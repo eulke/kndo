@@ -48,35 +48,51 @@ packages — *and* kndo validates the boundary contract both ways:
 | internal dep declared, no import resolves into that package | `unused` (subject `dependency`) — same verdict, remediation says "remove the workspace dep" |
 | import resolves into a sibling package not declared in the importer's manifest | `undeclared` (subject `dependency`) — phantom internal dependency; breaks publishability and build graphs |
 
-### The `deep-import` verdict (group `risk`, M3)
+### The `deep-import` verdict (group `risk`, M3) — internal *and* external providers
 
-A cross-package import that bypasses the provider package's declared entry points
-(`@org/app` importing `@org/ui/src/private/x` instead of `@org/ui`) erodes the boundary the
-provider declared: the consumer now depends on the sibling's internal file layout, and the
-import breaks outright if the provider is ever published (registries enforce `exports`).
+An import that bypasses a provider package's declared entry points erodes a boundary someone
+explicitly drew. **The provider does not have to be a workspace sibling** — the verdict covers
+both cases with one definition, because the mechanism is identical:
+
+- **Internal provider** (workspace sibling): `@org/app` importing `@org/ui/src/private/x`
+  instead of `@org/ui` — the consumer now depends on the sibling's internal file layout, and
+  the import breaks outright if the provider is ever published.
+- **External provider** (a dependency): `import { helper } from "some-lib/dist/internal/utils"`
+  — common in perfectly ordinary single-package apps. It often *works* only because a bundler
+  is lax where Node's `exports` enforcement would refuse, and it breaks silently on the next
+  library upgrade. The dependency's own manifest (already read for resolution) supplies the
+  declared surface.
+
 Three design rules keep the verdict signal, not noise:
 
 1. **Contract-gated, so it is zero-config and self-opting.** The finding fires **only when the
-   provider package declares an explicit surface** (an `exports` map or the language's
-   equivalent, reported by the adapter in `ManifestFacts`). No declared surface = no declared
-   boundary = no finding — monorepos where deep imports are accepted practice never see noise,
-   and a team opts in simply by making its package surface explicit. Boundaries the compiler
-   already enforces (Go `internal/`) are skipped outright, like Go package cycles.
-2. **One finding per (consumer package → provider package) pair** — subject `package`, rollup
-   spirit: "`@org/app` deep-imports `@org/ui` at 23 sites, touching 4 internal symbols", with
-   sites and symbols in the evidence (capped, `elided` counted). That pair is the unit a
-   migration is planned in; 23 line-level findings are not.
-3. **Computed remediation, two mechanical cases.** kndo already has the graph, so the finding
-   says which case each symbol is: (a) *also reachable via the public surface* → "switch the
+   provider declares an explicit surface** (an `exports` map or the language's equivalent,
+   reported by the adapter — from the sibling's manifest or the dependency's own). No declared
+   surface = no declared boundary = no finding: monorepos where sibling deep imports are
+   accepted practice never see noise, and `lodash/fp` is not a finding (lodash declares no
+   `exports` map — its subpaths are deliberately open). Boundaries whose enforcement is
+   *unconditional at build time* (Go `internal/`) are skipped outright; **partially** enforced
+   boundaries (Node `exports`, which bundlers and legacy TS resolution routinely bypass) are
+   exactly where the finding earns its keep — "works in webpack today, breaks in Node/jest
+   tomorrow".
+2. **One finding per (consumer package → provider) pair** — subject `package`, rollup spirit:
+   "`@org/app` deep-imports `@org/ui` at 23 sites, touching 4 internal symbols", with sites and
+   symbols in the evidence (capped, `elided` counted). That pair is the unit a migration is
+   planned in; 23 line-level findings are not.
+3. **Computed remediation, by case.** kndo has the graph, so the finding says which case each
+   symbol is. Provider-internal *and* also reachable via the public surface → "switch the
    specifier to `@org/ui`" — trivially safe, the first candidate for `kndo clean` auto-fix
-   post-1.0; (b) *genuinely internal* → the exact subpath export to add (`"./testing"`), or
-   extraction to a shared package. Consumers (humans and agents) receive executable
-   instructions, not a lecture.
+   post-1.0 (applies to external providers too when the symbol is re-exported publicly).
+   Genuinely internal, internal provider → the exact subpath export to add (`"./testing"`), or
+   extraction to a shared package. Genuinely internal, **external** provider → you don't own
+   the surface: use the public equivalent, request the export upstream, or vendor the code —
+   stated in that order.
 
 Severity: warning (the gate means the provider explicitly declared the contract being
 bypassed). Finding confidence = the underlying edge's confidence. The edges themselves are
 recorded from M1 regardless (reachability must stay correct — deep-imported code *is* used);
-the verdict lands in M3 with the package-surface machinery.
+the verdict lands in M3. The external-provider case is also listed with the dependency-hygiene
+findings (RFC 0005 §5), since that is where a single-package app will meet it.
 
 ## 5. Roots & library mode are per-package decisions
 

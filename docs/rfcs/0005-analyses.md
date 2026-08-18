@@ -179,6 +179,11 @@ Two further import-side findings:
   version requirements across workspace packages (RFC 0011): three packages pinning three
   `lodash` versions is an inconsistency someone will debug eventually. Manifest-only detection,
   zero-config; evidence lists every declaring manifest with its requirement. Severity: warning.
+- `deep-import` (subject `package`) — an import bypassing a provider's *declared* entry-point
+  surface. Applies to workspace siblings **and external dependencies alike** — a plain
+  single-package app importing `some-lib/dist/internal/x` gets the finding when `some-lib`
+  declares an `exports` map. Contract-gated, pair-level rollup, computed remediation — full
+  design in RFC 0011 §4.
 - `unresolved` (subject `import`) — a relative/internal import specifier that resolves to no file
   (`Resolution::Unresolved` after all adapters decline): almost always a broken path or a missed
   rename. Failed *package* resolution surfaces as `undeclared` instead, never twice.

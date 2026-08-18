@@ -33,7 +33,7 @@ project health*, not on style. One binary, one config (optional), one output sch
 | Excess visibility | Which symbols are exported/public but could be private? |
 | Private type leaks | Which public APIs reference types their consumers cannot name? |
 | Dependency cycles | Which files/modules form import cycles? |
-| Boundary erosion | Which packages reach into a sibling's internals, bypassing its declared surface? |
+| Boundary erosion | Which imports reach into a package's internals — a workspace sibling's or an external dependency's — bypassing its declared surface? |
 | CRAP score | Which functions are complex **and** untested — Change Risk Anti-Patterns? |
 | Project health | One number (0–100) + grade summarizing the above, trendable over time. |
 
