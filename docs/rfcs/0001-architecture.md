@@ -99,7 +99,9 @@ Target: warm incremental p95 **< 500 ms** on a 5k-file repo (pre-commit path).
 
 Cold full runs are allowed seconds (parallel across cores) — they build the cache that makes every
 subsequent run warm. The 500 ms contract is for the *warm* path and is enforced by a benchmark
-suite in CI from milestone M2 (ROADMAP).
+suite in CI from milestone M2 (ROADMAP). The full parallelism model — per-phase strategy,
+determinism under any thread count, adaptive sequential fallback, and the CI performance gates —
+is specified in [RFC 0008](0008-performance-and-parallelism.md).
 
 ## 6. Error philosophy
 

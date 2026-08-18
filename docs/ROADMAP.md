@@ -28,8 +28,9 @@ installer, `kondo doctor`. First navigation verbs over the warm graph (RFC 0007)
 `kondo query` (composite JSONL queries, single graph load).
 
 **Exit:** **warm p95 < 500 ms** on the 5k-file benchmark repo (CI-enforced benchmark, navigation
-verbs included); `--no-cache` ≡ cached results on fixture matrix; kondo runs in kondo's own
-pre-commit (dogfooding begins).
+verbs included); RFC 0008 gates live: `--threads 1` ≡ `--threads N` byte-identical output,
+≥ 3× scaling at 8 cores on the 100-file scenario, > 10% regressions block merge; `--no-cache` ≡
+cached results on fixture matrix; kondo runs in kondo's own pre-commit (dogfooding begins).
 
 ## M3 — Reachability semantics complete + second language (Go)
 `test-only` (three-color reachability), tooling roots, wildcard-edge conservatism,

@@ -20,6 +20,7 @@ This directory is the single source of truth for product and technical decisions
 | Analyses & metrics | [rfcs/0005-analyses.md](rfcs/0005-analyses.md) | Draft |
 | CLI, output & config | [rfcs/0006-cli-and-output.md](rfcs/0006-cli-and-output.md) | Draft |
 | Graph navigation & query | [rfcs/0007-graph-navigation.md](rfcs/0007-graph-navigation.md) | Draft |
+| Performance & parallelism | [rfcs/0008-performance-and-parallelism.md](rfcs/0008-performance-and-parallelism.md) | Draft |
 | Core contracts (traits) | [contracts/core-traits.md](contracts/core-traits.md) | Draft |
 | Output schema (JSON) | [contracts/output-schema.md](contracts/output-schema.md) | Draft |
 | Roadmap | [ROADMAP.md](ROADMAP.md) | Draft |

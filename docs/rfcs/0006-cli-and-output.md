@@ -134,6 +134,9 @@ threshold = 30
 [health.weights]                       # override RFC 0005 defaults
 duplication = 25
 
+[performance]
+threads = 0                            # 0 = physical cores (RFC 0008 §5); --threads flag wins
+
 [[rule]]                               # per-path overrides
 paths = ["examples/**"]
 skip = ["unused"]                      # one verdict covers symbols, files and directories
