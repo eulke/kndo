@@ -42,7 +42,7 @@ round-trip these examples in CI.
   "confidence": "certain",              // "certain" | "probable" | "possible"
   "message": "calcLegacyTax() is unreachable from any production or test root",
   "location": { "path": "src/billing/tax.ts", "range": { "start": [41,1], "end": [78,2] },
-                "symbol": "calcLegacyTax" },
+                "symbol": "calcLegacyTax", "package": "@org/billing" },   // owning workspace package (RFC 0011)
   "rolled_up": null,                    // file/directory rollups: count of subsumed findings
   "related": [                           // evidence chain (also what `kondo explain` renders)
     { "role": "cause", "path": "src/billing/index.ts", "range": { "start": [12,1], "end": [12,42] },
@@ -99,8 +99,8 @@ without maintaining the mapping themselves. New groups are additive; consumers m
 unknown groups after known ones rather than dropping their findings.
 
 What the verdict landed on travels in `subject_kind`: the `SymbolKind` names from
-[core-traits.md](core-traits.md) in kebab-case, plus `file`, `directory`, `dependency`,
-`import`, `suppression`. Suppression/config targets may append the subject as
+[core-traits.md](core-traits.md) in kebab-case, plus `file`, `directory`, `package`,
+`dependency`, `import`, `suppression`. Suppression/config targets may append the subject as
 `category:subject` (e.g. `unused:enum-member`, `test-only:dependency`). Subject kinds are
 additive like categories and are not a registry of their own. Human renderers compose the
 two (`unused (dependency)`); JSON consumers filter on either axis independently.

@@ -41,7 +41,8 @@ A selector uniquely addresses a graph node:
 |------|--------|---------|
 | File | project-relative path | `src/billing/tax.ts` |
 | Symbol | `path#name`, nested via `.` | `src/billing/tax.ts#TaxTable.lookup` |
-| Package | `pkg:<name>` | `pkg:lodash` |
+| Dependency (external) | `dep:<name>` | `dep:lodash` |
+| Package (workspace unit, RFC 0011) | `pkg:<name>` | `pkg:@org/ui` |
 | Root set | `roots:production` \| `roots:test` \| `roots:tooling` | `roots:production` |
 
 Ambiguity (e.g. overloads) is an error listing the concrete candidates — never a guess.
@@ -60,8 +61,9 @@ Everything the graph knows about one node, in one call:
 declaration (span, kind, visibility, exported), file role/origin & reachability color, direct degree
 (in/out, by edge kind), roots that reach it (nearest first), metrics (cyclomatic, CRAP, coverage
 if ingested), duplication group membership, open findings attached to it, provenance
-(adapter/plugins that produced its facts). For a `pkg:` selector: manifest scope, importing files
-count, usage status. For files: declared symbols (capped).
+(adapter/plugins that produced its facts). For a `dep:` selector: manifest scope, importing files
+count, usage status. For a `pkg:` selector: mode (library/app), member counts, dependents.
+For files: declared symbols (capped).
 
 ### 4.3 `kondo uses <selector>`
 Outgoing dependencies: what this node needs. `--depth N` (default 1), `--transitive`
@@ -116,7 +118,7 @@ amortization levels:
 ```
 $ kondo query <<'EOF'
 {"id":"q1","verb":"used-by","selectors":["src/billing/tax.ts#calcLegacyTax"],"flags":{"split_by_color":true}}
-{"id":"q2","verb":"trace","flags":{"pairs":[["src/api/routes.ts","pkg:decimal.js"]]}}
+{"id":"q2","verb":"trace","flags":{"pairs":[["src/api/routes.ts","dep:decimal.js"]]}}
 {"id":"q3","verb":"impact","selectors":["src/billing/tax.ts#TaxTable"],"flags":{"if_deleted":true}}
 EOF
 ```
@@ -144,7 +146,7 @@ kondo find calcLegacyTax                        → selector src/billing/tax.ts#
 kondo used-by src/billing/tax.ts#calcLegacyTax --split-by-color
                                                 → 0 production, 2 test consumers
 kondo impact src/billing/tax.ts#calcLegacyTax --if-deleted
-                                                → also orphans TaxTable + frees pkg:decimal.js
+                                                → also orphans TaxTable + frees dep:decimal.js
 <agent edits: deletes function, tests, TaxTable, dependency>
 kondo check --staged                            → verifies: 4 fixed findings, 0 new, health +1
 ```

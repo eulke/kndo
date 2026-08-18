@@ -10,7 +10,8 @@ during M1 with a PR to this file.
 ```rust
 pub struct FileId(u32);      // interned; stable within a snapshot
 pub struct SymbolId(u32);
-pub struct PackageId(u32);
+pub struct DependencyId(u32); // an external dependency declared in a manifest
+pub struct PackageId(u32);    // a workspace unit: one manifest + the files it governs (RFC 0011)
 
 // A file's classification is two orthogonal axes, never one enum: a generated test file and a
 // vendored production file are both expressible. `Role` values mirror `RootKind` on purpose.
@@ -35,13 +36,15 @@ pub enum RefKind { Call, Read, Write, Extend, Implement, Override, TypeUse }
 pub enum Confidence { Certain, Probable, Possible }
 
 pub enum EdgeKind {
-    ImportsFile   { from: FileId, to: FileId },
-    ImportsPackage{ from: FileId, to: PackageId },
-    References    { from: SymbolId, to: SymbolId, kind: RefKind },
-    Declares      { file: FileId, symbol: SymbolId },
-    Root          { kind: RootKind, target: NodeRef },     // NodeRef = File | Symbol
-    Wildcard      { from: FileId },                        // dynamic construct: may reach anything visible
+    ImportsFile      { from: FileId, to: FileId },         // may cross Package boundaries (RFC 0011 §4)
+    ImportsDependency{ from: FileId, to: DependencyId },
+    References       { from: SymbolId, to: SymbolId, kind: RefKind },
+    Declares         { file: FileId, symbol: SymbolId },
+    Root             { kind: RootKind, target: NodeRef },  // NodeRef = File | Symbol
+    Wildcard         { from: FileId },                     // dynamic construct: may reach anything visible
 }
+// Every File is owned by exactly one Package (nearest-manifest rule, RFC 0011 §3);
+// Package depends-on Package edges are derived by the core, never emitted by adapters.
 // RefKind matters to analyses: Implement/Override edges drive dispatch-aware member liveness
 // (RFC 0005 §2); Extend/TypeUse distinguish type-level from value-level consumption.
 // every edge: { kind: EdgeKind, confidence: Confidence, source: Provenance }
@@ -65,14 +68,16 @@ pub trait LanguageAdapter: Send + Sync {
     /// return partial facts + diagnostics.
     fn extract(&self, file: &SourceFile) -> FileFacts;
 
-    /// Parse a manifest into declared dependencies.
+    /// Parse a manifest into declared dependencies AND package identity/topology (RFC 0011 §3):
+    /// package name, workspace membership declarations, publish/private signals, entry points.
     fn extract_manifest(&self, file: &SourceFile) -> ManifestFacts;
 
     /// Resolve an import specifier to a concrete target, given an index of claimable paths.
     /// Called by the core's resolution driver — including for specifiers emitted by *other*
-    /// adapters (cross-language edges, RFC 0002 §4).
+    /// adapters (cross-language edges, RFC 0002 §4). Internal-package specifiers
+    /// (workspace:*, path deps, alias paths) resolve to File targets in the sibling package.
     fn resolve(&self, spec: &ImportSpec, ctx: &ResolveCtx) -> Resolution;
-    // Resolution = File(ProjectPath, Confidence) | Package(PackageName, Confidence)
+    // Resolution = File(ProjectPath, Confidence) | Dependency(DependencyName, Confidence)
     //            | Stdlib | Unresolved
 }
 ```
@@ -85,9 +90,36 @@ pub struct FileFacts {
     pub roots:        Vec<RawRoot>,         // language-defined only (main, pub API…)
     pub functions:    Vec<FunctionMetrics>, // { symbol, cyclomatic: u32, loc, token_fingerprints }
     pub dynamics:     Vec<DynamicUse>,      // constructs forcing Wildcard edges (span + reason)
+    pub suppressions: Vec<RawSuppression>,  // kondo:allow pragmas found in comments (§2.1)
     pub diagnostics:  Vec<Diagnostic>,
 }
 ```
+
+### 2.1 Suppression extraction
+
+Comment syntax is language-defined, so **adapters extract suppression pragmas**; the core only
+validates and binds them (RFC 0005 §11):
+
+```rust
+pub struct RawSuppression {
+    pub span: Span,                    // the pragma comment itself
+    pub category: SmolStr,             // verdict name — validated by the core against the registry
+    pub subject: Option<SmolStr>,      // optional :subject facet (kebab-case)
+    pub reason: Option<String>,        // free text after the directive
+    pub scope: SuppressionScope,       // Declaration | File
+}
+pub enum SuppressionScope { Declaration, File }
+```
+
+- Grammar inside any comment style of the language:
+  `kondo:allow <category>[:<subject>] [reason…]` (scope `Declaration`) and
+  `kondo:allow-file <category>[:<subject>] [reason…]` (scope `File`).
+- Binding (core-side): a `Declaration` pragma attaches to the declaration it precedes or shares
+  a line with, covering that symbol *and everything it declares* (a class-level allow covers its
+  members). `File` pragmas cover the whole file. A pragma that binds to nothing, names an
+  unknown category, or whose bound target has no matching finding is itself reported as `stale`.
+- Adapters do **not** interpret pragmas — extraction only. Validation, binding, counting, and
+  staleness are core logic, identical across languages.
 
 Compliance: every adapter must pass the shared conformance harness with its fixture corpus
 (RFC 0002 §8). `FileFacts` must be deterministic for identical content.

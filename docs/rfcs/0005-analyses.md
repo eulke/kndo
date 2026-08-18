@@ -13,13 +13,14 @@ rollup.** Three orthogonal things, kept orthogonal:
    `duplicate`, `crap`, `stale`. A verdict means the same thing whatever it lands on — there is
    no `unused-file` vs `unused-code`: both are `unused`.
 2. **Subject = the `subject_kind` facet**: the kind of graph node the verdict landed on — `file`,
-   `directory`, `dependency`, `import`, `suppression`, or any symbol kind (`function`, `type-alias`,
+   `directory`, `package`, `dependency`, `import`, `suppression`, or any symbol kind (`function`, `type-alias`,
    `enum-member`, `css-rule`…). Configuration and suppressions target a bare category or
    `category:subject` (e.g. `unused:enum-member`, `test-only:dependency`); knip-style
    `unused-type` ≡ `unused:type-alias`.
 3. **Reporting level = widest uniform node**: when a verdict holds for every symbol in a file
    *and* for the file node itself, kondo emits **one** finding on the file (subject `file`), not
-   N symbol findings; when it holds for every file in a directory, one finding on the directory.
+   N symbol findings; when it holds for every file in a directory, one finding on the directory;
+   when it holds for a whole workspace package, one finding on the package (RFC 0011 §6).
    Rollup is presentation of the same facts, not a different verdict — "test-only file" is the
    `test-only` verdict reported at file granularity.
 
@@ -121,6 +122,8 @@ scopes onto it — npm `peerDependencies`, Cargo `build-dependencies`, Gradle co
 
 Adapter-provided package mappings handle subpath imports, type-only packages (`@types/*` bound to
 their runtime package), and side-effect-only imports (`import "polyfill"` counts as usage).
+Internal workspace dependencies get the same verdicts with boundary-aware remediation
+(RFC 0011 §4).
 
 Two further import-side findings:
 
@@ -220,7 +223,11 @@ modes, the delta caused by the change. Weights are configurable; defaults are th
 
 ## 11. Suppression model
 
-- Inline: a language-comment pragma `kondo:allow <category>[:<subject>] [reason]` on the declaration.
+- Inline: `kondo:allow <category>[:<subject>] [reason]` in a comment on/above the declaration,
+  or `kondo:allow-file …` for file scope. **Adapters extract** the pragmas (comment syntax is
+  language-defined — `FileFacts.suppressions`, contracts §2.1); the **core validates and binds**
+  them: a declaration-scoped allow covers the symbol and everything it declares; a pragma that
+  binds to nothing or matches no finding is itself a `stale` finding.
 - Baseline: `.kondo/baseline.json` acknowledges existing findings at adoption time (RFC 0006 §6).
 - Config: per-glob disables of categories or `category:subject` pairs (e.g. `examples/**` exempt
   from `unused`; `unused:enum-member` off globally for codebases with wire-format enums).
@@ -248,6 +255,7 @@ Still open — each needs a yes/no:
 |-----------|--------|-------|
 | `redundant-export-binding` | one symbol exported under multiple bindings where some binding has zero consumers | language-neutral form of JS "redundant default/named export"; also covers Rust `pub use` re-exports |
 | `private-type-leak` | public symbol whose signature references a non-exported type | API hygiene; derivable from type-reference edges |
+| `deep-import` | cross-package import bypassing the sibling package's entry points | boundary hygiene in workspaces (RFC 0011 §4); 1.0 records the edge at `probable`, does not judge it |
 
 **Deliberately out of core: stale TODOs.** Detecting aged/orphaned TODO comments requires comment
 extraction plus non-graph data (git blame age, issue-tracker state). That breaks the pure

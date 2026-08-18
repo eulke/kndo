@@ -59,12 +59,14 @@ in [contracts/core-traits.md](../contracts/core-traits.md)):
 - `File` — a source file (path, content hash, language, role: production | test | tooling,
   origin: authored | generated | vendored — two orthogonal axes)
 - `Symbol` — a named declarable (function, method, type, class, const, css-rule…), owned by a File
-- `Package` — a dependency declared in a manifest (name, version req, scope: prod | dev | build | peer | optional)
-- `Manifest` — the declaring file of Packages (package.json, go.mod, Cargo.toml…)
+- `Dependency` — an external dependency declared in a manifest (name, version req, scope: prod | dev | build | peer | optional)
+- `Package` — a workspace unit: one manifest + the file tree it governs; every File is owned by exactly one Package (RFC 0011)
+- `Manifest` — the declaring file of Dependencies and Package identity (package.json, go.mod, Cargo.toml…)
 
 **Edges**
-- `File imports File` — module-level dependency (resolved by the adapter)
-- `File imports Package` — external dependency usage
+- `File imports File` — module-level dependency (resolved by the adapter; may cross Packages)
+- `File imports Dependency` — external dependency usage
+- `Package depends-on Package` — derived by the core from cross-package edges and manifests
 - `Symbol references Symbol` — call/use/extend/implement/type-reference
 - `File declares Symbol`
 - `Root → Symbol | File` — entry-point marking (bin main, exported public API, framework handler,
