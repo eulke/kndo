@@ -29,7 +29,9 @@ that produces it.
 4. **Answers carry evidence.** Edges come with kind, confidence, and source span — an agent can
    jump straight to the proving line instead of trusting a summary.
 5. **Same output discipline as `check`.** Human format on TTY, JSON (schema §8 of the output
-   contract) when piped or with `--format json`. No information exists in one format only.
+   contract) when piped or with `--format json`, and the token-frugal agent format
+   (output-schema §9) with `--format agent` / `KONDO_FORMAT=agent`. No information exists in
+   one format only.
 
 ## 3. Selectors
 

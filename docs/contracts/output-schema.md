@@ -163,3 +163,50 @@ Verb result shapes (fields beyond these are additive/minor):
   finding fields §2 }… ] } }` — `if_deleted` present only with the flag.
 
 Query exit codes are defined in RFC 0007 §6 and are part of this contract.
+
+## 9. Agent format (`--format agent`)
+
+A line-oriented plain-text rendering of the same data, optimized for LLM context windows:
+maximum information per token, deterministic grammar, no decoration. Versioned independently of
+the JSON schema (`agent-format 1` in the header); grammar changes bump the version and the old
+version stays available for one release cycle, like JSON majors.
+
+```
+kondo 0.3.1 agent-format 1 | mode staged | cache warm | 312ms
+result: 3 new, 2 fixed | health 82 -> 84 (B) | baseline 412 acknowledged
+new:
+1. [kndo-a3f81c92e5d4] unused function src/billing/tax.ts:41 calcLegacyTax
+   cause: last production reference removed by src/billing/index.ts:12 (this change)
+   fix: delete calcLegacyTax() and its export in src/billing/index.ts:12
+2. [kndo-9c04d1b2aa7e] test-only function src/util/csv.ts:8 exportCsv (2 test roots: src/util/csv.test.ts)
+   fix: delete exportCsv() together with its tests
+fixed:
+3. [kndo-77b0e4f2c19d] unused dependency package.json date-fns
+more: none
+next: kondo explain <id> | kondo used-by <selector> --format agent
+```
+
+Grammar rules (normative):
+
+- **Header + result lines always first**, fixed field order, `|`-separated. An agent reads two
+  lines and knows the outcome.
+- **One finding = one numbered line**: `N. [id] <category> <subject_kind> <path:line> <name>`,
+  followed by optional indented `cause:` / `fix:` / `evidence:` lines. Numbers let a model refer
+  to findings cheaply ("fix 1 and 3"); ids are the durable anchors.
+- **Findings appear in group order** (defect, waste, risk, hygiene) within `new:` / `fixed:` /
+  `findings:` blocks — same triage order as every other renderer.
+- **Elision is always explicit**: `more: 47 unused (kondo check --only unused --format agent)`
+  or `more: none`. A model must never have to guess whether it saw everything.
+- **`next:` closes every response** with the drill-down commands relevant to what was shown —
+  affordances travel with the data, so the model needn't memorize the CLI.
+- Confidence below `certain` is appended in parentheses (`(probable)`); severity is implied by
+  group/category and never repeated per line.
+- Navigation verbs (RFC 0007) render in the same grammar: numbered entries of
+  `[selector] kind path:line` plus the verb's specifics (depth, via-edge, cycle path), same
+  `more:`/`next:` discipline. `kondo query` (JSONL) is unaffected — it stays JSON by nature.
+- Encoding: UTF-8, no ANSI, no glyphs, stable across `--threads` and cache states (RFC 0008 §4).
+
+The agent format is a *rendering* of `RunResult`/`QueryResult` — it can never carry information
+absent from the JSON, and anything added to it must land in the JSON schema first. Like JSON and
+SARIF it renders **core-side** (machine formats, contracts §5): every frontend — CLI today,
+`kondo serve`/MCP tomorrow — emits byte-identical agent text.

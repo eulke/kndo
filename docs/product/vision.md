@@ -49,10 +49,12 @@ project health*, not on style. One binary, one config (optional), one output sch
 5. **Changes are judged by their blast radius.** Analyzing a diff means analyzing everything the
    diff *affects*: if your change makes a distant symbol become used (or unused), that shows up in
    the report even though you never touched that file.
-6. **Dual audience: humans and agents.** Human output is a readable terminal summary. Agent/CI
-   output is a stable, versioned JSON schema (plus SARIF). Both come from the same engine — an
-   agent running kondo after generating code gets machine-checkable feedback that its additions
-   are wired in and nothing became orphaned.
+6. **Dual audience: humans and agents.** Human output is a readable terminal summary. Programs
+   get a stable, versioned JSON schema (plus SARIF). LLM agents get a third first-class format:
+   token-frugal deterministic text (`--format agent`) that keeps every machine anchor (ids,
+   selectors, explicit elision) at a fraction of JSON's token cost. All come from the same
+   engine — an agent running kondo after generating code gets machine-checkable feedback that
+   its additions are wired in and nothing became orphaned.
 7. **The graph is a product, not just an implementation detail.** Having paid for a whole-project
    semantic graph, kondo exposes it read-only as navigation verbs (find, describe, uses, used-by,
    trace, impact) so exploration costs milliseconds and bounded output instead of context-window

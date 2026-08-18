@@ -17,7 +17,7 @@
 kondo check [PATHS…]           # full analysis (default command: `kondo` = `kondo check`)
     --staged                   # scope report to effects of the staged changes
     --diff <ref>               # scope report to effects of changes vs merge-base(ref)
-    --format human|json|sarif  # default: human on TTY, json when piped
+    --format human|json|sarif|agent  # default: human on TTY, json when piped; KONDO_FORMAT env overrides the default
     --fail-on <severity>       # exit-code threshold (default: warning in diff modes, none in full)
     --only <cats> / --skip <cats>
     --strict                   # promote severities (see RFC 0005), stricter confidence floor
@@ -88,9 +88,16 @@ Diff mode uses the same group order inside its NEW and FIXED sections.
   additive changes bump minor; anything else bumps major and keeps the previous major available
   via `--schema <ver>` for one release cycle.
 - `--format sarif`: SARIF 2.1.0 mapping (category → ruleId) for GitHub code scanning et al.
-- Agent ergonomics: ids are stable across runs (content-anchored, not line-anchored — see
-  contracts §finding-id), so an agent can act on a finding, re-run, and verify that exact id
-  disappeared.
+- `--format agent`: a **token-frugal plain-text format designed for LLM consumption**
+  (grammar in contracts §9). JSON is for programs; an LLM pays 3–5× the tokens for JSON's
+  structural overhead and doesn't need it to parse. The agent format keeps every machine anchor
+  (finding ids, selectors, counts) in a deterministic line grammar, drops all decoration, and
+  states its affordances inline (which command shows more). Same information as JSON — nothing
+  exists in one format only. An agent harness sets `KONDO_FORMAT=agent` once and every kondo
+  invocation in that session answers in it, `check` and navigation verbs alike.
+- Agent ergonomics, all formats: ids are stable across runs (content-anchored, not
+  line-anchored — see contracts §finding-id), so an agent can act on a finding, re-run, and
+  verify that exact id disappeared.
 
 ## 5. Exit codes
 

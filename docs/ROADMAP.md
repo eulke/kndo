@@ -15,9 +15,9 @@ Workspace layout (`kondo-cli`, `kondo-core`, `kondo-adapter-toolkit`, `kondo-ada
 graph model per contracts, discovery, extraction, resolution driver, conformance harness.
 Analyses: `unused` (symbols, files, dependencies — with file/directory rollup), `undeclared`,
 and `duplicate` on byte-identical files (subject `file` — free on content hashes).
-Output: human (RFC 0009 visual language, incl. degradation tiers) + JSON v1.0.0, both emitted
-through the `Engine` facade (contracts §5 — the CLI is a frontend from day one, not a shortcut).
-No cache yet (cold runs only).
+Output: human (RFC 0009 visual language, incl. degradation tiers), JSON v1.0.0, and agent
+format v1 (output-schema §9) — all emitted through the `Engine` facade (contracts §5 — the CLI
+is a frontend from day one, not a shortcut). No cache yet (cold runs only).
 
 **Exit:** correct findings on fixture corpus + 3 real OSS TS repos; `kondo check` on kondo's own
 JS-free repo returns cleanly; JSON validates against generated schema.

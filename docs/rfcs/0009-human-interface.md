@@ -7,8 +7,9 @@
 This RFC owns everything a human *sees* in the terminal. It binds only `kondo-cli`: the core
 returns data (`RunResult`), the CLI renders it — the separation is contractual (contracts §5),
 so any future frontend (LSP, GUI, `kondo serve`) can define its own presentation without
-touching this document or the core. Machine formats (JSON/SARIF) are out of scope here — they
-are serialized core-side and schema-governed.
+touching this document or the core. Machine formats (JSON/SARIF, and the LLM-oriented agent
+format) are out of scope here — they are serialized core-side and schema-governed
+(output-schema §9).
 
 ## 2. Design principles
 
