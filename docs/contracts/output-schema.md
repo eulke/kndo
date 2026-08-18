@@ -36,6 +36,7 @@ round-trip these examples in CI.
 {
   "id": "kndo-a3f81c92e5d4",            // stable content-anchored id, §5
   "category": "unused",                 // verdict; registry in §6
+  "group": "waste",                     // the verdict's nature: defect | waste | risk | hygiene (fixed mapping, §6)
   "subject_kind": "function",           // what the verdict landed on: symbol kind | file | directory | dependency | import | suppression
   "severity": "warning",                // "error" | "warning" | "info"
   "confidence": "certain",              // "certain" | "probable" | "possible"
@@ -88,6 +89,12 @@ re-run kondo and assert X is absent; a baseline survives reformatting.
 Categories are pure verdicts (RFC 0005 taxonomy rule):
 `unused`, `test-only`, `undeclared`, `unresolved`, `duplicate`, `crap`, `stale`.
 New categories are additive (minor bump); consumers must ignore unknown categories.
+
+Each category maps to exactly one `group` — `defect` (unresolved, undeclared), `waste` (unused,
+test-only, duplicate), `risk` (crap), `hygiene` (stale) — normative mapping in RFC 0005. The
+field is redundant with `category` by design: it is included so consumers section and sort
+without maintaining the mapping themselves. New groups are additive; consumers must render
+unknown groups after known ones rather than dropping their findings.
 
 What the verdict landed on travels in `subject_kind`: the `SymbolKind` names from
 [core-traits.md](core-traits.md) in kebab-case, plus `file`, `directory`, `dependency`,

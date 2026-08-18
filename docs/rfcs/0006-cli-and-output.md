@@ -59,7 +59,24 @@ FIXED
   unused (dependency)  package.json  "date-fns" — first production usage added
 ```
 
-Full mode groups by category with counts, worst-first, truncated with `… and N more (kondo check --only unused)`.
+Full mode renders one section per **group**, in fixed order — defects, waste, risk, hygiene
+(RFC 0005 taxonomy rule 4) — because that is the reader's triage order: fix what's broken,
+delete what's dead, then plan refactors. Within a section, findings group by category with
+counts, worst-first, truncated with `… and N more (kondo check --only unused)`:
+
+```
+DEFECTS (2)
+  unresolved  src/api/client.ts:3   import "./transpor" resolves to nothing
+  …
+WASTE (51)
+  unused      src/legacy/           directory unreachable — 14 files, safe to delete
+  …
+RISK (7)
+  crap        src/billing/tax.ts    calcTax() CRAP 41 (complexity 9, coverage 0%)
+  …
+```
+
+Diff mode uses the same group order inside its NEW and FIXED sections.
 
 ## 4. Machine output
 

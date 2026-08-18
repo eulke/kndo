@@ -23,6 +23,21 @@ rollup.** Three orthogonal things, kept orthogonal:
    Rollup is presentation of the same facts, not a different verdict — "test-only file" is the
    `test-only` verdict reported at file granularity.
 
+4. **Group = the verdict's nature, fixed per category**: every verdict belongs to exactly one
+   presentation group, declared here — never configurable, never guessed by renderers:
+
+   | Group | Verdicts | Meaning for the reader |
+   |-------|----------|------------------------|
+   | `defect` | `unresolved`, `undeclared` | something is broken or lying — fix it |
+   | `waste` | `unused`, `test-only`, `duplicate` | something can be removed or consolidated |
+   | `risk` | `crap` | something is dangerous to change — refactor or test it |
+   | `hygiene` | `stale` | kondo's own bookkeeping is outdated |
+
+   Groups drive ordering and sectioning in every renderer (defects before waste before risk
+   before hygiene — see RFC 0006 §3) and give consumers a stable coarse filter. A future verdict
+   must declare its group on arrival (e.g. candidate `cyclic-dependencies` → `risk`,
+   `internal-only` → `waste`); new groups are additive and rare.
+
 Intentional absences are documented decisions, not oversights: there is no `tooling-only`
 verdict (tooling reachability is healthy).
 
