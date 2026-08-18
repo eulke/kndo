@@ -6,6 +6,14 @@ All analyses are pure functions over the Project Graph (+ optional enrichments s
 Each finding carries: stable id, category, severity, confidence, location(s), evidence, and a
 remediation hint (schema in [contracts/output-schema.md](../contracts/output-schema.md)).
 
+**Taxonomy rule — categories are verdicts, kinds are facets.** A category encodes the verdict
+(`unused-code`, `test-only-code`, `unused-dependency`, `unresolved-import`, `duplicate-code`…);
+*what kind of thing* is affected — export, type, enum member, class member, CSS selector — is the
+finding's `symbol_kind` facet, never a separate category. Configuration and suppressions may
+target a bare category or a `category:kind` pair (e.g. `unused-code:enum-member`). This matches
+the granularity of per-kind tools (knip-style `unused-type` ≡ `unused-code:type-alias`) without
+a combinatorial category registry.
+
 ## 1. Reachability foundation
 
 Most detections derive from one computation. Roots are partitioned by `RootKind`:
@@ -39,6 +47,14 @@ symbol is still dead. Adapters/manifests decide which mode applies per package.
 former consumer if known from the findings snapshot. Confidence downgrades if any wildcard edge
 could plausibly target it (name exposed to reflection/serialization, plugin annotations, FFI).
 
+**Member granularity.** The analysis descends into type members: methods, fields, and enum
+members are symbols in their own right (`symbol_kind` facets `method`, `field`, `enum-member`),
+so "class member nothing calls" and "enum variant nothing references" are ordinary
+`unused-code` findings. Dynamic dispatch is handled through the graph, not guessed around:
+adapters emit implements/overrides references, so an interface/trait method implementation is
+alive whenever the interface method is reached; where dispatch is not statically resolvable, the
+member's liveness evidence is at best `probable` and findings demote accordingly.
+
 ## 3. `test-only-code` — non-productive code
 
 Symbols/files colored `test-only`, excluding test-flavored files themselves and declared test
@@ -52,14 +68,29 @@ Default severity: info (candidate to raise to warning — open question #3).
 Files with no incoming import/reference edge and no root. Subsumes asset/config orphans via
 cross-language edges (CSS, JSON). Generated/vendored flavors are exempt by default.
 
-## 5. `unused-dependency` — manifest waste
+## 5. Dependency & import hygiene
 
-For each `ManifestDependency` with scope `prod`: unused if no `File imports Package` edge from a
-production- or tooling-reachable file resolves to it. Dev-scoped deps check against all files.
+For each `ManifestDependency` with scope `prod`, classify by its importers:
+
+| Importers | Finding |
+|-----------|---------|
+| none | `unused-dependency` — declared, never imported |
+| only test-flavored / test-only-reachable files | `test-only-dependency` — belongs in dev scope, not shipped weight |
+| at least one production- or tooling-reachable file | used (no finding) |
+
+Dev-scoped deps check against all files (a dev dep is unused only if *nothing* imports it).
 Adapter-provided package mappings handle subpath imports, type-only packages (`@types/*` bound to
 their runtime package), and side-effect-only imports (`import "polyfill"` counts as usage).
-Also detects the inverse, `undeclared-dependency`: imports that resolve to a package absent from
-the manifest (phantom deps via hoisting). Severity: warning; error in `--strict`.
+
+Two further import-side findings:
+
+- `undeclared-dependency` — an import resolves to a package absent from the manifest (phantom
+  deps via hoisting/transitivity). Severity: warning; error in `--strict`.
+- `unresolved-import` — a relative/internal import specifier that resolves to no file
+  (`Resolution::Unresolved` after all adapters decline): almost always a broken path or a missed
+  rename. Failed *package* resolution surfaces as `undeclared-dependency` instead, never twice.
+  Severity: error (it is a defect, not waste) — but confidence-gated: dynamic specifiers demote
+  to `possible` and drop below the default report floor.
 
 ## 6. `duplicate-code` — structural clones
 
@@ -99,7 +130,7 @@ category_penalty = weight × saturating_ratio(category)
 | Category | Ratio basis | Default weight |
 |----------|-------------|----------------|
 | unused code | dead symbols / total symbols | 25 |
-| unused deps | unused / declared | 15 |
+| unused deps | misdeclared (unused, test-only, undeclared) / declared | 15 |
 | unused files | orphan files / total files | 10 |
 | test-only code | test-only symbols / total symbols | 10 |
 | duplication | duplicated tokens / total tokens | 20 |
@@ -112,9 +143,10 @@ modes, the delta caused by the change. Weights are configurable; defaults are th
 
 ## 9. Suppression model
 
-- Inline: a language-comment pragma `kondo:allow <category> [reason]` on the declaration.
+- Inline: a language-comment pragma `kondo:allow <category>[:<kind>] [reason]` on the declaration.
 - Baseline: `.kondo/baseline.json` acknowledges existing findings at adoption time (RFC 0006 §6).
-- Config: per-glob category disables (e.g. `examples/**` exempt from unused-code).
+- Config: per-glob disables of categories or `category:kind` pairs (e.g. `examples/**` exempt
+  from unused-code; `unused-code:enum-member` off globally for codebases with wire-format enums).
   All suppressions are themselves counted and reported (`suppressed: N`) — hidden waste is
   still waste, and a stale suppression (target finding gone) becomes an info finding.
 
@@ -133,6 +165,13 @@ Statically derivable, deliberately **not** committed for 1.0 — each needs a ye
 | `stale-suppression` | suppression whose finding no longer exists | already implied by §9 — promote to rule? |
 | `duplicate-asset` | identical files by content hash | trivial via blake3; catches copy-pasted configs/images |
 | `unused-css-variable` | `--var` declared, never `var()`-consumed | fits CSS adapter naturally |
+| `internal-only` | exported/public symbol or member whose every incoming reference comes from its own file/type | visibility tightening ("should be private/unexported"); cheap on the graph; likely the strongest candidate |
+| `redundant-export-binding` | one symbol exported under multiple bindings where some binding has zero consumers | language-neutral form of JS "redundant default/named export"; also covers Rust `pub use` re-exports |
+| `private-type-leak` | public symbol whose signature references a non-exported type | API hygiene; derivable from type-reference edges |
+
+**Deliberately out of core: stale TODOs.** Detecting aged/orphaned TODO comments requires comment
+extraction plus non-graph data (git blame age, issue-tracker state). That breaks the pure
+static-graph model; if wanted, it is a plugin with its own data sources, not an analysis.
 
 Acceptance bar for any rule, present or future: derivable from the graph, zero-config by default,
 < 5% false-positive rate on the dogfood corpus, and explainable in one sentence.

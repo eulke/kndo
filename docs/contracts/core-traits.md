@@ -15,9 +15,10 @@ pub struct PackageId(u32);
 pub enum FileFlavor { Production, Test, Tooling, Generated, Vendored }
 
 pub enum SymbolKind {
-    Function, Method, Class, Interface, Struct, Enum, TypeAlias,
+    Function, Method, Class, Interface, Struct, Enum, EnumMember, TypeAlias,
     Const, Static, Field, Module, CssRule, CssVariable, Other(SmolStr),
 }
+// kebab-case names double as the `category:kind` facet in config/suppressions (RFC 0005)
 
 pub enum RootKind { Production, Test, Tooling }
 

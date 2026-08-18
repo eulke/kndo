@@ -105,7 +105,7 @@ roots = ["src", "packages/*"]          # default: auto (git ls-files minus ignor
 exclude = ["**/generated/**"]
 
 [analysis]
-skip = []                              # categories to disable globally
+skip = []                              # categories or category:kind facets, e.g. ["unused-code:enum-member"]
 min-confidence = "probable"            # report floor; "possible" only with --verbose
 
 [analysis.duplicate-code]

@@ -83,9 +83,14 @@ re-run kondo and assert X is absent; a baseline survives reformatting.
 
 ## 6. Category registry (1.0)
 
-`unused-code`, `test-only-code`, `unused-file`, `unused-dependency`, `undeclared-dependency`,
-`duplicate-code`, `crap`, `stale-suppression`. New categories are additive (minor bump);
-consumers must ignore unknown categories.
+`unused-code`, `test-only-code`, `unused-file`, `unused-dependency`, `test-only-dependency`,
+`undeclared-dependency`, `unresolved-import`, `duplicate-code`, `crap`, `stale-suppression`.
+New categories are additive (minor bump); consumers must ignore unknown categories.
+
+Categories encode verdicts only (RFC 0005 taxonomy rule); the kind of the affected code travels
+in `symbol_kind`. Suppression/config targets may append a kind facet as `category:kind`
+(e.g. `unused-code:enum-member`) — the facet values are the `SymbolKind` names from
+[core-traits.md](core-traits.md) in kebab-case and are not part of this registry.
 
 ## 7. SARIF mapping
 
