@@ -8,7 +8,7 @@ All RFCs/ADRs/contracts in this directory reach `Accepted` after debate. Open qu
 [README](README.md) resolved or explicitly deferred.
 
 **Exit:** sign-off on contracts (`core-traits.md`, `output-schema.md`); candidate-rule table
-(RFC 0005 §10) triaged into 1.0 / later / rejected.
+(RFC 0005 §12) triaged into 1.0 / later / rejected.
 
 ## M1 — Skeleton + first language (JS/TS), full-scan only
 Workspace layout (`kondo-cli`, `kondo-core`, `kondo-adapter-toolkit`, `kondo-adapter-js`),
@@ -32,7 +32,8 @@ pre-commit (dogfooding begins).
 
 ## M3 — Reachability semantics complete + second language (Go)
 `test-only` (three-color reachability), tooling roots, wildcard-edge conservatism,
-confidence surfacing, library mode. Go adapter proves the contract fits a second language
+confidence surfacing, library mode, `internal-only` (visibility ladders ride the same
+reference-origin machinery). Go adapter proves the contract fits a second language
 without core changes — any needed contract change happens *here*, cheaply. Navigation completes:
 liveness traces (`trace X` from roots), `used-by --split-by-color`, and `kondo impact`
 (incl. `--if-deleted` simulation, reusing the derived-effects machinery).
@@ -42,8 +43,8 @@ caught in both languages; the RFC 0007 §5 agent workflow (find → used-by → 
 runs end to end on a fixture; contract diffs (if any) documented in updated contracts + ADR.
 
 ## M4 — Duplication, CRAP, health
-`duplicate` (winnowing index, incremental), `crap` + lcov/JaCoCo ingestion plugins
-(ADR 0005), `health` score + `kondo health`, SARIF output.
+`duplicate` (winnowing index, incremental), `cyclic` (SCCs with per-language tolerance),
+`crap` + lcov/JaCoCo ingestion plugins (ADR 0005), `health` score + `kondo health`, SARIF output.
 
 **Exit:** duplication findings stable under reformatting (Type-2); CRAP hotlist matches manual
 audit on a real repo; health deltas shown in diff modes.
@@ -68,7 +69,7 @@ adopt kondo in pre-commit and stay enabled for 2 weeks.
 `kondo clean` (guided auto-removal), watch mode / LSP, custom analyses over a stable graph API,
 `kondo serve` exposing the navigation verbs 1:1 as MCP tools (RFC 0007 §7), an arbitrary graph
 query language, deep mode (compiler-grade resolvers), historical trend service, HTML report,
-monorepo project-references awareness, remaining candidate rules from RFC 0005 §10.
+monorepo project-references awareness, remaining candidate rules from RFC 0005 §12.
 
 ## Standing rules
 

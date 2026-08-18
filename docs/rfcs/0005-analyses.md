@@ -29,14 +29,14 @@ rollup.** Three orthogonal things, kept orthogonal:
    | Group | Verdicts | Meaning for the reader |
    |-------|----------|------------------------|
    | `defect` | `unresolved`, `undeclared` | something is broken or lying — fix it |
-   | `waste` | `unused`, `test-only`, `duplicate` | something can be removed or consolidated |
-   | `risk` | `crap` | something is dangerous to change — refactor or test it |
+   | `waste` | `unused`, `test-only`, `duplicate`, `internal-only` | something can be removed, consolidated, or narrowed |
+   | `risk` | `crap`, `cyclic` | something is dangerous to change — refactor or test it |
    | `hygiene` | `stale` | kondo's own bookkeeping is outdated |
 
    Groups drive ordering and sectioning in every renderer (defects before waste before risk
    before hygiene — see RFC 0006 §3) and give consumers a stable coarse filter. A future verdict
-   must declare its group on arrival (e.g. candidate `cyclic-dependencies` → `risk`,
-   `internal-only` → `waste`); new groups are additive and rare.
+   must declare its group on arrival (e.g. candidate `layer-violation` → `risk`,
+   `redundant-export-binding` → `waste`); new groups are additive and rare.
 
 Intentional absences are documented decisions, not oversights: there is no `tooling-only`
 verdict (tooling reachability is healthy).
@@ -144,7 +144,37 @@ canonicalized ⇒ catches Type-1 and Type-2 clones; Type-3/semantic clones are o
 Severity: info by default (duplication is sometimes deliberate); the *metric* (duplication %)
 always feeds health regardless of severity.
 
-## 7. `crap` — Change Risk Anti-Patterns
+## 7. `internal-only` — excess visibility
+
+A symbol's declared visibility exceeds its observed use. For every symbol declared above the
+minimum visibility, the analysis computes the **tightest sufficient visibility**: the lowest
+level on the language's visibility ladder (adapter-declared — e.g. private → file → package/crate
+→ public) that still covers the origin of every incoming reference. Declared > sufficient ⇒
+finding; the remediation names the concrete change in the language's own terms (`private`,
+`pub(crate)`, unexported lowercase name), supplied by the adapter.
+
+Covers your whole ladder of cases uniformly: exported symbol referenced only within its own file
+(`internal-only:function`), public member used only inside its own type (`internal-only:method` —
+"should be private"), Rust `pub` used only in-crate ("should be `pub(crate)`").
+
+Exemptions: library-mode public API (roots are externally consumed by definition), symbols
+plausibly targeted by wildcard edges (demote to `possible`), and symbols plugins mark as
+externally consumed via `annotate_symbols` (FFI, serialization, DI). Severity: info.
+
+## 8. `cyclic` — dependency cycles
+
+Strongly connected components (Tarjan) of size ≥ 2 in the file-import graph, and in the
+package/module graph where manifests define units. **One finding per cycle**, not per
+participant (rollup spirit): anchored at the cycle's most-referenced node, with a shortest
+cycle path in `related` as the evidence chain. Incrementally, SCCs are recomputed only within
+the dirty region's weakly connected component.
+
+Cycle tolerance is a language fact, so adapters declare it per graph level and defaults stay
+honest: severity `warning` where the ecosystem treats cycles as hazards (JS/TS file cycles —
+init-order bugs), `info` where they are idiomatic (Rust modules within a crate), and impossible
+levels are skipped outright (Go package cycles — the compiler already forbids them).
+
+## 9. `crap` — Change Risk Anti-Patterns
 
 Per function/method, with `comp` = cyclomatic complexity (adapter-extracted) and `cov` = fraction
 of the function's statements covered:
@@ -158,7 +188,7 @@ CRAP(m) = comp(m)² × (1 − cov(m))³ + comp(m)
 - Threshold: findings for `CRAP > 30` (standard), configurable. Test code is exempt.
 - Output ranks the CRAP hotspot list — the refactor-next queue.
 
-## 8. `health` — project health score
+## 10. `health` — project health score
 
 A 0–100 composite, deterministic and documented so trends are meaningful:
 
@@ -175,13 +205,15 @@ category_penalty = weight × saturating_ratio(category)
 | test-only code | test-only symbols / total symbols | 10 |
 | duplication | duplicated tokens / total tokens | 20 |
 | CRAP | CRAPload above threshold, normalized | 20 |
+| cycles | files participating in cycles / total files | 5 |
+| excess visibility | internal-only symbols / exported symbols | 5 |
 
 `saturating_ratio` maps each raw ratio through a per-category curve (documented constants) so a
 single bad file can't zero the score and improvements near zero still show. Grades: A ≥ 90,
 B ≥ 80, C ≥ 65, D ≥ 50, F below. Output always shows the per-category breakdown and, in diff
 modes, the delta caused by the change. Weights are configurable; defaults are the contract.
 
-## 9. Suppression model
+## 11. Suppression model
 
 - Inline: a language-comment pragma `kondo:allow <category>[:<subject>] [reason]` on the declaration.
 - Baseline: `.kondo/baseline.json` acknowledges existing findings at adoption time (RFC 0006 §6).
@@ -190,22 +222,20 @@ modes, the delta caused by the change. Weights are configurable; defaults are th
   All suppressions are themselves counted and reported (`suppressed: N`) — hidden waste is
   still waste, and a stale suppression (target finding gone) becomes an info finding.
 
-## 10. Candidate rules for debate
+## 12. Candidate rules for debate
 
 Statically derivable, deliberately **not** committed for 1.0 — each needs a yes/no:
 
 | Candidate | Signal | Notes |
 |-----------|--------|-------|
-| `cyclic-dependencies` | SCCs in the file/package import graph | cheap on existing graph; strong health signal |
 | `orphan-export` | exported but never imported inside an app package | subset of `unused`; maybe its own verdict for clarity |
 | `barrel-abuse` | re-export files that fan out huge subgraphs | JS/TS-specific; hurts tree-shaking and kondo precision |
 | `layer-violation` | user-declared layering rules (`ui -/-> db`) | needs config DSL; high value in monorepos |
 | `oversized-unit` | file/function LOC & complexity ceilings | borders on linting — keep? |
 | `dead-feature-flag` | flag constants that are constant-true/false | needs flag-system plugins |
-| `stale` on suppressions | suppression whose finding no longer exists | already implied by §9 — promote to rule? |
+| `stale` on suppressions | suppression whose finding no longer exists | already implied by §11 — promote to rule? |
 | `duplicate-asset` | identical files by content hash | trivial via blake3; catches copy-pasted configs/images |
 | `unused-css-variable` | `--var` declared, never `var()`-consumed | fits CSS adapter naturally |
-| `internal-only` | exported/public symbol or member whose every incoming reference comes from its own file/type | visibility tightening ("should be private/unexported"); cheap on the graph; likely the strongest candidate |
 | `redundant-export-binding` | one symbol exported under multiple bindings where some binding has zero consumers | language-neutral form of JS "redundant default/named export"; also covers Rust `pub use` re-exports |
 | `private-type-leak` | public symbol whose signature references a non-exported type | API hygiene; derivable from type-reference edges |
 

@@ -96,7 +96,7 @@ Both sides are computed on the full graph (warm), so:
   `a.ts:42`").
 - You add a first real usage of a dep ⇒ its `unused` (dependency) finding is reported as **fixed**.
 
-Fixed findings are shown as positive deltas (they add to the health score movement, RFC 0005 §8),
+Fixed findings are shown as positive deltas (they add to the health score movement, RFC 0005 §10),
 which makes the pre-commit experience rewarding rather than purely punitive.
 
 ## 7. Concurrency & storage details

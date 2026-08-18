@@ -21,7 +21,7 @@ A plugin implements one or more of these hooks (trait `Plugin`, normative in con
 | `contribute_roots` | graph assembly | framework entry points: Next.js `pages/**`, Spring `@Component`, AWS Lambda handlers, `#[test]`-like macros of alt test frameworks |
 | `contribute_edges` | graph assembly | edges invisible to the language: DI wiring, route-string → handler, Angular template → class, CSS class names used from HTML templates |
 | `annotate_symbols` | graph assembly | mark symbols "externally consumed" (public SDK surface, FFI, serialization targets like `@JsonProperty`/serde fields) |
-| `ingest_coverage` | pre-analysis | parse a coverage format (lcov, cobertura, JaCoCo, llvm-cov) into per-function coverage (RFC 0005 §7) |
+| `ingest_coverage` | pre-analysis | parse a coverage format (lcov, cobertura, JaCoCo, llvm-cov) into per-function coverage (RFC 0005 §9) |
 | `suppress` | reporting | domain-specific suppression (e.g. migration files are exempt from dead-code) |
 
 Plugins **cannot**: define new node/edge kinds, mutate other plugins' output, read arbitrary

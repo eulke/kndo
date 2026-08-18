@@ -28,6 +28,8 @@ project health*, not on style. One binary, one config (optional), one output sch
 | Unused files | Which files does nothing import or reference? |
 | Test-only code | Which "production" code is only ever reached from tests? (candidate for deletion) |
 | Duplicate code | Which blocks are structural copies of each other? |
+| Excess visibility | Which symbols are exported/public but could be private? |
+| Dependency cycles | Which files/modules form import cycles? |
 | CRAP score | Which functions are complex **and** untested — Change Risk Anti-Patterns? |
 | Project health | One number (0–100) + grade summarizing the above, trendable over time. |
 
