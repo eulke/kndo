@@ -68,11 +68,13 @@ Static analysis of dynamic features must degrade honestly, not guess:
 - `probable` — resolution relied on convention or a single plausible candidate (string literal in
   `require(x)` with a resolvable literal value; duck-typed method with one candidate).
 - `possible` — dynamic construct detected but not resolvable (`import(variable)`, reflection,
-  `eval`). The adapter then emits a **wildcard edge** from the file to *unknown*, which analyses
-  treat as "this file may use anything it can see" — suppressing false "unused" claims downstream
-  rather than silently missing them.
+  `eval`). The adapter emits a **wildcard edge** from the file to *unknown* instead of guessing
+  a target.
 
-Findings inherit the *weakest* confidence on the evidence path and report it (RFC 0006).
+This is per-edge strength; how many edges of differing strength combine into a node's overall
+reachability color and confidence — including how wildcard edges fold in — is the tiered
+algorithm in RFC 0005 §1. Findings inherit the *weakest* confidence on their evidence path and
+report it (RFC 0006).
 
 ## 6. Adapter lifecycle & versioning
 

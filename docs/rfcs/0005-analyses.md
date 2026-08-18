@@ -61,8 +61,51 @@ Two reachability passes (production-only roots; then all roots) assign every sym
 | `tooling-only` | reachable only from tooling roots |
 | `unreachable` | reachable from nothing |
 
-Wildcard edges (dynamic constructs, RFC 0002 §5) make their source's reachable set conservative:
-anything plausibly targeted is kept alive at `possible` confidence rather than reported dead.
+**Color and confidence resolution.** Two things are easy to leave ambiguous and both resolve
+from one algorithm: what happens when a node is reachable from roots of *different kinds*, and
+what confidence a node gets when reachability depends on *non-certain* edges.
+
+For each `RootKind` κ and threshold τ ∈ {certain, probable, possible} — strength order
+certain > probable > possible, so "edges at least as strong as τ" shrinks as τ strengthens —
+define `R(κ, τ)`: the nodes reachable from κ-roots using only edges at least as strong as τ.
+`R(κ, possible)` therefore uses every edge regardless of confidence and is the largest set;
+`R(κ, certain)` uses only certain edges and is the smallest. Root edges carry their own
+confidence too (RFC 0001 §3) and seed the traversal at that strength — a plugin-contributed
+root nobody is fully sure about only participates from `probable` onward, like any other edge.
+
+Wildcard edges are not a separate mechanism — they are folded into this same computation: a
+`Wildcard { from }` edge expands into `possible`-confidence edges from that file to its
+**plausible target set** (same-file symbols, symbols a plugin marked externally-consumed via
+`annotate_symbols`, and whatever an adapter's `DynamicUse` reason narrows the scope to — a
+partial string prefix narrows it, a bare `eval` does not). One mechanism, not two.
+
+Every node's `(color, confidence)` comes from the first matching rule, in this fixed order:
+
+1. `production` — if the node ∈ `R(production, possible)`; confidence = the strongest τ for
+   which it's still in `R(production, τ)`.
+2. `test-only` — same test, against `R(test, τ)`.
+3. `tooling-only` — same test, against `R(tooling, τ)`.
+4. `unreachable` — the node is in `R(κ, possible)` for **no** κ: zero evidence at *any*
+   confidence tier, from *any* root kind, wildcard-expansion included.
+
+Color precedence deliberately outranks confidence: a node *possibly* production must never be
+offered up for deletion just because it is *certainly also* test-only — "maybe still used for
+real" beats "definitely only used by tests" for what a reader should do next.
+
+**Consequence: dead is always `certain`.** Rule 4 fires only when a node has no evidence at
+*any* tier, so an `unused` finding's confidence is always `certain` — there is no "probably
+dead". A node with any evidence, however weak, is colored **alive** (rules 1–3) at that weak
+confidence instead: a symbol reachable only through a `possible` edge is production-*possible*,
+never test-only-*probable* or dead-*probable*. `test-only`/`internal-only`/etc. findings, unlike
+`unused`, do inherit sub-certain confidence — they fire on nodes that *are* reachable, just not
+from the root kind that would make them safe.
+
+*Example:* symbol `S` is called from `src/prod/x.ts` (a production root) through a duck-typed
+dispatch (`probable`), and imported directly from `tests/y.test.ts` (`certain`). `S` is in
+`R(production, probable)` but not `R(production, certain)`, and rule 1 fires before rule 2 is
+even checked ⇒ color `production`, confidence `probable` — no `unused` finding, and
+`kondo describe S` reports "production (probable), kept alive by `src/prod/x.ts:12`
+(duck-typed call)".
 
 **Library mode:** for library packages the public API is a production root by definition —
 kondo will not call exported API "unused" just because the repo doesn't call it. Within an

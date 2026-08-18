@@ -41,8 +41,13 @@ pub enum EdgeKind {
     References       { from: SymbolId, to: SymbolId, kind: RefKind },
     Declares         { file: FileId, symbol: SymbolId },
     Root             { kind: RootKind, target: NodeRef },  // NodeRef = File | Symbol
-    Wildcard         { from: FileId },                     // dynamic construct: may reach anything visible
+    Wildcard         { from: FileId },                     // dynamic construct; resolved against a
+                                                            // plausible target set, not a fixed target
 }
+// Every edge (Root and Wildcard included) carries its own Confidence and contributes to
+// reachability only from that strength onward; how per-edge confidence combines into a node's
+// (color, confidence) — including Wildcard's plausible-target-set expansion — is the tiered
+// algorithm normatively defined in RFC 0005 §1, not left to each analysis to reinvent.
 // Every File is owned by exactly one Package (nearest-manifest rule, RFC 0011 §3);
 // Package depends-on Package edges are derived by the core, never emitted by adapters.
 // RefKind matters to analyses: Implement/Override edges drive dispatch-aware member liveness
