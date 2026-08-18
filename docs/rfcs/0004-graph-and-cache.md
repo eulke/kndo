@@ -10,10 +10,10 @@ disappear far from the edited files because reachability changed.
 
 ## 2. What is cached
 
-The cache lives in `.kondo/` at the project root (gitignored by default; `kondo init` adds it):
+The cache lives in `.kndo/` at the project root (gitignored by default; `kndo init` adds it):
 
 ```
-.kondo/
+.kndo/
   cache/
     facts/<adapter>/<file-hash>.bin   # FileFacts per (adapter, content) — content-addressed
     graph.bin                         # last assembled Project Graph snapshot
@@ -39,7 +39,7 @@ A cache entry's key is the hash of **all of its inputs**:
 | Layer | Key inputs |
 |-------|-----------|
 | FileFacts | file content hash · adapter id+facts-schema-version |
-| Graph | set of (path, content hash) · manifest hashes · kondo config hash · active plugins (id+version+wasm hash) · core graph-schema version |
+| Graph | set of (path, content hash) · manifest hashes · kndo config hash · active plugins (id+version+wasm hash) · core graph-schema version |
 | Findings | graph hash · enabled analyses + their config · coverage report hash (if any) |
 
 There is no time-based invalidation and no reliance on mtimes for correctness (mtime+size is used
@@ -65,7 +65,7 @@ Reachability-style analyses are global, but their *change* is local to the affec
 - Let `Δ` = nodes added/removed/re-resolved in step 4.
 - **Dirty region** = `Δ` ∪ reverse-closure(`Δ`) ∪ forward-closure(`Δ`) over reference/import
   edges, bounded by fixpoint (in practice small for typical commits).
-- Incremental reachability: kondo maintains per-node reachability colors
+- Incremental reachability: kndo maintains per-node reachability colors
   (`production | test-only | unreachable`, RFC 0005 §3). After a patch, colors are recomputed
   only within the dirty region using standard incremental BFS with frontier re-validation;
   a change that flips a node's color propagates until colors stabilize.
@@ -74,8 +74,8 @@ Reachability-style analyses are global, but their *change* is local to the affec
   buckets touched by `Δ` are re-compared.
 
 **Fallback honesty:** if the dirty region exceeds a threshold (default 30% of the graph — e.g.
-after a big rebase), kondo falls back to a full recompute, which is still cache-warm for parsing.
-Correctness never depends on the incremental path: `kondo check --no-cache` must produce
+after a big rebase), kndo falls back to a full recompute, which is still cache-warm for parsing.
+Correctness never depends on the incremental path: `kndo check --no-cache` must produce
 byte-identical findings, and CI runs both on a fixture matrix to enforce it.
 
 ## 6. Derived effects in diff modes
@@ -107,7 +107,7 @@ which makes the pre-commit experience rewarding rather than purely punitive.
 
 ## 7. Concurrency & storage details
 
-- Single-writer lock (`.kondo/cache/lock`) with graceful read-only degradation for concurrent runs.
+- Single-writer lock (`.kndo/cache/lock`) with graceful read-only degradation for concurrent runs.
 - Hashing: blake3 (parallel, fast, collision-safe). Serialization & layout: ADR 0004.
 - The cache is per-clone and disposable; nothing in `cache/` is ever committed. `baseline.json`
   is the only committed artifact and lives outside `cache/`.

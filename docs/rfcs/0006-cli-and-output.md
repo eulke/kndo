@@ -4,7 +4,7 @@
 
 ## 1. Design tenets
 
-- **Zero-config first run.** `kondo check` in any repo produces a useful report with no setup
+- **Zero-config first run.** `kndo check` in any repo produces a useful report with no setup
   (ADR 0006). Config only *adjusts*; it is never required.
 - **One mental model.** Every mode is "compute findings, show the relevant slice". Flags select
   the slice, not different engines.
@@ -14,29 +14,29 @@
 ## 2. Commands
 
 ```
-kondo check [PATHS…]           # full analysis (default command: `kondo` = `kondo check`)
+kndo check [PATHS…]           # full analysis (default command: `kndo` = `kndo check`)
     --staged                   # scope report to effects of the staged changes
     --diff <ref>               # scope report to effects of changes vs merge-base(ref)
-    --format human|json|sarif|agent  # default: human on TTY, json when piped; KONDO_FORMAT env overrides the default
+    --format human|json|sarif|agent  # default: human on TTY, json when piped; KNDO_FORMAT env overrides the default
     --fail-on <severity>       # exit-code threshold (default: warning in diff modes, none in full)
     --only <cats> / --skip <cats>
     --strict                   # promote severities (see RFC 0005), stricter confidence floor
     --no-cache                 # bypass cache (CI correctness check, debugging)
-kondo explain <finding-id>     # full evidence chain for one finding, human or --format json
-kondo health                   # health score + category breakdown + trend vs previous snapshots
+kndo explain <finding-id>     # full evidence chain for one finding, human or --format json
+kndo health                   # health score + category breakdown + trend vs previous snapshots
 
 # graph navigation (read-only, warm-cache; full spec in RFC 0007)
-kondo find <pattern>           # name → selector (files, symbols, packages)
-kondo describe <selector>      # everything the graph knows about one node
-kondo uses <selector>          # outgoing dependencies (--depth, --transitive)
-kondo used-by <selector>       # incoming dependents (--split-by-color: safe-to-delete signal)
-kondo trace <from> [<to>]      # concrete path A→B, or root→X liveness trace (why is X alive?)
-kondo impact <selector>        # blast radius; --if-deleted simulates removal → finding flips
-kondo query                    # composite queries: JSONL on stdin, one graph load, JSONL answers
+kndo find <pattern>           # name → selector (files, symbols, packages)
+kndo describe <selector>      # everything the graph knows about one node
+kndo uses <selector>          # outgoing dependencies (--depth, --transitive)
+kndo used-by <selector>       # incoming dependents (--split-by-color: safe-to-delete signal)
+kndo trace <from> [<to>]      # concrete path A→B, or root→X liveness trace (why is X alive?)
+kndo impact <selector>        # blast radius; --if-deleted simulates removal → finding flips
+kndo query                    # composite queries: JSONL on stdin, one graph load, JSONL answers
 
-kondo init                     # write minimal kondo.toml, .gitignore entry, offer pre-commit hook
-kondo baseline [--update]      # create/refresh baseline from current findings (RFC 0006 §6)
-kondo doctor                   # what was detected: adapters, plugins active & why, cache state, timings
+kndo init                     # write minimal kndo.toml, .gitignore entry, offer pre-commit hook
+kndo baseline [--update]      # create/refresh baseline from current findings (RFC 0006 §6)
+kndo doctor                   # what was detected: adapters, plugins active & why, cache state, timings
 ```
 
 `--staged`/`--diff` report the **findings delta** (new + fixed, including derived effects far from
@@ -51,7 +51,7 @@ CLI frontend: rendering lives outside the core (Engine boundary, contracts §5).
 with the delta and the health movement:
 
 ```
-kondo · staged · 3 new · 2 fixed · net +1
+kndo · staged · 3 new · 2 fixed · net +1
 
   health   82.4 ──▶ 84.1   +1.7 ↑   B
   budget   health-drop ≤ 0.0   +1.7  ✓
@@ -75,7 +75,7 @@ effects at a distance).
 Full mode renders one section per **group**, in fixed order — defects, waste, risk, hygiene
 (RFC 0005 taxonomy rule 4) — because that is the reader's triage order: fix what's broken,
 delete what's dead, then plan refactors. Within a section, findings group by category with
-counts, worst-first, truncated with `… and N more (kondo check --only unused)`:
+counts, worst-first, truncated with `… and N more (kndo check --only unused)`:
 
 ```
 DEFECTS (2)
@@ -103,7 +103,7 @@ Diff mode uses the same group order inside its NEW and FIXED sections.
   structural overhead and doesn't need it to parse. The agent format keeps every machine anchor
   (finding ids, selectors, counts) in a deterministic line grammar, drops all decoration, and
   states its affordances inline (which command shows more). Same information as JSON — nothing
-  exists in one format only. An agent harness sets `KONDO_FORMAT=agent` once and every kondo
+  exists in one format only. An agent harness sets `KNDO_FORMAT=agent` once and every kndo
   invocation in that session answers in it, `check` and navigation verbs alike.
 - Agent ergonomics, all formats: ids are stable across runs (content-anchored, not
   line-anchored — see contracts §finding-id), so an agent can act on a finding, re-run, and
@@ -115,7 +115,7 @@ Diff mode uses the same group order inside its NEW and FIXED sections.
 |------|---------|
 | 0 | ran; nothing at/above `--fail-on` and every delta budget holds |
 | 1 | ran; findings at/above `--fail-on` **or** a delta budget exceeded |
-| 2 | kondo failed (bad config, unreadable repo, internal error) — never fails a commit silently |
+| 2 | kndo failed (bad config, unreadable repo, internal error) — never fails a commit silently |
 
 **Delta budgets** turn "tolerable" into declared policy, layered on top of `--fail-on`
 (diff modes only):
@@ -142,22 +142,22 @@ Semantics, chosen to keep budgets from becoming normalized decay:
 - Every configured rule is reported with its measured value, verdict, and `over_by` when
   exceeded — in all formats (RFC 0009 §5, RFC 0010 §4, output-schema §1/§9).
 
-Pre-commit recipe (`kondo init` offers to install it):
+Pre-commit recipe (`kndo init` offers to install it):
 
 ```bash
-kondo check --staged --fail-on warning
+kndo check --staged --fail-on warning
 ```
 
 ## 6. Baseline & adoption path
 
-`kondo baseline` snapshots current findings into `.kondo/baseline.json` (committed). Baselined
+`kndo baseline` snapshots current findings into `.kndo/baseline.json` (committed). Baselined
 findings are excluded from failure counting and shown only as a one-line summary
 (`baseline: 412 acknowledged`), while diff modes still catch every *new* finding. A fixed
 baselined finding is auto-dropped on `--update`; the baseline can only shrink automatically —
-growth requires an explicit `kondo baseline --update` in a reviewed commit. This makes day-one
+growth requires an explicit `kndo baseline --update` in a reviewed commit. This makes day-one
 adoption in a legacy repo non-punitive while ratcheting health monotonically.
 
-## 7. Configuration (`kondo.toml`)
+## 7. Configuration (`kndo.toml`)
 
 Optional, at project root; discovered upward like `.gitignore`. Everything has a default.
 
@@ -197,5 +197,5 @@ Config hash participates in cache keys (RFC 0004 §3), so edits invalidate exact
 ## 8. Non-goals for 1.0
 
 Watch mode, LSP/IDE server, HTML report, historical trend storage beyond the last snapshots
-(external systems can archive the JSON), auto-fix/codemod (`kondo clean` is a tempting post-1.0
+(external systems can archive the JSON), auto-fix/codemod (`kndo clean` is a tempting post-1.0
 verb — deliberately deferred until confidence data has real-world mileage).

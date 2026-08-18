@@ -9,7 +9,7 @@ Eight languages at launch, "adding a language must be easy", parsing must tolera
 ## Decision
 All first-party adapters parse with **tree-sitter** grammars. The adapter contract does not
 mandate tree-sitter (an adapter only owes `FileFacts`), but the shared adapter toolkit
-(`kondo-adapter-toolkit`: query helpers, token normalization, complexity walker) is built around
+(`kndo-adapter-toolkit`: query helpers, token normalization, complexity walker) is built around
 it, making tree-sitter the paved road.
 
 ## Consequences

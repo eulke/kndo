@@ -95,7 +95,7 @@ pub struct FileFacts {
     pub roots:        Vec<RawRoot>,         // language-defined only (main, pub API…)
     pub functions:    Vec<FunctionMetrics>, // { symbol, cyclomatic: u32, loc, token_fingerprints }
     pub dynamics:     Vec<DynamicUse>,      // constructs forcing Wildcard edges (span + reason)
-    pub suppressions: Vec<RawSuppression>,  // kondo:allow pragmas found in comments (§2.1)
+    pub suppressions: Vec<RawSuppression>,  // kndo:allow pragmas found in comments (§2.1)
     pub diagnostics:  Vec<Diagnostic>,
 }
 ```
@@ -117,8 +117,8 @@ pub enum SuppressionScope { Declaration, File }
 ```
 
 - Grammar inside any comment style of the language:
-  `kondo:allow <category>[:<subject>] [reason…]` (scope `Declaration`) and
-  `kondo:allow-file <category>[:<subject>] [reason…]` (scope `File`).
+  `kndo:allow <category>[:<subject>] [reason…]` (scope `Declaration`) and
+  `kndo:allow-file <category>[:<subject>] [reason…]` (scope `File`).
 - Binding (core-side): a `Declaration` pragma attaches to the declaration it precedes or shares
   a line with, covering that symbol *and everything it declares* (a class-level allow covers its
   members). `File` pragmas cover the whole file.
@@ -129,7 +129,7 @@ pub enum SuppressionScope { Declaration, File }
   "actively suppressing" and "stale" are mutually exclusive by construction: deleting a stale
   pragma cannot resurrect a finding (it was stale precisely because the finding no longer
   exists), and deleting an active one correctly un-hides its finding.
-- `stale` findings are not inline-suppressible (`kondo:allow stale` is rejected as unknown-target
+- `stale` findings are not inline-suppressible (`kndo:allow stale` is rejected as unknown-target
   meta-suppression); acknowledge them via baseline or config if needed.
 - Adapters do **not** interpret pragmas — extraction only. Validation, binding, counting, and
   staleness are core logic, identical across languages.
@@ -140,7 +140,7 @@ Compliance: every adapter must pass the shared conformance harness with its fixt
 ## 3. `Plugin`
 
 All hooks optional; a plugin implements what it needs (RFC 0003 §2). Same trait for built-ins
-(statically linked) and external WASM components (bridged via `kondo-plugin-api`, ADR 0003).
+(statically linked) and external WASM components (bridged via `kndo-plugin-api`, ADR 0003).
 
 ```rust
 pub trait Plugin: Send + Sync {
@@ -181,7 +181,7 @@ pub trait Analysis: Send + Sync {
 
 ## 5. `Engine` — the frontend boundary
 
-`kondo-core` is a **library**; every interface to it — today's CLI, tomorrow's `kondo serve`/MCP,
+`kndo-core` is a **library**; every interface to it — today's CLI, tomorrow's `kndo serve`/MCP,
 an LSP, a GUI, a CI action — is a *frontend* consuming one facade. Nothing else is exported.
 
 ```rust

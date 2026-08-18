@@ -1,4 +1,4 @@
-# ADR 0004 — Cache: content-addressed binary snapshots under `.kondo/`
+# ADR 0004 — Cache: content-addressed binary snapshots under `.kndo/`
 
 **Status:** Proposed · **Date:** 2026-08-18
 
@@ -8,7 +8,7 @@ be disposable, per-clone, corruption-tolerant, and keyed so that any input chang
 exactly its dependents (RFC 0004 §3).
 
 ## Decision
-- **Location:** `.kondo/cache/` at project root, gitignored; only `baseline.json` (a sibling,
+- **Location:** `.kndo/cache/` at project root, gitignored; only `baseline.json` (a sibling,
   not in `cache/`) is committed.
 - **Hashing:** blake3 for all content addressing (parallel, collision-safe; also used for
   duplicate-asset detection so hashes are computed once).

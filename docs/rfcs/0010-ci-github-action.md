@@ -1,16 +1,16 @@
-# RFC 0010 — kondo in CI: GitHub Action & PR Reporting
+# RFC 0010 — kndo in CI: GitHub Action & PR Reporting
 
 **Status:** Draft · **Depends on:** RFC 0004 (diff modes, cache), RFC 0006 (formats, exit codes),
 contracts §5 (Engine boundary) · **Ships:** M6 (ROADMAP)
 
 ## 1. Goal
 
-`kondo-action`: a first-party GitHub Action that runs kondo on pull requests and reports where
+`kndo-action`: a first-party GitHub Action that runs kndo on pull requests and reports where
 reviewers already look — a PR comment, file annotations, the job summary — gating the merge on
-the same rules as the local pre-commit. Setup is one workflow block, zero kondo config required:
+the same rules as the local pre-commit. Setup is one workflow block, zero kndo config required:
 
 ```yaml
-- uses: kondo-dev/kondo-action@v1
+- uses: kndo-dev/kndo-action@v1
   with:
     fail-on: warning          # default; "none" = report-only
     comment: true             # sticky PR comment (default true)
@@ -19,8 +19,8 @@ the same rules as the local pre-commit. Setup is one workflow block, zero kondo 
 
 ## 2. Architectural position
 
-The Action is a **frontend** (contracts §5): it downloads the pinned kondo binary, invokes
-`kondo check --diff <base> --format json`, and renders/publishes the result. It contains zero
+The Action is a **frontend** (contracts §5): it downloads the pinned kndo binary, invokes
+`kndo check --diff <base> --format json`, and renders/publishes the result. It contains zero
 analysis logic and reads only the JSON contract — meaning any CI system (GitLab CI, Buildkite,
 Jenkins) can build the same integration against the same JSON without core changes; the GitHub
 Action is simply the one we ship and dogfood. Comment markdown is presentation, so it is
@@ -31,24 +31,24 @@ delta envelope.
 
 1. Resolve the diff base: the PR's merge-base against the base branch (not the branch tip —
    identical semantics to local `--diff`, RFC 0004 §6).
-2. Restore `.kondo/cache` via actions/cache (key: kondo version + graph schema version + OS;
+2. Restore `.kndo/cache` via actions/cache (key: kndo version + graph schema version + OS;
    content-addressed entries make stale restores safe — worst case is a colder run, never a
    wrong one, RFC 0004 §3).
-3. `kondo check --diff <base> --format json` → typed delta: new findings, fixed findings,
+3. `kndo check --diff <base> --format json` → typed delta: new findings, fixed findings,
    health movement, all including derived effects far from the touched files.
-4. Publish (§4) and exit with kondo's own exit code semantics (RFC 0006 §5): findings at/above
-   `fail-on` fail the check; kondo failures (exit 2) fail it *differently* — annotated as
+4. Publish (§4) and exit with kndo's own exit code semantics (RFC 0006 §5): findings at/above
+   `fail-on` fail the check; kndo failures (exit 2) fail it *differently* — annotated as
    infrastructure, never as "code has findings".
 
 ## 4. Publishing surfaces
 
 **Sticky comment (primary).** One comment per PR, **upserted in place** on every push —
-identified by a hidden HTML marker (`<!-- kondo-report -->`) — never appended: a PR with thirty
+identified by a hidden HTML marker (`<!-- kndo-report -->`) — never appended: a PR with thirty
 pushes gets one living report, not thirty stale ones. Layout mirrors the terminal report in
 markdown:
 
 ```markdown
-### kondo · 3 new · 2 fixed · health 82.4 → 84.1 (B) ↑ · budget 2/3 ✗
+### kndo · 3 new · 2 fixed · health 82.4 → 84.1 (B) ↑ · budget 2/3 ✗
 
 - [x] health-drop ≤ 0.0 — +1.7
 - [x] new defects = 0 — 0
@@ -88,13 +88,13 @@ comment by design — teams pick one or both.
 Declared permissions: `contents: read`, `pull-requests: write` (comment), `security-events:
 write` (only with `sarif: true`). On fork PRs the default token cannot write comments: the
 Action **degrades, never fails** — annotations + job summary still publish, and the comment is
-skipped with a notice in the summary. No `pull_request_target` gymnastics in v1: kondo runs
+skipped with a notice in the summary. No `pull_request_target` gymnastics in v1: kndo runs
 static analysis on untrusted code safely (it never executes the analyzed project), but
 write-token workflows on forks are a security decision we don't make for users.
 
 ## 6. Non-goals
 
-- No auto-fix commits or suggested-change batches from CI (post-1.0, alongside `kondo clean`).
+- No auto-fix commits or suggested-change batches from CI (post-1.0, alongside `kndo clean`).
 - No trend dashboards — the JSON is stable; external systems archive it (vision non-goal).
 - No GitHub App in 1.0: the Action + SARIF cover the surface without hosting anything. A
   richer App (checks UI, org dashboards) is a parking-lot item that would consume the same

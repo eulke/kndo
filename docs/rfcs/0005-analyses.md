@@ -18,7 +18,7 @@ rollup.** Three orthogonal things, kept orthogonal:
    `category:subject` (e.g. `unused:enum-member`, `test-only:dependency`); knip-style
    `unused-type` ≡ `unused:type-alias`.
 3. **Reporting level = widest uniform node**: when a verdict holds for every symbol in a file
-   *and* for the file node itself, kondo emits **one** finding on the file (subject `file`), not
+   *and* for the file node itself, kndo emits **one** finding on the file (subject `file`), not
    N symbol findings; when it holds for every file in a directory, one finding on the directory;
    when it holds for a whole workspace package, one finding on the package (RFC 0011 §6).
    Rollup is presentation of the same facts, not a different verdict — "test-only file" is the
@@ -32,7 +32,7 @@ rollup.** Three orthogonal things, kept orthogonal:
    | `defect` | `unresolved`, `undeclared`, `version-skew`, `private-type-leak` | something is broken or lying — fix it |
    | `waste` | `unused`, `test-only`, `duplicate`, `internal-only` | something can be removed, consolidated, or narrowed |
    | `risk` | `crap`, `cyclic`, `untested` | something is dangerous to change — refactor or test it |
-   | `hygiene` | `stale` | kondo's own bookkeeping is outdated |
+   | `hygiene` | `stale` | kndo's own bookkeeping is outdated |
 
    Groups drive ordering and sectioning in every renderer (defects before waste before risk
    before hygiene — see RFC 0006 §3) and give consumers a stable coarse filter. A future verdict
@@ -104,11 +104,11 @@ from the root kind that would make them safe.
 dispatch (`probable`), and imported directly from `tests/y.test.ts` (`certain`). `S` is in
 `R(production, probable)` but not `R(production, certain)`, and rule 1 fires before rule 2 is
 even checked ⇒ color `production`, confidence `probable` — no `unused` finding, and
-`kondo describe S` reports "production (probable), kept alive by `src/prod/x.ts:12`
+`kndo describe S` reports "production (probable), kept alive by `src/prod/x.ts:12`
 (duck-typed call)".
 
 **Library mode:** for library packages the public API is a production root by definition —
-kondo will not call exported API "unused" just because the repo doesn't call it. Within an
+kndo will not call exported API "unused" just because the repo doesn't call it. Within an
 unpublished application package, however, `export` is *not* a root; an exported-but-never-imported
 symbol is still dead. Adapters/manifests decide which mode applies per package.
 
@@ -262,7 +262,7 @@ of the function's statements covered:
 CRAP(m) = comp(m)² × (1 − cov(m))³ + comp(m)
 ```
 
-- Coverage comes from ingested reports (plugins, ADR 0005). No report ⇒ `cov` unknown ⇒ kondo
+- Coverage comes from ingested reports (plugins, ADR 0005). No report ⇒ `cov` unknown ⇒ kndo
   reports **CRAPload with cov=0** but flags results "coverage: none" (configurable to skip).
 - Threshold: findings for `CRAP > 30` (standard), configurable. Test code is exempt.
 - Output ranks the CRAP hotspot list — the refactor-next queue.
@@ -295,15 +295,15 @@ modes, the delta caused by the change. Weights are configurable; defaults are th
 
 ## 12. Suppression model
 
-- Inline: `kondo:allow <category>[:<subject>] [reason]` in a comment on/above the declaration,
-  or `kondo:allow-file …` for file scope. **Adapters extract** the pragmas (comment syntax is
+- Inline: `kndo:allow <category>[:<subject>] [reason]` in a comment on/above the declaration,
+  or `kndo:allow-file …` for file scope. **Adapters extract** the pragmas (comment syntax is
   language-defined — `FileFacts.suppressions`, contracts §2.1); the **core validates and binds**
   them: a declaration-scoped allow covers the symbol and everything it declares. Suppression
   *marks* findings, never deletes them — analyses compute the full set first, then pragmas match
   against it, so an actively-suppressing pragma can never be `stale` and deleting a stale pragma
   can never resurrect a finding (no allow/stale flicker loop; contracts §2.1). `stale` itself is
   not inline-suppressible.
-- Baseline: `.kondo/baseline.json` acknowledges existing findings at adoption time (RFC 0006 §6).
+- Baseline: `.kndo/baseline.json` acknowledges existing findings at adoption time (RFC 0006 §6).
 - Config: per-glob disables of categories or `category:subject` pairs (e.g. `examples/**` exempt
   from `unused`; `unused:enum-member` off globally for codebases with wire-format enums).
   All suppressions are themselves counted and reported (`suppressed: N`) — hidden waste is

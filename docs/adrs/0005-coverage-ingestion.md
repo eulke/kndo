@@ -4,10 +4,10 @@
 
 ## Context
 CRAP (RFC 0005 §10) needs per-function coverage. Measuring coverage requires *executing* tests —
-incompatible with a < 500 ms static tool and with kondo's non-goal of being a coverage tool.
+incompatible with a < 500 ms static tool and with kndo's non-goal of being a coverage tool.
 
 ## Decision
-kondo consumes existing coverage reports via `ingest_coverage` plugins (RFC 0003 §2). Launch
+kndo consumes existing coverage reports via `ingest_coverage` plugins (RFC 0003 §2). Launch
 formats: **lcov** (lingua franca: jest/vitest/nyc, llvm-cov, gcov, Go via converters) and
 **JaCoCo XML** (Java/Kotlin); **Cobertura XML** next. Reports are located by config or
 well-known paths, matched to files by path, mapped to functions by line ranges.
@@ -17,7 +17,7 @@ ignored **with a diagnostic** — stale certainty is worse than declared uncerta
 usable coverage, CRAP degrades as specified in RFC 0005 §10 (cov = 0, flagged `coverage: none`).
 
 ## Consequences
-- kondo stays static and fast; teams get CRAP "for free" if any coverage already runs in CI.
+- kndo stays static and fast; teams get CRAP "for free" if any coverage already runs in CI.
 - Coverage staleness/precision is inherited from the producer (line-level lcov ⇒ statement-level
   approximation of `cov(m)`); we report the source + age so consumers can judge.
 - New formats are plugins — no core changes.

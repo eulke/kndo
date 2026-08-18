@@ -1,9 +1,9 @@
-// kondo performance spike — validates the RFC 0001 §5 warm-run budget.
+// kndo performance spike — validates the RFC 0001 §5 warm-run budget.
 // Disposable by design; findings live in docs/spikes/0001-performance.md.
 //
 // Usage:
-//   kondo-perf-spike gen <dir> <n-files>     generate a synthetic TS repo
-//   kondo-perf-spike run <dir>               run all measurements against it
+//   kndo-perf-spike gen <dir> <n-files>     generate a synthetic TS repo
+//   kndo-perf-spike run <dir>               run all measurements against it
 
 use rayon::prelude::*;
 use std::fmt::Write as _;

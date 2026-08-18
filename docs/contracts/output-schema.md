@@ -2,7 +2,7 @@
 
 **Status:** Draft · Normative for `--format json`. Versioned: `schema_version` uses semver;
 additive = minor, breaking = major (RFC 0006 §4). A machine-readable JSON Schema
-(`schemas/kondo-output.schema.json`) is generated from the Rust types at build time and must
+(`schemas/kndo-output.schema.json`) is generated from the Rust types at build time and must
 round-trip these examples in CI.
 
 ## 1. Envelope
@@ -10,7 +10,7 @@ round-trip these examples in CI.
 ```jsonc
 {
   "schema_version": "1.0.0",
-  "kondo_version": "0.3.1",
+  "kndo_version": "0.3.1",
   "run": {
     "mode": "staged",                    // "full" | "staged" | "diff"
     "base_ref": null,                    // set for "diff"
@@ -51,7 +51,7 @@ round-trip these examples in CI.
   "location": { "path": "src/billing/tax.ts", "range": { "start": [41,1], "end": [78,2] },
                 "symbol": "calcLegacyTax", "package": "@org/billing" },   // owning workspace package (RFC 0011)
   "rolled_up": null,                    // file/directory rollups: count of subsumed findings
-  "related": [                           // evidence chain (also what `kondo explain` renders)
+  "related": [                           // evidence chain (also what `kndo explain` renders)
     { "role": "cause", "path": "src/billing/index.ts", "range": { "start": [12,1], "end": [12,42] },
       "note": "last production reference removed by this change" }
   ],
@@ -90,7 +90,7 @@ credit improvements and lets pre-commit output celebrate deletions.
 `id = "kndo-" + hash(category, subject_kind, project-relative path, symbol path (not line numbers),
 category-specific discriminator)`, truncated to 12 hex chars. Line/column changes do **not** change the id; renames
 and moves do (a rename is a different code object). Guarantees: an agent that fixes finding X can
-re-run kondo and assert X is absent; a baseline survives reformatting.
+re-run kndo and assert X is absent; a baseline survives reformatting.
 
 ## 6. Category registry (1.0)
 
@@ -116,7 +116,7 @@ two (`unused (dependency)`); JSON consumers filter on either axis independently.
 ## 7. SARIF mapping
 
 `category` → `rule.id`; `severity` → SARIF `level` (error/warning/note); evidence chain →
-`relatedLocations`; confidence → `properties.confidence`. One run object per kondo run.
+`relatedLocations`; confidence → `properties.confidence`. One run object per kndo run.
 
 ## 8. Query envelopes (navigation verbs, RFC 0007)
 
@@ -138,7 +138,7 @@ more", never as "that's all".
 
 Verbs accept multiple selectors; `results` always aligns 1:1 with `query.selectors` (a failed
 selector yields an inline `{ "status": "not-found" | "error", … }` entry without failing its
-siblings). In `kondo query` mode (RFC 0007 §4.7) this same envelope is emitted as one JSON Line
+siblings). In `kndo query` mode (RFC 0007 §4.7) this same envelope is emitted as one JSON Line
 per request, in input order, `run` appearing only on the first line (shared graph snapshot).
 
 Common building blocks:
@@ -180,7 +180,7 @@ the JSON schema (`agent-format 1` in the header); grammar changes bump the versi
 version stays available for one release cycle, like JSON majors.
 
 ```
-kondo 0.3.1 agent-format 1 | mode staged | cache warm | 312ms
+kndo 0.3.1 agent-format 1 | mode staged | cache warm | 312ms
 result: 3 new, 2 fixed, net +1 | health 82.4 -> 84.1 (B) | baseline 412 acknowledged
 budget: fail (2/3) | health-drop<=0.0 ok +1.7 | defects=0 ok 0 | net<=0 FAIL +1 over-by 1
 new:
@@ -192,7 +192,7 @@ new:
 fixed:
 3. [kndo-77b0e4f2c19d] unused dependency package.json date-fns
 more: none
-next: kondo explain <id> | kondo used-by <selector> --format agent
+next: kndo explain <id> | kndo used-by <selector> --format agent
 ```
 
 Grammar rules (normative):
@@ -207,7 +207,7 @@ Grammar rules (normative):
   to findings cheaply ("fix 1 and 3"); ids are the durable anchors.
 - **Findings appear in group order** (defect, waste, risk, hygiene) within `new:` / `fixed:` /
   `findings:` blocks — same triage order as every other renderer.
-- **Elision is always explicit**: `more: 47 unused (kondo check --only unused --format agent)`
+- **Elision is always explicit**: `more: 47 unused (kndo check --only unused --format agent)`
   or `more: none`. A model must never have to guess whether it saw everything.
 - **`next:` closes every response** with the drill-down commands relevant to what was shown —
   affordances travel with the data, so the model needn't memorize the CLI.
@@ -215,10 +215,10 @@ Grammar rules (normative):
   group/category and never repeated per line.
 - Navigation verbs (RFC 0007) render in the same grammar: numbered entries of
   `[selector] kind path:line` plus the verb's specifics (depth, via-edge, cycle path), same
-  `more:`/`next:` discipline. `kondo query` (JSONL) is unaffected — it stays JSON by nature.
+  `more:`/`next:` discipline. `kndo query` (JSONL) is unaffected — it stays JSON by nature.
 - Encoding: UTF-8, no ANSI, no glyphs, stable across `--threads` and cache states (RFC 0008 §4).
 
 The agent format is a *rendering* of `RunResult`/`QueryResult` — it can never carry information
 absent from the JSON, and anything added to it must land in the JSON schema first. Like JSON and
 SARIF it renders **core-side** (machine formats, contracts §5): every frontend — CLI today,
-`kondo serve`/MCP tomorrow — emits byte-identical agent text.
+`kndo serve`/MCP tomorrow — emits byte-identical agent text.

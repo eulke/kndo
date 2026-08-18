@@ -53,7 +53,7 @@ without any framework plugin (framework *roots* remain plugin territory, RFC 000
 (consistent `$n` renaming per RFC 0005 §6; template-literal text canonicalized, string/number
 literals bucketed).
 
-**Suppressions** — `// kondo:allow …`, `/* kondo:allow … */`, JSX `{/* kondo:allow … */}`.
+**Suppressions** — `// kndo:allow …`, `/* kndo:allow … */`, JSX `{/* kndo:allow … */}`.
 
 ## 3. Imports & resolution
 

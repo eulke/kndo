@@ -1,4 +1,4 @@
-# kondo — Product Vision
+# kndo — Product Vision
 
 **Status:** Draft · **Owner:** eulke · **Last updated:** 2026-08-18
 
@@ -16,7 +16,7 @@ about to edit the repo — actually has: **"what in this project is no longer ea
 
 ## 2. The product
 
-kondo is a **single, fast, multi-language static analyzer** focused on *waste detection and
+kndo is a **single, fast, multi-language static analyzer** focused on *waste detection and
 project health*, not on style. One binary, one config (optional), one output schema.
 
 ### Core detections (1.0)
@@ -39,7 +39,7 @@ project health*, not on style. One binary, one config (optional), one output sch
 ### Product principles
 
 1. **Fast enough to never skip.** Warm incremental runs complete in **< 500 ms** on large repos so
-   kondo can live in a pre-commit hook. Speed is a feature, not an optimization.
+   kndo can live in a pre-commit hook. Speed is a feature, not an optimization.
 2. **Languages are pluggable; the core is language-blind.** The core defines a language-neutral
    vocabulary (files, symbols, references, entry points). Language adapters translate source code
    into that vocabulary. Adding a language never touches the core.
@@ -56,10 +56,10 @@ project health*, not on style. One binary, one config (optional), one output sch
    get a stable, versioned JSON schema (plus SARIF). LLM agents get a third first-class format:
    token-frugal deterministic text (`--format agent`) that keeps every machine anchor (ids,
    selectors, explicit elision) at a fraction of JSON's token cost. All come from the same
-   engine — an agent running kondo after generating code gets machine-checkable feedback that
+   engine — an agent running kndo after generating code gets machine-checkable feedback that
    its additions are wired in and nothing became orphaned.
 7. **The graph is a product, not just an implementation detail.** Having paid for a whole-project
-   semantic graph, kondo exposes it read-only as navigation verbs (find, describe, uses, used-by,
+   semantic graph, kndo exposes it read-only as navigation verbs (find, describe, uses, used-by,
    trace, impact) so exploration costs milliseconds and bounded output instead of context-window
    budget — precise answers replace speculative file reading.
 8. **Adoptable in brownfield repos.** A baseline file lets legacy findings be acknowledged so only
@@ -69,11 +69,11 @@ project health*, not on style. One binary, one config (optional), one output sch
 
 | User | Flow |
 |------|------|
-| Developer | `kondo check --staged` in pre-commit: blocks the commit only for waste *introduced or caused by* the staged changes. |
-| Developer | `kondo check` locally: full report, explore findings, `kondo explain <id>`. |
-| CI | `kondo-action` on every PR: gates the merge on new findings and upserts one sticky comment with the delta and health movement (RFC 0010); any other CI consumes the same JSON. |
-| AI agent | Runs kondo after edits; consumes JSON to verify its new code is reachable, deleted code freed dependencies, no duplication introduced. |
-| AI agent | Navigates via the graph instead of grep-and-read: `kondo find/describe/uses/used-by/trace/impact` answer "who uses this?", "why is this alive?", "what breaks if I delete it?" in bounded, verifiable calls (RFC 0007). |
+| Developer | `kndo check --staged` in pre-commit: blocks the commit only for waste *introduced or caused by* the staged changes. |
+| Developer | `kndo check` locally: full report, explore findings, `kndo explain <id>`. |
+| CI | `kndo-action` on every PR: gates the merge on new findings and upserts one sticky comment with the delta and health movement (RFC 0010); any other CI consumes the same JSON. |
+| AI agent | Runs kndo after edits; consumes JSON to verify its new code is reachable, deleted code freed dependencies, no duplication introduced. |
+| AI agent | Navigates via the graph instead of grep-and-read: `kndo find/describe/uses/used-by/trace/impact` answer "who uses this?", "why is this alive?", "what breaks if I delete it?" in bounded, verifiable calls (RFC 0007). |
 | Tech lead | Health score and per-category trends over time; CRAP hotspot list for refactor planning. |
 
 ## 4. Supported languages (initial)
@@ -85,7 +85,7 @@ crate with zero core changes (see [RFC 0002](../rfcs/0002-language-adapters.md))
 ## 5. Non-goals
 
 - **Not a linter/formatter.** No style rules, no autofix of formatting. (ESLint, gofmt, ktlint own that.)
-- **Not a type checker or compiler.** kondo never blocks on code that doesn't compile; it degrades gracefully.
+- **Not a type checker or compiler.** kndo never blocks on code that doesn't compile; it degrades gracefully.
 - **Not a security scanner.** No CVE/vulnerability analysis (though removing unused dependencies shrinks the surface).
 - **Not a coverage tool.** Coverage is *ingested* from existing reports for CRAP, never measured (ADR 0005).
 - **No IDE integration in 1.0.** CLI + JSON/SARIF first; LSP server is a possible post-1.0 layer.
@@ -97,4 +97,4 @@ crate with zero core changes (see [RFC 0002](../rfcs/0002-language-adapters.md))
   (target: < 2% of findings marked as wrong via suppressions in dogfooding repos).
 - A new language adapter can be built by a third party against the published contract without
   patching the core.
-- kondo runs on itself in its own pre-commit hook from milestone M2 onward (dogfooding).
+- kndo runs on itself in its own pre-commit hook from milestone M2 onward (dogfooding).

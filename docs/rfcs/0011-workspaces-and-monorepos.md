@@ -4,7 +4,7 @@
 
 ## 1. Problem
 
-The repos where kondo matters most are not single-package projects: they are npm/pnpm workspaces,
+The repos where kndo matters most are not single-package projects: they are npm/pnpm workspaces,
 Cargo workspaces, Go multi-module repos, Gradle multi-project builds — often several ecosystems
 in one tree (JS frontend + Go backend). Until now the docs said "library mode per package"
 without defining what a package *is*, who owns each file, or what happens at package boundaries.
@@ -33,7 +33,7 @@ forever is not.
   one implicit Package — the single-project case is the monorepo model with n = 1, not a
   separate mode.
 - **Derived edges** — `Package depends-on Package` edges are derived from cross-package file
-  edges and manifest declarations; they power package-level queries (`kondo uses pkg:ui`),
+  edges and manifest declarations; they power package-level queries (`kndo uses pkg:ui`),
   package rollups (§6) and package-level cycles (`cyclic` subject `package`).
 
 ## 4. Resolution & boundary enforcement
@@ -41,7 +41,7 @@ forever is not.
 An import specifier may now resolve to a third target: an **internal package** (`workspace:*`
 deps, path dependencies, tsconfig path aliases into a sibling, Go replace directives, Cargo
 path deps). Resolution yields the concrete internal file — real edges, full reachability across
-packages — *and* kondo validates the boundary contract both ways:
+packages — *and* kndo validates the boundary contract both ways:
 
 | Manifest vs reality | Finding |
 |--------------------|---------|
@@ -66,7 +66,7 @@ Each Package independently resolves its mode from manifest signals, overridable 
   fed with correct roots.
 
 ```toml
-[package."@org/legacy-ui"]        # per-package config override (kondo.toml)
+[package."@org/legacy-ui"]        # per-package config override (kndo.toml)
 mode = "library"                   # force, when manifest signals lie
 skip = ["duplicate"]
 ```
@@ -80,7 +80,7 @@ a Package consumed only by tests rolls up to `test-only:package`. `subject_kind`
 `package`; findings gain an optional `package` field (owning package name) so CI and agents can
 partition results without path arithmetic.
 
-`kondo health` reports the global score plus a per-package breakdown (`--by-package`); weights
+`kndo health` reports the global score plus a per-package breakdown (`--by-package`); weights
 and formula are unchanged — the package axis is a *grouping* of the same penalties, not a new
 metric.
 
@@ -93,7 +93,7 @@ JS frontend simply produces no edges between those packages.
 
 ## 8. Scoping runs & queries
 
-- `kondo check [PATHS…]` already scopes by path; paths align with package boundaries naturally.
+- `kndo check [PATHS…]` already scopes by path; paths align with package boundaries naturally.
 - Selectors: `pkg:<name>` addresses a Package; the external-dependency selector becomes
   `dep:<name>` (RFC 0007 updated). `describe pkg:@org/ui`, `used-by pkg:@org/ui`,
   `trace pkg:app pkg:legacy` work like any node.
@@ -108,7 +108,7 @@ package-agnostic.
 
 ## 10. Non-goals (1.0)
 
-Task-runner integration (Nx/Turbo/Bazel graphs are *build* graphs; kondo derives its own from
+Task-runner integration (Nx/Turbo/Bazel graphs are *build* graphs; kndo derives its own from
 code), affected-package CI splitting (consumers can compute it from `Package depends-on` edges
 in the JSON), tsconfig project-references deep integration (parking lot), versioning/release
 concerns (changesets et al. own that).

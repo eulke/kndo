@@ -12,7 +12,7 @@
    tool that flickers is a tool that gets uninstalled. Pattern everywhere: *parallel compute,
    deterministic reduce* (§4).
 3. **The budget is enforced, not aspired to.** The RFC 0001 §5 phase budgets are CI gates from
-   M2 (§7), on fixture repos, with regression thresholds. A merge that makes kondo slower than
+   M2 (§7), on fixture repos, with regression thresholds. A merge that makes kndo slower than
    budget is a failing build, same as a wrong finding.
 4. **Adaptive, not maximal.** Parallelism has fixed costs (pool wake-up, work splitting). Small
    warm runs — the most common invocation — may execute fully sequentially when that is faster
@@ -68,7 +68,7 @@ The scheduling-dependent parts must never leak into ids, ordering, or output:
 
 - Default pool size: physical cores (not logical — hyperthread gains are negligible for this
   workload and hurt tail latency on laptops).
-- Overrides: `--threads N` flag > `KONDO_THREADS` env > config `[performance] threads`.
+- Overrides: `--threads N` flag > `KNDO_THREADS` env > config `[performance] threads`.
 - One global rayon pool per process, initialized lazily (§6) — plugins and adapters never spawn
   their own threads (contract rule; WASM plugins are single-threaded by sandbox).
 - `--threads 1` is a first-class supported mode (debugging, determinism checks, CI runners with
@@ -100,10 +100,10 @@ task splitting, cache-line contention) can exceed the work itself:
 
 ## 8. Non-goals
 
-- **No resident daemon for the budget.** A warm daemon (post-1.0 idea, ADR 0004) may make kondo
+- **No resident daemon for the budget.** A warm daemon (post-1.0 idea, ADR 0004) may make kndo
   *even* faster, but the 500 ms contract must hold from a cold process — pre-commit can't depend
   on a daemon being alive.
-- **No `unsafe` for speed** outside the vetted dependencies (rkyv, memmap); kondo's own code
+- **No `unsafe` for speed** outside the vetted dependencies (rkyv, memmap); kndo's own code
   stays safe Rust until a profile proves a specific bottleneck, decided case by case via ADR.
-- **No speculative background work** (pre-warming, watching): kondo does nothing between
+- **No speculative background work** (pre-warming, watching): kndo does nothing between
   invocations by design; that's what keeps it trustworthy in CI and pre-commit.

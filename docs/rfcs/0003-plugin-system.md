@@ -7,7 +7,7 @@
 The adapter boundary (RFC 0002) deliberately excludes everything a language *ecosystem* adds on
 top of the language: frameworks, test runners, coverage formats, org conventions. Those things
 change fast, are opinionated, and are optional — exactly what should be **pluggable and
-composable** rather than baked into adapters. Plugins are how kondo learns them.
+composable** rather than baked into adapters. Plugins are how kndo learns them.
 
 Guiding rule: **adapters describe what code *is*; plugins describe what an ecosystem *means* by it.**
 
@@ -37,7 +37,7 @@ Two tiers (decision in ADR 0003):
    (examples, each its own doc before implementation): `react`, `nextjs`, `jest/vitest`,
    `spring`, `junit`, `gradle-conventions`, `swiftui`, `coverage-lcov`, `coverage-jacoco`.
 2. **External plugins** — WASM components implementing the same hooks over a versioned ABI
-   (`kondo-plugin-api`), loaded from `.kondo/plugins/` or a configured path. Sandboxed (no fs/net;
+   (`kndo-plugin-api`), loaded from `.kndo/plugins/` or a configured path. Sandboxed (no fs/net;
    host-mediated file access), with per-file fuel/time limits so a plugin cannot break the 500 ms
    budget — a plugin that exceeds its budget is disabled for the run and reported as a diagnostic.
 
@@ -47,9 +47,9 @@ prototype a plugin natively and ship it as WASM unchanged.
 ## 4. Activation & configuration
 
 - **Auto-detection**: a plugin declares detection predicates (e.g. "package.json depends on
-  `react`", "a `build.gradle` exists"). Detected plugins activate silently; `kondo doctor` (RFC
+  `react`", "a `build.gradle` exists"). Detected plugins activate silently; `kndo doctor` (RFC
   0006) shows what activated and why.
-- **Explicit config** (`kondo.toml`) can force-enable/disable and pass plugin-scoped options:
+- **Explicit config** (`kndo.toml`) can force-enable/disable and pass plugin-scoped options:
 
 ```toml
 [plugins.nextjs]

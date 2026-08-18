@@ -3,12 +3,12 @@
 **Status:** Accepted · **Date:** 2026-08-18
 
 ## Context
-kondo's defining constraint is a < 500 ms warm run (pre-commit path) over multi-thousand-file
+kndo's defining constraint is a < 500 ms warm run (pre-commit path) over multi-thousand-file
 repos, distributed as a tool users install once and trust everywhere (macOS/Linux/Windows, CI
 containers, developer laptops).
 
 ## Decision
-Implement kondo in Rust: single static binary, no runtime, rayon for data-parallel extraction,
+Implement kndo in Rust: single static binary, no runtime, rayon for data-parallel extraction,
 first-class tree-sitter bindings, mature WASM hosting (wasmtime) for the plugin tier, memory
 safety for a tool that parses untrusted input.
 

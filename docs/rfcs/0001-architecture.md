@@ -4,7 +4,7 @@
 
 ## 1. Overview
 
-kondo is organized as a pipeline around one central data structure, the **Project Graph**:
+kndo is organized as a pipeline around one central data structure, the **Project Graph**:
 
 ```
 ┌────────────┐   ┌───────────────────┐   ┌───────────────┐   ┌────────────┐   ┌──────────┐
@@ -15,7 +15,7 @@ kondo is organized as a pipeline around one central data structure, the **Projec
 └────────────┘   └───────────────────┘   └───────┬───────┘   └────────────┘   └──────────┘
                                                  │  ▲
                                             ┌────▼──┴────┐
-                                            │   Cache    │  .kondo/ (content-addressed)
+                                            │   Cache    │  .kndo/ (content-addressed)
                                             └────────────┘
 ```
 
@@ -26,19 +26,19 @@ files and whole-program work is re-run only on the affected subgraph (RFC 0004).
 ## 2. Layering & the ignorance rule
 
 ```
-kondo-cli          ── one frontend: terminal UI, exit codes, human rendering (RFC 0009)
-kondo-core         ── the system: graph model, analysis engine, cache, orchestration, plugin host
-kondo-adapter-*    ── one crate per language (js, go, java, kotlin, swift, rust, json, css)
-kondo-plugin-api   ── stable API surface for third-party plugins (WASM)
+kndo-cli          ── one frontend: terminal UI, exit codes, human rendering (RFC 0009)
+kndo-core         ── the system: graph model, analysis engine, cache, orchestration, plugin host
+kndo-adapter-*    ── one crate per language (js, go, java, kotlin, swift, rust, json, css)
+kndo-plugin-api   ── stable API surface for third-party plugins (WASM)
 ```
 
-`kondo-core` is a library; the CLI is one frontend among future ones (`kondo serve`/MCP, LSP,
+`kndo-core` is a library; the CLI is one frontend among future ones (`kndo serve`/MCP, LSP,
 GUI, CI actions) and holds **zero** analysis logic. All frontends consume the same `Engine`
 facade (contracts §5): the core never prints, frontends never compute. Machine output (JSON,
 SARIF) is serialized core-side so every frontend emits identical data; only *human* rendering
 is frontend-owned.
 
-**The ignorance rule:** `kondo-core` must not contain the name of any language. It defines a
+**The ignorance rule:** `kndo-core` must not contain the name of any language. It defines a
 language-neutral vocabulary — `SourceFile`, `Symbol`, `Reference`, `Root`, `ManifestDependency` —
 and adapters translate language reality into that vocabulary. If implementing a feature requires
 `if language == X` in the core, the vocabulary is missing a concept and must be extended instead.
@@ -80,7 +80,7 @@ becomes part of the extraction contract.
 
 ## 4. Execution model
 
-1. **Discovery** — enumerate candidate files (respecting `.gitignore` + kondo config), or take the
+1. **Discovery** — enumerate candidate files (respecting `.gitignore` + kndo config), or take the
    changed set from `--staged` / `--diff <ref>`. Output: file list + content hashes (blake3).
 2. **Extraction** (parallel, rayon) — for each file whose hash is not in cache: adapter parses
    (tree-sitter, ADR 0002) and emits `FileFacts` (declarations, references, imports, roots,
@@ -118,7 +118,7 @@ is specified in [RFC 0008](0008-performance-and-parallelism.md).
 - A file that fails to parse degrades to an *opaque file node*: it keeps previous cached facts if
   any, else contributes no facts — and this is reported as a diagnostic, never a crash.
 - Adapter/plugin panics are caught at the file boundary; one bad file cannot kill the run.
-- kondo's own exit codes distinguish "findings" from "kondo failed" (RFC 0006 §5).
+- kndo's own exit codes distinguish "findings" from "kndo failed" (RFC 0006 §5).
 
 ## 7. Alternatives considered
 

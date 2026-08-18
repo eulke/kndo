@@ -1,6 +1,6 @@
-# kondo — Documentation
+# kndo — Documentation
 
-> **kondo** is a multi-language static analyzer that finds what your codebase no longer needs:
+> **kndo** is a multi-language static analyzer that finds what your codebase no longer needs:
 > unused dependencies, dead code, duplicated code, unused files, and code that only tests keep alive.
 > It reports overall project health, is fast enough to run as a pre-commit hook, and is designed
 > to be consumed by both humans and AI agents to prevent "AI slop" from accumulating.
@@ -37,9 +37,10 @@ This directory is the single source of truth for product and technical decisions
 | [0001](adrs/0001-rust-for-the-core.md) | Rust for the core | Accepted |
 | [0002](adrs/0002-tree-sitter-parsing.md) | tree-sitter as the universal parsing layer | Proposed |
 | [0003](adrs/0003-adapter-linking-strategy.md) | First-party adapters compiled in; third-party plugins via WASM | Proposed |
-| [0004](adrs/0004-cache-format.md) | Cache: content-addressed binary snapshot in `.kondo/` | Proposed |
+| [0004](adrs/0004-cache-format.md) | Cache: content-addressed binary snapshot in `.kndo/` | Proposed |
 | [0005](adrs/0005-coverage-ingestion.md) | Coverage is ingested, never measured, for CRAP | Proposed |
 | [0006](adrs/0006-single-binary-zero-config.md) | Single static binary, zero-config by default | Proposed |
+| [0007](adrs/0007-product-name.md) | Product name: `kndo` | Accepted |
 
 ## Conventions
 
@@ -53,8 +54,8 @@ This directory is the single source of truth for product and technical decisions
 
 ## Open questions (tracked for debate)
 
-1. Name collision: an OSS tool named `kondo` (tidies build artifacts) already exists on crates.io —
-   keep the name for the binary or pick a distinct crate name?
+1. ~~Name collision with the existing `kondo` crate~~ **Resolved** — the product is `kndo`
+   everywhere (ADR 0007); pending action: rename the GitHub repo and reserve the registry names.
 2. Candidate-rule triage is done (RFC 0005 §13); only `deep-import` remains open (yes/no).
 3. Default severity for `test-only code` findings — warn or info?
-4. Navigation verbs: flat (`kondo uses`) vs namespaced (`kondo graph uses`) — RFC 0007 §8.
+4. Navigation verbs: flat (`kndo uses`) vs namespaced (`kndo graph uses`) — RFC 0007 §8.

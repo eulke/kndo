@@ -4,9 +4,9 @@
 
 ## 1. Scope & position
 
-This RFC owns everything a human *sees* in the terminal. It binds only `kondo-cli`: the core
+This RFC owns everything a human *sees* in the terminal. It binds only `kndo-cli`: the core
 returns data (`RunResult`), the CLI renders it — the separation is contractual (contracts §5),
-so any future frontend (LSP, GUI, `kondo serve`) can define its own presentation without
+so any future frontend (LSP, GUI, `kndo serve`) can define its own presentation without
 touching this document or the core. Machine formats (JSON/SARIF, and the LLM-oriented agent
 format) are out of scope here — they are serialized core-side and schema-governed
 (output-schema §9).
@@ -15,7 +15,7 @@ format) are out of scope here — they are serialized core-side and schema-gover
 
 1. **Scannable in two seconds.** The first line answers "am I fine?"; the layout answers "what
    do I fix first?" without reading everything. Triage order = group order (RFC 0005 rule 4).
-2. **Quiet success.** A clean run prints one line (`kondo · clean · health 91 (A) · 214 ms`).
+2. **Quiet success.** A clean run prints one line (`kndo · clean · health 91 (A) · 214 ms`).
    No banners, no ASCII art, no emoji noise, no advertising. Silence is the reward.
 3. **Semantic color, never decorative.** Color encodes exactly two things: the finding's group
    and delta polarity (new/fixed). If it's colored, it means something; if it means something,
@@ -40,7 +40,7 @@ format) are out of scope here — they are serialized core-side and schema-gover
 
 - Category and confidence render as **text** (`unused`, `(probable)`) — never encoded only in
   color or glyph (principle 3).
-- One accent color per line maximum; paths and messages stay in default foreground. kondo output
+- One accent color per line maximum; paths and messages stay in default foreground. kndo output
   should look calm next to a compiler's.
 
 ## 4. Capability degradation
@@ -84,7 +84,7 @@ One finding = one primary line, optional evidence lines, fixed column order:
   health   84.1 ──▶ 81.9   −2.2 ↓   B  (1.9 from C)
   budget   health-drop ≤ 1.0   −2.2  ✗   over by 1.2      FAIL
   ```
-- Health block (in `kondo health` and full runs): score, grade, and per-category penalty bars
+- Health block (in `kndo health` and full runs): score, grade, and per-category penalty bars
   built from `▁▂▃▄▅▆▇` (ASCII: `#` scaled) — a shape, not a chart; details stay tabular.
 
 ## 6. Streams, progress & verbosity
@@ -98,7 +98,7 @@ One finding = one primary line, optional evidence lines, fixed column order:
 - `--quiet`: header line + exit code only. `--verbose`: adds `possible`-confidence findings,
   per-phase timings, and cache state. Neither changes *what* was analyzed (RFC 0006 flags do).
 - Errors speak human: every `EngineError` renders as problem + probable cause + next command
-  (`cache locked by pid 4211 — another kondo is running; retry or kondo doctor`). Never a bare
+  (`cache locked by pid 4211 — another kndo is running; retry or kndo doctor`). Never a bare
   Rust error chain outside `--verbose`.
 
 ## 7. Non-goals (1.0)
@@ -109,7 +109,7 @@ reports (the JSON feeds external renderers).
 
 ## 8. Open questions
 
-1. Should `kondo health` render a sparkline of the last N snapshots (data exists in
-   `.kondo/cache/`) or stay single-run until a real trend store lands post-1.0?
+1. Should `kndo health` render a sparkline of the last N snapshots (data exists in
+   `.kndo/cache/`) or stay single-run until a real trend store lands post-1.0?
 2. Glyph set on Windows legacy consoles (cmd.exe pre-Windows-Terminal): force ASCII always, or
    trust UTF-8 codepage detection?
