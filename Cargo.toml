@@ -1,0 +1,23 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/kndo-core",
+    "crates/kndo-cli",
+    "crates/kndo-adapter-toolkit",
+    "crates/kndo-adapter-js",
+]
+exclude = ["spikes/perf"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/eulke/kndo"
+publish = false # until 1.0 (ADR 0007: reserve names early regardless)
+
+[workspace.dependencies]
+smol_str = "0.3"
+
+[profile.release]
+lto = true
+codegen-units = 1

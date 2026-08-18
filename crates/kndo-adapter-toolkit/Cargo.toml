@@ -1,0 +1,11 @@
+[package]
+name = "kndo-adapter-toolkit"
+description = "Shared adapter machinery: tree-sitter query helpers, token normalization, complexity walker (ADR 0002 — the paved road)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+kndo-core = { path = "../kndo-core" }

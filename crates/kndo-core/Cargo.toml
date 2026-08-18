@@ -1,0 +1,11 @@
+[package]
+name = "kndo-core"
+description = "The system: graph model, analysis engine, cache, orchestration, plugin host. Language-blind by contract."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+smol_str = { workspace = true }
