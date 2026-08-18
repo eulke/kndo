@@ -22,7 +22,8 @@ pub enum SymbolKind {
     Function, Method, Class, Interface, Struct, Enum, EnumMember, TypeAlias,
     Const, Static, Variable, Field, Module, CssRule, CssVariable, Other(SmolStr),
 }
-// kebab-case names double as the `category:kind` facet in config/suppressions (RFC 0005)
+// kebab-case names are `subject_kind` facet values (alongside file | directory | dependency |
+// import | suppression) used in output and `category:subject` targeting (RFC 0005)
 
 pub enum RootKind { Production, Test, Tooling }
 
@@ -124,7 +125,7 @@ the graph API:
 
 ```rust
 pub trait Analysis: Send + Sync {
-    fn id(&self) -> AnalysisId;                       // "unused-code", "crap", …
+    fn id(&self) -> AnalysisId;                       // "unused", "crap", …
     fn run_full(&self, graph: &GraphView, enrich: &Enrichments) -> Vec<Finding>;
     /// Incremental entry point; default = run_full (correct, slower). Implementations override
     /// with dirty-region logic (RFC 0004 §5). CI enforces full ≡ incremental on fixtures.

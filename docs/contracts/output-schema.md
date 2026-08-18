@@ -35,18 +35,20 @@ round-trip these examples in CI.
 ```jsonc
 {
   "id": "kndo-a3f81c92e5d4",            // stable content-anchored id, §5
-  "category": "unused-code",            // registry in §6
+  "category": "unused",                 // verdict; registry in §6
+  "subject_kind": "function",           // what the verdict landed on: symbol kind | file | directory | dependency | import | suppression
   "severity": "warning",                // "error" | "warning" | "info"
   "confidence": "certain",              // "certain" | "probable" | "possible"
   "message": "calcLegacyTax() is unreachable from any production or test root",
   "location": { "path": "src/billing/tax.ts", "range": { "start": [41,1], "end": [78,2] },
-                "symbol": "calcLegacyTax", "symbol_kind": "function" },
+                "symbol": "calcLegacyTax" },
+  "rolled_up": null,                    // file/directory rollups: count of subsumed findings
   "related": [                           // evidence chain (also what `kondo explain` renders)
     { "role": "cause", "path": "src/billing/index.ts", "range": { "start": [12,1], "end": [12,42] },
       "note": "last production reference removed by this change" }
   ],
   "evidence": {                          // category-specific block, keyed by category
-    "test_roots": [],                    // e.g. for test-only-code
+    "test_roots": [],                    // e.g. for test-only
     "kept_alive_by": []
   },
   "sources": ["adapter:js-ts"],          // provenance: adapters/plugins whose facts contributed
@@ -67,7 +69,7 @@ credit improvements and lets pre-commit output celebrate deletions.
   "score": 84, "grade": "B",
   "previous": { "score": 82, "grade": "B" },    // from last snapshot, if any
   "categories": [
-    { "category": "unused-code",  "ratio": 0.031, "penalty": 6.2, "count": 47 },
+    { "category": "unused-symbols", "ratio": 0.031, "penalty": 6.2, "count": 47 },
     { "category": "duplication",  "ratio": 0.058, "penalty": 7.1, "tokens_duplicated": 8412 },
     { "category": "crap",         "penalty": 4.0, "crapload": 1912.4, "coverage": "lcov (2d old)" }
   ]
@@ -76,22 +78,23 @@ credit improvements and lets pre-commit output celebrate deletions.
 
 ## 5. Finding id stability
 
-`id = "kndo-" + hash(category, project-relative path, symbol path (not line numbers), category-specific
-discriminator)`, truncated to 12 hex chars. Line/column changes do **not** change the id; renames
+`id = "kndo-" + hash(category, subject_kind, project-relative path, symbol path (not line numbers),
+category-specific discriminator)`, truncated to 12 hex chars. Line/column changes do **not** change the id; renames
 and moves do (a rename is a different code object). Guarantees: an agent that fixes finding X can
 re-run kondo and assert X is absent; a baseline survives reformatting.
 
 ## 6. Category registry (1.0)
 
-`unused-code`, `test-only-code`, `unused-file`, `test-only-file`, `unused-dependency`,
-`test-only-dependency`, `undeclared-dependency`, `unresolved-import`, `duplicate-code`, `crap`,
-`stale-suppression`.
+Categories are pure verdicts (RFC 0005 taxonomy rule):
+`unused`, `test-only`, `undeclared`, `unresolved`, `duplicate`, `crap`, `stale`.
 New categories are additive (minor bump); consumers must ignore unknown categories.
 
-Categories encode verdicts only (RFC 0005 taxonomy rule); the kind of the affected code travels
-in `symbol_kind`. Suppression/config targets may append a kind facet as `category:kind`
-(e.g. `unused-code:enum-member`) — the facet values are the `SymbolKind` names from
-[core-traits.md](core-traits.md) in kebab-case and are not part of this registry.
+What the verdict landed on travels in `subject_kind`: the `SymbolKind` names from
+[core-traits.md](core-traits.md) in kebab-case, plus `file`, `directory`, `dependency`,
+`import`, `suppression`. Suppression/config targets may append the subject as
+`category:subject` (e.g. `unused:enum-member`, `test-only:dependency`). Subject kinds are
+additive like categories and are not a registry of their own. Human renderers compose the
+two (`unused (dependency)`); JSON consumers filter on either axis independently.
 
 ## 7. SARIF mapping
 

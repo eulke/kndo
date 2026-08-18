@@ -13,7 +13,7 @@ All RFCs/ADRs/contracts in this directory reach `Accepted` after debate. Open qu
 ## M1 — Skeleton + first language (JS/TS), full-scan only
 Workspace layout (`kondo-cli`, `kondo-core`, `kondo-adapter-toolkit`, `kondo-adapter-js`),
 graph model per contracts, discovery, extraction, resolution driver, conformance harness.
-Analyses: `unused-code`, `unused-file`, `unused-dependency` (+ `undeclared-dependency`).
+Analyses: `unused` (symbols, files, dependencies — with file/directory rollup) + `undeclared`.
 Output: human + JSON v1.0.0. No cache yet (cold runs only).
 
 **Exit:** correct findings on fixture corpus + 3 real OSS TS repos; `kondo check` on kondo's own
@@ -31,7 +31,7 @@ verbs included); `--no-cache` ≡ cached results on fixture matrix; kondo runs i
 pre-commit (dogfooding begins).
 
 ## M3 — Reachability semantics complete + second language (Go)
-`test-only-code` (three-color reachability), tooling roots, wildcard-edge conservatism,
+`test-only` (three-color reachability), tooling roots, wildcard-edge conservatism,
 confidence surfacing, library mode. Go adapter proves the contract fits a second language
 without core changes — any needed contract change happens *here*, cheaply. Navigation completes:
 liveness traces (`trace X` from roots), `used-by --split-by-color`, and `kondo impact`
@@ -42,7 +42,7 @@ caught in both languages; the RFC 0007 §5 agent workflow (find → used-by → 
 runs end to end on a fixture; contract diffs (if any) documented in updated contracts + ADR.
 
 ## M4 — Duplication, CRAP, health
-`duplicate-code` (winnowing index, incremental), `crap` + lcov/JaCoCo ingestion plugins
+`duplicate` (winnowing index, incremental), `crap` + lcov/JaCoCo ingestion plugins
 (ADR 0005), `health` score + `kondo health`, SARIF output.
 
 **Exit:** duplication findings stable under reformatting (Type-2); CRAP hotlist matches manual
@@ -59,7 +59,7 @@ runs against the released binary; budget still holds with all adapters active.
 
 ## M6 — 1.0 hardening
 False-positive hunt across dogfood corpus (target < 2%, vision §6), schema/ABI freeze, docs site,
-install channels (brew/cargo/npm shim/curl), `stale-suppression` rule, error-message polish.
+install channels (brew/cargo/npm shim/curl), `stale` (suppressions) rule, error-message polish.
 
 **Exit:** semver 1.0 commitments declared for the three contract surfaces; two external repos
 adopt kondo in pre-commit and stay enabled for 2 weeks.

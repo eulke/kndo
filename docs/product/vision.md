@@ -79,7 +79,7 @@ crate with zero core changes (see [RFC 0002](../rfcs/0002-language-adapters.md))
 
 - **Not a linter/formatter.** No style rules, no autofix of formatting. (ESLint, gofmt, ktlint own that.)
 - **Not a type checker or compiler.** kondo never blocks on code that doesn't compile; it degrades gracefully.
-- **Not a security scanner.** No CVE/vulnerability analysis (though unused-dependency removal shrinks the surface).
+- **Not a security scanner.** No CVE/vulnerability analysis (though removing unused dependencies shrinks the surface).
 - **Not a coverage tool.** Coverage is *ingested* from existing reports for CRAP, never measured (ADR 0005).
 - **No IDE integration in 1.0.** CLI + JSON/SARIF first; LSP server is a possible post-1.0 layer.
 

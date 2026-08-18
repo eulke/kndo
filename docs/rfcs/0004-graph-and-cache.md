@@ -94,7 +94,7 @@ Both sides are computed on the full graph (warm), so:
   *test-only* ⇒ reported as a **new** finding, attributed to your change, even though `b.ts` was
   never touched. The report includes the causal hint ("last production reference removed by
   `a.ts:42`").
-- You add a first real usage of a dep ⇒ its `unused-dependency` finding is reported as **fixed**.
+- You add a first real usage of a dep ⇒ its `unused` (dependency) finding is reported as **fixed**.
 
 Fixed findings are shown as positive deltas (they add to the health score movement, RFC 0005 §8),
 which makes the pre-commit experience rewarding rather than purely punitive.

@@ -6,17 +6,25 @@ All analyses are pure functions over the Project Graph (+ optional enrichments s
 Each finding carries: stable id, category, severity, confidence, location(s), evidence, and a
 remediation hint (schema in [contracts/output-schema.md](../contracts/output-schema.md)).
 
-**Taxonomy rule — category = verdict × subject domain; kinds are facets.** A category pairs a
-verdict (unused, test-only, undeclared, unresolved, duplicate…) with the coarse subject domain it
-judges: `code` (symbols), `file`, `dependency`, `import`. Within the code domain, *what kind* of
-symbol is affected — export, type, enum member, class member, CSS selector — is the finding's
-`symbol_kind` facet, never a separate category. Configuration and suppressions may target a bare
-category or a `category:kind` pair (e.g. `unused-code:enum-member`), matching the granularity of
-per-kind tools (knip-style `unused-type` ≡ `unused-code:type-alias`) without a combinatorial
-registry. The matrix must stay complete: every verdict meaningful for a domain has a category —
-`unused-{code,file,dependency}`, `test-only-{code,file,dependency}` — and an intentionally absent
-cell (there is no `tooling-only-*`: tooling reachability is healthy) is a documented decision,
-not an oversight.
+**Taxonomy rule — a category is a verdict; the subject is a facet; the reporting level is a
+rollup.** Three orthogonal things, kept orthogonal:
+
+1. **Category = verdict, nothing else**: `unused`, `test-only`, `undeclared`, `unresolved`,
+   `duplicate`, `crap`, `stale`. A verdict means the same thing whatever it lands on — there is
+   no `unused-file` vs `unused-code`: both are `unused`.
+2. **Subject = the `subject_kind` facet**: the kind of graph node the verdict landed on — `file`,
+   `directory`, `dependency`, `import`, `suppression`, or any symbol kind (`function`, `type-alias`,
+   `enum-member`, `css-rule`…). Configuration and suppressions target a bare category or
+   `category:subject` (e.g. `unused:enum-member`, `test-only:dependency`); knip-style
+   `unused-type` ≡ `unused:type-alias`.
+3. **Reporting level = widest uniform node**: when a verdict holds for every symbol in a file
+   *and* for the file node itself, kondo emits **one** finding on the file (subject `file`), not
+   N symbol findings; when it holds for every file in a directory, one finding on the directory.
+   Rollup is presentation of the same facts, not a different verdict — "test-only file" is the
+   `test-only` verdict reported at file granularity.
+
+Intentional absences are documented decisions, not oversights: there is no `tooling-only`
+verdict (tooling reachability is healthy).
 
 ## 1. Reachability foundation
 
@@ -45,39 +53,37 @@ kondo will not call exported API "unused" just because the repo doesn't call it.
 unpublished application package, however, `export` is *not* a root; an exported-but-never-imported
 symbol is still dead. Adapters/manifests decide which mode applies per package.
 
-## 2. `unused-code` — dead symbols
+## 2. `unused` — unreachable code, files & dependencies
 
 `unreachable` symbols. Severity: warning. Evidence: the symbol, why nothing reaches it, nearest
 former consumer if known from the findings snapshot. Confidence downgrades if any wildcard edge
 could plausibly target it (name exposed to reflection/serialization, plugin annotations, FFI).
 
 **Member granularity.** The analysis descends into type members: methods, fields, and enum
-members are symbols in their own right (`symbol_kind` facets `method`, `field`, `enum-member`),
+members are symbols in their own right (`subject_kind` facets `method`, `field`, `enum-member`),
 so "class member nothing calls" and "enum variant nothing references" are ordinary
-`unused-code` findings. Dynamic dispatch is handled through the graph, not guessed around:
+`unused` findings. Dynamic dispatch is handled through the graph, not guessed around:
 adapters emit implements/overrides references, so an interface/trait method implementation is
 alive whenever the interface method is reached; where dispatch is not statically resolvable, the
 member's liveness evidence is at best `probable` and findings demote accordingly.
 
-## 3. `test-only-code` — non-productive code
+## 3. `test-only` — non-productive code
 
-Symbols colored `test-only`, excluding symbols in test-role files themselves and declared test
-utilities (`testkit`/`fixtures` conventions, configurable). This is the "you built it, tests
-enshrined it, production never came" detector — the finding explicitly lists the test roots that
-keep the symbol alive, so deleting code + its tests together becomes mechanical.
+Nodes colored `test-only`, excluding test-role files themselves and declared test utilities
+(`testkit`/`fixtures` conventions, configurable). This is the "you built it, tests enshrined it,
+production never came" detector — the finding explicitly lists the test roots that keep the node
+alive, so deleting code + its tests together becomes mechanical.
 Default severity: info (candidate to raise to warning — open question #3).
-A *whole file* in that state is reported once as `test-only-file` (file domain, §4) instead of
-one finding per symbol.
 
-## 4. `unused-file` / `test-only-file` — file-domain verdicts
+## 4. File & directory subjects (rollup, not new categories)
 
-- `unused-file`: files with no incoming import/reference edge and no root. Subsumes asset/config
-  orphans via cross-language edges (CSS, JSON).
-- `test-only-file`: production-role files whose every incoming edge originates from test roots —
-  the file-level twin of `test-only-code`, reported as one finding for the file (its symbols are
-  not re-reported individually).
-
-Generated and vendored origins are exempt from both by default.
+`unused` and `test-only` apply to file nodes like any other node: a file with no incoming edge
+and no root is `unused` (subject `file`) — this subsumes asset/config orphans via cross-language
+edges (CSS, JSON); a production-role file whose every incoming edge comes from test roots is
+`test-only` (subject `file`). Per the rollup rule (§ taxonomy), the file finding *replaces* the
+per-symbol findings it summarizes, and a directory whose every file carries the same verdict
+rolls up once more (subject `directory`) — "you can delete this whole folder" is one finding,
+not fifty. Generated and vendored origins are exempt by default.
 
 ## 5. Dependency & import hygiene
 
@@ -85,15 +91,15 @@ For each `ManifestDependency` with scope `prod`, classify by its importers:
 
 | Importers | Finding |
 |-----------|---------|
-| none | `unused-dependency` — declared, never imported |
-| only test-role / test-only-reachable files | `test-only-dependency` — belongs in dev scope, not shipped weight |
+| none | `unused` (subject `dependency`) — declared, never imported |
+| only test-role / test-only-reachable files | `test-only` (subject `dependency`) — belongs in dev scope, not shipped weight |
 | at least one production- or tooling-reachable file | used (no finding) |
 
 The neutral scope taxonomy is `prod | dev | build | peer | optional` (adapters map ecosystem
 scopes onto it — npm `peerDependencies`, Cargo `build-dependencies`, Gradle configurations):
 
 - **dev / build** — checked against all files; unused only if *nothing* imports them.
-- **peer** — a contract with the consumer, not a usage claim: exempt from `unused-dependency`
+- **peer** — a contract with the consumer, not a usage claim: exempt from `unused`
   (an un-imported peer is at most an info-level note), and never `test-only`.
 - **optional** — runtime-conditional by design: findings demote to `possible` confidence, below
   the default report floor.
@@ -103,15 +109,15 @@ their runtime package), and side-effect-only imports (`import "polyfill"` counts
 
 Two further import-side findings:
 
-- `undeclared-dependency` — an import resolves to a package absent from the manifest (phantom
-  deps via hoisting/transitivity). Severity: warning; error in `--strict`.
-- `unresolved-import` — a relative/internal import specifier that resolves to no file
+- `undeclared` (subject `dependency`) — an import resolves to a package absent from the manifest
+  (phantom deps via hoisting/transitivity). Severity: warning; error in `--strict`.
+- `unresolved` (subject `import`) — a relative/internal import specifier that resolves to no file
   (`Resolution::Unresolved` after all adapters decline): almost always a broken path or a missed
-  rename. Failed *package* resolution surfaces as `undeclared-dependency` instead, never twice.
+  rename. Failed *package* resolution surfaces as `undeclared` instead, never twice.
   Severity: error (it is a defect, not waste) — but confidence-gated: dynamic specifiers demote
   to `possible` and drop below the default report floor.
 
-## 6. `duplicate-code` — structural clones
+## 6. `duplicate` — structural clones
 
 Token-based fingerprinting over adapter-normalized token streams (identifiers/literals
 canonicalized ⇒ catches Type-1 and Type-2 clones; Type-3/semantic clones are out of scope for 1.0):
@@ -162,10 +168,10 @@ modes, the delta caused by the change. Weights are configurable; defaults are th
 
 ## 9. Suppression model
 
-- Inline: a language-comment pragma `kondo:allow <category>[:<kind>] [reason]` on the declaration.
+- Inline: a language-comment pragma `kondo:allow <category>[:<subject>] [reason]` on the declaration.
 - Baseline: `.kondo/baseline.json` acknowledges existing findings at adoption time (RFC 0006 §6).
-- Config: per-glob disables of categories or `category:kind` pairs (e.g. `examples/**` exempt
-  from unused-code; `unused-code:enum-member` off globally for codebases with wire-format enums).
+- Config: per-glob disables of categories or `category:subject` pairs (e.g. `examples/**` exempt
+  from `unused`; `unused:enum-member` off globally for codebases with wire-format enums).
   All suppressions are themselves counted and reported (`suppressed: N`) — hidden waste is
   still waste, and a stale suppression (target finding gone) becomes an info finding.
 
@@ -176,12 +182,12 @@ Statically derivable, deliberately **not** committed for 1.0 — each needs a ye
 | Candidate | Signal | Notes |
 |-----------|--------|-------|
 | `cyclic-dependencies` | SCCs in the file/package import graph | cheap on existing graph; strong health signal |
-| `orphan-export` | exported but never imported inside an app package | subset of unused-code; maybe its own category for clarity |
+| `orphan-export` | exported but never imported inside an app package | subset of `unused`; maybe its own verdict for clarity |
 | `barrel-abuse` | re-export files that fan out huge subgraphs | JS/TS-specific; hurts tree-shaking and kondo precision |
 | `layer-violation` | user-declared layering rules (`ui -/-> db`) | needs config DSL; high value in monorepos |
 | `oversized-unit` | file/function LOC & complexity ceilings | borders on linting — keep? |
 | `dead-feature-flag` | flag constants that are constant-true/false | needs flag-system plugins |
-| `stale-suppression` | suppression whose finding no longer exists | already implied by §9 — promote to rule? |
+| `stale` on suppressions | suppression whose finding no longer exists | already implied by §9 — promote to rule? |
 | `duplicate-asset` | identical files by content hash | trivial via blake3; catches copy-pasted configs/images |
 | `unused-css-variable` | `--var` declared, never `var()`-consumed | fits CSS adapter naturally |
 | `internal-only` | exported/public symbol or member whose every incoming reference comes from its own file/type | visibility tightening ("should be private/unexported"); cheap on the graph; likely the strongest candidate |

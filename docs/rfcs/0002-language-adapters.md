@@ -45,8 +45,8 @@ Keeping fashion out of adapters keeps them small, testable, and slow-changing.
 The vocabulary must not assume "code". For data/style languages the mapping is:
 
 - **JSON**: files claimed only when *referenced* semantics exist (e.g. imported by JS/TS, listed
-  in a manifest). Symbols are not extracted; JSON participates as import *targets* so unused-file
-  analysis covers config/data files. Well-known manifests (`package.json`, `tsconfig.json`) are
+  in a manifest). Symbols are not extracted; JSON participates as import *targets* so file-level
+  `unused` findings cover config/data files. Well-known manifests (`package.json`, `tsconfig.json`) are
   claimed by the *owning* adapter instead.
 - **CSS/SCSS/LESS**: symbols are selectors/mixins/variables; references are `@import`/`@use`,
   `composes`, and — via the cross-language edge mechanism (§4) — class-name usage from JS/TS/HTML.

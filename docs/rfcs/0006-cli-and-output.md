@@ -51,15 +51,15 @@ when below `certain`. Diff mode leads with the delta and the health movement:
 kondo · 3 new · 2 fixed · health 82 → 84 (B)
 
 NEW
-  unused-code  src/billing/tax.ts:41  calcLegacyTax() became unreachable
-               └ last production reference removed by src/billing/index.ts:12 (this change)
-  test-only    src/util/csv.ts:8      exportCsv() now only reached from tests (2 test roots)
+  unused     src/billing/tax.ts:41  calcLegacyTax() became unreachable
+             └ last production reference removed by src/billing/index.ts:12 (this change)
+  test-only  src/util/csv.ts:8      exportCsv() now only reached from tests (2 test roots)
   …
 FIXED
-  unused-dependency  package.json  "date-fns" — first production usage added
+  unused (dependency)  package.json  "date-fns" — first production usage added
 ```
 
-Full mode groups by category with counts, worst-first, truncated with `… and N more (kondo check --only unused-code)`.
+Full mode groups by category with counts, worst-first, truncated with `… and N more (kondo check --only unused)`.
 
 ## 4. Machine output
 
@@ -105,10 +105,10 @@ roots = ["src", "packages/*"]          # default: auto (git ls-files minus ignor
 exclude = ["**/generated/**"]
 
 [analysis]
-skip = []                              # categories or category:kind facets, e.g. ["unused-code:enum-member"]
+skip = []                              # categories or category:subject, e.g. ["unused:enum-member"]
 min-confidence = "probable"            # report floor; "possible" only with --verbose
 
-[analysis.duplicate-code]
+[analysis.duplicate]
 min-tokens = 50
 
 [analysis.crap]
@@ -119,7 +119,7 @@ duplication = 25
 
 [[rule]]                               # per-path overrides
 paths = ["examples/**"]
-skip = ["unused-code", "unused-file"]
+skip = ["unused"]                      # one verdict covers symbols, files and directories
 
 [plugins.<name>]                       # RFC 0003 §4
 ```

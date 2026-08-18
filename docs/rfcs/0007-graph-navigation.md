@@ -69,8 +69,8 @@ Answers *"what am I pulling in?"* — e.g. before extracting a module.
 ### 4.4 `kondo used-by <selector>`
 Incoming dependents: who needs this node. Same flags as `uses`, plus `--split-by-color` to
 separate production, test-only, and tooling consumers. `used-by X` returning only test consumers
-is the *"safe to delete (with its tests)"* signal — the query twin of the `test-only-code`
-finding. Empty result ⇒ matches an `unused-code`/`unused-file` finding by construction.
+is the *"safe to delete (with its tests)"* signal — the query twin of the `test-only`
+finding. Empty result ⇒ matches an `unused` finding by construction.
 
 ### 4.5 `kondo trace <from> [<to>]`
 Explain connectivity as concrete paths, every hop with edge kind, confidence, and span:
