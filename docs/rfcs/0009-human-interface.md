@@ -72,8 +72,18 @@ One finding = one primary line, optional evidence lines, fixed column order:
   applies to rendering too).
 - Rollup findings state their scope in the message (`directory unreachable — 14 files`), and
   `explain` unrolls them.
-- Diff mode: `NEW` then `FIXED` blocks, each internally in group order; the header line always
-  shows both counts and the health delta (`3 new · 2 fixed · health 82 → 84 ↑`).
+- Diff mode: `NEW (introduced by this change)` then `NEW (derived, in untouched code)` then
+  `FIXED` blocks (`delta_origin` split, RFC 0004 §6), each internally in group order; the header
+  line always shows counts and net (`3 new · 2 fixed · net +1`), followed by the health movement
+  line and — when any `[delta]` budget is configured — the **budget block**: one line per rule
+  with limit, measured value, and verdict glyph; failures append `over by N` (exactly how much
+  to fix), and a health drop near a grade boundary appends the distance (`B (1.9 from C)`).
+  The PASS/FAIL word closes the block — the gate is never mysterious.
+
+  ```
+  health   84.1 ──▶ 81.9   −2.2 ↓   B  (1.9 from C)
+  budget   health-drop ≤ 1.0   −2.2  ✗   over by 1.2      FAIL
+  ```
 - Health block (in `kondo health` and full runs): score, grade, and per-category penalty bars
   built from `▁▂▃▄▅▆▇` (ASCII: `#` scaled) — a shape, not a chart; details stay tabular.
 

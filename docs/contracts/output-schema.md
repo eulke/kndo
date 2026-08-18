@@ -22,6 +22,13 @@ round-trip these examples in CI.
     "plugins":  [ { "id": "nextjs", "activated_by": "detected: dependency react" } ]
   },
   "health": { /* §4 */ },
+  "budget": {                            // diff modes, only when [delta] rules are configured (RFC 0006 §5)
+    "verdict": "fail",                   // "pass" | "fail"
+    "rules": [
+      { "rule": "max-health-drop", "limit": 0.0, "measured": 1.7, "verdict": "pass" },
+      { "rule": "max-net-findings", "limit": 0, "measured": 1, "verdict": "fail", "over_by": 1 }
+    ]
+  },
   "findings": [ /* §2 — in diff modes: only new findings */ ],
   "fixed": [ /* §3 — diff modes only */ ],
   "baseline": { "acknowledged": 412, "stale": 3 },
@@ -174,7 +181,8 @@ version stays available for one release cycle, like JSON majors.
 
 ```
 kondo 0.3.1 agent-format 1 | mode staged | cache warm | 312ms
-result: 3 new, 2 fixed | health 82 -> 84 (B) | baseline 412 acknowledged
+result: 3 new, 2 fixed, net +1 | health 82.4 -> 84.1 (B) | baseline 412 acknowledged
+budget: fail (2/3) | health-drop<=0.0 ok +1.7 | defects=0 ok 0 | net<=0 FAIL +1 over-by 1
 new:
 1. [kndo-a3f81c92e5d4] unused function src/billing/tax.ts:41 calcLegacyTax
    cause: last production reference removed by src/billing/index.ts:12 (this change)
@@ -191,6 +199,9 @@ Grammar rules (normative):
 
 - **Header + result lines always first**, fixed field order, `|`-separated. An agent reads two
   lines and knows the outcome.
+- **`budget:` line** appears only when `[delta]` rules are configured (RFC 0006 §5): overall
+  verdict + one `rule op limit ok|FAIL measured [over-by N]` segment per rule — a failing agent
+  reads `over-by` and knows exactly how much work remains, without interpretation.
 - **One finding = one numbered line**: `N. [id] <category> <subject_kind> <path:line> <name>`,
   followed by optional indented `cause:` / `fix:` / `evidence:` lines. Numbers let a model refer
   to findings cheaply ("fix 1 and 3"); ids are the durable anchors.

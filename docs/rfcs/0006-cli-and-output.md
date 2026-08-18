@@ -51,16 +51,26 @@ CLI frontend: rendering lives outside the core (Engine boundary, contracts §5).
 with the delta and the health movement:
 
 ```
-kondo · 3 new · 2 fixed · health 82 → 84 (B)
+kondo · staged · 3 new · 2 fixed · net +1
 
-NEW
-  unused     src/billing/tax.ts:41  calcLegacyTax() became unreachable
-             └ last production reference removed by src/billing/index.ts:12 (this change)
+  health   82.4 ──▶ 84.1   +1.7 ↑   B
+  budget   health-drop ≤ 0.0   +1.7  ✓
+           net findings ≤ 0      +1  ✗   over by 1        FAIL
+
+NEW (introduced by this change)
+  unused     src/billing/tax.ts:41  calcLegacyTax() — added but nothing uses it
+NEW (derived, in untouched code)
   test-only  src/util/csv.ts:8      exportCsv() now only reached from tests (2 test roots)
-  …
+             └ last production reference removed by src/billing/index.ts:12 (this change)
 FIXED
   unused (dependency)  package.json  "date-fns" — first production usage added
 ```
+
+The header answers "better or worse?" in one line; the budget block shows **every configured
+tolerance with its measured value and verdict** (§5) — a FAIL is never mysterious, and `over by`
+states exactly how much must be fixed to pass. NEW findings split by `delta_origin`
+(RFC 0004 §6): *introduced* (you added something unwired) before *derived* (your change had
+effects at a distance).
 
 Full mode renders one section per **group**, in fixed order — defects, waste, risk, hygiene
 (RFC 0005 taxonomy rule 4) — because that is the reader's triage order: fix what's broken,
@@ -99,13 +109,38 @@ Diff mode uses the same group order inside its NEW and FIXED sections.
   line-anchored — see contracts §finding-id), so an agent can act on a finding, re-run, and
   verify that exact id disappeared.
 
-## 5. Exit codes
+## 5. Exit codes & delta budgets
 
 | Code | Meaning |
 |------|---------|
-| 0 | ran; nothing at/above `--fail-on` |
-| 1 | ran; findings at/above `--fail-on` |
+| 0 | ran; nothing at/above `--fail-on` and every delta budget holds |
+| 1 | ran; findings at/above `--fail-on` **or** a delta budget exceeded |
 | 2 | kondo failed (bad config, unreadable repo, internal error) — never fails a commit silently |
+
+**Delta budgets** turn "tolerable" into declared policy, layered on top of `--fail-on`
+(diff modes only):
+
+```toml
+[delta]                      # defaults: strict ratchet
+max-health-drop = 0.0        # health never drops
+max-net-findings = 0         # new − fixed ≤ 0: pay for what you dirty
+
+[delta.budget]               # finer tolerances, by group or category
+defect = 0                   # new defects: never
+duplicate = 2                # up to 2 new clones tolerated per change
+```
+
+Semantics, chosen to keep budgets from becoming normalized decay:
+
+- Defaults are the strict ratchet (0 / 0); any positive tolerance is an explicit, visible
+  opt-in. The **baseline never grows automatically** regardless of budgets — a budget loosens
+  the *gate of one change*, never the recorded debt.
+- Budgets evaluate **against the merge-base, not cumulatively across pushes** of the same
+  branch/PR — pushing a fix must not "recharge" the allowance.
+- `fixed` findings compensate only inside `max-net-findings`; per-group/category budgets are
+  absolute (`defect = 0` means zero, even if the change fixes ten others).
+- Every configured rule is reported with its measured value, verdict, and `over_by` when
+  exceeded — in all formats (RFC 0009 §5, RFC 0010 §4, output-schema §1/§9).
 
 Pre-commit recipe (`kondo init` offers to install it):
 
@@ -146,6 +181,9 @@ duplication = 25
 
 [performance]
 threads = 0                            # 0 = physical cores (RFC 0008 §5); --threads flag wins
+
+[delta]                                # diff-mode gate budgets — semantics in §5
+max-health-drop = 0.0
 
 [[rule]]                               # per-path overrides
 paths = ["examples/**"]

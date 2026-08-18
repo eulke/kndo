@@ -48,7 +48,11 @@ pushes gets one living report, not thirty stale ones. Layout mirrors the termina
 markdown:
 
 ```markdown
-### kondo · 3 new · 2 fixed · health 82 → 84 (B) ↑
+### kondo · 3 new · 2 fixed · health 82.4 → 84.1 (B) ↑ · budget 2/3 ✗
+
+- [x] health-drop ≤ 0.0 — +1.7
+- [x] new defects = 0 — 0
+- [ ] net findings ≤ 0 — +1 (**over by 1**)
 
 **New**
 | | finding | where | why |
@@ -61,6 +65,8 @@ markdown:
 <details><summary>47 baseline findings unchanged</summary>…</details>
 ```
 
+The budget checklist (one checkbox per configured `[delta]` rule, RFC 0006 §5) makes the sticky
+comment a *living budget marker*: every push updates how much of the tolerance is consumed.
 Group order and glyph vocabulary follow RFC 0009 §3 (rendered as text/emoji-safe equivalents);
 long sections collapse under `<details>`; hard cap per section with a link to the workflow run
 for the full report. Fixed findings always render — the reward loop (RFC 0004 §6) applies to
