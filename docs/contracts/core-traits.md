@@ -116,8 +116,16 @@ pub enum SuppressionScope { Declaration, File }
   `kondo:allow-file <category>[:<subject>] [reason…]` (scope `File`).
 - Binding (core-side): a `Declaration` pragma attaches to the declaration it precedes or shares
   a line with, covering that symbol *and everything it declares* (a class-level allow covers its
-  members). `File` pragmas cover the whole file. A pragma that binds to nothing, names an
-  unknown category, or whose bound target has no matching finding is itself reported as `stale`.
+  members). `File` pragmas cover the whole file.
+- **Evaluation order (no-flicker guarantee):** analyses run as if no pragmas existed and compute
+  the full finding set; suppression then *marks* matched findings (hidden from report and
+  `--fail-on`, still counted) — it never deletes them. A pragma is `stale` only when it binds to
+  nothing, names an unknown category, or matches nothing in that **pre-suppression** set. Thus
+  "actively suppressing" and "stale" are mutually exclusive by construction: deleting a stale
+  pragma cannot resurrect a finding (it was stale precisely because the finding no longer
+  exists), and deleting an active one correctly un-hides its finding.
+- `stale` findings are not inline-suppressible (`kondo:allow stale` is rejected as unknown-target
+  meta-suppression); acknowledge them via baseline or config if needed.
 - Adapters do **not** interpret pragmas — extraction only. Validation, binding, counting, and
   staleness are core logic, identical across languages.
 

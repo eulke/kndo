@@ -226,8 +226,11 @@ modes, the delta caused by the change. Weights are configurable; defaults are th
 - Inline: `kondo:allow <category>[:<subject>] [reason]` in a comment on/above the declaration,
   or `kondo:allow-file …` for file scope. **Adapters extract** the pragmas (comment syntax is
   language-defined — `FileFacts.suppressions`, contracts §2.1); the **core validates and binds**
-  them: a declaration-scoped allow covers the symbol and everything it declares; a pragma that
-  binds to nothing or matches no finding is itself a `stale` finding.
+  them: a declaration-scoped allow covers the symbol and everything it declares. Suppression
+  *marks* findings, never deletes them — analyses compute the full set first, then pragmas match
+  against it, so an actively-suppressing pragma can never be `stale` and deleting a stale pragma
+  can never resurrect a finding (no allow/stale flicker loop; contracts §2.1). `stale` itself is
+  not inline-suppressible.
 - Baseline: `.kondo/baseline.json` acknowledges existing findings at adoption time (RFC 0006 §6).
 - Config: per-glob disables of categories or `category:subject` pairs (e.g. `examples/**` exempt
   from `unused`; `unused:enum-member` off globally for codebases with wire-format enums).
