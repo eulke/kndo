@@ -51,7 +51,11 @@ project health*, not on style. One binary, one config (optional), one output sch
    output is a stable, versioned JSON schema (plus SARIF). Both come from the same engine — an
    agent running kondo after generating code gets machine-checkable feedback that its additions
    are wired in and nothing became orphaned.
-7. **Adoptable in brownfield repos.** A baseline file lets legacy findings be acknowledged so only
+7. **The graph is a product, not just an implementation detail.** Having paid for a whole-project
+   semantic graph, kondo exposes it read-only as navigation verbs (find, describe, uses, used-by,
+   trace, impact) so exploration costs milliseconds and bounded output instead of context-window
+   budget — precise answers replace speculative file reading.
+8. **Adoptable in brownfield repos.** A baseline file lets legacy findings be acknowledged so only
    *new* waste fails the hook. Health improves incrementally, never via a big-bang cleanup.
 
 ## 3. Users & primary flows
@@ -62,6 +66,7 @@ project health*, not on style. One binary, one config (optional), one output sch
 | Developer | `kondo check` locally: full report, explore findings, `kondo explain <id>`. |
 | CI | `kondo check --diff origin/main --format json`: gate PRs on new findings; comment health delta. |
 | AI agent | Runs kondo after edits; consumes JSON to verify its new code is reachable, deleted code freed dependencies, no duplication introduced. |
+| AI agent | Navigates via the graph instead of grep-and-read: `kondo find/describe/uses/used-by/trace/impact` answer "who uses this?", "why is this alive?", "what breaks if I delete it?" in bounded, verifiable calls (RFC 0007). |
 | Tech lead | Health score and per-category trends over time; CRAP hotspot list for refactor planning. |
 
 ## 4. Supported languages (initial)

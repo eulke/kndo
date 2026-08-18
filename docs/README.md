@@ -19,6 +19,7 @@ This directory is the single source of truth for product and technical decisions
 | Graph, cache & incrementality | [rfcs/0004-graph-and-cache.md](rfcs/0004-graph-and-cache.md) | Draft |
 | Analyses & metrics | [rfcs/0005-analyses.md](rfcs/0005-analyses.md) | Draft |
 | CLI, output & config | [rfcs/0006-cli-and-output.md](rfcs/0006-cli-and-output.md) | Draft |
+| Graph navigation & query | [rfcs/0007-graph-navigation.md](rfcs/0007-graph-navigation.md) | Draft |
 | Core contracts (traits) | [contracts/core-traits.md](contracts/core-traits.md) | Draft |
 | Output schema (JSON) | [contracts/output-schema.md](contracts/output-schema.md) | Draft |
 | Roadmap | [ROADMAP.md](ROADMAP.md) | Draft |
@@ -50,3 +51,4 @@ This directory is the single source of truth for product and technical decisions
    keep the name for the binary or pick a distinct crate name?
 2. Which of the [candidate rules](rfcs/0005-analyses.md#candidate-rules-for-debate) make the 1.0 cut?
 3. Default severity for `test-only code` findings — warn or info?
+4. Navigation verbs: flat (`kondo uses`) vs namespaced (`kondo graph uses`) — RFC 0007 §8.

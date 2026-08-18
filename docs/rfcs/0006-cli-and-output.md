@@ -24,6 +24,15 @@ kondo check [PATHS…]           # full analysis (default command: `kondo` = `ko
     --no-cache                 # bypass cache (CI correctness check, debugging)
 kondo explain <finding-id>     # full evidence chain for one finding, human or --format json
 kondo health                   # health score + category breakdown + trend vs previous snapshots
+
+# graph navigation (read-only, warm-cache; full spec in RFC 0007)
+kondo find <pattern>           # name → selector (files, symbols, packages)
+kondo describe <selector>      # everything the graph knows about one node
+kondo uses <selector>          # outgoing dependencies (--depth, --transitive)
+kondo used-by <selector>       # incoming dependents (--split-by-color: safe-to-delete signal)
+kondo trace <from> [<to>]      # concrete path A→B, or root→X liveness trace (why is X alive?)
+kondo impact <selector>        # blast radius; --if-deleted simulates removal → finding flips
+
 kondo init                     # write minimal kondo.toml, .gitignore entry, offer pre-commit hook
 kondo baseline [--update]      # create/refresh baseline from current findings (RFC 0006 §6)
 kondo doctor                   # what was detected: adapters, plugins active & why, cache state, timings

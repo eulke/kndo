@@ -91,3 +91,51 @@ consumers must ignore unknown categories.
 
 `category` → `rule.id`; `severity` → SARIF `level` (error/warning/note); evidence chain →
 `relatedLocations`; confidence → `properties.confidence`. One run object per kondo run.
+
+## 8. Query envelopes (navigation verbs, RFC 0007)
+
+All navigation verbs share one envelope; `result` is verb-specific. Listings are always capped
+and carry explicit `elided` counts (RFC 0007 §2) — consumers must treat `elided > 0` as "there is
+more", never as "that's all".
+
+```jsonc
+{
+  "schema_version": "1.0.0",
+  "query": { "verb": "used-by", "selector": "src/billing/tax.ts#calcLegacyTax",
+             "flags": { "depth": 1, "split_by_color": true } },
+  "run": { "cache": "warm", "duration_ms": 74 },
+  "result": { /* verb-specific, below */ },
+  "diagnostics": []
+}
+```
+
+Common building blocks:
+
+```jsonc
+// NodeRef — every node mention, everywhere:
+{ "selector": "src/billing/tax.ts#TaxTable.lookup", "kind": "method",
+  "color": "test-only", "span": { "path": "src/billing/tax.ts", "start": [90,3], "end": [104,4] } }
+
+// EdgeRef — every edge mention:
+{ "edge": "references", "confidence": "certain",
+  "site": { "path": "src/billing/index.ts", "start": [12,10], "end": [12,23] } }
+```
+
+Verb result shapes (fields beyond these are additive/minor):
+
+- **find**: `{ "matches": [NodeRef…], "elided": N }` — ranked.
+- **describe**: `{ "node": NodeRef, "declaration": {…}, "degree": { "in": {...by edge kind}, "out": {…} },
+  "reached_by_roots": [NodeRef…], "metrics": { "cyclomatic": 14, "crap": 36.2, "coverage": 0.12 },
+  "findings": [finding-id…], "uses": [ {NodeRef, via: EdgeRef}… ], "used_by": [ … ],
+  "elided": { "uses": N, "used_by": M } }`.
+- **uses / used-by**: `{ "node": NodeRef, "entries": [ { "node": NodeRef, "via": EdgeRef,
+  "depth": 1 }… ], "by_color": { "production": N, "test-only": M, "tooling": K },
+  "elided": N }`.
+- **trace**: `{ "from": NodeRef, "to": NodeRef, "paths": [ { "hops": [ { "node": NodeRef,
+  "via": EdgeRef }… ], "weakest_confidence": "possible" }… ], "paths_elided": N }` —
+  liveness traces set `"from"` to the root found.
+- **impact**: `{ "node": NodeRef, "affected": { "by_depth": […], "by_color": {…},
+  "roots": [NodeRef…] }, "if_deleted": { "finding_flips": [ { "delta": "new"|"fixed",
+  finding fields §2 }… ] } }` — `if_deleted` present only with the flag.
+
+Query exit codes are defined in RFC 0007 §6 and are part of this contract.

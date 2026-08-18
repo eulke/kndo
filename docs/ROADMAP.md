@@ -22,19 +22,23 @@ JS-free repo returns cleanly; JSON validates against generated schema.
 ## M2 — Cache, incrementality, diff modes, pre-commit
 `.kondo/` cache (ADR 0004), warm-run algorithm, dirty-region analysis, `--staged`/`--diff` with
 derived-effects delta (RFC 0004 §6), baseline + suppressions, exit codes, `kondo init` hook
-installer, `kondo doctor`.
+installer, `kondo doctor`. First navigation verbs over the warm graph (RFC 0007): `find`,
+`describe`, `uses`, `used-by`, `trace` with query JSON envelopes.
 
-**Exit:** **warm p95 < 500 ms** on the 5k-file benchmark repo (CI-enforced benchmark);
-`--no-cache` ≡ cached results on fixture matrix; kondo runs in kondo's own pre-commit
-(dogfooding begins).
+**Exit:** **warm p95 < 500 ms** on the 5k-file benchmark repo (CI-enforced benchmark, navigation
+verbs included); `--no-cache` ≡ cached results on fixture matrix; kondo runs in kondo's own
+pre-commit (dogfooding begins).
 
 ## M3 — Reachability semantics complete + second language (Go)
 `test-only-code` (three-color reachability), tooling roots, wildcard-edge conservatism,
 confidence surfacing, library mode. Go adapter proves the contract fits a second language
-without core changes — any needed contract change happens *here*, cheaply.
+without core changes — any needed contract change happens *here*, cheaply. Navigation completes:
+liveness traces (`trace X` from roots), `used-by --split-by-color`, and `kondo impact`
+(incl. `--if-deleted` simulation, reusing the derived-effects machinery).
 
 **Exit:** Go conformance corpus passes; a deliberately-injected "only tests call this" fixture is
-caught in both languages; contract diffs (if any) documented in updated contracts + ADR.
+caught in both languages; the RFC 0007 §5 agent workflow (find → used-by → impact → check)
+runs end to end on a fixture; contract diffs (if any) documented in updated contracts + ADR.
 
 ## M4 — Duplication, CRAP, health
 `duplicate-code` (winnowing index, incremental), `crap` + lcov/JaCoCo ingestion plugins
@@ -61,8 +65,9 @@ adopt kondo in pre-commit and stay enabled for 2 weeks.
 
 ## Post-1.0 parking lot
 `kondo clean` (guided auto-removal), watch mode / LSP, custom analyses over a stable graph API,
-deep mode (compiler-grade resolvers), historical trend service, HTML report, monorepo
-project-references awareness, remaining candidate rules from RFC 0005 §10.
+`kondo serve` exposing the navigation verbs 1:1 as MCP tools (RFC 0007 §7), an arbitrary graph
+query language, deep mode (compiler-grade resolvers), historical trend service, HTML report,
+monorepo project-references awareness, remaining candidate rules from RFC 0005 §10.
 
 ## Standing rules
 
