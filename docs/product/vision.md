@@ -68,7 +68,7 @@ project health*, not on style. One binary, one config (optional), one output sch
 |------|------|
 | Developer | `kondo check --staged` in pre-commit: blocks the commit only for waste *introduced or caused by* the staged changes. |
 | Developer | `kondo check` locally: full report, explore findings, `kondo explain <id>`. |
-| CI | `kondo check --diff origin/main --format json`: gate PRs on new findings; comment health delta. |
+| CI | `kondo-action` on every PR: gates the merge on new findings and upserts one sticky comment with the delta and health movement (RFC 0010); any other CI consumes the same JSON. |
 | AI agent | Runs kondo after edits; consumes JSON to verify its new code is reachable, deleted code freed dependencies, no duplication introduced. |
 | AI agent | Navigates via the graph instead of grep-and-read: `kondo find/describe/uses/used-by/trace/impact` answer "who uses this?", "why is this alive?", "what breaks if I delete it?" in bounded, verifiable calls (RFC 0007). |
 | Tech lead | Health score and per-category trends over time; CRAP hotspot list for refactor planning. |

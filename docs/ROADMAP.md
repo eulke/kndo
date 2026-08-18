@@ -64,7 +64,9 @@ runs against the released binary; budget still holds with all adapters active.
 
 ## M6 — 1.0 hardening
 False-positive hunt across dogfood corpus (target < 2%, vision §6), schema/ABI freeze, docs site,
-install channels (brew/cargo/npm shim/curl), `stale` (suppressions) rule, error-message polish.
+install channels (brew/cargo/npm shim/curl), **`kondo-action` GA** (RFC 0010: sticky PR comment,
+annotations, SARIF opt-in — dogfooded on kondo's own PRs from M2 via a pre-GA workflow),
+`stale` (suppressions) rule, error-message polish.
 
 **Exit:** semver 1.0 commitments declared for the three contract surfaces; two external repos
 adopt kondo in pre-commit and stay enabled for 2 weeks.

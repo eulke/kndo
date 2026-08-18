@@ -22,6 +22,7 @@ This directory is the single source of truth for product and technical decisions
 | Graph navigation & query | [rfcs/0007-graph-navigation.md](rfcs/0007-graph-navigation.md) | Draft |
 | Performance & parallelism | [rfcs/0008-performance-and-parallelism.md](rfcs/0008-performance-and-parallelism.md) | Draft |
 | Human interface (CLI rendering) | [rfcs/0009-human-interface.md](rfcs/0009-human-interface.md) | Draft |
+| CI: GitHub Action & PR reporting | [rfcs/0010-ci-github-action.md](rfcs/0010-ci-github-action.md) | Draft |
 | Core contracts (traits) | [contracts/core-traits.md](contracts/core-traits.md) | Draft |
 | Output schema (JSON) | [contracts/output-schema.md](contracts/output-schema.md) | Draft |
 | Roadmap | [ROADMAP.md](ROADMAP.md) | Draft |
