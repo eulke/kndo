@@ -86,11 +86,13 @@ pub struct RawReference {
     pub span: Span,
 }
 
+/// Syntactic shape only — what the specifier text looks like, not what it resolves to.
+/// Builtins (`node:fs`, bare `fs`) are a *resolution*-time fact (the resolver owns the
+/// builtins list, RFC 0002 §5); extraction never claims `Stdlib`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ImportKind {
     Relative,
     Package,
-    Stdlib,
 }
 
 #[derive(Debug, Clone)]
@@ -100,6 +102,10 @@ pub struct RawImport {
     pub span: Span,
     /// `import "./polyfill"` — counts as usage without binding names (RFC 0005 §5).
     pub side_effect_only: bool,
+    /// `import type { T } from "..."` / type-only re-export — only the adapter can know
+    /// this; it decides whether the resulting edge is a value reference or `TypeUse`
+    /// (docs/adapters/js-ts.md §3).
+    pub type_only: bool,
     pub confidence: Confidence,
 }
 

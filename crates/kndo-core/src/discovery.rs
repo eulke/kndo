@@ -110,8 +110,16 @@ mod tests {
         for i in 0..20 {
             fs::write(dir.join(format!("f{i:02}.ts")), format!("{i}")).unwrap();
         }
-        let run1: Vec<_> = discover(&dir).unwrap().into_iter().map(|f| f.path.0).collect();
-        let run2: Vec<_> = discover(&dir).unwrap().into_iter().map(|f| f.path.0).collect();
+        let run1: Vec<_> = discover(&dir)
+            .unwrap()
+            .into_iter()
+            .map(|f| f.path.0)
+            .collect();
+        let run2: Vec<_> = discover(&dir)
+            .unwrap()
+            .into_iter()
+            .map(|f| f.path.0)
+            .collect();
         assert_eq!(run1, run2);
     }
 

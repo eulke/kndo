@@ -10,10 +10,11 @@ use kndo_core::adapter::{
 use kndo_core::vocab::{FileClass, FileOrigin, FileRole};
 use smol_str::SmolStr;
 
+mod extraction;
+
 pub struct JsTsAdapter;
 
-const EXTENSIONS: &[&str] =
-    &["ts", "tsx", "js", "jsx", "mjs", "cjs", "mts", "cts"];
+const EXTENSIONS: &[&str] = &["ts", "tsx", "js", "jsx", "mjs", "cjs", "mts", "cts"];
 
 impl JsTsAdapter {
     fn classify(path: &str) -> FileClass {
@@ -59,7 +60,10 @@ impl LanguageAdapter for JsTsAdapter {
         AdapterDescriptor {
             id: SmolStr::new("js-ts"),
             facts_schema_version: 1,
-            file_globs: EXTENSIONS.iter().map(|e| SmolStr::new(format!("**/*.{e}"))).collect(),
+            file_globs: EXTENSIONS
+                .iter()
+                .map(|e| SmolStr::new(format!("**/*.{e}")))
+                .collect(),
             manifest_globs: vec![
                 SmolStr::new("**/package.json"),
                 SmolStr::new("**/pnpm-workspace.yaml"),
@@ -76,12 +80,14 @@ impl LanguageAdapter for JsTsAdapter {
         if !claimed {
             return None;
         }
-        Some(FileClaim { language: SmolStr::new("js-ts"), class: Self::classify(p) })
+        Some(FileClaim {
+            language: SmolStr::new("js-ts"),
+            class: Self::classify(p),
+        })
     }
 
-    fn extract(&self, _file: &SourceFile<'_>) -> FileFacts {
-        // Lands next: tree-sitter extraction per spec §2, via kndo-adapter-toolkit.
-        FileFacts::default()
+    fn extract(&self, file: &SourceFile<'_>) -> FileFacts {
+        extraction::extract(file.path.0.as_str(), file.content)
     }
 
     fn extract_manifest(&self, _file: &SourceFile<'_>) -> ManifestFacts {
@@ -116,7 +122,10 @@ mod tests {
     #[test]
     fn classifies_role_and_origin_orthogonally() {
         let c = claim("src/billing/tax.ts").unwrap().class;
-        assert_eq!((c.role, c.origin), (FileRole::Production, FileOrigin::Authored));
+        assert_eq!(
+            (c.role, c.origin),
+            (FileRole::Production, FileOrigin::Authored)
+        );
 
         let c = claim("src/billing/tax.spec.ts").unwrap().class;
         assert_eq!(c.role, FileRole::Test);

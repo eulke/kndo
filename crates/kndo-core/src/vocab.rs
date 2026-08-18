@@ -49,7 +49,10 @@ pub struct FileClass {
 
 impl Default for FileClass {
     fn default() -> Self {
-        FileClass { role: FileRole::Production, origin: FileOrigin::Authored }
+        FileClass {
+            role: FileRole::Production,
+            origin: FileOrigin::Authored,
+        }
     }
 }
 
@@ -156,13 +159,31 @@ pub enum NodeRef {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum EdgeKind {
     /// May cross `Package` boundaries (RFC 0011 §4).
-    ImportsFile { from: FileId, to: FileId },
-    ImportsDependency { from: FileId, to: DependencyId },
-    References { from: SymbolId, to: SymbolId, kind: RefKind },
-    Declares { file: FileId, symbol: SymbolId },
-    Root { kind: RootKind, target: NodeRef },
+    ImportsFile {
+        from: FileId,
+        to: FileId,
+    },
+    ImportsDependency {
+        from: FileId,
+        to: DependencyId,
+    },
+    References {
+        from: SymbolId,
+        to: SymbolId,
+        kind: RefKind,
+    },
+    Declares {
+        file: FileId,
+        symbol: SymbolId,
+    },
+    Root {
+        kind: RootKind,
+        target: NodeRef,
+    },
     /// Dynamic construct; resolved against a plausible target set, not a fixed target.
-    Wildcard { from: FileId },
+    Wildcard {
+        from: FileId,
+    },
 }
 
 /// Identity of the component whose facts produced an edge/annotation — for attribution in
@@ -196,6 +217,9 @@ mod tests {
     fn symbol_kind_facets_are_kebab_case() {
         assert_eq!(SymbolKind::EnumMember.facet(), "enum-member");
         assert_eq!(SymbolKind::TypeAlias.facet(), "type-alias");
-        assert_eq!(SymbolKind::Other(SmolStr::new("sql-query")).facet(), "sql-query");
+        assert_eq!(
+            SymbolKind::Other(SmolStr::new("sql-query")).facet(),
+            "sql-query"
+        );
     }
 }

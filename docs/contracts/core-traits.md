@@ -91,7 +91,10 @@ pub trait LanguageAdapter: Send + Sync {
 pub struct FileFacts {
     pub declarations: Vec<Declaration>,     // { name, kind: SymbolKind, span, exported: bool, visibility }
     pub references:   Vec<RawReference>,    // { name, scope-context, span }  → resolved by driver
-    pub imports:      Vec<RawImport>,       // { specifier, kind, span, side_effect_only: bool }
+    pub imports:      Vec<RawImport>,       // { specifier, kind: Relative|Package, span,
+                                             //   side_effect_only, type_only, confidence }
+                                             // kind is syntactic shape only — Stdlib is a
+                                             // resolve()-time fact, never claimed here
     pub roots:        Vec<RawRoot>,         // language-defined only (main, pub API…)
     pub functions:    Vec<FunctionMetrics>, // { symbol, cyclomatic: u32, loc, token_fingerprints }
     pub dynamics:     Vec<DynamicUse>,      // constructs forcing Wildcard edges (span + reason)

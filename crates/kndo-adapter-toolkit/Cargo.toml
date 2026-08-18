@@ -9,3 +9,5 @@ publish.workspace = true
 
 [dependencies]
 kndo-core = { path = "../kndo-core" }
+tree-sitter = { workspace = true }
+tree-sitter-typescript = { workspace = true }

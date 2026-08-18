@@ -26,7 +26,11 @@ impl fmt::Display for EngineError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             EngineError::ProjectRootNotFound(p) => {
-                write!(f, "project root does not exist or is not a directory: {}", p.display())
+                write!(
+                    f,
+                    "project root does not exist or is not a directory: {}",
+                    p.display()
+                )
             }
         }
     }
@@ -80,7 +84,9 @@ impl Engine {
         if !root.is_dir() {
             return Err(EngineError::ProjectRootNotFound(root.to_path_buf()));
         }
-        Ok(Engine { root: root.to_path_buf() })
+        Ok(Engine {
+            root: root.to_path_buf(),
+        })
     }
 
     pub fn root(&self) -> &Path {
@@ -92,7 +98,10 @@ impl Engine {
     /// tree until git-index/merge-base scoping lands.
     pub fn check(&mut self, _req: CheckRequest) -> RunResult {
         match discovery::discover(&self.root) {
-            Ok(files) => RunResult { files_discovered: files.len(), ..RunResult::default() },
+            Ok(files) => RunResult {
+                files_discovered: files.len(),
+                ..RunResult::default()
+            },
             Err(e) => RunResult {
                 diagnostics: vec![format!("discovery failed: {e:?}")],
                 ..RunResult::default()
@@ -107,7 +116,10 @@ mod tests {
 
     #[test]
     fn open_rejects_missing_root() {
-        let err = Engine::open(Path::new("/definitely/not/a/dir"), ConfigOverrides::default());
+        let err = Engine::open(
+            Path::new("/definitely/not/a/dir"),
+            ConfigOverrides::default(),
+        );
         assert!(err.is_err());
     }
 
@@ -117,7 +129,9 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let mut engine = Engine::open(&dir, ConfigOverrides::default()).unwrap();
-        let result = engine.check(CheckRequest { mode: RunMode::Full });
+        let result = engine.check(CheckRequest {
+            mode: RunMode::Full,
+        });
         assert!(result.findings.is_empty());
         assert_eq!(result.files_discovered, 0);
     }
@@ -131,7 +145,9 @@ mod tests {
         std::fs::write(dir.join("b.ts"), "export const b = 2;").unwrap();
 
         let mut engine = Engine::open(&dir, ConfigOverrides::default()).unwrap();
-        let result = engine.check(CheckRequest { mode: RunMode::Full });
+        let result = engine.check(CheckRequest {
+            mode: RunMode::Full,
+        });
         assert_eq!(result.files_discovered, 2);
     }
 }

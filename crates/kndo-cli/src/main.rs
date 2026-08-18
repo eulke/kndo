@@ -13,7 +13,11 @@ fn main() -> ExitCode {
     match args.first().map(String::as_str) {
         None | Some("check") => check(),
         Some("--version" | "-V") => {
-            println!("kndo {} (schema {})", env!("CARGO_PKG_VERSION"), SCHEMA_VERSION);
+            println!(
+                "kndo {} (schema {})",
+                env!("CARGO_PKG_VERSION"),
+                SCHEMA_VERSION
+            );
             ExitCode::SUCCESS
         }
         Some(other) => {
@@ -38,7 +42,9 @@ fn check() -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    let result = engine.check(CheckRequest { mode: RunMode::Full });
+    let result = engine.check(CheckRequest {
+        mode: RunMode::Full,
+    });
 
     if !result.diagnostics.is_empty() {
         for d in &result.diagnostics {
