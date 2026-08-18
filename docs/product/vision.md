@@ -31,6 +31,7 @@ project health*, not on style. One binary, one config (optional), one output sch
 | Version skew | Which dependency is declared at diverging versions across workspace packages? |
 | Duplicate code | Which blocks are structural copies of each other — and which files are byte-identical? |
 | Excess visibility | Which symbols are exported/public but could be private? |
+| Private type leaks | Which public APIs reference types their consumers cannot name? |
 | Dependency cycles | Which files/modules form import cycles? |
 | CRAP score | Which functions are complex **and** untested — Change Risk Anti-Patterns? |
 | Project health | One number (0–100) + grade summarizing the above, trendable over time. |

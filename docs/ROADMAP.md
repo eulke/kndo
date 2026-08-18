@@ -41,8 +41,8 @@ cached results on fixture matrix; kondo runs in kondo's own pre-commit (dogfoodi
 ## M3 — Reachability semantics complete + second language (Go)
 `test-only` (three-color reachability), `untested` (its inverse — same coloring passes),
 tooling roots, wildcard-edge conservatism, confidence surfacing, library mode, `internal-only`
-(visibility ladders ride the same reference-origin machinery), `delta_origin`
-introduced/derived on diff findings (RFC 0004 §6). Go adapter proves the contract fits a second language
+and `private-type-leak` (both directions of the visibility-mismatch comparison, RFC 0005 §7),
+`delta_origin` introduced/derived on diff findings (RFC 0004 §6). Go adapter proves the contract fits a second language
 without core changes — any needed contract change happens *here*, cheaply. Navigation completes:
 liveness traces (`trace X` from roots), `used-by --split-by-color`, and `kondo impact`
 (incl. `--if-deleted` simulation, reusing the derived-effects machinery).
@@ -81,7 +81,7 @@ adopt kondo in pre-commit and stay enabled for 2 weeks.
 `kondo serve` exposing the navigation verbs 1:1 as MCP tools (RFC 0007 §7), an arbitrary graph
 query language, deep mode (compiler-grade resolvers), historical trend service, HTML report,
 tsconfig project-references deep integration, deferred rules from the RFC 0005 §13 triage
-(`layer-violation`, `oversized-unit`) and ecosystem-plugin rules (`barrel-abuse`,
+(`layer-violation`, `oversized-unit`, `redundant-export-binding`) and ecosystem-plugin rules (`barrel-abuse`,
 `dead-feature-flag`, churn×complexity hotspots via a git plugin, overlapping-dependency
 knowledge base, config-key drift), and **divergent clones** — near-identical clones where one
 copy got a fix the other didn't ("the bug you fixed here still lives there"), the natural

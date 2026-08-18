@@ -29,7 +29,7 @@ rollup.** Three orthogonal things, kept orthogonal:
 
    | Group | Verdicts | Meaning for the reader |
    |-------|----------|------------------------|
-   | `defect` | `unresolved`, `undeclared`, `version-skew` | something is broken or lying — fix it |
+   | `defect` | `unresolved`, `undeclared`, `version-skew`, `private-type-leak` | something is broken or lying — fix it |
    | `waste` | `unused`, `test-only`, `duplicate`, `internal-only` | something can be removed, consolidated, or narrowed |
    | `risk` | `crap`, `cyclic`, `untested` | something is dangerous to change — refactor or test it |
    | `hygiene` | `stale` | kondo's own bookkeeping is outdated |
@@ -199,14 +199,23 @@ the cache — are the same `duplicate` verdict with subject `file`: copy-pasted 
 and any other asset that token-based clone detection cannot see (binaries included). One finding
 groups all copies. Costing nothing beyond hashing, this lands in M1, ahead of structural clones.
 
-## 7. `internal-only` — excess visibility
+## 7. Visibility mismatch: `internal-only` & `private-type-leak`
 
-A symbol's declared visibility exceeds its observed use. For every symbol declared above the
-minimum visibility, the analysis computes the **tightest sufficient visibility**: the lowest
-level on the language's visibility ladder (adapter-declared — e.g. private → file → package/crate
-→ public) that still covers the origin of every incoming reference. Declared > sufficient ⇒
-finding; the remediation names the concrete change in the language's own terms (`private`,
-`pub(crate)`, unexported lowercase name), supplied by the adapter.
+Both directions of one comparison — a symbol's **declared** visibility against what its usage
+**requires** — using the language's visibility ladder (adapter-declared: private → file →
+package/crate → public):
+
+**`internal-only`** (declared > required; group `waste`): the analysis computes the **tightest
+sufficient visibility** — the lowest ladder level that still covers the origin of every incoming
+reference. Declared above it ⇒ finding; the remediation names the concrete change in the
+language's own terms (`private`, `pub(crate)`, unexported lowercase name), supplied by the
+adapter.
+
+**`private-type-leak`** (declared < required; group `defect`): a public/exported symbol whose
+signature references a type of *lower* visibility — the API promises a type its consumers cannot
+name. Derivable directly from `TypeUse` edges crossing visibility levels downward; no new
+vocabulary. Severity: warning in library-mode packages (a lying public API), info in app
+packages. Remediation offers both directions: export the type, or narrow the symbol.
 
 Covers your whole ladder of cases uniformly: exported symbol referenced only within its own file
 (`internal-only:function`), public member used only inside its own type (`internal-only:method` —
@@ -315,12 +324,17 @@ Triage of 2026-08-18 (earlier promotions: `internal-only` → §7, `cyclic` → 
 | `layer-violation` | **Deferred post-1.0** — needs a layering-rules config DSL and does nothing under zero config; parking lot |
 | `oversized-unit` | **Deferred post-1.0** — borders the linting non-goal; `crap` already covers the risky (untested) half |
 
+Second triage, 2026-08-18:
+
+| Candidate | Decision |
+|-----------|----------|
+| `private-type-leak` | **Adopted** into 1.0 (§7): zero new vocabulary — falls out of `TypeUse` edges crossing visibility downward; group `defect`; lands M3 with the visibility machinery |
+| `redundant-export-binding` | **Deferred post-1.0**: requires modeling export *bindings* as contract entities distinct from symbols — real vocabulary cost for moderate value; parking lot |
+
 Still open — each needs a yes/no:
 
 | Candidate | Signal | Notes |
 |-----------|--------|-------|
-| `redundant-export-binding` | one symbol exported under multiple bindings where some binding has zero consumers | language-neutral form of JS "redundant default/named export"; also covers Rust `pub use` re-exports |
-| `private-type-leak` | public symbol whose signature references a non-exported type | API hygiene; derivable from type-reference edges |
 | `deep-import` | cross-package import bypassing the sibling package's entry points | boundary hygiene in workspaces (RFC 0011 §4); 1.0 records the edge at `probable`, does not judge it |
 | `hollow-test` | test root whose forward closure reaches zero production symbols | the anti-slop "this test tests nothing real" detector (mocks-only tests); needs dogfood validation of the FP rate before committing |
 | `speculative-abstraction` | interface/trait with exactly one implementation and at most one consumer | YAGNI materialized; trivially derivable from `Implement` edges; `probable` confidence (DI/test seams exempt via plugin annotations, library-mode public abstractions exempt); group `waste` |

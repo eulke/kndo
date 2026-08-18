@@ -96,12 +96,12 @@ re-run kondo and assert X is absent; a baseline survives reformatting.
 
 Categories are pure verdicts (RFC 0005 taxonomy rule):
 `unused`, `test-only`, `untested`, `undeclared`, `unresolved`, `version-skew`, `duplicate`,
-`internal-only`, `cyclic`, `crap`, `stale`.
+`internal-only`, `private-type-leak`, `cyclic`, `crap`, `stale`.
 New categories are additive (minor bump); consumers must ignore unknown categories.
 
-Each category maps to exactly one `group` — `defect` (unresolved, undeclared, version-skew),
-`waste` (unused, test-only, duplicate, internal-only), `risk` (crap, cyclic, untested),
-`hygiene` (stale) — normative mapping in RFC 0005. The
+Each category maps to exactly one `group` — `defect` (unresolved, undeclared, version-skew,
+private-type-leak), `waste` (unused, test-only, duplicate, internal-only), `risk` (crap, cyclic,
+untested), `hygiene` (stale) — normative mapping in RFC 0005. The
 field is redundant with `category` by design: it is included so consumers section and sort
 without maintaining the mapping themselves. New groups are additive; consumers must render
 unknown groups after known ones rather than dropping their findings.
