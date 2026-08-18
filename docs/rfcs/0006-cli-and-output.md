@@ -32,6 +32,7 @@ kondo uses <selector>          # outgoing dependencies (--depth, --transitive)
 kondo used-by <selector>       # incoming dependents (--split-by-color: safe-to-delete signal)
 kondo trace <from> [<to>]      # concrete path A→B, or root→X liveness trace (why is X alive?)
 kondo impact <selector>        # blast radius; --if-deleted simulates removal → finding flips
+kondo batch                    # JSONL queries on stdin, one process/graph-load, JSONL answers
 
 kondo init                     # write minimal kondo.toml, .gitignore entry, offer pre-commit hook
 kondo baseline [--update]      # create/refresh baseline from current findings (RFC 0006 §6)

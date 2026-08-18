@@ -23,7 +23,8 @@ JS-free repo returns cleanly; JSON validates against generated schema.
 `.kondo/` cache (ADR 0004), warm-run algorithm, dirty-region analysis, `--staged`/`--diff` with
 derived-effects delta (RFC 0004 §6), baseline + suppressions, exit codes, `kondo init` hook
 installer, `kondo doctor`. First navigation verbs over the warm graph (RFC 0007): `find`,
-`describe`, `uses`, `used-by`, `trace` with query JSON envelopes.
+`describe`, `uses`, `used-by`, `trace` with query JSON envelopes, multi-selector support and
+`kondo batch` (JSONL, single graph load).
 
 **Exit:** **warm p95 < 500 ms** on the 5k-file benchmark repo (CI-enforced benchmark, navigation
 verbs included); `--no-cache` ≡ cached results on fixture matrix; kondo runs in kondo's own

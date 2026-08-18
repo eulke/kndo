@@ -19,7 +19,8 @@ that produces it.
 
 1. **Read-only, warm, fast.** Navigation verbs never mutate findings or baseline. They revalidate
    the cache exactly like `check` (patching changed files first, RFC 0004 §4), so answers reflect
-   the working tree, within the same < 500 ms warm budget.
+   the working tree, within the same < 500 ms warm budget. Startup + revalidation dominate that
+   budget, so batching (§4.7) amortizes them: many questions, one process, one graph load.
 2. **Bounded by default.** Every listing is capped (default 50 entries, `--limit`) with an explicit
    `"elided": N` count and deterministic ordering — an agent always knows whether it saw
    everything, and output can never blow up a context window.
@@ -94,6 +95,40 @@ Forward-looking blast radius, built on the same machinery as diff-mode derived e
   orphaned. Simulation only: nothing is written. This lets an agent *plan* a deletion and know
   the full cleanup set before editing a single line.
 
+### 4.7 `kondo batch` — many questions, one process
+
+Per-invocation cost (process start + cache revalidation, ~120 ms warm) dwarfs per-query cost
+(~a few ms on the loaded graph). An agent exploring a subsystem asks dozens of questions;
+paying startup dozens of times wastes both wall-clock and the 500 ms mental budget. Two
+amortization levels:
+
+1. **Multi-selector verbs.** Every verb accepts multiple selectors/patterns:
+   `kondo used-by selA selB selC`. The `result` becomes an array of per-selector results in
+   argument order (schema §8). `trace` takes repeated `--pair A,B` for multiple traces.
+2. **`kondo batch`** — heterogeneous queries in one process: reads JSON Lines from stdin
+   (one request per line: `{ "verb", "selectors": […], "flags": {…}, "id"? }`), revalidates the
+   cache **once**, answers in input order as JSON Lines on stdout, one envelope per request,
+   echoing the optional caller-supplied `id` for correlation.
+
+```
+$ kondo batch <<'EOF'
+{"id":"q1","verb":"used-by","selectors":["src/billing/tax.ts#calcLegacyTax"],"flags":{"split_by_color":true}}
+{"id":"q2","verb":"trace","flags":{"pairs":[["src/api/routes.ts","pkg:decimal.js"]]}}
+{"id":"q3","verb":"impact","selectors":["src/billing/tax.ts#TaxTable"],"flags":{"if_deleted":true}}
+EOF
+```
+
+Batch semantics:
+
+- **Isolation:** a failing request (bad selector, no path) yields an error/status envelope on its
+  line; the batch continues. The batch never partially mutates anything — all requests see the
+  same graph snapshot, so answers are mutually consistent (no torn reads across lines).
+- **Streaming:** responses are flushed per line as computed — an agent can pipeline.
+- **Bounds still apply** per request (caps + `elided`); a batch is limited to 1000 requests
+  (diagnostic + truncation status beyond that, guarding against runaway generation).
+- Batch mode is JSON-only (no human format) and is the intended transport for a future
+  `kondo serve`/MCP wrapper (§7): one MCP tool call ⇒ one batch line, same envelopes.
+
 ## 5. Agent workflow (worked example)
 
 Goal: "remove the legacy tax path".
@@ -110,6 +145,8 @@ kondo check --staged                            → verifies: 4 fixed findings, 
 
 Four bounded calls replace reading five files into context, and the final `check` is the
 machine-verifiable proof the cleanup is complete — the anti-slop loop closed end to end.
+After `find`, the middle queries are independent — an agent that already knows its questions
+collapses them into one `kondo batch` invocation (§4.7), paying startup once.
 
 ## 6. Exit codes & failure semantics
 
@@ -121,6 +158,10 @@ machine-verifiable proof the cleanup is complete — the anti-slop loop closed e
 
 The 0-vs-1 distinction is load-bearing for agents scripting checks like "assert nothing uses X
 anymore" (`kondo trace roots:production X` → expect 1).
+
+Multi-selector and batch runs report per-request status inside each envelope (`"status":
+"ok" | "not-found" | "error"`); the process exit code is the *worst* individual status
+(0 < 1 < 2), so single-question scripting semantics survive batching unchanged.
 
 ## 7. Non-goals (1.0)
 
