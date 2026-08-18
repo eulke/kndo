@@ -29,9 +29,9 @@ rollup.** Three orthogonal things, kept orthogonal:
 
    | Group | Verdicts | Meaning for the reader |
    |-------|----------|------------------------|
-   | `defect` | `unresolved`, `undeclared` | something is broken or lying — fix it |
+   | `defect` | `unresolved`, `undeclared`, `version-skew` | something is broken or lying — fix it |
    | `waste` | `unused`, `test-only`, `duplicate`, `internal-only` | something can be removed, consolidated, or narrowed |
-   | `risk` | `crap`, `cyclic` | something is dangerous to change — refactor or test it |
+   | `risk` | `crap`, `cyclic`, `untested` | something is dangerous to change — refactor or test it |
    | `hygiene` | `stale` | kondo's own bookkeeping is outdated |
 
    Groups drive ordering and sectioning in every renderer (defects before waste before risk
@@ -129,6 +129,10 @@ Two further import-side findings:
 
 - `undeclared` (subject `dependency`) — an import resolves to a package absent from the manifest
   (phantom deps via hoisting/transitivity). Severity: warning; error in `--strict`.
+- `version-skew` (subject `dependency`) — the same external dependency declared with diverging
+  version requirements across workspace packages (RFC 0011): three packages pinning three
+  `lodash` versions is an inconsistency someone will debug eventually. Manifest-only detection,
+  zero-config; evidence lists every declaring manifest with its requirement. Severity: warning.
 - `unresolved` (subject `import`) — a relative/internal import specifier that resolves to no file
   (`Resolution::Unresolved` after all adapters decline): almost always a broken path or a missed
   rename. Failed *package* resolution surfaces as `undeclared` instead, never twice.
@@ -182,7 +186,22 @@ honest: severity `warning` where the ecosystem treats cycles as hazards (JS/TS f
 init-order bugs), `info` where they are idiomatic (Rust modules within a crate), and impossible
 levels are skipped outright (Go package cycles — the compiler already forbids them).
 
-## 9. `crap` — Change Risk Anti-Patterns
+## 9. `untested` — static test-blind spots
+
+The exact inverse of `test-only`, computed from the same coloring passes at zero extra cost:
+symbols **production-reachable but reachable from no test root whatsoever** — not "low
+coverage" (dynamic, needs a report) but "no test even *imports* this, transitively". CRAP tells
+you complex code is poorly covered *if* you feed it coverage; `untested` finds the blind spots
+statically, zero-config, day one.
+
+- Active only when the project has test roots at all — a repo without tests gets one diagnostic,
+  not a thousand findings.
+- Severity: info. Subject granularity and rollup as usual (an entire untested file or package
+  rolls up). Confidence demotes through wildcard edges like every reachability verdict.
+- Evidence: the production roots that reach the symbol (proof it matters) and the nearest tested
+  neighbor (where a test could start).
+
+## 10. `crap` — Change Risk Anti-Patterns
 
 Per function/method, with `comp` = cyclomatic complexity (adapter-extracted) and `cov` = fraction
 of the function's statements covered:
@@ -196,7 +215,7 @@ CRAP(m) = comp(m)² × (1 − cov(m))³ + comp(m)
 - Threshold: findings for `CRAP > 30` (standard), configurable. Test code is exempt.
 - Output ranks the CRAP hotspot list — the refactor-next queue.
 
-## 10. `health` — project health score
+## 11. `health` — project health score
 
 A 0–100 composite, deterministic and documented so trends are meaningful:
 
@@ -215,13 +234,14 @@ category_penalty = weight × saturating_ratio(category)
 | CRAP | CRAPload above threshold, normalized | 20 |
 | cycles | files participating in cycles / total files | 5 |
 | excess visibility | internal-only symbols / exported symbols | 5 |
+| test blind spots | untested production symbols / production symbols | 5 |
 
 `saturating_ratio` maps each raw ratio through a per-category curve (documented constants) so a
 single bad file can't zero the score and improvements near zero still show. Grades: A ≥ 90,
 B ≥ 80, C ≥ 65, D ≥ 50, F below. Output always shows the per-category breakdown and, in diff
 modes, the delta caused by the change. Weights are configurable; defaults are the contract.
 
-## 11. Suppression model
+## 12. Suppression model
 
 - Inline: `kondo:allow <category>[:<subject>] [reason]` in a comment on/above the declaration,
   or `kondo:allow-file …` for file scope. **Adapters extract** the pragmas (comment syntax is
@@ -237,7 +257,7 @@ modes, the delta caused by the change. Weights are configurable; defaults are th
   All suppressions are themselves counted and reported (`suppressed: N`) — hidden waste is
   still waste, and a stale suppression (target finding gone) becomes an info finding.
 
-## 12. Candidate rules — triage log & open candidates
+## 13. Candidate rules — triage log & open candidates
 
 Triage of 2026-08-18 (earlier promotions: `internal-only` → §7, `cyclic` → §8):
 
@@ -259,6 +279,8 @@ Still open — each needs a yes/no:
 | `redundant-export-binding` | one symbol exported under multiple bindings where some binding has zero consumers | language-neutral form of JS "redundant default/named export"; also covers Rust `pub use` re-exports |
 | `private-type-leak` | public symbol whose signature references a non-exported type | API hygiene; derivable from type-reference edges |
 | `deep-import` | cross-package import bypassing the sibling package's entry points | boundary hygiene in workspaces (RFC 0011 §4); 1.0 records the edge at `probable`, does not judge it |
+| `hollow-test` | test root whose forward closure reaches zero production symbols | the anti-slop "this test tests nothing real" detector (mocks-only tests); needs dogfood validation of the FP rate before committing |
+| `speculative-abstraction` | interface/trait with exactly one implementation and at most one consumer | YAGNI materialized; trivially derivable from `Implement` edges; `probable` confidence (DI/test seams exempt via plugin annotations, library-mode public abstractions exempt); group `waste` |
 
 **Deliberately out of core: stale TODOs.** Detecting aged/orphaned TODO comments requires comment
 extraction plus non-graph data (git blame age, issue-tracker state). That breaks the pure

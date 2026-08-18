@@ -54,7 +54,8 @@ round-trip these examples in CI.
   },
   "sources": ["adapter:js-ts"],          // provenance: adapters/plugins whose facts contributed
   "remediation": "Delete calcLegacyTax() (and its export in src/billing/index.ts).",
-  "delta": "new"                         // diff modes: "new"; absent in full mode
+  "delta": "new",                        // diff modes: "new"; absent in full mode
+  "delta_origin": "derived"              // diff modes: "introduced" (inside the change set — dead on arrival) | "derived" (flipped by it); RFC 0004 §6
 }
 ```
 
@@ -87,13 +88,13 @@ re-run kondo and assert X is absent; a baseline survives reformatting.
 ## 6. Category registry (1.0)
 
 Categories are pure verdicts (RFC 0005 taxonomy rule):
-`unused`, `test-only`, `undeclared`, `unresolved`, `duplicate`, `internal-only`, `cyclic`,
-`crap`, `stale`.
+`unused`, `test-only`, `untested`, `undeclared`, `unresolved`, `version-skew`, `duplicate`,
+`internal-only`, `cyclic`, `crap`, `stale`.
 New categories are additive (minor bump); consumers must ignore unknown categories.
 
-Each category maps to exactly one `group` — `defect` (unresolved, undeclared), `waste` (unused,
-test-only, duplicate, internal-only), `risk` (crap, cyclic), `hygiene` (stale) — normative
-mapping in RFC 0005. The
+Each category maps to exactly one `group` — `defect` (unresolved, undeclared, version-skew),
+`waste` (unused, test-only, duplicate, internal-only), `risk` (crap, cyclic, untested),
+`hygiene` (stale) — normative mapping in RFC 0005. The
 field is redundant with `category` by design: it is included so consumers section and sort
 without maintaining the mapping themselves. New groups are additive; consumers must render
 unknown groups after known ones rather than dropping their findings.

@@ -50,7 +50,7 @@ packages — *and* kondo validates the boundary contract both ways:
 
 Cross-package edges that bypass the sibling's *entry points* (deep imports into another
 package's internals, e.g. `@org/ui/src/private/x`) demote to `probable` and are candidate
-territory for a future `deep-import` verdict (noted in RFC 0005 §12) — 1.0 only records the
+territory for a future `deep-import` verdict (noted in RFC 0005 §13) — 1.0 only records the
 edge; it does not judge it.
 
 ## 5. Roots & library mode are per-package decisions

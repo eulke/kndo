@@ -96,7 +96,13 @@ Both sides are computed on the full graph (warm), so:
   `a.ts:42`").
 - You add a first real usage of a dep ⇒ its `unused` (dependency) finding is reported as **fixed**.
 
-Fixed findings are shown as positive deltas (they add to the health score movement, RFC 0005 §10),
+Every delta finding carries a `delta_origin`: **`introduced`** (the finding sits inside the
+change set itself — e.g. this diff adds a symbol nothing uses: *dead on arrival*, the moment an
+agent or author can self-correct before committing) vs **`derived`** (the finding lives in
+untouched code and flipped because of the change). Renderers may lead with introduced findings;
+both fail the same gates.
+
+Fixed findings are shown as positive deltas (they add to the health score movement, RFC 0005 §11),
 which makes the pre-commit experience rewarding rather than purely punitive.
 
 ## 7. Concurrency & storage details

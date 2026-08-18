@@ -23,7 +23,7 @@ An adapter owns what the **language specification and its standard toolchain** d
    - imports (raw specifier + kind: relative, package, stdlib)
    - language-defined roots (`main` functions, `pub` API of a library crate, exported members of
      an npm package's `main`/`exports`, `@main`/top-level code in Swift…)
-   - per-function cyclomatic complexity (for CRAP, RFC 0005 §9)
+   - per-function cyclomatic complexity (for CRAP, RFC 0005 §10)
    - normalized token streams per function/block (for duplicate detection, RFC 0005 §6)
 4. **Resolution** — mapping an import specifier or a reference to its target, given the graph
    assembly context (e.g. Node resolution algorithm incl. `tsconfig` paths; Go module paths; Java

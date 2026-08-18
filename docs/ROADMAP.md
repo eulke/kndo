@@ -8,7 +8,7 @@ All RFCs/ADRs/contracts in this directory reach `Accepted` after debate. Open qu
 [README](README.md) resolved or explicitly deferred.
 
 **Exit:** sign-off on contracts (`core-traits.md`, `output-schema.md`); candidate-rule table
-(RFC 0005 §12) triaged into 1.0 / later / rejected.
+(RFC 0005 §13) triaged into 1.0 / later / rejected.
 
 ## M1 — Skeleton + first language (JS/TS), full-scan only
 Workspace layout (`kondo-cli`, `kondo-core`, `kondo-adapter-toolkit`, `kondo-adapter-js`),
@@ -16,7 +16,8 @@ graph model per contracts, discovery, extraction, resolution driver, conformance
 Package model per RFC 0011 with npm/pnpm/yarn workspaces (the single-package repo is the n = 1
 case, so this is foundation, not a feature).
 Analyses: `unused` (symbols, files, dependencies — with file/directory rollup), `undeclared`,
-and `duplicate` on byte-identical files (subject `file` — free on content hashes).
+`version-skew` (manifest-only, rides the RFC 0011 package model), and `duplicate` on
+byte-identical files (subject `file` — free on content hashes).
 Output: human (RFC 0009 visual language, incl. degradation tiers), JSON v1.0.0, and agent
 format v1 (output-schema §9) — all emitted through the `Engine` facade (contracts §5 — the CLI
 is a frontend from day one, not a shortcut). No cache yet (cold runs only).
@@ -37,9 +38,10 @@ verbs included); RFC 0008 gates live: `--threads 1` ≡ `--threads N` byte-ident
 cached results on fixture matrix; kondo runs in kondo's own pre-commit (dogfooding begins).
 
 ## M3 — Reachability semantics complete + second language (Go)
-`test-only` (three-color reachability), tooling roots, wildcard-edge conservatism,
-confidence surfacing, library mode, `internal-only` (visibility ladders ride the same
-reference-origin machinery). Go adapter proves the contract fits a second language
+`test-only` (three-color reachability), `untested` (its inverse — same coloring passes),
+tooling roots, wildcard-edge conservatism, confidence surfacing, library mode, `internal-only`
+(visibility ladders ride the same reference-origin machinery), `delta_origin`
+introduced/derived on diff findings (RFC 0004 §6). Go adapter proves the contract fits a second language
 without core changes — any needed contract change happens *here*, cheaply. Navigation completes:
 liveness traces (`trace X` from roots), `used-by --split-by-color`, and `kondo impact`
 (incl. `--if-deleted` simulation, reusing the derived-effects machinery).
@@ -77,9 +79,13 @@ adopt kondo in pre-commit and stay enabled for 2 weeks.
 `kondo clean` (guided auto-removal), watch mode / LSP, custom analyses over a stable graph API,
 `kondo serve` exposing the navigation verbs 1:1 as MCP tools (RFC 0007 §7), an arbitrary graph
 query language, deep mode (compiler-grade resolvers), historical trend service, HTML report,
-tsconfig project-references deep integration, deferred rules from the RFC 0005 §12 triage
+tsconfig project-references deep integration, deferred rules from the RFC 0005 §13 triage
 (`layer-violation`, `oversized-unit`) and ecosystem-plugin rules (`barrel-abuse`,
-`dead-feature-flag`).
+`dead-feature-flag`, churn×complexity hotspots via a git plugin, overlapping-dependency
+knowledge base, config-key drift), and **divergent clones** — near-identical clones where one
+copy got a fix the other didn't ("the bug you fixed here still lives there"), the natural
+Type-3 extension of the winnowing index and the headline candidate for the first post-1.0
+release.
 
 ## Standing rules
 

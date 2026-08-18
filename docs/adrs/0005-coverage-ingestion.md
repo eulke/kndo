@@ -3,7 +3,7 @@
 **Status:** Proposed · **Date:** 2026-08-18
 
 ## Context
-CRAP (RFC 0005 §9) needs per-function coverage. Measuring coverage requires *executing* tests —
+CRAP (RFC 0005 §10) needs per-function coverage. Measuring coverage requires *executing* tests —
 incompatible with a < 500 ms static tool and with kondo's non-goal of being a coverage tool.
 
 ## Decision
@@ -14,7 +14,7 @@ well-known paths, matched to files by path, mapped to functions by line ranges.
 
 Freshness policy: a report older than `max-age` (default 7 days) or referencing missing files is
 ignored **with a diagnostic** — stale certainty is worse than declared uncertainty. Without
-usable coverage, CRAP degrades as specified in RFC 0005 §9 (cov = 0, flagged `coverage: none`).
+usable coverage, CRAP degrades as specified in RFC 0005 §10 (cov = 0, flagged `coverage: none`).
 
 ## Consequences
 - kondo stays static and fast; teams get CRAP "for free" if any coverage already runs in CI.

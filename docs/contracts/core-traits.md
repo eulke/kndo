@@ -98,7 +98,7 @@ pub struct FileFacts {
 ### 2.1 Suppression extraction
 
 Comment syntax is language-defined, so **adapters extract suppression pragmas**; the core only
-validates and binds them (RFC 0005 §11):
+validates and binds them (RFC 0005 §12):
 
 ```rust
 pub struct RawSuppression {
