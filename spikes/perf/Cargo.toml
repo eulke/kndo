@@ -1,0 +1,22 @@
+[package]
+name = "kondo-perf-spike"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+# Disposable spike: validates the RFC 0001 §5 warm-run budget before M1.
+# Results recorded in docs/spikes/0001-performance.md — this code is not the product.
+
+[dependencies]
+blake3 = { version = "1", features = ["rayon"] }
+rayon = "1"
+ignore = "0.4"
+memmap2 = "0.9"
+bincode = "1"
+serde = { version = "1", features = ["derive"] }
+tree-sitter = "0.25"
+tree-sitter-typescript = "0.23"
+
+[profile.release]
+lto = true
+codegen-units = 1

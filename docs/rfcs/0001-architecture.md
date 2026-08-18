@@ -95,6 +95,8 @@ becomes part of the extraction contract.
 ## 5. Concurrency & performance budget
 
 Target: warm incremental p95 **< 500 ms** on a 5k-file repo (pre-commit path).
+Validated empirically by [spike 0001](../spikes/0001-performance.md): measured warm composite
+~75 ms on 4 cores — 6.8× headroom.
 
 | Phase | Budget (warm, small diff) | Notes |
 |-------|--------------------------|-------|
