@@ -43,6 +43,7 @@ cached results on fixture matrix; kndo runs in kndo's own pre-commit (dogfooding
 `test-only` (three-color reachability), `untested` (its inverse — same coloring passes),
 tooling roots, wildcard-edge conservatism, confidence surfacing, library mode, `internal-only`
 and `private-type-leak` (both directions of the visibility-mismatch comparison, RFC 0005 §7),
+`deep-import` (contract-gated boundary erosion with pair-level rollup, RFC 0011 §4),
 `delta_origin` introduced/derived on diff findings (RFC 0004 §6). Go adapter proves the contract fits a second language
 without core changes — any needed contract change happens *here*, cheaply. Navigation completes:
 liveness traces (`trace X` from roots), `used-by --split-by-color`, and `kndo impact`

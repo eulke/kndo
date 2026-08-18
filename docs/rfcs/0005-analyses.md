@@ -11,7 +11,7 @@ rollup.** Three orthogonal things, kept orthogonal:
 
 1. **Category = verdict, nothing else**: `unused`, `test-only`, `untested`, `undeclared`,
    `unresolved`, `version-skew`, `duplicate`, `internal-only`, `private-type-leak`, `cyclic`,
-   `crap`, `stale` (the normative registry lives in
+   `deep-import`, `crap`, `stale` (the normative registry lives in
    [output-schema.md §6](../contracts/output-schema.md)). A verdict means the same thing
    whatever it lands on — there is no `unused-file` vs `unused-code`: both are `unused`.
 2. **Subject = the `subject_kind` facet**: the kind of graph node the verdict landed on — `file`,
@@ -33,7 +33,7 @@ rollup.** Three orthogonal things, kept orthogonal:
    |-------|----------|------------------------|
    | `defect` | `unresolved`, `undeclared`, `version-skew`, `private-type-leak` | something is broken or lying — fix it |
    | `waste` | `unused`, `test-only`, `duplicate`, `internal-only` | something can be removed, consolidated, or narrowed |
-   | `risk` | `crap`, `cyclic`, `untested` | something is dangerous to change — refactor or test it |
+   | `risk` | `crap`, `cyclic`, `untested`, `deep-import` | something is dangerous to change — refactor or test it |
    | `hygiene` | `stale` | kndo's own bookkeeping is outdated |
 
    Groups drive ordering and sectioning in every renderer (defects before waste before risk
@@ -334,7 +334,7 @@ Second triage, 2026-08-18:
 | `private-type-leak` | **Adopted** into 1.0 (§7): zero new vocabulary — falls out of `TypeUse` edges crossing visibility downward; group `defect`; lands M3 with the visibility machinery |
 | `redundant-export-binding` | **Deferred post-1.0**: requires modeling export *bindings* as contract entities distinct from symbols — real vocabulary cost for moderate value; parking lot |
 
-| `deep-import` | **Deferred post-1.0** — 1.0 already records the edge at `probable` (RFC 0011 §4); promoting it to a verdict waits for workspace dogfooding data on how noisy real deep-import surfaces are |
+| `deep-import` | ~~Deferred~~ → **Adopted** (superseding decision, same day): the contract-gate design removes the noise objection that motivated deferral — the finding fires only against a provider package that *declares* an explicit surface, so accepted-practice monorepos never see it. Full spec in RFC 0011 §4; group `risk`, pair-level rollup, computed remediation; lands M3 |
 
 No candidates remain open. Future proposals enter through this table with the §13 acceptance
 bar; every row above is a decision of record.

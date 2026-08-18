@@ -48,10 +48,35 @@ packages — *and* kndo validates the boundary contract both ways:
 | internal dep declared, no import resolves into that package | `unused` (subject `dependency`) — same verdict, remediation says "remove the workspace dep" |
 | import resolves into a sibling package not declared in the importer's manifest | `undeclared` (subject `dependency`) — phantom internal dependency; breaks publishability and build graphs |
 
-Cross-package edges that bypass the sibling's *entry points* (deep imports into another
-package's internals, e.g. `@org/ui/src/private/x`) demote to `probable` and are candidate
-territory for a future `deep-import` verdict (noted in RFC 0005 §13) — 1.0 only records the
-edge; it does not judge it.
+### The `deep-import` verdict (group `risk`, M3)
+
+A cross-package import that bypasses the provider package's declared entry points
+(`@org/app` importing `@org/ui/src/private/x` instead of `@org/ui`) erodes the boundary the
+provider declared: the consumer now depends on the sibling's internal file layout, and the
+import breaks outright if the provider is ever published (registries enforce `exports`).
+Three design rules keep the verdict signal, not noise:
+
+1. **Contract-gated, so it is zero-config and self-opting.** The finding fires **only when the
+   provider package declares an explicit surface** (an `exports` map or the language's
+   equivalent, reported by the adapter in `ManifestFacts`). No declared surface = no declared
+   boundary = no finding — monorepos where deep imports are accepted practice never see noise,
+   and a team opts in simply by making its package surface explicit. Boundaries the compiler
+   already enforces (Go `internal/`) are skipped outright, like Go package cycles.
+2. **One finding per (consumer package → provider package) pair** — subject `package`, rollup
+   spirit: "`@org/app` deep-imports `@org/ui` at 23 sites, touching 4 internal symbols", with
+   sites and symbols in the evidence (capped, `elided` counted). That pair is the unit a
+   migration is planned in; 23 line-level findings are not.
+3. **Computed remediation, two mechanical cases.** kndo already has the graph, so the finding
+   says which case each symbol is: (a) *also reachable via the public surface* → "switch the
+   specifier to `@org/ui`" — trivially safe, the first candidate for `kndo clean` auto-fix
+   post-1.0; (b) *genuinely internal* → the exact subpath export to add (`"./testing"`), or
+   extraction to a shared package. Consumers (humans and agents) receive executable
+   instructions, not a lecture.
+
+Severity: warning (the gate means the provider explicitly declared the contract being
+bypassed). Finding confidence = the underlying edge's confidence. The edges themselves are
+recorded from M1 regardless (reachability must stay correct — deep-imported code *is* used);
+the verdict lands in M3 with the package-surface machinery.
 
 ## 5. Roots & library mode are per-package decisions
 

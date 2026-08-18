@@ -58,7 +58,8 @@ This directory is the single source of truth for product and technical decisions
 
 1. Name → `kndo` everywhere (ADR 0007). *Pending actions outside this repo: rename the GitHub
    repository, reserve crates.io/npm names.*
-2. Candidate rules → fully triaged (RFC 0005 §13), `deep-import` deferred post-1.0 with reason.
+2. Candidate rules → fully triaged (RFC 0005 §13); `deep-import`, briefly deferred, was adopted
+   same-day once the contract-gate design removed the noise objection (RFC 0011 §4).
 3. `test-only` default severity → **info**, revisit at M6 with dogfooding data (RFC 0005 §3).
 4. Navigation verbs → **flat** (`kndo uses`), per RFC 0007 §8 draft stance, now decision.
 
