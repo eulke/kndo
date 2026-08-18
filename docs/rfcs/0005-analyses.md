@@ -6,13 +6,17 @@ All analyses are pure functions over the Project Graph (+ optional enrichments s
 Each finding carries: stable id, category, severity, confidence, location(s), evidence, and a
 remediation hint (schema in [contracts/output-schema.md](../contracts/output-schema.md)).
 
-**Taxonomy rule — categories are verdicts, kinds are facets.** A category encodes the verdict
-(`unused-code`, `test-only-code`, `unused-dependency`, `unresolved-import`, `duplicate-code`…);
-*what kind of thing* is affected — export, type, enum member, class member, CSS selector — is the
-finding's `symbol_kind` facet, never a separate category. Configuration and suppressions may
-target a bare category or a `category:kind` pair (e.g. `unused-code:enum-member`). This matches
-the granularity of per-kind tools (knip-style `unused-type` ≡ `unused-code:type-alias`) without
-a combinatorial category registry.
+**Taxonomy rule — category = verdict × subject domain; kinds are facets.** A category pairs a
+verdict (unused, test-only, undeclared, unresolved, duplicate…) with the coarse subject domain it
+judges: `code` (symbols), `file`, `dependency`, `import`. Within the code domain, *what kind* of
+symbol is affected — export, type, enum member, class member, CSS selector — is the finding's
+`symbol_kind` facet, never a separate category. Configuration and suppressions may target a bare
+category or a `category:kind` pair (e.g. `unused-code:enum-member`), matching the granularity of
+per-kind tools (knip-style `unused-type` ≡ `unused-code:type-alias`) without a combinatorial
+registry. The matrix must stay complete: every verdict meaningful for a domain has a category —
+`unused-{code,file,dependency}`, `test-only-{code,file,dependency}` — and an intentionally absent
+cell (there is no `tooling-only-*`: tooling reachability is healthy) is a documented decision,
+not an oversight.
 
 ## 1. Reachability foundation
 
@@ -20,7 +24,7 @@ Most detections derive from one computation. Roots are partitioned by `RootKind`
 
 - **Production roots** — language-defined entry points (`main`, published/public API of a library,
   package `exports`/`bin`) + plugin-contributed roots (framework handlers, DI-registered beans…).
-- **Test roots** — test functions/files (language flavor detection + test-framework plugins).
+- **Test roots** — test functions/files (language role detection + test-framework plugins).
 - **Tooling roots** — build/config scripts (webpack.config, build.gradle, migrations…): they keep
   their imports alive but are not production code themselves.
 
@@ -57,16 +61,23 @@ member's liveness evidence is at best `probable` and findings demote accordingly
 
 ## 3. `test-only-code` — non-productive code
 
-Symbols/files colored `test-only`, excluding test-flavored files themselves and declared test
+Symbols colored `test-only`, excluding symbols in test-role files themselves and declared test
 utilities (`testkit`/`fixtures` conventions, configurable). This is the "you built it, tests
 enshrined it, production never came" detector — the finding explicitly lists the test roots that
 keep the symbol alive, so deleting code + its tests together becomes mechanical.
 Default severity: info (candidate to raise to warning — open question #3).
+A *whole file* in that state is reported once as `test-only-file` (file domain, §4) instead of
+one finding per symbol.
 
-## 4. `unused-file` — orphan files
+## 4. `unused-file` / `test-only-file` — file-domain verdicts
 
-Files with no incoming import/reference edge and no root. Subsumes asset/config orphans via
-cross-language edges (CSS, JSON). Generated/vendored flavors are exempt by default.
+- `unused-file`: files with no incoming import/reference edge and no root. Subsumes asset/config
+  orphans via cross-language edges (CSS, JSON).
+- `test-only-file`: production-role files whose every incoming edge originates from test roots —
+  the file-level twin of `test-only-code`, reported as one finding for the file (its symbols are
+  not re-reported individually).
+
+Generated and vendored origins are exempt from both by default.
 
 ## 5. Dependency & import hygiene
 
@@ -75,10 +86,18 @@ For each `ManifestDependency` with scope `prod`, classify by its importers:
 | Importers | Finding |
 |-----------|---------|
 | none | `unused-dependency` — declared, never imported |
-| only test-flavored / test-only-reachable files | `test-only-dependency` — belongs in dev scope, not shipped weight |
+| only test-role / test-only-reachable files | `test-only-dependency` — belongs in dev scope, not shipped weight |
 | at least one production- or tooling-reachable file | used (no finding) |
 
-Dev-scoped deps check against all files (a dev dep is unused only if *nothing* imports it).
+The neutral scope taxonomy is `prod | dev | build | peer | optional` (adapters map ecosystem
+scopes onto it — npm `peerDependencies`, Cargo `build-dependencies`, Gradle configurations):
+
+- **dev / build** — checked against all files; unused only if *nothing* imports them.
+- **peer** — a contract with the consumer, not a usage claim: exempt from `unused-dependency`
+  (an un-imported peer is at most an info-level note), and never `test-only`.
+- **optional** — runtime-conditional by design: findings demote to `possible` confidence, below
+  the default report floor.
+
 Adapter-provided package mappings handle subpath imports, type-only packages (`@types/*` bound to
 their runtime package), and side-effect-only imports (`import "polyfill"` counts as usage).
 

@@ -17,7 +17,7 @@ A plugin implements one or more of these hooks (trait `Plugin`, normative in con
 
 | Hook | Runs | Typical use |
 |------|------|-------------|
-| `classify_file` | discovery | mark files as generated/vendored/test beyond language defaults (e.g. `*.stories.tsx`) |
+| `classify_file` | discovery | adjust a file's role/origin beyond language defaults (e.g. `*.stories.tsx` → tooling) |
 | `contribute_roots` | graph assembly | framework entry points: Next.js `pages/**`, Spring `@Component`, AWS Lambda handlers, `#[test]`-like macros of alt test frameworks |
 | `contribute_edges` | graph assembly | edges invisible to the language: DI wiring, route-string → handler, Angular template → class, CSS class names used from HTML templates |
 | `annotate_symbols` | graph assembly | mark symbols "externally consumed" (public SDK surface, FFI, serialization targets like `@JsonProperty`/serde fields) |

@@ -12,26 +12,37 @@ pub struct FileId(u32);      // interned; stable within a snapshot
 pub struct SymbolId(u32);
 pub struct PackageId(u32);
 
-pub enum FileFlavor { Production, Test, Tooling, Generated, Vendored }
+// A file's classification is two orthogonal axes, never one enum: a generated test file and a
+// vendored production file are both expressible. `Role` values mirror `RootKind` on purpose.
+pub enum FileRole   { Production, Test, Tooling }
+pub enum FileOrigin { Authored, Generated, Vendored }
+pub struct FileClass { pub role: FileRole, pub origin: FileOrigin }
 
 pub enum SymbolKind {
     Function, Method, Class, Interface, Struct, Enum, EnumMember, TypeAlias,
-    Const, Static, Field, Module, CssRule, CssVariable, Other(SmolStr),
+    Const, Static, Variable, Field, Module, CssRule, CssVariable, Other(SmolStr),
 }
 // kebab-case names double as the `category:kind` facet in config/suppressions (RFC 0005)
 
 pub enum RootKind { Production, Test, Tooling }
+
+pub enum DependencyScope { Prod, Dev, Build, Peer, Optional }
+// analysis semantics per scope: RFC 0005 §5
+
+pub enum RefKind { Call, Read, Write, Extend, Implement, Override, TypeUse }
 
 pub enum Confidence { Certain, Probable, Possible }
 
 pub enum EdgeKind {
     ImportsFile   { from: FileId, to: FileId },
     ImportsPackage{ from: FileId, to: PackageId },
-    References    { from: SymbolId, to: SymbolId },
+    References    { from: SymbolId, to: SymbolId, kind: RefKind },
     Declares      { file: FileId, symbol: SymbolId },
     Root          { kind: RootKind, target: NodeRef },     // NodeRef = File | Symbol
     Wildcard      { from: FileId },                        // dynamic construct: may reach anything visible
 }
+// RefKind matters to analyses: Implement/Override edges drive dispatch-aware member liveness
+// (RFC 0005 §2); Extend/TypeUse distinguish type-level from value-level consumption.
 // every edge: { kind: EdgeKind, confidence: Confidence, source: Provenance }
 // Provenance = Adapter(AdapterId) | Plugin(PluginId)  — for attribution in output
 ```
@@ -47,7 +58,7 @@ pub trait LanguageAdapter: Send + Sync {
     // { id: "js-ts", facts_schema_version: u32, file_globs, manifest_globs, grammar_version }
 
     /// Claim & classify a path (fast; name-based, content peeking only when unavoidable).
-    fn claim(&self, path: &ProjectPath) -> Option<FileClaim>;   // { language, flavor: FileFlavor }
+    fn claim(&self, path: &ProjectPath) -> Option<FileClaim>;   // { language, class: FileClass }
 
     /// Parse one file and extract every language-defined fact. Must not fail on broken code:
     /// return partial facts + diagnostics.
@@ -90,7 +101,7 @@ pub trait Plugin: Send + Sync {
     fn descriptor(&self) -> PluginDescriptor;
     // { id, version, ordering constraints, detection: Vec<DetectRule>, requested_file_access: Vec<Glob> }
 
-    fn classify_file(&self, path: &ProjectPath, current: FileFlavor) -> Option<FileFlavor> { None }
+    fn classify_file(&self, path: &ProjectPath, current: FileClass) -> Option<FileClass> { None }
     fn contribute_roots(&self, graph: &GraphView, out: &mut RootSink) {}
     fn contribute_edges(&self, graph: &GraphView, out: &mut EdgeSink) {}
     fn annotate_symbols(&self, graph: &GraphView, out: &mut AnnotationSink) {}

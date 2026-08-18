@@ -50,9 +50,10 @@ The graph is the language-neutral model of the project. Node and edge kinds (nor
 in [contracts/core-traits.md](../contracts/core-traits.md)):
 
 **Nodes**
-- `File` — a source file (path, content hash, language, flavor: production | test | generated | vendored)
+- `File` — a source file (path, content hash, language, role: production | test | tooling,
+  origin: authored | generated | vendored — two orthogonal axes)
 - `Symbol` — a named declarable (function, method, type, class, const, css-rule…), owned by a File
-- `Package` — a dependency declared in a manifest (name, version req, scope: prod | dev | build)
+- `Package` — a dependency declared in a manifest (name, version req, scope: prod | dev | build | peer | optional)
 - `Manifest` — the declaring file of Packages (package.json, go.mod, Cargo.toml…)
 
 **Edges**

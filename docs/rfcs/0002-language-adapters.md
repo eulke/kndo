@@ -13,8 +13,9 @@ and treats them uniformly; adding a language is adding one crate that implements
 An adapter owns what the **language specification and its standard toolchain** define:
 
 1. **Claiming files** — which extensions/filenames it handles (`.ts`, `go.mod`, `BUILD.gradle.kts`…),
-   including distinguishing *flavors*: test files (`_test.go`, `*.spec.ts`), generated code
-   (headers/pragmas like `// Code generated … DO NOT EDIT`), vendored code.
+   including classifying each file on two orthogonal axes — *role* (production / test / tooling:
+   `_test.go`, `*.spec.ts`) and *origin* (authored / generated / vendored: headers like
+   `// Code generated … DO NOT EDIT`).
 2. **Parsing** — producing a syntax tree (tree-sitter grammar, ADR 0002) and surviving broken code.
 3. **Extraction** — emitting `FileFacts`:
    - declared symbols (name, kind, span, visibility, exported?)
@@ -85,7 +86,7 @@ Findings inherit the *weakest* confidence on the evidence path and report it (RF
 
 ## 7. Per-language notes (initial scope)
 
-| Language | Resolution highlights | Roots (language-defined) | Test flavor detection |
+| Language | Resolution highlights | Roots (language-defined) | Test-role detection |
 |----------|----------------------|--------------------------|----------------------|
 | JS/TS | Node ESM+CJS, `tsconfig` paths/baseUrl, package.json `exports`; JSX/TSX | package entry points (`main`, `exports`, `bin`), scripts referenced files | `*.test.*`, `*.spec.*`, `__tests__/` |
 | Go | Go modules, internal/ visibility | `main.main`, exported identifiers of library modules, `init` | `_test.go` |

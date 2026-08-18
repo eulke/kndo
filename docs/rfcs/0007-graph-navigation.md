@@ -55,7 +55,7 @@ The entry point of every agent workflow: name → selector.
 
 ### 4.2 `kondo describe <selector>`
 Everything the graph knows about one node, in one call:
-declaration (span, kind, visibility, exported), file flavor & reachability color, direct degree
+declaration (span, kind, visibility, exported), file role/origin & reachability color, direct degree
 (in/out, by edge kind), roots that reach it (nearest first), metrics (cyclomatic, CRAP, coverage
 if ingested), duplication group membership, open findings attached to it, provenance
 (adapter/plugins that produced its facts). For a `pkg:` selector: manifest scope, importing files
