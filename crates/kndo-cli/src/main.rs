@@ -40,9 +40,19 @@ fn check() -> ExitCode {
     };
     let result = engine.check(CheckRequest { mode: RunMode::Full });
 
+    if !result.diagnostics.is_empty() {
+        for d in &result.diagnostics {
+            eprintln!("kndo: {d}");
+        }
+        return ExitCode::from(2);
+    }
+
     // RFC 0009 §2 quiet success — one line. (Real rendering lands with real findings.)
     if result.findings.is_empty() {
-        println!("kndo · clean · 0 findings (M1 skeleton — analyses land next)");
+        println!(
+            "kndo · clean · {} files discovered · 0 findings (M1 skeleton — analyses land next)",
+            result.files_discovered
+        );
         ExitCode::SUCCESS
     } else {
         println!("kndo · {} findings", result.findings.len());

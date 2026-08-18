@@ -10,6 +10,7 @@
 //! either requires updating both in the same PR.
 
 pub mod adapter;
+pub mod discovery;
 pub mod engine;
 pub mod plugin;
 pub mod vocab;

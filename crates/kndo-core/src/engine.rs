@@ -9,6 +9,8 @@
 use std::fmt;
 use std::path::{Path, PathBuf};
 
+use crate::discovery;
+
 /// Mirrors the output schema's `schema_version` (contracts/output-schema.md).
 pub const SCHEMA_VERSION: &str = "1.0.0";
 
@@ -62,6 +64,9 @@ pub struct Finding {
 pub struct RunResult {
     pub findings: Vec<Finding>,
     pub diagnostics: Vec<String>,
+    /// Discovery output, pre-adapter-claiming. Stands in for `run.adapters[].files`
+    /// (output-schema §1) until adapter registration lands in `Engine`.
+    pub files_discovered: usize,
 }
 
 /// Synchronous and single-instance-per-project (the cache lock, RFC 0004 §7); a serving
@@ -82,10 +87,17 @@ impl Engine {
         &self.root
     }
 
-    /// M1 skeleton: discovery/extraction/graph/analyses land behind this signature. The
-    /// signature is the contract; the emptiness is temporary.
+    /// M1 skeleton: extraction/graph/analyses land behind this signature next. Discovery is
+    /// wired; `--staged`/`--diff` scoping (`RunMode`) is not yet — every mode walks the full
+    /// tree until git-index/merge-base scoping lands.
     pub fn check(&mut self, _req: CheckRequest) -> RunResult {
-        RunResult::default()
+        match discovery::discover(&self.root) {
+            Ok(files) => RunResult { files_discovered: files.len(), ..RunResult::default() },
+            Err(e) => RunResult {
+                diagnostics: vec![format!("discovery failed: {e:?}")],
+                ..RunResult::default()
+            },
+        }
     }
 }
 
@@ -101,10 +113,25 @@ mod tests {
 
     #[test]
     fn check_on_empty_project_is_clean() {
-        let dir = std::env::temp_dir().join("kndo-engine-test");
+        let dir = std::env::temp_dir().join("kndo-engine-test-empty");
+        let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let mut engine = Engine::open(&dir, ConfigOverrides::default()).unwrap();
         let result = engine.check(CheckRequest { mode: RunMode::Full });
         assert!(result.findings.is_empty());
+        assert_eq!(result.files_discovered, 0);
+    }
+
+    #[test]
+    fn check_counts_discovered_files() {
+        let dir = std::env::temp_dir().join("kndo-engine-test-files");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("a.ts"), "export const a = 1;").unwrap();
+        std::fs::write(dir.join("b.ts"), "export const b = 2;").unwrap();
+
+        let mut engine = Engine::open(&dir, ConfigOverrides::default()).unwrap();
+        let result = engine.check(CheckRequest { mode: RunMode::Full });
+        assert_eq!(result.files_discovered, 2);
     }
 }

@@ -17,6 +17,9 @@ publish = false # until 1.0 (ADR 0007: reserve names early regardless)
 
 [workspace.dependencies]
 smol_str = "0.3"
+blake3 = { version = "1", features = ["rayon"] }
+ignore = "0.4"
+rayon = "1"
 
 [profile.release]
 lto = true

@@ -9,3 +9,6 @@ publish.workspace = true
 
 [dependencies]
 smol_str = { workspace = true }
+blake3 = { workspace = true }
+ignore = { workspace = true }
+rayon = { workspace = true }
