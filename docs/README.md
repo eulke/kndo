@@ -12,34 +12,34 @@ This directory is the single source of truth for product and technical decisions
 
 | Area | Document | Status |
 |------|----------|--------|
-| Product | [product/vision.md](product/vision.md) | Draft |
-| Architecture | [rfcs/0001-architecture.md](rfcs/0001-architecture.md) | Draft |
-| Language adapters | [rfcs/0002-language-adapters.md](rfcs/0002-language-adapters.md) | Draft |
-| Plugin system | [rfcs/0003-plugin-system.md](rfcs/0003-plugin-system.md) | Draft |
-| Graph, cache & incrementality | [rfcs/0004-graph-and-cache.md](rfcs/0004-graph-and-cache.md) | Draft |
-| Analyses & metrics | [rfcs/0005-analyses.md](rfcs/0005-analyses.md) | Draft |
-| CLI, output & config | [rfcs/0006-cli-and-output.md](rfcs/0006-cli-and-output.md) | Draft |
-| Graph navigation & query | [rfcs/0007-graph-navigation.md](rfcs/0007-graph-navigation.md) | Draft |
-| Performance & parallelism | [rfcs/0008-performance-and-parallelism.md](rfcs/0008-performance-and-parallelism.md) | Draft |
-| Human interface (CLI rendering) | [rfcs/0009-human-interface.md](rfcs/0009-human-interface.md) | Draft |
-| CI: GitHub Action & PR reporting | [rfcs/0010-ci-github-action.md](rfcs/0010-ci-github-action.md) | Draft |
-| Workspaces & monorepos | [rfcs/0011-workspaces-and-monorepos.md](rfcs/0011-workspaces-and-monorepos.md) | Draft |
+| Product | [product/vision.md](product/vision.md) | Accepted |
+| Architecture | [rfcs/0001-architecture.md](rfcs/0001-architecture.md) | Accepted |
+| Language adapters | [rfcs/0002-language-adapters.md](rfcs/0002-language-adapters.md) | Accepted |
+| Plugin system | [rfcs/0003-plugin-system.md](rfcs/0003-plugin-system.md) | Accepted |
+| Graph, cache & incrementality | [rfcs/0004-graph-and-cache.md](rfcs/0004-graph-and-cache.md) | Accepted |
+| Analyses & metrics | [rfcs/0005-analyses.md](rfcs/0005-analyses.md) | Accepted |
+| CLI, output & config | [rfcs/0006-cli-and-output.md](rfcs/0006-cli-and-output.md) | Accepted |
+| Graph navigation & query | [rfcs/0007-graph-navigation.md](rfcs/0007-graph-navigation.md) | Accepted |
+| Performance & parallelism | [rfcs/0008-performance-and-parallelism.md](rfcs/0008-performance-and-parallelism.md) | Accepted |
+| Human interface (CLI rendering) | [rfcs/0009-human-interface.md](rfcs/0009-human-interface.md) | Accepted |
+| CI: GitHub Action & PR reporting | [rfcs/0010-ci-github-action.md](rfcs/0010-ci-github-action.md) | Accepted |
+| Workspaces & monorepos | [rfcs/0011-workspaces-and-monorepos.md](rfcs/0011-workspaces-and-monorepos.md) | Accepted |
 | Spike: warm-budget validation | [spikes/0001-performance.md](spikes/0001-performance.md) | Done |
-| Adapter spec: JS/TS | [adapters/js-ts.md](adapters/js-ts.md) | Draft |
-| Core contracts (traits) | [contracts/core-traits.md](contracts/core-traits.md) | Draft |
-| Output schema (JSON) | [contracts/output-schema.md](contracts/output-schema.md) | Draft |
-| Roadmap | [ROADMAP.md](ROADMAP.md) | Draft |
+| Adapter spec: JS/TS | [adapters/js-ts.md](adapters/js-ts.md) | Draft (M1 working spec) |
+| Core contracts (traits) | [contracts/core-traits.md](contracts/core-traits.md) | Accepted |
+| Output schema (JSON) | [contracts/output-schema.md](contracts/output-schema.md) | Accepted |
+| Roadmap | [ROADMAP.md](ROADMAP.md) | Accepted |
 
 ### ADRs (Architecture Decision Records)
 
 | # | Decision | Status |
 |---|----------|--------|
 | [0001](adrs/0001-rust-for-the-core.md) | Rust for the core | Accepted |
-| [0002](adrs/0002-tree-sitter-parsing.md) | tree-sitter as the universal parsing layer | Proposed |
-| [0003](adrs/0003-adapter-linking-strategy.md) | First-party adapters compiled in; third-party plugins via WASM | Proposed |
-| [0004](adrs/0004-cache-format.md) | Cache: content-addressed binary snapshot in `.kndo/` | Proposed |
-| [0005](adrs/0005-coverage-ingestion.md) | Coverage is ingested, never measured, for CRAP | Proposed |
-| [0006](adrs/0006-single-binary-zero-config.md) | Single static binary, zero-config by default | Proposed |
+| [0002](adrs/0002-tree-sitter-parsing.md) | tree-sitter as the universal parsing layer | Accepted |
+| [0003](adrs/0003-adapter-linking-strategy.md) | First-party adapters compiled in; third-party plugins via WASM | Accepted |
+| [0004](adrs/0004-cache-format.md) | Cache: content-addressed binary snapshot in `.kndo/` | Accepted |
+| [0005](adrs/0005-coverage-ingestion.md) | Coverage is ingested, never measured, for CRAP | Accepted |
+| [0006](adrs/0006-single-binary-zero-config.md) | Single static binary, zero-config by default | Accepted |
 | [0007](adrs/0007-product-name.md) | Product name: `kndo` | Accepted |
 
 ## Conventions
@@ -52,10 +52,16 @@ This directory is the single source of truth for product and technical decisions
 - Documents are written in English (lingua franca for OSS and agent consumption); discussion can
   happen in any language.
 
-## Open questions (tracked for debate)
+## Open questions
 
-1. ~~Name collision with the existing `kondo` crate~~ **Resolved** — the product is `kndo`
-   everywhere (ADR 0007); pending action: rename the GitHub repo and reserve the registry names.
-2. Candidate-rule triage is done (RFC 0005 §13); only `deep-import` remains open (yes/no).
-3. Default severity for `test-only code` findings — warn or info?
-4. Navigation verbs: flat (`kndo uses`) vs namespaced (`kndo graph uses`) — RFC 0007 §8.
+**M0 is closed — none remain.** Resolution log:
+
+1. Name → `kndo` everywhere (ADR 0007). *Pending actions outside this repo: rename the GitHub
+   repository, reserve crates.io/npm names.*
+2. Candidate rules → fully triaged (RFC 0005 §13), `deep-import` deferred post-1.0 with reason.
+3. `test-only` default severity → **info**, revisit at M6 with dogfooding data (RFC 0005 §3).
+4. Navigation verbs → **flat** (`kndo uses`), per RFC 0007 §8 draft stance, now decision.
+
+Per-document open questions that remain (RFC 0007 §8 items 2–3, RFC 0009 §8, adapter spec §7)
+carry explicit draft stances that are the decision of record until implementation experience
+argues otherwise — revisiting one is a normal PR against the doc, not a blocker.

@@ -3,13 +3,14 @@
 **Status:** Draft · Milestones ship in order; each has explicit exit criteria. Docs are updated in
 the same PR as the code they describe — a milestone isn't done if its documents lie.
 
-## M0 — Definition (now)
-All RFCs/ADRs/contracts in this directory reach `Accepted` after debate. Open questions in
-[README](README.md) resolved or explicitly deferred.
+## M0 — Definition ✅ (completed 2026-08-18)
+All RFCs/ADRs/contracts reached `Accepted` after debate; open questions resolved or explicitly
+deferred with reasons of record.
 
-**Exit:** sign-off on contracts (`core-traits.md`, `output-schema.md`); candidate-rule table
-(RFC 0005 §13) triaged into 1.0 / later / rejected; ~~warm-budget feasibility validated by
-spike~~ **done** — [spike 0001](spikes/0001-performance.md): 73 ms measured vs 500 ms budget.
+**Exit (met):** contracts signed off (`core-traits.md`, `output-schema.md`); candidate-rule
+table (RFC 0005 §13) fully triaged — no candidate left undecided; warm-budget feasibility
+validated by [spike 0001](spikes/0001-performance.md) (73 ms measured vs 500 ms budget);
+product name decided (ADR 0007).
 
 ## M1 — Skeleton + first language (JS/TS), full-scan only
 Workspace layout (`kndo-cli`, `kndo-core`, `kndo-adapter-toolkit`, `kndo-adapter-js`),

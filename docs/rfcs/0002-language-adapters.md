@@ -1,6 +1,6 @@
 # RFC 0002 — Language Adapters
 
-**Status:** Draft · **Depends on:** RFC 0001 · **Normative contract:** [contracts/core-traits.md](../contracts/core-traits.md)
+**Status:** Accepted · **Depends on:** RFC 0001 · **Normative contract:** [contracts/core-traits.md](../contracts/core-traits.md)
 
 ## 1. Purpose
 

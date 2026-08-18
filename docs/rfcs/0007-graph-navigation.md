@@ -1,6 +1,6 @@
 # RFC 0007 — Graph Navigation & Query Commands
 
-**Status:** Draft · **Depends on:** RFC 0001, 0004, 0006 · **Normative schema:** [contracts/output-schema.md](../contracts/output-schema.md) §8
+**Status:** Accepted · **Depends on:** RFC 0001, 0004, 0006 · **Normative schema:** [contracts/output-schema.md](../contracts/output-schema.md) §8
 
 ## 1. Motivation
 

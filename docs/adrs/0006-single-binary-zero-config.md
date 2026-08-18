@@ -1,6 +1,6 @@
 # ADR 0006 — Single static binary, zero-config by default
 
-**Status:** Proposed · **Date:** 2026-08-18
+**Status:** Accepted · **Date:** 2026-08-18
 
 ## Context
 Target users include pre-commit hooks, CI containers, and AI agents — environments where every

@@ -1,6 +1,6 @@
 # RFC 0008 — Performance & Parallelism
 
-**Status:** Draft · **Depends on:** RFC 0001, 0004 · **Related:** ADR 0001 (Rust), ADR 0004 (cache)
+**Status:** Accepted · **Depends on:** RFC 0001, 0004 · **Related:** ADR 0001 (Rust), ADR 0004 (cache)
 
 ## 1. Principles
 

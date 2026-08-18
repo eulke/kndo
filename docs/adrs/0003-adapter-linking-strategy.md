@@ -1,6 +1,6 @@
 # ADR 0003 — First-party adapters compiled in; third-party extensions via WASM
 
-**Status:** Proposed · **Date:** 2026-08-18
+**Status:** Accepted · **Date:** 2026-08-18
 
 ## Context
 Languages and plugins must be pluggable (RFC 0002/0003), but Rust has no stable native ABI, and

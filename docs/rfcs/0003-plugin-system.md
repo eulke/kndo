@@ -1,6 +1,6 @@
 # RFC 0003 — Plugin System
 
-**Status:** Draft · **Depends on:** RFC 0001, 0002 · **Normative contract:** [contracts/core-traits.md](../contracts/core-traits.md)
+**Status:** Accepted · **Depends on:** RFC 0001, 0002 · **Normative contract:** [contracts/core-traits.md](../contracts/core-traits.md)
 
 ## 1. Why plugins exist
 

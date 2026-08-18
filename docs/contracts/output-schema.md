@@ -1,6 +1,6 @@
 # Contract — JSON Output Schema
 
-**Status:** Draft · Normative for `--format json`. Versioned: `schema_version` uses semver;
+**Status:** Accepted · Normative for `--format json`. Versioned: `schema_version` uses semver;
 additive = minor, breaking = major (RFC 0006 §4). A machine-readable JSON Schema
 (`schemas/kndo-output.schema.json`) is generated from the Rust types at build time and must
 round-trip these examples in CI.

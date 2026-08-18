@@ -1,6 +1,6 @@
 # ADR 0004 — Cache: content-addressed binary snapshots under `.kndo/`
 
-**Status:** Proposed · **Date:** 2026-08-18
+**Status:** Accepted · **Date:** 2026-08-18
 
 ## Context
 The 500 ms warm budget allots ~100 ms to loading the previous graph (RFC 0001 §5). The cache must

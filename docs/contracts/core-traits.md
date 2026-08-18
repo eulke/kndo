@@ -1,6 +1,6 @@
 # Contract — Core Traits & Graph Vocabulary
 
-**Status:** Draft · Normative for RFC 0001/0002/0003. Code must match this document; changing
+**Status:** Accepted · Normative for RFC 0001/0002/0003. Code must match this document; changing
 either requires updating both in the same PR. Sketches are simplified Rust (lifetimes, error
 types and non-essential fields elided) — shape is normative, exact signatures may be refined
 during M1 with a PR to this file.

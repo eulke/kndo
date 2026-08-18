@@ -1,6 +1,6 @@
 # kndo — Product Vision
 
-**Status:** Draft · **Owner:** eulke · **Last updated:** 2026-08-18
+**Status:** Accepted · **Owner:** eulke · **Last updated:** 2026-08-18
 
 ## 1. The problem
 

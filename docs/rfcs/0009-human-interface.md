@@ -1,6 +1,6 @@
 # RFC 0009 — Human Interface: CLI Rendering & Visual Language
 
-**Status:** Draft · **Depends on:** RFC 0005 (groups), RFC 0006 (commands), contracts §5 (Engine)
+**Status:** Accepted · **Depends on:** RFC 0005 (groups), RFC 0006 (commands), contracts §5 (Engine)
 
 ## 1. Scope & position
 

@@ -1,6 +1,6 @@
 # RFC 0006 — CLI, Output & Configuration
 
-**Status:** Draft · **Depends on:** RFC 0001, 0004, 0005 · **Normative schema:** [contracts/output-schema.md](../contracts/output-schema.md)
+**Status:** Accepted · **Depends on:** RFC 0001, 0004, 0005 · **Normative schema:** [contracts/output-schema.md](../contracts/output-schema.md)
 
 ## 1. Design tenets
 

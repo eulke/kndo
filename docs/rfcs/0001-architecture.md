@@ -1,6 +1,6 @@
 # RFC 0001 — Core Architecture
 
-**Status:** Draft · **Depends on:** — · **Depended on by:** all other RFCs
+**Status:** Accepted · **Depends on:** — · **Depended on by:** all other RFCs
 
 ## 1. Overview
 

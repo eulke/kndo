@@ -1,6 +1,6 @@
 # ADR 0005 — Coverage is ingested, never measured
 
-**Status:** Proposed · **Date:** 2026-08-18
+**Status:** Accepted · **Date:** 2026-08-18
 
 ## Context
 CRAP (RFC 0005 §10) needs per-function coverage. Measuring coverage requires *executing* tests —

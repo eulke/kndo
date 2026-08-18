@@ -1,6 +1,6 @@
 # RFC 0005 — Analyses & Metrics
 
-**Status:** Draft · **Depends on:** RFC 0001, 0002, 0004
+**Status:** Accepted · **Depends on:** RFC 0001, 0002, 0004
 
 All analyses are pure functions over the Project Graph (+ optional enrichments such as coverage).
 Each finding carries: stable id, category, severity, confidence, location(s), evidence, and a
@@ -9,9 +9,11 @@ remediation hint (schema in [contracts/output-schema.md](../contracts/output-sch
 **Taxonomy rule — a category is a verdict; the subject is a facet; the reporting level is a
 rollup.** Three orthogonal things, kept orthogonal:
 
-1. **Category = verdict, nothing else**: `unused`, `test-only`, `undeclared`, `unresolved`,
-   `duplicate`, `crap`, `stale`. A verdict means the same thing whatever it lands on — there is
-   no `unused-file` vs `unused-code`: both are `unused`.
+1. **Category = verdict, nothing else**: `unused`, `test-only`, `untested`, `undeclared`,
+   `unresolved`, `version-skew`, `duplicate`, `internal-only`, `private-type-leak`, `cyclic`,
+   `crap`, `stale` (the normative registry lives in
+   [output-schema.md §6](../contracts/output-schema.md)). A verdict means the same thing
+   whatever it lands on — there is no `unused-file` vs `unused-code`: both are `unused`.
 2. **Subject = the `subject_kind` facet**: the kind of graph node the verdict landed on — `file`,
    `directory`, `package`, `dependency`, `import`, `suppression`, or any symbol kind (`function`, `type-alias`,
    `enum-member`, `css-rule`…). Configuration and suppressions target a bare category or
@@ -132,7 +134,8 @@ Nodes colored `test-only`, excluding test-role files themselves and declared tes
 (`testkit`/`fixtures` conventions, configurable). This is the "you built it, tests enshrined it,
 production never came" detector — the finding explicitly lists the test roots that keep the node
 alive, so deleting code + its tests together becomes mechanical.
-Default severity: info (candidate to raise to warning — open question #3).
+Default severity: **info** (decided; revisit at M6 with dogfooding data before any raise to
+warning — changing it is a defaults-contract change, ADR 0006).
 
 ## 4. File & directory subjects (rollup, not new categories)
 
@@ -331,11 +334,10 @@ Second triage, 2026-08-18:
 | `private-type-leak` | **Adopted** into 1.0 (§7): zero new vocabulary — falls out of `TypeUse` edges crossing visibility downward; group `defect`; lands M3 with the visibility machinery |
 | `redundant-export-binding` | **Deferred post-1.0**: requires modeling export *bindings* as contract entities distinct from symbols — real vocabulary cost for moderate value; parking lot |
 
-Still open — each needs a yes/no:
+| `deep-import` | **Deferred post-1.0** — 1.0 already records the edge at `probable` (RFC 0011 §4); promoting it to a verdict waits for workspace dogfooding data on how noisy real deep-import surfaces are |
 
-| Candidate | Signal | Notes |
-|-----------|--------|-------|
-| `deep-import` | cross-package import bypassing the sibling package's entry points | boundary hygiene in workspaces (RFC 0011 §4); 1.0 records the edge at `probable`, does not judge it |
+No candidates remain open. Future proposals enter through this table with the §13 acceptance
+bar; every row above is a decision of record.
 | `hollow-test` | test root whose forward closure reaches zero production symbols | the anti-slop "this test tests nothing real" detector (mocks-only tests); needs dogfood validation of the FP rate before committing |
 | `speculative-abstraction` | interface/trait with exactly one implementation and at most one consumer | YAGNI materialized; trivially derivable from `Implement` edges; `probable` confidence (DI/test seams exempt via plugin annotations, library-mode public abstractions exempt); group `waste` |
 

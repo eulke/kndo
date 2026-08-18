@@ -1,6 +1,6 @@
 # RFC 0010 — kndo in CI: GitHub Action & PR Reporting
 
-**Status:** Draft · **Depends on:** RFC 0004 (diff modes, cache), RFC 0006 (formats, exit codes),
+**Status:** Accepted · **Depends on:** RFC 0004 (diff modes, cache), RFC 0006 (formats, exit codes),
 contracts §5 (Engine boundary) · **Ships:** M6 (ROADMAP)
 
 ## 1. Goal

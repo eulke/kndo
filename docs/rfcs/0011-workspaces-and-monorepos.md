@@ -1,6 +1,6 @@
 # RFC 0011 — Workspaces & Monorepos
 
-**Status:** Draft · **Depends on:** RFC 0001, 0002, 0004, 0005 · **Changes:** graph vocabulary (contracts §1)
+**Status:** Accepted · **Depends on:** RFC 0001, 0002, 0004, 0005 · **Changes:** graph vocabulary (contracts §1)
 
 ## 1. Problem
 

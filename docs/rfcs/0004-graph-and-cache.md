@@ -1,6 +1,6 @@
 # RFC 0004 — Project Graph Cache & Incremental Analysis
 
-**Status:** Draft · **Depends on:** RFC 0001, 0002 · **Related ADR:** 0004 (cache format)
+**Status:** Accepted · **Depends on:** RFC 0001, 0002 · **Related ADR:** 0004 (cache format)
 
 ## 1. Goal
 

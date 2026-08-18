@@ -1,6 +1,6 @@
 # ADR 0002 — tree-sitter as the universal parsing layer
 
-**Status:** Proposed · **Date:** 2026-08-18
+**Status:** Accepted · **Date:** 2026-08-18
 
 ## Context
 Eight languages at launch, "adding a language must be easy", parsing must tolerate broken code
