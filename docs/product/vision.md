@@ -27,7 +27,7 @@ project health*, not on style. One binary, one config (optional), one output sch
 | Unused code | Which symbols (functions, classes, types…) are unreachable from any entry point? |
 | Unused files | Which files does nothing import or reference? |
 | Test-only code | Which "production" code is only ever reached from tests? (candidate for deletion) |
-| Duplicate code | Which blocks are structural copies of each other? |
+| Duplicate code | Which blocks are structural copies of each other — and which files are byte-identical? |
 | Excess visibility | Which symbols are exported/public but could be private? |
 | Dependency cycles | Which files/modules form import cycles? |
 | CRAP score | Which functions are complex **and** untested — Change Risk Anti-Patterns? |

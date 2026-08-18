@@ -144,6 +144,11 @@ canonicalized ⇒ catches Type-1 and Type-2 clones; Type-3/semantic clones are o
 Severity: info by default (duplication is sometimes deliberate); the *metric* (duplication %)
 always feeds health regardless of severity.
 
+**Exact file duplicates.** Byte-identical files — same blake3 content hash, computed anyway for
+the cache — are the same `duplicate` verdict with subject `file`: copy-pasted configs, images,
+and any other asset that token-based clone detection cannot see (binaries included). One finding
+groups all copies. Costing nothing beyond hashing, this lands in M1, ahead of structural clones.
+
 ## 7. `internal-only` — excess visibility
 
 A symbol's declared visibility exceeds its observed use. For every symbol declared above the
@@ -222,20 +227,25 @@ modes, the delta caused by the change. Weights are configurable; defaults are th
   All suppressions are themselves counted and reported (`suppressed: N`) — hidden waste is
   still waste, and a stale suppression (target finding gone) becomes an info finding.
 
-## 12. Candidate rules for debate
+## 12. Candidate rules — triage log & open candidates
 
-Statically derivable, deliberately **not** committed for 1.0 — each needs a yes/no:
+Triage of 2026-08-18 (earlier promotions: `internal-only` → §7, `cyclic` → §8):
+
+| Candidate | Decision |
+|-----------|----------|
+| `duplicate-asset` | **Adopted** — folded into `duplicate` with subject `file` (§6): byte-identical files, free on the blake3 hashes we already compute; lands M1 |
+| `orphan-export` | **Dropped, subsumed** — fully covered by `internal-only` (§7), whose remediation ("lower the visibility") is strictly better than "maybe delete the export" |
+| `unused-css-variable` | **Dropped, subsumed** — falls out as `unused:css-variable` once the CSS adapter extracts custom-property declarations and `var()` uses, which is already in its §RFC 0002 scope |
+| `stale` on suppressions | **Already committed** — in the category registry and scheduled for M6 |
+| `barrel-abuse` | **Plugin territory** — a JS/TS ecosystem convention, not a language or graph fact; belongs to the js ecosystem plugin, post-1.0 |
+| `dead-feature-flag` | **Plugin territory** — the useful version needs flag-system knowledge (LaunchDarkly, Unleash…); a constant-propagation assist in the core may follow real plugin demand |
+| `layer-violation` | **Deferred post-1.0** — needs a layering-rules config DSL and does nothing under zero config; parking lot |
+| `oversized-unit` | **Deferred post-1.0** — borders the linting non-goal; `crap` already covers the risky (untested) half |
+
+Still open — each needs a yes/no:
 
 | Candidate | Signal | Notes |
 |-----------|--------|-------|
-| `orphan-export` | exported but never imported inside an app package | subset of `unused`; maybe its own verdict for clarity |
-| `barrel-abuse` | re-export files that fan out huge subgraphs | JS/TS-specific; hurts tree-shaking and kondo precision |
-| `layer-violation` | user-declared layering rules (`ui -/-> db`) | needs config DSL; high value in monorepos |
-| `oversized-unit` | file/function LOC & complexity ceilings | borders on linting — keep? |
-| `dead-feature-flag` | flag constants that are constant-true/false | needs flag-system plugins |
-| `stale` on suppressions | suppression whose finding no longer exists | already implied by §11 — promote to rule? |
-| `duplicate-asset` | identical files by content hash | trivial via blake3; catches copy-pasted configs/images |
-| `unused-css-variable` | `--var` declared, never `var()`-consumed | fits CSS adapter naturally |
 | `redundant-export-binding` | one symbol exported under multiple bindings where some binding has zero consumers | language-neutral form of JS "redundant default/named export"; also covers Rust `pub use` re-exports |
 | `private-type-leak` | public symbol whose signature references a non-exported type | API hygiene; derivable from type-reference edges |
 

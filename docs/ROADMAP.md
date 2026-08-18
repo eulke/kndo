@@ -13,7 +13,8 @@ All RFCs/ADRs/contracts in this directory reach `Accepted` after debate. Open qu
 ## M1 — Skeleton + first language (JS/TS), full-scan only
 Workspace layout (`kondo-cli`, `kondo-core`, `kondo-adapter-toolkit`, `kondo-adapter-js`),
 graph model per contracts, discovery, extraction, resolution driver, conformance harness.
-Analyses: `unused` (symbols, files, dependencies — with file/directory rollup) + `undeclared`.
+Analyses: `unused` (symbols, files, dependencies — with file/directory rollup), `undeclared`,
+and `duplicate` on byte-identical files (subject `file` — free on content hashes).
 Output: human + JSON v1.0.0. No cache yet (cold runs only).
 
 **Exit:** correct findings on fixture corpus + 3 real OSS TS repos; `kondo check` on kondo's own
@@ -69,7 +70,9 @@ adopt kondo in pre-commit and stay enabled for 2 weeks.
 `kondo clean` (guided auto-removal), watch mode / LSP, custom analyses over a stable graph API,
 `kondo serve` exposing the navigation verbs 1:1 as MCP tools (RFC 0007 §7), an arbitrary graph
 query language, deep mode (compiler-grade resolvers), historical trend service, HTML report,
-monorepo project-references awareness, remaining candidate rules from RFC 0005 §12.
+monorepo project-references awareness, deferred rules from the RFC 0005 §12 triage
+(`layer-violation`, `oversized-unit`) and ecosystem-plugin rules (`barrel-abuse`,
+`dead-feature-flag`).
 
 ## Standing rules
 

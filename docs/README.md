@@ -49,6 +49,7 @@ This directory is the single source of truth for product and technical decisions
 
 1. Name collision: an OSS tool named `kondo` (tidies build artifacts) already exists on crates.io —
    keep the name for the binary or pick a distinct crate name?
-2. Which of the [candidate rules](rfcs/0005-analyses.md#candidate-rules-for-debate) make the 1.0 cut?
+2. Candidate-rule triage is done (RFC 0005 §12); still open: `redundant-export-binding` and
+   `private-type-leak` — yes/no each.
 3. Default severity for `test-only code` findings — warn or info?
 4. Navigation verbs: flat (`kondo uses`) vs namespaced (`kondo graph uses`) — RFC 0007 §8.
