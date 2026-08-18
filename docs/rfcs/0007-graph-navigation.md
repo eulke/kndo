@@ -95,39 +95,43 @@ Forward-looking blast radius, built on the same machinery as diff-mode derived e
   orphaned. Simulation only: nothing is written. This lets an agent *plan* a deletion and know
   the full cleanup set before editing a single line.
 
-### 4.7 `kondo batch` — many questions, one process
+### 4.7 Batching & `kondo query` — many questions, one process
 
 Per-invocation cost (process start + cache revalidation, ~120 ms warm) dwarfs per-query cost
 (~a few ms on the loaded graph). An agent exploring a subsystem asks dozens of questions;
 paying startup dozens of times wastes both wall-clock and the 500 ms mental budget. Two
 amortization levels:
 
-1. **Multi-selector verbs.** Every verb accepts multiple selectors/patterns:
-   `kondo used-by selA selB selC`. The `result` becomes an array of per-selector results in
+1. **Every verb is batched.** All verbs accept multiple selectors/patterns:
+   `kondo used-by selA selB selC`. The `results` array holds one per-selector result in
    argument order (schema §8). `trace` takes repeated `--pair A,B` for multiple traces.
-2. **`kondo batch`** — heterogeneous queries in one process: reads JSON Lines from stdin
-   (one request per line: `{ "verb", "selectors": […], "flags": {…}, "id"? }`), revalidates the
-   cache **once**, answers in input order as JSON Lines on stdout, one envelope per request,
-   echoing the optional caller-supplied `id` for correlation.
+2. **`kondo query`** — the composite query interface: heterogeneous questions in one process.
+   Reads JSON Lines from stdin (one request per line: `{ "verb", "selectors": […],
+   "flags": {…}, "id"? }`), revalidates the cache **once**, answers in input order as JSON
+   Lines on stdout, one envelope per request, echoing the optional caller-supplied `id` for
+   correlation.
 
 ```
-$ kondo batch <<'EOF'
+$ kondo query <<'EOF'
 {"id":"q1","verb":"used-by","selectors":["src/billing/tax.ts#calcLegacyTax"],"flags":{"split_by_color":true}}
 {"id":"q2","verb":"trace","flags":{"pairs":[["src/api/routes.ts","pkg:decimal.js"]]}}
 {"id":"q3","verb":"impact","selectors":["src/billing/tax.ts#TaxTable"],"flags":{"if_deleted":true}}
 EOF
 ```
 
-Batch semantics:
+`kondo query` semantics:
 
 - **Isolation:** a failing request (bad selector, no path) yields an error/status envelope on its
-  line; the batch continues. The batch never partially mutates anything — all requests see the
-  same graph snapshot, so answers are mutually consistent (no torn reads across lines).
+  line; the run continues. Nothing is ever mutated — all requests see the same graph snapshot,
+  so answers are mutually consistent (no torn reads across lines).
 - **Streaming:** responses are flushed per line as computed — an agent can pipeline.
-- **Bounds still apply** per request (caps + `elided`); a batch is limited to 1000 requests
+- **Bounds still apply** per request (caps + `elided`); a query run is limited to 1000 requests
   (diagnostic + truncation status beyond that, guarding against runaway generation).
-- Batch mode is JSON-only (no human format) and is the intended transport for a future
-  `kondo serve`/MCP wrapper (§7): one MCP tool call ⇒ one batch line, same envelopes.
+- `kondo query` is JSON-only (no human format) and is the intended transport for a future
+  `kondo serve`/MCP wrapper (§7): one MCP tool call ⇒ one request line, same envelopes.
+- The individual verbs (§4.1–4.6) are sugar over the same engine: one verb ≡ a single-line
+  query. Future composition features (joins, set operations over results) belong to `kondo
+  query`, keeping the verbs simple — tracked as open question 4 (§8).
 
 ## 5. Agent workflow (worked example)
 
@@ -146,7 +150,7 @@ kondo check --staged                            → verifies: 4 fixed findings, 
 Four bounded calls replace reading five files into context, and the final `check` is the
 machine-verifiable proof the cleanup is complete — the anti-slop loop closed end to end.
 After `find`, the middle queries are independent — an agent that already knows its questions
-collapses them into one `kondo batch` invocation (§4.7), paying startup once.
+collapses them into one `kondo query` invocation (§4.7), paying startup once.
 
 ## 6. Exit codes & failure semantics
 
@@ -159,9 +163,9 @@ collapses them into one `kondo batch` invocation (§4.7), paying startup once.
 The 0-vs-1 distinction is load-bearing for agents scripting checks like "assert nothing uses X
 anymore" (`kondo trace roots:production X` → expect 1).
 
-Multi-selector and batch runs report per-request status inside each envelope (`"status":
-"ok" | "not-found" | "error"`); the process exit code is the *worst* individual status
-(0 < 1 < 2), so single-question scripting semantics survive batching unchanged.
+Multi-selector and `kondo query` runs report per-request status inside each envelope
+(`"status": "ok" | "not-found" | "error"`); the process exit code is the *worst* individual
+status (0 < 1 < 2), so single-question scripting semantics survive batching unchanged.
 
 ## 7. Non-goals (1.0)
 
@@ -178,3 +182,6 @@ Multi-selector and batch runs report per-request status inside each envelope (`"
 2. Should `describe` inline the first level of `uses`/`used-by` (saves a round-trip, grows
    payload)? Current draft: yes, capped at 10 per direction with `elided` counts.
 3. `trace --all` path explosion policy: cap by `--max-paths` only, or also by path length?
+4. How much composition does `kondo query` grow before it *is* the deferred query language —
+   1.0 draft: independent requests only (no joins/set operations/piping between lines);
+   result-set composition is evaluated post-1.0 with real agent usage data.

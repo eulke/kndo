@@ -102,7 +102,7 @@ more", never as "that's all".
 {
   "schema_version": "1.0.0",
   "query": { "verb": "used-by", "selectors": ["src/billing/tax.ts#calcLegacyTax"],
-             "flags": { "depth": 1, "split_by_color": true }, "id": "q1" },   // id: batch echo, optional
+             "flags": { "depth": 1, "split_by_color": true }, "id": "q1" },   // id: query-mode echo, optional
   "run": { "cache": "warm", "duration_ms": 74 },
   "status": "ok",                        // "ok" | "not-found" | "error" (per request)
   "results": [ { /* one verb-specific result per selector, argument order */ } ],
@@ -112,7 +112,7 @@ more", never as "that's all".
 
 Verbs accept multiple selectors; `results` always aligns 1:1 with `query.selectors` (a failed
 selector yields an inline `{ "status": "not-found" | "error", … }` entry without failing its
-siblings). In `kondo batch` mode (RFC 0007 §4.7) this same envelope is emitted as one JSON Line
+siblings). In `kondo query` mode (RFC 0007 §4.7) this same envelope is emitted as one JSON Line
 per request, in input order, `run` appearing only on the first line (shared graph snapshot).
 
 Common building blocks:
