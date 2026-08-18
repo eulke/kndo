@@ -134,10 +134,40 @@ pub trait Analysis: Send + Sync {
 }
 ```
 
-## 5. Stability tiers
+## 5. `Engine` — the frontend boundary
+
+`kondo-core` is a **library**; every interface to it — today's CLI, tomorrow's `kondo serve`/MCP,
+an LSP, a GUI, a CI action — is a *frontend* consuming one facade. Nothing else is exported.
+
+```rust
+pub struct Engine { /* opaque: graph, cache, adapters, plugins */ }
+
+impl Engine {
+    pub fn open(root: &Path, overrides: ConfigOverrides) -> Result<Engine, EngineError>;
+    pub fn check(&mut self, req: CheckRequest) -> RunResult;    // full | staged | diff
+    pub fn query(&mut self, req: QueryRequest) -> QueryResult;  // RFC 0007 verbs, incl. batches
+    pub fn explain(&self, id: FindingId) -> Option<Explanation>;
+    pub fn baseline(&mut self, op: BaselineOp) -> BaselineResult;
+    pub fn doctor(&self) -> DoctorReport;
+}
+```
+
+- `RunResult`/`QueryResult` are the **typed forms of the output schema**
+  ([output-schema.md](output-schema.md)); the JSON and SARIF serializers live core-side so every
+  frontend emits byte-identical machine output. *Human* rendering lives frontend-side (RFC 0009).
+- **Separation rules, enforced by dependency direction:** the core contains no terminal concerns
+  (no ANSI, no TTY detection, no exit codes, no stdout) — it returns data and never prints;
+  frontends contain no analysis concerns — they cannot reach the graph, cache, or adapters
+  except through `Engine`. A frontend that needs a new fact is a core PR adding it to
+  `RunResult`, never a core import.
+- `Engine` is synchronous and single-instance-per-project (the cache lock, RFC 0004 §7); a
+  serving frontend wraps it in its own concurrency model.
+
+## 6. Stability tiers
 
 | Surface | Tier |
 |---------|------|
 | Graph vocabulary (§1), `LanguageAdapter`, `Plugin` | **Contract** — semver'd from 1.0; WASM ABI versioned independently |
+| `Engine` facade (§5) | **Contract** — semver'd from 1.0; the only surface frontends may touch |
 | `Analysis`, cache layouts | Internal — may change any release (cache self-invalidates) |
 | Output schema | Contract — see [output-schema.md](output-schema.md) |

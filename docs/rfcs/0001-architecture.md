@@ -26,11 +26,17 @@ files and whole-program work is re-run only on the affected subgraph (RFC 0004).
 ## 2. Layering & the ignorance rule
 
 ```
-kondo-cli          ── CLI, terminal UI, exit codes
-kondo-core         ── graph model, analysis engine, cache, orchestration, plugin host
+kondo-cli          ── one frontend: terminal UI, exit codes, human rendering (RFC 0009)
+kondo-core         ── the system: graph model, analysis engine, cache, orchestration, plugin host
 kondo-adapter-*    ── one crate per language (js, go, java, kotlin, swift, rust, json, css)
 kondo-plugin-api   ── stable API surface for third-party plugins (WASM)
 ```
+
+`kondo-core` is a library; the CLI is one frontend among future ones (`kondo serve`/MCP, LSP,
+GUI, CI actions) and holds **zero** analysis logic. All frontends consume the same `Engine`
+facade (contracts §5): the core never prints, frontends never compute. Machine output (JSON,
+SARIF) is serialized core-side so every frontend emits identical data; only *human* rendering
+is frontend-owned.
 
 **The ignorance rule:** `kondo-core` must not contain the name of any language. It defines a
 language-neutral vocabulary — `SourceFile`, `Symbol`, `Reference`, `Root`, `ManifestDependency` —

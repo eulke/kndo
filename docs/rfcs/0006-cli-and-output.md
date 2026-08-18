@@ -45,7 +45,10 @@ the touched files — RFC 0004 §6), not "findings inside touched files".
 ## 3. Human output
 
 Compact, grouped, colored; every finding shows its id (for `explain`/suppression) and confidence
-when below `certain`. Diff mode leads with the delta and the health movement:
+when below `certain`. This section defines *what* is shown; the visual language — colors, glyphs,
+layout grammar, capability degradation, stream discipline — is RFC 0009, and it binds only the
+CLI frontend: rendering lives outside the core (Engine boundary, contracts §5). Diff mode leads
+with the delta and the health movement:
 
 ```
 kondo · 3 new · 2 fixed · health 82 → 84 (B)
