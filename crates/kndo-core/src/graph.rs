@@ -60,6 +60,30 @@ impl ProjectGraph {
     pub fn file_id(&self, path: &ProjectPath) -> Option<FileId> {
         self.file_index.get(path).copied()
     }
+
+    /// Crate-internal only: lets sibling modules (analyses) build exact graphs in tests —
+    /// including edges (Root, References, Wildcard) real extraction doesn't produce yet.
+    /// External code can never fabricate a graph; only [`assemble`] does, for real.
+    #[cfg(test)]
+    pub(crate) fn for_test(
+        files: Vec<FileNode>,
+        symbols: Vec<SymbolNode>,
+        dependencies: Vec<DependencyNode>,
+        edges: Vec<Edge>,
+    ) -> Self {
+        let file_index = files
+            .iter()
+            .enumerate()
+            .map(|(i, f)| (f.path.clone(), FileId(i as u32)))
+            .collect();
+        ProjectGraph {
+            files,
+            symbols,
+            dependencies,
+            edges,
+            file_index,
+        }
+    }
 }
 
 /// One file's claim + extracted facts, plus which adapter produced them (by index into the

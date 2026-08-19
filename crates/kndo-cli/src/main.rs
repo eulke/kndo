@@ -68,6 +68,11 @@ fn check() -> ExitCode {
         );
         ExitCode::SUCCESS
     } else {
+        // One line per finding until RFC 0009's full human renderer lands (severity grouping,
+        // color, evidence chains) — this is just enough to not silently drop finding data.
+        for f in &result.findings {
+            println!("{} [{}:{}] {}", f.id, f.category, f.subject_kind, f.message);
+        }
         println!("kndo · {} findings", result.findings.len());
         ExitCode::from(1)
     }

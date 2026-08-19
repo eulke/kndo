@@ -14,6 +14,7 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 
 use crate::adapter::{Diagnostic, DiagnosticLevel, LanguageAdapter};
+use crate::analysis;
 use crate::graph;
 
 /// Mirrors the output schema's `schema_version` (contracts/output-schema.md).
@@ -119,15 +120,18 @@ impl Engine {
     /// is not yet — every mode walks the full tree until git-index/merge-base scoping lands.
     pub fn check(&mut self, _req: CheckRequest) -> RunResult {
         match graph::assemble(&self.root, &self.adapters) {
-            Ok((g, diagnostics)) => RunResult {
-                files_discovered: g.files.len(),
-                files_claimed: g.files.iter().filter(|f| f.language.is_some()).count(),
-                symbols: g.symbols.len(),
-                dependencies: g.dependencies.len(),
-                edges: g.edges.len(),
-                diagnostics,
-                findings: Vec::new(),
-            },
+            Ok((g, diagnostics)) => {
+                let findings = analysis::run_all(&g);
+                RunResult {
+                    files_discovered: g.files.len(),
+                    files_claimed: g.files.iter().filter(|f| f.language.is_some()).count(),
+                    symbols: g.symbols.len(),
+                    dependencies: g.dependencies.len(),
+                    edges: g.edges.len(),
+                    diagnostics,
+                    findings,
+                }
+            }
             Err(crate::discovery::DiscoveryError::Root(e)) => RunResult {
                 diagnostics: vec![Diagnostic {
                     level: DiagnosticLevel::Warn,
