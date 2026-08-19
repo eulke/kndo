@@ -138,6 +138,27 @@ export type { a, b as c } from "./barrel-named-type";
 
     #[test]
     #[ignore]
+    fn dump_cjs_shapes() {
+        let src = br#"
+const whole = require("./whole");
+const { a, b: renamed } = require("./named");
+let lazy = require("lodash");
+require("./side-effect");
+if (cond) { const nested = require("./nested"); }
+const dynamic = require(someVariable);
+module.exports = { f, g: localG, computed: 1 };
+module.exports = function main() {};
+module.exports = someExpression;
+exports.foo = function () {};
+exports.bar = localBar;
+module.exports.baz = 42;
+"#;
+        let tree = parse(src, false).unwrap();
+        dump(tree.root_node(), src, 0);
+    }
+
+    #[test]
+    #[ignore]
     fn dump_import_clause_shapes() {
         let src = br#"
 import def from "./a";

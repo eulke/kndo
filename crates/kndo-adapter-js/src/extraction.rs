@@ -3,12 +3,15 @@
 //! Field names below are verified against the real tree-sitter-typescript grammar (not
 //! assumed) — see `kndo_adapter_toolkit::parsing::introspect` for the probe this was built
 //! against. Scope of this slice: top-level declarations (functions, classes, interfaces,
-//! type aliases, enums + members, const/let), ESM static imports, and `export ... from`
-//! re-exports (barrels — `handle_reexport_statement`). Deferred to later commits (each
-//! already flagged in the spec, not silently missing): class/interface members, CJS export
-//! patterns, JSX references, dynamic constructs, cyclomatic complexity, fingerprints,
-//! suppressions, `export { a as b }` with no `from` clause (a local re-export, not a barrel
-//! pass-through).
+//! type aliases, enums + members, const/let), ESM static imports, `export ... from`
+//! re-exports (barrels — `handle_reexport_statement`), and CJS (`require("literal")` at any
+//! depth, `module.exports`/`exports.foo` export surface, `module.exports = require(…)`
+//! barrels — the `collect_requires`/`collect_cjs_exports` block). Deferred to later commits
+//! (each already flagged in the spec, not silently missing): class/interface members, JSX
+//! references, dynamic constructs (incl. non-literal `require(expr)`, `require.resolve`, and
+//! namespace-member consumption like `env.colors` — the main remaining CJS gap), cyclomatic
+//! complexity, fingerprints, suppressions, `export { a as b }` with no `from` clause (a local
+//! re-export, not a barrel pass-through).
 
 use kndo_core::adapter::{
     Declaration, Diagnostic, DiagnosticLevel, FileFacts, ImportBinding, ImportKind, RawImport,
@@ -48,6 +51,14 @@ pub fn extract(path: &str, content: &[u8]) -> FileFacts {
     for child in root.children(&mut cursor) {
         handle_statement(child, content, false, &mut out);
     }
+    // CJS export surface (`module.exports = …`, `exports.foo = …`) — a separate top-level pass
+    // *after* the declaration walk, because `exports.foo = foo` may textually precede
+    // `function foo() {}` (hoisting) and the mark-existing-declaration decision needs the
+    // complete declaration list.
+    collect_cjs_exports(root, content, &mut out);
+    // CJS imports (`require("literal")`) — a full-tree walk like references, because a require
+    // call can appear at any nesting depth, not just in top-level statements.
+    collect_requires(root, content, &mut out);
     // Separate full-tree walk (declarations above only visit top-level statements — a
     // reference can appear at any nesting depth, inside any function/block).
     collect_references(root, content, &mut out.references);
@@ -280,6 +291,19 @@ fn handle_lexical(node: Node, src: &[u8], exported: bool, out: &mut FileFacts) {
         let Some(name_node) = declarator.child_by_field_name("name") else {
             continue;
         };
+        // `const x = require("./y")` is an import in declaration clothing — the name is an
+        // import binding (collect_requires), not a declaration, exactly as `import x from`
+        // declares nothing. Emitting both would leave a symbol `x` that nothing ever
+        // references (references to `x` resolve to the *target's* symbol via the binding),
+        // i.e. a guaranteed false-positive `unused`. The rare `export const x = require(…)`
+        // keeps its declaration: the export surface is real even though the value is imported.
+        if !exported
+            && declarator
+                .child_by_field_name("value")
+                .is_some_and(|v| is_require_call(v, src))
+        {
+            continue;
+        }
         // Destructuring patterns (`const { a, b } = x`) deferred — not silently dropped from
         // the spec, just not in this slice's scope.
         if name_node.kind() != "identifier" {
@@ -379,6 +403,319 @@ fn collect_import_bindings(import_clause: Node, src: &[u8]) -> Vec<ImportBinding
         }
     }
     bindings
+}
+
+// ---------------------------------------------------------------- CJS (spec §2 export
+// surface, §3 `require("literal")` — shapes verified via `dump_cjs_shapes`)
+
+/// A `require(<single string literal>)` call — the only require form this slice imports
+/// (spec §3: certain). Non-literal `require(expr)` is wildcard territory (spec §2's dynamic-
+/// constructs table) and `require.resolve` is probable — both need the `DynamicUse`→wildcard
+/// wiring `graph.rs` doesn't consume yet, so both are deferred with it, not silently dropped.
+fn is_require_call(node: Node, src: &[u8]) -> bool {
+    require_specifier(node, src).is_some()
+}
+
+fn require_specifier<'t>(node: Node<'t>, src: &[u8]) -> Option<Node<'t>> {
+    if node.kind() != "call_expression" {
+        return None;
+    }
+    let function = node.child_by_field_name("function")?;
+    if function.kind() != "identifier" || text(function, src) != "require" {
+        return None; // `require.resolve(…)` and friends land here — deferred, see above.
+    }
+    let arguments = node.child_by_field_name("arguments")?;
+    let mut cursor = arguments.walk();
+    let real_args: Vec<Node> = arguments
+        .children(&mut cursor)
+        .filter(|c| c.is_named())
+        .collect();
+    match real_args.as_slice() {
+        [only] if only.kind() == "string" => Some(*only),
+        _ => None,
+    }
+}
+
+/// Full-tree walk for `require("literal")` calls (any nesting depth — a lazy require inside a
+/// function body is still a real edge). The enclosing context decides the bindings, mirroring
+/// what `collect_import_bindings` does for ESM clauses:
+/// - `const x = require("./y")` → one binding `{local: x, imported: None}` — the whole
+///   `module.exports` value, which is exactly what the synthetic `default` name means on the
+///   target side (both for a CJS target's `module.exports = …` and an ESM target's default).
+/// - `const {a, b: c} = require("./y")` → named bindings, `pair_pattern`'s `key` being the
+///   target's exported name and `value` the local — the CJS mirror of `import {a, b as c}`.
+/// - Statement-level bare `require("./y")` → `side_effect_only`, same as `import "./y"`.
+/// - Any other context (argument position, ternary arm, …) → the import edge alone, no
+///   bindings — same stance as `import * as ns` (the edge is what reachability needs).
+fn collect_requires(node: Node, src: &[u8], out: &mut FileFacts) {
+    if let Some(string_node) = require_specifier(node, src) {
+        if let Some(specifier) = string_literal_value(string_node, src) {
+            let kind = if specifier.starts_with('.')
+                || specifier.starts_with('/')
+                || specifier.starts_with('#')
+            {
+                ImportKind::Relative
+            } else {
+                ImportKind::Package
+            };
+            let parent = node.parent();
+            let side_effect_only = parent.is_some_and(|p| p.kind() == "expression_statement");
+            // `module.exports = require("./x")` — the CJS barrel, mirror of `export * from`:
+            // the target's whole-module value becomes this file's own export surface, so it's
+            // a re-export binding the synthetic `default` on both sides. Deliberately at *any*
+            // nesting depth (unlike declaration extraction, which stays top-level): a
+            // conditional `if (…) module.exports = require("./a") else … ("./b")` aliases both
+            // targets — over-approximation in the keep-alive direction, the same doctrine the
+            // reference walk documents (collecting too much fails safe; excluding risks
+            // marking genuinely-used code unused).
+            let reexported = parent.is_some_and(|p| {
+                p.kind() == "assignment_expression"
+                    && p.child_by_field_name("left")
+                        .is_some_and(|l| is_module_exports(l, src))
+            });
+            let bindings = if reexported {
+                vec![ImportBinding {
+                    local: SmolStr::new("default"),
+                    imported: None,
+                }]
+            } else {
+                parent
+                    .filter(|p| p.kind() == "variable_declarator")
+                    .and_then(|p| p.child_by_field_name("name"))
+                    .map(|pattern| collect_require_bindings(pattern, src))
+                    .unwrap_or_default()
+            };
+            out.imports.push(RawImport {
+                specifier,
+                kind,
+                span: span(node),
+                side_effect_only,
+                type_only: false,
+                confidence: Confidence::Certain,
+                bindings,
+                reexported,
+            });
+        }
+    }
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        collect_requires(child, src, out);
+    }
+}
+
+fn collect_require_bindings(pattern: Node, src: &[u8]) -> Vec<ImportBinding> {
+    match pattern.kind() {
+        "identifier" => vec![ImportBinding {
+            local: SmolStr::new(text(pattern, src)),
+            imported: None,
+        }],
+        "object_pattern" => {
+            let mut bindings = Vec::new();
+            let mut cursor = pattern.walk();
+            for entry in pattern.children(&mut cursor) {
+                match entry.kind() {
+                    "shorthand_property_identifier_pattern" => {
+                        let name = text(entry, src);
+                        bindings.push(ImportBinding {
+                            local: SmolStr::new(name),
+                            imported: Some(SmolStr::new(name)),
+                        });
+                    }
+                    "pair_pattern" => {
+                        let key = entry.child_by_field_name("key");
+                        let value = entry.child_by_field_name("value");
+                        if let (Some(key), Some(value)) = (key, value) {
+                            // Nested destructuring (`{a: {b}}`) and defaults skipped — only a
+                            // plain identifier value is a resolvable module-level binding.
+                            if key.kind() == "property_identifier" && value.kind() == "identifier" {
+                                bindings.push(ImportBinding {
+                                    local: SmolStr::new(text(value, src)),
+                                    imported: Some(SmolStr::new(text(key, src))),
+                                });
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            bindings
+        }
+        // Array patterns etc. — the import edge still lands, only the per-name fact is missed.
+        _ => Vec::new(),
+    }
+}
+
+/// CJS export surface, top-level statements only (spec §2): `module.exports = …` and
+/// `exports.foo = …` / `module.exports.foo = …`. Conditional exports inside blocks
+/// (`if (x) module.exports = …`) are dynamic behavior — deferred with the rest of the
+/// dynamic-constructs table, not silently treated as unconditional.
+///
+/// Two distinct outcomes, chosen per assignment:
+/// - **Mark an existing declaration exported** when the export names one (`exports.foo = foo`,
+///   `module.exports = {a, b}` shorthand, `exports.pub = localName`) — the declaration *is*
+///   the exported thing; fabricating a second symbol for it would leave one of the two
+///   unreferenced and falsely `unused`. When the external name differs from the local one
+///   (`exports.pub = localName`), the local is what gets marked — the alias fact itself is the
+///   same gap as ESM's local `export { a as b }`, deferred with it.
+/// - **Declare a new exported symbol** otherwise: `module.exports = <expr>` declares the
+///   synthetic `default` (the name CJS interop binds — same convention as ESM anonymous
+///   default exports), and `exports.foo = <non-identifier>` declares `foo` (kind by the
+///   value's shape).
+///
+/// Spec §2's "computed/spread members demote the file's export surface to `probable`" has no
+/// mechanism yet — `Declaration` carries no confidence and `FileFacts::dynamics` isn't
+/// consumed by assembly — so those members contribute nothing for now, deferred alongside the
+/// wildcard wiring rather than modeled wrong.
+fn collect_cjs_exports(root: Node, src: &[u8], out: &mut FileFacts) {
+    let mut cursor = root.walk();
+    for statement in root.children(&mut cursor) {
+        if statement.kind() != "expression_statement" {
+            continue;
+        }
+        let Some(assignment) = statement.named_child(0) else {
+            continue;
+        };
+        if assignment.kind() != "assignment_expression" {
+            continue;
+        }
+        let (Some(left), Some(right)) = (
+            assignment.child_by_field_name("left"),
+            assignment.child_by_field_name("right"),
+        ) else {
+            continue;
+        };
+
+        if is_module_exports(left, src) {
+            handle_cjs_module_exports(assignment, right, src, out);
+        } else if let Some(name) = cjs_named_export(left, src) {
+            handle_cjs_named_export(name, assignment, right, src, out);
+        }
+    }
+}
+
+/// `module.exports` — the whole-module export target.
+fn is_module_exports(node: Node, src: &[u8]) -> bool {
+    node.kind() == "member_expression"
+        && node
+            .child_by_field_name("object")
+            .is_some_and(|o| o.kind() == "identifier" && text(o, src) == "module")
+        && node
+            .child_by_field_name("property")
+            .is_some_and(|p| text(p, src) == "exports")
+}
+
+/// `exports.<name>` or `module.exports.<name>` — a single named export. Returns the name.
+fn cjs_named_export(node: Node, src: &[u8]) -> Option<SmolStr> {
+    if node.kind() != "member_expression" {
+        return None;
+    }
+    let object = node.child_by_field_name("object")?;
+    let is_exports_object = (object.kind() == "identifier" && text(object, src) == "exports")
+        || is_module_exports(object, src);
+    if !is_exports_object {
+        return None;
+    }
+    let property = node.child_by_field_name("property")?;
+    (property.kind() == "property_identifier").then(|| SmolStr::new(text(property, src)))
+}
+
+fn handle_cjs_module_exports(assignment: Node, right: Node, src: &[u8], out: &mut FileFacts) {
+    // `module.exports = require("./x")` — the CJS barrel. collect_requires owns it (a
+    // re-exported import binding `default` straight through to the target); synthesizing a
+    // local `default` declaration here too would shadow that alias with a symbol nothing
+    // ever references.
+    if is_require_call(right, src) {
+        return;
+    }
+    if right.kind() == "object" {
+        // `module.exports = { a, b: localB, … }` — identifier members export those local
+        // declarations (spec §2: certain).
+        let mut cursor = right.walk();
+        for member in right.children(&mut cursor) {
+            let local = match member.kind() {
+                "shorthand_property_identifier" => Some(SmolStr::new(text(member, src))),
+                "pair" => member
+                    .child_by_field_name("value")
+                    .filter(|v| v.kind() == "identifier")
+                    .map(|v| SmolStr::new(text(v, src))),
+                _ => None, // computed/spread/literal members — no mechanism yet, see above
+            };
+            if let Some(local) = local {
+                mark_declaration_exported(&local, out);
+            }
+        }
+        return;
+    }
+    // `module.exports = localThing` — the local declaration *is* the export: mark it, no
+    // synthetic symbol. A synthetic `default` alongside it would be a second symbol for the
+    // same value, and whichever of the two nobody happens to reference would read as a
+    // false-positive `unused` (found dogfooding against debug-js/debug: `module.exports =
+    // setup` produced a phantom dead `default` next to a live `setup`). A whole-module
+    // consumer's `default` binding then simply finds no symbol — the file edge still lands,
+    // and the local stays alive through the reference this very assignment's RHS contributes.
+    if right.kind() == "identifier"
+        && mark_declaration_exported(&SmolStr::new(text(right, src)), out)
+    {
+        return;
+    }
+    // `module.exports = <anonymous expr>` — the synthetic `default`, exactly the name a
+    // consumer's whole-module binding (`const x = require(…)` / `import x from`) looks up;
+    // same convention as ESM anonymous default exports.
+    let kind = match right.kind() {
+        "class" => SymbolKind::Class,
+        "function_expression" | "arrow_function" | "generator_function" => SymbolKind::Function,
+        _ => SymbolKind::Const,
+    };
+    out.declarations.push(Declaration {
+        name: SmolStr::new("default"),
+        kind,
+        span: span(assignment),
+        exported: true,
+        visibility: visibility(true),
+    });
+}
+
+fn handle_cjs_named_export(
+    name: SmolStr,
+    assignment: Node,
+    right: Node,
+    src: &[u8],
+    out: &mut FileFacts,
+) {
+    // In declaration-priority order: the export names an existing declaration
+    // (`exports.foo = …` with `function foo` present), the value is one
+    // (`exports.pub = localName`), or nothing local matches and the assignment itself is
+    // the declaration (`exports.foo = function () {}`).
+    if mark_declaration_exported(&name, out) {
+        return;
+    }
+    if right.kind() == "identifier"
+        && mark_declaration_exported(&SmolStr::new(text(right, src)), out)
+    {
+        return;
+    }
+    let kind = match right.kind() {
+        "class" => SymbolKind::Class,
+        "function_expression" | "arrow_function" | "generator_function" => SymbolKind::Function,
+        _ => SymbolKind::Const,
+    };
+    out.declarations.push(Declaration {
+        name,
+        kind,
+        span: span(assignment),
+        exported: true,
+        visibility: visibility(true),
+    });
+}
+
+fn mark_declaration_exported(name: &SmolStr, out: &mut FileFacts) -> bool {
+    let mut found = false;
+    for decl in out.declarations.iter_mut().filter(|d| &d.name == name) {
+        decl.exported = true;
+        decl.visibility = visibility(true);
+        found = true;
+    }
+    found
 }
 
 /// Every identifier/type-identifier usage in the tree, recursively — the shapes below are
@@ -804,5 +1141,223 @@ mod tests {
     fn ordinary_import_is_never_flagged_as_a_reexport() {
         let facts = extract("f.ts", b"import { x } from './mod';");
         assert!(!facts.imports[0].reexported);
+    }
+
+    // ---------------------------------------------------------------- CJS requires
+
+    #[test]
+    fn whole_module_require_binds_as_default_and_declares_nothing() {
+        let facts = extract("f.js", b"const whole = require('./lib');");
+        assert_eq!(facts.imports.len(), 1);
+        let imp = &facts.imports[0];
+        assert_eq!(imp.specifier.as_str(), "./lib");
+        assert_eq!(imp.kind, ImportKind::Relative);
+        assert_eq!(imp.confidence, Confidence::Certain);
+        assert!(!imp.side_effect_only);
+        assert_eq!(imp.bindings.len(), 1);
+        assert_eq!(imp.bindings[0].local.as_str(), "whole");
+        assert_eq!(imp.bindings[0].imported, None);
+        // `whole` is an import binding, not a declaration — same as `import whole from`.
+        assert!(facts.declarations.is_empty());
+    }
+
+    #[test]
+    fn destructured_require_binds_named_with_rename() {
+        let facts = extract("f.js", b"const { a, b: renamed } = require('./lib');");
+        let imp = &facts.imports[0];
+        assert_eq!(
+            imp.bindings
+                .iter()
+                .map(|b| (
+                    b.local.to_string(),
+                    b.imported.as_ref().map(|s| s.to_string())
+                ))
+                .collect::<Vec<_>>(),
+            vec![
+                ("a".into(), Some("a".into())),
+                ("renamed".into(), Some("b".into())),
+            ]
+        );
+        assert!(facts.declarations.is_empty());
+    }
+
+    #[test]
+    fn bare_require_statement_is_side_effect_only() {
+        let facts = extract("f.js", b"require('./polyfill');");
+        let imp = &facts.imports[0];
+        assert!(imp.side_effect_only);
+        assert!(imp.bindings.is_empty());
+    }
+
+    #[test]
+    fn nested_require_still_produces_an_import() {
+        let facts = extract(
+            "f.js",
+            b"function lazy() { const dep = require('./heavy'); return dep; }",
+        );
+        assert_eq!(facts.imports.len(), 1);
+        assert_eq!(facts.imports[0].specifier.as_str(), "./heavy");
+        assert_eq!(facts.imports[0].bindings[0].local.as_str(), "dep");
+    }
+
+    #[test]
+    fn bare_package_require_is_a_package_import() {
+        let facts = extract("f.js", b"const _ = require('lodash');");
+        assert_eq!(facts.imports[0].kind, ImportKind::Package);
+    }
+
+    #[test]
+    fn non_literal_require_is_deferred_not_guessed() {
+        let facts = extract("f.js", b"const dyn = require(someVariable);");
+        assert!(facts.imports.is_empty());
+        // With no recognized require value, the declarator is an ordinary declaration again.
+        assert_eq!(facts.declarations.len(), 1);
+    }
+
+    #[test]
+    fn require_lookalikes_are_not_imports() {
+        let facts = extract(
+            "f.js",
+            b"requireAll('./x'); require.resolve('./y'); obj.require('./z');",
+        );
+        assert!(facts.imports.is_empty());
+    }
+
+    #[test]
+    fn exported_const_require_keeps_its_declaration_and_the_import() {
+        let facts = extract("f.ts", b"export const x = require('./y');");
+        assert_eq!(facts.imports.len(), 1);
+        assert_eq!(facts.declarations.len(), 1);
+        assert!(facts.declarations[0].exported);
+    }
+
+    // ---------------------------------------------------------------- CJS export surface
+
+    fn exported_names(facts: &FileFacts) -> Vec<(String, bool)> {
+        facts
+            .declarations
+            .iter()
+            .map(|d| (d.name.to_string(), d.exported))
+            .collect()
+    }
+
+    #[test]
+    fn module_exports_object_marks_shorthand_and_identifier_members_exported() {
+        let facts = extract(
+            "f.js",
+            b"function f() {}\nconst localG = 1;\nmodule.exports = { f, g: localG, computed: 1 };",
+        );
+        assert_eq!(
+            exported_names(&facts),
+            vec![("f".into(), true), ("localG".into(), true)]
+        );
+    }
+
+    #[test]
+    fn module_exports_expression_declares_the_synthetic_default() {
+        let facts = extract("f.js", b"module.exports = function main() {};");
+        assert_eq!(exported_names(&facts), vec![("default".into(), true)]);
+        assert_eq!(facts.declarations[0].kind, SymbolKind::Function);
+    }
+
+    #[test]
+    fn module_exports_identifier_marks_the_local_without_a_phantom_default() {
+        // A synthetic `default` next to the marked local would be a second symbol for the
+        // same value — whichever one nobody references would false-positive as unused.
+        let facts = extract("f.js", b"function run() {}\nmodule.exports = run;");
+        assert_eq!(exported_names(&facts), vec![("run".into(), true)]);
+    }
+
+    #[test]
+    fn module_exports_unknown_identifier_still_declares_default() {
+        // The RHS names nothing this file declares (e.g. an imported binding) — the synthetic
+        // default is then the only record that this module exports *something*.
+        let facts = extract("f.js", b"module.exports = somethingImported;");
+        assert_eq!(exported_names(&facts), vec![("default".into(), true)]);
+    }
+
+    #[test]
+    fn exports_dot_name_with_a_function_value_declares_an_exported_symbol() {
+        let facts = extract("f.js", b"exports.foo = function () {};");
+        assert_eq!(exported_names(&facts), vec![("foo".into(), true)]);
+        assert_eq!(facts.declarations[0].kind, SymbolKind::Function);
+    }
+
+    #[test]
+    fn exports_dot_name_matching_a_local_declaration_marks_it_instead_of_duplicating() {
+        let facts = extract("f.js", b"function foo() {}\nexports.foo = foo;");
+        assert_eq!(exported_names(&facts), vec![("foo".into(), true)]);
+    }
+
+    #[test]
+    fn exports_assignment_before_the_declaration_still_marks_it() {
+        // Hoisting: the export statement can textually precede the function it exports.
+        let facts = extract("f.js", b"exports.foo = foo;\nfunction foo() {}");
+        assert_eq!(exported_names(&facts), vec![("foo".into(), true)]);
+    }
+
+    #[test]
+    fn exports_dot_name_aliasing_a_local_marks_the_local() {
+        let facts = extract(
+            "f.js",
+            b"function internalName() {}\nexports.pub = internalName;",
+        );
+        assert_eq!(exported_names(&facts), vec![("internalName".into(), true)]);
+    }
+
+    #[test]
+    fn module_exports_dot_name_works_like_exports_dot_name() {
+        let facts = extract("f.js", b"module.exports.baz = 42;");
+        assert_eq!(exported_names(&facts), vec![("baz".into(), true)]);
+        assert_eq!(facts.declarations[0].kind, SymbolKind::Const);
+    }
+
+    #[test]
+    fn conditional_module_exports_is_deferred_not_treated_as_unconditional() {
+        let facts = extract("f.js", b"if (flag) { module.exports = function () {}; }");
+        assert!(facts.declarations.is_empty());
+    }
+
+    #[test]
+    fn unrelated_member_assignment_is_not_an_export() {
+        let facts = extract("f.js", b"obj.exports = 1;\nthing.foo = 2;");
+        assert!(facts.declarations.is_empty());
+    }
+
+    #[test]
+    fn module_exports_require_is_a_cjs_barrel_reexport() {
+        let facts = extract("f.js", b"module.exports = require('./impl');");
+        assert_eq!(facts.imports.len(), 1);
+        let imp = &facts.imports[0];
+        assert!(imp.reexported);
+        assert_eq!(imp.bindings.len(), 1);
+        assert_eq!(imp.bindings[0].local.as_str(), "default");
+        assert_eq!(imp.bindings[0].imported, None);
+        // The re-export alias owns `default` — no synthetic local declaration to shadow it.
+        assert!(facts.declarations.is_empty());
+    }
+
+    #[test]
+    fn conditional_module_exports_require_still_reexports_both_branches() {
+        // Over-approximation in the keep-alive direction: both branches' targets stay part of
+        // this file's surface (one wins at runtime, but "possibly exported" must never read
+        // as dead).
+        let facts = extract(
+            "f.js",
+            b"if (isBrowser) { module.exports = require('./browser'); } else { module.exports = require('./node'); }",
+        );
+        assert_eq!(facts.imports.len(), 2);
+        assert!(facts.imports.iter().all(|i| i.reexported));
+    }
+
+    #[test]
+    fn require_call_wrapped_in_an_invocation_is_not_a_barrel() {
+        // `module.exports = require('./common')(exports)` — the require is in function
+        // position of an outer call; the module's export is the *call result*, so the
+        // synthetic default belongs to this file, and the import is a plain edge.
+        let facts = extract("f.js", b"module.exports = require('./common')(exports);");
+        assert_eq!(facts.imports.len(), 1);
+        assert!(!facts.imports[0].reexported);
+        assert_eq!(exported_names(&facts), vec![("default".into(), true)]);
     }
 }
