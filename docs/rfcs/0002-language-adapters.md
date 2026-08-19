@@ -85,19 +85,22 @@ report it (RFC 0006).
 - First-party adapters are compiled into the binary; the same trait is bridged to WASM for
   third-party adapters (ADR 0003). An adapter must not perform I/O beyond the file content handed
   to it — all filesystem access goes through the core (determinism, sandboxability, testability).
-- **Version-dependent language data is generated data, never hand-maintained code.** Facts that
-  track a language/runtime release cadence — stdlib/builtin module lists (Node builtins, Go
-  packages, Java modules), reserved words, version-gated syntax tables — ship as data files
-  embedded at build time, produced by a **checked-in generator** that queries the authoritative
+- **Version-dependent language data is generated data, never hand-maintained code — through the
+  shared mechanism, not per-adapter improvisation.** Facts that track a language/runtime release
+  cadence — stdlib/builtin module lists (Node builtins, Go packages, Java modules), reserved
+  words, version-gated syntax tables — ship as **`kndo-stdlib v1`** data files (toolkit `stdlib`
+  module: one format, one loader, one validation, provenance headers surfaced by `kndo doctor`),
+  embedded at build time and produced by a **checked-in generator** querying the authoritative
   source (`module.builtinModules`, `go list std`, `java --list-modules`). A new runtime version
-  means regenerating a file, never editing adapter code. Two companions to the rule: prefer
-  *structural* version-proof signals over lists where the language offers one (Node's `node:`
-  prefix covers every post-v18 builtin by that runtime's own policy — the bare-name list is a
-  frozen legacy set); and a **manifest-declared dependency always shadows the builtin list**
-  (the userland `punycode` package is real) — declared intent beats shipped data. Never query
-  the *ambient* installed runtime at analysis time: that would make findings depend on the
-  machine, violating determinism (RFC 0008 §4) — the generator runs at kndo development time,
-  not at the user's analysis time.
+  means regenerating a file, never editing adapter code. The bare-specifier **precedence is
+  written once in the toolkit**, never re-derived per language: (1) structural stdlib signal
+  (Node's `node:` prefix — unambiguous by the language's own construction, version-proof) >
+  (2) manifest-declared dependency (declared intent beats shipped data — the userland `punycode`
+  package is real) > (3) the stdlib list > (4) external dependency. An adapter supplies only
+  what it alone knows: the structural check and the subpath→package mapping. Never query the
+  *ambient* installed runtime at analysis time: that would make findings depend on the machine,
+  violating determinism (RFC 0008 §4) — generators run at kndo development time, not at the
+  user's analysis time.
 
 ## 7. Per-language notes (initial scope)
 

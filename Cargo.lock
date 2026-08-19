@@ -210,6 +210,7 @@ name = "kndo-adapter-toolkit"
 version = "0.1.0"
 dependencies = [
  "kndo-core",
+ "smol_str",
  "tree-sitter",
  "tree-sitter-typescript",
 ]

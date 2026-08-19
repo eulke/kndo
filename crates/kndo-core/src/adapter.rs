@@ -211,21 +211,39 @@ pub struct ImportSpec {
     pub from: ProjectPath,
 }
 
-/// Index of claimable paths (and, later, manifest/package facts) the core exposes to
-/// resolvers — populated from discovery output. Adapters only ever *query* it; they never
-/// touch the filesystem themselves (the purity rule, RFC 0002 §6). Grows as the resolution
-/// driver matures (manifest facts, package topology); read-only by construction.
+/// Index of claimable paths and manifest facts the core exposes to resolvers — populated from
+/// discovery and manifest extraction. Adapters only ever *query* it; they never touch the
+/// filesystem themselves (the purity rule, RFC 0002 §6). Read-only by construction.
 pub struct ResolveCtx<'a> {
     known_files: &'a std::collections::HashSet<ProjectPath>,
+    /// Dependency names declared in the importing file's package manifest. Feeds the
+    /// declared-beats-stdlib-list shadowing rule (RFC 0002 §6); empty until the engine wires
+    /// manifest facts through.
+    declared_dependencies: Option<&'a std::collections::HashSet<SmolStr>>,
 }
 
 impl<'a> ResolveCtx<'a> {
     pub fn new(known_files: &'a std::collections::HashSet<ProjectPath>) -> Self {
-        ResolveCtx { known_files }
+        ResolveCtx {
+            known_files,
+            declared_dependencies: None,
+        }
+    }
+
+    pub fn with_declared_dependencies(
+        mut self,
+        deps: &'a std::collections::HashSet<SmolStr>,
+    ) -> Self {
+        self.declared_dependencies = Some(deps);
+        self
     }
 
     pub fn contains(&self, path: &ProjectPath) -> bool {
         self.known_files.contains(path)
+    }
+
+    pub fn is_declared_dependency(&self, name: &SmolStr) -> bool {
+        self.declared_dependencies.is_some_and(|d| d.contains(name))
     }
 }
 

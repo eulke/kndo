@@ -15,25 +15,14 @@ use smol_str::SmolStr;
 const TS_EXTS: &[&str] = &["ts", "tsx", "mts", "cts"];
 const JS_EXTS: &[&str] = &["js", "jsx", "mjs", "cjs"];
 
-/// Bare-importable Node builtins — **generated data, never hand-maintained code**
-/// (`scripts/gen-node-builtins.mjs`, sourced from Node's own `module.builtinModules`).
-///
-/// Two facts make this maintainable without touching adapter code on new Node releases:
-/// 1. Since ~v18, Node's policy is that every NEW builtin is `node:`-prefix-only (`node:test`,
-///    `node:sqlite` — the bare names fail); the prefix is handled structurally in `resolve`,
-///    so this bare-name set is a frozen legacy list, not a moving target.
-/// 2. If it ever does move, updating is regenerating a data file, not editing code.
-///
-/// Known limitation until manifest facts reach `ResolveCtx`: a *declared* dependency whose
-/// name shadows a builtin (the userland `punycode` package is real) should win over this
-/// list — manifest-declared beats builtin once the manifest slice lands (spec §3).
-static NODE_BUILTINS: std::sync::LazyLock<std::collections::HashSet<&'static str>> =
+/// The js-ts stdlib dataset — generated data via the shared `kndo-stdlib v1` mechanism
+/// (toolkit `stdlib` module, RFC 0002 §6). Regenerate with `scripts/gen-stdlib-js.mjs`;
+/// never hand-edit. The bare-name set is frozen by Node's own policy (new builtins are
+/// `node:`-prefix-only — that prefix is the *structural* signal passed to the classifier).
+static STDLIB: std::sync::LazyLock<kndo_adapter_toolkit::stdlib::StdlibIndex> =
     std::sync::LazyLock::new(|| {
-        include_str!("node_builtins.txt")
-            .lines()
-            .map(str::trim)
-            .filter(|l| !l.is_empty() && !l.starts_with('#'))
-            .collect()
+        kndo_adapter_toolkit::stdlib::StdlibIndex::parse(include_str!("stdlib.txt"))
+            .expect("shipped stdlib.txt is malformed — regenerate with scripts/gen-stdlib-js.mjs")
     });
 
 pub fn resolve(spec: &ImportSpec, ctx: &ResolveCtx<'_>) -> Resolution {
@@ -48,15 +37,16 @@ pub fn resolve(spec: &ImportSpec, ctx: &ResolveCtx<'_>) -> Resolution {
         return resolve_relative(spec.from.0.as_str(), s, ctx);
     }
 
-    if let Some(builtin) = s.strip_prefix("node:") {
-        let _ = builtin; // `node:`-prefixed is unambiguously stdlib regardless of the name.
-        return Resolution::Stdlib;
-    }
-    if NODE_BUILTINS.contains(s) {
-        return Resolution::Stdlib;
-    }
-
-    Resolution::Dependency(package_name_from_specifier(s), Confidence::Certain)
+    // Bare specifier: the toolkit owns the precedence (structural stdlib > declared dep >
+    // stdlib list > dependency); this adapter supplies only what it alone knows — the
+    // structural signal and the subpath→package mapping.
+    kndo_adapter_toolkit::stdlib::classify_bare_specifier(
+        s,
+        package_name_from_specifier(s),
+        s.starts_with("node:"),
+        &STDLIB,
+        ctx,
+    )
 }
 
 fn resolve_relative(from: &str, spec: &str, ctx: &ResolveCtx<'_>) -> Resolution {
@@ -281,24 +271,32 @@ mod tests {
     }
 
     #[test]
-    fn generated_builtins_data_is_well_formed() {
-        // Guards the generated file itself: non-trivial, essentials present, no duplicates.
-        assert!(
-            NODE_BUILTINS.len() >= 60,
-            "suspiciously small: {}",
-            NODE_BUILTINS.len()
-        );
+    fn shipped_stdlib_data_parses_and_carries_essentials() {
+        // Format/sortedness/duplicate validation is enforced by the shared parser (toolkit
+        // stdlib module); here we only guard that the shipped dataset is real, not a stub.
+        assert!(STDLIB.len() >= 60, "suspiciously small: {}", STDLIB.len());
         for essential in ["fs", "path", "url", "util", "events"] {
-            assert!(NODE_BUILTINS.contains(essential), "missing {essential}");
+            assert!(STDLIB.contains(essential), "missing {essential}");
         }
-        let raw_lines = include_str!("node_builtins.txt")
-            .lines()
-            .filter(|l| !l.trim().is_empty() && !l.starts_with('#'))
-            .count();
+        assert_eq!(STDLIB.provenance().0, "js-ts");
+    }
+
+    #[test]
+    fn declared_dependency_shadows_stdlib_name() {
+        // The userland `punycode` package is real: declared in the manifest it must resolve
+        // as a dependency, not the deprecated builtin — toolkit precedence rule 2.
+        let known = ctx_with(&[]);
+        let mut deps = HashSet::new();
+        deps.insert(SmolStr::new("punycode"));
+        let ctx = ResolveCtx::new(&known).with_declared_dependencies(&deps);
+        let r = resolve(&spec("src/a.ts", "punycode"), &ctx);
         assert_eq!(
-            raw_lines,
-            NODE_BUILTINS.len(),
-            "duplicates in generated data"
+            r,
+            Resolution::Dependency(SmolStr::new("punycode"), Confidence::Certain)
         );
+        // Undeclared, the same name stays stdlib.
+        let ctx = ResolveCtx::new(&known);
+        let r = resolve(&spec("src/a.ts", "punycode"), &ctx);
+        assert_eq!(r, Resolution::Stdlib);
     }
 }

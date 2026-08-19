@@ -1,6 +1,8 @@
-# Node bare-importable builtin modules — GENERATED, do not edit by hand.
-# Source: require('module').builtinModules, v22.22.2.
-# Regenerate: node scripts/gen-node-builtins.mjs > crates/kndo-adapter-js/src/node_builtins.txt
+# kndo-stdlib v1
+# language: js-ts
+# source: node -p require('module').builtinModules
+# source-version: v22.22.2
+# regenerate: node scripts/gen-stdlib-js.mjs > crates/kndo-adapter-js/src/stdlib.txt
 _http_agent
 _http_client
 _http_common

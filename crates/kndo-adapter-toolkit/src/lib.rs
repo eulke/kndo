@@ -5,3 +5,4 @@
 //! largely grammar + queries + resolver logic on top of this crate.
 
 pub mod parsing;
+pub mod stdlib;
