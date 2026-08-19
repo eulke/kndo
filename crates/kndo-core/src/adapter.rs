@@ -100,6 +100,17 @@ pub enum ImportKind {
     Package,
 }
 
+/// One local name this import introduces, and which export it names — the fact the core needs
+/// to resolve a same-name-elsewhere `RawReference` to the *target file's* symbol rather than
+/// (incorrectly) a same-file one. `imported: None` is a default import — binds to the target's
+/// synthetic `"default"` export, the same name declarations.rs already uses for anonymous
+/// default exports.
+#[derive(Debug, Clone)]
+pub struct ImportBinding {
+    pub local: SmolStr,
+    pub imported: Option<SmolStr>,
+}
+
 #[derive(Debug, Clone)]
 pub struct RawImport {
     pub specifier: SmolStr,
@@ -112,6 +123,11 @@ pub struct RawImport {
     /// (docs/adapters/js-ts.md §3).
     pub type_only: bool,
     pub confidence: Confidence,
+    /// Empty for side-effect-only imports and (for now) namespace imports (`import * as ns`) —
+    /// resolving `ns.foo` back to a specific export needs member-expression-aware reference
+    /// resolution this slice doesn't attempt; the import edge itself is unaffected, only the
+    /// finer-grained "this binding referenced that export" fact is missed.
+    pub bindings: Vec<ImportBinding>,
 }
 
 #[derive(Debug, Clone)]

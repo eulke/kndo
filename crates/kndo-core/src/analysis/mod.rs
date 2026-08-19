@@ -34,6 +34,7 @@ pub fn finding_id(
 pub fn run_all(graph: &crate::graph::ProjectGraph) -> Vec<Finding> {
     let reach = reachability::compute(graph);
     let mut findings = unused::find_unused_files(graph, &reach);
+    findings.extend(unused::find_unused_symbols(graph, &reach));
     findings.extend(undeclared::find_undeclared_dependencies(graph));
     findings.extend(version_skew::find_version_skew(graph));
     findings.extend(duplicate::find_duplicate_files(graph));

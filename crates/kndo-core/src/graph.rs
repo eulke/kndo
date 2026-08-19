@@ -380,24 +380,23 @@ pub fn assemble(
         }
     }
 
-    // Phase 3 — symbols, dependencies, and edges, sequentially in FileId order (the loop
-    // order below), which is what makes the whole assembly deterministic without an explicit
-    // post-hoc sort of symbols/edges.
-    let ctx = ResolveCtx::new(&known_files).with_declared_dependencies(&declared_dependency_names);
+    // Phase 3a — symbols (Declares edges) and in-source roots, sequentially in FileId order.
+    // Split from imports/references (phase 3b) because resolving a reference or an import
+    // binding to *another* file's symbol needs that file's symbol table already built —
+    // forward references (file 0 importing from file 5) are the common case, not an edge case,
+    // so every file's declarations must exist before any file's imports are resolved.
     let mut symbols = Vec::new();
-    let mut dependencies = Vec::new();
-    let mut dep_index: HashMap<SmolStr, DependencyId> = HashMap::new();
-
+    let mut symbol_by_name_per_file: Vec<HashMap<SmolStr, SymbolId>> =
+        vec![HashMap::new(); claimed_per_file.len()];
     for (i, slot) in claimed_per_file.iter().enumerate() {
         let Some(claimed) = slot else { continue };
         let file_id = FileId(i as u32);
         let adapter = &adapters[claimed.adapter_index];
         let provenance = || Provenance::Adapter(adapter.descriptor().id.clone());
 
-        let mut symbol_by_name: HashMap<&SmolStr, SymbolId> = HashMap::new();
         for decl in &claimed.facts.declarations {
             let symbol_id = SymbolId(symbols.len() as u32);
-            symbol_by_name.insert(&decl.name, symbol_id);
+            symbol_by_name_per_file[i].insert(decl.name.clone(), symbol_id);
             symbols.push(SymbolNode {
                 file: file_id,
                 name: decl.name.clone(),
@@ -424,9 +423,9 @@ pub fn assemble(
                 RawRootTarget::WholeFile => Some(NodeRef::File(file_id)),
                 // A root naming a declaration this extraction didn't actually produce is an
                 // adapter contract violation — defensive skip, not a silent crash.
-                RawRootTarget::Declaration(name) => {
-                    symbol_by_name.get(name).map(|&s| NodeRef::Symbol(s))
-                }
+                RawRootTarget::Declaration(name) => symbol_by_name_per_file[i]
+                    .get(name)
+                    .map(|&s| NodeRef::Symbol(s)),
             };
             if let Some(target) = target {
                 edges.push(Edge {
@@ -439,6 +438,24 @@ pub fn assemble(
                 });
             }
         }
+    }
+
+    // Phase 3b — imports, import-bindings, references, and diagnostics. Every file's symbol
+    // table is complete now (phase 3a), so cross-file lookups are safe regardless of
+    // discovery order.
+    let ctx = ResolveCtx::new(&known_files).with_declared_dependencies(&declared_dependency_names);
+    let mut dependencies = Vec::new();
+    let mut dep_index: HashMap<SmolStr, DependencyId> = HashMap::new();
+
+    for (i, slot) in claimed_per_file.iter().enumerate() {
+        let Some(claimed) = slot else { continue };
+        let file_id = FileId(i as u32);
+        let adapter = &adapters[claimed.adapter_index];
+        let provenance = || Provenance::Adapter(adapter.descriptor().id.clone());
+
+        // Local name -> target symbol, from this file's import bindings — the fact that lets a
+        // `RawReference` to an *imported* name resolve cross-file instead of only same-file.
+        let mut bound_symbols: HashMap<SmolStr, SymbolId> = HashMap::new();
 
         for imp in &claimed.facts.imports {
             let spec = ImportSpec {
@@ -455,6 +472,17 @@ pub fn assemble(
                             confidence,
                             source: provenance(),
                         });
+                        for binding in &imp.bindings {
+                            let exported_name = binding
+                                .imported
+                                .clone()
+                                .unwrap_or_else(|| SmolStr::new("default"));
+                            if let Some(&symbol_id) =
+                                symbol_by_name_per_file[to.0 as usize].get(&exported_name)
+                            {
+                                bound_symbols.insert(binding.local.clone(), symbol_id);
+                            }
+                        }
                     }
                 }
                 Resolution::Dependency(name, confidence) => {
@@ -475,6 +503,33 @@ pub fn assemble(
                 // this into a finding is the future `unresolved` analysis's job, not
                 // assembly's (RFC 0005 §5).
                 Resolution::Stdlib | Resolution::Unresolved => {}
+            }
+        }
+
+        // File-granularity (`NodeRef::File`, not a specific symbol): extraction doesn't track
+        // which enclosing declaration contains a reference, only which file — sufficient for
+        // reachability (a reachable file referencing a symbol makes that symbol reachable
+        // regardless of which of the file's functions did it) though not for finer-grained
+        // "which caller" evidence later. Bound (imported) names resolve first, falling back to
+        // same-file declarations — real JS/TS can't have both share a name at module scope, so
+        // this ordering is never actually contested by valid code, just a defensive default.
+        // Neither lookup models block/parameter shadowing: a same-named local could
+        // (incorrectly, but safely — see module docs) resolve to an unrelated declaration.
+        for reference in &claimed.facts.references {
+            let target = bound_symbols
+                .get(&reference.name)
+                .or_else(|| symbol_by_name_per_file[i].get(&reference.name))
+                .copied();
+            if let Some(to) = target {
+                edges.push(Edge {
+                    kind: EdgeKind::References {
+                        from: NodeRef::File(file_id),
+                        to,
+                        kind: crate::vocab::RefKind::Read,
+                    },
+                    confidence: Confidence::Certain,
+                    source: provenance(),
+                });
             }
         }
 
@@ -506,8 +561,8 @@ pub fn assemble(
 mod tests {
     use super::*;
     use crate::adapter::{
-        AdapterDescriptor, Declaration, FileFacts, ImportKind, ManifestDependency, ManifestFacts,
-        ManifestRoot, RawImport, RawRoot, RawRootTarget,
+        AdapterDescriptor, Declaration, FileFacts, ImportBinding, ImportKind, ManifestDependency,
+        ManifestFacts, ManifestRoot, RawImport, RawReference, RawRoot, RawRootTarget,
     };
     use crate::vocab::{DependencyScope, FileOrigin, FileRole, RootKind};
     use std::fs;
@@ -543,10 +598,14 @@ mod tests {
 
         fn extract(&self, file: &SourceFile<'_>) -> FileFacts {
             // Content format for the mock: one directive per line.
-            //   decl <name>        -> a Function declaration
-            //   import <specifier> -> a certain, non-side-effect import
-            //   root-file          -> a Production root targeting this whole file
-            //   root-decl <name>   -> a Production root targeting the named declaration
+            //   decl <name>                 -> a Function declaration
+            //   import <specifier> [binding[,binding...]]
+            //       binding := name          -> ImportBinding { local: name, imported: Some(name) }
+            //                | local=imported -> ImportBinding { local, imported: Some(imported) }
+            //                | local=          -> ImportBinding { local, imported: None } (default)
+            //   ref <name>                  -> a RawReference to that name
+            //   root-file                   -> a Production root targeting this whole file
+            //   root-decl <name>            -> a Production root targeting the named declaration
             let text = std::str::from_utf8(file.content).unwrap_or("");
             let mut facts = FileFacts::default();
             for line in text.lines() {
@@ -558,7 +617,28 @@ mod tests {
                         exported: true,
                         visibility: VisibilityLevel(1),
                     });
-                } else if let Some(spec) = line.strip_prefix("import ") {
+                } else if let Some(rest) = line.strip_prefix("import ") {
+                    let mut parts = rest.splitn(2, ' ');
+                    let spec = parts.next().unwrap_or("");
+                    let bindings = parts
+                        .next()
+                        .map(|tokens| {
+                            tokens
+                                .split(',')
+                                .map(|tok| match tok.split_once('=') {
+                                    Some((local, imported)) => ImportBinding {
+                                        local: SmolStr::new(local),
+                                        imported: (!imported.is_empty())
+                                            .then(|| SmolStr::new(imported)),
+                                    },
+                                    None => ImportBinding {
+                                        local: SmolStr::new(tok),
+                                        imported: Some(SmolStr::new(tok)),
+                                    },
+                                })
+                                .collect()
+                        })
+                        .unwrap_or_default();
                     facts.imports.push(RawImport {
                         specifier: SmolStr::new(spec),
                         kind: ImportKind::Relative,
@@ -566,6 +646,13 @@ mod tests {
                         side_effect_only: false,
                         type_only: false,
                         confidence: Confidence::Certain,
+                        bindings,
+                    });
+                } else if let Some(name) = line.strip_prefix("ref ") {
+                    facts.references.push(RawReference {
+                        name: SmolStr::new(name),
+                        scope_context: None,
+                        span: Span::default(),
                     });
                 } else if line == "root-file" {
                     facts.roots.push(RawRoot {
@@ -903,6 +990,92 @@ mod tests {
             .edges
             .iter()
             .all(|e| !matches!(e.kind, EdgeKind::Root { .. })));
+    }
+
+    #[test]
+    fn cross_file_reference_resolves_via_import_binding() {
+        // a.mock (index 0) references `used`, imported (bound) from b.mock (index 1) — a
+        // forward reference in file-discovery order, the case phase 3a/3b split exists for.
+        let dir = project(
+            "ref-cross-file",
+            &[
+                ("a.mock", "import ./b.mock used\nref used"),
+                ("b.mock", "decl used"),
+            ],
+        );
+        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let a = graph.file_id(&ProjectPath(SmolStr::new("a.mock"))).unwrap();
+        let used = SymbolId(graph.symbols.iter().position(|s| s.name == "used").unwrap() as u32);
+        assert!(graph.edges.iter().any(|e| e.kind
+            == EdgeKind::References {
+                from: NodeRef::File(a),
+                to: used,
+                kind: crate::vocab::RefKind::Read,
+            }));
+    }
+
+    #[test]
+    fn renamed_binding_resolves_to_the_original_exported_name() {
+        // `import { used as alias }` — alias.local != alias.imported.
+        let dir = project(
+            "ref-renamed-binding",
+            &[
+                ("a.mock", "import ./b.mock alias=used\nref alias"),
+                ("b.mock", "decl used"),
+            ],
+        );
+        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let used_symbol = graph.symbols.iter().find(|s| s.name == "used").unwrap();
+        assert!(graph
+            .edges
+            .iter()
+            .any(|e| matches!(e.kind, EdgeKind::References { to, .. } if graph.symbols[to.0 as usize].name == used_symbol.name)));
+    }
+
+    #[test]
+    fn default_binding_resolves_to_the_synthetic_default_export() {
+        let dir = project(
+            "ref-default-binding",
+            &[
+                ("a.mock", "import ./b.mock main=\nref main"),
+                ("b.mock", "decl default"),
+            ],
+        );
+        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        assert!(graph
+            .edges
+            .iter()
+            .any(|e| matches!(e.kind, EdgeKind::References { .. })));
+    }
+
+    #[test]
+    fn same_file_reference_resolves_without_an_import() {
+        let dir = project("ref-same-file", &[("a.mock", "decl helper\nref helper")]);
+        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let a = graph.file_id(&ProjectPath(SmolStr::new("a.mock"))).unwrap();
+        let helper = SymbolId(
+            graph
+                .symbols
+                .iter()
+                .position(|s| s.name == "helper")
+                .unwrap() as u32,
+        );
+        assert!(graph.edges.iter().any(|e| e.kind
+            == EdgeKind::References {
+                from: NodeRef::File(a),
+                to: helper,
+                kind: crate::vocab::RefKind::Read,
+            }));
+    }
+
+    #[test]
+    fn reference_to_an_unresolvable_name_produces_no_edge() {
+        let dir = project("ref-unresolved", &[("a.mock", "ref ghost")]);
+        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        assert!(graph
+            .edges
+            .iter()
+            .all(|e| !matches!(e.kind, EdgeKind::References { .. })));
     }
 
     #[test]

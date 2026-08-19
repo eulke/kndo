@@ -84,4 +84,55 @@ import def, { named } from "./mixed";
         let tree = parse(src, false).unwrap();
         dump(tree.root_node(), src, 0);
     }
+
+    #[test]
+    #[ignore]
+    fn dump_reference_shapes() {
+        let src = br#"
+function outer() {
+    foo();
+    obj.method();
+    const { a, b: renamed } = obj;
+    const literal = { key: 1, shorthand, [computed]: 2 };
+    return <Foo bar={baz} />;
+}
+class C extends Base implements IFace {
+    field: SomeType = value;
+    method(): ReturnType { return new Ctor(); }
+}
+"#;
+        let tree = parse(src, true).unwrap();
+        dump(tree.root_node(), src, 0);
+    }
+
+    #[test]
+    #[ignore]
+    fn dump_binding_shapes() {
+        let src = br#"
+function f(x, y = defaultVal, { z }: Opts): void {
+    const arrow = (a, b = other) => a + b + y + z;
+    for (const item of items) { use(item); }
+    try {} catch (e) { log(e); }
+    let arr: Array<Item> = [];
+    const template = `${value} and ${other.thing}`;
+    counter = counter + 1;
+}
+"#;
+        let tree = parse(src, false).unwrap();
+        dump(tree.root_node(), src, 0);
+    }
+
+    #[test]
+    #[ignore]
+    fn dump_import_clause_shapes() {
+        let src = br#"
+import def from "./a";
+import { x, y as z } from "./b";
+import def2, { named } from "./c";
+import * as ns from "./d";
+import type { T } from "./e";
+"#;
+        let tree = parse(src, false).unwrap();
+        dump(tree.root_node(), src, 0);
+    }
 }

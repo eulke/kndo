@@ -9,8 +9,8 @@
 //! fingerprints, suppressions, `export { a as b }` / `export * from` surface nuances.
 
 use kndo_core::adapter::{
-    Declaration, Diagnostic, DiagnosticLevel, FileFacts, ImportKind, RawImport, Span,
-    VisibilityLevel,
+    Declaration, Diagnostic, DiagnosticLevel, FileFacts, ImportBinding, ImportKind, RawImport,
+    RawReference, Span, VisibilityLevel,
 };
 use kndo_core::vocab::{Confidence, SymbolKind};
 use smol_str::SmolStr;
@@ -46,6 +46,9 @@ pub fn extract(path: &str, content: &[u8]) -> FileFacts {
     for child in root.children(&mut cursor) {
         handle_statement(child, content, false, &mut out);
     }
+    // Separate full-tree walk (declarations above only visit top-level statements — a
+    // reference can appear at any nesting depth, inside any function/block).
+    collect_references(root, content, &mut out.references);
     out
 }
 
@@ -223,10 +226,14 @@ fn handle_import_statement(node: Node, src: &[u8], out: &mut FileFacts) {
     let mut cursor = node.walk();
     let mut has_type_token = false;
     let mut has_clause = false;
+    let mut bindings = Vec::new();
     for c in node.children(&mut cursor) {
         match c.kind() {
             "type" => has_type_token = true,
-            "import_clause" => has_clause = true,
+            "import_clause" => {
+                has_clause = true;
+                bindings = collect_import_bindings(c, src);
+            }
             _ => {}
         }
     }
@@ -240,7 +247,111 @@ fn handle_import_statement(node: Node, src: &[u8], out: &mut FileFacts) {
         side_effect_only,
         type_only,
         confidence: Confidence::Certain,
+        bindings,
     });
+}
+
+/// `import_clause`'s children: a bare `identifier` (default import), `named_imports` (each
+/// `import_specifier` an exported name plus optional local `alias`), or `namespace_import`
+/// (`* as ns` — deferred: resolving `ns.foo` back to a specific export needs member-expression-
+/// aware reference resolution this slice doesn't attempt; the import edge is unaffected, only
+/// the finer per-binding fact is missed).
+fn collect_import_bindings(import_clause: Node, src: &[u8]) -> Vec<ImportBinding> {
+    let mut bindings = Vec::new();
+    let mut cursor = import_clause.walk();
+    for child in import_clause.children(&mut cursor) {
+        match child.kind() {
+            "identifier" => bindings.push(ImportBinding {
+                local: SmolStr::new(text(child, src)),
+                imported: None,
+            }),
+            "named_imports" => {
+                let mut inner = child.walk();
+                for spec in child.children(&mut inner) {
+                    if spec.kind() != "import_specifier" {
+                        continue;
+                    }
+                    let Some(name_node) = spec.child_by_field_name("name") else {
+                        continue;
+                    };
+                    let name = text(name_node, src);
+                    let local = spec
+                        .child_by_field_name("alias")
+                        .map(|a| text(a, src))
+                        .unwrap_or(name);
+                    bindings.push(ImportBinding {
+                        local: SmolStr::new(local),
+                        imported: Some(SmolStr::new(name)),
+                    });
+                }
+            }
+            _ => {}
+        }
+    }
+    bindings
+}
+
+/// Every identifier/type-identifier usage in the tree, recursively — the shapes below are
+/// verified against the real grammar (`kndo_adapter_toolkit::parsing::introspect`, the
+/// `dump_reference_shapes`/`dump_binding_shapes`/`dump_import_clause_shapes` probes), not
+/// assumed. Two things a naive "collect every identifier" walk gets wrong, handled explicitly:
+///
+/// 1. **Property/member names are never references** — `property_identifier` (object literal
+///    keys, `.member` access, class member names) names a *position*, not a scope lookup, so
+///    it's simply never in the collectible-kinds list below (no per-site check needed —
+///    excluded by construction).
+/// 2. **Binding positions introduce a name rather than look one up** — a declaration's own
+///    name, a parameter/catch/for-loop binding, or a destructuring pattern (which can nest
+///    arbitrarily) — so those are skipped as *whole subtrees*, not just their own node, keyed
+///    by (parent kind, field). A destructuring pattern's *value* side (`= obj` in
+///    `const { a } = obj`) is a real reference and is walked normally; only the *pattern* side
+///    is skipped.
+///
+/// Where in doubt, this errs toward collecting (a reference to a name nothing declares simply
+/// fails to resolve later and is dropped, silently and safely) rather than excluding (which
+/// would risk marking genuinely-used code `unused` — the direction that actually matters).
+fn collect_references(node: Node, src: &[u8], out: &mut Vec<RawReference>) {
+    // Import statements are entirely declarative name-binding syntax (already turned into
+    // `ImportBinding` facts by `collect_import_bindings`) — nothing inside one is a reference.
+    if node.kind() == "import_statement" {
+        return;
+    }
+
+    let skip_field: Option<&str> = match node.kind() {
+        "function_declaration"
+        | "generator_function_declaration"
+        | "class_declaration"
+        | "interface_declaration"
+        | "type_alias_declaration"
+        | "enum_declaration"
+        | "variable_declarator" => Some("name"),
+        "required_parameter" | "optional_parameter" => Some("pattern"),
+        "for_in_statement" => Some("left"),
+        "catch_clause" => Some("parameter"),
+        _ => None,
+    };
+    let skip_id = skip_field
+        .and_then(|f| node.child_by_field_name(f))
+        .map(|n| n.id());
+
+    if matches!(
+        node.kind(),
+        "identifier" | "type_identifier" | "shorthand_property_identifier"
+    ) {
+        out.push(RawReference {
+            name: SmolStr::new(text(node, src)),
+            scope_context: None,
+            span: span(node),
+        });
+    }
+
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        if Some(child.id()) == skip_id {
+            continue;
+        }
+        collect_references(child, src, out);
+    }
 }
 
 #[cfg(test)]
@@ -252,6 +363,22 @@ mod tests {
             .declarations
             .into_iter()
             .map(|d| (d.name.to_string(), d.kind, d.exported))
+            .collect()
+    }
+
+    fn refs(src: &str) -> Vec<String> {
+        extract("f.ts", src.as_bytes())
+            .references
+            .into_iter()
+            .map(|r| r.name.to_string())
+            .collect()
+    }
+
+    fn refs_tsx(src: &str) -> Vec<String> {
+        extract("f.tsx", src.as_bytes())
+            .references
+            .into_iter()
+            .map(|r| r.name.to_string())
             .collect()
     }
 
@@ -360,5 +487,152 @@ mod tests {
         let facts = extract("f.tsx", b"export function App() { return <div/>; }");
         assert_eq!(facts.declarations.len(), 1);
         assert!(facts.diagnostics.is_empty());
+    }
+
+    // ---------------------------------------------------------------- references
+
+    #[test]
+    fn function_call_is_a_reference_but_the_declaration_name_is_not() {
+        let r = refs("function outer() { foo(); }");
+        assert!(r.contains(&"foo".to_string()));
+        assert!(!r.contains(&"outer".to_string()));
+    }
+
+    #[test]
+    fn member_expression_object_is_a_reference_but_the_property_is_not() {
+        let r = refs("function f() { obj.method(); }");
+        assert!(r.contains(&"obj".to_string()));
+        assert!(!r.contains(&"method".to_string()));
+    }
+
+    #[test]
+    fn object_literal_key_is_not_a_reference_but_shorthand_value_is() {
+        let r = refs("function f() { const o = { key: 1, shorthand }; }");
+        assert!(!r.contains(&"key".to_string()));
+        assert!(r.contains(&"shorthand".to_string()));
+    }
+
+    #[test]
+    fn destructuring_names_are_not_references_but_the_source_is() {
+        let r = refs("function f() { const { a, b: renamed } = source; }");
+        assert!(!r.contains(&"a".to_string()));
+        assert!(!r.contains(&"renamed".to_string()));
+        assert!(r.contains(&"source".to_string()));
+    }
+
+    #[test]
+    fn parameter_names_are_not_references_but_default_values_are() {
+        let r = refs("function f(x, y = fallback) {}");
+        assert!(!r.contains(&"x".to_string()));
+        assert!(!r.contains(&"y".to_string()));
+        assert!(r.contains(&"fallback".to_string()));
+    }
+
+    #[test]
+    fn class_extends_and_implements_are_references_but_its_own_name_is_not() {
+        let r = refs("class C extends Base implements IFace {}");
+        assert!(r.contains(&"Base".to_string()));
+        assert!(r.contains(&"IFace".to_string()));
+        assert!(!r.contains(&"C".to_string()));
+    }
+
+    #[test]
+    fn type_annotation_is_a_reference() {
+        let r = refs("function f() { let x: SomeType; }");
+        assert!(r.contains(&"SomeType".to_string()));
+        assert!(!r.contains(&"x".to_string()));
+    }
+
+    #[test]
+    fn for_of_binding_is_not_a_reference_but_the_iterable_is() {
+        let r = refs("function f() { for (const item of items) { use(item); } }");
+        assert!(r.contains(&"items".to_string()));
+        assert!(r.contains(&"use".to_string()));
+        // "item" is used once, inside `use(item)` — the loop binding itself must not add a
+        // second, spurious occurrence.
+        assert_eq!(r.iter().filter(|n| *n == "item").count(), 1);
+    }
+
+    #[test]
+    fn catch_binding_is_not_a_reference_but_its_use_inside_the_block_is() {
+        let r = refs("function f() { try {} catch (e) { log(e); } }");
+        assert!(r.contains(&"log".to_string()));
+        assert_eq!(r.iter().filter(|n| *n == "e").count(), 1);
+    }
+
+    #[test]
+    fn jsx_component_name_is_a_reference() {
+        let r = refs_tsx("function App() { return <Foo bar={baz} />; }");
+        assert!(r.contains(&"Foo".to_string()));
+        assert!(r.contains(&"baz".to_string()));
+        assert!(!r.contains(&"bar".to_string())); // the JSX attribute name, not a value lookup
+    }
+
+    #[test]
+    fn import_statement_contributes_no_references() {
+        let r = refs("import { x } from './mod';");
+        assert!(r.is_empty());
+    }
+
+    // ---------------------------------------------------------------- import bindings
+
+    fn bindings(src: &str) -> Vec<(String, Option<String>)> {
+        extract("f.ts", src.as_bytes()).imports[0]
+            .bindings
+            .iter()
+            .map(|b| {
+                (
+                    b.local.to_string(),
+                    b.imported.as_ref().map(|s| s.to_string()),
+                )
+            })
+            .collect()
+    }
+
+    #[test]
+    fn default_import_binds_with_no_imported_name() {
+        assert_eq!(
+            bindings("import def from './a';"),
+            vec![("def".into(), None)]
+        );
+    }
+
+    #[test]
+    fn named_imports_bind_by_exported_name() {
+        assert_eq!(
+            bindings("import { x, y } from './b';"),
+            vec![
+                ("x".into(), Some("x".into())),
+                ("y".into(), Some("y".into()))
+            ]
+        );
+    }
+
+    #[test]
+    fn renamed_named_import_binds_local_to_the_original_exported_name() {
+        assert_eq!(
+            bindings("import { x as z } from './b';"),
+            vec![("z".into(), Some("x".into()))]
+        );
+    }
+
+    #[test]
+    fn default_and_named_combo_binds_both() {
+        assert_eq!(
+            bindings("import def, { named } from './c';"),
+            vec![("def".into(), None), ("named".into(), Some("named".into()))]
+        );
+    }
+
+    #[test]
+    fn namespace_import_binds_nothing_but_the_import_edge_still_exists() {
+        let facts = extract("f.ts", b"import * as ns from './d';");
+        assert!(facts.imports[0].bindings.is_empty());
+        assert!(!facts.imports[0].side_effect_only);
+    }
+
+    #[test]
+    fn side_effect_import_has_no_bindings() {
+        assert!(bindings("import './polyfill';").is_empty());
     }
 }

@@ -38,7 +38,7 @@ pub enum Confidence { Certain, Probable, Possible }
 pub enum EdgeKind {
     ImportsFile      { from: FileId, to: FileId },         // may cross Package boundaries (RFC 0011 §4)
     ImportsDependency{ from: FileId, to: DependencyId },
-    References       { from: SymbolId, to: SymbolId, kind: RefKind },
+    References       { from: NodeRef, to: SymbolId, kind: RefKind },  // from: File | Symbol — see below
     Declares         { file: FileId, symbol: SymbolId },
     Root             { kind: RootKind, target: NodeRef },  // NodeRef = File | Symbol
     Wildcard         { from: FileId },                     // dynamic construct; resolved against a
@@ -48,6 +48,12 @@ pub enum EdgeKind {
 // reachability only from that strength onward; how per-edge confidence combines into a node's
 // (color, confidence) — including Wildcard's plausible-target-set expansion — is the tiered
 // algorithm normatively defined in RFC 0005 §1, not left to each analysis to reinvent.
+// `References.from` is `NodeRef` rather than always `SymbolId`: an adapter that hasn't tracked
+// which declaration encloses a reference (only which file) emits `NodeRef::File` — sufficient
+// for reachability (a reachable file referencing a symbol makes that symbol reachable
+// regardless of which of the file's own functions did the referencing) though not for
+// finer-grained "which caller" evidence. `NodeRef::Symbol` once an adapter tracks enclosing
+// scope precisely enough to say more.
 // Every File is owned by exactly one Package (nearest-manifest rule, RFC 0011 §3);
 // Package depends-on Package edges are derived by the core, never emitted by adapters.
 // RefKind matters to analyses: Implement/Override edges drive dispatch-aware member liveness
@@ -98,11 +104,23 @@ pub trait LanguageAdapter: Send + Sync {
 ```rust
 pub struct FileFacts {
     pub declarations: Vec<Declaration>,     // { name, kind: SymbolKind, span, exported: bool, visibility }
-    pub references:   Vec<RawReference>,    // { name, scope-context, span }  → resolved by driver
+    pub references:   Vec<RawReference>,    // { name, scope-context, span } — resolved core-side
+                                             // (graph::assemble) against same-file declarations
+                                             // and this file's own import bindings (below); no
+                                             // adapter hook, no enclosing-scope tracking assumed
     pub imports:      Vec<RawImport>,       // { specifier, kind: Relative|Package, span,
-                                             //   side_effect_only, type_only, confidence }
+                                             //   side_effect_only, type_only, confidence,
+                                             //   bindings: Vec<ImportBinding> }
                                              // kind is syntactic shape only — Stdlib is a
-                                             // resolve()-time fact, never claimed here
+                                             // resolve()-time fact, never claimed here.
+                                             // ImportBinding { local, imported: Option<Name> } —
+                                             // None imported = default import (binds to the
+                                             // target's synthetic "default" export); lets a
+                                             // same-name RawReference resolve to the *target
+                                             // file's* symbol instead of (incorrectly) a
+                                             // same-file one. Empty for side-effect-only and
+                                             // namespace (`import * as ns`) imports — the latter
+                                             // deferred, member-expression-aware resolution.
     pub roots:        Vec<RawRoot>,         // language-defined only (main, pub API…), target is
                                              // *within this file* — WholeFile | Declaration(name)
     pub functions:    Vec<FunctionMetrics>, // { symbol, cyclomatic: u32, loc, token_fingerprints }

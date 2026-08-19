@@ -62,7 +62,7 @@ pub fn compute(graph: &ProjectGraph) -> ReachabilityMap {
     for edge in &graph.edges {
         match edge.kind {
             EdgeKind::References { from, to, .. } => adjacency
-                .entry(NodeRef::Symbol(from))
+                .entry(from)
                 .or_default()
                 .push((NodeRef::Symbol(to), edge.confidence)),
             EdgeKind::ImportsFile { from, to } => adjacency
@@ -332,7 +332,7 @@ mod tests {
             ),
             edge(
                 EdgeKind::References {
-                    from: SymbolId(0),
+                    from: NodeRef::Symbol(SymbolId(0)),
                     to: SymbolId(1),
                     kind: RefKind::Call,
                 },

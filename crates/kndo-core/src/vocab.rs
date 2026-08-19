@@ -167,8 +167,14 @@ pub enum EdgeKind {
         from: FileId,
         to: DependencyId,
     },
+    /// `from` is `NodeRef` rather than `SymbolId`: without enclosing-scope tracking during
+    /// extraction, an adapter can know *which file* contains a reference without knowing
+    /// *which declaration* — `NodeRef::File` for that file-granularity case (safe for
+    /// reachability: a reachable file referencing a symbol makes that symbol reachable
+    /// regardless of which of the file's own functions did the referencing), `NodeRef::Symbol`
+    /// once an adapter tracks enclosing scope precisely enough to say more.
     References {
-        from: SymbolId,
+        from: NodeRef,
         to: SymbolId,
         kind: RefKind,
     },
