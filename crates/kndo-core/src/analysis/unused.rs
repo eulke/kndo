@@ -8,18 +8,29 @@
 //! `EdgeKind::References`'s doc) — safe for this verdict either way: a symbol is `unreachable`
 //! only when *nothing*, from *any* file, references it.
 //!
-//! Directory rollup (§ taxonomy: "a directory whose every file carries the same verdict rolls
-//! up once more") is not implemented here — every unused file/symbol is reported individually
-//! for now.
+//! Directory rollup (taxonomy rule 3: "a directory whose every file carries the same verdict
+//! rolls up once more — the widest uniform node gets one finding, not fifty") is implemented
+//! for files: when *every* file anywhere under a directory (recursively, including any nested
+//! subdirectories) is unused, that whole directory gets one `unused:directory` finding instead
+//! of one per file, and the individual file findings it summarizes are dropped. A single
+//! non-unused file anywhere in the subtree blocks the rollup for every one of its ancestors —
+//! this includes files merely out-of-scope (unclaimed, generated, vendored), not just
+//! genuinely-reachable ones: a directory containing so much as a vendored README isn't safe to
+//! claim as "delete this whole folder." A nested package manifest structurally can never be
+//! `unused` (manifests are unclaimed, never eligible — see below), so rollup can never
+//! silently cross a package boundary either.
+
+use std::collections::HashMap;
 
 use crate::analysis::finding_id;
 use crate::analysis::reachability::{Reachability, ReachabilityMap};
 use crate::engine::{Finding, Location, Severity};
-use crate::graph::ProjectGraph;
-use crate::vocab::{Confidence, FileId, FileOrigin, NodeRef, SymbolId};
+use crate::graph::{self, ProjectGraph};
+use crate::vocab::{Confidence, FileId, FileOrigin, NodeRef, PackageId, SymbolId};
 
 pub fn find_unused_files(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<Finding> {
     let mut findings = Vec::new();
+    let mut unused: HashMap<&str, (FileId, PackageId)> = HashMap::new();
     for (index, file) in graph.files.iter().enumerate() {
         // Unclaimed: no adapter recognized this file, so no adapter has an opinion on whether
         // it can be a root or a target — out of scope, not a verdict.
@@ -39,8 +50,17 @@ pub fn find_unused_files(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<F
             continue;
         }
         debug_assert_eq!(confidence, Confidence::Certain);
+        unused.insert(file.path.0.as_str(), (file_id, file.package));
+    }
 
-        let path = file.path.0.as_str();
+    let rolled_up = directory_rollups(graph, &unused);
+    for dir in &rolled_up.dirs {
+        findings.push(directory_finding(graph, dir));
+    }
+    for (&path, &(_, package)) in &unused {
+        if rolled_up.covered.contains(path) {
+            continue;
+        }
         findings.push(Finding {
             id: finding_id("unused", "file", path, "", ""),
             category: "unused".to_string(),
@@ -50,14 +70,130 @@ pub fn find_unused_files(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<F
             confidence: Confidence::Certain,
             message: format!("{path} is unreachable: no root or import reaches it"),
             location: Location {
-                path: Some(file.path.clone()),
+                path: Some(crate::adapter::ProjectPath(smol_str::SmolStr::new(path))),
                 range: None,
                 symbol: None,
-                package: graph.package_name(file.package).map(str::to_string),
+                package: graph.package_name(package).map(str::to_string),
             },
         });
     }
     findings
+}
+
+struct DirRollup<'a> {
+    /// The widest directories where every file underneath is unused, deepest-independent
+    /// (never both a directory and one of its own ancestors).
+    dirs: Vec<DirGroup<'a>>,
+    /// Every file path folded into one of `dirs` — excluded from the per-file finding list.
+    covered: std::collections::HashSet<&'a str>,
+}
+
+struct DirGroup<'a> {
+    path: &'a str,
+    files: Vec<&'a str>,
+    package: PackageId,
+}
+
+fn directory_rollups<'a>(
+    graph: &'a ProjectGraph,
+    unused: &HashMap<&'a str, (FileId, PackageId)>,
+) -> DirRollup<'a> {
+    // Every directory that owns at least one file in the *whole project* (not just the unused
+    // ones) — a non-unused file here is exactly what should block its ancestors from rolling
+    // up, so it has to be in this index too.
+    let mut dir_files: HashMap<&'a str, Vec<&'a str>> = HashMap::new();
+    for file in &graph.files {
+        let path = file.path.0.as_str();
+        for ancestor in ancestors(path) {
+            dir_files.entry(ancestor).or_default().push(path);
+        }
+    }
+
+    let mut fully_unused: Vec<&str> = dir_files
+        .iter()
+        // `files.len() >= 2`: a one-file "directory" rollup is worse than the plain file
+        // finding it would replace ("delete this whole folder" about a single file is just a
+        // roundabout way of saying "delete this file") — same floor `duplicate` applies to
+        // its own grouping, for the same reason: a group of one isn't a group.
+        .filter(|(_, files)| files.len() >= 2 && files.iter().all(|f| unused.contains_key(f)))
+        .map(|(&dir, _)| dir)
+        .collect();
+    // Widest first (fewest path segments) so a directory is skipped once its parent already
+    // qualifies — the "widest uniform node" the taxonomy rule asks for, not every level.
+    // Depth by segment *count*, not slash count: "" (root, depth 0) and "src" (depth 1) both
+    // contain zero '/' characters, so `matches('/').count()` alone ties them — and a tie here
+    // is exactly the bug, since the two are not remotely the same width.
+    fully_unused.sort_by_key(|d| depth(d));
+
+    let mut dirs = Vec::new();
+    let mut covered = std::collections::HashSet::new();
+    for dir in fully_unused {
+        if dirs
+            .iter()
+            .any(|g: &DirGroup| graph::package_owns(g.path, dir))
+        {
+            continue; // already covered by a wider rollup already accepted
+        }
+        let files = dir_files.remove(dir).unwrap_or_default();
+        // All files here are unused (verified above) and therefore claimed (unused.insert only
+        // ever holds claimed files), so every one shares a package — a nested package boundary
+        // would have introduced an unclaimed manifest and blocked the rollup already.
+        let package = files
+            .first()
+            .and_then(|f| unused.get(f))
+            .map(|&(_, p)| p)
+            .unwrap_or(PackageId(0));
+        covered.extend(files.iter().copied());
+        dirs.push(DirGroup {
+            path: dir,
+            files,
+            package,
+        });
+    }
+    DirRollup { dirs, covered }
+}
+
+fn depth(dir: &str) -> usize {
+    if dir.is_empty() {
+        0
+    } else {
+        dir.matches('/').count() + 1
+    }
+}
+
+fn ancestors(path: &str) -> Vec<&str> {
+    let mut out = Vec::new();
+    let mut current = graph::core_dirname(path);
+    loop {
+        out.push(current);
+        if current.is_empty() {
+            break;
+        }
+        current = graph::core_dirname(current);
+    }
+    out
+}
+
+fn directory_finding(graph: &ProjectGraph, dir: &DirGroup<'_>) -> Finding {
+    let display = if dir.path.is_empty() { "." } else { dir.path };
+    Finding {
+        id: finding_id("unused", "directory", dir.path, "", ""),
+        category: "unused".to_string(),
+        group: "waste".to_string(),
+        subject_kind: "directory".to_string(),
+        severity: Severity::Warning,
+        confidence: Confidence::Certain,
+        message: format!(
+            "{display} is unreachable: {} files, none referenced — safe to delete the whole directory",
+            dir.files.len()
+        ),
+        location: Location {
+            path: Some(crate::adapter::ProjectPath(smol_str::SmolStr::new(dir.path))),
+            range: None,
+            symbol: None,
+            package: graph.package_name(dir.package).map(str::to_string),
+        },
+    }
 }
 
 pub fn find_unused_symbols(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<Finding> {
@@ -225,6 +361,125 @@ mod tests {
     fn finding_id_is_stable_across_runs() {
         let files = vec![file("orphan.ts", Some(FileClass::default()))];
         let graph = ProjectGraph::for_test(files, vec![], vec![], vec![]);
+        let reach = reachability::compute(&graph);
+        let a = find_unused_files(&graph, &reach);
+        let b = find_unused_files(&graph, &reach);
+        assert_eq!(a[0].id, b[0].id);
+    }
+
+    // ---------------------------------------------------------------- directory rollup
+
+    /// A live file at `src/main.ts` with a Production root — present in every rollup test below
+    /// so `src/legacy` has some live sibling content both at the project root *and* inside
+    /// `src` itself. Without it, `src/legacy` being "fully dead" also makes `src` (nothing
+    /// else lives there in these tiny fixtures) and the project root fully dead, and the
+    /// widest-rollup rule correctly (if unhelpfully, for testing one directory in isolation)
+    /// climbs past the directory under test.
+    fn with_live_root(mut files: Vec<FileNode>) -> (Vec<FileNode>, Vec<Edge>) {
+        files.insert(0, file("src/main.ts", Some(FileClass::default())));
+        let edges = vec![edge(
+            EdgeKind::Root {
+                kind: RootKind::Production,
+                target: NodeRef::File(FileId(0)),
+            },
+            Confidence::Certain,
+        )];
+        (files, edges)
+    }
+
+    #[test]
+    fn a_fully_dead_directory_rolls_up_to_one_finding() {
+        let (files, edges) = with_live_root(vec![
+            file("src/legacy/a.ts", Some(FileClass::default())),
+            file("src/legacy/b.ts", Some(FileClass::default())),
+            file("src/legacy/sub/c.ts", Some(FileClass::default())),
+        ]);
+        let graph = ProjectGraph::for_test(files, vec![], vec![], edges);
+        let reach = reachability::compute(&graph);
+        let findings = find_unused_files(&graph, &reach);
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].subject_kind, "directory");
+        assert_eq!(findings[0].location.path.as_ref().unwrap().0, "src/legacy");
+        assert!(findings[0].message.contains("3 files"));
+    }
+
+    #[test]
+    fn rollup_picks_the_widest_qualifying_directory_not_every_level() {
+        // Both src/legacy and src/legacy/sub are, on their own, "every file inside is dead" —
+        // taxonomy rule 3 wants the widest one, one finding, not one per level.
+        let (files, edges) = with_live_root(vec![
+            file("src/legacy/a.ts", Some(FileClass::default())),
+            file("src/legacy/sub/b.ts", Some(FileClass::default())),
+            file("src/legacy/sub/c.ts", Some(FileClass::default())),
+        ]);
+        let graph = ProjectGraph::for_test(files, vec![], vec![], edges);
+        let reach = reachability::compute(&graph);
+        let findings = find_unused_files(&graph, &reach);
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].location.path.as_ref().unwrap().0, "src/legacy");
+    }
+
+    #[test]
+    fn one_live_file_blocks_rollup_for_every_ancestor() {
+        let files = vec![
+            file("src/legacy/a.ts", Some(FileClass::default())),
+            file("src/legacy/b.ts", Some(FileClass::default())),
+        ];
+        let edges = vec![edge(
+            EdgeKind::Root {
+                kind: RootKind::Production,
+                target: NodeRef::File(FileId(1)), // b.ts is reachable
+            },
+            Confidence::Certain,
+        )];
+        let graph = ProjectGraph::for_test(files, vec![], vec![], edges);
+        let reach = reachability::compute(&graph);
+        let findings = find_unused_files(&graph, &reach);
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].subject_kind, "file");
+        assert!(findings[0].message.contains("a.ts"));
+    }
+
+    #[test]
+    fn an_exempt_file_also_blocks_rollup_even_though_it_reports_nothing_itself() {
+        // vendor.js is Vendored (exempt, reports no finding of its own) but its mere presence
+        // means "delete this whole folder" would also delete something never actually judged.
+        let files = vec![
+            file("src/legacy/a.ts", Some(FileClass::default())),
+            file("src/legacy/b.ts", Some(FileClass::default())),
+            file(
+                "src/legacy/vendor.js",
+                Some(FileClass {
+                    role: FileRole::Production,
+                    origin: FileOrigin::Vendored,
+                }),
+            ),
+        ];
+        let graph = ProjectGraph::for_test(files, vec![], vec![], vec![]);
+        let reach = reachability::compute(&graph);
+        let findings = find_unused_files(&graph, &reach);
+        assert_eq!(findings.len(), 2, "no rollup — vendor.js blocks it");
+        assert!(findings.iter().all(|f| f.subject_kind == "file"));
+    }
+
+    #[test]
+    fn a_single_dead_file_never_rolls_up_to_its_own_directory() {
+        // A one-file "directory" finding is a worse restatement of the plain file finding.
+        let files = vec![file("orphan.ts", Some(FileClass::default()))];
+        let graph = ProjectGraph::for_test(files, vec![], vec![], vec![]);
+        let reach = reachability::compute(&graph);
+        let findings = find_unused_files(&graph, &reach);
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].subject_kind, "file");
+    }
+
+    #[test]
+    fn directory_finding_id_is_stable_across_runs() {
+        let (files, edges) = with_live_root(vec![
+            file("src/legacy/a.ts", Some(FileClass::default())),
+            file("src/legacy/b.ts", Some(FileClass::default())),
+        ]);
+        let graph = ProjectGraph::for_test(files, vec![], vec![], edges);
         let reach = reachability::compute(&graph);
         let a = find_unused_files(&graph, &reach);
         let b = find_unused_files(&graph, &reach);

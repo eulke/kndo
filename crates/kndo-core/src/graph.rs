@@ -156,18 +156,21 @@ struct Claimed {
 /// Directory part of a project-relative path (`""` for root-level files). A private duplicate
 /// of `kndo-adapter-toolkit::paths::dirname` — trivial string logic, but the core cannot depend
 /// on an adapter-side crate (the ignorance rule runs both directions: adapters depend on the
-/// core, never the reverse).
-fn core_dirname(path: &str) -> &str {
+/// core, never the reverse). `pub(crate)`: sibling modules (analyses doing their own directory
+/// reasoning, e.g. `unused`'s rollup) reuse it rather than re-deriving the same logic.
+pub(crate) fn core_dirname(path: &str) -> &str {
     match path.rfind('/') {
         Some(i) => &path[..i],
         None => "",
     }
 }
 
-/// Does `manifest_dir` govern `file_dir` (RFC 0011 §3, nearest-manifest-ancestor)? The empty
-/// (project-root) manifest dir governs everything — callers only rely on that once every more
-/// specific candidate has already been tried (ownership resolution sorts deepest-first).
-fn package_owns(manifest_dir: &str, file_dir: &str) -> bool {
+/// Does `ancestor_dir` govern (contain, at any depth, or equal) `dir`? The empty (project-root)
+/// dir governs everything. Doubles as both RFC 0011 §3's nearest-manifest-ancestor test (this
+/// module's own use) and a generic "is A an ancestor-or-self of B" check other analyses reuse
+/// (e.g. `unused`'s directory rollup, deciding whether a narrower rollup is already covered by
+/// a wider one).
+pub(crate) fn package_owns(manifest_dir: &str, file_dir: &str) -> bool {
     manifest_dir.is_empty()
         || file_dir == manifest_dir
         || file_dir
