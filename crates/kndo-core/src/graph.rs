@@ -348,6 +348,12 @@ pub fn assemble(
     let mut edges = Vec::new();
     let mut declared_dependency_names: HashSet<SmolStr> = HashSet::new();
     let mut declared_dependencies: Vec<DeclaredDependency> = Vec::new();
+    // Every file a manifest names as a production root, at that root's own confidence — used
+    // after phase 3a to promote the file's *exported* symbols to production roots too (RFC
+    // 0011 §5: "Published/library: its public API is a production root — external consumers
+    // exist by definition"). Keyed by file, keeping the strongest confidence when more than
+    // one manifest field roots the same file (e.g. both `main` and an `exports` leaf).
+    let mut library_root_files: HashMap<FileId, Confidence> = HashMap::new();
     for (i, slot) in manifests_per_file.iter().enumerate() {
         let Some((adapter_index, facts)) = slot else {
             continue;
@@ -378,6 +384,10 @@ pub fn assemble(
                     confidence: root.confidence,
                     source: provenance(),
                 });
+                if root.kind == crate::vocab::RootKind::Production {
+                    let entry = library_root_files.entry(target).or_insert(root.confidence);
+                    *entry = (*entry).max(root.confidence);
+                }
             }
         }
         for d in &facts.diagnostics {
@@ -423,6 +433,26 @@ pub fn assemble(
                 confidence: Confidence::Certain,
                 source: provenance(),
             });
+
+            // Library-mode promotion (RFC 0011 §5): this file is a manifest-declared production
+            // root and this symbol is exported from it, so it's part of the package's public
+            // API — a production root in its own right, not just "alive because the file is."
+            // Without this, every public export a root file doesn't also call internally reads
+            // as dead code (confirmed against real npm packages during M1 conformance work —
+            // e.g. a library's second named export, never self-invoked, otherwise false-
+            // positives as `unused`).
+            if decl.exported {
+                if let Some(&confidence) = library_root_files.get(&file_id) {
+                    edges.push(Edge {
+                        kind: EdgeKind::Root {
+                            kind: crate::vocab::RootKind::Production,
+                            target: NodeRef::Symbol(symbol_id),
+                        },
+                        confidence,
+                        source: provenance(),
+                    });
+                }
+            }
         }
 
         // In-source roots (RawRoot — e.g. a language-level `export =`/`pub` API marker), as
@@ -608,7 +638,8 @@ mod tests {
 
         fn extract(&self, file: &SourceFile<'_>) -> FileFacts {
             // Content format for the mock: one directive per line.
-            //   decl <name>                 -> a Function declaration
+            //   decl <name>                 -> an exported Function declaration
+            //   private-decl <name>         -> an unexported Function declaration
             //   import <specifier> [binding[,binding...]]
             //       binding := name          -> ImportBinding { local: name, imported: Some(name) }
             //                | local=imported -> ImportBinding { local, imported: Some(imported) }
@@ -626,6 +657,14 @@ mod tests {
                         span: Span::default(),
                         exported: true,
                         visibility: VisibilityLevel(1),
+                    });
+                } else if let Some(name) = line.strip_prefix("private-decl ") {
+                    facts.declarations.push(Declaration {
+                        name: SmolStr::new(name),
+                        kind: SymbolKind::Function,
+                        span: Span::default(),
+                        exported: false,
+                        visibility: VisibilityLevel(0),
                     });
                 } else if let Some(rest) = line.strip_prefix("import ") {
                     let mut parts = rest.splitn(2, ' ');
@@ -926,6 +965,37 @@ mod tests {
                 kind: RootKind::Production,
                 target: NodeRef::File(entry),
             }));
+    }
+
+    #[test]
+    fn library_root_files_promote_their_exported_symbols_to_production_roots() {
+        // RFC 0011 §5: "Published/library: its public API is a production root — external
+        // consumers exist by definition." Discovered via M1 conformance-testing against real
+        // npm packages (sindresorhus/p-limit): a library's second named export, never called
+        // by the package's own code, was false-positive `unused` before this fix.
+        let dir = project(
+            "library-root-promotion",
+            &[
+                ("manifest.json", "root entry.mock"),
+                ("entry.mock", "decl publicApi\nprivate-decl helper"),
+            ],
+        );
+        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let symbol_id = |name: &str| {
+            graph
+                .symbols
+                .iter()
+                .position(|s| s.name.as_str() == name)
+                .map(|i| SymbolId(i as u32))
+                .unwrap()
+        };
+        assert!(graph.edges.iter().any(|e| e.kind
+            == EdgeKind::Root {
+                kind: RootKind::Production,
+                target: NodeRef::Symbol(symbol_id("publicApi")),
+            }));
+        assert!(!graph.edges.iter().any(|e| matches!(e.kind,
+            EdgeKind::Root { target: NodeRef::Symbol(s), .. } if s == symbol_id("helper"))));
     }
 
     #[test]

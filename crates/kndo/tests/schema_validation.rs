@@ -52,8 +52,11 @@ fn real_json_output_validates_against_the_committed_schema() {
         r#"{"name": "schema-validation-fixture", "private": false, "main": "src/index.ts"}"#,
     )
     .unwrap();
+    fs::write(dir.join("src/index.ts"), "console.log(\"alive\");\n").unwrap();
+    // Not `main`'s own exports (those are the package's public API, and a production root in
+    // their own right — RFC 0011 §5) — an orphan file nothing imports, still genuinely dead.
     fs::write(
-        dir.join("src/index.ts"),
+        dir.join("src/orphan.ts"),
         "export function dead(): void {}\n",
     )
     .unwrap();
