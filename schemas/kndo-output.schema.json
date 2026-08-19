@@ -4,6 +4,16 @@
   "description": "The full `--format json` envelope shape (contracts/output-schema.md §1) — also the schema\ngenerator's root type (`cargo xtask gen-schema`, gated behind the `schema` feature): the\nJSON Schema is derived from this struct, not maintained as a second hand-written document.",
   "type": "object",
   "properties": {
+    "baseline": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/BaselineSummary"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "diagnostics": {
       "type": "array",
       "items": {
@@ -50,6 +60,26 @@
       "required": [
         "id",
         "files"
+      ]
+    },
+    "BaselineSummary": {
+      "description": "`baseline` summary (contracts/output-schema.md §1's `baseline` envelope field, RFC 0006 §6):\n`acknowledged` counts baseline entries that still match a current finding (excluded from\n`findings` and from `--fail-on`); `stale` counts entries that match nothing anymore — the\nunderlying issue was fixed, and `kndo baseline --update` would drop them.",
+      "type": "object",
+      "properties": {
+        "acknowledged": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "stale": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "acknowledged",
+        "stale"
       ]
     },
     "Confidence": {

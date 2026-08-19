@@ -24,12 +24,66 @@ fn main() -> ExitCode {
             ExitCode::SUCCESS
         }
         Some("check") => check(&args[1..]),
+        Some("baseline") => baseline_cmd(&args[1..]),
         // Bare flags with no subcommand (`kndo --format json`) are an implicit `check`, same
         // as no arguments at all — `kndo` = `kndo check` (RFC 0006 §2).
         Some(s) if s.starts_with('-') => check(&args),
         None => check(&args),
         Some(other) => {
-            eprintln!("kndo: unknown command `{other}` (M1 skeleton: check, --version)");
+            eprintln!("kndo: unknown command `{other}` (check, baseline, --version)");
+            ExitCode::from(2)
+        }
+    }
+}
+
+/// `kndo baseline [--update]` (RFC 0006 §6): snapshot the complete current finding set into
+/// `.kndo/baseline.json` (committed — a human reviews the diff). Without `--update`, refuses to
+/// overwrite an existing baseline — the RFC's "growth requires an explicit `kndo baseline
+/// --update` in a reviewed commit" reads as *every* baseline write after the first needing that
+/// explicit flag, not just growth specifically, since a bare re-run can't tell growth from
+/// shrinkage without diffing first; `--update` covers both cases identically (a full snapshot
+/// replace), matching the RFC's "auto-dropped on `--update`" language for fixed entries.
+fn baseline_cmd(args: &[String]) -> ExitCode {
+    let update = args.iter().any(|a| a == "--update");
+
+    let cwd = match std::env::current_dir() {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!("kndo: cannot determine working directory: {e}");
+            return ExitCode::from(2);
+        }
+    };
+
+    if kndo::baseline::exists(&cwd) && !update {
+        eprintln!(
+            "kndo: .kndo/baseline.json already exists — use `kndo baseline --update` to refresh it"
+        );
+        return ExitCode::from(2);
+    }
+
+    let mut engine = match kndo::open(&cwd, ConfigOverrides::default()) {
+        Ok(e) => e,
+        Err(e) => {
+            eprintln!("kndo: {e}");
+            return ExitCode::from(2);
+        }
+    };
+    let findings = engine.compute_findings();
+    let entries: Vec<kndo::baseline::BaselineEntry> = findings
+        .iter()
+        .map(kndo::baseline::BaselineEntry::from)
+        .collect();
+    let count = entries.len();
+
+    match kndo::baseline::save(&cwd, &entries) {
+        Ok(()) => {
+            println!(
+                "kndo: baseline written — {count} findings acknowledged (.kndo/baseline.json)"
+            );
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("kndo: failed to write .kndo/baseline.json: {e}");
             ExitCode::from(2)
         }
     }

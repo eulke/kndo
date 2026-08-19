@@ -10,6 +10,7 @@
 //! core never knows which languages exist (RFC 0001 §2, the ignorance rule), and frontends
 //! never compose the product — they call `kndo::open`, which passes the registry in here.
 
+use std::collections::HashSet;
 use std::fmt;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -149,13 +150,24 @@ pub struct AdapterRunInfo {
     pub files: usize,
 }
 
+/// `baseline` summary (contracts/output-schema.md §1's `baseline` envelope field, RFC 0006 §6):
+/// `acknowledged` counts baseline entries that still match a current finding (excluded from
+/// `findings` and from `--fail-on`); `stale` counts entries that match nothing anymore — the
+/// underlying issue was fixed, and `kndo baseline --update` would drop them.
+#[derive(Debug, Clone, serde::Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct BaselineSummary {
+    pub acknowledged: usize,
+    pub stale: usize,
+}
+
 /// Typed form of the output-schema envelope. JSON/SARIF/agent serializers live core-side so
 /// every frontend emits byte-identical machine output; *human* rendering is frontend-owned
 /// (RFC 0009). Flat here for ergonomic Rust consumption; [`RunResult::to_json`] nests it into
-/// the schema's actual shape. Not yet present: `health`, `budget`, `baseline`, `suppressed` —
-/// none of those subsystems exist yet (health/CRAP scoring is M4; baseline, suppressions, and
-/// diff-mode budgets are M2), so the fields are omitted rather than emitted empty/null. Adding
-/// them later is additive (minor schema bump, RFC 0006 §4), not a breaking change.
+/// the schema's actual shape. Not yet present: `health`, `budget`, `suppressed` — neither
+/// subsystem exists yet (health/CRAP scoring is M4; inline suppression pragmas need adapter-side
+/// grammar work not yet done), so those fields are omitted rather than emitted empty/null.
+/// Adding them later is additive (minor schema bump, RFC 0006 §4), not a breaking change.
 #[derive(Debug, Default)]
 pub struct RunResult {
     pub findings: Vec<Finding>,
@@ -182,6 +194,23 @@ pub struct RunResult {
     /// its very first run and is still, correctly, cold (RFC 0004 §2).
     pub cache_enabled: bool,
     pub cache_hits: u64,
+    /// `None` when `.kndo/baseline.json` doesn't exist (RFC 0006 §6) — distinct from `Some`
+    /// with zero counts, which means a baseline exists and is fully clean/reproducing.
+    pub baseline: Option<BaselineSummary>,
+}
+
+impl RunResult {
+    /// `"warm"` only when the cache was on *and* actually served something this run — an
+    /// enabled-but-empty cache (first run ever, or every file changed) is honestly `"cold"`
+    /// (RFC 0004 §2). Shared by every renderer (`to_json`, `to_agent_format`) so "what counts as
+    /// warm" is defined exactly once.
+    pub fn cache_status(&self) -> &'static str {
+        if self.cache_enabled && self.cache_hits > 0 {
+            "warm"
+        } else {
+            "cold"
+        }
+    }
 }
 
 /// Owned mirror of the JSON envelope's `run` object — not borrowed, unlike a hot-path type,
@@ -210,6 +239,8 @@ struct Envelope {
     kndo_version: &'static str,
     run: RunInfo,
     findings: Vec<Finding>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    baseline: Option<BaselineSummary>,
     diagnostics: Vec<Diagnostic>,
 }
 
@@ -223,18 +254,12 @@ impl RunResult {
                 base_ref: self.base_ref.clone(),
                 started_at: self.started_at.clone(),
                 duration_ms: self.duration_ms,
-                // "warm" only when the cache was on AND actually served something — an
-                // enabled-but-empty cache (first run ever, or every file changed) is honestly
-                // cold, not merely "not disabled" (RFC 0004 §2).
-                cache: if self.cache_enabled && self.cache_hits > 0 {
-                    "warm"
-                } else {
-                    "cold"
-                },
+                cache: self.cache_status(),
                 project_root: self.project_root.clone(),
                 adapters: self.adapters.clone(),
             },
             findings: self.findings.clone(),
+            baseline: self.baseline.clone(),
             diagnostics: self.diagnostics.clone(),
         }
     }
@@ -308,54 +333,13 @@ impl Engine {
         let base_ref = req.mode.base_ref();
         let project_root = self.root.display().to_string();
 
-        let outcome =
-            match graph::assemble_with_cache(&self.root, &self.adapters, self.cache.as_ref()) {
-                Ok((g, diagnostics)) => {
-                    let findings = analysis::run_all(&g);
-                    let adapters = self
-                        .adapters
-                        .iter()
-                        .map(|a| {
-                            let id = a.descriptor().id;
-                            let files = g
-                                .files
-                                .iter()
-                                .filter(|f| f.language.as_deref() == Some(id.as_str()))
-                                .count();
-                            AdapterRunInfo {
-                                id: id.to_string(),
-                                files,
-                            }
-                        })
-                        .collect();
-                    RunResult {
-                        files_discovered: g.files.len(),
-                        files_claimed: g.files.iter().filter(|f| f.language.is_some()).count(),
-                        symbols: g.symbols.len(),
-                        dependencies: g.dependencies.len(),
-                        edges: g.edges.len(),
-                        diagnostics,
-                        findings,
-                        adapters,
-                        ..RunResult::default()
-                    }
-                }
-                Err(crate::discovery::DiscoveryError::Root(e)) => RunResult {
-                    diagnostics: vec![Diagnostic {
-                        level: DiagnosticLevel::Warn,
-                        path: None,
-                        message: format!(
-                            "cannot walk the project root: {e} — check the path and permissions"
-                        ),
-                        span: None,
-                    }],
-                    ..RunResult::default()
-                },
-            };
+        let outcome = self.run_analysis();
 
         if let Some(cache) = &self.cache {
             cache.prune(crate::cache::DEFAULT_CAP_BYTES);
         }
+
+        let (findings, baseline) = self.apply_baseline(outcome.findings);
 
         RunResult {
             mode,
@@ -369,8 +353,96 @@ impl Engine {
                 .as_ref()
                 .map(|c| c.hits() + c.graph_hits())
                 .unwrap_or(0),
+            findings,
+            baseline,
             ..outcome
         }
+    }
+
+    /// The complete, current finding set — bypassing any existing baseline entirely (RFC 0006
+    /// §6): `kndo baseline` needs exactly this to snapshot what "acknowledged" means right now,
+    /// not what's left after an old baseline already filtered it down.
+    pub fn compute_findings(&mut self) -> Vec<Finding> {
+        self.run_analysis().findings
+    }
+
+    /// Assemble + analyze — the part of `check()` and [`Self::compute_findings`] that's
+    /// identical: everything except the run-level metadata (timing, mode) and baseline
+    /// filtering, which only `check()` applies.
+    fn run_analysis(&mut self) -> RunResult {
+        match graph::assemble_with_cache(&self.root, &self.adapters, self.cache.as_ref()) {
+            Ok((g, diagnostics)) => {
+                let findings = analysis::run_all(&g);
+                let adapters = self
+                    .adapters
+                    .iter()
+                    .map(|a| {
+                        let id = a.descriptor().id;
+                        let files = g
+                            .files
+                            .iter()
+                            .filter(|f| f.language.as_deref() == Some(id.as_str()))
+                            .count();
+                        AdapterRunInfo {
+                            id: id.to_string(),
+                            files,
+                        }
+                    })
+                    .collect();
+                RunResult {
+                    files_discovered: g.files.len(),
+                    files_claimed: g.files.iter().filter(|f| f.language.is_some()).count(),
+                    symbols: g.symbols.len(),
+                    dependencies: g.dependencies.len(),
+                    edges: g.edges.len(),
+                    diagnostics,
+                    findings,
+                    adapters,
+                    ..RunResult::default()
+                }
+            }
+            Err(crate::discovery::DiscoveryError::Root(e)) => RunResult {
+                diagnostics: vec![Diagnostic {
+                    level: DiagnosticLevel::Warn,
+                    path: None,
+                    message: format!(
+                        "cannot walk the project root: {e} — check the path and permissions"
+                    ),
+                    span: None,
+                }],
+                ..RunResult::default()
+            },
+        }
+    }
+
+    /// Partitions `findings` against `.kndo/baseline.json` (RFC 0006 §6): a matched entry is
+    /// excluded from the returned findings (and so from `--fail-on`, which only ever sees what
+    /// `check()` returns) and counted in the summary instead. `None` when no baseline file
+    /// exists — distinct from `Some` with `acknowledged: 0`, a baseline that exists but matches
+    /// nothing right now (everything it acknowledged got fixed).
+    fn apply_baseline(&self, findings: Vec<Finding>) -> (Vec<Finding>, Option<BaselineSummary>) {
+        let Some(entries) = crate::baseline::load(&self.root) else {
+            return (findings, None);
+        };
+        let all_ids: HashSet<&str> = findings.iter().map(|f| f.id.as_str()).collect();
+        let acknowledged = entries
+            .iter()
+            .filter(|e| all_ids.contains(e.id.as_str()))
+            .count();
+        let stale = entries.len() - acknowledged;
+
+        let baselined_ids: HashSet<&str> = entries.iter().map(|e| e.id.as_str()).collect();
+        let kept = findings
+            .into_iter()
+            .filter(|f| !baselined_ids.contains(f.id.as_str()))
+            .collect();
+        (
+            kept,
+            Some(BaselineSummary {
+                acknowledged,
+                stale,
+            }),
+        )
     }
 }
 

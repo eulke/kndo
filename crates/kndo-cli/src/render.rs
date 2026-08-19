@@ -27,6 +27,13 @@ pub struct RenderOptions {
 
 const GROUP_ORDER: [&str; 4] = ["defect", "waste", "risk", "hygiene"];
 
+fn baseline_suffix(result: &RunResult) -> String {
+    match &result.baseline {
+        Some(b) => format!(" · baseline: {} acknowledged", b.acknowledged),
+        None => String::new(),
+    }
+}
+
 const RED: &str = "\x1b[31m";
 const YELLOW: &str = "\x1b[33m";
 const MAGENTA: &str = "\x1b[35m";
@@ -34,9 +41,11 @@ const BLUE: &str = "\x1b[34m";
 const RESET: &str = "\x1b[0m";
 
 pub fn render(result: &RunResult, opts: &RenderOptions) -> String {
+    let baseline_suffix = baseline_suffix(result);
+
     if result.findings.is_empty() {
         return format!(
-            "kndo · clean · {} files ({} claimed, {} symbols, {} deps, {} edges) · {}ms\n",
+            "kndo · clean · {} files ({} claimed, {} symbols, {} deps, {} edges) · {}ms{baseline_suffix}\n",
             result.files_discovered,
             result.files_claimed,
             result.symbols,
@@ -47,10 +56,16 @@ pub fn render(result: &RunResult, opts: &RenderOptions) -> String {
     }
 
     if opts.quiet {
-        return format!("kndo · {} findings\n", result.findings.len());
+        return format!(
+            "kndo · {} findings{baseline_suffix}\n",
+            result.findings.len()
+        );
     }
 
     let mut out = String::new();
+    if let Some(b) = &result.baseline {
+        out.push_str(&format!("baseline: {} acknowledged\n\n", b.acknowledged));
+    }
     let mut groups: Vec<&str> = result
         .findings
         .iter()

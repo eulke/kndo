@@ -53,16 +53,22 @@ pub fn render(result: &RunResult) -> String {
 
 fn header(result: &RunResult) -> String {
     format!(
-        "kndo {KNDO_VERSION} agent-format {AGENT_FORMAT_VERSION} | mode {} | cache cold | {}ms",
-        result.mode, result.duration_ms
+        "kndo {KNDO_VERSION} agent-format {AGENT_FORMAT_VERSION} | mode {} | cache {} | {}ms",
+        result.mode,
+        result.cache_status(),
+        result.duration_ms
     )
 }
 
 fn result_line(result: &RunResult) -> String {
-    if result.findings.is_empty() {
+    let findings = if result.findings.is_empty() {
         "result: clean".to_string()
     } else {
         format!("result: {} findings", result.findings.len())
+    };
+    match &result.baseline {
+        Some(b) => format!("{findings} | baseline {} acknowledged", b.acknowledged),
+        None => findings,
     }
 }
 
@@ -174,6 +180,23 @@ mod tests {
         assert!(out.contains("mode full"));
         assert!(out.contains("cache cold"));
         assert!(out.contains("42ms"));
+    }
+
+    #[test]
+    fn baseline_summary_appends_to_the_result_line_when_present() {
+        let mut r = result(vec![]);
+        r.baseline = Some(crate::engine::BaselineSummary {
+            acknowledged: 412,
+            stale: 3,
+        });
+        let out = render(&r);
+        assert!(out.contains("result: clean | baseline 412 acknowledged"));
+    }
+
+    #[test]
+    fn no_baseline_line_when_no_baseline_exists() {
+        let out = render(&result(vec![]));
+        assert!(!out.contains("baseline"));
     }
 
     #[test]
