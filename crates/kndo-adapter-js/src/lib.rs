@@ -15,7 +15,7 @@ mod resolution;
 
 pub struct JsTsAdapter;
 
-const EXTENSIONS: &[&str] = &["ts", "tsx", "js", "jsx", "mjs", "cjs", "mts", "cts"];
+pub(crate) const EXTENSIONS: &[&str] = &["ts", "tsx", "js", "jsx", "mjs", "cjs", "mts", "cts"];
 
 /// This adapter's classification conventions (spec §1) as data; the matcher and the
 /// universal vendored-tree conventions live in the toolkit (one implementation for all

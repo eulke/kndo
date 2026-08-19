@@ -94,9 +94,18 @@ pub trait LanguageAdapter: Send + Sync {
     /// Resolve an import specifier to a concrete target, given an index of claimable paths.
     /// Called by the core's resolution driver — including for specifiers emitted by *other*
     /// adapters (cross-language edges, RFC 0002 §4). Internal-package specifiers
-    /// (workspace:*, path deps, alias paths) resolve to File targets in the sibling package.
+    /// (workspace:*, path deps, alias paths) resolve as WorkspaceMember — the concrete
+    /// sibling file plus the package name, from which assembly derives BOTH edge kinds
+    /// (ImportsFile for reachability, ImportsDependency for the declaration contract —
+    /// RFC 0011 §4 validates it both ways). ResolveCtx carries the workspace-member index
+    /// (name → { dir, resolved entry }) the core builds from every named manifest's facts.
+    /// When no concrete in-repo file matches (a source checkout whose published entries are
+    /// build artifacts), the specifier falls through to the external ladder as a plain
+    /// Dependency — the package is still consumed, and dropping to Unresolved would silently
+    /// un-count a genuinely used dependency; only the file edge is unknowable.
     fn resolve(&self, spec: &ImportSpec, ctx: &ResolveCtx) -> Resolution;
     // Resolution = File(ProjectPath, Confidence) | Dependency(DependencyName, Confidence)
+    //            | WorkspaceMember { name, target: ProjectPath, confidence }
     //            | Stdlib | Unresolved
 }
 ```
@@ -152,6 +161,12 @@ pub struct ManifestFacts {
                                                        //   confidence } — already resolved by the
                                                        // adapter (a manifest root always names a
                                                        // *different* file, unlike FileFacts::roots)
+    pub resolved_entries:   Vec<(ProjectPath, Confidence)>, // import entry points, resolved, in
+                                                       // precedence order (main > module > exports
+                                                       // leaves) — the WorkspaceMember.entry source.
+                                                       // NOT private-gated (a sibling importing a
+                                                       // private member still resolves through its
+                                                       // entry; privateness only gates roots)
     pub declares_surface:   bool,                     // `exports` map or equivalent present —
                                                        // the contract gate for `deep-import` (RFC 0011 §4)
     pub script_invoked_names: Vec<SmolStr>,           // names invoked as the leading command of a

@@ -45,6 +45,10 @@ pub struct SymbolNode {
     pub visibility: VisibilityLevel,
 }
 
+/// A package consumed *as a dependency* — external (npm/crates.io/…) or an in-repo workspace
+/// member imported by name (RFC 0011 §4: the workspace case carries the same
+/// declaration-contract obligations, so it lives in the same node kind; its file-level
+/// reachability is carried separately by the `ImportsFile` edge the same resolution emits).
 #[derive(Debug, Clone)]
 pub struct DependencyNode {
     pub name: SmolStr,
@@ -541,7 +545,31 @@ pub fn assemble(
         }
     }
 
-    let ctx = ResolveCtx::new(&known_files).with_declared_dependencies(&declared_dependency_names);
+    // Workspace-member index (RFC 0011 §4): every *named* manifest in the graph, keyed by
+    // package name, with its directory and adapter-resolved primary entry — what lets a bare
+    // specifier (`@org/ui`) resolve to the sibling's internal files instead of an external
+    // dependency. Built from manifest facts, consumed by import resolution — strictly after
+    // manifest extraction, so no circularity. Duplicate names keep the first in
+    // file-discovery order (deterministic); a repo with two same-named manifests is broken
+    // in ways no resolution order fixes.
+    let mut workspace_member_index: HashMap<SmolStr, crate::adapter::WorkspaceMember> =
+        HashMap::new();
+    for (i, slot) in manifests_per_file.iter().enumerate() {
+        let Some((_, facts)) = slot else { continue };
+        let Some(name) = &facts.package_name else {
+            continue;
+        };
+        workspace_member_index
+            .entry(name.clone())
+            .or_insert_with(|| crate::adapter::WorkspaceMember {
+                dir: SmolStr::new(core_dirname(files[i].path.0.as_str())),
+                entry: facts.resolved_entries.first().cloned(),
+            });
+    }
+
+    let ctx = ResolveCtx::new(&known_files)
+        .with_declared_dependencies(&declared_dependency_names)
+        .with_workspace_members(&workspace_member_index);
 
     // Phase 3a-bis — re-export aliasing (`export {a} from './b'`, `export type {a} from
     // './b'`): a barrel's re-exported bindings become resolvable as *its own* exports too, not
@@ -561,8 +589,14 @@ pub fn assemble(
                 specifier: imp.specifier.clone(),
                 from: files[i].path.clone(),
             };
-            let Resolution::File(target_path, _) = adapter.resolve(&spec, &ctx) else {
-                continue;
+            // A re-export resolves through to a file target whether the specifier was
+            // relative (`./b`) or a workspace-member name (`@org/ui`) — the aliasing works
+            // off the concrete target file either way. (The member's ImportsDependency side
+            // is phase 3b's job when it re-resolves this same import.)
+            let target_path = match adapter.resolve(&spec, &ctx) {
+                Resolution::File(path, _) => path,
+                Resolution::WorkspaceMember { target, .. } => target,
+                _ => continue,
             };
             let Some(&target) = file_index.get(&target_path) else {
                 continue;
@@ -617,57 +651,68 @@ pub fn assemble(
                 specifier: imp.specifier.clone(),
                 from: files[i].path.clone(),
             };
-            match adapter.resolve(&spec, &ctx) {
-                Resolution::File(path, confidence) => {
-                    // Resolvers only ever match against `ctx`'s known-files set, so this
-                    // must be Some — defensive skip, not a silent contract violation, if not.
-                    if let Some(&to) = file_index.get(&path) {
-                        edges.push(Edge {
-                            kind: EdgeKind::ImportsFile { from: file_id, to },
-                            confidence,
-                            source: provenance(),
-                        });
-                        for binding in &imp.bindings {
-                            let exported_name = binding
-                                .imported
-                                .clone()
-                                .unwrap_or_else(|| SmolStr::new("default"));
-                            if let Some(&symbol_id) =
-                                symbol_by_name_per_file[to.0 as usize].get(&exported_name)
-                            {
-                                bound_symbols.insert(binding.local.clone(), symbol_id);
-                            }
-                        }
-                        // The namespace escaped static tracking (`ns[key]`, ns passed
-                        // along) — every symbol in the target is plausibly used
-                        // (RFC 0005 §1: "wildcard over that namespace's exports").
-                        if imp.opaque_namespace_use {
-                            edges.push(Edge {
-                                kind: EdgeKind::Wildcard { from: to },
-                                confidence: Confidence::Possible,
-                                source: provenance(),
-                            });
-                        }
-                    }
-                }
-                Resolution::Dependency(name, confidence) => {
-                    let to = *dep_index.entry(name.clone()).or_insert_with(|| {
-                        let id = DependencyId(dependencies.len() as u32);
-                        dependencies.push(DependencyNode { name: name.clone() });
-                        id
-                    });
+            // A workspace-member resolution is BOTH targets at once (RFC 0011 §4): the
+            // concrete internal file (reachability is real, cross-package) and the named
+            // dependency (the declaration contract is real too — undeclared siblings are
+            // phantom internal dependencies, declared-but-unimported ones are unused).
+            // Stdlib: not a graph node — there is nothing to point an edge at. Unresolved:
+            // resolution is intentionally incomplete right now (self-reference imports,
+            // exports maps — spec §3); turning it into a finding is the future `unresolved`
+            // analysis's job, not assembly's (RFC 0005 §5).
+            let (file_target, dep_target) = match adapter.resolve(&spec, &ctx) {
+                Resolution::File(path, confidence) => (Some((path, confidence)), None),
+                Resolution::Dependency(name, confidence) => (None, Some((name, confidence))),
+                Resolution::WorkspaceMember {
+                    name,
+                    target,
+                    confidence,
+                } => (Some((target, confidence)), Some((name, confidence))),
+                Resolution::Stdlib | Resolution::Unresolved => (None, None),
+            };
+
+            if let Some((path, confidence)) = file_target {
+                // Resolvers only ever match against `ctx`'s known-files set, so this
+                // must be Some — defensive skip, not a silent contract violation, if not.
+                if let Some(&to) = file_index.get(&path) {
                     edges.push(Edge {
-                        kind: EdgeKind::ImportsDependency { from: file_id, to },
+                        kind: EdgeKind::ImportsFile { from: file_id, to },
                         confidence,
                         source: provenance(),
                     });
+                    for binding in &imp.bindings {
+                        let exported_name = binding
+                            .imported
+                            .clone()
+                            .unwrap_or_else(|| SmolStr::new("default"));
+                        if let Some(&symbol_id) =
+                            symbol_by_name_per_file[to.0 as usize].get(&exported_name)
+                        {
+                            bound_symbols.insert(binding.local.clone(), symbol_id);
+                        }
+                    }
+                    // The namespace escaped static tracking (`ns[key]`, ns passed
+                    // along) — every symbol in the target is plausibly used
+                    // (RFC 0005 §1: "wildcard over that namespace's exports").
+                    if imp.opaque_namespace_use {
+                        edges.push(Edge {
+                            kind: EdgeKind::Wildcard { from: to },
+                            confidence: Confidence::Possible,
+                            source: provenance(),
+                        });
+                    }
                 }
-                // Stdlib: not a graph node — there is nothing to point an edge at.
-                // Unresolved: resolution is intentionally incomplete right now (self-
-                // reference imports, exports maps, workspace packages — spec §3); turning
-                // this into a finding is the future `unresolved` analysis's job, not
-                // assembly's (RFC 0005 §5).
-                Resolution::Stdlib | Resolution::Unresolved => {}
+            }
+            if let Some((name, confidence)) = dep_target {
+                let to = *dep_index.entry(name.clone()).or_insert_with(|| {
+                    let id = DependencyId(dependencies.len() as u32);
+                    dependencies.push(DependencyNode { name: name.clone() });
+                    id
+                });
+                edges.push(Edge {
+                    kind: EdgeKind::ImportsDependency { from: file_id, to },
+                    confidence,
+                    source: provenance(),
+                });
             }
         }
 
@@ -930,6 +975,8 @@ mod tests {
             //   dep <name>        -> a prod-scope declared dependency
             //   root <path>       -> a Production root targeting that known file, if it exists
             //   cli-invoke <name> -> a script-invoked dependency name
+            //   name <pkg>        -> the package's declared name
+            //   entry <path>      -> a resolved entry (what a sibling's bare-name import lands on)
             let text = std::str::from_utf8(file.content).unwrap_or("");
             let mut facts = ManifestFacts::default();
             for line in text.lines() {
@@ -950,6 +997,13 @@ mod tests {
                     }
                 } else if let Some(name) = line.strip_prefix("cli-invoke ") {
                     facts.script_invoked_names.push(SmolStr::new(name));
+                } else if let Some(name) = line.strip_prefix("name ") {
+                    facts.package_name = Some(SmolStr::new(name));
+                } else if let Some(p) = line.strip_prefix("entry ") {
+                    let target = ProjectPath(SmolStr::new(p));
+                    if ctx.contains(&target) {
+                        facts.resolved_entries.push((target, Confidence::Certain));
+                    }
                 }
             }
             facts
@@ -970,6 +1024,18 @@ mod tests {
                     Resolution::File(path, Confidence::Certain)
                 } else {
                     Resolution::Unresolved
+                };
+            }
+            // Workspace member by name — mirrors the real adapters' precedence (an in-repo
+            // name match outranks the external-dependency fallback below).
+            if let Some(member) = ctx.workspace_member(&spec.specifier) {
+                return match &member.entry {
+                    Some((target, confidence)) => Resolution::WorkspaceMember {
+                        name: spec.specifier.clone(),
+                        target: target.clone(),
+                        confidence: *confidence,
+                    },
+                    None => Resolution::Unresolved,
                 };
             }
             // Confidence is deliberately observable here so tests can tell whether the
@@ -1312,6 +1378,130 @@ mod tests {
             .find(|e| matches!(e.kind, EdgeKind::ImportsDependency { .. }))
             .unwrap();
         assert_eq!(edge.confidence, Confidence::Certain);
+    }
+
+    // ---------------------------------------------------------------- workspace members
+
+    #[test]
+    fn workspace_name_import_produces_both_file_and_dependency_edges() {
+        // RFC 0011 §4: resolution yields the concrete internal file (real reachability) AND
+        // the declaration contract stays checkable (an ImportsDependency edge by name).
+        let dir = project(
+            "ws-both-edges",
+            &[
+                ("packages/a/manifest.json", "name pkg-a\ndep pkg-b"),
+                ("packages/a/src.mock", "import pkg-b\nroot-file"),
+                (
+                    "packages/b/manifest.json",
+                    "name pkg-b\nentry packages/b/lib.mock",
+                ),
+                ("packages/b/lib.mock", "decl util"),
+            ],
+        );
+        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let a_src = graph
+            .file_id(&ProjectPath(SmolStr::new("packages/a/src.mock")))
+            .unwrap();
+        let b_lib = graph
+            .file_id(&ProjectPath(SmolStr::new("packages/b/lib.mock")))
+            .unwrap();
+        assert!(graph.edges.iter().any(|e| e.kind
+            == EdgeKind::ImportsFile {
+                from: a_src,
+                to: b_lib,
+            }));
+        assert!(graph
+            .dependencies
+            .iter()
+            .any(|d| d.name.as_str() == "pkg-b"));
+        assert!(graph
+            .edges
+            .iter()
+            .any(|e| matches!(e.kind, EdgeKind::ImportsDependency { from, .. } if from == a_src)));
+        // And the reachability consequence: b's FILE is alive through the cross-package
+        // import even though b is not a root of anything. (Its `util` symbol is still
+        // correctly flagged — this fixture's import carries no bindings, nothing references
+        // the symbol by name; symbol-level discrimination survives the file being alive.)
+        let findings = crate::analysis::run_all(&graph);
+        assert!(!findings.iter().any(|f| f.subject_kind == "file"
+            && f.location.path.as_ref().map(|p| p.0.as_str()) == Some("packages/b/lib.mock")));
+    }
+
+    #[test]
+    fn phantom_internal_dependency_is_undeclared() {
+        // packages/a imports pkg-b by name WITHOUT declaring it — RFC 0011 §4's table:
+        // "import resolves into a sibling package not declared in the importer's manifest →
+        // undeclared (phantom internal dependency)".
+        let dir = project(
+            "ws-phantom",
+            &[
+                ("packages/a/manifest.json", "name pkg-a"),
+                ("packages/a/src.mock", "import pkg-b\nroot-file"),
+                (
+                    "packages/b/manifest.json",
+                    "name pkg-b\nentry packages/b/lib.mock",
+                ),
+                ("packages/b/lib.mock", "decl util"),
+            ],
+        );
+        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let findings = crate::analysis::run_all(&graph);
+        assert!(findings
+            .iter()
+            .any(|f| f.category == "undeclared" && f.location.symbol.as_deref() == Some("pkg-b")));
+    }
+
+    #[test]
+    fn declared_but_unimported_workspace_dep_is_unused() {
+        // The other direction of RFC 0011 §4's table: "internal dep declared, no import
+        // resolves into that package → unused (subject dependency)".
+        let dir = project(
+            "ws-unused-dep",
+            &[
+                ("packages/a/manifest.json", "name pkg-a\ndep pkg-b"),
+                ("packages/a/src.mock", "root-file"),
+                (
+                    "packages/b/manifest.json",
+                    "name pkg-b\nentry packages/b/lib.mock",
+                ),
+                ("packages/b/lib.mock", "root-file"),
+            ],
+        );
+        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let findings = crate::analysis::run_all(&graph);
+        assert!(findings.iter().any(|f| f.category == "unused"
+            && f.subject_kind == "dependency"
+            && f.location.symbol.as_deref() == Some("pkg-b")));
+    }
+
+    #[test]
+    fn workspace_bindings_resolve_to_the_siblings_symbols() {
+        // `import { util } from 'pkg-b'` — the binding resolves through b's entry file's
+        // symbol table, so `util` is kept alive by a's reference while b's other export
+        // is still caught.
+        let dir = project(
+            "ws-bindings",
+            &[
+                ("packages/a/manifest.json", "name pkg-a\ndep pkg-b"),
+                (
+                    "packages/a/src.mock",
+                    "import pkg-b util\nref util\nroot-file",
+                ),
+                (
+                    "packages/b/manifest.json",
+                    "name pkg-b\nentry packages/b/lib.mock",
+                ),
+                ("packages/b/lib.mock", "decl util\ndecl dead"),
+            ],
+        );
+        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let findings = crate::analysis::run_all(&graph);
+        let flagged: Vec<Option<&str>> = findings
+            .iter()
+            .map(|f| f.location.symbol.as_deref())
+            .collect();
+        assert!(flagged.contains(&Some("dead")));
+        assert!(!flagged.contains(&Some("util")));
     }
 
     #[test]

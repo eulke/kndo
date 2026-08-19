@@ -15,7 +15,8 @@ pub struct FileId(pub u32);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SymbolId(pub u32);
 
-/// An external dependency declared in a manifest.
+/// A package consumed as a dependency — external, or an in-repo workspace member imported by
+/// name (RFC 0011 §4; same declaration contract either way).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct DependencyId(pub u32);
 

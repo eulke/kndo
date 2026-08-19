@@ -2,10 +2,10 @@
 //!
 //! Covers: relative/absolute specifiers against the discovered-file index (extension
 //! resolution order + directory `index.*` fallback), `node:`-prefixed and bare Node builtins
-//! (→ `Stdlib`), and bare package specifiers via the subpath→package mapping (→
-//! `Dependency`). Deferred to later commits (each already named in the spec, not silently
-//! missing): self-reference `imports` (`#internal/*`), `exports`/`tsconfig paths` maps,
-//! workspace-package resolution (RFC 0011), pnpm symlink layouts.
+//! (→ `Stdlib`), workspace-member names and subpaths (RFC 0011 §4 — `resolve_workspace`), and
+//! bare package specifiers via the subpath→package mapping (→ `Dependency`). Deferred to
+//! later commits (each already named in the spec, not silently missing): self-reference
+//! `imports` (`#internal/*`), `exports`/`tsconfig paths` maps, pnpm symlink layouts.
 
 use kndo_core::adapter::{ImportSpec, ProjectPath, Resolution, ResolveCtx};
 use kndo_core::vocab::Confidence;
@@ -37,16 +37,78 @@ pub fn resolve(spec: &ImportSpec, ctx: &ResolveCtx<'_>) -> Resolution {
         return resolve_relative(spec.from.0.as_str(), s, ctx);
     }
 
+    // Workspace members first (RFC 0011 §4, js-ts.md §3: "name matches against sibling
+    // manifests resolve to internal files"): a bare specifier naming an in-repo package
+    // outranks the entire external-specifier ladder below — the code demonstrably lives in
+    // this repo, the strongest possible statement of what the name means. Checking before
+    // even the structural-stdlib rule is safe by construction: npm package names cannot
+    // contain `:`, so `node:fs` can never collide with a workspace name. This check sits in
+    // the adapter rather than the toolkit's shared precedence (RFC 0002 §6) because subpath
+    // resolution needs this language's own candidate ladder, which the toolkit deliberately
+    // doesn't own.
+    let package_name = package_name_from_specifier(s);
+    if let Some(member) = ctx.workspace_member(&package_name) {
+        if let Some(resolution) = resolve_workspace(s, &package_name, member, ctx) {
+            return resolution;
+        }
+        // No concrete in-repo file matched (the member's entries are build artifacts absent
+        // from a source checkout, or the subpath names a built layout) — fall through to the
+        // external ladder below: the specifier still names a *consumed package*, and losing
+        // the ImportsDependency evidence would silently un-count a genuinely used dependency
+        // (found dogfooding against colinhacks/zod, whose published entries are build
+        // outputs). Only the file edge is unknowable, and it points at nothing in-tree.
+    }
+
     // Bare specifier: the toolkit owns the precedence (structural stdlib > declared dep >
     // stdlib list > dependency); this adapter supplies only what it alone knows — the
     // structural signal and the subpath→package mapping.
     kndo_adapter_toolkit::stdlib::classify_bare_specifier(
         s,
-        package_name_from_specifier(s),
+        package_name,
         s.starts_with("node:"),
         &STDLIB,
         ctx,
     )
+}
+
+/// `@org/ui` → the member's resolved entry; `@org/ui/button` → the subpath against the
+/// member's own directory via the same candidate ladder relative imports use — a deep import
+/// (RFC 0011 §4): its edge is recorded from M1 (reachability must stay correct — deep-imported
+/// code IS used); the `deep-import` *verdict* lands M3. `None` when no concrete in-repo file
+/// matches — the caller then falls through to the external ladder so the dependency-usage
+/// evidence survives (see the call site).
+fn resolve_workspace(
+    spec: &str,
+    package_name: &str,
+    member: &kndo_core::adapter::WorkspaceMember,
+    ctx: &ResolveCtx<'_>,
+) -> Option<Resolution> {
+    let subpath = spec
+        .strip_prefix(package_name)
+        .unwrap_or("")
+        .trim_start_matches('/');
+    if subpath.is_empty() {
+        return member
+            .entry
+            .as_ref()
+            .map(|(target, confidence)| Resolution::WorkspaceMember {
+                name: SmolStr::new(package_name),
+                target: target.clone(),
+                confidence: *confidence,
+            });
+    }
+    let base = kndo_adapter_toolkit::paths::join(member.dir.as_str(), subpath);
+    for candidate in candidates(&base) {
+        let path = ProjectPath(SmolStr::new(candidate));
+        if ctx.contains(&path) {
+            return Some(Resolution::WorkspaceMember {
+                name: SmolStr::new(package_name),
+                target: path,
+                confidence: Confidence::Certain,
+            });
+        }
+    }
+    None
 }
 
 fn resolve_relative(from: &str, spec: &str, ctx: &ResolveCtx<'_>) -> Resolution {
@@ -245,6 +307,106 @@ mod tests {
             assert!(STDLIB.contains(essential), "missing {essential}");
         }
         assert_eq!(STDLIB.provenance().0, "js-ts");
+    }
+
+    // ---------------------------------------------------------------- workspace members
+
+    use kndo_core::adapter::WorkspaceMember;
+    use std::collections::HashMap;
+
+    fn members(entries: &[(&str, &str, Option<&str>)]) -> HashMap<SmolStr, WorkspaceMember> {
+        entries
+            .iter()
+            .map(|&(name, dir, entry)| {
+                (
+                    SmolStr::new(name),
+                    WorkspaceMember {
+                        dir: SmolStr::new(dir),
+                        entry: entry.map(|e| (ProjectPath(SmolStr::new(e)), Confidence::Certain)),
+                    },
+                )
+            })
+            .collect()
+    }
+
+    #[test]
+    fn bare_workspace_name_resolves_to_the_members_entry() {
+        let known = ctx_with(&["packages/ui/src/index.ts"]);
+        let map = members(&[("@org/ui", "packages/ui", Some("packages/ui/src/index.ts"))]);
+        let ctx = ResolveCtx::new(&known).with_workspace_members(&map);
+        let r = resolve(&spec("packages/app/main.ts", "@org/ui"), &ctx);
+        assert_eq!(
+            r,
+            Resolution::WorkspaceMember {
+                name: SmolStr::new("@org/ui"),
+                target: ProjectPath(SmolStr::new("packages/ui/src/index.ts")),
+                confidence: Confidence::Certain,
+            }
+        );
+    }
+
+    #[test]
+    fn workspace_subpath_resolves_against_the_members_directory() {
+        // The deep-import shape (RFC 0011 §4) — the edge is recorded from M1, the verdict
+        // lands M3.
+        let known = ctx_with(&["packages/ui/button.ts"]);
+        let map = members(&[("@org/ui", "packages/ui", None)]);
+        let ctx = ResolveCtx::new(&known).with_workspace_members(&map);
+        let r = resolve(&spec("packages/app/main.ts", "@org/ui/button"), &ctx);
+        assert_eq!(
+            r,
+            Resolution::WorkspaceMember {
+                name: SmolStr::new("@org/ui"),
+                target: ProjectPath(SmolStr::new("packages/ui/button.ts")),
+                confidence: Confidence::Certain,
+            }
+        );
+    }
+
+    #[test]
+    fn unresolvable_member_falls_through_to_the_external_ladder() {
+        // A member whose entries are build artifacts absent from a source checkout (the
+        // colinhacks/zod shape): no in-repo file matches, but the specifier still names a
+        // consumed package — falling to Unresolved would silently un-count a genuinely used
+        // dependency. Only the file edge is unknowable; the dependency evidence survives.
+        let known = ctx_with(&[]);
+        let map = members(&[("@org/ui", "packages/ui", None)]);
+        let ctx = ResolveCtx::new(&known).with_workspace_members(&map);
+        assert_eq!(
+            resolve(&spec("a.ts", "@org/ui"), &ctx),
+            Resolution::Dependency(SmolStr::new("@org/ui"), Confidence::Certain)
+        );
+        assert_eq!(
+            resolve(&spec("a.ts", "@org/ui/missing"), &ctx),
+            Resolution::Dependency(SmolStr::new("@org/ui"), Confidence::Certain)
+        );
+    }
+
+    #[test]
+    fn workspace_name_outranks_a_declared_external_dependency() {
+        // `"@org/ui": "workspace:*"` is declared AND a member — it must resolve internal.
+        let known = ctx_with(&["packages/ui/index.ts"]);
+        let map = members(&[("@org/ui", "packages/ui", Some("packages/ui/index.ts"))]);
+        let mut deps = HashSet::new();
+        deps.insert(SmolStr::new("@org/ui"));
+        let ctx = ResolveCtx::new(&known)
+            .with_declared_dependencies(&deps)
+            .with_workspace_members(&map);
+        assert!(matches!(
+            resolve(&spec("a.ts", "@org/ui"), &ctx),
+            Resolution::WorkspaceMember { .. }
+        ));
+    }
+
+    #[test]
+    fn non_member_bare_specifier_still_resolves_externally() {
+        let known = ctx_with(&[]);
+        let map = members(&[("@org/ui", "packages/ui", None)]);
+        let ctx = ResolveCtx::new(&known).with_workspace_members(&map);
+        assert_eq!(
+            resolve(&spec("a.ts", "lodash"), &ctx),
+            Resolution::Dependency(SmolStr::new("lodash"), Confidence::Certain)
+        );
     }
 
     #[test]

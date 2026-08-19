@@ -59,13 +59,31 @@ pub fn extract(path: &str, content: &[u8], ctx: &ResolveCtx<'_>) -> ManifestFact
         }
     }
 
-    // `main`/`module`: unambiguous single-field entry points, roots only in library mode.
+    // An import entry must be a *source* file this adapter could claim — real manifests
+    // (found dogfooding against colinhacks/zod) have `exports` leaves like "./package.json"
+    // (self-reference) and type declarations; resolving a sibling's bare-name import to a
+    // .json would be a junk edge, so non-claimable targets never become entries. (They can
+    // still be roots when the root logic wants them — this filter is entries-only.)
+    let is_source_entry = |target: &ProjectPath| {
+        target
+            .0
+            .rsplit('.')
+            .next()
+            .is_some_and(|ext| crate::EXTENSIONS.contains(&ext))
+    };
+
+    // `main`/`module`: unambiguous single-field entry points, roots only in library mode —
+    // but always `resolved_entries` (a sibling importing this package by name resolves
+    // through its entry regardless of `private`; RFC 0011 §4).
+    let mut resolved_entries = Vec::new();
     for key in ["main", "module"] {
         if let Some(v) = obj.get(key).and_then(|v| v.as_str()) {
             entry_points.push(SmolStr::new(v));
-            if !private {
-                if let Some((target, confidence)) = resolve_entry(path, v, ctx, Confidence::Certain)
-                {
+            if let Some((target, confidence)) = resolve_entry(path, v, ctx, Confidence::Certain) {
+                if is_source_entry(&target) {
+                    resolved_entries.push((target.clone(), confidence));
+                }
+                if !private {
                     roots.push(ManifestRoot {
                         kind: RootKind::Production,
                         target,
@@ -83,10 +101,13 @@ pub fn extract(path: &str, content: &[u8], ctx: &ResolveCtx<'_>) -> ManifestFact
     if let Some(exports) = obj.get("exports") {
         for spec in string_leaves(exports) {
             entry_points.push(SmolStr::new(&spec));
-            if !private {
-                if let Some((target, confidence)) =
-                    resolve_entry(path, &spec, ctx, Confidence::Probable)
-                {
+            if let Some((target, confidence)) =
+                resolve_entry(path, &spec, ctx, Confidence::Probable)
+            {
+                if is_source_entry(&target) {
+                    resolved_entries.push((target.clone(), confidence));
+                }
+                if !private {
                     roots.push(ManifestRoot {
                         kind: RootKind::Production,
                         target,
@@ -164,6 +185,7 @@ pub fn extract(path: &str, content: &[u8], ctx: &ResolveCtx<'_>) -> ManifestFact
         entry_points,
         script_invoked_names,
         roots,
+        resolved_entries,
         declares_surface,
         diagnostics: Vec::new(),
     }
@@ -469,6 +491,43 @@ mod tests {
         );
         assert_eq!(facts.roots.len(), 1);
         assert_eq!(facts.roots[0].kind, RootKind::Tooling);
+    }
+
+    // ---------------------------------------------------------------- resolved entries
+
+    #[test]
+    fn resolved_entries_are_populated_even_for_private_packages() {
+        // Roots are private-gated; resolved entries are not — a sibling importing a private
+        // member by name still resolves through its entry (RFC 0011 §4).
+        let known = ctx_with(&["package.json", "src/index.ts"]);
+        let facts = extract_at(
+            "package.json",
+            r#"{ "private": true, "main": "src/index.ts" }"#,
+            &known,
+        );
+        assert!(facts.roots.is_empty());
+        assert_eq!(facts.resolved_entries.len(), 1);
+        assert_eq!(
+            facts.resolved_entries[0].0,
+            ProjectPath(SmolStr::new("src/index.ts"))
+        );
+        assert_eq!(facts.resolved_entries[0].1, Confidence::Certain);
+    }
+
+    #[test]
+    fn main_entry_precedes_exports_leaves() {
+        let known = ctx_with(&["package.json", "main.ts", "extra.ts"]);
+        let facts = extract_at(
+            "package.json",
+            r#"{ "main": "main.ts", "exports": { "./extra": "./extra.ts" } }"#,
+            &known,
+        );
+        assert_eq!(
+            facts.resolved_entries[0].0,
+            ProjectPath(SmolStr::new("main.ts"))
+        );
+        assert_eq!(facts.resolved_entries[0].1, Confidence::Certain);
+        assert_eq!(facts.resolved_entries[1].1, Confidence::Probable);
     }
 
     // ---------------------------------------------------------------- scripts → invoked names

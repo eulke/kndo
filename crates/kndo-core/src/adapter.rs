@@ -265,6 +265,13 @@ pub struct ManifestFacts {
     /// something must actually import them). `types`/`typings` never contribute: `.d.ts` is
     /// declarations only, no runtime edge (docs/adapters/js-ts.md §1).
     pub roots: Vec<ManifestRoot>,
+    /// The package's import entry points, resolved to concrete files in precedence order
+    /// (main > module > exports leaves) — what a sibling's bare-name import of this package
+    /// lands on (RFC 0011 §4, the core's `WorkspaceMember.entry` source). Unlike `roots`,
+    /// NOT gated on `private`: a private package has no self-standing roots, but a sibling
+    /// importing it by name still resolves through its entry. `bin` is excluded — an
+    /// executable is invoked, never imported through.
+    pub resolved_entries: Vec<(ProjectPath, Confidence)>,
     /// Whether an explicit surface is declared (`exports` map or equivalent) — the
     /// contract gate for `deep-import` (RFC 0011 §4).
     pub declares_surface: bool,
@@ -288,6 +295,25 @@ pub struct ImportSpec {
     pub from: ProjectPath,
 }
 
+/// One workspace member as resolvers see it (RFC 0011 §4): a named in-repo package a bare
+/// specifier can resolve *into*. Built by the core from every named manifest's facts after
+/// manifest extraction — "name matches against sibling manifests" (js-ts.md §3) needs no
+/// workspace-glob gating: an in-repo manifest whose `name` matches the specifier is the
+/// resolution regardless of how the workspace topology declares it (a name match to a
+/// non-member would be a defect in the repo itself, not a resolution ambiguity).
+#[derive(Debug, Clone)]
+pub struct WorkspaceMember {
+    /// The manifest's directory, project-relative (`""` for a root manifest) — the base
+    /// subpath specifiers (`@org/ui/button`) resolve against.
+    pub dir: SmolStr,
+    /// The member's primary entry, resolved by its own adapter at manifest-extraction time
+    /// (first of main/module/exports that named a real file) — what the bare name resolves
+    /// to. Deliberately NOT gated on `private` like root-worthiness is: a private sibling is
+    /// still imported *through its entry* by other members; privateness only says its exports
+    /// aren't roots on their own.
+    pub entry: Option<(ProjectPath, Confidence)>,
+}
+
 /// Index of claimable paths and manifest facts the core exposes to resolvers — populated from
 /// discovery and manifest extraction. Adapters only ever *query* it; they never touch the
 /// filesystem themselves (the purity rule, RFC 0002 §6). Read-only by construction.
@@ -297,6 +323,10 @@ pub struct ResolveCtx<'a> {
     /// declared-beats-stdlib-list shadowing rule (RFC 0002 §6); empty until the engine wires
     /// manifest facts through.
     declared_dependencies: Option<&'a std::collections::HashSet<SmolStr>>,
+    /// Named in-repo packages, keyed by declared package name (RFC 0011 §4). Empty during
+    /// manifest extraction itself (the map is *built from* manifest facts — no circularity),
+    /// populated for import resolution.
+    workspace_members: Option<&'a std::collections::HashMap<SmolStr, WorkspaceMember>>,
 }
 
 impl<'a> ResolveCtx<'a> {
@@ -304,6 +334,7 @@ impl<'a> ResolveCtx<'a> {
         ResolveCtx {
             known_files,
             declared_dependencies: None,
+            workspace_members: None,
         }
     }
 
@@ -315,6 +346,14 @@ impl<'a> ResolveCtx<'a> {
         self
     }
 
+    pub fn with_workspace_members(
+        mut self,
+        members: &'a std::collections::HashMap<SmolStr, WorkspaceMember>,
+    ) -> Self {
+        self.workspace_members = Some(members);
+        self
+    }
+
     pub fn contains(&self, path: &ProjectPath) -> bool {
         self.known_files.contains(path)
     }
@@ -322,12 +361,29 @@ impl<'a> ResolveCtx<'a> {
     pub fn is_declared_dependency(&self, name: &SmolStr) -> bool {
         self.declared_dependencies.is_some_and(|d| d.contains(name))
     }
+
+    pub fn workspace_member(&self, name: &str) -> Option<&'a WorkspaceMember> {
+        self.workspace_members.and_then(|m| m.get(name))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Resolution {
     File(ProjectPath, Confidence),
     Dependency(SmolStr, Confidence),
+    /// A bare specifier that resolved *into* a named in-repo package (RFC 0011 §4): `target`
+    /// is the concrete internal file (the member's entry, or a subpath into it — deep
+    /// imports included, their edges are recorded from M1 even though the `deep-import`
+    /// verdict lands M3), and `name` is the member's package name. Distinct from plain
+    /// `File` because assembly derives BOTH edge kinds from it: `ImportsFile` (reachability
+    /// is real, cross-package) and `ImportsDependency` (the declaration contract is real
+    /// too — RFC 0011 §4's table validates it both ways: declared-but-unimported workspace
+    /// deps are `unused`, imported-but-undeclared siblings are phantom `undeclared`).
+    WorkspaceMember {
+        name: SmolStr,
+        target: ProjectPath,
+        confidence: Confidence,
+    },
     Stdlib,
     Unresolved,
 }
