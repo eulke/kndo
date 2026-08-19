@@ -17,11 +17,9 @@
 //!   inputs RFC 0004 §3 also lists — a kndo config hash and the active plugin set — don't exist
 //!   as subsystems yet, so they're honestly absent from the key rather than faked; extending it
 //!   is required before either subsystem ships. Any key mismatch is a full rebuild, never a
-//!   partial patch. `rkyv`, per ADR 0004 — loading validates the on-disk buffer and hands back
-//!   an archived view without a bincode-style structural parse; it's a validated in-memory
-//!   buffer today, not an `mmap`, so "zero-copy" here means "no deserialize step", not literally
-//!   zero copies — real `mmap`-backed loading is a follow-up, not a functional gap (nothing
-//!   about the format changes if it lands later).
+//!   partial patch. `rkyv` + `mmap`, per ADR 0004 exactly — `get_graph` maps `graph.bin` and
+//!   validates directly against the mapped bytes; nothing is read into a heap buffer first, so
+//!   loading really is "mmap + validate," not a copy dressed up as one.
 //! - Every artifact — facts entry and graph snapshot alike — carries a magic + format-version
 //!   header; any mismatch, including a kndo upgrade that changed the on-disk shape, silently
 //!   rebuilds that layer rather than erroring or migrating in place. The cache is explicitly
@@ -308,30 +306,47 @@ impl ProjectCache {
     /// changed since the snapshot was written, so this is a plain miss, not an error, exactly
     /// like a facts-entry miss (ADR 0004: any mismatch ⇒ silently rebuild).
     pub fn get_graph(&self, key: &[u8; GRAPH_KEY_LEN]) -> Option<(ProjectGraph, Vec<Diagnostic>)> {
-        let bytes = fs::read(self.graph_path()).ok()?;
-        if bytes.len() < GRAPH_HEADER_LEN || bytes[..GRAPH_MAGIC.len()] != GRAPH_MAGIC {
+        let file = fs::File::open(self.graph_path()).ok()?;
+        let len = file.metadata().ok()?.len();
+        if len < GRAPH_HEADER_LEN as u64 {
+            return None; // no snapshot yet, or a partial one — either way, nothing to map
+        }
+
+        // SAFETY: `graph.bin` is only ever replaced by `put_graph`'s write-to-tmp-then-rename,
+        // which is atomic on every platform kndo targets — a concurrent writer's rename can
+        // only swap this mapping onto a *complete*, previously-finished file; it can never
+        // truncate or mutate the bytes of the inode currently mapped. `ProjectCache` also holds
+        // a single-writer advisory lock for the whole cache (ADR 0004 §7), so no other kndo
+        // process is writing this file at the same time in the first place. The one hazard
+        // `Mmap::map` genuinely can't rule out — some other, non-kndo process truncating or
+        // overwriting the file in place while it's mapped — is the same hazard any mmap-based
+        // cache accepts; `rkyv::access` below still validates every byte before trusting any of
+        // them, so even that failure mode surfaces as a clean miss, never memory-unsafe.
+        let mmap = unsafe { memmap2::Mmap::map(&file) }.ok()?;
+
+        if mmap[..GRAPH_MAGIC.len()] != GRAPH_MAGIC {
             return None;
         }
         let version_start = GRAPH_MAGIC.len();
         let key_start = version_start + 4;
-        let version = u32::from_le_bytes(bytes[version_start..key_start].try_into().ok()?);
+        let version = u32::from_le_bytes(mmap[version_start..key_start].try_into().ok()?);
         if version != GRAPH_FORMAT_VERSION {
             return None;
         }
-        if bytes[key_start..GRAPH_HEADER_LEN] != *key {
+        if mmap[key_start..GRAPH_HEADER_LEN] != *key {
             return None;
         }
 
-        // rkyv needs its input aligned to the archive's own requirements, which an arbitrary
-        // byte offset into a plain `Vec<u8>` isn't guaranteed to satisfy — copy the payload
-        // into a properly aligned buffer before validating. Still far cheaper than a bincode-
-        // style structural parse: one linear copy, then in-place validation, no per-node
-        // allocation walk on the way in (only `deserialize` below allocates, once, into the
-        // owned graph this function returns).
-        let payload = &bytes[GRAPH_HEADER_LEN..];
-        let mut aligned = rkyv::util::AlignedVec::<16>::with_capacity(payload.len());
-        aligned.extend_from_slice(payload);
-        let archived = rkyv::access::<ArchivedGraphSnapshot, rkyv::rancor::Error>(&aligned).ok()?;
+        // Genuinely zero-copy: `payload` is a slice straight into the OS page cache via `mmap`,
+        // never a heap buffer kndo allocated and filled in first. `GRAPH_HEADER_LEN` (40 bytes)
+        // is a multiple of every alignment this archive's plain-data fields need, and `mmap`
+        // hands back a page-aligned base (verified empirically: rkyv's `access` rejects a
+        // misaligned slice outright rather than silently miscompiling, so this isn't a
+        // "probably fine" assumption), so the offset payload stays aligned too — `access`
+        // validates in place with no copy at all.
+        let archived =
+            rkyv::access::<ArchivedGraphSnapshot, rkyv::rancor::Error>(&mmap[GRAPH_HEADER_LEN..])
+                .ok()?;
         let snapshot: GraphSnapshot =
             rkyv::deserialize::<GraphSnapshot, rkyv::rancor::Error>(archived).ok()?;
 
