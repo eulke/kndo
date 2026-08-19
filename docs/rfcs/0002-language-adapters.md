@@ -90,9 +90,13 @@ report it (RFC 0006).
   cadence — stdlib/builtin module lists (Node builtins, Go packages, Java modules), reserved
   words, version-gated syntax tables — ship as **`kndo-stdlib v1`** data files (toolkit `stdlib`
   module: one format, one loader, one validation, provenance headers surfaced by `kndo doctor`),
-  embedded at build time and produced by a **checked-in generator** querying the authoritative
-  source (`module.builtinModules`, `go list std`, `java --list-modules`). A new runtime version
-  means regenerating a file, never editing adapter code. The bare-specifier **precedence is
+  embedded at build time and produced by **one generic generator** — `cargo xtask gen-stdlib
+  <language>` — where each language is a *table entry* (source command, version command,
+  exclusion prefixes), never a per-language script. The generator validates its output with the
+  same loader that consumes it at build time, and queries the authoritative source
+  (`module.builtinModules`, `go list std`, `java --list-modules`). A new runtime version means
+  regenerating a file; a new language means one table row — never new tooling, never editing
+  adapter code. The bare-specifier **precedence is
   written once in the toolkit**, never re-derived per language: (1) structural stdlib signal
   (Node's `node:` prefix — unambiguous by the language's own construction, version-proof) >
   (2) manifest-declared dependency (declared intent beats shipped data — the userland `punycode`

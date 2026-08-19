@@ -1,8 +1,8 @@
 # kndo-stdlib v1
 # language: js-ts
-# source: node -p require('module').builtinModules
+# source: node -p require('module').builtinModules.join('\n')
 # source-version: v22.22.2
-# regenerate: node scripts/gen-stdlib-js.mjs > crates/kndo-adapter-js/src/stdlib.txt
+# regenerate: cargo xtask gen-stdlib js-ts
 _http_agent
 _http_client
 _http_common

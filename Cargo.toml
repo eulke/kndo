@@ -5,6 +5,7 @@ members = [
     "crates/kndo-cli",
     "crates/kndo-adapter-toolkit",
     "crates/kndo-adapter-js",
+    "xtask",
 ]
 exclude = ["spikes/perf"]
 

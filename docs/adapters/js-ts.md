@@ -81,8 +81,9 @@ mapping (`lodash/fp` → `lodash`, `@scope/pkg/sub` → `@scope/pkg`). **Builtin
 the shared `kndo-stdlib v1` mechanism (RFC 0002 §6; toolkit owns format, loader, and the
 four-step precedence): the `node:` prefix is the *structural* signal (covers every post-v18
 builtin forever — Node's own policy makes new builtins prefix-only), and the frozen legacy
-bare-name set is generated data (`scripts/gen-stdlib-js.mjs` from `module.builtinModules` —
-regenerated, never hand-edited). A manifest-declared dependency shadowing a builtin name
+bare-name set is generated data (`cargo xtask gen-stdlib js-ts`, sourced from
+`module.builtinModules` — regenerated, never hand-edited). A manifest-declared dependency
+shadowing a builtin name
 (userland `punycode`) resolves as the dependency, not the builtin — precedence rule 2. Asset specifiers (`.css .svg .png .json …`) resolve as cross-language
 file edges when the file exists (RFC 0002 §4) — the CSS/JSON adapters claim the targets.
 
