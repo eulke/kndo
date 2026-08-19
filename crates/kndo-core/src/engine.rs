@@ -26,8 +26,19 @@ pub const SCHEMA_VERSION: &str = "1.0.0";
 /// `CARGO_PKG_VERSION` is the same string the distribution crate and CLI would report.
 pub const KNDO_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-#[derive(Debug, Default)]
-pub struct ConfigOverrides {}
+#[derive(Debug, Clone)]
+pub struct ConfigOverrides {
+    /// `--no-cache` (RFC 0004 §4): disables the facts cache entirely for this run. Defaults to
+    /// `true` — the correctness gate is that this must never change *findings*, only whether
+    /// the run was warm.
+    pub use_cache: bool,
+}
+
+impl Default for ConfigOverrides {
+    fn default() -> Self {
+        ConfigOverrides { use_cache: true }
+    }
+}
 
 #[derive(Debug)]
 pub enum EngineError {
@@ -164,6 +175,12 @@ pub struct RunResult {
     pub duration_ms: u64,
     pub project_root: String,
     pub adapters: Vec<AdapterRunInfo>,
+    /// Whether the facts cache was consulted at all (`--no-cache` ⇒ `false`) and how many
+    /// files it actually served from disk this run — the only honest way to know whether a
+    /// run was warm: a freshly-`kndo init`ed project has the cache *enabled* on its very first
+    /// run and is still, correctly, cold (RFC 0004 §2).
+    pub cache_enabled: bool,
+    pub cache_hits: u64,
 }
 
 /// Owned mirror of the JSON envelope's `run` object — not borrowed, unlike a hot-path type,
@@ -205,7 +222,14 @@ impl RunResult {
                 base_ref: self.base_ref.clone(),
                 started_at: self.started_at.clone(),
                 duration_ms: self.duration_ms,
-                cache: "cold", // no cache exists yet (RFC 0004 lands M2) — every run is cold
+                // "warm" only when the cache was on AND actually served something — an
+                // enabled-but-empty cache (first run ever, or every file changed) is honestly
+                // cold, not merely "not disabled" (RFC 0004 §2).
+                cache: if self.cache_enabled && self.cache_hits > 0 {
+                    "warm"
+                } else {
+                    "cold"
+                },
                 project_root: self.project_root.clone(),
                 adapters: self.adapters.clone(),
             },
@@ -241,6 +265,8 @@ pub fn json_schema() -> schemars::Schema {
 pub struct Engine {
     root: PathBuf,
     adapters: Vec<Box<dyn LanguageAdapter>>,
+    cache: Option<crate::cache::FactsCache>,
+    cache_enabled: bool,
 }
 
 impl Engine {
@@ -250,15 +276,20 @@ impl Engine {
     /// trait; embedders and tests may pass a custom set directly.
     pub fn open(
         root: &Path,
-        _overrides: ConfigOverrides,
+        overrides: ConfigOverrides,
         adapters: Vec<Box<dyn LanguageAdapter>>,
     ) -> Result<Engine, EngineError> {
         if !root.is_dir() {
             return Err(EngineError::ProjectRootNotFound(root.to_path_buf()));
         }
+        let cache = overrides
+            .use_cache
+            .then(|| crate::cache::FactsCache::open(root));
         Ok(Engine {
             root: root.to_path_buf(),
             adapters,
+            cache,
+            cache_enabled: overrides.use_cache,
         })
     }
 
@@ -276,49 +307,54 @@ impl Engine {
         let base_ref = req.mode.base_ref();
         let project_root = self.root.display().to_string();
 
-        let outcome = match graph::assemble(&self.root, &self.adapters) {
-            Ok((g, diagnostics)) => {
-                let findings = analysis::run_all(&g);
-                let adapters = self
-                    .adapters
-                    .iter()
-                    .map(|a| {
-                        let id = a.descriptor().id;
-                        let files = g
-                            .files
-                            .iter()
-                            .filter(|f| f.language.as_deref() == Some(id.as_str()))
-                            .count();
-                        AdapterRunInfo {
-                            id: id.to_string(),
-                            files,
-                        }
-                    })
-                    .collect();
-                RunResult {
-                    files_discovered: g.files.len(),
-                    files_claimed: g.files.iter().filter(|f| f.language.is_some()).count(),
-                    symbols: g.symbols.len(),
-                    dependencies: g.dependencies.len(),
-                    edges: g.edges.len(),
-                    diagnostics,
-                    findings,
-                    adapters,
-                    ..RunResult::default()
+        let outcome =
+            match graph::assemble_with_cache(&self.root, &self.adapters, self.cache.as_ref()) {
+                Ok((g, diagnostics)) => {
+                    let findings = analysis::run_all(&g);
+                    let adapters = self
+                        .adapters
+                        .iter()
+                        .map(|a| {
+                            let id = a.descriptor().id;
+                            let files = g
+                                .files
+                                .iter()
+                                .filter(|f| f.language.as_deref() == Some(id.as_str()))
+                                .count();
+                            AdapterRunInfo {
+                                id: id.to_string(),
+                                files,
+                            }
+                        })
+                        .collect();
+                    RunResult {
+                        files_discovered: g.files.len(),
+                        files_claimed: g.files.iter().filter(|f| f.language.is_some()).count(),
+                        symbols: g.symbols.len(),
+                        dependencies: g.dependencies.len(),
+                        edges: g.edges.len(),
+                        diagnostics,
+                        findings,
+                        adapters,
+                        ..RunResult::default()
+                    }
                 }
-            }
-            Err(crate::discovery::DiscoveryError::Root(e)) => RunResult {
-                diagnostics: vec![Diagnostic {
-                    level: DiagnosticLevel::Warn,
-                    path: None,
-                    message: format!(
-                        "cannot walk the project root: {e} — check the path and permissions"
-                    ),
-                    span: None,
-                }],
-                ..RunResult::default()
-            },
-        };
+                Err(crate::discovery::DiscoveryError::Root(e)) => RunResult {
+                    diagnostics: vec![Diagnostic {
+                        level: DiagnosticLevel::Warn,
+                        path: None,
+                        message: format!(
+                            "cannot walk the project root: {e} — check the path and permissions"
+                        ),
+                        span: None,
+                    }],
+                    ..RunResult::default()
+                },
+            };
+
+        if let Some(cache) = &self.cache {
+            cache.prune(crate::cache::DEFAULT_CAP_BYTES);
+        }
 
         RunResult {
             mode,
@@ -326,6 +362,8 @@ impl Engine {
             started_at,
             duration_ms: start.elapsed().as_millis() as u64,
             project_root,
+            cache_enabled: self.cache_enabled,
+            cache_hits: self.cache.as_ref().map(|c| c.hits()).unwrap_or(0),
             ..outcome
         }
     }
@@ -334,6 +372,119 @@ impl Engine {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use smol_str::SmolStr;
+
+    /// Bare-minimum adapter claiming `.mock` files — engine.rs can't depend on a real adapter
+    /// crate (that would invert the layering the ignorance rule protects), but a cache-warmth
+    /// test needs *something* to extract, or every file stays factless and nothing is ever
+    /// cached.
+    struct CacheMockAdapter;
+
+    impl LanguageAdapter for CacheMockAdapter {
+        fn descriptor(&self) -> crate::adapter::AdapterDescriptor {
+            crate::adapter::AdapterDescriptor {
+                id: SmolStr::new("mock"),
+                facts_schema_version: 1,
+                file_globs: vec![SmolStr::new("**/*.mock")],
+                manifest_globs: vec![],
+                grammar_version: SmolStr::new("mock"),
+            }
+        }
+        fn claim(&self, path: &ProjectPath) -> Option<crate::adapter::FileClaim> {
+            path.0
+                .ends_with(".mock")
+                .then(|| crate::adapter::FileClaim {
+                    language: SmolStr::new("mock"),
+                    class: Default::default(),
+                })
+        }
+        fn claim_manifest(&self, _path: &ProjectPath) -> bool {
+            false
+        }
+        fn extract(&self, _file: &crate::adapter::SourceFile<'_>) -> crate::adapter::FileFacts {
+            crate::adapter::FileFacts::default()
+        }
+        fn extract_manifest(
+            &self,
+            _file: &crate::adapter::SourceFile<'_>,
+            _ctx: &crate::adapter::ResolveCtx<'_>,
+        ) -> crate::adapter::ManifestFacts {
+            crate::adapter::ManifestFacts::default()
+        }
+        fn resolve(
+            &self,
+            _spec: &crate::adapter::ImportSpec,
+            _ctx: &crate::adapter::ResolveCtx<'_>,
+        ) -> crate::adapter::Resolution {
+            crate::adapter::Resolution::Unresolved
+        }
+    }
+
+    #[test]
+    fn a_second_check_on_the_same_engine_is_warm() {
+        let dir = std::env::temp_dir().join("kndo-engine-test-warm");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("a.mock"), "hello").unwrap();
+
+        let mut engine = Engine::open(
+            &dir,
+            ConfigOverrides::default(),
+            vec![Box::new(CacheMockAdapter)],
+        )
+        .unwrap();
+
+        let first = engine.check(CheckRequest {
+            mode: RunMode::Full,
+        });
+        assert!(first.cache_enabled);
+        assert_eq!(first.cache_hits, 0); // nothing cached yet — the whole run is a miss
+        assert!(first.to_json().contains("\"cache\": \"cold\""));
+
+        let second = engine.check(CheckRequest {
+            mode: RunMode::Full,
+        });
+        assert_eq!(second.cache_hits, 1);
+        assert!(second.to_json().contains("\"cache\": \"warm\""));
+
+        // `--no-cache` must never change *findings*, only warmth.
+        assert_eq!(first.files_claimed, second.files_claimed);
+        assert_eq!(first.symbols, second.symbols);
+    }
+
+    #[test]
+    fn no_cache_override_reports_cold_even_after_a_prior_warm_engine() {
+        let dir = std::env::temp_dir().join("kndo-engine-test-no-cache");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("a.mock"), "hello").unwrap();
+
+        // Warm the on-disk cache with one engine…
+        Engine::open(
+            &dir,
+            ConfigOverrides::default(),
+            vec![Box::new(CacheMockAdapter)],
+        )
+        .unwrap()
+        .check(CheckRequest {
+            mode: RunMode::Full,
+        });
+
+        // …then open a fresh engine with the cache disabled: it must never report warm, even
+        // though the disk cache is populated and would otherwise hit.
+        let mut uncached = Engine::open(
+            &dir,
+            ConfigOverrides { use_cache: false },
+            vec![Box::new(CacheMockAdapter)],
+        )
+        .unwrap();
+        let result = uncached.check(CheckRequest {
+            mode: RunMode::Full,
+        });
+        assert!(!result.cache_enabled);
+        assert_eq!(result.cache_hits, 0);
+        assert!(result.to_json().contains("\"cache\": \"cold\""));
+    }
 
     #[test]
     fn open_rejects_missing_root() {

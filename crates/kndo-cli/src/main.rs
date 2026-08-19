@@ -39,6 +39,7 @@ struct Flags {
     format: Option<String>,
     color: Option<String>,
     quiet: bool,
+    no_cache: bool,
 }
 
 fn parse_flags(args: &[String]) -> Flags {
@@ -46,6 +47,7 @@ fn parse_flags(args: &[String]) -> Flags {
         format: None,
         color: None,
         quiet: false,
+        no_cache: false,
     };
     let mut it = args.iter();
     while let Some(arg) = it.next() {
@@ -53,6 +55,7 @@ fn parse_flags(args: &[String]) -> Flags {
             "--format" => flags.format = it.next().cloned(),
             "--color" => flags.color = it.next().cloned(),
             "--quiet" => flags.quiet = true,
+            "--no-cache" => flags.no_cache = true,
             s if s.starts_with("--format=") => {
                 flags.format = Some(s["--format=".len()..].to_string())
             }
@@ -105,7 +108,10 @@ fn check(args: &[String]) -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    let mut engine = match kndo::open(&cwd, ConfigOverrides::default()) {
+    let overrides = ConfigOverrides {
+        use_cache: !flags.no_cache,
+    };
+    let mut engine = match kndo::open(&cwd, overrides) {
         Ok(e) => e,
         Err(e) => {
             eprintln!("kndo: {e}");

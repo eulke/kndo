@@ -13,7 +13,9 @@ use crate::vocab::{Confidence, DependencyScope, FileClass, RootKind, SymbolKind}
 
 /// Project-relative path with `/` separators, the only path form that crosses the adapter
 /// boundary (case handling and symlink resolution are the core's discovery concern).
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(transparent)]
 pub struct ProjectPath(pub SmolStr);
@@ -21,7 +23,9 @@ pub struct ProjectPath(pub SmolStr);
 /// 1-indexed line/column span, `start` inclusive, `end` exclusive. Serializes as the
 /// `[line, col]` pair shape the output schema uses (contracts/output-schema.md §2), not an
 /// object — tuples serialize as JSON arrays by default.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, serde::Serialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, Default, serde::Serialize, serde::Deserialize,
+)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Span {
     pub start: (u32, u32),
@@ -35,7 +39,7 @@ pub struct SourceFile<'a> {
     pub content: &'a [u8],
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "lowercase")]
 pub enum DiagnosticLevel {
@@ -43,7 +47,7 @@ pub enum DiagnosticLevel {
     Info,
 }
 
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Diagnostic {
     pub level: DiagnosticLevel,
@@ -81,10 +85,12 @@ pub struct FileClaim {
 
 /// Ladder index on the adapter-declared visibility ladder (RFC 0005 §7): 0 = most private,
 /// higher = wider. The adapter names the levels; the core only compares them.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub struct VisibilityLevel(pub u8);
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Declaration {
     pub name: SmolStr,
     pub kind: SymbolKind,
@@ -93,7 +99,7 @@ pub struct Declaration {
     pub visibility: VisibilityLevel,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct RawReference {
     pub name: SmolStr,
     /// Enough context for the resolution driver (enclosing scope path, receiver hints…).
@@ -104,7 +110,7 @@ pub struct RawReference {
 /// Syntactic shape only — what the specifier text looks like, not what it resolves to.
 /// Builtins (`node:fs`, bare `fs`) are a *resolution*-time fact (the resolver owns the
 /// builtins list, RFC 0002 §5); extraction never claims `Stdlib`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ImportKind {
     Relative,
     Package,
@@ -115,13 +121,13 @@ pub enum ImportKind {
 /// (incorrectly) a same-file one. `imported: None` is a default import — binds to the target's
 /// synthetic `"default"` export, the same name declarations.rs already uses for anonymous
 /// default exports.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ImportBinding {
     pub local: SmolStr,
     pub imported: Option<SmolStr>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct RawImport {
     pub specifier: SmolStr,
     pub kind: ImportKind,
@@ -153,7 +159,7 @@ pub struct RawImport {
     pub opaque_namespace_use: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum RawRootTarget {
     WholeFile,
     /// By declared name within this file.
@@ -161,14 +167,14 @@ pub enum RawRootTarget {
 }
 
 /// Language-defined roots only (`main`, `pub` API…); ecosystem roots come from plugins.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct RawRoot {
     pub kind: RootKind,
     pub target: RawRootTarget,
     pub confidence: Confidence,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct FunctionMetrics {
     /// Declared name (symbol path within the file).
     pub symbol: SmolStr,
@@ -179,7 +185,7 @@ pub struct FunctionMetrics {
 }
 
 /// A construct forcing a `Wildcard` edge (RFC 0005 §1 plausible-target-set expansion).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct DynamicUse {
     pub span: Span,
     /// Human-readable reason ("non-literal import()", "eval").
@@ -193,7 +199,7 @@ pub struct DynamicUse {
     pub narrowed_to: Option<SmolStr>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum SuppressionScope {
     Declaration,
     File,
@@ -201,7 +207,7 @@ pub enum SuppressionScope {
 
 /// A `kndo:allow` pragma as extracted; validation, binding, counting and staleness are core
 /// logic, identical across languages (contracts §2.1 — the no-flicker guarantee lives there).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct RawSuppression {
     pub span: Span,
     /// Verdict name — validated by the core against the registry.
@@ -213,8 +219,9 @@ pub struct RawSuppression {
 }
 
 /// Everything an adapter owes the core for one file. Must be deterministic for identical
-/// content (conformance harness, RFC 0002 §8).
-#[derive(Debug, Default)]
+/// content (conformance harness, RFC 0002 §8). Round-trips through the facts cache
+/// (`cache.rs`, ADR 0004) — `Deserialize` exists for that alone, never for adapters to read.
+#[derive(Debug, Default, serde::Serialize, serde::Deserialize)]
 pub struct FileFacts {
     pub declarations: Vec<Declaration>,
     pub references: Vec<RawReference>,

@@ -14,6 +14,7 @@ ignore = { workspace = true }
 rayon = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+bincode = { workspace = true }
 chrono = { workspace = true }
 schemars = { version = "1", features = ["smol_str03"], optional = true }
 

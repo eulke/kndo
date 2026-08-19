@@ -50,6 +50,10 @@ pub fn discover(root: &Path) -> Result<Discovered, DiscoveryError> {
         // Honor .gitignore by content, not by the presence of an actual .git directory —
         // kndo analyzes the tree it's given, git repo or not.
         .require_git(false)
+        // `.kndo/` is kndo's own cache (ADR 0004), never project content — excluded
+        // unconditionally rather than relying on the project's own `.gitignore` (which a
+        // fresh clone may not have updated yet, and which `kndo init` — not this — owns).
+        .filter_entry(|e| e.file_name() != std::ffi::OsStr::new(".kndo"))
         .build()
         .filter_map(Result::ok)
         .filter(|e| e.file_type().is_some_and(|t| t.is_file()))

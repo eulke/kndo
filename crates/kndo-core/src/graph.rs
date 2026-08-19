@@ -199,10 +199,24 @@ pub(crate) fn package_owns(manifest_dir: &str, file_dir: &str) -> bool {
 
 /// Discovers, claims, extracts, resolves, and links — the full RFC 0001 §4 pipeline up to
 /// (not including) analyses. Diagnostics accumulate rather than abort: a graph that omits one
-/// unreadable file's facts is far more useful than no graph at all (RFC 0001 §6).
+/// unreadable file's facts is far more useful than no graph at all (RFC 0001 §6). Always cold
+/// (no facts cache consulted) — see [`assemble_with_cache`] for the warm path.
 pub fn assemble(
     root: &Path,
     adapters: &[Box<dyn LanguageAdapter>],
+) -> Result<(ProjectGraph, Vec<Diagnostic>), DiscoveryError> {
+    assemble_with_cache(root, adapters, None)
+}
+
+/// Same pipeline as [`assemble`], additionally consulting/populating a facts cache (RFC 0004
+/// §2–4, ADR 0004): a file whose content hash already has a cached-and-current entry skips
+/// re-parsing entirely, which is the warm path's dominant win since parsing dominates cold-run
+/// cost (spike 0001). `cache: None` is exactly [`assemble`]'s behavior — this must hold
+/// byte-for-byte, since `--no-cache` ≡ cached results is an RFC 0004 §4 correctness gate.
+pub fn assemble_with_cache(
+    root: &Path,
+    adapters: &[Box<dyn LanguageAdapter>],
+    cache: Option<&crate::cache::FactsCache>,
 ) -> Result<(ProjectGraph, Vec<Diagnostic>), DiscoveryError> {
     let discovered = discovery::discover(root)?;
     let mut diagnostics = discovered.diagnostics;
@@ -213,7 +227,9 @@ pub fn assemble(
     // Phase 1 — claim + extract, in parallel. rayon's collect preserves input order (the
     // path-sorted order discovery already established), so the FileId assignment in phase 2
     // stays deterministic regardless of which file's extraction happens to finish first
-    // (RFC 0008 §4: parallel compute, deterministic reduce).
+    // (RFC 0008 §4: parallel compute, deterministic reduce). A facts-cache hit/miss changes
+    // only *how* `facts` is obtained, never the order or shape of this collection — cached and
+    // freshly-extracted facts are indistinguishable to every phase downstream.
     let outcomes: Vec<Result<Option<Claimed>, Diagnostic>> = discovered
         .files
         .par_iter()
@@ -225,6 +241,20 @@ pub fn assemble(
             else {
                 return Ok(None); // no adapter claims it — still a valid, factless File node
             };
+            let descriptor = adapters[adapter_index].descriptor();
+            if let Some(facts) = cache.and_then(|c| {
+                c.get(
+                    descriptor.id.as_str(),
+                    descriptor.facts_schema_version,
+                    &df.content_hash,
+                )
+            }) {
+                return Ok(Some(Claimed {
+                    claim,
+                    facts,
+                    adapter_index,
+                }));
+            }
             let abs = root.join(df.path.0.as_str());
             let content = std::fs::read(&abs).map_err(|e| Diagnostic {
                 level: DiagnosticLevel::Warn,
@@ -240,6 +270,14 @@ pub fn assemble(
                 content: &content,
             };
             let facts = adapters[adapter_index].extract(&source);
+            if let Some(c) = cache {
+                c.put(
+                    descriptor.id.as_str(),
+                    descriptor.facts_schema_version,
+                    &df.content_hash,
+                    &facts,
+                );
+            }
             Ok(Some(Claimed {
                 claim,
                 facts,
@@ -1831,5 +1869,62 @@ mod tests {
                 .map(|s| s.name.clone())
                 .collect::<Vec<_>>()
         );
+    }
+
+    // RFC 0004 §4's correctness gate: `--no-cache` must produce byte-identical findings to a
+    // cached run. This slice only caches `FileFacts` (no graph/findings snapshot yet), so the
+    // gate is checked at the graph level — a warm assemble must yield the exact same edges and
+    // symbols as a cold one on identical input.
+    #[test]
+    fn warm_assemble_matches_a_cold_assemble_byte_for_byte() {
+        let dir = project(
+            "cache-equivalence",
+            &[
+                ("a.mock", "decl x\nimport ./b.mock\nimport lodash"),
+                ("b.mock", "decl y"),
+                ("c.mock", "decl z\nimport ./a.mock"),
+            ],
+        );
+        let cold = assemble(&dir, &mock_adapters()).unwrap().0;
+
+        let cache_dir = std::env::temp_dir().join("kndo-graph-test-cache-equivalence-cache");
+        let _ = fs::remove_dir_all(&cache_dir);
+        let cache = crate::cache::FactsCache::open(&cache_dir);
+        // First cached run populates every entry (all misses); second is fully warm.
+        assemble_with_cache(&dir, &mock_adapters(), Some(&cache)).unwrap();
+        let warm = assemble_with_cache(&dir, &mock_adapters(), Some(&cache))
+            .unwrap()
+            .0;
+
+        assert_eq!(cold.edges, warm.edges);
+        assert_eq!(
+            cold.symbols
+                .iter()
+                .map(|s| (s.name.clone(), s.kind.clone(), s.file))
+                .collect::<Vec<_>>(),
+            warm.symbols
+                .iter()
+                .map(|s| (s.name.clone(), s.kind.clone(), s.file))
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(cold.files.len(), warm.files.len());
+        assert_eq!(cold.dependencies.len(), warm.dependencies.len());
+    }
+
+    #[test]
+    fn unchanged_files_are_served_from_the_facts_cache_on_the_second_assemble() {
+        let dir = project(
+            "cache-hits",
+            &[("a.mock", "decl x"), ("b.mock", "decl y\nimport ./a.mock")],
+        );
+        let cache_dir = std::env::temp_dir().join("kndo-graph-test-cache-hits-cache");
+        let _ = fs::remove_dir_all(&cache_dir);
+        let cache = crate::cache::FactsCache::open(&cache_dir);
+
+        assemble_with_cache(&dir, &mock_adapters(), Some(&cache)).unwrap();
+        assert_eq!(cache.hits(), 0); // first run: every file is a miss, then gets stored
+
+        assemble_with_cache(&dir, &mock_adapters(), Some(&cache)).unwrap();
+        assert_eq!(cache.hits(), 2); // second run: both files served from disk, none re-parsed
     }
 }

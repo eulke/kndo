@@ -100,8 +100,12 @@ pub fn run_fixture(
     let expected: ExpectedFile = serde_json::from_str(&expected_text)
         .map_err(|e| ConformanceError(format!("parsing {}: {e}", expected_path.display())))?;
 
+    // Fixtures are checked-in golden inputs, not throwaway project dirs — caching would leave
+    // a `.kndo/` behind inside version-controlled fixture directories on every test run, for
+    // zero benefit (fixtures are tiny and each runs once).
     let project_dir = fixture_dir.join("project");
-    let mut engine = Engine::open(&project_dir, ConfigOverrides::default(), adapters)
+    let overrides = ConfigOverrides { use_cache: false };
+    let mut engine = Engine::open(&project_dir, overrides, adapters)
         .map_err(|e| ConformanceError(format!("opening {}: {e}", project_dir.display())))?;
     let result = engine.check(CheckRequest {
         mode: RunMode::Full,

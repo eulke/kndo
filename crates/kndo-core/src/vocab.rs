@@ -62,7 +62,7 @@ impl Default for FileClass {
 /// Kebab-case names double as `subject_kind` facet values (alongside `file | directory |
 /// package | dependency | import | suppression`) in output and `category:subject` targeting
 /// (RFC 0005 taxonomy rule 2).
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum SymbolKind {
     Function,
     Method,
@@ -106,7 +106,7 @@ impl SymbolKind {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum RootKind {
     Production,
     Test,
@@ -141,7 +141,9 @@ pub enum RefKind {
 
 /// Per-edge strength. Ordered by strength: `Possible < Probable < Certain`, so `max()` yields
 /// the strongest evidence and "edges at least as strong as τ" is a simple `>=` (RFC 0005 §1).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "lowercase")]
 pub enum Confidence {

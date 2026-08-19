@@ -303,6 +303,16 @@ impl Engine {
   `RunResult`, never a core import.
 - `Engine` is synchronous and single-instance-per-project (the cache lock, RFC 0004 §7); a
   serving frontend wraps it in its own concurrency model.
+- `ConfigOverrides.use_cache` (default `true`) is the `--no-cache` switch (RFC 0004 §4): the
+  facts layer (`.kndo/cache/facts/`, ADR 0004) skips re-parsing any file whose content hash
+  already has a current cache entry. `RunResult.cache_enabled`/`cache_hits` are how a frontend
+  learns whether a run was actually warm — `run.cache` in the JSON envelope is `"warm"` only
+  when the cache was on *and* served at least one file; an enabled-but-empty cache (first run,
+  or a change big enough that nothing hit) is honestly `"cold"`. Correctness never depends on
+  this: `--no-cache` must produce byte-identical findings (CI-enforced, RFC 0004 §4). The graph
+  and findings snapshots, the warm-run patch algorithm, and dirty-region incrementality (RFC
+  0004 §2, §4–6) aren't implemented yet — every run still re-assembles the full graph from
+  (cached-or-fresh) facts.
 
 ## 6. Stability tiers
 
