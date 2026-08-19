@@ -10,6 +10,7 @@ use kndo_core::adapter::{
 use smol_str::SmolStr;
 
 mod extraction;
+mod manifest;
 mod resolution;
 
 pub struct JsTsAdapter;
@@ -59,13 +60,17 @@ impl LanguageAdapter for JsTsAdapter {
         })
     }
 
+    fn claim_manifest(&self, path: &ProjectPath) -> bool {
+        // pnpm-workspace.yaml topology parsing is deferred (spec §4) — package.json only.
+        path.0.rsplit('/').next() == Some("package.json")
+    }
+
     fn extract(&self, file: &SourceFile<'_>) -> FileFacts {
         extraction::extract(file.path.0.as_str(), file.content)
     }
 
-    fn extract_manifest(&self, _file: &SourceFile<'_>) -> ManifestFacts {
-        // Lands next: package.json identity/topology/deps per spec §4.
-        ManifestFacts::default()
+    fn extract_manifest(&self, file: &SourceFile<'_>, ctx: &ResolveCtx<'_>) -> ManifestFacts {
+        manifest::extract(file.path.0.as_str(), file.content, ctx)
     }
 
     fn resolve(&self, spec: &ImportSpec, ctx: &ResolveCtx<'_>) -> Resolution {

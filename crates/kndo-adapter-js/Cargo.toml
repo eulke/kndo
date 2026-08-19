@@ -12,3 +12,4 @@ kndo-core = { path = "../kndo-core" }
 kndo-adapter-toolkit = { path = "../kndo-adapter-toolkit" }
 smol_str = { workspace = true }
 tree-sitter = { workspace = true }
+serde_json = { workspace = true }

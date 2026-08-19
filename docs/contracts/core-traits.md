@@ -69,13 +69,21 @@ pub trait LanguageAdapter: Send + Sync {
     /// Claim & classify a path (fast; name-based, content peeking only when unavoidable).
     fn claim(&self, path: &ProjectPath) -> Option<FileClaim>;   // { language, class: FileClass }
 
+    /// Is this path one of this adapter's manifest files? Manifests are claimed separately from
+    /// source — they never get a `FileClaim`/language of their own (docs/adapters/js-ts.md §1).
+    fn claim_manifest(&self, path: &ProjectPath) -> bool;
+
     /// Parse one file and extract every language-defined fact. Must not fail on broken code:
     /// return partial facts + diagnostics.
     fn extract(&self, file: &SourceFile) -> FileFacts;
 
-    /// Parse a manifest into declared dependencies AND package identity/topology (RFC 0011 §3):
-    /// package name, workspace membership declarations, publish/private signals, entry points.
-    fn extract_manifest(&self, file: &SourceFile) -> ManifestFacts;
+    /// Parse a manifest into declared dependencies, package identity/topology (RFC 0011 §3),
+    /// and roots. `ctx` lets the adapter resolve entry-point specifiers (main/module/exports/
+    /// bin) against the known-files index itself — a manifest root always names a *different*
+    /// file than the one being extracted, so (unlike `FileFacts::roots`) it must already be a
+    /// concrete `ProjectPath` by the time the core sees it; the core has no language-specific
+    /// resolution rules to guess one with.
+    fn extract_manifest(&self, file: &SourceFile, ctx: &ResolveCtx) -> ManifestFacts;
 
     /// Resolve an import specifier to a concrete target, given an index of claimable paths.
     /// Called by the core's resolution driver — including for specifiers emitted by *other*
@@ -95,13 +103,39 @@ pub struct FileFacts {
                                              //   side_effect_only, type_only, confidence }
                                              // kind is syntactic shape only — Stdlib is a
                                              // resolve()-time fact, never claimed here
-    pub roots:        Vec<RawRoot>,         // language-defined only (main, pub API…)
+    pub roots:        Vec<RawRoot>,         // language-defined only (main, pub API…), target is
+                                             // *within this file* — WholeFile | Declaration(name)
     pub functions:    Vec<FunctionMetrics>, // { symbol, cyclomatic: u32, loc, token_fingerprints }
     pub dynamics:     Vec<DynamicUse>,      // constructs forcing Wildcard edges (span + reason)
     pub suppressions: Vec<RawSuppression>,  // kndo:allow pragmas found in comments (§2.1)
     pub diagnostics:  Vec<Diagnostic>,
 }
 ```
+
+```rust
+pub struct ManifestFacts {
+    pub package_name:       Option<SmolStr>,
+    pub private:            bool,                    // publish signal: true → app mode (RFC 0011 §5)
+    pub workspace_members:  Vec<SmolStr>,             // workspace globs (RFC 0011 §3)
+    pub dependencies:       Vec<ManifestDependency>,  // { name, version_req, scope: DependencyScope }
+    pub entry_points:       Vec<SmolStr>,             // main/module/exports/bin/types, raw and
+                                                       // unresolved — future self-import resolution
+                                                       // input; NOT the root-worthiness signal
+    pub roots:              Vec<ManifestRoot>,        // { kind: RootKind, target: ProjectPath,
+                                                       //   confidence } — already resolved by the
+                                                       // adapter (a manifest root always names a
+                                                       // *different* file, unlike FileFacts::roots)
+    pub declares_surface:   bool,                     // `exports` map or equivalent present —
+                                                       // the contract gate for `deep-import` (RFC 0011 §4)
+    pub diagnostics:        Vec<Diagnostic>,
+}
+```
+
+Root defaults (RFC 0011 §5, library mode lands fully at M3 — this is the default rule, no
+per-package config override yet): `bin` targets are production roots unconditionally; `main`/
+`module`/`exports` targets are production roots only when `private` is false — an unpublished
+app's exports are not roots on their own, something must actually import them. `types`/
+`typings` are never roots — a `.d.ts` target carries no runtime edge.
 
 ### 2.1 Suppression extraction
 

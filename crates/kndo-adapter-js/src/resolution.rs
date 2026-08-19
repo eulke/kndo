@@ -63,7 +63,7 @@ fn resolve_relative(from: &str, spec: &str, ctx: &ResolveCtx<'_>) -> Resolution 
 
 /// Candidate paths in resolution order: explicit path as given, then extension appends
 /// (TS before JS), then `.d.ts`, then directory `index.*` in the same extension order.
-fn candidates(base: &str) -> Vec<String> {
+pub(crate) fn candidates(base: &str) -> Vec<String> {
     let mut out = vec![base.to_string()];
     for ext in TS_EXTS.iter().chain(JS_EXTS.iter()) {
         out.push(format!("{base}.{ext}"));

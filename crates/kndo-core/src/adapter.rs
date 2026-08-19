@@ -191,6 +191,17 @@ pub struct ManifestDependency {
     pub scope: DependencyScope,
 }
 
+/// A manifest-declared root, already resolved to a concrete file (unlike [`RawRoot`], which
+/// targets something *within* the file being extracted — a manifest root always names a
+/// *different* file, so the adapter resolves it itself against [`ResolveCtx`] rather than
+/// handing the core an unresolved specifier to guess at).
+#[derive(Debug, Clone)]
+pub struct ManifestRoot {
+    pub kind: RootKind,
+    pub target: ProjectPath,
+    pub confidence: Confidence,
+}
+
 /// Declared dependencies AND package identity/topology (RFC 0011 §3).
 #[derive(Debug, Default)]
 pub struct ManifestFacts {
@@ -200,8 +211,16 @@ pub struct ManifestFacts {
     /// Workspace membership declarations (globs).
     pub workspace_members: Vec<SmolStr>,
     pub dependencies: Vec<ManifestDependency>,
-    /// Entry-point specifiers (bin/main/exports targets) — resolution inputs and roots.
+    /// Entry-point specifiers (main/module/exports/bin/types), raw and unresolved — future
+    /// resolution input for self-referencing imports (a package importing its own name).
+    /// Root-worthiness is a separate, already-resolved fact: see `roots`.
     pub entry_points: Vec<SmolStr>,
+    /// Roots this manifest declares, already resolved to concrete files (RFC 0011 §5, RFC 0005
+    /// §1's library-mode rule): `bin` targets unconditionally, plus `main`/`module`/`exports`
+    /// targets when the package isn't `private` (an unpublished app's exports are not roots —
+    /// something must actually import them). `types`/`typings` never contribute: `.d.ts` is
+    /// declarations only, no runtime edge (docs/adapters/js-ts.md §1).
+    pub roots: Vec<ManifestRoot>,
     /// Whether an explicit surface is declared (`exports` map or equivalent) — the
     /// contract gate for `deep-import` (RFC 0011 §4).
     pub declares_surface: bool,
@@ -270,12 +289,20 @@ pub trait LanguageAdapter: Send + Sync {
     /// Claim & classify a path (fast; name-based, content peeking only when unavoidable).
     fn claim(&self, path: &ProjectPath) -> Option<FileClaim>;
 
+    /// Is this path one of this adapter's manifest files (`package.json`, …)? Manifests are
+    /// claimed separately from source (`claim`) — they never get a [`FileClaim`]/language of
+    /// their own (docs/adapters/js-ts.md §1: "manifests are not claimed"), only manifest facts.
+    fn claim_manifest(&self, path: &ProjectPath) -> bool;
+
     /// Parse one file and extract every language-defined fact. Must not fail on broken code:
     /// return partial facts + diagnostics.
     fn extract(&self, file: &SourceFile<'_>) -> FileFacts;
 
-    /// Parse a manifest into declared dependencies and package identity/topology.
-    fn extract_manifest(&self, file: &SourceFile<'_>) -> ManifestFacts;
+    /// Parse a manifest into declared dependencies, package identity/topology, and roots.
+    /// `ctx` lets the adapter resolve entry-point specifiers (main/module/exports/bin) against
+    /// the known-files index itself — the same Node-resolution knowledge `resolve()` already
+    /// owns, not something the core can generically guess at.
+    fn extract_manifest(&self, file: &SourceFile<'_>, ctx: &ResolveCtx<'_>) -> ManifestFacts;
 
     /// Resolve an import specifier to a concrete target. Called by the core's resolution
     /// driver — including for specifiers emitted by *other* adapters (RFC 0002 §4).
