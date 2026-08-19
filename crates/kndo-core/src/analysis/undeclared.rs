@@ -64,7 +64,7 @@ pub fn find_undeclared_dependencies(graph: &ProjectGraph) -> Vec<Finding> {
                 // finding has, unlike version-skew/duplicate which genuinely span many files.
                 path: graph.packages[package.0 as usize].manifest.clone(),
                 range: None,
-                symbol: None,
+                symbol: Some(name.to_string()),
                 package: graph.package_name(package).map(str::to_string),
             },
         });

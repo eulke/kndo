@@ -139,19 +139,13 @@ fn check(args: &[String]) -> ExitCode {
             };
             print!("{}", render::render(&result, &opts));
         }
-        "agent" | "sarif" => {
-            eprintln!(
-                "kndo: --format {format} isn't implemented yet ({}); use human or json",
-                if format == "sarif" {
-                    "SARIF lands with M4's health/CRAP work"
-                } else {
-                    "agent-format grammar is the natural next slice after JSON, not yet built"
-                }
-            );
+        "agent" => println!("{}", result.to_agent_format()),
+        "sarif" => {
+            eprintln!("kndo: --format sarif isn't implemented yet (lands with M4's health/CRAP work); use human, json, or agent");
             return ExitCode::from(2);
         }
         other => {
-            eprintln!("kndo: unknown --format `{other}` (human, json)");
+            eprintln!("kndo: unknown --format `{other}` (human, json, agent)");
             return ExitCode::from(2);
         }
     }

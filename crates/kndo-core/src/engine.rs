@@ -100,6 +100,9 @@ pub struct Location {
     pub path: Option<ProjectPath>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub range: Option<Span>,
+    /// The finding's primary named subject — a code symbol's name for symbol-kind findings,
+    /// but also a dependency's name for `undeclared`/`version-skew` (which have no code symbol
+    /// at all): whatever single name a reader or the agent-format renderer would point at.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub symbol: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -201,6 +204,12 @@ impl RunResult {
         };
         serde_json::to_string_pretty(&envelope)
             .unwrap_or_else(|e| format!("{{\"error\": \"failed to serialize output: {e}\"}}"))
+    }
+
+    /// The `--format agent` rendering (contracts/output-schema.md §9) — like JSON, serialized
+    /// core-side so every frontend emits byte-identical agent text.
+    pub fn to_agent_format(&self) -> String {
+        crate::agent_format::render(self)
     }
 }
 

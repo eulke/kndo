@@ -43,9 +43,13 @@ pub fn find_version_skew(graph: &ProjectGraph) -> Vec<Finding> {
             severity: Severity::Warning,
             confidence: Confidence::Certain,
             message: format!("{name} is declared with diverging version requirements: {evidence}"),
-            // Spans every declaring manifest — no single path is *the* location (the message
-            // already lists all of them); expressing that properly is `related`, not built yet.
-            location: Location::default(),
+            location: Location {
+                // Spans every declaring manifest — no single `path` is *the* location (the
+                // message already lists all of them; `related` would express it properly and
+                // isn't built yet), but the dependency's own name is a real, single fact.
+                symbol: Some(name.to_string()),
+                ..Location::default()
+            },
         });
     }
     findings
