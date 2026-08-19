@@ -91,6 +91,27 @@ pub struct CheckRequest {
     pub mode: RunMode,
 }
 
+/// `kndo baseline`'s two modes (RFC 0006 §6, contracts §5's `Engine::baseline`): `Create`
+/// refuses if `.kndo/baseline.json` already exists (a bare re-run can't tell intended growth
+/// from intended shrinkage without a human reviewing the diff first); `Update` always
+/// (re)writes a full snapshot from the current finding set — auto-dropping entries that no
+/// longer reproduce, adding whatever's newly present.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BaselineOp {
+    Create,
+    Update,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BaselineResult {
+    Written {
+        acknowledged: usize,
+    },
+    /// `Create` requested but a baseline is already there.
+    AlreadyExists,
+    WriteFailed(String),
+}
+
 /// A finding's severity (contracts/output-schema.md §2) — RFC 0005 assigns one per category as
 /// a fixed default; `--strict` promotion isn't implemented yet, so this is always the default.
 /// Declaration order doubles as sort/triage order: worst first (RFC 0009 §5).
@@ -359,16 +380,29 @@ impl Engine {
         }
     }
 
-    /// The complete, current finding set — bypassing any existing baseline entirely (RFC 0006
-    /// §6): `kndo baseline` needs exactly this to snapshot what "acknowledged" means right now,
-    /// not what's left after an old baseline already filtered it down.
-    pub fn compute_findings(&mut self) -> Vec<Finding> {
-        self.run_analysis().findings
+    /// `kndo baseline [--update]` (RFC 0006 §6, contracts §5). Snapshots the complete, current
+    /// finding set — bypassing whatever baseline already exists, since the whole point is
+    /// capturing what "acknowledged" means right now, not what's left after an old baseline
+    /// already filtered it down.
+    pub fn baseline(&mut self, op: BaselineOp) -> BaselineResult {
+        if op == BaselineOp::Create && crate::baseline::exists(&self.root) {
+            return BaselineResult::AlreadyExists;
+        }
+        let findings = self.run_analysis().findings;
+        let entries: Vec<crate::baseline::BaselineEntry> = findings
+            .iter()
+            .map(crate::baseline::BaselineEntry::from)
+            .collect();
+        let acknowledged = entries.len();
+        match crate::baseline::save(&self.root, &entries) {
+            Ok(()) => BaselineResult::Written { acknowledged },
+            Err(e) => BaselineResult::WriteFailed(e.to_string()),
+        }
     }
 
-    /// Assemble + analyze — the part of `check()` and [`Self::compute_findings`] that's
-    /// identical: everything except the run-level metadata (timing, mode) and baseline
-    /// filtering, which only `check()` applies.
+    /// Assemble + analyze — the part of `check()` and [`Self::baseline`] that's identical:
+    /// everything except the run-level metadata (timing, mode) and baseline filtering, which
+    /// only `check()` applies (`baseline()` needs the unfiltered set).
     fn run_analysis(&mut self) -> RunResult {
         match graph::assemble_with_cache(&self.root, &self.adapters, self.cache.as_ref()) {
             Ok((g, diagnostics)) => {

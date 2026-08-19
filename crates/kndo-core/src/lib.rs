@@ -12,7 +12,7 @@
 pub mod adapter;
 pub mod agent_format;
 pub mod analysis;
-pub mod baseline;
+mod baseline;
 pub mod cache;
 pub mod conformance;
 pub mod discovery;

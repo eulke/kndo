@@ -8,7 +8,10 @@
 use std::io::IsTerminal;
 use std::process::ExitCode;
 
-use kndo::engine::{CheckRequest, ConfigOverrides, Finding, RunMode, Severity, SCHEMA_VERSION};
+use kndo::engine::{
+    BaselineOp, BaselineResult, CheckRequest, ConfigOverrides, Finding, RunMode, Severity,
+    SCHEMA_VERSION,
+};
 
 mod render;
 
@@ -36,15 +39,21 @@ fn main() -> ExitCode {
     }
 }
 
-/// `kndo baseline [--update]` (RFC 0006 §6): snapshot the complete current finding set into
-/// `.kndo/baseline.json` (committed — a human reviews the diff). Without `--update`, refuses to
-/// overwrite an existing baseline — the RFC's "growth requires an explicit `kndo baseline
-/// --update` in a reviewed commit" reads as *every* baseline write after the first needing that
-/// explicit flag, not just growth specifically, since a bare re-run can't tell growth from
-/// shrinkage without diffing first; `--update` covers both cases identically (a full snapshot
-/// replace), matching the RFC's "auto-dropped on `--update`" language for fixed entries.
+/// `kndo baseline [--update]` (RFC 0006 §6, contracts §5's `Engine::baseline`): snapshot the
+/// complete current finding set into `.kndo/baseline.json` (committed — a human reviews the
+/// diff). Without `--update`, refuses to overwrite an existing baseline — the RFC's "growth
+/// requires an explicit `kndo baseline --update` in a reviewed commit" reads as *every* baseline
+/// write after the first needing that explicit flag, not just growth specifically, since a bare
+/// re-run can't tell growth from shrinkage without diffing first; `--update` covers both cases
+/// identically (a full snapshot replace), matching the RFC's "auto-dropped on `--update`"
+/// language for fixed entries. All the actual file I/O lives behind `Engine::baseline` — this is
+/// purely argument parsing and rendering the outcome, like every other command here.
 fn baseline_cmd(args: &[String]) -> ExitCode {
-    let update = args.iter().any(|a| a == "--update");
+    let op = if args.iter().any(|a| a == "--update") {
+        BaselineOp::Update
+    } else {
+        BaselineOp::Create
+    };
 
     let cwd = match std::env::current_dir() {
         Ok(d) => d,
@@ -53,14 +62,6 @@ fn baseline_cmd(args: &[String]) -> ExitCode {
             return ExitCode::from(2);
         }
     };
-
-    if kndo::baseline::exists(&cwd) && !update {
-        eprintln!(
-            "kndo: .kndo/baseline.json already exists — use `kndo baseline --update` to refresh it"
-        );
-        return ExitCode::from(2);
-    }
-
     let mut engine = match kndo::open(&cwd, ConfigOverrides::default()) {
         Ok(e) => e,
         Err(e) => {
@@ -68,21 +69,21 @@ fn baseline_cmd(args: &[String]) -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    let findings = engine.compute_findings();
-    let entries: Vec<kndo::baseline::BaselineEntry> = findings
-        .iter()
-        .map(kndo::baseline::BaselineEntry::from)
-        .collect();
-    let count = entries.len();
 
-    match kndo::baseline::save(&cwd, &entries) {
-        Ok(()) => {
+    match engine.baseline(op) {
+        BaselineResult::Written { acknowledged } => {
             println!(
-                "kndo: baseline written — {count} findings acknowledged (.kndo/baseline.json)"
+                "kndo: baseline written — {acknowledged} findings acknowledged (.kndo/baseline.json)"
             );
             ExitCode::SUCCESS
         }
-        Err(e) => {
+        BaselineResult::AlreadyExists => {
+            eprintln!(
+                "kndo: .kndo/baseline.json already exists — use `kndo baseline --update` to refresh it"
+            );
+            ExitCode::from(2)
+        }
+        BaselineResult::WriteFailed(e) => {
             eprintln!("kndo: failed to write .kndo/baseline.json: {e}");
             ExitCode::from(2)
         }
