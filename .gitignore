@@ -1,5 +1,9 @@
 target/
-.kondo/cache/
+# The whole directory, not just cache/ — this is for git-status hygiene only (kndo's own
+# `.kndo/.gitignore`, written by `cache::FactsCache::open`, is what actually keeps `cache/`
+# out of `git add -A`; discovery.rs excludes `.kndo/` from analysis unconditionally,
+# independent of this file, since a project's first-ever run predates any gitignore entry).
+.kndo/
 
 # Conformance fixture corpora (RFC 0002 §8) are deliberately-flawed test data — checked into
 # git, exercised via the conformance harness's own `cargo test` run, but excluded from kndo's
