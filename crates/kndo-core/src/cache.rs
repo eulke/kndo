@@ -50,6 +50,17 @@ const HEADER_LEN: usize = FACTS_MAGIC.len() + 4;
 /// ADR 0004's default facts-store cap; `prune` enforces it, LRU-by-mtime.
 pub const DEFAULT_CAP_BYTES: u64 = 256 * 1024 * 1024;
 
+/// On-disk cache state, as reported by `kndo doctor` (RFC 0006 §2). Read-only — never mutates
+/// anything, unlike the facts/graph get/put paths.
+#[derive(Debug, Clone, Copy)]
+pub struct CacheStats {
+    pub writable: bool,
+    pub facts_entries: usize,
+    pub facts_bytes: u64,
+    pub graph_snapshot_present: bool,
+    pub graph_snapshot_bytes: u64,
+}
+
 /// Graph-snapshot envelope header: magic + format version (belt to the content-key's
 /// suspenders, same role as [`ENTRY_FORMAT_VERSION`]) + the 32-byte key itself, kept in this
 /// plain, unarchived prefix so a key mismatch — the common case any time a file changed — is a
@@ -276,6 +287,38 @@ impl ProjectCache {
             if fs::remove_file(&path).is_ok() {
                 total = total.saturating_sub(size);
             }
+        }
+    }
+
+    /// Read-only snapshot of on-disk cache state for `kndo doctor` (RFC 0006 §2, contracts §5's
+    /// `Engine::doctor`) — never called on the hot check path, so a full facts-directory walk
+    /// here (same traversal as `prune`, just counting instead of deleting) is fine.
+    pub fn stats(&self) -> CacheStats {
+        let mut facts_entries = 0usize;
+        let mut facts_bytes = 0u64;
+        let mut stack = vec![self.facts_dir.clone()];
+        while let Some(dir) = stack.pop() {
+            let Ok(read_dir) = fs::read_dir(&dir) else {
+                continue;
+            };
+            for entry in read_dir.flatten() {
+                let path = entry.path();
+                let Ok(meta) = entry.metadata() else { continue };
+                if meta.is_dir() {
+                    stack.push(path);
+                } else if path.extension().is_some_and(|e| e == "bin") {
+                    facts_entries += 1;
+                    facts_bytes += meta.len();
+                }
+            }
+        }
+        let graph_bytes = fs::metadata(self.graph_path()).map(|m| m.len()).ok();
+        CacheStats {
+            writable: self.writable,
+            facts_entries,
+            facts_bytes,
+            graph_snapshot_present: graph_bytes.is_some(),
+            graph_snapshot_bytes: graph_bytes.unwrap_or(0),
         }
     }
 
@@ -590,6 +633,36 @@ mod tests {
         cache.put("js-ts", 1, &hash, &sample_facts());
         cache.prune(DEFAULT_CAP_BYTES);
         assert!(cache.get("js-ts", 1, &hash).is_some());
+    }
+
+    #[test]
+    fn stats_reflect_facts_and_graph_state() {
+        let dir = tmp("stats");
+        let cache = ProjectCache::open(&dir);
+        let empty = cache.stats();
+        assert!(empty.writable);
+        assert_eq!(empty.facts_entries, 0);
+        assert!(!empty.graph_snapshot_present);
+
+        cache.put("js-ts", 1, &[1u8; 32], &sample_facts());
+        cache.put("js-ts", 1, &[2u8; 32], &sample_facts());
+        let after_facts = cache.stats();
+        assert_eq!(after_facts.facts_entries, 2);
+        assert!(after_facts.facts_bytes > 0);
+        assert!(!after_facts.graph_snapshot_present);
+
+        cache.put_graph(&[3u8; GRAPH_KEY_LEN], &sample_graph(), &[]);
+        let after_graph = cache.stats();
+        assert!(after_graph.graph_snapshot_present);
+        assert!(after_graph.graph_snapshot_bytes > 0);
+    }
+
+    #[test]
+    fn stats_on_a_read_only_handle_still_reports_writable_false() {
+        let dir = tmp("stats-readonly");
+        let _first = ProjectCache::open(&dir);
+        let second = ProjectCache::open(&dir);
+        assert!(!second.stats().writable);
     }
 
     fn sample_graph() -> ProjectGraph {

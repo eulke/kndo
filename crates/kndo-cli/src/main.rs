@@ -28,15 +28,83 @@ fn main() -> ExitCode {
         }
         Some("check") => check(&args[1..]),
         Some("baseline") => baseline_cmd(&args[1..]),
+        Some("doctor") => doctor_cmd(),
         // Bare flags with no subcommand (`kndo --format json`) are an implicit `check`, same
         // as no arguments at all — `kndo` = `kndo check` (RFC 0006 §2).
         Some(s) if s.starts_with('-') => check(&args),
         None => check(&args),
         Some(other) => {
-            eprintln!("kndo: unknown command `{other}` (check, baseline, --version)");
+            eprintln!("kndo: unknown command `{other}` (check, baseline, doctor, --version)");
             ExitCode::from(2)
         }
     }
+}
+
+/// `kndo doctor` (RFC 0006 §2): plain-text only for now — output-schema.md doesn't specify a
+/// JSON shape for this command yet, so `--format` isn't wired here (a deliberate scoping choice,
+/// not an oversight; `check`/`explain`/navigation verbs are where the JSON contract matters).
+fn doctor_cmd() -> ExitCode {
+    let cwd = match std::env::current_dir() {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!("kndo: cannot determine working directory: {e}");
+            return ExitCode::from(2);
+        }
+    };
+    let engine = match kndo::open(&cwd, ConfigOverrides::default()) {
+        Ok(e) => e,
+        Err(e) => {
+            eprintln!("kndo: {e}");
+            return ExitCode::from(2);
+        }
+    };
+    let report = engine.doctor();
+
+    println!("project root: {}", report.project_root);
+    println!();
+    println!("adapters:");
+    if report.adapters.is_empty() {
+        println!("  (none registered)");
+    }
+    for a in &report.adapters {
+        println!("  {}  (grammar {})", a.id, a.grammar_version);
+        println!("    files:     {}", a.file_globs.join(", "));
+        println!("    manifests: {}", a.manifest_globs.join(", "));
+    }
+    println!();
+    println!("plugins: none registered (plugin system is internal-only pre-1.0, RFC 0003 §6)");
+    println!();
+    println!(
+        "cache: {}",
+        if report.cache_enabled {
+            "enabled"
+        } else {
+            "disabled (--no-cache)"
+        }
+    );
+    if let Some(c) = &report.cache {
+        println!("  writable:       {}", c.writable);
+        println!(
+            "  facts entries:  {} ({} bytes)",
+            c.facts_entries, c.facts_bytes
+        );
+        println!(
+            "  graph snapshot: {}",
+            if c.graph_snapshot_present {
+                format!("present ({} bytes)", c.graph_snapshot_bytes)
+            } else {
+                "absent".to_string()
+            }
+        );
+    }
+    println!();
+    if report.baseline_present {
+        println!("baseline: present ({} entries)", report.baseline_entries);
+    } else {
+        println!("baseline: absent (kndo baseline to create one)");
+    }
+
+    ExitCode::SUCCESS
 }
 
 /// `kndo baseline [--update]` (RFC 0006 §6, contracts §5's `Engine::baseline`): snapshot the

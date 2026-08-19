@@ -112,6 +112,44 @@ pub enum BaselineResult {
     WriteFailed(String),
 }
 
+/// One registered adapter, as `kndo doctor` reports it (RFC 0006 §2's "what was detected:
+/// adapters…") — static descriptor info, not tied to any particular run.
+#[derive(Debug, Clone)]
+pub struct DoctorAdapterInfo {
+    pub id: String,
+    pub grammar_version: String,
+    pub file_globs: Vec<String>,
+    pub manifest_globs: Vec<String>,
+}
+
+/// `kndo doctor`'s cache section — `None` when the cache is disabled entirely
+/// (`ConfigOverrides.use_cache: false`), `Some` with a fresh, uncreated cache's stats
+/// (everything zero, `writable` reflecting whether the directory itself could be created) when
+/// enabled but never yet used.
+#[derive(Debug, Clone, Copy)]
+pub struct DoctorCacheInfo {
+    pub writable: bool,
+    pub facts_entries: usize,
+    pub facts_bytes: u64,
+    pub graph_snapshot_present: bool,
+    pub graph_snapshot_bytes: u64,
+}
+
+/// `kndo doctor` (RFC 0006 §2, contracts §5's `Engine::doctor`): everything detected about this
+/// project, without running a check — read-only and instant, so it stays useful for debugging a
+/// setup that itself might be slow or broken. `plugins` is always empty: the plugin system is
+/// internal-only pre-1.0 (RFC 0003 §6) and `Engine` doesn't wire any in yet — an honest gap, not
+/// an omission to paper over with a placeholder.
+#[derive(Debug, Clone)]
+pub struct DoctorReport {
+    pub project_root: String,
+    pub adapters: Vec<DoctorAdapterInfo>,
+    pub cache_enabled: bool,
+    pub cache: Option<DoctorCacheInfo>,
+    pub baseline_present: bool,
+    pub baseline_entries: usize,
+}
+
 /// A finding's severity (contracts/output-schema.md §2) — RFC 0005 assigns one per category as
 /// a fixed default; `--strict` promotion isn't implemented yet, so this is always the default.
 /// Declaration order doubles as sort/triage order: worst first (RFC 0009 §5).
@@ -342,6 +380,47 @@ impl Engine {
 
     pub fn root(&self) -> &Path {
         &self.root
+    }
+
+    /// `kndo doctor` (RFC 0006 §2, contracts §5). Deliberately does not assemble or analyze
+    /// anything — every field comes from static descriptors, a cache-directory stat walk, and a
+    /// baseline-file read, so this stays fast and side-effect-free even when the project itself
+    /// would be slow or broken to check.
+    pub fn doctor(&self) -> DoctorReport {
+        let adapters = self
+            .adapters
+            .iter()
+            .map(|a| {
+                let d = a.descriptor();
+                DoctorAdapterInfo {
+                    id: d.id.to_string(),
+                    grammar_version: d.grammar_version.to_string(),
+                    file_globs: d.file_globs.iter().map(|g| g.to_string()).collect(),
+                    manifest_globs: d.manifest_globs.iter().map(|g| g.to_string()).collect(),
+                }
+            })
+            .collect();
+
+        let cache = self.cache.as_ref().map(|c| {
+            let stats = c.stats();
+            DoctorCacheInfo {
+                writable: stats.writable,
+                facts_entries: stats.facts_entries,
+                facts_bytes: stats.facts_bytes,
+                graph_snapshot_present: stats.graph_snapshot_present,
+                graph_snapshot_bytes: stats.graph_snapshot_bytes,
+            }
+        });
+
+        let baseline_entries = crate::baseline::load(&self.root);
+        DoctorReport {
+            project_root: self.root.display().to_string(),
+            adapters,
+            cache_enabled: self.cache_enabled,
+            cache,
+            baseline_present: baseline_entries.is_some(),
+            baseline_entries: baseline_entries.map(|e| e.len()).unwrap_or(0),
+        }
     }
 
     /// `--staged`/`--diff` scoping (`RunMode`) isn't implemented yet — every mode walks the
