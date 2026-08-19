@@ -480,10 +480,64 @@ pub fn assemble(
         }
     }
 
+    let ctx = ResolveCtx::new(&known_files).with_declared_dependencies(&declared_dependency_names);
+
+    // Phase 3a-bis — re-export aliasing (`export {a} from './b'`, `export type {a} from
+    // './b'`): a barrel's re-exported bindings become resolvable as *its own* exports too, not
+    // merely usable inside it (js-ts.md §5: "Barrel files… resolved through, transparently").
+    // Must run for every file before phase 3b resolves any file's import bindings — the same
+    // forward-reference reasoning as the 3a/3b split, one level deeper: a barrel can be
+    // imported before or after this loop reaches the barrel's own re-export statement. Scoped
+    // to one hop: a barrel re-exporting from another barrel only resolves correctly when
+    // file-discovery order happens to process the deeper barrel first in this same pass — true
+    // multi-hop chain resolution is a future increment, not attempted here.
+    for (i, slot) in claimed_per_file.iter().enumerate() {
+        let Some(claimed) = slot else { continue };
+        let file_id = FileId(i as u32);
+        let adapter = &adapters[claimed.adapter_index];
+        for imp in claimed.facts.imports.iter().filter(|imp| imp.reexported) {
+            let spec = ImportSpec {
+                specifier: imp.specifier.clone(),
+                from: files[i].path.clone(),
+            };
+            let Resolution::File(target_path, _) = adapter.resolve(&spec, &ctx) else {
+                continue;
+            };
+            let Some(&target) = file_index.get(&target_path) else {
+                continue;
+            };
+            for binding in &imp.bindings {
+                let exported_name = binding
+                    .imported
+                    .clone()
+                    .unwrap_or_else(|| SmolStr::new("default"));
+                let Some(&original_symbol) =
+                    symbol_by_name_per_file[target.0 as usize].get(&exported_name)
+                else {
+                    continue;
+                };
+                symbol_by_name_per_file[i].insert(binding.local.clone(), original_symbol);
+                // The barrel itself is a manifest-declared production root, so everything it
+                // re-exports is part of the package's public API too (RFC 0011 §5) — same
+                // promotion phase 3a already applies to the barrel's *own* declarations,
+                // extended through one level of re-export indirection.
+                if let Some(&confidence) = library_root_files.get(&file_id) {
+                    edges.push(Edge {
+                        kind: EdgeKind::Root {
+                            kind: crate::vocab::RootKind::Production,
+                            target: NodeRef::Symbol(original_symbol),
+                        },
+                        confidence,
+                        source: Provenance::Adapter(adapter.descriptor().id.clone()),
+                    });
+                }
+            }
+        }
+    }
+
     // Phase 3b — imports, import-bindings, references, and diagnostics. Every file's symbol
     // table is complete now (phase 3a), so cross-file lookups are safe regardless of
     // discovery order.
-    let ctx = ResolveCtx::new(&known_files).with_declared_dependencies(&declared_dependency_names);
     let mut dependencies = Vec::new();
     let mut dep_index: HashMap<SmolStr, DependencyId> = HashMap::new();
 
@@ -640,7 +694,8 @@ mod tests {
             // Content format for the mock: one directive per line.
             //   decl <name>                 -> an exported Function declaration
             //   private-decl <name>         -> an unexported Function declaration
-            //   import <specifier> [binding[,binding...]]
+            //   import <specifier> [binding[,binding...]]     -> RawImport { reexported: false }
+            //   reexport <specifier> [binding[,binding...]]   -> RawImport { reexported: true }
             //       binding := name          -> ImportBinding { local: name, imported: Some(name) }
             //                | local=imported -> ImportBinding { local, imported: Some(imported) }
             //                | local=          -> ImportBinding { local, imported: None } (default)
@@ -666,7 +721,11 @@ mod tests {
                         exported: false,
                         visibility: VisibilityLevel(0),
                     });
-                } else if let Some(rest) = line.strip_prefix("import ") {
+                } else if let Some(rest) = line
+                    .strip_prefix("import ")
+                    .or_else(|| line.strip_prefix("reexport "))
+                {
+                    let reexported = line.starts_with("reexport ");
                     let mut parts = rest.splitn(2, ' ');
                     let spec = parts.next().unwrap_or("");
                     let bindings = parts
@@ -696,6 +755,7 @@ mod tests {
                         type_only: false,
                         confidence: Confidence::Certain,
                         bindings,
+                        reexported,
                     });
                 } else if let Some(name) = line.strip_prefix("ref ") {
                     facts.references.push(RawReference {
@@ -996,6 +1056,74 @@ mod tests {
             }));
         assert!(!graph.edges.iter().any(|e| matches!(e.kind,
             EdgeKind::Root { target: NodeRef::Symbol(s), .. } if s == symbol_id("helper"))));
+    }
+
+    #[test]
+    fn barrel_reexport_resolves_transparently_to_the_original_symbol() {
+        // js-ts.md §5: "Barrel files… resolved through, transparently." consumer.mock imports
+        // `a` from barrel.mock, which never declares `a` itself — only re-exports it from
+        // source.mock. Discovered dogfooding kndo against real npm packages (sindresorhus/
+        // type-fest): a pure barrel entry point re-exporting hundreds of individual types is a
+        // very common real-world shape.
+        let dir = project(
+            "barrel-reexport",
+            &[
+                ("source.mock", "decl a"),
+                ("barrel.mock", "reexport ./source.mock a"),
+                ("consumer.mock", "import ./barrel.mock a\nref a"),
+            ],
+        );
+        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let a_symbol = SymbolId(
+            graph
+                .symbols
+                .iter()
+                .position(|s| s.name.as_str() == "a")
+                .unwrap() as u32,
+        );
+        // Exactly one `a` symbol exists — the barrel didn't fabricate a second declaration.
+        assert_eq!(
+            graph
+                .symbols
+                .iter()
+                .filter(|s| s.name.as_str() == "a")
+                .count(),
+            1
+        );
+        let consumer = graph
+            .file_id(&ProjectPath(SmolStr::new("consumer.mock")))
+            .unwrap();
+        assert!(graph.edges.iter().any(|e| e.kind
+            == EdgeKind::References {
+                from: NodeRef::File(consumer),
+                to: a_symbol,
+                kind: crate::vocab::RefKind::Read,
+            }));
+    }
+
+    #[test]
+    fn barrel_reexport_from_a_library_root_promotes_the_original_symbol_to_a_production_root() {
+        let dir = project(
+            "barrel-root-reexport",
+            &[
+                ("manifest.json", "root barrel.mock"),
+                ("source.mock", "decl a"),
+                ("barrel.mock", "reexport ./source.mock a"),
+            ],
+        );
+        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let a_symbol = SymbolId(
+            graph
+                .symbols
+                .iter()
+                .position(|s| s.name.as_str() == "a")
+                .unwrap() as u32,
+        );
+        assert!(graph.edges.iter().any(|e| e.kind
+            == EdgeKind::Root {
+                kind: RootKind::Production,
+                target: NodeRef::Symbol(a_symbol),
+            }));
     }
 
     #[test]

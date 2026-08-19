@@ -3,10 +3,12 @@
 //! Field names below are verified against the real tree-sitter-typescript grammar (not
 //! assumed) — see `kndo_adapter_toolkit::parsing::introspect` for the probe this was built
 //! against. Scope of this slice: top-level declarations (functions, classes, interfaces,
-//! type aliases, enums + members, const/let) and ESM static imports. Deferred to later
-//! commits (each already flagged in the spec, not silently missing): class/interface
-//! members, CJS export patterns, JSX references, dynamic constructs, cyclomatic complexity,
-//! fingerprints, suppressions, `export { a as b }` / `export * from` surface nuances.
+//! type aliases, enums + members, const/let), ESM static imports, and `export ... from`
+//! re-exports (barrels — `handle_reexport_statement`). Deferred to later commits (each
+//! already flagged in the spec, not silently missing): class/interface members, CJS export
+//! patterns, JSX references, dynamic constructs, cyclomatic complexity, fingerprints,
+//! suppressions, `export { a as b }` with no `from` clause (a local re-export, not a barrel
+//! pass-through).
 
 use kndo_core::adapter::{
     Declaration, Diagnostic, DiagnosticLevel, FileFacts, ImportBinding, ImportKind, RawImport,
@@ -135,10 +137,97 @@ fn handle_export_statement(node: Node, src: &[u8], out: &mut FileFacts) {
             exported: true,
             visibility: visibility(true),
         });
+        return;
     }
-    // `export { a as c }`, `export * from "..."`, `export * as ns from "..."` — export-
-    // surface binding nuances (RFC 0005 §13 redundant-export-binding territory); no new
-    // declarations to extract here, deliberately not attempted in this slice.
+    if let Some(source_node) = node.child_by_field_name("source") {
+        handle_reexport_statement(node, source_node, src, out);
+    }
+    // Otherwise: `export { a as c }` (no `from` clause — re-exporting an already-declared
+    // local symbol under a new public name) — export-surface binding nuances (RFC 0005 §13
+    // redundant-export-binding territory); no new declarations to extract here, deliberately
+    // not attempted in this slice.
+}
+
+/// `export ... from "specifier"` — a re-export (js-ts.md §5: "Barrel files… resolved through,
+/// transparently"). Modeled as a [`RawImport`] whose bindings are also this file's own export
+/// surface (`RawImport::reexported`) — `export {a, b as c} from './x'` and
+/// `export type {a, b as c} from './x'` collect real bindings via `export_clause`, same shape
+/// as `import_clause`'s `named_imports`; the bare-star forms (`export * from`, `export * as ns
+/// from`) contribute no bindings, same precedent as a plain `import * as ns` (namespace member
+/// access isn't reference-resolved in this slice) — the import edge itself still lands, which
+/// is what fixes those targets' file-level reachability.
+///
+/// Verified against the real grammar (`kndo_adapter_toolkit::parsing::introspect::
+/// dump_reexport_shapes`): `export type { a } from` (the named-clause form) parses cleanly, but
+/// `export type * from` is a grammar ERROR in tree-sitter-typescript 0.23.2 specifically around
+/// the `type` token in the bare-star form — the `source` field survives regardless, so the
+/// specifier is still recoverable; the file still gets its (accurate) "syntax errors" diagnostic.
+fn handle_reexport_statement(node: Node, source_node: Node, src: &[u8], out: &mut FileFacts) {
+    let Some(specifier) = string_literal_value(source_node, src) else {
+        return;
+    };
+    let kind =
+        if specifier.starts_with('.') || specifier.starts_with('/') || specifier.starts_with('#') {
+            ImportKind::Relative
+        } else {
+            ImportKind::Package
+        };
+
+    let mut cursor = node.walk();
+    let mut type_only = false;
+    let mut bindings = Vec::new();
+    for c in node.children(&mut cursor) {
+        match c.kind() {
+            "type" => type_only = true,
+            "ERROR" => {
+                let mut inner = c.walk();
+                if c.children(&mut inner).any(|gc| gc.kind() == "type") {
+                    type_only = true;
+                }
+            }
+            "export_clause" => bindings = collect_export_bindings(c, src),
+            _ => {}
+        }
+    }
+
+    out.imports.push(RawImport {
+        specifier,
+        kind,
+        span: span(node),
+        side_effect_only: false,
+        type_only,
+        confidence: Confidence::Certain,
+        bindings,
+        reexported: true,
+    });
+}
+
+/// `export_clause`'s children: `export_specifier` nodes, the export-direction mirror of
+/// `collect_import_bindings`'s `import_specifier` handling. `name` is always the *original*
+/// name in the `from` target (what the re-export resolves through to); `alias`, when present,
+/// is the name this file re-exposes it as — `local` here matches that "name used in this
+/// file's own export surface" role, same as a regular import binding's `local`.
+fn collect_export_bindings(export_clause: Node, src: &[u8]) -> Vec<ImportBinding> {
+    let mut bindings = Vec::new();
+    let mut cursor = export_clause.walk();
+    for spec in export_clause.children(&mut cursor) {
+        if spec.kind() != "export_specifier" {
+            continue;
+        }
+        let Some(name_node) = spec.child_by_field_name("name") else {
+            continue;
+        };
+        let name = text(name_node, src);
+        let local = spec
+            .child_by_field_name("alias")
+            .map(|a| text(a, src))
+            .unwrap_or(name);
+        bindings.push(ImportBinding {
+            local: SmolStr::new(local),
+            imported: Some(SmolStr::new(name)),
+        });
+    }
+    bindings
 }
 
 fn handle_enum(node: Node, src: &[u8], exported: bool, out: &mut FileFacts) {
@@ -248,6 +337,7 @@ fn handle_import_statement(node: Node, src: &[u8], out: &mut FileFacts) {
         type_only,
         confidence: Confidence::Certain,
         bindings,
+        reexported: false,
     });
 }
 
@@ -634,5 +724,85 @@ mod tests {
     #[test]
     fn side_effect_import_has_no_bindings() {
         assert!(bindings("import './polyfill';").is_empty());
+    }
+
+    // ---------------------------------------------------------------- re-exports
+
+    #[test]
+    fn named_reexport_is_flagged_and_binds_by_original_name() {
+        let facts = extract("f.ts", b"export { a, b as c } from './x';");
+        assert_eq!(facts.imports.len(), 1);
+        let imp = &facts.imports[0];
+        assert_eq!(imp.specifier.as_str(), "./x");
+        assert_eq!(imp.kind, ImportKind::Relative);
+        assert!(imp.reexported);
+        assert!(!imp.type_only);
+        assert_eq!(
+            imp.bindings
+                .iter()
+                .map(|b| (
+                    b.local.to_string(),
+                    b.imported.as_ref().map(|s| s.to_string())
+                ))
+                .collect::<Vec<_>>(),
+            vec![
+                ("a".into(), Some("a".into())),
+                ("c".into(), Some("b".into())),
+            ]
+        );
+    }
+
+    #[test]
+    fn typed_named_reexport_is_type_only() {
+        let facts = extract("f.ts", b"export type { T } from './types';");
+        assert!(facts.imports[0].reexported);
+        assert!(facts.imports[0].type_only);
+    }
+
+    #[test]
+    fn star_reexport_has_no_bindings_but_still_reexports() {
+        let facts = extract("f.ts", b"export * from './all';");
+        let imp = &facts.imports[0];
+        assert!(imp.reexported);
+        assert!(imp.bindings.is_empty());
+        assert_eq!(imp.specifier.as_str(), "./all");
+    }
+
+    #[test]
+    fn typed_star_reexport_still_recovers_the_specifier_despite_the_grammar_gap() {
+        // `export type *` is a tree-sitter-typescript 0.23.2 grammar ERROR around the `type`
+        // token specifically for the bare-star form (verified via
+        // kndo_adapter_toolkit::parsing::introspect::dump_reexport_shapes) — the `source`
+        // field survives regardless, so extraction still recovers the specifier and still
+        // flags `type_only`, just alongside the (accurate) syntax-error diagnostic.
+        let facts = extract("f.ts", b"export type * from './all-types';");
+        assert_eq!(facts.imports.len(), 1);
+        let imp = &facts.imports[0];
+        assert!(imp.reexported);
+        assert!(imp.type_only);
+        assert_eq!(imp.specifier.as_str(), "./all-types");
+        assert!(!facts.diagnostics.is_empty());
+    }
+
+    #[test]
+    fn namespace_reexport_has_no_bindings() {
+        let facts = extract("f.ts", b"export * as ns from './d';");
+        let imp = &facts.imports[0];
+        assert!(imp.reexported);
+        assert!(imp.bindings.is_empty());
+    }
+
+    #[test]
+    fn plain_reexport_of_a_local_symbol_contributes_no_import() {
+        // No `from` clause — re-exporting an already-declared local symbol, not a barrel
+        // pass-through. Out of scope for this slice (see handle_export_statement).
+        let facts = extract("f.ts", b"function f() {}\nexport { f as g };");
+        assert!(facts.imports.is_empty());
+    }
+
+    #[test]
+    fn ordinary_import_is_never_flagged_as_a_reexport() {
+        let facts = extract("f.ts", b"import { x } from './mod';");
+        assert!(!facts.imports[0].reexported);
     }
 }

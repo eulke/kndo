@@ -105,7 +105,7 @@ monorepo over-exposure hides.
 
 | Case | Stance |
 |------|--------|
-| Barrel files (`index.ts` re-export fans) | resolved through, transparently; re-exported symbols alive only if some consumer imports them through *any* path |
+| Barrel files (`index.ts` re-export fans) | resolved through, transparently; re-exported symbols alive only if some consumer imports them through *any* path — implemented for named re-exports (`export {a, b as c} from './x'`, `export type {…} from`) and, when the barrel is itself a manifest-declared production root, promotes each re-exported symbol to the package's public surface (RFC 0011 §5). Bare-star re-exports (`export * from './x'`) only fix the target *file's* reachability today (no names to resolve through); one level of chaining only — a barrel re-exporting from another barrel resolves correctly only when file-discovery order happens to process the deeper barrel first. |
 | Declaration merging (`interface X` twice, namespace+function) | one logical symbol, multiple declaration spans |
 | Decorators | reference edges to the decorator expression; `emitDecoratorMetadata` adds `TypeUse` edges on decorated signatures; DI semantics stay in plugins |
 | `declare module`/ambient/global augmentation | symbols marked externally-consumed (never `unused`/`internal-only`) |

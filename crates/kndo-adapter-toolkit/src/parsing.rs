@@ -124,6 +124,20 @@ function f(x, y = defaultVal, { z }: Opts): void {
 
     #[test]
     #[ignore]
+    fn dump_reexport_shapes() {
+        let src = br#"
+export * from "./barrel-all";
+export type * from "./barrel-all-type";
+export * as ns from "./barrel-ns";
+export { a, b as c } from "./barrel-named";
+export type { a, b as c } from "./barrel-named-type";
+"#;
+        let tree = parse(src, false).unwrap();
+        dump(tree.root_node(), src, 0);
+    }
+
+    #[test]
+    #[ignore]
     fn dump_import_clause_shapes() {
         let src = br#"
 import def from "./a";

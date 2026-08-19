@@ -138,6 +138,12 @@ pub struct RawImport {
     /// resolution this slice doesn't attempt; the import edge itself is unaffected, only the
     /// finer-grained "this binding referenced that export" fact is missed.
     pub bindings: Vec<ImportBinding>,
+    /// `export { a } from "./b"` / `export * from "./b"` — a re-export, not a plain import:
+    /// `bindings` become part of *this file's own* export surface too, so another file
+    /// importing `a` from here should resolve straight through to `./b`'s original declaration
+    /// (js-ts.md §5: "Barrel files… resolved through, transparently"). `false` for an ordinary
+    /// `import` statement, which only makes a name usable inside the importing file.
+    pub reexported: bool,
 }
 
 #[derive(Debug, Clone)]
