@@ -1,2 +1,9 @@
 target/
 .kondo/cache/
+
+# Conformance fixture corpora (RFC 0002 §8) are deliberately-flawed test data — checked into
+# git, exercised via the conformance harness's own `cargo test` run, but excluded from kndo's
+# self-check of its own repo (ROADMAP M1 exit: "kndo check on kndo's own JS-free repo returns
+# cleanly"). The `ignore` crate reads this file for its glob rules regardless of git-tracked
+# status, so this line doesn't affect version control at all.
+**/tests/fixtures/

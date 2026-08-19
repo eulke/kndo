@@ -1,0 +1,7 @@
+{
+  "findings": [
+    { "category": "unused", "subject_kind": "file", "path": "src/orphan.ts" },
+    { "category": "unused", "subject_kind": "function", "path": "src/lib.ts", "symbol": "dead" },
+    { "category": "unused", "subject_kind": "dependency", "path": "package.json", "symbol": "left-pad" }
+  ]
+}

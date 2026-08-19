@@ -1,0 +1,11 @@
+{
+  "name": "dependency-hygiene",
+  "private": false,
+  "main": "src/index.ts",
+  "dependencies": {
+    "chai": "^4.0.0"
+  },
+  "devDependencies": {
+    "vitest": "^1.0.0"
+  }
+}

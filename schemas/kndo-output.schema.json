@@ -1,0 +1,287 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Envelope",
+  "description": "The full `--format json` envelope shape (contracts/output-schema.md §1) — also the schema\ngenerator's root type (`cargo xtask gen-schema`, gated behind the `schema` feature): the\nJSON Schema is derived from this struct, not maintained as a second hand-written document.",
+  "type": "object",
+  "properties": {
+    "diagnostics": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Diagnostic"
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Finding"
+      }
+    },
+    "kndo_version": {
+      "type": "string"
+    },
+    "run": {
+      "$ref": "#/$defs/RunInfo"
+    },
+    "schema_version": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "kndo_version",
+    "run",
+    "findings",
+    "diagnostics"
+  ],
+  "$defs": {
+    "AdapterRunInfo": {
+      "description": "One registered adapter's contribution (`run.adapters[]`, output-schema §1).",
+      "type": "object",
+      "properties": {
+        "files": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "files"
+      ]
+    },
+    "Confidence": {
+      "description": "Per-edge strength. Ordered by strength: `Possible < Probable < Certain`, so `max()` yields\nthe strongest evidence and \"edges at least as strong as τ\" is a simple `>=` (RFC 0005 §1).",
+      "type": "string",
+      "enum": [
+        "possible",
+        "probable",
+        "certain"
+      ]
+    },
+    "Diagnostic": {
+      "type": "object",
+      "properties": {
+        "level": {
+          "$ref": "#/$defs/DiagnosticLevel"
+        },
+        "message": {
+          "type": "string"
+        },
+        "path": {
+          "description": "The file this diagnostic is about, when there is one — `None` for project-level\ndiagnostics (e.g. \"cannot walk the project root\"). A diagnostic merged from many\nfiles without this field would be unattributable; adapters emit diagnostics scoped\nto the file they're extracting, the core fills this in.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProjectPath"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "span": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Span"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "level",
+        "message"
+      ]
+    },
+    "DiagnosticLevel": {
+      "type": "string",
+      "enum": [
+        "warn",
+        "info"
+      ]
+    },
+    "Finding": {
+      "description": "Typed form of the output-schema finding (grows field-by-field with the analyses in M1;\nevery field lands in the JSON schema first — that document is normative). Not yet present:\n`related` (evidence chain), `evidence` (category-specific block), `sources`, `remediation`,\n`rolled_up`, `delta`/`delta_origin` — each needs infrastructure this milestone doesn't have\n(an evidence model, computed remediation text, diff mode) and is omitted rather than\nfabricated with a placeholder.",
+      "type": "object",
+      "properties": {
+        "category": {
+          "type": "string"
+        },
+        "confidence": {
+          "$ref": "#/$defs/Confidence"
+        },
+        "group": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "location": {
+          "$ref": "#/$defs/Location"
+        },
+        "message": {
+          "type": "string"
+        },
+        "severity": {
+          "$ref": "#/$defs/Severity"
+        },
+        "subject_kind": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "category",
+        "group",
+        "subject_kind",
+        "severity",
+        "confidence",
+        "message",
+        "location"
+      ]
+    },
+    "Location": {
+      "description": "Where a finding landed (contracts/output-schema.md §2). Every field is optional because not\nevery subject has all of them: `version-skew`/`duplicate` findings span multiple manifests\nor files, so no single `path` is *the* location — expressing that properly is the `related`\nevidence chain, not yet implemented (deferred, not faked with an arbitrary first path).",
+      "type": "object",
+      "properties": {
+        "package": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "path": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProjectPath"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "range": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Span"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "symbol": {
+          "description": "The finding's primary named subject — a code symbol's name for symbol-kind findings,\nbut also a dependency's name for `undeclared`/`version-skew` (which have no code symbol\nat all): whatever single name a reader or the agent-format renderer would point at.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "ProjectPath": {
+      "description": "Project-relative path with `/` separators, the only path form that crosses the adapter\nboundary (case handling and symlink resolution are the core's discovery concern).",
+      "type": "string"
+    },
+    "RunInfo": {
+      "description": "Owned mirror of the JSON envelope's `run` object — not borrowed, unlike a hot-path type,\nbecause this exists purely to be serialized (and, behind `schema`, to derive the JSON\nSchema from): the one-time clone per `--format json` invocation is free by comparison.",
+      "type": "object",
+      "properties": {
+        "adapters": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/AdapterRunInfo"
+          }
+        },
+        "base_ref": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cache": {
+          "type": "string"
+        },
+        "duration_ms": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "mode": {
+          "type": "string"
+        },
+        "project_root": {
+          "type": "string"
+        },
+        "started_at": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "mode",
+        "started_at",
+        "duration_ms",
+        "cache",
+        "project_root",
+        "adapters"
+      ]
+    },
+    "Severity": {
+      "description": "A finding's severity (contracts/output-schema.md §2) — RFC 0005 assigns one per category as\na fixed default; `--strict` promotion isn't implemented yet, so this is always the default.\nDeclaration order doubles as sort/triage order: worst first (RFC 0009 §5).",
+      "type": "string",
+      "enum": [
+        "error",
+        "warning",
+        "info"
+      ]
+    },
+    "Span": {
+      "description": "1-indexed line/column span, `start` inclusive, `end` exclusive. Serializes as the\n`[line, col]` pair shape the output schema uses (contracts/output-schema.md §2), not an\nobject — tuples serialize as JSON arrays by default.",
+      "type": "object",
+      "properties": {
+        "end": {
+          "type": "array",
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            }
+          ]
+        },
+        "start": {
+          "type": "array",
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            }
+          ]
+        }
+      },
+      "required": [
+        "start",
+        "end"
+      ]
+    }
+  }
+}

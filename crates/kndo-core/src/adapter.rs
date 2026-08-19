@@ -14,6 +14,7 @@ use crate::vocab::{Confidence, DependencyScope, FileClass, RootKind, SymbolKind}
 /// Project-relative path with `/` separators, the only path form that crosses the adapter
 /// boundary (case handling and symlink resolution are the core's discovery concern).
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(transparent)]
 pub struct ProjectPath(pub SmolStr);
 
@@ -21,6 +22,7 @@ pub struct ProjectPath(pub SmolStr);
 /// `[line, col]` pair shape the output schema uses (contracts/output-schema.md §2), not an
 /// object — tuples serialize as JSON arrays by default.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, serde::Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Span {
     pub start: (u32, u32),
     pub end: (u32, u32),
@@ -34,6 +36,7 @@ pub struct SourceFile<'a> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "lowercase")]
 pub enum DiagnosticLevel {
     Warn,
@@ -41,6 +44,7 @@ pub enum DiagnosticLevel {
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Diagnostic {
     pub level: DiagnosticLevel,
     /// The file this diagnostic is about, when there is one — `None` for project-level

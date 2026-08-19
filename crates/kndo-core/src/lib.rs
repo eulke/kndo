@@ -12,6 +12,7 @@
 pub mod adapter;
 pub mod agent_format;
 pub mod analysis;
+pub mod conformance;
 pub mod discovery;
 pub mod engine;
 pub mod graph;

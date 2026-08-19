@@ -83,6 +83,7 @@ pub struct CheckRequest {
 /// a fixed default; `--strict` promotion isn't implemented yet, so this is always the default.
 /// Declaration order doubles as sort/triage order: worst first (RFC 0009 §5).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "lowercase")]
 pub enum Severity {
     Error,
@@ -95,6 +96,7 @@ pub enum Severity {
 /// or files, so no single `path` is *the* location — expressing that properly is the `related`
 /// evidence chain, not yet implemented (deferred, not faked with an arbitrary first path).
 #[derive(Debug, Clone, Default, serde::Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Location {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub path: Option<ProjectPath>,
@@ -116,6 +118,7 @@ pub struct Location {
 /// (an evidence model, computed remediation text, diff mode) and is omitted rather than
 /// fabricated with a placeholder.
 #[derive(Debug, Clone, serde::Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Finding {
     pub id: String,
     pub category: String,
@@ -129,6 +132,7 @@ pub struct Finding {
 
 /// One registered adapter's contribution (`run.adapters[]`, output-schema §1).
 #[derive(Debug, Clone, serde::Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct AdapterRunInfo {
     pub id: String,
     pub files: usize,
@@ -162,47 +166,58 @@ pub struct RunResult {
     pub adapters: Vec<AdapterRunInfo>,
 }
 
+/// Owned mirror of the JSON envelope's `run` object — not borrowed, unlike a hot-path type,
+/// because this exists purely to be serialized (and, behind `schema`, to derive the JSON
+/// Schema from): the one-time clone per `--format json` invocation is free by comparison.
 #[derive(serde::Serialize)]
-struct RunInfo<'a> {
-    mode: &'a str,
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+struct RunInfo {
+    mode: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    base_ref: Option<&'a str>,
-    started_at: &'a str,
+    base_ref: Option<String>,
+    started_at: String,
     duration_ms: u64,
     cache: &'static str,
-    project_root: &'a str,
-    adapters: &'a [AdapterRunInfo],
+    project_root: String,
+    adapters: Vec<AdapterRunInfo>,
 }
 
+/// The full `--format json` envelope shape (contracts/output-schema.md §1) — also the schema
+/// generator's root type (`cargo xtask gen-schema`, gated behind the `schema` feature): the
+/// JSON Schema is derived from this struct, not maintained as a second hand-written document.
 #[derive(serde::Serialize)]
-struct Envelope<'a> {
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+struct Envelope {
     schema_version: &'static str,
     kndo_version: &'static str,
-    run: RunInfo<'a>,
-    findings: &'a [Finding],
-    diagnostics: &'a [Diagnostic],
+    run: RunInfo,
+    findings: Vec<Finding>,
+    diagnostics: Vec<Diagnostic>,
 }
 
 impl RunResult {
-    /// The `--format json` rendering (contracts/output-schema.md §1) — serialized core-side so
-    /// every frontend emits byte-identical machine output (RFC 0001 §2, contracts §5).
-    pub fn to_json(&self) -> String {
-        let envelope = Envelope {
+    fn to_envelope(&self) -> Envelope {
+        Envelope {
             schema_version: SCHEMA_VERSION,
             kndo_version: KNDO_VERSION,
             run: RunInfo {
-                mode: &self.mode,
-                base_ref: self.base_ref.as_deref(),
-                started_at: &self.started_at,
+                mode: self.mode.clone(),
+                base_ref: self.base_ref.clone(),
+                started_at: self.started_at.clone(),
                 duration_ms: self.duration_ms,
                 cache: "cold", // no cache exists yet (RFC 0004 lands M2) — every run is cold
-                project_root: &self.project_root,
-                adapters: &self.adapters,
+                project_root: self.project_root.clone(),
+                adapters: self.adapters.clone(),
             },
-            findings: &self.findings,
-            diagnostics: &self.diagnostics,
-        };
-        serde_json::to_string_pretty(&envelope)
+            findings: self.findings.clone(),
+            diagnostics: self.diagnostics.clone(),
+        }
+    }
+
+    /// The `--format json` rendering (contracts/output-schema.md §1) — serialized core-side so
+    /// every frontend emits byte-identical machine output (RFC 0001 §2, contracts §5).
+    pub fn to_json(&self) -> String {
+        serde_json::to_string_pretty(&self.to_envelope())
             .unwrap_or_else(|e| format!("{{\"error\": \"failed to serialize output: {e}\"}}"))
     }
 
@@ -211,6 +226,14 @@ impl RunResult {
     pub fn to_agent_format(&self) -> String {
         crate::agent_format::render(self)
     }
+}
+
+/// The `--format json` envelope's JSON Schema, derived from [`Envelope`] itself — never a
+/// second hand-written document (contracts/output-schema.md's normative promise). Dev-time
+/// only: regenerate the committed copy with `cargo xtask gen-schema`.
+#[cfg(feature = "schema")]
+pub fn json_schema() -> schemars::Schema {
+    schemars::schema_for!(Envelope)
 }
 
 /// Synchronous and single-instance-per-project (the cache lock, RFC 0004 §7); a serving

@@ -15,3 +15,9 @@ rayon = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 chrono = { workspace = true }
+schemars = { version = "1", features = ["smol_str03"], optional = true }
+
+[features]
+# Dev-time only (`cargo xtask gen-schema`, schema-validation tests) — never needed at analysis
+# time, so it's not in any shipped binary's default feature set (ADR 0006).
+schema = ["dep:schemars"]

@@ -1,0 +1,8 @@
+{
+  "name": "@demo/a",
+  "private": false,
+  "main": "src/index.ts",
+  "dependencies": {
+    "chalk": "^5.0.0"
+  }
+}

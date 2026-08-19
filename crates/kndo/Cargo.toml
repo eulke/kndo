@@ -11,6 +11,13 @@ publish.workspace = true
 kndo-core = { path = "../kndo-core" }
 kndo-adapter-js = { path = "../kndo-adapter-js", optional = true }
 
+[dev-dependencies]
+# "schema" here is test-only, to detect a stale committed schema — the shipped binary above
+# never enables it.
+kndo-core = { path = "../kndo-core", features = ["schema"] }
+jsonschema = { version = "0.49", default-features = false }
+serde_json = { workspace = true }
+
 [features]
 # Every first-party adapter is a feature so embedders can build slimmer binaries
 # (ADR 0006); the default is the full product.

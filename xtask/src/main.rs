@@ -10,6 +10,12 @@
 //!
 //! Runs at kndo development time only — the analyzed machine's toolchains are never queried
 //! at analysis time (determinism, RFC 0008 §4).
+//!
+//! # gen-schema
+//!
+//! `cargo xtask gen-schema` regenerates `schemas/kndo-output.schema.json` from
+//! `kndo_core::engine::Envelope` via `schemars` (contracts/output-schema.md's normative
+//! promise: "generated from the Rust types," never a second hand-written document).
 
 use std::process::{Command, ExitCode};
 
@@ -45,6 +51,7 @@ fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.first().map(String::as_str) {
         Some("gen-stdlib") => gen_stdlib(args.get(1).map(String::as_str)),
+        Some("gen-schema") => gen_schema(),
         _ => {
             eprintln!("usage: cargo xtask gen-stdlib <language>|--all");
             eprintln!(
@@ -55,9 +62,40 @@ fn main() -> ExitCode {
                     .collect::<Vec<_>>()
                     .join(", ")
             );
+            eprintln!("usage: cargo xtask gen-schema");
             ExitCode::from(2)
         }
     }
+}
+
+fn gen_schema() -> ExitCode {
+    let schema = kndo_core::engine::json_schema();
+    let text = match serde_json::to_string_pretty(&schema) {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("xtask: gen-schema failed to serialize: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let path = match workspace_root() {
+        Ok(root) => root.join("schemas/kndo-output.schema.json"),
+        Err(e) => {
+            eprintln!("xtask: gen-schema failed: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    if let Some(dir) = path.parent() {
+        if let Err(e) = std::fs::create_dir_all(dir) {
+            eprintln!("xtask: gen-schema failed creating {}: {e}", dir.display());
+            return ExitCode::FAILURE;
+        }
+    }
+    if let Err(e) = std::fs::write(&path, format!("{text}\n")) {
+        eprintln!("xtask: gen-schema failed writing {}: {e}", path.display());
+        return ExitCode::FAILURE;
+    }
+    println!("xtask: wrote {}", path.display());
+    ExitCode::SUCCESS
 }
 
 fn gen_stdlib(which: Option<&str>) -> ExitCode {

@@ -9,3 +9,5 @@ publish.workspace = true
 
 [dependencies]
 kndo-adapter-toolkit = { path = "../crates/kndo-adapter-toolkit" }
+kndo-core = { path = "../crates/kndo-core", features = ["schema"] }
+serde_json = { workspace = true }

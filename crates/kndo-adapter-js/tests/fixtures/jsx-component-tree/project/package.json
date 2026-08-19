@@ -1,0 +1,5 @@
+{
+  "name": "jsx-component-tree",
+  "private": false,
+  "main": "src/index.tsx"
+}
