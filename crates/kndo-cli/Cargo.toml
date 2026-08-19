@@ -12,5 +12,4 @@ name = "kndo"
 path = "src/main.rs"
 
 [dependencies]
-kndo-core = { path = "../kndo-core" }
-kndo-adapter-js = { path = "../kndo-adapter-js" }
+kndo = { path = "../kndo" }

@@ -191,13 +191,21 @@ an LSP, a GUI, a CI action — is a *frontend* consuming one facade. Nothing els
 pub struct Engine { /* opaque: graph, cache, adapters, plugins */ }
 
 impl Engine {
-    pub fn open(root: &Path, overrides: ConfigOverrides) -> Result<Engine, EngineError>;
+    /// `adapters` is composed by the DISTRIBUTION layer (the `kndo` crate, RFC 0001 §2) —
+    /// frontends call `kndo::open(root, overrides)` and never touch this parameter; only
+    /// embedders and tests pass a custom set.
+    pub fn open(root: &Path, overrides: ConfigOverrides,
+                adapters: Vec<Box<dyn LanguageAdapter>>) -> Result<Engine, EngineError>;
     pub fn check(&mut self, req: CheckRequest) -> RunResult;    // full | staged | diff
     pub fn query(&mut self, req: QueryRequest) -> QueryResult;  // RFC 0007 verbs, incl. batches
     pub fn explain(&self, id: FindingId) -> Option<Explanation>;
     pub fn baseline(&mut self, op: BaselineOp) -> BaselineResult;
     pub fn doctor(&self) -> DoctorReport;
 }
+
+// Distribution layer (crate `kndo`) — what frontends actually call:
+// pub fn kndo::open(root: &Path, overrides: ConfigOverrides) -> Result<Engine, EngineError>
+// pub fn kndo::default_adapters() -> Vec<Box<dyn LanguageAdapter>>
 ```
 
 - `RunResult`/`QueryResult` are the **typed forms of the output schema**

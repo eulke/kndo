@@ -1,0 +1,18 @@
+[package]
+name = "kndo"
+description = "The composed product: core + first-party adapters (+ built-in plugins, later). Frontends depend on this crate and nothing below it."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+kndo-core = { path = "../kndo-core" }
+kndo-adapter-js = { path = "../kndo-adapter-js", optional = true }
+
+[features]
+# Every first-party adapter is a feature so embedders can build slimmer binaries
+# (ADR 0006); the default is the full product.
+default = ["js"]
+js = ["dep:kndo-adapter-js"]

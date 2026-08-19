@@ -6,9 +6,9 @@
 //! except through this type. A frontend that needs a new fact is a core PR adding it to
 //! [`RunResult`], never a core import.
 //!
-//! Adapter *registration* is a frontend concern too: the core never knows which languages
-//! exist (RFC 0001 §2, the ignorance rule) — `kndo-cli` composes `Engine::open` with the
-//! first-party adapters it links in.
+//! Adapter *registration* is the **distribution layer's** concern (the `kndo` crate): the
+//! core never knows which languages exist (RFC 0001 §2, the ignorance rule), and frontends
+//! never compose the product — they call `kndo::open`, which passes the registry in here.
 
 use std::fmt;
 use std::path::{Path, PathBuf};
@@ -92,9 +92,10 @@ pub struct Engine {
 }
 
 impl Engine {
-    /// `adapters` is the frontend's registered language set — compiled-in first-party
-    /// adapters today, WASM-bridged third-party adapters later (ADR 0003). The core never
-    /// selects or knows about them beyond the trait.
+    /// `adapters` is the registered language set, composed by the distribution layer (the
+    /// `kndo` crate) — compiled-in first-party adapters today, WASM-bridged third-party
+    /// adapters later (ADR 0003). The core never selects or knows about them beyond the
+    /// trait; embedders and tests may pass a custom set directly.
     pub fn open(
         root: &Path,
         _overrides: ConfigOverrides,

@@ -26,10 +26,12 @@ files and whole-program work is re-run only on the affected subgraph (RFC 0004).
 ## 2. Layering & the ignorance rule
 
 ```
-kndo-cli          ── one frontend: terminal UI, exit codes, human rendering (RFC 0009)
-kndo-core         ── the system: graph model, analysis engine, cache, orchestration, plugin host
-kndo-adapter-*    ── one crate per language (js, go, java, kotlin, swift, rust, json, css)
-kndo-plugin-api   ── stable API surface for third-party plugins (WASM)
+kndo-cli           ── one frontend: terminal UI, exit codes, human rendering (RFC 0009)
+kndo               ── the DISTRIBUTION layer: the composed product (core + all first-party
+                      adapters + built-in plugins), one `open()` for every frontend
+kndo-core          ── the system: graph model, analysis engine, cache, orchestration, plugin host
+kndo-adapter-*     ── one crate per language (js, go, java, kotlin, swift, rust, json, css)
+kndo-plugin-api    ── stable API surface for third-party plugins (WASM)
 ```
 
 `kndo-core` is a library; the CLI is one frontend among future ones (`kndo serve`/MCP, LSP,
@@ -37,6 +39,13 @@ GUI, CI actions) and holds **zero** analysis logic. All frontends consume the sa
 facade (contracts §5): the core never prints, frontends never compute. Machine output (JSON,
 SARIF) is serialized core-side so every frontend emits identical data; only *human* rendering
 is frontend-owned.
+
+**Which languages the product ships is distribution knowledge, not frontend knowledge.** The
+`kndo` crate owns the composition — it depends downward on the core *and* on every first-party
+adapter (feature-gated for slim embedder builds, ADR 0006) and hands frontends a single
+`kndo::open()`. Frontends therefore never name a language, can never ship a kndo missing one,
+and adding a language touches exactly one crate. The ignorance rule is preserved: the core
+still depends on no adapter — composition happens *above* both.
 
 **The ignorance rule:** `kndo-core` must not contain the name of any language. It defines a
 language-neutral vocabulary — `SourceFile`, `Symbol`, `Reference`, `Root`, `ManifestDependency` —

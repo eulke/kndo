@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
+    "crates/kndo",
     "crates/kndo-core",
     "crates/kndo-cli",
     "crates/kndo-adapter-toolkit",

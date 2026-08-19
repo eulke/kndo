@@ -1,18 +1,13 @@
-//! kndo CLI — a frontend over `kndo_core::engine::Engine`, nothing more (contracts §5).
+//! kndo CLI — a frontend over the `kndo` distribution crate, nothing more (contracts §5).
 //!
-//! Everything analysis-shaped lives behind the Engine; this binary owns argument parsing,
-//! exit codes, and human rendering (RFC 0009). If code here needs a graph fact, that is a
-//! core PR adding it to `RunResult`, never a core import beyond the facade.
+//! Pure presentation: argument parsing, exit codes, human rendering (RFC 0009). Which
+//! languages exist is the distribution crate's knowledge (RFC 0001 §2) — this binary never
+//! names one. If code here needs a graph fact, that is a core PR adding it to `RunResult`,
+//! never a deeper import.
 
 use std::process::ExitCode;
 
-use kndo_core::adapter::LanguageAdapter;
-use kndo_core::engine::{CheckRequest, ConfigOverrides, Engine, RunMode, SCHEMA_VERSION};
-
-/// The first-party adapter set this binary links in (RFC 0001 §2 — the core never knows).
-fn registered_adapters() -> Vec<Box<dyn LanguageAdapter>> {
-    vec![Box::new(kndo_adapter_js::JsTsAdapter)]
-}
+use kndo::engine::{CheckRequest, ConfigOverrides, RunMode, SCHEMA_VERSION};
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -41,7 +36,7 @@ fn check() -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    let mut engine = match Engine::open(&cwd, ConfigOverrides::default(), registered_adapters()) {
+    let mut engine = match kndo::open(&cwd, ConfigOverrides::default()) {
         Ok(e) => e,
         Err(e) => {
             eprintln!("kndo: {e}");
@@ -56,8 +51,8 @@ fn check() -> ExitCode {
     // continue — findings and diagnostics are not the same thing.
     for d in &result.diagnostics {
         let level = match d.level {
-            kndo_core::adapter::DiagnosticLevel::Warn => "warning",
-            kndo_core::adapter::DiagnosticLevel::Info => "info",
+            kndo::adapter::DiagnosticLevel::Warn => "warning",
+            kndo::adapter::DiagnosticLevel::Info => "info",
         };
         match &d.path {
             Some(p) => eprintln!("kndo: {level}: {}: {}", p.0, d.message),
