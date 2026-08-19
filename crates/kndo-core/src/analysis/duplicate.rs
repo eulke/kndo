@@ -91,6 +91,7 @@ mod tests {
             content_hash: hash_of(content),
             language: None,
             class: None,
+            package: crate::vocab::PackageId(0),
         }
     }
 

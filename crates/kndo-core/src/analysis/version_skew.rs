@@ -55,6 +55,7 @@ mod tests {
 
     fn declared(manifest: &str, name: &str, version_req: &str) -> DeclaredDependency {
         DeclaredDependency {
+            package: crate::vocab::PackageId(0),
             manifest: ProjectPath(SmolStr::new(manifest)),
             name: SmolStr::new(name),
             version_req: SmolStr::new(version_req),

@@ -63,6 +63,7 @@ mod tests {
             content_hash: [0; 32],
             language: class.map(|_| SmolStr::new("mock")),
             class,
+            package: crate::vocab::PackageId(0),
         }
     }
 

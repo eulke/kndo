@@ -16,7 +16,7 @@ use crate::adapter::{
 use crate::discovery::{self, DiscoveryError};
 use crate::vocab::{
     Confidence, DependencyId, DependencyScope, Edge, EdgeKind, FileClass, FileId, NodeRef,
-    Provenance, SymbolId, SymbolKind,
+    PackageId, Provenance, SymbolId, SymbolKind,
 };
 use smol_str::SmolStr;
 
@@ -29,6 +29,10 @@ pub struct FileNode {
     /// still resolve, per RFC 0002 §4's cross-language model.
     pub language: Option<SmolStr>,
     pub class: Option<FileClass>,
+    /// Every file belongs to exactly one Package (RFC 0011 §3, nearest-manifest-ancestor).
+    /// `PackageId(0)` is always the implicit package (see [`ProjectGraph::packages`]) — never
+    /// `None`, since ownership is total even when nothing real claims a file.
+    pub package: PackageId,
 }
 
 #[derive(Debug, Clone)]
@@ -46,17 +50,27 @@ pub struct DependencyNode {
     pub name: SmolStr,
 }
 
+/// A workspace unit: one manifest + the file tree it governs (RFC 0011 §3). `PackageId(0)` is
+/// always the implicit package with `manifest: None` — "a repo with no manifest at all is one
+/// implicit Package" generalizes to "whatever no real manifest's subtree claims," so ownership
+/// is total (every file has a package) even in a repo with zero manifests, or with manifests
+/// that don't cover every directory.
+#[derive(Debug, Clone)]
+pub struct PackageNode {
+    pub manifest: Option<ProjectPath>,
+    pub name: Option<SmolStr>,
+    /// Publish signal from the manifest — mirrors `ManifestFacts::private` (RFC 0011 §5).
+    pub private: bool,
+}
+
 /// One manifest's declaration of an external dependency — the raw fact `undeclared` and
 /// `version-skew` compare against, kept separate from [`DependencyNode`] because a declaration
 /// can exist with zero importers (nothing wrong with that on its own — that's `unused`'s
 /// concern) and a project can have many manifests declaring the same name differently (that's
-/// `version-skew`'s). Not yet package-attributed (RFC 0011's `Package` node/ownership hasn't
-/// landed): in a workspace with multiple manifests, a name declared by *any* manifest reads as
-/// "declared" project-wide rather than per-owning-package — correct for the single-manifest
-/// case M1 treats as foundational, an intentional imprecision for the monorepo case until
-/// ownership exists to do better.
+/// `version-skew`'s).
 #[derive(Debug, Clone)]
 pub struct DeclaredDependency {
+    pub package: PackageId,
     pub manifest: ProjectPath,
     pub name: SmolStr,
     pub version_req: SmolStr,
@@ -71,6 +85,7 @@ pub struct ProjectGraph {
     pub symbols: Vec<SymbolNode>,
     pub dependencies: Vec<DependencyNode>,
     pub declared_dependencies: Vec<DeclaredDependency>,
+    pub packages: Vec<PackageNode>,
     pub edges: Vec<Edge>,
     file_index: HashMap<ProjectPath, FileId>,
 }
@@ -100,6 +115,11 @@ impl ProjectGraph {
             symbols,
             dependencies,
             declared_dependencies: Vec::new(),
+            packages: vec![PackageNode {
+                manifest: None,
+                name: None,
+                private: false,
+            }],
             edges,
             file_index,
         }
@@ -110,6 +130,12 @@ impl ProjectGraph {
         self.declared_dependencies = deps;
         self
     }
+
+    #[cfg(test)]
+    pub(crate) fn with_packages(mut self, packages: Vec<PackageNode>) -> Self {
+        self.packages = packages;
+        self
+    }
 }
 
 /// One file's claim + extracted facts, plus which adapter produced them (by index into the
@@ -118,6 +144,28 @@ struct Claimed {
     claim: FileClaim,
     facts: crate::adapter::FileFacts,
     adapter_index: usize,
+}
+
+/// Directory part of a project-relative path (`""` for root-level files). A private duplicate
+/// of `kndo-adapter-toolkit::paths::dirname` — trivial string logic, but the core cannot depend
+/// on an adapter-side crate (the ignorance rule runs both directions: adapters depend on the
+/// core, never the reverse).
+fn core_dirname(path: &str) -> &str {
+    match path.rfind('/') {
+        Some(i) => &path[..i],
+        None => "",
+    }
+}
+
+/// Does `manifest_dir` govern `file_dir` (RFC 0011 §3, nearest-manifest-ancestor)? The empty
+/// (project-root) manifest dir governs everything — callers only rely on that once every more
+/// specific candidate has already been tried (ownership resolution sorts deepest-first).
+fn package_owns(manifest_dir: &str, file_dir: &str) -> bool {
+    manifest_dir.is_empty()
+        || file_dir == manifest_dir
+        || file_dir
+            .strip_prefix(manifest_dir)
+            .is_some_and(|rest| rest.starts_with('/'))
 }
 
 /// Discovers, claims, extracts, resolves, and links — the full RFC 0001 §4 pipeline up to
@@ -240,7 +288,47 @@ pub fn assemble(
             content_hash: df.content_hash,
             language,
             class,
+            package: PackageId(0), // patched in phase 2a once ownership is computed
         });
+    }
+
+    // Phase 2a — packages and ownership (RFC 0011 §3): one implicit `Package` covering
+    // whatever no real manifest's subtree claims (index 0 — "a repo with no manifest at all
+    // is one implicit Package" generalizes to "the part of any repo no manifest governs"),
+    // plus one `Package` per manifest found. Ownership is nearest-manifest-ancestor, resolved
+    // by trying manifest directories deepest-first so a nested manifest shadows its parent.
+    let mut packages = vec![PackageNode {
+        manifest: None,
+        name: None,
+        private: false,
+    }];
+    let mut manifest_package: Vec<Option<PackageId>> = vec![None; manifests_per_file.len()];
+    for (i, slot) in manifests_per_file.iter().enumerate() {
+        if let Some((_, facts)) = slot {
+            let package_id = PackageId(packages.len() as u32);
+            packages.push(PackageNode {
+                manifest: Some(files[i].path.clone()),
+                name: facts.package_name.clone(),
+                private: facts.private,
+            });
+            manifest_package[i] = Some(package_id);
+        }
+    }
+    let mut manifest_dirs: Vec<(String, PackageId)> = manifest_package
+        .iter()
+        .enumerate()
+        .filter_map(|(i, pkg)| {
+            pkg.map(|id| (core_dirname(files[i].path.0.as_str()).to_string(), id))
+        })
+        .collect();
+    manifest_dirs.sort_by_key(|(dir, _)| std::cmp::Reverse(dir.len()));
+    for file in files.iter_mut() {
+        let file_dir = core_dirname(file.path.0.as_str());
+        file.package = manifest_dirs
+            .iter()
+            .find(|(manifest_dir, _)| package_owns(manifest_dir, file_dir))
+            .map(|&(_, id)| id)
+            .unwrap_or(PackageId(0));
     }
 
     // Phase 2.5 — manifest roots and declared dependencies, sequentially in file-discovery
@@ -255,9 +343,12 @@ pub fn assemble(
             continue;
         };
         let provenance = || Provenance::Adapter(adapters[*adapter_index].descriptor().id.clone());
+        // Set alongside this manifest's own PackageNode a few lines above — always Some here.
+        let package = manifest_package[i].unwrap_or(PackageId(0));
         for dep in &facts.dependencies {
             declared_dependency_names.insert(dep.name.clone());
             declared_dependencies.push(DeclaredDependency {
+                package,
                 manifest: files[i].path.clone(),
                 name: dep.name.clone(),
                 version_req: dep.version_req.clone(),
@@ -403,6 +494,7 @@ pub fn assemble(
             symbols,
             dependencies,
             declared_dependencies,
+            packages,
             edges,
             file_index,
         },
@@ -654,6 +746,69 @@ mod tests {
             graph.files[0].language.is_none(),
             "spec: manifests are not claimed as source (docs/adapters/js-ts.md §1)"
         );
+    }
+
+    #[test]
+    fn no_manifest_means_everyone_owns_the_implicit_package() {
+        let dir = project("pkg-implicit", &[("a.mock", "decl f")]);
+        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        assert_eq!(graph.packages.len(), 1);
+        assert!(graph.packages[0].manifest.is_none());
+        assert_eq!(graph.files[0].package, PackageId(0));
+    }
+
+    #[test]
+    fn root_manifest_owns_every_file_under_it() {
+        let dir = project(
+            "pkg-root",
+            &[("manifest.json", "dep lodash"), ("src/a.mock", "decl f")],
+        );
+        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        assert_eq!(graph.packages.len(), 2);
+        let manifest_id = graph
+            .file_id(&ProjectPath(SmolStr::new("manifest.json")))
+            .unwrap();
+        let src_id = graph
+            .file_id(&ProjectPath(SmolStr::new("src/a.mock")))
+            .unwrap();
+        assert_eq!(graph.files[manifest_id.0 as usize].package, PackageId(1));
+        assert_eq!(graph.files[src_id.0 as usize].package, PackageId(1));
+    }
+
+    #[test]
+    fn nested_manifest_shadows_the_root_package_for_its_own_subtree() {
+        let dir = project(
+            "pkg-nested",
+            &[
+                ("manifest.json", "dep lodash"),
+                ("root.mock", "decl f"),
+                ("packages/ui/manifest.json", "dep react"),
+                ("packages/ui/button.mock", "decl g"),
+            ],
+        );
+        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        // implicit(0) is never used (a root manifest exists); root manifest is 1, nested is 2 —
+        // discovery order is alphabetical, so `manifest.json` (root) claims package 1 before
+        // `packages/ui/manifest.json` claims package 2.
+        assert_eq!(graph.packages.len(), 3);
+
+        let root_file = graph
+            .file_id(&ProjectPath(SmolStr::new("root.mock")))
+            .unwrap();
+        let ui_manifest = graph
+            .file_id(&ProjectPath(SmolStr::new("packages/ui/manifest.json")))
+            .unwrap();
+        let ui_file = graph
+            .file_id(&ProjectPath(SmolStr::new("packages/ui/button.mock")))
+            .unwrap();
+
+        let root_package = graph.files[root_file.0 as usize].package;
+        let ui_package = graph.files[ui_manifest.0 as usize].package;
+        assert_ne!(
+            root_package, ui_package,
+            "the nested manifest must shadow the root one for its own subtree"
+        );
+        assert_eq!(graph.files[ui_file.0 as usize].package, ui_package);
     }
 
     #[test]

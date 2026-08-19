@@ -158,6 +158,7 @@ mod tests {
                 role: FileRole::Production,
                 origin: FileOrigin::Authored,
             }),
+            package: crate::vocab::PackageId(0),
         }
     }
 
