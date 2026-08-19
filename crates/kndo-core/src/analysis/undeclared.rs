@@ -12,9 +12,9 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::analysis::finding_id;
+use crate::analysis::{finding_id, package_discriminator, package_label};
 use crate::engine::{Finding, Location, Severity};
-use crate::graph::{PackageNode, ProjectGraph};
+use crate::graph::ProjectGraph;
 use crate::vocab::{Confidence, DependencyId, EdgeKind, PackageId};
 
 pub fn find_undeclared_dependencies(graph: &ProjectGraph) -> Vec<Finding> {
@@ -72,29 +72,6 @@ pub fn find_undeclared_dependencies(graph: &ProjectGraph) -> Vec<Finding> {
     findings
 }
 
-/// The stable, empty-for-the-implicit-package identity used in the finding id — deliberately
-/// *not* the human-readable label (which can be absent or a display name), so ids stay stable
-/// across packages that share a name but not a manifest path.
-fn package_discriminator(graph: &ProjectGraph, package: PackageId) -> String {
-    match graph.packages[package.0 as usize].manifest.as_ref() {
-        Some(path) => path.0.to_string(),
-        None => String::new(),
-    }
-}
-
-fn package_label(graph: &ProjectGraph, package: PackageId) -> String {
-    match &graph.packages[package.0 as usize] {
-        PackageNode {
-            name: Some(name), ..
-        } => name.to_string(),
-        PackageNode {
-            manifest: Some(path),
-            ..
-        } => path.0.to_string(),
-        PackageNode { .. } => "the project (no manifest)".to_string(),
-    }
-}
-
 fn importer_summary(importers: &[&str]) -> String {
     if importers.is_empty() {
         return String::new();
@@ -119,7 +96,7 @@ fn importer_summary(importers: &[&str]) -> String {
 mod tests {
     use super::*;
     use crate::adapter::ProjectPath;
-    use crate::graph::{DeclaredDependency, DependencyNode, FileNode};
+    use crate::graph::{DeclaredDependency, DependencyNode, FileNode, PackageNode};
     use crate::vocab::{Confidence, DependencyScope, Edge, FileClass, FileId, Provenance};
     use smol_str::SmolStr;
 

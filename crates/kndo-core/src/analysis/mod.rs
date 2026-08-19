@@ -2,6 +2,7 @@
 //! consumes the graph plus whatever shared engines it needs (reachability, dup-detection, …)
 //! and produces [`crate::engine::Finding`]s — never source text, never I/O.
 
+pub mod dependency_hygiene;
 pub mod duplicate;
 pub mod reachability;
 pub mod undeclared;
@@ -9,6 +10,8 @@ pub mod unused;
 pub mod version_skew;
 
 use crate::engine::Finding;
+use crate::graph::{PackageNode, ProjectGraph};
+use crate::vocab::PackageId;
 
 /// The stable finding id (contracts/output-schema.md §5): `"kndo-" + blake3(category,
 /// subject_kind, path, symbol path, discriminator)[..12 hex]`. Line/column never participate,
@@ -30,6 +33,30 @@ pub fn finding_id(
     format!("kndo-{}", &digest.to_hex()[..12])
 }
 
+/// The stable, empty-for-the-implicit-package identity used in finding ids — deliberately
+/// *not* the human-readable label (which can be absent or a display name), so ids stay stable
+/// across packages that share a name but not a manifest path. Shared by every per-package
+/// dependency analysis (`undeclared`, `dependency_hygiene`).
+pub(crate) fn package_discriminator(graph: &ProjectGraph, package: PackageId) -> String {
+    match graph.packages[package.0 as usize].manifest.as_ref() {
+        Some(path) => path.0.to_string(),
+        None => String::new(),
+    }
+}
+
+pub(crate) fn package_label(graph: &ProjectGraph, package: PackageId) -> String {
+    match &graph.packages[package.0 as usize] {
+        PackageNode {
+            name: Some(name), ..
+        } => name.to_string(),
+        PackageNode {
+            manifest: Some(path),
+            ..
+        } => path.0.to_string(),
+        PackageNode { .. } => "the project (no manifest)".to_string(),
+    }
+}
+
 /// Runs every M1 analysis and returns their findings, sorted by id for deterministic output.
 pub fn run_all(graph: &crate::graph::ProjectGraph) -> Vec<Finding> {
     let reach = reachability::compute(graph);
@@ -38,6 +65,7 @@ pub fn run_all(graph: &crate::graph::ProjectGraph) -> Vec<Finding> {
     findings.extend(undeclared::find_undeclared_dependencies(graph));
     findings.extend(version_skew::find_version_skew(graph));
     findings.extend(duplicate::find_duplicate_files(graph));
+    findings.extend(dependency_hygiene::find_dependency_hygiene(graph));
     findings.sort_by(|a, b| a.id.cmp(&b.id));
     findings
 }
