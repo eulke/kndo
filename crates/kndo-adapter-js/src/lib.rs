@@ -1,7 +1,7 @@
 //! JavaScript/TypeScript adapter — normative spec: docs/adapters/js-ts.md.
 //!
-//! This commit implements §1 (claiming & classification). Extraction, resolution and
-//! manifests land next, against the conformance harness.
+//! Implements §1 (claiming & classification), §2 first slice (extraction) and §3 first slice
+//! (resolution). Manifests land next, against the conformance harness.
 
 use kndo_core::adapter::{
     AdapterDescriptor, FileClaim, FileFacts, ImportSpec, LanguageAdapter, ManifestFacts,
@@ -11,6 +11,7 @@ use kndo_core::vocab::{FileClass, FileOrigin, FileRole};
 use smol_str::SmolStr;
 
 mod extraction;
+mod resolution;
 
 pub struct JsTsAdapter;
 
@@ -95,9 +96,8 @@ impl LanguageAdapter for JsTsAdapter {
         ManifestFacts::default()
     }
 
-    fn resolve(&self, _spec: &ImportSpec, _ctx: &ResolveCtx) -> Resolution {
-        // Lands next: Node ESM+CJS algorithm per spec §3.
-        Resolution::Unresolved
+    fn resolve(&self, spec: &ImportSpec, ctx: &ResolveCtx<'_>) -> Resolution {
+        resolution::resolve(spec, ctx)
     }
 }
 

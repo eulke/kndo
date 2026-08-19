@@ -211,10 +211,23 @@ pub struct ImportSpec {
     pub from: ProjectPath,
 }
 
-/// Index of claimable paths and manifests the driver exposes to resolvers.
-/// (Grows with the resolution driver in M1; opaque to adapters by design.)
-#[derive(Debug, Default)]
-pub struct ResolveCtx {}
+/// Index of claimable paths (and, later, manifest/package facts) the core exposes to
+/// resolvers — populated from discovery output. Adapters only ever *query* it; they never
+/// touch the filesystem themselves (the purity rule, RFC 0002 §6). Grows as the resolution
+/// driver matures (manifest facts, package topology); read-only by construction.
+pub struct ResolveCtx<'a> {
+    known_files: &'a std::collections::HashSet<ProjectPath>,
+}
+
+impl<'a> ResolveCtx<'a> {
+    pub fn new(known_files: &'a std::collections::HashSet<ProjectPath>) -> Self {
+        ResolveCtx { known_files }
+    }
+
+    pub fn contains(&self, path: &ProjectPath) -> bool {
+        self.known_files.contains(path)
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Resolution {
@@ -243,5 +256,5 @@ pub trait LanguageAdapter: Send + Sync {
 
     /// Resolve an import specifier to a concrete target. Called by the core's resolution
     /// driver — including for specifiers emitted by *other* adapters (RFC 0002 §4).
-    fn resolve(&self, spec: &ImportSpec, ctx: &ResolveCtx) -> Resolution;
+    fn resolve(&self, spec: &ImportSpec, ctx: &ResolveCtx<'_>) -> Resolution;
 }
