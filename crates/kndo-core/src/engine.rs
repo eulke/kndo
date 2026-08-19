@@ -175,10 +175,11 @@ pub struct RunResult {
     pub duration_ms: u64,
     pub project_root: String,
     pub adapters: Vec<AdapterRunInfo>,
-    /// Whether the facts cache was consulted at all (`--no-cache` ⇒ `false`) and how many
-    /// files it actually served from disk this run — the only honest way to know whether a
-    /// run was warm: a freshly-`kndo init`ed project has the cache *enabled* on its very first
-    /// run and is still, correctly, cold (RFC 0004 §2).
+    /// Whether the cache was consulted at all (`--no-cache` ⇒ `false`) and how many things it
+    /// actually served this run — facts entries plus, when the whole graph matched, one graph
+    /// snapshot (`ProjectCache::hits() + ProjectCache::graph_hits()`) — the only honest way to
+    /// know whether a run was warm: a freshly-`kndo init`ed project has the cache *enabled* on
+    /// its very first run and is still, correctly, cold (RFC 0004 §2).
     pub cache_enabled: bool,
     pub cache_hits: u64,
 }
@@ -265,7 +266,7 @@ pub fn json_schema() -> schemars::Schema {
 pub struct Engine {
     root: PathBuf,
     adapters: Vec<Box<dyn LanguageAdapter>>,
-    cache: Option<crate::cache::FactsCache>,
+    cache: Option<crate::cache::ProjectCache>,
     cache_enabled: bool,
 }
 
@@ -284,7 +285,7 @@ impl Engine {
         }
         let cache = overrides
             .use_cache
-            .then(|| crate::cache::FactsCache::open(root));
+            .then(|| crate::cache::ProjectCache::open(root));
         Ok(Engine {
             root: root.to_path_buf(),
             adapters,
@@ -363,7 +364,11 @@ impl Engine {
             duration_ms: start.elapsed().as_millis() as u64,
             project_root,
             cache_enabled: self.cache_enabled,
-            cache_hits: self.cache.as_ref().map(|c| c.hits()).unwrap_or(0),
+            cache_hits: self
+                .cache
+                .as_ref()
+                .map(|c| c.hits() + c.graph_hits())
+                .unwrap_or(0),
             ..outcome
         }
     }

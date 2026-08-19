@@ -20,13 +20,14 @@ use crate::vocab::{
 };
 use smol_str::SmolStr;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct FileNode {
     pub path: ProjectPath,
     pub content_hash: [u8; 32],
     /// `None` when no registered adapter claims this file — it still exists as a File node
     /// (e.g. a README, or a CSS file before a CSS adapter exists) so import edges *to* it
     /// still resolve, per RFC 0002 §4's cross-language model.
+    #[rkyv(with = rkyv::with::Map<crate::rkyv_support::SmolStrAsString>)]
     pub language: Option<SmolStr>,
     pub class: Option<FileClass>,
     /// Every file belongs to exactly one Package (RFC 0011 §3, nearest-manifest-ancestor).
@@ -35,9 +36,10 @@ pub struct FileNode {
     pub package: PackageId,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct SymbolNode {
     pub file: FileId,
+    #[rkyv(with = crate::rkyv_support::SmolStrAsString)]
     pub name: SmolStr,
     pub kind: SymbolKind,
     pub span: Span,
@@ -49,8 +51,9 @@ pub struct SymbolNode {
 /// member imported by name (RFC 0011 §4: the workspace case carries the same
 /// declaration-contract obligations, so it lives in the same node kind; its file-level
 /// reachability is carried separately by the `ImportsFile` edge the same resolution emits).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct DependencyNode {
+    #[rkyv(with = crate::rkyv_support::SmolStrAsString)]
     pub name: SmolStr,
 }
 
@@ -59,9 +62,10 @@ pub struct DependencyNode {
 /// implicit Package" generalizes to "whatever no real manifest's subtree claims," so ownership
 /// is total (every file has a package) even in a repo with zero manifests, or with manifests
 /// that don't cover every directory.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct PackageNode {
     pub manifest: Option<ProjectPath>,
+    #[rkyv(with = rkyv::with::Map<crate::rkyv_support::SmolStrAsString>)]
     pub name: Option<SmolStr>,
     /// Publish signal from the manifest — mirrors `ManifestFacts::private` (RFC 0011 §5).
     pub private: bool,
@@ -72,11 +76,13 @@ pub struct PackageNode {
 /// can exist with zero importers (nothing wrong with that on its own — that's `unused`'s
 /// concern) and a project can have many manifests declaring the same name differently (that's
 /// `version-skew`'s).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct DeclaredDependency {
     pub package: PackageId,
     pub manifest: ProjectPath,
+    #[rkyv(with = crate::rkyv_support::SmolStrAsString)]
     pub name: SmolStr,
+    #[rkyv(with = crate::rkyv_support::SmolStrAsString)]
     pub version_req: SmolStr,
     pub scope: DependencyScope,
 }
@@ -109,6 +115,37 @@ impl ProjectGraph {
     /// never named themselves.
     pub fn package_name(&self, package: PackageId) -> Option<&str> {
         self.packages[package.0 as usize].name.as_deref()
+    }
+
+    /// Rebuilds a full graph from its persisted parts (RFC 0004 §2's `graph.bin`, `cache.rs`) —
+    /// the warm-path counterpart to [`assemble`]: same shape, but skipping claim/extract/
+    /// resolve/link entirely when nothing changed. `file_index` isn't itself persisted (cheap
+    /// to rebuild, and doing so means the cache format never has to carry a second, derived
+    /// copy of `files` in lockstep).
+    pub(crate) fn from_snapshot_parts(
+        files: Vec<FileNode>,
+        symbols: Vec<SymbolNode>,
+        dependencies: Vec<DependencyNode>,
+        declared_dependencies: Vec<DeclaredDependency>,
+        script_invoked_dependencies: HashSet<(PackageId, SmolStr)>,
+        packages: Vec<PackageNode>,
+        edges: Vec<Edge>,
+    ) -> Self {
+        let file_index = files
+            .iter()
+            .enumerate()
+            .map(|(i, f)| (f.path.clone(), FileId(i as u32)))
+            .collect();
+        ProjectGraph {
+            files,
+            symbols,
+            dependencies,
+            declared_dependencies,
+            script_invoked_dependencies,
+            packages,
+            edges,
+            file_index,
+        }
     }
 
     /// Crate-internal only: lets sibling modules (analyses) build exact graphs in tests —
@@ -197,6 +234,57 @@ pub(crate) fn package_owns(manifest_dir: &str, file_dir: &str) -> bool {
             .is_some_and(|rest| rest.starts_with('/'))
 }
 
+/// Bumped whenever the *persisted* shape of a graph snapshot changes in a way that isn't
+/// already covered by an adapter's own `facts_schema_version` — e.g. a new node/edge kind, or
+/// an assembly-algorithm change that could produce a different graph from the same facts. Feeds
+/// [`compute_graph_key`] (RFC 0004 §3's "core graph-schema version"); a bump here invalidates
+/// every project's cached `graph.bin` on the next run, same as any other key-input change.
+pub const GRAPH_SCHEMA_VERSION: u32 = 1;
+
+/// The graph snapshot's cache key (RFC 0004 §3, `cache.rs`'s `graph.bin`): a single digest
+/// folding in the *whole* discovered file set (every path + content hash — this already
+/// subsumes "manifest hashes," since a manifest is just one more discovered file) plus each
+/// registered adapter's id and facts-schema version plus [`GRAPH_SCHEMA_VERSION`] itself. Two
+/// key inputs RFC 0004 §3 also names — a kndo config hash and the active plugin set — don't
+/// exist as subsystems yet, so they're honestly absent rather than faked.
+///
+/// Every variable-length field (paths, adapter ids) is length-prefixed before its bytes so the
+/// scheme is unambiguous by construction, not merely collision-resistant by luck of the input
+/// distribution — two different file sets can never fold to the same byte stream before
+/// hashing.
+pub(crate) fn compute_graph_key(
+    discovered_files: &[discovery::DiscoveredFile],
+    adapters: &[Box<dyn LanguageAdapter>],
+) -> [u8; 32] {
+    let mut hasher = blake3::Hasher::new();
+    hasher.update(&GRAPH_SCHEMA_VERSION.to_le_bytes());
+
+    // `discovered_files` is already sorted by path (discovery.rs's own determinism invariant),
+    // so this fold is stable across runs regardless of filesystem walk order.
+    for f in discovered_files {
+        let path_bytes = f.path.0.as_bytes();
+        hasher.update(&(path_bytes.len() as u32).to_le_bytes());
+        hasher.update(path_bytes);
+        hasher.update(&f.content_hash);
+    }
+
+    let mut adapter_versions: Vec<(String, u32)> = adapters
+        .iter()
+        .map(|a| {
+            let d = a.descriptor();
+            (d.id.to_string(), d.facts_schema_version)
+        })
+        .collect();
+    adapter_versions.sort();
+    for (id, version) in &adapter_versions {
+        hasher.update(&(id.len() as u32).to_le_bytes());
+        hasher.update(id.as_bytes());
+        hasher.update(&version.to_le_bytes());
+    }
+
+    *hasher.finalize().as_bytes()
+}
+
 /// Discovers, claims, extracts, resolves, and links — the full RFC 0001 §4 pipeline up to
 /// (not including) analyses. Diagnostics accumulate rather than abort: a graph that omits one
 /// unreadable file's facts is far more useful than no graph at all (RFC 0001 §6). Always cold
@@ -216,10 +304,22 @@ pub fn assemble(
 pub fn assemble_with_cache(
     root: &Path,
     adapters: &[Box<dyn LanguageAdapter>],
-    cache: Option<&crate::cache::FactsCache>,
+    cache: Option<&crate::cache::ProjectCache>,
 ) -> Result<(ProjectGraph, Vec<Diagnostic>), DiscoveryError> {
     let discovered = discovery::discover(root)?;
     let mut diagnostics = discovered.diagnostics;
+
+    // The graph-snapshot fast path (RFC 0004 §2, §4 step 1): if every input the key folds in —
+    // the whole discovered file set, each registered adapter's identity/version, and the graph
+    // schema itself — matches the last snapshot exactly, skip claim/extract/resolve/link
+    // entirely and hand back the persisted graph. Any mismatch (a single changed byte anywhere
+    // is enough) is a plain miss; there's no partial reuse yet, only all-or-nothing.
+    let graph_key = compute_graph_key(&discovered.files, adapters);
+    if let Some(cache) = cache {
+        if let Some((graph, graph_diagnostics)) = cache.get_graph(&graph_key) {
+            return Ok((graph, graph_diagnostics));
+        }
+    }
 
     let known_files: HashSet<ProjectPath> =
         discovered.files.iter().map(|f| f.path.clone()).collect();
@@ -835,19 +935,21 @@ pub fn assemble_with_cache(
         }
     }
 
-    Ok((
-        ProjectGraph {
-            files,
-            symbols,
-            dependencies,
-            declared_dependencies,
-            script_invoked_dependencies,
-            packages,
-            edges,
-            file_index,
-        },
-        diagnostics,
-    ))
+    let graph = ProjectGraph {
+        files,
+        symbols,
+        dependencies,
+        declared_dependencies,
+        script_invoked_dependencies,
+        packages,
+        edges,
+        file_index,
+    };
+    if let Some(cache) = cache {
+        cache.put_graph(&graph_key, &graph, &diagnostics);
+    }
+
+    Ok((graph, diagnostics))
 }
 
 #[cfg(test)]
@@ -1889,7 +1991,7 @@ mod tests {
 
         let cache_dir = std::env::temp_dir().join("kndo-graph-test-cache-equivalence-cache");
         let _ = fs::remove_dir_all(&cache_dir);
-        let cache = crate::cache::FactsCache::open(&cache_dir);
+        let cache = crate::cache::ProjectCache::open(&cache_dir);
         // First cached run populates every entry (all misses); second is fully warm.
         assemble_with_cache(&dir, &mock_adapters(), Some(&cache)).unwrap();
         let warm = assemble_with_cache(&dir, &mock_adapters(), Some(&cache))
@@ -1919,12 +2021,37 @@ mod tests {
         );
         let cache_dir = std::env::temp_dir().join("kndo-graph-test-cache-hits-cache");
         let _ = fs::remove_dir_all(&cache_dir);
-        let cache = crate::cache::FactsCache::open(&cache_dir);
+        let cache = crate::cache::ProjectCache::open(&cache_dir);
 
         assemble_with_cache(&dir, &mock_adapters(), Some(&cache)).unwrap();
         assert_eq!(cache.hits(), 0); // first run: every file is a miss, then gets stored
+        assert_eq!(cache.graph_hits(), 0);
+
+        // Second run: nothing changed, so the *graph* snapshot itself hits (the stronger,
+        // whole-assembly skip) before per-file facts are ever consulted — the facts layer
+        // stays exactly where the first run left it.
+        assemble_with_cache(&dir, &mock_adapters(), Some(&cache)).unwrap();
+        assert_eq!(cache.hits(), 0);
+        assert_eq!(cache.graph_hits(), 1);
+    }
+
+    #[test]
+    fn a_changed_file_misses_the_graph_snapshot_but_still_warms_its_sibling_from_facts() {
+        let dir = project(
+            "graph-key-sensitivity",
+            &[("a.mock", "decl x"), ("b.mock", "decl y\nimport ./a.mock")],
+        );
+        let cache_dir = std::env::temp_dir().join("kndo-graph-test-graph-key-sensitivity-cache");
+        let _ = fs::remove_dir_all(&cache_dir);
+        let cache = crate::cache::ProjectCache::open(&cache_dir);
 
         assemble_with_cache(&dir, &mock_adapters(), Some(&cache)).unwrap();
-        assert_eq!(cache.hits(), 2); // second run: both files served from disk, none re-parsed
+
+        // Edit one file — the graph key changes (it folds in the whole file set), so the
+        // snapshot must miss; but the *other*, untouched file's facts entry is still valid.
+        fs::write(dir.join("a.mock"), "decl x2").unwrap();
+        assemble_with_cache(&dir, &mock_adapters(), Some(&cache)).unwrap();
+        assert_eq!(cache.graph_hits(), 0); // never hit — the key never matched after the edit
+        assert_eq!(cache.hits(), 1); // b.mock's facts, unchanged, still served from disk
     }
 }

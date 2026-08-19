@@ -1,20 +1,31 @@
-//! `.kndo/cache/` — the facts layer of the project cache (ADR 0004, RFC 0004 §2–3).
+//! `.kndo/cache/` — the project cache (ADR 0004, RFC 0004 §2–3): a facts layer (this file's
+//! original scope) plus a graph snapshot (`graph.bin`) that lets a warm run skip assembly
+//! entirely, not just re-parsing. The patch algorithm and dirty-region incrementality (RFC 0004
+//! §4–6) — reusing *part* of a stale graph — aren't implemented yet: today it's all-or-nothing,
+//! either every input matches the last snapshot exactly, or the graph is rebuilt from scratch
+//! (cache-warm parsing still applies during that rebuild). The findings snapshot (needed for
+//! diff-mode derived effects, RFC 0004 §6) doesn't exist yet either.
 //!
-//! This is the foundation the rest of RFC 0004 (graph snapshot, findings snapshot, dirty-region
-//! incrementality, diff-mode derived effects) builds on: skip-reparsing-unchanged-files is
-//! already most of the warm-path win, since parsing dominates cold-run cost (spike 0001). The
-//! graph/findings snapshots and the patch algorithm (RFC 0004 §4–6) are not implemented yet —
-//! every run still re-assembles the graph from (cached-or-fresh) `FileFacts`.
-//!
-//! Layout, keying, and format decisions here mirror ADR 0004 exactly:
-//! - Content-addressed by `(adapter id, adapter facts-schema version, file content hash)` —
-//!   renames, branch switches, and `git stash` all hit the cache; a file reverted to an old
-//!   version re-hits its old entry.
-//! - `bincode` for these small per-file entries — no zero-copy win at this size (`rkyv` is for
-//!   `graph.bin`/`findings.bin`, which don't exist yet).
-//! - Every artifact carries a magic + format-version header; any mismatch — including a kndo
-//!   upgrade that changed the on-disk shape — silently rebuilds that entry rather than erroring
-//!   or migrating in place. The cache is explicitly disposable.
+//! Layout, keying, and format decisions mirror ADR 0004 exactly:
+//! - Facts are content-addressed by `(adapter id, adapter facts-schema version, file content
+//!   hash)` — renames, branch switches, and `git stash` all hit the cache; a file reverted to
+//!   an old version re-hits its old entry. `bincode` — no zero-copy win at this per-file size.
+//! - The graph snapshot is keyed by a single digest folding in the *whole* discovered file set
+//!   (every path + content hash — RFC 0004 §3's "set of (path, content hash)" already subsumes
+//!   "manifest hashes": a manifest is just one more discovered file) plus each registered
+//!   adapter's id and facts-schema version plus [`crate::graph::GRAPH_SCHEMA_VERSION`]. Two
+//!   inputs RFC 0004 §3 also lists — a kndo config hash and the active plugin set — don't exist
+//!   as subsystems yet, so they're honestly absent from the key rather than faked; extending it
+//!   is required before either subsystem ships. Any key mismatch is a full rebuild, never a
+//!   partial patch. `rkyv`, per ADR 0004 — loading validates the on-disk buffer and hands back
+//!   an archived view without a bincode-style structural parse; it's a validated in-memory
+//!   buffer today, not an `mmap`, so "zero-copy" here means "no deserialize step", not literally
+//!   zero copies — real `mmap`-backed loading is a follow-up, not a functional gap (nothing
+//!   about the format changes if it lands later).
+//! - Every artifact — facts entry and graph snapshot alike — carries a magic + format-version
+//!   header; any mismatch, including a kndo upgrade that changed the on-disk shape, silently
+//!   rebuilds that layer rather than erroring or migrating in place. The cache is explicitly
+//!   disposable.
 //! - Single-writer advisory lock; a concurrent run degrades to read-only cache use instead of
 //!   racing writes.
 
@@ -23,7 +34,12 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use crate::adapter::FileFacts;
+use crate::adapter::{Diagnostic, FileFacts};
+use crate::graph::{
+    DeclaredDependency, DependencyNode, FileNode, PackageNode, ProjectGraph, SymbolNode,
+};
+use crate::vocab::{Edge, PackageId};
+use smol_str::SmolStr;
 
 /// Facts-entry envelope header: bumped whenever the serialized shape changes, independent of
 /// any adapter's own `facts_schema_version` (which already keys the entry's path) — this is
@@ -36,6 +52,46 @@ const HEADER_LEN: usize = FACTS_MAGIC.len() + 4;
 /// ADR 0004's default facts-store cap; `prune` enforces it, LRU-by-mtime.
 pub const DEFAULT_CAP_BYTES: u64 = 256 * 1024 * 1024;
 
+/// Graph-snapshot envelope header: magic + format version (belt to the content-key's
+/// suspenders, same role as [`ENTRY_FORMAT_VERSION`]) + the 32-byte key itself, kept in this
+/// plain, unarchived prefix so a key mismatch — the common case any time a file changed — is a
+/// handful of byte comparisons, never a full `rkyv` validation of a payload about to be thrown
+/// away.
+const GRAPH_MAGIC: [u8; 4] = *b"KNG1";
+const GRAPH_FORMAT_VERSION: u32 = 1;
+const GRAPH_KEY_LEN: usize = 32;
+const GRAPH_HEADER_LEN: usize = GRAPH_MAGIC.len() + 4 + GRAPH_KEY_LEN;
+
+/// `script_invoked_dependencies` is a `HashSet<(PackageId, SmolStr)>` on the live graph — rkyv
+/// can't derive `Archive` for a bare tuple with a `#[rkyv(with = ..)]`-annotated element (the
+/// attribute only attaches to a named struct/enum field), and a `HashSet` needs converting to a
+/// sequence either way, so this tiny struct is both the `with`-attachment point and the
+/// sequence element.
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+struct ScriptInvokedDepSnap {
+    package: PackageId,
+    #[rkyv(with = crate::rkyv_support::SmolStrAsString)]
+    name: SmolStr,
+}
+
+/// The archived payload (everything after the header) — deliberately a standalone type rather
+/// than deriving `Archive` on [`ProjectGraph`] itself: `ProjectGraph::file_index` is a derived
+/// index (rebuilt on load, RFC 0004 §2 — no reason to pay to persist it), and `diagnostics`
+/// lives outside `ProjectGraph` entirely on the live path (`assemble`'s second return value) but
+/// belongs in the snapshot so a full-hit warm run doesn't silently drop them (RFC 0001 §6:
+/// diagnostics degrade, never vanish — including across a "nothing changed" cache hit).
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+struct GraphSnapshot {
+    files: Vec<FileNode>,
+    symbols: Vec<SymbolNode>,
+    dependencies: Vec<DependencyNode>,
+    declared_dependencies: Vec<DeclaredDependency>,
+    script_invoked_dependencies: Vec<ScriptInvokedDepSnap>,
+    packages: Vec<PackageNode>,
+    edges: Vec<Edge>,
+    diagnostics: Vec<Diagnostic>,
+}
+
 struct LockFile(PathBuf);
 
 impl Drop for LockFile {
@@ -44,15 +100,14 @@ impl Drop for LockFile {
     }
 }
 
-/// One project's on-disk facts cache handle — `.kndo/cache/facts/` under the project root.
-/// Read/write methods take `&self` and touch only per-entry files named by content hash, so
-/// concurrent calls from rayon workers on distinct files never race (the only shared mutable
-/// state is the hit counter, which is atomic).
-pub struct FactsCache {
+/// One project's on-disk cache handle — `.kndo/cache/` under the project root: `facts/` (one
+/// entry per file) plus `graph.bin` (one snapshot for the whole project). Facts read/write
+/// methods take `&self` and touch only per-entry files named by content hash, so concurrent
+/// calls from rayon workers on distinct files never race; the graph snapshot is written once,
+/// after assembly, never mid-assembly (the only shared mutable state during assembly is the
+/// facts hit counter, which is atomic).
+pub struct ProjectCache {
     facts_dir: PathBuf,
-    /// Kept for the future graph/findings snapshot paths (RFC 0004 §2) and for tests; not read
-    /// by the facts layer itself, which only ever needs `facts_dir`.
-    #[allow(dead_code)]
     cache_dir: PathBuf,
     /// `false` when another process already holds the write lock, or the cache directory
     /// couldn't be created (read-only filesystem, permissions…) — reads still work in either
@@ -61,6 +116,10 @@ pub struct FactsCache {
     writable: bool,
     _lock: Option<LockFile>,
     hits: AtomicU64,
+    /// Separate from `hits`: a graph-snapshot hit skips the facts layer entirely (nothing to
+    /// look up per file when the whole graph is already known-current), so it needs its own
+    /// signal — `Engine`'s warm/cold reporting checks both (`hits() + graph_hits() > 0`).
+    graph_hits: AtomicU64,
 }
 
 fn hex32(bytes: &[u8; 32]) -> String {
@@ -71,22 +130,23 @@ fn hex32(bytes: &[u8; 32]) -> String {
     s
 }
 
-impl FactsCache {
+impl ProjectCache {
     /// Opens (creating if needed) the cache under `root`. Never fails the caller — an
     /// unwritable or uncreatable cache directory just yields a read-mostly-empty, write-nothing
     /// handle rather than aborting analysis (RFC 0001 §6's "diagnostics degrade, never vanish"
     /// spirit, applied to a subsystem that's allowed to not exist at all).
-    pub fn open(root: &Path) -> FactsCache {
+    pub fn open(root: &Path) -> ProjectCache {
         let kndo_dir = root.join(".kndo");
         let cache_dir = kndo_dir.join("cache");
         let facts_dir = cache_dir.join("facts");
         if fs::create_dir_all(&facts_dir).is_err() {
-            return FactsCache {
+            return ProjectCache {
                 facts_dir,
                 cache_dir,
                 writable: false,
                 _lock: None,
                 hits: AtomicU64::new(0),
+                graph_hits: AtomicU64::new(0),
             };
         }
         // Makes the cache disposable regardless of the project's own root `.gitignore` — a
@@ -102,12 +162,13 @@ impl FactsCache {
             .ok()
             .map(|_| LockFile(lock_path));
         let writable = lock.is_some();
-        FactsCache {
+        ProjectCache {
             facts_dir,
             cache_dir,
             writable,
             _lock: lock,
             hits: AtomicU64::new(0),
+            graph_hits: AtomicU64::new(0),
         }
     }
 
@@ -128,6 +189,13 @@ impl FactsCache {
     /// open-but-empty on a project's first run.
     pub fn hits(&self) -> u64 {
         self.hits.load(Ordering::Relaxed)
+    }
+
+    /// Number of `get_graph` calls served from the snapshot. Separate from [`Self::hits`]: a
+    /// graph-snapshot hit skips the facts layer entirely, so `Engine`'s warm/cold reporting
+    /// checks `hits() + graph_hits() > 0`, not `hits()` alone.
+    pub fn graph_hits(&self) -> u64 {
+        self.graph_hits.load(Ordering::Relaxed)
     }
 
     /// Fetch cached facts for this exact `(adapter, schema version, content)` triple. A
@@ -229,6 +297,103 @@ impl FactsCache {
     fn cache_root(&self) -> &Path {
         &self.cache_dir
     }
+
+    fn graph_path(&self) -> PathBuf {
+        self.cache_dir.join("graph.bin")
+    }
+
+    /// Load the graph snapshot iff its stored key exactly matches `key` — the caller (`graph.rs`)
+    /// computes `key` from the current discovered file set + adapter versions +
+    /// [`crate::graph::GRAPH_SCHEMA_VERSION`]; any other value means *something* in that input
+    /// changed since the snapshot was written, so this is a plain miss, not an error, exactly
+    /// like a facts-entry miss (ADR 0004: any mismatch ⇒ silently rebuild).
+    pub fn get_graph(&self, key: &[u8; GRAPH_KEY_LEN]) -> Option<(ProjectGraph, Vec<Diagnostic>)> {
+        let bytes = fs::read(self.graph_path()).ok()?;
+        if bytes.len() < GRAPH_HEADER_LEN || bytes[..GRAPH_MAGIC.len()] != GRAPH_MAGIC {
+            return None;
+        }
+        let version_start = GRAPH_MAGIC.len();
+        let key_start = version_start + 4;
+        let version = u32::from_le_bytes(bytes[version_start..key_start].try_into().ok()?);
+        if version != GRAPH_FORMAT_VERSION {
+            return None;
+        }
+        if bytes[key_start..GRAPH_HEADER_LEN] != *key {
+            return None;
+        }
+
+        // rkyv needs its input aligned to the archive's own requirements, which an arbitrary
+        // byte offset into a plain `Vec<u8>` isn't guaranteed to satisfy — copy the payload
+        // into a properly aligned buffer before validating. Still far cheaper than a bincode-
+        // style structural parse: one linear copy, then in-place validation, no per-node
+        // allocation walk on the way in (only `deserialize` below allocates, once, into the
+        // owned graph this function returns).
+        let payload = &bytes[GRAPH_HEADER_LEN..];
+        let mut aligned = rkyv::util::AlignedVec::<16>::with_capacity(payload.len());
+        aligned.extend_from_slice(payload);
+        let archived = rkyv::access::<ArchivedGraphSnapshot, rkyv::rancor::Error>(&aligned).ok()?;
+        let snapshot: GraphSnapshot =
+            rkyv::deserialize::<GraphSnapshot, rkyv::rancor::Error>(archived).ok()?;
+
+        let script_invoked_dependencies = snapshot
+            .script_invoked_dependencies
+            .into_iter()
+            .map(|d| (d.package, d.name))
+            .collect();
+        let graph = ProjectGraph::from_snapshot_parts(
+            snapshot.files,
+            snapshot.symbols,
+            snapshot.dependencies,
+            snapshot.declared_dependencies,
+            script_invoked_dependencies,
+            snapshot.packages,
+            snapshot.edges,
+        );
+        self.graph_hits.fetch_add(1, Ordering::Relaxed);
+        Some((graph, snapshot.diagnostics))
+    }
+
+    /// Persist `graph`/`diagnostics` under `key`. No-op when the cache opened read-only or
+    /// encoding fails, same silent-degrade contract as [`Self::put`].
+    pub fn put_graph(
+        &self,
+        key: &[u8; GRAPH_KEY_LEN],
+        graph: &ProjectGraph,
+        diagnostics: &[Diagnostic],
+    ) {
+        if !self.writable {
+            return;
+        }
+        let snapshot = GraphSnapshot {
+            files: graph.files.clone(),
+            symbols: graph.symbols.clone(),
+            dependencies: graph.dependencies.clone(),
+            declared_dependencies: graph.declared_dependencies.clone(),
+            script_invoked_dependencies: graph
+                .script_invoked_dependencies
+                .iter()
+                .cloned()
+                .map(|(package, name)| ScriptInvokedDepSnap { package, name })
+                .collect(),
+            packages: graph.packages.clone(),
+            edges: graph.edges.clone(),
+            diagnostics: diagnostics.to_vec(),
+        };
+        let Ok(bytes) = rkyv::to_bytes::<rkyv::rancor::Error>(&snapshot) else {
+            return;
+        };
+        let mut out = Vec::with_capacity(GRAPH_HEADER_LEN + bytes.len());
+        out.extend_from_slice(&GRAPH_MAGIC);
+        out.extend_from_slice(&GRAPH_FORMAT_VERSION.to_le_bytes());
+        out.extend_from_slice(key);
+        out.extend_from_slice(&bytes);
+
+        let path = self.graph_path();
+        let tmp = path.with_extension("bin.tmp");
+        if fs::write(&tmp, &out).is_ok() {
+            let _ = fs::rename(&tmp, &path);
+        }
+    }
 }
 
 fn encode(facts: &FileFacts) -> Option<Vec<u8>> {
@@ -279,7 +444,7 @@ mod tests {
     #[test]
     fn miss_on_empty_cache_then_hit_after_put() {
         let dir = tmp("hit-miss");
-        let cache = FactsCache::open(&dir);
+        let cache = ProjectCache::open(&dir);
         let hash = [1u8; 32];
         assert!(cache.get("js-ts", 1, &hash).is_none());
         assert_eq!(cache.hits(), 0);
@@ -294,7 +459,7 @@ mod tests {
     #[test]
     fn distinct_hashes_and_adapters_never_collide() {
         let dir = tmp("distinct-keys");
-        let cache = FactsCache::open(&dir);
+        let cache = ProjectCache::open(&dir);
         let a = [1u8; 32];
         let b = [2u8; 32];
         cache.put("js-ts", 1, &a, &sample_facts());
@@ -306,9 +471,9 @@ mod tests {
     #[test]
     fn a_second_writer_degrades_to_read_only() {
         let dir = tmp("second-writer");
-        let first = FactsCache::open(&dir);
+        let first = ProjectCache::open(&dir);
         assert!(first.writable);
-        let second = FactsCache::open(&dir);
+        let second = ProjectCache::open(&dir);
         assert!(!second.writable);
 
         let hash = [7u8; 32];
@@ -324,17 +489,17 @@ mod tests {
     fn dropping_the_writer_releases_the_lock_for_the_next_open() {
         let dir = tmp("lock-release");
         {
-            let first = FactsCache::open(&dir);
+            let first = ProjectCache::open(&dir);
             assert!(first.writable);
         } // dropped — lock file removed
-        let second = FactsCache::open(&dir);
+        let second = ProjectCache::open(&dir);
         assert!(second.writable);
     }
 
     #[test]
     fn corrupt_entry_is_a_silent_miss_not_an_error() {
         let dir = tmp("corrupt");
-        let cache = FactsCache::open(&dir);
+        let cache = ProjectCache::open(&dir);
         let hash = [3u8; 32];
         cache.put("js-ts", 1, &hash, &sample_facts());
         let path = cache.entry_path("js-ts", 1, &hash);
@@ -345,7 +510,7 @@ mod tests {
     #[test]
     fn stale_format_version_is_a_silent_miss() {
         let dir = tmp("stale-version");
-        let cache = FactsCache::open(&dir);
+        let cache = ProjectCache::open(&dir);
         let hash = [4u8; 32];
         let mut bytes = encode(&sample_facts()).unwrap();
         // Corrupt just the format-version field to simulate a future kndo build's layout.
@@ -359,7 +524,7 @@ mod tests {
     #[test]
     fn gitignore_makes_the_cache_disposable_regardless_of_the_project_gitignore() {
         let dir = tmp("gitignore");
-        let _cache = FactsCache::open(&dir);
+        let _cache = ProjectCache::open(&dir);
         let contents = fs::read_to_string(dir.join(".kndo/.gitignore")).unwrap();
         assert!(contents.contains("cache/"));
     }
@@ -367,7 +532,7 @@ mod tests {
     #[test]
     fn prune_evicts_oldest_entries_first_down_to_the_cap() {
         let dir = tmp("prune");
-        let cache = FactsCache::open(&dir);
+        let cache = ProjectCache::open(&dir);
         // Distinct content per entry so sizes differ enough to matter, and put() calls stagger
         // mtimes in insertion order (filesystem mtime resolution is coarse but monotonic here).
         for i in 0..5u8 {
@@ -405,10 +570,123 @@ mod tests {
     #[test]
     fn prune_is_a_noop_under_the_cap() {
         let dir = tmp("prune-noop");
-        let cache = FactsCache::open(&dir);
+        let cache = ProjectCache::open(&dir);
         let hash = [9u8; 32];
         cache.put("js-ts", 1, &hash, &sample_facts());
         cache.prune(DEFAULT_CAP_BYTES);
         assert!(cache.get("js-ts", 1, &hash).is_some());
+    }
+
+    fn sample_graph() -> ProjectGraph {
+        use crate::adapter::ProjectPath;
+        use crate::vocab::{Confidence, Edge, EdgeKind, FileId, Provenance, SymbolId};
+
+        ProjectGraph::for_test(
+            vec![FileNode {
+                path: ProjectPath("a.mock".into()),
+                content_hash: [1u8; 32],
+                language: Some("mock".into()),
+                class: None,
+                package: PackageId(0),
+            }],
+            vec![SymbolNode {
+                file: FileId(0),
+                name: "x".into(),
+                kind: crate::vocab::SymbolKind::Function,
+                span: Default::default(),
+                exported: true,
+                visibility: crate::adapter::VisibilityLevel(0),
+            }],
+            vec![DependencyNode {
+                name: "lodash".into(),
+            }],
+            vec![Edge {
+                kind: EdgeKind::Declares {
+                    file: FileId(0),
+                    symbol: SymbolId(0),
+                },
+                confidence: Confidence::Certain,
+                source: Provenance::Adapter("mock".into()),
+            }],
+        )
+        .with_script_invoked_dependencies(vec![(PackageId(0), "xo".into())])
+        .with_declared_dependencies(vec![DeclaredDependency {
+            package: PackageId(0),
+            manifest: ProjectPath("package.json".into()),
+            name: "lodash".into(),
+            version_req: "^4".into(),
+            scope: crate::vocab::DependencyScope::Prod,
+        }])
+    }
+
+    #[test]
+    fn graph_round_trips_including_diagnostics_and_misses_on_key_mismatch() {
+        let dir = tmp("graph-roundtrip");
+        let cache = ProjectCache::open(&dir);
+        let key = [5u8; GRAPH_KEY_LEN];
+        let graph = sample_graph();
+        let diagnostics = vec![Diagnostic {
+            level: crate::adapter::DiagnosticLevel::Warn,
+            path: Some(crate::adapter::ProjectPath("a.mock".into())),
+            message: "example diagnostic".to_string(),
+            span: None,
+        }];
+
+        assert!(cache.get_graph(&key).is_none());
+        assert_eq!(cache.graph_hits(), 0);
+
+        cache.put_graph(&key, &graph, &diagnostics);
+
+        let (restored, restored_diagnostics) = cache.get_graph(&key).expect("should hit");
+        assert_eq!(cache.graph_hits(), 1);
+        assert_eq!(restored.files.len(), 1);
+        assert_eq!(restored.files[0].path.0, "a.mock");
+        assert_eq!(restored.symbols.len(), 1);
+        assert_eq!(restored.symbols[0].name, "x");
+        assert_eq!(restored.dependencies.len(), 1);
+        assert_eq!(restored.declared_dependencies.len(), 1);
+        assert_eq!(restored.edges.len(), 1);
+        assert_eq!(
+            restored.script_invoked_dependencies,
+            [(PackageId(0), SmolStr::new("xo"))]
+                .into_iter()
+                .collect::<std::collections::HashSet<_>>()
+        );
+        assert_eq!(
+            restored.file_id(&crate::adapter::ProjectPath("a.mock".into())),
+            Some(crate::vocab::FileId(0))
+        );
+        assert_eq!(restored_diagnostics.len(), 1);
+        assert_eq!(restored_diagnostics[0].message, "example diagnostic");
+
+        // A different key (any input change) is a plain miss, not a stale hit.
+        let other_key = [6u8; GRAPH_KEY_LEN];
+        assert!(cache.get_graph(&other_key).is_none());
+        assert_eq!(cache.graph_hits(), 1); // unchanged — the miss above didn't count
+    }
+
+    #[test]
+    fn a_second_writer_never_writes_a_graph_snapshot() {
+        let dir = tmp("graph-read-only");
+        let first = ProjectCache::open(&dir);
+        let second = ProjectCache::open(&dir);
+        assert!(!second.writable);
+
+        let key = [1u8; GRAPH_KEY_LEN];
+        second.put_graph(&key, &sample_graph(), &[]);
+        assert!(second.get_graph(&key).is_none());
+
+        first.put_graph(&key, &sample_graph(), &[]);
+        assert!(second.get_graph(&key).is_some()); // shared filesystem state, same as facts
+    }
+
+    #[test]
+    fn corrupt_graph_snapshot_is_a_silent_miss() {
+        let dir = tmp("graph-corrupt");
+        let cache = ProjectCache::open(&dir);
+        let key = [2u8; GRAPH_KEY_LEN];
+        cache.put_graph(&key, &sample_graph(), &[]);
+        fs::write(cache.graph_path(), b"not a valid snapshot").unwrap();
+        assert!(cache.get_graph(&key).is_none());
     }
 }

@@ -18,4 +18,5 @@ pub mod discovery;
 pub mod engine;
 pub mod graph;
 pub mod plugin;
+mod rkyv_support;
 pub mod vocab;

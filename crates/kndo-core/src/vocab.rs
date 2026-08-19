@@ -9,40 +9,94 @@ use smol_str::SmolStr;
 
 /// Interned; stable within a snapshot. Assigned by a deterministic post-collection sort,
 /// never by completion order (RFC 0008 §4).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+)]
 pub struct FileId(pub u32);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+)]
 pub struct SymbolId(pub u32);
 
 /// A package consumed as a dependency — external, or an in-repo workspace member imported by
 /// name (RFC 0011 §4; same declaration contract either way).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+)]
 pub struct DependencyId(pub u32);
 
 /// A workspace unit: one manifest + the files it governs (RFC 0011).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+)]
 pub struct PackageId(pub u32);
 
 // ---------------------------------------------------------------- file classification
 
 /// A file's classification is two orthogonal axes, never one enum: a generated test file and
 /// a vendored production file are both expressible. `FileRole` mirrors `RootKind` on purpose.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize,
+)]
 pub enum FileRole {
     Production,
     Test,
     Tooling,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize,
+)]
 pub enum FileOrigin {
     Authored,
     Generated,
     Vendored,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize,
+)]
 pub struct FileClass {
     pub role: FileRole,
     pub origin: FileOrigin,
@@ -62,7 +116,18 @@ impl Default for FileClass {
 /// Kebab-case names double as `subject_kind` facet values (alongside `file | directory |
 /// package | dependency | import | suppression`) in output and `category:subject` targeting
 /// (RFC 0005 taxonomy rule 2).
-#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    Hash,
+    serde::Serialize,
+    serde::Deserialize,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+)]
 pub enum SymbolKind {
     Function,
     Method,
@@ -79,7 +144,7 @@ pub enum SymbolKind {
     Module,
     CssRule,
     CssVariable,
-    Other(SmolStr),
+    Other(#[rkyv(with = crate::rkyv_support::SmolStrAsString)] SmolStr),
 }
 
 impl SymbolKind {
@@ -106,7 +171,19 @@ impl SymbolKind {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    serde::Serialize,
+    serde::Deserialize,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+)]
 pub enum RootKind {
     Production,
     Test,
@@ -115,7 +192,9 @@ pub enum RootKind {
 
 /// Analysis semantics per scope: RFC 0005 §5 (peer exempt from `unused`; optional demotes
 /// findings to `possible`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize,
+)]
 pub enum DependencyScope {
     Prod,
     Dev,
@@ -128,7 +207,9 @@ pub enum DependencyScope {
 
 /// Reference subtype. `Implement`/`Override` drive dispatch-aware member liveness
 /// (RFC 0005 §2); `Extend`/`TypeUse` distinguish type-level from value-level consumption.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize,
+)]
 pub enum RefKind {
     Call,
     Read,
@@ -142,7 +223,19 @@ pub enum RefKind {
 /// Per-edge strength. Ordered by strength: `Possible < Probable < Certain`, so `max()` yields
 /// the strongest evidence and "edges at least as strong as τ" is a simple `>=` (RFC 0005 §1).
 #[derive(
-    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    serde::Serialize,
+    serde::Deserialize,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
 )]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "lowercase")]
@@ -152,7 +245,9 @@ pub enum Confidence {
     Certain,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize,
+)]
 pub enum NodeRef {
     File(FileId),
     Symbol(SymbolId),
@@ -161,7 +256,7 @@ pub enum NodeRef {
 /// How per-edge confidence combines into a node's `(color, confidence)` — including
 /// `Wildcard`'s plausible-target-set expansion — is the tiered algorithm normatively defined
 /// in RFC 0005 §1, not left to each analysis to reinvent.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub enum EdgeKind {
     /// May cross `Package` boundaries (RFC 0011 §4).
     ImportsFile {
@@ -199,13 +294,13 @@ pub enum EdgeKind {
 
 /// Identity of the component whose facts produced an edge/annotation — for attribution in
 /// output (`"sources": ["adapter:js-ts"]`).
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub enum Provenance {
-    Adapter(SmolStr),
-    Plugin(SmolStr),
+    Adapter(#[rkyv(with = crate::rkyv_support::SmolStrAsString)] SmolStr),
+    Plugin(#[rkyv(with = crate::rkyv_support::SmolStrAsString)] SmolStr),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct Edge {
     pub kind: EdgeKind,
     pub confidence: Confidence,
