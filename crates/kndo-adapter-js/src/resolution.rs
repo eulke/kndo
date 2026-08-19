@@ -15,60 +15,26 @@ use smol_str::SmolStr;
 const TS_EXTS: &[&str] = &["ts", "tsx", "mts", "cts"];
 const JS_EXTS: &[&str] = &["js", "jsx", "mjs", "cjs"];
 
-/// Not exhaustive, but every commonly-imported Node core module — enough to keep them out of
-/// `undeclared`/`unused` dependency findings without pulling in a full builtins crate.
-const NODE_BUILTINS: &[&str] = &[
-    "assert",
-    "assert/strict",
-    "buffer",
-    "child_process",
-    "cluster",
-    "console",
-    "constants",
-    "crypto",
-    "dgram",
-    "diagnostics_channel",
-    "dns",
-    "dns/promises",
-    "domain",
-    "events",
-    "fs",
-    "fs/promises",
-    "http",
-    "http2",
-    "https",
-    "inspector",
-    "module",
-    "net",
-    "os",
-    "path",
-    "path/posix",
-    "path/win32",
-    "perf_hooks",
-    "process",
-    "punycode",
-    "querystring",
-    "readline",
-    "readline/promises",
-    "repl",
-    "stream",
-    "stream/promises",
-    "stream/web",
-    "string_decoder",
-    "timers",
-    "timers/promises",
-    "tls",
-    "trace_events",
-    "tty",
-    "url",
-    "util",
-    "util/types",
-    "v8",
-    "vm",
-    "wasi",
-    "worker_threads",
-    "zlib",
-];
+/// Bare-importable Node builtins — **generated data, never hand-maintained code**
+/// (`scripts/gen-node-builtins.mjs`, sourced from Node's own `module.builtinModules`).
+///
+/// Two facts make this maintainable without touching adapter code on new Node releases:
+/// 1. Since ~v18, Node's policy is that every NEW builtin is `node:`-prefix-only (`node:test`,
+///    `node:sqlite` — the bare names fail); the prefix is handled structurally in `resolve`,
+///    so this bare-name set is a frozen legacy list, not a moving target.
+/// 2. If it ever does move, updating is regenerating a data file, not editing code.
+///
+/// Known limitation until manifest facts reach `ResolveCtx`: a *declared* dependency whose
+/// name shadows a builtin (the userland `punycode` package is real) should win over this
+/// list — manifest-declared beats builtin once the manifest slice lands (spec §3).
+static NODE_BUILTINS: std::sync::LazyLock<std::collections::HashSet<&'static str>> =
+    std::sync::LazyLock::new(|| {
+        include_str!("node_builtins.txt")
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty() && !l.starts_with('#'))
+            .collect()
+    });
 
 pub fn resolve(spec: &ImportSpec, ctx: &ResolveCtx<'_>) -> Resolution {
     let s = spec.specifier.as_str();
@@ -86,7 +52,7 @@ pub fn resolve(spec: &ImportSpec, ctx: &ResolveCtx<'_>) -> Resolution {
         let _ = builtin; // `node:`-prefixed is unambiguously stdlib regardless of the name.
         return Resolution::Stdlib;
     }
-    if NODE_BUILTINS.contains(&s) {
+    if NODE_BUILTINS.contains(s) {
         return Resolution::Stdlib;
     }
 
@@ -303,5 +269,36 @@ mod tests {
             &ResolveCtx::new(&known),
         );
         assert_eq!(r, Resolution::Unresolved);
+    }
+
+    #[test]
+    fn builtin_subpath_is_stdlib() {
+        // fs/promises is its own entry in module.builtinModules — the generated data
+        // carries all of these; a hand list historically missed several.
+        let known = ctx_with(&[]);
+        let r = resolve(&spec("src/a.ts", "fs/promises"), &ResolveCtx::new(&known));
+        assert_eq!(r, Resolution::Stdlib);
+    }
+
+    #[test]
+    fn generated_builtins_data_is_well_formed() {
+        // Guards the generated file itself: non-trivial, essentials present, no duplicates.
+        assert!(
+            NODE_BUILTINS.len() >= 60,
+            "suspiciously small: {}",
+            NODE_BUILTINS.len()
+        );
+        for essential in ["fs", "path", "url", "util", "events"] {
+            assert!(NODE_BUILTINS.contains(essential), "missing {essential}");
+        }
+        let raw_lines = include_str!("node_builtins.txt")
+            .lines()
+            .filter(|l| !l.trim().is_empty() && !l.starts_with('#'))
+            .count();
+        assert_eq!(
+            raw_lines,
+            NODE_BUILTINS.len(),
+            "duplicates in generated data"
+        );
     }
 }
