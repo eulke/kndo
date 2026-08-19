@@ -117,6 +117,7 @@ mod tests {
             kind: EdgeKind::ImportsDependency { from, to },
             confidence: Confidence::Certain,
             source: Provenance::Adapter(SmolStr::new("mock")),
+            span: None,
         }
     }
 

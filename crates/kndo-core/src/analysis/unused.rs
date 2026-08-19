@@ -180,6 +180,7 @@ mod tests {
             kind,
             confidence,
             source: Provenance::Adapter(SmolStr::new("mock")),
+            span: None,
         }
     }
 

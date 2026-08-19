@@ -701,6 +701,10 @@ mod tests {
                 },
                 confidence: Confidence::Certain,
                 source: Provenance::Adapter("mock".into()),
+                span: Some(crate::adapter::Span {
+                    start: (3, 1),
+                    end: (5, 2),
+                }),
             }],
         )
         .with_script_invoked_dependencies(vec![(PackageId(0), "xo".into())])
@@ -750,6 +754,13 @@ mod tests {
         assert_eq!(restored.dependencies.len(), 1);
         assert_eq!(restored.declared_dependencies.len(), 1);
         assert_eq!(restored.edges.len(), 1);
+        assert_eq!(
+            restored.edges[0].span,
+            Some(crate::adapter::Span {
+                start: (3, 1),
+                end: (5, 2),
+            })
+        );
         assert_eq!(
             restored.script_invoked_dependencies,
             [(PackageId(0), SmolStr::new("xo"))]

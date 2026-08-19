@@ -5,6 +5,8 @@
 
 use smol_str::SmolStr;
 
+use crate::adapter::Span;
+
 // ---------------------------------------------------------------- interned ids
 
 /// Interned; stable within a snapshot. Assigned by a deterministic post-collection sort,
@@ -305,6 +307,13 @@ pub struct Edge {
     pub kind: EdgeKind,
     pub confidence: Confidence,
     pub source: Provenance,
+    /// The extraction-time span this edge's evidence came from — the import statement, the
+    /// reference site, the declaration itself for `Declares` — when the fact that produced this
+    /// edge carried one (contracts/output-schema.md §8's `EdgeRef.site`, RFC 0007 design tenet
+    /// 4: "an agent can jump straight to the proving line"). `None` for edges with no distinct
+    /// evidence site of their own — role-derived and manifest-declared roots are markers, not
+    /// spanned facts.
+    pub span: Option<Span>,
 }
 
 #[cfg(test)]

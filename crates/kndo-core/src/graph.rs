@@ -567,6 +567,7 @@ pub fn assemble_with_cache(
                     },
                     confidence: root.confidence,
                     source: provenance(),
+                    span: None, // manifest-declared root: a marker, no extraction-time span
                 });
                 if root.kind == crate::vocab::RootKind::Production {
                     let entry = library_root_files.entry(target).or_insert(root.confidence);
@@ -607,6 +608,7 @@ pub fn assemble_with_cache(
             },
             confidence: Confidence::Probable,
             source: Provenance::Adapter(adapters[claimed.adapter_index].descriptor().id.clone()),
+            span: None, // role-derived root: the convention names the file, nothing spans it
         });
         role_root_files.insert(file_id, kind);
     }
@@ -643,6 +645,7 @@ pub fn assemble_with_cache(
                 },
                 confidence: Confidence::Certain,
                 source: provenance(),
+                span: Some(decl.span),
             });
 
             // Library-mode promotion (RFC 0011 §5): this file is a manifest-declared production
@@ -661,6 +664,7 @@ pub fn assemble_with_cache(
                         },
                         confidence,
                         source: provenance(),
+                        span: Some(decl.span),
                     });
                 }
                 // Same promotion for role-derived roots (phase 2.6): a config file's exports
@@ -676,6 +680,7 @@ pub fn assemble_with_cache(
                         },
                         confidence: Confidence::Probable,
                         source: provenance(),
+                        span: Some(decl.span),
                     });
                 }
             }
@@ -694,6 +699,13 @@ pub fn assemble_with_cache(
                     .map(|&s| NodeRef::Symbol(s)),
             };
             if let Some(target) = target {
+                // The declaration's own span is real evidence for a `Declaration`-target root
+                // (why this symbol counts as the language-level API marker); `WholeFile` has
+                // nothing narrower to point at than the file itself.
+                let span = match target {
+                    NodeRef::Symbol(s) => Some(symbols[s.0 as usize].span),
+                    NodeRef::File(_) => None,
+                };
                 edges.push(Edge {
                     kind: EdgeKind::Root {
                         kind: root.kind,
@@ -701,6 +713,7 @@ pub fn assemble_with_cache(
                     },
                     confidence: root.confidence,
                     source: provenance(),
+                    span,
                 });
             }
         }
@@ -785,6 +798,7 @@ pub fn assemble_with_cache(
                         },
                         confidence,
                         source: Provenance::Adapter(adapter.descriptor().id.clone()),
+                        span: Some(imp.span),
                     });
                 }
             }
@@ -840,6 +854,7 @@ pub fn assemble_with_cache(
                         kind: EdgeKind::ImportsFile { from: file_id, to },
                         confidence,
                         source: provenance(),
+                        span: Some(imp.span),
                     });
                     for binding in &imp.bindings {
                         let exported_name = binding
@@ -860,6 +875,7 @@ pub fn assemble_with_cache(
                             kind: EdgeKind::Wildcard { from: to },
                             confidence: Confidence::Possible,
                             source: provenance(),
+                            span: Some(imp.span),
                         });
                     }
                 }
@@ -874,6 +890,7 @@ pub fn assemble_with_cache(
                     kind: EdgeKind::ImportsDependency { from: file_id, to },
                     confidence,
                     source: provenance(),
+                    span: Some(imp.span),
                 });
             }
         }
@@ -901,6 +918,7 @@ pub fn assemble_with_cache(
                     },
                     confidence: Confidence::Certain,
                     source: provenance(),
+                    span: Some(reference.span),
                 });
             }
         }
@@ -931,11 +949,13 @@ pub fn assemble_with_cache(
                             },
                             confidence: Confidence::Possible,
                             source: provenance(),
+                            span: Some(dynamic.span),
                         });
                         edges.push(Edge {
                             kind: EdgeKind::Wildcard { from: target },
                             confidence: Confidence::Possible,
                             source: provenance(),
+                            span: Some(dynamic.span),
                         });
                     }
                 }
@@ -945,6 +965,7 @@ pub fn assemble_with_cache(
                     kind: EdgeKind::Wildcard { from: file_id },
                     confidence: Confidence::Possible,
                     source: provenance(),
+                    span: Some(dynamic.span),
                 }),
             }
         }
