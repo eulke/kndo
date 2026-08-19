@@ -59,24 +59,34 @@ pub fn discover(root: &Path) -> Result<Discovered, DiscoveryError> {
     let results: Vec<Result<DiscoveredFile, Diagnostic>> = paths
         .par_iter()
         .map(|abs| {
-            let skip = |why: String| Diagnostic {
+            // No normalized ProjectPath exists yet for these two failures — the absolute
+            // path stays in the message instead (still informative; both cases are
+            // pathological, not part of the normal skip path below).
+            let skip_raw = |why: &str| Diagnostic {
                 level: DiagnosticLevel::Warn,
+                path: None,
                 message: format!("skipped {}: {why}", abs.display()),
                 span: None,
             };
             let rel = abs
                 .strip_prefix(root)
-                .map_err(|_| skip("outside project root".into()))?;
+                .map_err(|_| skip_raw("outside project root"))?;
             // Normalize to `/` — the only path form that crosses the adapter boundary
             // (contracts §2, ProjectPath).
             let rel_str = rel
                 .to_str()
-                .ok_or_else(|| skip("path is not valid UTF-8".into()))?
+                .ok_or_else(|| skip_raw("path is not valid UTF-8"))?
                 .replace('\\', "/");
-            let content = std::fs::read(abs).map_err(|e| skip(format!("unreadable ({e})")))?;
+            let path = ProjectPath(rel_str.into());
+            let content = std::fs::read(abs).map_err(|e| Diagnostic {
+                level: DiagnosticLevel::Warn,
+                path: Some(path.clone()),
+                message: format!("unreadable ({e})"),
+                span: None,
+            })?;
             let hash = blake3::hash(&content);
             Ok(DiscoveredFile {
-                path: ProjectPath(rel_str.into()),
+                path,
                 content_hash: *hash.as_bytes(),
             })
         })

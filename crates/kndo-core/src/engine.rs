@@ -5,12 +5,16 @@
 //! frontends contain no analysis concerns — they cannot reach the graph, cache, or adapters
 //! except through this type. A frontend that needs a new fact is a core PR adding it to
 //! [`RunResult`], never a core import.
+//!
+//! Adapter *registration* is a frontend concern too: the core never knows which languages
+//! exist (RFC 0001 §2, the ignorance rule) — `kndo-cli` composes `Engine::open` with the
+//! first-party adapters it links in.
 
 use std::fmt;
 use std::path::{Path, PathBuf};
 
-use crate::adapter::Diagnostic;
-use crate::discovery;
+use crate::adapter::{Diagnostic, DiagnosticLevel, LanguageAdapter};
+use crate::graph;
 
 /// Mirrors the output schema's `schema_version` (contracts/output-schema.md).
 pub const SCHEMA_VERSION: &str = "1.0.0";
@@ -71,24 +75,37 @@ pub struct RunResult {
     /// Typed diagnostics (the schema's `diagnostics` array) — one representation everywhere,
     /// never parallel stringly-typed variants.
     pub diagnostics: Vec<Diagnostic>,
-    /// Discovery output, pre-adapter-claiming. Stands in for `run.adapters[].files`
-    /// (output-schema §1) until adapter registration lands in `Engine`.
     pub files_discovered: usize,
+    /// Files a registered adapter recognized (subset of `files_discovered`). Stands in for
+    /// `run.adapters[].files` (output-schema §1) until per-adapter breakdown lands.
+    pub files_claimed: usize,
+    pub symbols: usize,
+    pub dependencies: usize,
+    pub edges: usize,
 }
 
 /// Synchronous and single-instance-per-project (the cache lock, RFC 0004 §7); a serving
 /// frontend wraps it in its own concurrency model.
 pub struct Engine {
     root: PathBuf,
+    adapters: Vec<Box<dyn LanguageAdapter>>,
 }
 
 impl Engine {
-    pub fn open(root: &Path, _overrides: ConfigOverrides) -> Result<Engine, EngineError> {
+    /// `adapters` is the frontend's registered language set — compiled-in first-party
+    /// adapters today, WASM-bridged third-party adapters later (ADR 0003). The core never
+    /// selects or knows about them beyond the trait.
+    pub fn open(
+        root: &Path,
+        _overrides: ConfigOverrides,
+        adapters: Vec<Box<dyn LanguageAdapter>>,
+    ) -> Result<Engine, EngineError> {
         if !root.is_dir() {
             return Err(EngineError::ProjectRootNotFound(root.to_path_buf()));
         }
         Ok(Engine {
             root: root.to_path_buf(),
+            adapters,
         })
     }
 
@@ -96,19 +113,24 @@ impl Engine {
         &self.root
     }
 
-    /// M1 skeleton: extraction/graph/analyses land behind this signature next. Discovery is
-    /// wired; `--staged`/`--diff` scoping (`RunMode`) is not yet — every mode walks the full
-    /// tree until git-index/merge-base scoping lands.
+    /// M1 skeleton: analyses land behind this signature next. Graph assembly (discovery →
+    /// claim → extract → resolve → link) is wired; `--staged`/`--diff` scoping (`RunMode`)
+    /// is not yet — every mode walks the full tree until git-index/merge-base scoping lands.
     pub fn check(&mut self, _req: CheckRequest) -> RunResult {
-        match discovery::discover(&self.root) {
-            Ok(discovered) => RunResult {
-                files_discovered: discovered.files.len(),
-                diagnostics: discovered.diagnostics,
-                ..RunResult::default()
+        match graph::assemble(&self.root, &self.adapters) {
+            Ok((g, diagnostics)) => RunResult {
+                files_discovered: g.files.len(),
+                files_claimed: g.files.iter().filter(|f| f.language.is_some()).count(),
+                symbols: g.symbols.len(),
+                dependencies: g.dependencies.len(),
+                edges: g.edges.len(),
+                diagnostics,
+                findings: Vec::new(),
             },
-            Err(discovery::DiscoveryError::Root(e)) => RunResult {
+            Err(crate::discovery::DiscoveryError::Root(e)) => RunResult {
                 diagnostics: vec![Diagnostic {
-                    level: crate::adapter::DiagnosticLevel::Warn,
+                    level: DiagnosticLevel::Warn,
+                    path: None,
                     message: format!(
                         "cannot walk the project root: {e} — check the path and permissions"
                     ),
@@ -129,6 +151,7 @@ mod tests {
         let err = Engine::open(
             Path::new("/definitely/not/a/dir"),
             ConfigOverrides::default(),
+            vec![],
         );
         assert!(err.is_err());
     }
@@ -138,7 +161,7 @@ mod tests {
         let dir = std::env::temp_dir().join("kndo-engine-test-empty");
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
-        let mut engine = Engine::open(&dir, ConfigOverrides::default()).unwrap();
+        let mut engine = Engine::open(&dir, ConfigOverrides::default(), vec![]).unwrap();
         let result = engine.check(CheckRequest {
             mode: RunMode::Full,
         });
@@ -147,17 +170,19 @@ mod tests {
     }
 
     #[test]
-    fn check_counts_discovered_files() {
+    fn check_counts_discovered_files_with_no_adapters_registered() {
         let dir = std::env::temp_dir().join("kndo-engine-test-files");
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("a.ts"), "export const a = 1;").unwrap();
         std::fs::write(dir.join("b.ts"), "export const b = 2;").unwrap();
 
-        let mut engine = Engine::open(&dir, ConfigOverrides::default()).unwrap();
+        let mut engine = Engine::open(&dir, ConfigOverrides::default(), vec![]).unwrap();
         let result = engine.check(CheckRequest {
             mode: RunMode::Full,
         });
         assert_eq!(result.files_discovered, 2);
+        // No adapters registered in this test — files exist as nodes but nothing claims them.
+        assert_eq!(result.files_claimed, 0);
     }
 }

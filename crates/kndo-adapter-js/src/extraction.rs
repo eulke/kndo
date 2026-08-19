@@ -23,6 +23,7 @@ pub fn extract(path: &str, content: &[u8]) -> FileFacts {
     let Some(tree) = kndo_adapter_toolkit::parsing::parse(content, tsx) else {
         out.diagnostics.push(Diagnostic {
             level: DiagnosticLevel::Warn,
+            path: None, // filled in by the core when merging FileFacts into RunResult
             message: "failed to initialize the tree-sitter parser".into(),
             span: None,
         });
@@ -35,6 +36,7 @@ pub fn extract(path: &str, content: &[u8]) -> FileFacts {
         // produces a usable partial tree, so we keep walking and just flag it.
         out.diagnostics.push(Diagnostic {
             level: DiagnosticLevel::Warn,
+            path: None,
             message: "syntax errors in file — extraction is best-effort".into(),
             span: None,
         });

@@ -219,6 +219,7 @@ dependencies = [
 name = "kndo-cli"
 version = "0.1.0"
 dependencies = [
+ "kndo-adapter-js",
  "kndo-core",
 ]
 

@@ -6,7 +6,13 @@
 
 use std::process::ExitCode;
 
+use kndo_core::adapter::LanguageAdapter;
 use kndo_core::engine::{CheckRequest, ConfigOverrides, Engine, RunMode, SCHEMA_VERSION};
+
+/// The first-party adapter set this binary links in (RFC 0001 §2 — the core never knows).
+fn registered_adapters() -> Vec<Box<dyn LanguageAdapter>> {
+    vec![Box::new(kndo_adapter_js::JsTsAdapter)]
+}
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -35,7 +41,7 @@ fn check() -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    let mut engine = match Engine::open(&cwd, ConfigOverrides::default()) {
+    let mut engine = match Engine::open(&cwd, ConfigOverrides::default(), registered_adapters()) {
         Ok(e) => e,
         Err(e) => {
             eprintln!("kndo: {e}");
@@ -53,14 +59,17 @@ fn check() -> ExitCode {
             kndo_core::adapter::DiagnosticLevel::Warn => "warning",
             kndo_core::adapter::DiagnosticLevel::Info => "info",
         };
-        eprintln!("kndo: {level}: {}", d.message);
+        match &d.path {
+            Some(p) => eprintln!("kndo: {level}: {}: {}", p.0, d.message),
+            None => eprintln!("kndo: {level}: {}", d.message),
+        }
     }
 
     // RFC 0009 §2 quiet success — one line. (Real rendering lands with real findings.)
     if result.findings.is_empty() {
         println!(
-            "kndo · clean · {} files discovered · 0 findings (M1 skeleton — analyses land next)",
-            result.files_discovered
+            "kndo · clean · {} files ({} claimed, {} symbols, {} deps, {} edges) · 0 findings (M1 skeleton — analyses land next)",
+            result.files_discovered, result.files_claimed, result.symbols, result.dependencies, result.edges
         );
         ExitCode::SUCCESS
     } else {

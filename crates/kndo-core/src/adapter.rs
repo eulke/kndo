@@ -39,6 +39,11 @@ pub enum DiagnosticLevel {
 #[derive(Debug, Clone)]
 pub struct Diagnostic {
     pub level: DiagnosticLevel,
+    /// The file this diagnostic is about, when there is one — `None` for project-level
+    /// diagnostics (e.g. "cannot walk the project root"). A diagnostic merged from many
+    /// files without this field would be unattributable; adapters emit diagnostics scoped
+    /// to the file they're extracting, the core fills this in.
+    pub path: Option<ProjectPath>,
     pub message: String,
     pub span: Option<Span>,
 }
