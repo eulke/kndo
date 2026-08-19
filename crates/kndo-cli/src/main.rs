@@ -29,15 +29,152 @@ fn main() -> ExitCode {
         Some("check") => check(&args[1..]),
         Some("baseline") => baseline_cmd(&args[1..]),
         Some("doctor") => doctor_cmd(),
+        Some("init") => init_cmd(&args[1..]),
         // Bare flags with no subcommand (`kndo --format json`) are an implicit `check`, same
         // as no arguments at all — `kndo` = `kndo check` (RFC 0006 §2).
         Some(s) if s.starts_with('-') => check(&args),
         None => check(&args),
         Some(other) => {
-            eprintln!("kndo: unknown command `{other}` (check, baseline, doctor, --version)");
+            eprintln!("kndo: unknown command `{other}` (check, baseline, doctor, init, --version)");
             ExitCode::from(2)
         }
     }
+}
+
+const KNDO_TOML_TEMPLATE: &str = r#"# kndo.toml — everything here is optional; every setting already has the default shown.
+# Written by `kndo init`. Full reference: RFC 0006 §7.
+
+# [project]
+# roots = ["src", "packages/*"]          # default: auto (git ls-files minus ignores)
+# exclude = ["**/generated/**"]
+
+# [analysis]
+# skip = []                              # categories or category:subject, e.g. ["unused:enum-member"]
+# min-confidence = "probable"            # report floor; "possible" only with --verbose
+
+# [analysis.duplicate]
+# min-tokens = 50
+
+# [analysis.crap]
+# threshold = 30
+
+# [performance]
+# threads = 0                            # 0 = physical cores; --threads flag wins
+
+# [delta]                                # diff-mode gate budgets, see RFC 0006 §5
+# max-health-drop = 0.0
+# max-net-findings = 0
+
+# [[rule]]                               # per-path overrides
+# paths = ["examples/**"]
+# skip = ["unused"]
+"#;
+
+const PRE_COMMIT_HOOK: &str = "#!/bin/sh\nexec kndo check --staged --fail-on warning\n";
+
+/// `kndo init` (RFC 0006 §2): "write minimal kndo.toml, .gitignore entry, offer pre-commit
+/// hook." Deliberately not an `Engine` method — contracts §5's `Engine` trait doesn't list
+/// `init` alongside `check`/`baseline`/`doctor`, and this command does no analysis at all, just
+/// project scaffolding, so there's nothing for the analysis facade to own.
+///
+/// "Offer" is read literally: writing directly into `.git/hooks/pre-commit` unprompted could
+/// silently clobber an existing hook (or a hook manager's own file) — a hard-to-reverse,
+/// surprising action for a tool to take on its own. Default behavior only *prints* the
+/// recommended hook and how to install it; `--hook` opts into actually writing it, and even
+/// then only when `.git/hooks/pre-commit` doesn't already exist.
+fn init_cmd(args: &[String]) -> ExitCode {
+    let install_hook = args.iter().any(|a| a == "--hook");
+    let cwd = match std::env::current_dir() {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!("kndo: cannot determine working directory: {e}");
+            return ExitCode::from(2);
+        }
+    };
+
+    let toml_path = cwd.join("kndo.toml");
+    if toml_path.is_file() {
+        println!("kndo.toml: already exists, left untouched");
+    } else {
+        match std::fs::write(&toml_path, KNDO_TOML_TEMPLATE) {
+            Ok(()) => println!("kndo.toml: written"),
+            Err(e) => {
+                eprintln!("kndo: failed to write kndo.toml: {e}");
+                return ExitCode::from(2);
+            }
+        }
+    }
+
+    match ensure_gitignore_entry(&cwd) {
+        Ok(GitignoreOutcome::AlreadyPresent) => println!(".gitignore: .kndo/ already present"),
+        Ok(GitignoreOutcome::Appended) => println!(".gitignore: added .kndo/"),
+        Err(e) => {
+            eprintln!("kndo: failed to update .gitignore: {e}");
+            return ExitCode::from(2);
+        }
+    }
+
+    let hook_path = cwd.join(".git/hooks/pre-commit");
+    if !install_hook {
+        println!("pre-commit hook: not installed (recommended — install with `kndo init --hook`, or add manually):");
+        println!("  {}", PRE_COMMIT_HOOK.lines().last().unwrap());
+    } else if !cwd.join(".git").is_dir() {
+        println!(
+            "pre-commit hook: skipped — {} is not a git repository",
+            cwd.display()
+        );
+    } else if hook_path.is_file() {
+        eprintln!(
+            "kndo: .git/hooks/pre-commit already exists — refusing to overwrite it; add this line yourself:"
+        );
+        eprintln!("  {}", PRE_COMMIT_HOOK.lines().last().unwrap());
+        return ExitCode::from(2);
+    } else {
+        if let Some(parent) = hook_path.parent() {
+            if let Err(e) = std::fs::create_dir_all(parent) {
+                eprintln!("kndo: failed to create .git/hooks: {e}");
+                return ExitCode::from(2);
+            }
+        }
+        if let Err(e) = std::fs::write(&hook_path, PRE_COMMIT_HOOK) {
+            eprintln!("kndo: failed to write .git/hooks/pre-commit: {e}");
+            return ExitCode::from(2);
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            if let Ok(meta) = std::fs::metadata(&hook_path) {
+                let mut perms = meta.permissions();
+                perms.set_mode(perms.mode() | 0o111);
+                let _ = std::fs::set_permissions(&hook_path, perms);
+            }
+        }
+        println!("pre-commit hook: installed at .git/hooks/pre-commit");
+    }
+
+    ExitCode::SUCCESS
+}
+
+enum GitignoreOutcome {
+    AlreadyPresent,
+    Appended,
+}
+
+/// Idempotent: only appends `.kndo/` when no line already matches it exactly, and creates the
+/// file if the project has none yet.
+fn ensure_gitignore_entry(root: &std::path::Path) -> std::io::Result<GitignoreOutcome> {
+    let path = root.join(".gitignore");
+    let existing = std::fs::read_to_string(&path).unwrap_or_default();
+    if existing.lines().any(|l| l.trim() == ".kndo/") {
+        return Ok(GitignoreOutcome::AlreadyPresent);
+    }
+    let mut updated = existing;
+    if !updated.is_empty() && !updated.ends_with('\n') {
+        updated.push('\n');
+    }
+    updated.push_str(".kndo/\n");
+    std::fs::write(&path, updated)?;
+    Ok(GitignoreOutcome::Appended)
 }
 
 /// `kndo doctor` (RFC 0006 §2): plain-text only for now — output-schema.md doesn't specify a
@@ -377,6 +514,48 @@ fn check(args: &[String]) -> ExitCode {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn tmp_dir(name: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("kndo-cli-test-{name}"));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn gitignore_created_when_absent() {
+        let dir = tmp_dir("gitignore-create");
+        assert!(matches!(
+            ensure_gitignore_entry(&dir).unwrap(),
+            GitignoreOutcome::Appended
+        ));
+        let text = std::fs::read_to_string(dir.join(".gitignore")).unwrap();
+        assert_eq!(text, ".kndo/\n");
+    }
+
+    #[test]
+    fn gitignore_entry_appended_to_existing_content() {
+        let dir = tmp_dir("gitignore-append");
+        std::fs::write(dir.join(".gitignore"), "target/").unwrap(); // no trailing newline
+        assert!(matches!(
+            ensure_gitignore_entry(&dir).unwrap(),
+            GitignoreOutcome::Appended
+        ));
+        let text = std::fs::read_to_string(dir.join(".gitignore")).unwrap();
+        assert_eq!(text, "target/\n.kndo/\n");
+    }
+
+    #[test]
+    fn gitignore_entry_is_idempotent() {
+        let dir = tmp_dir("gitignore-idempotent");
+        std::fs::write(dir.join(".gitignore"), "target/\n.kndo/\n").unwrap();
+        assert!(matches!(
+            ensure_gitignore_entry(&dir).unwrap(),
+            GitignoreOutcome::AlreadyPresent
+        ));
+        let text = std::fs::read_to_string(dir.join(".gitignore")).unwrap();
+        assert_eq!(text, "target/\n.kndo/\n"); // unchanged, not duplicated
+    }
 
     fn flags(staged: bool, diff: Option<&str>, fail_on: Option<&str>) -> Flags {
         Flags {
