@@ -95,6 +95,13 @@ impl ProjectGraph {
         self.file_index.get(path).copied()
     }
 
+    /// The declared package name for a `PackageId`, when the owning manifest declared one
+    /// (`package.json` `name`, …) — `None` for the implicit package and for manifests that
+    /// never named themselves.
+    pub fn package_name(&self, package: PackageId) -> Option<&str> {
+        self.packages[package.0 as usize].name.as_deref()
+    }
+
     /// Crate-internal only: lets sibling modules (analyses) build exact graphs in tests —
     /// including edges (Root, References, Wildcard) real extraction doesn't produce yet.
     /// External code can never fabricate a graph; only [`assemble`] does, for real.

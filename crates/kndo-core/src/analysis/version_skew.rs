@@ -9,8 +9,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::analysis::finding_id;
-use crate::engine::Finding;
+use crate::engine::{Finding, Location, Severity};
 use crate::graph::ProjectGraph;
+use crate::vocab::Confidence;
 
 pub fn find_version_skew(graph: &ProjectGraph) -> Vec<Finding> {
     let mut by_name: BTreeMap<&str, Vec<(&str, &str)>> = BTreeMap::new();
@@ -39,7 +40,12 @@ pub fn find_version_skew(graph: &ProjectGraph) -> Vec<Finding> {
             category: "version-skew".to_string(),
             group: "defect".to_string(),
             subject_kind: "dependency".to_string(),
+            severity: Severity::Warning,
+            confidence: Confidence::Certain,
             message: format!("{name} is declared with diverging version requirements: {evidence}"),
+            // Spans every declaring manifest — no single path is *the* location (the message
+            // already lists all of them); expressing that properly is `related`, not built yet.
+            location: Location::default(),
         });
     }
     findings

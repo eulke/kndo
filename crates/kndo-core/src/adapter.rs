@@ -13,11 +13,14 @@ use crate::vocab::{Confidence, DependencyScope, FileClass, RootKind, SymbolKind}
 
 /// Project-relative path with `/` separators, the only path form that crosses the adapter
 /// boundary (case handling and symlink resolution are the core's discovery concern).
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize)]
+#[serde(transparent)]
 pub struct ProjectPath(pub SmolStr);
 
-/// 1-indexed line/column span, `start` inclusive, `end` exclusive.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+/// 1-indexed line/column span, `start` inclusive, `end` exclusive. Serializes as the
+/// `[line, col]` pair shape the output schema uses (contracts/output-schema.md §2), not an
+/// object — tuples serialize as JSON arrays by default.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, serde::Serialize)]
 pub struct Span {
     pub start: (u32, u32),
     pub end: (u32, u32),
@@ -30,21 +33,24 @@ pub struct SourceFile<'a> {
     pub content: &'a [u8],
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "lowercase")]
 pub enum DiagnosticLevel {
     Warn,
     Info,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct Diagnostic {
     pub level: DiagnosticLevel,
     /// The file this diagnostic is about, when there is one — `None` for project-level
     /// diagnostics (e.g. "cannot walk the project root"). A diagnostic merged from many
     /// files without this field would be unattributable; adapters emit diagnostics scoped
     /// to the file they're extracting, the core fills this in.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub path: Option<ProjectPath>,
     pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub span: Option<Span>,
 }
 

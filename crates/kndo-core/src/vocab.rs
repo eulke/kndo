@@ -140,7 +140,8 @@ pub enum RefKind {
 
 /// Per-edge strength. Ordered by strength: `Possible < Probable < Certain`, so `max()` yields
 /// the strongest evidence and "edges at least as strong as τ" is a simple `>=` (RFC 0005 §1).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Confidence {
     Possible,
     Probable,

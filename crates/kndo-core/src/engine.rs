@@ -12,13 +12,19 @@
 
 use std::fmt;
 use std::path::{Path, PathBuf};
+use std::time::Instant;
 
-use crate::adapter::{Diagnostic, DiagnosticLevel, LanguageAdapter};
+use crate::adapter::{Diagnostic, DiagnosticLevel, LanguageAdapter, ProjectPath, Span};
 use crate::analysis;
 use crate::graph;
+use crate::vocab::Confidence;
 
 /// Mirrors the output schema's `schema_version` (contracts/output-schema.md).
 pub const SCHEMA_VERSION: &str = "1.0.0";
+
+/// The product version — every crate shares `version.workspace = true`, so kndo-core's own
+/// `CARGO_PKG_VERSION` is the same string the distribution crate and CLI would report.
+pub const KNDO_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[derive(Debug, Default)]
 pub struct ConfigOverrides {}
@@ -51,25 +57,87 @@ pub enum RunMode {
     Diff { base: String },
 }
 
+impl RunMode {
+    fn as_str(&self) -> &'static str {
+        match self {
+            RunMode::Full => "full",
+            RunMode::Staged => "staged",
+            RunMode::Diff { .. } => "diff",
+        }
+    }
+
+    fn base_ref(&self) -> Option<String> {
+        match self {
+            RunMode::Diff { base } => Some(base.clone()),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct CheckRequest {
     pub mode: RunMode,
 }
 
+/// A finding's severity (contracts/output-schema.md §2) — RFC 0005 assigns one per category as
+/// a fixed default; `--strict` promotion isn't implemented yet, so this is always the default.
+/// Declaration order doubles as sort/triage order: worst first (RFC 0009 §5).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Severity {
+    Error,
+    Warning,
+    Info,
+}
+
+/// Where a finding landed (contracts/output-schema.md §2). Every field is optional because not
+/// every subject has all of them: `version-skew`/`duplicate` findings span multiple manifests
+/// or files, so no single `path` is *the* location — expressing that properly is the `related`
+/// evidence chain, not yet implemented (deferred, not faked with an arbitrary first path).
+#[derive(Debug, Clone, Default, serde::Serialize)]
+pub struct Location {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub path: Option<ProjectPath>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub range: Option<Span>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub symbol: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub package: Option<String>,
+}
+
 /// Typed form of the output-schema finding (grows field-by-field with the analyses in M1;
-/// every field lands in the JSON schema first — that document is normative).
-#[derive(Debug, Clone)]
+/// every field lands in the JSON schema first — that document is normative). Not yet present:
+/// `related` (evidence chain), `evidence` (category-specific block), `sources`, `remediation`,
+/// `rolled_up`, `delta`/`delta_origin` — each needs infrastructure this milestone doesn't have
+/// (an evidence model, computed remediation text, diff mode) and is omitted rather than
+/// fabricated with a placeholder.
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct Finding {
     pub id: String,
     pub category: String,
     pub group: String,
     pub subject_kind: String,
+    pub severity: Severity,
+    pub confidence: Confidence,
     pub message: String,
+    pub location: Location,
+}
+
+/// One registered adapter's contribution (`run.adapters[]`, output-schema §1).
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct AdapterRunInfo {
+    pub id: String,
+    pub files: usize,
 }
 
 /// Typed form of the output-schema envelope. JSON/SARIF/agent serializers live core-side so
 /// every frontend emits byte-identical machine output; *human* rendering is frontend-owned
-/// (RFC 0009).
+/// (RFC 0009). Flat here for ergonomic Rust consumption; [`RunResult::to_json`] nests it into
+/// the schema's actual shape. Not yet present: `health`, `budget`, `baseline`, `suppressed` —
+/// none of those subsystems exist yet (health/CRAP scoring is M4; baseline, suppressions, and
+/// diff-mode budgets are M2), so the fields are omitted rather than emitted empty/null. Adding
+/// them later is additive (minor schema bump, RFC 0006 §4), not a breaking change.
 #[derive(Debug, Default)]
 pub struct RunResult {
     pub findings: Vec<Finding>,
@@ -77,12 +145,63 @@ pub struct RunResult {
     /// never parallel stringly-typed variants.
     pub diagnostics: Vec<Diagnostic>,
     pub files_discovered: usize,
-    /// Files a registered adapter recognized (subset of `files_discovered`). Stands in for
-    /// `run.adapters[].files` (output-schema §1) until per-adapter breakdown lands.
+    /// Files a registered adapter recognized (subset of `files_discovered`); `adapters` below
+    /// is the per-language breakdown the schema actually wants (`run.adapters[].files`).
     pub files_claimed: usize,
     pub symbols: usize,
     pub dependencies: usize,
     pub edges: usize,
+    pub mode: String,
+    pub base_ref: Option<String>,
+    pub started_at: String,
+    pub duration_ms: u64,
+    pub project_root: String,
+    pub adapters: Vec<AdapterRunInfo>,
+}
+
+#[derive(serde::Serialize)]
+struct RunInfo<'a> {
+    mode: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    base_ref: Option<&'a str>,
+    started_at: &'a str,
+    duration_ms: u64,
+    cache: &'static str,
+    project_root: &'a str,
+    adapters: &'a [AdapterRunInfo],
+}
+
+#[derive(serde::Serialize)]
+struct Envelope<'a> {
+    schema_version: &'static str,
+    kndo_version: &'static str,
+    run: RunInfo<'a>,
+    findings: &'a [Finding],
+    diagnostics: &'a [Diagnostic],
+}
+
+impl RunResult {
+    /// The `--format json` rendering (contracts/output-schema.md §1) — serialized core-side so
+    /// every frontend emits byte-identical machine output (RFC 0001 §2, contracts §5).
+    pub fn to_json(&self) -> String {
+        let envelope = Envelope {
+            schema_version: SCHEMA_VERSION,
+            kndo_version: KNDO_VERSION,
+            run: RunInfo {
+                mode: &self.mode,
+                base_ref: self.base_ref.as_deref(),
+                started_at: &self.started_at,
+                duration_ms: self.duration_ms,
+                cache: "cold", // no cache exists yet (RFC 0004 lands M2) — every run is cold
+                project_root: &self.project_root,
+                adapters: &self.adapters,
+            },
+            findings: &self.findings,
+            diagnostics: &self.diagnostics,
+        };
+        serde_json::to_string_pretty(&envelope)
+            .unwrap_or_else(|e| format!("{{\"error\": \"failed to serialize output: {e}\"}}"))
+    }
 }
 
 /// Synchronous and single-instance-per-project (the cache lock, RFC 0004 §7); a serving
@@ -115,13 +234,35 @@ impl Engine {
         &self.root
     }
 
-    /// M1 skeleton: analyses land behind this signature next. Graph assembly (discovery →
-    /// claim → extract → resolve → link) is wired; `--staged`/`--diff` scoping (`RunMode`)
-    /// is not yet — every mode walks the full tree until git-index/merge-base scoping lands.
-    pub fn check(&mut self, _req: CheckRequest) -> RunResult {
-        match graph::assemble(&self.root, &self.adapters) {
+    /// `--staged`/`--diff` scoping (`RunMode`) isn't implemented yet — every mode walks the
+    /// full tree until git-index/merge-base scoping lands (M2); the requested mode is still
+    /// echoed into the result honestly (`run.mode`), it just doesn't change behavior yet.
+    pub fn check(&mut self, req: CheckRequest) -> RunResult {
+        let start = Instant::now();
+        let started_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+        let mode = req.mode.as_str().to_string();
+        let base_ref = req.mode.base_ref();
+        let project_root = self.root.display().to_string();
+
+        let outcome = match graph::assemble(&self.root, &self.adapters) {
             Ok((g, diagnostics)) => {
                 let findings = analysis::run_all(&g);
+                let adapters = self
+                    .adapters
+                    .iter()
+                    .map(|a| {
+                        let id = a.descriptor().id;
+                        let files = g
+                            .files
+                            .iter()
+                            .filter(|f| f.language.as_deref() == Some(id.as_str()))
+                            .count();
+                        AdapterRunInfo {
+                            id: id.to_string(),
+                            files,
+                        }
+                    })
+                    .collect();
                 RunResult {
                     files_discovered: g.files.len(),
                     files_claimed: g.files.iter().filter(|f| f.language.is_some()).count(),
@@ -130,6 +271,8 @@ impl Engine {
                     edges: g.edges.len(),
                     diagnostics,
                     findings,
+                    adapters,
+                    ..RunResult::default()
                 }
             }
             Err(crate::discovery::DiscoveryError::Root(e)) => RunResult {
@@ -143,6 +286,15 @@ impl Engine {
                 }],
                 ..RunResult::default()
             },
+        };
+
+        RunResult {
+            mode,
+            base_ref,
+            started_at,
+            duration_ms: start.elapsed().as_millis() as u64,
+            project_root,
+            ..outcome
         }
     }
 }
@@ -189,5 +341,55 @@ mod tests {
         assert_eq!(result.files_discovered, 2);
         // No adapters registered in this test — files exist as nodes but nothing claims them.
         assert_eq!(result.files_claimed, 0);
+    }
+
+    #[test]
+    fn to_json_produces_the_envelope_shape() {
+        let dir = std::env::temp_dir().join("kndo-engine-test-json");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let mut engine = Engine::open(&dir, ConfigOverrides::default(), vec![]).unwrap();
+        let result = engine.check(CheckRequest {
+            mode: RunMode::Full,
+        });
+        let json = result.to_json();
+        let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(value["schema_version"], SCHEMA_VERSION);
+        assert_eq!(value["kndo_version"], KNDO_VERSION);
+        assert_eq!(value["run"]["mode"], "full");
+        assert_eq!(value["run"]["cache"], "cold");
+        assert!(value["run"]["base_ref"].is_null()); // skipped, not just null-valued
+        assert!(value["run"]["duration_ms"].is_u64());
+        assert!(value["findings"].is_array());
+        assert!(value["diagnostics"].is_array());
+        // Not yet implemented subsystems must be absent, not fabricated as empty/null.
+        assert!(value.get("health").is_none());
+        assert!(value.get("budget").is_none());
+        assert!(value.get("baseline").is_none());
+    }
+
+    #[test]
+    fn to_json_omits_absent_finding_location_fields() {
+        let dir = std::env::temp_dir().join("kndo-engine-test-json-location");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let finding = Finding {
+            id: "kndo-000000000000".to_string(),
+            category: "version-skew".to_string(),
+            group: "defect".to_string(),
+            subject_kind: "dependency".to_string(),
+            severity: Severity::Warning,
+            confidence: Confidence::Certain,
+            message: "example".to_string(),
+            location: Location::default(),
+        };
+        let json = serde_json::to_string(&finding).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(value["location"], serde_json::json!({}));
+        assert_eq!(value["severity"], "warning");
+        assert_eq!(value["confidence"], "certain");
     }
 }

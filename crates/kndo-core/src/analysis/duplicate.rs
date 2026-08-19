@@ -17,8 +17,9 @@
 use std::collections::HashMap;
 
 use crate::analysis::finding_id;
-use crate::engine::Finding;
+use crate::engine::{Finding, Location, Severity};
 use crate::graph::ProjectGraph;
+use crate::vocab::Confidence;
 
 pub fn find_duplicate_files(graph: &ProjectGraph) -> Vec<Finding> {
     let empty_hash: [u8; 32] = blake3::hash(b"").into();
@@ -50,11 +51,16 @@ pub fn find_duplicate_files(graph: &ProjectGraph) -> Vec<Finding> {
             category: "duplicate".to_string(),
             group: "waste".to_string(),
             subject_kind: "file".to_string(),
+            severity: Severity::Info, // RFC 0005 §6: info by default — duplication is sometimes deliberate
+            confidence: Confidence::Certain,
             message: format!(
                 "{} identical files share the same content: {}",
                 paths.len(),
                 summarize(&paths)
             ),
+            // Spans every copy — no single path is *the* location (the message lists them
+            // all); expressing that properly is `related`, not built yet.
+            location: Location::default(),
         });
     }
     findings

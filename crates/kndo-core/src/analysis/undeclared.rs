@@ -13,9 +13,9 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::analysis::finding_id;
-use crate::engine::Finding;
+use crate::engine::{Finding, Location, Severity};
 use crate::graph::{PackageNode, ProjectGraph};
-use crate::vocab::{DependencyId, EdgeKind, PackageId};
+use crate::vocab::{Confidence, DependencyId, EdgeKind, PackageId};
 
 pub fn find_undeclared_dependencies(graph: &ProjectGraph) -> Vec<Finding> {
     let mut declared_by_package: HashMap<PackageId, HashSet<&str>> = HashMap::new();
@@ -52,11 +52,21 @@ pub fn find_undeclared_dependencies(graph: &ProjectGraph) -> Vec<Finding> {
             category: "undeclared".to_string(),
             group: "defect".to_string(),
             subject_kind: "dependency".to_string(),
+            severity: Severity::Warning, // error under --strict (RFC 0005 §5) — not implemented yet
+            confidence: Confidence::Certain,
             message: format!(
                 "{name} is imported but not declared in {}'s manifest (phantom dependency — likely resolving via hoisting/transitivity){}",
                 package_label(graph, package),
                 importer_summary(files)
             ),
+            location: Location {
+                // The manifest that *should* declare it — the one real single-file anchor this
+                // finding has, unlike version-skew/duplicate which genuinely span many files.
+                path: graph.packages[package.0 as usize].manifest.clone(),
+                range: None,
+                symbol: None,
+                package: graph.package_name(package).map(str::to_string),
+            },
         });
     }
     findings

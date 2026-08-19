@@ -14,7 +14,7 @@
 
 use crate::analysis::finding_id;
 use crate::analysis::reachability::{Reachability, ReachabilityMap};
-use crate::engine::Finding;
+use crate::engine::{Finding, Location, Severity};
 use crate::graph::ProjectGraph;
 use crate::vocab::{Confidence, FileId, FileOrigin, NodeRef, SymbolId};
 
@@ -46,7 +46,15 @@ pub fn find_unused_files(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<F
             category: "unused".to_string(),
             group: "waste".to_string(),
             subject_kind: "file".to_string(),
+            severity: Severity::Warning,
+            confidence: Confidence::Certain,
             message: format!("{path} is unreachable: no root or import reaches it"),
+            location: Location {
+                path: Some(file.path.clone()),
+                range: None,
+                symbol: None,
+                package: graph.package_name(file.package).map(str::to_string),
+            },
         });
     }
     findings
@@ -82,10 +90,18 @@ pub fn find_unused_symbols(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec
             category: "unused".to_string(),
             group: "waste".to_string(),
             subject_kind: facet.to_string(),
+            severity: Severity::Warning,
+            confidence: Confidence::Certain,
             message: format!(
                 "{path}#{} is unreachable: nothing references this {facet}",
                 symbol.name
             ),
+            location: Location {
+                path: Some(file.path.clone()),
+                range: Some(symbol.span),
+                symbol: Some(symbol.name.to_string()),
+                package: graph.package_name(file.package).map(str::to_string),
+            },
         });
     }
     findings
