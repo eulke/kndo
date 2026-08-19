@@ -154,6 +154,15 @@ pub struct ManifestFacts {
                                                        // *different* file, unlike FileFacts::roots)
     pub declares_surface:   bool,                     // `exports` map or equivalent present —
                                                        // the contract gate for `deep-import` (RFC 0011 §4)
+    pub script_invoked_names: Vec<SmolStr>,           // names invoked as the leading command of a
+                                                       // build/tooling script (npm `scripts`,
+                                                       // Cargo `[[bin]]`-adjacent xtasks, …) — a
+                                                       // CLI-only tool dependency never produces an
+                                                       // Imports edge, so this is dependency
+                                                       // hygiene's (RFC 0005 §5) only usage evidence
+                                                       // for it; cross-referenced by name against
+                                                       // declared dependencies downstream, so an
+                                                       // unrelated match is simply never looked up
     pub diagnostics:        Vec<Diagnostic>,
 }
 ```

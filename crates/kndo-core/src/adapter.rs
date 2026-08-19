@@ -268,6 +268,15 @@ pub struct ManifestFacts {
     /// Whether an explicit surface is declared (`exports` map or equivalent) — the
     /// contract gate for `deep-import` (RFC 0011 §4).
     pub declares_surface: bool,
+    /// Names invoked as the leading command of a `scripts` clause (`"test": "xo && ava"` →
+    /// `["xo", "ava"]`) — a CLI-only tool never gets an `ImportsDependency` edge (nothing
+    /// `import`s a binary), so without this signal a real, actively-invoked devDependency
+    /// reads as `unused` by dependency hygiene (RFC 0005 §5) despite genuinely being used,
+    /// just not through source code. Distinct from `roots`: a command name doesn't resolve to
+    /// a file, so it can never itself be a root — this only ever feeds dependency-usage
+    /// classification, cross-referenced against declared dependency names downstream (a name
+    /// that happens to match nothing declared is simply never looked up).
+    pub script_invoked_names: Vec<SmolStr>,
     pub diagnostics: Vec<Diagnostic>,
 }
 

@@ -24,8 +24,9 @@ use std::collections::HashMap;
 
 use crate::analysis::finding_id;
 use crate::analysis::reachability::{Reachability, ReachabilityMap};
+use crate::analysis::rollup::{self, DirGroup};
 use crate::engine::{Finding, Location, Severity};
-use crate::graph::{self, ProjectGraph};
+use crate::graph::ProjectGraph;
 use crate::vocab::{Confidence, FileId, FileOrigin, NodeRef, PackageId, SymbolId};
 
 pub fn find_unused_files(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<Finding> {
@@ -53,7 +54,7 @@ pub fn find_unused_files(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<F
         unused.insert(file.path.0.as_str(), (file_id, file.package));
     }
 
-    let rolled_up = directory_rollups(graph, &unused);
+    let rolled_up = rollup::directory_rollups(graph, &unused);
     for dir in &rolled_up.dirs {
         findings.push(directory_finding(graph, dir));
     }
@@ -78,100 +79,6 @@ pub fn find_unused_files(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<F
         });
     }
     findings
-}
-
-struct DirRollup<'a> {
-    /// The widest directories where every file underneath is unused, deepest-independent
-    /// (never both a directory and one of its own ancestors).
-    dirs: Vec<DirGroup<'a>>,
-    /// Every file path folded into one of `dirs` — excluded from the per-file finding list.
-    covered: std::collections::HashSet<&'a str>,
-}
-
-struct DirGroup<'a> {
-    path: &'a str,
-    files: Vec<&'a str>,
-    package: PackageId,
-}
-
-fn directory_rollups<'a>(
-    graph: &'a ProjectGraph,
-    unused: &HashMap<&'a str, (FileId, PackageId)>,
-) -> DirRollup<'a> {
-    // Every directory that owns at least one file in the *whole project* (not just the unused
-    // ones) — a non-unused file here is exactly what should block its ancestors from rolling
-    // up, so it has to be in this index too.
-    let mut dir_files: HashMap<&'a str, Vec<&'a str>> = HashMap::new();
-    for file in &graph.files {
-        let path = file.path.0.as_str();
-        for ancestor in ancestors(path) {
-            dir_files.entry(ancestor).or_default().push(path);
-        }
-    }
-
-    let mut fully_unused: Vec<&str> = dir_files
-        .iter()
-        // `files.len() >= 2`: a one-file "directory" rollup is worse than the plain file
-        // finding it would replace ("delete this whole folder" about a single file is just a
-        // roundabout way of saying "delete this file") — same floor `duplicate` applies to
-        // its own grouping, for the same reason: a group of one isn't a group.
-        .filter(|(_, files)| files.len() >= 2 && files.iter().all(|f| unused.contains_key(f)))
-        .map(|(&dir, _)| dir)
-        .collect();
-    // Widest first (fewest path segments) so a directory is skipped once its parent already
-    // qualifies — the "widest uniform node" the taxonomy rule asks for, not every level.
-    // Depth by segment *count*, not slash count: "" (root, depth 0) and "src" (depth 1) both
-    // contain zero '/' characters, so `matches('/').count()` alone ties them — and a tie here
-    // is exactly the bug, since the two are not remotely the same width.
-    fully_unused.sort_by_key(|d| depth(d));
-
-    let mut dirs = Vec::new();
-    let mut covered = std::collections::HashSet::new();
-    for dir in fully_unused {
-        if dirs
-            .iter()
-            .any(|g: &DirGroup| graph::package_owns(g.path, dir))
-        {
-            continue; // already covered by a wider rollup already accepted
-        }
-        let files = dir_files.remove(dir).unwrap_or_default();
-        // All files here are unused (verified above) and therefore claimed (unused.insert only
-        // ever holds claimed files), so every one shares a package — a nested package boundary
-        // would have introduced an unclaimed manifest and blocked the rollup already.
-        let package = files
-            .first()
-            .and_then(|f| unused.get(f))
-            .map(|&(_, p)| p)
-            .unwrap_or(PackageId(0));
-        covered.extend(files.iter().copied());
-        dirs.push(DirGroup {
-            path: dir,
-            files,
-            package,
-        });
-    }
-    DirRollup { dirs, covered }
-}
-
-fn depth(dir: &str) -> usize {
-    if dir.is_empty() {
-        0
-    } else {
-        dir.matches('/').count() + 1
-    }
-}
-
-fn ancestors(path: &str) -> Vec<&str> {
-    let mut out = Vec::new();
-    let mut current = graph::core_dirname(path);
-    loop {
-        out.push(current);
-        if current.is_empty() {
-            break;
-        }
-        current = graph::core_dirname(current);
-    }
-    out
 }
 
 fn directory_finding(graph: &ProjectGraph, dir: &DirGroup<'_>) -> Finding {

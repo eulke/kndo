@@ -85,6 +85,11 @@ pub struct ProjectGraph {
     pub symbols: Vec<SymbolNode>,
     pub dependencies: Vec<DependencyNode>,
     pub declared_dependencies: Vec<DeclaredDependency>,
+    /// `(package, name)` pairs a manifest's `scripts` invoke as a leading command — dependency
+    /// hygiene's (RFC 0005 §5) only usage evidence for CLI-only tools, which never produce an
+    /// `ImportsDependency` edge (nothing `import`s a binary). Names here aren't necessarily
+    /// declared dependencies — cross-referencing is `dependency_hygiene`'s job, not assembly's.
+    pub script_invoked_dependencies: HashSet<(PackageId, SmolStr)>,
     pub packages: Vec<PackageNode>,
     pub edges: Vec<Edge>,
     file_index: HashMap<ProjectPath, FileId>,
@@ -122,6 +127,7 @@ impl ProjectGraph {
             symbols,
             dependencies,
             declared_dependencies: Vec::new(),
+            script_invoked_dependencies: HashSet::new(),
             packages: vec![PackageNode {
                 manifest: None,
                 name: None,
@@ -135,6 +141,15 @@ impl ProjectGraph {
     #[cfg(test)]
     pub(crate) fn with_declared_dependencies(mut self, deps: Vec<DeclaredDependency>) -> Self {
         self.declared_dependencies = deps;
+        self
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_script_invoked_dependencies(
+        mut self,
+        deps: Vec<(PackageId, SmolStr)>,
+    ) -> Self {
+        self.script_invoked_dependencies = deps.into_iter().collect();
         self
     }
 
@@ -348,6 +363,7 @@ pub fn assemble(
     let mut edges = Vec::new();
     let mut declared_dependency_names: HashSet<SmolStr> = HashSet::new();
     let mut declared_dependencies: Vec<DeclaredDependency> = Vec::new();
+    let mut script_invoked_dependencies: HashSet<(PackageId, SmolStr)> = HashSet::new();
     // Every file a manifest names as a production root, at that root's own confidence — used
     // after phase 3a to promote the file's *exported* symbols to production roots too (RFC
     // 0011 §5: "Published/library: its public API is a production root — external consumers
@@ -370,6 +386,9 @@ pub fn assemble(
                 version_req: dep.version_req.clone(),
                 scope: dep.scope,
             });
+        }
+        for name in &facts.script_invoked_names {
+            script_invoked_dependencies.insert((package, name.clone()));
         }
         for root in &facts.roots {
             // Resolved against `manifest_ctx`'s known-files set, so this must be Some —
@@ -739,6 +758,7 @@ pub fn assemble(
             symbols,
             dependencies,
             declared_dependencies,
+            script_invoked_dependencies,
             packages,
             edges,
             file_index,
@@ -907,8 +927,9 @@ mod tests {
 
         fn extract_manifest(&self, file: &SourceFile<'_>, ctx: &ResolveCtx<'_>) -> ManifestFacts {
             // Content format for the mock manifest: one directive per line.
-            //   dep <name>  -> a prod-scope declared dependency
-            //   root <path> -> a Production root targeting that known file, if it exists
+            //   dep <name>        -> a prod-scope declared dependency
+            //   root <path>       -> a Production root targeting that known file, if it exists
+            //   cli-invoke <name> -> a script-invoked dependency name
             let text = std::str::from_utf8(file.content).unwrap_or("");
             let mut facts = ManifestFacts::default();
             for line in text.lines() {
@@ -927,6 +948,8 @@ mod tests {
                             confidence: Confidence::Certain,
                         });
                     }
+                } else if let Some(name) = line.strip_prefix("cli-invoke ") {
+                    facts.script_invoked_names.push(SmolStr::new(name));
                 }
             }
             facts
@@ -1289,6 +1312,15 @@ mod tests {
             .find(|e| matches!(e.kind, EdgeKind::ImportsDependency { .. }))
             .unwrap();
         assert_eq!(edge.confidence, Confidence::Certain);
+    }
+
+    #[test]
+    fn cli_invoke_directive_reaches_script_invoked_dependencies() {
+        let dir = project("cli-invoke", &[("manifest.json", "dep xo\ncli-invoke xo")]);
+        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        assert!(graph
+            .script_invoked_dependencies
+            .contains(&(PackageId(1), SmolStr::new("xo"))));
     }
 
     #[test]

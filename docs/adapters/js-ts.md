@@ -113,6 +113,7 @@ monorepo over-exposure hides.
 | UMD wrappers | detected by shape, treated as generated-style opaque exports at `probable` |
 | Re-export of a whole dep (`export * from "lib"`) | keeps the dep used; contributes a `probable` wildcard export surface |
 | `tsconfig` project references | not followed in 1.0 (parking lot); path aliases within one graph are |
+| CLI-only dependency (`"lint": "xo"`, no `import`) | counts as used via `ManifestFacts.script_invoked_names` — the leading token of each `scripts` shell clause (`&&`/`||`/`;`/`\|`-split), cross-referenced against declared dependency names by `dependency_hygiene` (RFC 0005 §5) as a synthetic tooling-role importer. Never makes a dependency `test-only` (a CLI invocation isn't test-role) — only ever rules out `unused`. |
 
 ## 6. Conformance fixtures (shared harness, RFC 0002 §8)
 

@@ -19,11 +19,18 @@
 //!   findings still show; demoting the confidence is the honest, available half of that rule.
 //!
 //! "Test-role" here means the importing file's own `FileClass::role == Test` (a purely
-//! syntactic, already-available signal) — *not* the deeper "transitively only reached by test
-//! roots" reachability signal RFC 0005 §5 also gestures at, which needs `RootKind::Test` edges
-//! no adapter produces yet (test-root detection is explicitly roadmap M3). Scoped down to the
-//! syntactic signal on purpose: real value today, nothing invented ahead of the data that
-//! would make the fuller version correct.
+//! syntactic, already-available signal).
+//!
+//! **CLI-only dependencies.** A `scripts`-invoked tool (`"test": "xo && ava"`) never produces
+//! an `ImportsDependency` edge — nothing `import`s a binary — so without a second signal every
+//! CLI-only devDependency reads as declared-but-never-imported and gets falsely flagged
+//! `unused`. `graph.script_invoked_dependencies` (built from each manifest's `scripts`, adapter
+//! §7 open-question-2-adjacent) supplies it: a script-invoked name counts as one synthetic
+//! `FileRole::Tooling` importer, folded into the same importer-roles classification table
+//! everything else already goes through — not a parallel code path. Tooling-role "importers"
+//! only ever push a dependency out of `unused`; they can never make it `test-only` (a script
+//! invocation is never test-role), matching the "at least one production- or
+//! tooling-reachable file" used-verdict RFC 0005 §5's table already states for real imports.
 
 use std::collections::{HashMap, HashSet};
 
@@ -65,11 +72,17 @@ pub fn find_dependency_hygiene(graph: &ProjectGraph) -> Vec<Finding> {
             continue;
         }
 
-        let roles: &[FileRole] = dep_id_by_name
+        let mut roles: Vec<FileRole> = dep_id_by_name
             .get(dep.name.as_str())
             .and_then(|&id| importer_roles.get(&(id, dep.package)))
-            .map(Vec::as_slice)
-            .unwrap_or(&[]);
+            .cloned()
+            .unwrap_or_default();
+        if graph
+            .script_invoked_dependencies
+            .contains(&(dep.package, dep.name.clone()))
+        {
+            roles.push(FileRole::Tooling);
+        }
         let confidence = if dep.scope == DependencyScope::Optional {
             Confidence::Possible
         } else {
@@ -347,5 +360,78 @@ mod tests {
         let a = find_dependency_hygiene(&graph);
         let b = find_dependency_hygiene(&graph);
         assert_eq!(a[0].id, b[0].id);
+    }
+
+    // ---------------------------------------------------------------- CLI-only dependencies
+
+    #[test]
+    fn script_invoked_dev_dependency_is_not_unused() {
+        let graph = graph_with(
+            vec![],
+            vec![],
+            vec![],
+            vec![declared("xo", DependencyScope::Dev)],
+        )
+        .with_script_invoked_dependencies(vec![(PackageId(0), SmolStr::new("xo"))]);
+        assert!(find_dependency_hygiene(&graph).is_empty());
+    }
+
+    #[test]
+    fn script_invoked_prod_dependency_is_used_not_test_only() {
+        // A CLI invocation is tooling-role evidence, never test-role — it must push the
+        // dependency past `unused` without ever making it eligible for `test-only`.
+        let graph = graph_with(
+            vec![],
+            vec![],
+            vec![],
+            vec![declared("prettier", DependencyScope::Prod)],
+        )
+        .with_script_invoked_dependencies(vec![(PackageId(0), SmolStr::new("prettier"))]);
+        assert!(find_dependency_hygiene(&graph).is_empty());
+    }
+
+    #[test]
+    fn unrelated_script_invocation_does_not_shadow_a_real_unused_dependency() {
+        let graph = graph_with(
+            vec![],
+            vec![],
+            vec![],
+            vec![declared("lodash", DependencyScope::Prod)],
+        )
+        .with_script_invoked_dependencies(vec![(PackageId(0), SmolStr::new("tsc"))]);
+        let findings = find_dependency_hygiene(&graph);
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].category, "unused");
+    }
+
+    #[test]
+    fn script_invocation_in_a_sibling_package_does_not_cross_boundaries() {
+        let graph = graph_with(
+            vec![],
+            vec![],
+            vec![],
+            vec![declared("xo", DependencyScope::Dev)],
+        )
+        .with_script_invoked_dependencies(vec![(PackageId(1), SmolStr::new("xo"))]);
+        let findings = find_dependency_hygiene(&graph);
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].category, "unused");
+    }
+
+    #[test]
+    fn test_role_importer_plus_script_invocation_is_used_not_test_only() {
+        let files = vec![file("a.test.ts", FileRole::Test)];
+        let dependencies = vec![DependencyNode {
+            name: SmolStr::new("vitest"),
+        }];
+        let edges = vec![imports_dep_edge(FileId(0), DependencyId(0))];
+        let graph = graph_with(
+            files,
+            dependencies,
+            edges,
+            vec![declared("vitest", DependencyScope::Prod)],
+        )
+        .with_script_invoked_dependencies(vec![(PackageId(0), SmolStr::new("vitest"))]);
+        assert!(find_dependency_hygiene(&graph).is_empty());
     }
 }

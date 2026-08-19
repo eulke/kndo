@@ -104,16 +104,35 @@ pub fn extract(path: &str, content: &[u8], ctx: &ResolveCtx<'_>) -> ManifestFact
         }
     }
 
-    // `scripts` → tooling roots (spec §4; the §7 open-question-2 drafted rule, implemented as
-    // drafted): whitespace-tokenize each command, and any path-looking token that resolves to
-    // a known file is a tooling root. No shell parsing — a token either names a file or it
-    // doesn't. "Path-looking" (contains `/` or `.`) filters out bare tool names: `ava` must
-    // never root a coincidental ./ava.js, because npm runs the node_modules binary, not that
-    // file. `--flag=./x.js` tokens contribute their value side. `probable`, not certain — a
-    // token match is a heuristic, nothing declares the file.
+    // `scripts` feeds two independent facts, from two independent token slices of each
+    // command (whitespace tokens for roots, shell-clause leading tokens for invoked names —
+    // no shell parsing, just enough tokenizing to tell the two apart):
+    //
+    // 1. Tooling roots (spec §4; the §7 open-question-2 drafted rule, implemented as
+    //    drafted): any path-looking whitespace token that resolves to a known file is a
+    //    tooling root. "Path-looking" (contains `/` or `.`) filters out bare tool names: `ava`
+    //    must never root a coincidental ./ava.js, because npm runs the node_modules binary,
+    //    not that file. `--flag=./x.js` tokens contribute their value side. `probable`, not
+    //    certain — a token match is a heuristic, nothing declares the file.
+    // 2. `script_invoked_names`: the leading token of each shell clause (`"xo && ava"` splits
+    //    on `&&`/`||`/`;`/`|` into clauses `"xo"`, `"ava"` — the invoked binary is each
+    //    clause's *first* token only; later tokens are that binary's own arguments, e.g.
+    //    `start` and `--single-run` in `"karma start --single-run"` are NOT candidate names).
+    //    A CLI-only devDependency never gets an `ImportsDependency` edge, so this is what lets
+    //    dependency hygiene (RFC 0005 §5, dependency_hygiene.rs) see it as used at all —
+    //    cross-referenced there against real declared dependency names, so an unrelated word
+    //    happening to be a script's first token (`node`, `tsc`) simply matches nothing.
+    let mut script_invoked_names = Vec::new();
     if let Some(scripts) = obj.get("scripts").and_then(|v| v.as_object()) {
         let mut seen = std::collections::HashSet::new();
         for command in scripts.values().filter_map(|v| v.as_str()) {
+            for clause in command.split(['&', '|', ';']) {
+                if let Some(first) = clause.split_whitespace().next() {
+                    if !(first.starts_with('-') || first.contains('/') || first.contains('.')) {
+                        script_invoked_names.push(SmolStr::new(first));
+                    }
+                }
+            }
             for raw_token in command.split_whitespace() {
                 let token = match raw_token.split_once('=') {
                     Some((flag, value)) if flag.starts_with('-') => value,
@@ -143,6 +162,7 @@ pub fn extract(path: &str, content: &[u8], ctx: &ResolveCtx<'_>) -> ManifestFact
         workspace_members,
         dependencies,
         entry_points,
+        script_invoked_names,
         roots,
         declares_surface,
         diagnostics: Vec::new(),
@@ -449,6 +469,64 @@ mod tests {
         );
         assert_eq!(facts.roots.len(), 1);
         assert_eq!(facts.roots[0].kind, RootKind::Tooling);
+    }
+
+    // ---------------------------------------------------------------- scripts → invoked names
+
+    #[test]
+    fn chained_commands_each_contribute_their_leading_token() {
+        let known = ctx_with(&["package.json"]);
+        let facts = extract_at(
+            "package.json",
+            r#"{ "scripts": { "test": "xo && ava && tsd" } }"#,
+            &known,
+        );
+        assert_eq!(
+            facts.script_invoked_names,
+            vec![SmolStr::new("xo"), SmolStr::new("ava"), SmolStr::new("tsd")]
+        );
+    }
+
+    #[test]
+    fn only_the_leading_token_of_a_clause_is_a_candidate_name() {
+        // "start" and "--single-run" are `karma`'s own arguments, not invoked tools.
+        let known = ctx_with(&["package.json"]);
+        let facts = extract_at(
+            "package.json",
+            r#"{ "scripts": { "test:browser": "karma start --single-run" } }"#,
+            &known,
+        );
+        assert_eq!(facts.script_invoked_names, vec![SmolStr::new("karma")]);
+    }
+
+    #[test]
+    fn path_looking_leading_tokens_are_not_candidate_names() {
+        // `node` is the invoked binary (not a project dependency, harmless if it matches
+        // nothing); `scripts/build.mjs` is a path, already handled as a tooling root.
+        let known = ctx_with(&["package.json", "scripts/build.mjs"]);
+        let facts = extract_at(
+            "package.json",
+            r#"{ "scripts": { "build": "node scripts/build.mjs" } }"#,
+            &known,
+        );
+        assert_eq!(facts.script_invoked_names, vec![SmolStr::new("node")]);
+    }
+
+    #[test]
+    fn pipe_and_semicolon_also_split_clauses() {
+        let known = ctx_with(&["package.json"]);
+        let facts = extract_at(
+            "package.json",
+            r#"{ "scripts": { "coverage": "cat ./coverage/lcov.info | coveralls; echo done" } }"#,
+            &known,
+        );
+        assert!(facts
+            .script_invoked_names
+            .contains(&SmolStr::new("coveralls")));
+        assert!(facts.script_invoked_names.contains(&SmolStr::new("echo")));
+        // `cat` is path-looking (`./coverage/lcov.info` is its argument, `cat` itself is not
+        // path-looking) — included; harmless since nothing project-side is ever named `cat`.
+        assert!(facts.script_invoked_names.contains(&SmolStr::new("cat")));
     }
 
     #[test]
