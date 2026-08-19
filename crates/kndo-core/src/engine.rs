@@ -9,6 +9,7 @@
 use std::fmt;
 use std::path::{Path, PathBuf};
 
+use crate::adapter::Diagnostic;
 use crate::discovery;
 
 /// Mirrors the output schema's `schema_version` (contracts/output-schema.md).
@@ -67,7 +68,9 @@ pub struct Finding {
 #[derive(Debug, Default)]
 pub struct RunResult {
     pub findings: Vec<Finding>,
-    pub diagnostics: Vec<String>,
+    /// Typed diagnostics (the schema's `diagnostics` array) — one representation everywhere,
+    /// never parallel stringly-typed variants.
+    pub diagnostics: Vec<Diagnostic>,
     /// Discovery output, pre-adapter-claiming. Stands in for `run.adapters[].files`
     /// (output-schema §1) until adapter registration lands in `Engine`.
     pub files_discovered: usize,
@@ -98,12 +101,19 @@ impl Engine {
     /// tree until git-index/merge-base scoping lands.
     pub fn check(&mut self, _req: CheckRequest) -> RunResult {
         match discovery::discover(&self.root) {
-            Ok(files) => RunResult {
-                files_discovered: files.len(),
+            Ok(discovered) => RunResult {
+                files_discovered: discovered.files.len(),
+                diagnostics: discovered.diagnostics,
                 ..RunResult::default()
             },
-            Err(e) => RunResult {
-                diagnostics: vec![format!("discovery failed: {e:?}")],
+            Err(discovery::DiscoveryError::Root(e)) => RunResult {
+                diagnostics: vec![Diagnostic {
+                    level: crate::adapter::DiagnosticLevel::Warn,
+                    message: format!(
+                        "cannot walk the project root: {e} — check the path and permissions"
+                    ),
+                    span: None,
+                }],
                 ..RunResult::default()
             },
         }

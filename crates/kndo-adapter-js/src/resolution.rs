@@ -16,13 +16,13 @@ const TS_EXTS: &[&str] = &["ts", "tsx", "mts", "cts"];
 const JS_EXTS: &[&str] = &["js", "jsx", "mjs", "cjs"];
 
 /// The js-ts stdlib dataset — generated data via the shared `kndo-stdlib v1` mechanism
-/// (toolkit `stdlib` module, RFC 0002 §6). Regenerate with `scripts/gen-stdlib-js.mjs`;
+/// (toolkit `stdlib` module, RFC 0002 §6). Regenerate with `cargo xtask gen-stdlib js-ts`;
 /// never hand-edit. The bare-name set is frozen by Node's own policy (new builtins are
 /// `node:`-prefix-only — that prefix is the *structural* signal passed to the classifier).
-static STDLIB: std::sync::LazyLock<kndo_adapter_toolkit::stdlib::StdlibIndex> =
+static STDLIB: std::sync::LazyLock<kndo_adapter_toolkit::stdlib::StdlibIndex<'static>> =
     std::sync::LazyLock::new(|| {
         kndo_adapter_toolkit::stdlib::StdlibIndex::parse(include_str!("stdlib.txt"))
-            .expect("shipped stdlib.txt is malformed — regenerate with scripts/gen-stdlib-js.mjs")
+            .expect("shipped stdlib.txt is malformed — regenerate: cargo xtask gen-stdlib js-ts")
     });
 
 pub fn resolve(spec: &ImportSpec, ctx: &ResolveCtx<'_>) -> Resolution {
@@ -50,8 +50,8 @@ pub fn resolve(spec: &ImportSpec, ctx: &ResolveCtx<'_>) -> Resolution {
 }
 
 fn resolve_relative(from: &str, spec: &str, ctx: &ResolveCtx<'_>) -> Resolution {
-    let from_dir = dirname(from);
-    let base = join(from_dir, spec);
+    use kndo_adapter_toolkit::paths;
+    let base = paths::join(paths::dirname(from), spec);
     for candidate in candidates(&base) {
         let path = ProjectPath(SmolStr::new(candidate));
         if ctx.contains(&path) {
@@ -59,40 +59,6 @@ fn resolve_relative(from: &str, spec: &str, ctx: &ResolveCtx<'_>) -> Resolution 
         }
     }
     Resolution::Unresolved
-}
-
-fn dirname(path: &str) -> &str {
-    match path.rfind('/') {
-        Some(i) => &path[..i],
-        None => "",
-    }
-}
-
-/// Joins a specifier onto the importing file's directory, normalizing `.`/`..` segments.
-/// Pure string manipulation — no filesystem access (adapters stay fs-free by contract).
-fn join(from_dir: &str, spec: &str) -> String {
-    let mut stack: Vec<&str> = if from_dir.is_empty() {
-        vec![]
-    } else {
-        from_dir.split('/').collect()
-    };
-    let spec = match spec.strip_prefix('/') {
-        Some(rest) => {
-            stack.clear();
-            rest
-        }
-        None => spec,
-    };
-    for seg in spec.split('/') {
-        match seg {
-            "" | "." => {}
-            ".." => {
-                stack.pop();
-            }
-            s => stack.push(s),
-        }
-    }
-    stack.join("/")
 }
 
 /// Candidate paths in resolution order: explicit path as given, then extension appends

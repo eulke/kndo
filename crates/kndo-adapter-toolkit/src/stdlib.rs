@@ -34,11 +34,11 @@ const MAGIC: &str = "# kndo-stdlib v1";
 
 /// A parsed, validated stdlib dataset. Construct once per adapter (in a `LazyLock`).
 #[derive(Debug)]
-pub struct StdlibIndex {
-    entries: HashSet<&'static str>,
-    language: &'static str,
-    source: &'static str,
-    source_version: &'static str,
+pub struct StdlibIndex<'a> {
+    entries: HashSet<&'a str>,
+    language: &'a str,
+    source: &'a str,
+    source_version: &'a str,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -50,11 +50,13 @@ pub enum StdlibDataError {
     Duplicate,
 }
 
-impl StdlibIndex {
-    /// Parses and validates embedded `kndo-stdlib v1` data. Adapters call this in a
-    /// `LazyLock` initializer; a malformed *shipped* dataset is a build defect, so failing
-    /// loudly at first use (via `expect` at the call site) is correct.
-    pub fn parse(data: &'static str) -> Result<StdlibIndex, StdlibDataError> {
+impl<'a> StdlibIndex<'a> {
+    /// Parses and validates `kndo-stdlib v1` data. Adapters call this in a `LazyLock`
+    /// initializer over `include_str!` data (`StdlibIndex<'static>`); a malformed *shipped*
+    /// dataset is a build defect, so failing loudly at first use (`expect`) is correct.
+    /// The borrowed lifetime also lets the generator (xtask) validate freshly-built strings
+    /// without leaking.
+    pub fn parse(data: &'a str) -> Result<StdlibIndex<'a>, StdlibDataError> {
         let mut lines = data.lines().map(str::trim);
         if lines.next() != Some(MAGIC) {
             return Err(StdlibDataError::MissingMagic);
@@ -63,7 +65,7 @@ impl StdlibIndex {
         let mut language = None;
         let mut source = None;
         let mut source_version = None;
-        let mut entries: Vec<&'static str> = Vec::new();
+        let mut entries: Vec<&'a str> = Vec::new();
 
         for line in data.lines().skip(1).map(str::trim) {
             if line.is_empty() {
@@ -91,7 +93,7 @@ impl StdlibIndex {
         if !entries.windows(2).all(|w| w[0] <= w[1]) {
             return Err(StdlibDataError::Unsorted);
         }
-        let set: HashSet<&'static str> = entries.iter().copied().collect();
+        let set: HashSet<&'a str> = entries.iter().copied().collect();
         if set.len() != entries.len() {
             return Err(StdlibDataError::Duplicate);
         }
@@ -139,7 +141,7 @@ pub fn classify_bare_specifier(
     specifier: &str,
     package_name: SmolStr,
     is_structural_stdlib: bool,
-    stdlib: &StdlibIndex,
+    stdlib: &StdlibIndex<'_>,
     ctx: &ResolveCtx<'_>,
 ) -> kndo_core::adapter::Resolution {
     use kndo_core::adapter::Resolution;

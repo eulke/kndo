@@ -4,5 +4,7 @@
 //! token normalizer (RFC 0005 §6), and the shared cyclomatic-complexity walker. An adapter is
 //! largely grammar + queries + resolver logic on top of this crate.
 
+pub mod classify;
 pub mod parsing;
+pub mod paths;
 pub mod stdlib;

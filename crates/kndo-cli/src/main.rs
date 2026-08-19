@@ -46,11 +46,14 @@ fn check() -> ExitCode {
         mode: RunMode::Full,
     });
 
-    if !result.diagnostics.is_empty() {
-        for d in &result.diagnostics {
-            eprintln!("kndo: {d}");
-        }
-        return ExitCode::from(2);
+    // Diagnostics degrade the run, they don't kill it (RFC 0001 §6): report on stderr and
+    // continue — findings and diagnostics are not the same thing.
+    for d in &result.diagnostics {
+        let level = match d.level {
+            kndo_core::adapter::DiagnosticLevel::Warn => "warning",
+            kndo_core::adapter::DiagnosticLevel::Info => "info",
+        };
+        eprintln!("kndo: {level}: {}", d.message);
     }
 
     // RFC 0009 §2 quiet success — one line. (Real rendering lands with real findings.)

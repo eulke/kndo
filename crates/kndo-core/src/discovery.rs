@@ -13,7 +13,7 @@ use std::path::Path;
 
 use rayon::prelude::*;
 
-use crate::adapter::ProjectPath;
+use crate::adapter::{Diagnostic, DiagnosticLevel, ProjectPath};
 
 /// One discovered file: its project-relative path (`/`-separated) and content hash.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -27,9 +27,18 @@ pub enum DiscoveryError {
     Root(std::io::Error),
 }
 
+/// Discovery result: the files plus everything that could NOT be read — a file silently
+/// disappearing from analysis is the worst failure mode a static analyzer has, so every
+/// skipped path becomes a diagnostic instead of vanishing (RFC 0001 §6).
+#[derive(Debug)]
+pub struct Discovered {
+    pub files: Vec<DiscoveredFile>,
+    pub diagnostics: Vec<Diagnostic>,
+}
+
 /// Walk `root` respecting ignore files, hash every regular file, and return the result sorted
 /// by path — deterministic regardless of filesystem or thread-scheduling order.
-pub fn discover(root: &Path) -> Result<Vec<DiscoveredFile>, DiscoveryError> {
+pub fn discover(root: &Path) -> Result<Discovered, DiscoveryError> {
     if !root.is_dir() {
         return Err(DiscoveryError::Root(std::io::Error::new(
             std::io::ErrorKind::NotFound,
@@ -47,24 +56,43 @@ pub fn discover(root: &Path) -> Result<Vec<DiscoveredFile>, DiscoveryError> {
         .map(|e| e.into_path())
         .collect();
 
-    let mut files: Vec<DiscoveredFile> = paths
+    let results: Vec<Result<DiscoveredFile, Diagnostic>> = paths
         .par_iter()
-        .filter_map(|abs| {
-            let rel = abs.strip_prefix(root).ok()?;
+        .map(|abs| {
+            let skip = |why: String| Diagnostic {
+                level: DiagnosticLevel::Warn,
+                message: format!("skipped {}: {why}", abs.display()),
+                span: None,
+            };
+            let rel = abs
+                .strip_prefix(root)
+                .map_err(|_| skip("outside project root".into()))?;
             // Normalize to `/` — the only path form that crosses the adapter boundary
             // (contracts §2, ProjectPath).
-            let rel_str = rel.to_str()?.replace('\\', "/");
-            let content = std::fs::read(abs).ok()?;
+            let rel_str = rel
+                .to_str()
+                .ok_or_else(|| skip("path is not valid UTF-8".into()))?
+                .replace('\\', "/");
+            let content = std::fs::read(abs).map_err(|e| skip(format!("unreadable ({e})")))?;
             let hash = blake3::hash(&content);
-            Some(DiscoveredFile {
+            Ok(DiscoveredFile {
                 path: ProjectPath(rel_str.into()),
                 content_hash: *hash.as_bytes(),
             })
         })
         .collect();
 
+    let mut files = Vec::with_capacity(results.len());
+    let mut diagnostics = Vec::new();
+    for r in results {
+        match r {
+            Ok(f) => files.push(f),
+            Err(d) => diagnostics.push(d),
+        }
+    }
     files.sort_by(|a, b| a.path.0.cmp(&b.path.0));
-    Ok(files)
+    diagnostics.sort_by(|a, b| a.message.cmp(&b.message)); // deterministic order here too
+    Ok(Discovered { files, diagnostics })
 }
 
 #[cfg(test)]
@@ -87,7 +115,7 @@ mod tests {
         fs::write(dir.join("a.ts"), "export const a = 1;").unwrap();
         fs::write(dir.join("ignored.txt"), "should not appear").unwrap();
 
-        let files = discover(&dir).unwrap();
+        let files = discover(&dir).unwrap().files;
         let paths: Vec<&str> = files.iter().map(|f| f.path.0.as_str()).collect();
 
         assert_eq!(paths, vec!["a.ts", "b.ts"]);
@@ -99,7 +127,7 @@ mod tests {
         fs::write(dir.join("x.ts"), "same").unwrap();
         fs::write(dir.join("y.ts"), "same").unwrap();
 
-        let files = discover(&dir).unwrap();
+        let files = discover(&dir).unwrap().files;
         assert_eq!(files[0].content_hash, files[1].content_hash);
         assert_ne!(files[0].content_hash, [0u8; 32]);
     }
@@ -112,11 +140,13 @@ mod tests {
         }
         let run1: Vec<_> = discover(&dir)
             .unwrap()
+            .files
             .into_iter()
             .map(|f| f.path.0)
             .collect();
         let run2: Vec<_> = discover(&dir)
             .unwrap()
+            .files
             .into_iter()
             .map(|f| f.path.0)
             .collect();

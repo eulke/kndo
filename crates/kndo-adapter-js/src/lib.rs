@@ -7,7 +7,6 @@ use kndo_core::adapter::{
     AdapterDescriptor, FileClaim, FileFacts, ImportSpec, LanguageAdapter, ManifestFacts,
     ProjectPath, Resolution, ResolveCtx, SourceFile,
 };
-use kndo_core::vocab::{FileClass, FileOrigin, FileRole};
 use smol_str::SmolStr;
 
 mod extraction;
@@ -17,44 +16,17 @@ pub struct JsTsAdapter;
 
 const EXTENSIONS: &[&str] = &["ts", "tsx", "js", "jsx", "mjs", "cjs", "mts", "cts"];
 
-impl JsTsAdapter {
-    fn classify(path: &str) -> FileClass {
-        let file_name = path.rsplit('/').next().unwrap_or(path);
-
-        // Origin axis (spec §1): vendored trees, then generated markers (content markers like
-        // @generated banners are checked at extract time; name-level signals here).
-        let origin = if path.starts_with("vendor/")
-            || path.contains("/vendor/")
-            || path.starts_with("third_party/")
-            || path.contains("/third_party/")
-        {
-            FileOrigin::Vendored
-        } else {
-            FileOrigin::Authored
-        };
-
-        // Role axis (spec §1). Order matters: test markers beat tooling markers.
-        let stem_has = |marker: &str| file_name.contains(marker);
-        let role = if stem_has(".test.")
-            || stem_has(".spec.")
-            || path.contains("/__tests__/")
-            || path.starts_with("__tests__/")
-            || path.contains("/__mocks__/")
-            || path.starts_with("__mocks__/")
-        {
-            FileRole::Test
-        } else if stem_has(".config.")
-            || path.contains("/.storybook/")
-            || path.starts_with(".storybook/")
-        {
-            FileRole::Tooling
-        } else {
-            FileRole::Production
-        };
-
-        FileClass { role, origin }
-    }
-}
+/// This adapter's classification conventions (spec §1) as data; the matcher and the
+/// universal vendored-tree conventions live in the toolkit (one implementation for all
+/// adapters). Generated-origin content markers (@generated banners) are an extract-time
+/// concern, not a path concern.
+const PATH_PATTERNS: kndo_adapter_toolkit::classify::PathPatterns =
+    kndo_adapter_toolkit::classify::PathPatterns {
+        test_name_markers: &[".test.", ".spec."],
+        test_dirs: &["__tests__", "__mocks__"],
+        tooling_name_markers: &[".config."],
+        tooling_dirs: &[".storybook"],
+    };
 
 impl LanguageAdapter for JsTsAdapter {
     fn descriptor(&self) -> AdapterDescriptor {
@@ -75,15 +47,15 @@ impl LanguageAdapter for JsTsAdapter {
 
     fn claim(&self, path: &ProjectPath) -> Option<FileClaim> {
         let p = path.0.as_str();
-        // `.d.ts` is ours (declarations only — spec §1); plain extension match otherwise.
+        // Extension match covers `.d.ts` too (its final extension is `ts`); the
+        // declarations-only handling of `.d.ts` is extraction's concern, not claiming's.
         let ext = p.rsplit('.').next()?;
-        let claimed = p.ends_with(".d.ts") || EXTENSIONS.contains(&ext);
-        if !claimed {
+        if !EXTENSIONS.contains(&ext) {
             return None;
         }
         Some(FileClaim {
             language: SmolStr::new("js-ts"),
-            class: Self::classify(p),
+            class: kndo_adapter_toolkit::classify::classify(p, &PATH_PATTERNS),
         })
     }
 
@@ -104,6 +76,7 @@ impl LanguageAdapter for JsTsAdapter {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use kndo_core::vocab::{FileOrigin, FileRole};
 
     fn claim(path: &str) -> Option<FileClaim> {
         JsTsAdapter.claim(&ProjectPath(SmolStr::new(path)))

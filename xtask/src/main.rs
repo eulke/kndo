@@ -126,8 +126,7 @@ fn generate(source: &StdlibSource) -> Result<(), String> {
 
     // Validate with the exact loader that consumes this file at build time — the generator
     // can never emit something the product would reject.
-    let leaked: &'static str = Box::leak(out.clone().into_boxed_str());
-    kndo_adapter_toolkit::stdlib::StdlibIndex::parse(leaked)
+    kndo_adapter_toolkit::stdlib::StdlibIndex::parse(&out)
         .map_err(|e| format!("generated data failed loader validation: {e:?}"))?;
 
     let path = workspace_root()?.join(source.output);
