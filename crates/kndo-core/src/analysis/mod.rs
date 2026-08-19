@@ -3,7 +3,9 @@
 //! and produces [`crate::engine::Finding`]s — never source text, never I/O.
 
 pub mod reachability;
+pub mod undeclared;
 pub mod unused;
+pub mod version_skew;
 
 use crate::engine::Finding;
 
@@ -31,6 +33,8 @@ pub fn finding_id(
 pub fn run_all(graph: &crate::graph::ProjectGraph) -> Vec<Finding> {
     let reach = reachability::compute(graph);
     let mut findings = unused::find_unused_files(graph, &reach);
+    findings.extend(undeclared::find_undeclared_dependencies(graph));
+    findings.extend(version_skew::find_version_skew(graph));
     findings.sort_by(|a, b| a.id.cmp(&b.id));
     findings
 }

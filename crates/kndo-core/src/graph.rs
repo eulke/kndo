@@ -15,8 +15,8 @@ use crate::adapter::{
 };
 use crate::discovery::{self, DiscoveryError};
 use crate::vocab::{
-    Confidence, DependencyId, Edge, EdgeKind, FileClass, FileId, NodeRef, Provenance, SymbolId,
-    SymbolKind,
+    Confidence, DependencyId, DependencyScope, Edge, EdgeKind, FileClass, FileId, NodeRef,
+    Provenance, SymbolId, SymbolKind,
 };
 use smol_str::SmolStr;
 
@@ -46,6 +46,23 @@ pub struct DependencyNode {
     pub name: SmolStr,
 }
 
+/// One manifest's declaration of an external dependency — the raw fact `undeclared` and
+/// `version-skew` compare against, kept separate from [`DependencyNode`] because a declaration
+/// can exist with zero importers (nothing wrong with that on its own — that's `unused`'s
+/// concern) and a project can have many manifests declaring the same name differently (that's
+/// `version-skew`'s). Not yet package-attributed (RFC 0011's `Package` node/ownership hasn't
+/// landed): in a workspace with multiple manifests, a name declared by *any* manifest reads as
+/// "declared" project-wide rather than per-owning-package — correct for the single-manifest
+/// case M1 treats as foundational, an intentional imprecision for the monorepo case until
+/// ownership exists to do better.
+#[derive(Debug, Clone)]
+pub struct DeclaredDependency {
+    pub manifest: ProjectPath,
+    pub name: SmolStr,
+    pub version_req: SmolStr,
+    pub scope: DependencyScope,
+}
+
 /// The assembled language-neutral graph (contracts §1). Read-only once built; incremental
 /// patching lands with the cache (RFC 0004).
 #[derive(Debug, Default)]
@@ -53,6 +70,7 @@ pub struct ProjectGraph {
     pub files: Vec<FileNode>,
     pub symbols: Vec<SymbolNode>,
     pub dependencies: Vec<DependencyNode>,
+    pub declared_dependencies: Vec<DeclaredDependency>,
     pub edges: Vec<Edge>,
     file_index: HashMap<ProjectPath, FileId>,
 }
@@ -81,9 +99,16 @@ impl ProjectGraph {
             files,
             symbols,
             dependencies,
+            declared_dependencies: Vec::new(),
             edges,
             file_index,
         }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_declared_dependencies(mut self, deps: Vec<DeclaredDependency>) -> Self {
+        self.declared_dependencies = deps;
+        self
     }
 }
 
@@ -223,14 +248,21 @@ pub fn assemble(
     // stdlib-shadowing precedence rule (RFC 0002 §6) that phase 3's resolver calls already
     // implement but, until now, were never handed anything to check against.
     let mut edges = Vec::new();
-    let mut declared_dependencies: HashSet<SmolStr> = HashSet::new();
+    let mut declared_dependency_names: HashSet<SmolStr> = HashSet::new();
+    let mut declared_dependencies: Vec<DeclaredDependency> = Vec::new();
     for (i, slot) in manifests_per_file.iter().enumerate() {
         let Some((adapter_index, facts)) = slot else {
             continue;
         };
         let provenance = || Provenance::Adapter(adapters[*adapter_index].descriptor().id.clone());
         for dep in &facts.dependencies {
-            declared_dependencies.insert(dep.name.clone());
+            declared_dependency_names.insert(dep.name.clone());
+            declared_dependencies.push(DeclaredDependency {
+                manifest: files[i].path.clone(),
+                name: dep.name.clone(),
+                version_req: dep.version_req.clone(),
+                scope: dep.scope,
+            });
         }
         for root in &facts.roots {
             // Resolved against `manifest_ctx`'s known-files set, so this must be Some —
@@ -260,7 +292,7 @@ pub fn assemble(
     // Phase 3 — symbols, dependencies, and edges, sequentially in FileId order (the loop
     // order below), which is what makes the whole assembly deterministic without an explicit
     // post-hoc sort of symbols/edges.
-    let ctx = ResolveCtx::new(&known_files).with_declared_dependencies(&declared_dependencies);
+    let ctx = ResolveCtx::new(&known_files).with_declared_dependencies(&declared_dependency_names);
     let mut symbols = Vec::new();
     let mut dependencies = Vec::new();
     let mut dep_index: HashMap<SmolStr, DependencyId> = HashMap::new();
@@ -370,6 +402,7 @@ pub fn assemble(
             files,
             symbols,
             dependencies,
+            declared_dependencies,
             edges,
             file_index,
         },
