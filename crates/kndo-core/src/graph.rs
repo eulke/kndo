@@ -400,6 +400,33 @@ pub fn assemble(
         }
     }
 
+    // Phase 2.6 — role-derived roots (RFC 0005 §2, literally): "Test roots — test
+    // functions/files (language role detection…)"; "Tooling roots — build/config scripts
+    // (webpack.config…)". The adapter's role classification *is* the seed for these two root
+    // kinds — the runner/tool that consumes the file lives outside the graph, so the file's
+    // existence under the convention is the whole evidence. `Probable`, not certain: a
+    // convention names the file, nothing declares it (same reasoning as `exports`-map leaves).
+    // Production roots stay manifest/API-driven (phase 2.5) — never role-derived.
+    let mut role_root_files: HashMap<FileId, crate::vocab::RootKind> = HashMap::new();
+    for (i, slot) in claimed_per_file.iter().enumerate() {
+        let Some(claimed) = slot else { continue };
+        let kind = match claimed.claim.class.role {
+            crate::vocab::FileRole::Test => crate::vocab::RootKind::Test,
+            crate::vocab::FileRole::Tooling => crate::vocab::RootKind::Tooling,
+            crate::vocab::FileRole::Production => continue,
+        };
+        let file_id = FileId(i as u32);
+        edges.push(Edge {
+            kind: EdgeKind::Root {
+                kind,
+                target: NodeRef::File(file_id),
+            },
+            confidence: Confidence::Probable,
+            source: Provenance::Adapter(adapters[claimed.adapter_index].descriptor().id.clone()),
+        });
+        role_root_files.insert(file_id, kind);
+    }
+
     // Phase 3a — symbols (Declares edges) and in-source roots, sequentially in FileId order.
     // Split from imports/references (phase 3b) because resolving a reference or an import
     // binding to *another* file's symbol needs that file's symbol table already built —
@@ -449,6 +476,21 @@ pub fn assemble(
                             target: NodeRef::Symbol(symbol_id),
                         },
                         confidence,
+                        source: provenance(),
+                    });
+                }
+                // Same promotion for role-derived roots (phase 2.6): a config file's exports
+                // ARE its interface to the tool that loads it (`export default {…}` in
+                // webpack.config consumed by webpack), and a test file's exports may be
+                // shared fixtures — the consumer is outside the graph either way, so the
+                // export surface is the whole visible contract.
+                if let Some(&kind) = role_root_files.get(&file_id) {
+                    edges.push(Edge {
+                        kind: EdgeKind::Root {
+                            kind,
+                            target: NodeRef::Symbol(symbol_id),
+                        },
+                        confidence: Confidence::Probable,
                         source: provenance(),
                     });
                 }
@@ -731,12 +773,23 @@ mod tests {
         }
 
         fn claim(&self, path: &ProjectPath) -> Option<FileClaim> {
-            path.0.ends_with(".mock").then(|| FileClaim {
-                language: SmolStr::new("mock"),
-                class: FileClass {
-                    role: FileRole::Production,
-                    origin: FileOrigin::Authored,
-                },
+            path.0.ends_with(".mock").then(|| {
+                // Role by filename convention, mirroring real adapters' classification:
+                // "*.test.*" → Test, "*.config.*" → Tooling, everything else Production.
+                let role = if path.0.contains(".test.") {
+                    FileRole::Test
+                } else if path.0.contains(".config.") {
+                    FileRole::Tooling
+                } else {
+                    FileRole::Production
+                };
+                FileClaim {
+                    language: SmolStr::new("mock"),
+                    class: FileClass {
+                        role,
+                        origin: FileOrigin::Authored,
+                    },
+                }
             })
         }
 
@@ -1270,6 +1323,63 @@ mod tests {
             .edges
             .iter()
             .all(|e| !matches!(e.kind, EdgeKind::Root { .. })));
+    }
+
+    #[test]
+    fn test_role_files_are_test_roots_not_unused() {
+        // RFC 0005 §2: "Test roots — test functions/files (language role detection…)". A test
+        // file nothing imports is TestOnly, not Unreachable — while a production orphan next
+        // to it is still caught.
+        let dir = project(
+            "role-roots-test",
+            &[("a.test.mock", "decl helper"), ("orphan.mock", "decl gone")],
+        );
+        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let test_file = graph
+            .file_id(&ProjectPath(SmolStr::new("a.test.mock")))
+            .unwrap();
+        let root = graph
+            .edges
+            .iter()
+            .find(|e| {
+                e.kind
+                    == EdgeKind::Root {
+                        kind: RootKind::Test,
+                        target: NodeRef::File(test_file),
+                    }
+            })
+            .expect("role-derived test root");
+        assert_eq!(root.confidence, Confidence::Probable);
+
+        let findings = crate::analysis::run_all(&graph);
+        let flagged_paths: Vec<&str> = findings
+            .iter()
+            .filter_map(|f| f.location.path.as_ref().map(|p| p.0.as_str()))
+            .collect();
+        assert!(!flagged_paths.contains(&"a.test.mock"));
+        assert!(flagged_paths.contains(&"orphan.mock"));
+    }
+
+    #[test]
+    fn tooling_role_files_root_their_exported_symbols_too() {
+        // A config file's exports ARE its interface to the tool that loads it — neither the
+        // file nor its exported symbol may be flagged; an unexported dead helper inside the
+        // same config still is (symbol-level precision survives the promotion).
+        let dir = project(
+            "role-roots-tooling",
+            &[(
+                "build.config.mock",
+                "decl configObject\nprivate-decl helper",
+            )],
+        );
+        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let findings = crate::analysis::run_all(&graph);
+        assert!(!findings
+            .iter()
+            .any(|f| f.location.symbol.as_deref() == Some("configObject")));
+        assert!(findings
+            .iter()
+            .any(|f| f.location.symbol.as_deref() == Some("helper")));
     }
 
     #[test]

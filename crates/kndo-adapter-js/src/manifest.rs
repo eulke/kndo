@@ -2,12 +2,12 @@
 //!
 //! Scope for this increment: identity (`name`, `private`), scoped dependencies, `exports`
 //! surface detection, and roots. Root detection covers `bin` (unconditional — an executable
-//! entry point is a root regardless of publish status) and `main`/`module`/`exports` gated on
+//! entry point is a root regardless of publish status), `main`/`module`/`exports` gated on
 //! `!private` (RFC 0011 §5: an unpublished app's exports are not roots on their own; something
-//! must actually import them). `types`/`typings` are resolution inputs only — `.d.ts` carries
-//! no runtime edge (spec §1). `scripts` → tooling roots and `pnpm-workspace.yaml` topology are
-//! explicitly deferred (roadmap M3 tooling-roots slice; the latter needs a YAML parser this
-//! crate doesn't otherwise need).
+//! must actually import them), and `scripts` → tooling roots (path-looking tokens resolving
+//! to known files — spec §7 open question 2's drafted rule). `types`/`typings` are resolution
+//! inputs only — `.d.ts` carries no runtime edge (spec §1). `pnpm-workspace.yaml` topology
+//! stays deferred (needs a YAML parser this crate doesn't otherwise need).
 
 use kndo_core::adapter::{
     Diagnostic, DiagnosticLevel, ManifestDependency, ManifestFacts, ManifestRoot, ProjectPath,
@@ -101,6 +101,39 @@ pub fn extract(path: &str, content: &[u8], ctx: &ResolveCtx<'_>) -> ManifestFact
     for key in ["types", "typings"] {
         if let Some(v) = obj.get(key).and_then(|v| v.as_str()) {
             entry_points.push(SmolStr::new(v));
+        }
+    }
+
+    // `scripts` → tooling roots (spec §4; the §7 open-question-2 drafted rule, implemented as
+    // drafted): whitespace-tokenize each command, and any path-looking token that resolves to
+    // a known file is a tooling root. No shell parsing — a token either names a file or it
+    // doesn't. "Path-looking" (contains `/` or `.`) filters out bare tool names: `ava` must
+    // never root a coincidental ./ava.js, because npm runs the node_modules binary, not that
+    // file. `--flag=./x.js` tokens contribute their value side. `probable`, not certain — a
+    // token match is a heuristic, nothing declares the file.
+    if let Some(scripts) = obj.get("scripts").and_then(|v| v.as_object()) {
+        let mut seen = std::collections::HashSet::new();
+        for command in scripts.values().filter_map(|v| v.as_str()) {
+            for raw_token in command.split_whitespace() {
+                let token = match raw_token.split_once('=') {
+                    Some((flag, value)) if flag.starts_with('-') => value,
+                    _ => raw_token,
+                };
+                if !(token.contains('/') || token.contains('.')) {
+                    continue;
+                }
+                if let Some((target, confidence)) =
+                    resolve_entry(path, token, ctx, Confidence::Probable)
+                {
+                    if seen.insert(target.clone()) {
+                        roots.push(ManifestRoot {
+                            kind: RootKind::Tooling,
+                            target,
+                            confidence,
+                        });
+                    }
+                }
+            }
         }
     }
 
@@ -334,6 +367,88 @@ mod tests {
         let facts = extract_at("package.json", r#"{ "types": "./index.d.ts" }"#, &known);
         assert!(facts.roots.is_empty());
         assert!(facts.entry_points.iter().any(|e| e == "./index.d.ts"));
+    }
+
+    // ---------------------------------------------------------------- scripts → tooling roots
+
+    #[test]
+    fn script_file_token_becomes_a_probable_tooling_root() {
+        let known = ctx_with(&["package.json", "benchmark.js"]);
+        let facts = extract_at(
+            "package.json",
+            r#"{ "scripts": { "bench": "node benchmark.js" } }"#,
+            &known,
+        );
+        assert_eq!(facts.roots.len(), 1);
+        assert_eq!(facts.roots[0].kind, RootKind::Tooling);
+        assert_eq!(
+            facts.roots[0].target,
+            ProjectPath(SmolStr::new("benchmark.js"))
+        );
+        assert_eq!(facts.roots[0].confidence, Confidence::Probable);
+    }
+
+    #[test]
+    fn bare_tool_names_never_root_coincidental_files() {
+        // npm runs node_modules/.bin/ava — a root-level ava.js is NOT what "ava" invokes.
+        let known = ctx_with(&["package.json", "ava.js", "xo.js"]);
+        let facts = extract_at(
+            "package.json",
+            r#"{ "scripts": { "test": "xo && ava" } }"#,
+            &known,
+        );
+        assert!(facts.roots.is_empty());
+    }
+
+    #[test]
+    fn flag_value_tokens_contribute_their_path_side() {
+        let known = ctx_with(&["package.json", "webpack.config.js"]);
+        let facts = extract_at(
+            "package.json",
+            r#"{ "scripts": { "build": "webpack --config=./webpack.config.js" } }"#,
+            &known,
+        );
+        assert_eq!(facts.roots.len(), 1);
+        assert_eq!(
+            facts.roots[0].target,
+            ProjectPath(SmolStr::new("webpack.config.js"))
+        );
+    }
+
+    #[test]
+    fn unknown_script_tokens_produce_no_roots() {
+        let known = ctx_with(&["package.json"]);
+        let facts = extract_at(
+            "package.json",
+            r#"{ "scripts": { "build": "node missing.js && tsc -p tsconfig.build.json" } }"#,
+            &known,
+        );
+        assert!(facts.roots.is_empty());
+    }
+
+    #[test]
+    fn the_same_script_file_roots_once_across_scripts() {
+        let known = ctx_with(&["package.json", "run.js"]);
+        let facts = extract_at(
+            "package.json",
+            r#"{ "scripts": { "a": "node run.js", "b": "node run.js --fast" } }"#,
+            &known,
+        );
+        assert_eq!(facts.roots.len(), 1);
+    }
+
+    #[test]
+    fn script_roots_apply_even_when_private() {
+        // Unlike main/exports (library mode), a script reference is direct evidence of
+        // invocation regardless of publish status — same reasoning as bin.
+        let known = ctx_with(&["package.json", "scripts/build.mjs"]);
+        let facts = extract_at(
+            "package.json",
+            r#"{ "private": true, "scripts": { "build": "node scripts/build.mjs" } }"#,
+            &known,
+        );
+        assert_eq!(facts.roots.len(), 1);
+        assert_eq!(facts.roots[0].kind, RootKind::Tooling);
     }
 
     #[test]

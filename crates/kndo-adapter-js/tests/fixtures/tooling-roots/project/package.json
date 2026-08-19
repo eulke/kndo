@@ -1,0 +1,7 @@
+{
+  "name": "tooling-roots",
+  "private": true,
+  "scripts": {
+    "build": "node scripts/build.mjs --out=dist"
+  }
+}
