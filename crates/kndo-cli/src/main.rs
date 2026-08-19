@@ -643,6 +643,8 @@ mod tests {
             confidence: kndo::vocab::Confidence::Certain,
             message: "example".to_string(),
             location: Default::default(),
+            delta: None,
+            delta_origin: None,
         }
     }
 

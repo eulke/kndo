@@ -127,6 +127,8 @@ fn unused_finding(
             package_label(graph, dep.package)
         ),
         location: dependency_location(graph, dep),
+        delta: None,
+        delta_origin: None,
     }
 }
 
@@ -154,6 +156,8 @@ fn test_only_finding(
             package_label(graph, dep.package)
         ),
         location: dependency_location(graph, dep),
+        delta: None,
+        delta_origin: None,
     }
 }
 

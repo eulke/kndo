@@ -7,6 +7,10 @@
 //! (`<glyph> <category>[:<subject>] <path:line> <message> [(confidence)] [id]`), the
 //! quiet-success line, semantic per-group color.
 //!
+//! Diff modes (`--staged`/`--diff`) render a NEW/FIXED split instead (RFC 0006 §3): NEW splits
+//! further by `delta_origin` (introduced vs derived), FIXED is flat, and the header states the
+//! net.
+//!
 //! Deliberately not implemented, simplified rather than silently wrong:
 //! - RFC 0009 §4's three-tier capability ladder (rich TTY / basic TTY / no TTY / `TERM=dumb`)
 //!   collapses to one on/off switch (`RenderOptions::color`) driving *both* color and glyph
@@ -14,10 +18,13 @@
 //!   unreadable, only less decorated than the richest tier could be.
 //! - Width-based column truncation and the below-60-columns two-line fallback (§4) — lines
 //!   are never truncated here.
-//! - The health block and diff-mode NEW/FIXED sections (§5) — no health scoring (M4) or diff
-//!   mode (M2) exists yet to render.
+//! - The health/budget block (§5) — no health scoring exists yet (M4), so there's nothing to
+//!   render; the diff header's `net` count is the only summary today.
+//! - The `└ cause: …` evidence line under a derived finding — `RunResult`/`Finding` don't carry
+//!   the `related` evidence chain yet (deferred, see `engine::Finding`'s doc), so there is
+//!   nothing to render; `delta_origin` alone is still shown.
 
-use kndo::engine::{Finding, RunResult};
+use kndo::engine::{DeltaOrigin, Finding, RunResult};
 use kndo::vocab::Confidence;
 
 pub struct RenderOptions {
@@ -41,6 +48,10 @@ const BLUE: &str = "\x1b[34m";
 const RESET: &str = "\x1b[0m";
 
 pub fn render(result: &RunResult, opts: &RenderOptions) -> String {
+    if result.mode == "staged" || result.mode == "diff" {
+        return render_diff(result, opts);
+    }
+
     let baseline_suffix = baseline_suffix(result);
 
     if result.findings.is_empty() {
@@ -92,6 +103,67 @@ pub fn render(result: &RunResult, opts: &RenderOptions) -> String {
         render_section(&mut out, group, &in_group, opts);
     }
     out
+}
+
+/// Diff modes' rendering (RFC 0006 §3): a one-line header (`N new · M fixed · net ±K`), then
+/// `NEW (introduced by this change)`, `NEW (derived, in untouched code)`, and `FIXED` sections
+/// — each present only when non-empty, in that fixed order, mirroring the RFC's own example.
+fn render_diff(result: &RunResult, opts: &RenderOptions) -> String {
+    let net = result.findings.len() as i64 - result.fixed.len() as i64;
+    let baseline_suffix = baseline_suffix(result);
+    let header = format!(
+        "kndo · {} · {} new · {} fixed · net {net:+}{baseline_suffix}\n",
+        result.mode,
+        result.findings.len(),
+        result.fixed.len(),
+    );
+
+    if opts.quiet || (result.findings.is_empty() && result.fixed.is_empty()) {
+        return header;
+    }
+
+    let mut out = header;
+    out.push('\n');
+
+    let introduced: Vec<&Finding> = result
+        .findings
+        .iter()
+        .filter(|f| f.delta_origin == Some(DeltaOrigin::Introduced))
+        .collect();
+    let derived: Vec<&Finding> = result
+        .findings
+        .iter()
+        .filter(|f| f.delta_origin == Some(DeltaOrigin::Derived))
+        .collect();
+
+    if !introduced.is_empty() {
+        out.push_str("NEW (introduced by this change)\n");
+        render_flat(&mut out, &introduced, opts);
+    }
+    if !derived.is_empty() {
+        out.push_str("NEW (derived, in untouched code)\n");
+        render_flat(&mut out, &derived, opts);
+    }
+    if !result.fixed.is_empty() {
+        out.push_str("FIXED\n");
+        let fixed: Vec<&Finding> = result.fixed.iter().collect();
+        render_flat(&mut out, &fixed, opts);
+    }
+    out
+}
+
+/// One finding per line, sorted like every other section (worst severity, then path, then
+/// span) but without the group header `render_section` prints — diff mode's sections are
+/// `NEW`/`FIXED`, not the taxonomy groups.
+fn render_flat(out: &mut String, findings: &[&Finding], opts: &RenderOptions) {
+    let mut sorted = findings.to_vec();
+    sort_findings(&mut sorted);
+    for f in sorted {
+        out.push_str("  ");
+        out.push_str(&render_finding_line(f, opts));
+        out.push('\n');
+    }
+    out.push('\n');
 }
 
 fn sort_findings(findings: &mut [&Finding]) {
@@ -184,5 +256,109 @@ fn confidence_str(c: Confidence) -> &'static str {
         Confidence::Certain => "certain",
         Confidence::Probable => "probable",
         Confidence::Possible => "possible",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use kndo::adapter::ProjectPath;
+    use kndo::engine::{Delta, DeltaOrigin, Location, Severity};
+    use smol_str::SmolStr;
+
+    fn finding(category: &str, group: &str) -> Finding {
+        Finding {
+            id: format!("kndo-{category}"),
+            category: category.to_string(),
+            group: group.to_string(),
+            subject_kind: "function".to_string(),
+            severity: Severity::Warning,
+            confidence: Confidence::Certain,
+            message: "example".to_string(),
+            location: Location {
+                path: Some(ProjectPath(SmolStr::new("src/a.ts"))),
+                range: None,
+                symbol: Some("thing".to_string()),
+                package: None,
+            },
+            delta: None,
+            delta_origin: None,
+        }
+    }
+
+    fn opts() -> RenderOptions {
+        RenderOptions {
+            color: false,
+            quiet: false,
+        }
+    }
+
+    #[test]
+    fn diff_mode_splits_introduced_derived_and_fixed_sections() {
+        let mut introduced = finding("unused", "waste");
+        introduced.delta = Some(Delta::New);
+        introduced.delta_origin = Some(DeltaOrigin::Introduced);
+
+        let mut derived = finding("test-only", "waste");
+        derived.delta = Some(Delta::New);
+        derived.delta_origin = Some(DeltaOrigin::Derived);
+
+        let mut fixed = finding("unused", "waste");
+        fixed.delta = Some(Delta::Fixed);
+
+        let result = RunResult {
+            mode: "staged".to_string(),
+            findings: vec![introduced, derived],
+            fixed: vec![fixed],
+            ..RunResult::default()
+        };
+        let out = render(&result, &opts());
+
+        assert!(out.starts_with("kndo · staged · 2 new · 1 fixed · net +1\n"));
+        let introduced_pos = out.find("NEW (introduced by this change)").unwrap();
+        let derived_pos = out.find("NEW (derived, in untouched code)").unwrap();
+        let fixed_pos = out.find("FIXED").unwrap();
+        assert!(introduced_pos < derived_pos && derived_pos < fixed_pos);
+    }
+
+    #[test]
+    fn diff_mode_clean_result_is_just_the_header() {
+        let result = RunResult {
+            mode: "diff".to_string(),
+            base_ref: Some("main".to_string()),
+            ..RunResult::default()
+        };
+        let out = render(&result, &opts());
+        assert_eq!(out, "kndo · diff · 0 new · 0 fixed · net +0\n");
+    }
+
+    #[test]
+    fn diff_mode_quiet_is_a_one_liner_even_with_findings() {
+        let mut f = finding("unused", "waste");
+        f.delta = Some(Delta::New);
+        f.delta_origin = Some(DeltaOrigin::Introduced);
+        let result = RunResult {
+            mode: "staged".to_string(),
+            findings: vec![f],
+            ..RunResult::default()
+        };
+        let out = render(
+            &result,
+            &RenderOptions {
+                color: false,
+                quiet: true,
+            },
+        );
+        assert_eq!(out, "kndo · staged · 1 new · 0 fixed · net +1\n");
+    }
+
+    #[test]
+    fn full_mode_is_unaffected_by_the_diff_mode_branch() {
+        let result = RunResult {
+            mode: "full".to_string(),
+            ..RunResult::default()
+        };
+        let out = render(&result, &opts());
+        assert!(out.starts_with("kndo · clean ·"));
     }
 }

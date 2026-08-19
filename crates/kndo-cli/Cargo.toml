@@ -13,3 +13,6 @@ path = "src/main.rs"
 
 [dependencies]
 kndo = { path = "../kndo" }
+
+[dev-dependencies]
+smol_str = { workspace = true }

@@ -50,6 +50,8 @@ pub fn find_version_skew(graph: &ProjectGraph) -> Vec<Finding> {
                 symbol: Some(name.to_string()),
                 ..Location::default()
             },
+            delta: None,
+            delta_origin: None,
         });
     }
     findings

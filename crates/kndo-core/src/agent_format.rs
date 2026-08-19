@@ -3,14 +3,17 @@
 //! JSON (RFC 0001 §2, contracts §5): every frontend — CLI today, `kndo serve`/MCP tomorrow —
 //! emits byte-identical agent text, never reconstructed per-frontend.
 //!
-//! Scope for this increment: full-mode rendering only — a `findings:` block, not diff mode's
-//! `new:`/`fixed:` split (no diff mode exists yet, M2), so no `budget:` line either (delta
-//! budgets are diff-mode-only). No `cause:`/`fix:` evidence lines under a finding: the format
-//! "can never carry information absent from the JSON" (output-schema §9), and `RunResult`
-//! doesn't carry `related`/`remediation` data yet (deferred, see `engine::Finding`'s doc).
+//! Diff modes render `new:`/`fixed:` blocks instead of `findings:` (output-schema §9's own
+//! example), with one numbering sequence running across both. No `budget:` line: delta budgets
+//! depend on health scoring, which doesn't exist yet (M4). No `cause:`/`fix:` evidence lines
+//! under a finding, in any mode: the format "can never carry information absent from the JSON"
+//! (output-schema §9), and `RunResult` doesn't carry `related`/`remediation` data yet (deferred,
+//! see `engine::Finding`'s doc) — unlike the human renderer, this also means diff mode's NEW
+//! findings aren't visually split by `delta_origin` here; output-schema §9's own example shows
+//! one flat `new:` block, `delta_origin` traveling on each line's JSON-equivalent data only.
 //! `next:` names only commands that work today (`--format json`) — the navigation verbs
-//! (`kndo explain`, `kndo used-by`, …) don't exist yet (RFC 0007), so they aren't offered as
-//! if they did.
+//! (`kndo explain`, `kndo used-by`, …) don't exist yet (RFC 0007), so they aren't offered as if
+//! they did.
 
 use crate::engine::{Finding, RunResult, KNDO_VERSION};
 use crate::vocab::Confidence;
@@ -19,6 +22,10 @@ const GROUP_ORDER: [&str; 4] = ["defect", "waste", "risk", "hygiene"];
 const AGENT_FORMAT_VERSION: u32 = 1;
 
 pub fn render(result: &RunResult) -> String {
+    if result.mode == "staged" || result.mode == "diff" {
+        return render_diff(result);
+    }
+
     let mut out = String::new();
     out.push_str(&header(result));
     out.push('\n');
@@ -28,7 +35,7 @@ pub fn render(result: &RunResult) -> String {
     if !result.findings.is_empty() {
         out.push_str("findings:\n");
         let mut n = 0usize;
-        for group in ordered_groups(result) {
+        for group in ordered_groups(&result.findings) {
             let mut in_group: Vec<&Finding> = result
                 .findings
                 .iter()
@@ -49,6 +56,65 @@ pub fn render(result: &RunResult) -> String {
     out.push_str("more: none\n");
     out.push_str("next: kndo check --format json\n");
     out
+}
+
+/// Diff modes' rendering — output-schema §9's own example: `new:`/`fixed:` blocks sharing one
+/// running number sequence (new findings numbered first, fixed continuing after), instead of
+/// `findings:`.
+fn render_diff(result: &RunResult) -> String {
+    let mut out = String::new();
+    out.push_str(&header(result));
+    out.push('\n');
+    out.push_str(&diff_result_line(result));
+    out.push('\n');
+
+    let mut n = 0usize;
+    if !result.findings.is_empty() {
+        out.push_str("new:\n");
+        for group in ordered_groups(&result.findings) {
+            let mut in_group: Vec<&Finding> = result
+                .findings
+                .iter()
+                .filter(|f| f.group == group)
+                .collect();
+            sort_findings(&mut in_group);
+            for f in in_group {
+                n += 1;
+                out.push_str(&finding_line(n, f));
+                out.push('\n');
+            }
+        }
+    }
+    if !result.fixed.is_empty() {
+        out.push_str("fixed:\n");
+        for group in ordered_groups(&result.fixed) {
+            let mut in_group: Vec<&Finding> =
+                result.fixed.iter().filter(|f| f.group == group).collect();
+            sort_findings(&mut in_group);
+            for f in in_group {
+                n += 1;
+                out.push_str(&finding_line(n, f));
+                out.push('\n');
+            }
+        }
+    }
+
+    out.push_str("more: none\n");
+    out.push_str("next: kndo check --format json\n");
+    out
+}
+
+fn diff_result_line(result: &RunResult) -> String {
+    let net = result.findings.len() as i64 - result.fixed.len() as i64;
+    let base = format!(
+        "result: {} new, {} fixed, net {net:+}",
+        result.findings.len(),
+        result.fixed.len()
+    );
+    match &result.baseline {
+        Some(b) => format!("{base} | baseline {} acknowledged", b.acknowledged),
+        None => base,
+    }
 }
 
 fn header(result: &RunResult) -> String {
@@ -72,9 +138,8 @@ fn result_line(result: &RunResult) -> String {
     }
 }
 
-fn ordered_groups(result: &RunResult) -> Vec<&str> {
-    let mut groups: Vec<&str> = result
-        .findings
+fn ordered_groups(findings: &[Finding]) -> Vec<&str> {
+    let mut groups: Vec<&str> = findings
         .iter()
         .map(|f| f.group.as_str())
         .collect::<std::collections::BTreeSet<_>>()
@@ -139,7 +204,7 @@ fn confidence_str(c: Confidence) -> &'static str {
 mod tests {
     use super::*;
     use crate::adapter::ProjectPath;
-    use crate::engine::{Location, Severity};
+    use crate::engine::{DeltaOrigin, Location, Severity};
     use smol_str::SmolStr;
 
     fn finding(category: &str, group: &str, subject_kind: &str, severity: Severity) -> Finding {
@@ -157,6 +222,8 @@ mod tests {
                 symbol: Some("thing".to_string()),
                 package: None,
             },
+            delta: None,
+            delta_origin: None,
         }
     }
 
@@ -167,6 +234,42 @@ mod tests {
             findings,
             ..RunResult::default()
         }
+    }
+
+    #[test]
+    fn diff_mode_splits_new_and_fixed_with_one_running_number_sequence() {
+        let mut introduced = finding("unused", "waste", "function", Severity::Warning);
+        introduced.delta = Some(crate::engine::Delta::New);
+        introduced.delta_origin = Some(DeltaOrigin::Introduced);
+
+        let mut fixed = finding("test-only", "waste", "function", Severity::Info);
+        fixed.delta = Some(crate::engine::Delta::Fixed);
+
+        let out = render(&RunResult {
+            mode: "staged".to_string(),
+            duration_ms: 7,
+            findings: vec![introduced],
+            fixed: vec![fixed],
+            ..RunResult::default()
+        });
+
+        assert!(out.contains("result: 1 new, 1 fixed, net +0"));
+        assert!(out.contains("new:\n1. [kndo-unused]"));
+        assert!(out.contains("fixed:\n2. [kndo-test-only]"));
+        assert!(!out.contains("findings:"));
+    }
+
+    #[test]
+    fn diff_mode_with_nothing_changed_omits_both_blocks() {
+        let out = render(&RunResult {
+            mode: "diff".to_string(),
+            base_ref: Some("main".to_string()),
+            duration_ms: 7,
+            ..RunResult::default()
+        });
+        assert!(out.contains("result: 0 new, 0 fixed, net +0"));
+        assert!(!out.contains("new:"));
+        assert!(!out.contains("fixed:"));
     }
 
     #[test]

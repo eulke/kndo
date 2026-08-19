@@ -26,6 +26,12 @@
         "$ref": "#/$defs/Finding"
       }
     },
+    "fixed": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Finding"
+      }
+    },
     "kndo_version": {
       "type": "string"
     },
@@ -91,6 +97,22 @@
         "certain"
       ]
     },
+    "Delta": {
+      "description": "A finding's place in a diff-mode delta (contracts/output-schema.md §2, RFC 0004 §6). `None`\nin full mode — there is no \"before\" to compare against, so the concept doesn't apply, and\nthe field is omitted rather than forced to some default.",
+      "type": "string",
+      "enum": [
+        "new",
+        "fixed"
+      ]
+    },
+    "DeltaOrigin": {
+      "description": "Only set on `Delta::New` findings: does this finding sit *inside* the change set itself\n(`Introduced` — dead on arrival, an agent or author can self-correct before committing) or\ndoes it live in untouched code that flipped because of the change at a distance (`Derived`)?\nRFC 0004 §6.",
+      "type": "string",
+      "enum": [
+        "introduced",
+        "derived"
+      ]
+    },
     "Diagnostic": {
       "type": "object",
       "properties": {
@@ -135,7 +157,7 @@
       ]
     },
     "Finding": {
-      "description": "Typed form of the output-schema finding (grows field-by-field with the analyses in M1;\nevery field lands in the JSON schema first — that document is normative). Not yet present:\n`related` (evidence chain), `evidence` (category-specific block), `sources`, `remediation`,\n`rolled_up`, `delta`/`delta_origin` — each needs infrastructure this milestone doesn't have\n(an evidence model, computed remediation text, diff mode) and is omitted rather than\nfabricated with a placeholder.",
+      "description": "Typed form of the output-schema finding (grows field-by-field with the analyses in M1;\nevery field lands in the JSON schema first — that document is normative). Not yet present:\n`related` (evidence chain), `evidence` (category-specific block), `sources`, `remediation`,\n`rolled_up` — each needs infrastructure this milestone doesn't have (an evidence model,\ncomputed remediation text) and is omitted rather than fabricated with a placeholder.",
       "type": "object",
       "properties": {
         "category": {
@@ -143,6 +165,26 @@
         },
         "confidence": {
           "$ref": "#/$defs/Confidence"
+        },
+        "delta": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Delta"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "delta_origin": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DeltaOrigin"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "group": {
           "type": "string"

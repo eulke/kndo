@@ -10,15 +10,46 @@
 //! core never knows which languages exist (RFC 0001 §2, the ignorance rule), and frontends
 //! never compose the product — they call `kndo::open`, which passes the registry in here.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use crate::adapter::{Diagnostic, DiagnosticLevel, LanguageAdapter, ProjectPath, Span};
 use crate::analysis;
+use crate::gitutil;
 use crate::graph;
 use crate::vocab::Confidence;
+
+/// The set of paths that differ (added, removed, or content-changed) between two graphs' file
+/// sets — "the change set," in RFC 0004 §6's terms, at file granularity. Feeds diff mode's
+/// `delta_origin`: a new finding whose path is in this set is `Introduced` (inside the change
+/// itself); otherwise it's `Derived` (flipped at a distance by untouched code).
+fn touched_paths(before: &graph::ProjectGraph, after: &graph::ProjectGraph) -> HashSet<String> {
+    let before_hashes: HashMap<&str, [u8; 32]> = before
+        .files
+        .iter()
+        .map(|f| (f.path.0.as_str(), f.content_hash))
+        .collect();
+    let after_hashes: HashMap<&str, [u8; 32]> = after
+        .files
+        .iter()
+        .map(|f| (f.path.0.as_str(), f.content_hash))
+        .collect();
+
+    let mut touched = HashSet::new();
+    for (path, hash) in &after_hashes {
+        if before_hashes.get(path) != Some(hash) {
+            touched.insert((*path).to_string()); // added or content-modified
+        }
+    }
+    for path in before_hashes.keys() {
+        if !after_hashes.contains_key(path) {
+            touched.insert((*path).to_string()); // removed
+        }
+    }
+    touched
+}
 
 /// Mirrors the output schema's `schema_version` (contracts/output-schema.md).
 pub const SCHEMA_VERSION: &str = "1.0.0";
@@ -182,12 +213,34 @@ pub struct Location {
     pub package: Option<String>,
 }
 
+/// A finding's place in a diff-mode delta (contracts/output-schema.md §2, RFC 0004 §6). `None`
+/// in full mode — there is no "before" to compare against, so the concept doesn't apply, and
+/// the field is omitted rather than forced to some default.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "lowercase")]
+pub enum Delta {
+    New,
+    Fixed,
+}
+
+/// Only set on `Delta::New` findings: does this finding sit *inside* the change set itself
+/// (`Introduced` — dead on arrival, an agent or author can self-correct before committing) or
+/// does it live in untouched code that flipped because of the change at a distance (`Derived`)?
+/// RFC 0004 §6.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "lowercase")]
+pub enum DeltaOrigin {
+    Introduced,
+    Derived,
+}
+
 /// Typed form of the output-schema finding (grows field-by-field with the analyses in M1;
 /// every field lands in the JSON schema first — that document is normative). Not yet present:
 /// `related` (evidence chain), `evidence` (category-specific block), `sources`, `remediation`,
-/// `rolled_up`, `delta`/`delta_origin` — each needs infrastructure this milestone doesn't have
-/// (an evidence model, computed remediation text, diff mode) and is omitted rather than
-/// fabricated with a placeholder.
+/// `rolled_up` — each needs infrastructure this milestone doesn't have (an evidence model,
+/// computed remediation text) and is omitted rather than fabricated with a placeholder.
 #[derive(Debug, Clone, serde::Serialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Finding {
@@ -199,6 +252,10 @@ pub struct Finding {
     pub confidence: Confidence,
     pub message: String,
     pub location: Location,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delta: Option<Delta>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delta_origin: Option<DeltaOrigin>,
 }
 
 /// One registered adapter's contribution (`run.adapters[]`, output-schema §1).
@@ -229,7 +286,13 @@ pub struct BaselineSummary {
 /// Adding them later is additive (minor schema bump, RFC 0006 §4), not a breaking change.
 #[derive(Debug, Default)]
 pub struct RunResult {
+    /// Full mode: every finding. Diff modes: only *new* findings (contracts/output-schema.md
+    /// §1) — findings that disappeared belong in `fixed` below, not here.
     pub findings: Vec<Finding>,
+    /// Diff modes only (RFC 0004 §6, output-schema §3): findings present in the "before" tree
+    /// but absent from "after," each carrying `delta: Fixed` and the *previous* location.
+    /// Always empty in full mode.
+    pub fixed: Vec<Finding>,
     /// Typed diagnostics (the schema's `diagnostics` array) — one representation everywhere,
     /// never parallel stringly-typed variants.
     pub diagnostics: Vec<Diagnostic>,
@@ -298,6 +361,8 @@ struct Envelope {
     kndo_version: &'static str,
     run: RunInfo,
     findings: Vec<Finding>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    fixed: Vec<Finding>,
     #[serde(skip_serializing_if = "Option::is_none")]
     baseline: Option<BaselineSummary>,
     diagnostics: Vec<Diagnostic>,
@@ -318,6 +383,7 @@ impl RunResult {
                 adapters: self.adapters.clone(),
             },
             findings: self.findings.clone(),
+            fixed: self.fixed.clone(),
             baseline: self.baseline.clone(),
             diagnostics: self.diagnostics.clone(),
         }
@@ -423,9 +489,8 @@ impl Engine {
         }
     }
 
-    /// `--staged`/`--diff` scoping (`RunMode`) isn't implemented yet — every mode walks the
-    /// full tree until git-index/merge-base scoping lands (M2); the requested mode is still
-    /// echoed into the result honestly (`run.mode`), it just doesn't change behavior yet.
+    /// Full mode reports every current finding; `--staged`/`--diff <ref>` report the RFC 0004
+    /// §6 derived-effects delta instead — see [`Self::run_diff`].
     pub fn check(&mut self, req: CheckRequest) -> RunResult {
         let start = Instant::now();
         let started_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
@@ -433,13 +498,23 @@ impl Engine {
         let base_ref = req.mode.base_ref();
         let project_root = self.root.display().to_string();
 
-        let outcome = self.run_analysis();
+        let outcome = match &req.mode {
+            RunMode::Full => {
+                let root = self.root.clone();
+                let raw = self.run_analysis_at(&root);
+                let (findings, baseline) = self.apply_baseline(raw.findings);
+                RunResult {
+                    findings,
+                    baseline,
+                    ..raw
+                }
+            }
+            RunMode::Staged | RunMode::Diff { .. } => self.run_diff(&req.mode),
+        };
 
         if let Some(cache) = &self.cache {
             cache.prune(crate::cache::DEFAULT_CAP_BYTES);
         }
-
-        let (findings, baseline) = self.apply_baseline(outcome.findings);
 
         RunResult {
             mode,
@@ -453,9 +528,162 @@ impl Engine {
                 .as_ref()
                 .map(|c| c.hits() + c.graph_hits())
                 .unwrap_or(0),
-            findings,
-            baseline,
             ..outcome
+        }
+    }
+
+    /// RFC 0004 §6's derived-effects delta: assemble the graph at two tree states and report
+    /// `(findings_after − findings_before) ∪ (findings_before − findings_after)`, each finding
+    /// tagged `delta: New|Fixed` (and, for `New`, `delta_origin: Introduced|Derived` — whether
+    /// it sits inside a *touched* file or was flipped at a distance in untouched code, per the
+    /// RFC's own example). Both sides run through baseline filtering symmetrically before the
+    /// diff, so an acknowledged issue never surfaces as new or fixed on either side.
+    ///
+    /// Tree states, since the RFC's prose doesn't spell out exact git semantics and this is a
+    /// deliberate reading of it: `--staged`'s "after" is the **index**, not the raw working
+    /// tree — exactly what would be committed, excluding further unstaged edits on top (the
+    /// pre-commit use case `kndo init --hook` installs wants precisely this). `--staged`'s
+    /// "before" is `HEAD`. `--diff <ref>`'s "before" is `merge-base(<ref>, HEAD)`; "after" is
+    /// the real working tree as-is (uncommitted changes included) — no materialization needed,
+    /// it's just `self.root`.
+    fn run_diff(&mut self, mode: &RunMode) -> RunResult {
+        let git_root = match gitutil::repo_root(&self.root) {
+            Ok(r) => r,
+            Err(e) => return Self::git_failure(e),
+        };
+
+        let before_treeish = match mode {
+            RunMode::Staged => gitutil::rev_parse(&git_root, "HEAD"),
+            RunMode::Diff { base } => gitutil::merge_base(&git_root, base, "HEAD"),
+            RunMode::Full => unreachable!("run_diff is only called for Staged/Diff"),
+        };
+        let before_treeish = match before_treeish {
+            Ok(t) => t,
+            Err(e) => return Self::git_failure(e),
+        };
+        let before_dir = match gitutil::materialize(&git_root, &before_treeish) {
+            Ok(d) => d,
+            Err(e) => return Self::git_failure(e),
+        };
+
+        // `--staged` needs a second materialization (the index); `--diff` reuses the real root.
+        // Owned, not borrowed: `assemble_and_analyze` needs `&mut self` right after, which an
+        // active borrow of `self.root` would block.
+        let staged_after_dir;
+        let after_root: PathBuf = match mode {
+            RunMode::Staged => {
+                let index_tree = match gitutil::write_tree(&git_root) {
+                    Ok(t) => t,
+                    Err(e) => return Self::git_failure(e),
+                };
+                staged_after_dir = match gitutil::materialize(&git_root, &index_tree) {
+                    Ok(d) => d,
+                    Err(e) => return Self::git_failure(e),
+                };
+                staged_after_dir.path().to_path_buf()
+            }
+            RunMode::Diff { .. } => self.root.clone(),
+            RunMode::Full => unreachable!("run_diff is only called for Staged/Diff"),
+        };
+
+        let (before_graph, before_findings, before_diagnostics) =
+            match self.assemble_and_analyze(before_dir.path()) {
+                Ok(t) => t,
+                Err(d) => {
+                    return RunResult {
+                        diagnostics: vec![d],
+                        ..RunResult::default()
+                    }
+                }
+            };
+        let (after_graph, after_findings, after_diagnostics) =
+            match self.assemble_and_analyze(&after_root) {
+                Ok(t) => t,
+                Err(d) => {
+                    return RunResult {
+                        diagnostics: vec![d],
+                        ..RunResult::default()
+                    }
+                }
+            };
+
+        let (before_findings, _) = self.apply_baseline(before_findings);
+        let (after_findings, baseline) = self.apply_baseline(after_findings);
+
+        let touched = touched_paths(&before_graph, &after_graph);
+        let before_ids: HashSet<String> = before_findings.iter().map(|f| f.id.clone()).collect();
+        let after_ids: HashSet<String> = after_findings.iter().map(|f| f.id.clone()).collect();
+
+        let new_findings: Vec<Finding> = after_findings
+            .into_iter()
+            .filter(|f| !before_ids.contains(f.id.as_str()))
+            .map(|mut f| {
+                let origin = match &f.location.path {
+                    Some(p) if touched.contains(p.0.as_str()) => DeltaOrigin::Introduced,
+                    _ => DeltaOrigin::Derived,
+                };
+                f.delta = Some(Delta::New);
+                f.delta_origin = Some(origin);
+                f
+            })
+            .collect();
+        let fixed_findings: Vec<Finding> = before_findings
+            .into_iter()
+            .filter(|f| !after_ids.contains(f.id.as_str()))
+            .map(|mut f| {
+                f.delta = Some(Delta::Fixed);
+                f
+            })
+            .collect();
+
+        let adapters = self
+            .adapters
+            .iter()
+            .map(|a| {
+                let id = a.descriptor().id;
+                let files = after_graph
+                    .files
+                    .iter()
+                    .filter(|f| f.language.as_deref() == Some(id.as_str()))
+                    .count();
+                AdapterRunInfo {
+                    id: id.to_string(),
+                    files,
+                }
+            })
+            .collect();
+
+        let mut diagnostics = after_diagnostics;
+        diagnostics.extend(before_diagnostics);
+
+        RunResult {
+            files_discovered: after_graph.files.len(),
+            files_claimed: after_graph
+                .files
+                .iter()
+                .filter(|f| f.language.is_some())
+                .count(),
+            symbols: after_graph.symbols.len(),
+            dependencies: after_graph.dependencies.len(),
+            edges: after_graph.edges.len(),
+            diagnostics,
+            findings: new_findings,
+            fixed: fixed_findings,
+            adapters,
+            baseline,
+            ..RunResult::default()
+        }
+    }
+
+    fn git_failure(e: gitutil::GitError) -> RunResult {
+        RunResult {
+            diagnostics: vec![Diagnostic {
+                level: DiagnosticLevel::Warn,
+                path: None,
+                message: format!("diff mode unavailable: {e}"),
+                span: None,
+            }],
+            ..RunResult::default()
         }
     }
 
@@ -467,7 +695,8 @@ impl Engine {
         if op == BaselineOp::Create && crate::baseline::exists(&self.root) {
             return BaselineResult::AlreadyExists;
         }
-        let findings = self.run_analysis().findings;
+        let root = self.root.clone();
+        let findings = self.run_analysis_at(&root).findings;
         let entries: Vec<crate::baseline::BaselineEntry> = findings
             .iter()
             .map(crate::baseline::BaselineEntry::from)
@@ -479,13 +708,39 @@ impl Engine {
         }
     }
 
-    /// Assemble + analyze — the part of `check()` and [`Self::baseline`] that's identical:
-    /// everything except the run-level metadata (timing, mode) and baseline filtering, which
-    /// only `check()` applies (`baseline()` needs the unfiltered set).
-    fn run_analysis(&mut self) -> RunResult {
-        match graph::assemble_with_cache(&self.root, &self.adapters, self.cache.as_ref()) {
+    /// The lowest-level shared step: assemble the graph rooted at an arbitrary directory (the
+    /// real project root for full mode; a git-materialized temp directory for diff modes'
+    /// "before", and `--staged`'s "after") and run every analysis over it. `self.cache` is
+    /// still the *real* project's `.kndo/cache/` regardless of `root` — the facts layer keys
+    /// purely by content hash, so it's fully shared across trees; the graph-snapshot layer's
+    /// key folds in the whole file set, so a differing tree just misses cleanly rather than
+    /// colliding with the real project's own cached graph.
+    fn assemble_and_analyze(
+        &mut self,
+        root: &Path,
+    ) -> Result<(graph::ProjectGraph, Vec<Finding>, Vec<Diagnostic>), Diagnostic> {
+        match graph::assemble_with_cache(root, &self.adapters, self.cache.as_ref()) {
             Ok((g, diagnostics)) => {
                 let findings = analysis::run_all(&g);
+                Ok((g, findings, diagnostics))
+            }
+            Err(crate::discovery::DiscoveryError::Root(e)) => Err(Diagnostic {
+                level: DiagnosticLevel::Warn,
+                path: None,
+                message: format!(
+                    "cannot walk the project root: {e} — check the path and permissions"
+                ),
+                span: None,
+            }),
+        }
+    }
+
+    /// Full-mode `RunResult` construction — assemble + analyze at `root`, plus the run counters
+    /// (`files_discovered`, `symbols`, …) that only full mode reports directly (diff mode
+    /// builds its own `RunResult` in [`Self::run_diff`], from the "after" side).
+    fn run_analysis_at(&mut self, root: &Path) -> RunResult {
+        match self.assemble_and_analyze(root) {
+            Ok((g, findings, diagnostics)) => {
                 let adapters = self
                     .adapters
                     .iter()
@@ -514,15 +769,8 @@ impl Engine {
                     ..RunResult::default()
                 }
             }
-            Err(crate::discovery::DiscoveryError::Root(e)) => RunResult {
-                diagnostics: vec![Diagnostic {
-                    level: DiagnosticLevel::Warn,
-                    path: None,
-                    message: format!(
-                        "cannot walk the project root: {e} — check the path and permissions"
-                    ),
-                    span: None,
-                }],
+            Err(d) => RunResult {
+                diagnostics: vec![d],
                 ..RunResult::default()
             },
         }
@@ -608,6 +856,126 @@ mod tests {
         ) -> crate::adapter::Resolution {
             crate::adapter::Resolution::Unresolved
         }
+    }
+
+    /// A second mock, richer than [`CacheMockAdapter`]: understands `root-file` (a whole-file
+    /// production root) and `import ./sibling.dmock` (an `ImportsFile` edge), which is enough
+    /// to drive `unused` (file-level) — exactly what the diff-mode tests below need to produce
+    /// real new/fixed findings across two tree states.
+    struct DiffMockAdapter;
+
+    impl LanguageAdapter for DiffMockAdapter {
+        fn descriptor(&self) -> crate::adapter::AdapterDescriptor {
+            crate::adapter::AdapterDescriptor {
+                id: SmolStr::new("dmock"),
+                facts_schema_version: 1,
+                file_globs: vec![SmolStr::new("**/*.dmock")],
+                manifest_globs: vec![],
+                grammar_version: SmolStr::new("dmock"),
+            }
+        }
+        fn claim(&self, path: &ProjectPath) -> Option<crate::adapter::FileClaim> {
+            path.0
+                .ends_with(".dmock")
+                .then(|| crate::adapter::FileClaim {
+                    language: SmolStr::new("dmock"),
+                    class: Default::default(),
+                })
+        }
+        fn claim_manifest(&self, _path: &ProjectPath) -> bool {
+            false
+        }
+        fn extract(&self, file: &crate::adapter::SourceFile<'_>) -> crate::adapter::FileFacts {
+            let text = std::str::from_utf8(file.content).unwrap_or("");
+            let mut facts = crate::adapter::FileFacts::default();
+            for line in text.lines() {
+                if line == "root-file" {
+                    facts.roots.push(crate::adapter::RawRoot {
+                        kind: crate::vocab::RootKind::Production,
+                        target: crate::adapter::RawRootTarget::WholeFile,
+                        confidence: Confidence::Certain,
+                    });
+                } else if let Some(spec) = line.strip_prefix("import ") {
+                    facts.imports.push(crate::adapter::RawImport {
+                        specifier: SmolStr::new(spec),
+                        kind: crate::adapter::ImportKind::Relative,
+                        span: Span::default(),
+                        side_effect_only: true,
+                        type_only: false,
+                        confidence: Confidence::Certain,
+                        bindings: vec![],
+                        reexported: false,
+                        opaque_namespace_use: false,
+                    });
+                }
+            }
+            facts
+        }
+        fn extract_manifest(
+            &self,
+            _file: &crate::adapter::SourceFile<'_>,
+            _ctx: &crate::adapter::ResolveCtx<'_>,
+        ) -> crate::adapter::ManifestFacts {
+            crate::adapter::ManifestFacts::default()
+        }
+        fn resolve(
+            &self,
+            spec: &crate::adapter::ImportSpec,
+            ctx: &crate::adapter::ResolveCtx<'_>,
+        ) -> crate::adapter::Resolution {
+            let Some(rel) = spec.specifier.strip_prefix("./") else {
+                return crate::adapter::Resolution::Unresolved;
+            };
+            let dir = spec.from.0.rsplit_once('/').map(|(d, _)| d).unwrap_or("");
+            let candidate = if dir.is_empty() {
+                rel.to_string()
+            } else {
+                format!("{dir}/{rel}")
+            };
+            let path = ProjectPath(SmolStr::new(candidate));
+            if ctx.contains(&path) {
+                crate::adapter::Resolution::File(path, Confidence::Certain)
+            } else {
+                crate::adapter::Resolution::Unresolved
+            }
+        }
+    }
+
+    /// A throwaway git repo for diff-mode tests — local signing disabled for the same reason
+    /// `gitutil`'s own test fixtures disable it (this sandbox signs every commit via an
+    /// MCP-backed tool unrelated to what's under test, and it occasionally times out).
+    fn git_repo(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("kndo-engine-difftest-{name}"));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let git = |args: &[&str]| {
+            let status = std::process::Command::new("git")
+                .arg("-C")
+                .arg(&dir)
+                .args(args)
+                .status()
+                .unwrap();
+            assert!(status.success(), "git {args:?} failed");
+        };
+        git(&["init", "-q", "."]);
+        git(&["config", "user.email", "test@example.com"]);
+        git(&["config", "user.name", "test"]);
+        git(&["config", "commit.gpgsign", "false"]);
+        dir
+    }
+
+    fn git_add_all_commit(dir: &std::path::Path, message: &str) {
+        let git = |args: &[&str]| {
+            let status = std::process::Command::new("git")
+                .arg("-C")
+                .arg(dir)
+                .args(args)
+                .status()
+                .unwrap();
+            assert!(status.success(), "git {args:?} failed");
+        };
+        git(&["add", "-A"]);
+        git(&["commit", "-q", "-m", message]);
     }
 
     #[test]
@@ -758,11 +1126,186 @@ mod tests {
             confidence: Confidence::Certain,
             message: "example".to_string(),
             location: Location::default(),
+            delta: None,
+            delta_origin: None,
         };
         let json = serde_json::to_string(&finding).unwrap();
         let value: serde_json::Value = serde_json::from_str(&json).unwrap();
         assert_eq!(value["location"], serde_json::json!({}));
         assert_eq!(value["severity"], "warning");
         assert_eq!(value["confidence"], "certain");
+    }
+
+    fn git_rev_parse(dir: &std::path::Path, refname: &str) -> String {
+        let out = std::process::Command::new("git")
+            .arg("-C")
+            .arg(dir)
+            .args(["rev-parse", refname])
+            .output()
+            .unwrap();
+        String::from_utf8(out.stdout).unwrap().trim().to_string()
+    }
+
+    fn finding_path(f: &Finding) -> &str {
+        f.location.path.as_ref().map(|p| p.0.as_str()).unwrap_or("")
+    }
+
+    #[test]
+    fn diff_mode_reports_introduced_and_derived_new_findings_plus_fixed() {
+        let dir = git_repo("delta-basic");
+        std::fs::write(dir.join("root.dmock"), "root-file\nimport ./b.dmock\n").unwrap();
+        std::fs::write(dir.join("b.dmock"), "").unwrap();
+        std::fs::write(dir.join("orphan.dmock"), "").unwrap(); // already dead at the base
+        git_add_all_commit(&dir, "base");
+        let base_sha = git_rev_parse(&dir, "HEAD");
+
+        // Uncommitted working-tree changes: root.dmock stops importing b.dmock (b.dmock goes
+        // dead — "derived", since b.dmock itself isn't the touched file), starts importing
+        // orphan.dmock instead (orphan.dmock comes alive — "fixed"), and a brand new dead file
+        // shows up ("introduced" — it's the touched file itself).
+        std::fs::write(dir.join("root.dmock"), "root-file\nimport ./orphan.dmock\n").unwrap();
+        std::fs::write(dir.join("c.dmock"), "").unwrap();
+
+        let mut engine = Engine::open(
+            &dir,
+            ConfigOverrides::default(),
+            vec![Box::new(DiffMockAdapter)],
+        )
+        .unwrap();
+        let result = engine.check(CheckRequest {
+            mode: RunMode::Diff { base: base_sha },
+        });
+
+        assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+        assert_eq!(result.mode, "diff");
+
+        let new_b = result
+            .findings
+            .iter()
+            .find(|f| finding_path(f) == "b.dmock")
+            .expect("b.dmock should be a new finding");
+        assert_eq!(new_b.delta, Some(Delta::New));
+        assert_eq!(new_b.delta_origin, Some(DeltaOrigin::Derived));
+
+        let new_c = result
+            .findings
+            .iter()
+            .find(|f| finding_path(f) == "c.dmock")
+            .expect("c.dmock should be a new finding");
+        assert_eq!(new_c.delta, Some(Delta::New));
+        assert_eq!(new_c.delta_origin, Some(DeltaOrigin::Introduced));
+
+        assert_eq!(result.findings.len(), 2, "{:?}", result.findings);
+
+        let fixed_orphan = result
+            .fixed
+            .iter()
+            .find(|f| finding_path(f) == "orphan.dmock")
+            .expect("orphan.dmock should be fixed");
+        assert_eq!(fixed_orphan.delta, Some(Delta::Fixed));
+        assert_eq!(result.fixed.len(), 1, "{:?}", result.fixed);
+    }
+
+    #[test]
+    fn staged_mode_uses_the_index_not_the_raw_working_tree() {
+        let dir = git_repo("staged-index");
+        std::fs::write(dir.join("root.dmock"), "root-file\n").unwrap();
+        git_add_all_commit(&dir, "base");
+
+        // Stage a new dead file, then make a further UNSTAGED edit to root.dmock — that
+        // unstaged edit must not affect the "after" side, which is exactly the index.
+        std::fs::write(dir.join("staged.dmock"), "").unwrap();
+        let status = std::process::Command::new("git")
+            .arg("-C")
+            .arg(&dir)
+            .args(["add", "staged.dmock"])
+            .status()
+            .unwrap();
+        assert!(status.success());
+        std::fs::write(
+            dir.join("root.dmock"),
+            "root-file\nimport ./unstaged.dmock\n",
+        )
+        .unwrap();
+        // `unstaged.dmock` doesn't even exist on disk as a tracked/staged file — if `--staged`
+        // leaked the raw working tree in, this import would resolve to nothing new; the real
+        // assertion is that `staged.dmock` (and only it) shows up as new.
+
+        let mut engine = Engine::open(
+            &dir,
+            ConfigOverrides::default(),
+            vec![Box::new(DiffMockAdapter)],
+        )
+        .unwrap();
+        let result = engine.check(CheckRequest {
+            mode: RunMode::Staged,
+        });
+
+        assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+        assert_eq!(result.findings.len(), 1, "{:?}", result.findings);
+        assert_eq!(finding_path(&result.findings[0]), "staged.dmock");
+    }
+
+    #[test]
+    fn diff_mode_outside_a_git_repo_degrades_to_a_diagnostic_not_a_panic() {
+        let dir = std::env::temp_dir().join("kndo-engine-difftest-no-git");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("a.dmock"), "").unwrap();
+
+        let mut engine = Engine::open(
+            &dir,
+            ConfigOverrides::default(),
+            vec![Box::new(DiffMockAdapter)],
+        )
+        .unwrap();
+        let result = engine.check(CheckRequest {
+            mode: RunMode::Staged,
+        });
+
+        assert!(result.findings.is_empty());
+        assert!(!result.diagnostics.is_empty());
+        assert!(result.diagnostics[0].message.contains("diff mode"));
+    }
+
+    #[test]
+    fn baseline_applies_symmetrically_in_diff_mode() {
+        let dir = git_repo("delta-baseline");
+        std::fs::write(dir.join("root.dmock"), "root-file\n").unwrap();
+        std::fs::write(dir.join("orphan.dmock"), "").unwrap();
+        git_add_all_commit(&dir, "base");
+        let base_sha = git_rev_parse(&dir, "HEAD");
+
+        let mut engine = Engine::open(
+            &dir,
+            ConfigOverrides::default(),
+            vec![Box::new(DiffMockAdapter)],
+        )
+        .unwrap();
+        // Baseline acknowledges orphan.dmock's finding while it's still present on both sides.
+        let baseline_result = engine.baseline(BaselineOp::Create);
+        assert!(matches!(
+            baseline_result,
+            BaselineResult::Written { acknowledged: 1 }
+        ));
+
+        // Add a second, unacknowledged dead file — the acknowledged one must not resurface as
+        // new or fixed on either side of the diff.
+        std::fs::write(dir.join("also-dead.dmock"), "").unwrap();
+        let result = engine.check(CheckRequest {
+            mode: RunMode::Diff { base: base_sha },
+        });
+
+        assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+        assert!(!result
+            .findings
+            .iter()
+            .any(|f| finding_path(f) == "orphan.dmock"));
+        assert!(!result
+            .fixed
+            .iter()
+            .any(|f| finding_path(f) == "orphan.dmock"));
+        assert_eq!(result.findings.len(), 1);
+        assert_eq!(finding_path(&result.findings[0]), "also-dead.dmock");
     }
 }
