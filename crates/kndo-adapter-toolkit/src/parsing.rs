@@ -178,6 +178,28 @@ window.eval("indirect");
 
     #[test]
     #[ignore]
+    fn dump_namespace_member_shapes() {
+        let src = br#"
+import * as ns from "./mod";
+ns.used();
+const v = ns.value;
+ns[dynamicKey]();
+callback(ns);
+const alias = ns;
+exports.storage.setItem("k", "v");
+const r = exports.reader;
+register(exports);
+module.exports.humanize(x);
+sink(module.exports);
+exports.written = 1;
+module.exports = whole;
+"#;
+        let tree = parse(src, false).unwrap();
+        dump(tree.root_node(), src, 0);
+    }
+
+    #[test]
+    #[ignore]
     fn dump_import_clause_shapes() {
         let src = br#"
 import def from "./a";

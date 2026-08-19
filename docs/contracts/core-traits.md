@@ -110,7 +110,8 @@ pub struct FileFacts {
                                              // adapter hook, no enclosing-scope tracking assumed
     pub imports:      Vec<RawImport>,       // { specifier, kind: Relative|Package, span,
                                              //   side_effect_only, type_only, confidence,
-                                             //   bindings: Vec<ImportBinding> }
+                                             //   bindings: Vec<ImportBinding>, reexported,
+                                             //   opaque_namespace_use }
                                              // kind is syntactic shape only — Stdlib is a
                                              // resolve()-time fact, never claimed here.
                                              // ImportBinding { local, imported: Option<Name> } —
@@ -118,9 +119,14 @@ pub struct FileFacts {
                                              // target's synthetic "default" export); lets a
                                              // same-name RawReference resolve to the *target
                                              // file's* symbol instead of (incorrectly) a
-                                             // same-file one. Empty for side-effect-only and
-                                             // namespace (`import * as ns`) imports — the latter
-                                             // deferred, member-expression-aware resolution.
+                                             // same-file one. Statically-tracked namespace
+                                             // member accesses (`ns.foo`) become bindings with
+                                             // a dotted local ("ns.foo") plus a same-named
+                                             // RawReference. opaque_namespace_use: the imported
+                                             // namespace is consumed in ways static tracking
+                                             // can't follow (computed member `ns[key]`, or ns
+                                             // escaping into a call/assignment) — assembly then
+                                             // wildcards over the resolved target's symbols.
     pub roots:        Vec<RawRoot>,         // language-defined only (main, pub API…), target is
                                              // *within this file* — WholeFile | Declaration(name)
     pub functions:    Vec<FunctionMetrics>, // { symbol, cyclomatic: u32, loc, token_fingerprints }

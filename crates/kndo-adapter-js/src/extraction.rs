@@ -6,15 +6,17 @@
 //! type aliases, enums + members, const/let), ESM static imports, `export ... from`
 //! re-exports (barrels — `handle_reexport_statement`), and CJS (`require("literal")` at any
 //! depth, `module.exports`/`exports.foo` export surface, `module.exports = require(…)`
-//! barrels — the `collect_requires`/`collect_cjs_exports` block), and dynamic constructs
+//! barrels — the `collect_requires`/`collect_cjs_exports` block), dynamic constructs
 //! (`import("literal")`/`require.resolve` at probable; non-literal `import(expr)`/
 //! `require(expr)` with static-prefix narrowing, `eval`, `new Function` → `DynamicUse`
-//! wildcards). Deferred to later commits (each already flagged in the spec, not silently
-//! missing): class/interface members, JSX references, the remaining dynamic-table rows
-//! (computed member access `ns[key]`, string-keyed registries) and namespace-member
-//! consumption like `env.colors` — the main remaining CJS gap — plus cyclomatic complexity,
-//! fingerprints, suppressions, `export { a as b }` with no `from` clause (a local re-export,
-//! not a barrel pass-through).
+//! wildcards), and namespace member consumption (`ns.foo` precise, `ns[key]`/escapes opaque,
+//! `exports.foo` self-reads, escaping exports objects — `collect_namespace_uses`). Deferred
+//! to later commits (each already flagged in the spec, not silently missing): class/interface
+//! members, JSX references, string-literal subscripts as precise possible-references (folded
+//! into the opaque case for now — see `collect_namespace_uses`), second-order namespace
+//! aliasing (`const alias = ns` — covered by the escape wildcard, only precision is lost),
+//! cyclomatic complexity, fingerprints, suppressions, `export { a as b }` with no `from`
+//! clause (a local re-export, not a barrel pass-through).
 
 use kndo_core::adapter::{
     Declaration, Diagnostic, DiagnosticLevel, DynamicUse, FileFacts, ImportBinding, ImportKind,
@@ -63,6 +65,10 @@ pub fn extract(path: &str, content: &[u8]) -> FileFacts {
     // constructs (`eval`, `new Function`) — a full-tree walk like references, because any of
     // them can appear at any nesting depth, not just in top-level statements.
     collect_requires(root, path, content, &mut out);
+    // Namespace member consumption (`ns.foo`, `ns[key]`, `exports.foo` reads, escaping
+    // namespace values) — must run after both import passes above, because it attaches facts
+    // to the imports they produced.
+    collect_namespace_uses(root, content, &mut out);
     // Separate full-tree walk (declarations above only visit top-level statements — a
     // reference can appear at any nesting depth, inside any function/block).
     collect_references(root, content, &mut out.references);
@@ -214,6 +220,7 @@ fn handle_reexport_statement(node: Node, source_node: Node, src: &[u8], out: &mu
         confidence: Confidence::Certain,
         bindings,
         reexported: true,
+        opaque_namespace_use: false,
     });
 }
 
@@ -366,6 +373,7 @@ fn handle_import_statement(node: Node, src: &[u8], out: &mut FileFacts) {
         confidence: Confidence::Certain,
         bindings,
         reexported: false,
+        opaque_namespace_use: false,
     });
 }
 
@@ -554,6 +562,7 @@ fn push_dynamic_import(
         confidence,
         bindings: Vec::new(),
         reexported: false,
+        opaque_namespace_use: false,
     });
 }
 
@@ -659,6 +668,7 @@ fn handle_literal_require(node: Node, string_node: Node, src: &[u8], out: &mut F
         confidence: Confidence::Certain,
         bindings,
         reexported,
+        opaque_namespace_use: false,
     });
 }
 
@@ -875,6 +885,243 @@ fn mark_declaration_exported(name: &SmolStr, out: &mut FileFacts) -> bool {
         found = true;
     }
     found
+}
+
+// ---------------------------------------------------------------- namespace member consumption
+// (spec §2 references/"member accesses" + dynamic-constructs rows 3–4; shapes verified via
+// `dump_namespace_member_shapes`)
+
+/// Resolves how namespace-valued bindings are *consumed* — the fact that a plain reference
+/// walk can't see, because `ns.foo` is an identifier (`ns`) plus a `property_identifier`
+/// (`foo`), and property names are deliberately never references. Three consumption shapes,
+/// two namespace kinds:
+///
+/// | Consumption | Imported namespace (`import * as ns` / `const m = require(…)`) | Own exports (`exports` / `module.exports`) |
+/// |---|---|---|
+/// | static member read `B.foo` | binding `{"ns.foo" → foo}` + a same-named reference — resolves precisely to the target's symbol | plain reference to `foo` — resolves same-file |
+/// | computed member `B[key]` | `opaque_namespace_use` on the import — wildcard over the target | escape `DynamicUse` — wildcard over own symbols |
+/// | value escapes (argument, RHS, return) | same as computed | same as computed |
+///
+/// Assignment-LHS positions (`exports.foo = …`, `module.exports = …`, `ns.x = …`) are *writes*
+/// and contribute nothing here — the CJS export pass owns the self-export forms, and mutating
+/// an imported module object is out of scope. String-literal subscripts (`ns["foo"]`, spec's
+/// registry row: "plain possible reference when the literal resolves") are currently folded
+/// into the computed case — strictly more conservative, the precise possible-reference form
+/// needs per-binding confidence the contract doesn't carry yet. Second-order aliasing
+/// (`const alias = ns; alias.foo`) resolves as an escape of `ns`, not a tracked member — the
+/// escape wildcard covers `foo` at possible, so nothing is lost, only precision.
+fn collect_namespace_uses(root: Node, src: &[u8], out: &mut FileFacts) {
+    let namespaces = namespace_bindings(root, src, out);
+    let mut ctx = NamespaceUseCtx {
+        namespaces,
+        seen_bindings: std::collections::HashSet::new(),
+        seen_refs: std::collections::HashSet::new(),
+        exports_escape: None,
+    };
+    walk_namespace_uses(root, src, &mut ctx, out);
+    if let Some(escape_span) = ctx.exports_escape {
+        out.dynamics.push(DynamicUse {
+            span: escape_span,
+            reason: SmolStr::new("exports object escapes static tracking"),
+            narrowed_to: None,
+        });
+    }
+}
+
+struct NamespaceUseCtx {
+    /// Local namespace name → index into `FileFacts::imports`.
+    namespaces: std::collections::HashMap<SmolStr, usize>,
+    seen_bindings: std::collections::HashSet<(usize, SmolStr)>,
+    seen_refs: std::collections::HashSet<SmolStr>,
+    /// First span where `exports`/`module.exports` escaped — one wildcard per file suffices.
+    exports_escape: Option<Span>,
+}
+
+/// Module-scope namespace-valued bindings: `import * as ns from "./x"` and
+/// `const m = require("./x")`, mapped to the RawImport already extracted for that specifier.
+fn namespace_bindings(
+    root: Node,
+    src: &[u8],
+    out: &FileFacts,
+) -> std::collections::HashMap<SmolStr, usize> {
+    let mut by_specifier: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
+    for (i, imp) in out.imports.iter().enumerate() {
+        by_specifier.entry(imp.specifier.as_str()).or_insert(i);
+    }
+
+    let mut map = std::collections::HashMap::new();
+    collect_namespace_names(root, src, &by_specifier, &mut map);
+    map
+}
+
+fn collect_namespace_names(
+    node: Node,
+    src: &[u8],
+    by_specifier: &std::collections::HashMap<&str, usize>,
+    map: &mut std::collections::HashMap<SmolStr, usize>,
+) {
+    match node.kind() {
+        "import_statement" => {
+            let specifier = node
+                .child_by_field_name("source")
+                .and_then(|s| string_literal_value(s, src));
+            let ns_name = find_namespace_import_name(node, src);
+            if let (Some(spec), Some(name)) = (specifier, ns_name) {
+                if let Some(&idx) = by_specifier.get(spec.as_str()) {
+                    map.insert(name, idx);
+                }
+            }
+            return; // nothing else namespace-relevant inside an import statement
+        }
+        "variable_declarator" => {
+            let name = node
+                .child_by_field_name("name")
+                .filter(|n| n.kind() == "identifier");
+            let value = node.child_by_field_name("value");
+            if let (Some(name), Some(value)) = (name, value) {
+                if let Some(string_node) = require_specifier(value, src) {
+                    if let Some(spec) = string_literal_value(string_node, src) {
+                        if let Some(&idx) = by_specifier.get(spec.as_str()) {
+                            map.insert(SmolStr::new(text(name, src)), idx);
+                        }
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        collect_namespace_names(child, src, by_specifier, map);
+    }
+}
+
+fn find_namespace_import_name(import_statement: Node, src: &[u8]) -> Option<SmolStr> {
+    let mut cursor = import_statement.walk();
+    let clause = import_statement
+        .children(&mut cursor)
+        .find(|c| c.kind() == "import_clause")?;
+    let mut inner = clause.walk();
+    let namespace = clause
+        .children(&mut inner)
+        .find(|c| c.kind() == "namespace_import")?;
+    let mut ns_cursor = namespace.walk();
+    let name = namespace
+        .children(&mut ns_cursor)
+        .find(|c| c.kind() == "identifier")
+        .map(|n| SmolStr::new(text(n, src)));
+    name
+}
+
+fn walk_namespace_uses(node: Node, src: &[u8], ctx: &mut NamespaceUseCtx, out: &mut FileFacts) {
+    // Import statements are pure binding syntax — the `ns` in `import * as ns` is not a use.
+    if node.kind() == "import_statement" {
+        return;
+    }
+
+    let base: Option<NamespaceBase> = match node.kind() {
+        "identifier" => {
+            let name = text(node, src);
+            if name == "exports" {
+                Some(NamespaceBase::OwnExports)
+            } else {
+                ctx.namespaces.get(name).copied().map(NamespaceBase::Import)
+            }
+        }
+        "member_expression" if is_module_exports(node, src) => Some(NamespaceBase::OwnExports),
+        _ => None,
+    };
+    if let Some(base) = base {
+        handle_namespace_occurrence(node, base, src, ctx, out);
+    }
+
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        walk_namespace_uses(child, src, ctx, out);
+    }
+}
+
+#[derive(Clone, Copy)]
+enum NamespaceBase {
+    /// Index into `FileFacts::imports`.
+    Import(usize),
+    /// `exports` / `module.exports` — this file's own export object.
+    OwnExports,
+}
+
+fn handle_namespace_occurrence(
+    node: Node,
+    base: NamespaceBase,
+    src: &[u8],
+    ctx: &mut NamespaceUseCtx,
+    out: &mut FileFacts,
+) {
+    let Some(parent) = node.parent() else { return };
+    let is_field =
+        |p: Node, field: &str| p.child_by_field_name(field).map(|c| c.id()) == Some(node.id());
+
+    // Binding/rebinding positions are not uses of the target.
+    if (parent.kind() == "variable_declarator" && is_field(parent, "name"))
+        || (parent.kind() == "assignment_expression" && is_field(parent, "left"))
+    {
+        return;
+    }
+
+    if parent.kind() == "member_expression" && is_field(parent, "object") {
+        // Static member read `B.prop` — unless the member itself is an assignment target.
+        let is_write = parent.parent().is_some_and(|gp| {
+            gp.kind() == "assignment_expression" && {
+                gp.child_by_field_name("left").map(|c| c.id()) == Some(parent.id())
+            }
+        });
+        if is_write {
+            return;
+        }
+        let Some(prop) = parent
+            .child_by_field_name("property")
+            .filter(|p| p.kind() == "property_identifier")
+        else {
+            return;
+        };
+        let prop_name = SmolStr::new(text(prop, src));
+        match base {
+            NamespaceBase::Import(idx) => {
+                if ctx.seen_bindings.insert((idx, prop_name.clone())) {
+                    // Dotted synthetic local ("ns.foo") — real identifiers can't contain a
+                    // dot, so it can never collide with a genuine binding or declaration.
+                    let dotted = SmolStr::new(format!("{}.{}", text(node, src), prop_name));
+                    out.imports[idx].bindings.push(ImportBinding {
+                        local: dotted.clone(),
+                        imported: Some(prop_name),
+                    });
+                    out.references.push(RawReference {
+                        name: dotted,
+                        scope_context: None,
+                        span: span(parent),
+                    });
+                }
+            }
+            NamespaceBase::OwnExports => {
+                if ctx.seen_refs.insert(prop_name.clone()) {
+                    out.references.push(RawReference {
+                        name: prop_name,
+                        scope_context: None,
+                        span: span(parent),
+                    });
+                }
+            }
+        }
+        return;
+    }
+
+    // Computed member (`B[key]`) or the namespace value escaping (argument, RHS, return…):
+    // static tracking ends here — wildcard over the namespace's symbols.
+    match base {
+        NamespaceBase::Import(idx) => out.imports[idx].opaque_namespace_use = true,
+        NamespaceBase::OwnExports => {
+            ctx.exports_escape.get_or_insert(span(node));
+        }
+    }
 }
 
 /// Every identifier/type-identifier usage in the tree, recursively — the shapes below are
@@ -1594,6 +1841,137 @@ mod tests {
         assert_eq!(facts.imports.len(), 1);
         assert_eq!(facts.imports[0].confidence, Confidence::Probable);
         assert_eq!(facts.imports[0].specifier.as_str(), "./config");
+        assert!(facts.dynamics.is_empty());
+    }
+
+    // ---------------------------------------------------------------- namespace member uses
+
+    #[test]
+    fn esm_namespace_member_access_binds_and_references_the_target_export() {
+        let facts = extract(
+            "f.ts",
+            b"import * as ns from './mod';\nfunction f() { return ns.used(); }",
+        );
+        let imp = &facts.imports[0];
+        assert!(!imp.opaque_namespace_use);
+        assert_eq!(
+            imp.bindings
+                .iter()
+                .map(|b| (
+                    b.local.to_string(),
+                    b.imported.as_ref().map(|s| s.to_string())
+                ))
+                .collect::<Vec<_>>(),
+            vec![("ns.used".into(), Some("used".into()))]
+        );
+        assert!(facts
+            .references
+            .iter()
+            .any(|r| r.name.as_str() == "ns.used"));
+    }
+
+    #[test]
+    fn cjs_whole_module_member_access_binds_too() {
+        let facts = extract("f.js", b"const m = require('./lib');\nm.helper();");
+        let imp = &facts.imports[0];
+        // The whole-module default binding and the member binding coexist.
+        assert!(imp
+            .bindings
+            .iter()
+            .any(|b| b.local.as_str() == "m" && b.imported.is_none()));
+        assert!(imp
+            .bindings
+            .iter()
+            .any(|b| b.local.as_str() == "m.helper" && b.imported.as_deref() == Some("helper")));
+    }
+
+    #[test]
+    fn repeated_member_access_binds_once() {
+        let facts = extract(
+            "f.ts",
+            b"import * as ns from './mod';\nns.f(); ns.f(); ns.f();",
+        );
+        assert_eq!(facts.imports[0].bindings.len(), 1);
+        assert_eq!(
+            facts
+                .references
+                .iter()
+                .filter(|r| r.name.as_str() == "ns.f")
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn computed_member_access_makes_the_namespace_opaque() {
+        let facts = extract("f.ts", b"import * as ns from './mod';\nns[key]();");
+        assert!(facts.imports[0].opaque_namespace_use);
+    }
+
+    #[test]
+    fn escaping_namespace_makes_it_opaque() {
+        let facts = extract("f.ts", b"import * as ns from './mod';\ncallback(ns);");
+        assert!(facts.imports[0].opaque_namespace_use);
+        let facts = extract("f.ts", b"import * as ns from './mod';\nconst alias = ns;");
+        assert!(facts.imports[0].opaque_namespace_use);
+    }
+
+    #[test]
+    fn unused_namespace_import_stays_transparent() {
+        // The `ns` in the import clause itself is binding syntax, not a use.
+        let facts = extract("f.ts", b"import * as ns from './mod';");
+        assert!(!facts.imports[0].opaque_namespace_use);
+        assert!(facts.imports[0].bindings.is_empty());
+    }
+
+    #[test]
+    fn own_exports_member_read_references_the_local_symbol() {
+        // The debug-js/debug shape: exports.storage assigned once, then *read* through the
+        // exports object — the read keeps `storage` alive.
+        let facts = extract(
+            "f.js",
+            b"exports.storage = localstorage();\nfunction load() { return exports.storage.getItem('k'); }",
+        );
+        assert!(facts
+            .references
+            .iter()
+            .any(|r| r.name.as_str() == "storage"));
+    }
+
+    #[test]
+    fn own_exports_write_is_not_a_read_reference() {
+        let facts = extract("f.js", b"exports.written = 1;");
+        assert!(!facts
+            .references
+            .iter()
+            .any(|r| r.name.as_str() == "written"));
+    }
+
+    #[test]
+    fn escaping_exports_object_is_a_dynamic_use() {
+        // The other debug shape: `module.exports = require('./common')(exports)` — the own
+        // exports object escapes into a call, so every own symbol is plausibly used.
+        let facts = extract("f.js", b"module.exports = require('./common')(exports);");
+        assert!(facts
+            .dynamics
+            .iter()
+            .any(|d| d.reason.as_str() == "exports object escapes static tracking"));
+    }
+
+    #[test]
+    fn module_exports_member_read_references_like_bare_exports() {
+        let facts = extract("f.js", b"exports.diff = 1;\nlog(module.exports.diff);");
+        assert!(facts.references.iter().any(|r| r.name.as_str() == "diff"));
+        // Reading a member is precise consumption — no escape wildcard needed.
+        assert!(facts.dynamics.is_empty());
+    }
+
+    #[test]
+    fn plain_exports_assignments_do_not_escape() {
+        let facts = extract(
+            "f.js",
+            b"exports.a = 1;\nmodule.exports.b = 2;\nmodule.exports = function () {};",
+        );
         assert!(facts.dynamics.is_empty());
     }
 }

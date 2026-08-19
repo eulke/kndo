@@ -577,6 +577,16 @@ pub fn assemble(
                                 bound_symbols.insert(binding.local.clone(), symbol_id);
                             }
                         }
+                        // The namespace escaped static tracking (`ns[key]`, ns passed
+                        // along) — every symbol in the target is plausibly used
+                        // (RFC 0005 §1: "wildcard over that namespace's exports").
+                        if imp.opaque_namespace_use {
+                            edges.push(Edge {
+                                kind: EdgeKind::Wildcard { from: to },
+                                confidence: Confidence::Possible,
+                                source: provenance(),
+                            });
+                        }
                     }
                 }
                 Resolution::Dependency(name, confidence) => {
@@ -740,6 +750,7 @@ mod tests {
             //   private-decl <name>         -> an unexported Function declaration
             //   import <specifier> [binding[,binding...]]     -> RawImport { reexported: false }
             //   reexport <specifier> [binding[,binding...]]   -> RawImport { reexported: true }
+            //   import-opaque <specifier>                     -> RawImport { opaque_namespace_use: true }
             //       binding := name          -> ImportBinding { local: name, imported: Some(name) }
             //                | local=imported -> ImportBinding { local, imported: Some(imported) }
             //                | local=          -> ImportBinding { local, imported: None } (default)
@@ -770,8 +781,10 @@ mod tests {
                 } else if let Some(rest) = line
                     .strip_prefix("import ")
                     .or_else(|| line.strip_prefix("reexport "))
+                    .or_else(|| line.strip_prefix("import-opaque "))
                 {
                     let reexported = line.starts_with("reexport ");
+                    let opaque_namespace_use = line.starts_with("import-opaque ");
                     let mut parts = rest.splitn(2, ' ');
                     let spec = parts.next().unwrap_or("");
                     let bindings = parts
@@ -802,6 +815,7 @@ mod tests {
                         confidence: Confidence::Certain,
                         bindings,
                         reexported,
+                        opaque_namespace_use,
                     });
                 } else if let Some(name) = line.strip_prefix("ref ") {
                     facts.references.push(RawReference {
@@ -1256,6 +1270,37 @@ mod tests {
             .edges
             .iter()
             .all(|e| !matches!(e.kind, EdgeKind::Root { .. })));
+    }
+
+    #[test]
+    fn opaque_namespace_import_wildcards_over_the_target() {
+        // `import * as ns; f(ns)` / `ns[key]` — the namespace escaped static tracking, so
+        // every symbol in the target is plausibly used (RFC 0005 §1). End-to-end: the
+        // target's never-referenced-by-name symbol must stay out of `unused`.
+        let dir = project(
+            "opaque-namespace",
+            &[
+                ("a.mock", "root-file\nimport-opaque ./b.mock"),
+                ("b.mock", "decl viaKey"),
+                ("dead.mock", "decl gone"),
+            ],
+        );
+        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let b = graph.file_id(&ProjectPath(SmolStr::new("b.mock"))).unwrap();
+        let wildcard = graph
+            .edges
+            .iter()
+            .find(|e| e.kind == EdgeKind::Wildcard { from: b })
+            .expect("wildcard from the opaquely-consumed target");
+        assert_eq!(wildcard.confidence, Confidence::Possible);
+
+        let findings = crate::analysis::run_all(&graph);
+        assert!(!findings
+            .iter()
+            .any(|f| f.location.symbol.as_deref() == Some("viaKey")));
+        assert!(findings
+            .iter()
+            .any(|f| f.location.path.as_ref().map(|p| p.0.as_str()) == Some("dead.mock")));
     }
 
     #[test]

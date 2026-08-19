@@ -1,0 +1,5 @@
+{
+  "name": "namespace-members",
+  "private": false,
+  "main": "src/index.ts"
+}

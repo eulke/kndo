@@ -144,6 +144,13 @@ pub struct RawImport {
     /// (js-ts.md §5: "Barrel files… resolved through, transparently"). `false` for an ordinary
     /// `import` statement, which only makes a name usable inside the importing file.
     pub reexported: bool,
+    /// The imported namespace is consumed in ways static tracking can't follow — a computed
+    /// member access (`ns[key]`) or the namespace value escaping into a call/assignment/return.
+    /// Assembly then adds a `Wildcard` edge *from the resolved target file*, making every
+    /// symbol in it plausibly used (`possible`) — the RFC 0005 §1 "wildcard over that
+    /// namespace's exports" rule. Statically-tracked accesses (`ns.foo`) don't set this; they
+    /// resolve precisely through `bindings` instead.
+    pub opaque_namespace_use: bool,
 }
 
 #[derive(Debug, Clone)]
