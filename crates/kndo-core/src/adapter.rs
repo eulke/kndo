@@ -177,7 +177,12 @@ pub struct DynamicUse {
     pub span: Span,
     /// Human-readable reason ("non-literal import()", "eval").
     pub reason: SmolStr,
-    /// Static narrowing when available (`./locales/${x}` → that directory).
+    /// Static narrowing when available (`./locales/${x}` → that directory), as a
+    /// **project-relative directory path** — the adapter resolves its language's specifier
+    /// semantics (what `./` is relative to) before handing this over; the core only
+    /// prefix-matches it against discovered paths, staying language-blind. `None` (never
+    /// `""`) when nothing narrows the scope — a bare `eval` — leaving the plausible target
+    /// set at the RFC's default: the dynamic file's own symbols.
     pub narrowed_to: Option<SmolStr>,
 }
 

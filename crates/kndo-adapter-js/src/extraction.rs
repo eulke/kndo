@@ -6,16 +6,19 @@
 //! type aliases, enums + members, const/let), ESM static imports, `export ... from`
 //! re-exports (barrels — `handle_reexport_statement`), and CJS (`require("literal")` at any
 //! depth, `module.exports`/`exports.foo` export surface, `module.exports = require(…)`
-//! barrels — the `collect_requires`/`collect_cjs_exports` block). Deferred to later commits
-//! (each already flagged in the spec, not silently missing): class/interface members, JSX
-//! references, dynamic constructs (incl. non-literal `require(expr)`, `require.resolve`, and
-//! namespace-member consumption like `env.colors` — the main remaining CJS gap), cyclomatic
-//! complexity, fingerprints, suppressions, `export { a as b }` with no `from` clause (a local
-//! re-export, not a barrel pass-through).
+//! barrels — the `collect_requires`/`collect_cjs_exports` block), and dynamic constructs
+//! (`import("literal")`/`require.resolve` at probable; non-literal `import(expr)`/
+//! `require(expr)` with static-prefix narrowing, `eval`, `new Function` → `DynamicUse`
+//! wildcards). Deferred to later commits (each already flagged in the spec, not silently
+//! missing): class/interface members, JSX references, the remaining dynamic-table rows
+//! (computed member access `ns[key]`, string-keyed registries) and namespace-member
+//! consumption like `env.colors` — the main remaining CJS gap — plus cyclomatic complexity,
+//! fingerprints, suppressions, `export { a as b }` with no `from` clause (a local re-export,
+//! not a barrel pass-through).
 
 use kndo_core::adapter::{
-    Declaration, Diagnostic, DiagnosticLevel, FileFacts, ImportBinding, ImportKind, RawImport,
-    RawReference, Span, VisibilityLevel,
+    Declaration, Diagnostic, DiagnosticLevel, DynamicUse, FileFacts, ImportBinding, ImportKind,
+    RawImport, RawReference, Span, VisibilityLevel,
 };
 use kndo_core::vocab::{Confidence, SymbolKind};
 use smol_str::SmolStr;
@@ -56,9 +59,10 @@ pub fn extract(path: &str, content: &[u8]) -> FileFacts {
     // `function foo() {}` (hoisting) and the mark-existing-declaration decision needs the
     // complete declaration list.
     collect_cjs_exports(root, content, &mut out);
-    // CJS imports (`require("literal")`) — a full-tree walk like references, because a require
-    // call can appear at any nesting depth, not just in top-level statements.
-    collect_requires(root, content, &mut out);
+    // CJS imports (`require("literal")`), dynamic imports (`import(…)`), and dynamic
+    // constructs (`eval`, `new Function`) — a full-tree walk like references, because any of
+    // them can appear at any nesting depth, not just in top-level statements.
+    collect_requires(root, path, content, &mut out);
     // Separate full-tree walk (declarations above only visit top-level statements — a
     // reference can appear at any nesting depth, inside any function/block).
     collect_references(root, content, &mut out.references);
@@ -405,13 +409,12 @@ fn collect_import_bindings(import_clause: Node, src: &[u8]) -> Vec<ImportBinding
     bindings
 }
 
-// ---------------------------------------------------------------- CJS (spec §2 export
-// surface, §3 `require("literal")` — shapes verified via `dump_cjs_shapes`)
+// ---------------------------------------------------------------- CJS & dynamic constructs
+// (spec §2 export surface + dynamic-constructs table, §3 import table — shapes verified via
+// `dump_cjs_shapes` and `dump_dynamic_shapes`)
 
-/// A `require(<single string literal>)` call — the only require form this slice imports
-/// (spec §3: certain). Non-literal `require(expr)` is wildcard territory (spec §2's dynamic-
-/// constructs table) and `require.resolve` is probable — both need the `DynamicUse`→wildcard
-/// wiring `graph.rs` doesn't consume yet, so both are deferred with it, not silently dropped.
+/// A `require(<single string literal>)` call — the require form that imports at `certain`
+/// (spec §3). The non-literal form is handled separately as a [`DynamicUse`] wildcard.
 fn is_require_call(node: Node, src: &[u8]) -> bool {
     require_specifier(node, src).is_some()
 }
@@ -422,23 +425,191 @@ fn require_specifier<'t>(node: Node<'t>, src: &[u8]) -> Option<Node<'t>> {
     }
     let function = node.child_by_field_name("function")?;
     if function.kind() != "identifier" || text(function, src) != "require" {
-        return None; // `require.resolve(…)` and friends land here — deferred, see above.
+        return None;
     }
-    let arguments = node.child_by_field_name("arguments")?;
+    single_argument(node).filter(|arg| arg.kind() == "string")
+}
+
+/// The lone named argument of a call, when there is exactly one.
+fn single_argument(call: Node) -> Option<Node> {
+    let arguments = call.child_by_field_name("arguments")?;
     let mut cursor = arguments.walk();
     let real_args: Vec<Node> = arguments
         .children(&mut cursor)
         .filter(|c| c.is_named())
         .collect();
     match real_args.as_slice() {
-        [only] if only.kind() == "string" => Some(*only),
+        [only] => Some(*only),
         _ => None,
     }
 }
 
-/// Full-tree walk for `require("literal")` calls (any nesting depth — a lazy require inside a
-/// function body is still a real edge). The enclosing context decides the bindings, mirroring
-/// what `collect_import_bindings` does for ESM clauses:
+/// Full-tree walk for `require`/`import()` calls and dynamic constructs, at any nesting
+/// depth — a lazy require inside a function body is still a real edge. `path` is the file's
+/// own project-relative path, needed to resolve a dynamic narrowing prefix (`./locales/${x}`)
+/// into the project-relative directory the contract's `narrowed_to` expects.
+fn collect_requires(node: Node, path: &str, src: &[u8], out: &mut FileFacts) {
+    match node.kind() {
+        "call_expression" => handle_call_expression(node, path, src, out),
+        // `new Function("…")` — spec §2's dynamic table: wildcard, file-wide.
+        "new_expression" => {
+            if node
+                .child_by_field_name("constructor")
+                .is_some_and(|c| c.kind() == "identifier" && text(c, src) == "Function")
+            {
+                out.dynamics.push(DynamicUse {
+                    span: span(node),
+                    reason: SmolStr::new("new Function"),
+                    narrowed_to: None,
+                });
+            }
+        }
+        _ => {}
+    }
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        collect_requires(child, path, src, out);
+    }
+}
+
+fn handle_call_expression(node: Node, path: &str, src: &[u8], out: &mut FileFacts) {
+    let Some(function) = node.child_by_field_name("function") else {
+        return;
+    };
+    match function.kind() {
+        // `import(…)` — its own node kind in the grammar, not an identifier.
+        "import" => match single_argument(node) {
+            Some(arg) if arg.kind() == "string" => {
+                // spec §3: `import("literal")` → probable (bundler code-split semantics). No
+                // bindings this slice: the awaited value is the namespace object, and
+                // namespace member resolution is the same deferred gap as `import * as ns`.
+                push_dynamic_import(node, arg, Confidence::Probable, src, out);
+            }
+            Some(arg) => out.dynamics.push(DynamicUse {
+                span: span(node),
+                reason: SmolStr::new("non-literal import()"),
+                narrowed_to: static_prefix_dir(arg, path, src),
+            }),
+            None => {}
+        },
+        "identifier" => match text(function, src) {
+            "require" => match single_argument(node) {
+                Some(arg) if arg.kind() == "string" => handle_literal_require(node, arg, src, out),
+                Some(arg) => out.dynamics.push(DynamicUse {
+                    span: span(node),
+                    reason: SmolStr::new("non-literal require()"),
+                    narrowed_to: static_prefix_dir(arg, path, src),
+                }),
+                None => {}
+            },
+            // Direct `eval` only — indirect (`window.eval`) doesn't even see local scope.
+            "eval" => out.dynamics.push(DynamicUse {
+                span: span(node),
+                reason: SmolStr::new("eval"),
+                narrowed_to: None,
+            }),
+            _ => {}
+        },
+        // `require.resolve("literal")` — spec §3: file, probable. The non-literal form is
+        // deferred (it resolves a path rather than loading a module, so folding it into the
+        // require-wildcard would overstate what it keeps alive).
+        "member_expression" => {
+            let is_require_resolve = function
+                .child_by_field_name("object")
+                .is_some_and(|o| o.kind() == "identifier" && text(o, src) == "require")
+                && function
+                    .child_by_field_name("property")
+                    .is_some_and(|p| text(p, src) == "resolve");
+            if is_require_resolve {
+                if let Some(arg) = single_argument(node).filter(|a| a.kind() == "string") {
+                    push_dynamic_import(node, arg, Confidence::Probable, src, out);
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+/// A bindingless import from a call-shaped construct (`import("literal")`,
+/// `require.resolve("literal")`) — the edge is what reachability needs.
+fn push_dynamic_import(
+    call: Node,
+    string_node: Node,
+    confidence: Confidence,
+    src: &[u8],
+    out: &mut FileFacts,
+) {
+    let Some(specifier) = string_literal_value(string_node, src) else {
+        return;
+    };
+    let kind = import_kind(&specifier);
+    out.imports.push(RawImport {
+        specifier,
+        kind,
+        span: span(call),
+        side_effect_only: call
+            .parent()
+            .is_some_and(|p| p.kind() == "expression_statement"),
+        type_only: false,
+        confidence,
+        bindings: Vec::new(),
+        reexported: false,
+    });
+}
+
+fn import_kind(specifier: &str) -> ImportKind {
+    if specifier.starts_with('.') || specifier.starts_with('/') || specifier.starts_with('#') {
+        ImportKind::Relative
+    } else {
+        ImportKind::Package
+    }
+}
+
+/// The static string prefix of a dynamic specifier, resolved to the **project-relative
+/// directory** the contract's `narrowed_to` expects (spec §2: `./locales/${x}` → that
+/// directory). Two shapes carry a usable prefix (verified via `dump_dynamic_shapes`): a
+/// template string whose *leading* piece is a text fragment, and a `+` concatenation whose
+/// leftmost operand is a string literal. The prefix narrows only when it's relative (a
+/// package-name prefix can't name project files) and contains a `/` (without one there's no
+/// directory to name). A prefix resolving to the project root returns `None` — "anywhere in
+/// the project" is not a narrowing.
+fn static_prefix_dir(arg: Node, path: &str, src: &[u8]) -> Option<SmolStr> {
+    let prefix: SmolStr = match arg.kind() {
+        "template_string" => {
+            let first = arg.named_child(0)?;
+            if first.kind() != "string_fragment" {
+                return None; // `${x}/…` — no leading static text
+            }
+            SmolStr::new(text(first, src))
+        }
+        "binary_expression" => {
+            // Leftmost operand of a `+` chain (`"./a/" + x + y` parses left-nested).
+            let mut left = arg;
+            while left.kind() == "binary_expression" {
+                if left.child_by_field_name("operator").map(|o| text(o, src)) != Some("+") {
+                    return None;
+                }
+                left = left.child_by_field_name("left")?;
+            }
+            if left.kind() != "string" {
+                return None;
+            }
+            string_literal_value(left, src)?
+        }
+        _ => return None,
+    };
+
+    if !(prefix.starts_with("./") || prefix.starts_with("../") || prefix.starts_with('/')) {
+        return None;
+    }
+    let dir_spec = &prefix[..prefix.rfind('/')? + 1];
+    let dir =
+        kndo_adapter_toolkit::paths::join(kndo_adapter_toolkit::paths::dirname(path), dir_spec);
+    (!dir.is_empty()).then(|| SmolStr::new(dir))
+}
+
+/// The `require("literal")` import itself — `certain` (spec §3), bindings from the enclosing
+/// context, mirroring what `collect_import_bindings` does for ESM clauses:
 /// - `const x = require("./y")` → one binding `{local: x, imported: None}` — the whole
 ///   `module.exports` value, which is exactly what the synthetic `default` name means on the
 ///   target side (both for a CJS target's `module.exports = …` and an ESM target's default).
@@ -447,60 +618,48 @@ fn require_specifier<'t>(node: Node<'t>, src: &[u8]) -> Option<Node<'t>> {
 /// - Statement-level bare `require("./y")` → `side_effect_only`, same as `import "./y"`.
 /// - Any other context (argument position, ternary arm, …) → the import edge alone, no
 ///   bindings — same stance as `import * as ns` (the edge is what reachability needs).
-fn collect_requires(node: Node, src: &[u8], out: &mut FileFacts) {
-    if let Some(string_node) = require_specifier(node, src) {
-        if let Some(specifier) = string_literal_value(string_node, src) {
-            let kind = if specifier.starts_with('.')
-                || specifier.starts_with('/')
-                || specifier.starts_with('#')
-            {
-                ImportKind::Relative
-            } else {
-                ImportKind::Package
-            };
-            let parent = node.parent();
-            let side_effect_only = parent.is_some_and(|p| p.kind() == "expression_statement");
-            // `module.exports = require("./x")` — the CJS barrel, mirror of `export * from`:
-            // the target's whole-module value becomes this file's own export surface, so it's
-            // a re-export binding the synthetic `default` on both sides. Deliberately at *any*
-            // nesting depth (unlike declaration extraction, which stays top-level): a
-            // conditional `if (…) module.exports = require("./a") else … ("./b")` aliases both
-            // targets — over-approximation in the keep-alive direction, the same doctrine the
-            // reference walk documents (collecting too much fails safe; excluding risks
-            // marking genuinely-used code unused).
-            let reexported = parent.is_some_and(|p| {
-                p.kind() == "assignment_expression"
-                    && p.child_by_field_name("left")
-                        .is_some_and(|l| is_module_exports(l, src))
-            });
-            let bindings = if reexported {
-                vec![ImportBinding {
-                    local: SmolStr::new("default"),
-                    imported: None,
-                }]
-            } else {
-                parent
-                    .filter(|p| p.kind() == "variable_declarator")
-                    .and_then(|p| p.child_by_field_name("name"))
-                    .map(|pattern| collect_require_bindings(pattern, src))
-                    .unwrap_or_default()
-            };
-            out.imports.push(RawImport {
-                specifier,
-                kind,
-                span: span(node),
-                side_effect_only,
-                type_only: false,
-                confidence: Confidence::Certain,
-                bindings,
-                reexported,
-            });
-        }
-    }
-    let mut cursor = node.walk();
-    for child in node.children(&mut cursor) {
-        collect_requires(child, src, out);
-    }
+fn handle_literal_require(node: Node, string_node: Node, src: &[u8], out: &mut FileFacts) {
+    let Some(specifier) = string_literal_value(string_node, src) else {
+        return;
+    };
+    let kind = import_kind(&specifier);
+    let parent = node.parent();
+    let side_effect_only = parent.is_some_and(|p| p.kind() == "expression_statement");
+    // `module.exports = require("./x")` — the CJS barrel, mirror of `export * from`:
+    // the target's whole-module value becomes this file's own export surface, so it's
+    // a re-export binding the synthetic `default` on both sides. Deliberately at *any*
+    // nesting depth (unlike declaration extraction, which stays top-level): a
+    // conditional `if (…) module.exports = require("./a") else … ("./b")` aliases both
+    // targets — over-approximation in the keep-alive direction, the same doctrine the
+    // reference walk documents (collecting too much fails safe; excluding risks
+    // marking genuinely-used code unused).
+    let reexported = parent.is_some_and(|p| {
+        p.kind() == "assignment_expression"
+            && p.child_by_field_name("left")
+                .is_some_and(|l| is_module_exports(l, src))
+    });
+    let bindings = if reexported {
+        vec![ImportBinding {
+            local: SmolStr::new("default"),
+            imported: None,
+        }]
+    } else {
+        parent
+            .filter(|p| p.kind() == "variable_declarator")
+            .and_then(|p| p.child_by_field_name("name"))
+            .map(|pattern| collect_require_bindings(pattern, src))
+            .unwrap_or_default()
+    };
+    out.imports.push(RawImport {
+        specifier,
+        kind,
+        span: span(node),
+        side_effect_only,
+        type_only: false,
+        confidence: Confidence::Certain,
+        bindings,
+        reexported,
+    });
 }
 
 fn collect_require_bindings(pattern: Node, src: &[u8]) -> Vec<ImportBinding> {
@@ -1216,10 +1375,9 @@ mod tests {
 
     #[test]
     fn require_lookalikes_are_not_imports() {
-        let facts = extract(
-            "f.js",
-            b"requireAll('./x'); require.resolve('./y'); obj.require('./z');",
-        );
+        // (`require.resolve` is deliberately absent here — it IS an import, at probable;
+        // see require_resolve_literal_is_a_probable_import.)
+        let facts = extract("f.js", b"requireAll('./x'); obj.require('./z');");
         assert!(facts.imports.is_empty());
     }
 
@@ -1359,5 +1517,83 @@ mod tests {
         assert_eq!(facts.imports.len(), 1);
         assert!(!facts.imports[0].reexported);
         assert_eq!(exported_names(&facts), vec![("default".into(), true)]);
+    }
+
+    // ---------------------------------------------------------------- dynamic constructs
+
+    #[test]
+    fn literal_dynamic_import_is_a_probable_import() {
+        let facts = extract("f.ts", b"async function f() { return import('./lazy'); }");
+        assert_eq!(facts.imports.len(), 1);
+        let imp = &facts.imports[0];
+        assert_eq!(imp.specifier.as_str(), "./lazy");
+        assert_eq!(imp.confidence, Confidence::Probable);
+        assert!(imp.bindings.is_empty());
+        assert!(facts.dynamics.is_empty());
+    }
+
+    #[test]
+    fn non_literal_dynamic_import_is_a_dynamic_use() {
+        let facts = extract("f.ts", b"async function f(m) { return import(m); }");
+        assert!(facts.imports.is_empty());
+        assert_eq!(facts.dynamics.len(), 1);
+        assert_eq!(facts.dynamics[0].reason.as_str(), "non-literal import()");
+        assert_eq!(facts.dynamics[0].narrowed_to, None);
+    }
+
+    #[test]
+    fn template_prefix_narrows_to_the_project_relative_directory() {
+        let facts = extract(
+            "src/i18n/loader.ts",
+            b"export function load(lang) { return import(`./locales/${lang}.json`); }",
+        );
+        assert_eq!(facts.dynamics.len(), 1);
+        assert_eq!(
+            facts.dynamics[0].narrowed_to.as_deref(),
+            Some("src/i18n/locales")
+        );
+    }
+
+    #[test]
+    fn concatenation_prefix_narrows_too() {
+        let facts = extract(
+            "src/f.js",
+            b"function load(name) { return require('../plugins/' + name); }",
+        );
+        assert_eq!(facts.dynamics[0].reason.as_str(), "non-literal require()");
+        assert_eq!(facts.dynamics[0].narrowed_to.as_deref(), Some("plugins"));
+    }
+
+    #[test]
+    fn package_name_prefix_does_not_narrow() {
+        // A non-relative prefix can't name project files — wildcard stays un-narrowed.
+        let facts = extract("f.js", b"const m = require(`lodash/${fn}`);");
+        assert_eq!(facts.dynamics.len(), 1);
+        assert_eq!(facts.dynamics[0].narrowed_to, None);
+    }
+
+    #[test]
+    fn template_starting_with_a_substitution_does_not_narrow() {
+        let facts = extract("f.js", b"const m = require(`${base}/thing`);");
+        assert_eq!(facts.dynamics[0].narrowed_to, None);
+    }
+
+    #[test]
+    fn direct_eval_and_new_function_are_dynamic_uses_but_indirect_eval_is_not() {
+        let facts = extract(
+            "f.js",
+            b"eval('code');\nconst f = new Function('return 1');\nwindow.eval('indirect');",
+        );
+        let reasons: Vec<&str> = facts.dynamics.iter().map(|d| d.reason.as_str()).collect();
+        assert_eq!(reasons, vec!["eval", "new Function"]);
+    }
+
+    #[test]
+    fn require_resolve_literal_is_a_probable_import() {
+        let facts = extract("f.js", b"const p = require.resolve('./config');");
+        assert_eq!(facts.imports.len(), 1);
+        assert_eq!(facts.imports[0].confidence, Confidence::Probable);
+        assert_eq!(facts.imports[0].specifier.as_str(), "./config");
+        assert!(facts.dynamics.is_empty());
     }
 }

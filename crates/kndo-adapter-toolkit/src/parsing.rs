@@ -159,6 +159,25 @@ module.exports.baz = 42;
 
     #[test]
     #[ignore]
+    fn dump_dynamic_shapes() {
+        let src = br#"
+const a = await import("./literal");
+import("./side-effect-dyn");
+const b = await import(someVar);
+const c = await import(`./locales/${lang}.json`);
+const d = require("./prefix/" + name);
+const e = require(`no-prefix-${x}`);
+eval("code");
+const f = new Function("return 1");
+const g = require.resolve("./resolved");
+window.eval("indirect");
+"#;
+        let tree = parse(src, false).unwrap();
+        dump(tree.root_node(), src, 0);
+    }
+
+    #[test]
+    #[ignore]
     fn dump_import_clause_shapes() {
         let src = br#"
 import def from "./a";

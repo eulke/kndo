@@ -124,7 +124,10 @@ pub struct FileFacts {
     pub roots:        Vec<RawRoot>,         // language-defined only (main, pub API…), target is
                                              // *within this file* — WholeFile | Declaration(name)
     pub functions:    Vec<FunctionMetrics>, // { symbol, cyclomatic: u32, loc, token_fingerprints }
-    pub dynamics:     Vec<DynamicUse>,      // constructs forcing Wildcard edges (span + reason)
+    pub dynamics:     Vec<DynamicUse>,      // constructs forcing Wildcard edges (span + reason +
+                                            // optional narrowed_to: a *project-relative* dir the
+                                            // adapter already resolved — the core only prefix-
+                                            // matches it, staying language-blind)
     pub suppressions: Vec<RawSuppression>,  // kndo:allow pragmas found in comments (§2.1)
     pub diagnostics:  Vec<Diagnostic>,
 }

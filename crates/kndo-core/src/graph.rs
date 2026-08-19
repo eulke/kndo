@@ -627,6 +627,50 @@ pub fn assemble(
             }
         }
 
+        // Dynamic constructs → wildcard edges (RFC 0005 §1: "one mechanism, not two").
+        // Un-narrowed (`eval`, `require(expr)` with no static prefix): a `Wildcard` edge from
+        // this file — reachability expands it over the file's own symbols at `possible`.
+        // Narrowed (`import(`./locales/${x}`)` → that directory): the plausible target set is
+        // the directory's files instead, expressed with existing edge kinds — a `possible`
+        // ImportsFile edge to every discovered file under the directory (unclaimed ones
+        // included: a dynamically-loaded .json is a real target), plus a `Wildcard` edge
+        // *from each target*, because a dynamically-imported module is consumed opaquely —
+        // no binding names exist, so every symbol in it is plausibly used. Without that
+        // second edge the target files would be alive but their exported symbols still
+        // certain-dead: exactly the false positive the narrowing exists to prevent.
+        for dynamic in &claimed.facts.dynamics {
+            match dynamic.narrowed_to.as_deref().filter(|d| !d.is_empty()) {
+                Some(dir) => {
+                    for (j, file) in files.iter().enumerate() {
+                        if j == i || !package_owns(dir, core_dirname(file.path.0.as_str())) {
+                            continue;
+                        }
+                        let target = FileId(j as u32);
+                        edges.push(Edge {
+                            kind: EdgeKind::ImportsFile {
+                                from: file_id,
+                                to: target,
+                            },
+                            confidence: Confidence::Possible,
+                            source: provenance(),
+                        });
+                        edges.push(Edge {
+                            kind: EdgeKind::Wildcard { from: target },
+                            confidence: Confidence::Possible,
+                            source: provenance(),
+                        });
+                    }
+                }
+                // Empty-string narrowing would prefix-match the whole project — treat it as
+                // the adapter meaning "no narrowing" rather than "everything".
+                None => edges.push(Edge {
+                    kind: EdgeKind::Wildcard { from: file_id },
+                    confidence: Confidence::Possible,
+                    source: provenance(),
+                }),
+            }
+        }
+
         for d in &claimed.facts.diagnostics {
             diagnostics.push(Diagnostic {
                 level: d.level,
@@ -702,6 +746,8 @@ mod tests {
             //   ref <name>                  -> a RawReference to that name
             //   root-file                   -> a Production root targeting this whole file
             //   root-decl <name>            -> a Production root targeting the named declaration
+            //   dynamic                     -> an un-narrowed DynamicUse (eval-style)
+            //   dynamic-narrowed <dir>      -> a DynamicUse narrowed to that project dir
             let text = std::str::from_utf8(file.content).unwrap_or("");
             let mut facts = FileFacts::default();
             for line in text.lines() {
@@ -774,6 +820,18 @@ mod tests {
                         kind: RootKind::Production,
                         target: RawRootTarget::Declaration(SmolStr::new(name)),
                         confidence: Confidence::Certain,
+                    });
+                } else if let Some(dir) = line.strip_prefix("dynamic-narrowed ") {
+                    facts.dynamics.push(crate::adapter::DynamicUse {
+                        span: Span::default(),
+                        reason: SmolStr::new("mock dynamic"),
+                        narrowed_to: Some(SmolStr::new(dir)),
+                    });
+                } else if line == "dynamic" {
+                    facts.dynamics.push(crate::adapter::DynamicUse {
+                        span: Span::default(),
+                        reason: SmolStr::new("mock dynamic"),
+                        narrowed_to: None,
                     });
                 }
             }
@@ -1198,6 +1256,93 @@ mod tests {
             .edges
             .iter()
             .all(|e| !matches!(e.kind, EdgeKind::Root { .. })));
+    }
+
+    #[test]
+    fn unnarrowed_dynamic_becomes_a_wildcard_edge_from_the_file() {
+        let dir = project("dynamic-plain", &[("a.mock", "dynamic")]);
+        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let a = graph.file_id(&ProjectPath(SmolStr::new("a.mock"))).unwrap();
+        let wildcard = graph
+            .edges
+            .iter()
+            .find(|e| e.kind == EdgeKind::Wildcard { from: a })
+            .expect("wildcard edge");
+        assert_eq!(wildcard.confidence, Confidence::Possible);
+    }
+
+    #[test]
+    fn narrowed_dynamic_imports_the_directorys_files_at_possible() {
+        let dir = project(
+            "dynamic-narrowed",
+            &[
+                ("a.mock", "dynamic-narrowed handlers"),
+                ("handlers/one.mock", "decl run"),
+                ("handlers/sub/two.mock", ""),
+                ("handlers/data.json", "{}"), // unclaimed — still a plausible target
+                ("elsewhere/other.mock", ""),
+            ],
+        );
+        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let a = graph.file_id(&ProjectPath(SmolStr::new("a.mock"))).unwrap();
+        let id = |p: &str| graph.file_id(&ProjectPath(SmolStr::new(p))).unwrap();
+        let imports_from_a: Vec<FileId> = graph
+            .edges
+            .iter()
+            .filter_map(|e| match e.kind {
+                EdgeKind::ImportsFile { from, to } if from == a => {
+                    assert_eq!(e.confidence, Confidence::Possible);
+                    Some(to)
+                }
+                _ => None,
+            })
+            .collect();
+        assert!(imports_from_a.contains(&id("handlers/one.mock")));
+        assert!(imports_from_a.contains(&id("handlers/sub/two.mock")));
+        assert!(imports_from_a.contains(&id("handlers/data.json")));
+        assert!(!imports_from_a.contains(&id("elsewhere/other.mock")));
+        assert!(!imports_from_a.contains(&a));
+        // Each narrowed target also wildcards over its own symbols: a dynamically-imported
+        // module is consumed opaquely, so its exports must not stay certain-dead.
+        assert!(graph.edges.iter().any(|e| e.kind
+            == EdgeKind::Wildcard {
+                from: id("handlers/one.mock")
+            }));
+        assert!(!graph
+            .edges
+            .iter()
+            .any(|e| e.kind == EdgeKind::Wildcard { from: a }));
+    }
+
+    #[test]
+    fn narrowed_dynamic_keeps_target_symbols_possible_alive_end_to_end() {
+        // The §6 corpus promise ("wildcard narrows, nothing false-positive"), at the graph +
+        // analysis level: a root file dynamically loading `handlers/` keeps the handler's
+        // exported symbol out of `unused`, while a file outside the narrowed scope is still
+        // caught.
+        let dir = project(
+            "dynamic-liveness",
+            &[
+                ("a.mock", "root-file\ndynamic-narrowed handlers"),
+                ("handlers/one.mock", "decl run"),
+                ("dead.mock", "decl gone"),
+            ],
+        );
+        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let findings = crate::analysis::run_all(&graph);
+        let subjects: Vec<(&str, Option<&str>)> = findings
+            .iter()
+            .map(|f| {
+                (
+                    f.subject_kind.as_str(),
+                    f.location.path.as_ref().map(|p| p.0.as_str()),
+                )
+            })
+            .collect();
+        assert!(subjects.contains(&("file", Some("dead.mock"))));
+        assert!(!subjects
+            .iter()
+            .any(|(_, p)| *p == Some("handlers/one.mock")));
     }
 
     #[test]
