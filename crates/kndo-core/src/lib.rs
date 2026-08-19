@@ -21,4 +21,5 @@ mod gitutil;
 pub mod graph;
 pub mod plugin;
 mod rkyv_support;
+mod suppression;
 pub mod vocab;

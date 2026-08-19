@@ -87,6 +87,19 @@ pub struct DeclaredDependency {
     pub scope: DependencyScope,
 }
 
+/// [`ProjectGraph::from_snapshot_parts`]'s input, bundled into one struct purely to stay under
+/// clippy's argument-count lint — every field here is one `ProjectGraph` field, verbatim.
+pub(crate) struct GraphSnapshotParts {
+    pub files: Vec<FileNode>,
+    pub symbols: Vec<SymbolNode>,
+    pub dependencies: Vec<DependencyNode>,
+    pub declared_dependencies: Vec<DeclaredDependency>,
+    pub script_invoked_dependencies: HashSet<(PackageId, SmolStr)>,
+    pub packages: Vec<PackageNode>,
+    pub edges: Vec<Edge>,
+    pub suppressions: Vec<(FileId, crate::adapter::RawSuppression)>,
+}
+
 /// The assembled language-neutral graph (contracts §1). Read-only once built; incremental
 /// patching lands with the cache (RFC 0004).
 #[derive(Debug, Default)]
@@ -102,6 +115,11 @@ pub struct ProjectGraph {
     pub script_invoked_dependencies: HashSet<(PackageId, SmolStr)>,
     pub packages: Vec<PackageNode>,
     pub edges: Vec<Edge>,
+    /// `kndo:allow`/`kndo:allow-file` pragmas as extracted, one per file — binding (line
+    /// adjacency to a declaration), validation and marking of matched findings is core logic
+    /// downstream of assembly, not here (contracts §2.1). Persisted through the graph-snapshot
+    /// cache like everything else in this struct, so a warm run never silently drops them.
+    pub suppressions: Vec<(FileId, crate::adapter::RawSuppression)>,
     file_index: HashMap<ProjectPath, FileId>,
 }
 
@@ -121,29 +139,24 @@ impl ProjectGraph {
     /// the warm-path counterpart to [`assemble`]: same shape, but skipping claim/extract/
     /// resolve/link entirely when nothing changed. `file_index` isn't itself persisted (cheap
     /// to rebuild, and doing so means the cache format never has to carry a second, derived
-    /// copy of `files` in lockstep).
-    pub(crate) fn from_snapshot_parts(
-        files: Vec<FileNode>,
-        symbols: Vec<SymbolNode>,
-        dependencies: Vec<DependencyNode>,
-        declared_dependencies: Vec<DeclaredDependency>,
-        script_invoked_dependencies: HashSet<(PackageId, SmolStr)>,
-        packages: Vec<PackageNode>,
-        edges: Vec<Edge>,
-    ) -> Self {
-        let file_index = files
+    /// copy of `files` in lockstep). Bundled into [`GraphSnapshotParts`] rather than taken as
+    /// separate arguments — one more than clippy's default argument-count lint allows.
+    pub(crate) fn from_snapshot_parts(parts: GraphSnapshotParts) -> Self {
+        let file_index = parts
+            .files
             .iter()
             .enumerate()
             .map(|(i, f)| (f.path.clone(), FileId(i as u32)))
             .collect();
         ProjectGraph {
-            files,
-            symbols,
-            dependencies,
-            declared_dependencies,
-            script_invoked_dependencies,
-            packages,
-            edges,
+            files: parts.files,
+            symbols: parts.symbols,
+            dependencies: parts.dependencies,
+            declared_dependencies: parts.declared_dependencies,
+            script_invoked_dependencies: parts.script_invoked_dependencies,
+            packages: parts.packages,
+            edges: parts.edges,
+            suppressions: parts.suppressions,
             file_index,
         }
     }
@@ -175,6 +188,7 @@ impl ProjectGraph {
                 private: false,
             }],
             edges,
+            suppressions: Vec::new(),
             file_index,
         }
     }
@@ -197,6 +211,15 @@ impl ProjectGraph {
     #[cfg(test)]
     pub(crate) fn with_packages(mut self, packages: Vec<PackageNode>) -> Self {
         self.packages = packages;
+        self
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_suppressions(
+        mut self,
+        suppressions: Vec<(FileId, crate::adapter::RawSuppression)>,
+    ) -> Self {
+        self.suppressions = suppressions;
         self
     }
 }
@@ -773,6 +796,7 @@ pub fn assemble_with_cache(
     // discovery order.
     let mut dependencies = Vec::new();
     let mut dep_index: HashMap<SmolStr, DependencyId> = HashMap::new();
+    let mut suppressions: Vec<(FileId, crate::adapter::RawSuppression)> = Vec::new();
 
     for (i, slot) in claimed_per_file.iter().enumerate() {
         let Some(claimed) = slot else { continue };
@@ -933,6 +957,10 @@ pub fn assemble_with_cache(
                 span: d.span,
             });
         }
+
+        for s in &claimed.facts.suppressions {
+            suppressions.push((file_id, s.clone()));
+        }
     }
 
     let graph = ProjectGraph {
@@ -943,6 +971,7 @@ pub fn assemble_with_cache(
         script_invoked_dependencies,
         packages,
         edges,
+        suppressions,
         file_index,
     };
     if let Some(cache) = cache {
@@ -1017,6 +1046,7 @@ mod tests {
             //   root-decl <name>            -> a Production root targeting the named declaration
             //   dynamic                     -> an un-narrowed DynamicUse (eval-style)
             //   dynamic-narrowed <dir>      -> a DynamicUse narrowed to that project dir
+            //   suppress <category>         -> a Declaration-scope RawSuppression
             let text = std::str::from_utf8(file.content).unwrap_or("");
             let mut facts = FileFacts::default();
             for line in text.lines() {
@@ -1104,6 +1134,14 @@ mod tests {
                         span: Span::default(),
                         reason: SmolStr::new("mock dynamic"),
                         narrowed_to: None,
+                    });
+                } else if let Some(category) = line.strip_prefix("suppress ") {
+                    facts.suppressions.push(crate::adapter::RawSuppression {
+                        span: Span::default(),
+                        category: SmolStr::new(category),
+                        subject: None,
+                        reason: None,
+                        scope: crate::adapter::SuppressionScope::Declaration,
                     });
                 }
             }
@@ -1232,6 +1270,22 @@ mod tests {
             .filter(|e| matches!(e.kind, EdgeKind::Declares { file, .. } if file == file_id))
             .collect();
         assert_eq!(declares.len(), 2);
+    }
+
+    #[test]
+    fn suppressions_are_collected_per_file_during_assembly() {
+        let dir = project(
+            "suppressions",
+            &[
+                ("a.mock", "decl foo\nsuppress unused"),
+                ("b.mock", "decl bar"),
+            ],
+        );
+        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let a = graph.file_id(&ProjectPath(SmolStr::new("a.mock"))).unwrap();
+        assert_eq!(graph.suppressions.len(), 1);
+        assert_eq!(graph.suppressions[0].0, a);
+        assert_eq!(graph.suppressions[0].1.category.as_str(), "unused");
     }
 
     #[test]

@@ -40,6 +40,9 @@
     },
     "schema_version": {
       "type": "string"
+    },
+    "suppressed": {
+      "$ref": "#/$defs/SuppressedSummary"
     }
   },
   "required": [
@@ -47,6 +50,7 @@
     "kndo_version",
     "run",
     "findings",
+    "suppressed",
     "diagnostics"
   ],
   "$defs": {
@@ -353,6 +357,26 @@
       "required": [
         "start",
         "end"
+      ]
+    },
+    "SuppressedSummary": {
+      "description": "`suppressed.inline`/`suppressed.config` (output-schema §1, contracts §2.1) — always present\n(unlike `baseline`, which is `None` when the feature isn't adopted at all): inline pragma\nmatching runs on every check, so `{ inline: 0, config: 0 }` is a meaningful \"nothing\nsuppressed,\" not an absent subsystem. `config` stays honestly `0` — no `kndo.toml`\nsuppression parser exists yet (RFC 0005 §12's config mechanism).",
+      "type": "object",
+      "properties": {
+        "config": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "inline": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "inline",
+        "config"
       ]
     }
   }

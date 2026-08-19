@@ -11,6 +11,11 @@
 //! further by `delta_origin` (introduced vs derived), FIXED is flat, and the header states the
 //! net.
 //!
+//! Suppressed findings (inline `kndo:allow` pragmas, contracts §2.1) are never listed — matched
+//! findings are marked, not deleted, so they're already absent from `RunResult.findings` by the
+//! time this module sees it; only the count surfaces, in the header suffix and (full mode,
+//! non-quiet) a `suppressed: N inline, M config` line, and only when non-zero.
+//!
 //! Deliberately not implemented, simplified rather than silently wrong:
 //! - RFC 0009 §4's three-tier capability ladder (rich TTY / basic TTY / no TTY / `TERM=dumb`)
 //!   collapses to one on/off switch (`RenderOptions::color`) driving *both* color and glyph
@@ -41,6 +46,17 @@ fn baseline_suffix(result: &RunResult) -> String {
     }
 }
 
+/// Only shown when something is actually suppressed — `suppressed` is always present
+/// (unlike `baseline`), but a silent `· suppressed: 0` on every clean run would be noise.
+fn suppressed_suffix(result: &RunResult) -> String {
+    let total = result.suppressed.inline + result.suppressed.config;
+    if total == 0 {
+        String::new()
+    } else {
+        format!(" · suppressed: {total}")
+    }
+}
+
 const RED: &str = "\x1b[31m";
 const YELLOW: &str = "\x1b[33m";
 const MAGENTA: &str = "\x1b[35m";
@@ -53,10 +69,11 @@ pub fn render(result: &RunResult, opts: &RenderOptions) -> String {
     }
 
     let baseline_suffix = baseline_suffix(result);
+    let suppressed_suffix = suppressed_suffix(result);
 
     if result.findings.is_empty() {
         return format!(
-            "kndo · clean · {} files ({} claimed, {} symbols, {} deps, {} edges) · {}ms{baseline_suffix}\n",
+            "kndo · clean · {} files ({} claimed, {} symbols, {} deps, {} edges) · {}ms{baseline_suffix}{suppressed_suffix}\n",
             result.files_discovered,
             result.files_claimed,
             result.symbols,
@@ -68,7 +85,7 @@ pub fn render(result: &RunResult, opts: &RenderOptions) -> String {
 
     if opts.quiet {
         return format!(
-            "kndo · {} findings{baseline_suffix}\n",
+            "kndo · {} findings{baseline_suffix}{suppressed_suffix}\n",
             result.findings.len()
         );
     }
@@ -76,6 +93,12 @@ pub fn render(result: &RunResult, opts: &RenderOptions) -> String {
     let mut out = String::new();
     if let Some(b) = &result.baseline {
         out.push_str(&format!("baseline: {} acknowledged\n\n", b.acknowledged));
+    }
+    if result.suppressed.inline + result.suppressed.config > 0 {
+        out.push_str(&format!(
+            "suppressed: {} inline, {} config\n\n",
+            result.suppressed.inline, result.suppressed.config
+        ));
     }
     let mut groups: Vec<&str> = result
         .findings
@@ -111,8 +134,9 @@ pub fn render(result: &RunResult, opts: &RenderOptions) -> String {
 fn render_diff(result: &RunResult, opts: &RenderOptions) -> String {
     let net = result.findings.len() as i64 - result.fixed.len() as i64;
     let baseline_suffix = baseline_suffix(result);
+    let suppressed_suffix = suppressed_suffix(result);
     let header = format!(
-        "kndo · {} · {} new · {} fixed · net {net:+}{baseline_suffix}\n",
+        "kndo · {} · {} new · {} fixed · net {net:+}{baseline_suffix}{suppressed_suffix}\n",
         result.mode,
         result.findings.len(),
         result.fixed.len(),
@@ -360,5 +384,62 @@ mod tests {
         };
         let out = render(&result, &opts());
         assert!(out.starts_with("kndo · clean ·"));
+    }
+
+    #[test]
+    fn zero_suppressed_is_silent_everywhere() {
+        let result = RunResult {
+            mode: "full".to_string(),
+            ..RunResult::default()
+        };
+        let out = render(&result, &opts());
+        assert!(!out.contains("suppressed"));
+    }
+
+    #[test]
+    fn nonzero_suppressed_shows_in_the_clean_full_mode_header() {
+        let result = RunResult {
+            mode: "full".to_string(),
+            suppressed: kndo::engine::SuppressedSummary {
+                inline: 3,
+                config: 1,
+            },
+            ..RunResult::default()
+        };
+        let out = render(&result, &opts());
+        assert!(out.starts_with("kndo · clean ·"));
+        assert!(out.contains("suppressed: 4"));
+    }
+
+    #[test]
+    fn nonzero_suppressed_gets_its_own_line_above_findings() {
+        let result = RunResult {
+            mode: "full".to_string(),
+            findings: vec![finding("unused", "waste")],
+            suppressed: kndo::engine::SuppressedSummary {
+                inline: 2,
+                config: 0,
+            },
+            ..RunResult::default()
+        };
+        let out = render(&result, &opts());
+        assert!(out.contains("suppressed: 2 inline, 0 config\n\n"));
+    }
+
+    #[test]
+    fn nonzero_suppressed_shows_in_the_diff_mode_header() {
+        let result = RunResult {
+            mode: "staged".to_string(),
+            suppressed: kndo::engine::SuppressedSummary {
+                inline: 1,
+                config: 0,
+            },
+            ..RunResult::default()
+        };
+        let out = render(&result, &opts());
+        assert_eq!(
+            out,
+            "kndo · staged · 0 new · 0 fixed · net +0 · suppressed: 1\n"
+        );
     }
 }

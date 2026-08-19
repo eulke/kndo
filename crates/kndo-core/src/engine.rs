@@ -277,13 +277,25 @@ pub struct BaselineSummary {
     pub stale: usize,
 }
 
+/// `suppressed.inline`/`suppressed.config` (output-schema §1, contracts §2.1) — always present
+/// (unlike `baseline`, which is `None` when the feature isn't adopted at all): inline pragma
+/// matching runs on every check, so `{ inline: 0, config: 0 }` is a meaningful "nothing
+/// suppressed," not an absent subsystem. `config` stays honestly `0` — no `kndo.toml`
+/// suppression parser exists yet (RFC 0005 §12's config mechanism).
+#[derive(Debug, Clone, Copy, Default, serde::Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct SuppressedSummary {
+    pub inline: usize,
+    pub config: usize,
+}
+
 /// Typed form of the output-schema envelope. JSON/SARIF/agent serializers live core-side so
 /// every frontend emits byte-identical machine output; *human* rendering is frontend-owned
 /// (RFC 0009). Flat here for ergonomic Rust consumption; [`RunResult::to_json`] nests it into
-/// the schema's actual shape. Not yet present: `health`, `budget`, `suppressed` — neither
-/// subsystem exists yet (health/CRAP scoring is M4; inline suppression pragmas need adapter-side
-/// grammar work not yet done), so those fields are omitted rather than emitted empty/null.
-/// Adding them later is additive (minor schema bump, RFC 0006 §4), not a breaking change.
+/// the schema's actual shape. Not yet present: `health`, `budget` — neither subsystem exists
+/// yet (health/CRAP scoring and delta-budget gates are M4), so those fields are omitted rather
+/// than emitted empty/null. Adding them later is additive (minor schema bump, RFC 0006 §4), not
+/// a breaking change.
 #[derive(Debug, Default)]
 pub struct RunResult {
     /// Full mode: every finding. Diff modes: only *new* findings (contracts/output-schema.md
@@ -319,6 +331,10 @@ pub struct RunResult {
     /// `None` when `.kndo/baseline.json` doesn't exist (RFC 0006 §6) — distinct from `Some`
     /// with zero counts, which means a baseline exists and is fully clean/reproducing.
     pub baseline: Option<BaselineSummary>,
+    /// Inline `kndo:allow` pragmas matched against this run's findings (contracts §2.1) — always
+    /// present, unlike `baseline`. In diff modes this reflects the "after" side only, mirroring
+    /// how `baseline` is applied symmetrically but reported from "after" (see `run_diff`).
+    pub suppressed: SuppressedSummary,
 }
 
 impl RunResult {
@@ -365,6 +381,7 @@ struct Envelope {
     fixed: Vec<Finding>,
     #[serde(skip_serializing_if = "Option::is_none")]
     baseline: Option<BaselineSummary>,
+    suppressed: SuppressedSummary,
     diagnostics: Vec<Diagnostic>,
 }
 
@@ -385,6 +402,7 @@ impl RunResult {
             findings: self.findings.clone(),
             fixed: self.fixed.clone(),
             baseline: self.baseline.clone(),
+            suppressed: self.suppressed,
             diagnostics: self.diagnostics.clone(),
         }
     }
@@ -586,7 +604,7 @@ impl Engine {
             RunMode::Full => unreachable!("run_diff is only called for Staged/Diff"),
         };
 
-        let (before_graph, before_findings, before_diagnostics) =
+        let (before_graph, before_findings, before_diagnostics, _before_suppressed) =
             match self.assemble_and_analyze(before_dir.path()) {
                 Ok(t) => t,
                 Err(d) => {
@@ -596,7 +614,7 @@ impl Engine {
                     }
                 }
             };
-        let (after_graph, after_findings, after_diagnostics) =
+        let (after_graph, after_findings, after_diagnostics, after_suppressed) =
             match self.assemble_and_analyze(&after_root) {
                 Ok(t) => t,
                 Err(d) => {
@@ -671,6 +689,7 @@ impl Engine {
             fixed: fixed_findings,
             adapters,
             baseline,
+            suppressed: after_suppressed,
             ..RunResult::default()
         }
     }
@@ -718,11 +737,20 @@ impl Engine {
     fn assemble_and_analyze(
         &mut self,
         root: &Path,
-    ) -> Result<(graph::ProjectGraph, Vec<Finding>, Vec<Diagnostic>), Diagnostic> {
+    ) -> Result<
+        (
+            graph::ProjectGraph,
+            Vec<Finding>,
+            Vec<Diagnostic>,
+            SuppressedSummary,
+        ),
+        Diagnostic,
+    > {
         match graph::assemble_with_cache(root, &self.adapters, self.cache.as_ref()) {
             Ok((g, diagnostics)) => {
                 let findings = analysis::run_all(&g);
-                Ok((g, findings, diagnostics))
+                let (findings, suppressed) = crate::suppression::apply(&g, findings);
+                Ok((g, findings, diagnostics, suppressed))
             }
             Err(crate::discovery::DiscoveryError::Root(e)) => Err(Diagnostic {
                 level: DiagnosticLevel::Warn,
@@ -740,7 +768,7 @@ impl Engine {
     /// builds its own `RunResult` in [`Self::run_diff`], from the "after" side).
     fn run_analysis_at(&mut self, root: &Path) -> RunResult {
         match self.assemble_and_analyze(root) {
-            Ok((g, findings, diagnostics)) => {
+            Ok((g, findings, diagnostics, suppressed)) => {
                 let adapters = self
                     .adapters
                     .iter()
@@ -766,6 +794,7 @@ impl Engine {
                     diagnostics,
                     findings,
                     adapters,
+                    suppressed,
                     ..RunResult::default()
                 }
             }
@@ -859,9 +888,10 @@ mod tests {
     }
 
     /// A second mock, richer than [`CacheMockAdapter`]: understands `root-file` (a whole-file
-    /// production root) and `import ./sibling.dmock` (an `ImportsFile` edge), which is enough
-    /// to drive `unused` (file-level) — exactly what the diff-mode tests below need to produce
-    /// real new/fixed findings across two tree states.
+    /// production root), `import ./sibling.dmock` (an `ImportsFile` edge), and
+    /// `suppress-file <category>` (a File-scope `RawSuppression`) — enough to drive `unused`
+    /// (file-level) and inline suppression, exactly what the diff-mode and suppression tests
+    /// below need to produce real new/fixed/suppressed findings across two tree states.
     struct DiffMockAdapter;
 
     impl LanguageAdapter for DiffMockAdapter {
@@ -894,6 +924,14 @@ mod tests {
                         kind: crate::vocab::RootKind::Production,
                         target: crate::adapter::RawRootTarget::WholeFile,
                         confidence: Confidence::Certain,
+                    });
+                } else if let Some(category) = line.strip_prefix("suppress-file ") {
+                    facts.suppressions.push(crate::adapter::RawSuppression {
+                        span: Span::default(),
+                        category: SmolStr::new(category),
+                        subject: None,
+                        reason: None,
+                        scope: crate::adapter::SuppressionScope::File,
                     });
                 } else if let Some(spec) = line.strip_prefix("import ") {
                     facts.imports.push(crate::adapter::RawImport {
@@ -1109,6 +1147,13 @@ mod tests {
         assert!(value.get("health").is_none());
         assert!(value.get("budget").is_none());
         assert!(value.get("baseline").is_none());
+        // Unlike baseline, suppressed is always present — inline pragma matching runs on
+        // every check, so "nothing suppressed" is a meaningful zeroed result, not an absent
+        // subsystem.
+        assert_eq!(
+            value["suppressed"],
+            serde_json::json!({"inline": 0, "config": 0})
+        );
     }
 
     #[test]
@@ -1307,5 +1352,70 @@ mod tests {
             .any(|f| finding_path(f) == "orphan.dmock"));
         assert_eq!(result.findings.len(), 1);
         assert_eq!(finding_path(&result.findings[0]), "also-dead.dmock");
+    }
+
+    #[test]
+    fn inline_suppression_hides_a_finding_from_full_mode_but_still_counts_it() {
+        let dir = std::env::temp_dir().join("kndo-engine-test-suppress-full");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("orphan.dmock"), "suppress-file unused\n").unwrap();
+
+        let mut engine = Engine::open(
+            &dir,
+            ConfigOverrides::default(),
+            vec![Box::new(DiffMockAdapter)],
+        )
+        .unwrap();
+        let result = engine.check(CheckRequest {
+            mode: RunMode::Full,
+        });
+
+        assert!(
+            !result
+                .findings
+                .iter()
+                .any(|f| finding_path(f) == "orphan.dmock"),
+            "{:?}",
+            result.findings
+        );
+        assert_eq!(result.suppressed.inline, 1);
+        assert_eq!(result.suppressed.config, 0);
+    }
+
+    #[test]
+    fn a_suppression_present_on_both_sides_of_a_diff_never_surfaces_as_new_or_fixed() {
+        let dir = git_repo("delta-suppressed");
+        std::fs::write(dir.join("root.dmock"), "root-file\n").unwrap();
+        std::fs::write(dir.join("orphan.dmock"), "suppress-file unused\n").unwrap();
+        git_add_all_commit(&dir, "base");
+        let base_sha = git_rev_parse(&dir, "HEAD");
+
+        // Touch an unrelated file so the diff isn't a total no-op.
+        std::fs::write(dir.join("also-dead.dmock"), "").unwrap();
+
+        let mut engine = Engine::open(
+            &dir,
+            ConfigOverrides::default(),
+            vec![Box::new(DiffMockAdapter)],
+        )
+        .unwrap();
+        let result = engine.check(CheckRequest {
+            mode: RunMode::Diff { base: base_sha },
+        });
+
+        assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+        assert!(!result
+            .findings
+            .iter()
+            .any(|f| finding_path(f) == "orphan.dmock"));
+        assert!(!result
+            .fixed
+            .iter()
+            .any(|f| finding_path(f) == "orphan.dmock"));
+        assert_eq!(result.findings.len(), 1);
+        assert_eq!(finding_path(&result.findings[0]), "also-dead.dmock");
+        // Reported from the "after" side, mirroring baseline's convention.
+        assert_eq!(result.suppressed.inline, 1);
     }
 }

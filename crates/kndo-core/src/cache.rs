@@ -32,11 +32,11 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use crate::adapter::{Diagnostic, FileFacts};
+use crate::adapter::{Diagnostic, FileFacts, RawSuppression};
 use crate::graph::{
     DeclaredDependency, DependencyNode, FileNode, PackageNode, ProjectGraph, SymbolNode,
 };
-use crate::vocab::{Edge, PackageId};
+use crate::vocab::{Edge, FileId, PackageId};
 use smol_str::SmolStr;
 
 /// Facts-entry envelope header: bumped whenever the serialized shape changes, independent of
@@ -98,6 +98,10 @@ struct GraphSnapshot {
     script_invoked_dependencies: Vec<ScriptInvokedDepSnap>,
     packages: Vec<PackageNode>,
     edges: Vec<Edge>,
+    /// `RawSuppression` already carries its own rkyv derives (adapter.rs), and both tuple
+    /// elements do too, so unlike `script_invoked_dependencies` this needs no wrapper struct —
+    /// rkyv archives same-arity tuples of `Archive` types natively.
+    suppressions: Vec<(FileId, RawSuppression)>,
     diagnostics: Vec<Diagnostic>,
 }
 
@@ -398,15 +402,16 @@ impl ProjectCache {
             .into_iter()
             .map(|d| (d.package, d.name))
             .collect();
-        let graph = ProjectGraph::from_snapshot_parts(
-            snapshot.files,
-            snapshot.symbols,
-            snapshot.dependencies,
-            snapshot.declared_dependencies,
+        let graph = ProjectGraph::from_snapshot_parts(crate::graph::GraphSnapshotParts {
+            files: snapshot.files,
+            symbols: snapshot.symbols,
+            dependencies: snapshot.dependencies,
+            declared_dependencies: snapshot.declared_dependencies,
             script_invoked_dependencies,
-            snapshot.packages,
-            snapshot.edges,
-        );
+            packages: snapshot.packages,
+            edges: snapshot.edges,
+            suppressions: snapshot.suppressions,
+        });
         self.graph_hits.fetch_add(1, Ordering::Relaxed);
         Some((graph, snapshot.diagnostics))
     }
@@ -435,6 +440,7 @@ impl ProjectCache {
                 .collect(),
             packages: graph.packages.clone(),
             edges: graph.edges.clone(),
+            suppressions: graph.suppressions.clone(),
             diagnostics: diagnostics.to_vec(),
         };
         let Ok(bytes) = rkyv::to_bytes::<rkyv::rancor::Error>(&snapshot) else {
@@ -705,6 +711,16 @@ mod tests {
             version_req: "^4".into(),
             scope: crate::vocab::DependencyScope::Prod,
         }])
+        .with_suppressions(vec![(
+            FileId(0),
+            RawSuppression {
+                span: Default::default(),
+                category: "unused".into(),
+                subject: Some("enum-member".into()),
+                reason: Some("legacy shim".to_string()),
+                scope: crate::adapter::SuppressionScope::Declaration,
+            },
+        )])
     }
 
     #[test]
@@ -746,6 +762,21 @@ mod tests {
         );
         assert_eq!(restored_diagnostics.len(), 1);
         assert_eq!(restored_diagnostics[0].message, "example diagnostic");
+        assert_eq!(restored.suppressions.len(), 1);
+        assert_eq!(restored.suppressions[0].0, FileId(0));
+        assert_eq!(restored.suppressions[0].1.category.as_str(), "unused");
+        assert_eq!(
+            restored.suppressions[0].1.subject.as_deref(),
+            Some("enum-member")
+        );
+        assert_eq!(
+            restored.suppressions[0].1.reason.as_deref(),
+            Some("legacy shim")
+        );
+        assert_eq!(
+            restored.suppressions[0].1.scope,
+            crate::adapter::SuppressionScope::Declaration
+        );
 
         // A different key (any input change) is a plain miss, not a stale hit.
         let other_key = [6u8; GRAPH_KEY_LEN];

@@ -10,17 +10,19 @@
 //! (`import("literal")`/`require.resolve` at probable; non-literal `import(expr)`/
 //! `require(expr)` with static-prefix narrowing, `eval`, `new Function` → `DynamicUse`
 //! wildcards), and namespace member consumption (`ns.foo` precise, `ns[key]`/escapes opaque,
-//! `exports.foo` self-reads, escaping exports objects — `collect_namespace_uses`). Deferred
-//! to later commits (each already flagged in the spec, not silently missing): class/interface
-//! members, JSX references, string-literal subscripts as precise possible-references (folded
-//! into the opaque case for now — see `collect_namespace_uses`), second-order namespace
-//! aliasing (`const alias = ns` — covered by the escape wildcard, only precision is lost),
-//! cyclomatic complexity, fingerprints, suppressions, `export { a as b }` with no `from`
-//! clause (a local re-export, not a barrel pass-through).
+//! `exports.foo` self-reads, escaping exports objects — `collect_namespace_uses`), and
+//! `kndo:allow`/`kndo:allow-file` suppression pragmas in any comment style
+//! (`collect_suppressions` — extraction only; binding a pragma to the declaration it covers is
+//! core logic, contracts §2.1). Deferred to later commits (each already flagged in the spec,
+//! not silently missing): class/interface members, JSX references, string-literal subscripts
+//! as precise possible-references (folded into the opaque case for now — see
+//! `collect_namespace_uses`), second-order namespace aliasing (`const alias = ns` — covered by
+//! the escape wildcard, only precision is lost), cyclomatic complexity, fingerprints,
+//! `export { a as b }` with no `from` clause (a local re-export, not a barrel pass-through).
 
 use kndo_core::adapter::{
     Declaration, Diagnostic, DiagnosticLevel, DynamicUse, FileFacts, ImportBinding, ImportKind,
-    RawImport, RawReference, Span, VisibilityLevel,
+    RawImport, RawReference, RawSuppression, Span, SuppressionScope, VisibilityLevel,
 };
 use kndo_core::vocab::{Confidence, SymbolKind};
 use smol_str::SmolStr;
@@ -72,6 +74,11 @@ pub fn extract(path: &str, content: &[u8]) -> FileFacts {
     // Separate full-tree walk (declarations above only visit top-level statements — a
     // reference can appear at any nesting depth, inside any function/block).
     collect_references(root, content, &mut out.references);
+    // Suppression pragmas: comments are `extra` nodes tree-sitter attaches wherever they
+    // physically sit — a same-line trailing comment after a declaration lands *inside* that
+    // declaration's own subtree (verified via the toolkit's introspect probe), not as a
+    // sibling after it — so only a full-tree walk finds every comment reliably.
+    collect_suppressions(root, content, &mut out.suppressions);
     out
 }
 
@@ -1143,6 +1150,99 @@ fn handle_namespace_occurrence(
 /// Where in doubt, this errs toward collecting (a reference to a name nothing declares simply
 /// fails to resolve later and is dropped, silently and safely) rather than excluding (which
 /// would risk marking genuinely-used code `unused` — the direction that actually matters).
+/// Every `comment` node in the tree (verified via the toolkit's introspect probe: `//` and
+/// `/* */`/`/** */` both parse to the same `comment` kind, and comments can appear as a sibling
+/// anywhere *or* nested inside a preceding node's subtree — hence the unconditional recursion
+/// into every node, comments included, rather than stopping early). Extraction only; binding a
+/// pragma to the declaration it covers is core logic (contracts §2.1), not this adapter's job.
+fn collect_suppressions(node: Node, src: &[u8], out: &mut Vec<RawSuppression>) {
+    if node.kind() == "comment" {
+        if let Some(pragma) = parse_suppression_pragma(text(node, src)) {
+            out.push(RawSuppression {
+                span: span(node),
+                category: pragma.category,
+                subject: pragma.subject,
+                reason: pragma.reason,
+                scope: pragma.scope,
+            });
+        }
+    }
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        collect_suppressions(child, src, out);
+    }
+}
+
+struct ParsedPragma {
+    scope: SuppressionScope,
+    category: SmolStr,
+    subject: Option<SmolStr>,
+    reason: Option<String>,
+}
+
+/// `kndo:allow <category>[:<subject>] [reason…]` (scope `Declaration`) or
+/// `kndo:allow-file <category>[:<subject>] [reason…]` (scope `File`) — contracts §2.1's grammar,
+/// found inside any comment style. Block comments (including `/** … */`) are checked line by
+/// line (stripping a leading `*` per line, the common doc-comment convention) since the pragma
+/// need not be the comment's first line; `//` comments are always exactly one line. Returns
+/// `None` for anything that isn't a pragma — an ordinary comment is never mistaken for one, and
+/// `kndo:allow` must be followed by whitespace (or nothing) so a name that merely starts with
+/// that text (`kndo:allowlist`, say) doesn't false-match.
+fn parse_suppression_pragma(comment_text: &str) -> Option<ParsedPragma> {
+    let lines: Vec<&str> = if let Some(inner) = comment_text.strip_prefix("//") {
+        vec![inner]
+    } else if let Some(inner) = comment_text
+        .strip_prefix("/*")
+        .and_then(|s| s.strip_suffix("*/"))
+    {
+        inner
+            .lines()
+            .map(|line| {
+                let trimmed = line.trim_start();
+                trimmed.strip_prefix('*').unwrap_or(trimmed)
+            })
+            .collect()
+    } else {
+        return None; // not a recognized comment delimiter shape — never expected in practice
+    };
+    lines.into_iter().find_map(parse_pragma_line)
+}
+
+fn parse_pragma_line(line: &str) -> Option<ParsedPragma> {
+    let line = line.trim();
+    let (scope, rest) = if let Some(rest) = line.strip_prefix("kndo:allow-file") {
+        (SuppressionScope::File, rest)
+    } else if let Some(rest) = line.strip_prefix("kndo:allow") {
+        (SuppressionScope::Declaration, rest)
+    } else {
+        return None;
+    };
+    if !rest.is_empty() && !rest.starts_with(char::is_whitespace) {
+        return None; // e.g. "kndo:allowlist" — the keyword must stand alone
+    }
+    let rest = rest.trim_start();
+    let mut parts = rest.splitn(2, char::is_whitespace);
+    let target = parts.next().unwrap_or("");
+    if target.is_empty() {
+        return None; // "kndo:allow" naming no category isn't a valid pragma
+    }
+    let reason = parts
+        .next()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+    let (category, subject) = match target.split_once(':') {
+        Some((c, s)) => (c, Some(SmolStr::new(s))),
+        None => (target, None),
+    };
+    Some(ParsedPragma {
+        scope,
+        category: SmolStr::new(category),
+        subject,
+        reason,
+    })
+}
+
 fn collect_references(node: Node, src: &[u8], out: &mut Vec<RawReference>) {
     // Import statements are entirely declarative name-binding syntax (already turned into
     // `ImportBinding` facts by `collect_import_bindings`) — nothing inside one is a reference.
@@ -1973,5 +2073,87 @@ mod tests {
             b"exports.a = 1;\nmodule.exports.b = 2;\nmodule.exports = function () {};",
         );
         assert!(facts.dynamics.is_empty());
+    }
+
+    fn suppressions(src: &str) -> Vec<RawSuppression> {
+        extract("f.ts", src.as_bytes()).suppressions
+    }
+
+    #[test]
+    fn line_comment_pragma_with_category_subject_and_reason() {
+        let s = suppressions("// kndo:allow unused:enum-member deliberately kept\nfunction f() {}");
+        assert_eq!(s.len(), 1);
+        assert_eq!(s[0].scope, SuppressionScope::Declaration);
+        assert_eq!(s[0].category, "unused");
+        assert_eq!(s[0].subject.as_deref(), Some("enum-member"));
+        assert_eq!(s[0].reason.as_deref(), Some("deliberately kept"));
+    }
+
+    #[test]
+    fn line_comment_pragma_without_subject_or_reason() {
+        let s = suppressions("// kndo:allow unused\nfunction f() {}");
+        assert_eq!(s.len(), 1);
+        assert_eq!(s[0].category, "unused");
+        assert!(s[0].subject.is_none());
+        assert!(s[0].reason.is_none());
+    }
+
+    #[test]
+    fn allow_file_pragma_has_file_scope() {
+        let s = suppressions("// kndo:allow-file version-skew\n");
+        assert_eq!(s.len(), 1);
+        assert_eq!(s[0].scope, SuppressionScope::File);
+        assert_eq!(s[0].category, "version-skew");
+    }
+
+    #[test]
+    fn block_comment_pragma_on_any_line_is_found() {
+        let s = suppressions(
+            "/**\n * some doc text\n * kndo:allow unused reason here\n */\nfunction f() {}",
+        );
+        assert_eq!(s.len(), 1);
+        assert_eq!(s[0].category, "unused");
+        assert_eq!(s[0].reason.as_deref(), Some("reason here"));
+    }
+
+    #[test]
+    fn single_line_block_comment_pragma() {
+        let s = suppressions("/* kndo:allow unused */\nfunction f() {}");
+        assert_eq!(s.len(), 1);
+        assert_eq!(s[0].category, "unused");
+    }
+
+    #[test]
+    fn trailing_same_line_comment_is_still_found_despite_nesting_inside_the_block() {
+        // Verified via the toolkit's introspect probe: this comment lands *inside*
+        // `f`'s statement_block in the tree, not as a sibling after the declaration.
+        let s = suppressions("function f() {} // kndo:allow unused trailing");
+        assert_eq!(s.len(), 1);
+        assert_eq!(s[0].category, "unused");
+    }
+
+    #[test]
+    fn ordinary_comments_are_not_pragmas() {
+        assert!(suppressions("// just a comment\nfunction f() {}").is_empty());
+        assert!(suppressions("/* kndo:allowlist something */").is_empty());
+        assert!(suppressions("// kndo:allow\nfunction f() {}").is_empty()); // no category named
+    }
+
+    #[test]
+    fn multiple_pragmas_in_one_file_are_all_collected() {
+        let s = suppressions(
+            "// kndo:allow unused\nfunction a() {}\n\n// kndo:allow-file duplicate\nfunction b() {}",
+        );
+        assert_eq!(s.len(), 2);
+        assert_eq!(s[0].category, "unused");
+        assert_eq!(s[1].scope, SuppressionScope::File);
+        assert_eq!(s[1].category, "duplicate");
+    }
+
+    #[test]
+    fn pragma_span_covers_the_whole_comment_node() {
+        let s = suppressions("// kndo:allow unused\nfunction f() {}");
+        assert_eq!(s[0].span.start, (1, 1));
+        assert_eq!(s[0].span.end.0, 1); // single-line comment stays on line 1
     }
 }

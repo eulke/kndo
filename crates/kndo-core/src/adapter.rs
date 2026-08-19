@@ -252,7 +252,18 @@ pub struct DynamicUse {
     pub narrowed_to: Option<SmolStr>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    serde::Serialize,
+    serde::Deserialize,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+)]
 pub enum SuppressionScope {
     Declaration,
     File,
@@ -260,12 +271,25 @@ pub enum SuppressionScope {
 
 /// A `kndo:allow` pragma as extracted; validation, binding, counting and staleness are core
 /// logic, identical across languages (contracts §2.1 — the no-flicker guarantee lives there).
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+/// Carries its own rkyv derives (not just serde's) so it survives the graph-snapshot cache
+/// (ADR 0004) unchanged — a graph-snapshot hit skips `FileFacts` extraction entirely, so without
+/// this, suppressions would silently vanish on a warm run and violate the no-flicker guarantee.
+#[derive(
+    Debug,
+    Clone,
+    serde::Serialize,
+    serde::Deserialize,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+)]
 pub struct RawSuppression {
     pub span: Span,
     /// Verdict name — validated by the core against the registry.
+    #[rkyv(with = crate::rkyv_support::SmolStrAsString)]
     pub category: SmolStr,
     /// Optional `:subject` facet (kebab-case).
+    #[rkyv(with = rkyv::with::Map<crate::rkyv_support::SmolStrAsString>)]
     pub subject: Option<SmolStr>,
     pub reason: Option<String>,
     pub scope: SuppressionScope,

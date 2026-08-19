@@ -14,6 +14,10 @@
 //! `next:` names only commands that work today (`--format json`) — the navigation verbs
 //! (`kndo explain`, `kndo used-by`, …) don't exist yet (RFC 0007), so they aren't offered as if
 //! they did.
+//!
+//! Suppressed findings are never listed here either — matching, marked findings are already
+//! absent from `RunResult.findings`/`fixed` by the time this module sees them — only appended to
+//! the result line as `| suppressed N inline, M config`, and only when non-zero.
 
 use crate::engine::{Finding, RunResult, KNDO_VERSION};
 use crate::vocab::Confidence;
@@ -111,10 +115,11 @@ fn diff_result_line(result: &RunResult) -> String {
         result.findings.len(),
         result.fixed.len()
     );
-    match &result.baseline {
+    let with_baseline = match &result.baseline {
         Some(b) => format!("{base} | baseline {} acknowledged", b.acknowledged),
         None => base,
-    }
+    };
+    append_suppressed(with_baseline, result)
 }
 
 fn header(result: &RunResult) -> String {
@@ -132,9 +137,24 @@ fn result_line(result: &RunResult) -> String {
     } else {
         format!("result: {} findings", result.findings.len())
     };
-    match &result.baseline {
+    let with_baseline = match &result.baseline {
         Some(b) => format!("{findings} | baseline {} acknowledged", b.acknowledged),
         None => findings,
+    };
+    append_suppressed(with_baseline, result)
+}
+
+/// `suppressed` is always present (unlike `baseline`), but only appended when non-zero — a
+/// silent `| suppressed 0` on every clean run would just be token noise for an agent consumer.
+fn append_suppressed(line: String, result: &RunResult) -> String {
+    let total = result.suppressed.inline + result.suppressed.config;
+    if total == 0 {
+        line
+    } else {
+        format!(
+            "{line} | suppressed {} inline, {} config",
+            result.suppressed.inline, result.suppressed.config
+        )
     }
 }
 
@@ -349,5 +369,36 @@ mod tests {
         )]));
         assert!(!out.contains('\x1b'));
         assert!(out.is_ascii());
+    }
+
+    #[test]
+    fn zero_suppressed_is_omitted_from_the_result_line() {
+        let out = render(&result(vec![]));
+        assert!(!out.contains("suppressed"));
+    }
+
+    #[test]
+    fn nonzero_suppressed_is_appended_to_the_result_line() {
+        let mut r = result(vec![]);
+        r.suppressed = crate::engine::SuppressedSummary {
+            inline: 5,
+            config: 2,
+        };
+        let out = render(&r);
+        assert!(out.contains("result: clean | suppressed 5 inline, 2 config"));
+    }
+
+    #[test]
+    fn nonzero_suppressed_is_appended_to_the_diff_result_line() {
+        let out = render(&RunResult {
+            mode: "staged".to_string(),
+            duration_ms: 7,
+            suppressed: crate::engine::SuppressedSummary {
+                inline: 1,
+                config: 0,
+            },
+            ..RunResult::default()
+        });
+        assert!(out.contains("result: 0 new, 0 fixed, net +0 | suppressed 1 inline, 0 config"));
     }
 }

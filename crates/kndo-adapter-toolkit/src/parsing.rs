@@ -200,6 +200,26 @@ module.exports = whole;
 
     #[test]
     #[ignore]
+    fn dump_comment_shapes() {
+        let src = br#"
+// kndo:allow unused reason text
+function a() {}
+
+/* kndo:allow-file version-skew */
+
+/**
+ * kndo:allow unused:enum-member
+ */
+function b() {}
+
+function c() {} // kndo:allow unused trailing comment
+"#;
+        let tree = parse(src, false).unwrap();
+        dump(tree.root_node(), src, 0);
+    }
+
+    #[test]
+    #[ignore]
     fn dump_import_clause_shapes() {
         let src = br#"
 import def from "./a";
