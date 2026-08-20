@@ -22,7 +22,7 @@ pub fn resolve(spec: &ImportSpec, ctx: &ResolveCtx<'_>) -> Resolution {
     let mut candidate = s;
     loop {
         if let Some(member) = ctx.workspace_member(candidate) {
-            if let Some(resolution) = resolve_into_package(s, candidate, member, ctx) {
+            if let Some(resolution) = resolve_into_package(spec, s, candidate, member, ctx) {
                 return resolution;
             }
             break; // matched a declared module but found no file in the target package
@@ -59,20 +59,29 @@ pub fn resolve(spec: &ImportSpec, ctx: &ResolveCtx<'_>) -> Resolution {
 /// `candidate` is a workspace member's declared module path that `s` is prefixed by (checked by
 /// the caller before this runs); resolves the remaining subpath to a concrete file within that
 /// package directory. `""` subpath (importing the module path exactly) still needs *some* file
-/// to point `Resolution::File` at — Go packages are directories, contracts §2 has no multi-file
+/// to point a resolution at — Go packages are directories, contracts §2 has no multi-file
 /// resolution target (docs/adapters/go.md §3) — so both cases go through `pick_package_file`.
 ///
-/// Plain `Resolution::File`, deliberately **not** `Resolution::WorkspaceMember` — that variant
-/// also creates an `ImportsDependency` edge (assembly derives both edge kinds from it, contracts
-/// §2), which is exactly right for JS's model (every workspace member is a separate package
-/// that must be *declared* to be imported, RFC 0011 §4's phantom-dependency check) and exactly
-/// wrong for Go's: a module's own subpackages need no `require` entry at all — a module can't
-/// require itself, and Go has no per-sibling declaration concept even across `go.work` modules.
-/// Using `WorkspaceMember` here was the first cut's bug, caught dogfooding: a module importing
-/// its own subpackage read as `undeclared` (a "phantom dependency on itself"). `Resolution::File`
-/// still gets full reachability (`ImportsFile`) — the only thing skipped is a dependency
-/// contract Go doesn't have.
+/// Which *variant* depends on whose module the importing file lives in (RFC 0012 §10):
+///
+/// - **Own module** (the matched member's directory is an ancestor of the importing file):
+///   plain `Resolution::File`. A module's own subpackages need no `require` entry — a module
+///   can't require itself. Using `WorkspaceMember` here was the first cut's bug, caught
+///   dogfooding: a module importing its own subpackage read as `undeclared` (a "phantom
+///   dependency on itself").
+/// - **Sibling module** (a `go.work` workspace member the importer does *not* live in):
+///   `Resolution::WorkspaceMember` — assembly derives BOTH edge kinds from it (contracts §2):
+///   `ImportsFile` for real cross-module reachability, `ImportsDependency` for the declaration
+///   contract, which go.work does **not** waive — each module's `go.mod` must still `require`
+///   its siblings for standalone builds (`go mod tidy` adds them), so an undeclared sibling
+///   import is a genuine phantom dependency and a declared-but-unimported one is genuinely
+///   unused, exactly RFC 0011 §4's model.
+///
+/// A module nested inside another module's directory tree would blur the ancestry test; Go
+/// itself strongly discourages nested modules and the tie simply resolves toward the safer
+/// `File` (no dependency-contract accusation).
 fn resolve_into_package(
+    spec: &ImportSpec,
     s: &str,
     matched_module_path: &str,
     member: &kndo_core::adapter::WorkspaceMember,
@@ -84,7 +93,24 @@ fn resolve_into_package(
         .trim_start_matches('/');
     let target_dir = kndo_adapter_toolkit::paths::join(member.dir.as_str(), subpath);
     let target = pick_package_file(&target_dir, ctx)?;
-    Some(Resolution::File(target, Confidence::Certain))
+
+    let importer_dir = kndo_adapter_toolkit::paths::dirname(spec.from.0.as_str());
+    let own_module = dir_owns(member.dir.as_str(), importer_dir);
+    if own_module {
+        Some(Resolution::File(target, Confidence::Certain))
+    } else {
+        Some(Resolution::WorkspaceMember {
+            name: SmolStr::new(matched_module_path),
+            target,
+            confidence: Confidence::Certain,
+        })
+    }
+}
+
+/// Is `sub` the directory `dir` itself, or nested anywhere under it? `""` = the project root,
+/// which owns everything.
+fn dir_owns(dir: &str, sub: &str) -> bool {
+    dir.is_empty() || sub == dir || sub.starts_with(&format!("{dir}/"))
 }
 
 /// The lexicographically-first non-test `.go` file directly in `dir` — deterministic (RFC 0008
@@ -174,6 +200,52 @@ mod tests {
                 // Deterministic pick: lexicographically first non-test .go file in `sub/`.
                 assert_eq!(target.0.as_str(), "sub/x.go");
             }
+            other => panic!("expected File, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn sibling_module_import_resolves_as_workspace_member() {
+        // RFC 0012 §10: the importer lives in moda/, the target module in modb/ — a genuine
+        // cross-module edge. WorkspaceMember gives assembly both edge kinds: reachability AND
+        // the dependency contract (go.work does not waive `require`; an undeclared sibling is
+        // a phantom dependency).
+        let known: HashSet<ProjectPath> = ["moda/main.go", "modb/lib.go"]
+            .iter()
+            .map(|p| ProjectPath(SmolStr::new(*p)))
+            .collect();
+        let mut members = HashMap::new();
+        members.insert(
+            SmolStr::new("example.com/a"),
+            WorkspaceMember {
+                dir: SmolStr::new("moda"),
+                entry: None,
+            },
+        );
+        members.insert(
+            SmolStr::new("example.com/b"),
+            WorkspaceMember {
+                dir: SmolStr::new("modb"),
+                entry: None,
+            },
+        );
+        let ctx = ResolveCtx::new(&known).with_workspace_members(&members);
+
+        match resolve(&spec("example.com/b", "moda/main.go"), &ctx) {
+            Resolution::WorkspaceMember {
+                name,
+                target,
+                confidence,
+            } => {
+                assert_eq!(name.as_str(), "example.com/b");
+                assert_eq!(target.0.as_str(), "modb/lib.go");
+                assert_eq!(confidence, Confidence::Certain);
+            }
+            other => panic!("expected WorkspaceMember, got {other:?}"),
+        }
+        // And the mirror: the same module resolving its own subpackage stays plain File.
+        match resolve(&spec("example.com/b", "modb/lib.go"), &ctx) {
+            Resolution::File(target, _) => assert_eq!(target.0.as_str(), "modb/lib.go"),
             other => panic!("expected File, got {other:?}"),
         }
     }

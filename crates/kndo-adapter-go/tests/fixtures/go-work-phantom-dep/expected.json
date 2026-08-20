@@ -1,0 +1,5 @@
+{
+  "findings": [
+    { "category": "undeclared", "subject_kind": "dependency", "path": "modb/go.mod", "symbol": "example.com/a" }
+  ]
+}

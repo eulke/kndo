@@ -16,17 +16,21 @@ use kndo_core::adapter::{
 use kndo_core::vocab::DependencyScope;
 use smol_str::SmolStr;
 
-pub fn extract(_path: &str, content: &[u8], _ctx: &ResolveCtx<'_>) -> ManifestFacts {
+pub fn extract(path: &str, content: &[u8], _ctx: &ResolveCtx<'_>) -> ManifestFacts {
     let mut out = ManifestFacts::default();
     let Ok(text) = std::str::from_utf8(content) else {
         out.diagnostics.push(Diagnostic {
             level: DiagnosticLevel::Warn,
             path: None,
-            message: "go.mod is not valid UTF-8".to_string(),
+            message: "go manifest is not valid UTF-8".to_string(),
             span: None,
         });
         return out;
     };
+
+    if path.rsplit('/').next() == Some("go.work") {
+        return extract_go_work(text, out);
+    }
 
     let mut in_require_block = false;
     for raw_line in text.lines() {
@@ -52,9 +56,9 @@ pub fn extract(_path: &str, content: &[u8], _ctx: &ResolveCtx<'_>) -> ManifestFa
             out.dependencies.extend(parse_require_entry(rest.trim()));
         }
         // `go 1.x`, `toolchain`, `replace`, `exclude` directives: not surfaced — none of them
-        // are dependency declarations, and `replace` (a local-path or version override) has no
-        // ManifestFacts field to land in today (closest to RFC 0011's `go.work` support, itself
-        // deferred — docs/adapters/go.md §7).
+        // are dependency declarations. A local `replace` whose target declares the same module
+        // path already resolves through the workspace-member index (RFC 0012 §10); one that
+        // *renames* a module path is the recorded divergence, not modeled.
     }
 
     // No publish-privacy flag exists in go.mod at all (docs/adapters/go.md §4) — this is a
@@ -62,6 +66,48 @@ pub fn extract(_path: &str, content: &[u8], _ctx: &ResolveCtx<'_>) -> ManifestFa
     // `internal/` path convention, handled entirely in extraction.rs.
     out.private = false;
     out
+}
+
+/// `go.work` (RFC 0012 §10): the workspace aggregator — `use` directives (single-line or
+/// parenthesized block) become `workspace_members`. Everything else the format allows (`go`,
+/// `toolchain`, `replace`) contributes nothing here: member modules already self-register in
+/// the core's workspace index by their own declared module paths, so cross-module resolution
+/// needs no data from this file — and a local `replace` whose target declares the same module
+/// path resolves through that same index anyway. The one true gap, a `replace` that *renames*
+/// a module path, is a recorded divergence (RFC 0012 §10), not modeled. No `module` directive
+/// exists in the format, so `package_name` stays `None` — the go.work PackageNode is an
+/// aggregator, never a same-directory shadow of a real module's `go.mod` (assembly's ownership
+/// tie-break is discovery order, and `go.mod` sorts first).
+fn extract_go_work(text: &str, mut out: ManifestFacts) -> ManifestFacts {
+    let mut in_use_block = false;
+    for raw_line in text.lines() {
+        let line = strip_line_comment(raw_line).trim();
+        if line.is_empty() {
+            continue;
+        }
+        if in_use_block {
+            if line == ")" {
+                in_use_block = false;
+                continue;
+            }
+            push_use_entry(line, &mut out);
+            continue;
+        }
+        if line == "use (" {
+            in_use_block = true;
+        } else if let Some(rest) = line.strip_prefix("use ") {
+            push_use_entry(rest.trim(), &mut out);
+        }
+    }
+    out.private = false; // same statement of fact as go.mod: the format has no publish flag
+    out
+}
+
+fn push_use_entry(entry: &str, out: &mut ManifestFacts) {
+    let cleaned = entry.trim_matches('"').trim_start_matches("./");
+    if !cleaned.is_empty() {
+        out.workspace_members.push(SmolStr::new(cleaned));
+    }
 }
 
 fn strip_line_comment(line: &str) -> &str {
@@ -150,5 +196,38 @@ require (
         let facts = extract("go.mod", &[0xff, 0xfe, 0x00], &ctx());
         assert!(!facts.diagnostics.is_empty());
         assert_eq!(facts.package_name, None);
+    }
+
+    // ------------------------------------------------- go.work (RFC 0012 §10)
+
+    #[test]
+    fn go_work_use_directives_become_workspace_members() {
+        let facts = extract(
+            "go.work",
+            b"go 1.22\n\nuse ./tools\n\nuse (\n\t./moda\n\t./modb // trailing comment\n)\n",
+            &ctx(),
+        );
+        let members: Vec<&str> = facts.workspace_members.iter().map(|m| m.as_str()).collect();
+        assert_eq!(members, vec!["tools", "moda", "modb"]);
+        assert_eq!(facts.package_name, None, "go.work declares no module");
+        assert!(facts.dependencies.is_empty());
+        assert!(facts.roots.is_empty());
+    }
+
+    #[test]
+    fn go_work_replace_and_go_directives_contribute_nothing() {
+        let facts = extract(
+            "go.work",
+            b"go 1.22\n\nuse ./a\n\nreplace example.com/x => ../x\n",
+            &ctx(),
+        );
+        assert_eq!(facts.workspace_members.len(), 1);
+        assert!(facts.dependencies.is_empty());
+    }
+
+    #[test]
+    fn nested_go_work_path_still_parses_as_go_work() {
+        let facts = extract("sub/go.work", b"use ./m\n", &ctx());
+        assert_eq!(facts.workspace_members.len(), 1);
     }
 }

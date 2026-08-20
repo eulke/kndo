@@ -98,7 +98,13 @@ system's last string-guess into assembly: Go emits qualified accesses as structu
 the core resolves the qualifier against the import's alias or the *target's* declared package
 name — fixing the dir≠package case (`gopkg.in/yaml.v3` → `yaml`, fixture
 `qualified-package-name/`) and keeping receiver accesses (`t.helper()`) from ever capturing a
-same-named free function. The one remaining RFC 0012 stage (§10, go.work) closes the queue.
+same-named free function. §10 closed the queue: `go.work` is claimed and parsed (`use`
+directives → `workspace_members`), and sibling-module imports resolve as `WorkspaceMember` —
+reachability plus the `require` contract go.work does not waive — pinned by fixtures
+`go-work-multi-module/` (declared sibling: precise cross-module liveness, one deliberate dead
+helper found) and `go-work-phantom-dep/` (undeclared sibling: a real phantom dependency). The
+path-renaming `replace` directive stands as RFC 0012 §10's one recorded divergence. **All RFC
+0012 stages (§§3–10) have now landed.**
 
 ## M4 — Duplication, CRAP, health
 `duplicate` (winnowing index, incremental), `cyclic` (SCCs with per-language tolerance),

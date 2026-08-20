@@ -35,9 +35,9 @@ impl LanguageAdapter for GoAdapter {
     fn descriptor(&self) -> AdapterDescriptor {
         AdapterDescriptor {
             id: SmolStr::new("go"),
-            facts_schema_version: 6, // 6: scope_context/local_alias/unit_name (RFC 0012 §9); 5: detected_origin (§7); 4: RefKind + signature_span (§5); 3: within (§4); 2: member_of (§3)
+            facts_schema_version: 7, // 7: go.work + sibling-module WorkspaceMember resolution (RFC 0012 §10); 6: scope_context/local_alias/unit_name (§9); 5: detected_origin (§7); 4: RefKind + signature_span (§5); 3: within (§4); 2: member_of (§3)
             file_globs: vec![SmolStr::new("**/*.go")],
-            manifest_globs: vec![SmolStr::new("**/go.mod")],
+            manifest_globs: vec![SmolStr::new("**/go.mod"), SmolStr::new("**/go.work")],
             grammar_version: SmolStr::new("tree-sitter-go 0.25"),
             // RFC 0012 §6's Go ladder: capitalization is the language's entire visibility
             // system — unexported is package-scoped (`Unit` = the dir#package key), exported
@@ -68,7 +68,7 @@ impl LanguageAdapter for GoAdapter {
     }
 
     fn claim_manifest(&self, path: &ProjectPath) -> bool {
-        path.0.rsplit('/').next() == Some("go.mod")
+        matches!(path.0.rsplit('/').next(), Some("go.mod") | Some("go.work"))
     }
 
     fn extract(&self, file: &SourceFile<'_>) -> kndo_core::adapter::FileFacts {
@@ -118,10 +118,12 @@ mod tests {
     }
 
     #[test]
-    fn claim_manifest_matches_only_go_mod() {
+    fn claim_manifest_matches_go_mod_and_go_work() {
         let a = GoAdapter;
         assert!(a.claim_manifest(&path("go.mod")));
         assert!(a.claim_manifest(&path("pkg/go.mod")));
+        assert!(a.claim_manifest(&path("go.work"))); // RFC 0012 §10
         assert!(!a.claim_manifest(&path("go.sum")));
+        assert!(!a.claim_manifest(&path("go.work.sum")));
     }
 }

@@ -66,7 +66,7 @@ see §1.1.
 | Claim | Files |
 |-------|-------|
 | Language `go` | `.go` (excludes `.go` files that fail to parse as Go — extraction degrades per §2's broken-code rule, never un-claims) |
-| Manifests | `go.mod`. `go.sum` is a lockfile (content hashes, not structure) — **not** claimed, same stance as JS's `package-lock.json`. `go.work` (multi-module workspaces) is **not** claimed in this slice — deferred, §7 |
+| Manifests | `go.mod` and `go.work` (RFC 0012 §10). `go.sum`/`go.work.sum` are lockfiles (content hashes, not structure) — **not** claimed, same stance as JS's `package-lock.json` |
 | Role `test` | `*_test.go` (Go's sole, compiler-recognized convention — no glob guessing needed) |
 | Role `tooling` | not detected in this slice (§7) — Go has no ecosystem-wide config-file convention comparable to `webpack.config.js`; inventing pattern-matching for something with no real convention would be guessing, not claiming |
 | Origin `generated` | detected from content via `FileFacts::detected_origin` (RFC 0012 §7 — the trait extension this row's earlier text called for): extraction scans the first 64 lines for Go's single authoritative marker (`// Code generated … DO NOT EDIT.`, `go help generate`) with the toolkit's `ContentMarkers` scanner, column-anchored so a generator mentioning the marker in a string literal doesn't classify as its own output. Assembly applies the override to the `FileNode` before any analysis, so every Generated exemption sees it (conformance fixture `generated-file/`: a dead `.pb.go` stays silent; the same file minus the banner is an `unused` finding). |
@@ -162,7 +162,13 @@ specifiers (`gopkg.in/yaml.v3` binds as `yaml`).
    current module's own path (`go.mod`'s `module` directive) — looked up against the core's
    workspace-member index, which registers *every* named manifest in the graph, including this
    project's own single `go.mod` ("the monorepo model with n = 1," RFC 0011 §3), so a same-module
-   subpackage import and a future `go.work` sibling-module import share one lookup. A Go import
+   subpackage import and a `go.work` sibling-module import share one lookup — the *variant*
+   differs (RFC 0012 §10): the importer's own module resolves as plain `File` (a module can't
+   require itself), a sibling module as `WorkspaceMember`, from which assembly derives both
+   `ImportsFile` (reachability) and `ImportsDependency` — because go.work does **not** waive
+   `require`: each module's `go.mod` must still declare its siblings for standalone builds, so
+   an undeclared sibling import is a genuine phantom dependency (fixture
+   `go-work-phantom-dep/`) and a declared-but-unimported one genuinely unused. A Go import
    names a **package** (a directory of files), and `Resolution::File` (contracts §2) names *one*
    file, so this adapter picks the alphabetically-first non-test `.go` file in the target
    directory as the nominal target (so `ImportsFile` reachability exists at all — an unimported
@@ -216,7 +222,7 @@ parser.
 |---|---|---|
 | `name` | `module` directive | the module path IS the package identity |
 | `private: true` | *(no manifest equivalent — see below)* |
-| `workspaces` | `go.work`'s `use` directives | separate file format; not parsed this slice (§7), matching JS's own `pnpm-workspace.yaml` deferral |
+| `workspaces` | `go.work`'s `use` directives | parsed (RFC 0012 §10): single-line and block `use` forms → `ManifestFacts::workspace_members`; `go`/`toolchain`/`replace` directives contribute nothing (member modules self-register by declared module path; a path-*renaming* `replace` is the recorded divergence, not modeled) |
 | dependency scopes (prod/dev/peer/optional) | `require (...)` | Go has exactly one scope — every entry is `DependencyScope::Prod`. `// indirect` comments mark transitively-pulled requires (Go's own `go mod tidy` bookkeeping) — not surfaced as a different scope, since kndo's scope taxonomy has no "transitive" concept and treating it as anything other than `Prod` would misrepresent it as unused/optional when it's exactly as required as a direct one |
 | `main`/`module`/`exports` entry points, `declares_surface` | *(no equivalent)* | Go has no importable "default entry" and no explicit-surface declaration — every package directory is independently, uniformly importable by its full path. `ManifestFacts.declares_surface` is always `false` for Go: there is no `exports`-map-equivalent contract to gate `deep-import` on, and `internal/` (the one real boundary Go has) is skipped by RFC 0011 §4's own rule anyway (§0) |
 | `bin` | `package main` + `func main()` | a **source-file** fact, not a manifest fact — see §2's Roots paragraph; `ManifestFacts.roots` is always empty for Go |
@@ -246,7 +252,7 @@ consumed by definition," an `internal/` package's is not.
 | `go:generate` directive comments | not parsed — the directive names a command line to run, not a file reference kndo could statically resolve without executing it |
 | `reflect`/`plugin`-based dynamic dispatch | not modeled as a `DynamicUse` wildcard in this slice (§0) — genuinely rare in application code; revisit if dogfooding surfaces false `unused` positives traceable to it |
 | Build-tag-gated files (`//go:build linux`, `_linux.go` suffix files) | claimed and extracted like any other `.go` file, unconditionally — kndo analyzes the union of all build configurations, the same "any-feature-is-live" stance RFC 0002 §7's table already states for Rust's `#[cfg]` features; a symbol used only under one build tag is still "used," not dead |
-| Multi-module workspace (`go.work`) | not claimed this slice (§1, §7) — a repo with multiple `go.mod`s but no `go.work` still works correctly today via RFC 0011 §3's default rule ("every file belongs to the nearest manifest ancestor"), just without `go.work`'s replace-directive awareness |
+| Multi-module workspace (`go.work`) | claimed and parsed (RFC 0012 §10, fixtures `go-work-multi-module/` + `go-work-phantom-dep/`): `use` directives → `workspace_members`, sibling-module imports resolve as `WorkspaceMember` (reachability + the `require` contract, which go.work does not waive). A path-renaming `replace` directive remains the one recorded divergence — not modeled |
 
 ## 6. Conformance fixtures (shared harness, RFC 0002 §8)
 
@@ -276,8 +282,9 @@ reachability findings.
 Most of this section graduated into **RFC 0012 (Precise Reference Semantics & Visibility)**,
 which owns the cross-language design for each — this list now just points there:
 
-1. `go.work` multi-module workspace support → RFC 0012 §10 (adapter work; one recorded
-   divergence for path-renaming `replace` directives).
+1. ~~`go.work` multi-module workspace support~~ — **fixed** (RFC 0012 §10, landed: go.work
+   claimed and parsed, sibling-module imports resolve as `WorkspaceMember` with the full
+   dependency contract; the path-renaming `replace` divergence stands recorded, not modeled).
 2. `RefKind` differentiation (`TypeUse`/`Extend`) → RFC 0012 §5. Go's mapping is nearly free
    (`type_identifier` *is* the type-position signal; embeddings → `Extend`).
 3. Package-level `internal-only` boundary awareness → RFC 0012 §6 (the visibility ladder as
