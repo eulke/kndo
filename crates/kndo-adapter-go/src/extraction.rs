@@ -19,12 +19,12 @@ use smol_str::SmolStr;
 use tree_sitter::Node;
 
 pub fn extract(path: &str, content: &[u8]) -> FileFacts {
-    let mut out = FileFacts {
-        unit: Some(SmolStr::new(kndo_adapter_toolkit::paths::dirname(path))),
-        ..FileFacts::default()
-    };
+    let mut out = FileFacts::default();
 
     let Some(tree) = crate::parsing::parse(content) else {
+        // No tree means no `package` clause either — a bare-directory unit key is the honest
+        // degenerate (still groups with nothing wrongly: real Go files always carry a clause).
+        out.unit = Some(SmolStr::new(kndo_adapter_toolkit::paths::dirname(path)));
         out.diagnostics.push(Diagnostic {
             level: DiagnosticLevel::Warn,
             path: None,
@@ -43,7 +43,22 @@ pub fn extract(path: &str, content: &[u8]) -> FileFacts {
         });
     }
 
-    let is_main_package = package_name(root, content).as_deref() == Some("main");
+    let declared_package = package_name(root, content);
+    // Unit key = `dir#declared-package-name` (RFC 0012 §8): Go's *real* resolution unit is the
+    // package, and one directory can legally hold two — `package foo` plus the external test
+    // package `package foo_test`. Folding the declared name into the (opaque-to-the-core) key
+    // splits them with zero core changes: a `foo_test` file no longer resolves `foo`'s
+    // unexported symbols by proximity, exactly Go's own rule (it must import `foo` like any
+    // other consumer). A file with no parseable package clause keys on the directory alone.
+    out.unit = Some(match &declared_package {
+        Some(name) => SmolStr::new(format!(
+            "{}#{name}",
+            kndo_adapter_toolkit::paths::dirname(path)
+        )),
+        None => SmolStr::new(kndo_adapter_toolkit::paths::dirname(path)),
+    });
+
+    let is_main_package = declared_package.as_deref() == Some("main");
     // Root-worthiness by path, computed once (docs/adapters/go.md §0, §4): `internal/` is
     // compiler-enforced, not externally consumed by definition, so its exports aren't
     // auto-promoted; a test file's declarations are never library-mode public API either.
@@ -524,11 +539,26 @@ mod tests {
     }
 
     #[test]
-    fn unit_is_the_file_s_own_directory() {
+    fn unit_is_directory_plus_declared_package_name() {
         let facts = extract("pkg/sub/a.go", b"package sub\n");
-        assert_eq!(facts.unit.as_deref(), Some("pkg/sub"));
+        assert_eq!(facts.unit.as_deref(), Some("pkg/sub#sub"));
         let facts = extract("a.go", b"package main\n");
-        assert_eq!(facts.unit.as_deref(), Some(""));
+        assert_eq!(facts.unit.as_deref(), Some("#main"));
+    }
+
+    #[test]
+    fn external_test_package_gets_its_own_unit() {
+        // RFC 0012 §8, closing docs/adapters/go.md §1.1's documented imprecision: one
+        // directory, two Go packages — `foo` and its external test package `foo_test` — must
+        // be two units, so the test package can't resolve foo's unexported symbols by
+        // proximity (Go's own rule: it imports foo like any other consumer).
+        let internal = extract("pkg/a.go", b"package foo\n");
+        let external = extract("pkg/a_test.go", b"package foo_test\n\nimport \"testing\"\n");
+        let in_package_test = extract("pkg/b_test.go", b"package foo\n\nimport \"testing\"\n");
+        assert_eq!(internal.unit.as_deref(), Some("pkg#foo"));
+        assert_eq!(external.unit.as_deref(), Some("pkg#foo_test"));
+        // An ordinary in-package test file DOES share the unit — it sees unexported symbols.
+        assert_eq!(in_package_test.unit, internal.unit);
     }
 
     #[test]

@@ -86,15 +86,15 @@ same-*package* and the symbol could still be unexported. Under-reporting, never 
 consistent with the codebase's "never falsely accuse" stance — and a fix (once wanted) is
 localized to `internal_only.rs` gaining a package-aware boundary check, not this adapter.
 
-**1.1 Why `unit` had to exist first**: see §0. Set to the file's own directory
-(`dirname(file.path)`; the module root itself is `""`) for every claimed `.go` file, including
-`_test.go` files. The one known imprecision this accepts: Go's "external test package" convention
-(`package foo_test` in a `_test.go` file, used to avoid import cycles in table-driven tests) is,
-strictly, a *different* package from `foo` despite sharing a directory — this adapter does not
-parse the `package` clause's name to split them into separate units. In practice this means an
-external test file could theoretically resolve an unqualified name against the internal package's
-private symbols when it shouldn't be able to — extremely unlikely to produce a wrong finding in
-real code (names would have to collide), flagged here rather than silently accepted.
+**1.1 Why `unit` had to exist first**: see §0. Set to `dir#declared-package-name` (RFC 0012
+§8) for every claimed `.go` file — the directory *plus* the `package` clause's name, because
+Go's real resolution unit is the package and one directory legally holds two: `package foo` and
+its external test package `package foo_test` (the import-cycle-avoidance convention). Folding
+the declared name into the opaque key splits them with zero core changes: a `foo_test` file
+resolves none of `foo`'s unexported symbols by proximity — exactly Go's own rule (it imports
+`foo` like any other consumer) — while an ordinary in-package `_test.go` (`package foo`) shares
+the unit and sees them, also exactly Go's rule. A file whose package clause doesn't parse keys
+on the directory alone (degenerate, groups with nothing wrongly).
 
 ## 2. Extraction
 
@@ -288,8 +288,8 @@ which owns the cross-language design for each — this list now just points ther
 5. Method-call resolution (`T.Method` declarations vs bare `Method` references — unexported
    methods currently false-positive as `unused:method`, found reviewing this adapter's debt)
    → RFC 0012 §3 (`member_of` + visibility-scoped duck-typed fallback). Landing first.
-6. External test packages sharing their directory's unit (§1.1's documented imprecision)
-   → RFC 0012 §8: unit key becomes `dir#declared-package-name`. Adapter-only fix.
+6. ~~External test packages sharing their directory's unit~~ — **fixed** (RFC 0012 §8,
+   landed with the `dir#declared-package-name` unit key; §1.1 documents the current rule).
 7. Unaliased-import alias guessed from the last path segment (`gopkg.in/yaml.v3` → `yaml`)
    → RFC 0012 §9 (qualified-reference resolution core-side; deliberately last).
 

@@ -7,8 +7,10 @@ use kndo_adapter_go::GoAdapter;
 use kndo_core::{analysis, graph};
 use std::fs;
 
-fn multi_file_module() -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join("kndo-go-assembly-regression");
+/// Each caller passes a distinct name: tests run in parallel, and a shared directory races
+/// one test's `remove_dir_all` against another's assemble (observed as a real flake).
+fn multi_file_module(name: &str) -> std::path::PathBuf {
+    let dir = std::env::temp_dir().join(format!("kndo-go-assembly-{name}"));
     let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(dir.join("sub")).unwrap();
     fs::write(
@@ -46,7 +48,7 @@ fn a_root_that_is_only_a_symbol_does_not_strand_its_file_or_its_callees() {
     // and by the same mechanism, `Greeting`'s file-attributed call to the same-package sibling
     // `format` never propagated either. Both `main.go` and `sub/format.go` read as fully
     // unreachable despite genuinely being used.
-    let dir = multi_file_module();
+    let dir = multi_file_module("symbol-root");
     let (g, diagnostics) = graph::assemble(&dir, &[Box::new(GoAdapter)]).unwrap();
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
     let (findings, _) = analysis::run_all(&g);
@@ -82,7 +84,7 @@ fn importing_the_module_s_own_subpackage_is_never_a_phantom_dependency() {
     // cannot `require` itself), so it read as `undeclared` ("phantom dependency"). Go has no
     // per-sibling declaration concept at all for its own subpackages; fixed by resolving to a
     // plain `Resolution::File` instead (docs/adapters/go.md, resolution.rs's `resolve_into_package`).
-    let dir = multi_file_module();
+    let dir = multi_file_module("own-subpackage");
     let (g, diagnostics) = graph::assemble(&dir, &[Box::new(GoAdapter)]).unwrap();
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
     let (findings, _) = analysis::run_all(&g);

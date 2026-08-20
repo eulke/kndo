@@ -1614,7 +1614,10 @@ mod tests {
         let dir = project(
             "member-fallback-unit",
             &[
-                ("pkg/a.mock", "unit pkg\ndecl caller\nref helper\nroot-decl caller"),
+                (
+                    "pkg/a.mock",
+                    "unit pkg\ndecl caller\nref helper\nroot-decl caller",
+                ),
                 ("pkg/b.mock", "unit pkg\nmember-decl T helper"),
             ],
         );

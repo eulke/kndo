@@ -136,8 +136,7 @@ pub fn resolve(graph: &ProjectGraph, selector: &Selector) -> Result<Resolved, Re
                 .enumerate()
                 .filter(|(_, s)| {
                     s.file == file
-                        && (s.name.as_str() == name.as_str()
-                            || s.qualified_name() == name.as_str())
+                        && (s.name.as_str() == name.as_str() || s.qualified_name() == name.as_str())
                 })
                 .map(|(i, _)| SymbolId(i as u32))
                 .collect();
