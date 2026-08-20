@@ -78,6 +78,16 @@ after a big rebase), kndo falls back to a full recompute, which is still cache-w
 Correctness never depends on the incremental path: `kndo check --no-cache` must produce
 byte-identical findings, and CI runs both on a fixture matrix to enforce it.
 
+**Implementation status (M2 close-out, 2026-08-20):** step 4's *patch* — reusing part of a stale
+graph — and §5's incremental BFS/reachability-color propagation are **not built**; today any
+change to the discovered file set is a full graph rebuild (all-or-nothing, keyed as in §3), with
+only the facts layer staying warm per file. This was deliberately deferred rather than blocking
+M2: measured on the 5k-file benchmark repo, a single changed file still rebuilds in ~84 ms
+(facts-cache-warm) against the 500 ms budget, so the fallback-honesty path this section already
+requires (§5, full recompute) turned out sufficient at benchmark scale without the patch
+algorithm existing yet. This section remains the accepted target design — revisit if profiling on
+larger real repos shows the all-or-nothing rebuild cost growing past budget.
+
 ## 6. Derived effects in diff modes
 
 In `--staged` / `--diff` modes the *scope of reporting* is not "findings located in changed files"

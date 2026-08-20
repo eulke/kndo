@@ -306,18 +306,22 @@ impl Engine {
 - `ConfigOverrides.use_cache` (default `true`) is the `--no-cache` switch (RFC 0004 §4), gating
   two cache layers (`cache.rs`, ADR 0004): the facts layer (`.kndo/cache/facts/`) skips
   re-parsing any file whose content hash already has a current entry; the graph layer
-  (`.kndo/cache/graph.bin`) skips claim/extract/resolve/link *entirely* when a single digest —
-  folding in the whole discovered file set, every registered adapter's id/version, and the core
-  graph-schema version — matches the last snapshot exactly. There is no partial reuse yet: a
-  graph-snapshot miss falls through to full assembly (itself facts-cache-warm for whichever
-  files didn't change). `RunResult.cache_enabled`/`cache_hits` are how a frontend learns whether
-  a run was actually warm — `run.cache` in the JSON envelope is `"warm"` only when the cache was
-  on *and* served at least one file or the whole graph; an enabled-but-empty cache (first run, or
-  a change big enough that nothing hit) is honestly `"cold"`. Correctness never depends on this:
-  `--no-cache` must produce byte-identical findings (CI-enforced, RFC 0004 §4). The findings
-  snapshot, the warm-run *patch* algorithm (reusing part of a stale graph), and dirty-region
-  incrementality (RFC 0004 §2, §4–6) aren't implemented yet — a changed file forces a full
-  rebuild, not a targeted patch.
+  (`.kndo/cache/graphs/<key>.bin`, content-addressed like facts entries so full mode's working
+  tree and diff modes' before/after tree states coexist instead of evicting each other) skips
+  claim/extract/resolve/link *entirely* when a single digest — folding in the whole discovered
+  file set, every registered adapter's id/version, and the core graph-schema version — matches a
+  stored snapshot exactly. There is no partial reuse yet: a graph-snapshot miss falls through to
+  full assembly (itself facts-cache-warm for whichever files didn't change). `RunResult
+  .cache_enabled`/`cache_hits` are how a frontend learns whether a run was actually warm —
+  `run.cache` in the JSON envelope is `"warm"` only when the cache was on *and* served at least
+  one file or the whole graph; an enabled-but-empty cache (first run, or a change big enough that
+  nothing hit) is honestly `"cold"`. Correctness never depends on this: `--no-cache` must produce
+  byte-identical findings (verified on the fixture matrix and the 5k-file benchmark; not yet
+  wired into a CI workflow — RFC 0004 §4). The findings snapshot, the warm-run *patch* algorithm
+  (reusing part of a stale graph), and dirty-region incrementality (RFC 0004 §2, §4–6) aren't
+  implemented yet — a changed file forces a full rebuild, not a targeted patch; measured
+  sufficient for the M2 budget at benchmark scale (ROADMAP M2 close-out note), revisit if a
+  larger real repo's rebuild cost grows past budget.
 
 ## 6. Stability tiers
 

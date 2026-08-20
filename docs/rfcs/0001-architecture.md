@@ -117,8 +117,13 @@ Validated empirically by [spike 0001](../spikes/0001-performance.md): measured w
 | Reporting | 50 ms | |
 
 Cold full runs are allowed seconds (parallel across cores) — they build the cache that makes every
-subsequent run warm. The 500 ms contract is for the *warm* path and is enforced by a benchmark
-suite in CI from milestone M2 (ROADMAP). The full parallelism model — per-phase strategy,
+subsequent run warm. The 500 ms contract is for the *warm* path, intended to be enforced by a
+benchmark suite in CI from milestone M2 (ROADMAP); as of M2's close-out the budget is measured
+manually (well under budget — see ROADMAP's M2 note) and the CI wiring itself is deferred. The
+phase breakdown above is the target allocation assuming the RFC 0004 §4-5 patch/dirty-region path;
+that path isn't built yet either (same M2 note) — today "Graph patch + analyses" is a full
+recompute, still fast enough at benchmark scale via the facts cache. The full parallelism model —
+per-phase strategy,
 determinism under any thread count, adaptive sequential fallback, and the CI performance gates —
 is specified in [RFC 0008](0008-performance-and-parallelism.md).
 
