@@ -34,6 +34,8 @@ pub fn default_adapters() -> Vec<Box<dyn LanguageAdapter>> {
         adapters.push(Box::new(kndo_adapter_js::JsTsAdapter));
         #[cfg(feature = "go")]
         adapters.push(Box::new(kndo_adapter_go::GoAdapter));
+        #[cfg(feature = "rust")]
+        adapters.push(Box::new(kndo_adapter_rust::RustAdapter));
         adapters
     }
 }

@@ -82,7 +82,17 @@ emit member references that land in the duck-typed member fallback (RFC 0012 §3
 `Deref`-based method resolution is exactly the case that fallback exists for. Type positions
 → `TypeUse`; `impl Trait for T` → `Implement`. Attribute derives (`#[derive(Serialize)]`)
 emit `TypeUse` references to each derive name at `probable` — that is what keeps a
-derive-only dependency honest in dependency hygiene.
+derive-only dependency honest in dependency hygiene. **Attribute arguments** more generally
+are token soup that may name real items: `a::b::C` runs are reconstructed and emitted like
+body paths (`#[rkyv(with = crate::rkyv_support::SmolStrAsString)]` imports the module and
+`TypeUse`-references the item; `#[derive(serde::Serialize)]` keeps `serde` used), at item
+level and field/variant level alike — a struct alive only through a field attribute stays
+alive. Lint-control and non-item attributes (`allow`/`warn`/`deny`/`forbid`/`expect`,
+`doc`, `cfg`/`cfg_attr`) are excluded: their arguments are lint paths and config keys, and
+`#[allow(clippy::x)]` must never invent a `clippy` dependency. **Trait items inherit the
+trait's visibility** (the same language rule as enum variants): a `pub trait`'s methods sit
+on the public rung, which is what lets the member fallback see their cross-file call sites
+and what places them on a published crate's API surface.
 
 **Imports** — `use` declarations, mapped to the contract like this:
 
@@ -103,7 +113,7 @@ segment paths. All `use` edges are `certain` — Rust has no bundler ambiguity.
 
 | Construct | Effect |
 |-----------|--------|
-| `name!(…)` invocation | a `certain` reference to `name` (keeps `macro_rules!` alive), plus a scan of the token tree for identifier tokens → `possible` references (catches `format!("{}", user)` keeping `user`'s referents alive). **No wildcard per macro** — that would drown every Rust file in `possible` edges |
+| `name!(…)` invocation | a `certain` reference to `name` (keeps `macro_rules!` alive), plus a scan of the token tree: `a::b` token runs are reconstructed and routed through the body-path rule — `print!("{}", render::render_query(x))` binds `render_query` through the `use`-established qualifier exactly as it would outside the macro — and lone identifier tokens stay plain reads (`format!("{}", user)` keeps `user`'s referents alive). String literals inside token trees are scanned for Rust 2021 **inline format captures**: `format!("v{VERSION}")` reads `VERSION` (`{{` escapes and positional `{}`/`{0}` contribute nothing). **No wildcard per macro** — that would drown every Rust file in `possible` edges |
 | `include!("lit")` / `include_str!` / `include_bytes!` with a literal | `probable` file edge |
 | `#[no_mangle]` / `#[export_name]` / `pub extern "C" fn` | in-source `Production` root at `probable` — an FFI consumer exists outside the graph |
 | `#[test]` / `#[bench]` | in-source `Test` root at `certain` — the runner is the consumer |

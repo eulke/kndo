@@ -11,6 +11,7 @@ publish.workspace = true
 kndo-core = { path = "../kndo-core" }
 kndo-adapter-js = { path = "../kndo-adapter-js", optional = true }
 kndo-adapter-go = { path = "../kndo-adapter-go", optional = true }
+kndo-adapter-rust = { path = "../kndo-adapter-rust", optional = true }
 
 [dev-dependencies]
 # "schema" here is test-only, to detect a stale committed schema — the shipped binary above
@@ -22,6 +23,7 @@ serde_json = { workspace = true }
 [features]
 # Every first-party adapter is a feature so embedders can build slimmer binaries
 # (ADR 0006); the default is the full product.
-default = ["js", "go"]
+default = ["js", "go", "rust"]
 js = ["dep:kndo-adapter-js"]
 go = ["dep:kndo-adapter-go"]
+rust = ["dep:kndo-adapter-rust"]

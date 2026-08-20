@@ -326,10 +326,36 @@ no-op — RFC 0004 §4's target. The dirty-fraction threshold is 5%, measured (3
 dirty propagation, incremental recoloring (13 ms at 50k), file-set changes.
 
 ## M5 — Remaining languages + plugin system GA
-Adapters: Java, Kotlin, Swift, Rust, JSON, CSS (order: Java → Kotlin share infra; Rust; Swift;
-CSS+JSON close cross-language edges). First-party ecosystem plugins for detected frameworks
-(initial set per RFC 0003 §3). **WASM plugin/adapter ABI** (`kndo-plugin-api`) published with a
-sample external plugin + compliance suite.
+Adapters: Java, Kotlin, Swift, Rust, JSON, CSS (Rust moved first — dogfooding on kndo itself is
+the highest-signal corpus; then Java → Kotlin share infra; Swift; CSS+JSON close cross-language
+edges). First-party ecosystem plugins for detected frameworks (initial set per RFC 0003 §3).
+**WASM plugin/adapter ABI** (`kndo-plugin-api`) published with a sample external plugin +
+compliance suite.
+
+### M5 progress — Rust adapter ✅ (landed 2026-08-20)
+
+`kndo-adapter-rust` per docs/adapters/rust.md: module tree as the file graph (`mod foo;` →
+`self::foo`, `#[path]` → `file:` specifiers), two-step tail rule, `crate`/`self`/`super`
+anchors, bare-segment precedence (stdlib → workspace member with `_`↔`-` normalization and
+self-crate detection → declared dep → local-module retry → `Dependency` probable fallback),
+Cargo.toml extraction with the `workspace = true` inheritance sentinel, bins rooting
+unconditionally and lib entries only when publishable, `#[cfg(test)]` subtrees as inline test
+roots, trait-impl methods rooted for dispatch, and entry-liveness imports keeping crate
+entries alive under deep paths. Assembly grew the **library-surface fixpoint** (phase 2.7,
+shared semantics with JS): `pub mod` chains and bare `export * from` re-exports extend a
+published package's surface transitively, with patch-side parity in `try_patch` — this lifted
+the JS star-reexport limitation recorded in docs/adapters/js-ts.md §5.
+
+The dogfood loop (kndo on kndo, ~70 files, ~290 ms cold) drove findings 1100 → 324 through
+adapter/core precision fixes rather than suppression — primitives-as-deps, aliased-qualifier
+re-probing, attribute-argument path reconstruction (item and field level, lint attributes
+excluded), trait-visibility inheritance, struct-literal initializer reads, macro token-tree
+path reconstruction, and Rust 2021 inline format captures; core gained the `test_root_symbols`
+exemption (a test being test-reachable is a test, not a finding). Every surviving category was
+audited: the remaining `unused`/`test-only` entries are true statements about the code.
+Bench gate note: the recorded perf baseline predates this container's current load — HEAD
+itself misses it by +30% — so parity was verified by interleaved A/B against HEAD (overlapping
+ranges, medians favor the adapter build); warm scenarios are unchanged or better.
 
 **Exit:** all eight launch languages pass conformance; a third-party demo adapter (not in-tree)
 runs against the released binary; budget still holds with all adapters active.

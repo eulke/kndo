@@ -7,6 +7,7 @@ members = [
     "crates/kndo-adapter-toolkit",
     "crates/kndo-adapter-js",
     "crates/kndo-adapter-go",
+    "crates/kndo-adapter-rust",
     "xtask",
 ]
 exclude = ["spikes/perf"]
@@ -26,6 +27,8 @@ rayon = "1"
 tree-sitter = "0.25"
 tree-sitter-typescript = "0.23"
 tree-sitter-go = "0.25"
+tree-sitter-rust = "0.24"
+toml = "0.8"
 serde_json = "1"
 serde = { version = "1", features = ["derive"] }
 bincode = "1"
