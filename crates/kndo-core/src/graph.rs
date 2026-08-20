@@ -1134,345 +1134,385 @@ pub fn assemble_from_source(
 
     // Phase 3b — imports, import-bindings, references, and diagnostics. Every file's symbol
     // table is complete now (phase 3a), so cross-file lookups are safe regardless of
-    // discovery order.
+    // discovery order — which is also what makes this phase embarrassingly parallel
+    // (RFC 0008 §2: "per-import resolution ... resolved concurrently"): every table it reads
+    // is immutable by now, and each file's contributions collect into a private
+    // `ResolvedFile` merged below in FileId order (§4: parallel compute, deterministic
+    // reduce). `DependencyId` assignment stays in the sequential merge — ids are
+    // first-appearance-in-file-order, exactly as the sequential loop assigned them.
+    struct ResolvedFile {
+        edges: Vec<Edge>,
+        /// `(name, confidence, span, from, provenance)` — becomes `ImportsDependency` in the
+        /// merge once the name has a deterministic id.
+        dep_imports: Vec<(
+            SmolStr,
+            Confidence,
+            crate::adapter::Span,
+            FileId,
+            Provenance,
+        )>,
+        diagnostics: Vec<Diagnostic>,
+        suppressions: Vec<(FileId, crate::adapter::RawSuppression)>,
+    }
     let mut dependencies = Vec::new();
     let mut dep_index: HashMap<SmolStr, DependencyId> = HashMap::default();
     let mut suppressions: Vec<(FileId, crate::adapter::RawSuppression)> = Vec::new();
 
-    for (i, slot) in claimed_per_file.iter().enumerate() {
-        let Some(claimed) = slot else { continue };
-        let file_id = FileId(i as u32);
-        let adapter = &adapters[claimed.adapter_index];
-        let provenance = || Provenance::Adapter(adapter.descriptor().id.clone());
-
-        // Local name -> target symbol, from this file's import bindings — the fact that lets a
-        // `RawReference` to an *imported* name resolve cross-file instead of only same-file.
-        let mut bound_symbols: HashMap<SmolStr, SymbolId> = HashMap::default();
-        // Qualifier -> resolved in-repo target file (RFC 0012 §9): the import's explicit
-        // `local_alias`, or — unaliased — the *target's own* declared `unit_name`. This is
-        // where the dir≠package problem dissolves: only assembly holds both sides, so the
-        // qualifier for `gopkg.in/yaml.v3`-style imports comes from the target's `package`
-        // clause, never from a guess about the specifier. First import wins on a duplicate
-        // qualifier (Go rejects that program anyway — deterministic either way).
-        let mut qualifier_targets: HashMap<SmolStr, FileId> = HashMap::default();
-
-        for imp in &claimed.facts.imports {
-            let spec = ImportSpec {
-                specifier: imp.specifier.clone(),
-                from: files[i].path.clone(),
-            };
-            // A workspace-member resolution is BOTH targets at once (RFC 0011 §4): the
-            // concrete internal file (reachability is real, cross-package) and the named
-            // dependency (the declaration contract is real too — undeclared siblings are
-            // phantom internal dependencies, declared-but-unimported ones are unused).
-            // Stdlib: not a graph node — there is nothing to point an edge at. Unresolved:
-            // resolution is intentionally incomplete right now (self-reference imports,
-            // exports maps — spec §3); turning it into a finding is the future `unresolved`
-            // analysis's job, not assembly's (RFC 0005 §5).
-            let (file_target, dep_target) = match adapter.resolve(&spec, &ctx) {
-                Resolution::File(path, confidence) => (Some((path, confidence)), None),
-                Resolution::Dependency(name, confidence) => (None, Some((name, confidence))),
-                Resolution::WorkspaceMember {
-                    name,
-                    target,
-                    confidence,
-                } => (Some((target, confidence)), Some((name, confidence))),
-                Resolution::Stdlib | Resolution::Unresolved => (None, None),
+    let resolved_files: Vec<Option<ResolvedFile>> = claimed_per_file
+        .par_iter()
+        .enumerate()
+        .map(|(i, slot)| {
+            let claimed = slot.as_ref()?;
+            let file_id = FileId(i as u32);
+            let adapter = &adapters[claimed.adapter_index];
+            let provenance = || Provenance::Adapter(adapter.descriptor().id.clone());
+            let mut out = ResolvedFile {
+                edges: Vec::new(),
+                dep_imports: Vec::new(),
+                diagnostics: Vec::new(),
+                suppressions: Vec::new(),
             };
 
-            if let Some((path, confidence)) = file_target {
-                // Resolvers only ever match against `ctx`'s known-files set, so this
-                // must be Some — defensive skip, not a silent contract violation, if not.
-                if let Some(&to) = file_index.get(&path) {
-                    edges.push(Edge {
-                        kind: EdgeKind::ImportsFile { from: file_id, to },
+            // Local name -> target symbol, from this file's import bindings — the fact that lets a
+            // `RawReference` to an *imported* name resolve cross-file instead of only same-file.
+            let mut bound_symbols: HashMap<SmolStr, SymbolId> = HashMap::default();
+            // Qualifier -> resolved in-repo target file (RFC 0012 §9): the import's explicit
+            // `local_alias`, or — unaliased — the *target's own* declared `unit_name`. This is
+            // where the dir≠package problem dissolves: only assembly holds both sides, so the
+            // qualifier for `gopkg.in/yaml.v3`-style imports comes from the target's `package`
+            // clause, never from a guess about the specifier. First import wins on a duplicate
+            // qualifier (Go rejects that program anyway — deterministic either way).
+            let mut qualifier_targets: HashMap<SmolStr, FileId> = HashMap::default();
+
+            for imp in &claimed.facts.imports {
+                let spec = ImportSpec {
+                    specifier: imp.specifier.clone(),
+                    from: files[i].path.clone(),
+                };
+                // A workspace-member resolution is BOTH targets at once (RFC 0011 §4): the
+                // concrete internal file (reachability is real, cross-package) and the named
+                // dependency (the declaration contract is real too — undeclared siblings are
+                // phantom internal dependencies, declared-but-unimported ones are unused).
+                // Stdlib: not a graph node — there is nothing to point an edge at. Unresolved:
+                // resolution is intentionally incomplete right now (self-reference imports,
+                // exports maps — spec §3); turning it into a finding is the future `unresolved`
+                // analysis's job, not assembly's (RFC 0005 §5).
+                let (file_target, dep_target) = match adapter.resolve(&spec, &ctx) {
+                    Resolution::File(path, confidence) => (Some((path, confidence)), None),
+                    Resolution::Dependency(name, confidence) => (None, Some((name, confidence))),
+                    Resolution::WorkspaceMember {
+                        name,
+                        target,
                         confidence,
-                        source: provenance(),
-                        span: Some(imp.span),
-                    });
-                    for binding in &imp.bindings {
-                        let exported_name = binding
-                            .imported
-                            .clone()
-                            .unwrap_or_else(|| SmolStr::new("default"));
-                        // Same-file first; then the target file's own unit (package-scoped
-                        // languages, RFC 0002 §2 `FileFacts::unit`) — a Go import names a
-                        // *package* (a directory of files), and `Resolution::File`'s target is
-                        // necessarily just one representative file in it (contracts §2 has no
-                        // multi-file resolution target), so the symbol a qualified access binds
-                        // to may live in any of that directory's other files.
-                        let symbol_id = symbol_by_name_per_file[to.0 as usize]
-                            .get(&exported_name)
-                            .or_else(|| {
-                                file_unit[to.0 as usize].as_ref().and_then(|unit| {
-                                    symbol_by_name_per_unit
-                                        .get(unit)
-                                        .and_then(|t| t.get(&exported_name))
-                                })
-                            })
-                            .copied();
-                        if let Some(symbol_id) = symbol_id {
-                            bound_symbols.insert(binding.local.clone(), symbol_id);
-                        }
-                    }
-                    let qualifier = imp.local_alias.clone().or_else(|| {
-                        claimed_per_file[to.0 as usize]
-                            .as_ref()
-                            .and_then(|c| c.facts.unit_name.clone())
-                    });
-                    if let Some(q) = qualifier {
-                        qualifier_targets.entry(q).or_insert(to);
-                    }
-                    // The namespace escaped static tracking (`ns[key]`, ns passed
-                    // along) — every symbol in the target is plausibly used
-                    // (RFC 0005 §1: "wildcard over that namespace's exports").
-                    if imp.opaque_namespace_use {
-                        edges.push(Edge {
-                            kind: EdgeKind::Wildcard { from: to },
-                            confidence: Confidence::Possible,
+                    } => (Some((target, confidence)), Some((name, confidence))),
+                    Resolution::Stdlib | Resolution::Unresolved => (None, None),
+                };
+
+                if let Some((path, confidence)) = file_target {
+                    // Resolvers only ever match against `ctx`'s known-files set, so this
+                    // must be Some — defensive skip, not a silent contract violation, if not.
+                    if let Some(&to) = file_index.get(&path) {
+                        out.edges.push(Edge {
+                            kind: EdgeKind::ImportsFile { from: file_id, to },
+                            confidence,
                             source: provenance(),
                             span: Some(imp.span),
                         });
-                    }
-                }
-            }
-            if let Some((name, confidence)) = dep_target {
-                let to = *dep_index.entry(name.clone()).or_insert_with(|| {
-                    let id = DependencyId(dependencies.len() as u32);
-                    dependencies.push(DependencyNode { name: name.clone() });
-                    id
-                });
-                edges.push(Edge {
-                    kind: EdgeKind::ImportsDependency { from: file_id, to },
-                    confidence,
-                    source: provenance(),
-                    span: Some(imp.span),
-                });
-            }
-        }
-
-        // Edge attribution (RFC 0012 §4): a reference carrying `within` is attributed to the
-        // enclosing symbol it executes inside — resolved against this file's own declarations
-        // (bare names, then the qualified member table, same convention as member root
-        // targets). **Any miss falls back to file attribution — today's over-approximation,
-        // the safe direction** (regression-tested; this fallback is the design's load-bearing
-        // safety property). With symbol attribution, a dead function's calls no longer keep
-        // its callees alive: RFC 0005 §1's execution rule ("a symbol-attributed reference
-        // fires only when its symbol is reached") plus its module-load rule make transitive
-        // death visible. `within: None` — module-level code, and every adapter that doesn't
-        // emit the field — keeps file attribution: load-time references fire when the file
-        // loads, exactly as before.
-        //
-        // Resolution order for the *target*: bound (imported) names first, then same-file
-        // declarations, then same-unit siblings (`FileFacts::unit` — Go's package-scoped
-        // visibility, absent for file-scoped languages) — real JS/TS can't have both of the
-        // first two share a name at module scope, so that ordering is never actually contested
-        // by valid code, just a defensive default; the unit fallback is the one genuinely load-
-        // bearing case (a sibling file in the same Go package, no import involved at all).
-        // No lookup models block/parameter shadowing: a same-named local could (incorrectly,
-        // but safely — see module docs) resolve to an unrelated declaration.
-        for reference in &claimed.facts.references {
-            let from = reference
-                .within
-                .as_ref()
-                .and_then(|within| {
-                    symbol_by_name_per_file[i]
-                        .get(within)
-                        .or_else(|| symbol_by_qualified_per_file[i].get(within.as_str()))
-                })
-                .map(|&s| NodeRef::Symbol(s))
-                .unwrap_or(NodeRef::File(file_id));
-
-            // Qualified references (RFC 0012 §9): `q.name` where `q` matches an import
-            // qualifier resolves `name` inside that target (its own declarations, then its
-            // unit siblings — a Go import names a package, and the symbol may live in any of
-            // the package's files) at Certain. Hit or miss, a matched qualifier *settles*
-            // resolution — the name lives in that target or nowhere; this file's own tables
-            // are never candidates. A qualifier matching no import is a receiver expression
-            // (`t.helper()`): the name is a member access by construction, so it skips the
-            // free-name tables and goes straight to the duck-typed member fallback below —
-            // where before §9 a same-file free function sharing the member's name would have
-            // (incorrectly, if safely) captured the reference.
-            let mut is_receiver_access = false;
-            if let Some(q) = &reference.scope_context {
-                match qualifier_targets.get(q) {
-                    Some(&target_file) => {
-                        let t = target_file.0 as usize;
-                        let sym = symbol_by_name_per_file[t]
-                            .get(&reference.name)
-                            .or_else(|| {
-                                file_unit[t].as_ref().and_then(|unit| {
-                                    symbol_by_name_per_unit
-                                        .get(unit)
-                                        .and_then(|tab| tab.get(&reference.name))
+                        for binding in &imp.bindings {
+                            let exported_name = binding
+                                .imported
+                                .clone()
+                                .unwrap_or_else(|| SmolStr::new("default"));
+                            // Same-file first; then the target file's own unit (package-scoped
+                            // languages, RFC 0002 §2 `FileFacts::unit`) — a Go import names a
+                            // *package* (a directory of files), and `Resolution::File`'s target is
+                            // necessarily just one representative file in it (contracts §2 has no
+                            // multi-file resolution target), so the symbol a qualified access binds
+                            // to may live in any of that directory's other files.
+                            let symbol_id = symbol_by_name_per_file[to.0 as usize]
+                                .get(&exported_name)
+                                .or_else(|| {
+                                    file_unit[to.0 as usize].as_ref().and_then(|unit| {
+                                        symbol_by_name_per_unit
+                                            .get(unit)
+                                            .and_then(|t| t.get(&exported_name))
+                                    })
                                 })
-                            })
-                            .copied();
-                        if let Some(to) = sym {
-                            edges.push(Edge {
-                                kind: EdgeKind::References {
-                                    from,
-                                    to,
-                                    kind: reference.kind,
-                                },
-                                confidence: Confidence::Certain,
+                                .copied();
+                            if let Some(symbol_id) = symbol_id {
+                                bound_symbols.insert(binding.local.clone(), symbol_id);
+                            }
+                        }
+                        let qualifier = imp.local_alias.clone().or_else(|| {
+                            claimed_per_file[to.0 as usize]
+                                .as_ref()
+                                .and_then(|c| c.facts.unit_name.clone())
+                        });
+                        if let Some(q) = qualifier {
+                            qualifier_targets.entry(q).or_insert(to);
+                        }
+                        // The namespace escaped static tracking (`ns[key]`, ns passed
+                        // along) — every symbol in the target is plausibly used
+                        // (RFC 0005 §1: "wildcard over that namespace's exports").
+                        if imp.opaque_namespace_use {
+                            out.edges.push(Edge {
+                                kind: EdgeKind::Wildcard { from: to },
+                                confidence: Confidence::Possible,
                                 source: provenance(),
-                                span: Some(reference.span),
+                                span: Some(imp.span),
                             });
                         }
-                        continue;
                     }
-                    None => is_receiver_access = true,
+                }
+                if let Some((name, confidence)) = dep_target {
+                    out.dep_imports
+                        .push((name, confidence, imp.span, file_id, provenance()));
                 }
             }
 
-            let target = if is_receiver_access {
-                None
-            } else {
-                bound_symbols
-                    .get(&reference.name)
-                    .or_else(|| symbol_by_name_per_file[i].get(&reference.name))
-                    .or_else(|| {
-                        file_unit[i].as_ref().and_then(|unit| {
-                            symbol_by_name_per_unit
-                                .get(unit)
-                                .and_then(|t| t.get(&reference.name))
-                        })
+            // Edge attribution (RFC 0012 §4): a reference carrying `within` is attributed to the
+            // enclosing symbol it executes inside — resolved against this file's own declarations
+            // (bare names, then the qualified member table, same convention as member root
+            // targets). **Any miss falls back to file attribution — today's over-approximation,
+            // the safe direction** (regression-tested; this fallback is the design's load-bearing
+            // safety property). With symbol attribution, a dead function's calls no longer keep
+            // its callees alive: RFC 0005 §1's execution rule ("a symbol-attributed reference
+            // fires only when its symbol is reached") plus its module-load rule make transitive
+            // death visible. `within: None` — module-level code, and every adapter that doesn't
+            // emit the field — keeps file attribution: load-time references fire when the file
+            // loads, exactly as before.
+            //
+            // Resolution order for the *target*: bound (imported) names first, then same-file
+            // declarations, then same-unit siblings (`FileFacts::unit` — Go's package-scoped
+            // visibility, absent for file-scoped languages) — real JS/TS can't have both of the
+            // first two share a name at module scope, so that ordering is never actually contested
+            // by valid code, just a defensive default; the unit fallback is the one genuinely load-
+            // bearing case (a sibling file in the same Go package, no import involved at all).
+            // No lookup models block/parameter shadowing: a same-named local could (incorrectly,
+            // but safely — see module docs) resolve to an unrelated declaration.
+            for reference in &claimed.facts.references {
+                let from = reference
+                    .within
+                    .as_ref()
+                    .and_then(|within| {
+                        symbol_by_name_per_file[i]
+                            .get(within)
+                            .or_else(|| symbol_by_qualified_per_file[i].get(within.as_str()))
                     })
-                    .copied()
-            };
-            if let Some(to) = target {
-                edges.push(Edge {
-                    kind: EdgeKind::References {
-                        from,
-                        to,
-                        kind: reference.kind,
-                    },
-                    confidence: Confidence::Certain,
-                    source: provenance(),
-                    span: Some(reference.span),
-                });
-                continue;
-            }
+                    .map(|&s| NodeRef::Symbol(s))
+                    .unwrap_or(NodeRef::File(file_id));
 
-            // Duck-typed member fallback (RFC 0012 §3, implementing RFC 0002 §5's ladder rule
-            // "duck-typed method with one candidate → probable"): an unresolved name that
-            // matches member declarations plausibly targets any of them — extraction has no
-            // receiver types, so honesty lives in the confidence, not in a guess. The
-            // plausible set is scoped by each candidate's own declared visibility (RFC 0012
-            // §6): a member is a candidate iff its visibility scope *contains this reference
-            // site* — an unexported Go method (scope Unit) only for sites in its own unit, a
-            // public member (scope Public) project-wide. A rung the ladder doesn't cover
-            // (index out of range, no ladder declared) counts as Public — the conservative
-            // wider mapping: over-approximating who may see a member only adds keep-alive
-            // edges. Cross-language candidates are excluded (a bare-name site never plausibly
-            // calls another language's member — same reasoning as §5's ladder-index guard).
-            // One candidate ⇒ Probable, several ⇒ Possible each — all get edges (conservative
-            // keep-alive; dead-is-certain is untouched, since a member no call-site anywhere
-            // matches still has zero edges).
-            let candidates: Vec<SymbolId> = member_by_name
-                .get(&reference.name)
-                .map(|all| {
-                    all.iter()
-                        .copied()
-                        .filter(|&m| {
-                            let sym = &symbols[m.0 as usize];
-                            let j = sym.file.0 as usize;
-                            if files[j].language != files[i].language {
-                                return false;
+                // Qualified references (RFC 0012 §9): `q.name` where `q` matches an import
+                // qualifier resolves `name` inside that target (its own declarations, then its
+                // unit siblings — a Go import names a package, and the symbol may live in any of
+                // the package's files) at Certain. Hit or miss, a matched qualifier *settles*
+                // resolution — the name lives in that target or nowhere; this file's own tables
+                // are never candidates. A qualifier matching no import is a receiver expression
+                // (`t.helper()`): the name is a member access by construction, so it skips the
+                // free-name tables and goes straight to the duck-typed member fallback below —
+                // where before §9 a same-file free function sharing the member's name would have
+                // (incorrectly, if safely) captured the reference.
+                let mut is_receiver_access = false;
+                if let Some(q) = &reference.scope_context {
+                    match qualifier_targets.get(q) {
+                        Some(&target_file) => {
+                            let t = target_file.0 as usize;
+                            let sym = symbol_by_name_per_file[t]
+                                .get(&reference.name)
+                                .or_else(|| {
+                                    file_unit[t].as_ref().and_then(|unit| {
+                                        symbol_by_name_per_unit
+                                            .get(unit)
+                                            .and_then(|tab| tab.get(&reference.name))
+                                    })
+                                })
+                                .copied();
+                            if let Some(to) = sym {
+                                out.edges.push(Edge {
+                                    kind: EdgeKind::References {
+                                        from,
+                                        to,
+                                        kind: reference.kind,
+                                    },
+                                    confidence: Confidence::Certain,
+                                    source: provenance(),
+                                    span: Some(reference.span),
+                                });
                             }
-                            let scope = files[j]
-                                .language
-                                .as_ref()
-                                .and_then(|lang| ladders.get(lang))
-                                .and_then(|ladder| ladder.get(sym.visibility.0 as usize))
-                                .map(|rung| rung.scope)
-                                .unwrap_or(crate::adapter::VisibilityScope::Public);
-                            scope_contains_site(scope, j, i, &file_unit, &files)
-                        })
-                        .collect()
-                })
-                .unwrap_or_default();
-            if !candidates.is_empty() {
-                let confidence = if candidates.len() == 1 {
-                    Confidence::Probable
+                            continue;
+                        }
+                        None => is_receiver_access = true,
+                    }
+                }
+
+                let target = if is_receiver_access {
+                    None
                 } else {
-                    Confidence::Possible
+                    bound_symbols
+                        .get(&reference.name)
+                        .or_else(|| symbol_by_name_per_file[i].get(&reference.name))
+                        .or_else(|| {
+                            file_unit[i].as_ref().and_then(|unit| {
+                                symbol_by_name_per_unit
+                                    .get(unit)
+                                    .and_then(|t| t.get(&reference.name))
+                            })
+                        })
+                        .copied()
                 };
-                for to in candidates {
-                    edges.push(Edge {
+                if let Some(to) = target {
+                    out.edges.push(Edge {
                         kind: EdgeKind::References {
-                            from, // same within-or-file attribution as the exact-match path
+                            from,
                             to,
                             kind: reference.kind,
                         },
-                        confidence,
+                        confidence: Confidence::Certain,
                         source: provenance(),
                         span: Some(reference.span),
                     });
+                    continue;
                 }
-            }
-        }
 
-        // Dynamic constructs → wildcard edges (RFC 0005 §1: "one mechanism, not two").
-        // Un-narrowed (`eval`, `require(expr)` with no static prefix): a `Wildcard` edge from
-        // this file — reachability expands it over the file's own symbols at `possible`.
-        // Narrowed (`import(`./locales/${x}`)` → that directory): the plausible target set is
-        // the directory's files instead, expressed with existing edge kinds — a `possible`
-        // ImportsFile edge to every discovered file under the directory (unclaimed ones
-        // included: a dynamically-loaded .json is a real target), plus a `Wildcard` edge
-        // *from each target*, because a dynamically-imported module is consumed opaquely —
-        // no binding names exist, so every symbol in it is plausibly used. Without that
-        // second edge the target files would be alive but their exported symbols still
-        // certain-dead: exactly the false positive the narrowing exists to prevent.
-        for dynamic in &claimed.facts.dynamics {
-            match dynamic.narrowed_to.as_deref().filter(|d| !d.is_empty()) {
-                Some(dir) => {
-                    for (j, file) in files.iter().enumerate() {
-                        if j == i || !package_owns(dir, core_dirname(file.path.0.as_str())) {
-                            continue;
-                        }
-                        let target = FileId(j as u32);
-                        edges.push(Edge {
-                            kind: EdgeKind::ImportsFile {
-                                from: file_id,
-                                to: target,
+                // Duck-typed member fallback (RFC 0012 §3, implementing RFC 0002 §5's ladder rule
+                // "duck-typed method with one candidate → probable"): an unresolved name that
+                // matches member declarations plausibly targets any of them — extraction has no
+                // receiver types, so honesty lives in the confidence, not in a guess. The
+                // plausible set is scoped by each candidate's own declared visibility (RFC 0012
+                // §6): a member is a candidate iff its visibility scope *contains this reference
+                // site* — an unexported Go method (scope Unit) only for sites in its own unit, a
+                // public member (scope Public) project-wide. A rung the ladder doesn't cover
+                // (index out of range, no ladder declared) counts as Public — the conservative
+                // wider mapping: over-approximating who may see a member only adds keep-alive
+                // edges. Cross-language candidates are excluded (a bare-name site never plausibly
+                // calls another language's member — same reasoning as §5's ladder-index guard).
+                // One candidate ⇒ Probable, several ⇒ Possible each — all get edges (conservative
+                // keep-alive; dead-is-certain is untouched, since a member no call-site anywhere
+                // matches still has zero edges).
+                let candidates: Vec<SymbolId> = member_by_name
+                    .get(&reference.name)
+                    .map(|all| {
+                        all.iter()
+                            .copied()
+                            .filter(|&m| {
+                                let sym = &symbols[m.0 as usize];
+                                let j = sym.file.0 as usize;
+                                if files[j].language != files[i].language {
+                                    return false;
+                                }
+                                let scope = files[j]
+                                    .language
+                                    .as_ref()
+                                    .and_then(|lang| ladders.get(lang))
+                                    .and_then(|ladder| ladder.get(sym.visibility.0 as usize))
+                                    .map(|rung| rung.scope)
+                                    .unwrap_or(crate::adapter::VisibilityScope::Public);
+                                scope_contains_site(scope, j, i, &file_unit, &files)
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                if !candidates.is_empty() {
+                    let confidence = if candidates.len() == 1 {
+                        Confidence::Probable
+                    } else {
+                        Confidence::Possible
+                    };
+                    for to in candidates {
+                        out.edges.push(Edge {
+                            kind: EdgeKind::References {
+                                from, // same within-or-file attribution as the exact-match path
+                                to,
+                                kind: reference.kind,
                             },
-                            confidence: Confidence::Possible,
+                            confidence,
                             source: provenance(),
-                            span: Some(dynamic.span),
-                        });
-                        edges.push(Edge {
-                            kind: EdgeKind::Wildcard { from: target },
-                            confidence: Confidence::Possible,
-                            source: provenance(),
-                            span: Some(dynamic.span),
+                            span: Some(reference.span),
                         });
                     }
                 }
-                // Empty-string narrowing would prefix-match the whole project — treat it as
-                // the adapter meaning "no narrowing" rather than "everything".
-                None => edges.push(Edge {
-                    kind: EdgeKind::Wildcard { from: file_id },
-                    confidence: Confidence::Possible,
-                    source: provenance(),
-                    span: Some(dynamic.span),
-                }),
             }
-        }
 
-        for d in &claimed.facts.diagnostics {
-            diagnostics.push(Diagnostic {
-                level: d.level,
-                path: Some(files[i].path.clone()),
-                message: d.message.clone(),
-                span: d.span,
+            // Dynamic constructs → wildcard edges (RFC 0005 §1: "one mechanism, not two").
+            // Un-narrowed (`eval`, `require(expr)` with no static prefix): a `Wildcard` edge from
+            // this file — reachability expands it over the file's own symbols at `possible`.
+            // Narrowed (`import(`./locales/${x}`)` → that directory): the plausible target set is
+            // the directory's files instead, expressed with existing edge kinds — a `possible`
+            // ImportsFile edge to every discovered file under the directory (unclaimed ones
+            // included: a dynamically-loaded .json is a real target), plus a `Wildcard` edge
+            // *from each target*, because a dynamically-imported module is consumed opaquely —
+            // no binding names exist, so every symbol in it is plausibly used. Without that
+            // second edge the target files would be alive but their exported symbols still
+            // certain-dead: exactly the false positive the narrowing exists to prevent.
+            for dynamic in &claimed.facts.dynamics {
+                match dynamic.narrowed_to.as_deref().filter(|d| !d.is_empty()) {
+                    Some(dir) => {
+                        for (j, file) in files.iter().enumerate() {
+                            if j == i || !package_owns(dir, core_dirname(file.path.0.as_str())) {
+                                continue;
+                            }
+                            let target = FileId(j as u32);
+                            out.edges.push(Edge {
+                                kind: EdgeKind::ImportsFile {
+                                    from: file_id,
+                                    to: target,
+                                },
+                                confidence: Confidence::Possible,
+                                source: provenance(),
+                                span: Some(dynamic.span),
+                            });
+                            out.edges.push(Edge {
+                                kind: EdgeKind::Wildcard { from: target },
+                                confidence: Confidence::Possible,
+                                source: provenance(),
+                                span: Some(dynamic.span),
+                            });
+                        }
+                    }
+                    // Empty-string narrowing would prefix-match the whole project — treat it as
+                    // the adapter meaning "no narrowing" rather than "everything".
+                    None => out.edges.push(Edge {
+                        kind: EdgeKind::Wildcard { from: file_id },
+                        confidence: Confidence::Possible,
+                        source: provenance(),
+                        span: Some(dynamic.span),
+                    }),
+                }
+            }
+
+            for d in &claimed.facts.diagnostics {
+                out.diagnostics.push(Diagnostic {
+                    level: d.level,
+                    path: Some(files[i].path.clone()),
+                    message: d.message.clone(),
+                    span: d.span,
+                });
+            }
+
+            for s in &claimed.facts.suppressions {
+                out.suppressions.push((file_id, s.clone()));
+            }
+            Some(out)
+        })
+        .collect();
+
+    for resolved in resolved_files.into_iter().flatten() {
+        edges.extend(resolved.edges);
+        for (name, confidence, span, from, source) in resolved.dep_imports {
+            let to = *dep_index.entry(name.clone()).or_insert_with(|| {
+                let id = DependencyId(dependencies.len() as u32);
+                dependencies.push(DependencyNode { name: name.clone() });
+                id
+            });
+            edges.push(Edge {
+                kind: EdgeKind::ImportsDependency { from, to },
+                confidence,
+                source,
+                span: Some(span),
             });
         }
-
-        for s in &claimed.facts.suppressions {
-            suppressions.push((file_id, s.clone()));
-        }
+        diagnostics.extend(resolved.diagnostics);
+        suppressions.extend(resolved.suppressions);
     }
 
     let graph = ProjectGraph {
