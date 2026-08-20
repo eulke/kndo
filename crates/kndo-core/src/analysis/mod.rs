@@ -43,6 +43,28 @@ pub fn finding_id(
     format!("kndo-{}", &digest.to_hex()[..12])
 }
 
+/// Symbols that are themselves `Test` roots — inline test infrastructure (`#[test]`
+/// functions and everything an adapter roots inside a `#[cfg(test)]` module; Rust is the
+/// first language whose tests live inside production files). `test-only` and `untested`
+/// exempt them: a test being reachable only from tests is the definition of a test, not a
+/// finding.
+pub(crate) fn test_root_symbols(
+    graph: &ProjectGraph,
+) -> std::collections::HashSet<crate::vocab::SymbolId> {
+    use crate::vocab::{EdgeKind, NodeRef, RootKind};
+    graph
+        .edges
+        .iter()
+        .filter_map(|e| match e.kind {
+            EdgeKind::Root {
+                kind: RootKind::Test,
+                target: NodeRef::Symbol(s),
+            } => Some(s),
+            _ => None,
+        })
+        .collect()
+}
+
 /// The stable, empty-for-the-implicit-package identity used in finding ids — deliberately
 /// *not* the human-readable label (which can be absent or a display name), so ids stay stable
 /// across packages that share a name but not a manifest path. Shared by every per-package

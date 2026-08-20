@@ -825,6 +825,41 @@ fn try_patch(
                     });
                 }
             }
+            // Phase 2.7's surface-expansion edges (owned by this file, removed above):
+            // membership itself is stable under the guard — kept edges from other owners
+            // still mark this file (and its targets stay members through edges THEY own) —
+            // so only the edges this file emits regenerate, from its unchanged re-exports.
+            if let Some(&confidence) = library_root_files.get(&file_id) {
+                for imp in claimed
+                    .facts
+                    .imports
+                    .iter()
+                    .filter(|i| i.reexported && i.bindings.is_empty())
+                {
+                    let spec = ImportSpec {
+                        specifier: imp.specifier.clone(),
+                        from: graph.files[c].path.clone(),
+                    };
+                    let target = match adapter.resolve(&spec, &ctx) {
+                        Resolution::File(path, _) => path,
+                        Resolution::WorkspaceMember { target, .. } => target,
+                        _ => continue,
+                    };
+                    let Some(&target) = graph.file_index.get(&target) else {
+                        continue;
+                    };
+                    new_edges.push(Edge {
+                        kind: EdgeKind::Root {
+                            kind: crate::vocab::RootKind::Production,
+                            target: NodeRef::File(target),
+                        },
+                        confidence,
+                        span: Some(imp.span),
+                        source: Provenance::Adapter(adapter_id.clone()),
+                        owner: file_id,
+                    });
+                }
+            }
             // Phase 3b, shared resolver.
             resolved_outputs.push(resolve_file(c, &claimed.facts, &**adapter, &tables));
         }
@@ -1549,7 +1584,7 @@ pub(crate) fn package_owns(manifest_dir: &str, file_dir: &str) -> bool {
 /// an assembly-algorithm change that could produce a different graph from the same facts. Feeds
 /// [`compute_graph_key`] (RFC 0004 §3's "core graph-schema version"); a bump here invalidates
 /// every project's cached `graph.bin` on the next run, same as any other key-input change.
-pub const GRAPH_SCHEMA_VERSION: u32 = 11; // 11: PackageNode.workspace_entry (RFC 0013 §4); 10: patch layer (RFC 0013 §4 — Edge.owner, FilePatchMeta, extraction-only stored diagnostics); 9: SymbolMetrics.token_count (RFC 0005 §11); 8: function_metrics (RFC 0005 §6); 7: cycle policies (§8); 6: PackageNode surface (RFC 0011 §4); 5: ladders + FileNode.unit (RFC 0012 §6); 4: RefKind + signature_span (§5); 3: within (§4)
+pub const GRAPH_SCHEMA_VERSION: u32 = 12; // 12: library-surface fixpoint (phase 2.7 — same inputs now assemble surface Root edges, prior snapshots are semantically stale); 11: PackageNode.workspace_entry (RFC 0013 §4); 10: patch layer (RFC 0013 §4 — Edge.owner, FilePatchMeta, extraction-only stored diagnostics); 9: SymbolMetrics.token_count (RFC 0005 §11); 8: function_metrics (RFC 0005 §6); 7: cycle policies (§8); 6: PackageNode surface (RFC 0011 §4); 5: ladders + FileNode.unit (RFC 0012 §6); 4: RefKind + signature_span (§5); 3: within (§4)
 
 /// The graph snapshot's cache key (RFC 0004 §3, `cache.rs`'s `graph.bin`): a single digest
 /// folding in the *whole* discovered file set (every path + content hash — this already
@@ -2003,6 +2038,96 @@ pub fn assemble_from_source(
     let mut member_by_name: HashMap<SmolStr, Vec<SymbolId>> = HashMap::default();
     let mut symbol_by_qualified_per_file: Vec<HashMap<String, SymbolId>> =
         vec![HashMap::default(); claimed_per_file.len()];
+    // Workspace-member index (RFC 0011 §4): every *named* manifest in the graph, keyed by
+    // package name, with its directory and adapter-resolved primary entry — what lets a bare
+    // specifier (`@org/ui`) resolve to the sibling's internal files instead of an external
+    // dependency. Built from manifest facts, consumed by import resolution — strictly after
+    // manifest extraction, so no circularity. Duplicate names keep the first in
+    // file-discovery order (deterministic); a repo with two same-named manifests is broken
+    // in ways no resolution order fixes.
+    let mut workspace_member_index: HashMap<SmolStr, crate::adapter::WorkspaceMember> =
+        HashMap::default();
+    for (i, slot) in manifests_per_file.iter().enumerate() {
+        let Some((_, facts)) = slot else { continue };
+        let Some(name) = &facts.package_name else {
+            continue;
+        };
+        workspace_member_index
+            .entry(name.clone())
+            .or_insert_with(|| crate::adapter::WorkspaceMember {
+                dir: SmolStr::new(core_dirname(files[i].path.0.as_str())),
+                entry: facts.resolved_entries.first().cloned(),
+            });
+    }
+
+    let ctx = ResolveCtx::new(&known_files)
+        .with_declared_dependencies(&declared_dependency_names)
+        .with_workspace_members(&workspace_member_index);
+
+    // Phase 2.7 — library-surface expansion (completing RFC 0011 §5's library mode): a
+    // package-surface file's *whole-surface* re-exports — `pub mod x;` in Rust, `export *
+    // from './x'` in a published JS package: `reexported` with no named bindings — extend the
+    // surface into the target file, transitively to a fixpoint. Each expansion emits a
+    // production Root edge for the target file, owned by the re-exporting file: reachability
+    // consumes it directly, pass B's export promotion picks the target up from
+    // `library_root_files` exactly like a manifest-named root, and the incremental patch
+    // (RFC 0013) re-derives membership from the kept edges. Without this, any library whose
+    // API lives behind a public module tree — every real Rust crate — reads as dead.
+    {
+        let mut work: Vec<FileId> = {
+            let mut v: Vec<FileId> = library_root_files.keys().copied().collect();
+            v.sort();
+            v
+        };
+        while let Some(f) = work.pop() {
+            let Some(claimed) = &claimed_per_file[f.0 as usize] else {
+                continue;
+            };
+            let confidence = library_root_files[&f];
+            let adapter = &adapters[claimed.adapter_index];
+            for imp in claimed
+                .facts
+                .imports
+                .iter()
+                .filter(|i| i.reexported && i.bindings.is_empty())
+            {
+                let spec = ImportSpec {
+                    specifier: imp.specifier.clone(),
+                    from: files[f.0 as usize].path.clone(),
+                };
+                let target_path = match adapter.resolve(&spec, &ctx) {
+                    Resolution::File(path, _) => path,
+                    Resolution::WorkspaceMember { target, .. } => target,
+                    _ => continue,
+                };
+                let Some(&target) = file_index.get(&target_path) else {
+                    continue;
+                };
+                edges.push(Edge {
+                    kind: EdgeKind::Root {
+                        kind: crate::vocab::RootKind::Production,
+                        target: NodeRef::File(target),
+                    },
+                    confidence,
+                    source: Provenance::Adapter(adapter.descriptor().id.clone()),
+                    span: Some(imp.span),
+                    owner: f,
+                });
+                use std::collections::hash_map::Entry;
+                match library_root_files.entry(target) {
+                    Entry::Vacant(slot) => {
+                        slot.insert(confidence);
+                        work.push(target);
+                    }
+                    Entry::Occupied(mut slot) => {
+                        let merged = (*slot.get()).max(confidence);
+                        slot.insert(merged);
+                    }
+                }
+            }
+        }
+    }
+
     // Pass A — tables + symbol nodes, sequentially in FileId order (SymbolId assignment is
     // order itself). Emissions (Declares edges, promotions, in-source roots, metrics) moved
     // to pass B below so the *same* emitter serves the full build and the incremental patch
@@ -2065,32 +2190,6 @@ pub fn assemble_from_source(
         edges.extend(out.edges);
         function_metrics.extend(out.metrics);
     }
-
-    // Workspace-member index (RFC 0011 §4): every *named* manifest in the graph, keyed by
-    // package name, with its directory and adapter-resolved primary entry — what lets a bare
-    // specifier (`@org/ui`) resolve to the sibling's internal files instead of an external
-    // dependency. Built from manifest facts, consumed by import resolution — strictly after
-    // manifest extraction, so no circularity. Duplicate names keep the first in
-    // file-discovery order (deterministic); a repo with two same-named manifests is broken
-    // in ways no resolution order fixes.
-    let mut workspace_member_index: HashMap<SmolStr, crate::adapter::WorkspaceMember> =
-        HashMap::default();
-    for (i, slot) in manifests_per_file.iter().enumerate() {
-        let Some((_, facts)) = slot else { continue };
-        let Some(name) = &facts.package_name else {
-            continue;
-        };
-        workspace_member_index
-            .entry(name.clone())
-            .or_insert_with(|| crate::adapter::WorkspaceMember {
-                dir: SmolStr::new(core_dirname(files[i].path.0.as_str())),
-                entry: facts.resolved_entries.first().cloned(),
-            });
-    }
-
-    let ctx = ResolveCtx::new(&known_files)
-        .with_declared_dependencies(&declared_dependency_names)
-        .with_workspace_members(&workspace_member_index);
 
     // Phase 3a-bis — re-export aliasing (`export {a} from './b'`, `export type {a} from
     // './b'`): a barrel's re-exported bindings become resolvable as *its own* exports too, not

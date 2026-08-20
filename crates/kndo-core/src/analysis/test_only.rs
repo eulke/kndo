@@ -116,6 +116,7 @@ fn directory_finding(graph: &ProjectGraph, dir: &DirGroup<'_>, confidence: Confi
 
 pub fn find_test_only_symbols(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<Finding> {
     let mut findings = Vec::new();
+    let test_roots = crate::analysis::test_root_symbols(graph);
     for (index, symbol) in graph.symbols.iter().enumerate() {
         let file = &graph.files[symbol.file.0 as usize];
         let Some(class) = file.class else { continue };
@@ -124,6 +125,9 @@ pub fn find_test_only_symbols(graph: &ProjectGraph, reach: &ReachabilityMap) -> 
         }
         if class.role == FileRole::Test {
             continue; // the file itself is exempt — so are its own symbols
+        }
+        if test_roots.contains(&SymbolId(index as u32)) {
+            continue; // inline test infrastructure IS a test, not test-only production code
         }
         if reach.get(NodeRef::File(symbol.file)).0 == Reachability::TestOnly {
             continue; // rollup: the file-level finding already covers every symbol in it

@@ -159,7 +159,11 @@ fn directory_finding(graph: &ProjectGraph, dir: &DirGroup<'_>, confidence: Confi
 
 fn find_untested_symbols(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<Finding> {
     let mut findings = Vec::new();
+    let test_roots = crate::analysis::test_root_symbols(graph);
     for (index, symbol) in graph.symbols.iter().enumerate() {
+        if test_roots.contains(&SymbolId(index as u32)) {
+            continue; // inline test infrastructure (see analysis::test_root_symbols)
+        }
         let file = &graph.files[symbol.file.0 as usize];
         let Some(class) = file.class else { continue };
         let symbol_id = SymbolId(index as u32);

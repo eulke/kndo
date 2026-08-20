@@ -1,6 +1,9 @@
 {
   "findings": [
-    { "category": "unused", "subject_kind": "function", "path": "src/bar.ts", "symbol": "Bar" },
-    { "category": "unused", "subject_kind": "file", "path": "src/orphan.ts" }
+    {
+      "category": "unused",
+      "subject_kind": "file",
+      "path": "src/orphan.ts"
+    }
   ]
 }
