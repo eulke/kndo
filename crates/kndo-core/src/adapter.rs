@@ -114,6 +114,12 @@ pub struct AdapterDescriptor {
     pub file_globs: Vec<SmolStr>,
     pub manifest_globs: Vec<SmolStr>,
     pub grammar_version: SmolStr,
+    /// The ladder [`VisibilityLevel`] indexes into (RFC 0012 §6) — index = level. Empty means
+    /// the language has no visibility semantics (CSS, JSON): visibility analyses skip its
+    /// files entirely, and its member declarations (it should have none) are treated as
+    /// `Public` by the fallback's conservative default. Assembly carries the ladder onto the
+    /// graph keyed by claim language, so analyses (pure graph functions) never touch adapters.
+    pub visibility_ladder: Vec<VisibilityRung>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -142,6 +148,60 @@ pub struct FileClaim {
     rkyv::Deserialize,
 )]
 pub struct VisibilityLevel(pub u8);
+
+/// What the core can *check* about a visibility level (RFC 0012 §6): the graph region a
+/// symbol at that level is visible to. Ordered narrowest → widest (`File < Unit < Package <
+/// Public`) — derive order is normative. Scopes nest: a `Unit` symbol is visible to its own
+/// file too, a `Package` one to its own unit, and so on — containment checks treat them as
+/// concentric, not disjoint.
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    serde::Serialize,
+    serde::Deserialize,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+)]
+pub enum VisibilityScope {
+    /// Same file only.
+    File,
+    /// Same `FileFacts::unit` key (Go package, Rust module) — contains `File`.
+    Unit,
+    /// Same `PackageId` (RFC 0011 manifest ownership) — contains `Unit`.
+    Package,
+    /// Everywhere.
+    Public,
+}
+
+/// One rung of an adapter's visibility ladder (RFC 0012 §6): the **scope** is what the core
+/// checks; the **label** is the language's own word for the level, used verbatim in
+/// remediation text (RFC 0005 §7: "in the language's own terms, supplied by the adapter").
+/// Two rungs may share a scope (Java `protected`/`public` both map to `Public` — the
+/// conservative-mapping rule: a level with no exact scope maps to the nearest *wider* one,
+/// which can only suppress an `internal-only` finding, never fabricate one).
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    serde::Serialize,
+    serde::Deserialize,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+)]
+pub struct VisibilityRung {
+    pub scope: VisibilityScope,
+    #[rkyv(with = crate::rkyv_support::SmolStrAsString)]
+    pub label: SmolStr,
+}
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Declaration {

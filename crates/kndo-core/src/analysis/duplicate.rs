@@ -100,6 +100,7 @@ mod tests {
             language: None,
             class: None,
             package: crate::vocab::PackageId(0),
+            unit: None,
         }
     }
 

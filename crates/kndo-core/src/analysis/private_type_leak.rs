@@ -15,8 +15,10 @@
 //! Severity per RFC 0005 §7: warning in library-mode packages (a lying public API), info in
 //! app packages — the package's publish signal (`PackageNode::private`, RFC 0011 §5) is the
 //! mode. Confidence: the evidence edge's own confidence. Cross-language pairs are skipped —
-//! visibility levels are ladder indices *within one language's ladder* (RFC 0012 §6) and
-//! comparing indices across languages would be numerology.
+//! visibility levels only mean anything *within one language's ladder* (RFC 0012 §6) and
+//! comparing them across languages would be numerology. "Lower visibility" is compared as
+//! ladder rung *scopes* when the language declared a ladder (so same-scope rungs like Java
+//! `protected`/`public` never accuse each other), raw indices otherwise.
 
 use std::collections::HashMap;
 
@@ -55,9 +57,6 @@ pub fn find_private_type_leaks(graph: &ProjectGraph) -> Vec<Finding> {
         }
 
         let leaked = &graph.symbols[type_id.0 as usize];
-        if leaked.visibility >= decl.visibility {
-            continue; // the type is at least as visible as the promise — no leak
-        }
 
         let decl_file = &graph.files[decl.file.0 as usize];
         let leaked_file = &graph.files[leaked.file.0 as usize];
@@ -68,7 +67,28 @@ pub fn find_private_type_leaks(graph: &ProjectGraph) -> Vec<Finding> {
             continue;
         }
         if decl_file.language != leaked_file.language {
-            continue; // ladder indices only compare within one language (module doc)
+            continue; // visibility levels only compare within one language (module doc)
+        }
+        // "Lower visibility" via the language's ladder when it's declared (RFC 0012 §6):
+        // comparing *scopes* — not raw indices — means two rungs sharing a scope (Java
+        // `protected`/`public`, both `Public` by the conservative-mapping rule) never accuse
+        // each other. Fall back to index comparison when no ladder covers the levels — the
+        // pre-ladder behavior, still meaningful within one language.
+        let ladder = decl_file
+            .language
+            .as_deref()
+            .and_then(|lang| graph.ladder_for(lang));
+        let leaks = match ladder.map(|l| {
+            (
+                l.get(leaked.visibility.0 as usize),
+                l.get(decl.visibility.0 as usize),
+            )
+        }) {
+            Some((Some(leaked_rung), Some(decl_rung))) => leaked_rung.scope < decl_rung.scope,
+            _ => leaked.visibility < decl.visibility,
+        };
+        if !leaks {
+            continue; // the type is at least as visible as the promise — no leak
         }
         if seen.insert((decl_id, type_id), ()).is_some() {
             continue;
@@ -132,6 +152,7 @@ mod tests {
                 origin: FileOrigin::Authored,
             }),
             package: crate::vocab::PackageId(0),
+            unit: None,
         }
     }
 
@@ -311,6 +332,38 @@ mod tests {
             find_private_type_leaks(&graph_with(symbols, edges)).len(),
             1
         );
+    }
+
+    #[test]
+    fn same_scope_rungs_do_not_leak_even_with_different_indices() {
+        // Java-shaped tail: `protected` (rung 2) in a `public` (rung 3) signature — both map
+        // to `Public` scope by RFC 0012 §6's conservative rule, so index inequality alone
+        // must not accuse.
+        use crate::adapter::{VisibilityRung, VisibilityScope};
+        let rung = |scope, label: &str| VisibilityRung {
+            scope,
+            label: SmolStr::new(label),
+        };
+        let symbols = vec![
+            callable(FileId(0), "F", 3, span(1, 1, 1, 40)),
+            ty(FileId(0), "Prot", 2),
+        ];
+        let edges = vec![type_use(
+            SymbolId(0),
+            SymbolId(1),
+            span(1, 10, 1, 16),
+            Confidence::Certain,
+        )];
+        let graph = graph_with(symbols, edges).with_visibility_ladders(vec![(
+            SmolStr::new("mock"),
+            vec![
+                rung(VisibilityScope::File, "private"),
+                rung(VisibilityScope::Unit, "package-private"),
+                rung(VisibilityScope::Public, "protected"),
+                rung(VisibilityScope::Public, "public"),
+            ],
+        )]);
+        assert!(find_private_type_leaks(&graph).is_empty());
     }
 
     #[test]

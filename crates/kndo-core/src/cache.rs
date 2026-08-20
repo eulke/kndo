@@ -94,6 +94,16 @@ struct ScriptInvokedDepSnap {
     name: SmolStr,
 }
 
+/// Same tuple-with-`SmolStr` limitation as [`ScriptInvokedDepSnap`], for
+/// `ProjectGraph::visibility_ladders` (RFC 0012 §6) — `VisibilityRung` carries its own rkyv
+/// derives (adapter.rs), only the language key needs the wrapper.
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+struct LadderSnap {
+    #[rkyv(with = crate::rkyv_support::SmolStrAsString)]
+    language: SmolStr,
+    rungs: Vec<crate::adapter::VisibilityRung>,
+}
+
 /// The archived payload (everything after the header) — deliberately a standalone type rather
 /// than deriving `Archive` on [`ProjectGraph`] itself: `ProjectGraph::file_index` is a derived
 /// index (rebuilt on load, RFC 0004 §2 — no reason to pay to persist it), and `diagnostics`
@@ -113,6 +123,7 @@ struct GraphSnapshot {
     /// elements do too, so unlike `script_invoked_dependencies` this needs no wrapper struct —
     /// rkyv archives same-arity tuples of `Archive` types natively.
     suppressions: Vec<(FileId, RawSuppression)>,
+    visibility_ladders: Vec<LadderSnap>,
     diagnostics: Vec<Diagnostic>,
 }
 
@@ -499,6 +510,11 @@ impl ProjectCache {
             packages: snapshot.packages,
             edges: snapshot.edges,
             suppressions: snapshot.suppressions,
+            visibility_ladders: snapshot
+                .visibility_ladders
+                .into_iter()
+                .map(|l| (l.language, l.rungs))
+                .collect(),
         });
         self.graph_hits.fetch_add(1, Ordering::Relaxed);
         Some((graph, snapshot.diagnostics))
@@ -529,6 +545,14 @@ impl ProjectCache {
             packages: graph.packages.clone(),
             edges: graph.edges.clone(),
             suppressions: graph.suppressions.clone(),
+            visibility_ladders: graph
+                .visibility_ladders
+                .iter()
+                .map(|(language, rungs)| LadderSnap {
+                    language: language.clone(),
+                    rungs: rungs.clone(),
+                })
+                .collect(),
             diagnostics: diagnostics.to_vec(),
         };
         let Ok(bytes) = rkyv::to_bytes::<rkyv::rancor::Error>(&snapshot) else {
@@ -803,6 +827,7 @@ mod tests {
                 language: Some("mock".into()),
                 class: None,
                 package: PackageId(0),
+                unit: None,
             }],
             vec![SymbolNode {
                 file: FileId(0),

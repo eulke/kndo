@@ -99,7 +99,12 @@ packages are production roots (library mode); `scripts` file references become t
 module-local < exported < **package-surface** (reachable through the package's `exports` map).
 An exported symbol not reachable through `exports` is *exported but package-internal* — the
 ladder makes "exported yet not part of the public surface" expressible, which is exactly where
-monorepo over-exposure hides.
+monorepo over-exposure hides. Declared as descriptor data (RFC 0012 §6):
+`[File "module-local", Package "exported", Public "package surface"]` — note `exported` maps to
+`Package` scope, not `Public`: an ESM export is importable anywhere *within its own package's
+world*, and the wider promise is the exports-map surface. Extraction emits levels 0/1 today;
+level 2 is an assembly-time promotion that lands with surface-awareness — the rung is declared
+now so the ladder is complete the day a symbol carries it.
 
 ## 5. Known hard cases & stances
 

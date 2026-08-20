@@ -70,7 +70,19 @@ filesystem: all content arrives via parameters (determinism, sandboxing, testing
 ```rust
 pub trait LanguageAdapter: Send + Sync {
     fn descriptor(&self) -> AdapterDescriptor;
-    // { id: "js-ts", facts_schema_version: u32, file_globs, manifest_globs, grammar_version }
+    // { id: "js-ts", facts_schema_version: u32, file_globs, manifest_globs, grammar_version,
+    //   visibility_ladder: Vec<VisibilityRung> }
+    // visibility_ladder (RFC 0012 §6): what VisibilityLevel indexes into — each rung a
+    // { scope: File|Unit|Package|Public, label } pair; the scope is what the core can check
+    // (same file / same FileFacts::unit / same PackageId / anywhere — nested, narrowest to
+    // widest), the label is the language's own word, used verbatim in remediation text.
+    // Empty ladder = no visibility semantics (CSS, JSON): visibility analyses skip the
+    // language. Conservative-mapping rule: a language level with no exact scope maps to the
+    // nearest WIDER one (Java protected → Public) — over-approximating who may see a symbol
+    // can only suppress a finding, never fabricate one. Assembly copies the ladder onto
+    // ProjectGraph::visibility_ladders keyed by claim language; analyses are pure graph
+    // functions and never touch adapters. Consumers: internal-only's tightest-sufficient
+    // rung, private-type-leak's scope comparison, the member fallback's candidate scoping.
 
     /// Claim & classify a path (fast; name-based, content peeking only when unavoidable).
     fn claim(&self, path: &ProjectPath) -> Option<FileClaim>;   // { language, class: FileClass }
@@ -134,9 +146,11 @@ pub struct FileFacts {
                                              // resolve on their own track: an unqualified
                                              // reference never certain-resolves to a member; it
                                              // reaches members only through the duck-typed
-                                             // fallback (assembly phase 3b — same-file then
-                                             // same-unit candidates; one candidate ⇒ Probable,
-                                             // several ⇒ Possible each, per RFC 0002 §5), and a
+                                             // fallback (assembly phase 3b — candidates are
+                                             // same-language members whose declared visibility
+                                             // scope contains the site, per the RFC 0012 §6
+                                             // ladder; one candidate ⇒ Probable, several ⇒
+                                             // Possible each, per RFC 0002 §5), and a
                                              // RawRoot targeting a member names it in qualified
                                              // `Owner.name` form. Display/selectors use the
                                              // qualified form; ids fold it in, so same-named

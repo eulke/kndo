@@ -34,6 +34,12 @@ pub struct FileNode {
     /// `PackageId(0)` is always the implicit package (see [`ProjectGraph::packages`]) — never
     /// `None`, since ownership is total even when nothing real claims a file.
     pub package: PackageId,
+    /// The file's `FileFacts::unit` key, persisted onto the graph (RFC 0012 §6): visibility-
+    /// scope containment checks (`internal-only`'s tightest-sufficient computation, the
+    /// member fallback's candidate scoping) need "same unit?" answerable from the graph
+    /// alone, warm path included. `None` for file-scoped languages, exactly as in the facts.
+    #[rkyv(with = rkyv::with::Map<crate::rkyv_support::SmolStrAsString>)]
+    pub unit: Option<SmolStr>,
 }
 
 #[derive(Debug, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
@@ -118,6 +124,7 @@ pub(crate) struct GraphSnapshotParts {
     pub packages: Vec<PackageNode>,
     pub edges: Vec<Edge>,
     pub suppressions: Vec<(FileId, crate::adapter::RawSuppression)>,
+    pub visibility_ladders: Vec<(SmolStr, Vec<crate::adapter::VisibilityRung>)>,
 }
 
 /// The assembled language-neutral graph (contracts §1). Read-only once built; incremental
@@ -140,12 +147,28 @@ pub struct ProjectGraph {
     /// downstream of assembly, not here (contracts §2.1). Persisted through the graph-snapshot
     /// cache like everything else in this struct, so a warm run never silently drops them.
     pub suppressions: Vec<(FileId, crate::adapter::RawSuppression)>,
+    /// Each claimed language's visibility ladder (RFC 0012 §6), copied off the claiming
+    /// adapter's descriptor at assembly time and keyed by the claim language `FileNode::
+    /// language` stores — so analyses (pure graph functions, no adapter access) can turn a
+    /// symbol's `VisibilityLevel` index into a checkable [`crate::adapter::VisibilityScope`]
+    /// plus the language's own remediation label. Sorted by language for determinism.
+    pub visibility_ladders: Vec<(SmolStr, Vec<crate::adapter::VisibilityRung>)>,
     file_index: HashMap<ProjectPath, FileId>,
 }
 
 impl ProjectGraph {
     pub fn file_id(&self, path: &ProjectPath) -> Option<FileId> {
         self.file_index.get(path).copied()
+    }
+
+    /// The visibility ladder for a claim language (RFC 0012 §6) — `None` when the language
+    /// never declared one (unclaimed files, pre-ladder snapshots). An empty ladder is a
+    /// deliberate declaration ("no visibility semantics") and returns `Some(&[])`.
+    pub fn ladder_for(&self, language: &str) -> Option<&[crate::adapter::VisibilityRung]> {
+        self.visibility_ladders
+            .iter()
+            .find(|(l, _)| l == language)
+            .map(|(_, rungs)| rungs.as_slice())
     }
 
     /// The declared package name for a `PackageId`, when the owning manifest declared one
@@ -177,6 +200,7 @@ impl ProjectGraph {
             packages: parts.packages,
             edges: parts.edges,
             suppressions: parts.suppressions,
+            visibility_ladders: parts.visibility_ladders,
             file_index,
         }
     }
@@ -209,8 +233,34 @@ impl ProjectGraph {
             }],
             edges,
             suppressions: Vec::new(),
+            // The "mock" test language's ladder, mirroring Go's shape (the language whose
+            // rules the member-fallback and internal-only tests exercise): 0 = unit-private,
+            // 1 = public. Tests needing a different shape override via
+            // `with_visibility_ladders`.
+            visibility_ladders: vec![(
+                SmolStr::new("mock"),
+                vec![
+                    crate::adapter::VisibilityRung {
+                        scope: crate::adapter::VisibilityScope::Unit,
+                        label: SmolStr::new("private"),
+                    },
+                    crate::adapter::VisibilityRung {
+                        scope: crate::adapter::VisibilityScope::Public,
+                        label: SmolStr::new("exported"),
+                    },
+                ],
+            )],
             file_index,
         }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_visibility_ladders(
+        mut self,
+        ladders: Vec<(SmolStr, Vec<crate::adapter::VisibilityRung>)>,
+    ) -> Self {
+        self.visibility_ladders = ladders;
+        self
     }
 
     #[cfg(test)]
@@ -282,7 +332,7 @@ pub(crate) fn package_owns(manifest_dir: &str, file_dir: &str) -> bool {
 /// an assembly-algorithm change that could produce a different graph from the same facts. Feeds
 /// [`compute_graph_key`] (RFC 0004 §3's "core graph-schema version"); a bump here invalidates
 /// every project's cached `graph.bin` on the next run, same as any other key-input change.
-pub const GRAPH_SCHEMA_VERSION: u32 = 4; // 4: RefKind pass-through + signature_span (RFC 0012 §5); 3: within (§4); 2: member_of (§3)
+pub const GRAPH_SCHEMA_VERSION: u32 = 5; // 5: visibility ladders + FileNode.unit (RFC 0012 §6); 4: RefKind + signature_span (§5); 3: within (§4); 2: member_of (§3)
 
 /// The graph snapshot's cache key (RFC 0004 §3, `cache.rs`'s `graph.bin`): a single digest
 /// folding in the *whole* discovered file set (every path + content hash — this already
@@ -505,9 +555,13 @@ pub fn assemble_from_source(
     for (i, df) in discovered.files.iter().enumerate() {
         let file_id = FileId(i as u32);
         file_index.insert(df.path.clone(), file_id);
-        let (language, class) = match &claimed_per_file[i] {
-            Some(c) => (Some(c.claim.language.clone()), Some(c.claim.class)),
-            None => (None, None),
+        let (language, class, unit) = match &claimed_per_file[i] {
+            Some(c) => (
+                Some(c.claim.language.clone()),
+                Some(c.claim.class),
+                c.facts.unit.clone(),
+            ),
+            None => (None, None, None),
         };
         files.push(FileNode {
             path: df.path.clone(),
@@ -515,6 +569,7 @@ pub fn assemble_from_source(
             language,
             class,
             package: PackageId(0), // patched in phase 2a once ownership is computed
+            unit,
         });
     }
 
@@ -649,6 +704,45 @@ pub fn assemble_from_source(
         role_root_files.insert(file_id, kind);
     }
 
+    // Each claimed language's visibility ladder (RFC 0012 §6), off its claiming adapter's
+    // descriptor — keyed by claim language (what `FileNode::language` stores), BTreeMap for
+    // deterministic order. Only languages with at least one claimed file appear: an unused
+    // adapter's ladder is dead data. Built before phase 3 because the member fallback (3b)
+    // scopes its candidates by ladder rung.
+    let mut ladders: std::collections::BTreeMap<SmolStr, Vec<crate::adapter::VisibilityRung>> =
+        std::collections::BTreeMap::new();
+    for slot in claimed_per_file.iter().flatten() {
+        ladders
+            .entry(slot.claim.language.clone())
+            .or_insert_with(|| adapters[slot.adapter_index].descriptor().visibility_ladder);
+    }
+
+    // Whether a declaration in `decl_file` at `scope` is visible to a reference site in
+    // `site_file` (RFC 0012 §6). Scopes nest (File ⊂ Unit ⊂ Package ⊂ Public), so each arm
+    // accepts everything the narrower one would: a Unit-scoped Go method is visible to its own
+    // file whether or not the adapter set a unit key.
+    fn scope_contains_site(
+        scope: crate::adapter::VisibilityScope,
+        decl_file: usize,
+        site_file: usize,
+        file_unit: &[Option<SmolStr>],
+        files: &[FileNode],
+    ) -> bool {
+        use crate::adapter::VisibilityScope::*;
+        match scope {
+            File => decl_file == site_file,
+            Unit => {
+                decl_file == site_file
+                    || matches!(
+                        (&file_unit[decl_file], &file_unit[site_file]),
+                        (Some(a), Some(b)) if a == b
+                    )
+            }
+            Package => files[decl_file].package == files[site_file].package,
+            Public => true,
+        }
+    }
+
     // Phase 3a — symbols (Declares edges) and in-source roots, sequentially in FileId order.
     // Split from imports/references (phase 3b) because resolving a reference or an import
     // binding to *another* file's symbol needs that file's symbol table already built —
@@ -667,12 +761,11 @@ pub fn assemble_from_source(
     // an unqualified reference must never `certain`-resolve to a member (bare member names
     // collide across owners by construction — `T.get` and `U.get` are both just `get`), so
     // members stay OUT of the exact-name tables above and live here, name → every same-named
-    // member, for the duck-typed fallback in phase 3b. Qualified lookup (for `RawRoot`
-    // targets naming `Owner.name`) gets its own exact table.
-    let mut member_by_name_per_file: Vec<HashMap<SmolStr, Vec<SymbolId>>> =
-        vec![HashMap::new(); claimed_per_file.len()];
-    let mut member_by_name_per_unit: HashMap<SmolStr, HashMap<SmolStr, Vec<SymbolId>>> =
-        HashMap::new();
+    // member project-wide; phase 3b's duck-typed fallback narrows the set per site by each
+    // candidate's declared visibility scope (RFC 0012 §6 — replacing the interim same-file/
+    // same-unit tiers). Qualified lookup (for `RawRoot` targets naming `Owner.name`) gets its
+    // own exact table.
+    let mut member_by_name: HashMap<SmolStr, Vec<SymbolId>> = HashMap::new();
     let mut symbol_by_qualified_per_file: Vec<HashMap<String, SymbolId>> =
         vec![HashMap::new(); claimed_per_file.len()];
     for (i, slot) in claimed_per_file.iter().enumerate() {
@@ -695,18 +788,10 @@ pub fn assemble_from_source(
                     }
                 }
                 Some(owner) => {
-                    member_by_name_per_file[i]
+                    member_by_name
                         .entry(decl.name.clone())
                         .or_default()
                         .push(symbol_id);
-                    if let Some(unit) = &claimed.facts.unit {
-                        member_by_name_per_unit
-                            .entry(unit.clone())
-                            .or_default()
-                            .entry(decl.name.clone())
-                            .or_default()
-                            .push(symbol_id);
-                    }
                     symbol_by_qualified_per_file[i]
                         .insert(format!("{owner}.{}", decl.name), symbol_id);
                 }
@@ -1054,32 +1139,48 @@ pub fn assemble_from_source(
             // Duck-typed member fallback (RFC 0012 §3, implementing RFC 0002 §5's ladder rule
             // "duck-typed method with one candidate → probable"): an unresolved name that
             // matches member declarations plausibly targets any of them — extraction has no
-            // receiver types, so honesty lives in the confidence, not in a guess. Same-file
-            // candidates outrank same-unit ones (a nearer tier being non-empty settles the
-            // plausible set); one candidate ⇒ Probable, several ⇒ Possible each — all get
-            // edges (conservative keep-alive; dead-is-certain is untouched, since a member
-            // no call-site anywhere matches still has zero edges). Interim scope until RFC
-            // 0012 §6's visibility ladder lands: file then unit — complete for Go by the
-            // language's own rules (an unexported method is only legally callable in-package;
-            // exported ones are roots).
-            let candidates = {
-                let same_file = member_by_name_per_file[i].get(&reference.name);
-                match same_file {
-                    Some(v) if !v.is_empty() => Some(v),
-                    _ => file_unit[i].as_ref().and_then(|unit| {
-                        member_by_name_per_unit
-                            .get(unit)
-                            .and_then(|t| t.get(&reference.name))
-                    }),
-                }
-            };
-            if let Some(candidates) = candidates {
+            // receiver types, so honesty lives in the confidence, not in a guess. The
+            // plausible set is scoped by each candidate's own declared visibility (RFC 0012
+            // §6): a member is a candidate iff its visibility scope *contains this reference
+            // site* — an unexported Go method (scope Unit) only for sites in its own unit, a
+            // public member (scope Public) project-wide. A rung the ladder doesn't cover
+            // (index out of range, no ladder declared) counts as Public — the conservative
+            // wider mapping: over-approximating who may see a member only adds keep-alive
+            // edges. Cross-language candidates are excluded (a bare-name site never plausibly
+            // calls another language's member — same reasoning as §5's ladder-index guard).
+            // One candidate ⇒ Probable, several ⇒ Possible each — all get edges (conservative
+            // keep-alive; dead-is-certain is untouched, since a member no call-site anywhere
+            // matches still has zero edges).
+            let candidates: Vec<SymbolId> = member_by_name
+                .get(&reference.name)
+                .map(|all| {
+                    all.iter()
+                        .copied()
+                        .filter(|&m| {
+                            let sym = &symbols[m.0 as usize];
+                            let j = sym.file.0 as usize;
+                            if files[j].language != files[i].language {
+                                return false;
+                            }
+                            let scope = files[j]
+                                .language
+                                .as_ref()
+                                .and_then(|lang| ladders.get(lang))
+                                .and_then(|ladder| ladder.get(sym.visibility.0 as usize))
+                                .map(|rung| rung.scope)
+                                .unwrap_or(crate::adapter::VisibilityScope::Public);
+                            scope_contains_site(scope, j, i, &file_unit, &files)
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            if !candidates.is_empty() {
                 let confidence = if candidates.len() == 1 {
                     Confidence::Probable
                 } else {
                     Confidence::Possible
                 };
-                for &to in candidates {
+                for to in candidates {
                     edges.push(Edge {
                         kind: EdgeKind::References {
                             from, // same within-or-file attribution as the exact-match path
@@ -1164,6 +1265,7 @@ pub fn assemble_from_source(
         packages,
         edges,
         suppressions,
+        visibility_ladders: ladders.into_iter().collect(),
         file_index,
     };
     if let Some(cache) = cache {
@@ -1195,6 +1297,16 @@ mod tests {
                 file_globs: vec![SmolStr::new("**/*.mock")],
                 manifest_globs: vec![],
                 grammar_version: SmolStr::new("n/a"),
+                visibility_ladder: vec![
+                    crate::adapter::VisibilityRung {
+                        scope: crate::adapter::VisibilityScope::Unit,
+                        label: SmolStr::new("private"),
+                    },
+                    crate::adapter::VisibilityRung {
+                        scope: crate::adapter::VisibilityScope::Public,
+                        label: SmolStr::new("exported"),
+                    },
+                ],
             }
         }
 
@@ -1265,9 +1377,15 @@ mod tests {
                         member_of: None,
                         signature_span: None,
                     });
-                } else if let Some(rest) = line.strip_prefix("member-decl ") {
+                } else if let Some(rest) = line
+                    .strip_prefix("member-decl ")
+                    .or_else(|| line.strip_prefix("member-decl-exported "))
+                {
                     // `member-decl <owner> <name>` — an unexported member declaration
-                    // (RFC 0012 §3): bare name, structured owner.
+                    // (RFC 0012 §3): bare name, structured owner. The `-exported` variant
+                    // declares at ladder level 1 (`Public` on the mock ladder) for the
+                    // fallback's visibility-scoped candidacy (RFC 0012 §6).
+                    let exported = line.starts_with("member-decl-exported ");
                     let mut parts = rest.splitn(2, ' ');
                     let owner = parts.next().unwrap_or("");
                     let name = parts.next().unwrap_or("");
@@ -1275,8 +1393,8 @@ mod tests {
                         name: SmolStr::new(name),
                         kind: SymbolKind::Method,
                         span: Span::default(),
-                        exported: false,
-                        visibility: VisibilityLevel(0),
+                        exported,
+                        visibility: VisibilityLevel(exported as u8),
                         member_of: Some(SmolStr::new(owner)),
                         signature_span: None,
                     });
@@ -1699,6 +1817,45 @@ mod tests {
             .edges
             .iter()
             .any(|e| matches!(e.kind, EdgeKind::References { to, .. } if to == member)));
+    }
+
+    #[test]
+    fn unexported_member_is_not_a_candidate_outside_its_unit() {
+        // RFC 0012 §6's visibility-scoped candidacy: a Unit-scoped member (mock ladder level
+        // 0) in another unit can't plausibly be the callee — Go's own rule (an unexported
+        // method is only legally callable in-package).
+        let dir = project(
+            "member-scope-unit",
+            &[
+                (
+                    "pkg1/a.mock",
+                    "unit pkg1\ndecl caller\nref helper\nroot-decl caller",
+                ),
+                ("pkg2/b.mock", "unit pkg2\nmember-decl T helper"),
+            ],
+        );
+        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        assert!(reference_edges_to(&graph, "helper").is_empty());
+    }
+
+    #[test]
+    fn exported_member_is_a_candidate_project_wide() {
+        // The other half: a Public-scoped member (mock ladder level 1) is a candidate for
+        // any same-language site, unit boundaries notwithstanding.
+        let dir = project(
+            "member-scope-public",
+            &[
+                (
+                    "pkg1/a.mock",
+                    "unit pkg1\ndecl caller\nref helper\nroot-decl caller",
+                ),
+                ("pkg2/b.mock", "unit pkg2\nmember-decl-exported T helper"),
+            ],
+        );
+        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let edges = reference_edges_to(&graph, "helper");
+        assert_eq!(edges.len(), 1);
+        assert_eq!(edges[0].confidence, Confidence::Probable);
     }
 
     #[test]

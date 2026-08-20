@@ -964,6 +964,16 @@ mod tests {
                 file_globs: vec![SmolStr::new("**/*.mock")],
                 manifest_globs: vec![],
                 grammar_version: SmolStr::new("mock"),
+                visibility_ladder: vec![
+                    crate::adapter::VisibilityRung {
+                        scope: crate::adapter::VisibilityScope::Unit,
+                        label: SmolStr::new("private"),
+                    },
+                    crate::adapter::VisibilityRung {
+                        scope: crate::adapter::VisibilityScope::Public,
+                        label: SmolStr::new("exported"),
+                    },
+                ],
             }
         }
         fn claim(&self, path: &ProjectPath) -> Option<crate::adapter::FileClaim> {
@@ -1011,6 +1021,16 @@ mod tests {
                 file_globs: vec![SmolStr::new("**/*.dmock")],
                 manifest_globs: vec![],
                 grammar_version: SmolStr::new("dmock"),
+                visibility_ladder: vec![
+                    crate::adapter::VisibilityRung {
+                        scope: crate::adapter::VisibilityScope::Unit,
+                        label: SmolStr::new("private"),
+                    },
+                    crate::adapter::VisibilityRung {
+                        scope: crate::adapter::VisibilityScope::Public,
+                        label: SmolStr::new("exported"),
+                    },
+                ],
             }
         }
         fn claim(&self, path: &ProjectPath) -> Option<crate::adapter::FileClaim> {

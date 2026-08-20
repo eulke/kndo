@@ -171,6 +171,7 @@ mod tests {
             language: class.map(|_| SmolStr::new("mock")),
             class,
             package: crate::vocab::PackageId(0),
+            unit: None,
         }
     }
 

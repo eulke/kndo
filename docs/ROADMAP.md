@@ -78,13 +78,17 @@ references its own file makes). `deep-import`'s verdict and `kndo impact` remain
 its own real design pass (subpath+surface tracking; a new navigation verb), not attempted as a
 rushed add-on to this pass.
 
-RFC 0012 (Precise Reference Semantics & Visibility) then landed its first five stages here:
+RFC 0012 (Precise Reference Semantics & Visibility) then landed its first six stages here:
 `member_of` + the duck-typed member-call fallback (killing the unused:method false positive),
 the Go `dir#package` unit key, symbol-granular reference attribution (`within`) in the core
 and **both** adapters — transitive death is now visible in Go and JS/TS alike, pinned by
-conformance fixtures in each — and §5's `RefKind` tagging + callable `signature_span`s feeding
+conformance fixtures in each — §5's `RefKind` tagging + callable `signature_span`s feeding
 the `private-type-leak` analysis (RFC 0005 §7's second direction), likewise fixture-pinned in
-both languages. Remaining RFC 0012 stages (§§6–10: the visibility ladder, detected_origin,
+both languages, and §6's ladder-as-data: adapters declare `(scope, label)` visibility rungs,
+assembly carries them onto the graph, and three consumers read them — `internal-only`'s
+tightest-sufficient rung (closing go.md's documented same-package under-reporting, fixture
+`internal-only-unit/`), `private-type-leak`'s scope comparison, and the member fallback's
+visibility-scoped candidacy. Remaining RFC 0012 stages (§§7–10: detected_origin,
 qualified-reference resolution, go.work) are the current in-order work queue.
 
 ## M4 — Duplication, CRAP, health

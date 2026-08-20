@@ -166,6 +166,7 @@ mod tests {
                 language: Some(SmolStr::new("mock")),
                 class: None,
                 package: PackageId(0),
+                unit: None,
             }],
             symbols,
             vec![],

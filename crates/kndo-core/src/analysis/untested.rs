@@ -214,6 +214,7 @@ mod tests {
                 origin: FileOrigin::Authored,
             }),
             package: crate::vocab::PackageId(0),
+            unit: None,
         }
     }
 
@@ -400,6 +401,7 @@ mod tests {
                     origin: FileOrigin::Generated,
                 }),
                 package: crate::vocab::PackageId(0),
+                unit: None,
             },
         ];
         let edges = vec![

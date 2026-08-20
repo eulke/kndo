@@ -109,6 +109,7 @@ mod tests {
             language: Some(SmolStr::new("mock")),
             class: Some(FileClass::default()),
             package,
+            unit: None,
         }
     }
 

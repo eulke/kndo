@@ -73,18 +73,16 @@ see §1.1.
 | Origin `vendored` | `vendor/**` — Go's actual `go mod vendor` output directory, already in the toolkit's `UNIVERSAL_VENDORED_DIRS` (kndo-adapter-toolkit `classify.rs`) — zero adapter-side work |
 
 **`VisibilityLevel`**: `0` (unexported — lowercase first rune) or `1` (exported — uppercase first
-rune), computed per declaration, never read from syntax the way JS reads an `export` keyword. Note
-for `internal-only`/`private-type-leak` (RFC 0005 §7) consumers: Go's real visibility ladder is
-**package**-grained at level 0, not file-grained — an unexported symbol is visible to every file in
-its package, not just its own file. `internal_only.rs` (kndo-core) currently only implements a
-*file*-boundary tightest-sufficient check (documented in its own module doc as a scope
-limitation); applied to Go it can only ever be conservative in the safe direction for level-0
-symbols (it never flags them at all, since `visibility.0 == 0` short-circuits before any boundary
-check) and can under-report for level-1 (exported) symbols used only by same-package sibling files
-— it sees a cross-*file* reference and correctly stops there, missing that the reference is
-same-*package* and the symbol could still be unexported. Under-reporting, never over-reporting —
-consistent with the codebase's "never falsely accuse" stance — and a fix (once wanted) is
-localized to `internal_only.rs` gaining a package-aware boundary check, not this adapter.
+rune), computed per declaration, never read from syntax the way JS reads an `export` keyword. The
+descriptor declares the matching ladder (RFC 0012 §6): `[Unit "unexported", Public "exported"]` —
+level 0 is **package**-grained (`Unit` = the `dir#package` key, §1.1), not file-grained, because an
+unexported symbol is visible to every file in its package. That data closed this doc's own
+previously-documented under-reporting: `internal-only` now computes the tightest-sufficient *rung*,
+so an exported symbol used only by same-package sibling files is correctly flagged "unexported
+would suffice" (conformance fixture `internal-only-unit/`), and the duck-typed member fallback
+(RFC 0012 §3) scopes candidates by the same rungs — an unexported method is only a candidate
+in-unit, Go's own legality rule. `internal/` is deliberately **not** a rung: it caps root
+*promotion* (§0), a separate mechanism from who can name a symbol.
 
 **1.1 Why `unit` had to exist first**: see §0. Set to `dir#declared-package-name` (RFC 0012
 §8) for every claimed `.go` file — the directory *plus* the `package` clause's name, because

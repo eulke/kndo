@@ -198,6 +198,7 @@ mod tests {
                 origin: FileOrigin::Authored,
             }),
             package: crate::vocab::PackageId(0),
+            unit: None,
         }
     }
 

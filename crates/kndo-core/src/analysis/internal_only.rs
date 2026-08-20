@@ -4,20 +4,17 @@
 //! lowest ladder level that still covers the origin of every incoming reference. Declared above
 //! it ⇒ finding."
 //!
-//! **Ladder scope, honestly**: the adapter-declared visibility ladder (RFC 0005 §7: private →
-//! file → package/crate → public) is currently binary in the only adapter that exists —
-//! [`crate::adapter::VisibilityLevel`] is `0` (unexported, file-private) or `1` (exported) for
-//! JS/TS (`kndo-adapter-js/src/extraction.rs`), and no graph fact yet distinguishes "same
-//! package, different file" from "different package" for a reference's origin. So this analysis
-//! only ever computes one of two tightest-sufficient answers — file-private (an exported symbol
-//! referenced only from its own declaring file) or "declared is already tightest" (some
-//! reference crosses the file boundary) — not the fuller package/crate middle rung the RFC's
-//! ladder names. It's the common, useful case (RFC 0005 §7's own headline example: "exported
-//! symbol referenced only within its own file"); the middle rung needs a richer per-reference
-//! fact (which package the reference came from) and a language ladder with an actual middle
-//! rung (Rust `pub(crate)`) before it's honestly buildable. Likewise "public member used only
-//! inside its own type" (`internal-only:method`) needs a *type*-scoped declaration fact (finer
-//! than "declared in this file") the graph doesn't carry yet — also not attempted here.
+//! Generalized over the adapter-declared visibility ladder (RFC 0012 §6): each incoming
+//! reference's origin is classified into the narrowest [`VisibilityScope`] relating it to the
+//! declaring file (same file → `File`, same `FileNode::unit` → `Unit`, same package →
+//! `Package`, else `Public`); the **required** scope is the widest of those over the strong
+//! (≥ `Probable`) references. The tightest sufficient rung is then the lowest ladder index
+//! whose scope covers it — if that rung's scope is strictly narrower than the declared rung's,
+//! the finding fires and the remediation names the lower rung's *label* (the language's own
+//! word — RFC 0005 §7). Two rungs sharing a scope never accuse each other (Java
+//! `protected`/`public` both map to `Public` by the conservative-mapping rule — no evidence
+//! could distinguish them). A language with no ladder, an empty ladder (CSS/JSON), or a
+//! declared level the ladder doesn't cover is skipped outright — degrade toward silence.
 //!
 //! Exemptions: a symbol that is itself a root target (library-mode public API, a test
 //! file's exported fixtures, a tooling config's exports — RFC 0011 §5's promotion, already
@@ -29,13 +26,15 @@
 //! code already flagged for deletion is redundant noise (same rollup-taxonomy reasoning
 //! `unused.rs` itself documents for skipping symbols in an already-unreachable file).
 //!
-//! Confidence: `Certain` when every incoming reference is same-file; if the only cross-file
-//! evidence keeping it exported is a `Possible`-confidence edge (RFC 0005 §1's wildcard/dynamic
-//! tier — unreliable either way), the verdict still fires but demoted to `Possible`, mirroring
-//! "confidence demotes through wildcard edges like every reachability verdict."
+//! Confidence: `Certain` when the strong references alone define the verdict; if a
+//! `Possible`-confidence reference (RFC 0005 §1's wildcard/dynamic tier — unreliable either
+//! way) originates *wider* than the strong-evidence requirement, the verdict still fires but
+//! demoted to `Possible`, mirroring "confidence demotes through wildcard edges like every
+//! reachability verdict."
 
 use std::collections::{HashMap, HashSet};
 
+use crate::adapter::VisibilityScope;
 use crate::analysis::finding_id;
 use crate::analysis::reachability::{Reachability, ReachabilityMap};
 use crate::engine::{Finding, Location, Severity};
@@ -47,6 +46,26 @@ fn origin_file(graph: &ProjectGraph, node: NodeRef) -> FileId {
         NodeRef::File(f) => f,
         NodeRef::Symbol(s) => graph.symbols[s.0 as usize].file,
     }
+}
+
+/// The narrowest scope that relates `origin` to the declaring file `decl` — what a reference
+/// from `origin` *requires* the declaration's visibility to at least be. Scopes nest
+/// (File ⊂ Unit ⊂ Package ⊂ Public), so this is a straight first-match walk.
+fn required_scope(graph: &ProjectGraph, decl: FileId, origin: FileId) -> VisibilityScope {
+    if decl == origin {
+        return VisibilityScope::File;
+    }
+    let decl_file = &graph.files[decl.0 as usize];
+    let origin_file = &graph.files[origin.0 as usize];
+    if let (Some(a), Some(b)) = (&decl_file.unit, &origin_file.unit) {
+        if a == b {
+            return VisibilityScope::Unit;
+        }
+    }
+    if decl_file.package == origin_file.package {
+        return VisibilityScope::Package;
+    }
+    VisibilityScope::Public
 }
 
 pub fn find_internal_only(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<Finding> {
@@ -78,8 +97,19 @@ pub fn find_internal_only(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<
         if matches!(class.origin, FileOrigin::Generated | FileOrigin::Vendored) {
             continue;
         }
-        if symbol.visibility.0 == 0 {
-            continue; // already the tightest level there is — nothing to narrow
+        let Some(ladder) = file
+            .language
+            .as_deref()
+            .and_then(|lang| graph.ladder_for(lang))
+        else {
+            continue; // no ladder declared — visibility semantics unknown, stay silent
+        };
+        let declared_index = symbol.visibility.0 as usize;
+        let Some(declared) = ladder.get(declared_index) else {
+            continue; // level the ladder doesn't cover (empty ladder included) — stay silent
+        };
+        if declared_index == 0 {
+            continue; // already the tightest rung there is — nothing to narrow
         }
 
         let symbol_id = SymbolId(index as u32);
@@ -93,19 +123,43 @@ pub fn find_internal_only(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<
         let Some(refs) = refs_by_target.get(&symbol_id) else {
             continue; // zero incoming references at all — `unused`'s verdict, not this one
         };
-        let cross_file_strong = refs
+        // Strong (≥ Probable) references define what the declaration *must* cover; a weak
+        // (Possible) reference from wider than that doesn't widen the requirement — it
+        // demotes the verdict's confidence instead.
+        let required = refs
             .iter()
-            .any(|&(f, c)| f != symbol.file && c >= Confidence::Probable);
-        if cross_file_strong {
-            continue; // a Certain/Probable cross-file reference justifies the declared visibility
+            .filter(|&&(_, c)| c >= Confidence::Probable)
+            .map(|&(f, _)| required_scope(graph, symbol.file, f))
+            .max()
+            .unwrap_or(VisibilityScope::File);
+        let weak_wider = refs
+            .iter()
+            .filter(|&&(_, c)| c < Confidence::Probable)
+            .any(|&(f, _)| required_scope(graph, symbol.file, f) > required);
+
+        // The tightest sufficient rung: lowest index whose scope covers every strong origin.
+        let Some((tightest_index, tightest)) = ladder
+            .iter()
+            .enumerate()
+            .find(|(_, rung)| rung.scope >= required)
+        else {
+            continue; // no rung covers the usage — nothing narrower to suggest
+        };
+        if tightest_index >= declared_index || tightest.scope >= declared.scope {
+            continue; // declared is already tightest, or only same-scope rungs below it
         }
-        let cross_file_weak = refs.iter().any(|&(f, _)| f != symbol.file);
-        let confidence = if cross_file_weak {
+
+        let confidence = if weak_wider {
             Confidence::Possible
         } else {
             Confidence::Certain
         };
-
+        let usage = match required {
+            VisibilityScope::File => "its own file",
+            VisibilityScope::Unit => "its own unit",
+            VisibilityScope::Package => "its own package",
+            VisibilityScope::Public => "the project", // unreachable: Public rungs cover it
+        };
         let path = file.path.0.as_str();
         let facet = symbol.kind.facet();
         let qualified = symbol.qualified_name();
@@ -117,7 +171,8 @@ pub fn find_internal_only(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<
             severity: Severity::Info, // RFC 0005 §7: info
             confidence,
             message: format!(
-                "{path}#{qualified} is exported but only used within its own file — consider not exporting this {facet}"
+                "{path}#{qualified} is declared {} but only used within {usage} — {} would suffice for this {facet}",
+                declared.label, tightest.label
             ),
             location: Location {
                 path: Some(file.path.clone()),
@@ -152,6 +207,7 @@ mod tests {
                 origin: FileOrigin::Authored,
             }),
             package: crate::vocab::PackageId(0),
+            unit: None,
         }
     }
 
@@ -377,6 +433,7 @@ mod tests {
                 origin: FileOrigin::Generated,
             }),
             package: crate::vocab::PackageId(0),
+            unit: None,
         }];
         let symbols = vec![symbol(FileId(0), "helper", 1)];
         let edges = vec![edge(
@@ -418,5 +475,185 @@ mod tests {
         let a = find_internal_only(&graph, &reach);
         let b = find_internal_only(&graph, &reach);
         assert_eq!(a[0].id, b[0].id);
+    }
+
+    // ------------------------------------------ ladder generalization (RFC 0012 §6)
+
+    fn file_in_unit(path: &str, unit: &str) -> FileNode {
+        let mut f = file(path);
+        f.unit = Some(SmolStr::new(unit));
+        f
+    }
+
+    fn root_and_ref(root_file: FileId, from: FileId, to: SymbolId) -> Vec<Edge> {
+        vec![
+            edge(
+                EdgeKind::Root {
+                    kind: RootKind::Production,
+                    target: NodeRef::File(root_file),
+                },
+                Confidence::Certain,
+            ),
+            edge(
+                EdgeKind::References {
+                    from: NodeRef::File(from),
+                    to,
+                    kind: RefKind::Call,
+                },
+                Confidence::Certain,
+            ),
+        ]
+    }
+
+    #[test]
+    fn exported_symbol_used_only_by_same_unit_siblings_is_internal_only() {
+        // The documented Go under-reporting this stage fixes: cross-file evidence used to
+        // justify any exported level; with the ladder, a same-unit-only use narrows to the
+        // Unit rung ("could be unexported").
+        let files = vec![
+            file_in_unit("pkg/a.go2", "pkg#p"),
+            file_in_unit("pkg/b.go2", "pkg#p"),
+        ];
+        let symbols = vec![symbol(FileId(0), "Helper", 1)];
+        let edges = root_and_ref(FileId(1), FileId(1), SymbolId(0));
+        let graph = ProjectGraph::for_test(files, symbols, vec![], edges);
+        let reach = crate::analysis::reachability::compute(&graph);
+        let findings = find_internal_only(&graph, &reach);
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].confidence, Confidence::Certain);
+        assert!(
+            findings[0].message.contains("private would suffice"),
+            "remediation must name the lower rung's label: {}",
+            findings[0].message
+        );
+    }
+
+    #[test]
+    fn cross_package_use_needs_the_widest_rung_and_is_not_flagged() {
+        // Mock ladder is [Unit, Public]: a strong reference from another package requires
+        // Package scope, and the lowest covering rung is Public — exactly the declared level.
+        let mut f0 = file("a/x.ts");
+        f0.package = crate::vocab::PackageId(0);
+        let mut f1 = file("b/y.ts");
+        f1.package = crate::vocab::PackageId(1);
+        let symbols = vec![symbol(FileId(0), "helper", 1)];
+        let edges = root_and_ref(FileId(1), FileId(1), SymbolId(0));
+        let graph =
+            ProjectGraph::for_test(vec![f0, f1], symbols, vec![], edges).with_packages(vec![
+                crate::graph::PackageNode {
+                    manifest: None,
+                    name: None,
+                    private: false,
+                },
+                crate::graph::PackageNode {
+                    manifest: None,
+                    name: None,
+                    private: false,
+                },
+            ]);
+        let reach = crate::analysis::reachability::compute(&graph);
+        assert!(find_internal_only(&graph, &reach).is_empty());
+    }
+
+    #[test]
+    fn a_language_with_no_declared_ladder_is_skipped() {
+        let files = vec![file("src/a.ts")];
+        let symbols = vec![symbol(FileId(0), "helper", 1)];
+        let edges = root_and_ref(FileId(0), FileId(0), SymbolId(0));
+        let graph =
+            ProjectGraph::for_test(files, symbols, vec![], edges).with_visibility_ladders(vec![]);
+        let reach = crate::analysis::reachability::compute(&graph);
+        assert!(find_internal_only(&graph, &reach).is_empty());
+    }
+
+    #[test]
+    fn a_declared_level_beyond_the_ladder_is_skipped_not_accused() {
+        // Conservative degradation: an adapter emitting a level its ladder doesn't name is a
+        // contract wobble — stay silent rather than guess a scope.
+        let files = vec![file("src/a.ts")];
+        let symbols = vec![symbol(FileId(0), "helper", 7)];
+        let edges = root_and_ref(FileId(0), FileId(0), SymbolId(0));
+        let graph = ProjectGraph::for_test(files, symbols, vec![], edges);
+        let reach = crate::analysis::reachability::compute(&graph);
+        assert!(find_internal_only(&graph, &reach).is_empty());
+    }
+
+    fn rung(scope: crate::adapter::VisibilityScope, label: &str) -> crate::adapter::VisibilityRung {
+        crate::adapter::VisibilityRung {
+            scope,
+            label: SmolStr::new(label),
+        }
+    }
+
+    #[test]
+    fn multi_rung_ladder_names_the_tightest_sufficient_label() {
+        // JS-shaped ladder [File, Package, Public]: declared at the middle rung, used
+        // same-file only — the remediation names rung 0's label, not just "not exported".
+        use crate::adapter::VisibilityScope::*;
+        let files = vec![file("src/a.ts")];
+        let symbols = vec![symbol(FileId(0), "helper", 1)];
+        let edges = root_and_ref(FileId(0), FileId(0), SymbolId(0));
+        let graph =
+            ProjectGraph::for_test(files, symbols, vec![], edges).with_visibility_ladders(vec![(
+                SmolStr::new("mock"),
+                vec![
+                    rung(File, "module-local"),
+                    rung(Package, "exported"),
+                    rung(Public, "package surface"),
+                ],
+            )]);
+        let reach = crate::analysis::reachability::compute(&graph);
+        let findings = find_internal_only(&graph, &reach);
+        assert_eq!(findings.len(), 1);
+        assert!(
+            findings[0]
+                .message
+                .contains("declared exported but only used within its own file"),
+            "{}",
+            findings[0].message
+        );
+        assert!(
+            findings[0].message.contains("module-local would suffice"),
+            "{}",
+            findings[0].message
+        );
+    }
+
+    #[test]
+    fn same_scope_rungs_never_accuse_each_other() {
+        // Java-shaped tail [.., Public "protected", Public "public"]: a symbol declared at
+        // the top rung whose uses require Public must NOT be told to become "protected" —
+        // no static evidence can distinguish two rungs sharing a scope.
+        use crate::adapter::VisibilityScope::*;
+        let mut f0 = file("A.java2");
+        f0.package = crate::vocab::PackageId(0);
+        let mut f1 = file("B.java2");
+        f1.package = crate::vocab::PackageId(1);
+        let symbols = vec![symbol(FileId(0), "helper", 3)];
+        let edges = root_and_ref(FileId(1), FileId(1), SymbolId(0));
+        let graph = ProjectGraph::for_test(vec![f0, f1], symbols, vec![], edges)
+            .with_packages(vec![
+                crate::graph::PackageNode {
+                    manifest: None,
+                    name: None,
+                    private: false,
+                },
+                crate::graph::PackageNode {
+                    manifest: None,
+                    name: None,
+                    private: false,
+                },
+            ])
+            .with_visibility_ladders(vec![(
+                SmolStr::new("mock"),
+                vec![
+                    rung(File, "private"),
+                    rung(Unit, "package-private"),
+                    rung(Public, "protected"),
+                    rung(Public, "public"),
+                ],
+            )]);
+        let reach = crate::analysis::reachability::compute(&graph);
+        assert!(find_internal_only(&graph, &reach).is_empty());
     }
 }

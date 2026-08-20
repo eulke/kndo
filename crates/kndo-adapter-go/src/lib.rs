@@ -11,7 +11,7 @@ mod resolution;
 
 use kndo_core::adapter::{
     AdapterDescriptor, FileClaim, ImportSpec, LanguageAdapter, ManifestFacts, ProjectPath,
-    Resolution, ResolveCtx, SourceFile,
+    Resolution, ResolveCtx, SourceFile, VisibilityRung, VisibilityScope,
 };
 use smol_str::SmolStr;
 
@@ -39,6 +39,20 @@ impl LanguageAdapter for GoAdapter {
             file_globs: vec![SmolStr::new("**/*.go")],
             manifest_globs: vec![SmolStr::new("**/go.mod")],
             grammar_version: SmolStr::new("tree-sitter-go 0.25"),
+            // RFC 0012 §6's Go ladder: capitalization is the language's entire visibility
+            // system — unexported is package-scoped (`Unit` = the dir#package key), exported
+            // is public. `internal/` is NOT a rung: it caps root *promotion* (a separate
+            // mechanism, docs/adapters/go.md §0), not who can name a symbol.
+            visibility_ladder: vec![
+                VisibilityRung {
+                    scope: VisibilityScope::Unit,
+                    label: SmolStr::new("unexported"),
+                },
+                VisibilityRung {
+                    scope: VisibilityScope::Public,
+                    label: SmolStr::new("exported"),
+                },
+            ],
         }
     }
 

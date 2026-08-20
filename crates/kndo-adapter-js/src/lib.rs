@@ -5,7 +5,7 @@
 
 use kndo_core::adapter::{
     AdapterDescriptor, FileClaim, FileFacts, ImportSpec, LanguageAdapter, ManifestFacts,
-    ProjectPath, Resolution, ResolveCtx, SourceFile,
+    ProjectPath, Resolution, ResolveCtx, SourceFile, VisibilityRung, VisibilityScope,
 };
 use smol_str::SmolStr;
 
@@ -43,6 +43,24 @@ impl LanguageAdapter for JsTsAdapter {
                 SmolStr::new("**/pnpm-workspace.yaml"),
             ],
             grammar_version: SmolStr::new("tree-sitter-typescript 0.23"),
+            // RFC 0012 §6's JS/TS ladder. Extraction emits 0/1 today (js-ts.md §4); rung 2
+            // ("package surface": reachable through the package's `exports` map) is an
+            // assembly-time promotion that lands with surface-awareness — declared now so the
+            // ladder is complete the day a symbol carries level 2.
+            visibility_ladder: vec![
+                VisibilityRung {
+                    scope: VisibilityScope::File,
+                    label: SmolStr::new("module-local"),
+                },
+                VisibilityRung {
+                    scope: VisibilityScope::Package,
+                    label: SmolStr::new("exported"),
+                },
+                VisibilityRung {
+                    scope: VisibilityScope::Public,
+                    label: SmolStr::new("package surface"),
+                },
+            ],
         }
     }
 

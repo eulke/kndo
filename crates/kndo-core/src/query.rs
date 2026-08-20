@@ -1586,6 +1586,7 @@ mod tests {
                 origin: FileOrigin::Authored,
             }),
             package: PackageId(0),
+            unit: None,
         }
     }
 
