@@ -845,8 +845,9 @@ impl Engine {
         Diagnostic,
     > {
         match graph::assemble_from_source(source, &self.adapters, self.cache.as_ref()) {
-            Ok((g, diagnostics)) => {
-                let findings = analysis::run_all(&g);
+            Ok((g, mut diagnostics)) => {
+                let (findings, analysis_diagnostics) = analysis::run_all(&g);
+                diagnostics.extend(analysis_diagnostics);
                 let (findings, suppressed) = crate::suppression::apply(&g, findings);
                 Ok((g, findings, diagnostics, suppressed))
             }
@@ -938,6 +939,15 @@ impl Engine {
 mod tests {
     use super::*;
     use smol_str::SmolStr;
+
+    /// True for the diagnostic `untested` emits when a project has no test roots at all (RFC
+    /// 0005 §9) — expected noise in every diff-mode fixture below, since none of this module's
+    /// mock adapters declare test roots. Filtering it out keeps `diagnostics.is_empty()`-style
+    /// assertions meaningful for genuine regressions instead of forcing every diff test to know
+    /// about a finding category it isn't testing.
+    fn is_no_test_roots_diagnostic(d: &Diagnostic) -> bool {
+        d.message.starts_with("untested: no test roots detected")
+    }
 
     /// Bare-minimum adapter claiming `.mock` files — engine.rs can't depend on a real adapter
     /// crate (that would invert the layering the ignorance rule protects), but a cache-warmth
@@ -1336,7 +1346,11 @@ mod tests {
             mode: RunMode::Diff { base: base_sha },
         });
 
-        assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+        assert!(
+            result.diagnostics.iter().all(is_no_test_roots_diagnostic),
+            "{:?}",
+            result.diagnostics
+        );
         assert_eq!(result.mode, "diff");
 
         let new_b = result
@@ -1401,7 +1415,11 @@ mod tests {
             mode: RunMode::Staged,
         });
 
-        assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+        assert!(
+            result.diagnostics.iter().all(is_no_test_roots_diagnostic),
+            "{:?}",
+            result.diagnostics
+        );
         assert_eq!(result.findings.len(), 1, "{:?}", result.findings);
         assert_eq!(finding_path(&result.findings[0]), "staged.dmock");
     }
@@ -1460,7 +1478,11 @@ mod tests {
             mode: RunMode::Diff { base: base_sha },
         });
 
-        assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+        assert!(
+            result.diagnostics.iter().all(is_no_test_roots_diagnostic),
+            "{:?}",
+            result.diagnostics
+        );
         // Exactly one derived new finding, with a pkg-relative path — and nothing about
         // outside.dmock on either side (it is out of scope, not "removed").
         assert_eq!(result.findings.len(), 1, "{:?}", result.findings);
@@ -1497,7 +1519,11 @@ mod tests {
             mode: RunMode::Diff { base: base_sha },
         });
 
-        assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+        assert!(
+            result.diagnostics.iter().all(is_no_test_roots_diagnostic),
+            "{:?}",
+            result.diagnostics
+        );
         assert!(!result
             .findings
             .iter()
@@ -1560,7 +1586,11 @@ mod tests {
             mode: RunMode::Diff { base: base_sha },
         });
 
-        assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+        assert!(
+            result.diagnostics.iter().all(is_no_test_roots_diagnostic),
+            "{:?}",
+            result.diagnostics
+        );
         assert!(!result
             .findings
             .iter()

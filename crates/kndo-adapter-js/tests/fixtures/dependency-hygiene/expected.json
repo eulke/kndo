@@ -1,6 +1,7 @@
 {
   "findings": [
     { "category": "test-only", "subject_kind": "dependency", "path": "package.json", "symbol": "chai" },
-    { "category": "unused", "subject_kind": "dependency", "path": "package.json", "symbol": "vitest" }
+    { "category": "unused", "subject_kind": "dependency", "path": "package.json", "symbol": "vitest" },
+    { "category": "untested", "subject_kind": "file", "path": "src/index.ts" }
   ]
 }

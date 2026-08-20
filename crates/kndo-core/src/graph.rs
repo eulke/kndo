@@ -1653,7 +1653,7 @@ mod tests {
         // import even though b is not a root of anything. (Its `util` symbol is still
         // correctly flagged — this fixture's import carries no bindings, nothing references
         // the symbol by name; symbol-level discrimination survives the file being alive.)
-        let findings = crate::analysis::run_all(&graph);
+        let (findings, _diag) = crate::analysis::run_all(&graph);
         assert!(!findings.iter().any(|f| f.subject_kind == "file"
             && f.location.path.as_ref().map(|p| p.0.as_str()) == Some("packages/b/lib.mock")));
     }
@@ -1676,7 +1676,7 @@ mod tests {
             ],
         );
         let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
-        let findings = crate::analysis::run_all(&graph);
+        let (findings, _diag) = crate::analysis::run_all(&graph);
         assert!(findings
             .iter()
             .any(|f| f.category == "undeclared" && f.location.symbol.as_deref() == Some("pkg-b")));
@@ -1699,7 +1699,7 @@ mod tests {
             ],
         );
         let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
-        let findings = crate::analysis::run_all(&graph);
+        let (findings, _diag) = crate::analysis::run_all(&graph);
         assert!(findings.iter().any(|f| f.category == "unused"
             && f.subject_kind == "dependency"
             && f.location.symbol.as_deref() == Some("pkg-b")));
@@ -1726,7 +1726,7 @@ mod tests {
             ],
         );
         let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
-        let findings = crate::analysis::run_all(&graph);
+        let (findings, _diag) = crate::analysis::run_all(&graph);
         let flagged: Vec<Option<&str>> = findings
             .iter()
             .map(|f| f.location.symbol.as_deref())
@@ -1804,7 +1804,7 @@ mod tests {
             .expect("role-derived test root");
         assert_eq!(root.confidence, Confidence::Probable);
 
-        let findings = crate::analysis::run_all(&graph);
+        let (findings, _diag) = crate::analysis::run_all(&graph);
         let flagged_paths: Vec<&str> = findings
             .iter()
             .filter_map(|f| f.location.path.as_ref().map(|p| p.0.as_str()))
@@ -1826,7 +1826,7 @@ mod tests {
             )],
         );
         let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
-        let findings = crate::analysis::run_all(&graph);
+        let (findings, _diag) = crate::analysis::run_all(&graph);
         assert!(!findings
             .iter()
             .any(|f| f.location.symbol.as_deref() == Some("configObject")));
@@ -1857,7 +1857,7 @@ mod tests {
             .expect("wildcard from the opaquely-consumed target");
         assert_eq!(wildcard.confidence, Confidence::Possible);
 
-        let findings = crate::analysis::run_all(&graph);
+        let (findings, _diag) = crate::analysis::run_all(&graph);
         assert!(!findings
             .iter()
             .any(|f| f.location.symbol.as_deref() == Some("viaKey")));
@@ -1937,7 +1937,7 @@ mod tests {
             ],
         );
         let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
-        let findings = crate::analysis::run_all(&graph);
+        let (findings, _diag) = crate::analysis::run_all(&graph);
         let subjects: Vec<(&str, Option<&str>)> = findings
             .iter()
             .map(|f| {

@@ -23,6 +23,12 @@ pub enum Reachability {
 /// consequence: dead is always certain.
 pub struct ReachabilityMap {
     colors: HashMap<NodeRef, (Reachability, Confidence)>,
+    /// The raw per-`(root kind, confidence tier)` reached sets `compute` builds on its way to
+    /// `colors` — kept around because `colors` only records each node's *winning* color
+    /// (Production beats TestOnly beats ToolingOnly), which is exactly wrong for a query like
+    /// `untested` (RFC 0005 §9): "is this Production-colored node *also* reachable from a test
+    /// root" needs the kind that lost the precedence race, not just the one that won it.
+    reached: HashMap<(RootKind, Confidence), HashSet<NodeRef>>,
 }
 
 impl ReachabilityMap {
@@ -31,6 +37,16 @@ impl ReachabilityMap {
             .get(&node)
             .copied()
             .unwrap_or((Reachability::Unreachable, Confidence::Certain))
+    }
+
+    /// Whether `node` is reachable from any root of `kind`, at any confidence whatsoever —
+    /// independent of which color `node` actually won (see the struct doc). `Possible` is the
+    /// loosest tier's BFS (edges filtered by `conf >= tau`, and `Possible` is the weakest tau),
+    /// so its reached set is the union of every stronger tier's.
+    pub fn reachable_from(&self, kind: RootKind, node: NodeRef) -> bool {
+        self.reached
+            .get(&(kind, Confidence::Possible))
+            .is_some_and(|s| s.contains(&node))
     }
 }
 
@@ -138,7 +154,7 @@ pub fn compute(graph: &ProjectGraph) -> ReachabilityMap {
         }
     }
 
-    ReachabilityMap { colors }
+    ReachabilityMap { colors, reached }
 }
 
 #[cfg(test)]
@@ -285,6 +301,55 @@ mod tests {
             reach.get(NodeRef::File(FileId(2))),
             (Reachability::Production, Confidence::Probable)
         );
+    }
+
+    #[test]
+    fn reachable_from_sees_past_color_precedence() {
+        // Same worked example as `color_precedence_beats_confidence_tier`: target's *color* is
+        // Production (it wins the precedence race), but it's independently reachable from the
+        // test root too — `reachable_from` must report that even though `get`'s color hides it.
+        let prod_root = file("prod_root.ts");
+        let test_root = file("test_root.ts");
+        let target = file("target.ts");
+        let files = vec![prod_root, test_root, target];
+        let edges = vec![
+            edge(
+                EdgeKind::Root {
+                    kind: RootKind::Production,
+                    target: NodeRef::File(FileId(0)),
+                },
+                Confidence::Certain,
+            ),
+            edge(
+                EdgeKind::Root {
+                    kind: RootKind::Test,
+                    target: NodeRef::File(FileId(1)),
+                },
+                Confidence::Certain,
+            ),
+            edge(
+                EdgeKind::ImportsFile {
+                    from: FileId(0),
+                    to: FileId(2),
+                },
+                Confidence::Certain,
+            ),
+            edge(
+                EdgeKind::ImportsFile {
+                    from: FileId(1),
+                    to: FileId(2),
+                },
+                Confidence::Certain,
+            ),
+        ];
+        let graph = ProjectGraph::for_test(files, vec![], vec![], edges);
+        let reach = compute(&graph);
+        assert_eq!(
+            reach.get(NodeRef::File(FileId(2))).0,
+            Reachability::Production
+        );
+        assert!(reach.reachable_from(RootKind::Test, NodeRef::File(FileId(2))));
+        assert!(!reach.reachable_from(RootKind::Test, NodeRef::File(FileId(0))));
     }
 
     #[test]

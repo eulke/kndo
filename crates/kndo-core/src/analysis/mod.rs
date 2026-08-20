@@ -8,9 +8,11 @@ pub mod reachability;
 mod rollup;
 pub mod test_only;
 pub mod undeclared;
+pub mod untested;
 pub mod unused;
 pub mod version_skew;
 
+use crate::adapter::Diagnostic;
 use crate::engine::Finding;
 use crate::graph::{PackageNode, ProjectGraph};
 use crate::vocab::PackageId;
@@ -60,7 +62,7 @@ pub(crate) fn package_label(graph: &ProjectGraph, package: PackageId) -> String 
 }
 
 /// Runs every M1 analysis and returns their findings, sorted by id for deterministic output.
-pub fn run_all(graph: &crate::graph::ProjectGraph) -> Vec<Finding> {
+pub fn run_all(graph: &crate::graph::ProjectGraph) -> (Vec<Finding>, Vec<Diagnostic>) {
     let reach = reachability::compute(graph);
     let mut findings = unused::find_unused_files(graph, &reach);
     findings.extend(unused::find_unused_symbols(graph, &reach));
@@ -70,6 +72,8 @@ pub fn run_all(graph: &crate::graph::ProjectGraph) -> Vec<Finding> {
     findings.extend(version_skew::find_version_skew(graph));
     findings.extend(duplicate::find_duplicate_files(graph));
     findings.extend(dependency_hygiene::find_dependency_hygiene(graph));
+    let (untested_findings, untested_diagnostic) = untested::find_untested(graph, &reach);
+    findings.extend(untested_findings);
     findings.sort_by(|a, b| a.id.cmp(&b.id));
-    findings
+    (findings, untested_diagnostic.into_iter().collect())
 }
