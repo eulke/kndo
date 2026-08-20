@@ -19,7 +19,7 @@ use crate::vocab::{Confidence, FileOrigin, FileRole};
 
 /// RFC 0005 §10's standard threshold ("findings for CRAP > 30"); configurability lands with
 /// the config file.
-const CRAP_THRESHOLD: f64 = 30.0;
+pub(crate) const CRAP_THRESHOLD: f64 = 30.0;
 
 pub fn crap_score(cyclomatic: u32, coverage: f64) -> f64 {
     let comp = cyclomatic as f64;
@@ -119,6 +119,7 @@ mod tests {
         SymbolMetrics {
             cyclomatic,
             loc: 10,
+            token_count: 60,
             fingerprints: Vec::new(),
         }
     }

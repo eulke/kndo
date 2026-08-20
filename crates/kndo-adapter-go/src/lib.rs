@@ -36,7 +36,7 @@ impl LanguageAdapter for GoAdapter {
     fn descriptor(&self) -> AdapterDescriptor {
         AdapterDescriptor {
             id: SmolStr::new("go"),
-            facts_schema_version: 8, // 8: FunctionMetrics emission (RFC 0005 §6); 7: go.work + sibling WorkspaceMember (RFC 0012 §10); 6: scope_context/local_alias/unit_name (§9); 5: detected_origin (§7); 4: RefKind + signature_span (§5)
+            facts_schema_version: 9, // 9: FunctionMetrics.token_count (RFC 0005 §11); 8: FunctionMetrics emission (RFC 0005 §6); 7: go.work + sibling WorkspaceMember (RFC 0012 §10); 6: scope_context/local_alias/unit_name (§9); 5: detected_origin (§7); 4: RefKind + signature_span (§5)
             file_globs: vec![SmolStr::new("**/*.go")],
             manifest_globs: vec![SmolStr::new("**/go.mod"), SmolStr::new("**/go.work")],
             grammar_version: SmolStr::new("tree-sitter-go 0.25"),

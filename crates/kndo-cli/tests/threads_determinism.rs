@@ -67,6 +67,13 @@ fn run_check(dir: &Path, threads: &str) -> serde_json::Value {
         run.remove("started_at");
         run.remove("duration_ms");
     }
+    // `health.previous` is run-*order* state, not analysis output: each full run stores its
+    // score in `.kndo/health.json` as the next run's trend baseline, so the second invocation
+    // legitimately reports a `previous` the first one couldn't have. The score and category
+    // breakdown themselves stay in the comparison — those must be thread-count-invariant.
+    if let Some(health) = value.get_mut("health").and_then(|h| h.as_object_mut()) {
+        health.remove("previous");
+    }
     value
 }
 

@@ -32,6 +32,16 @@
         "$ref": "#/$defs/Finding"
       }
     },
+    "health": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Health"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "kndo_version": {
       "type": "string"
     },
@@ -227,6 +237,118 @@
         "location"
       ]
     },
+    "Health": {
+      "description": "The §4 health block. `previous` is filled by the engine (before-side in diff modes, the\nstored snapshot in full mode) — computation here is always \"this graph, now\".",
+      "type": "object",
+      "properties": {
+        "categories": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/HealthCategory"
+          }
+        },
+        "grade": {
+          "type": "string"
+        },
+        "packages": {
+          "description": "Per-package breakdown (RFC 0011 §6) — present when more than one package owns claimed\nfiles; the single-package (and no-manifest) common case omits it.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PackageHealth"
+          }
+        },
+        "previous": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HealthSummary"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "score": {
+          "description": "0–100, one-decimal precision.",
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "required": [
+        "score",
+        "grade",
+        "categories"
+      ]
+    },
+    "HealthCategory": {
+      "type": "object",
+      "properties": {
+        "category": {
+          "type": "string"
+        },
+        "count": {
+          "description": "Subjects counted by the numerator (dead symbols, orphan files, misdeclared deps, …).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0
+        },
+        "coverage": {
+          "description": "Ingested coverage provenance (\"coverage-lcov coverage/lcov.info (2d old)\"), or \"none\".",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "crapload": {
+          "description": "Σ CRAP score over threshold-exceeding functions (the hotlist's total load).",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "penalty": {
+          "type": "number",
+          "format": "double"
+        },
+        "ratio": {
+          "description": "The raw ratio (numerator / denominator), before the saturation curve.",
+          "type": "number",
+          "format": "double"
+        },
+        "tokens_duplicated": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "category",
+        "ratio",
+        "penalty"
+      ]
+    },
+    "HealthSummary": {
+      "type": "object",
+      "properties": {
+        "grade": {
+          "type": "string"
+        },
+        "score": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "required": [
+        "score",
+        "grade"
+      ]
+    },
     "Location": {
       "description": "Where a finding landed (contracts/output-schema.md §2). Every field is optional because not\nevery subject has all of them: `version-skew`/`duplicate` findings span multiple manifests\nor files, so no single `path` is *the* location — expressing that properly is the `related`\nevidence chain, not yet implemented (deferred, not faked with an arbitrary first path).",
       "type": "object",
@@ -265,6 +387,26 @@
           ]
         }
       }
+    },
+    "PackageHealth": {
+      "type": "object",
+      "properties": {
+        "grade": {
+          "type": "string"
+        },
+        "package": {
+          "type": "string"
+        },
+        "score": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "required": [
+        "package",
+        "score",
+        "grade"
+      ]
     },
     "ProjectPath": {
       "description": "Project-relative path with `/` separators, the only path form that crosses the adapter\nboundary (case handling and symlink resolution are the core's discovery concern).",

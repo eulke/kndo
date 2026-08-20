@@ -75,15 +75,25 @@ credit improvements and lets pre-commit output celebrate deletions.
 
 ```jsonc
 {
-  "score": 84, "grade": "B",
-  "previous": { "score": 82, "grade": "B" },    // from last snapshot, if any
-  "categories": [
+  "score": 84.1, "grade": "B",                  // one-decimal score; A≥90 B≥80 C≥65 D≥50 F
+  "previous": { "score": 82.0, "grade": "B" },  // full mode: last snapshot (.kndo/health.json), if any;
+                                                // diff modes: the computed "before" side
+  "categories": [                               // always all computed categories, each with ratio+penalty
     { "category": "unused-symbols", "ratio": 0.031, "penalty": 6.2, "count": 47 },
     { "category": "duplication",  "ratio": 0.058, "penalty": 7.1, "tokens_duplicated": 8412 },
-    { "category": "crap",         "penalty": 4.0, "crapload": 1912.4, "coverage": "lcov (2d old)" }
+    { "category": "crap",         "ratio": 0.2, "penalty": 4.0, "count": 12, "crapload": 1912.4,
+      "coverage": "coverage-lcov coverage/lcov.info (2d old)" }   // or "none"
+  ],
+  "packages": [                                 // RFC 0011 §6 breakdown; present only when ≥ 2
+    { "package": "@demo/a", "score": 91.0, "grade": "A" }         // packages own claimed files
   ]
 }
 ```
+
+Category names in the breakdown: `unused-symbols`, `unused-dependencies`, `unused-files`,
+`test-only`, `duplication`, `crap`, `cycles`, `internal-only`, `untested` (the last omitted
+when the project has no test roots — RFC 0005 §11's gate). Weights, saturation constants, and
+ratio definitions are normative in RFC 0005 §11.
 
 ## 5. Finding id stability
 

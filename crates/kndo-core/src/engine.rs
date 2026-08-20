@@ -64,6 +64,32 @@ fn coverage_plugins() -> Vec<Box<dyn crate::plugin::Plugin>> {
     vec![Box::new(crate::plugin::LcovPlugin)]
 }
 
+/// Where full-mode runs remember their last health score (`.kndo/health.json`) so the next
+/// run can report the trend (output-schema §4's `previous`). Diff modes never touch it — their
+/// `previous` is the computed "before" side.
+fn health_snapshot_path(root: &Path) -> PathBuf {
+    root.join(".kndo").join("health.json")
+}
+
+fn load_health_snapshot(root: &Path) -> Option<crate::analysis::health::HealthSummary> {
+    let bytes = std::fs::read(health_snapshot_path(root)).ok()?;
+    serde_json::from_slice(&bytes).ok()
+}
+
+fn store_health_snapshot(root: &Path, score: f64, grade: &str) {
+    let summary = crate::analysis::health::HealthSummary {
+        score,
+        grade: grade.to_string(),
+    };
+    if let Ok(json) = serde_json::to_string_pretty(&summary) {
+        let path = health_snapshot_path(root);
+        if let Some(dir) = path.parent() {
+            let _ = std::fs::create_dir_all(dir);
+        }
+        let _ = std::fs::write(path, json); // best-effort: read-only checkouts stay silent
+    }
+}
+
 /// Mirrors the output schema's `schema_version` (contracts/output-schema.md).
 pub const SCHEMA_VERSION: &str = "1.0.0";
 
@@ -377,6 +403,11 @@ pub struct RunResult {
     /// present, unlike `baseline`. In diff modes this reflects the "after" side only, mirroring
     /// how `baseline` is applied symmetrically but reported from "after" (see `run_diff`).
     pub suppressed: SuppressedSummary,
+    /// The health score (RFC 0005 §11, output-schema §4). Full mode: the current tree, with
+    /// `previous` from the last stored snapshot when the cache holds one. Diff modes: the
+    /// "after" side, with `previous` computed from "before" — the M4 exit criterion's delta.
+    /// `None` only when assembly itself failed.
+    pub health: Option<crate::analysis::health::Health>,
 }
 
 /// `"warm"` only when the cache was on *and* actually served something this run — an
@@ -426,6 +457,8 @@ struct Envelope {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     fixed: Vec<Finding>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    health: Option<crate::analysis::health::Health>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     baseline: Option<BaselineSummary>,
     suppressed: SuppressedSummary,
     diagnostics: Vec<Diagnostic>,
@@ -447,6 +480,7 @@ impl RunResult {
             },
             findings: self.findings.clone(),
             fixed: self.fixed.clone(),
+            health: self.health.clone(),
             baseline: self.baseline.clone(),
             suppressed: self.suppressed,
             diagnostics: self.diagnostics.clone(),
@@ -493,6 +527,16 @@ fn ensure_thread_pool(threads: Option<usize>) {
     let _ = rayon::ThreadPoolBuilder::new()
         .num_threads(n)
         .build_global();
+}
+
+/// One tree's full analysis, as [`Engine::assemble_and_analyze`] returns it — graph plus
+/// everything derived from it in that pass.
+struct AnalyzedTree {
+    graph: graph::ProjectGraph,
+    findings: Vec<Finding>,
+    diagnostics: Vec<Diagnostic>,
+    suppressed: SuppressedSummary,
+    health: crate::analysis::health::Health,
 }
 
 /// Synchronous and single-instance-per-project (the cache lock, RFC 0004 §7); a serving
@@ -586,7 +630,14 @@ impl Engine {
         let outcome = match &req.mode {
             RunMode::Full => {
                 let root = self.root.clone();
-                let raw = self.run_analysis_at(&root);
+                let mut raw = self.run_analysis_at(&root);
+                // Trend (RFC 0006 §2's "trend vs previous snapshots"): the last full run's
+                // score, stored beside the baseline in `.kndo/` — best-effort on read-only
+                // checkouts, and deliberately not in the prunable cache directory.
+                if let Some(health) = &mut raw.health {
+                    health.previous = load_health_snapshot(&self.root);
+                    store_health_snapshot(&self.root, health.score, &health.grade);
+                }
                 let (findings, baseline) = self.apply_baseline(raw.findings);
                 RunResult {
                     findings,
@@ -692,26 +743,37 @@ impl Engine {
             None => discovery::TreeSource::Directory(&work_root),
         };
 
-        let (before_graph, before_findings, before_diagnostics, _before_suppressed) =
-            match self.assemble_and_analyze(&before_source) {
-                Ok(t) => t,
-                Err(d) => {
-                    return RunResult {
-                        diagnostics: vec![d],
-                        ..RunResult::default()
-                    }
+        let before = match self.assemble_and_analyze(&before_source) {
+            Ok(t) => t,
+            Err(d) => {
+                return RunResult {
+                    diagnostics: vec![d],
+                    ..RunResult::default()
                 }
-            };
-        let (after_graph, after_findings, after_diagnostics, after_suppressed) =
-            match self.assemble_and_analyze(&after_source) {
-                Ok(t) => t,
-                Err(d) => {
-                    return RunResult {
-                        diagnostics: vec![d],
-                        ..RunResult::default()
-                    }
+            }
+        };
+        let after = match self.assemble_and_analyze(&after_source) {
+            Ok(t) => t,
+            Err(d) => {
+                return RunResult {
+                    diagnostics: vec![d],
+                    ..RunResult::default()
                 }
-            };
+            }
+        };
+        let (before_graph, before_findings, before_diagnostics, before_health) = (
+            before.graph,
+            before.findings,
+            before.diagnostics,
+            before.health,
+        );
+        let (after_graph, after_findings, after_diagnostics, after_suppressed, after_health) = (
+            after.graph,
+            after.findings,
+            after.diagnostics,
+            after.suppressed,
+            after.health,
+        );
 
         let (before_findings, _) = self.apply_baseline(before_findings);
         let (after_findings, baseline) = self.apply_baseline(after_findings);
@@ -778,6 +840,14 @@ impl Engine {
             adapters,
             baseline,
             suppressed: after_suppressed,
+            health: {
+                let mut health = after_health;
+                health.previous = Some(crate::analysis::health::HealthSummary {
+                    score: before_health.score,
+                    grade: before_health.grade,
+                });
+                Some(health)
+            },
             ..RunResult::default()
         }
     }
@@ -835,8 +905,7 @@ impl Engine {
         let start = Instant::now();
         let root = self.root.clone();
         let source = discovery::TreeSource::Directory(&root);
-        let (graph, findings, _diagnostics, _suppressed) = match self.assemble_and_analyze(&source)
-        {
+        let analyzed = match self.assemble_and_analyze(&source) {
             Ok(t) => t,
             Err(d) => {
                 return requests
@@ -845,6 +914,7 @@ impl Engine {
                     .collect()
             }
         };
+        let (graph, findings) = (analyzed.graph, analyzed.findings);
         let reach = query_envelope::compute_reachability(&graph);
         let findings_owned = findings; // keep the Vec<Finding> alive across the borrow below
         let locations = query_envelope::finding_locations(&findings_owned);
@@ -873,22 +943,22 @@ impl Engine {
     fn assemble_and_analyze(
         &mut self,
         source: &discovery::TreeSource<'_>,
-    ) -> Result<
-        (
-            graph::ProjectGraph,
-            Vec<Finding>,
-            Vec<Diagnostic>,
-            SuppressedSummary,
-        ),
-        Diagnostic,
-    > {
+    ) -> Result<AnalyzedTree, Diagnostic> {
         match graph::assemble_from_source(source, &self.adapters, self.cache.as_ref()) {
             Ok((g, mut diagnostics)) => {
                 let coverage = self.ingest_coverage(&mut diagnostics);
-                let (findings, analysis_diagnostics) = analysis::run_all(&g, &coverage);
+                let outcome = analysis::run_all(&g, &coverage);
+                let (findings, analysis_diagnostics, health) =
+                    (outcome.findings, outcome.diagnostics, outcome.health);
                 diagnostics.extend(analysis_diagnostics);
                 let (findings, suppressed) = crate::suppression::apply(&g, findings);
-                Ok((g, findings, diagnostics, suppressed))
+                Ok(AnalyzedTree {
+                    graph: g,
+                    findings,
+                    diagnostics,
+                    suppressed,
+                    health,
+                })
             }
             Err(crate::discovery::DiscoveryError::Root(e)) => Err(Diagnostic {
                 level: DiagnosticLevel::Warn,
@@ -944,6 +1014,15 @@ impl Engine {
                     Ok(content) => {
                         let project_path = ProjectPath(smol_str::SmolStr::new(rel.as_str()));
                         plugin.ingest_coverage(&project_path, &content, &mut sink);
+                        // Provenance is host-side: the host located the report and checked
+                        // its freshness, so it records what was ingested and how old it was
+                        // (surfaced by health's crap category, per ADR 0005).
+                        sink.add_source(format!(
+                            "{} {} ({}d old)",
+                            plugin.descriptor().id,
+                            rel,
+                            age_days.unwrap_or(0)
+                        ));
                     }
                     Err(e) => diagnostics.push(Diagnostic {
                         level: DiagnosticLevel::Warn,
@@ -962,7 +1041,13 @@ impl Engine {
     /// builds its own `RunResult` in [`Self::run_diff`], from the "after" side).
     fn run_analysis_at(&mut self, root: &Path) -> RunResult {
         match self.assemble_and_analyze(&discovery::TreeSource::Directory(root)) {
-            Ok((g, findings, diagnostics, suppressed)) => {
+            Ok(AnalyzedTree {
+                graph: g,
+                findings,
+                diagnostics,
+                suppressed,
+                health,
+            }) => {
                 let adapters = self
                     .adapters
                     .iter()
@@ -989,6 +1074,7 @@ impl Engine {
                     findings,
                     adapters,
                     suppressed,
+                    health: Some(health),
                     ..RunResult::default()
                 }
             }
@@ -1397,8 +1483,11 @@ mod tests {
         assert!(value["run"]["duration_ms"].is_u64());
         assert!(value["findings"].is_array());
         assert!(value["diagnostics"].is_array());
+        // Health is real since M4: present in full mode, with the §4 shape.
+        assert!(value["health"]["score"].is_number());
+        assert!(value["health"]["grade"].is_string());
+        assert!(value["health"]["categories"].is_array());
         // Not yet implemented subsystems must be absent, not fabricated as empty/null.
-        assert!(value.get("health").is_none());
         assert!(value.get("budget").is_none());
         assert!(value.get("baseline").is_none());
         // Unlike baseline, suppressed is always present — inline pragma matching runs on

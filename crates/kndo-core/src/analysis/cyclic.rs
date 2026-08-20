@@ -39,8 +39,14 @@ use crate::engine::{Finding, Location, RelatedLocation, Severity};
 use crate::graph::ProjectGraph;
 use crate::vocab::{Confidence, EdgeKind, FileId, FileOrigin, PackageId};
 
-pub fn find_cycles(graph: &ProjectGraph) -> Vec<Finding> {
+/// Findings plus the set of files participating in any tolerance-reported cycle — `health`'s
+/// "files participating in cycles" numerator (RFC 0005 §11). The set includes files whose
+/// file-level cycle rolled up into a package-level finding (they still sit in a real cycle);
+/// it excludes cycles every participant language declares `Impossible` or that are entirely
+/// generated/vendored, exactly like the findings themselves.
+pub fn find_cycles(graph: &ProjectGraph) -> (Vec<Finding>, HashSet<FileId>) {
     let mut findings = Vec::new();
+    let mut participants: HashSet<FileId> = HashSet::new();
 
     // ------------------------------------------------------------- file level
     // Adjacency over ImportsFile edges, keeping the strongest-confidence edge per (from, to)
@@ -76,6 +82,12 @@ pub fn find_cycles(graph: &ProjectGraph) -> Vec<Finding> {
         });
         if !any_authored {
             continue;
+        }
+
+        // Participation is judged before the package rollup below: a file in a cross-package
+        // cycle is still in a cycle, even though its finding reports at package level.
+        if cycle_severity(graph, &files, |p| p.file_cycles).is_some() {
+            participants.extend(files.iter().copied());
         }
 
         // Spanning ≥ 2 real packages → the package-level finding is this cycle's rollup.
@@ -287,7 +299,7 @@ pub fn find_cycles(graph: &ProjectGraph) -> Vec<Finding> {
     }
 
     findings.sort_by(|a, b| a.id.cmp(&b.id));
-    findings
+    (findings, participants)
 }
 
 /// The most severe applicable tolerance among the participants' languages, mapped to a
@@ -491,7 +503,7 @@ mod tests {
             vec![file("a.ts", 0), file("b.ts", 0)],
             vec![imports(0, 1), imports(1, 0)],
         );
-        let findings = find_cycles(&graph);
+        let findings = find_cycles(&graph).0;
         assert_eq!(findings.len(), 1, "one finding per cycle, not per member");
         let f = &findings[0];
         assert_eq!(f.category, "cyclic");
@@ -509,13 +521,13 @@ mod tests {
             vec![file("a.ts", 0), file("b.ts", 0), file("c.ts", 0)],
             vec![imports(0, 1), imports(1, 2)],
         );
-        assert!(find_cycles(&graph).is_empty());
+        assert!(find_cycles(&graph).0.is_empty());
     }
 
     #[test]
     fn a_self_import_is_not_a_cycle() {
         let graph = one_package_graph(vec![file("a.ts", 0)], vec![imports(0, 0)]);
-        assert!(find_cycles(&graph).is_empty());
+        assert!(find_cycles(&graph).0.is_empty());
     }
 
     #[test]
@@ -529,7 +541,7 @@ mod tests {
             ],
             vec![imports(0, 1), imports(1, 0), imports(2, 3), imports(3, 2)],
         );
-        assert_eq!(find_cycles(&graph).len(), 2);
+        assert_eq!(find_cycles(&graph).0.len(), 2);
     }
 
     #[test]
@@ -545,7 +557,7 @@ mod tests {
                 package_cycles: CycleTolerance::Impossible,
             },
         )]);
-        assert!(find_cycles(&graph).is_empty());
+        assert!(find_cycles(&graph).0.is_empty());
     }
 
     #[test]
@@ -561,7 +573,7 @@ mod tests {
                 package_cycles: CycleTolerance::Idiomatic,
             },
         )]);
-        let findings = find_cycles(&graph);
+        let findings = find_cycles(&graph).0;
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].severity, Severity::Info);
     }
@@ -577,7 +589,7 @@ mod tests {
             });
         }
         let graph = one_package_graph(vec![a, b], vec![imports(0, 1), imports(1, 0)]);
-        assert!(find_cycles(&graph).is_empty());
+        assert!(find_cycles(&graph).0.is_empty());
     }
 
     fn real_package(name: &str) -> PackageNode {
@@ -615,7 +627,7 @@ mod tests {
             real_package("p"),
             real_package("q"),
         ]);
-        let findings = find_cycles(&graph);
+        let findings = find_cycles(&graph).0;
         assert_eq!(findings.len(), 1, "{findings:#?}");
         assert_eq!(findings[0].subject_kind, "package");
         assert_eq!(findings[0].severity, Severity::Warning);
@@ -642,7 +654,7 @@ mod tests {
             real_package("p"),
             real_package("q"),
         ]);
-        let findings = find_cycles(&graph);
+        let findings = find_cycles(&graph).0;
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].subject_kind, "package");
     }
@@ -657,7 +669,7 @@ mod tests {
             vec![imports(0, 1), imports(1, 0)],
         )
         .with_packages(vec![implicit_package(), real_package("p")]);
-        let findings = find_cycles(&graph);
+        let findings = find_cycles(&graph).0;
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].subject_kind, "file");
     }
@@ -670,7 +682,7 @@ mod tests {
             vec![file("a.ts", 0), file("b.ts", 0)],
             vec![imports(0, 1), weak],
         );
-        let findings = find_cycles(&graph);
+        let findings = find_cycles(&graph).0;
         assert_eq!(findings[0].confidence, Confidence::Possible);
     }
 
@@ -685,7 +697,7 @@ mod tests {
             vec![file("b.ts", 0), file("a.ts", 0)],
             vec![imports(0, 1), imports(1, 0)],
         );
-        assert_eq!(find_cycles(&g1)[0].id, find_cycles(&g2)[0].id);
+        assert_eq!(find_cycles(&g1).0[0].id, find_cycles(&g2).0[0].id);
     }
 
     #[test]
@@ -696,7 +708,7 @@ mod tests {
             vec![file("a.ts", 0), file("b.ts", 0), file("c.ts", 0)],
             vec![imports(0, 1), imports(1, 2), imports(2, 0), imports(1, 0)],
         );
-        let findings = find_cycles(&graph);
+        let findings = find_cycles(&graph).0;
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("3 files"));
         assert!(

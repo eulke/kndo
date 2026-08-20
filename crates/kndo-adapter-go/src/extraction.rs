@@ -260,6 +260,7 @@ fn push_function_metrics(out: &mut FileFacts, symbol: &str, node: Node) {
         symbol: SmolStr::new(symbol),
         cyclomatic: shape.cyclomatic,
         loc: shape.loc,
+        token_count: shape.token_count as u32,
         fingerprints: shape.fingerprints,
     });
 }

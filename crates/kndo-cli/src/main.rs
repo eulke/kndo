@@ -30,6 +30,7 @@ fn main() -> ExitCode {
         Some("check") => check(&args[1..]),
         Some("baseline") => baseline_cmd(&args[1..]),
         Some("doctor") => doctor_cmd(),
+        Some("health") => health_cmd(&args[1..]),
         Some("init") => init_cmd(&args[1..]),
         Some("find") => nav::find_cmd(&args[1..]),
         Some("describe") => nav::describe_cmd(&args[1..]),
@@ -44,7 +45,7 @@ fn main() -> ExitCode {
         None => check(&args),
         Some(other) => {
             eprintln!(
-                "kndo: unknown command `{other}` (check, baseline, doctor, init, find, describe, uses, used-by, trace, query, --version)"
+                "kndo: unknown command `{other}` (check, health, baseline, doctor, init, find, describe, uses, used-by, trace, query, --version)"
             );
             ExitCode::from(2)
         }
@@ -314,6 +315,7 @@ struct Flags {
     diff: Option<String>,
     fail_on: Option<String>,
     threads: Option<String>,
+    by_package: bool,
 }
 
 fn parse_flags(args: &[String]) -> Flags {
@@ -326,6 +328,7 @@ fn parse_flags(args: &[String]) -> Flags {
         diff: None,
         fail_on: None,
         threads: None,
+        by_package: false,
     };
     let mut it = args.iter();
     while let Some(arg) = it.next() {
@@ -338,6 +341,7 @@ fn parse_flags(args: &[String]) -> Flags {
             "--diff" => flags.diff = it.next().cloned(),
             "--fail-on" => flags.fail_on = it.next().cloned(),
             "--threads" => flags.threads = it.next().cloned(),
+            "--by-package" => flags.by_package = true,
             s if s.starts_with("--format=") => {
                 flags.format = Some(s["--format=".len()..].to_string())
             }
@@ -486,6 +490,88 @@ pub(crate) fn resolve_color(explicit: Option<&str>) -> bool {
     }
 }
 
+/// `kndo health` (RFC 0006 §2): the health score, per-category breakdown, and trend vs the
+/// previous snapshot — a full-mode analysis presented health-first. `--by-package` adds the
+/// RFC 0011 §6 breakdown (same penalties grouped by package, never a different metric).
+/// Never a gate: always exits 0 — budgets (RFC 0006 §5) are the gating mechanism, and they
+/// arrive with the config file.
+fn health_cmd(args: &[String]) -> ExitCode {
+    let flags = parse_flags(args);
+    let format = resolve_format(flags.format.as_deref());
+    let env_threads = std::env::var("KNDO_THREADS").ok();
+    let threads = match resolve_threads(flags.threads.as_deref(), env_threads.as_deref()) {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("kndo: {e}");
+            return ExitCode::from(2);
+        }
+    };
+    let cwd = match std::env::current_dir() {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!("kndo: cannot determine working directory: {e}");
+            return ExitCode::from(2);
+        }
+    };
+    let overrides = ConfigOverrides {
+        use_cache: !flags.no_cache,
+        threads,
+    };
+    let mut engine = match kndo::open(&cwd, overrides) {
+        Ok(e) => e,
+        Err(e) => {
+            eprintln!("kndo: {e}");
+            return ExitCode::from(2);
+        }
+    };
+    let result = engine.check(CheckRequest {
+        mode: kndo::engine::RunMode::Full,
+    });
+    for d in &result.diagnostics {
+        let level = match d.level {
+            kndo::adapter::DiagnosticLevel::Warn => "warning",
+            kndo::adapter::DiagnosticLevel::Info => "info",
+        };
+        match &d.path {
+            Some(p) => eprintln!("kndo: {level}: {}: {}", p.0, d.message),
+            None => eprintln!("kndo: {level}: {}", d.message),
+        }
+    }
+    let Some(health) = &result.health else {
+        eprintln!(
+            "kndo: health unavailable - the project tree could not be analyzed (see diagnostics above)"
+        );
+        return ExitCode::from(2);
+    };
+    match format.as_str() {
+        // The §4 health object is the whole payload here — `kndo check --format json` carries
+        // the full envelope; this command answers exactly one question.
+        "json" => match serde_json::to_string_pretty(health) {
+            Ok(json) => println!("{json}"),
+            Err(e) => {
+                eprintln!("kndo: failed to serialize health: {e}");
+                return ExitCode::from(2);
+            }
+        },
+        "human" | "agent" => {
+            let opts = render::RenderOptions {
+                color: resolve_color(flags.color.as_deref()),
+                quiet: flags.quiet,
+            };
+            let mut health = health.clone();
+            if !flags.by_package {
+                health.packages.clear();
+            }
+            print!("{}", render::render_health(&health, &opts, true));
+        }
+        other => {
+            eprintln!("kndo: unknown --format `{other}` (human, json, agent)");
+            return ExitCode::from(2);
+        }
+    }
+    ExitCode::SUCCESS
+}
+
 fn check(args: &[String]) -> ExitCode {
     let flags = parse_flags(args);
     let format = resolve_format(flags.format.as_deref());
@@ -622,6 +708,7 @@ mod tests {
             diff: diff.map(str::to_string),
             fail_on: fail_on.map(str::to_string),
             threads: None,
+            by_package: false,
         }
     }
 

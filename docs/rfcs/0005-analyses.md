@@ -322,6 +322,33 @@ single bad file can't zero the score and improvements near zero still show. Grad
 B ≥ 80, C ≥ 65, D ≥ 50, F below. Output always shows the per-category breakdown and, in diff
 modes, the delta caused by the change. Weights are configurable; defaults are the contract.
 
+**Landed (M4) — the documented constants.** The curve is `saturating_ratio(r) = min(r /
+saturation, 1)`: linear near zero, full weight at the saturation point. Defaults (the
+contract until the config file lands):
+
+| Category | Saturation (ratio = full weight) |
+|----------|----------------------------------|
+| unused code | 0.25 |
+| unused deps | 0.5 |
+| unused files | 0.25 |
+| test-only code | 0.25 |
+| duplication | 0.3 |
+| CRAP | 0.5 |
+| cycles | 0.25 |
+| excess visibility | 0.5 |
+| test blind spots | 0.5 |
+
+Ratio definitions where the table above leaves room: *duplication* counts the tokens of every
+clone-group member beyond its canonical (lexicographically first) instance — the copies you'd
+delete, not the one you'd keep; *CRAP*'s raw ratio is `Σ max(0, CRAP(m) − threshold) /
+(threshold × functions)` (average threshold-excess per function, in threshold units), with
+`crapload = Σ CRAP(m)` over threshold-exceeding functions reported alongside; *cycles* counts
+only files in tolerance-**reported** cycles (§8 — `Impossible`/idiomatic-skip cycles are not
+penalties); *test blind spots* is skipped entirely when the project has no test roots, the
+same honesty gate as §9's diagnostic. Health is computed before baseline and suppression are
+applied — the score measures the codebase, not how much of it has been acknowledged away.
+The score floors at 0 (weights sum to 115).
+
 ## 12. Suppression model
 
 - Inline: `kndo:allow <category>[:<subject>] [reason]` in a comment on/above the declaration,

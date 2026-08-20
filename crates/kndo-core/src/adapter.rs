@@ -392,6 +392,9 @@ pub struct FunctionMetrics {
     pub symbol: SmolStr,
     pub cyclomatic: u32,
     pub loc: u32,
+    /// Normalized-stream token count — `health`'s duplication ratio basis (RFC 0005 §11:
+    /// "duplicated tokens / total tokens").
+    pub token_count: u32,
     /// Winnowing fingerprints over the normalized token stream (RFC 0005 §6).
     pub fingerprints: Vec<u64>,
 }

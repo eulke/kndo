@@ -93,14 +93,13 @@ impl Plugin for LcovPlugin {
     /// silence, never to a wrong file.
     fn ingest_coverage(
         &self,
-        path: &ProjectPath,
+        _path: &ProjectPath,
         content: &[u8],
         out: &mut crate::coverage::CoverageSink,
     ) {
         let Ok(text) = std::str::from_utf8(content) else {
             return;
         };
-        out.add_source(format!("lcov {}", path.0));
         let mut current: Option<ProjectPath> = None;
         for line in text.lines() {
             let line = line.trim_end();

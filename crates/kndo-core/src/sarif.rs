@@ -303,6 +303,7 @@ mod tests {
             cache_hits: 0,
             baseline: None,
             suppressed: SuppressedSummary::default(),
+            health: None,
         }
     }
 

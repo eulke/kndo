@@ -26,8 +26,10 @@ pub struct FileCoverage {
 #[derive(Debug, Default)]
 pub struct CoverageMap {
     pub files: HashMap<ProjectPath, FileCoverage>,
-    /// Human-readable provenance per ingested report ("lcov coverage/lcov.info") — surfaced
-    /// so consumers can judge the source, per ADR 0005's consequences.
+    /// Human-readable provenance per ingested report ("coverage-lcov coverage/lcov.info
+    /// (2d old)"), recorded by the *host* after each successful ingest — it located the
+    /// report and checked its freshness, so it owns saying what was used. Surfaced by
+    /// health's crap category so consumers can judge the source (ADR 0005).
     pub sources: Vec<String>,
 }
 

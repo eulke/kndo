@@ -190,8 +190,26 @@ emits 75k crap findings (every one of its 15k-clone families is complex and unco
 moves synth-repo warm to ~750 ms — linear finding-construction/serialization volume, not an
 algorithmic regression; bench5k stays at ~60 ms warm.
 
-**Exit:** duplication findings stable under reformatting (Type-2); CRAP hotlist matches manual
-audit on a real repo; health deltas shown in diff modes.
+The health score closed the milestone's feature list (RFC 0005 §11, all of it): the composite
+computed from the same primitives the analyses use (reachability colors, metrics, coverage,
+aux stats returned by `cyclic`/`duplicate` — never recomputed), with the saturation curve and
+its per-category constants now documented in §11 as the contract. `SymbolMetrics` gained
+`token_count` (graph schema 9, facts Go 9/JS 8) so duplication's ratio basis is real tokens,
+not a proxy. `RunResult.health` carries the §4 object in every mode: full mode reads/writes a
+`.kndo/health.json` snapshot for the trend line, diff modes compute `previous` from the
+"before" side — the exit criterion's delta, rendered in the human diff header
+(`health 81.3 ──▶ 60.9 −20.4 ↓ D (10.9 from F)`, with the grade-boundary distance on drops),
+the agent result line (`| health 81.3 -> 60.9 (D)`), and the JSON envelope. `kndo health`
+renders the full category table (`--by-package` adds RFC 0011 §6's grouping of the same
+penalties; always exit 0 — gating stays with budgets). One test adjusted with cause:
+`threads_determinism` now strips `health.previous` before comparing, because the trend
+snapshot makes consecutive full runs legitimately differ in that one field — the score and
+breakdown remain in the byte-identical comparison.
+
+**Exit:** duplication findings stable under reformatting (Type-2) — **met** (byte-identical id
+on the real CLI); health deltas shown in diff modes — **met** (see above); CRAP hotlist
+matches manual audit on a real repo — **pending**: validated on fixtures and synthetic corpora
+(formula, threshold, coverage flip verified), the real-repo audit remains before M4 closes.
 
 ## M5 — Remaining languages + plugin system GA
 Adapters: Java, Kotlin, Swift, Rust, JSON, CSS (order: Java → Kotlin share infra; Rust; Swift;

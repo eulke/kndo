@@ -81,6 +81,8 @@ impl SymbolNode {
 pub struct SymbolMetrics {
     pub cyclomatic: u32,
     pub loc: u32,
+    /// Normalized-stream token count (RFC 0005 §11's duplication ratio basis).
+    pub token_count: u32,
     pub fingerprints: Vec<u64>,
 }
 
@@ -400,7 +402,7 @@ pub(crate) fn package_owns(manifest_dir: &str, file_dir: &str) -> bool {
 /// an assembly-algorithm change that could produce a different graph from the same facts. Feeds
 /// [`compute_graph_key`] (RFC 0004 §3's "core graph-schema version"); a bump here invalidates
 /// every project's cached `graph.bin` on the next run, same as any other key-input change.
-pub const GRAPH_SCHEMA_VERSION: u32 = 8; // 8: function_metrics (RFC 0005 §6); 7: cycle policies (§8); 6: PackageNode surface (RFC 0011 §4); 5: ladders + FileNode.unit (RFC 0012 §6); 4: RefKind + signature_span (§5); 3: within (§4)
+pub const GRAPH_SCHEMA_VERSION: u32 = 9; // 9: SymbolMetrics.token_count (RFC 0005 §11); 8: function_metrics (RFC 0005 §6); 7: cycle policies (§8); 6: PackageNode surface (RFC 0011 §4); 5: ladders + FileNode.unit (RFC 0012 §6); 4: RefKind + signature_span (§5); 3: within (§4)
 
 /// The graph snapshot's cache key (RFC 0004 §3, `cache.rs`'s `graph.bin`): a single digest
 /// folding in the *whole* discovered file set (every path + content hash — this already
@@ -967,6 +969,7 @@ pub fn assemble_from_source(
                     SymbolMetrics {
                         cyclomatic: fm.cyclomatic,
                         loc: fm.loc,
+                        token_count: fm.token_count,
                         fingerprints: fm.fingerprints.clone(),
                     },
                 ));
@@ -2298,8 +2301,8 @@ mod tests {
             )],
         );
         let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
-        let (findings, _) =
-            crate::analysis::run_all(&graph, &crate::coverage::CoverageMap::default());
+        let findings =
+            crate::analysis::run_all(&graph, &crate::coverage::CoverageMap::default()).findings;
         let unused: Vec<&str> = findings
             .iter()
             .filter(|f| f.category == "unused")
@@ -2326,8 +2329,8 @@ mod tests {
             ],
         );
         let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
-        let (findings, _) =
-            crate::analysis::run_all(&graph, &crate::coverage::CoverageMap::default());
+        let findings =
+            crate::analysis::run_all(&graph, &crate::coverage::CoverageMap::default()).findings;
         // Alive is the claim — an `internal-only` info finding (exported, used same-file
         // only) is separate, correct, and out of scope here.
         assert!(!findings
@@ -2667,8 +2670,8 @@ mod tests {
         // import even though b is not a root of anything. (Its `util` symbol is still
         // correctly flagged — this fixture's import carries no bindings, nothing references
         // the symbol by name; symbol-level discrimination survives the file being alive.)
-        let (findings, _diag) =
-            crate::analysis::run_all(&graph, &crate::coverage::CoverageMap::default());
+        let findings =
+            crate::analysis::run_all(&graph, &crate::coverage::CoverageMap::default()).findings;
         assert!(!findings.iter().any(|f| f.subject_kind == "file"
             && f.location.path.as_ref().map(|p| p.0.as_str()) == Some("packages/b/lib.mock")));
     }
@@ -2691,8 +2694,8 @@ mod tests {
             ],
         );
         let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
-        let (findings, _diag) =
-            crate::analysis::run_all(&graph, &crate::coverage::CoverageMap::default());
+        let findings =
+            crate::analysis::run_all(&graph, &crate::coverage::CoverageMap::default()).findings;
         assert!(findings
             .iter()
             .any(|f| f.category == "undeclared" && f.location.symbol.as_deref() == Some("pkg-b")));
@@ -2715,8 +2718,8 @@ mod tests {
             ],
         );
         let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
-        let (findings, _diag) =
-            crate::analysis::run_all(&graph, &crate::coverage::CoverageMap::default());
+        let findings =
+            crate::analysis::run_all(&graph, &crate::coverage::CoverageMap::default()).findings;
         assert!(findings.iter().any(|f| f.category == "unused"
             && f.subject_kind == "dependency"
             && f.location.symbol.as_deref() == Some("pkg-b")));
@@ -2743,8 +2746,8 @@ mod tests {
             ],
         );
         let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
-        let (findings, _diag) =
-            crate::analysis::run_all(&graph, &crate::coverage::CoverageMap::default());
+        let findings =
+            crate::analysis::run_all(&graph, &crate::coverage::CoverageMap::default()).findings;
         let flagged: Vec<Option<&str>> = findings
             .iter()
             .map(|f| f.location.symbol.as_deref())
@@ -2772,8 +2775,8 @@ mod tests {
             ],
         );
         let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
-        let (findings, _diag) =
-            crate::analysis::run_all(&graph, &crate::coverage::CoverageMap::default());
+        let findings =
+            crate::analysis::run_all(&graph, &crate::coverage::CoverageMap::default()).findings;
         let flagged: Vec<Option<&str>> = findings
             .iter()
             .map(|f| f.location.symbol.as_deref())
@@ -2853,8 +2856,8 @@ mod tests {
             .expect("role-derived test root");
         assert_eq!(root.confidence, Confidence::Probable);
 
-        let (findings, _diag) =
-            crate::analysis::run_all(&graph, &crate::coverage::CoverageMap::default());
+        let findings =
+            crate::analysis::run_all(&graph, &crate::coverage::CoverageMap::default()).findings;
         let flagged_paths: Vec<&str> = findings
             .iter()
             .filter_map(|f| f.location.path.as_ref().map(|p| p.0.as_str()))
@@ -2876,8 +2879,8 @@ mod tests {
             )],
         );
         let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
-        let (findings, _diag) =
-            crate::analysis::run_all(&graph, &crate::coverage::CoverageMap::default());
+        let findings =
+            crate::analysis::run_all(&graph, &crate::coverage::CoverageMap::default()).findings;
         assert!(!findings
             .iter()
             .any(|f| f.location.symbol.as_deref() == Some("configObject")));
@@ -2908,8 +2911,8 @@ mod tests {
             .expect("wildcard from the opaquely-consumed target");
         assert_eq!(wildcard.confidence, Confidence::Possible);
 
-        let (findings, _diag) =
-            crate::analysis::run_all(&graph, &crate::coverage::CoverageMap::default());
+        let findings =
+            crate::analysis::run_all(&graph, &crate::coverage::CoverageMap::default()).findings;
         assert!(!findings
             .iter()
             .any(|f| f.location.symbol.as_deref() == Some("viaKey")));
@@ -2989,8 +2992,8 @@ mod tests {
             ],
         );
         let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
-        let (findings, _diag) =
-            crate::analysis::run_all(&graph, &crate::coverage::CoverageMap::default());
+        let findings =
+            crate::analysis::run_all(&graph, &crate::coverage::CoverageMap::default()).findings;
         let subjects: Vec<(&str, Option<&str>)> = findings
             .iter()
             .map(|f| {

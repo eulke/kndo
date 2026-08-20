@@ -7,6 +7,7 @@ pub mod cyclic;
 pub mod deep_import;
 pub mod dependency_hygiene;
 pub mod duplicate;
+pub mod health;
 pub mod internal_only;
 pub mod private_type_leak;
 pub mod reachability;
@@ -73,7 +74,7 @@ pub(crate) fn package_label(graph: &ProjectGraph, package: PackageId) -> String 
 pub fn run_all(
     graph: &crate::graph::ProjectGraph,
     coverage: &crate::coverage::CoverageMap,
-) -> (Vec<Finding>, Vec<Diagnostic>) {
+) -> AnalysisOutcome {
     let reach = reachability::compute(graph);
     let mut findings = unused::find_unused_files(graph, &reach);
     findings.extend(unused::find_unused_symbols(graph, &reach));
@@ -82,15 +83,43 @@ pub fn run_all(
     findings.extend(undeclared::find_undeclared_dependencies(graph));
     findings.extend(version_skew::find_version_skew(graph));
     findings.extend(duplicate::find_duplicate_files(graph));
-    findings.extend(duplicate::find_duplicate_functions(graph));
+    let (duplicate_findings, duplicated) = duplicate::find_duplicate_functions(graph);
+    findings.extend(duplicate_findings);
     findings.extend(dependency_hygiene::find_dependency_hygiene(graph));
     findings.extend(internal_only::find_internal_only(graph, &reach));
     findings.extend(private_type_leak::find_private_type_leaks(graph));
     findings.extend(deep_import::find_deep_imports(graph));
-    findings.extend(cyclic::find_cycles(graph));
+    let (cycle_findings, cycle_files) = cyclic::find_cycles(graph);
+    findings.extend(cycle_findings);
     findings.extend(crap::find_crap(graph, coverage));
     let (untested_findings, untested_diagnostic) = untested::find_untested(graph, &reach);
     findings.extend(untested_findings);
     findings.sort_by(|a, b| a.id.cmp(&b.id));
-    (findings, untested_diagnostic.into_iter().collect())
+
+    // Health is computed over the pre-suppression findings (the score measures the codebase,
+    // not what's been acknowledged away) and the aux stats the analyses just produced.
+    let health = health::compute(
+        graph,
+        &reach,
+        &findings,
+        &health::HealthInputs {
+            coverage,
+            cycle_files: &cycle_files,
+            duplicated: &duplicated,
+        },
+    );
+
+    AnalysisOutcome {
+        findings,
+        diagnostics: untested_diagnostic.into_iter().collect(),
+        health,
+    }
+}
+
+/// Everything one analysis pass produces: findings (id-sorted), analysis-side diagnostics,
+/// and the health score computed from the same primitives (RFC 0005 §11).
+pub struct AnalysisOutcome {
+    pub findings: Vec<Finding>,
+    pub diagnostics: Vec<Diagnostic>,
+    pub health: health::Health,
 }

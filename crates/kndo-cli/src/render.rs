@@ -23,11 +23,15 @@
 //!   unreadable, only less decorated than the richest tier could be.
 //! - Width-based column truncation and the below-60-columns two-line fallback (§4) — lines
 //!   are never truncated here.
-//! - The health/budget block (§5) — no health scoring exists yet (M4), so there's nothing to
-//!   render; the diff header's `net` count is the only summary today.
+//! - The budget block (§5) — budgets need the config file ([delta] rules), which doesn't
+//!   exist yet; the health half of §5 IS rendered: a score/grade line plus per-category
+//!   penalty bars (non-zero categories only in `check` output; `kndo health` renders the full
+//!   table), and diff mode's header carries the before ──▶ after health line with the
+//!   grade-boundary distance on drops.
 //! - Findings that carry a `related` evidence chain (first populated by `cyclic`) render it as
 //!   indented `└` lines under the finding — role, location, note.
 
+use kndo::analysis::health::Health;
 use kndo::engine::{DeltaOrigin, Finding, RunResult};
 use kndo::query::{NeighborEntry, QNodeRef};
 use kndo::query_envelope::{QueryResult, ResultEntry};
@@ -73,7 +77,7 @@ pub fn render(result: &RunResult, opts: &RenderOptions) -> String {
     let suppressed_suffix = suppressed_suffix(result);
 
     if result.findings.is_empty() {
-        return format!(
+        let mut out = format!(
             "kndo · clean · {} files ({} claimed, {} symbols, {} deps, {} edges) · {}ms{baseline_suffix}{suppressed_suffix}\n",
             result.files_discovered,
             result.files_claimed,
@@ -82,6 +86,12 @@ pub fn render(result: &RunResult, opts: &RenderOptions) -> String {
             result.edges,
             result.duration_ms
         );
+        if !opts.quiet {
+            if let Some(health) = &result.health {
+                out.push_str(&health_score_line(health));
+            }
+        }
+        return out;
     }
 
     if opts.quiet {
@@ -126,7 +136,116 @@ pub fn render(result: &RunResult, opts: &RenderOptions) -> String {
         sort_findings(&mut in_group);
         render_section(&mut out, group, &in_group, opts);
     }
+    if let Some(health) = &result.health {
+        out.push_str(&render_health(health, opts, false));
+    }
     out
+}
+
+/// The §5 health block: the score/grade (+trend) line, then one bar line per category —
+/// every category when `full_table` (`kndo health`), only penalized ones inside `check`
+/// output (a zero-penalty row is reassurance, not triage).
+pub fn render_health(health: &Health, opts: &RenderOptions, full_table: bool) -> String {
+    let mut out = health_score_line(health);
+    for c in &health.categories {
+        if !full_table && c.penalty == 0.0 {
+            continue;
+        }
+        let mut extras: Vec<String> = Vec::new();
+        if let Some(n) = c.count {
+            extras.push(n.to_string());
+        }
+        if let Some(t) = c.tokens_duplicated {
+            extras.push(format!("{t} tokens"));
+        }
+        if let Some(l) = c.crapload {
+            extras.push(format!("load {l}"));
+        }
+        if let Some(cov) = &c.coverage {
+            extras.push(format!("coverage {cov}"));
+        }
+        let extra = if extras.is_empty() {
+            String::new()
+        } else {
+            format!("  ({})", extras.join(", "))
+        };
+        out.push_str(&format!(
+            "  {:<20} {}  −{:.1}{extra}\n",
+            c.category,
+            penalty_bar(c.penalty, opts),
+            c.penalty,
+        ));
+    }
+    if full_table && !health.packages.is_empty() {
+        out.push_str("\nby package:\n");
+        for p in &health.packages {
+            out.push_str(&format!(
+                "  {:<24} {:>5.1}  {}\n",
+                p.package, p.score, p.grade
+            ));
+        }
+    }
+    out
+}
+
+fn health_score_line(health: &Health) -> String {
+    let trend = match &health.previous {
+        Some(prev) if prev.score != health.score => {
+            let delta = health.score - prev.score;
+            let arrow = if delta > 0.0 { "↑" } else { "↓" };
+            format!("   {delta:+.1} {arrow} from {:.1}", prev.score)
+        }
+        Some(_) => "   unchanged".to_string(),
+        None => String::new(),
+    };
+    format!("health   {:.1}  {}{trend}\n", health.score, health.grade)
+}
+
+/// RFC 0009 §5's bar: a shape, not a chart — `▁▂▃▄▅▆▇` scaled against the heaviest weight
+/// (25), or `#` repetition when decoration is off.
+fn penalty_bar(penalty: f64, opts: &RenderOptions) -> String {
+    let level = ((penalty / 25.0) * 7.0).ceil().clamp(0.0, 7.0) as usize;
+    if opts.color {
+        const GLYPHS: [&str; 8] = [" ", "▁", "▂", "▃", "▄", "▅", "▆", "▇"];
+        GLYPHS[level].to_string()
+    } else {
+        format!("{:<7}", "#".repeat(level))
+    }
+}
+
+/// Diff mode's §5 health line: before ──▶ after with the signed delta, and on a drop the
+/// distance to the next grade boundary ("how close is this to becoming a C").
+fn health_diff_line(health: &Health) -> String {
+    let Some(prev) = &health.previous else {
+        return health_score_line(health);
+    };
+    let delta = health.score - prev.score;
+    let arrow = if delta > 0.0 {
+        "↑"
+    } else if delta < 0.0 {
+        "↓"
+    } else {
+        "="
+    };
+    let boundary = match delta < 0.0 {
+        true => grade_boundary_suffix(health.score, &health.grade),
+        false => String::new(),
+    };
+    format!(
+        "health   {:.1} ──▶ {:.1}   {delta:+.1} {arrow}   {}{boundary}\n",
+        prev.score, health.score, health.grade
+    )
+}
+
+fn grade_boundary_suffix(score: f64, grade: &str) -> String {
+    let (threshold, next) = match grade {
+        "A" => (90.0, "B"),
+        "B" => (80.0, "C"),
+        "C" => (65.0, "D"),
+        "D" => (50.0, "F"),
+        _ => return String::new(),
+    };
+    format!("  ({:.1} from {next})", score - threshold)
 }
 
 /// Diff modes' rendering (RFC 0006 §3): a one-line header (`N new · M fixed · net ±K`), then
@@ -143,11 +262,17 @@ fn render_diff(result: &RunResult, opts: &RenderOptions) -> String {
         result.fixed.len(),
     );
 
+    let health_line = result
+        .health
+        .as_ref()
+        .map(health_diff_line)
+        .unwrap_or_default();
+
     if opts.quiet || (result.findings.is_empty() && result.fixed.is_empty()) {
-        return header;
+        return format!("{header}{health_line}");
     }
 
-    let mut out = header;
+    let mut out = format!("{header}{health_line}");
     out.push('\n');
 
     let introduced: Vec<&Finding> = result

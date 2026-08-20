@@ -116,12 +116,31 @@ fn render_diff(result: &RunResult) -> String {
     out
 }
 
+/// Output-schema §9's result-line health segment: `health 82.4 -> 84.1 (B)` when a previous
+/// score exists (stored snapshot in full mode, the computed "before" side in diff modes),
+/// `health 84.1 (B)` otherwise.
+fn append_health(line: String, result: &RunResult) -> String {
+    match &result.health {
+        Some(h) => match &h.previous {
+            Some(prev) => format!(
+                "{line} | health {:.1} -> {:.1} ({})",
+                prev.score, h.score, h.grade
+            ),
+            None => format!("{line} | health {:.1} ({})", h.score, h.grade),
+        },
+        None => line,
+    }
+}
+
 fn diff_result_line(result: &RunResult) -> String {
     let net = result.findings.len() as i64 - result.fixed.len() as i64;
-    let base = format!(
-        "result: {} new, {} fixed, net {net:+}",
-        result.findings.len(),
-        result.fixed.len()
+    let base = append_health(
+        format!(
+            "result: {} new, {} fixed, net {net:+}",
+            result.findings.len(),
+            result.fixed.len()
+        ),
+        result,
     );
     let with_baseline = match &result.baseline {
         Some(b) => format!("{base} | baseline {} acknowledged", b.acknowledged),
@@ -140,11 +159,14 @@ fn header(result: &RunResult) -> String {
 }
 
 fn result_line(result: &RunResult) -> String {
-    let findings = if result.findings.is_empty() {
-        "result: clean".to_string()
-    } else {
-        format!("result: {} findings", result.findings.len())
-    };
+    let findings = append_health(
+        if result.findings.is_empty() {
+            "result: clean".to_string()
+        } else {
+            format!("result: {} findings", result.findings.len())
+        },
+        result,
+    );
     let with_baseline = match &result.baseline {
         Some(b) => format!("{findings} | baseline {} acknowledged", b.acknowledged),
         None => findings,
