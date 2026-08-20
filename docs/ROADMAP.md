@@ -164,6 +164,14 @@ with a precomputed in-degree pass (~490 ms warm; the remaining ~140 ms is Tarjan
 duplicate index on 15k deliberately-identical functions, linear costs on a corpus built to be
 worst-case; bench5k stays comfortably in budget).
 
+SARIF output landed next (`--format sarif`, contracts §7's mapping exactly): SARIF 2.1.0
+rendered core-side like every machine format — category → rule.id with one rule per distinct
+category, severity → level (info → note), the `related` evidence chain → relatedLocations
+with role-prefixed messages, confidence and subject/symbol/package under properties, and the
+stable kndo finding id as partialFingerprints (SARIF's result-matching mechanism, which
+kndo's line-number-free ids are already built for). Diff modes emit current findings only —
+SARIF models "the results of this run"; the JSON envelope remains the delta carrier.
+
 **Exit:** duplication findings stable under reformatting (Type-2); CRAP hotlist matches manual
 audit on a real repo; health deltas shown in diff modes.
 
