@@ -160,7 +160,14 @@ file-scoped model can shrug off. The adapter computes the key from information i
 (for Go: the file's own directory — no new input); the core only groups declarations by it
 (`graph::assemble` phase 3a) and adds it as a third, last-resort lookup in phase 3b's reference
 resolution. `None` (every adapter before Go, and JS/TS today) reproduces prior behavior exactly —
-this is additive, not a breaking change to the trait's existing implementors.
+this is additive, not a breaking change to the trait's existing implementors. Import-binding
+resolution gets the same fallback for the same reason, one level removed: `Resolution::File`
+names one concrete file, but for a package-scoped language a single import can still name a whole
+directory of files (Go: `resolve()` picks one representative file in the target package so an
+`ImportsFile` edge has somewhere to point; the specific symbol an import binding names may live in
+any of that directory's *other* files) — so a binding lookup that misses in the target file's own
+symbol table falls back to the target file's `unit` table before giving up, mirroring the
+reference-resolution fallback exactly.
 
 ```rust
 pub struct ManifestFacts {

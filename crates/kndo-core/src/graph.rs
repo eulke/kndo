@@ -890,9 +890,23 @@ pub fn assemble_from_source(
                             .imported
                             .clone()
                             .unwrap_or_else(|| SmolStr::new("default"));
-                        if let Some(&symbol_id) =
-                            symbol_by_name_per_file[to.0 as usize].get(&exported_name)
-                        {
+                        // Same-file first; then the target file's own unit (package-scoped
+                        // languages, RFC 0002 §2 `FileFacts::unit`) — a Go import names a
+                        // *package* (a directory of files), and `Resolution::File`'s target is
+                        // necessarily just one representative file in it (contracts §2 has no
+                        // multi-file resolution target), so the symbol a qualified access binds
+                        // to may live in any of that directory's other files.
+                        let symbol_id = symbol_by_name_per_file[to.0 as usize]
+                            .get(&exported_name)
+                            .or_else(|| {
+                                file_unit[to.0 as usize].as_ref().and_then(|unit| {
+                                    symbol_by_name_per_unit
+                                        .get(unit)
+                                        .and_then(|t| t.get(&exported_name))
+                                })
+                            })
+                            .copied();
+                        if let Some(symbol_id) = symbol_id {
                             bound_symbols.insert(binding.local.clone(), symbol_id);
                         }
                     }
@@ -1406,10 +1420,9 @@ mod tests {
         let a = graph
             .file_id(&ProjectPath(SmolStr::new("pkg1/a.mock")))
             .unwrap();
-        assert!(!graph
-            .edges
-            .iter()
-            .any(|e| matches!(e.kind, EdgeKind::References { from, .. } if from == NodeRef::File(a))));
+        assert!(!graph.edges.iter().any(
+            |e| matches!(e.kind, EdgeKind::References { from, .. } if from == NodeRef::File(a))
+        ));
     }
 
     #[test]
@@ -1426,10 +1439,9 @@ mod tests {
         );
         let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
         let a = graph.file_id(&ProjectPath(SmolStr::new("a.mock"))).unwrap();
-        assert!(!graph
-            .edges
-            .iter()
-            .any(|e| matches!(e.kind, EdgeKind::References { from, .. } if from == NodeRef::File(a))));
+        assert!(!graph.edges.iter().any(
+            |e| matches!(e.kind, EdgeKind::References { from, .. } if from == NodeRef::File(a))
+        ));
     }
 
     #[test]
@@ -1825,6 +1837,36 @@ mod tests {
             .collect();
         assert!(flagged.contains(&Some("dead")));
         assert!(!flagged.contains(&Some("util")));
+    }
+
+    #[test]
+    fn import_binding_resolves_through_the_target_s_unit_not_just_its_own_file() {
+        // Go's shape: `import "pkg"` resolves to *one* representative file in the target
+        // directory (contracts §2 has no multi-file resolution target), but the actually-used
+        // symbol may be declared in a *different* file that merely shares the same package
+        // (`unit`) — e.g. `resolve()` picks `pkg/x.mock` as the nominal target, but `target` is
+        // declared in its sibling `pkg/y.mock`.
+        let dir = project(
+            "import-binding-unit-fallback",
+            &[
+                (
+                    "a.mock",
+                    "import ./pkg/x.mock target\nref target\nroot-file",
+                ),
+                ("pkg/x.mock", "unit pkg"),
+                ("pkg/y.mock", "unit pkg\nprivate-decl target"),
+            ],
+        );
+        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (findings, _diag) = crate::analysis::run_all(&graph);
+        let flagged: Vec<Option<&str>> = findings
+            .iter()
+            .map(|f| f.location.symbol.as_deref())
+            .collect();
+        assert!(
+            !flagged.contains(&Some("target")),
+            "the binding should have resolved through pkg's unit table: {findings:?}"
+        );
     }
 
     #[test]

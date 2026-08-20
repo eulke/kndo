@@ -1,0 +1,249 @@
+# Adapter Spec — Go
+
+**Status:** Draft · **Implements:** `LanguageAdapter` (contracts §2) · **Milestone:** M3
+**Grammar:** tree-sitter-go
+
+The second adapter, and the one that exists specifically to test the contract (RFC 0002 §1: "adding
+a language is adding one crate that implements one trait" — if that claim doesn't survive a second,
+structurally different language, it isn't a real claim). Go is deliberately not JS-with-different-
+syntax: no relative imports, visibility is a naming convention rather than a keyword, and a
+"package" is a directory of files with no import needed between them — that last one required a
+core contract change (`FileFacts::unit`, contracts §2) before this adapter could even be started;
+see §1.1.
+
+## 0. What's structurally different from JS/TS, and why it matters here
+
+- **Package-scoped, not file-scoped, visibility.** A Go *package* is its containing directory —
+  every `.go` file directly inside one directory belongs to the same package (the compiler
+  enforces this: a directory literally cannot mix packages, with one narrow exception, §5), and
+  package members see each other with **no import statement at all**, exported or not. This is
+  the ordinary shape of real Go code (splitting one package across multiple files by concern is
+  idiomatic), not an edge case — which is why it needed a core change rather than an adapter-side
+  workaround (contracts §2, `FileFacts::unit`): this adapter sets `unit` to the file's own
+  directory, and the core's phase-3b reference resolution falls back to "same unit" after
+  same-file and import-bound lookups fail.
+- **No relative imports.** Every import is a fully-qualified path (`"encoding/json"`,
+  `"github.com/foo/bar/baz"`) resolved against the current module's declared path (`go.mod`'s
+  `module` directive) plus a directory-listing step — never against the importing file's own
+  location. `ImportKind::Relative` is simply never emitted by this adapter.
+- **Visibility is capitalization, not a keyword.** An identifier is exported iff its first
+  rune is uppercase — computed, not declared. There is no `export`, no `pub`, no manifest-level
+  surface (no `exports` map equivalent) — see §1's `VisibilityLevel` note and §4.
+- **`internal/` is a compiler-enforced boundary**, not a convention kndo has to police itself:
+  packages under an `internal/` path segment are uncompilable outside the module subtree rooted
+  at `internal/`'s parent. Two consequences: (a) it is Go's structural equivalent of npm's
+  `private: true` for *root promotion purposes* (§4) — an `internal/` package's exported surface
+  is not "externally consumed by definition" the way a normal package's is, so it isn't
+  auto-promoted to a production root; (b) `deep-import` (RFC 0011 §4) explicitly skips boundaries
+  "whose enforcement is unconditional at build time" — `internal/` is the RFC's own example — so
+  this adapter records no deep-import-relevant surface data for it at all; the compiler already
+  did the job.
+- **No dynamic import surface worth modeling.** No `require(expr)`, no `import(expr)`, no `eval`.
+  Every import is a `certain`-confidence static fact. `reflect`/`plugin`-based indirection exists
+  but is rare, advanced, and not attempted here (§5) — the wildcard-edge machinery (RFC 0005 §1)
+  stays available for it later if it turns out to matter in practice.
+
+## 1. Claiming & classification
+
+| Claim | Files |
+|-------|-------|
+| Language `go` | `.go` (excludes `.go` files that fail to parse as Go — extraction degrades per §2's broken-code rule, never un-claims) |
+| Manifests | `go.mod`. `go.sum` is a lockfile (content hashes, not structure) — **not** claimed, same stance as JS's `package-lock.json`. `go.work` (multi-module workspaces) is **not** claimed in this slice — deferred, §7 |
+| Role `test` | `*_test.go` (Go's sole, compiler-recognized convention — no glob guessing needed) |
+| Role `tooling` | not detected in this slice (§7) — Go has no ecosystem-wide config-file convention comparable to `webpack.config.js`; inventing pattern-matching for something with no real convention would be guessing, not claiming |
+| Origin `generated` | first-line-window scan for `^// Code generated .* DO NOT EDIT\.$` — the exact string `go generate` tooling and every code generator that follows Go's own documented convention emits (`go help generate`). More reliable than JS's heuristic markers because it's a single authoritative source, not a guess. |
+| Origin `vendored` | `vendor/**` — Go's actual `go mod vendor` output directory, already in the toolkit's `UNIVERSAL_VENDORED_DIRS` (kndo-adapter-toolkit `classify.rs`) — zero adapter-side work |
+
+**`VisibilityLevel`**: `0` (unexported — lowercase first rune) or `1` (exported — uppercase first
+rune), computed per declaration, never read from syntax the way JS reads an `export` keyword. Note
+for `internal-only`/`private-type-leak` (RFC 0005 §7) consumers: Go's real visibility ladder is
+**package**-grained at level 0, not file-grained — an unexported symbol is visible to every file in
+its package, not just its own file. `internal_only.rs` (kndo-core) currently only implements a
+*file*-boundary tightest-sufficient check (documented in its own module doc as a scope
+limitation); applied to Go it can only ever be conservative in the safe direction for level-0
+symbols (it never flags them at all, since `visibility.0 == 0` short-circuits before any boundary
+check) and can under-report for level-1 (exported) symbols used only by same-package sibling files
+— it sees a cross-*file* reference and correctly stops there, missing that the reference is
+same-*package* and the symbol could still be unexported. Under-reporting, never over-reporting —
+consistent with the codebase's "never falsely accuse" stance — and a fix (once wanted) is
+localized to `internal_only.rs` gaining a package-aware boundary check, not this adapter.
+
+**1.1 Why `unit` had to exist first**: see §0. Set to the file's own directory
+(`dirname(file.path)`; the module root itself is `""`) for every claimed `.go` file, including
+`_test.go` files. The one known imprecision this accepts: Go's "external test package" convention
+(`package foo_test` in a `_test.go` file, used to avoid import cycles in table-driven tests) is,
+strictly, a *different* package from `foo` despite sharing a directory — this adapter does not
+parse the `package` clause's name to split them into separate units. In practice this means an
+external test file could theoretically resolve an unqualified name against the internal package's
+private symbols when it shouldn't be able to — extremely unlikely to produce a wrong finding in
+real code (names would have to collide), flagged here rather than silently accepted.
+
+## 2. Extraction
+
+**Declarations**: top-level `func` (plain functions), methods (`func (t T) Name(...)` / `func (t
+*T) Name(...)` — symbol name `T.Name`, so a value-receiver and pointer-receiver method pair on the
+same type visibly share a namespace the way Go's own method-set rules do), `type` (struct,
+interface, alias `type X = Y`, defined type `type X Y`), top-level `const` and `var` (including
+grouped `const ( ... )` / `var ( ... )` blocks — one declaration per identifier, not one per
+block), and `init` (Go's special no-args, unexported-by-construction, called-implicitly-by-the-
+runtime function — always a root, §4, regardless of the capitalization rule, and there can be
+more than one per file).
+
+**References**: identifier uses (calls, reads, writes), qualified accesses through a package
+import alias (`json.Marshal` → a reference to `Marshal`, resolved through the import binding
+exactly as JS resolves `ns.foo` when the binding is staticaly trackable — contracts §2's
+`ImportBinding` shape already fits this with no change), struct-embedding and interface-embedding
+field types (an embedded field/interface has no explicit name, its type name doubles as the
+implicit member name — extraction records it as a reference to that type, not a `RefKind::Extend`-
+tagged one: **no adapter, including JS, actually emits differentiated `RefKind` values yet** —
+every `References` edge is core-assigned `RefKind::Read` regardless of what the adapter's own docs
+say (a real doc/implementation gap discovered while confirming this, not invented for Go) — so Go
+does not attempt to be the first to diverge from that; §5 revisits it as an open question, not a
+silent gap.
+
+**Roots (`RawRoot`, language-defined — RFC 0002 §2 point 3)**: `func main()` inside a file
+declaring `package main` is always a `RootKind::Production` root, unconditionally (Go's literal
+equivalent of npm's `bin` target — a binary entry point). `func init()` is always a
+`RootKind::Production` root too (called by the runtime before `main`, in every package that has
+one, not just `package main` — skipping it would read every side-effect-only `init` as dead code).
+Every other exported (capitalized) top-level declaration in a **non-internal, non-test** file
+becomes a root too — see §4 for why this is the right per-package analogue of JS's manifest-gated
+`private` check, computed here in extraction rather than there because Go's root-worthiness is a
+**per-file, path-derived fact** (is this file under `internal/`?), not a manifest-level one.
+
+**Metrics** (`FunctionMetrics` — cyclomatic complexity, token fingerprints): **not populated**,
+matching JS/TS's actual current state exactly (verified before writing this doc: `extraction.rs`'s
+own header lists these as "deferred to later commits," and nothing in the codebase populates
+`FunctionMetrics` for any language yet). Not a Go-specific gap — CRAP/duplicate-detection support
+lands with M4 regardless of language, so there is no toolkit-shared complexity walker to call into
+yet either.
+
+**Suppressions**: `// kndo:allow …` on its own line or trailing a declaration — same syntax and
+scope rules as JS/TS (RFC 0005 §12 is language-neutral; only comment *syntax* is adapter-owned,
+and `//` line comments are identical between the two languages).
+
+**Dynamic constructs → `DynamicUse`**: none emitted in this slice. See §0's last bullet and §5.
+
+## 3. Imports & resolution
+
+Every `RawImport` has `kind: ImportKind::Package` (never `Relative` — see §0) and
+`confidence: Confidence::Certain` (see §0's last bullet). An `import _ "pkg"` (blank import, used
+purely for side effects — `init()` registration) sets `side_effect_only: true`, matching JS's
+`import "./polyfill"` shape exactly. An `import . "pkg"` (dot import — every exported name becomes
+ambiently referenceable with no qualifying prefix, rare and mostly confined to test helper
+packages) sets `opaque_namespace_use: true`: static per-name binding tracking would require
+resolving every unqualified reference in the file against the dot-imported package's whole export
+set, which needs full same-file name-shadowing awareness this extraction slice doesn't have —
+following the same "wildcard over the resolved target's symbols" shape `graph::assemble` already
+implements for JS's opaque namespace imports (contracts §2), no new core mechanism needed. An
+aliased import (`import j "encoding/json"`) binds the local name `j` the same way a JS default
+import binds its local name.
+
+**Resolution algorithm** (the adapter's `resolve`):
+
+1. **Same-module internal package.** If the specifier equals, or has as a `/`-segment prefix, the
+   current module's own path (`go.mod`'s `module` directive) — resolved by the core as a
+   `WorkspaceMember` exactly like a JS `workspace:*` sibling: the concrete target is *the whole
+   target directory's file set*, expressed as `Resolution::File` pointing at... — no. A Go import
+   names a **package** (a directory of files), and `Resolution::File` names **one** file. This
+   adapter resolves an internal-package import to the alphabetically-first non-test `.go` file
+   in the target directory as `Resolution::File`'s nominal target (so `ImportsFile` reachability
+   exists at all — a whole unimported directory correctly reads as unreachable), and relies on
+   `FileFacts::unit` to make every file in that directory *individually* import-bound-reachable
+   for symbol resolution: the importer's `ImportBinding`s point at names that live somewhere in
+   the target directory, and because every file in that directory shares one `unit`, the core's
+   phase-3a unit table already contains all of them regardless of which specific file
+   `Resolution::File` nominally pointed at. This is a real, documented approximation — file-level
+   reachability (`unused`, `test-only`) is accurate at *directory* granularity for an
+   externally-imported package (the whole package is reachable, not just the nominal file), which
+   is Go's actual truth anyway (importing a package makes the *package* reachable, not one of its
+   files more than another) — see §5.
+2. **Stdlib.** No structural prefix exists in Go the way `node:` does (§0) — the whole precedence
+   collapses to "is this exact import path in the generated stdlib list" (`kndo-stdlib v1`,
+   `cargo xtask gen-stdlib go`, sourced from `go list std`). Checked *after* same-module internal
+   resolution (a module path can never collide with a stdlib path in a real build, so order
+   between these two never actually matters, but internal-first mirrors JS's "workspace before
+   external ladder" precedence for consistency) and before the external-dependency check, so a
+   module that (implausibly) required a package shadowing a stdlib import path would still resolve
+   as the stdlib package — matching Go's own compiler behavior (there is no shadowing mechanism;
+   `go.mod` cannot override what an import path structurally means).
+3. **External dependency.** Longest-declared-prefix match against `go.mod`'s `require` entries:
+   `require golang.org/x/net v0.10.0` + import `"golang.org/x/net/html"` → `Dependency
+   ("golang.org/x/net", Certain)`. This is the one genuinely new resolution primitive Go needs
+   that JS's flat `@scope/name`-is-always-two-segments convention doesn't (module paths have no
+   fixed segment count) — implemented as a straightforward longest-prefix search over the
+   declared require set, not a heuristic.
+4. Anything matching none of the above (a typo'd or unresolvable import) → `Resolution::Unresolved`
+   — same `unresolved` analysis territory as JS (RFC 0005 §5), not a parse error.
+
+## 4. Manifests & packages (RFC 0011)
+
+`go.mod` is a small line-oriented grammar (`module`, `go`, `require`/`replace`/`exclude` blocks) —
+hand-parsed here rather than pulling in a dependency, the same "no more machinery than the format
+needs" stance `package.json`'s `serde_json` parse takes for a format that *does* warrant a real
+parser.
+
+| `package.json` concept | `go.mod` equivalent | notes |
+|---|---|---|
+| `name` | `module` directive | the module path IS the package identity |
+| `private: true` | *(no manifest equivalent — see below)* |
+| `workspaces` | `go.work`'s `use` directives | separate file format; not parsed this slice (§7), matching JS's own `pnpm-workspace.yaml` deferral |
+| dependency scopes (prod/dev/peer/optional) | `require (...)` | Go has exactly one scope — every entry is `DependencyScope::Prod`. `// indirect` comments mark transitively-pulled requires (Go's own `go mod tidy` bookkeeping) — not surfaced as a different scope, since kndo's scope taxonomy has no "transitive" concept and treating it as anything other than `Prod` would misrepresent it as unused/optional when it's exactly as required as a direct one |
+| `main`/`module`/`exports` entry points, `declares_surface` | *(no equivalent)* | Go has no importable "default entry" and no explicit-surface declaration — every package directory is independently, uniformly importable by its full path. `ManifestFacts.declares_surface` is always `false` for Go: there is no `exports`-map-equivalent contract to gate `deep-import` on, and `internal/` (the one real boundary Go has) is skipped by RFC 0011 §4's own rule anyway (§0) |
+| `bin` | `package main` + `func main()` | a **source-file** fact, not a manifest fact — see §2's Roots paragraph; `ManifestFacts.roots` is always empty for Go |
+| `scripts` → tooling roots / invoked names | *(no equivalent)* | no script-runner convention in `go.mod`; `go:generate` directives are a stretch target, not attempted (§7) |
+
+**`private` and library-mode root promotion, resolved without the manifest**: RFC 0011 §5's rule
+("published/library: public API is a production root; private/app: exports need a real edge")
+needs a *per-package* signal, and Go's real per-package privacy signal is **not** manifest-level at
+all — it's the `internal/` path convention (§0), which is per-file/per-path, not per-module. So
+`ManifestFacts.private` is always `false` for Go (there is no publish flag to read — this is a
+statement of fact, not a default guess), and library-mode promotion happens entirely in extraction
+(§2's Roots paragraph: every exported top-level declaration in a non-`internal/`, non-test file
+roots itself) rather than through the `library_root_files`/manifest-root mechanism JS's promotion
+rides (`graph::assemble` phase 3a, RFC 0011 §5's existing wiring) — that mechanism stays
+byte-for-byte unchanged; Go simply doesn't use it, supplying `RawRoot`s directly instead. The net
+effect is the RFC's intent either way: a package's genuinely-public surface is "externally
+consumed by definition," an `internal/` package's is not.
+
+## 5. Known hard cases & stances
+
+| Case | Stance |
+|------|--------|
+| External test package (`package foo_test` in a `_test.go` file) | treated as the same `unit` as `package foo` in the same directory (§1.1) — a documented, safe-direction imprecision, not a silent gap |
+| Generic type parameters (`func F[T any](x T)`, `type Container[T any] struct{...}`) | the type-parameter list's constraint identifiers are ordinary references (e.g. `any`, a stdlib/local interface name); no special generics handling attempted beyond that — a constraint referencing a not-yet-declared local type still resolves correctly since phase 3a builds the whole file's symbol table before phase 3b resolves any reference, same ordering JS's forward-reference case already relies on |
+| Method sets / interface satisfaction (does type `T` implement interface `I`?) | **not modeled** — Go's implicit (structural) interface satisfaction has no explicit `implements` syntax to hook a reference onto, unlike TS's `implements` clause. A type satisfying an interface produces no edge; this is a real expressiveness gap relative to TS, not an oversight — modeling it needs whole-program method-set computation, out of scope for extraction (a per-file, non-typechecking pass) |
+| Struct/interface embedding | recorded as a plain reference to the embedded type's name (§2) — not a `RefKind::Extend`, matching the codebase-wide state that no adapter differentiates `RefKind` yet (§2, §7 open question) |
+| `go:generate` directive comments | not parsed — the directive names a command line to run, not a file reference kndo could statically resolve without executing it |
+| `reflect`/`plugin`-based dynamic dispatch | not modeled as a `DynamicUse` wildcard in this slice (§0) — genuinely rare in application code; revisit if dogfooding surfaces false `unused` positives traceable to it |
+| Build-tag-gated files (`//go:build linux`, `_linux.go` suffix files) | claimed and extracted like any other `.go` file, unconditionally — kndo analyzes the union of all build configurations, the same "any-feature-is-live" stance RFC 0002 §7's table already states for Rust's `#[cfg]` features; a symbol used only under one build tag is still "used," not dead |
+| Multi-module workspace (`go.work`) | not claimed this slice (§1, §7) — a repo with multiple `go.mod`s but no `go.work` still works correctly today via RFC 0011 §3's default rule ("every file belongs to the nearest manifest ancestor"), just without `go.work`'s replace-directive awareness |
+
+## 6. Conformance fixtures (shared harness, RFC 0002 §8)
+
+Minimum corpus, each a mini-module with expected findings: single-file `package main` with a dead
+function · multi-file package with a same-package, no-import cross-file call (the `unit` mechanism's
+own reason for existing) · `internal/` package whose exports are correctly *not* promoted to roots
+· library package (no `main`) whose exported API is correctly promoted to roots with zero in-repo
+callers · external dependency subpath import (`golang.org/x/net/html` against a `require
+golang.org/x/net` line) · phantom dependency (`undeclared` — an import with no matching `require`)
+· blank import (`import _`) counting as dependency usage without a binding · `_test.go` file
+exempt from `test-only` the same way a JS test file is · vendored directory exempt from analysis ·
+generated-file header exemption (`// Code generated ... DO NOT EDIT.`).
+
+## 7. Open questions
+
+1. `go.work` multi-module workspace support — deferred, same as JS's `pnpm-workspace.yaml` slice-1
+   deferral. Needed before kndo can fully model a repo that deliberately splits into several Go
+   modules with local `replace` directives between them.
+2. `RefKind` differentiation (`Extend` for interface embedding, `TypeUse` for type-position
+   references) — genuinely useful for `private-type-leak` (RFC 0005 §7) in both languages, but
+   every adapter's `References` edges are core-assigned a single hardcoded kind today; this is a
+   cross-language contract change, not something to solve one-sided for Go alone.
+3. Package-level `internal-only` boundary awareness (§1's `VisibilityLevel` note) — `internal_only.rs`
+   currently only checks the file boundary; extending it to check the package (`unit`) boundary
+   for languages that set `unit` would make its verdicts precise for Go instead of merely
+   safely-conservative. Tracked as a follow-up to that module, not this adapter.
+4. Tooling-role detection (§1) — Go genuinely has weaker ecosystem-wide config-file conventions
+   than JS; revisit if a real convention (e.g. `.golangci.yml`-adjacent tool configs written *in*
+   Go, which is rare but exists) turns out to matter during dogfooding.
