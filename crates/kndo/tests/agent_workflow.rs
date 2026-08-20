@@ -9,18 +9,18 @@
 //! consumed only by tests, next to the live path the app actually uses.
 
 use std::fs;
-use std::path::PathBuf;
+use std::path::Path;
 
 use kndo::engine::{CheckRequest, ConfigOverrides, RunMode};
 use kndo::query_envelope::{QueryFlags, QueryRequest, ResultEntry, Verb};
 
-fn write(root: &PathBuf, rel: &str, content: &str) {
+fn write(root: &Path, rel: &str, content: &str) {
     let path = root.join(rel);
     fs::create_dir_all(path.parent().unwrap()).unwrap();
     fs::write(path, content).unwrap();
 }
 
-fn project(root: &PathBuf) {
+fn project(root: &Path) {
     write(
         root,
         "package.json",
@@ -54,7 +54,7 @@ fn project(root: &PathBuf) {
     );
 }
 
-fn engine(root: &PathBuf) -> kndo::engine::Engine {
+fn engine(root: &Path) -> kndo::engine::Engine {
     kndo::open(
         root,
         ConfigOverrides {
