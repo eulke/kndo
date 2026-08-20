@@ -64,6 +64,20 @@ liveness traces (`trace X` from roots), `used-by --split-by-color`, and `kndo im
 caught in both languages; the RFC 0007 §5 agent workflow (find → used-by → impact → check)
 runs end to end on a fixture; contract diffs (if any) documented in updated contracts + ADR.
 
+**Progress so far:** `untested` and `internal-only` implemented and dogfooded (RFC 0005 §7, §9).
+Go adapter landed (`kndo-adapter-go`) — claiming, extraction, manifest, and resolution modules,
+conformance fixtures, real-CLI-dogfooded against hand-built multi-file/multi-package projects
+(both `unused` and `test-only` correctly cross the language boundary — the exit criterion's own
+"only tests call this" case verified working for Go, not just JS). The contract genuinely needed
+extending twice, both documented (contracts §2, RFC 0005 §1, RFC 0011 §4): `FileFacts::unit` for
+package-scoped (not file-scoped) reference resolution, and a `ResolveCtx::files_in_dir` query for
+languages whose import unit is a directory rather than a single file — plus one real, previously-
+latent core bug the second language's shape exposed and fixed (`analysis/reachability.rs`: a
+symbol-only root, the common case in Go, never propagated reachability to the file-attributed
+references its own file makes). `private-type-leak`, `deep-import`'s verdict, and `kndo impact`
+remain — each needs its own real design pass (TypeUse edge tagging; subpath+surface tracking;
+a new navigation verb), not attempted as a rushed add-on to this pass.
+
 ## M4 — Duplication, CRAP, health
 `duplicate` (winnowing index, incremental), `cyclic` (SCCs with per-language tolerance),
 `crap` + lcov/JaCoCo ingestion plugins (ADR 0005), `health` score + `kndo health`, SARIF output.

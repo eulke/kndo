@@ -460,6 +460,24 @@ impl<'a> ResolveCtx<'a> {
     pub fn workspace_member(&self, name: &str) -> Option<&'a WorkspaceMember> {
         self.workspace_members.and_then(|m| m.get(name))
     }
+
+    /// Every known file whose *immediate* directory equals `dir` (`""` = project root) — one
+    /// more path segment, not a recursive subtree. Added for languages whose import unit is a
+    /// directory rather than a single file (Go's package — RFC 0002 §2, docs/adapters/go.md
+    /// §3): resolving `foo.com/bar/sub` needs *some* concrete file in `sub/` to anchor an
+    /// `ImportsFile` edge on, and there's no naming convention (unlike JS's `index.*`) to guess
+    /// one from. Read-only, like every other `ResolveCtx` query; callers needing a deterministic
+    /// pick (RFC 0008 §4) sort the result themselves — iteration order here follows the
+    /// underlying set, not insertion or path order.
+    pub fn files_in_dir(&self, dir: &str) -> impl Iterator<Item = &'a ProjectPath> {
+        let dir = dir.to_string();
+        self.known_files
+            .iter()
+            .filter(move |p| match p.0.rfind('/') {
+                Some(i) => p.0[..i] == dir,
+                None => dir.is_empty(),
+            })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -511,4 +529,41 @@ pub trait LanguageAdapter: Send + Sync {
     /// Resolve an import specifier to a concrete target. Called by the core's resolution
     /// driver — including for specifiers emitted by *other* adapters (RFC 0002 §4).
     fn resolve(&self, spec: &ImportSpec, ctx: &ResolveCtx<'_>) -> Resolution;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashSet;
+
+    fn files(paths: &[&str]) -> HashSet<ProjectPath> {
+        paths
+            .iter()
+            .map(|p| ProjectPath(SmolStr::new(*p)))
+            .collect()
+    }
+
+    #[test]
+    fn files_in_dir_matches_immediate_children_only() {
+        let known = files(&["pkg/a.go", "pkg/b.go", "pkg/sub/deeper.go", "root.go"]);
+        let ctx = ResolveCtx::new(&known);
+        let mut got: Vec<&str> = ctx.files_in_dir("pkg").map(|p| p.0.as_str()).collect();
+        got.sort();
+        assert_eq!(got, vec!["pkg/a.go", "pkg/b.go"]);
+    }
+
+    #[test]
+    fn files_in_dir_empty_string_means_project_root() {
+        let known = files(&["root.go", "pkg/a.go"]);
+        let ctx = ResolveCtx::new(&known);
+        let got: Vec<&str> = ctx.files_in_dir("").map(|p| p.0.as_str()).collect();
+        assert_eq!(got, vec!["root.go"]);
+    }
+
+    #[test]
+    fn files_in_dir_with_no_matches_is_empty() {
+        let known = files(&["pkg/a.go"]);
+        let ctx = ResolveCtx::new(&known);
+        assert_eq!(ctx.files_in_dir("nowhere").count(), 0);
+    }
 }

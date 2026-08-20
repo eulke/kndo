@@ -42,6 +42,24 @@ see §1.1.
   Every import is a `certain`-confidence static fact. `reflect`/`plugin`-based indirection exists
   but is rare, advanced, and not attempted here (§5) — the wildcard-edge machinery (RFC 0005 §1)
   stays available for it later if it turns out to matter in practice.
+- **Root promotion is symbol-level, not file-level, far more often than in JS.** JS's manifest
+  roots (`main`/`module`/`exports`) always name a *file*; the individual exports of that file get
+  promoted too (RFC 0011 §5), but the file itself is always independently a root as well. Go has
+  no manifest-level entry-file concept at all (§4) — `func main`, `func init`, and every promoted
+  exported declaration (§2) are *symbol*-targeted roots with no accompanying file-level root. This
+  exposed a real, previously-latent reachability gap: reference edges are file-granular by design
+  (`graph::assemble`'s own doc — extraction tracks *which file* references something, not which
+  enclosing symbol), so a file's outgoing references only ever get traversed once the BFS has
+  visited that file *as a node*; a symbol reached only via its own direct `Root` edge never causes
+  that visit. `main.go` and everything it (file-attributedly) referenced read as fully
+  unreachable despite `main` genuinely being a root. Fixed at the core (`analysis/reachability.rs`
+  — reaching a symbol now also reaches its owning file, at the same confidence), not worked around
+  per-adapter, since the underlying bug — file-granular references never propagating past a
+  symbol-only root — was always latent for JS too (RFC 0011 §5's own barrel-reexport promotion
+  produces the identical shape); JS's existing test suite just never happened to exercise a case
+  where the promoted file had *no other* path to reachability. Regression coverage:
+  `reachability.rs`'s own unit test plus an end-to-end one in `kndo-adapter-go/tests/assembly.rs`
+  (unit tests alone would have missed the file-granular-attribution interaction).
 
 ## 1. Claiming & classification
 
@@ -51,7 +69,7 @@ see §1.1.
 | Manifests | `go.mod`. `go.sum` is a lockfile (content hashes, not structure) — **not** claimed, same stance as JS's `package-lock.json`. `go.work` (multi-module workspaces) is **not** claimed in this slice — deferred, §7 |
 | Role `test` | `*_test.go` (Go's sole, compiler-recognized convention — no glob guessing needed) |
 | Role `tooling` | not detected in this slice (§7) — Go has no ecosystem-wide config-file convention comparable to `webpack.config.js`; inventing pattern-matching for something with no real convention would be guessing, not claiming |
-| Origin `generated` | first-line-window scan for `^// Code generated .* DO NOT EDIT\.$` — the exact string `go generate` tooling and every code generator that follows Go's own documented convention emits (`go help generate`). More reliable than JS's heuristic markers because it's a single authoritative source, not a guess. |
+| Origin `generated` | **not detected — a real trait limitation, not a scope choice.** Go's own convention is a single, authoritative marker (`^// Code generated .* DO NOT EDIT\.$`, `go help generate`), far more reliable than JS's heuristic ones — but `claim()` receives only a `ProjectPath`, never file content (contracts §2), and `FileClass` (which carries `origin`) is fixed at claim time, before `extract()` ever sees the bytes. No adapter, including JS, can implement content-based origin detection under the trait as it stands today — JS's own `lib.rs` already flags this as "an extract-time concern, not a path concern" without a hook to act on it. Worth a real trait extension (letting `extract()` correct the class, or a content-peek hook) if this turns out to matter; not invented here to paper over it. |
 | Origin `vendored` | `vendor/**` — Go's actual `go mod vendor` output directory, already in the toolkit's `UNIVERSAL_VENDORED_DIRS` (kndo-adapter-toolkit `classify.rs`) — zero adapter-side work |
 
 **`VisibilityLevel`**: `0` (unexported — lowercase first rune) or `1` (exported — uppercase first
@@ -142,22 +160,34 @@ import binds its local name.
 **Resolution algorithm** (the adapter's `resolve`):
 
 1. **Same-module internal package.** If the specifier equals, or has as a `/`-segment prefix, the
-   current module's own path (`go.mod`'s `module` directive) — resolved by the core as a
-   `WorkspaceMember` exactly like a JS `workspace:*` sibling: the concrete target is *the whole
-   target directory's file set*, expressed as `Resolution::File` pointing at... — no. A Go import
-   names a **package** (a directory of files), and `Resolution::File` names **one** file. This
-   adapter resolves an internal-package import to the alphabetically-first non-test `.go` file
-   in the target directory as `Resolution::File`'s nominal target (so `ImportsFile` reachability
-   exists at all — a whole unimported directory correctly reads as unreachable), and relies on
-   `FileFacts::unit` to make every file in that directory *individually* import-bound-reachable
-   for symbol resolution: the importer's `ImportBinding`s point at names that live somewhere in
-   the target directory, and because every file in that directory shares one `unit`, the core's
-   phase-3a unit table already contains all of them regardless of which specific file
-   `Resolution::File` nominally pointed at. This is a real, documented approximation — file-level
-   reachability (`unused`, `test-only`) is accurate at *directory* granularity for an
-   externally-imported package (the whole package is reachable, not just the nominal file), which
-   is Go's actual truth anyway (importing a package makes the *package* reachable, not one of its
-   files more than another) — see §5.
+   current module's own path (`go.mod`'s `module` directive) — looked up against the core's
+   workspace-member index, which registers *every* named manifest in the graph, including this
+   project's own single `go.mod` ("the monorepo model with n = 1," RFC 0011 §3), so a same-module
+   subpackage import and a future `go.work` sibling-module import share one lookup. A Go import
+   names a **package** (a directory of files), and `Resolution::File` (contracts §2) names *one*
+   file, so this adapter picks the alphabetically-first non-test `.go` file in the target
+   directory as the nominal target (so `ImportsFile` reachability exists at all — an unimported
+   directory correctly reads as unreachable) and relies on `FileFacts::unit` to make every file in
+   that directory *individually* reachable for symbol resolution regardless of which one was
+   nominally picked — both for unqualified same-unit references (contracts §2's `unit` field) and
+   for import-binding lookups that miss on the nominal file (contracts §2's matching fallback on
+   import-binding resolution). This is a real, documented approximation: file-level reachability
+   (`unused`, `test-only`) ends up accurate at *directory* granularity for an externally-imported
+   package (the whole package is reachable, not just the nominal file) — which is Go's actual
+   truth anyway, since importing a package makes the *package* reachable, not one of its files
+   more than another (§5).
+   
+   **Deliberately `Resolution::File`, not `Resolution::WorkspaceMember`** — the first draft used
+   `WorkspaceMember` (matching JS's workspace-sibling shape exactly), and dogfooding caught why
+   that's wrong for Go: assembly derives *both* an `ImportsFile` edge *and* an `ImportsDependency`
+   edge from `WorkspaceMember` (contracts §2 — correct for JS, where every workspace member is a
+   separate package that must be *declared* to be imported, RFC 0011 §4's phantom-dependency
+   check). Go has no such contract: a module can't `require` itself, and a module importing its
+   own subpackage read as `undeclared` — "phantom dependency on itself" — until this switched to
+   `Resolution::File`, which still gets full `ImportsFile` reachability without inventing a
+   dependency declaration Go doesn't have. Kept as a graph-assembly regression test
+   (`kndo-adapter-go/tests/assembly.rs`), not just a resolver unit test, since the bug only shows
+   up once assembly derives edges from the `Resolution` value.
 2. **Stdlib.** No structural prefix exists in Go the way `node:` does (§0) — the whole precedence
    collapses to "is this exact import path in the generated stdlib list" (`kndo-stdlib v1`,
    `cargo xtask gen-stdlib go`, sourced from `go list std`). Checked *after* same-module internal
@@ -221,15 +251,26 @@ consumed by definition," an `internal/` package's is not.
 
 ## 6. Conformance fixtures (shared harness, RFC 0002 §8)
 
-Minimum corpus, each a mini-module with expected findings: single-file `package main` with a dead
-function · multi-file package with a same-package, no-import cross-file call (the `unit` mechanism's
-own reason for existing) · `internal/` package whose exports are correctly *not* promoted to roots
-· library package (no `main`) whose exported API is correctly promoted to roots with zero in-repo
-callers · external dependency subpath import (`golang.org/x/net/html` against a `require
-golang.org/x/net` line) · phantom dependency (`undeclared` — an import with no matching `require`)
-· blank import (`import _`) counting as dependency usage without a binding · `_test.go` file
-exempt from `test-only` the same way a JS test file is · vendored directory exempt from analysis ·
-generated-file header exemption (`// Code generated ... DO NOT EDIT.`).
+Minimum corpus, each a mini-module with expected findings: multi-file package with a
+same-package, no-import cross-file call plus one genuinely dead sibling function (the `unit`
+mechanism's own reason for existing, and the exact shape that caught the reachability.rs
+propagation gap, §0) · `internal/` package whose exports are correctly *not* promoted to roots,
+alongside a sibling non-internal library file whose exports *are* (both directions of §4's
+promotion rule in one fixture).
+
+**No `undeclared`-dependency fixture, deliberately.** Unlike JS/npm (where flat `node_modules`
+hoisting lets code import a package that compiles fine but isn't declared — the actual phantom-
+dependency problem RFC 0011 §4's check exists for), Go's module system has no equivalent: an
+import that doesn't trace to a `require` line simply doesn't build, full stop — `go build`/`go mod
+tidy` refuse before kndo would ever see the code. `resolve()` reflects this honestly (§3): an
+external specifier with no declared-prefix match resolves `Unresolved`, not a `Dependency` edge
+naming an undeclared package the way JS's `classify_bare_specifier` deliberately does — so
+`undeclared` (subject `dependency`) has no realistic Go scenario to fire on. Blank imports
+(`import _`) counting as dependency usage without a binding, `_test.go` exemption from
+`test-only`, and vendored-directory exemption are covered by extraction/manifest unit tests
+rather than duplicated here as conformance fixtures — the harness's value is exercising the real
+`Engine` end to end, which the two fixtures above already do across both dependency-hygiene and
+reachability findings.
 
 ## 7. Open questions
 
@@ -247,3 +288,10 @@ generated-file header exemption (`// Code generated ... DO NOT EDIT.`).
 4. Tooling-role detection (§1) — Go genuinely has weaker ecosystem-wide config-file conventions
    than JS; revisit if a real convention (e.g. `.golangci.yml`-adjacent tool configs written *in*
    Go, which is rare but exists) turns out to matter during dogfooding.
+5. Content-based origin classification (§1) — a real trait gap, not language-specific: `claim()`
+   only ever sees a path, `FileClass` is fixed before `extract()` sees any bytes. Go's
+   `// Code generated ... DO NOT EDIT.` marker is exactly the kind of single-authoritative-source
+   signal this would be trivial to act on if the trait had a hook for it (`extract()` returning a
+   class correction, or a content-peek step at claim time) — worth proposing generally, once a
+   second adapter with real generated-code volume in dogfooding makes the gap concrete rather
+   than theoretical.

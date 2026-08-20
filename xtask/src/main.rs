@@ -42,8 +42,18 @@ const SOURCES: &[StdlibSource] = &[
         version_command: &["node", "--version"],
         exclude_prefixes: &["node:"],
     },
+    StdlibSource {
+        language: "go",
+        output: "crates/kndo-adapter-go/src/stdlib.txt",
+        list_command: &["go", "list", "std"],
+        version_command: &["go", "version"],
+        // `internal/...` stdlib packages (~a quarter of `go list std`'s output) are real
+        // entries but uncompilable outside the standard library itself — Go's `internal/`
+        // boundary (docs/adapters/go.md §0) is a structural, compiler-enforced signal, not
+        // something the stdlib-classification list needs to carry.
+        exclude_prefixes: &["internal/"],
+    },
     // Future entries — one line of data each, no new tooling:
-    //   go:    list `go list std`,            version `go version`
     //   java:  list `java --list-modules`,    version `java --version`
 ];
 

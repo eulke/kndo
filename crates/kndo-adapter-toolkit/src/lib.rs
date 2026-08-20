@@ -8,3 +8,4 @@ pub mod classify;
 pub mod parsing;
 pub mod paths;
 pub mod stdlib;
+pub mod suppression;

@@ -22,7 +22,7 @@
 
 use kndo_core::adapter::{
     Declaration, Diagnostic, DiagnosticLevel, DynamicUse, FileFacts, ImportBinding, ImportKind,
-    RawImport, RawReference, RawSuppression, Span, SuppressionScope, VisibilityLevel,
+    RawImport, RawReference, RawSuppression, Span, VisibilityLevel,
 };
 use kndo_core::vocab::{Confidence, SymbolKind};
 use smol_str::SmolStr;
@@ -1261,7 +1261,9 @@ fn handle_namespace_occurrence(
 /// pragma to the declaration it covers is core logic (contracts §2.1), not this adapter's job.
 fn collect_suppressions(node: Node, src: &[u8], out: &mut Vec<RawSuppression>) {
     if node.kind() == "comment" {
-        if let Some(pragma) = parse_suppression_pragma(text(node, src)) {
+        if let Some(pragma) =
+            kndo_adapter_toolkit::suppression::parse_suppression_pragma(text(node, src))
+        {
             out.push(RawSuppression {
                 span: span(node),
                 category: pragma.category,
@@ -1275,76 +1277,6 @@ fn collect_suppressions(node: Node, src: &[u8], out: &mut Vec<RawSuppression>) {
     for child in node.children(&mut cursor) {
         collect_suppressions(child, src, out);
     }
-}
-
-struct ParsedPragma {
-    scope: SuppressionScope,
-    category: SmolStr,
-    subject: Option<SmolStr>,
-    reason: Option<String>,
-}
-
-/// `kndo:allow <category>[:<subject>] [reason…]` (scope `Declaration`) or
-/// `kndo:allow-file <category>[:<subject>] [reason…]` (scope `File`) — contracts §2.1's grammar,
-/// found inside any comment style. Block comments (including `/** … */`) are checked line by
-/// line (stripping a leading `*` per line, the common doc-comment convention) since the pragma
-/// need not be the comment's first line; `//` comments are always exactly one line. Returns
-/// `None` for anything that isn't a pragma — an ordinary comment is never mistaken for one, and
-/// `kndo:allow` must be followed by whitespace (or nothing) so a name that merely starts with
-/// that text (`kndo:allowlist`, say) doesn't false-match.
-fn parse_suppression_pragma(comment_text: &str) -> Option<ParsedPragma> {
-    let lines: Vec<&str> = if let Some(inner) = comment_text.strip_prefix("//") {
-        vec![inner]
-    } else if let Some(inner) = comment_text
-        .strip_prefix("/*")
-        .and_then(|s| s.strip_suffix("*/"))
-    {
-        inner
-            .lines()
-            .map(|line| {
-                let trimmed = line.trim_start();
-                trimmed.strip_prefix('*').unwrap_or(trimmed)
-            })
-            .collect()
-    } else {
-        return None; // not a recognized comment delimiter shape — never expected in practice
-    };
-    lines.into_iter().find_map(parse_pragma_line)
-}
-
-fn parse_pragma_line(line: &str) -> Option<ParsedPragma> {
-    let line = line.trim();
-    let (scope, rest) = if let Some(rest) = line.strip_prefix("kndo:allow-file") {
-        (SuppressionScope::File, rest)
-    } else if let Some(rest) = line.strip_prefix("kndo:allow") {
-        (SuppressionScope::Declaration, rest)
-    } else {
-        return None;
-    };
-    if !rest.is_empty() && !rest.starts_with(char::is_whitespace) {
-        return None; // e.g. "kndo:allowlist" — the keyword must stand alone
-    }
-    let rest = rest.trim_start();
-    let mut parts = rest.splitn(2, char::is_whitespace);
-    let target = parts.next().unwrap_or("");
-    if target.is_empty() {
-        return None; // "kndo:allow" naming no category isn't a valid pragma
-    }
-    let reason = parts
-        .next()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(str::to_string);
-    let (category, subject) = match target.split_once(':') {
-        Some((c, s)) => (c, Some(SmolStr::new(s))),
-        None => (target, None),
-    };
-    Some(ParsedPragma {
-        scope,
-        category: SmolStr::new(category),
-        subject,
-        reason,
-    })
 }
 
 fn collect_references(
@@ -1405,6 +1337,7 @@ fn collect_references(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use kndo_core::adapter::SuppressionScope;
 
     fn decls(src: &str) -> Vec<(String, SymbolKind, bool)> {
         extract("f.ts", src.as_bytes())

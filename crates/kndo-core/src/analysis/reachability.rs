@@ -113,21 +113,48 @@ pub fn compute(graph: &ProjectGraph) -> ReachabilityMap {
 
     // R(kind, tau) for every (kind, tau), literally: BFS seeded only by roots whose own
     // confidence is >= tau, traversing only edges with confidence >= tau.
+    //
+    // One addition beyond the literal algorithm: reaching a *symbol* also reaches its *owning
+    // file*, at the same confidence. Reference edges are file-granular by design (this module's
+    // own adjacency-construction comment: "extraction doesn't track which enclosing declaration
+    // contains a reference, only which file"), so a file's outgoing References/ImportsFile edges
+    // only ever get traversed once the BFS has visited that file *as a node* — a symbol reached
+    // only via its own direct `Root` edge (RFC 0011 §5's per-export library-mode promotion; Go's
+    // `func main`/`init`/exported-declaration promotion, docs/adapters/go.md §2) never causes
+    // that visit on its own, so whatever the symbol's file references next-door goes uncolored.
+    // Caught dogfooding the Go adapter: `func main()` was correctly a root, but the sibling
+    // function it called (attributed, like every reference, to `main.go` the file) stayed
+    // Unreachable because `main.go` itself was never enqueued. A symbol's aliveness already
+    // implies its file is "in play" for every other purpose this graph models file-granular
+    // reference evidence for; propagating it here keeps that one true consistently, not just at
+    // the root symbol's own file.
     let mut reached: HashMap<(RootKind, Confidence), HashSet<NodeRef>> = HashMap::new();
     for &(kind, _) in &ROOT_KINDS {
         let kind_seeds = seeds.get(&kind).cloned().unwrap_or_default();
         for &tau in &TIERS {
             let mut visited: HashSet<NodeRef> = HashSet::new();
             let mut queue: VecDeque<NodeRef> = VecDeque::new();
+            let visit =
+                |node: NodeRef, visited: &mut HashSet<NodeRef>, queue: &mut VecDeque<NodeRef>| {
+                    if visited.insert(node) {
+                        queue.push_back(node);
+                    }
+                    if let NodeRef::Symbol(s) = node {
+                        let owner = NodeRef::File(graph.symbols[s.0 as usize].file);
+                        if visited.insert(owner) {
+                            queue.push_back(owner);
+                        }
+                    }
+                };
             for &(node, conf) in &kind_seeds {
-                if conf >= tau && visited.insert(node) {
-                    queue.push_back(node);
+                if conf >= tau {
+                    visit(node, &mut visited, &mut queue);
                 }
             }
             while let Some(node) = queue.pop_front() {
                 for &(next, conf) in adjacency.get(&node).map(Vec::as_slice).unwrap_or(&[]) {
-                    if conf >= tau && visited.insert(next) {
-                        queue.push_back(next);
+                    if conf >= tau {
+                        visit(next, &mut visited, &mut queue);
                     }
                 }
             }
@@ -410,6 +437,47 @@ mod tests {
         assert_eq!(
             reach.get(NodeRef::Symbol(SymbolId(1))).0,
             Reachability::Production
+        );
+    }
+
+    #[test]
+    fn a_symbol_only_root_pulls_its_owning_file_into_reachability_too() {
+        // The exact shape a symbol-targeted root produces (RFC 0011 §5's per-export library-
+        // mode promotion; Go's `func main`/exported-declaration promotion, docs/adapters/go.md
+        // §2): `main` is a root, declared in `main.ts`, and `main.ts` (not the `main` symbol
+        // itself — references are file-granular, this module's own adjacency doc) references
+        // `helper`, declared in a *different* file. `helper` must end up reachable — which
+        // requires `main.ts` itself to be visited by the BFS, not just the `main` symbol.
+        let files = vec![file("main.ts"), file("helper.ts")];
+        let symbols = vec![symbol(FileId(0), "main"), symbol(FileId(1), "helper")];
+        let edges = vec![
+            edge(
+                EdgeKind::Root {
+                    kind: RootKind::Production,
+                    target: NodeRef::Symbol(SymbolId(0)),
+                },
+                Confidence::Certain,
+            ),
+            edge(
+                EdgeKind::References {
+                    from: NodeRef::File(FileId(0)), // file-attributed, not symbol-attributed
+                    to: SymbolId(1),
+                    kind: RefKind::Call,
+                },
+                Confidence::Certain,
+            ),
+        ];
+        let graph = ProjectGraph::for_test(files, symbols, vec![], edges);
+        let reach = compute(&graph);
+        assert_eq!(
+            reach.get(NodeRef::File(FileId(0))).0,
+            Reachability::Production,
+            "the root symbol's owning file must itself become reachable"
+        );
+        assert_eq!(
+            reach.get(NodeRef::Symbol(SymbolId(1))).0,
+            Reachability::Production,
+            "helper, referenced from main.ts, must be reachable through it"
         );
     }
 

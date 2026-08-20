@@ -1,0 +1,5 @@
+{
+  "findings": [
+    { "category": "unused", "subject_kind": "file", "path": "internal/util/helper.go" }
+  ]
+}

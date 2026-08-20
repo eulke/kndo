@@ -48,6 +48,18 @@ packages — *and* kndo validates the boundary contract both ways:
 | internal dep declared, no import resolves into that package | `unused` (subject `dependency`) — same verdict, remediation says "remove the workspace dep" |
 | import resolves into a sibling package not declared in the importer's manifest | `undeclared` (subject `dependency`) — phantom internal dependency; breaks publishability and build graphs |
 
+This table — and `Resolution::WorkspaceMember`'s edge derivation generally (both `ImportsFile`
+*and* `ImportsDependency`, contracts §2) — assumes the ecosystem has a per-sibling declaration
+contract to validate in the first place (npm's `workspaces`/`dependencies` entries, Cargo's
+`[dependencies]` path entries). Not every language does: a Go module's own subpackages need no
+`require` entry (a module cannot require itself), so an adapter resolving its own module's
+internal imports uses plain `Resolution::File` instead — full `ImportsFile` reachability, no
+`ImportsDependency` edge, and correctly no `undeclared` finding for a contract that doesn't exist
+(docs/adapters/go.md §3). `WorkspaceMember` stays reserved for resolutions where a real
+declaration contract exists to validate — a `go.work` sibling *module* (once supported) would
+still be `WorkspaceMember`, since that's a genuinely separate module Go's own tooling tracks by
+name via `go.work`'s `use` directives, just not via `require`.
+
 ### The `deep-import` verdict (group `risk`, M3) — internal *and* external providers
 
 An import that bypasses a provider package's declared entry points erodes a boundary someone

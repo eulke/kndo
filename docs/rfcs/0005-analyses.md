@@ -81,6 +81,17 @@ Wildcard edges are not a separate mechanism — they are folded into this same c
 `annotate_symbols`, and whatever an adapter's `DynamicUse` reason narrows the scope to — a
 partial string prefix narrows it, a bare `eval` does not). One mechanism, not two.
 
+Reference edges are file-granular, not per-enclosing-symbol (contracts §2: extraction tracks
+*which file* a reference came from, not which declaration inside it made the call) — so reaching
+a *symbol* whose only root is its own direct `Root` edge, with no independent root on its
+*containing file*, would otherwise strand every reference that file makes: the traversal only
+follows a file's outgoing edges once it has visited the file itself as a node. `R(κ, τ)`'s
+traversal therefore also enqueues a reached symbol's owning file, at the same τ, alongside the
+symbol — every other case where root-worthiness lands on a file already implies this (a manifest
+root always names a file first, RFC 0011 §5), so this only changes behavior for languages whose
+roots are symbol-only by construction (Go's `func main`/`init`/exported-declaration promotion,
+docs/adapters/go.md §0, §2 — no manifest-level entry-file concept to also root).
+
 Every node's `(color, confidence)` comes from the first matching rule, in this fixed order:
 
 1. `production` — if the node ∈ `R(production, possible)`; confidence = the strongest τ for
