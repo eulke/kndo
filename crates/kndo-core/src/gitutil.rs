@@ -8,12 +8,20 @@
 //! (`libgit2`) or reimplementing tree/index plumbing in pure Rust for what's a handful of
 //! well-defined, stable commands.
 //!
-//! Every write here is index-file-scoped via `GIT_INDEX_FILE` pointed at a throwaway path —
-//! `read-tree`/`checkout-index` never touch the repository's real index or working tree,
-//! regardless of what the user currently has staged or modified.
+//! Trees are read **in memory, never materialized to disk**: [`ls_tree`] enumerates a
+//! tree-ish's paths + blob ids without touching the filesystem, and [`cat_blobs`] streams the
+//! blob contents needed over one `cat-file --batch` pipe. An earlier implementation checked
+//! whole trees out into temp directories (`read-tree` + `checkout-index`) so the existing
+//! directory-walking pipeline could run on them unchanged — measured at ~0.5 s of pure
+//! file-creation syscalls per tree at 5k files (×2 trees for `--staged`, plus cleanup), it was
+//! the dominant cost of diff mode and blew RFC 0008's warm budget; enumerating + streaming the
+//! same tree costs milliseconds. Everything here is read-only against the repository — the
+//! only object-database *write* diff mode ever performs is `write-tree` (staged mode's
+//! "after"), which adds a tree object without touching the index or working tree.
 
+use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 #[derive(Debug)]
 pub struct GitError(pub String);
@@ -73,32 +81,132 @@ pub fn write_tree(repo_root: &Path) -> Result<String, GitError> {
     run(&["-C", &root_str, "write-tree"], &[])
 }
 
-/// Checks out `treeish`'s complete content into a fresh temporary directory, returned so the
-/// caller controls its lifetime (cleaned up automatically on drop). Uses a second, equally
-/// throwaway directory to hold the temporary index file `GIT_INDEX_FILE` points `read-tree`/
-/// `checkout-index` at — never the repository's real index.
-pub fn materialize(repo_root: &Path, treeish: &str) -> Result<tempfile::TempDir, GitError> {
-    let dest = tempfile::Builder::new()
-        .prefix("kndo-tree-")
-        .tempdir()
-        .map_err(|e| GitError(format!("failed to create a temp directory: {e}")))?;
-    let index_holder = tempfile::Builder::new()
-        .prefix("kndo-index-")
-        .tempdir()
-        .map_err(|e| GitError(format!("failed to create a temp directory: {e}")))?;
-    let index_file = index_holder.path().join("index");
+/// One entry of a recursively-listed tree: repo-relative path (raw bytes — git paths aren't
+/// guaranteed UTF-8; the caller decides how to degrade), blob id, and file mode (`100644`
+/// regular, `100755` executable, `120000` symlink, `160000` submodule).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TreeEntry {
+    pub path: Vec<u8>,
+    pub sha: String,
+    pub mode: u32,
+}
 
-    let root_str = repo_root.to_string_lossy();
-    run(
-        &["-C", &root_str, "read-tree", treeish],
-        &[("GIT_INDEX_FILE", index_file.as_path())],
-    )?;
-    let work_tree_flag = format!("--work-tree={}", dest.path().display());
-    run(
-        &["-C", &root_str, &work_tree_flag, "checkout-index", "--all"],
-        &[("GIT_INDEX_FILE", index_file.as_path())],
-    )?;
-    Ok(dest)
+/// `git ls-tree -r -z <treeish>` — every blob in the tree, recursively, without touching the
+/// filesystem. `-z` (NUL-delimited records, no path quoting) so unusual filenames survive
+/// byte-exact.
+pub fn ls_tree(repo_root: &Path, treeish: &str) -> Result<Vec<TreeEntry>, GitError> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(repo_root)
+        .args(["ls-tree", "-r", "-z", treeish])
+        .output()
+        .map_err(|e| GitError(format!("failed to run `git ls-tree`: {e}")))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(GitError(if stderr.is_empty() {
+            format!("`git ls-tree {treeish}` failed")
+        } else {
+            stderr
+        }));
+    }
+
+    // Record shape: `<mode> <type> <sha>\t<path>` terminated by NUL.
+    let mut entries = Vec::new();
+    for record in output.stdout.split(|&b| b == 0) {
+        if record.is_empty() {
+            continue;
+        }
+        let Some(tab) = record.iter().position(|&b| b == b'\t') else {
+            return Err(GitError(
+                "malformed `git ls-tree -z` record (no tab)".into(),
+            ));
+        };
+        let (meta, path) = (&record[..tab], &record[tab + 1..]);
+        let meta = std::str::from_utf8(meta)
+            .map_err(|_| GitError("malformed `git ls-tree -z` record (non-UTF-8 header)".into()))?;
+        let mut fields = meta.split(' ');
+        let (Some(mode), Some(kind), Some(sha)) = (fields.next(), fields.next(), fields.next())
+        else {
+            return Err(GitError(format!(
+                "malformed `git ls-tree -z` record: {meta}"
+            )));
+        };
+        if kind != "blob" {
+            continue; // submodules (`commit` entries) have no content to analyze
+        }
+        let mode: u32 = mode
+            .parse()
+            .map_err(|_| GitError(format!("malformed ls-tree mode: {mode}")))?;
+        entries.push(TreeEntry {
+            path: path.to_vec(),
+            sha: sha.to_string(),
+            mode,
+        });
+    }
+    Ok(entries)
+}
+
+/// Streams the contents of `shas` over one `git cat-file --batch` pipe, returned in request
+/// order — `None` for an id git reports missing (the caller degrades it to a diagnostic, the
+/// same contract as an unreadable file in a directory walk). One subprocess for the whole
+/// batch: per-blob `git show` spawns would cost a process each, and the batch pipe is what
+/// makes tree reading ~5× cheaper than materializing the tree to disk ever was.
+pub fn cat_blobs(repo_root: &Path, shas: &[String]) -> Result<Vec<Option<Vec<u8>>>, GitError> {
+    if shas.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut child = Command::new("git")
+        .arg("-C")
+        .arg(repo_root)
+        .args(["cat-file", "--batch"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|e| GitError(format!("failed to run `git cat-file --batch`: {e}")))?;
+
+    // Feed requests from a separate thread: writing every request before reading any response
+    // deadlocks once either pipe's buffer fills (git blocks writing responses we aren't
+    // reading; we block writing requests git isn't consuming).
+    let mut stdin = child.stdin.take().expect("stdin was piped");
+    let request: String = shas.iter().map(|s| format!("{s}\n")).collect();
+    let writer = std::thread::spawn(move || {
+        let _ = stdin.write_all(request.as_bytes());
+        // stdin drops here, closing the pipe — cat-file exits after the last response.
+    });
+
+    let mut reader = BufReader::new(child.stdout.take().expect("stdout was piped"));
+    let mut results = Vec::with_capacity(shas.len());
+    for _ in shas {
+        // Response header: `<sha> <type> <size>\n`, or `<sha> missing\n`.
+        let mut header = String::new();
+        reader
+            .read_line(&mut header)
+            .map_err(|e| GitError(format!("reading `git cat-file --batch` output: {e}")))?;
+        let header = header.trim_end();
+        if header.ends_with(" missing") || header.is_empty() {
+            results.push(None);
+            continue;
+        }
+        let size: usize = header
+            .rsplit(' ')
+            .next()
+            .and_then(|s| s.parse().ok())
+            .ok_or_else(|| GitError(format!("malformed cat-file header: {header}")))?;
+        let mut content = vec![0u8; size];
+        reader
+            .read_exact(&mut content)
+            .map_err(|e| GitError(format!("reading blob content: {e}")))?;
+        let mut newline = [0u8; 1];
+        reader
+            .read_exact(&mut newline)
+            .map_err(|e| GitError(format!("reading blob terminator: {e}")))?;
+        results.push(Some(content));
+    }
+
+    let _ = writer.join();
+    let _ = child.wait();
+    Ok(results)
 }
 
 #[cfg(test)]
@@ -152,9 +260,20 @@ mod tests {
         assert!(repo_root(&dir).is_err());
     }
 
+    /// Reads one path's content out of a tree via ls_tree + cat_blobs — the composed operation
+    /// diff mode performs, minus discovery's filtering.
+    fn tree_content(dir: &Path, treeish: &str, path: &str) -> Option<Vec<u8>> {
+        let entries = ls_tree(dir, treeish).unwrap();
+        let entry = entries.iter().find(|e| e.path == path.as_bytes())?;
+        cat_blobs(dir, std::slice::from_ref(&entry.sha))
+            .unwrap()
+            .pop()
+            .flatten()
+    }
+
     #[test]
-    fn materialize_head_ignores_unstaged_and_staged_changes() {
-        let dir = tmp("materialize-head");
+    fn head_tree_ignores_unstaged_and_staged_changes() {
+        let dir = tmp("tree-head");
         init_repo(&dir);
         fs::write(dir.join("a.txt"), "committed\n").unwrap();
         git(&dir, &["add", "-A"]);
@@ -164,17 +283,13 @@ mod tests {
         git(&dir, &["add", "b.txt"]);
         fs::write(dir.join("a.txt"), "unstaged edit\n").unwrap();
 
-        let materialized = materialize(&dir, "HEAD").unwrap();
-        assert_eq!(
-            fs::read_to_string(materialized.path().join("a.txt")).unwrap(),
-            "committed\n"
-        );
-        assert!(!materialized.path().join("b.txt").exists());
+        assert_eq!(tree_content(&dir, "HEAD", "a.txt").unwrap(), b"committed\n");
+        assert_eq!(tree_content(&dir, "HEAD", "b.txt"), None);
     }
 
     #[test]
-    fn materialize_index_reflects_exactly_what_is_staged() {
-        let dir = tmp("materialize-index");
+    fn index_tree_reflects_exactly_what_is_staged() {
+        let dir = tmp("tree-index");
         init_repo(&dir);
         fs::write(dir.join("a.txt"), "committed\n").unwrap();
         git(&dir, &["add", "-A"]);
@@ -185,14 +300,13 @@ mod tests {
         fs::write(dir.join("a.txt"), "unstaged edit\n").unwrap(); // must NOT appear below
 
         let index_tree = write_tree(&dir).unwrap();
-        let materialized = materialize(&dir, &index_tree).unwrap();
         assert_eq!(
-            fs::read_to_string(materialized.path().join("a.txt")).unwrap(),
-            "committed\n"
+            tree_content(&dir, &index_tree, "a.txt").unwrap(),
+            b"committed\n"
         );
         assert_eq!(
-            fs::read_to_string(materialized.path().join("b.txt")).unwrap(),
-            "staged\n"
+            tree_content(&dir, &index_tree, "b.txt").unwrap(),
+            b"staged\n"
         );
 
         // The real repo's own index/working tree must be untouched by any of this.
@@ -205,6 +319,48 @@ mod tests {
         let status_text = String::from_utf8_lossy(&status.stdout);
         assert!(status_text.contains("A  b.txt") || status_text.contains("A b.txt"));
         assert!(status_text.contains("a.txt")); // unstaged modification still shows as dirty
+    }
+
+    #[test]
+    fn ls_tree_reports_modes_and_recurses_into_subdirectories() {
+        let dir = tmp("ls-tree-modes");
+        init_repo(&dir);
+        fs::create_dir_all(dir.join("sub")).unwrap();
+        fs::write(dir.join("plain.txt"), "x\n").unwrap();
+        fs::write(dir.join("sub/nested.txt"), "y\n").unwrap();
+        git(&dir, &["add", "-A"]);
+        git(&dir, &["update-index", "--chmod=+x", "plain.txt"]);
+        git(&dir, &["commit", "-q", "-m", "init"]);
+
+        let entries = ls_tree(&dir, "HEAD").unwrap();
+        let by_path = |p: &str| entries.iter().find(|e| e.path == p.as_bytes()).unwrap();
+        assert_eq!(by_path("plain.txt").mode, 100755);
+        assert_eq!(by_path("sub/nested.txt").mode, 100644);
+    }
+
+    #[test]
+    fn cat_blobs_returns_contents_in_request_order_and_none_for_missing() {
+        let dir = tmp("cat-blobs");
+        init_repo(&dir);
+        fs::write(dir.join("a.txt"), "alpha\n").unwrap();
+        fs::write(dir.join("b.txt"), "beta\n").unwrap();
+        git(&dir, &["add", "-A"]);
+        git(&dir, &["commit", "-q", "-m", "init"]);
+
+        let entries = ls_tree(&dir, "HEAD").unwrap();
+        let sha = |p: &str| {
+            entries
+                .iter()
+                .find(|e| e.path == p.as_bytes())
+                .unwrap()
+                .sha
+                .clone()
+        };
+        let bogus = "0000000000000000000000000000000000000000".to_string();
+        let got = cat_blobs(&dir, &[sha("b.txt"), bogus, sha("a.txt")]).unwrap();
+        assert_eq!(got[0].as_deref(), Some(b"beta\n".as_slice()));
+        assert_eq!(got[1], None);
+        assert_eq!(got[2].as_deref(), Some(b"alpha\n".as_slice()));
     }
 
     #[test]

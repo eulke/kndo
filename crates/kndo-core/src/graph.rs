@@ -329,8 +329,20 @@ pub fn assemble_with_cache(
     adapters: &[Box<dyn LanguageAdapter>],
     cache: Option<&crate::cache::ProjectCache>,
 ) -> Result<(ProjectGraph, Vec<Diagnostic>), DiscoveryError> {
-    let discovered = discovery::discover(root)?;
-    let mut diagnostics = discovered.diagnostics;
+    assemble_from_source(&discovery::TreeSource::Directory(root), adapters, cache)
+}
+
+/// [`assemble_with_cache`] over any [`discovery::TreeSource`] — a directory, or a git tree-ish
+/// read in memory (diff modes, RFC 0004 §6). Everything past discovery is source-blind:
+/// identical content produces identical facts, hashes, ids, and findings whether the bytes came
+/// from disk or the object database.
+pub fn assemble_from_source(
+    source: &discovery::TreeSource<'_>,
+    adapters: &[Box<dyn LanguageAdapter>],
+    cache: Option<&crate::cache::ProjectCache>,
+) -> Result<(ProjectGraph, Vec<Diagnostic>), DiscoveryError> {
+    let mut discovered = discovery::discover_source(source)?;
+    let mut diagnostics = std::mem::take(&mut discovered.diagnostics);
 
     // The graph-snapshot fast path (RFC 0004 §2, §4 step 1): if every input the key folds in —
     // the whole discovered file set, each registered adapter's identity/version, and the graph
@@ -378,8 +390,7 @@ pub fn assemble_with_cache(
                     adapter_index,
                 }));
             }
-            let abs = root.join(df.path.0.as_str());
-            let content = std::fs::read(&abs).map_err(|e| Diagnostic {
+            let content = discovered.read(&df.path).map_err(|e| Diagnostic {
                 level: DiagnosticLevel::Warn,
                 path: Some(df.path.clone()),
                 message: format!(
@@ -435,8 +446,7 @@ pub fn assemble_with_cache(
             else {
                 return Ok(None);
             };
-            let abs = root.join(df.path.0.as_str());
-            let content = std::fs::read(&abs).map_err(|e| Diagnostic {
+            let content = discovered.read(&df.path).map_err(|e| Diagnostic {
                 level: DiagnosticLevel::Warn,
                 path: Some(df.path.clone()),
                 message: format!("manifest unreadable at extraction time ({e})"),

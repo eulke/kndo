@@ -17,6 +17,7 @@ use std::time::Instant;
 
 use crate::adapter::{Diagnostic, DiagnosticLevel, LanguageAdapter, ProjectPath, Span};
 use crate::analysis;
+use crate::discovery;
 use crate::gitutil;
 use crate::graph;
 use crate::query_envelope::{self, QueryRequest, QueryResult};
@@ -590,13 +591,30 @@ impl Engine {
     /// tree — exactly what would be committed, excluding further unstaged edits on top (the
     /// pre-commit use case `kndo init --hook` installs wants precisely this). `--staged`'s
     /// "before" is `HEAD`. `--diff <ref>`'s "before" is `merge-base(<ref>, HEAD)`; "after" is
-    /// the real working tree as-is (uncommitted changes included) — no materialization needed,
-    /// it's just `self.root`.
+    /// the real working tree as-is (uncommitted changes included) — it's just `self.root`.
+    ///
+    /// Git-side tree states are read **in memory** (`discovery::TreeSource::GitTree`:
+    /// `ls-tree` + `cat-file --batch`), never checked out to temp directories — materializing
+    /// whole trees was measured as diff mode's dominant cost (~0.5 s of file-creation syscalls
+    /// per tree at 5k files, ×2 for `--staged`, plus cleanup) and scaled with repo size instead
+    /// of change size. When `self.root` is a subdirectory of the repository, tree paths are
+    /// scoped and re-relativized to it (`prefix`), so both diff sides and full mode agree on
+    /// the same project-relative paths.
     fn run_diff(&mut self, mode: &RunMode) -> RunResult {
         let git_root = match gitutil::repo_root(&self.root) {
             Ok(r) => r,
             Err(e) => return Self::git_failure(e),
         };
+        // Canonicalize both sides before computing the prefix: `repo_root` comes back
+        // canonicalized from git, while `self.root` is whatever the frontend passed.
+        let canonical_root = self
+            .root
+            .canonicalize()
+            .unwrap_or_else(|_| self.root.clone());
+        let prefix = canonical_root
+            .strip_prefix(&git_root)
+            .map(|p| p.to_string_lossy().replace('\\', "/"))
+            .unwrap_or_default();
 
         let before_treeish = match mode {
             RunMode::Staged => gitutil::rev_parse(&git_root, "HEAD"),
@@ -607,33 +625,37 @@ impl Engine {
             Ok(t) => t,
             Err(e) => return Self::git_failure(e),
         };
-        let before_dir = match gitutil::materialize(&git_root, &before_treeish) {
-            Ok(d) => d,
-            Err(e) => return Self::git_failure(e),
-        };
 
-        // `--staged` needs a second materialization (the index); `--diff` reuses the real root.
-        // Owned, not borrowed: `assemble_and_analyze` needs `&mut self` right after, which an
-        // active borrow of `self.root` would block.
-        let staged_after_dir;
-        let after_root: PathBuf = match mode {
-            RunMode::Staged => {
-                let index_tree = match gitutil::write_tree(&git_root) {
-                    Ok(t) => t,
-                    Err(e) => return Self::git_failure(e),
-                };
-                staged_after_dir = match gitutil::materialize(&git_root, &index_tree) {
-                    Ok(d) => d,
-                    Err(e) => return Self::git_failure(e),
-                };
-                staged_after_dir.path().to_path_buf()
-            }
-            RunMode::Diff { .. } => self.root.clone(),
+        // `--staged`'s "after" is the index as a tree object (`write-tree` — the one
+        // object-database write diff mode performs; it never touches the real index or working
+        // tree). `--diff`'s "after" is the working tree itself. Owned locals (not borrows of
+        // `self`) because `assemble_and_analyze` needs `&mut self` right after.
+        let after_treeish: Option<String> = match mode {
+            RunMode::Staged => match gitutil::write_tree(&git_root) {
+                Ok(t) => Some(t),
+                Err(e) => return Self::git_failure(e),
+            },
+            RunMode::Diff { .. } => None,
             RunMode::Full => unreachable!("run_diff is only called for Staged/Diff"),
+        };
+        let work_root = self.root.clone();
+
+        let before_source = discovery::TreeSource::GitTree {
+            repo_root: &git_root,
+            treeish: &before_treeish,
+            prefix: &prefix,
+        };
+        let after_source = match &after_treeish {
+            Some(treeish) => discovery::TreeSource::GitTree {
+                repo_root: &git_root,
+                treeish,
+                prefix: &prefix,
+            },
+            None => discovery::TreeSource::Directory(&work_root),
         };
 
         let (before_graph, before_findings, before_diagnostics, _before_suppressed) =
-            match self.assemble_and_analyze(before_dir.path()) {
+            match self.assemble_and_analyze(&before_source) {
                 Ok(t) => t,
                 Err(d) => {
                     return RunResult {
@@ -643,7 +665,7 @@ impl Engine {
                 }
             };
         let (after_graph, after_findings, after_diagnostics, after_suppressed) =
-            match self.assemble_and_analyze(&after_root) {
+            match self.assemble_and_analyze(&after_source) {
                 Ok(t) => t,
                 Err(d) => {
                     return RunResult {
@@ -774,7 +796,9 @@ impl Engine {
     pub fn query_batch(&mut self, requests: Vec<QueryRequest>) -> Vec<QueryResult> {
         let start = Instant::now();
         let root = self.root.clone();
-        let (graph, findings, _diagnostics, _suppressed) = match self.assemble_and_analyze(&root) {
+        let source = discovery::TreeSource::Directory(&root);
+        let (graph, findings, _diagnostics, _suppressed) = match self.assemble_and_analyze(&source)
+        {
             Ok(t) => t,
             Err(d) => {
                 return requests
@@ -801,16 +825,16 @@ impl Engine {
             .collect()
     }
 
-    /// The lowest-level shared step: assemble the graph rooted at an arbitrary directory (the
-    /// real project root for full mode; a git-materialized temp directory for diff modes'
-    /// "before", and `--staged`'s "after") and run every analysis over it. `self.cache` is
-    /// still the *real* project's `.kndo/cache/` regardless of `root` — the facts layer keys
-    /// purely by content hash, so it's fully shared across trees; the graph-snapshot layer's
-    /// key folds in the whole file set, so a differing tree just misses cleanly rather than
-    /// colliding with the real project's own cached graph.
+    /// The lowest-level shared step: assemble the graph from an arbitrary tree source (the
+    /// real project directory for full mode; in-memory git trees for diff modes' "before" and
+    /// `--staged`'s "after") and run every analysis over it. `self.cache` is still the *real*
+    /// project's `.kndo/cache/` regardless of source — the facts layer keys purely by content
+    /// hash, so it's fully shared across trees; the graph-snapshot layer's key folds in the
+    /// whole file set, so a differing tree just misses cleanly rather than colliding with the
+    /// real project's own cached graph.
     fn assemble_and_analyze(
         &mut self,
-        root: &Path,
+        source: &discovery::TreeSource<'_>,
     ) -> Result<
         (
             graph::ProjectGraph,
@@ -820,7 +844,7 @@ impl Engine {
         ),
         Diagnostic,
     > {
-        match graph::assemble_with_cache(root, &self.adapters, self.cache.as_ref()) {
+        match graph::assemble_from_source(source, &self.adapters, self.cache.as_ref()) {
             Ok((g, diagnostics)) => {
                 let findings = analysis::run_all(&g);
                 let (findings, suppressed) = crate::suppression::apply(&g, findings);
@@ -830,7 +854,7 @@ impl Engine {
                 level: DiagnosticLevel::Warn,
                 path: None,
                 message: format!(
-                    "cannot walk the project root: {e} — check the path and permissions"
+                    "cannot read the project tree: {e} — check the path and permissions"
                 ),
                 span: None,
             }),
@@ -841,7 +865,7 @@ impl Engine {
     /// (`files_discovered`, `symbols`, …) that only full mode reports directly (diff mode
     /// builds its own `RunResult` in [`Self::run_diff`], from the "after" side).
     fn run_analysis_at(&mut self, root: &Path) -> RunResult {
-        match self.assemble_and_analyze(root) {
+        match self.assemble_and_analyze(&discovery::TreeSource::Directory(root)) {
             Ok((g, findings, diagnostics, suppressed)) => {
                 let adapters = self
                     .adapters
@@ -1402,6 +1426,47 @@ mod tests {
         assert!(result.findings.is_empty());
         assert!(!result.diagnostics.is_empty());
         assert!(result.diagnostics[0].message.contains("diff mode"));
+    }
+
+    /// Running diff mode from a subdirectory of the repo scopes both sides to that
+    /// subdirectory with matching project-relative paths — previously the "before" side was
+    /// the whole materialized repo (repo-relative paths) while `--diff`'s "after" was the
+    /// subdirectory (subdir-relative paths), so paths never aligned and everything outside the
+    /// subdir appeared removed.
+    #[test]
+    fn diff_mode_from_a_subdirectory_scopes_both_sides_to_it() {
+        let dir = git_repo("subdir-scope");
+        std::fs::create_dir_all(dir.join("pkg")).unwrap();
+        std::fs::write(dir.join("outside.dmock"), "").unwrap(); // dead, but OUTSIDE the scope
+        std::fs::write(
+            dir.join("pkg/root.dmock"),
+            "root-file\nimport ./used.dmock\n",
+        )
+        .unwrap();
+        std::fs::write(dir.join("pkg/used.dmock"), "").unwrap();
+        git_add_all_commit(&dir, "base");
+        let base_sha = git_rev_parse(&dir, "HEAD");
+
+        // Working-tree change inside pkg only: stop importing used.dmock.
+        std::fs::write(dir.join("pkg/root.dmock"), "root-file\n").unwrap();
+
+        let mut engine = Engine::open(
+            &dir.join("pkg"),
+            ConfigOverrides::default(),
+            vec![Box::new(DiffMockAdapter)],
+        )
+        .unwrap();
+        let result = engine.check(CheckRequest {
+            mode: RunMode::Diff { base: base_sha },
+        });
+
+        assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+        // Exactly one derived new finding, with a pkg-relative path — and nothing about
+        // outside.dmock on either side (it is out of scope, not "removed").
+        assert_eq!(result.findings.len(), 1, "{:?}", result.findings);
+        assert_eq!(finding_path(&result.findings[0]), "used.dmock");
+        assert_eq!(result.findings[0].delta_origin, Some(DeltaOrigin::Derived));
+        assert!(result.fixed.is_empty(), "{:?}", result.fixed);
     }
 
     #[test]
