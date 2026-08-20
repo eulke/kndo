@@ -355,6 +355,35 @@ fn render_query_entry(out: &mut String, entry: &ResultEntry, opts: &RenderOption
         }
         ResultEntry::Describe(d) => {
             out.push_str(&format!("  {}\n", node_line(&d.node)));
+            if let Some(decl) = &d.declaration {
+                out.push_str(&format!(
+                    "  declaration: {} · visibility {}{}\n",
+                    decl.kind,
+                    decl.visibility,
+                    if decl.exported { " · exported" } else { "" }
+                ));
+            }
+            if let Some(file) = &d.file {
+                out.push_str(&format!("  file: {} · {}\n", file.role, file.origin));
+            }
+            if let Some(dep) = &d.dependency {
+                out.push_str(&format!(
+                    "  dependency: {} · {} importing file{} · {}\n",
+                    dep.manifest_scopes.join(", "),
+                    dep.importing_files,
+                    if dep.importing_files == 1 { "" } else { "s" },
+                    if dep.used { "used" } else { "unused" }
+                ));
+            }
+            if let Some(pkg) = &d.package {
+                out.push_str(&format!(
+                    "  package: {} · {} files · {} dependent{}\n",
+                    pkg.mode,
+                    pkg.files,
+                    pkg.dependents,
+                    if pkg.dependents == 1 { "" } else { "s" }
+                ));
+            }
             out.push_str(&format!(
                 "  degree: in={} out={}\n",
                 d.degree.in_by_kind.values().sum::<usize>(),
@@ -366,8 +395,17 @@ fn render_query_entry(out: &mut String, entry: &ResultEntry, opts: &RenderOption
                     out.push_str(&format!("    {}\n", node_line(r)));
                 }
             }
+            if !d.declared_symbols.is_empty() {
+                out.push_str("  declared symbols:\n");
+                for s in &d.declared_symbols {
+                    out.push_str(&format!("    {}\n", node_line(s)));
+                }
+            }
             if !d.findings.is_empty() {
                 out.push_str(&format!("  findings: {}\n", d.findings.join(", ")));
+            }
+            if !d.sources.is_empty() {
+                out.push_str(&format!("  sources: {}\n", d.sources.join(", ")));
             }
         }
         ResultEntry::Neighbors(r) => {
@@ -579,6 +617,84 @@ mod tests {
         assert_eq!(
             out,
             "kndo · staged · 0 new · 0 fixed · net +0 · suppressed: 1\n"
+        );
+    }
+
+    fn qnode(selector: &str, kind: &str) -> kndo::query::QNodeRef {
+        kndo::query::QNodeRef {
+            selector: selector.to_string(),
+            kind: kind.to_string(),
+            color: Some("production".to_string()),
+            span: None,
+        }
+    }
+
+    fn query_result(entry: kndo::query_envelope::ResultEntry) -> QueryResult {
+        QueryResult {
+            verb: kndo::query_envelope::Verb::Describe,
+            selectors: vec!["dep:left-pad".to_string()],
+            id: None,
+            cache: "warm",
+            duration_ms: 3,
+            results: vec![entry],
+            diagnostics: vec![],
+        }
+    }
+
+    #[test]
+    fn describe_human_output_shows_declaration_file_and_dependency_blocks() {
+        use kndo::query::{DeclarationInfo, Degree, DependencyInfo, DescribeResult, NodeSpan};
+        use kndo::query_envelope::ResultEntry;
+
+        let symbol = query_result(ResultEntry::Describe(Box::new(DescribeResult {
+            node: qnode("src/billing.js#computeTotal", "function"),
+            declaration: Some(DeclarationInfo {
+                kind: "function".to_string(),
+                span: NodeSpan {
+                    path: "src/billing.js".to_string(),
+                    start: (1, 1),
+                    end: (3, 2),
+                },
+                exported: true,
+                visibility: 1,
+            }),
+            file: None,
+            dependency: None,
+            package: None,
+            degree: Degree::default(),
+            reached_by_roots: vec![],
+            findings: vec![],
+            sources: vec![],
+            declared_symbols: vec![],
+            elided: Default::default(),
+        })));
+        let out = render_query(&symbol, &opts());
+        assert!(
+            out.contains("declaration: function · visibility 1 · exported"),
+            "{out}"
+        );
+
+        let dep = query_result(ResultEntry::Describe(Box::new(DescribeResult {
+            node: qnode("dep:left-pad", "dependency"),
+            declaration: None,
+            file: None,
+            dependency: Some(DependencyInfo {
+                manifest_scopes: vec!["prod".to_string()],
+                importing_files: 1,
+                used: true,
+            }),
+            package: None,
+            degree: Degree::default(),
+            reached_by_roots: vec![],
+            findings: vec![],
+            sources: vec![],
+            declared_symbols: vec![],
+            elided: Default::default(),
+        })));
+        let out = render_query(&dep, &opts());
+        assert!(
+            out.contains("dependency: prod · 1 importing file · used"),
+            "{out}"
         );
     }
 }

@@ -274,6 +274,34 @@ fn render_query_entry(out: &mut String, entry: &ResultEntry) {
         }
         ResultEntry::Describe(d) => {
             out.push_str(&format!("node: {}\n", node_line(&d.node)));
+            if let Some(decl) = &d.declaration {
+                out.push_str(&format!(
+                    "declaration: {} visibility={}{}\n",
+                    decl.kind,
+                    decl.visibility,
+                    if decl.exported { " exported" } else { "" }
+                ));
+            }
+            if let Some(file) = &d.file {
+                out.push_str(&format!(
+                    "file: role={} origin={}\n",
+                    file.role, file.origin
+                ));
+            }
+            if let Some(dep) = &d.dependency {
+                out.push_str(&format!(
+                    "dependency: scopes={} importing_files={} {}\n",
+                    dep.manifest_scopes.join(","),
+                    dep.importing_files,
+                    if dep.used { "used" } else { "unused" }
+                ));
+            }
+            if let Some(pkg) = &d.package {
+                out.push_str(&format!(
+                    "package: mode={} files={} dependents={}\n",
+                    pkg.mode, pkg.files, pkg.dependents
+                ));
+            }
             out.push_str(&format!(
                 "degree: in={} out={}\n",
                 sum_degree(&d.degree.in_by_kind),
@@ -283,6 +311,12 @@ fn render_query_entry(out: &mut String, entry: &ResultEntry) {
                 out.push_str("reached_by_roots:\n");
                 for (n, r) in d.reached_by_roots.iter().enumerate() {
                     out.push_str(&format!("  {}. {}\n", n + 1, node_line(r)));
+                }
+            }
+            if !d.declared_symbols.is_empty() {
+                out.push_str("declared_symbols:\n");
+                for (n, s) in d.declared_symbols.iter().enumerate() {
+                    out.push_str(&format!("  {}. {}\n", n + 1, node_line(s)));
                 }
             }
             if !d.findings.is_empty() {
@@ -530,5 +564,80 @@ mod tests {
             ..RunResult::default()
         });
         assert!(out.contains("result: 0 new, 0 fixed, net +0 | suppressed 1 inline, 0 config"));
+    }
+
+    #[test]
+    fn describe_agent_output_shows_declaration_and_dependency_blocks() {
+        use crate::query::{
+            DeclarationInfo, Degree, DependencyInfo, DescribeResult, NodeSpan, QNodeRef,
+        };
+        use crate::query_envelope::{QueryResult, ResultEntry, Verb};
+
+        let node = |selector: &str, kind: &str| QNodeRef {
+            selector: selector.to_string(),
+            kind: kind.to_string(),
+            color: Some("production".to_string()),
+            span: None,
+        };
+        let query_result = |entry: ResultEntry| QueryResult {
+            verb: Verb::Describe,
+            selectors: vec!["x".to_string()],
+            id: None,
+            cache: "warm",
+            duration_ms: 3,
+            results: vec![entry],
+            diagnostics: vec![],
+        };
+
+        let symbol = query_result(ResultEntry::Describe(Box::new(DescribeResult {
+            node: node("src/billing.js#computeTotal", "function"),
+            declaration: Some(DeclarationInfo {
+                kind: "function".to_string(),
+                span: NodeSpan {
+                    path: "src/billing.js".to_string(),
+                    start: (1, 1),
+                    end: (3, 2),
+                },
+                exported: true,
+                visibility: 1,
+            }),
+            file: None,
+            dependency: None,
+            package: None,
+            degree: Degree::default(),
+            reached_by_roots: vec![],
+            findings: vec![],
+            sources: vec![],
+            declared_symbols: vec![],
+            elided: Default::default(),
+        })));
+        let out = render_query(&symbol);
+        assert!(
+            out.contains("declaration: function visibility=1 exported"),
+            "{out}"
+        );
+
+        let dep = query_result(ResultEntry::Describe(Box::new(DescribeResult {
+            node: node("dep:left-pad", "dependency"),
+            declaration: None,
+            file: None,
+            dependency: Some(DependencyInfo {
+                manifest_scopes: vec!["prod".to_string()],
+                importing_files: 1,
+                used: true,
+            }),
+            package: None,
+            degree: Degree::default(),
+            reached_by_roots: vec![],
+            findings: vec![],
+            sources: vec![],
+            declared_symbols: vec![],
+            elided: Default::default(),
+        })));
+        let out = render_query(&dep);
+        assert!(
+            out.contains("dependency: scopes=prod importing_files=1 used"),
+            "{out}"
+        );
     }
 }
