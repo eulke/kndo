@@ -5,6 +5,7 @@
 pub mod dependency_hygiene;
 pub mod duplicate;
 pub mod internal_only;
+pub mod private_type_leak;
 pub mod reachability;
 mod rollup;
 pub mod test_only;
@@ -74,6 +75,7 @@ pub fn run_all(graph: &crate::graph::ProjectGraph) -> (Vec<Finding>, Vec<Diagnos
     findings.extend(duplicate::find_duplicate_files(graph));
     findings.extend(dependency_hygiene::find_dependency_hygiene(graph));
     findings.extend(internal_only::find_internal_only(graph, &reach));
+    findings.extend(private_type_leak::find_private_type_leaks(graph));
     let (untested_findings, untested_diagnostic) = untested::find_untested(graph, &reach);
     findings.extend(untested_findings);
     findings.sort_by(|a, b| a.id.cmp(&b.id));

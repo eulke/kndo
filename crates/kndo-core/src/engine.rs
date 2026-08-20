@@ -938,6 +938,7 @@ impl Engine {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::vocab::RefKind;
     use smol_str::SmolStr;
 
     /// True for the diagnostic `untested` emits when a project has no test roots at all (RFC
@@ -1061,6 +1062,7 @@ mod tests {
                         exported: true,
                         visibility: crate::adapter::VisibilityLevel(1),
                         member_of: None,
+                        signature_span: None,
                     });
                 } else if let Some(name) = line.strip_prefix("ref ") {
                     facts.references.push(crate::adapter::RawReference {
@@ -1068,6 +1070,7 @@ mod tests {
                         scope_context: None,
                         span: Span::default(),
                         within: None,
+                        kind: RefKind::Read,
                     });
                 }
             }

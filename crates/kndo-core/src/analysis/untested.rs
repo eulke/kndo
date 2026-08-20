@@ -226,6 +226,7 @@ mod tests {
             exported: true,
             visibility: VisibilityLevel(1),
             member_of: None,
+            signature_span: None,
         }
     }
 

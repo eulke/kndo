@@ -50,6 +50,8 @@ pub struct SymbolNode {
     /// Mirrors [`crate::adapter::Declaration::member_of`].
     #[rkyv(with = rkyv::with::Map<crate::rkyv_support::SmolStrAsString>)]
     pub member_of: Option<SmolStr>,
+    /// Mirrors [`crate::adapter::Declaration::signature_span`] (RFC 0012 §5).
+    pub signature_span: Option<Span>,
 }
 
 impl SymbolNode {
@@ -280,7 +282,7 @@ pub(crate) fn package_owns(manifest_dir: &str, file_dir: &str) -> bool {
 /// an assembly-algorithm change that could produce a different graph from the same facts. Feeds
 /// [`compute_graph_key`] (RFC 0004 §3's "core graph-schema version"); a bump here invalidates
 /// every project's cached `graph.bin` on the next run, same as any other key-input change.
-pub const GRAPH_SCHEMA_VERSION: u32 = 3; // 3: within-attributed References (RFC 0012 §4); 2: member_of (§3)
+pub const GRAPH_SCHEMA_VERSION: u32 = 4; // 4: RefKind pass-through + signature_span (RFC 0012 §5); 3: within (§4); 2: member_of (§3)
 
 /// The graph snapshot's cache key (RFC 0004 §3, `cache.rs`'s `graph.bin`): a single digest
 /// folding in the *whole* discovered file set (every path + content hash — this already
@@ -717,6 +719,7 @@ pub fn assemble_from_source(
                 exported: decl.exported,
                 visibility: decl.visibility,
                 member_of: decl.member_of.clone(),
+                signature_span: decl.signature_span,
             });
             edges.push(Edge {
                 kind: EdgeKind::Declares {
@@ -1039,7 +1042,7 @@ pub fn assemble_from_source(
                     kind: EdgeKind::References {
                         from,
                         to,
-                        kind: crate::vocab::RefKind::Read,
+                        kind: reference.kind,
                     },
                     confidence: Confidence::Certain,
                     source: provenance(),
@@ -1081,7 +1084,7 @@ pub fn assemble_from_source(
                         kind: EdgeKind::References {
                             from, // same within-or-file attribution as the exact-match path
                             to,
-                            kind: crate::vocab::RefKind::Read,
+                            kind: reference.kind,
                         },
                         confidence,
                         source: provenance(),
@@ -1177,7 +1180,7 @@ mod tests {
         AdapterDescriptor, Declaration, FileFacts, ImportBinding, ImportKind, ManifestDependency,
         ManifestFacts, ManifestRoot, RawImport, RawReference, RawRoot, RawRootTarget,
     };
-    use crate::vocab::{DependencyScope, FileOrigin, FileRole, RootKind};
+    use crate::vocab::{DependencyScope, FileOrigin, FileRole, RefKind, RootKind};
     use std::fs;
 
     /// A minimal in-memory adapter for graph tests. kndo-core must never depend on a real
@@ -1250,6 +1253,7 @@ mod tests {
                         exported: true,
                         visibility: VisibilityLevel(1),
                         member_of: None,
+                        signature_span: None,
                     });
                 } else if let Some(name) = line.strip_prefix("private-decl ") {
                     facts.declarations.push(Declaration {
@@ -1259,6 +1263,7 @@ mod tests {
                         exported: false,
                         visibility: VisibilityLevel(0),
                         member_of: None,
+                        signature_span: None,
                     });
                 } else if let Some(rest) = line.strip_prefix("member-decl ") {
                     // `member-decl <owner> <name>` — an unexported member declaration
@@ -1273,6 +1278,7 @@ mod tests {
                         exported: false,
                         visibility: VisibilityLevel(0),
                         member_of: Some(SmolStr::new(owner)),
+                        signature_span: None,
                     });
                 } else if let Some(rest) = line
                     .strip_prefix("import ")
@@ -1324,6 +1330,7 @@ mod tests {
                         scope_context: None,
                         span: Span::default(),
                         within: Some(SmolStr::new(within)),
+                        kind: RefKind::Read,
                     });
                 } else if let Some(name) = line.strip_prefix("ref ") {
                     facts.references.push(RawReference {
@@ -1331,6 +1338,7 @@ mod tests {
                         scope_context: None,
                         span: Span::default(),
                         within: None,
+                        kind: RefKind::Read,
                     });
                 } else if line == "root-file" {
                     facts.roots.push(RawRoot {

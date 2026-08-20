@@ -24,7 +24,7 @@ use kndo_core::adapter::{
     Declaration, Diagnostic, DiagnosticLevel, DynamicUse, FileFacts, ImportBinding, ImportKind,
     RawImport, RawReference, RawSuppression, Span, VisibilityLevel,
 };
-use kndo_core::vocab::{Confidence, SymbolKind};
+use kndo_core::vocab::{Confidence, RefKind, SymbolKind};
 use smol_str::SmolStr;
 use tree_sitter::Node;
 
@@ -151,6 +151,21 @@ fn handle_statement(node: Node, src: &[u8], exported: bool, out: &mut FileFacts)
     }
 }
 
+/// Everything before the body block (RFC 0012 §5): name, parameters and return-type
+/// annotation — the declaration's *promise*, distinct from its implementation. `None` when
+/// the grammar has no `body` field. Callables only in this slice (RFC 0012 §5's v1 scope);
+/// classes/interfaces/type aliases stay `None` — their "signature" is their whole body, which
+/// would make every member reference a "signature" reference and drown the leak analysis.
+fn signature_span_of(node: Node) -> Option<Span> {
+    let body = node.child_by_field_name("body")?;
+    let start = node.start_position();
+    let end = body.start_position();
+    Some(Span {
+        start: (start.row as u32 + 1, start.column as u32 + 1),
+        end: (end.row as u32 + 1, end.column as u32 + 1),
+    })
+}
+
 /// Handles a declaration whose only shape variance is its `name` field falling back to
 /// `default` (covers `export default function foo(){}`-style named-but-default exports).
 fn handle_named(node: Node, src: &[u8], exported: bool, out: &mut FileFacts, kind: SymbolKind) {
@@ -158,6 +173,11 @@ fn handle_named(node: Node, src: &[u8], exported: bool, out: &mut FileFacts, kin
         .child_by_field_name("name")
         .map(|n| SmolStr::new(text(n, src)))
         .unwrap_or_else(|| SmolStr::new("default"));
+    let signature_span = if matches!(kind, SymbolKind::Function) {
+        signature_span_of(node)
+    } else {
+        None
+    };
     out.declarations.push(Declaration {
         name,
         kind,
@@ -165,6 +185,7 @@ fn handle_named(node: Node, src: &[u8], exported: bool, out: &mut FileFacts, kin
         exported,
         visibility: visibility(exported),
         member_of: None,
+        signature_span,
     });
 }
 
@@ -188,6 +209,7 @@ fn handle_export_statement(node: Node, src: &[u8], out: &mut FileFacts) {
             exported: true,
             visibility: visibility(true),
             member_of: None,
+            signature_span: None,
         });
         return;
     }
@@ -295,6 +317,7 @@ fn handle_enum(node: Node, src: &[u8], exported: bool, out: &mut FileFacts) {
         exported,
         visibility: visibility(exported),
         member_of: None,
+        signature_span: None,
     });
 
     let Some(body) = node.child_by_field_name("body") else {
@@ -317,6 +340,7 @@ fn handle_enum(node: Node, src: &[u8], exported: bool, out: &mut FileFacts) {
                 exported,
                 visibility: visibility(exported),
                 member_of: None,
+                signature_span: None,
             });
         }
     }
@@ -360,6 +384,7 @@ fn handle_lexical(node: Node, src: &[u8], exported: bool, out: &mut FileFacts) {
             exported,
             visibility: visibility(exported),
             member_of: None,
+            signature_span: None,
         });
     }
 }
@@ -957,6 +982,7 @@ fn handle_cjs_module_exports(
         exported: true,
         visibility: visibility(true),
         member_of: None,
+        signature_span: None,
     });
 }
 
@@ -999,6 +1025,7 @@ fn handle_cjs_named_export(
         exported: true,
         visibility: visibility(true),
         member_of: None,
+        signature_span: None,
     });
 }
 
@@ -1256,6 +1283,7 @@ fn handle_namespace_occurrence(
                         scope_context: None,
                         within: within.cloned(),
                         span: span(parent),
+                        kind: RefKind::Read,
                     });
                 }
             }
@@ -1266,6 +1294,7 @@ fn handle_namespace_occurrence(
                         scope_context: None,
                         within: within.cloned(),
                         span: span(parent),
+                        kind: RefKind::Read,
                     });
                 }
             }
@@ -1435,11 +1464,22 @@ fn collect_references(
         "identifier" | "type_identifier" | "shorthand_property_identifier"
     ) && !export_ref_skips.contains(&node.id())
     {
+        // `type_identifier` *is* the grammar's type-position signal (RFC 0012 §5): the same
+        // name in value position parses as plain `identifier`, so no per-site context check
+        // is needed. `extends`/`implements` clauses also surface as `type_identifier` here —
+        // tagged TypeUse, not Extend, in this slice (heritage-clause discrimination is
+        // deferred with class signature spans, which the leak analysis would need first).
+        let kind = if node.kind() == "type_identifier" {
+            RefKind::TypeUse
+        } else {
+            RefKind::Read
+        };
         out.push(RawReference {
             name: SmolStr::new(text(node, src)),
             scope_context: None,
             within: within.cloned(),
             span: span(node),
+            kind,
         });
     }
 
@@ -2568,5 +2608,64 @@ mod tests {
         let s = suppressions("// kndo:allow unused\nfunction f() {}");
         assert_eq!(s[0].span.start, (1, 1));
         assert_eq!(s[0].span.end.0, 1); // single-line comment stays on line 1
+    }
+
+    // ------------------------------------------------- RFC 0012 §5: RefKind + signature_span
+
+    #[test]
+    fn function_signature_span_covers_params_and_return_type_but_not_the_body() {
+        let facts = extract(
+            "f.ts",
+            b"type Secret = { id: number };\n\nexport function make(s: Secret): Secret {\n  const inner: Secret = s;\n  return inner;\n}\n",
+        );
+        let d = facts
+            .declarations
+            .iter()
+            .find(|d| d.name.as_str() == "make")
+            .unwrap();
+        let sig = d.signature_span.expect("callables get a signature span");
+        assert_eq!(sig.start.0, 3);
+        assert_eq!(sig.end.0, 3); // ends where the body block opens
+        let sig_uses = facts
+            .references
+            .iter()
+            .filter(|r| r.name.as_str() == "Secret" && r.span.start.0 == 3)
+            .count();
+        assert_eq!(sig_uses, 2, "param + return type positions");
+    }
+
+    #[test]
+    fn only_callables_get_signature_spans() {
+        let facts = extract(
+            "f.ts",
+            b"export class C {}\nexport interface I {}\nexport type A = string;\nexport const v = 1;\nexport enum E { X }\n",
+        );
+        for d in &facts.declarations {
+            assert!(
+                d.signature_span.is_none(),
+                "{} should have no signature span",
+                d.name
+            );
+        }
+    }
+
+    #[test]
+    fn type_positions_are_tagged_type_use_and_value_positions_read() {
+        use kndo_core::vocab::RefKind;
+        let facts = extract(
+            "f.ts",
+            b"import { Secret, helper } from './x';\n\nexport function f(s: Secret) {\n  helper(s);\n}\n",
+        );
+        let kind_of = |n: &str| {
+            facts
+                .references
+                .iter()
+                .find(|r| r.name.as_str() == n)
+                .unwrap_or_else(|| panic!("no reference {n:?}"))
+                .kind
+        };
+        assert_eq!(kind_of("Secret"), RefKind::TypeUse);
+        assert_eq!(kind_of("helper"), RefKind::Read);
+        assert_eq!(kind_of("s"), RefKind::Read);
     }
 }

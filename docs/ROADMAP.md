@@ -74,17 +74,18 @@ package-scoped (not file-scoped) reference resolution, and a `ResolveCtx::files_
 languages whose import unit is a directory rather than a single file — plus one real, previously-
 latent core bug the second language's shape exposed and fixed (`analysis/reachability.rs`: a
 symbol-only root, the common case in Go, never propagated reachability to the file-attributed
-references its own file makes). `private-type-leak`, `deep-import`'s verdict, and `kndo impact`
-remain — each needs its own real design pass (TypeUse edge tagging; subpath+surface tracking;
-a new navigation verb), not attempted as a rushed add-on to this pass.
+references its own file makes). `deep-import`'s verdict and `kndo impact` remain — each needs
+its own real design pass (subpath+surface tracking; a new navigation verb), not attempted as a
+rushed add-on to this pass.
 
-RFC 0012 (Precise Reference Semantics & Visibility) then landed its first four stages here:
+RFC 0012 (Precise Reference Semantics & Visibility) then landed its first five stages here:
 `member_of` + the duck-typed member-call fallback (killing the unused:method false positive),
-the Go `dir#package` unit key, and symbol-granular reference attribution (`within`) in the core
+the Go `dir#package` unit key, symbol-granular reference attribution (`within`) in the core
 and **both** adapters — transitive death is now visible in Go and JS/TS alike, pinned by
-conformance fixtures in each. Remaining RFC 0012 stages (§§5–9: RefKind + private-type-leak,
-the visibility ladder, detected_origin, qualified-reference resolution) are the current
-in-order work queue.
+conformance fixtures in each — and §5's `RefKind` tagging + callable `signature_span`s feeding
+the `private-type-leak` analysis (RFC 0005 §7's second direction), likewise fixture-pinned in
+both languages. Remaining RFC 0012 stages (§§6–10: the visibility ladder, detected_origin,
+qualified-reference resolution, go.work) are the current in-order work queue.
 
 ## M4 — Duplication, CRAP, health
 `duplicate` (winnowing index, incremental), `cyclic` (SCCs with per-language tolerance),

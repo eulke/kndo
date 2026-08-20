@@ -113,7 +113,19 @@ pub trait LanguageAdapter: Send + Sync {
 ```rust
 pub struct FileFacts {
     pub declarations: Vec<Declaration>,     // { name, kind: SymbolKind, span, exported: bool,
-                                             //   visibility, member_of: Option<Name> }
+                                             //   visibility, member_of: Option<Name>,
+                                             //   signature_span: Option<Span> }
+                                             // signature_span (RFC 0012 §5): the declaration's
+                                             // *promise* — everything before the body block
+                                             // (name, parameters, return/result types).
+                                             // Callables only in v1; None on type/value
+                                             // declarations (a struct's whole body is not a
+                                             // signature — firing on it would falsely accuse
+                                             // exported-struct/unexported-field shapes). Feeds
+                                             // the `private-type-leak` analysis: a TypeUse
+                                             // reference attributed to an exported callable
+                                             // whose site lies inside this span, naming a
+                                             // lower-visibility type, is a lying public API.
                                              // member_of (RFC 0012 §3): the owning type's
                                              // declared name when this is a member (a Go
                                              // method's receiver type, a class method's class);
@@ -129,7 +141,8 @@ pub struct FileFacts {
                                              // `Owner.name` form. Display/selectors use the
                                              // qualified form; ids fold it in, so same-named
                                              // members of different owners stay distinct.
-    pub references:   Vec<RawReference>,    // { name, scope-context, span, within } — resolved
+    pub references:   Vec<RawReference>,    // { name, scope-context, span, within, kind } —
+                                             // resolved
                                              // core-side (graph::assemble) against same-file
                                              // declarations and this file's own import bindings
                                              // (below); no adapter resolution hook.
@@ -145,6 +158,15 @@ pub struct FileFacts {
                                              // back to file attribution — the safe direction —
                                              // and None (adapters not emitting it) reproduces
                                              // prior behavior exactly.
+                                             // kind (RFC 0012 §5): RefKind — what the use *is*
+                                             // (Read | TypeUse | Extend | …), carried verbatim
+                                             // onto the References edge. Untagged/default is
+                                             // Read, byte-identical to pre-§5 behavior; tree-
+                                             // sitter grammars make TypeUse nearly free (Go/TS:
+                                             // `type_identifier` IS the type-position signal).
+                                             // Reachability ignores kind entirely — every kind
+                                             // keeps its target alive; only kind-selective
+                                             // analyses (private-type-leak) filter by it.
     pub imports:      Vec<RawImport>,       // { specifier, kind: Relative|Package, span,
                                              //   side_effect_only, type_only, confidence,
                                              //   bindings: Vec<ImportBinding>, reexported,

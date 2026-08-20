@@ -209,8 +209,20 @@ pub enum DependencyScope {
 
 /// Reference subtype. `Implement`/`Override` drive dispatch-aware member liveness
 /// (RFC 0005 §2); `Extend`/`TypeUse` distinguish type-level from value-level consumption.
+/// Adapter-supplied per reference since RFC 0012 §5 (`RawReference::kind` — serde derives are
+/// for the facts cache); untagged references are `Read`, exactly the pre-§5 behavior.
 #[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize,
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    serde::Serialize,
+    serde::Deserialize,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
 )]
 pub enum RefKind {
     Call,

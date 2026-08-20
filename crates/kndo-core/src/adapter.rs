@@ -161,6 +161,13 @@ pub struct Declaration {
     /// at `Probable`/`Possible`, per RFC 0002 §5's ladder. A [`RawRoot`] targeting a member
     /// names it in qualified `Owner.name` form.
     pub member_of: Option<SmolStr>,
+    /// The sub-span covering this declaration's *signature* — parameters and return/result
+    /// types, everything before the body (RFC 0012 §5). Only the adapter knows where a body
+    /// starts; the core must not. `Some` on callables; `None` where the concept doesn't apply
+    /// (a type's leak surface is its member fields, which land with member extraction — v1 of
+    /// `private-type-leak` is deliberately callables-only rather than falsely accusing
+    /// exported-struct/unexported-field shapes).
+    pub signature_span: Option<Span>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -181,6 +188,11 @@ pub struct RawReference {
     /// attribution — today's over-approximation, the safe direction** — and `None` (every
     /// adapter that doesn't emit it) reproduces prior behavior exactly.
     pub within: Option<SmolStr>,
+    /// What kind of use this is (RFC 0012 §5) — `TypeUse` for type-position references (the
+    /// fact `private-type-leak` is built on), `Extend`/`Implement` for inheritance clauses,
+    /// `Read` otherwise. Assembly passes it straight onto the `References` edge; adapters that
+    /// don't differentiate emit `Read`, the pre-§5 behavior.
+    pub kind: crate::vocab::RefKind,
 }
 
 /// Syntactic shape only — what the specifier text looks like, not what it resolves to.

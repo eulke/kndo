@@ -164,6 +164,7 @@ mod tests {
             exported: visibility > 0,
             visibility: VisibilityLevel(visibility),
             member_of: None,
+            signature_span: None,
         }
     }
 

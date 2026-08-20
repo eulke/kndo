@@ -14,7 +14,7 @@ use kndo_core::adapter::{
     Declaration, Diagnostic, DiagnosticLevel, FileFacts, ImportBinding, ImportKind, RawImport,
     RawReference, RawRoot, RawRootTarget, RawSuppression, Span, VisibilityLevel,
 };
-use kndo_core::vocab::{Confidence, RootKind, SymbolKind};
+use kndo_core::vocab::{Confidence, RefKind, RootKind, SymbolKind};
 use smol_str::SmolStr;
 use tree_sitter::Node;
 
@@ -160,6 +160,7 @@ fn push_declaration(
     name: &str,
     kind: SymbolKind,
     node_span: Span,
+    signature_span: Option<Span>,
     promote_exports: bool,
 ) {
     let exported = is_exported(name);
@@ -170,6 +171,7 @@ fn push_declaration(
         exported,
         visibility: visibility(exported),
         member_of: None,
+        signature_span,
     });
     if exported && promote_exports {
         out.roots.push(RawRoot {
@@ -181,6 +183,19 @@ fn push_declaration(
 }
 
 // ---------------------------------------------------------------- declarations
+
+/// Everything before the body block (RFC 0012 §5): parameters and result types — the
+/// declaration's *promise*, distinct from its implementation. `None` when the grammar has no
+/// body (declarations inside `interface` blocks are handled elsewhere).
+fn signature_span_of(node: Node) -> Option<Span> {
+    let body = node.child_by_field_name("body")?;
+    let start = node.start_position();
+    let end = body.start_position();
+    Some(Span {
+        start: (start.row as u32 + 1, start.column as u32 + 1),
+        end: (end.row as u32 + 1, end.column as u32 + 1),
+    })
+}
 
 /// `func Name(...) ...` or `func init() {}` / `func main() {}` (roots, docs/adapters/go.md §2 —
 /// unconditional regardless of the capitalization rule).
@@ -195,7 +210,14 @@ fn handle_function(
         return;
     };
     let name = text(name_node, src);
-    push_declaration(out, name, SymbolKind::Function, span(node), promote_exports);
+    push_declaration(
+        out,
+        name,
+        SymbolKind::Function,
+        span(node),
+        signature_span_of(node),
+        promote_exports,
+    );
     if name == "init" || (name == "main" && is_main_package) {
         out.roots.push(RawRoot {
             kind: RootKind::Production,
@@ -232,6 +254,7 @@ fn handle_method(node: Node, src: &[u8], promote_exports: bool, out: &mut FileFa
         exported,
         visibility: visibility(exported),
         member_of: Some(SmolStr::new(&receiver_type)),
+        signature_span: signature_span_of(node),
     });
     if exported && promote_exports {
         out.roots.push(RawRoot {
@@ -286,7 +309,14 @@ fn handle_type_declaration(node: Node, src: &[u8], promote_exports: bool, out: &
             },
             _ => continue,
         };
-        push_declaration(out, text(name_node, src), kind, span(spec), promote_exports);
+        push_declaration(
+            out,
+            text(name_node, src),
+            kind,
+            span(spec),
+            None,
+            promote_exports,
+        );
     }
 }
 
@@ -311,6 +341,7 @@ fn handle_value_declaration(
                 text(name_node, src),
                 symbol_kind.clone(),
                 span(name_node),
+                None,
                 promote_exports,
             );
         }
@@ -490,6 +521,7 @@ fn collect_references(
                         scope_context: None,
                         span: span(node),
                         within: within.cloned(),
+                        kind: RefKind::Read,
                     });
                     return; // operand/field fully handled — don't also walk them generically
                 }
@@ -519,11 +551,27 @@ fn collect_references(
         node.kind(),
         "identifier" | "type_identifier" | "field_identifier"
     ) {
+        // RFC 0012 §5: in tree-sitter-go, `type_identifier` *is* the type-position signal —
+        // TypeUse falls out of the grammar. An embedded field (a `field_declaration` with no
+        // `name`) is Go's inheritance-adjacent construct → Extend.
+        let ref_kind = if node.kind() == "type_identifier" {
+            let embedded = node.parent().is_some_and(|p| {
+                p.kind() == "field_declaration" && p.child_by_field_name("name").is_none()
+            });
+            if embedded {
+                RefKind::Extend
+            } else {
+                RefKind::TypeUse
+            }
+        } else {
+            RefKind::Read
+        };
         out.push(RawReference {
             name: SmolStr::new(text(node, src)),
             scope_context: None,
             span: span(node),
             within: within.cloned(),
+            kind: ref_kind,
         });
     }
 
@@ -884,6 +932,75 @@ type D int
     fn syntax_errors_degrade_to_a_diagnostic_not_a_panic() {
         let facts = extract("a.go", b"package p\n\nfunc broken( {{{ garbage\n");
         assert!(!facts.diagnostics.is_empty());
+    }
+
+    // ------------------------------------------------- RFC 0012 §5: RefKind + signature_span
+
+    #[test]
+    fn function_signature_span_covers_params_and_result_but_not_the_body() {
+        let src = b"package p\n\ntype secret struct{}\n\nfunc Exported(s secret) secret {\n\tvar other secret\n\t_ = other\n\treturn s\n}\n";
+        let facts = extract("a.go", src);
+        let sig = decl(&facts, "Exported").signature_span.expect("callable");
+        // Line 5: `func Exported(s secret) secret {` — signature ends where the body block starts.
+        assert_eq!(sig.start.0, 5);
+        assert_eq!(sig.end.0, 5);
+        // The two `secret` type uses in the signature fall inside it; the body's doesn't.
+        let sig_uses: Vec<_> = facts
+            .references
+            .iter()
+            .filter(|r| {
+                r.name.as_str() == "secret" && r.span.start.0 == 5 && r.kind == RefKind::TypeUse
+            })
+            .collect();
+        assert_eq!(sig_uses.len(), 2, "param + result type positions");
+        assert!(
+            facts
+                .references
+                .iter()
+                .any(|r| r.name.as_str() == "secret" && r.span.start.0 == 6),
+            "the body's type use is still a reference, just outside the signature span"
+        );
+    }
+
+    #[test]
+    fn methods_get_signature_spans_and_types_and_vars_do_not() {
+        let src = b"package p\n\ntype T struct{}\n\nfunc (t T) M(x int) {}\n\nvar V = 1\n";
+        let facts = extract("a.go", src);
+        assert!(decl(&facts, "M").signature_span.is_some());
+        assert!(decl(&facts, "T").signature_span.is_none());
+        assert!(decl(&facts, "V").signature_span.is_none());
+    }
+
+    #[test]
+    fn type_positions_are_tagged_type_use_and_value_positions_read() {
+        let src = b"package p\n\ntype secret struct{}\n\nfunc F(s secret) {\n\tG(s)\n}\n\nfunc G(secret2 any) {}\n";
+        let facts = extract("a.go", src);
+        let by_name = |n: &str| {
+            facts
+                .references
+                .iter()
+                .find(|r| r.name.as_str() == n)
+                .unwrap_or_else(|| panic!("no reference {n:?}"))
+        };
+        assert_eq!(by_name("secret").kind, RefKind::TypeUse);
+        assert_eq!(by_name("G").kind, RefKind::Read);
+        assert_eq!(by_name("s").kind, RefKind::Read);
+    }
+
+    #[test]
+    fn embedded_struct_field_is_tagged_extend() {
+        let src =
+            b"package p\n\ntype Base struct{}\n\ntype Derived struct {\n\tBase\n\tNamed Base\n}\n";
+        let facts = extract("a.go", src);
+        let kinds: Vec<_> = facts
+            .references
+            .iter()
+            .filter(|r| r.name.as_str() == "Base")
+            .map(|r| r.kind)
+            .collect();
+        // Line 6's bare `Base` is embedding (Extend); line 7's `Named Base` is a plain
+        // field type (TypeUse).
+        assert_eq!(kinds, vec![RefKind::Extend, RefKind::TypeUse]);
     }
 }
 

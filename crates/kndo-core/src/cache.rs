@@ -594,6 +594,7 @@ mod tests {
                 exported: true,
                 visibility: crate::adapter::VisibilityLevel(1),
                 member_of: None,
+                signature_span: None,
             }],
             ..Default::default()
         }
@@ -811,6 +812,7 @@ mod tests {
                 exported: true,
                 visibility: crate::adapter::VisibilityLevel(0),
                 member_of: None,
+                signature_span: None,
             }],
             vec![DependencyNode {
                 name: "lodash".into(),
