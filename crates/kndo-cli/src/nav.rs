@@ -46,6 +46,7 @@ fn parse_nav_args(args: &[String]) -> Result<NavArgs, String> {
             "--transitive" => flags.transitive = true,
             "--edges" => flags.edges = Some(next_value(&mut it, "--edges")?),
             "--split-by-color" => {} // by_color is always computed; flag accepted for RFC parity
+            "--if-deleted" => flags.if_deleted = true,
             "--all" => flags.all = true,
             "--max-paths" => {
                 let raw = next_value(&mut it, "--max-paths")?;
@@ -153,6 +154,10 @@ pub fn used_by_cmd(args: &[String]) -> ExitCode {
     run_one(Verb::UsedBy, args)
 }
 
+pub fn impact_cmd(args: &[String]) -> ExitCode {
+    run_one(Verb::Impact, args)
+}
+
 pub fn trace_cmd(args: &[String]) -> ExitCode {
     run_one(Verb::Trace, args)
 }
@@ -208,6 +213,8 @@ struct QueryLineFlags {
     #[serde(default)]
     pairs: Vec<(String, String)>,
     limit: Option<usize>,
+    #[serde(default)]
+    if_deleted: bool,
 }
 
 impl From<QueryLineFlags> for QueryFlags {
@@ -224,6 +231,7 @@ impl From<QueryLineFlags> for QueryFlags {
             roots: f.roots,
             pairs: f.pairs,
             limit: f.limit,
+            if_deleted: f.if_deleted,
         }
     }
 }

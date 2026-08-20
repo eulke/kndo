@@ -417,6 +417,55 @@ fn render_query_entry(out: &mut String, entry: &ResultEntry, opts: &RenderOption
                 out.push_str(&format!("  … {} more (--limit)\n", r.elided));
             }
         }
+        ResultEntry::Impact(r) => {
+            out.push_str(&format!("  {}\n", node_line(&r.node)));
+            out.push_str(&format!(
+                "  affected: {} (production={} test-only={} tooling-only={} unreachable={})\n",
+                r.affected.len() + r.elided,
+                r.by_color.production,
+                r.by_color.test_only,
+                r.by_color.tooling_only,
+                r.by_color.unreachable
+            ));
+            for e in &r.affected {
+                out.push_str(&format!("    {}\n", neighbor_line(e)));
+            }
+            if r.elided > 0 {
+                out.push_str(&format!("  … {} more (--limit)\n", r.elided));
+            }
+            if !r.affected_roots.is_empty() {
+                out.push_str("  affected roots:\n");
+                for root in &r.affected_roots {
+                    out.push_str(&format!("    [{}] {}\n", root.kind, node_line(&root.node)));
+                }
+                if r.affected_roots_elided > 0 {
+                    out.push_str(&format!("    … {} more\n", r.affected_roots_elided));
+                }
+            }
+            if let Some(sim) = &r.if_deleted {
+                out.push_str("  if deleted:\n");
+                out.push_str(&format!(
+                    "    newly unreachable: {}\n",
+                    sim.newly_unreachable.len() + sim.newly_unreachable_elided
+                ));
+                for q in &sim.newly_unreachable {
+                    out.push_str(&format!("      {}\n", node_line(q)));
+                }
+                out.push_str(&format!(
+                    "    newly test-only: {}\n",
+                    sim.newly_test_only.len() + sim.newly_test_only_elided
+                ));
+                for q in &sim.newly_test_only {
+                    out.push_str(&format!("      {}\n", node_line(q)));
+                }
+                if !sim.freed_dependencies.is_empty() {
+                    out.push_str(&format!(
+                        "    freed dependencies: {}\n",
+                        sim.freed_dependencies.join(", ")
+                    ));
+                }
+            }
+        }
         ResultEntry::Trace(r) => {
             if r.paths.is_empty() {
                 out.push_str(&format!(

@@ -166,9 +166,16 @@ Verb result shapes (fields beyond these are additive/minor):
 - **trace**: `{ "from": NodeRef, "to": NodeRef, "paths": [ { "hops": [ { "node": NodeRef,
   "via": EdgeRef }… ], "weakest_confidence": "possible" }… ], "paths_elided": N }` —
   liveness traces set `"from"` to the root found.
-- **impact**: `{ "node": NodeRef, "affected": { "by_depth": […], "by_color": {…},
-  "roots": [NodeRef…] }, "if_deleted": { "finding_flips": [ { "delta": "new"|"fixed",
-  finding fields §2 }… ] } }` — `if_deleted` present only with the flag.
+- **impact**: `{ "node": NodeRef, "affected": [ { "node": NodeRef, "via": EdgeRef,
+  "depth": N }… ], "by_color": {…}, "elided": N,
+  "affected_roots": [ { "kind": "production"|"test"|"tooling", "node": NodeRef }… ],
+  "affected_roots_elided": N, "if_deleted": { "newly_unreachable": [NodeRef…],
+  "newly_unreachable_elided": N, "newly_test_only": [NodeRef…],
+  "newly_test_only_elided": N, "freed_dependencies": [name…] } }` — `if_deleted` present
+  only with the flag. `affected` reuses uses/used-by's depth-annotated entry shape (one
+  grammar, not two); the simulation reports *typed reachability flips* rather than
+  synthesized §2 finding objects — the flips are the graph-level fact, and fabricating
+  finding ids/messages for findings that don't exist yet would put untruths in the envelope.
 
 Query exit codes are defined in RFC 0007 §6 and are part of this contract.
 

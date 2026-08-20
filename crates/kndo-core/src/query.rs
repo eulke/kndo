@@ -1558,6 +1558,402 @@ fn render_path(
     }
 }
 
+// ---------------------------------------------------------------- impact (RFC 0007 §4.6)
+
+/// [`impact`]'s flags. Unlike `uses`/`used-by`, the *default* is the full transitive reverse
+/// closure — blast radius is a closure by definition; `--depth N` bounds it when given.
+#[derive(Debug, Clone, Copy)]
+pub struct ImpactOpts {
+    pub edges: EdgeFilter,
+    pub depth: Option<u32>,
+    pub limit: usize,
+    pub if_deleted: bool,
+}
+
+/// One root whose liveness evidence passes through the impacted node — retesting starts here.
+#[derive(Debug, Clone, serde::Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct AffectedRoot {
+    pub kind: String,
+    pub node: QNodeRef,
+}
+
+/// `--if-deleted`'s simulation result (RFC 0007 §4.6): the finding flips removal would cause,
+/// computed on a patched copy of the graph — nothing is written.
+#[derive(Debug, Clone, serde::Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct IfDeleted {
+    /// Files and symbols (outside the deleted set) that lose reachability entirely — each a
+    /// would-be `unused` finding.
+    pub newly_unreachable: Vec<QNodeRef>,
+    pub newly_unreachable_elided: usize,
+    /// Production nodes that only tests would still reach — each a would-be `test-only`.
+    pub newly_test_only: Vec<QNodeRef>,
+    pub newly_test_only_elided: usize,
+    /// Declared dependencies whose every importing file is in the deleted set — zero import
+    /// edges remain, the exact evidence `dependency_hygiene` calls `unused`.
+    pub freed_dependencies: Vec<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct ImpactResult {
+    pub node: QNodeRef,
+    /// The reverse closure — who is affected if this node changes — depth-annotated, capped.
+    pub affected: Vec<NeighborEntry>,
+    pub by_color: ByColor,
+    pub elided: usize,
+    pub affected_roots: Vec<AffectedRoot>,
+    pub affected_roots_elided: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub if_deleted: Option<IfDeleted>,
+}
+
+/// `kndo impact <selector> [--if-deleted]` (RFC 0007 §4.6): forward-looking blast radius on
+/// the same adjacency `uses`/`used-by` navigate, plus — with `--if-deleted` — a removal
+/// simulation on a patched graph copy, reusing the reachability engine itself (the diff-mode
+/// derived-effects machinery's core: same graph shape, recomputed colors, reported flips).
+///
+/// Selector coverage: files and symbols fully; a package is its files (dependents *outside*
+/// the package); a dependency supports the default mode only (its reverse closure is its
+/// importers — deleting a declared dependency breaks builds rather than flipping
+/// reachability, so `--if-deleted` is rejected with an explanation instead of an answer that
+/// would mean nothing).
+pub fn impact(
+    graph: &ProjectGraph,
+    reach: &ReachabilityMap,
+    resolved: &Resolved,
+    opts: ImpactOpts,
+) -> Result<ImpactResult, String> {
+    let node_ref = qnode_ref(graph, reach, resolved);
+
+    // Seeds: the graph nodes whose change/removal is being simulated.
+    let mut seed_files: HashSet<FileId> = HashSet::new();
+    let mut seed_symbols: HashSet<SymbolId> = HashSet::new();
+    let seeds: Vec<NavNode> = match resolved {
+        Resolved::Node(ResolvedNode::File(f)) => {
+            seed_files.insert(*f);
+            vec![NavNode::File(*f)]
+        }
+        Resolved::Node(ResolvedNode::Symbol(s)) => {
+            seed_symbols.insert(*s);
+            vec![NavNode::Symbol(*s)]
+        }
+        Resolved::Node(ResolvedNode::Package(p)) => {
+            let files: Vec<NavNode> = graph
+                .files
+                .iter()
+                .enumerate()
+                .filter(|(_, f)| f.package == *p)
+                .map(|(i, _)| {
+                    seed_files.insert(FileId(i as u32));
+                    NavNode::File(FileId(i as u32))
+                })
+                .collect();
+            files
+        }
+        Resolved::Dependency(d) => {
+            if opts.if_deleted {
+                return Err(format!(
+                    "--if-deleted does not apply to dep:{} — removing a declared dependency \
+                     breaks its importers outright rather than flipping reachability; use \
+                     `used-by dep:{}` to list them",
+                    d.0, d.0
+                ));
+            }
+            let Some(id) = graph
+                .dependencies
+                .iter()
+                .position(|dep| dep.name == d.0)
+                .map(|i| DependencyId(i as u32))
+            else {
+                // Declared-but-never-imported: zero importers IS the answer.
+                return Ok(ImpactResult {
+                    node: node_ref,
+                    affected: Vec::new(),
+                    by_color: ByColor::default(),
+                    elided: 0,
+                    affected_roots: Vec::new(),
+                    affected_roots_elided: 0,
+                    if_deleted: None,
+                });
+            };
+            vec![NavNode::Dependency(id)]
+        }
+        Resolved::Node(ResolvedNode::RootSet(_)) => {
+            return Err("impact does not apply to a root set — trace individual roots".into());
+        }
+    };
+    // Deleting a symbol deletes nothing else; deleting a file (or package) deletes every
+    // symbol it declares.
+    for (i, sym) in graph.symbols.iter().enumerate() {
+        if seed_files.contains(&sym.file) {
+            seed_symbols.insert(SymbolId(i as u32));
+        }
+    }
+
+    // Reverse-closure BFS (the same walk `used-by --transitive` does, multi-seed). For a
+    // package, dependents inside the package itself are its own business — excluded.
+    let excluded_package = match resolved {
+        Resolved::Node(ResolvedNode::Package(p)) => Some(*p),
+        _ => None,
+    };
+    let nav = build_nav_graph(graph);
+    let max_depth = opts.depth.unwrap_or(u32::MAX);
+    let mut best: HashMap<NavNode, (u32, EdgeLabel, Confidence, Option<Span>, FileId)> =
+        HashMap::new();
+    let mut queue: VecDeque<(NavNode, u32)> = VecDeque::new();
+    let mut queued: HashSet<NavNode> = HashSet::new();
+    for &seed in &seeds {
+        queue.push_back((seed, 0));
+        queued.insert(seed);
+    }
+    while let Some((node, d)) = queue.pop_front() {
+        if d >= max_depth {
+            continue;
+        }
+        for e in nav.reverse.get(&node).map(Vec::as_slice).unwrap_or(&[]) {
+            if !opts.edges.allows(e.label) {
+                continue;
+            }
+            best.entry(e.to)
+                .or_insert((d + 1, e.label, e.confidence, e.span, e.site_file));
+            if queued.insert(e.to) {
+                queue.push_back((e.to, d + 1));
+            }
+        }
+    }
+    for seed in &seeds {
+        best.remove(seed);
+    }
+    if let Some(p) = excluded_package {
+        best.retain(|n, _| match n {
+            NavNode::File(f) => graph.files[f.0 as usize].package != p,
+            NavNode::Symbol(s) => {
+                graph.files[graph.symbols[s.0 as usize].file.0 as usize].package != p
+            }
+            NavNode::Dependency(_) => true,
+        });
+    }
+
+    let closure: HashSet<NavNode> = best.keys().copied().collect();
+    let mut entries: Vec<(NavNode, u32, EdgeLabel, Confidence, Option<Span>, FileId)> = best
+        .into_iter()
+        .map(|(n, (d, l, c, s, sf))| (n, d, l, c, s, sf))
+        .collect();
+    entries.sort_by(|a, b| {
+        a.1.cmp(&b.1).then_with(|| {
+            selector_string(graph, &nav_to_resolved(graph, a.0))
+                .cmp(&selector_string(graph, &nav_to_resolved(graph, b.0)))
+        })
+    });
+
+    let mut by_color = ByColor::default();
+    for (n, ..) in &entries {
+        if let Some(color) = node_color(graph, reach, &nav_to_resolved(graph, *n)) {
+            match color.as_str() {
+                "production" => by_color.production += 1,
+                "test-only" => by_color.test_only += 1,
+                "tooling-only" => by_color.tooling_only += 1,
+                "unreachable" => by_color.unreachable += 1,
+                _ => {}
+            }
+        }
+    }
+    let total = entries.len();
+    let affected: Vec<NeighborEntry> = entries
+        .into_iter()
+        .take(opts.limit)
+        .map(|(n, d, l, c, s, sf)| NeighborEntry {
+            node: qnode_ref(graph, reach, &nav_to_resolved(graph, n)),
+            via: QEdgeRef {
+                edge: l.as_str().to_string(),
+                confidence: c,
+                site: s.map(|sp| NodeSpan {
+                    path: graph.files[sf.0 as usize].path.0.to_string(),
+                    start: sp.start,
+                    end: sp.end,
+                }),
+            },
+            depth: d,
+        })
+        .collect();
+
+    // Affected roots: every Root edge whose target sits in the closure (or IS a seed) — the
+    // entry points whose behavior a change here can reach, i.e. where retesting starts.
+    let seed_set: HashSet<NavNode> = seeds.iter().copied().collect();
+    let mut roots: Vec<AffectedRoot> = Vec::new();
+    let mut seen_roots: HashSet<(RootKind, NavNode)> = HashSet::new();
+    for (kind, targets) in &nav.roots {
+        for &(target, _) in targets {
+            if (closure.contains(&target) || seed_set.contains(&target))
+                && seen_roots.insert((*kind, target))
+            {
+                roots.push(AffectedRoot {
+                    kind: match kind {
+                        RootKind::Production => "production".to_string(),
+                        RootKind::Test => "test".to_string(),
+                        RootKind::Tooling => "tooling".to_string(),
+                    },
+                    node: qnode_ref(graph, reach, &nav_to_resolved(graph, target)),
+                });
+            }
+        }
+    }
+    roots.sort_by(|a, b| {
+        a.kind
+            .cmp(&b.kind)
+            .then_with(|| a.node.selector.cmp(&b.node.selector))
+    });
+    let roots_total = roots.len();
+    roots.truncate(opts.limit);
+    let affected_roots_elided = roots_total - roots.len();
+
+    let if_deleted = if opts.if_deleted {
+        Some(simulate_deletion(
+            graph,
+            reach,
+            &seed_files,
+            &seed_symbols,
+            opts.limit,
+        ))
+    } else {
+        None
+    };
+
+    Ok(ImpactResult {
+        node: node_ref,
+        affected,
+        by_color,
+        elided: total.saturating_sub(opts.limit),
+        affected_roots: roots,
+        affected_roots_elided,
+        if_deleted,
+    })
+}
+
+/// Rebuilds the graph minus every edge touching the deleted set, recomputes reachability with
+/// the real engine (`analysis::reachability::compute` — no parallel simulation logic to drift),
+/// and reports the color flips. Node arrays stay intact — ids keep meaning — only edges go;
+/// deleted nodes themselves are excluded from the flip report (they aren't "newly unreachable",
+/// they're gone).
+fn simulate_deletion(
+    graph: &ProjectGraph,
+    before: &ReachabilityMap,
+    deleted_files: &HashSet<FileId>,
+    deleted_symbols: &HashSet<SymbolId>,
+    limit: usize,
+) -> IfDeleted {
+    use crate::vocab::EdgeKind as EK;
+    let touches_deleted = |edge: &crate::vocab::Edge| -> bool {
+        match edge.kind {
+            EK::ImportsFile { from, to } => {
+                deleted_files.contains(&from) || deleted_files.contains(&to)
+            }
+            EK::ImportsDependency { from, .. } => deleted_files.contains(&from),
+            EK::References { from, to, .. } => {
+                deleted_symbols.contains(&to)
+                    || match from {
+                        NodeRef::File(f) => deleted_files.contains(&f),
+                        NodeRef::Symbol(s) => deleted_symbols.contains(&s),
+                    }
+            }
+            EK::Declares { file, symbol } => {
+                deleted_files.contains(&file) || deleted_symbols.contains(&symbol)
+            }
+            EK::Root { target, .. } => match target {
+                NodeRef::File(f) => deleted_files.contains(&f),
+                NodeRef::Symbol(s) => deleted_symbols.contains(&s),
+            },
+            EK::Wildcard { from } => deleted_files.contains(&from),
+        }
+    };
+
+    let kept_edges: Vec<crate::vocab::Edge> = graph
+        .edges
+        .iter()
+        .filter(|e| !touches_deleted(e))
+        .cloned()
+        .collect();
+    let sim = ProjectGraph::from_snapshot_parts(crate::graph::GraphSnapshotParts {
+        files: graph.files.clone(),
+        symbols: graph.symbols.clone(),
+        dependencies: graph.dependencies.clone(),
+        declared_dependencies: graph.declared_dependencies.clone(),
+        script_invoked_dependencies: graph.script_invoked_dependencies.clone(),
+        packages: graph.packages.clone(),
+        edges: kept_edges,
+        suppressions: graph.suppressions.clone(),
+        visibility_ladders: graph.visibility_ladders.clone(),
+    });
+    let after = crate::analysis::reachability::compute(&sim);
+
+    let mut newly_unreachable: Vec<QNodeRef> = Vec::new();
+    let mut newly_test_only: Vec<QNodeRef> = Vec::new();
+    let mut consider = |nref: NodeRef, resolved: Resolved| {
+        let was = before.get(nref).0;
+        let now = after.get(nref).0;
+        if was != Reachability::Unreachable && now == Reachability::Unreachable {
+            newly_unreachable.push(qnode_ref(graph, before, &resolved));
+        } else if was == Reachability::Production && now == Reachability::TestOnly {
+            newly_test_only.push(qnode_ref(graph, before, &resolved));
+        }
+    };
+    for (i, _) in graph.files.iter().enumerate() {
+        let f = FileId(i as u32);
+        if deleted_files.contains(&f) {
+            continue;
+        }
+        consider(NodeRef::File(f), Resolved::Node(ResolvedNode::File(f)));
+    }
+    for (i, _) in graph.symbols.iter().enumerate() {
+        let s = SymbolId(i as u32);
+        if deleted_symbols.contains(&s) {
+            continue;
+        }
+        consider(NodeRef::Symbol(s), Resolved::Node(ResolvedNode::Symbol(s)));
+    }
+    newly_unreachable.sort_by(|a, b| a.selector.cmp(&b.selector));
+    newly_test_only.sort_by(|a, b| a.selector.cmp(&b.selector));
+
+    // Declared dependencies with import evidence before, none after (all importers deleted) —
+    // dependency_hygiene's own `unused` evidence, reported as "freed".
+    let mut had_importers: HashSet<&str> = HashSet::new();
+    let mut still_has: HashSet<&str> = HashSet::new();
+    for edge in &graph.edges {
+        if let EK::ImportsDependency { from, to } = edge.kind {
+            let name = graph.dependencies[to.0 as usize].name.as_str();
+            had_importers.insert(name);
+            if !deleted_files.contains(&from) {
+                still_has.insert(name);
+            }
+        }
+    }
+    let declared: HashSet<&str> = graph
+        .declared_dependencies
+        .iter()
+        .map(|d| d.name.as_str())
+        .collect();
+    let mut freed_dependencies: Vec<String> = had_importers
+        .difference(&still_has)
+        .filter(|name| declared.contains(*name))
+        .map(|name| name.to_string())
+        .collect();
+    freed_dependencies.sort();
+
+    let unreachable_total = newly_unreachable.len();
+    newly_unreachable.truncate(limit);
+    let test_only_total = newly_test_only.len();
+    newly_test_only.truncate(limit);
+    IfDeleted {
+        newly_unreachable_elided: unreachable_total - newly_unreachable.len(),
+        newly_unreachable,
+        newly_test_only_elided: test_only_total - newly_test_only.len(),
+        newly_test_only,
+        freed_dependencies,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2275,5 +2671,255 @@ mod tests {
         let result = trace_liveness(&graph, &reach, &target, None);
         assert_eq!(result.from.selector, "roots:test");
         assert_eq!(result.paths.len(), 1);
+    }
+
+    // ---------------------------------------------------------------- impact (RFC 0007 §4.6)
+
+    fn impact_opts(if_deleted: bool) -> ImpactOpts {
+        ImpactOpts {
+            edges: EdgeFilter::parse(None).unwrap(),
+            depth: None,
+            limit: 50,
+            if_deleted,
+        }
+    }
+
+    #[test]
+    fn impact_default_is_the_reverse_closure_with_affected_roots() {
+        let graph = linear_graph();
+        let reach = reachability::compute(&graph);
+        let target = resolve(&graph, &Selector::File(ProjectPath("b.ts".into()))).unwrap();
+        let result = impact(&graph, &reach, &target, impact_opts(false)).unwrap();
+        // a.ts imports b.ts — it's affected at depth 1, and it's the production root.
+        assert!(result
+            .affected
+            .iter()
+            .any(|e| e.node.selector == "a.ts" && e.depth == 1));
+        assert!(result
+            .affected_roots
+            .iter()
+            .any(|r| r.kind == "production" && r.node.selector == "a.ts"));
+        assert!(result.if_deleted.is_none());
+    }
+
+    /// root a.ts → b.ts → d.ts; b.ts is lodash's only importer; lodash is declared.
+    fn chain_graph() -> ProjectGraph {
+        let files = vec![file("a.ts"), file("b.ts"), file("d.ts")];
+        let dependencies = vec![DependencyNode {
+            name: SmolStr::new("lodash"),
+        }];
+        let edges = vec![
+            edge(
+                EdgeKind::Root {
+                    kind: RootKind::Production,
+                    target: NodeRef::File(FileId(0)),
+                },
+                Confidence::Certain,
+                None,
+            ),
+            edge(
+                EdgeKind::ImportsFile {
+                    from: FileId(0),
+                    to: FileId(1),
+                },
+                Confidence::Certain,
+                Some(span(1, 1)),
+            ),
+            edge(
+                EdgeKind::ImportsFile {
+                    from: FileId(1),
+                    to: FileId(2),
+                },
+                Confidence::Certain,
+                Some(span(2, 2)),
+            ),
+            edge(
+                EdgeKind::ImportsDependency {
+                    from: FileId(1),
+                    to: DependencyId(0),
+                },
+                Confidence::Certain,
+                Some(span(3, 3)),
+            ),
+        ];
+        ProjectGraph::for_test(files, vec![], dependencies, edges).with_declared_dependencies(vec![
+            crate::graph::DeclaredDependency {
+                package: PackageId(0),
+                manifest: ProjectPath(SmolStr::new("package.json")),
+                name: SmolStr::new("lodash"),
+                version_req: SmolStr::new("*"),
+                scope: DependencyScope::Prod,
+            },
+        ])
+    }
+
+    #[test]
+    fn if_deleted_reports_orphaned_files_and_freed_dependencies() {
+        let graph = chain_graph();
+        let reach = reachability::compute(&graph);
+        let target = resolve(&graph, &Selector::File(ProjectPath("b.ts".into()))).unwrap();
+        let result = impact(&graph, &reach, &target, impact_opts(true)).unwrap();
+        let sim = result.if_deleted.expect("--if-deleted requested");
+        // d.ts was only reachable through b.ts — deleting b orphans it.
+        assert!(sim.newly_unreachable.iter().any(|q| q.selector == "d.ts"));
+        // b.ts itself is deleted, not "newly unreachable".
+        assert!(!sim.newly_unreachable.iter().any(|q| q.selector == "b.ts"));
+        // a.ts keeps its root — unaffected.
+        assert!(!sim.newly_unreachable.iter().any(|q| q.selector == "a.ts"));
+        // lodash's only importer is gone and it IS declared — freed.
+        assert_eq!(sim.freed_dependencies, vec!["lodash".to_string()]);
+    }
+
+    #[test]
+    fn if_deleted_of_a_symbol_flips_its_exclusive_callees() {
+        // root-decl foo (a.ts) → bar (b.ts) → baz (d.ts), all symbol-attributed: deleting bar
+        // makes baz (and b's file, which only bar's callers reached) newly unreachable.
+        let files = vec![file("a.ts"), file("b.ts"), file("d.ts")];
+        let symbols = vec![
+            symbol(FileId(0), "foo", 1, 3),
+            symbol(FileId(1), "bar", 1, 3),
+            symbol(FileId(2), "baz", 1, 3),
+        ];
+        let edges = vec![
+            edge(
+                EdgeKind::Root {
+                    kind: RootKind::Production,
+                    target: NodeRef::Symbol(SymbolId(0)),
+                },
+                Confidence::Certain,
+                None,
+            ),
+            edge(
+                EdgeKind::Declares {
+                    file: FileId(0),
+                    symbol: SymbolId(0),
+                },
+                Confidence::Certain,
+                None,
+            ),
+            edge(
+                EdgeKind::Declares {
+                    file: FileId(1),
+                    symbol: SymbolId(1),
+                },
+                Confidence::Certain,
+                None,
+            ),
+            edge(
+                EdgeKind::Declares {
+                    file: FileId(2),
+                    symbol: SymbolId(2),
+                },
+                Confidence::Certain,
+                None,
+            ),
+            edge(
+                EdgeKind::References {
+                    from: NodeRef::Symbol(SymbolId(0)),
+                    to: SymbolId(1),
+                    kind: RefKind::Call,
+                },
+                Confidence::Certain,
+                Some(span(2, 2)),
+            ),
+            edge(
+                EdgeKind::References {
+                    from: NodeRef::Symbol(SymbolId(1)),
+                    to: SymbolId(2),
+                    kind: RefKind::Call,
+                },
+                Confidence::Certain,
+                Some(span(2, 2)),
+            ),
+        ];
+        let graph = ProjectGraph::for_test(files, symbols, vec![], edges);
+        let reach = reachability::compute(&graph);
+        let target = resolve(
+            &graph,
+            &Selector::Symbol(ProjectPath("b.ts".into()), "bar".to_string()),
+        )
+        .unwrap();
+        let result = impact(&graph, &reach, &target, impact_opts(true)).unwrap();
+        // Default direction: foo (the caller) is the blast radius, transitively to depth 2.
+        assert!(result
+            .affected
+            .iter()
+            .any(|e| e.node.selector.ends_with("#foo")));
+        let sim = result.if_deleted.unwrap();
+        assert!(
+            sim.newly_unreachable
+                .iter()
+                .any(|q| q.selector.ends_with("#baz")),
+            "{:?}",
+            sim.newly_unreachable
+        );
+        assert!(!sim
+            .newly_unreachable
+            .iter()
+            .any(|q| q.selector.ends_with("#foo")));
+    }
+
+    #[test]
+    fn if_deleted_reports_production_to_test_only_demotions() {
+        // Production root a.ts and test root t.ts both import x.ts; deleting a.ts leaves x
+        // reachable only from tests.
+        let files = vec![file("a.ts"), file("t.ts"), file("x.ts")];
+        let edges = vec![
+            edge(
+                EdgeKind::Root {
+                    kind: RootKind::Production,
+                    target: NodeRef::File(FileId(0)),
+                },
+                Confidence::Certain,
+                None,
+            ),
+            edge(
+                EdgeKind::Root {
+                    kind: RootKind::Test,
+                    target: NodeRef::File(FileId(1)),
+                },
+                Confidence::Certain,
+                None,
+            ),
+            edge(
+                EdgeKind::ImportsFile {
+                    from: FileId(0),
+                    to: FileId(2),
+                },
+                Confidence::Certain,
+                None,
+            ),
+            edge(
+                EdgeKind::ImportsFile {
+                    from: FileId(1),
+                    to: FileId(2),
+                },
+                Confidence::Certain,
+                None,
+            ),
+        ];
+        let graph = ProjectGraph::for_test(files, vec![], vec![], edges);
+        let reach = reachability::compute(&graph);
+        let target = resolve(&graph, &Selector::File(ProjectPath("a.ts".into()))).unwrap();
+        let result = impact(&graph, &reach, &target, impact_opts(true)).unwrap();
+        let sim = result.if_deleted.unwrap();
+        assert!(
+            sim.newly_test_only.iter().any(|q| q.selector == "x.ts"),
+            "{:?}",
+            sim.newly_test_only
+        );
+        assert!(sim.newly_unreachable.is_empty());
+    }
+
+    #[test]
+    fn if_deleted_rejects_dependency_selectors_with_an_explanation() {
+        let graph = linear_graph();
+        let reach = reachability::compute(&graph);
+        let target = resolve(&graph, &Selector::Dependency(SmolStr::new("lodash"))).unwrap();
+        let err = impact(&graph, &reach, &target, impact_opts(true)).unwrap_err();
+        assert!(err.contains("--if-deleted"), "{err}");
+        // The default mode still answers: importers are the blast radius.
+        let ok = impact(&graph, &reach, &target, impact_opts(false)).unwrap();
+        assert!(ok.affected.iter().any(|e| e.node.selector == "a.ts"));
     }
 }

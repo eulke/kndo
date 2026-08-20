@@ -48,6 +48,22 @@
     "diagnostics"
   ],
   "$defs": {
+    "AffectedRoot": {
+      "description": "One root whose liveness evidence passes through the impacted node — retesting starts here.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "node": {
+          "$ref": "#/$defs/QNodeRef"
+        }
+      },
+      "required": [
+        "kind",
+        "node"
+      ]
+    },
     "ByColor": {
       "type": "object",
       "properties": {
@@ -347,6 +363,102 @@
         "via"
       ]
     },
+    "IfDeleted": {
+      "description": "`--if-deleted`'s simulation result (RFC 0007 §4.6): the finding flips removal would cause,\ncomputed on a patched copy of the graph — nothing is written.",
+      "type": "object",
+      "properties": {
+        "freed_dependencies": {
+          "description": "Declared dependencies whose every importing file is in the deleted set — zero import\nedges remain, the exact evidence `dependency_hygiene` calls `unused`.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "newly_test_only": {
+          "description": "Production nodes that only tests would still reach — each a would-be `test-only`.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/QNodeRef"
+          }
+        },
+        "newly_test_only_elided": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "newly_unreachable": {
+          "description": "Files and symbols (outside the deleted set) that lose reachability entirely — each a\nwould-be `unused` finding.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/QNodeRef"
+          }
+        },
+        "newly_unreachable_elided": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "newly_unreachable",
+        "newly_unreachable_elided",
+        "newly_test_only",
+        "newly_test_only_elided",
+        "freed_dependencies"
+      ]
+    },
+    "ImpactResult": {
+      "type": "object",
+      "properties": {
+        "affected": {
+          "description": "The reverse closure — who is affected if this node changes — depth-annotated, capped.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/NeighborEntry"
+          }
+        },
+        "affected_roots": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/AffectedRoot"
+          }
+        },
+        "affected_roots_elided": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "by_color": {
+          "$ref": "#/$defs/ByColor"
+        },
+        "elided": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "if_deleted": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/IfDeleted"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "node": {
+          "$ref": "#/$defs/QNodeRef"
+        }
+      },
+      "required": [
+        "node",
+        "affected",
+        "by_color",
+        "elided",
+        "affected_roots",
+        "affected_roots_elided"
+      ]
+    },
     "NeighborEntry": {
       "type": "object",
       "properties": {
@@ -585,6 +697,9 @@
         },
         {
           "$ref": "#/$defs/TraceResult"
+        },
+        {
+          "$ref": "#/$defs/ImpactResult"
         },
         {
           "type": "object",

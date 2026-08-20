@@ -113,8 +113,13 @@ surface-reachability) — conformance fixture `deep-import/`, gate verified both
 real CLI. The **external-provider half remains**: it needs the provider's own manifest, which
 `node_modules/` discovery doesn't reach — a provider-manifest peek at resolution time is its
 own discovery/cache/purity design pass (the gate stays closed meanwhile, so it degrades to
-silence, never noise). Still open for M3 exit: `kndo impact` (incl. `--if-deleted`) and the
-RFC 0007 §5 agent workflow running end-to-end.
+silence, never noise). `kndo impact` landed next (RFC 0007 §4.6): the reverse-closure blast
+radius on the same adjacency `uses`/`used-by` navigate (depth-annotated, color-summarized,
+affected roots listed), and `--if-deleted` simulating removal on a patched graph copy through
+the *real* reachability engine — reporting typed flips (newly unreachable, newly test-only,
+freed dependencies) rather than synthesized findings; wired through the single verb, `kndo
+query` JSONL, human/agent/JSON renderings, and the regenerated committed schemas. Still open
+for M3 exit: the RFC 0007 §5 agent workflow running end-to-end on a fixture.
 
 ## M4 — Duplication, CRAP, health
 `duplicate` (winnowing index, incremental), `cyclic` (SCCs with per-language tolerance),

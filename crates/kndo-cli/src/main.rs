@@ -36,6 +36,7 @@ fn main() -> ExitCode {
         Some("uses") => nav::uses_cmd(&args[1..]),
         Some("used-by") => nav::used_by_cmd(&args[1..]),
         Some("trace") => nav::trace_cmd(&args[1..]),
+        Some("impact") => nav::impact_cmd(&args[1..]),
         Some("query") => nav::query_cmd(),
         // Bare flags with no subcommand (`kndo --format json`) are an implicit `check`, same
         // as no arguments at all — `kndo` = `kndo check` (RFC 0006 §2).

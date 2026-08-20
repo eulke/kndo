@@ -335,6 +335,60 @@ fn render_query_entry(out: &mut String, entry: &ResultEntry) {
                 out.push_str(&format!("more: {} elided\n", r.elided));
             }
         }
+        ResultEntry::Impact(r) => {
+            out.push_str(&format!("node: {}\n", node_line(&r.node)));
+            out.push_str(&format!(
+                "affected: {} (production={} test-only={} tooling-only={} unreachable={})\n",
+                r.affected.len() + r.elided,
+                r.by_color.production,
+                r.by_color.test_only,
+                r.by_color.tooling_only,
+                r.by_color.unreachable
+            ));
+            for (n, e) in r.affected.iter().enumerate() {
+                out.push_str(&format!("{}. {}\n", n + 1, neighbor_line(e)));
+            }
+            if r.elided > 0 {
+                out.push_str(&format!("more: {} elided\n", r.elided));
+            }
+            if !r.affected_roots.is_empty() {
+                out.push_str("affected_roots:\n");
+                for (n, root) in r.affected_roots.iter().enumerate() {
+                    out.push_str(&format!(
+                        "  {}. [{}] {}\n",
+                        n + 1,
+                        root.kind,
+                        node_line(&root.node)
+                    ));
+                }
+                if r.affected_roots_elided > 0 {
+                    out.push_str(&format!("  more: {} elided\n", r.affected_roots_elided));
+                }
+            }
+            if let Some(sim) = &r.if_deleted {
+                out.push_str("if_deleted:\n");
+                out.push_str(&format!(
+                    "  newly_unreachable: {}\n",
+                    sim.newly_unreachable.len() + sim.newly_unreachable_elided
+                ));
+                for (n, q) in sim.newly_unreachable.iter().enumerate() {
+                    out.push_str(&format!("    {}. {}\n", n + 1, node_line(q)));
+                }
+                out.push_str(&format!(
+                    "  newly_test_only: {}\n",
+                    sim.newly_test_only.len() + sim.newly_test_only_elided
+                ));
+                for (n, q) in sim.newly_test_only.iter().enumerate() {
+                    out.push_str(&format!("    {}. {}\n", n + 1, node_line(q)));
+                }
+                if !sim.freed_dependencies.is_empty() {
+                    out.push_str(&format!(
+                        "  freed_dependencies: {}\n",
+                        sim.freed_dependencies.join(", ")
+                    ));
+                }
+            }
+        }
         ResultEntry::Trace(r) => {
             out.push_str(&format!(
                 "from: {} to: {}\n",

@@ -13,8 +13,8 @@ use crate::analysis::reachability::{self, ReachabilityMap};
 use crate::engine::Finding;
 use crate::graph::ProjectGraph;
 use crate::query::{
-    self, Direction, EdgeFilter, FindFilters, FindingLocation, NeighborsOpts, ResolveError,
-    Resolved, Selector,
+    self, Direction, EdgeFilter, FindFilters, FindingLocation, ImpactOpts, NeighborsOpts,
+    ResolveError, Resolved, Selector,
 };
 use crate::vocab::RootKind;
 
@@ -27,6 +27,7 @@ pub enum Verb {
     Uses,
     UsedBy,
     Trace,
+    Impact,
 }
 
 impl Verb {
@@ -37,6 +38,7 @@ impl Verb {
             Verb::Uses => "uses",
             Verb::UsedBy => "used-by",
             Verb::Trace => "trace",
+            Verb::Impact => "impact",
         }
     }
 
@@ -47,6 +49,7 @@ impl Verb {
             "uses" => Some(Verb::Uses),
             "used-by" => Some(Verb::UsedBy),
             "trace" => Some(Verb::Trace),
+            "impact" => Some(Verb::Impact),
             _ => None,
         }
     }
@@ -70,6 +73,8 @@ pub struct QueryFlags {
     /// per pair, `results` aligning with this list instead of `selectors` when non-empty.
     pub pairs: Vec<(String, String)>,
     pub limit: Option<usize>,
+    /// `impact --if-deleted` (RFC 0007 §4.6): simulate removal, report the finding flips.
+    pub if_deleted: bool,
 }
 
 pub struct QueryRequest {
@@ -113,6 +118,7 @@ pub enum ResultEntry {
     Describe(Box<query::DescribeResult>),
     Neighbors(query::NeighborsResult),
     Trace(query::TraceResult),
+    Impact(Box<query::ImpactResult>),
     Failed {
         status: &'static str,
         selector: String,
@@ -271,6 +277,7 @@ pub(crate) fn run(
             limit,
         ),
         Verb::Trace => trace_entries(graph, reach, &req.selectors, &req.flags),
+        Verb::Impact => impact_entries(graph, reach, &req.selectors, &req.flags, limit),
     };
     QueryResult {
         verb: req.verb,
@@ -404,6 +411,52 @@ fn neighbor_entries(
                     limit,
                 },
             )),
+            Err(failed) => failed.into(),
+        })
+        .collect()
+}
+
+fn impact_entries(
+    graph: &ProjectGraph,
+    reach: &ReachabilityMap,
+    selectors: &[String],
+    flags: &QueryFlags,
+    limit: usize,
+) -> Vec<ResultEntry> {
+    let edges = match EdgeFilter::parse(flags.edges.as_deref()) {
+        Ok(e) => e,
+        Err(message) => {
+            return selectors
+                .iter()
+                .map(|s| ResultEntry::Failed {
+                    status: "error",
+                    selector: s.clone(),
+                    message: message.clone(),
+                })
+                .collect()
+        }
+    };
+    selectors
+        .iter()
+        .map(|raw| match resolve_selector(graph, raw) {
+            Ok(resolved) => match query::impact(
+                graph,
+                reach,
+                &resolved,
+                ImpactOpts {
+                    edges,
+                    depth: flags.depth,
+                    limit,
+                    if_deleted: flags.if_deleted,
+                },
+            ) {
+                Ok(result) => ResultEntry::Impact(Box::new(result)),
+                Err(message) => ResultEntry::Failed {
+                    status: "error",
+                    selector: raw.clone(),
+                    message,
+                },
+            },
             Err(failed) => failed.into(),
         })
         .collect()
