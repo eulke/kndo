@@ -480,6 +480,7 @@ mod tests {
 
     fn imports(from: u32, to: u32) -> Edge {
         Edge {
+            owner: crate::vocab::FileId(0),
             kind: EdgeKind::ImportsFile {
                 from: FileId(from),
                 to: FileId(to),

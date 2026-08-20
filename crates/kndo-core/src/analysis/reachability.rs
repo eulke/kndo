@@ -300,6 +300,7 @@ mod tests {
 
     fn edge(kind: EdgeKind, confidence: Confidence) -> Edge {
         Edge {
+            owner: crate::vocab::FileId(0),
             kind,
             confidence,
             source: Provenance::Adapter(SmolStr::new("mock")),

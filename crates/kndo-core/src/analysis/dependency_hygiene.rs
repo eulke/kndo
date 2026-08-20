@@ -196,6 +196,7 @@ mod tests {
 
     fn imports_dep_edge(from: FileId, to: DependencyId) -> Edge {
         Edge {
+            owner: crate::vocab::FileId(0),
             kind: EdgeKind::ImportsDependency { from, to },
             confidence: Confidence::Certain,
             source: Provenance::Adapter(SmolStr::new("mock")),

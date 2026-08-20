@@ -990,7 +990,8 @@ impl Engine {
         match graph::assemble_from_source(source, &self.adapters, self.cache.as_ref()) {
             Ok(graph::AssembledGraph {
                 graph: g,
-                mut diagnostics,
+                discovery_diagnostics,
+                extraction_diagnostics,
                 pending_snapshot,
                 timings: assembly_timings,
             }) => {
@@ -1005,13 +1006,16 @@ impl Engine {
                 );
                 let g = std::sync::Arc::new(g);
                 if let Some(writer) = pending_snapshot {
-                    // Assembly-time diagnostics only — exactly what a warm hit replays.
+                    // Extraction + manifest diagnostics only (RFC 0013 §3c) — exactly what a
+                    // warm path replays; discovery diagnostics stay fresh per walk.
                     let graph_for_writer = std::sync::Arc::clone(&g);
-                    let diagnostics_for_writer = diagnostics.clone();
+                    let diagnostics_for_writer = extraction_diagnostics.clone();
                     self.pending_persist = Some(std::thread::spawn(move || {
                         writer.write(&graph_for_writer, &diagnostics_for_writer);
                     }));
                 }
+                let mut diagnostics = discovery_diagnostics;
+                diagnostics.extend(extraction_diagnostics);
                 let coverage_start = Instant::now();
                 let coverage = self.ingest_coverage(&mut diagnostics);
                 timings.push((

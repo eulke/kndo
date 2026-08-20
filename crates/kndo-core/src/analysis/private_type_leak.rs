@@ -192,6 +192,7 @@ mod tests {
 
     fn type_use(from: SymbolId, to: SymbolId, site: Span, confidence: Confidence) -> Edge {
         Edge {
+            owner: crate::vocab::FileId(0),
             kind: EdgeKind::References {
                 from: NodeRef::Symbol(from),
                 to,
@@ -280,6 +281,7 @@ mod tests {
             ty(FileId(0), "secret", 0),
         ];
         let edges = vec![Edge {
+            owner: crate::vocab::FileId(0),
             kind: EdgeKind::References {
                 from: NodeRef::Symbol(SymbolId(0)),
                 to: SymbolId(1),

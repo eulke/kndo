@@ -491,6 +491,7 @@ mod tests {
 
     fn prod_root(file: u32) -> Edge {
         Edge {
+            owner: crate::vocab::FileId(0),
             kind: EdgeKind::Root {
                 kind: RootKind::Production,
                 target: NodeRef::File(FileId(file)),
@@ -522,6 +523,7 @@ mod tests {
             vec![
                 prod_root(0),
                 Edge {
+                    owner: crate::vocab::FileId(0),
                     kind: EdgeKind::References {
                         from: NodeRef::File(FileId(0)),
                         to: SymbolId(0),
@@ -551,6 +553,7 @@ mod tests {
         let mut edges = vec![prod_root(0)];
         for i in 0..3 {
             edges.push(Edge {
+                owner: crate::vocab::FileId(0),
                 kind: EdgeKind::References {
                     from: NodeRef::File(FileId(0)),
                     to: SymbolId(i),
@@ -676,6 +679,7 @@ mod tests {
                 prod_root(0),
                 prod_root(1),
                 Edge {
+                    owner: crate::vocab::FileId(0),
                     kind: EdgeKind::References {
                         from: NodeRef::File(FileId(0)),
                         to: SymbolId(0),

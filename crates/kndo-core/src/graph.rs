@@ -86,6 +86,34 @@ pub struct SymbolMetrics {
     pub fingerprints: Vec<u64>,
 }
 
+/// Per-file state the incremental patch (RFC 0013 §4) needs beyond the graph proper —
+/// indexed by FileId, parallel to [`ProjectGraph::files`]. Grouped here rather than
+/// scattered onto [`FileNode`]: these fields serve the patch layer, not graph consumers.
+#[derive(
+    Debug, Clone, Default, PartialEq, Eq, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize,
+)]
+pub struct FilePatchMeta {
+    /// RFC 0013 §4's span-normalized surface signature; `None` for unclaimed files (nothing
+    /// derived to guard).
+    pub surface_sig: Option<[u8; 32]>,
+    /// The file's declared unit name (Go `package` clause — RFC 0012 §9's qualifier default),
+    /// persisted so the patch never re-fetches an unchanged target's facts.
+    #[rkyv(with = rkyv::with::Map<crate::rkyv_support::SmolStrAsString>)]
+    pub unit_name: Option<SmolStr>,
+    /// The re-export aliases phase 3a-bis resolved *into this file's own table* — the one
+    /// resolution table not derivable from `symbols`. Order-independent state after RFC 0013
+    /// §3b's fixpoint, hence safe to persist and reuse.
+    pub reexport_aliases: Vec<AliasEntry>,
+}
+
+/// One resolved re-export alias: importing `name` from the owning file resolves to `symbol`.
+#[derive(Debug, Clone, PartialEq, Eq, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+pub struct AliasEntry {
+    #[rkyv(with = crate::rkyv_support::SmolStrAsString)]
+    pub name: SmolStr,
+    pub symbol: SymbolId,
+}
+
 /// A package consumed *as a dependency* — external (npm/crates.io/…) or an in-repo workspace
 /// member imported by name (RFC 0011 §4: the workspace case carries the same
 /// declaration-contract obligations, so it lives in the same node kind; its file-level
@@ -151,6 +179,7 @@ pub(crate) struct GraphSnapshotParts {
     pub visibility_ladders: Vec<(SmolStr, Vec<crate::adapter::VisibilityRung>)>,
     pub cycle_policies: Vec<(SmolStr, crate::adapter::CyclePolicy)>,
     pub function_metrics: Vec<(SymbolId, SymbolMetrics)>,
+    pub patch_meta: Vec<FilePatchMeta>,
 }
 
 /// The assembled language-neutral graph (contracts §1). Read-only once built; incremental
@@ -185,6 +214,9 @@ pub struct ProjectGraph {
     /// Callable shapes (RFC 0005 §6), sparse — only symbols whose adapter emitted
     /// `FileFacts::functions` for them (callables), resolved to ids at assembly.
     pub function_metrics: Vec<(SymbolId, SymbolMetrics)>,
+    /// RFC 0013 §4 — indexed by FileId, always `files.len()` entries; empty-defaulted for
+    /// test-built graphs (the patch layer never runs there).
+    pub patch_meta: Vec<FilePatchMeta>,
     file_index: HashMap<ProjectPath, FileId>,
 }
 
@@ -244,6 +276,7 @@ impl ProjectGraph {
             visibility_ladders: parts.visibility_ladders,
             cycle_policies: parts.cycle_policies,
             function_metrics: parts.function_metrics,
+            patch_meta: parts.patch_meta,
             file_index,
         }
     }
@@ -258,6 +291,7 @@ impl ProjectGraph {
         dependencies: Vec<DependencyNode>,
         edges: Vec<Edge>,
     ) -> Self {
+        let files_len = files.len();
         let file_index = files
             .iter()
             .enumerate()
@@ -305,6 +339,7 @@ impl ProjectGraph {
                 },
             )],
             function_metrics: Vec::new(),
+            patch_meta: vec![FilePatchMeta::default(); files_len],
             file_index,
         }
     }
@@ -370,6 +405,114 @@ struct Claimed {
     claim: FileClaim,
     facts: crate::adapter::FileFacts,
     adapter_index: usize,
+    /// RFC 0013 §4's surface signature, computed once per (adapter, content) in phase 1's
+    /// parallel pass — cached and fresh facts get it identically.
+    surface_sig: [u8; 32],
+}
+
+/// The span-normalized surface signature (RFC 0013 §4): everything about a file that OTHER
+/// files' resolution — or this file's own derived-id stability — can depend on, hashed;
+/// bodies, spans, references, metrics, and suppressions excluded, so they move freely under
+/// the patch guard. Field-for-field per the RFC's table; serde+bincode gives an unambiguous
+/// byte layout without hand-rolled framing.
+fn surface_signature(
+    adapter_id: &str,
+    facts_schema_version: u32,
+    claim: &FileClaim,
+    facts: &crate::adapter::FileFacts,
+) -> [u8; 32] {
+    /// One import's surface tuple: specifier, kind, side_effect_only, type_only,
+    /// confidence, bindings (local, imported), reexported, opaque_namespace_use, local_alias.
+    type ImportView<'a> = (
+        &'a str,
+        &'a crate::adapter::ImportKind,
+        bool,
+        bool,
+        Confidence,
+        Vec<(&'a str, Option<&'a str>)>,
+        bool,
+        bool,
+        Option<&'a str>,
+    );
+
+    #[derive(serde::Serialize)]
+    struct View<'a> {
+        adapter_id: &'a str,
+        facts_schema_version: u32,
+        language: &'a str,
+        class: crate::vocab::FileClass,
+        detected_origin: Option<crate::vocab::FileOrigin>,
+        unit: Option<&'a str>,
+        unit_name: Option<&'a str>,
+        declarations: Vec<(
+            &'a str,
+            &'a crate::vocab::SymbolKind,
+            bool,
+            crate::adapter::VisibilityLevel,
+            Option<&'a str>,
+        )>,
+        imports: Vec<ImportView<'a>>,
+        roots: Vec<(
+            crate::vocab::RootKind,
+            &'a crate::adapter::RawRootTarget,
+            Confidence,
+        )>,
+        dynamics: Vec<(&'a str, Option<&'a str>)>,
+    }
+    let view = View {
+        adapter_id,
+        facts_schema_version,
+        language: claim.language.as_str(),
+        class: claim.class,
+        detected_origin: facts.detected_origin,
+        unit: facts.unit.as_deref(),
+        unit_name: facts.unit_name.as_deref(),
+        declarations: facts
+            .declarations
+            .iter()
+            .map(|d| {
+                (
+                    d.name.as_str(),
+                    &d.kind,
+                    d.exported,
+                    d.visibility,
+                    d.member_of.as_deref(),
+                )
+            })
+            .collect(),
+        imports: facts
+            .imports
+            .iter()
+            .map(|i| {
+                (
+                    i.specifier.as_str(),
+                    &i.kind,
+                    i.side_effect_only,
+                    i.type_only,
+                    i.confidence,
+                    i.bindings
+                        .iter()
+                        .map(|b| (b.local.as_str(), b.imported.as_deref()))
+                        .collect(),
+                    i.reexported,
+                    i.opaque_namespace_use,
+                    i.local_alias.as_deref(),
+                )
+            })
+            .collect(),
+        roots: facts
+            .roots
+            .iter()
+            .map(|r| (r.kind, &r.target, r.confidence))
+            .collect(),
+        dynamics: facts
+            .dynamics
+            .iter()
+            .map(|d| (d.reason.as_str(), d.narrowed_to.as_deref()))
+            .collect(),
+    };
+    let bytes = bincode::serialize(&view).unwrap_or_default();
+    *blake3::hash(&bytes).as_bytes()
 }
 
 /// Directory part of a project-relative path (`""` for root-level files). A private duplicate
@@ -402,7 +545,7 @@ pub(crate) fn package_owns(manifest_dir: &str, file_dir: &str) -> bool {
 /// an assembly-algorithm change that could produce a different graph from the same facts. Feeds
 /// [`compute_graph_key`] (RFC 0004 §3's "core graph-schema version"); a bump here invalidates
 /// every project's cached `graph.bin` on the next run, same as any other key-input change.
-pub const GRAPH_SCHEMA_VERSION: u32 = 9; // 9: SymbolMetrics.token_count (RFC 0005 §11); 8: function_metrics (RFC 0005 §6); 7: cycle policies (§8); 6: PackageNode surface (RFC 0011 §4); 5: ladders + FileNode.unit (RFC 0012 §6); 4: RefKind + signature_span (§5); 3: within (§4)
+pub const GRAPH_SCHEMA_VERSION: u32 = 10; // 10: patch layer (RFC 0013 §4 — Edge.owner, FilePatchMeta, extraction-only stored diagnostics); 9: SymbolMetrics.token_count (RFC 0005 §11); 8: function_metrics (RFC 0005 §6); 7: cycle policies (§8); 6: PackageNode surface (RFC 0011 §4); 5: ladders + FileNode.unit (RFC 0012 §6); 4: RefKind + signature_span (§5); 3: within (§4)
 
 /// The graph snapshot's cache key (RFC 0004 §3, `cache.rs`'s `graph.bin`): a single digest
 /// folding in the *whole* discovered file set (every path + content hash — this already
@@ -473,9 +616,11 @@ pub fn assemble_with_cache(
     // This convenience entry point persists inline — only the engine's own path defers the
     // write to a background thread (it owns a place to join it; callers here don't).
     if let Some(writer) = &assembled.pending_snapshot {
-        writer.write(&assembled.graph, &assembled.diagnostics);
+        writer.write(&assembled.graph, &assembled.extraction_diagnostics);
     }
-    Ok((assembled.graph, assembled.diagnostics))
+    let mut diagnostics = assembled.discovery_diagnostics;
+    diagnostics.extend(assembled.extraction_diagnostics);
+    Ok((assembled.graph, diagnostics))
 }
 
 /// [`assemble_with_cache`] over any [`discovery::TreeSource`] — a directory, or a git tree-ish
@@ -498,6 +643,11 @@ pub fn assemble_from_source(
     tick("sidecar-load", &mut phase_start);
     let mut discovered =
         discovery::discover_source(source, &known_blob_hashes, stat_index.as_ref())?;
+    // RFC 0013 §3c: discovery diagnostics are always the fresh walk's — they never enter the
+    // snapshot, whose stored diagnostics are extraction + manifest only (the producers warm
+    // paths skip). One composition rule for hit, patch, and full alike.
+    let mut discovery_diagnostics = std::mem::take(&mut discovered.diagnostics);
+    discovery_diagnostics.sort_unstable();
     if let Some(cache) = cache {
         // Persist fresh (git blob → blake3) pairs immediately — the graph-snapshot hit below
         // returns early, and the sidecar must grow even on runs that never reach extraction.
@@ -513,7 +663,7 @@ pub fn assemble_from_source(
             cache.save_stat_index(&discovered.stat_entries, discovered.stat_written_at_ns);
         }
     }
-    let mut diagnostics = std::mem::take(&mut discovered.diagnostics);
+    let mut diagnostics: Vec<Diagnostic> = Vec::new();
 
     // The graph-snapshot fast path (RFC 0004 §2, §4 step 1): if every input the key folds in —
     // the whole discovered file set, each registered adapter's identity/version, and the graph
@@ -527,7 +677,8 @@ pub fn assemble_from_source(
             tick("snapshot-load", &mut phase_start);
             return Ok(AssembledGraph {
                 graph,
-                diagnostics: graph_diagnostics,
+                discovery_diagnostics,
+                extraction_diagnostics: graph_diagnostics,
                 pending_snapshot: None,
                 timings,
             });
@@ -563,10 +714,17 @@ pub fn assemble_from_source(
                     &df.content_hash,
                 )
             }) {
+                let surface_sig = surface_signature(
+                    descriptor.id.as_str(),
+                    descriptor.facts_schema_version,
+                    &claim,
+                    &facts,
+                );
                 return Ok(Some(Claimed {
                     claim,
                     facts,
                     adapter_index,
+                    surface_sig,
                 }));
             }
             let content = discovered.read(&df.path).map_err(|e| Diagnostic {
@@ -591,10 +749,17 @@ pub fn assemble_from_source(
                     &facts,
                 );
             }
+            let surface_sig = surface_signature(
+                descriptor.id.as_str(),
+                descriptor.facts_schema_version,
+                &claim,
+                &facts,
+            );
             Ok(Some(Claimed {
                 claim,
                 facts,
                 adapter_index,
+                surface_sig,
             }))
         })
         .collect();
@@ -780,6 +945,7 @@ pub fn assemble_from_source(
             // `Resolution::File` lookup in phase 3).
             if let Some(&target) = file_index.get(&root.target) {
                 edges.push(Edge {
+                    owner: FileId(i as u32),
                     kind: EdgeKind::Root {
                         kind: root.kind,
                         target: NodeRef::File(target),
@@ -821,6 +987,7 @@ pub fn assemble_from_source(
         };
         let file_id = FileId(i as u32);
         edges.push(Edge {
+            owner: file_id,
             kind: EdgeKind::Root {
                 kind,
                 target: NodeRef::File(file_id),
@@ -891,6 +1058,7 @@ pub fn assemble_from_source(
     // `FileFacts::unit`'s doc). `None` for every file whose adapter doesn't set `unit` (JS/TS
     // today), so this is purely additive: those files never populate or consult these two maps.
     let mut file_unit: Vec<Option<SmolStr>> = vec![None; claimed_per_file.len()];
+    let mut patch_meta: Vec<FilePatchMeta> = vec![FilePatchMeta::default(); claimed_per_file.len()];
     let mut symbol_by_name_per_unit: HashMap<SmolStr, HashMap<SmolStr, SymbolId>> =
         HashMap::default();
     // Member declarations (`member_of: Some(..)`, RFC 0012 §3) resolve on a separate track:
@@ -943,6 +1111,7 @@ pub fn assemble_from_source(
                 signature_span: decl.signature_span,
             });
             edges.push(Edge {
+                owner: file_id,
                 kind: EdgeKind::Declares {
                     file: file_id,
                     symbol: symbol_id,
@@ -962,6 +1131,7 @@ pub fn assemble_from_source(
             if decl.exported {
                 if let Some(&confidence) = library_root_files.get(&file_id) {
                     edges.push(Edge {
+                        owner: file_id,
                         kind: EdgeKind::Root {
                             kind: crate::vocab::RootKind::Production,
                             target: NodeRef::Symbol(symbol_id),
@@ -978,6 +1148,7 @@ pub fn assemble_from_source(
                 // export surface is the whole visible contract.
                 if let Some(&kind) = role_root_files.get(&file_id) {
                     edges.push(Edge {
+                        owner: file_id,
                         kind: EdgeKind::Root {
                             kind,
                             target: NodeRef::Symbol(symbol_id),
@@ -1034,6 +1205,7 @@ pub fn assemble_from_source(
                     NodeRef::File(_) => None,
                 };
                 edges.push(Edge {
+                    owner: file_id,
                     kind: EdgeKind::Root {
                         kind: root.kind,
                         target,
@@ -1150,12 +1322,17 @@ pub fn assemble_from_source(
                 symbol_by_name_per_file[i].entry(reexport.local.clone())
             {
                 slot.insert(original_symbol);
+                patch_meta[i].reexport_aliases.push(AliasEntry {
+                    name: reexport.local.clone(),
+                    symbol: original_symbol,
+                });
                 // The barrel itself is a manifest-declared production root, so everything it
                 // re-exports is part of the package's public API too (RFC 0011 §5) — same
                 // promotion phase 3a already applies to the barrel's *own* declarations,
                 // extended through re-export indirection.
                 if let Some(&confidence) = library_root_files.get(&FileId(i as u32)) {
                     edges.push(Edge {
+                        owner: FileId(reexport.source_file as u32),
                         kind: EdgeKind::Root {
                             kind: crate::vocab::RootKind::Production,
                             target: NodeRef::Symbol(original_symbol),
@@ -1255,6 +1432,7 @@ pub fn assemble_from_source(
                     // must be Some — defensive skip, not a silent contract violation, if not.
                     if let Some(&to) = file_index.get(&path) {
                         out.edges.push(Edge {
+                            owner: file_id,
                             kind: EdgeKind::ImportsFile { from: file_id, to },
                             confidence,
                             source: provenance(),
@@ -1298,6 +1476,7 @@ pub fn assemble_from_source(
                         // (RFC 0005 §1: "wildcard over that namespace's exports").
                         if imp.opaque_namespace_use {
                             out.edges.push(Edge {
+                                owner: file_id,
                                 kind: EdgeKind::Wildcard { from: to },
                                 confidence: Confidence::Possible,
                                 source: provenance(),
@@ -1371,6 +1550,7 @@ pub fn assemble_from_source(
                                 .copied();
                             if let Some(to) = sym {
                                 out.edges.push(Edge {
+                                    owner: file_id,
                                     kind: EdgeKind::References {
                                         from,
                                         to,
@@ -1404,6 +1584,7 @@ pub fn assemble_from_source(
                 };
                 if let Some(to) = target {
                     out.edges.push(Edge {
+                        owner: file_id,
                         kind: EdgeKind::References {
                             from,
                             to,
@@ -1462,6 +1643,7 @@ pub fn assemble_from_source(
                     };
                     for to in candidates {
                         out.edges.push(Edge {
+                            owner: file_id,
                             kind: EdgeKind::References {
                                 from, // same within-or-file attribution as the exact-match path
                                 to,
@@ -1495,6 +1677,7 @@ pub fn assemble_from_source(
                             }
                             let target = FileId(j as u32);
                             out.edges.push(Edge {
+                                owner: file_id,
                                 kind: EdgeKind::ImportsFile {
                                     from: file_id,
                                     to: target,
@@ -1504,6 +1687,7 @@ pub fn assemble_from_source(
                                 span: Some(dynamic.span),
                             });
                             out.edges.push(Edge {
+                                owner: file_id,
                                 kind: EdgeKind::Wildcard { from: target },
                                 confidence: Confidence::Possible,
                                 source: provenance(),
@@ -1514,6 +1698,7 @@ pub fn assemble_from_source(
                     // Empty-string narrowing would prefix-match the whole project — treat it as
                     // the adapter meaning "no narrowing" rather than "everything".
                     None => out.edges.push(Edge {
+                        owner: file_id,
                         kind: EdgeKind::Wildcard { from: file_id },
                         confidence: Confidence::Possible,
                         source: provenance(),
@@ -1547,6 +1732,7 @@ pub fn assemble_from_source(
                 id
             });
             edges.push(Edge {
+                owner: from,
                 kind: EdgeKind::ImportsDependency { from, to },
                 confidence,
                 source,
@@ -1565,6 +1751,15 @@ pub fn assemble_from_source(
     edges.sort_unstable();
     diagnostics.sort_unstable();
 
+    // RFC 0013 §4: per-file patch metadata — surface signatures and unit names from phase
+    // 1's facts; the re-export aliases were recorded by the 3a-bis fixpoint above.
+    for (i, slot) in claimed_per_file.iter().enumerate() {
+        if let Some(claimed) = slot {
+            patch_meta[i].surface_sig = Some(claimed.surface_sig);
+            patch_meta[i].unit_name = claimed.facts.unit_name.clone();
+        }
+    }
+
     let graph = ProjectGraph {
         files,
         symbols,
@@ -1577,6 +1772,7 @@ pub fn assemble_from_source(
         visibility_ladders: ladders.into_iter().collect(),
         cycle_policies: cycle_policies.into_iter().collect(),
         function_metrics,
+        patch_meta,
         file_index,
     };
     // The snapshot is NOT written here (RFC 0008 §2: cache persist happens off the critical
@@ -1586,7 +1782,8 @@ pub fn assemble_from_source(
     tick("resolve+link", &mut phase_start);
     Ok(AssembledGraph {
         graph,
-        diagnostics,
+        discovery_diagnostics,
+        extraction_diagnostics: diagnostics,
         pending_snapshot,
         timings,
     })
@@ -1597,7 +1794,11 @@ pub fn assemble_from_source(
 /// the deferred writer the engine schedules off the critical path.
 pub struct AssembledGraph {
     pub graph: ProjectGraph,
-    pub diagnostics: Vec<Diagnostic>,
+    /// Always the fresh walk's (RFC 0013 §3c) — never stored, never replayed.
+    pub discovery_diagnostics: Vec<Diagnostic>,
+    /// Extraction + manifest diagnostics — what the snapshot stores and warm paths replay
+    /// (their producers were skipped). Canonically sorted, like the edges.
+    pub extraction_diagnostics: Vec<Diagnostic>,
     pub pending_snapshot: Option<crate::cache::GraphSnapshotWriter>,
     /// Assembly sub-phase wall times `(phase, µs)` — merged into `RunResult::timings` so
     /// `--verbose` shows where assembly goes (discovery+hash, snapshot load, extract incl.
@@ -2708,6 +2909,53 @@ mod tests {
                 to: a_symbol,
                 kind: crate::vocab::RefKind::Read,
             }));
+    }
+
+    #[test]
+    fn surface_signature_ignores_spans_but_sees_surface_changes() {
+        // RFC 0013 §4: bodies and positions move freely under the patch guard; any change to
+        // what other files can resolve against must move the signature.
+        let base = project("sig-base", &[("a.mock", "decl x\nref y")]);
+        let moved = project("sig-moved", &[("a.mock", "\n\ndecl x\nref y")]);
+        let grown = project("sig-grown", &[("a.mock", "decl x\ndecl z\nref y")]);
+        let sig = |dir: &std::path::Path| {
+            let (g, _) = assemble(dir, &mock_adapters()).unwrap();
+            g.patch_meta[g.file_id(&ProjectPath(SmolStr::new("a.mock"))).unwrap().0 as usize]
+                .surface_sig
+                .expect("claimed files carry a signature")
+        };
+        assert_eq!(
+            sig(&base),
+            sig(&moved),
+            "span-only movement must not move the signature"
+        );
+        assert_ne!(
+            sig(&base),
+            sig(&grown),
+            "a new declaration must move the signature"
+        );
+    }
+
+    #[test]
+    fn patch_meta_records_unit_names_and_reexport_aliases() {
+        let dir = project(
+            "patch-meta",
+            &[
+                ("source.mock", "decl a"),
+                ("barrel.mock", "reexport ./source.mock a"),
+            ],
+        );
+        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let barrel = graph
+            .file_id(&ProjectPath(SmolStr::new("barrel.mock")))
+            .unwrap();
+        let aliases = &graph.patch_meta[barrel.0 as usize].reexport_aliases;
+        assert_eq!(aliases.len(), 1);
+        assert_eq!(aliases[0].name.as_str(), "a");
+        assert_eq!(
+            graph.symbols[aliases[0].symbol.0 as usize].name.as_str(),
+            "a"
+        );
     }
 
     #[test]

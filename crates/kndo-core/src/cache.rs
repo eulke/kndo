@@ -138,6 +138,7 @@ struct GraphSnapshot {
     visibility_ladders: Vec<LadderSnap>,
     cycle_policies: Vec<CyclePolicySnap>,
     function_metrics: Vec<(SymbolId, crate::graph::SymbolMetrics)>,
+    patch_meta: Vec<crate::graph::FilePatchMeta>,
     diagnostics: Vec<Diagnostic>,
 }
 
@@ -585,6 +586,7 @@ impl ProjectCache {
                 .map(|p| (p.language, p.policy))
                 .collect(),
             function_metrics: snapshot.function_metrics,
+            patch_meta: snapshot.patch_meta,
         });
         self.graph_hits.fetch_add(1, Ordering::Relaxed);
         Some((graph, snapshot.diagnostics))
@@ -614,8 +616,23 @@ impl ProjectCache {
         }
         Some(GraphSnapshotWriter {
             path: self.graph_snapshot_path(&key),
+            latest_path: self.latest_pointer_path(),
             key,
         })
+    }
+
+    /// The previous run's snapshot, via the `graphs/latest` pointer (RFC 0013 §4) — what the
+    /// incremental patch starts from on a graph-key miss. Any failure (no pointer, evicted
+    /// snapshot, bad bytes) is a plain `None`: the caller full-rebuilds, the fallback-honesty
+    /// rule.
+    pub fn latest_graph(&self) -> Option<(ProjectGraph, Vec<Diagnostic>)> {
+        let bytes = fs::read(self.latest_pointer_path()).ok()?;
+        let key: [u8; GRAPH_KEY_LEN] = bytes.as_slice().try_into().ok()?;
+        self.get_graph(&key)
+    }
+
+    fn latest_pointer_path(&self) -> PathBuf {
+        self.cache_dir.join("graphs").join("latest")
     }
 }
 
@@ -624,6 +641,7 @@ impl ProjectCache {
 /// correctness.
 pub struct GraphSnapshotWriter {
     path: std::path::PathBuf,
+    latest_path: std::path::PathBuf,
     key: [u8; GRAPH_KEY_LEN],
 }
 
@@ -661,6 +679,7 @@ impl GraphSnapshotWriter {
                 })
                 .collect(),
             function_metrics: graph.function_metrics.clone(),
+            patch_meta: graph.patch_meta.clone(),
             diagnostics: diagnostics.to_vec(),
         };
         let Ok(bytes) = rkyv::to_bytes::<rkyv::rancor::Error>(&snapshot) else {
@@ -679,8 +698,14 @@ impl GraphSnapshotWriter {
             }
         }
         let tmp = path.with_extension("bin.tmp");
-        if fs::write(&tmp, &out).is_ok() {
-            let _ = fs::rename(&tmp, path);
+        if fs::write(&tmp, &out).is_ok() && fs::rename(&tmp, path).is_ok() {
+            // The `latest` pointer (RFC 0013 §4) — written only after the snapshot itself is
+            // durably in place, so the pointer never names a missing or partial file. Same
+            // atomic temp + rename discipline.
+            let latest_tmp = self.latest_path.with_extension("tmp");
+            if fs::write(&latest_tmp, self.key).is_ok() {
+                let _ = fs::rename(&latest_tmp, &self.latest_path);
+            }
         }
     }
 }
@@ -951,6 +976,7 @@ mod tests {
                 name: "lodash".into(),
             }],
             vec![Edge {
+                owner: crate::vocab::FileId(0),
                 kind: EdgeKind::Declares {
                     file: FileId(0),
                     symbol: SymbolId(0),
@@ -1024,6 +1050,10 @@ mod tests {
                 .collect::<rustc_hash::FxHashSet<_>>()
         );
         assert_eq!(
+            restored.patch_meta, graph.patch_meta,
+            "RFC 0013 §4: the patch layer's per-file metadata must round-trip"
+        );
+        assert_eq!(
             restored.file_id(&crate::adapter::ProjectPath("a.mock".into())),
             Some(crate::vocab::FileId(0))
         );
@@ -1049,6 +1079,11 @@ mod tests {
         let other_key = [6u8; GRAPH_KEY_LEN];
         assert!(cache.get_graph(&other_key).is_none());
         assert_eq!(cache.graph_hits(), 1); // unchanged — the miss above didn't count
+
+        // The latest pointer names the written snapshot — the patch's entry point on a
+        // future miss (RFC 0013 §4).
+        let (latest, _) = cache.latest_graph().expect("latest pointer resolves");
+        assert_eq!(latest.files.len(), restored.files.len());
     }
 
     #[test]

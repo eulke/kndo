@@ -300,6 +300,7 @@ mod tests {
 
     fn imports(from: u32, to: u32) -> Edge {
         Edge {
+            owner: crate::vocab::FileId(0),
             kind: EdgeKind::ImportsFile {
                 from: FileId(from),
                 to: FileId(to),
@@ -422,6 +423,7 @@ mod tests {
         }];
         let mut edges = vec![imports(0, 2)];
         edges.push(Edge {
+            owner: crate::vocab::FileId(0),
             kind: EdgeKind::References {
                 from: NodeRef::File(FileId(0)),
                 to: crate::vocab::SymbolId(0),

@@ -79,7 +79,17 @@ pub struct PackageId(pub u32);
 /// A file's classification is two orthogonal axes, never one enum: a generated test file and
 /// a vendored production file are both expressible. `FileRole` mirrors `RootKind` on purpose.
 #[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize,
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    serde::Serialize,
+    serde::Deserialize,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
 )]
 pub enum FileRole {
     Production,
@@ -107,7 +117,17 @@ pub enum FileOrigin {
 }
 
 #[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize,
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    serde::Serialize,
+    serde::Deserialize,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
 )]
 pub struct FileClass {
     pub role: FileRole,
@@ -383,6 +403,14 @@ pub struct Edge {
     /// evidence site of their own — role-derived and manifest-declared roots are markers, not
     /// spanned facts.
     pub span: Option<Span>,
+    /// The file whose facts produced this edge (RFC 0013 §2: ownership is explicit, never
+    /// inferred from edge shape — shapes provably lie: a narrowed-dynamic or opaque-namespace
+    /// `Wildcard` points *from the target* but is produced by the importer, and a barrel's
+    /// re-export `Root` promotion targets a symbol in another file; manifest-derived edges
+    /// are owned by the manifest's own FileId). This is the incremental patch's exact removal
+    /// set (`owner ∈ changed set`), and the invalidation hook plugin contributions will use.
+    /// Last in declaration order deliberately: the canonical sort keys on semantics first.
+    pub owner: FileId,
 }
 
 #[cfg(test)]

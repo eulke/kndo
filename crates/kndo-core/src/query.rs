@@ -1888,6 +1888,7 @@ fn simulate_deletion(
         visibility_ladders: graph.visibility_ladders.clone(),
         cycle_policies: graph.cycle_policies.clone(),
         function_metrics: graph.function_metrics.clone(),
+        patch_meta: graph.patch_meta.clone(),
     });
     let after = crate::analysis::reachability::compute(&sim);
 
@@ -2004,6 +2005,7 @@ mod tests {
 
     fn edge(kind: EdgeKind, confidence: Confidence, evidence: Option<Span>) -> Edge {
         Edge {
+            owner: crate::vocab::FileId(0),
             kind,
             confidence,
             source: Provenance::Adapter(SmolStr::new("mock")),
