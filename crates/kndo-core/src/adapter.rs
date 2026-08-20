@@ -447,6 +447,8 @@ pub enum SuppressionScope {
 #[derive(
     Debug,
     Clone,
+    PartialEq,
+    Eq,
     serde::Serialize,
     serde::Deserialize,
     rkyv::Archive,

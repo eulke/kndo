@@ -543,6 +543,7 @@ mod tests {
         let graph =
             ProjectGraph::for_test(vec![f0, f1], symbols, vec![], edges).with_packages(vec![
                 crate::graph::PackageNode {
+                    workspace_entry: None,
                     manifest: None,
                     name: None,
                     private: false,
@@ -550,6 +551,7 @@ mod tests {
                     surface: Vec::new(),
                 },
                 crate::graph::PackageNode {
+                    workspace_entry: None,
                     manifest: None,
                     name: None,
                     private: false,
@@ -640,6 +642,7 @@ mod tests {
         let graph = ProjectGraph::for_test(vec![f0, f1], symbols, vec![], edges)
             .with_packages(vec![
                 crate::graph::PackageNode {
+                    workspace_entry: None,
                     manifest: None,
                     name: None,
                     private: false,
@@ -647,6 +650,7 @@ mod tests {
                     surface: Vec::new(),
                 },
                 crate::graph::PackageNode {
+                    workspace_entry: None,
                     manifest: None,
                     name: None,
                     private: false,

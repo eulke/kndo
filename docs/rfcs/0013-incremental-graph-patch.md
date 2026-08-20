@@ -1,6 +1,6 @@
 # RFC 0013 — Incremental Graph Patch
 
-**Status:** Accepted · **Depends on:** RFC 0004 (§4 step 4 is the accepted target this
+**Status:** Accepted, implemented (same milestone) · **Depends on:** RFC 0004 (§4 step 4 is the accepted target this
 implements), RFC 0008, RFC 0012 · **Related:** ADR 0004
 
 ## 1. Problem, with the M4.5 numbers
@@ -120,7 +120,10 @@ On a graph-key miss with a loadable `latest` snapshot:
    `C` = files whose content hash differs.
 2. **Guards** (each falls back to full rebuild):
    - any `c ∈ C` matches an adapter's manifest globs;
-   - `|C|` > 30% of files (RFC 0004 §5's threshold — patch overhead beats the win);
+   - `|C|` > **5%** of files — measured, not assumed: under the 30% ceiling RFC 0004 §5
+     sketched, the benchmark suite's 1k/100-file scenario regressed +22% (the patch's fixed
+     costs — snapshot load, table rebuild — beat the saved resolution); the crossover sits
+     near 5%, and the pre-commit case the patch exists for is far below it;
    - any *claimed* `c ∈ C`: extract fresh facts (facts cache handles it), compute the new
      surface signature, compare to the stored one — any mismatch → full rebuild.
    Unclaimed changed files are always patchable (their only contribution is a content hash).

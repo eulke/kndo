@@ -176,6 +176,7 @@ mod tests {
         ];
         let packages = vec![
             PackageNode {
+                workspace_entry: None,
                 manifest: None,
                 name: None,
                 private: false,
@@ -183,6 +184,7 @@ mod tests {
                 surface: Vec::new(),
             },
             PackageNode {
+                workspace_entry: None,
                 manifest: Some(ProjectPath(SmolStr::new("packages/a/package.json"))),
                 name: Some(SmolStr::new("@demo/a")),
                 private: true,
@@ -190,6 +192,7 @@ mod tests {
                 surface: Vec::new(),
             },
             PackageNode {
+                workspace_entry: None,
                 manifest: Some(ProjectPath(SmolStr::new("packages/b/package.json"))),
                 name: Some(SmolStr::new("@demo/b")),
                 private: true,

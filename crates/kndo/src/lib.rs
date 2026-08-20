@@ -13,7 +13,8 @@
 //! (ADR 0006 feature-gated builds).
 
 pub use kndo_core::{
-    adapter, analysis, coverage, discovery, engine, graph, plugin, query, query_envelope, vocab,
+    adapter, analysis, cache, coverage, discovery, engine, graph, plugin, query, query_envelope,
+    vocab,
 };
 
 use kndo_core::adapter::LanguageAdapter;

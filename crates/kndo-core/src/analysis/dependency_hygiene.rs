@@ -222,6 +222,7 @@ mod tests {
     ) -> ProjectGraph {
         ProjectGraph::for_test(files, vec![], dependencies, edges)
             .with_packages(vec![PackageNode {
+                workspace_entry: None,
                 manifest: Some(ProjectPath(SmolStr::new("package.json"))),
                 name: Some(SmolStr::new("demo")),
                 private: true,

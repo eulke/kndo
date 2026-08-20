@@ -693,6 +693,7 @@ mod tests {
         )
         .with_packages(vec![
             PackageNode {
+                workspace_entry: None,
                 manifest: None,
                 name: None,
                 private: false,
@@ -700,6 +701,7 @@ mod tests {
                 surface: Vec::new(),
             },
             PackageNode {
+                workspace_entry: None,
                 manifest: Some(ProjectPath(SmolStr::new("a/pkg.json"))),
                 name: Some(SmolStr::new("pkg-a")),
                 private: false,
@@ -707,6 +709,7 @@ mod tests {
                 surface: Vec::new(),
             },
             PackageNode {
+                workspace_entry: None,
                 manifest: Some(ProjectPath(SmolStr::new("b/pkg.json"))),
                 name: Some(SmolStr::new("pkg-b")),
                 private: false,

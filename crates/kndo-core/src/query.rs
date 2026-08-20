@@ -2180,6 +2180,7 @@ mod tests {
         let mut graph = linear_graph();
         graph = graph.with_packages(vec![
             PackageNode {
+                workspace_entry: None,
                 manifest: Some(ProjectPath("a/package.json".into())),
                 name: Some("dup".into()),
                 private: false,
@@ -2187,6 +2188,7 @@ mod tests {
                 surface: Vec::new(),
             },
             PackageNode {
+                workspace_entry: None,
                 manifest: Some(ProjectPath("b/package.json".into())),
                 name: Some("dup".into()),
                 private: false,

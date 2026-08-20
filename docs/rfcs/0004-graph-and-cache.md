@@ -84,9 +84,13 @@ condition fired. The M4.5 benchmark suite's 50k fixture measured the all-or-noth
 *surrounding* pieces first: step 2's stat-scan (a `(mtime, size) → blake3` sidecar with git's
 racy-write guard — unchanged files are no longer even read), step 6's persist off the critical
 path, and parallel per-file resolution (RFC 0008 §2), which together brought the 50k one-file
-change to ~1 130 ms — still over any reasonable large-repo budget, so **step 4's patch is the
-scheduled next unit of work, before M5**. Design notes from the M4.5 analysis, recorded for
-that implementation:
+change to ~1 130 ms. **Step 4's patch then landed as RFC 0013** (design and invariants of
+record there): a one-file change at 50k now costs ~575 ms — the same as a no-op, which is the
+target this section set. The v1 guard is RFC 0013 §5's (surface-signature equality, file set
+unchanged, no manifests, ≤ 5% changed — measured, stricter than this section's 30% sketch);
+the equivalence gate is byte-identity of the patched graph against a scratch rebuild,
+enforced by a dedicated suite over the conformance corpora. The design notes below are kept
+as the record of the analysis that produced RFC 0013:
 
 - *v1 guard (body-only fast path):* patch only when the file **set** is unchanged and every
   changed file's **surface is identical** — same declarations (name/kind/exported/visibility/

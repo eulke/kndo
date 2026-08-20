@@ -517,6 +517,19 @@ impl ProjectCache {
     /// file simply doesn't exist yet — a plain miss, not an error, exactly like a facts-entry
     /// miss (ADR 0004: any mismatch ⇒ silently rebuild).
     pub fn get_graph(&self, key: &[u8; GRAPH_KEY_LEN]) -> Option<(ProjectGraph, Vec<Diagnostic>)> {
+        let out = self.get_graph_uncounted(key)?;
+        self.graph_hits.fetch_add(1, Ordering::Relaxed);
+        Some(out)
+    }
+
+    /// [`Self::get_graph`] without the hit counter — the patch's *probe* (RFC 0013 §5) loads
+    /// the previous snapshot speculatively; whether the cache actually served the run is only
+    /// known when the patch applies, and [`Self::count_graph_hit`] records it then. A failed
+    /// probe followed by a full rebuild must not report a warm graph layer it didn't have.
+    fn get_graph_uncounted(
+        &self,
+        key: &[u8; GRAPH_KEY_LEN],
+    ) -> Option<(ProjectGraph, Vec<Diagnostic>)> {
         let file = fs::File::open(self.graph_snapshot_path(key)).ok()?;
         let len = file.metadata().ok()?.len();
         if len < GRAPH_HEADER_LEN as u64 {
@@ -588,7 +601,6 @@ impl ProjectCache {
             function_metrics: snapshot.function_metrics,
             patch_meta: snapshot.patch_meta,
         });
-        self.graph_hits.fetch_add(1, Ordering::Relaxed);
         Some((graph, snapshot.diagnostics))
     }
 
@@ -628,7 +640,13 @@ impl ProjectCache {
     pub fn latest_graph(&self) -> Option<(ProjectGraph, Vec<Diagnostic>)> {
         let bytes = fs::read(self.latest_pointer_path()).ok()?;
         let key: [u8; GRAPH_KEY_LEN] = bytes.as_slice().try_into().ok()?;
-        self.get_graph(&key)
+        self.get_graph_uncounted(&key)
+    }
+
+    /// Record that the previous snapshot genuinely served this run — called by the patch on
+    /// success (see [`Self::get_graph_uncounted`]).
+    pub fn count_graph_hit(&self) {
+        self.graph_hits.fetch_add(1, Ordering::Relaxed);
     }
 
     fn latest_pointer_path(&self) -> PathBuf {

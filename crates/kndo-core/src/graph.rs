@@ -20,7 +20,7 @@ use crate::vocab::{
 };
 use smol_str::SmolStr;
 
-#[derive(Debug, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(Debug, Clone, PartialEq, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct FileNode {
     pub path: ProjectPath,
     pub content_hash: [u8; 32],
@@ -42,7 +42,7 @@ pub struct FileNode {
     pub unit: Option<SmolStr>,
 }
 
-#[derive(Debug, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(Debug, Clone, PartialEq, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct SymbolNode {
     pub file: FileId,
     /// Bare name — for members, ownership lives in `member_of`, never in the name string
@@ -77,7 +77,7 @@ impl SymbolNode {
 /// winnowing fingerprints feed structural `duplicate`. Keyed by `SymbolId` in
 /// [`ProjectGraph::function_metrics`] — the adapter-side `FunctionMetrics::symbol` name is
 /// resolved to the id at assembly and dropped.
-#[derive(Debug, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(Debug, Clone, PartialEq, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct SymbolMetrics {
     pub cyclomatic: u32,
     pub loc: u32,
@@ -118,7 +118,7 @@ pub struct AliasEntry {
 /// member imported by name (RFC 0011 §4: the workspace case carries the same
 /// declaration-contract obligations, so it lives in the same node kind; its file-level
 /// reachability is carried separately by the `ImportsFile` edge the same resolution emits).
-#[derive(Debug, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(Debug, Clone, PartialEq, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct DependencyNode {
     #[rkyv(with = crate::rkyv_support::SmolStrAsString)]
     pub name: SmolStr,
@@ -129,7 +129,7 @@ pub struct DependencyNode {
 /// implicit Package" generalizes to "whatever no real manifest's subtree claims," so ownership
 /// is total (every file has a package) even in a repo with zero manifests, or with manifests
 /// that don't cover every directory.
-#[derive(Debug, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(Debug, Clone, PartialEq, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct PackageNode {
     pub manifest: Option<ProjectPath>,
     #[rkyv(with = rkyv::with::Map<crate::rkyv_support::SmolStrAsString>)]
@@ -147,6 +147,11 @@ pub struct PackageNode {
     /// don't appear). An `ImportsFile` edge from another package landing on a file *not* in
     /// this set, while `declares_surface` holds, is a deep import.
     pub surface: Vec<FileId>,
+    /// The member's primary entry as the manifest's adapter resolved it — the
+    /// `WorkspaceMember::entry` input for bare-specifier resolution, persisted verbatim
+    /// (RFC 0013 §4: the patch rebuilds the workspace index from the snapshot; `surface`
+    /// can't stand in — it drops out-of-tree entries and confidences).
+    pub workspace_entry: Option<(ProjectPath, Confidence)>,
 }
 
 /// One manifest's declaration of an external dependency — the raw fact `undeclared` and
@@ -154,7 +159,7 @@ pub struct PackageNode {
 /// can exist with zero importers (nothing wrong with that on its own — that's `unused`'s
 /// concern) and a project can have many manifests declaring the same name differently (that's
 /// `version-skew`'s).
-#[derive(Debug, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(Debug, Clone, PartialEq, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct DeclaredDependency {
     pub package: PackageId,
     pub manifest: ProjectPath,
@@ -184,7 +189,7 @@ pub(crate) struct GraphSnapshotParts {
 
 /// The assembled language-neutral graph (contracts §1). Read-only once built; incremental
 /// patching lands with the cache (RFC 0004).
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq)]
 pub struct ProjectGraph {
     pub files: Vec<FileNode>,
     pub symbols: Vec<SymbolNode>,
@@ -309,6 +314,7 @@ impl ProjectGraph {
                 private: false,
                 declares_surface: false,
                 surface: Vec::new(),
+                workspace_entry: None,
             }],
             edges,
             suppressions: Vec::new(),
@@ -408,6 +414,1004 @@ struct Claimed {
     /// RFC 0013 §4's surface signature, computed once per (adapter, content) in phase 1's
     /// parallel pass — cached and fresh facts get it identically.
     surface_sig: [u8; 32],
+}
+
+/// Phase 1's per-file work — claim, fetch-or-extract facts (facts cache first), compute the
+/// surface signature — shared verbatim by the parallel full build and the incremental
+/// patch's re-extraction of changed files (RFC 0013 §5).
+fn claim_and_extract(
+    df: &discovery::DiscoveredFile,
+    adapters: &[Box<dyn LanguageAdapter>],
+    cache: Option<&crate::cache::ProjectCache>,
+    discovered: &discovery::DiscoveredTree,
+) -> Result<Option<Claimed>, Diagnostic> {
+    let Some((adapter_index, claim)) = adapters
+        .iter()
+        .enumerate()
+        .find_map(|(i, a)| a.claim(&df.path).map(|c| (i, c)))
+    else {
+        return Ok(None); // no adapter claims it — still a valid, factless File node
+    };
+    let descriptor = adapters[adapter_index].descriptor();
+    if let Some(facts) = cache.and_then(|c| {
+        c.get(
+            descriptor.id.as_str(),
+            descriptor.facts_schema_version,
+            &df.content_hash,
+        )
+    }) {
+        let surface_sig = surface_signature(
+            descriptor.id.as_str(),
+            descriptor.facts_schema_version,
+            &claim,
+            &facts,
+        );
+        return Ok(Some(Claimed {
+            claim,
+            facts,
+            adapter_index,
+            surface_sig,
+        }));
+    }
+    let content = discovered.read(&df.path).map_err(|e| Diagnostic {
+        level: DiagnosticLevel::Warn,
+        path: Some(df.path.clone()),
+        message: format!(
+            "claimed by {} but unreadable at extraction time ({e})",
+            claim.language
+        ),
+        span: None,
+    })?;
+    let source = SourceFile {
+        path: &df.path,
+        content: &content,
+    };
+    let facts = adapters[adapter_index].extract(&source);
+    if let Some(c) = cache {
+        c.put(
+            descriptor.id.as_str(),
+            descriptor.facts_schema_version,
+            &df.content_hash,
+            &facts,
+        );
+    }
+    let surface_sig = surface_signature(
+        descriptor.id.as_str(),
+        descriptor.facts_schema_version,
+        &claim,
+        &facts,
+    );
+    Ok(Some(Claimed {
+        claim,
+        facts,
+        adapter_index,
+        surface_sig,
+    }))
+}
+
+/// RFC 0013 §5 — the incremental patch. Applies when the previous snapshot exists, the file
+/// **set** is unchanged, no changed file is a manifest, at most 30% of files changed, and
+/// every changed claimed file's surface signature is unchanged — in which case the dirty set
+/// is exactly the changed files (§2.1: no resolution input moved). Everything else returns
+/// `None` and the caller full-rebuilds: one fallback, always correct. Every guard runs
+/// BEFORE any mutation — a half-patched graph must be unrepresentable.
+///
+/// The correctness obligation (§6): the returned graph is byte-identical to what the full
+/// rebuild of the same tree produces — enforced by the equivalence suite, made possible by
+/// the canonical-order invariant (§3a) and by sharing the exact per-file machinery
+/// ([`claim_and_extract`], [`emit_file_declarations`], [`resolve_file`]) with the full path.
+fn try_patch(
+    discovered: &discovery::DiscoveredTree,
+    adapters: &[Box<dyn LanguageAdapter>],
+    cache: &crate::cache::ProjectCache,
+) -> Option<(ProjectGraph, Vec<Diagnostic>)> {
+    let (mut graph, mut extraction_diagnostics) = cache.latest_graph()?;
+
+    // ---- guards, in cheapest-first order ----
+    if graph.files.len() != discovered.files.len() {
+        return None;
+    }
+    if graph
+        .files
+        .iter()
+        .zip(&discovered.files)
+        .any(|(old, new)| old.path != new.path)
+    {
+        return None; // adds/removes/renames renumber FileIds — §7's honest fallback
+    }
+    let changed: Vec<usize> = graph
+        .files
+        .iter()
+        .zip(&discovered.files)
+        .enumerate()
+        .filter(|(_, (old, new))| old.content_hash != new.content_hash)
+        .map(|(i, _)| i)
+        .collect();
+    if changed.is_empty() {
+        return None; // identical tree would have hit the snapshot key — defensive
+    }
+    if changed.len() * 20 > graph.files.len() {
+        // Stricter than RFC 0004 §5's 30% ceiling, and measured rather than assumed: the
+        // patch's fixed costs (snapshot load, table rebuild) beat the saved resolution once
+        // more than ~5% of files changed — the E0b suite's 1k/100-file scenario regressed
+        // +22% under a 30% threshold and recovers at 5%. RFC 0013 §5 records the number.
+        return None;
+    }
+    for &c in &changed {
+        if adapters
+            .iter()
+            .any(|a| a.claim_manifest(&discovered.files[c].path))
+        {
+            return None; // manifests feed global inputs (§2.1) — full rebuild
+        }
+    }
+
+    // Re-extract every changed claimed file and check its surface signature. Still no
+    // mutation: any failure here must leave nothing behind.
+    struct ChangedFile {
+        index: usize,
+        claimed: Option<Claimed>,
+    }
+    let mut changed_files: Vec<ChangedFile> = Vec::with_capacity(changed.len());
+    for &c in &changed {
+        match claim_and_extract(&discovered.files[c], adapters, Some(cache), discovered) {
+            Err(_) => return None, // unreadable at extraction — let the full path diagnose
+            Ok(None) => {
+                if graph.files[c].language.is_some() {
+                    return None; // claim is path-based; a flip here means a stale snapshot
+                }
+                changed_files.push(ChangedFile {
+                    index: c,
+                    claimed: None,
+                });
+            }
+            Ok(Some(claimed)) => {
+                if graph.patch_meta[c].surface_sig != Some(claimed.surface_sig) {
+                    return None; // §2.1: some resolution input moved — full rebuild
+                }
+                changed_files.push(ChangedFile {
+                    index: c,
+                    claimed: Some(claimed),
+                });
+            }
+        }
+    }
+
+    // Symbol runs must be contiguous per file (the full build constructs them that way) and
+    // each changed file's run must align 1:1 with its fresh declarations. The signature
+    // already implies alignment — but SymbolIds are load-bearing, so verify, never trust.
+    let mut symbol_range: Vec<(u32, u32)> = vec![(0, 0); graph.files.len()];
+    {
+        let mut last_file: Option<u32> = None;
+        for (idx, sym) in graph.symbols.iter().enumerate() {
+            let f = sym.file.0;
+            match last_file {
+                Some(prev) if f == prev => symbol_range[f as usize].1 = idx as u32 + 1,
+                Some(prev) if f < prev => return None, // non-contiguous — stale/corrupt
+                _ => {
+                    if symbol_range[f as usize].1 != 0 {
+                        return None; // a second run for the same file — non-contiguous
+                    }
+                    symbol_range[f as usize] = (idx as u32, idx as u32 + 1);
+                }
+            }
+            last_file = Some(f);
+        }
+    }
+    for cf in &changed_files {
+        let Some(claimed) = &cf.claimed else { continue };
+        let (start, end) = symbol_range[cf.index];
+        let decls = &claimed.facts.declarations;
+        if (end - start) as usize != decls.len() {
+            return None;
+        }
+        for (d, decl) in decls.iter().enumerate() {
+            let sym = &graph.symbols[start as usize + d];
+            if sym.name != decl.name
+                || sym.kind != decl.kind
+                || sym.exported != decl.exported
+                || sym.visibility != decl.visibility
+                || sym.member_of != decl.member_of
+            {
+                return None;
+            }
+        }
+    }
+
+    // ---- every guard passed: mutation begins ----
+    let changed_set: HashSet<u32> = changed.iter().map(|&c| c as u32).collect();
+    let changed_paths: HashSet<ProjectPath> = changed
+        .iter()
+        .map(|&c| graph.files[c].path.clone())
+        .collect();
+
+    for cf in &changed_files {
+        let c = cf.index;
+        graph.files[c].content_hash = discovered.files[c].content_hash;
+        if let Some(claimed) = &cf.claimed {
+            let (start, _) = symbol_range[c];
+            for (d, decl) in claimed.facts.declarations.iter().enumerate() {
+                let sym = &mut graph.symbols[start as usize + d];
+                sym.span = decl.span;
+                sym.signature_span = decl.signature_span;
+            }
+            graph.patch_meta[c].surface_sig = Some(claimed.surface_sig);
+        }
+    }
+
+    // Remove everything the changed files own — exact, thanks to Edge.owner (§2).
+    graph.edges.retain(|e| !changed_set.contains(&e.owner.0));
+    let mut function_metrics = std::mem::take(&mut graph.function_metrics);
+    function_metrics.retain(|(id, _)| !changed_set.contains(&graph.symbols[id.0 as usize].file.0));
+    graph
+        .suppressions
+        .retain(|(f, _)| !changed_set.contains(&f.0));
+    extraction_diagnostics.retain(|d| d.path.as_ref().is_none_or(|p| !changed_paths.contains(p)));
+
+    // ---- rebuild the resolution environment from the snapshot (§4: everything derivable) ----
+    let known_files: HashSet<ProjectPath> = graph.files.iter().map(|f| f.path.clone()).collect();
+    let declared_dependency_names: HashSet<SmolStr> = graph
+        .declared_dependencies
+        .iter()
+        .map(|d| d.name.clone())
+        .collect();
+    let mut workspace_member_index: HashMap<SmolStr, crate::adapter::WorkspaceMember> =
+        HashMap::default();
+    for pkg in &graph.packages {
+        let (Some(manifest), Some(name)) = (&pkg.manifest, &pkg.name) else {
+            continue;
+        };
+        workspace_member_index
+            .entry(name.clone())
+            .or_insert_with(|| crate::adapter::WorkspaceMember {
+                dir: SmolStr::new(core_dirname(manifest.0.as_str())),
+                entry: pkg.workspace_entry.clone(),
+            });
+    }
+    let ctx = ResolveCtx::new(&known_files)
+        .with_declared_dependencies(&declared_dependency_names)
+        .with_workspace_members(&workspace_member_index);
+
+    let files_len = graph.files.len();
+    let mut symbol_by_name_per_file: Vec<HashMap<SmolStr, SymbolId>> =
+        vec![HashMap::default(); files_len];
+    let mut symbol_by_qualified_per_file: Vec<HashMap<String, SymbolId>> =
+        vec![HashMap::default(); files_len];
+    let mut symbol_by_name_per_unit: HashMap<SmolStr, HashMap<SmolStr, SymbolId>> =
+        HashMap::default();
+    let mut member_by_name: HashMap<SmolStr, Vec<SymbolId>> = HashMap::default();
+    for (idx, sym) in graph.symbols.iter().enumerate() {
+        let i = sym.file.0 as usize;
+        let id = SymbolId(idx as u32);
+        match &sym.member_of {
+            None => {
+                symbol_by_name_per_file[i].insert(sym.name.clone(), id);
+                if let Some(unit) = &graph.files[i].unit {
+                    symbol_by_name_per_unit
+                        .entry(unit.clone())
+                        .or_default()
+                        .insert(sym.name.clone(), id);
+                }
+            }
+            Some(owner) => {
+                member_by_name.entry(sym.name.clone()).or_default().push(id);
+                symbol_by_qualified_per_file[i].insert(format!("{owner}.{}", sym.name), id);
+            }
+        }
+    }
+    // Aliases go in after declarations, vacant-only — the same outcome pass A + the fixpoint
+    // produce (declarations always precede aliases there too).
+    for (i, meta) in graph.patch_meta.iter().enumerate() {
+        for alias in &meta.reexport_aliases {
+            symbol_by_name_per_file[i]
+                .entry(alias.name.clone())
+                .or_insert(alias.symbol);
+        }
+    }
+    let file_unit: Vec<Option<SmolStr>> = graph.files.iter().map(|f| f.unit.clone()).collect();
+    let unit_name_by_file: Vec<Option<SmolStr>> = graph
+        .patch_meta
+        .iter()
+        .map(|m| m.unit_name.clone())
+        .collect();
+    let ladders: std::collections::BTreeMap<SmolStr, Vec<crate::adapter::VisibilityRung>> =
+        graph.visibility_ladders.iter().cloned().collect();
+
+    // Library roots for the changed files, from the KEPT (manifest-owned) edges — a changed
+    // file's own in-source production roots were just removed and regenerate below.
+    let mut library_root_files: HashMap<FileId, Confidence> = HashMap::default();
+    for e in &graph.edges {
+        if let EdgeKind::Root {
+            kind: crate::vocab::RootKind::Production,
+            target: NodeRef::File(f),
+        } = e.kind
+        {
+            if changed_set.contains(&f.0) {
+                let entry = library_root_files.entry(f).or_insert(e.confidence);
+                *entry = (*entry).max(e.confidence);
+            }
+        }
+    }
+    let mut role_root_files: HashMap<FileId, crate::vocab::RootKind> = HashMap::default();
+    for cf in &changed_files {
+        if cf.claimed.is_some() {
+            if let Some(class) = graph.files[cf.index].class {
+                let kind = match class.role {
+                    crate::vocab::FileRole::Test => Some(crate::vocab::RootKind::Test),
+                    crate::vocab::FileRole::Tooling => Some(crate::vocab::RootKind::Tooling),
+                    crate::vocab::FileRole::Production => None,
+                };
+                if let Some(kind) = kind {
+                    role_root_files.insert(FileId(cf.index as u32), kind);
+                }
+            }
+        }
+    }
+
+    // ---- regenerate the changed files' contributions, via the SAME machinery as the full
+    // build (emit_file_declarations + resolve_file) ----
+    let mut new_edges: Vec<Edge> = Vec::new();
+    let mut new_metrics: Vec<(SymbolId, SymbolMetrics)> = Vec::new();
+    let mut resolved_outputs: Vec<ResolvedFile> = Vec::new();
+    {
+        let tables = ResolveTables {
+            files: &graph.files,
+            file_index: &graph.file_index,
+            symbols: &graph.symbols,
+            symbol_by_name_per_file: &symbol_by_name_per_file,
+            symbol_by_qualified_per_file: &symbol_by_qualified_per_file,
+            symbol_by_name_per_unit: &symbol_by_name_per_unit,
+            member_by_name: &member_by_name,
+            file_unit: &file_unit,
+            unit_name_by_file: &unit_name_by_file,
+            ladders: &ladders,
+            ctx: &ctx,
+        };
+        for cf in &changed_files {
+            let Some(claimed) = &cf.claimed else { continue };
+            let c = cf.index;
+            let file_id = FileId(c as u32);
+            let adapter = &adapters[claimed.adapter_index];
+            let adapter_id = adapter.descriptor().id;
+
+            // Phase 2.6's role-derived file root (owned by the file, hence removed above).
+            if let Some(&kind) = role_root_files.get(&file_id) {
+                new_edges.push(Edge {
+                    kind: EdgeKind::Root {
+                        kind,
+                        target: NodeRef::File(file_id),
+                    },
+                    confidence: Confidence::Probable,
+                    source: Provenance::Adapter(adapter_id.clone()),
+                    span: None,
+                    owner: file_id,
+                });
+            }
+            // Phase 3a emissions, shared emitter.
+            let em = emit_file_declarations(
+                c,
+                &claimed.facts,
+                adapter_id.as_str(),
+                symbol_range[c].0,
+                &graph.symbols,
+                &symbol_by_name_per_file[c],
+                &symbol_by_qualified_per_file[c],
+                &library_root_files,
+                &role_root_files,
+            );
+            new_edges.extend(em.edges);
+            new_metrics.extend(em.metrics);
+            // Phase 3a-bis's promotions: the aliases themselves are unchanged under the guard
+            // (persisted, order-independent state); only the edges — owned by this file and
+            // removed above — regenerate, spans refreshed from the fresh imports.
+            if let Some(&confidence) = library_root_files.get(&file_id) {
+                for alias in &graph.patch_meta[c].reexport_aliases {
+                    let span = claimed
+                        .facts
+                        .imports
+                        .iter()
+                        .filter(|imp| imp.reexported)
+                        .find(|imp| imp.bindings.iter().any(|b| b.local == alias.name))
+                        .map(|imp| imp.span);
+                    new_edges.push(Edge {
+                        kind: EdgeKind::Root {
+                            kind: crate::vocab::RootKind::Production,
+                            target: NodeRef::Symbol(alias.symbol),
+                        },
+                        confidence,
+                        source: Provenance::Adapter(adapter_id.clone()),
+                        span,
+                        owner: file_id,
+                    });
+                }
+            }
+            // Phase 3b, shared resolver.
+            resolved_outputs.push(resolve_file(c, &claimed.facts, &**adapter, &tables));
+        }
+    }
+
+    // ---- apply, then restore the canonical order (§3a) ----
+    let mut dep_index: HashMap<SmolStr, DependencyId> = graph
+        .dependencies
+        .iter()
+        .enumerate()
+        .map(|(i, d)| (d.name.clone(), DependencyId(i as u32)))
+        .collect();
+    graph.edges.extend(new_edges);
+    for out in resolved_outputs {
+        graph.edges.extend(out.edges);
+        for (name, confidence, span, from, source) in out.dep_imports {
+            let to = *dep_index.entry(name.clone()).or_insert_with(|| {
+                let id = DependencyId(graph.dependencies.len() as u32);
+                graph
+                    .dependencies
+                    .push(DependencyNode { name: name.clone() });
+                id
+            });
+            graph.edges.push(Edge {
+                kind: EdgeKind::ImportsDependency { from, to },
+                confidence,
+                source,
+                span: Some(span),
+                owner: from,
+            });
+        }
+        extraction_diagnostics.extend(out.diagnostics);
+        graph.suppressions.extend(out.suppressions);
+    }
+    function_metrics.extend(new_metrics);
+    function_metrics.sort_by_key(|(id, _)| *id);
+    graph.function_metrics = function_metrics;
+    graph.edges.sort_unstable();
+    graph.suppressions.sort_by_key(|(f, _)| *f);
+    extraction_diagnostics.sort_unstable();
+
+    cache.count_graph_hit(); // the previous snapshot genuinely served this run
+    Some((graph, extraction_diagnostics))
+}
+
+/// One file's phase-3b output, merged deterministically in FileId order.
+struct ResolvedFile {
+    edges: Vec<Edge>,
+    /// `(name, confidence, span, from, provenance)` — becomes `ImportsDependency` in the
+    /// merge once the name has a deterministic id.
+    dep_imports: Vec<(
+        SmolStr,
+        Confidence,
+        crate::adapter::Span,
+        FileId,
+        Provenance,
+    )>,
+    diagnostics: Vec<Diagnostic>,
+    suppressions: Vec<(FileId, crate::adapter::RawSuppression)>,
+}
+
+// Whether a declaration in `decl_file` at `scope` is visible to a reference site in
+// `site_file` (RFC 0012 §6). Scopes nest (File ⊂ Unit ⊂ Package ⊂ Public), so each arm
+// accepts everything the narrower one would: a Unit-scoped Go method is visible to its own
+// file whether or not the adapter set a unit key.
+fn scope_contains_site(
+    scope: crate::adapter::VisibilityScope,
+    decl_file: usize,
+    site_file: usize,
+    file_unit: &[Option<SmolStr>],
+    files: &[FileNode],
+) -> bool {
+    use crate::adapter::VisibilityScope::*;
+    match scope {
+        File => decl_file == site_file,
+        Unit => {
+            decl_file == site_file
+                || matches!(
+                    (&file_unit[decl_file], &file_unit[site_file]),
+                    (Some(a), Some(b)) if a == b
+                )
+        }
+        Package => files[decl_file].package == files[site_file].package,
+        Public => true,
+    }
+}
+
+/// Everything phase 3b's per-file resolution reads — immutable once the symbol tables are
+/// built. A named struct (not captured locals) because the incremental patch (RFC 0013 §5)
+/// builds the same tables from the snapshot and calls the same [`resolve_file`]: one
+/// resolution semantics, two data sources, zero drift.
+struct ResolveTables<'a> {
+    files: &'a [FileNode],
+    file_index: &'a HashMap<ProjectPath, FileId>,
+    symbols: &'a [SymbolNode],
+    symbol_by_name_per_file: &'a [HashMap<SmolStr, SymbolId>],
+    symbol_by_qualified_per_file: &'a [HashMap<String, SymbolId>],
+    symbol_by_name_per_unit: &'a HashMap<SmolStr, HashMap<SmolStr, SymbolId>>,
+    member_by_name: &'a HashMap<SmolStr, Vec<SymbolId>>,
+    file_unit: &'a [Option<SmolStr>],
+    unit_name_by_file: &'a [Option<SmolStr>],
+    ladders: &'a std::collections::BTreeMap<SmolStr, Vec<crate::adapter::VisibilityRung>>,
+    ctx: &'a ResolveCtx<'a>,
+}
+
+/// One file's phase-3b contributions (imports, bindings, references, dynamics, diagnostics,
+/// suppressions) — the parallel full build and the incremental patch both call this.
+fn resolve_file(
+    i: usize,
+    facts: &crate::adapter::FileFacts,
+    adapter: &dyn LanguageAdapter,
+    t: &ResolveTables<'_>,
+) -> ResolvedFile {
+    let ResolveTables {
+        files,
+        file_index,
+        symbols,
+        symbol_by_name_per_file,
+        symbol_by_qualified_per_file,
+        symbol_by_name_per_unit,
+        member_by_name,
+        file_unit,
+        unit_name_by_file,
+        ladders,
+        ctx,
+    } = t;
+    let file_id = FileId(i as u32);
+    let provenance = || Provenance::Adapter(adapter.descriptor().id.clone());
+    let mut out = ResolvedFile {
+        edges: Vec::new(),
+        dep_imports: Vec::new(),
+        diagnostics: Vec::new(),
+        suppressions: Vec::new(),
+    };
+
+    // Local name -> target symbol, from this file's import bindings — the fact that lets a
+    // `RawReference` to an *imported* name resolve cross-file instead of only same-file.
+    let mut bound_symbols: HashMap<SmolStr, SymbolId> = HashMap::default();
+    // Qualifier -> resolved in-repo target file (RFC 0012 §9): the import's explicit
+    // `local_alias`, or — unaliased — the *target's own* declared `unit_name`. This is
+    // where the dir≠package problem dissolves: only assembly holds both sides, so the
+    // qualifier for `gopkg.in/yaml.v3`-style imports comes from the target's `package`
+    // clause, never from a guess about the specifier. First import wins on a duplicate
+    // qualifier (Go rejects that program anyway — deterministic either way).
+    let mut qualifier_targets: HashMap<SmolStr, FileId> = HashMap::default();
+
+    for imp in &facts.imports {
+        let spec = ImportSpec {
+            specifier: imp.specifier.clone(),
+            from: files[i].path.clone(),
+        };
+        // A workspace-member resolution is BOTH targets at once (RFC 0011 §4): the
+        // concrete internal file (reachability is real, cross-package) and the named
+        // dependency (the declaration contract is real too — undeclared siblings are
+        // phantom internal dependencies, declared-but-unimported ones are unused).
+        // Stdlib: not a graph node — there is nothing to point an edge at. Unresolved:
+        // resolution is intentionally incomplete right now (self-reference imports,
+        // exports maps — spec §3); turning it into a finding is the future `unresolved`
+        // analysis's job, not assembly's (RFC 0005 §5).
+        let (file_target, dep_target) = match adapter.resolve(&spec, ctx) {
+            Resolution::File(path, confidence) => (Some((path, confidence)), None),
+            Resolution::Dependency(name, confidence) => (None, Some((name, confidence))),
+            Resolution::WorkspaceMember {
+                name,
+                target,
+                confidence,
+            } => (Some((target, confidence)), Some((name, confidence))),
+            Resolution::Stdlib | Resolution::Unresolved => (None, None),
+        };
+
+        if let Some((path, confidence)) = file_target {
+            // Resolvers only ever match against `ctx`'s known-files set, so this
+            // must be Some — defensive skip, not a silent contract violation, if not.
+            if let Some(&to) = file_index.get(&path) {
+                out.edges.push(Edge {
+                    owner: file_id,
+                    kind: EdgeKind::ImportsFile { from: file_id, to },
+                    confidence,
+                    source: provenance(),
+                    span: Some(imp.span),
+                });
+                for binding in &imp.bindings {
+                    let exported_name = binding
+                        .imported
+                        .clone()
+                        .unwrap_or_else(|| SmolStr::new("default"));
+                    // Same-file first; then the target file's own unit (package-scoped
+                    // languages, RFC 0002 §2 `FileFacts::unit`) — a Go import names a
+                    // *package* (a directory of files), and `Resolution::File`'s target is
+                    // necessarily just one representative file in it (contracts §2 has no
+                    // multi-file resolution target), so the symbol a qualified access binds
+                    // to may live in any of that directory's other files.
+                    let symbol_id = symbol_by_name_per_file[to.0 as usize]
+                        .get(&exported_name)
+                        .or_else(|| {
+                            file_unit[to.0 as usize].as_ref().and_then(|unit| {
+                                symbol_by_name_per_unit
+                                    .get(unit)
+                                    .and_then(|t| t.get(&exported_name))
+                            })
+                        })
+                        .copied();
+                    if let Some(symbol_id) = symbol_id {
+                        bound_symbols.insert(binding.local.clone(), symbol_id);
+                    }
+                }
+                let qualifier = imp
+                    .local_alias
+                    .clone()
+                    .or_else(|| unit_name_by_file[to.0 as usize].clone());
+                if let Some(q) = qualifier {
+                    qualifier_targets.entry(q).or_insert(to);
+                }
+                // The namespace escaped static tracking (`ns[key]`, ns passed
+                // along) — every symbol in the target is plausibly used
+                // (RFC 0005 §1: "wildcard over that namespace's exports").
+                if imp.opaque_namespace_use {
+                    out.edges.push(Edge {
+                        owner: file_id,
+                        kind: EdgeKind::Wildcard { from: to },
+                        confidence: Confidence::Possible,
+                        source: provenance(),
+                        span: Some(imp.span),
+                    });
+                }
+            }
+        }
+        if let Some((name, confidence)) = dep_target {
+            out.dep_imports
+                .push((name, confidence, imp.span, file_id, provenance()));
+        }
+    }
+
+    // Edge attribution (RFC 0012 §4): a reference carrying `within` is attributed to the
+    // enclosing symbol it executes inside — resolved against this file's own declarations
+    // (bare names, then the qualified member table, same convention as member root
+    // targets). **Any miss falls back to file attribution — today's over-approximation,
+    // the safe direction** (regression-tested; this fallback is the design's load-bearing
+    // safety property). With symbol attribution, a dead function's calls no longer keep
+    // its callees alive: RFC 0005 §1's execution rule ("a symbol-attributed reference
+    // fires only when its symbol is reached") plus its module-load rule make transitive
+    // death visible. `within: None` — module-level code, and every adapter that doesn't
+    // emit the field — keeps file attribution: load-time references fire when the file
+    // loads, exactly as before.
+    //
+    // Resolution order for the *target*: bound (imported) names first, then same-file
+    // declarations, then same-unit siblings (`FileFacts::unit` — Go's package-scoped
+    // visibility, absent for file-scoped languages) — real JS/TS can't have both of the
+    // first two share a name at module scope, so that ordering is never actually contested
+    // by valid code, just a defensive default; the unit fallback is the one genuinely load-
+    // bearing case (a sibling file in the same Go package, no import involved at all).
+    // No lookup models block/parameter shadowing: a same-named local could (incorrectly,
+    // but safely — see module docs) resolve to an unrelated declaration.
+    for reference in &facts.references {
+        let from = reference
+            .within
+            .as_ref()
+            .and_then(|within| {
+                symbol_by_name_per_file[i]
+                    .get(within)
+                    .or_else(|| symbol_by_qualified_per_file[i].get(within.as_str()))
+            })
+            .map(|&s| NodeRef::Symbol(s))
+            .unwrap_or(NodeRef::File(file_id));
+
+        // Qualified references (RFC 0012 §9): `q.name` where `q` matches an import
+        // qualifier resolves `name` inside that target (its own declarations, then its
+        // unit siblings — a Go import names a package, and the symbol may live in any of
+        // the package's files) at Certain. Hit or miss, a matched qualifier *settles*
+        // resolution — the name lives in that target or nowhere; this file's own tables
+        // are never candidates. A qualifier matching no import is a receiver expression
+        // (`t.helper()`): the name is a member access by construction, so it skips the
+        // free-name tables and goes straight to the duck-typed member fallback below —
+        // where before §9 a same-file free function sharing the member's name would have
+        // (incorrectly, if safely) captured the reference.
+        let mut is_receiver_access = false;
+        if let Some(q) = &reference.scope_context {
+            match qualifier_targets.get(q) {
+                Some(&target_file) => {
+                    let t = target_file.0 as usize;
+                    let sym = symbol_by_name_per_file[t]
+                        .get(&reference.name)
+                        .or_else(|| {
+                            file_unit[t].as_ref().and_then(|unit| {
+                                symbol_by_name_per_unit
+                                    .get(unit)
+                                    .and_then(|tab| tab.get(&reference.name))
+                            })
+                        })
+                        .copied();
+                    if let Some(to) = sym {
+                        out.edges.push(Edge {
+                            owner: file_id,
+                            kind: EdgeKind::References {
+                                from,
+                                to,
+                                kind: reference.kind,
+                            },
+                            confidence: Confidence::Certain,
+                            source: provenance(),
+                            span: Some(reference.span),
+                        });
+                    }
+                    continue;
+                }
+                None => is_receiver_access = true,
+            }
+        }
+
+        let target = if is_receiver_access {
+            None
+        } else {
+            bound_symbols
+                .get(&reference.name)
+                .or_else(|| symbol_by_name_per_file[i].get(&reference.name))
+                .or_else(|| {
+                    file_unit[i].as_ref().and_then(|unit| {
+                        symbol_by_name_per_unit
+                            .get(unit)
+                            .and_then(|t| t.get(&reference.name))
+                    })
+                })
+                .copied()
+        };
+        if let Some(to) = target {
+            out.edges.push(Edge {
+                owner: file_id,
+                kind: EdgeKind::References {
+                    from,
+                    to,
+                    kind: reference.kind,
+                },
+                confidence: Confidence::Certain,
+                source: provenance(),
+                span: Some(reference.span),
+            });
+            continue;
+        }
+
+        // Duck-typed member fallback (RFC 0012 §3, implementing RFC 0002 §5's ladder rule
+        // "duck-typed method with one candidate → probable"): an unresolved name that
+        // matches member declarations plausibly targets any of them — extraction has no
+        // receiver types, so honesty lives in the confidence, not in a guess. The
+        // plausible set is scoped by each candidate's own declared visibility (RFC 0012
+        // §6): a member is a candidate iff its visibility scope *contains this reference
+        // site* — an unexported Go method (scope Unit) only for sites in its own unit, a
+        // public member (scope Public) project-wide. A rung the ladder doesn't cover
+        // (index out of range, no ladder declared) counts as Public — the conservative
+        // wider mapping: over-approximating who may see a member only adds keep-alive
+        // edges. Cross-language candidates are excluded (a bare-name site never plausibly
+        // calls another language's member — same reasoning as §5's ladder-index guard).
+        // One candidate ⇒ Probable, several ⇒ Possible each — all get edges (conservative
+        // keep-alive; dead-is-certain is untouched, since a member no call-site anywhere
+        // matches still has zero edges).
+        let candidates: Vec<SymbolId> = member_by_name
+            .get(&reference.name)
+            .map(|all| {
+                all.iter()
+                    .copied()
+                    .filter(|&m| {
+                        let sym = &symbols[m.0 as usize];
+                        let j = sym.file.0 as usize;
+                        if files[j].language != files[i].language {
+                            return false;
+                        }
+                        let scope = files[j]
+                            .language
+                            .as_ref()
+                            .and_then(|lang| ladders.get(lang))
+                            .and_then(|ladder| ladder.get(sym.visibility.0 as usize))
+                            .map(|rung| rung.scope)
+                            .unwrap_or(crate::adapter::VisibilityScope::Public);
+                        scope_contains_site(scope, j, i, file_unit, files)
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        if !candidates.is_empty() {
+            let confidence = if candidates.len() == 1 {
+                Confidence::Probable
+            } else {
+                Confidence::Possible
+            };
+            for to in candidates {
+                out.edges.push(Edge {
+                    owner: file_id,
+                    kind: EdgeKind::References {
+                        from, // same within-or-file attribution as the exact-match path
+                        to,
+                        kind: reference.kind,
+                    },
+                    confidence,
+                    source: provenance(),
+                    span: Some(reference.span),
+                });
+            }
+        }
+    }
+
+    // Dynamic constructs → wildcard edges (RFC 0005 §1: "one mechanism, not two").
+    // Un-narrowed (`eval`, `require(expr)` with no static prefix): a `Wildcard` edge from
+    // this file — reachability expands it over the file's own symbols at `possible`.
+    // Narrowed (`import(`./locales/${x}`)` → that directory): the plausible target set is
+    // the directory's files instead, expressed with existing edge kinds — a `possible`
+    // ImportsFile edge to every discovered file under the directory (unclaimed ones
+    // included: a dynamically-loaded .json is a real target), plus a `Wildcard` edge
+    // *from each target*, because a dynamically-imported module is consumed opaquely —
+    // no binding names exist, so every symbol in it is plausibly used. Without that
+    // second edge the target files would be alive but their exported symbols still
+    // certain-dead: exactly the false positive the narrowing exists to prevent.
+    for dynamic in &facts.dynamics {
+        match dynamic.narrowed_to.as_deref().filter(|d| !d.is_empty()) {
+            Some(dir) => {
+                for (j, file) in files.iter().enumerate() {
+                    if j == i || !package_owns(dir, core_dirname(file.path.0.as_str())) {
+                        continue;
+                    }
+                    let target = FileId(j as u32);
+                    out.edges.push(Edge {
+                        owner: file_id,
+                        kind: EdgeKind::ImportsFile {
+                            from: file_id,
+                            to: target,
+                        },
+                        confidence: Confidence::Possible,
+                        source: provenance(),
+                        span: Some(dynamic.span),
+                    });
+                    out.edges.push(Edge {
+                        owner: file_id,
+                        kind: EdgeKind::Wildcard { from: target },
+                        confidence: Confidence::Possible,
+                        source: provenance(),
+                        span: Some(dynamic.span),
+                    });
+                }
+            }
+            // Empty-string narrowing would prefix-match the whole project — treat it as
+            // the adapter meaning "no narrowing" rather than "everything".
+            None => out.edges.push(Edge {
+                owner: file_id,
+                kind: EdgeKind::Wildcard { from: file_id },
+                confidence: Confidence::Possible,
+                source: provenance(),
+                span: Some(dynamic.span),
+            }),
+        }
+    }
+
+    for d in &facts.diagnostics {
+        out.diagnostics.push(Diagnostic {
+            level: d.level,
+            path: Some(files[i].path.clone()),
+            message: d.message.clone(),
+            span: d.span,
+        });
+    }
+
+    for s in &facts.suppressions {
+        out.suppressions.push((file_id, s.clone()));
+    }
+
+    out
+}
+
+/// One file's declaration-derived emissions — Declares edges, library/role export promotions
+/// (RFC 0011 §5), in-source roots, and function metrics — given the file's facts and its
+/// already-assigned contiguous symbol run starting at `first_symbol`. THE single emitter for
+/// this logic: the full build's pass B and the incremental patch (RFC 0013 §5) both call it,
+/// so the two paths cannot drift.
+struct DeclarationEmissions {
+    edges: Vec<Edge>,
+    metrics: Vec<(SymbolId, SymbolMetrics)>,
+}
+
+#[allow(clippy::too_many_arguments)]
+fn emit_file_declarations(
+    i: usize,
+    facts: &crate::adapter::FileFacts,
+    adapter_id: &str,
+    first_symbol: u32,
+    symbols: &[SymbolNode],
+    bare_table: &HashMap<SmolStr, SymbolId>,
+    qualified_table: &HashMap<String, SymbolId>,
+    library_root_files: &HashMap<FileId, Confidence>,
+    role_root_files: &HashMap<FileId, crate::vocab::RootKind>,
+) -> DeclarationEmissions {
+    let file_id = FileId(i as u32);
+    let provenance = || Provenance::Adapter(SmolStr::new(adapter_id));
+    let mut edges = Vec::new();
+    let mut metrics = Vec::new();
+
+    for (d, decl) in facts.declarations.iter().enumerate() {
+        let symbol_id = SymbolId(first_symbol + d as u32);
+        edges.push(Edge {
+            kind: EdgeKind::Declares {
+                file: file_id,
+                symbol: symbol_id,
+            },
+            confidence: Confidence::Certain,
+            source: provenance(),
+            span: Some(decl.span),
+            owner: file_id,
+        });
+
+        // Library-mode promotion (RFC 0011 §5): this file is a manifest-declared production
+        // root and this symbol is exported from it, so it's part of the package's public
+        // API — a production root in its own right, not just "alive because the file is."
+        if decl.exported {
+            if let Some(&confidence) = library_root_files.get(&file_id) {
+                edges.push(Edge {
+                    kind: EdgeKind::Root {
+                        kind: crate::vocab::RootKind::Production,
+                        target: NodeRef::Symbol(symbol_id),
+                    },
+                    confidence,
+                    source: provenance(),
+                    span: Some(decl.span),
+                    owner: file_id,
+                });
+            }
+            // Same promotion for role-derived roots: a config file's exports ARE its
+            // interface to the tool that loads it, and a test file's exports may be shared
+            // fixtures — the consumer is outside the graph either way.
+            if let Some(&kind) = role_root_files.get(&file_id) {
+                edges.push(Edge {
+                    kind: EdgeKind::Root {
+                        kind,
+                        target: NodeRef::Symbol(symbol_id),
+                    },
+                    confidence: Confidence::Probable,
+                    source: provenance(),
+                    span: Some(decl.span),
+                    owner: file_id,
+                });
+            }
+        }
+    }
+
+    // Callable shapes (RFC 0005 §6): adapter names resolve exactly like root targets — bare
+    // table first, then the qualified member table; a no-match is dropped silently.
+    for fm in &facts.functions {
+        let resolved = bare_table
+            .get(fm.symbol.as_str())
+            .or_else(|| qualified_table.get(fm.symbol.as_str()));
+        if let Some(&symbol_id) = resolved {
+            metrics.push((
+                symbol_id,
+                SymbolMetrics {
+                    cyclomatic: fm.cyclomatic,
+                    loc: fm.loc,
+                    token_count: fm.token_count,
+                    fingerprints: fm.fingerprints.clone(),
+                },
+            ));
+        }
+    }
+
+    // In-source roots (RawRoot), as distinct from manifest-declared ones: they target
+    // something *within* the file being extracted, never a different file.
+    for root in &facts.roots {
+        let target = match &root.target {
+            RawRootTarget::WholeFile => Some(NodeRef::File(file_id)),
+            RawRootTarget::Declaration(name) => bare_table
+                .get(name)
+                .or_else(|| qualified_table.get(name.as_str()))
+                .map(|&s| NodeRef::Symbol(s)),
+        };
+        if let Some(target) = target {
+            let span = match target {
+                NodeRef::Symbol(s) => Some(symbols[s.0 as usize].span),
+                NodeRef::File(_) => None,
+            };
+            edges.push(Edge {
+                kind: EdgeKind::Root {
+                    kind: root.kind,
+                    target,
+                },
+                confidence: root.confidence,
+                source: provenance(),
+                span,
+                owner: file_id,
+            });
+        }
+    }
+
+    DeclarationEmissions { edges, metrics }
 }
 
 /// The span-normalized surface signature (RFC 0013 §4): everything about a file that OTHER
@@ -545,7 +1549,7 @@ pub(crate) fn package_owns(manifest_dir: &str, file_dir: &str) -> bool {
 /// an assembly-algorithm change that could produce a different graph from the same facts. Feeds
 /// [`compute_graph_key`] (RFC 0004 §3's "core graph-schema version"); a bump here invalidates
 /// every project's cached `graph.bin` on the next run, same as any other key-input change.
-pub const GRAPH_SCHEMA_VERSION: u32 = 10; // 10: patch layer (RFC 0013 §4 — Edge.owner, FilePatchMeta, extraction-only stored diagnostics); 9: SymbolMetrics.token_count (RFC 0005 §11); 8: function_metrics (RFC 0005 §6); 7: cycle policies (§8); 6: PackageNode surface (RFC 0011 §4); 5: ladders + FileNode.unit (RFC 0012 §6); 4: RefKind + signature_span (§5); 3: within (§4)
+pub const GRAPH_SCHEMA_VERSION: u32 = 11; // 11: PackageNode.workspace_entry (RFC 0013 §4); 10: patch layer (RFC 0013 §4 — Edge.owner, FilePatchMeta, extraction-only stored diagnostics); 9: SymbolMetrics.token_count (RFC 0005 §11); 8: function_metrics (RFC 0005 §6); 7: cycle policies (§8); 6: PackageNode surface (RFC 0011 §4); 5: ladders + FileNode.unit (RFC 0012 §6); 4: RefKind + signature_span (§5); 3: within (§4)
 
 /// The graph snapshot's cache key (RFC 0004 §3, `cache.rs`'s `graph.bin`): a single digest
 /// folding in the *whole* discovered file set (every path + content hash — this already
@@ -684,6 +1688,20 @@ pub fn assemble_from_source(
             });
         }
         tick("snapshot-probe", &mut phase_start);
+        // RFC 0013 §5: on a key miss, try the incremental patch off the previous snapshot —
+        // any guard failure falls through to the full rebuild below, the one fallback.
+        if let Some((graph, extraction_diagnostics)) = try_patch(&discovered, adapters, cache) {
+            tick("patch", &mut phase_start);
+            let pending_snapshot = cache.graph_writer(graph_key);
+            return Ok(AssembledGraph {
+                graph,
+                discovery_diagnostics,
+                extraction_diagnostics,
+                pending_snapshot,
+                timings,
+            });
+        }
+        tick("patch-probe", &mut phase_start);
     }
 
     let known_files: HashSet<ProjectPath> =
@@ -698,70 +1716,7 @@ pub fn assemble_from_source(
     let outcomes: Vec<Result<Option<Claimed>, Diagnostic>> = discovered
         .files
         .par_iter()
-        .map(|df| {
-            let Some((adapter_index, claim)) = adapters
-                .iter()
-                .enumerate()
-                .find_map(|(i, a)| a.claim(&df.path).map(|c| (i, c)))
-            else {
-                return Ok(None); // no adapter claims it — still a valid, factless File node
-            };
-            let descriptor = adapters[adapter_index].descriptor();
-            if let Some(facts) = cache.and_then(|c| {
-                c.get(
-                    descriptor.id.as_str(),
-                    descriptor.facts_schema_version,
-                    &df.content_hash,
-                )
-            }) {
-                let surface_sig = surface_signature(
-                    descriptor.id.as_str(),
-                    descriptor.facts_schema_version,
-                    &claim,
-                    &facts,
-                );
-                return Ok(Some(Claimed {
-                    claim,
-                    facts,
-                    adapter_index,
-                    surface_sig,
-                }));
-            }
-            let content = discovered.read(&df.path).map_err(|e| Diagnostic {
-                level: DiagnosticLevel::Warn,
-                path: Some(df.path.clone()),
-                message: format!(
-                    "claimed by {} but unreadable at extraction time ({e})",
-                    claim.language
-                ),
-                span: None,
-            })?;
-            let source = SourceFile {
-                path: &df.path,
-                content: &content,
-            };
-            let facts = adapters[adapter_index].extract(&source);
-            if let Some(c) = cache {
-                c.put(
-                    descriptor.id.as_str(),
-                    descriptor.facts_schema_version,
-                    &df.content_hash,
-                    &facts,
-                );
-            }
-            let surface_sig = surface_signature(
-                descriptor.id.as_str(),
-                descriptor.facts_schema_version,
-                &claim,
-                &facts,
-            );
-            Ok(Some(Claimed {
-                claim,
-                facts,
-                adapter_index,
-                surface_sig,
-            }))
-        })
+        .map(|df| claim_and_extract(df, adapters, cache, &discovered))
         .collect();
 
     let mut claimed_per_file: Vec<Option<Claimed>> = Vec::with_capacity(outcomes.len());
@@ -865,6 +1820,7 @@ pub fn assemble_from_source(
         private: false,
         declares_surface: false,
         surface: Vec::new(),
+        workspace_entry: None,
     }];
     let mut manifest_package: Vec<Option<PackageId>> = vec![None; manifests_per_file.len()];
     for (i, slot) in manifests_per_file.iter().enumerate() {
@@ -884,6 +1840,7 @@ pub fn assemble_from_source(
                 private: facts.private,
                 declares_surface: facts.declares_surface,
                 surface,
+                workspace_entry: facts.resolved_entries.first().cloned(),
             });
             manifest_package[i] = Some(package_id);
         }
@@ -1018,32 +1975,6 @@ pub fn assemble_from_source(
             .or_insert(descriptor.cycle_policy);
     }
 
-    // Whether a declaration in `decl_file` at `scope` is visible to a reference site in
-    // `site_file` (RFC 0012 §6). Scopes nest (File ⊂ Unit ⊂ Package ⊂ Public), so each arm
-    // accepts everything the narrower one would: a Unit-scoped Go method is visible to its own
-    // file whether or not the adapter set a unit key.
-    fn scope_contains_site(
-        scope: crate::adapter::VisibilityScope,
-        decl_file: usize,
-        site_file: usize,
-        file_unit: &[Option<SmolStr>],
-        files: &[FileNode],
-    ) -> bool {
-        use crate::adapter::VisibilityScope::*;
-        match scope {
-            File => decl_file == site_file,
-            Unit => {
-                decl_file == site_file
-                    || matches!(
-                        (&file_unit[decl_file], &file_unit[site_file]),
-                        (Some(a), Some(b)) if a == b
-                    )
-            }
-            Package => files[decl_file].package == files[site_file].package,
-            Public => true,
-        }
-    }
-
     // Phase 3a — symbols (Declares edges) and in-source roots, sequentially in FileId order.
     // Split from imports/references (phase 3b) because resolving a reference or an import
     // binding to *another* file's symbol needs that file's symbol table already built —
@@ -1072,12 +2003,15 @@ pub fn assemble_from_source(
     let mut member_by_name: HashMap<SmolStr, Vec<SymbolId>> = HashMap::default();
     let mut symbol_by_qualified_per_file: Vec<HashMap<String, SymbolId>> =
         vec![HashMap::default(); claimed_per_file.len()];
+    // Pass A — tables + symbol nodes, sequentially in FileId order (SymbolId assignment is
+    // order itself). Emissions (Declares edges, promotions, in-source roots, metrics) moved
+    // to pass B below so the *same* emitter serves the full build and the incremental patch
+    // (RFC 0013 §5 — one source of truth, no drift between paths).
+    let mut symbol_range_per_file: Vec<(u32, u32)> = vec![(0, 0); claimed_per_file.len()];
     for (i, slot) in claimed_per_file.iter().enumerate() {
         let Some(claimed) = slot else { continue };
-        let file_id = FileId(i as u32);
-        let adapter = &adapters[claimed.adapter_index];
-        let provenance = || Provenance::Adapter(adapter.descriptor().id.clone());
         file_unit[i] = claimed.facts.unit.clone();
+        let start = symbols.len() as u32;
 
         for decl in &claimed.facts.declarations {
             let symbol_id = SymbolId(symbols.len() as u32);
@@ -1101,7 +2035,7 @@ pub fn assemble_from_source(
                 }
             }
             symbols.push(SymbolNode {
-                file: file_id,
+                file: FileId(i as u32),
                 name: decl.name.clone(),
                 kind: decl.kind.clone(),
                 span: decl.span,
@@ -1110,112 +2044,26 @@ pub fn assemble_from_source(
                 member_of: decl.member_of.clone(),
                 signature_span: decl.signature_span,
             });
-            edges.push(Edge {
-                owner: file_id,
-                kind: EdgeKind::Declares {
-                    file: file_id,
-                    symbol: symbol_id,
-                },
-                confidence: Confidence::Certain,
-                source: provenance(),
-                span: Some(decl.span),
-            });
-
-            // Library-mode promotion (RFC 0011 §5): this file is a manifest-declared production
-            // root and this symbol is exported from it, so it's part of the package's public
-            // API — a production root in its own right, not just "alive because the file is."
-            // Without this, every public export a root file doesn't also call internally reads
-            // as dead code (confirmed against real npm packages during M1 conformance work —
-            // e.g. a library's second named export, never self-invoked, otherwise false-
-            // positives as `unused`).
-            if decl.exported {
-                if let Some(&confidence) = library_root_files.get(&file_id) {
-                    edges.push(Edge {
-                        owner: file_id,
-                        kind: EdgeKind::Root {
-                            kind: crate::vocab::RootKind::Production,
-                            target: NodeRef::Symbol(symbol_id),
-                        },
-                        confidence,
-                        source: provenance(),
-                        span: Some(decl.span),
-                    });
-                }
-                // Same promotion for role-derived roots (phase 2.6): a config file's exports
-                // ARE its interface to the tool that loads it (`export default {…}` in
-                // webpack.config consumed by webpack), and a test file's exports may be
-                // shared fixtures — the consumer is outside the graph either way, so the
-                // export surface is the whole visible contract.
-                if let Some(&kind) = role_root_files.get(&file_id) {
-                    edges.push(Edge {
-                        owner: file_id,
-                        kind: EdgeKind::Root {
-                            kind,
-                            target: NodeRef::Symbol(symbol_id),
-                        },
-                        confidence: Confidence::Probable,
-                        source: provenance(),
-                        span: Some(decl.span),
-                    });
-                }
-            }
         }
+        symbol_range_per_file[i] = (start, symbols.len() as u32);
+    }
 
-        // In-source roots (RawRoot — e.g. a language-level `export =`/`pub` API marker), as
-        // distinct from the manifest-declared roots phase 2.5 already linked: this targets
-        // something *within* the file being extracted, never a different file.
-        // Callable shapes (RFC 0005 §6): adapter names resolve exactly like root targets —
-        // bare table first, then the qualified member table; a name that matches nothing is
-        // dropped silently (defensive, same stance as unresolvable root targets).
-        for fm in &claimed.facts.functions {
-            let resolved = symbol_by_name_per_file[i]
-                .get(fm.symbol.as_str())
-                .or_else(|| symbol_by_qualified_per_file[i].get(fm.symbol.as_str()));
-            if let Some(&symbol_id) = resolved {
-                function_metrics.push((
-                    symbol_id,
-                    SymbolMetrics {
-                        cyclomatic: fm.cyclomatic,
-                        loc: fm.loc,
-                        token_count: fm.token_count,
-                        fingerprints: fm.fingerprints.clone(),
-                    },
-                ));
-            }
-        }
-
-        for root in &claimed.facts.roots {
-            let target = match &root.target {
-                RawRootTarget::WholeFile => Some(NodeRef::File(file_id)),
-                // A root naming a declaration this extraction didn't actually produce is an
-                // adapter contract violation — defensive skip, not a silent crash. Member
-                // targets use the qualified `Owner.name` form (RFC 0012 §3), looked up in the
-                // qualified table since members never enter the bare-name one.
-                RawRootTarget::Declaration(name) => symbol_by_name_per_file[i]
-                    .get(name)
-                    .or_else(|| symbol_by_qualified_per_file[i].get(name.as_str()))
-                    .map(|&s| NodeRef::Symbol(s)),
-            };
-            if let Some(target) = target {
-                // The declaration's own span is real evidence for a `Declaration`-target root
-                // (why this symbol counts as the language-level API marker); `WholeFile` has
-                // nothing narrower to point at than the file itself.
-                let span = match target {
-                    NodeRef::Symbol(s) => Some(symbols[s.0 as usize].span),
-                    NodeRef::File(_) => None,
-                };
-                edges.push(Edge {
-                    owner: file_id,
-                    kind: EdgeKind::Root {
-                        kind: root.kind,
-                        target,
-                    },
-                    confidence: root.confidence,
-                    source: provenance(),
-                    span,
-                });
-            }
-        }
+    // Pass B — per-file declaration emissions, via the shared emitter (also the patch's).
+    for (i, slot) in claimed_per_file.iter().enumerate() {
+        let Some(claimed) = slot else { continue };
+        let out = emit_file_declarations(
+            i,
+            &claimed.facts,
+            adapters[claimed.adapter_index].descriptor().id.as_str(),
+            symbol_range_per_file[i].0,
+            &symbols,
+            &symbol_by_name_per_file[i],
+            &symbol_by_qualified_per_file[i],
+            &library_root_files,
+            &role_root_files,
+        );
+        edges.extend(out.edges);
+        function_metrics.extend(out.metrics);
     }
 
     // Workspace-member index (RFC 0011 §4): every *named* manifest in the graph, keyed by
@@ -1351,6 +2199,14 @@ pub fn assemble_from_source(
         }
     }
 
+    // Every file's declared unit name (RFC 0012 §9 qualifier defaults) as a plain slice —
+    // resolve_file consumes this instead of reaching into other files' facts, which is what
+    // lets the incremental patch feed it from the snapshot (RFC 0013 §4).
+    let unit_name_by_file: Vec<Option<SmolStr>> = claimed_per_file
+        .iter()
+        .map(|s| s.as_ref().and_then(|c| c.facts.unit_name.clone()))
+        .collect();
+
     // Phase 3b — imports, import-bindings, references, and diagnostics. Every file's symbol
     // table is complete now (phase 3a), so cross-file lookups are safe regardless of
     // discovery order — which is also what makes this phase embarrassingly parallel
@@ -1359,367 +2215,34 @@ pub fn assemble_from_source(
     // `ResolvedFile` merged below in FileId order (§4: parallel compute, deterministic
     // reduce). `DependencyId` assignment stays in the sequential merge — ids are
     // first-appearance-in-file-order, exactly as the sequential loop assigned them.
-    struct ResolvedFile {
-        edges: Vec<Edge>,
-        /// `(name, confidence, span, from, provenance)` — becomes `ImportsDependency` in the
-        /// merge once the name has a deterministic id.
-        dep_imports: Vec<(
-            SmolStr,
-            Confidence,
-            crate::adapter::Span,
-            FileId,
-            Provenance,
-        )>,
-        diagnostics: Vec<Diagnostic>,
-        suppressions: Vec<(FileId, crate::adapter::RawSuppression)>,
-    }
     let mut dependencies = Vec::new();
     let mut dep_index: HashMap<SmolStr, DependencyId> = HashMap::default();
     let mut suppressions: Vec<(FileId, crate::adapter::RawSuppression)> = Vec::new();
 
+    let tables = ResolveTables {
+        files: &files,
+        file_index: &file_index,
+        symbols: &symbols,
+        symbol_by_name_per_file: &symbol_by_name_per_file,
+        symbol_by_qualified_per_file: &symbol_by_qualified_per_file,
+        symbol_by_name_per_unit: &symbol_by_name_per_unit,
+        member_by_name: &member_by_name,
+        file_unit: &file_unit,
+        unit_name_by_file: &unit_name_by_file,
+        ladders: &ladders,
+        ctx: &ctx,
+    };
     let resolved_files: Vec<Option<ResolvedFile>> = claimed_per_file
         .par_iter()
         .enumerate()
         .map(|(i, slot)| {
             let claimed = slot.as_ref()?;
-            let file_id = FileId(i as u32);
-            let adapter = &adapters[claimed.adapter_index];
-            let provenance = || Provenance::Adapter(adapter.descriptor().id.clone());
-            let mut out = ResolvedFile {
-                edges: Vec::new(),
-                dep_imports: Vec::new(),
-                diagnostics: Vec::new(),
-                suppressions: Vec::new(),
-            };
-
-            // Local name -> target symbol, from this file's import bindings — the fact that lets a
-            // `RawReference` to an *imported* name resolve cross-file instead of only same-file.
-            let mut bound_symbols: HashMap<SmolStr, SymbolId> = HashMap::default();
-            // Qualifier -> resolved in-repo target file (RFC 0012 §9): the import's explicit
-            // `local_alias`, or — unaliased — the *target's own* declared `unit_name`. This is
-            // where the dir≠package problem dissolves: only assembly holds both sides, so the
-            // qualifier for `gopkg.in/yaml.v3`-style imports comes from the target's `package`
-            // clause, never from a guess about the specifier. First import wins on a duplicate
-            // qualifier (Go rejects that program anyway — deterministic either way).
-            let mut qualifier_targets: HashMap<SmolStr, FileId> = HashMap::default();
-
-            for imp in &claimed.facts.imports {
-                let spec = ImportSpec {
-                    specifier: imp.specifier.clone(),
-                    from: files[i].path.clone(),
-                };
-                // A workspace-member resolution is BOTH targets at once (RFC 0011 §4): the
-                // concrete internal file (reachability is real, cross-package) and the named
-                // dependency (the declaration contract is real too — undeclared siblings are
-                // phantom internal dependencies, declared-but-unimported ones are unused).
-                // Stdlib: not a graph node — there is nothing to point an edge at. Unresolved:
-                // resolution is intentionally incomplete right now (self-reference imports,
-                // exports maps — spec §3); turning it into a finding is the future `unresolved`
-                // analysis's job, not assembly's (RFC 0005 §5).
-                let (file_target, dep_target) = match adapter.resolve(&spec, &ctx) {
-                    Resolution::File(path, confidence) => (Some((path, confidence)), None),
-                    Resolution::Dependency(name, confidence) => (None, Some((name, confidence))),
-                    Resolution::WorkspaceMember {
-                        name,
-                        target,
-                        confidence,
-                    } => (Some((target, confidence)), Some((name, confidence))),
-                    Resolution::Stdlib | Resolution::Unresolved => (None, None),
-                };
-
-                if let Some((path, confidence)) = file_target {
-                    // Resolvers only ever match against `ctx`'s known-files set, so this
-                    // must be Some — defensive skip, not a silent contract violation, if not.
-                    if let Some(&to) = file_index.get(&path) {
-                        out.edges.push(Edge {
-                            owner: file_id,
-                            kind: EdgeKind::ImportsFile { from: file_id, to },
-                            confidence,
-                            source: provenance(),
-                            span: Some(imp.span),
-                        });
-                        for binding in &imp.bindings {
-                            let exported_name = binding
-                                .imported
-                                .clone()
-                                .unwrap_or_else(|| SmolStr::new("default"));
-                            // Same-file first; then the target file's own unit (package-scoped
-                            // languages, RFC 0002 §2 `FileFacts::unit`) — a Go import names a
-                            // *package* (a directory of files), and `Resolution::File`'s target is
-                            // necessarily just one representative file in it (contracts §2 has no
-                            // multi-file resolution target), so the symbol a qualified access binds
-                            // to may live in any of that directory's other files.
-                            let symbol_id = symbol_by_name_per_file[to.0 as usize]
-                                .get(&exported_name)
-                                .or_else(|| {
-                                    file_unit[to.0 as usize].as_ref().and_then(|unit| {
-                                        symbol_by_name_per_unit
-                                            .get(unit)
-                                            .and_then(|t| t.get(&exported_name))
-                                    })
-                                })
-                                .copied();
-                            if let Some(symbol_id) = symbol_id {
-                                bound_symbols.insert(binding.local.clone(), symbol_id);
-                            }
-                        }
-                        let qualifier = imp.local_alias.clone().or_else(|| {
-                            claimed_per_file[to.0 as usize]
-                                .as_ref()
-                                .and_then(|c| c.facts.unit_name.clone())
-                        });
-                        if let Some(q) = qualifier {
-                            qualifier_targets.entry(q).or_insert(to);
-                        }
-                        // The namespace escaped static tracking (`ns[key]`, ns passed
-                        // along) — every symbol in the target is plausibly used
-                        // (RFC 0005 §1: "wildcard over that namespace's exports").
-                        if imp.opaque_namespace_use {
-                            out.edges.push(Edge {
-                                owner: file_id,
-                                kind: EdgeKind::Wildcard { from: to },
-                                confidence: Confidence::Possible,
-                                source: provenance(),
-                                span: Some(imp.span),
-                            });
-                        }
-                    }
-                }
-                if let Some((name, confidence)) = dep_target {
-                    out.dep_imports
-                        .push((name, confidence, imp.span, file_id, provenance()));
-                }
-            }
-
-            // Edge attribution (RFC 0012 §4): a reference carrying `within` is attributed to the
-            // enclosing symbol it executes inside — resolved against this file's own declarations
-            // (bare names, then the qualified member table, same convention as member root
-            // targets). **Any miss falls back to file attribution — today's over-approximation,
-            // the safe direction** (regression-tested; this fallback is the design's load-bearing
-            // safety property). With symbol attribution, a dead function's calls no longer keep
-            // its callees alive: RFC 0005 §1's execution rule ("a symbol-attributed reference
-            // fires only when its symbol is reached") plus its module-load rule make transitive
-            // death visible. `within: None` — module-level code, and every adapter that doesn't
-            // emit the field — keeps file attribution: load-time references fire when the file
-            // loads, exactly as before.
-            //
-            // Resolution order for the *target*: bound (imported) names first, then same-file
-            // declarations, then same-unit siblings (`FileFacts::unit` — Go's package-scoped
-            // visibility, absent for file-scoped languages) — real JS/TS can't have both of the
-            // first two share a name at module scope, so that ordering is never actually contested
-            // by valid code, just a defensive default; the unit fallback is the one genuinely load-
-            // bearing case (a sibling file in the same Go package, no import involved at all).
-            // No lookup models block/parameter shadowing: a same-named local could (incorrectly,
-            // but safely — see module docs) resolve to an unrelated declaration.
-            for reference in &claimed.facts.references {
-                let from = reference
-                    .within
-                    .as_ref()
-                    .and_then(|within| {
-                        symbol_by_name_per_file[i]
-                            .get(within)
-                            .or_else(|| symbol_by_qualified_per_file[i].get(within.as_str()))
-                    })
-                    .map(|&s| NodeRef::Symbol(s))
-                    .unwrap_or(NodeRef::File(file_id));
-
-                // Qualified references (RFC 0012 §9): `q.name` where `q` matches an import
-                // qualifier resolves `name` inside that target (its own declarations, then its
-                // unit siblings — a Go import names a package, and the symbol may live in any of
-                // the package's files) at Certain. Hit or miss, a matched qualifier *settles*
-                // resolution — the name lives in that target or nowhere; this file's own tables
-                // are never candidates. A qualifier matching no import is a receiver expression
-                // (`t.helper()`): the name is a member access by construction, so it skips the
-                // free-name tables and goes straight to the duck-typed member fallback below —
-                // where before §9 a same-file free function sharing the member's name would have
-                // (incorrectly, if safely) captured the reference.
-                let mut is_receiver_access = false;
-                if let Some(q) = &reference.scope_context {
-                    match qualifier_targets.get(q) {
-                        Some(&target_file) => {
-                            let t = target_file.0 as usize;
-                            let sym = symbol_by_name_per_file[t]
-                                .get(&reference.name)
-                                .or_else(|| {
-                                    file_unit[t].as_ref().and_then(|unit| {
-                                        symbol_by_name_per_unit
-                                            .get(unit)
-                                            .and_then(|tab| tab.get(&reference.name))
-                                    })
-                                })
-                                .copied();
-                            if let Some(to) = sym {
-                                out.edges.push(Edge {
-                                    owner: file_id,
-                                    kind: EdgeKind::References {
-                                        from,
-                                        to,
-                                        kind: reference.kind,
-                                    },
-                                    confidence: Confidence::Certain,
-                                    source: provenance(),
-                                    span: Some(reference.span),
-                                });
-                            }
-                            continue;
-                        }
-                        None => is_receiver_access = true,
-                    }
-                }
-
-                let target = if is_receiver_access {
-                    None
-                } else {
-                    bound_symbols
-                        .get(&reference.name)
-                        .or_else(|| symbol_by_name_per_file[i].get(&reference.name))
-                        .or_else(|| {
-                            file_unit[i].as_ref().and_then(|unit| {
-                                symbol_by_name_per_unit
-                                    .get(unit)
-                                    .and_then(|t| t.get(&reference.name))
-                            })
-                        })
-                        .copied()
-                };
-                if let Some(to) = target {
-                    out.edges.push(Edge {
-                        owner: file_id,
-                        kind: EdgeKind::References {
-                            from,
-                            to,
-                            kind: reference.kind,
-                        },
-                        confidence: Confidence::Certain,
-                        source: provenance(),
-                        span: Some(reference.span),
-                    });
-                    continue;
-                }
-
-                // Duck-typed member fallback (RFC 0012 §3, implementing RFC 0002 §5's ladder rule
-                // "duck-typed method with one candidate → probable"): an unresolved name that
-                // matches member declarations plausibly targets any of them — extraction has no
-                // receiver types, so honesty lives in the confidence, not in a guess. The
-                // plausible set is scoped by each candidate's own declared visibility (RFC 0012
-                // §6): a member is a candidate iff its visibility scope *contains this reference
-                // site* — an unexported Go method (scope Unit) only for sites in its own unit, a
-                // public member (scope Public) project-wide. A rung the ladder doesn't cover
-                // (index out of range, no ladder declared) counts as Public — the conservative
-                // wider mapping: over-approximating who may see a member only adds keep-alive
-                // edges. Cross-language candidates are excluded (a bare-name site never plausibly
-                // calls another language's member — same reasoning as §5's ladder-index guard).
-                // One candidate ⇒ Probable, several ⇒ Possible each — all get edges (conservative
-                // keep-alive; dead-is-certain is untouched, since a member no call-site anywhere
-                // matches still has zero edges).
-                let candidates: Vec<SymbolId> = member_by_name
-                    .get(&reference.name)
-                    .map(|all| {
-                        all.iter()
-                            .copied()
-                            .filter(|&m| {
-                                let sym = &symbols[m.0 as usize];
-                                let j = sym.file.0 as usize;
-                                if files[j].language != files[i].language {
-                                    return false;
-                                }
-                                let scope = files[j]
-                                    .language
-                                    .as_ref()
-                                    .and_then(|lang| ladders.get(lang))
-                                    .and_then(|ladder| ladder.get(sym.visibility.0 as usize))
-                                    .map(|rung| rung.scope)
-                                    .unwrap_or(crate::adapter::VisibilityScope::Public);
-                                scope_contains_site(scope, j, i, &file_unit, &files)
-                            })
-                            .collect()
-                    })
-                    .unwrap_or_default();
-                if !candidates.is_empty() {
-                    let confidence = if candidates.len() == 1 {
-                        Confidence::Probable
-                    } else {
-                        Confidence::Possible
-                    };
-                    for to in candidates {
-                        out.edges.push(Edge {
-                            owner: file_id,
-                            kind: EdgeKind::References {
-                                from, // same within-or-file attribution as the exact-match path
-                                to,
-                                kind: reference.kind,
-                            },
-                            confidence,
-                            source: provenance(),
-                            span: Some(reference.span),
-                        });
-                    }
-                }
-            }
-
-            // Dynamic constructs → wildcard edges (RFC 0005 §1: "one mechanism, not two").
-            // Un-narrowed (`eval`, `require(expr)` with no static prefix): a `Wildcard` edge from
-            // this file — reachability expands it over the file's own symbols at `possible`.
-            // Narrowed (`import(`./locales/${x}`)` → that directory): the plausible target set is
-            // the directory's files instead, expressed with existing edge kinds — a `possible`
-            // ImportsFile edge to every discovered file under the directory (unclaimed ones
-            // included: a dynamically-loaded .json is a real target), plus a `Wildcard` edge
-            // *from each target*, because a dynamically-imported module is consumed opaquely —
-            // no binding names exist, so every symbol in it is plausibly used. Without that
-            // second edge the target files would be alive but their exported symbols still
-            // certain-dead: exactly the false positive the narrowing exists to prevent.
-            for dynamic in &claimed.facts.dynamics {
-                match dynamic.narrowed_to.as_deref().filter(|d| !d.is_empty()) {
-                    Some(dir) => {
-                        for (j, file) in files.iter().enumerate() {
-                            if j == i || !package_owns(dir, core_dirname(file.path.0.as_str())) {
-                                continue;
-                            }
-                            let target = FileId(j as u32);
-                            out.edges.push(Edge {
-                                owner: file_id,
-                                kind: EdgeKind::ImportsFile {
-                                    from: file_id,
-                                    to: target,
-                                },
-                                confidence: Confidence::Possible,
-                                source: provenance(),
-                                span: Some(dynamic.span),
-                            });
-                            out.edges.push(Edge {
-                                owner: file_id,
-                                kind: EdgeKind::Wildcard { from: target },
-                                confidence: Confidence::Possible,
-                                source: provenance(),
-                                span: Some(dynamic.span),
-                            });
-                        }
-                    }
-                    // Empty-string narrowing would prefix-match the whole project — treat it as
-                    // the adapter meaning "no narrowing" rather than "everything".
-                    None => out.edges.push(Edge {
-                        owner: file_id,
-                        kind: EdgeKind::Wildcard { from: file_id },
-                        confidence: Confidence::Possible,
-                        source: provenance(),
-                        span: Some(dynamic.span),
-                    }),
-                }
-            }
-
-            for d in &claimed.facts.diagnostics {
-                out.diagnostics.push(Diagnostic {
-                    level: d.level,
-                    path: Some(files[i].path.clone()),
-                    message: d.message.clone(),
-                    span: d.span,
-                });
-            }
-
-            for s in &claimed.facts.suppressions {
-                out.suppressions.push((file_id, s.clone()));
-            }
-            Some(out)
+            Some(resolve_file(
+                i,
+                &claimed.facts,
+                &*adapters[claimed.adapter_index],
+                &tables,
+            ))
         })
         .collect();
 
@@ -1750,6 +2273,10 @@ pub fn assemble_from_source(
     // parallel schedule produced the graph. One total comparator, derived field order.
     edges.sort_unstable();
     diagnostics.sort_unstable();
+    // Same canonical-order rule for the remaining order-bearing vectors (RFC 0013 §3a):
+    // stable sorts, so same-key entries keep facts order — identical on both build paths.
+    function_metrics.sort_by_key(|(id, _)| *id);
+    suppressions.sort_by_key(|(f, _)| *f);
 
     // RFC 0013 §4: per-file patch metadata — surface signatures and unit names from phase
     // 1's facts; the re-export aliases were recorded by the 3a-bis fixpoint above.
@@ -2909,6 +3436,159 @@ mod tests {
                 to: a_symbol,
                 kind: crate::vocab::RefKind::Read,
             }));
+    }
+
+    /// RFC 0013 §6's equivalence obligation, at the unit level: assemble cold with a cache,
+    /// mutate, assemble again (the patch path), and compare against a scratch full rebuild
+    /// of the same tree — the graphs must be EQUAL, not merely finding-equivalent. The
+    /// project needs ≥ 4 files so one changed file stays under the 30% dirty threshold.
+    fn patch_equivalence_case(
+        name: &str,
+        files: &[(&str, &str)],
+        mutate: (&str, &str),
+        expect_patch: bool,
+    ) {
+        // Pad with filler files so one changed file sits under the measured 5% work
+        // threshold (RFC 0013 §5) — the scenarios stay about the guard logic, not the
+        // threshold arithmetic.
+        let filler: Vec<(String, String)> = (0..20)
+            .map(|i| (format!("filler{i}.mock"), format!("decl filler{i}")))
+            .collect();
+        let mut all: Vec<(&str, &str)> = files.to_vec();
+        all.extend(filler.iter().map(|(n, c)| (n.as_str(), c.as_str())));
+        let dir = project(name, &all);
+        let cache_dir = std::env::temp_dir().join(format!("kndo-graph-test-{name}-cache"));
+        let _ = fs::remove_dir_all(&cache_dir);
+        let cache = crate::cache::ProjectCache::open(&cache_dir);
+        assemble_with_cache(&dir, &mock_adapters(), Some(&cache)).unwrap();
+
+        fs::write(dir.join(mutate.0), mutate.1).unwrap();
+        let (patched, patched_diags) =
+            assemble_with_cache(&dir, &mock_adapters(), Some(&cache)).unwrap();
+        assert_eq!(
+            cache.graph_hits() > 0,
+            expect_patch,
+            "patch application expectation for {name}"
+        );
+
+        let (scratch, scratch_diags) = assemble(&dir, &mock_adapters()).unwrap();
+        assert_eq!(
+            patched, scratch,
+            "patched graph must be identical to the full rebuild ({name})"
+        );
+        assert_eq!(patched_diags, scratch_diags, "diagnostics too ({name})");
+    }
+
+    #[test]
+    fn patch_applies_on_a_body_only_edit_and_is_byte_identical() {
+        patch_equivalence_case(
+            "patch-body-edit",
+            &[
+                ("a.mock", "decl x\nref helper"),
+                ("b.mock", "decl helper\nimport ./a.mock x\nref x"),
+                ("c.mock", "decl c1"),
+                ("d.mock", "decl d1\nimport ./c.mock c1\nref c1"),
+            ],
+            // Same declarations, different references and spans — the body-only case.
+            ("a.mock", "\n\ndecl x\nref c1\nref helper"),
+            true,
+        );
+    }
+
+    #[test]
+    fn patch_falls_back_on_a_surface_change_and_stays_identical() {
+        patch_equivalence_case(
+            "patch-surface-change",
+            &[
+                ("a.mock", "decl x"),
+                ("b.mock", "decl b1\nimport ./a.mock x\nref x"),
+                ("c.mock", "decl c1"),
+                ("d.mock", "decl d1"),
+            ],
+            // A new exported declaration — other files' resolution could change.
+            ("a.mock", "decl x\ndecl brand_new"),
+            false,
+        );
+    }
+
+    #[test]
+    fn patch_falls_back_when_imports_change() {
+        patch_equivalence_case(
+            "patch-import-change",
+            &[
+                ("a.mock", "decl a1\nimport ./c.mock c1"),
+                ("b.mock", "decl b1"),
+                ("c.mock", "decl c1"),
+                ("d.mock", "decl d1"),
+            ],
+            // The import list is surface (dependency identity + workspace resolution).
+            ("a.mock", "decl a1\nimport ./d.mock d1"),
+            false,
+        );
+    }
+
+    #[test]
+    fn patch_handles_reference_retargeting_within_the_body() {
+        // The regenerated references must resolve against the *other* files' unchanged
+        // tables — a.mock stops referencing helper and starts referencing other.
+        let name = "patch-ref-retarget";
+        let filler: Vec<(String, String)> = (0..20)
+            .map(|i| (format!("filler{i}.mock"), format!("decl filler{i}")))
+            .collect();
+        let mut all: Vec<(&str, &str)> = vec![
+            ("a.mock", "decl a1\nimport ./b.mock helper\nref helper"),
+            ("b.mock", "decl helper\ndecl other"),
+            ("c.mock", "decl c1"),
+            ("d.mock", "decl d1"),
+        ];
+        all.extend(filler.iter().map(|(n, c)| (n.as_str(), c.as_str())));
+        let dir = project(name, &all);
+        let cache_dir = std::env::temp_dir().join(format!("kndo-graph-test-{name}-cache"));
+        let _ = fs::remove_dir_all(&cache_dir);
+        let cache = crate::cache::ProjectCache::open(&cache_dir);
+        assemble_with_cache(&dir, &mock_adapters(), Some(&cache)).unwrap();
+        fs::write(
+            dir.join("a.mock"),
+            "decl a1\nimport ./b.mock other\nref other",
+        )
+        .unwrap();
+        // Rebinding an import binding is an import change → surface change → full rebuild.
+        let (patched, _) = assemble_with_cache(&dir, &mock_adapters(), Some(&cache)).unwrap();
+        assert_eq!(cache.graph_hits(), 0, "import change must fall back");
+        let (scratch, _) = assemble(&dir, &mock_adapters()).unwrap();
+        assert_eq!(patched, scratch);
+    }
+
+    #[test]
+    fn patched_snapshot_serves_the_next_run_verbatim() {
+        // The patched graph is persisted under the new key; a third run with no further
+        // changes must hit that snapshot and reproduce the patched graph exactly.
+        let name = "patch-then-hit";
+        let filler: Vec<(String, String)> = (0..20)
+            .map(|i| (format!("filler{i}.mock"), format!("decl filler{i}")))
+            .collect();
+        let mut all: Vec<(&str, &str)> = vec![
+            ("a.mock", "decl x\nref y"),
+            ("b.mock", "decl y"),
+            ("c.mock", "decl c1"),
+            ("d.mock", "decl d1"),
+        ];
+        all.extend(filler.iter().map(|(n, c)| (n.as_str(), c.as_str())));
+        let dir = project(name, &all);
+        let cache_dir = std::env::temp_dir().join(format!("kndo-graph-test-{name}-cache"));
+        let _ = fs::remove_dir_all(&cache_dir);
+        let cache = crate::cache::ProjectCache::open(&cache_dir);
+        assemble_with_cache(&dir, &mock_adapters(), Some(&cache)).unwrap();
+        fs::write(dir.join("a.mock"), "\ndecl x\nref y").unwrap();
+        let (patched, _) = assemble_with_cache(&dir, &mock_adapters(), Some(&cache)).unwrap();
+        assert!(cache.graph_hits() > 0, "the edit should patch");
+        let hits_after_patch = cache.graph_hits();
+        let (warm, _) = assemble_with_cache(&dir, &mock_adapters(), Some(&cache)).unwrap();
+        assert!(
+            cache.graph_hits() > hits_after_patch,
+            "third run hits the key"
+        );
+        assert_eq!(patched, warm);
     }
 
     #[test]

@@ -311,8 +311,19 @@ change at or under their M2 marks — **met within measurement noise** (44/97 ms
 a machine now measurably slower than at M2's recording); the 50k fixture answers the
 incremental question with data — **met**: it fires, the patch precedes M5.
 
-**M4.5 exit criteria are met. Carried forward, scheduled: RFC 0004 §4 step 4 (the patch),
-first unit of work before M5.**
+**M4.5 exit criteria are met.**
+
+The carried item closed immediately after: **the incremental patch landed as RFC 0013**
+(designed, documented, then implemented in three commits — hardening, schema 10, patch).
+Ownership is explicit (`Edge.owner`), the dirty set is derived from surface signatures rather
+than guessed, canonical order makes graph equality checkable, barrel aliasing resolves to an
+order-independent fixpoint (multi-hop barrels now work), and the patch's single correctness
+statement — a patched graph is byte-identical to the full rebuild of the same tree — is
+enforced by a dedicated equivalence suite over both adapters' conformance corpora plus
+mock-level unit cases. Measured at 50k: the one-file change fell 1 134 → ~575 ms, equal to a
+no-op — RFC 0004 §4's target. The dirty-fraction threshold is 5%, measured (30% regressed the
+1k/100-file scenario by +22%). Deliberately out, with reasons in RFC 0013 §7: fine-grained
+dirty propagation, incremental recoloring (13 ms at 50k), file-set changes.
 
 ## M5 — Remaining languages + plugin system GA
 Adapters: Java, Kotlin, Swift, Rust, JSON, CSS (order: Java → Kotlin share infra; Rust; Swift;
