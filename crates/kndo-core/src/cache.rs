@@ -78,6 +78,10 @@ const GRAPH_KEY_LEN: usize = 32;
 const GRAPH_HEADER_LEN: usize = GRAPH_MAGIC.len() + 4 + GRAPH_KEY_LEN;
 
 /// Blob-hash sidecar envelope (`blob-hashes.bin` — see [`ProjectCache::load_blob_hashes`]).
+const STAT_MAGIC: [u8; 4] = *b"KNST";
+const STAT_INDEX_FORMAT_VERSION: u32 = 1;
+const STAT_INDEX_HEADER_LEN: usize = STAT_MAGIC.len() + 4;
+
 const BLOB_MAGIC: [u8; 4] = *b"KNB1";
 const BLOB_HASHES_FORMAT_VERSION: u32 = 1;
 const BLOB_HASHES_HEADER_LEN: usize = BLOB_MAGIC.len() + 4;
@@ -241,6 +245,56 @@ impl ProjectCache {
             return HashMap::default();
         }
         bincode::deserialize(&bytes[BLOB_HASHES_HEADER_LEN..]).unwrap_or_default()
+    }
+
+    /// The stat sidecar (RFC 0004 §4 step 2, `discovery::StatIndex`): `(mtime, size) →
+    /// blake3` per file, so an unchanged file is never re-read, let alone re-hashed. Any
+    /// read/format failure is a plain miss — every file just gets re-hashed.
+    pub fn load_stat_index(&self) -> Option<crate::discovery::StatIndex> {
+        let bytes = fs::read(self.stat_index_path()).ok()?;
+        if bytes.len() < STAT_INDEX_HEADER_LEN || bytes[..STAT_MAGIC.len()] != STAT_MAGIC {
+            return None;
+        }
+        let version = u32::from_le_bytes(
+            bytes[STAT_MAGIC.len()..STAT_INDEX_HEADER_LEN]
+                .try_into()
+                .ok()?,
+        );
+        if version != STAT_INDEX_FORMAT_VERSION {
+            return None;
+        }
+        bincode::deserialize(&bytes[STAT_INDEX_HEADER_LEN..]).ok()
+    }
+
+    /// Rewrite the stat sidecar wholesale (the current file set IS the index). Same
+    /// silent-degrade contract as every cache write.
+    pub fn save_stat_index(
+        &self,
+        entries: &[(crate::adapter::ProjectPath, crate::discovery::StatEntry)],
+        written_at_ns: u128,
+    ) {
+        if !self.writable || entries.is_empty() {
+            return;
+        }
+        let index = crate::discovery::StatIndex {
+            entries: entries.iter().cloned().collect(),
+            written_at_ns,
+        };
+        let mut out = Vec::new();
+        out.extend_from_slice(&STAT_MAGIC);
+        out.extend_from_slice(&STAT_INDEX_FORMAT_VERSION.to_le_bytes());
+        if bincode::serialize_into(&mut out, &index).is_err() {
+            return;
+        }
+        let path = self.stat_index_path();
+        let tmp = path.with_extension("bin.tmp");
+        if fs::write(&tmp, &out).is_ok() {
+            let _ = fs::rename(&tmp, &path);
+        }
+    }
+
+    fn stat_index_path(&self) -> PathBuf {
+        self.cache_dir.join("stat-index.bin")
     }
 
     /// Merge `new` pairs into the sidecar. No-op when read-only or nothing is new — the same

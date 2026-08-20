@@ -992,11 +992,17 @@ impl Engine {
                 graph: g,
                 mut diagnostics,
                 pending_snapshot,
+                timings: assembly_timings,
             }) => {
                 let mut timings = vec![(
                     "assemble".to_string(),
                     assemble_start.elapsed().as_micros() as u64,
                 )];
+                timings.extend(
+                    assembly_timings
+                        .into_iter()
+                        .map(|(phase, us)| (format!("assemble:{phase}"), us)),
+                );
                 let g = std::sync::Arc::new(g);
                 if let Some(writer) = pending_snapshot {
                     // Assembly-time diagnostics only — exactly what a warm hit replays.

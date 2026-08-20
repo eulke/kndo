@@ -487,12 +487,31 @@ pub fn assemble_from_source(
     adapters: &[Box<dyn LanguageAdapter>],
     cache: Option<&crate::cache::ProjectCache>,
 ) -> Result<AssembledGraph, DiscoveryError> {
+    let mut phase_start = std::time::Instant::now();
+    let mut timings: Vec<(&'static str, u64)> = Vec::new();
+    let mut tick = |label: &'static str, start: &mut std::time::Instant| {
+        timings.push((label, start.elapsed().as_micros() as u64));
+        *start = std::time::Instant::now();
+    };
     let known_blob_hashes = cache.map(|c| c.load_blob_hashes()).unwrap_or_default();
-    let mut discovered = discovery::discover_source(source, &known_blob_hashes)?;
+    let stat_index = cache.and_then(|c| c.load_stat_index());
+    tick("sidecar-load", &mut phase_start);
+    let mut discovered =
+        discovery::discover_source(source, &known_blob_hashes, stat_index.as_ref())?;
     if let Some(cache) = cache {
         // Persist fresh (git blob → blake3) pairs immediately — the graph-snapshot hit below
         // returns early, and the sidecar must grow even on runs that never reach extraction.
         cache.save_blob_hashes(&discovered.new_blob_hashes);
+        // Same for the stat sidecar (RFC 0004 §4 step 2), rewritten wholesale (the current
+        // file set IS the index) — but only when something actually changed: on a no-op run
+        // every entry matched, and rewriting a 50k-entry sidecar costs more than the stat
+        // fast path saves.
+        let index_current = stat_index
+            .as_ref()
+            .is_some_and(|i| i.is_current_for(&discovered.stat_entries));
+        if !index_current {
+            cache.save_stat_index(&discovered.stat_entries, discovered.stat_written_at_ns);
+        }
     }
     let mut diagnostics = std::mem::take(&mut discovered.diagnostics);
 
@@ -502,14 +521,18 @@ pub fn assemble_from_source(
     // entirely and hand back the persisted graph. Any mismatch (a single changed byte anywhere
     // is enough) is a plain miss; there's no partial reuse yet, only all-or-nothing.
     let graph_key = compute_graph_key(&discovered.files, adapters);
+    tick("discovery", &mut phase_start);
     if let Some(cache) = cache {
         if let Some((graph, graph_diagnostics)) = cache.get_graph(&graph_key) {
+            tick("snapshot-load", &mut phase_start);
             return Ok(AssembledGraph {
                 graph,
                 diagnostics: graph_diagnostics,
                 pending_snapshot: None,
+                timings,
             });
         }
+        tick("snapshot-probe", &mut phase_start);
     }
 
     let known_files: HashSet<ProjectPath> =
@@ -628,6 +651,8 @@ pub fn assemble_from_source(
             }
         }
     }
+
+    tick("extract", &mut phase_start);
 
     // Phase 2 — assign FileId (already the discovery-sorted index) and build File nodes.
     let mut files = Vec::with_capacity(discovered.files.len());
@@ -1468,10 +1493,12 @@ pub fn assemble_from_source(
     // path) — the freshly assembled graph hands back the key, and the engine defers the
     // serialize + write to a background thread that overlaps with analysis and rendering.
     let pending_snapshot = cache.and_then(|c| c.graph_writer(graph_key));
+    tick("resolve+link", &mut phase_start);
     Ok(AssembledGraph {
         graph,
         diagnostics,
         pending_snapshot,
+        timings,
     })
 }
 
@@ -1482,6 +1509,11 @@ pub struct AssembledGraph {
     pub graph: ProjectGraph,
     pub diagnostics: Vec<Diagnostic>,
     pub pending_snapshot: Option<crate::cache::GraphSnapshotWriter>,
+    /// Assembly sub-phase wall times `(phase, µs)` — merged into `RunResult::timings` so
+    /// `--verbose` shows where assembly goes (discovery+hash, snapshot load, extract incl.
+    /// facts-cache fetches, resolve+link). Empty on the snapshot fast path except its two
+    /// entries.
+    pub timings: Vec<(&'static str, u64)>,
 }
 
 #[cfg(test)]

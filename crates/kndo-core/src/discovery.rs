@@ -32,6 +32,9 @@ use crate::gitutil;
 pub struct DiscoveredFile {
     pub path: ProjectPath,
     pub content_hash: [u8; 32],
+    /// The fresh stat signature for the stat sidecar — `None` for git-tree sources (no
+    /// filesystem stat exists) or when the platform yields no mtime.
+    pub stat: Option<StatEntry>,
 }
 
 #[derive(Debug)]
@@ -46,6 +49,10 @@ pub enum DiscoveryError {
 pub struct Discovered {
     pub files: Vec<DiscoveredFile>,
     pub diagnostics: Vec<Diagnostic>,
+    /// Every file's fresh [`StatEntry`], for the caller to persist as the next run's index.
+    pub stat_entries: Vec<(ProjectPath, StatEntry)>,
+    /// When this walk began — the persisted index's racy-guard horizon.
+    pub stat_written_at_ns: u128,
 }
 
 /// Where a tree's content comes from — assembly is source-blind (RFC 0004 §6: diff modes
@@ -80,6 +87,9 @@ pub struct DiscoveredTree {
     /// into the cache's blob-hash sidecar so the next run's git-tree discovery can skip
     /// fetching those blobs entirely. Always empty for directory sources.
     pub new_blob_hashes: Vec<(String, [u8; 32])>,
+    /// Fresh stat entries for the stat sidecar (directory sources only, empty for git trees).
+    pub stat_entries: Vec<(ProjectPath, StatEntry)>,
+    pub stat_written_at_ns: u128,
     reader: ContentReader,
 }
 
@@ -142,14 +152,17 @@ impl DiscoveredTree {
 pub fn discover_source(
     source: &TreeSource<'_>,
     known_blob_hashes: &HashMap<String, [u8; 32]>,
+    stat_index: Option<&StatIndex>,
 ) -> Result<DiscoveredTree, DiscoveryError> {
     match source {
         TreeSource::Directory(root) => {
-            let discovered = discover(root)?;
+            let discovered = discover_with_stat(root, stat_index)?;
             Ok(DiscoveredTree {
                 files: discovered.files,
                 diagnostics: discovered.diagnostics,
                 new_blob_hashes: Vec::new(),
+                stat_entries: discovered.stat_entries,
+                stat_written_at_ns: discovered.stat_written_at_ns,
                 reader: ContentReader::Fs(root.to_path_buf()),
             })
         }
@@ -161,9 +174,59 @@ pub fn discover_source(
     }
 }
 
+/// One file's recorded `(mtime, size) → blake3` observation — RFC 0004 §4 step 2's
+/// "stat-scan ... re-hash suspects", the same trust model git's index uses: a file whose
+/// stat signature is unchanged since the index was written keeps its recorded hash without
+/// being read at all. The racy-write guard is git's too: an entry whose file mtime is at or
+/// past the index's own write time could have been modified in the same clock instant the
+/// hash was taken, so it is always re-hashed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct StatEntry {
+    pub mtime_ns: u128,
+    pub size: u64,
+    pub hash: [u8; 32],
+}
+
+/// The persisted stat sidecar (`ProjectCache::load_stat_index`) — correctness never depends
+/// on it: a missing/stale/garbage index only means files get re-hashed, and `--no-cache`
+/// (no index at all) must stay byte-identical, the RFC 0004 §4 gate.
+#[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize)]
+pub struct StatIndex {
+    pub entries: std::collections::HashMap<ProjectPath, StatEntry>,
+    pub written_at_ns: u128,
+}
+
+impl StatIndex {
+    /// Whether `fresh` (a discovery's full entry list) says anything this index doesn't —
+    /// the no-op-run guard: rewriting a 50k-entry sidecar every run costs more than the
+    /// stat fast path saves, so an unchanged index is simply left alone.
+    pub fn is_current_for(&self, fresh: &[(ProjectPath, StatEntry)]) -> bool {
+        fresh.len() == self.entries.len()
+            && fresh
+                .iter()
+                .all(|(path, entry)| self.entries.get(path) == Some(entry))
+    }
+}
+
+fn system_time_ns(t: std::time::SystemTime) -> u128 {
+    t.duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0)
+}
+
 /// Walk `root` respecting ignore files, hash every regular file, and return the result sorted
 /// by path — deterministic regardless of filesystem or thread-scheduling order.
 pub fn discover(root: &Path) -> Result<Discovered, DiscoveryError> {
+    discover_with_stat(root, None)
+}
+
+/// [`discover`] with an optional stat index: files whose `(mtime, size)` matches an entry
+/// (and predate the index's write time — the racy guard) reuse the recorded hash without
+/// being read. Every returned file carries a fresh [`StatEntry`] for the caller to persist.
+pub fn discover_with_stat(
+    root: &Path,
+    stat_index: Option<&StatIndex>,
+) -> Result<Discovered, DiscoveryError> {
     if !root.is_dir() {
         return Err(DiscoveryError::Root(std::io::Error::new(
             std::io::ErrorKind::NotFound,
@@ -171,6 +234,7 @@ pub fn discover(root: &Path) -> Result<Discovered, DiscoveryError> {
         )));
     }
 
+    let written_at_ns = system_time_ns(std::time::SystemTime::now());
     let paths: Vec<std::path::PathBuf> = ignore::WalkBuilder::new(root)
         // Honor .gitignore by content, not by the presence of an actual .git directory —
         // kndo analyzes the tree it's given, git repo or not.
@@ -207,6 +271,31 @@ pub fn discover(root: &Path) -> Result<Discovered, DiscoveryError> {
                 .ok_or_else(|| skip_raw("path is not valid UTF-8"))?
                 .replace('\\', "/");
             let path = ProjectPath(rel_str.into());
+            // One stat per file, here in the parallel section (a serial stat pass over the
+            // walk costs more at 50k files than parallel hashing saves).
+            let sig = std::fs::metadata(abs)
+                .ok()
+                .and_then(|m| m.modified().ok().map(|t| (system_time_ns(t), m.len())));
+            // Stat fast path: unchanged (mtime, size) signature, recorded before the index
+            // was written (racy guard) — reuse the hash, skip the read entirely.
+            if let (Some(index), Some((mtime_ns, size))) = (stat_index, sig) {
+                if let Some(entry) = index.entries.get(&path) {
+                    if entry.mtime_ns == mtime_ns
+                        && entry.size == size
+                        && mtime_ns < index.written_at_ns
+                    {
+                        return Ok(DiscoveredFile {
+                            path,
+                            content_hash: entry.hash,
+                            stat: Some(StatEntry {
+                                mtime_ns,
+                                size,
+                                hash: entry.hash,
+                            }),
+                        });
+                    }
+                }
+            }
             let content = std::fs::read(abs).map_err(|e| Diagnostic {
                 level: DiagnosticLevel::Warn,
                 path: Some(path.clone()),
@@ -217,6 +306,11 @@ pub fn discover(root: &Path) -> Result<Discovered, DiscoveryError> {
             Ok(DiscoveredFile {
                 path,
                 content_hash: *hash.as_bytes(),
+                stat: sig.map(|(mtime_ns, size)| StatEntry {
+                    mtime_ns,
+                    size,
+                    hash: *hash.as_bytes(),
+                }),
             })
         })
         .collect();
@@ -231,7 +325,16 @@ pub fn discover(root: &Path) -> Result<Discovered, DiscoveryError> {
     }
     files.sort_by(|a, b| a.path.0.cmp(&b.path.0));
     diagnostics.sort_by(|a, b| a.message.cmp(&b.message)); // deterministic order here too
-    Ok(Discovered { files, diagnostics })
+    let stat_entries = files
+        .iter()
+        .filter_map(|f| f.stat.map(|s| (f.path.clone(), s)))
+        .collect();
+    Ok(Discovered {
+        files,
+        diagnostics,
+        stat_entries,
+        stat_written_at_ns: written_at_ns,
+    })
 }
 
 fn git_error(e: gitutil::GitError) -> DiscoveryError {
@@ -367,6 +470,7 @@ fn discover_git_tree(
             files.push(DiscoveredFile {
                 path,
                 content_hash: *hash,
+                stat: None,
             });
         } else {
             unknown.push((path, sha));
@@ -389,6 +493,7 @@ fn discover_git_tree(
                 files.push(DiscoveredFile {
                     path: path.clone(),
                     content_hash: hash,
+                    stat: None,
                 });
                 blobs.insert(path, content);
                 new_blob_hashes.push((sha, hash));
@@ -412,6 +517,8 @@ fn discover_git_tree(
         files,
         diagnostics,
         new_blob_hashes,
+        stat_entries: Vec::new(),
+        stat_written_at_ns: 0,
         reader: ContentReader::Memory {
             blobs,
             sha_by_path,
@@ -508,7 +615,9 @@ mod tests {
     }
 
     fn tree_files(source: &TreeSource<'_>) -> Vec<DiscoveredFile> {
-        discover_source(source, &HashMap::default()).unwrap().files
+        discover_source(source, &HashMap::default(), None)
+            .unwrap()
+            .files
     }
 
     /// The parity contract, pinned: a committed tree discovered via git must yield the exact
@@ -548,7 +657,71 @@ mod tests {
             !walk_paths.contains(&"sub/local-ignored.ts"),
             "{walk_paths:?}"
         );
-        assert_eq!(from_walk, from_tree);
+        // Parity is over (path, content hash) — `stat` is source-specific metadata by
+        // design (a git tree has no filesystem stat to record).
+        assert_eq!(strip_stat(from_walk), strip_stat(from_tree));
+    }
+
+    fn strip_stat(files: Vec<DiscoveredFile>) -> Vec<(ProjectPath, [u8; 32])> {
+        files
+            .into_iter()
+            .map(|f| (f.path, f.content_hash))
+            .collect()
+    }
+
+    /// The stat-index contract (RFC 0004 §4 step 2): a matching, pre-horizon `(mtime, size)`
+    /// signature reuses the recorded hash without reading the file — proven with a poisoned
+    /// hash that could only come from the index.
+    #[test]
+    fn matching_stat_signature_skips_hashing_entirely() {
+        let dir = tmp("stat-hit");
+        fs::write(dir.join("a.ts"), "export const x = 1;").unwrap();
+        let first = discover(&dir).unwrap();
+        let mut entries: std::collections::HashMap<ProjectPath, StatEntry> =
+            first.stat_entries.iter().cloned().collect();
+        let poisoned = [7u8; 32];
+        entries.get_mut(&ProjectPath("a.ts".into())).unwrap().hash = poisoned;
+        let index = StatIndex {
+            entries,
+            // Horizon far in the future: every entry predates it — pure hit path.
+            written_at_ns: u128::MAX,
+        };
+        let second = discover_with_stat(&dir, Some(&index)).unwrap();
+        assert_eq!(
+            second.files[0].content_hash, poisoned,
+            "the recorded hash must be served verbatim — the file was never read"
+        );
+    }
+
+    #[test]
+    fn changed_mtime_or_racy_entry_rehashes() {
+        let dir = tmp("stat-miss");
+        fs::write(dir.join("a.ts"), "export const x = 1;").unwrap();
+        let first = discover(&dir).unwrap();
+        let real_hash = first.files[0].content_hash;
+        let mut entries: std::collections::HashMap<ProjectPath, StatEntry> =
+            first.stat_entries.iter().cloned().collect();
+        entries.get_mut(&ProjectPath("a.ts".into())).unwrap().hash = [7u8; 32];
+
+        // Racy guard: same signature, but the index horizon predates the file's mtime —
+        // the poisoned hash must NOT be trusted.
+        let racy = StatIndex {
+            entries: entries.clone(),
+            written_at_ns: 0,
+        };
+        let out = discover_with_stat(&dir, Some(&racy)).unwrap();
+        assert_eq!(out.files[0].content_hash, real_hash);
+
+        // Signature mismatch: mtime moved — re-hash regardless of horizon.
+        for e in entries.values_mut() {
+            e.mtime_ns += 1;
+        }
+        let stale = StatIndex {
+            entries,
+            written_at_ns: u128::MAX,
+        };
+        let out = discover_with_stat(&dir, Some(&stale)).unwrap();
+        assert_eq!(out.files[0].content_hash, real_hash);
     }
 
     #[test]
@@ -568,7 +741,7 @@ mod tests {
         assert_eq!(paths, vec!["src/inner.ts"]);
         // …and those paths line up with a walk rooted at the same subdirectory.
         let from_walk = tree_files(&TreeSource::Directory(&dir.join("pkg")));
-        assert_eq!(files, from_walk);
+        assert_eq!(strip_stat(files), strip_stat(from_walk));
     }
 
     #[test]
@@ -606,6 +779,7 @@ mod tests {
                 prefix: "",
             },
             &HashMap::default(),
+            None,
         )
         .unwrap();
         let content = tree.read(&ProjectPath("f.ts".into())).unwrap();
@@ -624,6 +798,7 @@ mod tests {
                 prefix: "",
             },
             &HashMap::default(),
+            None,
         )
         .is_err());
     }
@@ -643,11 +818,11 @@ mod tests {
             treeish: "HEAD",
             prefix: "",
         };
-        let cold = discover_source(&source, &HashMap::default()).unwrap();
+        let cold = discover_source(&source, &HashMap::default(), None).unwrap();
         assert_eq!(cold.new_blob_hashes.len(), 2);
 
         let sidecar: HashMap<String, [u8; 32]> = cold.new_blob_hashes.iter().cloned().collect();
-        let warm = discover_source(&source, &sidecar).unwrap();
+        let warm = discover_source(&source, &sidecar, None).unwrap();
         assert_eq!(warm.files, cold.files);
         assert!(
             warm.new_blob_hashes.is_empty(),
