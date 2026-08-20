@@ -106,6 +106,16 @@ helper found) and `go-work-phantom-dep/` (undeclared sibling: a real phantom dep
 path-renaming `replace` directive stands as RFC 0012 §10's one recorded divergence. **All RFC
 0012 stages (§§3–10) have now landed.**
 
+`deep-import` then landed for **internal providers** (RFC 0011 §4, all three design rules:
+contract gate on `declares_surface`, one finding per consumer→provider pair with capped site
+evidence, computed remediation splitting also-public from genuinely-internal symbols via
+surface-reachability) — conformance fixture `deep-import/`, gate verified both ways with the
+real CLI. The **external-provider half remains**: it needs the provider's own manifest, which
+`node_modules/` discovery doesn't reach — a provider-manifest peek at resolution time is its
+own discovery/cache/purity design pass (the gate stays closed meanwhile, so it degrades to
+silence, never noise). Still open for M3 exit: `kndo impact` (incl. `--if-deleted`) and the
+RFC 0007 §5 agent workflow running end-to-end.
+
 ## M4 — Duplication, CRAP, health
 `duplicate` (winnowing index, incremental), `cyclic` (SCCs with per-language tolerance),
 `crap` + lcov/JaCoCo ingestion plugins (ADR 0005), `health` score + `kndo health`, SARIF output.

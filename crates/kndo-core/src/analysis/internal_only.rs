@@ -544,11 +544,15 @@ mod tests {
                     manifest: None,
                     name: None,
                     private: false,
+                    declares_surface: false,
+                    surface: Vec::new(),
                 },
                 crate::graph::PackageNode {
                     manifest: None,
                     name: None,
                     private: false,
+                    declares_surface: false,
+                    surface: Vec::new(),
                 },
             ]);
         let reach = crate::analysis::reachability::compute(&graph);
@@ -637,11 +641,15 @@ mod tests {
                     manifest: None,
                     name: None,
                     private: false,
+                    declares_surface: false,
+                    surface: Vec::new(),
                 },
                 crate::graph::PackageNode {
                     manifest: None,
                     name: None,
                     private: false,
+                    declares_surface: false,
+                    surface: Vec::new(),
                 },
             ])
             .with_visibility_ladders(vec![(

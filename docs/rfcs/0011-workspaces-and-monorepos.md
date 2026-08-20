@@ -106,6 +106,20 @@ recorded from M1 regardless (reachability must stay correct — deep-imported co
 the verdict lands in M3. The external-provider case is also listed with the dependency-hygiene
 findings (RFC 0005 §5), since that is where a single-package app will meet it.
 
+**Landed (M3), with one recorded boundary:** the internal-provider case is implemented
+end-to-end — `ManifestFacts::{declares_surface, resolved_entries}` flow onto
+`PackageNode::{declares_surface, surface}` at assembly, and `analysis/deep_import.rs`
+implements all three rules (gate, pair rollup with capped site evidence, computed remediation
+— the also-public-vs-genuinely-internal split computed per touched symbol via file-granular
+surface-reachability, since a re-export chain from the entry is exactly an `ImportsFile`
+path). The **external-provider case cannot fire yet**, by the gate's own logic rather than a
+special case: evaluating it requires the provider's *own* manifest, which lives outside the
+discovered tree (`node_modules/` is not walked — RFC 0008's discovery bounds), so
+`declares_surface` is unknowable and the gate stays closed — silence, the safe direction.
+Making it fire needs a provider-manifest peek at resolution time (its own
+discovery/cache/purity design pass); tracked in ROADMAP as the remaining half of this
+verdict, not silently absorbed.
+
 ## 5. Roots & library mode are per-package decisions
 
 Each Package independently resolves its mode from manifest signals, overridable in config:

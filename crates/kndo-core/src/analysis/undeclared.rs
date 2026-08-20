@@ -177,16 +177,22 @@ mod tests {
                 manifest: None,
                 name: None,
                 private: false,
+                declares_surface: false,
+                surface: Vec::new(),
             },
             PackageNode {
                 manifest: Some(ProjectPath(SmolStr::new("packages/a/package.json"))),
                 name: Some(SmolStr::new("@demo/a")),
                 private: true,
+                declares_surface: false,
+                surface: Vec::new(),
             },
             PackageNode {
                 manifest: Some(ProjectPath(SmolStr::new("packages/b/package.json"))),
                 name: Some(SmolStr::new("@demo/b")),
                 private: true,
+                declares_surface: false,
+                surface: Vec::new(),
             },
         ];
         let graph = ProjectGraph::for_test(files, vec![], dependencies, edges)

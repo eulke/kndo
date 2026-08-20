@@ -222,6 +222,8 @@ mod tests {
                 manifest: Some(ProjectPath(SmolStr::new("package.json"))),
                 name: Some(SmolStr::new("demo")),
                 private: true,
+                declares_surface: false,
+                surface: Vec::new(),
             }])
             .with_declared_dependencies(declared_deps)
     }

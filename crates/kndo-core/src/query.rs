@@ -1782,11 +1782,15 @@ mod tests {
                 manifest: Some(ProjectPath("a/package.json".into())),
                 name: Some("dup".into()),
                 private: false,
+                declares_surface: false,
+                surface: Vec::new(),
             },
             PackageNode {
                 manifest: Some(ProjectPath("b/package.json".into())),
                 name: Some("dup".into()),
                 private: false,
+                declares_surface: false,
+                surface: Vec::new(),
             },
         ]);
         match resolve(&graph, &Selector::Package("dup".into())) {

@@ -295,7 +295,14 @@ pub struct ManifestFacts {
                                                        // private member still resolves through its
                                                        // entry; privateness only gates roots)
     pub declares_surface:   bool,                     // `exports` map or equivalent present —
-                                                       // the contract gate for `deep-import` (RFC 0011 §4)
+                                                       // the contract gate for `deep-import` (RFC 0011 §4).
+                                                       // Assembly carries it (plus resolved_entries
+                                                       // as FileIds) onto PackageNode
+                                                       // { declares_surface, surface }, so the
+                                                       // analysis is a pure graph function: an
+                                                       // ImportsFile edge from another package
+                                                       // landing off-surface while the gate holds
+                                                       // is a deep import.
     pub script_invoked_names: Vec<SmolStr>,           // names invoked as the leading command of a
                                                        // build/tooling script (npm `scripts`,
                                                        // Cargo `[[bin]]`-adjacent xtasks, …) — a

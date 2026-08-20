@@ -95,6 +95,17 @@ pub struct PackageNode {
     pub name: Option<SmolStr>,
     /// Publish signal from the manifest — mirrors `ManifestFacts::private` (RFC 0011 §5).
     pub private: bool,
+    /// Whether the manifest declares an explicit entry-point surface (an `exports` map or the
+    /// language's equivalent) — mirrors `ManifestFacts::declares_surface`, and is the
+    /// **contract gate** for `deep-import` (RFC 0011 §4): no declared surface = no declared
+    /// boundary = never a finding, so monorepos where sibling deep imports are accepted
+    /// practice see zero noise.
+    pub declares_surface: bool,
+    /// The declared surface as concrete files: `ManifestFacts::resolved_entries` mapped to
+    /// `FileId`s (entries naming files outside the discovered tree — build artifacts — simply
+    /// don't appear). An `ImportsFile` edge from another package landing on a file *not* in
+    /// this set, while `declares_surface` holds, is a deep import.
+    pub surface: Vec<FileId>,
 }
 
 /// One manifest's declaration of an external dependency — the raw fact `undeclared` and
@@ -230,6 +241,8 @@ impl ProjectGraph {
                 manifest: None,
                 name: None,
                 private: false,
+                declares_surface: false,
+                surface: Vec::new(),
             }],
             edges,
             suppressions: Vec::new(),
@@ -332,7 +345,7 @@ pub(crate) fn package_owns(manifest_dir: &str, file_dir: &str) -> bool {
 /// an assembly-algorithm change that could produce a different graph from the same facts. Feeds
 /// [`compute_graph_key`] (RFC 0004 §3's "core graph-schema version"); a bump here invalidates
 /// every project's cached `graph.bin` on the next run, same as any other key-input change.
-pub const GRAPH_SCHEMA_VERSION: u32 = 5; // 5: visibility ladders + FileNode.unit (RFC 0012 §6); 4: RefKind + signature_span (§5); 3: within (§4); 2: member_of (§3)
+pub const GRAPH_SCHEMA_VERSION: u32 = 6; // 6: PackageNode surface fields (RFC 0011 §4 deep-import); 5: ladders + FileNode.unit (RFC 0012 §6); 4: RefKind + signature_span (§5); 3: within (§4); 2: member_of (§3)
 
 /// The graph snapshot's cache key (RFC 0004 §3, `cache.rs`'s `graph.bin`): a single digest
 /// folding in the *whole* discovered file set (every path + content hash — this already
@@ -592,15 +605,27 @@ pub fn assemble_from_source(
         manifest: None,
         name: None,
         private: false,
+        declares_surface: false,
+        surface: Vec::new(),
     }];
     let mut manifest_package: Vec<Option<PackageId>> = vec![None; manifests_per_file.len()];
     for (i, slot) in manifests_per_file.iter().enumerate() {
         if let Some((_, facts)) = slot {
             let package_id = PackageId(packages.len() as u32);
+            // The declared surface as FileIds (RFC 0011 §4): entries naming files outside the
+            // discovered tree (published build artifacts in a source checkout) drop out here —
+            // an absent surface file can never be imported in-repo, so nothing is lost.
+            let surface = facts
+                .resolved_entries
+                .iter()
+                .filter_map(|(path, _)| file_index.get(path).copied())
+                .collect();
             packages.push(PackageNode {
                 manifest: Some(files[i].path.clone()),
                 name: facts.package_name.clone(),
                 private: facts.private,
+                declares_surface: facts.declares_surface,
+                surface,
             });
             manifest_package[i] = Some(package_id);
         }
@@ -1612,6 +1637,8 @@ mod tests {
             //   dep <name>        -> a prod-scope declared dependency
             //   root <path>       -> a Production root targeting that known file, if it exists
             //   cli-invoke <name> -> a script-invoked dependency name
+            //   declares-surface  -> ManifestFacts::declares_surface = true (RFC 0011 §4)
+            //   private           -> ManifestFacts::private = true (app mode)
             //   name <pkg>        -> the package's declared name
             //   entry <path>      -> a resolved entry (what a sibling's bare-name import lands on)
             let text = std::str::from_utf8(file.content).unwrap_or("");
@@ -1641,6 +1668,12 @@ mod tests {
                     if ctx.contains(&target) {
                         facts.resolved_entries.push((target, Confidence::Certain));
                     }
+                } else if line == "declares-surface" {
+                    // Explicit entry-point surface (`exports` map equivalent) — the
+                    // deep-import contract gate (RFC 0011 §4).
+                    facts.declares_surface = true;
+                } else if line == "private" {
+                    facts.private = true;
                 }
             }
             facts
