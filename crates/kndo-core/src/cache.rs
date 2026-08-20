@@ -544,9 +544,38 @@ impl ProjectCache {
         graph: &ProjectGraph,
         diagnostics: &[Diagnostic],
     ) {
-        if !self.writable {
-            return;
+        if let Some(writer) = self.graph_writer(*key) {
+            writer.write(graph, diagnostics);
         }
+    }
+
+    /// A detachable snapshot writer (RFC 0008 §2: "cache persist — off the critical path"):
+    /// owns everything it needs (paths only), so the engine can hand it to a background
+    /// thread and let serialization + write overlap with rendering. `None` when the cache is
+    /// read-only — the caller then simply has nothing to defer, same silent-degrade contract
+    /// as [`Self::put`].
+    pub fn graph_writer(&self, key: [u8; GRAPH_KEY_LEN]) -> Option<GraphSnapshotWriter> {
+        if !self.writable {
+            return None;
+        }
+        Some(GraphSnapshotWriter {
+            path: self.graph_snapshot_path(&key),
+            key,
+        })
+    }
+}
+
+/// See [`ProjectCache::graph_writer`]. Writing stays crash-safe regardless of which thread
+/// runs it: temp file + atomic rename, so a killed process loses cache warmth, never
+/// correctness.
+pub struct GraphSnapshotWriter {
+    path: std::path::PathBuf,
+    key: [u8; GRAPH_KEY_LEN],
+}
+
+impl GraphSnapshotWriter {
+    pub fn write(&self, graph: &ProjectGraph, diagnostics: &[Diagnostic]) {
+        let key = &self.key;
         let snapshot = GraphSnapshot {
             files: graph.files.clone(),
             symbols: graph.symbols.clone(),
@@ -589,7 +618,7 @@ impl ProjectCache {
         out.extend_from_slice(key);
         out.extend_from_slice(&bytes);
 
-        let path = self.graph_snapshot_path(key);
+        let path = &self.path;
         if let Some(dir) = path.parent() {
             if fs::create_dir_all(dir).is_err() {
                 return;
@@ -597,7 +626,7 @@ impl ProjectCache {
         }
         let tmp = path.with_extension("bin.tmp");
         if fs::write(&tmp, &out).is_ok() {
-            let _ = fs::rename(&tmp, &path);
+            let _ = fs::rename(&tmp, path);
         }
     }
 }

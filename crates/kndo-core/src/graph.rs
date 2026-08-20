@@ -469,7 +469,13 @@ pub fn assemble_with_cache(
     adapters: &[Box<dyn LanguageAdapter>],
     cache: Option<&crate::cache::ProjectCache>,
 ) -> Result<(ProjectGraph, Vec<Diagnostic>), DiscoveryError> {
-    assemble_from_source(&discovery::TreeSource::Directory(root), adapters, cache)
+    let assembled = assemble_from_source(&discovery::TreeSource::Directory(root), adapters, cache)?;
+    // This convenience entry point persists inline — only the engine's own path defers the
+    // write to a background thread (it owns a place to join it; callers here don't).
+    if let Some(writer) = &assembled.pending_snapshot {
+        writer.write(&assembled.graph, &assembled.diagnostics);
+    }
+    Ok((assembled.graph, assembled.diagnostics))
 }
 
 /// [`assemble_with_cache`] over any [`discovery::TreeSource`] — a directory, or a git tree-ish
@@ -480,7 +486,7 @@ pub fn assemble_from_source(
     source: &discovery::TreeSource<'_>,
     adapters: &[Box<dyn LanguageAdapter>],
     cache: Option<&crate::cache::ProjectCache>,
-) -> Result<(ProjectGraph, Vec<Diagnostic>), DiscoveryError> {
+) -> Result<AssembledGraph, DiscoveryError> {
     let known_blob_hashes = cache.map(|c| c.load_blob_hashes()).unwrap_or_default();
     let mut discovered = discovery::discover_source(source, &known_blob_hashes)?;
     if let Some(cache) = cache {
@@ -498,7 +504,11 @@ pub fn assemble_from_source(
     let graph_key = compute_graph_key(&discovered.files, adapters);
     if let Some(cache) = cache {
         if let Some((graph, graph_diagnostics)) = cache.get_graph(&graph_key) {
-            return Ok((graph, graph_diagnostics));
+            return Ok(AssembledGraph {
+                graph,
+                diagnostics: graph_diagnostics,
+                pending_snapshot: None,
+            });
         }
     }
 
@@ -1454,11 +1464,24 @@ pub fn assemble_from_source(
         function_metrics,
         file_index,
     };
-    if let Some(cache) = cache {
-        cache.put_graph(&graph_key, &graph, &diagnostics);
-    }
+    // The snapshot is NOT written here (RFC 0008 §2: cache persist happens off the critical
+    // path) — the freshly assembled graph hands back the key, and the engine defers the
+    // serialize + write to a background thread that overlaps with analysis and rendering.
+    let pending_snapshot = cache.and_then(|c| c.graph_writer(graph_key));
+    Ok(AssembledGraph {
+        graph,
+        diagnostics,
+        pending_snapshot,
+    })
+}
 
-    Ok((graph, diagnostics))
+/// [`assemble_from_source`]'s result: the graph, assembly-time diagnostics (exactly what a
+/// snapshot stores and a warm hit replays), and — on a snapshot miss with a writable cache —
+/// the deferred writer the engine schedules off the critical path.
+pub struct AssembledGraph {
+    pub graph: ProjectGraph,
+    pub diagnostics: Vec<Diagnostic>,
+    pub pending_snapshot: Option<crate::cache::GraphSnapshotWriter>,
 }
 
 #[cfg(test)]

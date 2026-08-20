@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Envelope",
-  "description": "The full `--format json` envelope shape (contracts/output-schema.md §1) — also the schema\ngenerator's root type (`cargo xtask gen-schema`, gated behind the `schema` feature): the\nJSON Schema is derived from this struct, not maintained as a second hand-written document.",
+  "description": "The full `--format json` envelope shape (contracts/output-schema.md §1) — also the schema\ngenerator's root type (`cargo xtask gen-schema`, gated behind the `schema` feature): the\nJSON Schema is derived from this struct, not maintained as a second hand-written document.\nBorrows the run's collections instead of cloning them: `to_json` on a 75k-finding result\nwas paying a full deep clone (every String in every Finding) purely to serialize — the\nborrow makes serialization allocation-free on the input side. Schema output is unaffected\n(schemars sees through references and slices to the same shapes).",
   "type": "object",
   "properties": {
     "baseline": {

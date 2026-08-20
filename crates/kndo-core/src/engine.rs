@@ -64,6 +64,14 @@ fn coverage_plugins() -> Vec<Box<dyn crate::plugin::Plugin>> {
     vec![Box::new(crate::plugin::LcovPlugin)]
 }
 
+impl Drop for Engine {
+    /// The RFC 0008 §2 sequencing: frontends drop the engine after printing, so the deferred
+    /// snapshot write completes "after results are printed, before exit".
+    fn drop(&mut self) {
+        self.join_persist();
+    }
+}
+
 /// Where full-mode runs remember their last health score (`.kndo/health.json`) so the next
 /// run can report the trend (output-schema §4's `previous`). Diff modes never touch it — their
 /// `previous` is the computed "before" side.
@@ -438,57 +446,61 @@ impl RunResult {
 /// Schema from): the one-time clone per `--format json` invocation is free by comparison.
 #[derive(serde::Serialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
-struct RunInfo {
-    mode: String,
+struct RunInfo<'a> {
+    mode: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
-    base_ref: Option<String>,
-    started_at: String,
+    base_ref: Option<&'a str>,
+    started_at: &'a str,
     duration_ms: u64,
     cache: &'static str,
-    project_root: String,
-    adapters: Vec<AdapterRunInfo>,
+    project_root: &'a str,
+    adapters: &'a [AdapterRunInfo],
 }
 
 /// The full `--format json` envelope shape (contracts/output-schema.md §1) — also the schema
 /// generator's root type (`cargo xtask gen-schema`, gated behind the `schema` feature): the
 /// JSON Schema is derived from this struct, not maintained as a second hand-written document.
+/// Borrows the run's collections instead of cloning them: `to_json` on a 75k-finding result
+/// was paying a full deep clone (every String in every Finding) purely to serialize — the
+/// borrow makes serialization allocation-free on the input side. Schema output is unaffected
+/// (schemars sees through references and slices to the same shapes).
 #[derive(serde::Serialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
-struct Envelope {
+struct Envelope<'a> {
     schema_version: &'static str,
     kndo_version: &'static str,
-    run: RunInfo,
-    findings: Vec<Finding>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    fixed: Vec<Finding>,
+    run: RunInfo<'a>,
+    findings: &'a [Finding],
+    #[serde(default, skip_serializing_if = "<[Finding]>::is_empty")]
+    fixed: &'a [Finding],
     #[serde(skip_serializing_if = "Option::is_none")]
-    health: Option<crate::analysis::health::Health>,
+    health: Option<&'a crate::analysis::health::Health>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    baseline: Option<BaselineSummary>,
+    baseline: Option<&'a BaselineSummary>,
     suppressed: SuppressedSummary,
-    diagnostics: Vec<Diagnostic>,
+    diagnostics: &'a [Diagnostic],
 }
 
 impl RunResult {
-    fn to_envelope(&self) -> Envelope {
+    fn to_envelope(&self) -> Envelope<'_> {
         Envelope {
             schema_version: SCHEMA_VERSION,
             kndo_version: KNDO_VERSION,
             run: RunInfo {
-                mode: self.mode.clone(),
-                base_ref: self.base_ref.clone(),
-                started_at: self.started_at.clone(),
+                mode: &self.mode,
+                base_ref: self.base_ref.as_deref(),
+                started_at: &self.started_at,
                 duration_ms: self.duration_ms,
                 cache: self.cache_status(),
-                project_root: self.project_root.clone(),
-                adapters: self.adapters.clone(),
+                project_root: &self.project_root,
+                adapters: &self.adapters,
             },
-            findings: self.findings.clone(),
-            fixed: self.fixed.clone(),
-            health: self.health.clone(),
-            baseline: self.baseline.clone(),
+            findings: &self.findings,
+            fixed: &self.fixed,
+            health: self.health.as_ref(),
+            baseline: self.baseline.as_ref(),
             suppressed: self.suppressed,
-            diagnostics: self.diagnostics.clone(),
+            diagnostics: &self.diagnostics,
         }
     }
 
@@ -537,7 +549,7 @@ fn ensure_thread_pool(threads: Option<usize>) {
 /// One tree's full analysis, as [`Engine::assemble_and_analyze`] returns it — graph plus
 /// everything derived from it in that pass.
 struct AnalyzedTree {
-    graph: graph::ProjectGraph,
+    graph: std::sync::Arc<graph::ProjectGraph>,
     findings: Vec<Finding>,
     diagnostics: Vec<Diagnostic>,
     suppressed: SuppressedSummary,
@@ -553,6 +565,13 @@ pub struct Engine {
     adapters: Vec<Box<dyn LanguageAdapter>>,
     cache: Option<crate::cache::ProjectCache>,
     cache_enabled: bool,
+    /// The in-flight background snapshot write (RFC 0008 §2: persist off the critical path)
+    /// — spawned right after assembly so serialization overlaps with analysis and rendering,
+    /// joined before the next assembly and on drop (frontends drop the engine after
+    /// printing, which is exactly the RFC's "written after results are printed, before
+    /// exit"). Crash-safety is the writer's temp-file + rename; a killed process loses only
+    /// cache warmth.
+    pending_persist: Option<std::thread::JoinHandle<()>>,
 }
 
 impl Engine {
@@ -577,6 +596,7 @@ impl Engine {
             adapters,
             cache,
             cache_enabled: overrides.use_cache,
+            pending_persist: None,
         })
     }
 
@@ -948,6 +968,12 @@ impl Engine {
             .collect()
     }
 
+    fn join_persist(&mut self) {
+        if let Some(handle) = self.pending_persist.take() {
+            let _ = handle.join();
+        }
+    }
+
     /// The lowest-level shared step: assemble the graph from an arbitrary tree source (the
     /// real project directory for full mode; in-memory git trees for diff modes' "before" and
     /// `--staged`'s "after") and run every analysis over it. `self.cache` is still the *real*
@@ -959,13 +985,27 @@ impl Engine {
         &mut self,
         source: &discovery::TreeSource<'_>,
     ) -> Result<AnalyzedTree, Diagnostic> {
+        self.join_persist(); // at most one background writer in flight
         let assemble_start = Instant::now();
         match graph::assemble_from_source(source, &self.adapters, self.cache.as_ref()) {
-            Ok((g, mut diagnostics)) => {
+            Ok(graph::AssembledGraph {
+                graph: g,
+                mut diagnostics,
+                pending_snapshot,
+            }) => {
                 let mut timings = vec![(
                     "assemble".to_string(),
                     assemble_start.elapsed().as_micros() as u64,
                 )];
+                let g = std::sync::Arc::new(g);
+                if let Some(writer) = pending_snapshot {
+                    // Assembly-time diagnostics only — exactly what a warm hit replays.
+                    let graph_for_writer = std::sync::Arc::clone(&g);
+                    let diagnostics_for_writer = diagnostics.clone();
+                    self.pending_persist = Some(std::thread::spawn(move || {
+                        writer.write(&graph_for_writer, &diagnostics_for_writer);
+                    }));
+                }
                 let coverage_start = Instant::now();
                 let coverage = self.ingest_coverage(&mut diagnostics);
                 timings.push((
