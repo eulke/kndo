@@ -2,13 +2,22 @@
 //! analysis is built on. This is a **literal, direct** implementation of the formalized
 //! algorithm (three explicit confidence-tier passes per root kind, not a cleverer
 //! single-pass widest-path algorithm): correctness and auditability win over performance
-//! for logic this load-bearing, and three tiers make the literal version cheap anyway.
-
-use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
-use std::collections::VecDeque;
+//! for logic this load-bearing.
+//!
+//! The *data layout* is where performance lives (RFC 0008 §3, applied to the hottest
+//! algorithm): nodes get dense indices (files first, then symbols), the traversable edges are
+//! built once into CSR-style columnar adjacency (offsets + targets + confidences — BFS walks
+//! contiguous `u32` columns, not hash buckets), and each of the nine per-`(kind, tier)`
+//! reached sets is a bitset. The module-load rule (reaching a symbol reaches its owning file,
+//! RFC 0012 §4) becomes an ordinary implicit CSR edge `symbol → owner` at `Certain` — the
+//! same semantics the special-cased visit had, since a certain edge passes every tier's
+//! filter exactly like the unconditional visit did. Its counterpart, the execution rule,
+//! still needs no code: symbol-attributed references hang off the symbol node and traverse
+//! only once it's reached. (The symbol→owner edge was originally caught dogfooding the Go
+//! adapter: `func main()` was a root but `main.go` was never enqueued.)
 
 use crate::graph::ProjectGraph;
-use crate::vocab::{Confidence, EdgeKind, FileId, NodeRef, RootKind, SymbolId};
+use crate::vocab::{Confidence, EdgeKind, NodeRef, RootKind};
 
 /// The four colors, named exactly as RFC 0005 §1's table names them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -19,35 +28,65 @@ pub enum Reachability {
     Unreachable,
 }
 
+/// Minimal fixed-size bitset — dense node indices make membership a shift and a mask.
+#[derive(Clone)]
+struct BitSet {
+    words: Vec<u64>,
+}
+
+impl BitSet {
+    fn new(len: usize) -> BitSet {
+        BitSet {
+            words: vec![0; len.div_ceil(64)],
+        }
+    }
+
+    #[inline]
+    fn insert(&mut self, i: usize) -> bool {
+        let (w, b) = (i / 64, 1u64 << (i % 64));
+        let fresh = self.words[w] & b == 0;
+        self.words[w] |= b;
+        fresh
+    }
+
+    #[inline]
+    fn contains(&self, i: usize) -> bool {
+        self.words[i / 64] & (1u64 << (i % 64)) != 0
+    }
+}
+
 /// Every graph node's resolved `(color, confidence)` — total over every file and symbol.
 /// Absence from every tier resolves to `(Unreachable, Certain)`, per RFC 0005 §1's
 /// consequence: dead is always certain.
 pub struct ReachabilityMap {
-    colors: HashMap<NodeRef, (Reachability, Confidence)>,
-    /// The raw per-`(root kind, confidence tier)` reached sets `compute` builds on its way to
-    /// `colors` — kept around because `colors` only records each node's *winning* color
-    /// (Production beats TestOnly beats ToolingOnly), which is exactly wrong for a query like
-    /// `untested` (RFC 0005 §9): "is this Production-colored node *also* reachable from a test
-    /// root" needs the kind that lost the precedence race, not just the one that won it.
-    reached: HashMap<(RootKind, Confidence), HashSet<NodeRef>>,
+    files_len: usize,
+    /// Dense per-node winning `(color, strongest tau)`.
+    colors: Vec<(Reachability, Confidence)>,
+    /// Per root kind, the `Possible`-tier reached set — the loosest tier's BFS, whose set is
+    /// the union of every stronger tier's. Kept because `colors` only records each node's
+    /// *winning* color (Production beats TestOnly beats ToolingOnly), which is exactly wrong
+    /// for a query like `untested` (RFC 0005 §9): "is this Production-colored node *also*
+    /// reachable from a test root" needs the kind that lost the precedence race.
+    reached_possible: [BitSet; 3],
 }
 
 impl ReachabilityMap {
+    #[inline]
+    fn index(&self, node: NodeRef) -> usize {
+        match node {
+            NodeRef::File(f) => f.0 as usize,
+            NodeRef::Symbol(s) => self.files_len + s.0 as usize,
+        }
+    }
+
     pub fn get(&self, node: NodeRef) -> (Reachability, Confidence) {
-        self.colors
-            .get(&node)
-            .copied()
-            .unwrap_or((Reachability::Unreachable, Confidence::Certain))
+        self.colors[self.index(node)]
     }
 
     /// Whether `node` is reachable from any root of `kind`, at any confidence whatsoever —
-    /// independent of which color `node` actually won (see the struct doc). `Possible` is the
-    /// loosest tier's BFS (edges filtered by `conf >= tau`, and `Possible` is the weakest tau),
-    /// so its reached set is the union of every stronger tier's.
+    /// independent of which color `node` actually won (see the struct doc).
     pub fn reachable_from(&self, kind: RootKind, node: NodeRef) -> bool {
-        self.reached
-            .get(&(kind, Confidence::Possible))
-            .is_some_and(|s| s.contains(&node))
+        self.reached_possible[kind_index(kind)].contains(self.index(node))
     }
 }
 
@@ -63,122 +102,163 @@ const ROOT_KINDS: [(RootKind, Reachability); 3] = [
     (RootKind::Tooling, Reachability::ToolingOnly),
 ];
 
+fn kind_index(kind: RootKind) -> usize {
+    match kind {
+        RootKind::Production => 0,
+        RootKind::Test => 1,
+        RootKind::Tooling => 2,
+    }
+}
+
 pub fn compute(graph: &ProjectGraph) -> ReachabilityMap {
-    // Adjacency for reachability-relevant edges only. Declares (ownership) and
-    // ImportsDependency (a fact about dependency usage, not code reachability) never
-    // participate — only Root (seeds, handled separately), References, ImportsFile, and
-    // Wildcard's expansion contribute traversable edges.
-    let mut declared_in: HashMap<FileId, Vec<SymbolId>> = HashMap::default();
+    let files_len = graph.files.len();
+    let n = files_len + graph.symbols.len();
+    let node_index = |node: NodeRef| -> usize {
+        match node {
+            NodeRef::File(f) => f.0 as usize,
+            NodeRef::Symbol(s) => files_len + s.0 as usize,
+        }
+    };
+
+    // ---- CSR construction: count, offset, fill. Traversable edges only — Declares
+    // (ownership) and ImportsDependency (a dependency-usage fact) never participate; Root
+    // edges are seeds, handled separately.
+    let mut declared_in: Vec<Vec<u32>> = vec![Vec::new(); files_len];
     for edge in &graph.edges {
         if let EdgeKind::Declares { file, symbol } = edge.kind {
-            declared_in.entry(file).or_default().push(symbol);
+            declared_in[file.0 as usize].push(symbol.0);
         }
     }
 
-    let mut adjacency: HashMap<NodeRef, Vec<(NodeRef, Confidence)>> = HashMap::default();
+    let mut degree: Vec<u32> = vec![0; n];
+    let count = |degree: &mut Vec<u32>, from: usize, extra: usize| degree[from] += extra as u32;
     for edge in &graph.edges {
         match edge.kind {
-            EdgeKind::References { from, to, .. } => adjacency
-                .entry(from)
-                .or_default()
-                .push((NodeRef::Symbol(to), edge.confidence)),
-            EdgeKind::ImportsFile { from, to } => adjacency
-                .entry(NodeRef::File(from))
-                .or_default()
-                .push((NodeRef::File(to), edge.confidence)),
+            EdgeKind::References { from, .. } => count(&mut degree, node_index(from), 1),
+            EdgeKind::ImportsFile { from, .. } => count(&mut degree, from.0 as usize, 1),
+            EdgeKind::Wildcard { from } => count(
+                &mut degree,
+                from.0 as usize,
+                declared_in[from.0 as usize].len(),
+            ),
+            _ => {}
+        }
+    }
+    // The module-load rule's implicit symbol → owner edge, one per symbol.
+    for i in 0..graph.symbols.len() {
+        degree[files_len + i] += 1;
+    }
+
+    let mut offsets: Vec<u32> = Vec::with_capacity(n + 1);
+    offsets.push(0);
+    for &d in &degree {
+        offsets.push(offsets.last().unwrap() + d);
+    }
+    let total = *offsets.last().unwrap() as usize;
+    let mut targets: Vec<u32> = vec![0; total];
+    let mut confs: Vec<Confidence> = vec![Confidence::Certain; total];
+    let mut cursor: Vec<u32> = offsets[..n].to_vec();
+    let mut push_edge = |cursor: &mut Vec<u32>, from: usize, to: usize, conf: Confidence| {
+        let at = cursor[from] as usize;
+        targets[at] = to as u32;
+        confs[at] = conf;
+        cursor[from] += 1;
+    };
+    for edge in &graph.edges {
+        match edge.kind {
+            EdgeKind::References { from, to, .. } => push_edge(
+                &mut cursor,
+                node_index(from),
+                files_len + to.0 as usize,
+                edge.confidence,
+            ),
+            EdgeKind::ImportsFile { from, to } => {
+                push_edge(&mut cursor, from.0 as usize, to.0 as usize, edge.confidence)
+            }
             EdgeKind::Wildcard { from } => {
                 // Plausible target set, absent narrower DynamicUse metadata (RFC 0005 §1):
                 // every symbol declared in the same file, at `possible`.
-                if let Some(syms) = declared_in.get(&from) {
-                    let entry = adjacency.entry(NodeRef::File(from)).or_default();
-                    for &s in syms {
-                        entry.push((NodeRef::Symbol(s), Confidence::Possible));
-                    }
+                for &sym in &declared_in[from.0 as usize] {
+                    push_edge(
+                        &mut cursor,
+                        from.0 as usize,
+                        files_len + sym as usize,
+                        Confidence::Possible,
+                    );
                 }
             }
-            EdgeKind::Declares { .. }
-            | EdgeKind::ImportsDependency { .. }
-            | EdgeKind::Root { .. } => {}
+            _ => {}
         }
     }
+    for (i, symbol) in graph.symbols.iter().enumerate() {
+        push_edge(
+            &mut cursor,
+            files_len + i,
+            symbol.file.0 as usize,
+            Confidence::Certain,
+        );
+    }
 
-    let mut seeds: HashMap<RootKind, Vec<(NodeRef, Confidence)>> = HashMap::default();
+    let mut seeds: [Vec<(u32, Confidence)>; 3] = [Vec::new(), Vec::new(), Vec::new()];
     for edge in &graph.edges {
         if let EdgeKind::Root { kind, target } = edge.kind {
-            seeds
-                .entry(kind)
-                .or_default()
-                .push((target, edge.confidence));
+            seeds[kind_index(kind)].push((node_index(target) as u32, edge.confidence));
         }
     }
 
     // R(kind, tau) for every (kind, tau), literally: BFS seeded only by roots whose own
-    // confidence is >= tau, traversing only edges with confidence >= tau.
-    //
-    // One addition beyond the literal algorithm — RFC 0005 §1's **module-load rule** (RFC 0012
-    // §4): reaching a *symbol* also reaches its *owning file*, at the same confidence. Using a
-    // symbol loads its module: the file's load-time (`within: None`, file-attributed)
-    // references and its ImportsFile edges must fire, and a symbol-only root (RFC 0011 §5's
-    // per-export promotion; Go's `func main`/`init`, docs/adapters/go.md §2) must not strand
-    // its own file. Its counterpart, the **execution rule**, needs no code at all: a
-    // symbol-attributed reference edge (`RawReference::within`) simply hangs off the symbol
-    // node, so it traverses only once that symbol is reached — which is what makes transitive
-    // death visible. Originally caught dogfooding the Go adapter: `func main()` was a root but
-    // `main.go` was never enqueued, stranding everything the file referenced.
-    let mut reached: HashMap<(RootKind, Confidence), HashSet<NodeRef>> = HashMap::default();
-    for &(kind, _) in &ROOT_KINDS {
-        let kind_seeds = seeds.get(&kind).cloned().unwrap_or_default();
+    // confidence is >= tau, traversing only edges with confidence >= tau. The module-load
+    // rule needs no special-case here any more — it's the implicit CSR edge above.
+    let mut reached: Vec<BitSet> = Vec::with_capacity(9);
+    for (k, _) in ROOT_KINDS.iter().enumerate().map(|(i, _)| (i, ())) {
         for &tau in &TIERS {
-            let mut visited: HashSet<NodeRef> = HashSet::default();
-            let mut queue: VecDeque<NodeRef> = VecDeque::new();
-            let visit =
-                |node: NodeRef, visited: &mut HashSet<NodeRef>, queue: &mut VecDeque<NodeRef>| {
-                    if visited.insert(node) {
-                        queue.push_back(node);
-                    }
-                    if let NodeRef::Symbol(s) = node {
-                        let owner = NodeRef::File(graph.symbols[s.0 as usize].file);
-                        if visited.insert(owner) {
-                            queue.push_back(owner);
+            let mut visited = BitSet::new(n);
+            let mut queue: Vec<u32> = Vec::new();
+            for &(node, conf) in &seeds[k] {
+                if conf >= tau && visited.insert(node as usize) {
+                    queue.push(node);
+                }
+            }
+            while let Some(node) = queue.pop() {
+                let (start, end) = (
+                    offsets[node as usize] as usize,
+                    offsets[node as usize + 1] as usize,
+                );
+                for at in start..end {
+                    if confs[at] >= tau {
+                        let next = targets[at];
+                        if visited.insert(next as usize) {
+                            queue.push(next);
                         }
                     }
-                };
-            for &(node, conf) in &kind_seeds {
-                if conf >= tau {
-                    visit(node, &mut visited, &mut queue);
                 }
             }
-            while let Some(node) = queue.pop_front() {
-                for &(next, conf) in adjacency.get(&node).map(Vec::as_slice).unwrap_or(&[]) {
-                    if conf >= tau {
-                        visit(next, &mut visited, &mut queue);
-                    }
-                }
-            }
-            reached.insert((kind, tau), visited);
+            reached.push(visited);
         }
     }
 
     // First-match precedence over every node: Production > TestOnly > ToolingOnly; within a
-    // color, the strongest tau achieved. Absent nodes are left out (ReachabilityMap::get
-    // supplies the (Unreachable, Certain) default).
-    let mut colors: HashMap<NodeRef, (Reachability, Confidence)> = HashMap::default();
-    let all_nodes = (0..graph.files.len())
-        .map(|i| NodeRef::File(FileId(i as u32)))
-        .chain((0..graph.symbols.len()).map(|i| NodeRef::Symbol(SymbolId(i as u32))));
-    for node in all_nodes {
-        let resolved = ROOT_KINDS.iter().find_map(|&(kind, color)| {
-            TIERS
-                .iter()
-                .find(|&&tau| reached.get(&(kind, tau)).is_some_and(|s| s.contains(&node)))
-                .map(|&tau| (color, tau))
-        });
-        if let Some(result) = resolved {
-            colors.insert(node, result);
+    // color, the strongest tau achieved. (Traversal order above is scheduling; membership is
+    // a set — so a stack-based visit order changes nothing observable.)
+    let mut colors: Vec<(Reachability, Confidence)> =
+        vec![(Reachability::Unreachable, Confidence::Certain); n];
+    for (idx, color) in colors.iter_mut().enumerate() {
+        'resolve: for (k, &(_, kind_color)) in ROOT_KINDS.iter().enumerate() {
+            for (t, &tau) in TIERS.iter().enumerate() {
+                if reached[k * 3 + t].contains(idx) {
+                    *color = (kind_color, tau);
+                    break 'resolve;
+                }
+            }
         }
     }
 
-    ReachabilityMap { colors, reached }
+    let reached_possible = [reached[2].clone(), reached[5].clone(), reached[8].clone()];
+    ReachabilityMap {
+        files_len,
+        colors,
+        reached_possible,
+    }
 }
 
 #[cfg(test)]
@@ -186,7 +266,9 @@ mod tests {
     use super::*;
     use crate::adapter::{ProjectPath, VisibilityLevel};
     use crate::graph::{DependencyNode, FileNode, ProjectGraph, SymbolNode};
-    use crate::vocab::{Edge, FileClass, FileOrigin, FileRole, Provenance, RefKind, SymbolKind};
+    use crate::vocab::{
+        Edge, FileClass, FileId, FileOrigin, FileRole, Provenance, RefKind, SymbolId, SymbolKind,
+    };
     use smol_str::SmolStr;
 
     fn file(path: &str) -> FileNode {

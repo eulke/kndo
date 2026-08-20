@@ -77,41 +77,136 @@ pub fn run_all(
 ) -> AnalysisOutcome {
     let mut timings = Timings::new();
     let reach = timings.time("reachability", || reachability::compute(graph));
+    let reach = &reach;
 
-    let mut findings = timings.time("unused", || {
-        let mut f = unused::find_unused_files(graph, &reach);
-        f.extend(unused::find_unused_symbols(graph, &reach));
-        f
-    });
-    findings.extend(timings.time("test-only", || {
-        let mut f = test_only::find_test_only_files(graph, &reach);
-        f.extend(test_only::find_test_only_symbols(graph, &reach));
-        f
-    }));
-    findings.extend(timings.time("dependencies", || {
-        let mut f = undeclared::find_undeclared_dependencies(graph);
-        f.extend(version_skew::find_version_skew(graph));
-        f.extend(dependency_hygiene::find_dependency_hygiene(graph));
-        f
-    }));
-    findings.extend(timings.time("duplicate-files", || duplicate::find_duplicate_files(graph)));
-    let (duplicate_findings, duplicated) = timings.time("duplicate-functions", || {
-        duplicate::find_duplicate_functions(graph)
-    });
+    // Independent analyses run concurrently (RFC 0008 §2's inter-analysis parallelism) via an
+    // explicit join tree — parallel compute, deterministic reduce (§4): every result lands in
+    // a named slot, findings are extended in the same fixed order as ever (and id-sorted
+    // below regardless), and per-phase timings are pushed in that fixed order after the join.
+    // The timing values themselves are each phase's own elapsed time — under parallelism they
+    // overlap, so the `--verbose` block's total exceeds the wall clock by design.
+    let timed = |f: &dyn Fn() -> Vec<Finding>| {
+        let start = std::time::Instant::now();
+        (f(), start.elapsed().as_micros() as u64)
+    };
+    #[allow(clippy::type_complexity)]
+    let (
+        ((unused_r, test_only_r), (dependencies_r, duplicate_files_r)),
+        (
+            ((duplicate_fn_r, duplicate_fn_us), internal_only_r),
+            ((ptl_r, deep_import_r), ((cyclic_r, cyclic_us), (crap_r, untested_r))),
+        ),
+    ) = rayon::join(
+        || {
+            rayon::join(
+                || {
+                    rayon::join(
+                        || {
+                            timed(&|| {
+                                let mut f = unused::find_unused_files(graph, reach);
+                                f.extend(unused::find_unused_symbols(graph, reach));
+                                f
+                            })
+                        },
+                        || {
+                            timed(&|| {
+                                let mut f = test_only::find_test_only_files(graph, reach);
+                                f.extend(test_only::find_test_only_symbols(graph, reach));
+                                f
+                            })
+                        },
+                    )
+                },
+                || {
+                    rayon::join(
+                        || {
+                            timed(&|| {
+                                let mut f = undeclared::find_undeclared_dependencies(graph);
+                                f.extend(version_skew::find_version_skew(graph));
+                                f.extend(dependency_hygiene::find_dependency_hygiene(graph));
+                                f
+                            })
+                        },
+                        || timed(&|| duplicate::find_duplicate_files(graph)),
+                    )
+                },
+            )
+        },
+        || {
+            rayon::join(
+                || {
+                    rayon::join(
+                        || {
+                            let start = std::time::Instant::now();
+                            let out = duplicate::find_duplicate_functions(graph);
+                            (out, start.elapsed().as_micros() as u64)
+                        },
+                        || timed(&|| internal_only::find_internal_only(graph, reach)),
+                    )
+                },
+                || {
+                    rayon::join(
+                        || {
+                            rayon::join(
+                                || timed(&|| private_type_leak::find_private_type_leaks(graph)),
+                                || timed(&|| deep_import::find_deep_imports(graph)),
+                            )
+                        },
+                        || {
+                            rayon::join(
+                                || {
+                                    let start = std::time::Instant::now();
+                                    let out = cyclic::find_cycles(graph);
+                                    (out, start.elapsed().as_micros() as u64)
+                                },
+                                || {
+                                    rayon::join(
+                                        || timed(&|| crap::find_crap(graph, coverage)),
+                                        || {
+                                            let start = std::time::Instant::now();
+                                            let out = untested::find_untested(graph, reach);
+                                            (out, start.elapsed().as_micros() as u64)
+                                        },
+                                    )
+                                },
+                            )
+                        },
+                    )
+                },
+            )
+        },
+    );
+
+    let (duplicate_findings, duplicated) = duplicate_fn_r;
+    let (cycle_findings, cycle_files) = cyclic_r;
+    let ((untested_findings, untested_diagnostic), untested_us) = untested_r;
+
+    let mut findings = unused_r.0;
+    timings.entries.push(("unused", unused_r.1));
+    findings.extend(test_only_r.0);
+    timings.entries.push(("test-only", test_only_r.1));
+    findings.extend(dependencies_r.0);
+    timings.entries.push(("dependencies", dependencies_r.1));
+    findings.extend(duplicate_files_r.0);
+    timings
+        .entries
+        .push(("duplicate-files", duplicate_files_r.1));
     findings.extend(duplicate_findings);
-    findings.extend(timings.time("internal-only", || {
-        internal_only::find_internal_only(graph, &reach)
-    }));
-    findings.extend(timings.time("private-type-leak", || {
-        private_type_leak::find_private_type_leaks(graph)
-    }));
-    findings.extend(timings.time("deep-import", || deep_import::find_deep_imports(graph)));
-    let (cycle_findings, cycle_files) = timings.time("cyclic", || cyclic::find_cycles(graph));
+    timings
+        .entries
+        .push(("duplicate-functions", duplicate_fn_us));
+    findings.extend(internal_only_r.0);
+    timings.entries.push(("internal-only", internal_only_r.1));
+    findings.extend(ptl_r.0);
+    timings.entries.push(("private-type-leak", ptl_r.1));
+    findings.extend(deep_import_r.0);
+    timings.entries.push(("deep-import", deep_import_r.1));
     findings.extend(cycle_findings);
-    findings.extend(timings.time("crap", || crap::find_crap(graph, coverage)));
-    let (untested_findings, untested_diagnostic) =
-        timings.time("untested", || untested::find_untested(graph, &reach));
+    timings.entries.push(("cyclic", cyclic_us));
+    findings.extend(crap_r.0);
+    timings.entries.push(("crap", crap_r.1));
     findings.extend(untested_findings);
+    timings.entries.push(("untested", untested_us));
     timings.time("sort-findings", || {
         findings.sort_unstable_by(|a, b| a.id.cmp(&b.id))
     });
@@ -121,7 +216,7 @@ pub fn run_all(
     let health = timings.time("health", || {
         health::compute(
             graph,
-            &reach,
+            reach,
             &findings,
             &health::HealthInputs {
                 coverage,

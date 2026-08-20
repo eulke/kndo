@@ -265,6 +265,25 @@ gap between no-op and 1-file (~1 s of pure re-resolve/re-link/persist) is exactl
 RFC 0004 §4's patch algorithm removes. E1/E2 must first pull the no-op cost down; then the
 incremental lands.
 
+E1 landed as a measured series (each commit carries its own before/after table): FxHash for
+every internal map (RFC 0008 §3's "no default SipHash" — −17…−42% across scenarios), the
+JSON envelope borrowing the run's collections instead of deep-cloning them to serialize, and
+the graph-snapshot persist moved off the critical path (§2 verbatim: a detachable writer on
+a background thread, joined after render via Engine::drop — ~400 ms off the 50k one-file
+change alone).
+
+E2 landed: reachability keeps its literal tiered algorithm but on §3's data layout — dense
+node indices, one CSR adjacency (offsets + targets + confidences), per-(kind, tier) bitsets,
+the module-load rule as an implicit `symbol → owner` CSR edge at `Certain` (same semantics,
+no special case) — 57 → 13 ms at 50k; and the independent analyses now run concurrently
+through an explicit `rayon::join` tree (§2's inter-analysis parallelism, §4's parallel
+compute / deterministic reduce: named slots, fixed extend order, id-sort regardless).
+Cumulative vs the E0b baseline: 5k warm-noop 86 → 61 ms, 5k one-file 217 → 127 ms, 50k
+warm-noop 903 → 590 ms, 50k one-file 1 962 → 1 312 ms, 50k staged 1 533 → 917 ms. The 50k
+no-op is now dominated by assembly (~220 ms: discovery + hashing 50k files and
+validating + deserializing a 29 MB snapshot) — E3's territory, together with the ~700 ms
+rebuild gap the one-file change still pays.
+
 **Exit:** the RFC 0008 §7 scenarios run as a suite against a recorded baseline with a >10%
 regression gate; bench5k warm no-op and one-file change at or under their M2 marks (~40 ms /
 ~90 ms); the 50k fixture answers the incremental question with data.
