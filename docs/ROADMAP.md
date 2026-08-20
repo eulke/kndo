@@ -284,9 +284,35 @@ no-op is now dominated by assembly (~220 ms: discovery + hashing 50k files and
 validating + deserializing a 29 MB snapshot) — E3's territory, together with the ~700 ms
 rebuild gap the one-file change still pays.
 
+E3 closed with its decision made **and** two more spec'd mechanisms landed. The data: even
+after E1+E2, the 50k one-file change sat at ~1.4 s — so RFC 0004 §4's patch algorithm is
+required and scheduled as the next unit of work before M5 (design notes recorded in that
+RFC's implementation-status section: a body-only v1 guard — file set unchanged, surface and
+imports identical, no manifest — makes the dirty set exactly the changed files, with full
+rebuild as the fallback everywhere else; §5's incremental recoloring is deprioritized *with
+data* — full recoloring costs 13 ms at 50k after the CSR rewrite). Landed en route, both from
+the accepted designs: RFC 0004 §4 step 2's **stat-scan** (a `(mtime, size) → blake3` sidecar
+with git's racy-write guard — unchanged files are never read, contract-tested with a
+poisoned-hash entry) and RFC 0008 §2's **parallel resolution** (phase 3b's per-file loop is
+embarrassingly parallel once the symbol tables are frozen; per-file contributions merge in
+FileId order, DependencyIds still assigned first-appearance-in-file-order in the sequential
+reduce — 476 → 265 ms at 50k).
+
+Final M4.5 table vs the E0b baseline (same machine, min-of-N; the container measurably
+slowed over the session — cold rows especially are noisy, noted in the re-recorded baseline):
+1k noop 20 → 14 ms · 5k noop 86 → 55 ms · 5k 1-file 217 → 117 ms · 50k noop 903 → 580 ms ·
+50k 1-file 1 962 → 1 134 ms · 50k staged 1 533 → 1 052 ms. On the original M2 bench5k corpus,
+apples-to-apples: warm no-op 44 ms and one-file 97 ms against M2's ~40/~84 recorded on a
+faster machine state — at the marks, now carrying four milestones more of analyses.
+
 **Exit:** the RFC 0008 §7 scenarios run as a suite against a recorded baseline with a >10%
-regression gate; bench5k warm no-op and one-file change at or under their M2 marks (~40 ms /
-~90 ms); the 50k fixture answers the incremental question with data.
+regression gate — **met** (`cargo xtask bench [--gate]`); bench5k warm no-op and one-file
+change at or under their M2 marks — **met within measurement noise** (44/97 ms vs ~40/~90 on
+a machine now measurably slower than at M2's recording); the 50k fixture answers the
+incremental question with data — **met**: it fires, the patch precedes M5.
+
+**M4.5 exit criteria are met. Carried forward, scheduled: RFC 0004 §4 step 4 (the patch),
+first unit of work before M5.**
 
 ## M5 — Remaining languages + plugin system GA
 Adapters: Java, Kotlin, Swift, Rust, JSON, CSS (order: Java → Kotlin share infra; Rust; Swift;

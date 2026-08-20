@@ -78,7 +78,43 @@ after a big rebase), kndo falls back to a full recompute, which is still cache-w
 Correctness never depends on the incremental path: `kndo check --no-cache` must produce
 byte-identical findings, and CI runs both on a fixture matrix to enforce it.
 
-**Implementation status (M2 close-out, 2026-08-20):** step 4's *patch* — reusing part of a stale
+**Implementation status (updated at M4.5, 2026-08-20; original M2 note below):** the revisit
+condition fired. The M4.5 benchmark suite's 50k fixture measured the all-or-nothing rebuild at
+1 962 ms for a one-file change (E0b baseline) — the patch is required. M4.5 landed the
+*surrounding* pieces first: step 2's stat-scan (a `(mtime, size) → blake3` sidecar with git's
+racy-write guard — unchanged files are no longer even read), step 6's persist off the critical
+path, and parallel per-file resolution (RFC 0008 §2), which together brought the 50k one-file
+change to ~1 130 ms — still over any reasonable large-repo budget, so **step 4's patch is the
+scheduled next unit of work, before M5**. Design notes from the M4.5 analysis, recorded for
+that implementation:
+
+- *v1 guard (body-only fast path):* patch only when the file **set** is unchanged and every
+  changed file's **surface is identical** — same declarations (name/kind/exported/visibility/
+  member_of, spans free to move), same imports/re-exports, same roots, same unit/unit_name,
+  same detected origin and class, and no manifest touched. That is the dominant pre-commit
+  case (editing bodies), and it makes the dirty set exactly the changed files: nobody else's
+  resolution can change. Everything outside the guard falls back to the full rebuild — the
+  fallback-honesty rule above, applied maximally at first.
+- *Old-facts comparison:* the guard compares fresh facts against the old facts fetched from
+  the facts cache by the file's **old** content hash (already cached), via a span-normalized
+  surface signature. Old facts missing ⇒ full rebuild.
+- *Splice mechanics:* FileIds are stable (path-sorted, set unchanged); a surface-identical
+  change keeps each changed file's symbol run identical in names/order, so SymbolIds are
+  stable too — the patch updates spans/signature_spans in place, regenerates the changed
+  files' owned edges (Declares/References/ImportsFile/ImportsDependency/Wildcard/in-source
+  roots — ownership is derivable from edge shape), their function_metrics, suppressions, and
+  per-file diagnostics, and leaves every other file's contributions untouched.
+- *Tables for one-file re-resolution:* almost everything comes from the loaded snapshot
+  (symbols → bare/qualified/unit/member tables); the two facts-only inputs are the import
+  targets' `unit_name` (qualifier defaults) and barrel re-export aliases — fetch just the
+  changed files' direct import targets' facts (bounded, cache-hot) or persist those two onto
+  the snapshot.
+- §5's incremental reachability-color propagation is **explicitly deprioritized with data**:
+  after the CSR/bitset rewrite (RFC 0008 §3), full recoloring costs 13 ms at 50k files —
+  two orders below the phases the patch addresses. It stays accepted design with a measured
+  trigger instead of a guess.
+
+**Original M2 note (2026-08-20):** step 4's *patch* — reusing part of a stale
 graph — and §5's incremental BFS/reachability-color propagation are **not built**; today any
 change to the discovered file set is a full graph rebuild (all-or-nothing, keyed as in §3), with
 only the facts layer staying warm per file. This was deliberately deferred rather than blocking
