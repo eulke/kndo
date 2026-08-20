@@ -145,11 +145,22 @@ pub struct VisibilityLevel(pub u8);
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Declaration {
+    /// The declaration's own name — for a member, the *bare* member name (`Method`, never
+    /// `"T.Method"`): ownership is a structured fact (`member_of`), not string encoding
+    /// (RFC 0012 §3). Display joins them (`T.Method`); resolution reasons about them apart.
     pub name: SmolStr,
     pub kind: SymbolKind,
     pub span: Span,
     pub exported: bool,
     pub visibility: VisibilityLevel,
+    /// The owning type's declared name, when this declaration is a member of one (a Go
+    /// method's receiver type, a class method's class, an enum member's enum — RFC 0012 §3's
+    /// per-language table). `None` for free-standing declarations. Members resolve differently
+    /// from free names: an unqualified reference never `certain`-resolves to a member — it
+    /// reaches members only through the duck-typed fallback (`graph::assemble` phase 3b),
+    /// at `Probable`/`Possible`, per RFC 0002 §5's ladder. A [`RawRoot`] targeting a member
+    /// names it in qualified `Owner.name` form.
+    pub member_of: Option<SmolStr>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

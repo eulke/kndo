@@ -112,7 +112,23 @@ pub trait LanguageAdapter: Send + Sync {
 
 ```rust
 pub struct FileFacts {
-    pub declarations: Vec<Declaration>,     // { name, kind: SymbolKind, span, exported: bool, visibility }
+    pub declarations: Vec<Declaration>,     // { name, kind: SymbolKind, span, exported: bool,
+                                             //   visibility, member_of: Option<Name> }
+                                             // member_of (RFC 0012 §3): the owning type's
+                                             // declared name when this is a member (a Go
+                                             // method's receiver type, a class method's class);
+                                             // name is then the BARE member name — ownership is
+                                             // a structured fact, never string encoding. Members
+                                             // resolve on their own track: an unqualified
+                                             // reference never certain-resolves to a member; it
+                                             // reaches members only through the duck-typed
+                                             // fallback (assembly phase 3b — same-file then
+                                             // same-unit candidates; one candidate ⇒ Probable,
+                                             // several ⇒ Possible each, per RFC 0002 §5), and a
+                                             // RawRoot targeting a member names it in qualified
+                                             // `Owner.name` form. Display/selectors use the
+                                             // qualified form; ids fold it in, so same-named
+                                             // members of different owners stay distinct.
     pub references:   Vec<RawReference>,    // { name, scope-context, span } — resolved core-side
                                              // (graph::assemble) against same-file declarations
                                              // and this file's own import bindings (below); no

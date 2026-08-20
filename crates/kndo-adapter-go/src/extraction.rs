@@ -153,6 +153,7 @@ fn push_declaration(
         span: node_span,
         exported,
         visibility: visibility(exported),
+        member_of: None,
     });
     if exported && promote_exports {
         out.roots.push(RawRoot {
@@ -188,9 +189,11 @@ fn handle_function(
     }
 }
 
-/// `func (t T) Name(...)` / `func (t *T) Name(...)` — symbol name `Type.Name`, so value- and
-/// pointer-receiver methods on the same type share a namespace the way Go's own method-set
-/// rules do (docs/adapters/go.md §2).
+/// `func (t T) Name(...)` / `func (t *T) Name(...)` — a *member* declaration (RFC 0012 §3):
+/// bare name `Name` with `member_of: Some("Type")`, never a `"Type.Name"` string. Ownership as
+/// a structured fact is what lets the core resolve a bare method-call reference through the
+/// duck-typed fallback instead of missing entirely — before this, an unexported method used
+/// only in-package false-positived as `unused:method`.
 fn handle_method(node: Node, src: &[u8], promote_exports: bool, out: &mut FileFacts) {
     let (Some(receiver), Some(name_node)) = (
         node.child_by_field_name("receiver"),
@@ -202,22 +205,26 @@ fn handle_method(node: Node, src: &[u8], promote_exports: bool, out: &mut FileFa
         return;
     };
     let method_name = text(name_node, src);
-    let qualified = format!("{receiver_type}.{method_name}");
-    // Root-worthiness (and suppression addressing) go by the method's *own* exportedness, not
-    // a fabricated one for the dotted name — `is_exported` on the dotted string would key off
-    // the receiver type's capitalization instead, which is a different, unrelated fact.
+    // Root-worthiness (and suppression addressing) go by the method's *own* exportedness —
+    // `is_exported` on a dotted string would key off the receiver type's capitalization
+    // instead, which is a different, unrelated fact.
     let exported = is_exported(method_name);
     out.declarations.push(Declaration {
-        name: SmolStr::new(&qualified),
+        name: SmolStr::new(method_name),
         kind: SymbolKind::Method,
         span: span(node),
         exported,
         visibility: visibility(exported),
+        member_of: Some(SmolStr::new(&receiver_type)),
     });
     if exported && promote_exports {
         out.roots.push(RawRoot {
             kind: RootKind::Production,
-            target: RawRootTarget::Declaration(SmolStr::new(&qualified)),
+            // Member root targets use the qualified form (contracts §2, RFC 0012 §3) — the
+            // core's bare-name table deliberately never contains members.
+            target: RawRootTarget::Declaration(SmolStr::new(format!(
+                "{receiver_type}.{method_name}"
+            ))),
             confidence: Confidence::Certain,
         });
     }
@@ -542,18 +549,29 @@ mod tests {
     }
 
     #[test]
-    fn methods_get_a_dotted_receiver_type_name() {
+    fn methods_are_members_of_their_receiver_type() {
+        // Bare name + member_of (RFC 0012 §3) — never a dotted string. Value- and
+        // pointer-receiver methods share the owner exactly as Go's method-set rules do.
         let src =
             b"package p\n\ntype T struct{}\nfunc (t T) Value() {}\nfunc (t *T) Pointer() {}\n";
         let facts = extract("a.go", src);
-        assert!(facts
+        let value = facts
             .declarations
             .iter()
-            .any(|d| d.name.as_str() == "T.Value"));
-        assert!(facts
+            .find(|d| d.name.as_str() == "Value")
+            .unwrap();
+        assert_eq!(value.member_of.as_deref(), Some("T"));
+        let pointer = facts
             .declarations
             .iter()
-            .any(|d| d.name.as_str() == "T.Pointer"));
+            .find(|d| d.name.as_str() == "Pointer")
+            .unwrap();
+        assert_eq!(pointer.member_of.as_deref(), Some("T"));
+        // Exported methods root themselves by the qualified form (member root targets,
+        // contracts §2) — the core's bare-name table deliberately never holds members.
+        assert!(facts.roots.iter().any(|r| matches!(
+            &r.target, RawRootTarget::Declaration(n) if n.as_str() == "T.Value"
+        )));
     }
 
     #[test]

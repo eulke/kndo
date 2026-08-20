@@ -135,21 +135,21 @@ pub fn find_test_only_symbols(graph: &ProjectGraph, reach: &ReachabilityMap) -> 
 
         let path = file.path.0.as_str();
         let facet = symbol.kind.facet();
+        let qualified = symbol.qualified_name();
         findings.push(Finding {
-            id: finding_id("test-only", facet, path, symbol.name.as_str(), ""),
+            id: finding_id("test-only", facet, path, &qualified, ""),
             category: "test-only".to_string(),
             group: "waste".to_string(),
             subject_kind: facet.to_string(),
             severity: Severity::Info,
             confidence,
             message: format!(
-                "{path}#{} is reachable only from tests: nothing in production calls this {facet}",
-                symbol.name
+                "{path}#{qualified} is reachable only from tests: nothing in production calls this {facet}"
             ),
             location: Location {
                 path: Some(file.path.clone()),
                 range: Some(symbol.span),
-                symbol: Some(symbol.name.to_string()),
+                symbol: Some(qualified.clone()),
                 package: graph.package_name(file.package).map(str::to_string),
             },
             delta: None,
@@ -189,6 +189,7 @@ mod tests {
             span: Default::default(),
             exported: true,
             visibility: VisibilityLevel(1),
+            member_of: None,
         }
     }
 

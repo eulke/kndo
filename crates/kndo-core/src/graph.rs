@@ -39,12 +39,30 @@ pub struct FileNode {
 #[derive(Debug, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct SymbolNode {
     pub file: FileId,
+    /// Bare name — for members, ownership lives in `member_of`, never in the name string
+    /// (RFC 0012 §3). Renderers and selectors use [`SymbolNode::qualified_name`].
     #[rkyv(with = crate::rkyv_support::SmolStrAsString)]
     pub name: SmolStr,
     pub kind: SymbolKind,
     pub span: Span,
     pub exported: bool,
     pub visibility: VisibilityLevel,
+    /// Mirrors [`crate::adapter::Declaration::member_of`].
+    #[rkyv(with = rkyv::with::Map<crate::rkyv_support::SmolStrAsString>)]
+    pub member_of: Option<SmolStr>,
+}
+
+impl SymbolNode {
+    /// The display/selector form: `Owner.name` for members, the bare name otherwise. This is
+    /// what finding messages, `location.symbol`, finding ids, and selector round-trips use —
+    /// so ids stay distinct for same-named members of different owners, and stay *stable* for
+    /// adapters that previously encoded the owner into the name itself.
+    pub fn qualified_name(&self) -> String {
+        match &self.member_of {
+            Some(owner) => format!("{owner}.{}", self.name),
+            None => self.name.to_string(),
+        }
+    }
 }
 
 /// A package consumed *as a dependency* — external (npm/crates.io/…) or an in-repo workspace
@@ -262,7 +280,7 @@ pub(crate) fn package_owns(manifest_dir: &str, file_dir: &str) -> bool {
 /// an assembly-algorithm change that could produce a different graph from the same facts. Feeds
 /// [`compute_graph_key`] (RFC 0004 §3's "core graph-schema version"); a bump here invalidates
 /// every project's cached `graph.bin` on the next run, same as any other key-input change.
-pub const GRAPH_SCHEMA_VERSION: u32 = 1;
+pub const GRAPH_SCHEMA_VERSION: u32 = 2; // 2: SymbolNode.member_of + member-call fallback (RFC 0012 §3)
 
 /// The graph snapshot's cache key (RFC 0004 §3, `cache.rs`'s `graph.bin`): a single digest
 /// folding in the *whole* discovered file set (every path + content hash — this already
@@ -643,6 +661,18 @@ pub fn assemble_from_source(
     // today), so this is purely additive: those files never populate or consult these two maps.
     let mut file_unit: Vec<Option<SmolStr>> = vec![None; claimed_per_file.len()];
     let mut symbol_by_name_per_unit: HashMap<SmolStr, HashMap<SmolStr, SymbolId>> = HashMap::new();
+    // Member declarations (`member_of: Some(..)`, RFC 0012 §3) resolve on a separate track:
+    // an unqualified reference must never `certain`-resolve to a member (bare member names
+    // collide across owners by construction — `T.get` and `U.get` are both just `get`), so
+    // members stay OUT of the exact-name tables above and live here, name → every same-named
+    // member, for the duck-typed fallback in phase 3b. Qualified lookup (for `RawRoot`
+    // targets naming `Owner.name`) gets its own exact table.
+    let mut member_by_name_per_file: Vec<HashMap<SmolStr, Vec<SymbolId>>> =
+        vec![HashMap::new(); claimed_per_file.len()];
+    let mut member_by_name_per_unit: HashMap<SmolStr, HashMap<SmolStr, Vec<SymbolId>>> =
+        HashMap::new();
+    let mut symbol_by_qualified_per_file: Vec<HashMap<String, SymbolId>> =
+        vec![HashMap::new(); claimed_per_file.len()];
     for (i, slot) in claimed_per_file.iter().enumerate() {
         let Some(claimed) = slot else { continue };
         let file_id = FileId(i as u32);
@@ -652,12 +682,32 @@ pub fn assemble_from_source(
 
         for decl in &claimed.facts.declarations {
             let symbol_id = SymbolId(symbols.len() as u32);
-            symbol_by_name_per_file[i].insert(decl.name.clone(), symbol_id);
-            if let Some(unit) = &claimed.facts.unit {
-                symbol_by_name_per_unit
-                    .entry(unit.clone())
-                    .or_default()
-                    .insert(decl.name.clone(), symbol_id);
+            match &decl.member_of {
+                None => {
+                    symbol_by_name_per_file[i].insert(decl.name.clone(), symbol_id);
+                    if let Some(unit) = &claimed.facts.unit {
+                        symbol_by_name_per_unit
+                            .entry(unit.clone())
+                            .or_default()
+                            .insert(decl.name.clone(), symbol_id);
+                    }
+                }
+                Some(owner) => {
+                    member_by_name_per_file[i]
+                        .entry(decl.name.clone())
+                        .or_default()
+                        .push(symbol_id);
+                    if let Some(unit) = &claimed.facts.unit {
+                        member_by_name_per_unit
+                            .entry(unit.clone())
+                            .or_default()
+                            .entry(decl.name.clone())
+                            .or_default()
+                            .push(symbol_id);
+                    }
+                    symbol_by_qualified_per_file[i]
+                        .insert(format!("{owner}.{}", decl.name), symbol_id);
+                }
             }
             symbols.push(SymbolNode {
                 file: file_id,
@@ -666,6 +716,7 @@ pub fn assemble_from_source(
                 span: decl.span,
                 exported: decl.exported,
                 visibility: decl.visibility,
+                member_of: decl.member_of.clone(),
             });
             edges.push(Edge {
                 kind: EdgeKind::Declares {
@@ -722,9 +773,12 @@ pub fn assemble_from_source(
             let target = match &root.target {
                 RawRootTarget::WholeFile => Some(NodeRef::File(file_id)),
                 // A root naming a declaration this extraction didn't actually produce is an
-                // adapter contract violation — defensive skip, not a silent crash.
+                // adapter contract violation — defensive skip, not a silent crash. Member
+                // targets use the qualified `Owner.name` form (RFC 0012 §3), looked up in the
+                // qualified table since members never enter the bare-name one.
                 RawRootTarget::Declaration(name) => symbol_by_name_per_file[i]
                     .get(name)
+                    .or_else(|| symbol_by_qualified_per_file[i].get(name.as_str()))
                     .map(|&s| NodeRef::Symbol(s)),
             };
             if let Some(target) = target {
@@ -973,6 +1027,49 @@ pub fn assemble_from_source(
                     source: provenance(),
                     span: Some(reference.span),
                 });
+                continue;
+            }
+
+            // Duck-typed member fallback (RFC 0012 §3, implementing RFC 0002 §5's ladder rule
+            // "duck-typed method with one candidate → probable"): an unresolved name that
+            // matches member declarations plausibly targets any of them — extraction has no
+            // receiver types, so honesty lives in the confidence, not in a guess. Same-file
+            // candidates outrank same-unit ones (a nearer tier being non-empty settles the
+            // plausible set); one candidate ⇒ Probable, several ⇒ Possible each — all get
+            // edges (conservative keep-alive; dead-is-certain is untouched, since a member
+            // no call-site anywhere matches still has zero edges). Interim scope until RFC
+            // 0012 §6's visibility ladder lands: file then unit — complete for Go by the
+            // language's own rules (an unexported method is only legally callable in-package;
+            // exported ones are roots).
+            let candidates = {
+                let same_file = member_by_name_per_file[i].get(&reference.name);
+                match same_file {
+                    Some(v) if !v.is_empty() => Some(v),
+                    _ => file_unit[i].as_ref().and_then(|unit| {
+                        member_by_name_per_unit
+                            .get(unit)
+                            .and_then(|t| t.get(&reference.name))
+                    }),
+                }
+            };
+            if let Some(candidates) = candidates {
+                let confidence = if candidates.len() == 1 {
+                    Confidence::Probable
+                } else {
+                    Confidence::Possible
+                };
+                for &to in candidates {
+                    edges.push(Edge {
+                        kind: EdgeKind::References {
+                            from: NodeRef::File(file_id),
+                            to,
+                            kind: crate::vocab::RefKind::Read,
+                        },
+                        confidence,
+                        source: provenance(),
+                        span: Some(reference.span),
+                    });
+                }
             }
         }
 
@@ -1134,6 +1231,7 @@ mod tests {
                         span: Span::default(),
                         exported: true,
                         visibility: VisibilityLevel(1),
+                        member_of: None,
                     });
                 } else if let Some(name) = line.strip_prefix("private-decl ") {
                     facts.declarations.push(Declaration {
@@ -1142,6 +1240,21 @@ mod tests {
                         span: Span::default(),
                         exported: false,
                         visibility: VisibilityLevel(0),
+                        member_of: None,
+                    });
+                } else if let Some(rest) = line.strip_prefix("member-decl ") {
+                    // `member-decl <owner> <name>` — an unexported member declaration
+                    // (RFC 0012 §3): bare name, structured owner.
+                    let mut parts = rest.splitn(2, ' ');
+                    let owner = parts.next().unwrap_or("");
+                    let name = parts.next().unwrap_or("");
+                    facts.declarations.push(Declaration {
+                        name: SmolStr::new(name),
+                        kind: SymbolKind::Method,
+                        span: Span::default(),
+                        exported: false,
+                        visibility: VisibilityLevel(0),
+                        member_of: Some(SmolStr::new(owner)),
                     });
                 } else if let Some(rest) = line
                     .strip_prefix("import ")
@@ -1423,6 +1536,138 @@ mod tests {
         assert!(!graph.edges.iter().any(
             |e| matches!(e.kind, EdgeKind::References { from, .. } if from == NodeRef::File(a))
         ));
+    }
+
+    // -------------------------------------------------- member-call fallback (RFC 0012 §3)
+
+    fn reference_edges_to<'g>(graph: &'g ProjectGraph, name: &str) -> Vec<&'g Edge> {
+        let target = SymbolId(
+            graph
+                .symbols
+                .iter()
+                .position(|s| s.name.as_str() == name)
+                .unwrap() as u32,
+        );
+        graph
+            .edges
+            .iter()
+            .filter(|e| matches!(e.kind, EdgeKind::References { to, .. } if to == target))
+            .collect()
+    }
+
+    #[test]
+    fn member_call_resolves_via_fallback_at_probable_with_one_candidate() {
+        // The Go bug this exists for: `t.helper()` is a bare `helper` reference; the
+        // declaration is a member of T. Exact resolution must miss (members never enter the
+        // bare-name table), the duck-typed fallback must hit at Probable (RFC 0002 §5).
+        let dir = project(
+            "member-fallback-one",
+            &[(
+                "a.mock",
+                "member-decl T helper\ndecl caller\nref helper\nroot-decl caller",
+            )],
+        );
+        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let edges = reference_edges_to(&graph, "helper");
+        assert_eq!(edges.len(), 1);
+        assert_eq!(edges[0].confidence, Confidence::Probable);
+    }
+
+    #[test]
+    fn member_call_with_several_candidates_keeps_all_alive_at_possible() {
+        let dir = project(
+            "member-fallback-many",
+            &[(
+                "a.mock",
+                "member-decl T get\nmember-decl U get\nref get\nroot-file",
+            )],
+        );
+        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let t_get = SymbolId(
+            graph
+                .symbols
+                .iter()
+                .position(|s| s.member_of.as_deref() == Some("T"))
+                .unwrap() as u32,
+        );
+        let u_get = SymbolId(
+            graph
+                .symbols
+                .iter()
+                .position(|s| s.member_of.as_deref() == Some("U"))
+                .unwrap() as u32,
+        );
+        for target in [t_get, u_get] {
+            let edge = graph
+                .edges
+                .iter()
+                .find(|e| matches!(e.kind, EdgeKind::References { to, .. } if to == target))
+                .expect("every same-named member candidate gets a keep-alive edge");
+            assert_eq!(edge.confidence, Confidence::Possible);
+        }
+    }
+
+    #[test]
+    fn member_fallback_reaches_same_unit_siblings() {
+        // The cross-file half of the Go bug: the method lives in a sibling file of the same
+        // package; the caller has no import and no same-file candidate.
+        let dir = project(
+            "member-fallback-unit",
+            &[
+                ("pkg/a.mock", "unit pkg\ndecl caller\nref helper\nroot-decl caller"),
+                ("pkg/b.mock", "unit pkg\nmember-decl T helper"),
+            ],
+        );
+        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let edges = reference_edges_to(&graph, "helper");
+        assert_eq!(edges.len(), 1);
+        assert_eq!(edges[0].confidence, Confidence::Probable);
+    }
+
+    #[test]
+    fn member_never_certain_resolves_and_exact_names_still_win() {
+        // A free declaration with the same name as a member: the exact (Certain) resolution
+        // wins and the fallback never fires — members must not pollute exact-name lookup.
+        let dir = project(
+            "member-vs-free",
+            &[(
+                "a.mock",
+                "decl helper\nmember-decl T helper\nref helper\nroot-file",
+            )],
+        );
+        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let free = SymbolId(
+            graph
+                .symbols
+                .iter()
+                .position(|s| s.name.as_str() == "helper" && s.member_of.is_none())
+                .unwrap() as u32,
+        );
+        let member = SymbolId(
+            graph
+                .symbols
+                .iter()
+                .position(|s| s.name.as_str() == "helper" && s.member_of.is_some())
+                .unwrap() as u32,
+        );
+        assert!(graph.edges.iter().any(|e| matches!(
+            e.kind, EdgeKind::References { to, .. } if to == free
+        ) && e.confidence == Confidence::Certain));
+        assert!(!graph
+            .edges
+            .iter()
+            .any(|e| matches!(e.kind, EdgeKind::References { to, .. } if to == member)));
+    }
+
+    #[test]
+    fn member_with_no_matching_call_anywhere_stays_certain_dead() {
+        // Dead-is-certain survives the fallback: zero same-named call sites ⇒ zero edges.
+        let dir = project(
+            "member-still-dead",
+            &[("a.mock", "member-decl T orphan\ndecl live\nroot-decl live")],
+        );
+        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        assert!(reference_edges_to(&graph, "orphan").is_empty());
     }
 
     #[test]

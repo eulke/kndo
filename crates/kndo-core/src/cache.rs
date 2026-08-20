@@ -593,6 +593,7 @@ mod tests {
                 span: Default::default(),
                 exported: true,
                 visibility: crate::adapter::VisibilityLevel(1),
+                member_of: None,
             }],
             ..Default::default()
         }
@@ -809,6 +810,7 @@ mod tests {
                 span: Default::default(),
                 exported: true,
                 visibility: crate::adapter::VisibilityLevel(0),
+                member_of: None,
             }],
             vec![DependencyNode {
                 name: "lodash".into(),

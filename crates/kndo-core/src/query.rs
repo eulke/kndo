@@ -127,11 +127,18 @@ pub fn resolve(graph: &ProjectGraph, selector: &Selector) -> Result<Resolved, Re
             .ok_or(ResolveError::NotFound),
         Selector::Symbol(path, name) => {
             let file = graph.file_id(path).ok_or(ResolveError::NotFound)?;
+            // A member resolves by its qualified `Owner.name` form or its bare name (RFC 0012
+            // §3) — a bare name shared by several owners' members surfaces as Ambiguous below,
+            // listing the qualified selectors to retry with.
             let matches: Vec<SymbolId> = graph
                 .symbols
                 .iter()
                 .enumerate()
-                .filter(|(_, s)| s.file == file && s.name.as_str() == name.as_str())
+                .filter(|(_, s)| {
+                    s.file == file
+                        && (s.name.as_str() == name.as_str()
+                            || s.qualified_name() == name.as_str())
+                })
                 .map(|(i, _)| SymbolId(i as u32))
                 .collect();
             match matches.len() {
@@ -209,7 +216,7 @@ pub fn selector_string(graph: &ProjectGraph, node: &Resolved) -> String {
         Resolved::Node(ResolvedNode::Symbol(s)) => {
             let sym = &graph.symbols[s.0 as usize];
             let path = &graph.files[sym.file.0 as usize].path.0;
-            format!("{path}#{}", sym.name)
+            format!("{path}#{}", sym.qualified_name())
         }
         Resolved::Node(ResolvedNode::Package(p)) => match graph.package_name(*p) {
             Some(name) => format!("pkg:{name}"),
@@ -599,7 +606,15 @@ pub fn find(
         candidates.push((r, node));
     }
     for (i, sym) in graph.symbols.iter().enumerate() {
-        let Some(r) = rank(sym.name.as_str(), pattern) else {
+        // Members match on either form — a search for `Method` and one for `T.Method` both
+        // land (RFC 0012 §3); the better of the two ranks wins.
+        let bare = rank(sym.name.as_str(), pattern);
+        let qualified = sym
+            .member_of
+            .is_some()
+            .then(|| rank(&sym.qualified_name(), pattern))
+            .flatten();
+        let Some(r) = [bare, qualified].into_iter().flatten().min() else {
             continue;
         };
         let node = Resolved::Node(ResolvedNode::Symbol(SymbolId(i as u32)));
@@ -1583,6 +1598,7 @@ mod tests {
             span: span(start, end),
             exported: true,
             visibility: VisibilityLevel(1),
+            member_of: None,
         }
     }
 

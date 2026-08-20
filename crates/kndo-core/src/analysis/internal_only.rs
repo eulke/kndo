@@ -108,21 +108,21 @@ pub fn find_internal_only(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<
 
         let path = file.path.0.as_str();
         let facet = symbol.kind.facet();
+        let qualified = symbol.qualified_name();
         findings.push(Finding {
-            id: finding_id("internal-only", facet, path, symbol.name.as_str(), ""),
+            id: finding_id("internal-only", facet, path, &qualified, ""),
             category: "internal-only".to_string(),
             group: "waste".to_string(),
             subject_kind: facet.to_string(),
             severity: Severity::Info, // RFC 0005 §7: info
             confidence,
             message: format!(
-                "{path}#{} is exported but only used within its own file — consider not exporting this {facet}",
-                symbol.name
+                "{path}#{qualified} is exported but only used within its own file — consider not exporting this {facet}"
             ),
             location: Location {
                 path: Some(file.path.clone()),
                 range: Some(symbol.span),
-                symbol: Some(symbol.name.to_string()),
+                symbol: Some(qualified.clone()),
                 package: graph.package_name(file.package).map(str::to_string),
             },
             delta: None,
@@ -163,6 +163,7 @@ mod tests {
             span: Default::default(),
             exported: visibility > 0,
             visibility: VisibilityLevel(visibility),
+            member_of: None,
         }
     }
 

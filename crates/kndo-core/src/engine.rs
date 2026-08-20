@@ -1060,6 +1060,7 @@ mod tests {
                         span: Span::default(),
                         exported: true,
                         visibility: crate::adapter::VisibilityLevel(1),
+                        member_of: None,
                     });
                 } else if let Some(name) = line.strip_prefix("ref ") {
                     facts.references.push(crate::adapter::RawReference {

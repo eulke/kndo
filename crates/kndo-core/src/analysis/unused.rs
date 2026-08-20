@@ -132,21 +132,19 @@ pub fn find_unused_symbols(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec
 
         let path = file.path.0.as_str();
         let facet = symbol.kind.facet();
+        let qualified = symbol.qualified_name();
         findings.push(Finding {
-            id: finding_id("unused", facet, path, symbol.name.as_str(), ""),
+            id: finding_id("unused", facet, path, &qualified, ""),
             category: "unused".to_string(),
             group: "waste".to_string(),
             subject_kind: facet.to_string(),
             severity: Severity::Warning,
             confidence: Confidence::Certain,
-            message: format!(
-                "{path}#{} is unreachable: nothing references this {facet}",
-                symbol.name
-            ),
+            message: format!("{path}#{qualified} is unreachable: nothing references this {facet}"),
             location: Location {
                 path: Some(file.path.clone()),
                 range: Some(symbol.span),
-                symbol: Some(symbol.name.to_string()),
+                symbol: Some(qualified.clone()),
                 package: graph.package_name(file.package).map(str::to_string),
             },
             delta: None,
@@ -414,6 +412,7 @@ mod tests {
             span: Default::default(),
             exported: true,
             visibility: VisibilityLevel(1),
+            member_of: None,
         }
     }
 

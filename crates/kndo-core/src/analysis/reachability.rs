@@ -213,6 +213,7 @@ mod tests {
             span: Default::default(),
             exported: true,
             visibility: VisibilityLevel(1),
+            member_of: None,
         }
     }
 

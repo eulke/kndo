@@ -97,3 +97,40 @@ fn importing_the_module_s_own_subpackage_is_never_a_phantom_dependency() {
         && f.subject_kind == "dependency"
         && f.location.symbol.as_deref() == Some("golang.org/x/text")));
 }
+
+#[test]
+fn unexported_method_called_through_a_variable_is_not_falsely_unused() {
+    // The RFC 0012 §3 bug: methods declare as members (`helper` member_of `T`), but a call
+    // `t.helper()` is a bare `helper` reference — name-exact resolution can never connect
+    // them (no receiver types in extraction). The duck-typed fallback must keep the method
+    // alive at Probable; before it, this exact shape false-positived as unused:method — the
+    // one failure mode kndo promises not to have.
+    let dir = std::env::temp_dir().join("kndo-go-assembly-method-call");
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(dir.join("go.mod"), "module example.com/m\n\ngo 1.22\n").unwrap();
+    fs::write(
+        dir.join("main.go"),
+        "package main\n\ntype T struct{}\n\nfunc (t T) helper() int { return 1 }\n\nfunc (t T) orphan() int { return 2 }\n\nfunc main() {\n\tt := T{}\n\t_ = t.helper()\n}\n",
+    )
+    .unwrap();
+
+    let (g, diagnostics) = graph::assemble(&dir, &[Box::new(GoAdapter)]).unwrap();
+    assert!(diagnostics.is_empty(), "{diagnostics:?}");
+    let (findings, _) = analysis::run_all(&g);
+
+    let unused_symbols: Vec<&str> = findings
+        .iter()
+        .filter(|f| f.category == "unused")
+        .filter_map(|f| f.location.symbol.as_deref())
+        .collect();
+    assert!(
+        !unused_symbols.contains(&"T.helper"),
+        "called method must stay alive via the member fallback: {unused_symbols:?}"
+    );
+    // ...while a genuinely uncalled unexported method still dies, qualified in the finding.
+    assert!(
+        unused_symbols.contains(&"T.orphan"),
+        "uncalled method must still be found: {unused_symbols:?}"
+    );
+}

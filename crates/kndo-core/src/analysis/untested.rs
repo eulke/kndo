@@ -170,22 +170,22 @@ fn find_untested_symbols(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<F
 
         let path = file.path.0.as_str();
         let facet = symbol.kind.facet();
+        let qualified = symbol.qualified_name();
         let confidence = reach.get(NodeRef::Symbol(symbol_id)).1;
         findings.push(Finding {
-            id: finding_id("untested", facet, path, symbol.name.as_str(), ""),
+            id: finding_id("untested", facet, path, &qualified, ""),
             category: "untested".to_string(),
             group: "risk".to_string(),
             subject_kind: facet.to_string(),
             severity: Severity::Info,
             confidence,
             message: format!(
-                "{path}#{} is production-reachable but no test reaches this {facet}",
-                symbol.name
+                "{path}#{qualified} is production-reachable but no test reaches this {facet}"
             ),
             location: Location {
                 path: Some(file.path.clone()),
                 range: Some(symbol.span),
-                symbol: Some(symbol.name.to_string()),
+                symbol: Some(qualified.clone()),
                 package: graph.package_name(file.package).map(str::to_string),
             },
             delta: None,
@@ -225,6 +225,7 @@ mod tests {
             span: Default::default(),
             exported: true,
             visibility: VisibilityLevel(1),
+            member_of: None,
         }
     }
 
