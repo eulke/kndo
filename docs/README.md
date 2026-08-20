@@ -24,8 +24,10 @@ This directory is the single source of truth for product and technical decisions
 | Human interface (CLI rendering) | [rfcs/0009-human-interface.md](rfcs/0009-human-interface.md) | Accepted |
 | CI: GitHub Action & PR reporting | [rfcs/0010-ci-github-action.md](rfcs/0010-ci-github-action.md) | Accepted |
 | Workspaces & monorepos | [rfcs/0011-workspaces-and-monorepos.md](rfcs/0011-workspaces-and-monorepos.md) | Accepted |
+| Precise reference semantics & visibility | [rfcs/0012-reference-semantics-and-visibility.md](rfcs/0012-reference-semantics-and-visibility.md) | Accepted |
 | Spike: warm-budget validation | [spikes/0001-performance.md](spikes/0001-performance.md) | Done |
 | Adapter spec: JS/TS | [adapters/js-ts.md](adapters/js-ts.md) | Draft (M1 working spec) |
+| Adapter spec: Go | [adapters/go.md](adapters/go.md) | Draft (M3 working spec) |
 | Core contracts (traits) | [contracts/core-traits.md](contracts/core-traits.md) | Accepted |
 | Output schema (JSON) | [contracts/output-schema.md](contracts/output-schema.md) | Accepted |
 | Roadmap | [ROADMAP.md](ROADMAP.md) | Accepted |

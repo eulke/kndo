@@ -274,24 +274,25 @@ reachability findings.
 
 ## 7. Open questions
 
-1. `go.work` multi-module workspace support — deferred, same as JS's `pnpm-workspace.yaml` slice-1
-   deferral. Needed before kndo can fully model a repo that deliberately splits into several Go
-   modules with local `replace` directives between them.
-2. `RefKind` differentiation (`Extend` for interface embedding, `TypeUse` for type-position
-   references) — genuinely useful for `private-type-leak` (RFC 0005 §7) in both languages, but
-   every adapter's `References` edges are core-assigned a single hardcoded kind today; this is a
-   cross-language contract change, not something to solve one-sided for Go alone.
-3. Package-level `internal-only` boundary awareness (§1's `VisibilityLevel` note) — `internal_only.rs`
-   currently only checks the file boundary; extending it to check the package (`unit`) boundary
-   for languages that set `unit` would make its verdicts precise for Go instead of merely
-   safely-conservative. Tracked as a follow-up to that module, not this adapter.
-4. Tooling-role detection (§1) — Go genuinely has weaker ecosystem-wide config-file conventions
-   than JS; revisit if a real convention (e.g. `.golangci.yml`-adjacent tool configs written *in*
-   Go, which is rare but exists) turns out to matter during dogfooding.
-5. Content-based origin classification (§1) — a real trait gap, not language-specific: `claim()`
-   only ever sees a path, `FileClass` is fixed before `extract()` sees any bytes. Go's
-   `// Code generated ... DO NOT EDIT.` marker is exactly the kind of single-authoritative-source
-   signal this would be trivial to act on if the trait had a hook for it (`extract()` returning a
-   class correction, or a content-peek step at claim time) — worth proposing generally, once a
-   second adapter with real generated-code volume in dogfooding makes the gap concrete rather
-   than theoretical.
+Most of this section graduated into **RFC 0012 (Precise Reference Semantics & Visibility)**,
+which owns the cross-language design for each — this list now just points there:
+
+1. `go.work` multi-module workspace support → RFC 0012 §10 (adapter work; one recorded
+   divergence for path-renaming `replace` directives).
+2. `RefKind` differentiation (`TypeUse`/`Extend`) → RFC 0012 §5. Go's mapping is nearly free
+   (`type_identifier` *is* the type-position signal; embeddings → `Extend`).
+3. Package-level `internal-only` boundary awareness → RFC 0012 §6 (the visibility ladder as
+   data; Go declares `[Unit "unexported", Public "exported"]`).
+4. Content-based origin classification (generated headers) → RFC 0012 §7
+   (`FileFacts::detected_origin`).
+5. Method-call resolution (`T.Method` declarations vs bare `Method` references — unexported
+   methods currently false-positive as `unused:method`, found reviewing this adapter's debt)
+   → RFC 0012 §3 (`member_of` + visibility-scoped duck-typed fallback). Landing first.
+6. External test packages sharing their directory's unit (§1.1's documented imprecision)
+   → RFC 0012 §8: unit key becomes `dir#declared-package-name`. Adapter-only fix.
+7. Unaliased-import alias guessed from the last path segment (`gopkg.in/yaml.v3` → `yaml`)
+   → RFC 0012 §9 (qualified-reference resolution core-side; deliberately last).
+
+Still genuinely open, unowned by any RFC: tooling-role detection (§1) — Go has no
+ecosystem-wide config-file convention worth pattern-matching; revisit only if dogfooding
+surfaces one.

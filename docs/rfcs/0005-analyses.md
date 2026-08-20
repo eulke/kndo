@@ -222,7 +222,10 @@ groups all copies. Costing nothing beyond hashing, this lands in M1, ahead of st
 
 Both directions of one comparison — a symbol's **declared** visibility against what its usage
 **requires** — using the language's visibility ladder (adapter-declared: private → file →
-package/crate → public):
+package/crate → public). *The ladder's concrete contract form (rungs as `(scope, label)` data
+on the adapter descriptor), the generalized tightest-sufficient algorithm, and
+`private-type-leak`'s implementation design (`RefKind` tagging + signature spans) are
+specified in RFC 0012 §§5–6.*
 
 **`internal-only`** (declared > required; group `waste`): the analysis computes the **tightest
 sufficient visibility** — the lowest ladder level that still covers the origin of every incoming
