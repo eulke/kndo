@@ -637,15 +637,28 @@ pub fn assemble_from_source(
     let mut symbols = Vec::new();
     let mut symbol_by_name_per_file: Vec<HashMap<SmolStr, SymbolId>> =
         vec![HashMap::new(); claimed_per_file.len()];
+    // Package-scoped (not file-scoped) resolution, for languages where it's the ordinary case
+    // rather than an edge case (Go's directory-is-the-package visibility unit — see
+    // `FileFacts::unit`'s doc). `None` for every file whose adapter doesn't set `unit` (JS/TS
+    // today), so this is purely additive: those files never populate or consult these two maps.
+    let mut file_unit: Vec<Option<SmolStr>> = vec![None; claimed_per_file.len()];
+    let mut symbol_by_name_per_unit: HashMap<SmolStr, HashMap<SmolStr, SymbolId>> = HashMap::new();
     for (i, slot) in claimed_per_file.iter().enumerate() {
         let Some(claimed) = slot else { continue };
         let file_id = FileId(i as u32);
         let adapter = &adapters[claimed.adapter_index];
         let provenance = || Provenance::Adapter(adapter.descriptor().id.clone());
+        file_unit[i] = claimed.facts.unit.clone();
 
         for decl in &claimed.facts.declarations {
             let symbol_id = SymbolId(symbols.len() as u32);
             symbol_by_name_per_file[i].insert(decl.name.clone(), symbol_id);
+            if let Some(unit) = &claimed.facts.unit {
+                symbol_by_name_per_unit
+                    .entry(unit.clone())
+                    .or_default()
+                    .insert(decl.name.clone(), symbol_id);
+            }
             symbols.push(SymbolNode {
                 file: file_id,
                 name: decl.name.clone(),
@@ -915,15 +928,25 @@ pub fn assemble_from_source(
         // which enclosing declaration contains a reference, only which file — sufficient for
         // reachability (a reachable file referencing a symbol makes that symbol reachable
         // regardless of which of the file's functions did it) though not for finer-grained
-        // "which caller" evidence later. Bound (imported) names resolve first, falling back to
-        // same-file declarations — real JS/TS can't have both share a name at module scope, so
-        // this ordering is never actually contested by valid code, just a defensive default.
-        // Neither lookup models block/parameter shadowing: a same-named local could
-        // (incorrectly, but safely — see module docs) resolve to an unrelated declaration.
+        // "which caller" evidence later. Bound (imported) names resolve first, then same-file
+        // declarations, then same-unit siblings (`FileFacts::unit` — Go's package-scoped
+        // visibility, absent for file-scoped languages) — real JS/TS can't have both of the
+        // first two share a name at module scope, so that ordering is never actually contested
+        // by valid code, just a defensive default; the unit fallback is the one genuinely load-
+        // bearing case (a sibling file in the same Go package, no import involved at all).
+        // No lookup models block/parameter shadowing: a same-named local could (incorrectly,
+        // but safely — see module docs) resolve to an unrelated declaration.
         for reference in &claimed.facts.references {
             let target = bound_symbols
                 .get(&reference.name)
                 .or_else(|| symbol_by_name_per_file[i].get(&reference.name))
+                .or_else(|| {
+                    file_unit[i].as_ref().and_then(|unit| {
+                        symbol_by_name_per_unit
+                            .get(unit)
+                            .and_then(|t| t.get(&reference.name))
+                    })
+                })
                 .copied();
             if let Some(to) = target {
                 edges.push(Edge {
@@ -1084,10 +1107,13 @@ mod tests {
             //   dynamic                     -> an un-narrowed DynamicUse (eval-style)
             //   dynamic-narrowed <dir>      -> a DynamicUse narrowed to that project dir
             //   suppress <category>         -> a Declaration-scope RawSuppression
+            //   unit <key>                  -> FileFacts::unit (package-scoped resolution)
             let text = std::str::from_utf8(file.content).unwrap_or("");
             let mut facts = FileFacts::default();
             for line in text.lines() {
-                if let Some(name) = line.strip_prefix("decl ") {
+                if let Some(key) = line.strip_prefix("unit ") {
+                    facts.unit = Some(SmolStr::new(key));
+                } else if let Some(name) = line.strip_prefix("decl ") {
                     facts.declarations.push(Declaration {
                         name: SmolStr::new(name),
                         kind: SymbolKind::Function,
@@ -1338,6 +1364,72 @@ mod tests {
             .edges
             .iter()
             .any(|e| e.kind == EdgeKind::ImportsFile { from: a, to: b }));
+    }
+
+    #[test]
+    fn same_unit_files_resolve_each_other_s_symbols_without_any_import() {
+        // Go's ordinary case (RFC 0002 §2, FileFacts::unit): two files sharing a package
+        // directory call each other's declarations with no import statement at all.
+        let dir = project(
+            "same-unit",
+            &[
+                ("pkg/a.mock", "unit pkg\nref target"),
+                ("pkg/b.mock", "unit pkg\nprivate-decl target"),
+            ],
+        );
+        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let a = graph
+            .file_id(&ProjectPath(SmolStr::new("pkg/a.mock")))
+            .unwrap();
+        let target = graph
+            .symbols
+            .iter()
+            .position(|s| s.name.as_str() == "target")
+            .map(|i| crate::vocab::SymbolId(i as u32))
+            .unwrap();
+        assert!(graph.edges.iter().any(|e| matches!(
+            e.kind,
+            EdgeKind::References { from, to, .. } if from == NodeRef::File(a) && to == target
+        )));
+    }
+
+    #[test]
+    fn different_unit_files_do_not_resolve_each_other_s_symbols() {
+        let dir = project(
+            "different-unit",
+            &[
+                ("pkg1/a.mock", "unit pkg1\nref target"),
+                ("pkg2/b.mock", "unit pkg2\nprivate-decl target"),
+            ],
+        );
+        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let a = graph
+            .file_id(&ProjectPath(SmolStr::new("pkg1/a.mock")))
+            .unwrap();
+        assert!(!graph
+            .edges
+            .iter()
+            .any(|e| matches!(e.kind, EdgeKind::References { from, .. } if from == NodeRef::File(a))));
+    }
+
+    #[test]
+    fn files_with_no_unit_are_unaffected_same_name_in_another_unit_does_not_leak_in() {
+        // A file that never sets `unit` (every adapter before Go) must behave exactly as before
+        // — no accidental cross-file resolution just because some *other*, unrelated file
+        // happens to declare a `unit`.
+        let dir = project(
+            "no-unit-unaffected",
+            &[
+                ("a.mock", "ref target"),
+                ("pkg/b.mock", "unit pkg\nprivate-decl target"),
+            ],
+        );
+        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let a = graph.file_id(&ProjectPath(SmolStr::new("a.mock"))).unwrap();
+        assert!(!graph
+            .edges
+            .iter()
+            .any(|e| matches!(e.kind, EdgeKind::References { from, .. } if from == NodeRef::File(a))));
     }
 
     #[test]

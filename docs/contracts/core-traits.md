@@ -145,8 +145,22 @@ pub struct FileFacts {
                                             // matches it, staying language-blind)
     pub suppressions: Vec<RawSuppression>,  // kndo:allow pragmas found in comments (§2.1)
     pub diagnostics:  Vec<Diagnostic>,
+    pub unit:         Option<SmolStr>,      // reference-resolution scope beyond "this file" —
+                                             // see below; `None` for file-scoped languages
 }
 ```
+
+**`unit` (added M3, surfaced by the Go adapter):** an unqualified [`RawReference`] resolves
+against, in order, import-bound names, this file's own declarations, and — new — every other
+file sharing this file's non-`None` `unit` key. Exists because "a reference resolves within its
+own file, or through an explicit import" is a JS/TS-ism, not universal: Go's visibility unit is
+the *package* (its containing directory), and two files in one package calling each other's
+unexported functions with no `import` statement at all is the ordinary case, not an edge case a
+file-scoped model can shrug off. The adapter computes the key from information it already has
+(for Go: the file's own directory — no new input); the core only groups declarations by it
+(`graph::assemble` phase 3a) and adds it as a third, last-resort lookup in phase 3b's reference
+resolution. `None` (every adapter before Go, and JS/TS today) reproduces prior behavior exactly —
+this is additive, not a breaking change to the trait's existing implementors.
 
 ```rust
 pub struct ManifestFacts {

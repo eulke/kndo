@@ -308,6 +308,17 @@ pub struct FileFacts {
     pub dynamics: Vec<DynamicUse>,
     pub suppressions: Vec<RawSuppression>,
     pub diagnostics: Vec<Diagnostic>,
+    /// Reference-resolution scope, when the language's isn't file-scoped (RFC 0002 §2, contract
+    /// extension surfaced by the Go adapter, M3): files sharing the same non-`None` key resolve
+    /// each other's declarations for an unqualified [`RawReference`] with no import binding, in
+    /// addition to their own. `None` (every adapter before Go) keeps today's exact behavior —
+    /// same-file-only, unless an import binds the name. Exists because file-scoped resolution is
+    /// a JS/TS-ism, not a universal: Go's visibility unit is the *package* (its containing
+    /// directory) — two files in one package call each other's unexported functions with no
+    /// `import` at all, the ordinary, common case, not an edge case a per-file model can treat as
+    /// safely-wrong. The adapter computes the key (for Go: the file's directory, from its own
+    /// path — no extra input needed); the core only groups by it, staying language-blind.
+    pub unit: Option<SmolStr>,
 }
 
 // ---------------------------------------------------------------- manifests (RFC 0011)
