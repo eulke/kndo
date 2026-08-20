@@ -33,7 +33,7 @@ impl LanguageAdapter for JsTsAdapter {
     fn descriptor(&self) -> AdapterDescriptor {
         AdapterDescriptor {
             id: SmolStr::new("js-ts"),
-            facts_schema_version: 5, // 5: detected_origin (RFC 0012 §7); 4: RefKind + signature_span (§5); 3: within (§4); 2: member_of (§3)
+            facts_schema_version: 6, // 6: RawImport.local_alias in the serialized shape (RFC 0012 §9 — always None for JS); 5: detected_origin (§7); 4: RefKind + signature_span (§5); 3: within (§4); 2: member_of (§3)
             file_globs: EXTENSIONS
                 .iter()
                 .map(|e| SmolStr::new(format!("**/*.{e}")))

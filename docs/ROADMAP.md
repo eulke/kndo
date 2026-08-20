@@ -92,8 +92,13 @@ visibility-scoped candidacy. §7 (`detected_origin`) closed go.md's other docume
 limitation: extraction now corrects the origin axis from content (Go's `DO NOT EDIT.` banner,
 JS `@generated` markers, via the toolkit's bounded `ContentMarkers` scanner), so generated
 files are exempt from findings even when their paths look authored — fixture `generated-file/`
-in both languages, negative-control dogfooded. Remaining RFC 0012 stages (§§9–10:
-qualified-reference resolution, go.work) are the current in-order work queue.
+in both languages, negative-control dogfooded. §9 (qualified-reference resolution) moved the
+system's last string-guess into assembly: Go emits qualified accesses as structured
+`{ name, scope_context }` facts (plus `RawImport.local_alias` and `FileFacts.unit_name`), and
+the core resolves the qualifier against the import's alias or the *target's* declared package
+name — fixing the dir≠package case (`gopkg.in/yaml.v3` → `yaml`, fixture
+`qualified-package-name/`) and keeping receiver accesses (`t.helper()`) from ever capturing a
+same-named free function. The one remaining RFC 0012 stage (§10, go.work) closes the queue.
 
 ## M4 — Duplication, CRAP, health
 `duplicate` (winnowing index, incremental), `cyclic` (SCCs with per-language tolerance),

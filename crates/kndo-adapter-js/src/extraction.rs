@@ -293,6 +293,7 @@ fn handle_reexport_statement(node: Node, source_node: Node, src: &[u8], out: &mu
         bindings,
         reexported: true,
         opaque_namespace_use: false,
+        local_alias: None,
     });
 }
 
@@ -452,6 +453,7 @@ fn handle_import_statement(node: Node, src: &[u8], out: &mut FileFacts) {
         bindings,
         reexported: false,
         opaque_namespace_use: false,
+        local_alias: None,
     });
 }
 
@@ -641,6 +643,7 @@ fn push_dynamic_import(
         bindings: Vec::new(),
         reexported: false,
         opaque_namespace_use: false,
+        local_alias: None,
     });
 }
 
@@ -747,6 +750,7 @@ fn handle_literal_require(node: Node, string_node: Node, src: &[u8], out: &mut F
         bindings,
         reexported,
         opaque_namespace_use: false,
+        local_alias: None,
     });
 }
 

@@ -8,11 +8,11 @@
 //! resolution pass — so this file is one flat walk plus one reference pass, not JS's several
 //! sequential passes over hoisting-sensitive export/import surfaces.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use kndo_core::adapter::{
-    Declaration, Diagnostic, DiagnosticLevel, FileFacts, ImportBinding, ImportKind, RawImport,
-    RawReference, RawRoot, RawRootTarget, RawSuppression, Span, VisibilityLevel,
+    Declaration, Diagnostic, DiagnosticLevel, FileFacts, ImportKind, RawImport, RawReference,
+    RawRoot, RawRootTarget, RawSuppression, Span, VisibilityLevel,
 };
 use kndo_core::vocab::{Confidence, RefKind, RootKind, SymbolKind};
 use smol_str::SmolStr;
@@ -73,6 +73,11 @@ pub fn extract(path: &str, content: &[u8]) -> FileFacts {
         )),
         None => SmolStr::new(kndo_adapter_toolkit::paths::dirname(path)),
     });
+    // The name importers bind this package by (RFC 0012 §9): the declared package name —
+    // assembly resolves unaliased qualified references against the *target's* value of this,
+    // the correct-by-construction answer to the dir≠package problem (`gopkg.in/yaml.v3`
+    // imports as `yaml`) that no per-file specifier guess could give.
+    out.unit_name = declared_package.as_deref().map(SmolStr::new);
 
     let is_main_package = declared_package.as_deref() == Some("main");
     // Root-worthiness by path, computed once (docs/adapters/go.md §0, §4): `internal/` is
@@ -82,13 +87,10 @@ pub fn extract(path: &str, content: &[u8]) -> FileFacts {
     let is_test_file = path.ends_with("_test.go");
     let promote_exports = !is_internal && !is_test_file;
 
-    let mut aliases: HashMap<SmolStr, usize> = HashMap::new();
     let mut cursor = root.walk();
     for child in root.children(&mut cursor) {
         match child.kind() {
-            "import_declaration" => {
-                handle_import_declaration(child, content, &mut out, &mut aliases)
-            }
+            "import_declaration" => handle_import_declaration(child, content, &mut out),
             "function_declaration" => {
                 handle_function(child, content, is_main_package, promote_exports, &mut out)
             }
@@ -116,14 +118,10 @@ pub fn extract(path: &str, content: &[u8]) -> FileFacts {
         }
     }
 
-    let mut seen_bindings: HashSet<(usize, SmolStr)> = HashSet::new();
     collect_references(
         root,
         content,
         None, // top level: within is established by the walk itself (RFC 0012 §4)
-        &aliases,
-        &mut out.imports,
-        &mut seen_bindings,
         &mut out.references,
     );
     collect_suppressions(root, content, &mut out.suppressions);
@@ -366,21 +364,16 @@ fn handle_value_declaration(
 
 // ---------------------------------------------------------------- imports
 
-fn handle_import_declaration(
-    node: Node,
-    src: &[u8],
-    out: &mut FileFacts,
-    aliases: &mut HashMap<SmolStr, usize>,
-) {
+fn handle_import_declaration(node: Node, src: &[u8], out: &mut FileFacts) {
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
         match child.kind() {
-            "import_spec" => handle_import_spec(child, src, out, aliases),
+            "import_spec" => handle_import_spec(child, src, out),
             "import_spec_list" => {
                 let mut inner = child.walk();
                 for spec in child.children(&mut inner) {
                     if spec.kind() == "import_spec" {
-                        handle_import_spec(spec, src, out, aliases);
+                        handle_import_spec(spec, src, out);
                     }
                 }
             }
@@ -389,12 +382,7 @@ fn handle_import_declaration(
     }
 }
 
-fn handle_import_spec(
-    node: Node,
-    src: &[u8],
-    out: &mut FileFacts,
-    aliases: &mut HashMap<SmolStr, usize>,
-) {
+fn handle_import_spec(node: Node, src: &[u8], out: &mut FileFacts) {
     let Some(path_node) = node.child_by_field_name("path") else {
         return;
     };
@@ -404,19 +392,18 @@ fn handle_import_spec(
         return;
     }
 
+    // Only the *explicit* alias is a per-file fact (RFC 0012 §9); an unaliased import binds
+    // by the target package's declared name, which lives in the target — assembly derives it
+    // from the resolved target's `unit_name` instead of this file guessing from the
+    // specifier's last segment (the guess that broke on `gopkg.in/yaml.v3` → `yaml`).
     let name_node = node.child_by_field_name("name");
-    let (side_effect_only, opaque_namespace_use, alias) = match name_node.map(|n| n.kind()) {
+    let (side_effect_only, opaque_namespace_use, local_alias) = match name_node.map(|n| n.kind()) {
         Some("blank_identifier") => (true, false, None),
         Some("dot") => (false, true, None),
         Some("package_identifier") => (false, false, name_node.map(|n| SmolStr::new(text(n, src)))),
-        _ => (
-            false,
-            false,
-            Some(SmolStr::new(default_import_alias(&specifier))),
-        ),
+        _ => (false, false, None),
     };
 
-    let index = out.imports.len();
     out.imports.push(RawImport {
         specifier: SmolStr::new(&specifier),
         kind: ImportKind::Package, // Go has no relative imports (docs/adapters/go.md §0)
@@ -424,25 +411,11 @@ fn handle_import_spec(
         side_effect_only,
         type_only: false,
         confidence: Confidence::Certain, // no dynamic import surface in Go
-        bindings: Vec::new(),            // filled in by collect_references (dotted local access)
+        bindings: Vec::new(),            // Go imports bind a namespace, not names (RFC 0012 §9)
         reexported: false,
         opaque_namespace_use,
+        local_alias,
     });
-    if let Some(alias) = alias {
-        aliases.insert(alias, index);
-    }
-}
-
-/// The package name Go code refers to when an import has no explicit alias: the specifier's
-/// last path segment. A real, documented imprecision (docs/adapters/go.md §3) — the target
-/// package's *declared* name can differ (`gopkg.in/yaml.v3` imports as `yaml`), which a
-/// single-file extraction pass has no way to know without reading the target.
-fn default_import_alias(specifier: &str) -> String {
-    specifier
-        .rsplit('/')
-        .next()
-        .unwrap_or(specifier)
-        .to_string()
 }
 
 // ---------------------------------------------------------------- references
@@ -489,14 +462,10 @@ fn within_for(node: Node, src: &[u8]) -> Option<SmolStr> {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 fn collect_references(
     node: Node,
     src: &[u8],
     within: Option<&SmolStr>,
-    aliases: &HashMap<SmolStr, usize>,
-    imports: &mut [RawImport],
-    seen_bindings: &mut HashSet<(usize, SmolStr)>,
     out: &mut Vec<RawReference>,
 ) {
     // Import specifiers are pure name-binding syntax — nothing inside is a reference (mirrors
@@ -514,34 +483,56 @@ fn collect_references(
     };
     let within = own_within.as_ref().or(within);
 
-    // `pkg.Name` where `pkg` is a known import alias: the qualified access JS's `ns.foo`
-    // handling already established a convention for (contracts §2's `ImportBinding` shape) —
-    // one dotted binding + a same-named reference, resolved precisely instead of guessed.
+    // Qualified access `q.Name` (RFC 0012 §9): emitted as a structured
+    // `{ name, scope_context: Some(q) }` fact — whether `q` is an import qualifier or a
+    // receiver variable is *assembly's* call (it alone knows every import's alias and every
+    // resolved target's declared package name), not a per-file guess. This replaced the
+    // dotted-binding synthesis (`json.Marshal` string keys), whose default-alias
+    // approximation broke on dir≠package specifiers (`gopkg.in/yaml.v3` binds as `yaml`).
+    // The operand still gets its own plain reference — a receiver variable or package-level
+    // var is genuinely used here; if it's an import qualifier instead, the bare name resolves
+    // to nothing and drops, silently and safely.
     if node.kind() == "selector_expression" {
         if let (Some(operand), Some(field)) = (
             node.child_by_field_name("operand"),
             node.child_by_field_name("field"),
         ) {
             if operand.kind() == "identifier" {
-                if let Some(&import_idx) = aliases.get(text(operand, src)) {
-                    let dotted = format!("{}.{}", text(operand, src), text(field, src));
-                    let dotted = SmolStr::new(&dotted);
-                    if seen_bindings.insert((import_idx, dotted.clone())) {
-                        imports[import_idx].bindings.push(ImportBinding {
-                            local: dotted.clone(),
-                            imported: Some(SmolStr::new(text(field, src))),
-                        });
-                    }
-                    out.push(RawReference {
-                        name: dotted,
-                        scope_context: None,
-                        span: span(node),
-                        within: within.cloned(),
-                        kind: RefKind::Read,
-                    });
-                    return; // operand/field fully handled — don't also walk them generically
-                }
+                out.push(RawReference {
+                    name: SmolStr::new(text(field, src)),
+                    scope_context: Some(SmolStr::new(text(operand, src))),
+                    span: span(node),
+                    within: within.cloned(),
+                    kind: RefKind::Read,
+                });
+                out.push(RawReference {
+                    name: SmolStr::new(text(operand, src)),
+                    scope_context: None,
+                    span: span(operand),
+                    within: within.cloned(),
+                    kind: RefKind::Read,
+                });
+                return; // operand/field fully handled — don't also walk them generically
             }
+        }
+    }
+
+    // The type-position mirror of the selector case: `pkg.Type` in a type position parses as
+    // `qualified_type` (package/name fields), not `selector_expression` — same structured
+    // fact, tagged TypeUse (§5).
+    if node.kind() == "qualified_type" {
+        if let (Some(package), Some(name)) = (
+            node.child_by_field_name("package"),
+            node.child_by_field_name("name"),
+        ) {
+            out.push(RawReference {
+                name: SmolStr::new(text(name, src)),
+                scope_context: Some(SmolStr::new(text(package, src))),
+                span: span(node),
+                within: within.cloned(),
+                kind: RefKind::TypeUse,
+            });
+            return;
         }
     }
 
@@ -558,7 +549,7 @@ fn collect_references(
             if skip_ids.contains(&child.id()) {
                 continue;
             }
-            collect_references(child, src, within, aliases, imports, seen_bindings, out);
+            collect_references(child, src, within, out);
         }
         return;
     }
@@ -604,7 +595,7 @@ fn collect_references(
         if Some(child.id()) == skip_id {
             continue;
         }
-        collect_references(child, src, within, aliases, imports, seen_bindings, out);
+        collect_references(child, src, within, out);
     }
 }
 
@@ -800,26 +791,69 @@ type D int
     }
 
     #[test]
-    fn plain_import_binds_the_last_path_segment_as_the_default_alias() {
+    fn plain_import_has_no_alias_and_qualified_access_is_a_structured_reference() {
+        // RFC 0012 §9 replaced the dotted-binding synthesis: the unaliased import carries NO
+        // local_alias (assembly derives the qualifier from the target's declared package
+        // name), and `json.Marshal` is a structured `{ name, scope_context }` fact.
         let src = b"package p\n\nimport \"encoding/json\"\n\nfunc F() { json.Marshal(nil) }\n";
         let facts = extract("a.go", src);
         assert_eq!(facts.imports.len(), 1);
         assert_eq!(facts.imports[0].specifier.as_str(), "encoding/json");
         assert!(!facts.imports[0].side_effect_only);
-        let binding = &facts.imports[0].bindings[0];
-        assert_eq!(binding.local.as_str(), "json.Marshal");
-        assert_eq!(binding.imported.as_deref(), Some("Marshal"));
-        assert!(facts
+        assert_eq!(facts.imports[0].local_alias, None);
+        assert!(facts.imports[0].bindings.is_empty());
+        let qref = facts
             .references
             .iter()
-            .any(|r| r.name.as_str() == "json.Marshal"));
+            .find(|r| r.name.as_str() == "Marshal")
+            .expect("qualified reference");
+        assert_eq!(qref.scope_context.as_deref(), Some("json"));
     }
 
     #[test]
-    fn aliased_import_binds_the_explicit_alias() {
+    fn aliased_import_carries_the_explicit_alias() {
         let src = b"package p\n\nimport j \"encoding/json\"\n\nfunc F() { j.Marshal(nil) }\n";
         let facts = extract("a.go", src);
-        assert_eq!(facts.imports[0].bindings[0].local.as_str(), "j.Marshal");
+        assert_eq!(facts.imports[0].local_alias.as_deref(), Some("j"));
+        let qref = facts
+            .references
+            .iter()
+            .find(|r| r.name.as_str() == "Marshal")
+            .expect("qualified reference");
+        assert_eq!(qref.scope_context.as_deref(), Some("j"));
+    }
+
+    #[test]
+    fn unit_name_is_the_declared_package_name() {
+        let facts = extract("pkg/v3/a.go", b"package yaml\n");
+        assert_eq!(facts.unit_name.as_deref(), Some("yaml"));
+    }
+
+    #[test]
+    fn qualified_type_positions_are_structured_type_use_references() {
+        // `pkg.Type` in a type position parses as `qualified_type`, not selector_expression —
+        // must yield the same structured fact, tagged TypeUse (§5).
+        let src = b"package p\n\nimport \"time\"\n\nfunc F(t time.Time) {}\n";
+        let facts = extract("a.go", src);
+        let qref = facts
+            .references
+            .iter()
+            .find(|r| r.name.as_str() == "Time")
+            .expect("qualified type reference");
+        assert_eq!(qref.scope_context.as_deref(), Some("time"));
+        assert_eq!(qref.kind, RefKind::TypeUse);
+    }
+
+    #[test]
+    fn receiver_member_calls_carry_the_receiver_as_scope_context() {
+        let src = b"package p\n\ntype T struct{}\n\nfunc (t T) helper() {}\n\nfunc F(t T) { t.helper() }\n";
+        let facts = extract("a.go", src);
+        let qref = facts
+            .references
+            .iter()
+            .find(|r| r.name.as_str() == "helper")
+            .expect("member reference");
+        assert_eq!(qref.scope_context.as_deref(), Some("t"));
     }
 
     #[test]
@@ -912,7 +946,11 @@ type D int
             "a.go",
             b"package p\n\nimport \"fmt\"\n\nfunc F() { fmt.Println(1) }\n",
         );
-        assert_eq!(find_ref(&facts, "fmt.Println").within.as_deref(), Some("F"));
+        assert_eq!(find_ref(&facts, "Println").within.as_deref(), Some("F"));
+        assert_eq!(
+            find_ref(&facts, "Println").scope_context.as_deref(),
+            Some("fmt")
+        );
     }
 
     #[test]

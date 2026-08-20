@@ -233,7 +233,14 @@ pub struct Declaration {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct RawReference {
     pub name: SmolStr,
-    /// Enough context for the resolution driver (enclosing scope path, receiver hints…).
+    /// The qualifier text of a qualified access (RFC 0012 §9): `json.Marshal` is
+    /// `{ name: "Marshal", scope_context: Some("json") }`. Assembly resolves the qualifier
+    /// against the file's imports — the explicit [`RawImport::local_alias`], or (unaliased)
+    /// the resolved target's [`FileFacts::unit_name`] — and, on a match, resolves `name`
+    /// inside that target's declarations at `Certain`. A qualifier matching no import is a
+    /// receiver expression (`t.helper()`): the name is a *member* access by construction, so
+    /// it skips the free-name tables entirely and goes straight to the duck-typed member
+    /// fallback (RFC 0012 §3). `None` = an unqualified name, resolved as before.
     pub scope_context: Option<SmolStr>,
     pub span: Span,
     /// The declared symbol this reference executes *inside* (RFC 0012 §4), under one
@@ -305,6 +312,13 @@ pub struct RawImport {
     /// namespace's exports" rule. Statically-tracked accesses (`ns.foo`) don't set this; they
     /// resolve precisely through `bindings` instead.
     pub opaque_namespace_use: bool,
+    /// The *explicit* local alias this import binds its target under (RFC 0012 §9): Go's
+    /// `import j "encoding/json"` → `Some("j")`. `None` for unaliased imports — assembly then
+    /// derives the qualifier from the resolved target's own [`FileFacts::unit_name`], which is
+    /// the correct-by-construction answer the old adapter-side "last specifier segment" guess
+    /// approximated (and got wrong for dir≠package mismatches like `gopkg.in/yaml.v3` →
+    /// `yaml`). Languages whose imports bind names, not namespaces (JS/TS), leave it `None`.
+    pub local_alias: Option<SmolStr>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -423,6 +437,15 @@ pub struct FileFacts {
     /// Role stays claim-time — no use case justifies content-derived roles. `None` = the
     /// claim-time origin stands. Rides the facts cache like every other content-derived fact.
     pub detected_origin: Option<crate::vocab::FileOrigin>,
+    /// The name *importers bind this unit by* (RFC 0012 §9): Go's `package` clause name,
+    /// Rust's module name. Distinct from [`FileFacts::unit`] (the opaque resolution *key* —
+    /// `dir#package`): `unit_name` is the visible qualifier. Assembly uses the resolved
+    /// import target's `unit_name` to resolve unaliased qualified references
+    /// (`RawReference::scope_context`) — the fact that makes `gopkg.in/yaml.v3` → `yaml`
+    /// resolve correctly, which no single-file guess about the specifier's last segment can.
+    /// `None` for languages whose imports don't bind a namespace by the target's declared
+    /// name (JS/TS).
+    pub unit_name: Option<SmolStr>,
 }
 
 // ---------------------------------------------------------------- manifests (RFC 0011)

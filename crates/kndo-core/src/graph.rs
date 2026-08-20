@@ -1002,6 +1002,13 @@ pub fn assemble_from_source(
         // Local name -> target symbol, from this file's import bindings — the fact that lets a
         // `RawReference` to an *imported* name resolve cross-file instead of only same-file.
         let mut bound_symbols: HashMap<SmolStr, SymbolId> = HashMap::new();
+        // Qualifier -> resolved in-repo target file (RFC 0012 §9): the import's explicit
+        // `local_alias`, or — unaliased — the *target's own* declared `unit_name`. This is
+        // where the dir≠package problem dissolves: only assembly holds both sides, so the
+        // qualifier for `gopkg.in/yaml.v3`-style imports comes from the target's `package`
+        // clause, never from a guess about the specifier. First import wins on a duplicate
+        // qualifier (Go rejects that program anyway — deterministic either way).
+        let mut qualifier_targets: HashMap<SmolStr, FileId> = HashMap::new();
 
         for imp in &claimed.facts.imports {
             let spec = ImportSpec {
@@ -1062,6 +1069,14 @@ pub fn assemble_from_source(
                             bound_symbols.insert(binding.local.clone(), symbol_id);
                         }
                     }
+                    let qualifier = imp.local_alias.clone().or_else(|| {
+                        claimed_per_file[to.0 as usize]
+                            .as_ref()
+                            .and_then(|c| c.facts.unit_name.clone())
+                    });
+                    if let Some(q) = qualifier {
+                        qualifier_targets.entry(q).or_insert(to);
+                    }
                     // The namespace escaped static tracking (`ns[key]`, ns passed
                     // along) — every symbol in the target is plausibly used
                     // (RFC 0005 §1: "wildcard over that namespace's exports").
@@ -1121,17 +1136,65 @@ pub fn assemble_from_source(
                 })
                 .map(|&s| NodeRef::Symbol(s))
                 .unwrap_or(NodeRef::File(file_id));
-            let target = bound_symbols
-                .get(&reference.name)
-                .or_else(|| symbol_by_name_per_file[i].get(&reference.name))
-                .or_else(|| {
-                    file_unit[i].as_ref().and_then(|unit| {
-                        symbol_by_name_per_unit
-                            .get(unit)
-                            .and_then(|t| t.get(&reference.name))
+
+            // Qualified references (RFC 0012 §9): `q.name` where `q` matches an import
+            // qualifier resolves `name` inside that target (its own declarations, then its
+            // unit siblings — a Go import names a package, and the symbol may live in any of
+            // the package's files) at Certain. Hit or miss, a matched qualifier *settles*
+            // resolution — the name lives in that target or nowhere; this file's own tables
+            // are never candidates. A qualifier matching no import is a receiver expression
+            // (`t.helper()`): the name is a member access by construction, so it skips the
+            // free-name tables and goes straight to the duck-typed member fallback below —
+            // where before §9 a same-file free function sharing the member's name would have
+            // (incorrectly, if safely) captured the reference.
+            let mut is_receiver_access = false;
+            if let Some(q) = &reference.scope_context {
+                match qualifier_targets.get(q) {
+                    Some(&target_file) => {
+                        let t = target_file.0 as usize;
+                        let sym = symbol_by_name_per_file[t]
+                            .get(&reference.name)
+                            .or_else(|| {
+                                file_unit[t].as_ref().and_then(|unit| {
+                                    symbol_by_name_per_unit
+                                        .get(unit)
+                                        .and_then(|tab| tab.get(&reference.name))
+                                })
+                            })
+                            .copied();
+                        if let Some(to) = sym {
+                            edges.push(Edge {
+                                kind: EdgeKind::References {
+                                    from,
+                                    to,
+                                    kind: reference.kind,
+                                },
+                                confidence: Confidence::Certain,
+                                source: provenance(),
+                                span: Some(reference.span),
+                            });
+                        }
+                        continue;
+                    }
+                    None => is_receiver_access = true,
+                }
+            }
+
+            let target = if is_receiver_access {
+                None
+            } else {
+                bound_symbols
+                    .get(&reference.name)
+                    .or_else(|| symbol_by_name_per_file[i].get(&reference.name))
+                    .or_else(|| {
+                        file_unit[i].as_ref().and_then(|unit| {
+                            symbol_by_name_per_unit
+                                .get(unit)
+                                .and_then(|t| t.get(&reference.name))
+                        })
                     })
-                })
-                .copied();
+                    .copied()
+            };
             if let Some(to) = target {
                 edges.push(Edge {
                     kind: EdgeKind::References {
@@ -1450,6 +1513,41 @@ mod tests {
                         bindings,
                         reexported,
                         opaque_namespace_use,
+                        local_alias: None,
+                    });
+                } else if let Some(rest) = line.strip_prefix("import-as ") {
+                    // `import-as <alias> <specifier>` — an explicitly-aliased namespace
+                    // import (RFC 0012 §9's `local_alias`).
+                    let mut parts = rest.splitn(2, ' ');
+                    let alias = parts.next().unwrap_or("");
+                    let spec = parts.next().unwrap_or("");
+                    facts.imports.push(RawImport {
+                        specifier: SmolStr::new(spec),
+                        kind: ImportKind::Relative,
+                        span: Span::default(),
+                        side_effect_only: false,
+                        type_only: false,
+                        confidence: Confidence::Certain,
+                        bindings: Vec::new(),
+                        reexported: false,
+                        opaque_namespace_use: false,
+                        local_alias: Some(SmolStr::new(alias)),
+                    });
+                } else if let Some(name) = line.strip_prefix("unit-name ") {
+                    // The name importers bind this unit by (RFC 0012 §9).
+                    facts.unit_name = Some(SmolStr::new(name));
+                } else if let Some(rest) = line.strip_prefix("qref ") {
+                    // `qref <qualifier> <name>` — a qualified reference
+                    // (RFC 0012 §9's `scope_context`).
+                    let mut parts = rest.splitn(2, ' ');
+                    let qualifier = parts.next().unwrap_or("");
+                    let name = parts.next().unwrap_or("");
+                    facts.references.push(RawReference {
+                        name: SmolStr::new(name),
+                        scope_context: Some(SmolStr::new(qualifier)),
+                        span: Span::default(),
+                        within: None,
+                        kind: RefKind::Read,
                     });
                 } else if let Some(rest) = line.strip_prefix("ref-in ") {
                     // `ref-in <within> <name>` — a reference executing inside the named
@@ -1870,6 +1968,120 @@ mod tests {
         let edges = reference_edges_to(&graph, "helper");
         assert_eq!(edges.len(), 1);
         assert_eq!(edges[0].confidence, Confidence::Probable);
+    }
+
+    // -------------------------------------------------- qualified references (RFC 0012 §9)
+
+    #[test]
+    fn aliased_import_qualifier_resolves_inside_the_target() {
+        let dir = project(
+            "qref-aliased",
+            &[
+                ("a.mock", "import-as j ./b.mock\nqref j Marshal\nroot-file"),
+                ("b.mock", "decl Marshal"),
+            ],
+        );
+        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let edges = reference_edges_to(&graph, "Marshal");
+        assert_eq!(edges.len(), 1);
+        assert_eq!(edges[0].confidence, Confidence::Certain);
+    }
+
+    #[test]
+    fn unaliased_import_qualifier_comes_from_the_targets_unit_name() {
+        // The dir≠package fix (RFC 0012 §9): the import specifier's last segment is
+        // "b.mock", but the target declares itself `yaml` — the qualifier the importer
+        // actually writes. Resolution must use the target's declared name, not a specifier
+        // guess.
+        let dir = project(
+            "qref-unit-name",
+            &[
+                ("a.mock", "import ./b.mock\nqref yaml Parse\nroot-file"),
+                ("b.mock", "unit-name yaml\ndecl Parse"),
+            ],
+        );
+        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let edges = reference_edges_to(&graph, "Parse");
+        assert_eq!(edges.len(), 1);
+        assert_eq!(edges[0].confidence, Confidence::Certain);
+    }
+
+    #[test]
+    fn qualified_resolution_reaches_the_targets_unit_siblings() {
+        // A Go import names a *package*; the resolved target is one representative file, but
+        // the accessed symbol may live in any same-unit sibling.
+        let dir = project(
+            "qref-unit-sibling",
+            &[
+                ("app/a.mock", "import-as p ./b.mock\nqref p X\nroot-file"),
+                ("app/b.mock", "unit app#p"),
+                ("app/c.mock", "unit app#p\ndecl X"),
+            ],
+        );
+        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let edges = reference_edges_to(&graph, "X");
+        assert_eq!(edges.len(), 1);
+        assert_eq!(edges[0].confidence, Confidence::Certain);
+    }
+
+    #[test]
+    fn a_matched_qualifier_settles_resolution_even_on_a_miss() {
+        // `j.Marshal` where the target has no `Marshal`: the name lives in that target or
+        // nowhere — a same-file free `Marshal` must NOT capture the qualified reference.
+        let dir = project(
+            "qref-miss",
+            &[
+                (
+                    "a.mock",
+                    "import-as j ./b.mock\ndecl Marshal\nqref j Marshal\nroot-file",
+                ),
+                ("b.mock", "decl Other"),
+            ],
+        );
+        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        assert!(
+            reference_edges_to(&graph, "Marshal").is_empty(),
+            "the local free decl must not capture a qualified reference"
+        );
+    }
+
+    #[test]
+    fn receiver_qualifier_skips_free_names_and_duck_types_to_members() {
+        // `t.helper()`: `t` matches no import, so the name is a member access by
+        // construction — the same-file free `helper` is not a candidate; the member is,
+        // via the §3 fallback.
+        let dir = project(
+            "qref-receiver",
+            &[(
+                "a.mock",
+                "decl helper\nmember-decl T helper\nqref t helper\nroot-file",
+            )],
+        );
+        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let free = SymbolId(
+            graph
+                .symbols
+                .iter()
+                .position(|s| s.name.as_str() == "helper" && s.member_of.is_none())
+                .unwrap() as u32,
+        );
+        let member = SymbolId(
+            graph
+                .symbols
+                .iter()
+                .position(|s| s.name.as_str() == "helper" && s.member_of.is_some())
+                .unwrap() as u32,
+        );
+        assert!(!graph
+            .edges
+            .iter()
+            .any(|e| matches!(e.kind, EdgeKind::References { to, .. } if to == free)));
+        let member_edge = graph
+            .edges
+            .iter()
+            .find(|e| matches!(e.kind, EdgeKind::References { to, .. } if to == member))
+            .expect("member fallback edge");
+        assert_eq!(member_edge.confidence, Confidence::Probable);
     }
 
     // -------------------------------------------------- detected_origin (RFC 0012 §7)

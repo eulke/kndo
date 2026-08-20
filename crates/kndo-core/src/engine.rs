@@ -1073,6 +1073,7 @@ mod tests {
                         bindings: vec![],
                         reexported: false,
                         opaque_namespace_use: false,
+                        local_alias: None,
                     });
                 } else if let Some(name) = line.strip_prefix("decl ") {
                     facts.declarations.push(crate::adapter::Declaration {

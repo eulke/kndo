@@ -105,17 +105,16 @@ block), and `init` (Go's special no-args, unexported-by-construction, called-imp
 runtime function — always a root, §4, regardless of the capitalization rule, and there can be
 more than one per file).
 
-**References**: identifier uses (calls, reads, writes), qualified accesses through a package
-import alias (`json.Marshal` → a reference to `Marshal`, resolved through the import binding
-exactly as JS resolves `ns.foo` when the binding is staticaly trackable — contracts §2's
-`ImportBinding` shape already fits this with no change), struct-embedding and interface-embedding
-field types (an embedded field/interface has no explicit name, its type name doubles as the
-implicit member name — extraction records it as a reference to that type, not a `RefKind::Extend`-
-tagged one: **no adapter, including JS, actually emits differentiated `RefKind` values yet** —
-every `References` edge is core-assigned `RefKind::Read` regardless of what the adapter's own docs
-say (a real doc/implementation gap discovered while confirming this, not invented for Go) — so Go
-does not attempt to be the first to diverge from that; §5 revisits it as an open question, not a
-silent gap.
+**References**: identifier uses (calls, reads, writes), each tagged with its `RefKind`
+(RFC 0012 §5): `type_identifier` positions are `TypeUse` (the grammar itself is the
+type-position signal), embedded struct/interface fields (a `field_declaration` with no name —
+the type name doubling as the implicit member name) are `Extend`, everything else `Read`.
+Qualified accesses are *structured facts*, not string synthesis (RFC 0012 §9): `json.Marshal`
+extracts as `{ name: "Marshal", scope_context: Some("json") }` (and `pkg.Type` in type
+positions the same, via the grammar's distinct `qualified_type` node, tagged `TypeUse`);
+whether the qualifier names an import — by explicit alias or by the resolved target's declared
+package name — or is a receiver variable is decided in assembly, which alone holds both sides.
+This replaced the earlier dotted-binding synthesis and its documented last-segment alias guess.
 
 **Roots (`RawRoot`, language-defined — RFC 0002 §2 point 3)**: `func main()` inside a file
 declaring `package main` is always a `RootKind::Production` root, unconditionally (Go's literal
@@ -152,8 +151,10 @@ resolving every unqualified reference in the file against the dot-imported packa
 set, which needs full same-file name-shadowing awareness this extraction slice doesn't have —
 following the same "wildcard over the resolved target's symbols" shape `graph::assemble` already
 implements for JS's opaque namespace imports (contracts §2), no new core mechanism needed. An
-aliased import (`import j "encoding/json"`) binds the local name `j` the same way a JS default
-import binds its local name.
+aliased import (`import j "encoding/json"`) carries `local_alias: Some("j")` (RFC 0012 §9);
+an unaliased one carries `None` — assembly derives its qualifier from the *target's* declared
+package name (`FileFacts::unit_name`), the correct-by-construction fix for dir≠package
+specifiers (`gopkg.in/yaml.v3` binds as `yaml`).
 
 **Resolution algorithm** (the adapter's `resolve`):
 
@@ -283,13 +284,16 @@ which owns the cross-language design for each — this list now just points ther
    data; Go declares `[Unit "unexported", Public "exported"]`).
 4. Content-based origin classification (generated headers) → RFC 0012 §7
    (`FileFacts::detected_origin`).
-5. Method-call resolution (`T.Method` declarations vs bare `Method` references — unexported
-   methods currently false-positive as `unused:method`, found reviewing this adapter's debt)
-   → RFC 0012 §3 (`member_of` + visibility-scoped duck-typed fallback). Landing first.
+5. ~~Method-call resolution (`T.Method` declarations vs bare `Method` references)~~ —
+   **fixed** (RFC 0012 §3, `member_of` + the visibility-scoped duck-typed fallback; §9's
+   `scope_context` further keeps a receiver access from ever capturing a same-named free
+   function).
 6. ~~External test packages sharing their directory's unit~~ — **fixed** (RFC 0012 §8,
    landed with the `dir#declared-package-name` unit key; §1.1 documents the current rule).
-7. Unaliased-import alias guessed from the last path segment (`gopkg.in/yaml.v3` → `yaml`)
-   → RFC 0012 §9 (qualified-reference resolution core-side; deliberately last).
+7. ~~Unaliased-import alias guessed from the last path segment~~ — **fixed** (RFC 0012 §9,
+   landed: qualified references are structured `scope_context` facts, and the unaliased
+   qualifier comes from the resolved target's declared package name — conformance fixture
+   `qualified-package-name/` pins the `gopkg.in/yaml.v3`-shaped case).
 
 Still genuinely open, unowned by any RFC: tooling-role detection (§1) — Go has no
 ecosystem-wide config-file convention worth pattern-matching; revisit only if dogfooding

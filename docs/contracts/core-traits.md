@@ -181,10 +181,31 @@ pub struct FileFacts {
                                              // Reachability ignores kind entirely — every kind
                                              // keeps its target alive; only kind-selective
                                              // analyses (private-type-leak) filter by it.
+                                             // scope_context (RFC 0012 §9): the qualifier text
+                                             // of a qualified access (`json.Marshal` → { name:
+                                             // "Marshal", scope_context: Some("json") }).
+                                             // Assembly matches it against the file's imports —
+                                             // explicit local_alias, or the resolved target's
+                                             // unit_name — and resolves the name INSIDE that
+                                             // target at Certain (hit or miss, a matched
+                                             // qualifier settles resolution; the local tables
+                                             // are never candidates). An unmatched qualifier is
+                                             // a receiver expression: member access by
+                                             // construction — skips free-name tables, goes
+                                             // straight to the §3 member fallback.
     pub imports:      Vec<RawImport>,       // { specifier, kind: Relative|Package, span,
                                              //   side_effect_only, type_only, confidence,
                                              //   bindings: Vec<ImportBinding>, reexported,
-                                             //   opaque_namespace_use }
+                                             //   opaque_namespace_use,
+                                             //   local_alias: Option<Name> }
+                                             // local_alias (RFC 0012 §9): the EXPLICIT alias a
+                                             // namespace import binds its target under (Go's
+                                             // `import j "enc/json"` → Some("j")); None for
+                                             // unaliased imports — assembly then derives the
+                                             // qualifier from the resolved target's own
+                                             // unit_name, fixing dir≠package specifiers
+                                             // (gopkg.in/yaml.v3 binds as `yaml`). JS/TS
+                                             // (name-binding imports) always None.
                                              // kind is syntactic shape only — Stdlib is a
                                              // resolve()-time fact, never claimed here.
                                              // ImportBinding { local, imported: Option<Name> } —
@@ -211,6 +232,13 @@ pub struct FileFacts {
     pub diagnostics:  Vec<Diagnostic>,
     pub unit:         Option<SmolStr>,      // reference-resolution scope beyond "this file" —
                                              // see below; `None` for file-scoped languages
+    pub unit_name:    Option<SmolStr>,      // the name IMPORTERS bind this unit by (RFC 0012
+                                             // §9): Go's `package` clause name. Distinct from
+                                             // `unit` (the opaque grouping key, dir#package):
+                                             // unit_name is the visible qualifier assembly
+                                             // resolves unaliased qualified references
+                                             // against. None where imports don't bind a
+                                             // namespace by the target's declared name (JS).
     pub detected_origin: Option<FileOrigin>, // content-derived correction of the claim-time
                                              // origin axis (RFC 0012 §7): a generated banner
                                              // (`// Code generated … DO NOT EDIT.`,
