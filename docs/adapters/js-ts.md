@@ -27,7 +27,13 @@ outside).
 **Declarations** — functions, classes (+ methods, fields, getters/setters as members),
 interfaces, type aliases, enums (+ members), top-level `const`/`let`/`var`, namespaces.
 Anonymous default exports (`export default () => {}`) declare a synthetic symbol named
-`default` (symbol path: `file#default`).
+`default` (symbol path: `file#default`). Property-assignment callables
+(`obj.method = function () {}`, the pre-class prototype-extension idiom) are **not**
+declarations and are not extracted — a documented scope limit, not an oversight: it bounds
+recall for symbol-level analyses (`crap`, structural `duplicate`, symbol reachability) on
+prototype-style codebases (the M4 express audit's `res.send` is the canonical miss), and
+lifting it means designing the symbol identity (`res.send` is a member of what?) — RFC 0012
+§3's member model is the frame if this scope ever widens.
 
 **Export surface** — `export` named/default, `export { a as b }`, re-exports
 (`export * from`, `export { x } from`), CJS (`module.exports = …`, `exports.foo = …`).

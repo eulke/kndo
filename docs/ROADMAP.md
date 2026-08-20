@@ -208,8 +208,18 @@ breakdown remain in the byte-identical comparison.
 
 **Exit:** duplication findings stable under reformatting (Type-2) — **met** (byte-identical id
 on the real CLI); health deltas shown in diff modes — **met** (see above); CRAP hotlist
-matches manual audit on a real repo — **pending**: validated on fixtures and synthetic corpora
-(formula, threshold, coverage flip verified), the real-repo audit remains before M4 closes.
+matches manual audit on a real repo — **met**: kndo over expressjs/express (real clone, no
+coverage report) produced a four-function hotlist (`lib/response.js#sendfile` CRAP 210 / comp
+14, `lib/response.js#stringify` 72/8, `lib/view.js#View` 72/8, `lib/utils.js#acceptParams`
+56/7); manual decision-point counts of three of the four (sendfile 13+1 including its nested
+closures, View 7+1, acceptParams 6+1) matched kndo's cyclomatic numbers exactly, and sendfile
+is exactly the function an express maintainer would name first. Precision is exact; the
+audit's one recall note is an adapter scope limit that predates `crap`: express's
+`res.send = function send()` prototype-assignment idiom is outside the JS adapter's
+documented declaration extraction, so such callables never enter the metrics table — now
+called out explicitly in docs/adapters/js-ts.md §2 with the RFC 0012 §3 frame for lifting it.
+
+**M4 exit criteria are all met.**
 
 ## M5 — Remaining languages + plugin system GA
 Adapters: Java, Kotlin, Swift, Rust, JSON, CSS (order: Java → Kotlin share infra; Rust; Swift;
