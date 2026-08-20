@@ -175,6 +175,7 @@ mod tests {
             class,
             package: crate::vocab::PackageId(0),
             unit: None,
+            test_spans: Vec::new(),
         }
     }
 

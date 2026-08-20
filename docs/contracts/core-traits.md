@@ -269,8 +269,35 @@ pub struct FileFacts {
                                              // first-N-lines window for comment-marker
                                              // languages; adapters with structured signals
                                              // (Java @Generated) set it from their own AST.
+    pub test_spans:   Vec<Span>,             // sub-file TEST REGIONS (added M5, surfaced by
+                                             // Rust — the first language whose tests live
+                                             // inside production files): span extents whose
+                                             // contents are test-role, attributes included
+                                             // (`#[cfg(test)]` items, `#[test]`/`#[bench]`
+                                             // fns, `#![cfg(test)]` = whole file). Outermost
+                                             // extents only; regions never overlap. Empty
+                                             // for per-file test detection (JS/TS, Go).
+                                             // Consumers — see below.
 }
 ```
+
+**`test_spans` (added M5, surfaced by the Rust adapter):** the file's *role* stays a per-path,
+claim-time axis; this field is the extraction-side truth that a *region* of a production file
+is test infrastructure. Four consumers, all core-side:
+
+1. **`crap`** and **health's symbol tallies** skip span-contained symbols — the same exemption
+   test files get, at span granularity (a `#[test]` fn is not untested production code).
+2. **`dependency_hygiene`** treats an import whose *site* lies inside a region as a test-role
+   usage: a `prod`-scoped dependency consumed only under `#[cfg(test)]` is a `test-only`
+   dependency, exactly as if the imports lived in test files.
+3. **Assembly (phase 2.55)** demotes a claimed-production file to test role when at least one
+   module-linking import (side-effect import binding a module name — Rust's `mod tests;`)
+   reaches it from inside a region and none reaches it from production code: the out-of-line
+   `#[cfg(test)] mod tests;` whole-file case the path-based claim cannot see. Patch safety:
+   whether each import sits inside a region is part of the surface signature (span-derived but
+   reformat-stable), so a gating change declines the incremental patch.
+4. **`duplicate` deliberately does not consult regions** — it already fingerprints test files,
+   so inline test clones remain findings (parity, not an exemption).
 
 **`unit` (added M3, surfaced by the Go adapter):** an unqualified [`RawReference`] resolves
 against, in order, import-bound names, this file's own declarations, and — new — every other

@@ -40,6 +40,21 @@ pub struct FileNode {
     /// alone, warm path included. `None` for file-scoped languages, exactly as in the facts.
     #[rkyv(with = rkyv::with::Map<crate::rkyv_support::SmolStrAsString>)]
     pub unit: Option<SmolStr>,
+    /// Sub-file test regions ([`crate::adapter::FileFacts::test_spans`]), sorted by span.
+    /// Role-sensitive consumers check containment via [`span_in_test_region`]: `crap` and
+    /// health's symbol tallies skip contained symbols, `dependency_hygiene` treats a
+    /// contained import site as test-role usage. Empty for languages whose test detection
+    /// is per-file.
+    pub test_spans: Vec<Span>,
+}
+
+/// Whether `span` lies inside any of `regions` — inclusive containment on the `(line,
+/// column)` order [`Span`] already carries. Regions are disjoint by construction
+/// (extraction records outermost extents) and per-file counts are small; linear scan.
+pub fn span_in_test_region(regions: &[Span], span: Span) -> bool {
+    regions
+        .iter()
+        .any(|r| r.start <= span.start && span.end <= r.end)
 }
 
 #[derive(Debug, Clone, PartialEq, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
@@ -635,6 +650,13 @@ fn try_patch(
                 sym.span = decl.span;
                 sym.signature_span = decl.signature_span;
             }
+            // Test-region extents move with every edit, same as symbol spans; the *gating*
+            // of imports (the only cross-file consequence) is surface-signature-guarded, so
+            // refreshing the extents here keeps crap/health/hygiene containment exact while
+            // `FileNode::class` (phase 2.55's demotion included) stays valid untouched.
+            let mut spans = claimed.facts.test_spans.clone();
+            spans.sort_unstable();
+            graph.files[c].test_spans = spans;
             graph.patch_meta[c].surface_sig = Some(claimed.surface_sig);
         }
     }
@@ -1461,7 +1483,8 @@ fn surface_signature(
     facts: &crate::adapter::FileFacts,
 ) -> [u8; 32] {
     /// One import's surface tuple: specifier, kind, side_effect_only, type_only,
-    /// confidence, bindings (local, imported), reexported, opaque_namespace_use, local_alias.
+    /// confidence, bindings (local, imported), reexported, opaque_namespace_use, local_alias,
+    /// in-test-region (derived from `FileFacts::test_spans` containment — see the View site).
     type ImportView<'a> = (
         &'a str,
         &'a crate::adapter::ImportKind,
@@ -1472,6 +1495,7 @@ fn surface_signature(
         bool,
         bool,
         Option<&'a str>,
+        bool,
     );
 
     #[derive(serde::Serialize)]
@@ -1536,6 +1560,11 @@ fn surface_signature(
                     i.reexported,
                     i.opaque_namespace_use,
                     i.local_alias.as_deref(),
+                    // Span-derived but span-*stable*: pure reformatting preserves whether an
+                    // import sits inside a test region; a move across the boundary changes
+                    // resolution-relevant behavior (phase 2.55's demotion, hygiene's site
+                    // role) and must decline the patch.
+                    span_in_test_region(&facts.test_spans, i.span),
                 )
             })
             .collect(),
@@ -1584,7 +1613,7 @@ pub(crate) fn package_owns(manifest_dir: &str, file_dir: &str) -> bool {
 /// an assembly-algorithm change that could produce a different graph from the same facts. Feeds
 /// [`compute_graph_key`] (RFC 0004 §3's "core graph-schema version"); a bump here invalidates
 /// every project's cached `graph.bin` on the next run, same as any other key-input change.
-pub const GRAPH_SCHEMA_VERSION: u32 = 12; // 12: library-surface fixpoint (phase 2.7 — same inputs now assemble surface Root edges, prior snapshots are semantically stale); 11: PackageNode.workspace_entry (RFC 0013 §4); 10: patch layer (RFC 0013 §4 — Edge.owner, FilePatchMeta, extraction-only stored diagnostics); 9: SymbolMetrics.token_count (RFC 0005 §11); 8: function_metrics (RFC 0005 §6); 7: cycle policies (§8); 6: PackageNode surface (RFC 0011 §4); 5: ladders + FileNode.unit (RFC 0012 §6); 4: RefKind + signature_span (§5); 3: within (§4)
+pub const GRAPH_SCHEMA_VERSION: u32 = 13; // 13: FileNode.test_spans + phase 2.55 test-gated module demotion (sub-file test regions); 12: library-surface fixpoint (phase 2.7 — same inputs now assemble surface Root edges, prior snapshots are semantically stale); 11: PackageNode.workspace_entry (RFC 0013 §4); 10: patch layer (RFC 0013 §4 — Edge.owner, FilePatchMeta, extraction-only stored diagnostics); 9: SymbolMetrics.token_count (RFC 0005 §11); 8: function_metrics (RFC 0005 §6); 7: cycle policies (§8); 6: PackageNode surface (RFC 0011 §4); 5: ladders + FileNode.unit (RFC 0012 §6); 4: RefKind + signature_span (§5); 3: within (§4)
 
 /// The graph snapshot's cache key (RFC 0004 §3, `cache.rs`'s `graph.bin`): a single digest
 /// folding in the *whole* discovered file set (every path + content hash — this already
@@ -1834,6 +1863,14 @@ pub fn assemble_from_source(
             }
             None => (None, None, None),
         };
+        let test_spans = match &claimed_per_file[i] {
+            Some(c) => {
+                let mut spans = c.facts.test_spans.clone();
+                spans.sort_unstable(); // canonical order invariant (RFC 0013 §3)
+                spans
+            }
+            None => Vec::new(),
+        };
         files.push(FileNode {
             path: df.path.clone(),
             content_hash: df.content_hash,
@@ -1841,6 +1878,7 @@ pub fn assemble_from_source(
             class,
             package: PackageId(0), // patched in phase 2a once ownership is computed
             unit,
+            test_spans,
         });
     }
 
@@ -1962,17 +2000,78 @@ pub fn assemble_from_source(
         }
     }
 
+    // Phase 2.55 — test-gated module demotion (the whole-file case of
+    // `FileFacts::test_spans`): `#[cfg(test)] mod tests;` puts an entire *file* behind a
+    // test gate, which the path-based claim cannot see. A claimed-production file becomes
+    // test-role when at least one module-linking import (side-effect import binding a module
+    // name — Rust's `mod foo;` / `#[path]`) reaches it from inside a test region and NO
+    // module link reaches it from production code. Runs before phase 2.6 so the demoted file
+    // gets its Test root and every role consumer downstream sees the corrected value. Patch
+    // parity: the per-import "test-gated" bit is part of the surface signature, so any change
+    // to the gating declines the patch and the preserved `FileNode::class` stays truthful.
+    // Gated on any-test-spans-present: corpora without sub-file tests skip the pass entirely.
+    if claimed_per_file
+        .iter()
+        .flatten()
+        .any(|c| !c.facts.test_spans.is_empty())
+    {
+        let ctx = ResolveCtx::new(&known_files);
+        // Per target: (reached from a test region, reached from production).
+        let mut links: HashMap<FileId, (bool, bool)> = HashMap::default();
+        for (i, slot) in claimed_per_file.iter().enumerate() {
+            let Some(c) = slot else { continue };
+            for imp in c
+                .facts
+                .imports
+                .iter()
+                .filter(|imp| imp.side_effect_only && imp.local_alias.is_some())
+            {
+                let spec = crate::adapter::ImportSpec {
+                    specifier: imp.specifier.clone(),
+                    from: files[i].path.clone(),
+                };
+                let Resolution::File(path, _) = adapters[c.adapter_index].resolve(&spec, &ctx)
+                else {
+                    continue;
+                };
+                let Some(&target) = file_index.get(&path) else {
+                    continue;
+                };
+                let entry = links.entry(target).or_insert((false, false));
+                if span_in_test_region(&c.facts.test_spans, imp.span) {
+                    entry.0 = true;
+                } else {
+                    entry.1 = true;
+                }
+            }
+        }
+        for (target, (from_test, from_production)) in links {
+            if from_test && !from_production {
+                if let Some(class) = &mut files[target.0 as usize].class {
+                    if class.role == crate::vocab::FileRole::Production {
+                        class.role = crate::vocab::FileRole::Test;
+                    }
+                }
+            }
+        }
+    }
+
     // Phase 2.6 — role-derived roots (RFC 0005 §2, literally): "Test roots — test
     // functions/files (language role detection…)"; "Tooling roots — build/config scripts
     // (webpack.config…)". The adapter's role classification *is* the seed for these two root
     // kinds — the runner/tool that consumes the file lives outside the graph, so the file's
     // existence under the convention is the whole evidence. `Probable`, not certain: a
     // convention names the file, nothing declares it (same reasoning as `exports`-map leaves).
-    // Production roots stay manifest/API-driven (phase 2.5) — never role-derived.
+    // Production roots stay manifest/API-driven (phase 2.5) — never role-derived. Reads the
+    // *node's* class, not the raw claim — phase 2.55's demotion and RFC 0012 §7's origin
+    // override are already applied there.
     let mut role_root_files: HashMap<FileId, crate::vocab::RootKind> = HashMap::default();
     for (i, slot) in claimed_per_file.iter().enumerate() {
         let Some(claimed) = slot else { continue };
-        let kind = match claimed.claim.class.role {
+        let Some(class) = files[i].class else {
+            continue;
+        };
+        let kind = match class.role {
             crate::vocab::FileRole::Test => crate::vocab::RootKind::Test,
             crate::vocab::FileRole::Tooling => crate::vocab::RootKind::Tooling,
             crate::vocab::FileRole::Production => continue,
@@ -2691,6 +2790,59 @@ mod tests {
                         reason: None,
                         scope: crate::adapter::SuppressionScope::Declaration,
                     });
+                } else if let Some(rest) = line.strip_prefix("test-region ") {
+                    // `test-region <start-line> <end-line>` — a sub-file test region
+                    // (`FileFacts::test_spans`).
+                    let mut parts = rest.splitn(2, ' ');
+                    let a: u32 = parts.next().and_then(|s| s.parse().ok()).unwrap_or(0);
+                    let b: u32 = parts.next().and_then(|s| s.parse().ok()).unwrap_or(a);
+                    facts.test_spans.push(Span {
+                        start: (a, 1),
+                        end: (b, 999),
+                    });
+                } else if let Some(rest) = line.strip_prefix("mod-link ") {
+                    // `mod-link <specifier> <line>` — a module-linking side-effect import
+                    // (Rust's `mod x;` shape: side_effect_only + local_alias), sited at the
+                    // given line so test-region containment is exercisable.
+                    let mut parts = rest.splitn(2, ' ');
+                    let spec = parts.next().unwrap_or("");
+                    let line_no: u32 = parts.next().and_then(|s| s.parse().ok()).unwrap_or(0);
+                    facts.imports.push(RawImport {
+                        specifier: SmolStr::new(spec),
+                        kind: ImportKind::Relative,
+                        span: Span {
+                            start: (line_no, 1),
+                            end: (line_no, 10),
+                        },
+                        side_effect_only: true,
+                        type_only: false,
+                        confidence: Confidence::Certain,
+                        bindings: Vec::new(),
+                        reexported: false,
+                        opaque_namespace_use: false,
+                        local_alias: Some(SmolStr::new(spec.rsplit('/').next().unwrap_or(spec))),
+                    });
+                } else if let Some(rest) = line.strip_prefix("import-at ") {
+                    // `import-at <line> <specifier>` — a plain import sited at a line (for
+                    // dependency-hygiene's test-region site role).
+                    let mut parts = rest.splitn(2, ' ');
+                    let line_no: u32 = parts.next().and_then(|s| s.parse().ok()).unwrap_or(0);
+                    let spec = parts.next().unwrap_or("");
+                    facts.imports.push(RawImport {
+                        specifier: SmolStr::new(spec),
+                        kind: ImportKind::Relative,
+                        span: Span {
+                            start: (line_no, 1),
+                            end: (line_no, 10),
+                        },
+                        side_effect_only: false,
+                        type_only: false,
+                        confidence: Confidence::Certain,
+                        bindings: Vec::new(),
+                        reexported: false,
+                        opaque_namespace_use: false,
+                        local_alias: None,
+                    });
                 }
             }
             facts
@@ -3206,6 +3358,115 @@ mod tests {
         );
         let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
         assert!(reference_edges_to(&graph, "orphan").is_empty());
+    }
+
+    // -------------------------------------------------- test regions (FileFacts::test_spans)
+
+    #[test]
+    fn test_gated_module_link_demotes_the_target_file_to_test_role() {
+        // `#[cfg(test)] mod tests;` → the child file is a whole-file test the path claim
+        // cannot see: phase 2.55 demotes it, and phase 2.6 then gives it the Test root.
+        let dir = project(
+            "test-gated-demotion",
+            &[
+                (
+                    "a.mock",
+                    "decl keep\nroot-decl keep\ntest-region 5 9\nmod-link ./child.mock 6",
+                ),
+                ("child.mock", "decl helper"),
+            ],
+        );
+        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let child = graph
+            .files
+            .iter()
+            .position(|f| f.path.0 == "child.mock")
+            .unwrap();
+        assert_eq!(
+            graph.files[child].class.unwrap().role,
+            FileRole::Test,
+            "a file linked only from inside a test region is test infrastructure"
+        );
+        assert!(
+            graph.edges.iter().any(|e| matches!(
+                e.kind,
+                EdgeKind::Root {
+                    kind: RootKind::Test,
+                    target: NodeRef::File(f),
+                } if f.0 as usize == child
+            )),
+            "the demoted file gets its role-derived Test root"
+        );
+    }
+
+    #[test]
+    fn a_production_module_link_vetoes_the_demotion() {
+        // The same child linked from a second file's production code stays production: any
+        // ungated module link means the file is compiled outside test builds.
+        let dir = project(
+            "test-gated-veto",
+            &[
+                ("a.mock", "test-region 5 9\nmod-link ./child.mock 6"),
+                ("b.mock", "mod-link ./child.mock 2"),
+                ("child.mock", "decl helper"),
+            ],
+        );
+        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let child = graph
+            .files
+            .iter()
+            .position(|f| f.path.0 == "child.mock")
+            .unwrap();
+        assert_eq!(graph.files[child].class.unwrap().role, FileRole::Production);
+    }
+
+    #[test]
+    fn file_node_carries_sorted_test_spans() {
+        let dir = project(
+            "test-span-store",
+            &[("a.mock", "test-region 20 30\ntest-region 5 9\ndecl x")],
+        );
+        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        assert_eq!(
+            graph.files[0].test_spans,
+            vec![
+                Span {
+                    start: (5, 1),
+                    end: (9, 999)
+                },
+                Span {
+                    start: (20, 1),
+                    end: (30, 999)
+                },
+            ],
+            "canonical order: sorted regardless of emission order"
+        );
+    }
+
+    #[test]
+    fn import_gating_participates_in_the_surface_signature() {
+        // Moving an import across a test-region boundary changes phase 2.55's inputs and
+        // hygiene's site role — the patch must decline, so the signature must move.
+        let claim = MockAdapter
+            .claim(&ProjectPath(SmolStr::new("a.mock")))
+            .unwrap();
+        let sig_of = |content: &str| {
+            let path = ProjectPath(SmolStr::new("a.mock"));
+            let facts = MockAdapter.extract(&SourceFile {
+                path: &path,
+                content: content.as_bytes(),
+            });
+            surface_signature("mock", 1, &claim, &facts)
+        };
+        let gated = sig_of("test-region 5 9\nmod-link ./child.mock 6");
+        let ungated = sig_of("test-region 5 9\nmod-link ./child.mock 2");
+        assert_ne!(gated, ungated, "gating flip must move the signature");
+        // …but a pure region move that keeps the import on the same side does not.
+        let same_side = sig_of("test-region 4 9\nmod-link ./child.mock 6");
+        assert_eq!(
+            gated, same_side,
+            "reformat-shaped shifts keep the signature"
+        );
     }
 
     // -------------------------------------------------- within attribution (RFC 0012 §4)

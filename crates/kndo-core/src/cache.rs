@@ -979,6 +979,7 @@ mod tests {
                 class: None,
                 package: PackageId(0),
                 unit: None,
+                test_spans: Vec::new(),
             }],
             vec![SymbolNode {
                 file: FileId(0),

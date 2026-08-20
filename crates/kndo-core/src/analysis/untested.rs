@@ -222,6 +222,7 @@ mod tests {
             }),
             package: crate::vocab::PackageId(0),
             unit: None,
+            test_spans: Vec::new(),
         }
     }
 
@@ -410,6 +411,7 @@ mod tests {
                 }),
                 package: crate::vocab::PackageId(0),
                 unit: None,
+                test_spans: Vec::new(),
             },
         ];
         let edges = vec![

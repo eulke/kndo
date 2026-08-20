@@ -80,6 +80,9 @@ struct PendingAttrs {
     cfg_test: bool,
     mod_path: Option<String>,
     derives: Vec<(SmolStr, Span)>,
+    /// Start of the first attribute in this pending run — a test region's extent covers the
+    /// attributes that gate it (`FileFacts::test_spans` records `#[cfg(test)]`'s own line).
+    attr_start: Option<(u32, u32)>,
 }
 
 pub(crate) fn extract(_path: &str, content: &[u8]) -> FileFacts {
@@ -107,13 +110,32 @@ pub(crate) fn extract(_path: &str, content: &[u8]) -> FileFacts {
         });
     }
 
+    // `#![cfg(test)]` at the top gates the WHOLE file (a test-helper file compiled only
+    // under test, without any `mod` wrapper): one region covering everything, and the walk
+    // runs in cfg-test context so every declaration roots as test infrastructure — the same
+    // treatment an inline `#[cfg(test)] mod` body gets.
+    let mut whole_file_test = false;
+    let mut cursor = root.walk();
+    for child in root.children(&mut cursor) {
+        if child.kind() == "inner_attribute_item" {
+            let t = text(child, content);
+            if t.starts_with("#![cfg") && t.contains("test") {
+                whole_file_test = true;
+            }
+        }
+    }
+    drop(cursor);
+    if whole_file_test {
+        out.test_spans.push(span(root));
+    }
+
     let local_qualifiers = collect_local_qualifiers(root, content);
     walk_items(
         root,
         content,
         &Ctx {
             owner: None,
-            in_cfg_test: false,
+            in_cfg_test: whole_file_test,
             local_qualifiers: &local_qualifiers,
         },
         &mut out,
@@ -225,13 +247,26 @@ fn walk_items(list: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
             "attribute_item" => collect_attr(item, src, &mut pending, out),
             "line_comment" | "block_comment" => {} // attributes survive doc comments
             _ => {
-                handle_item(item, src, ctx, std::mem::take(&mut pending), out);
+                let pending = std::mem::take(&mut pending);
+                // Test-region extents (FileFacts::test_spans): a `#[cfg(test)]` item —
+                // inline `mod tests {}` body included — or a `#[test]`/`#[bench]` fn is a
+                // test region, attributes included. Outermost extent only: inside a
+                // `#[cfg(test)]` module the enclosing region already covers every item.
+                if !ctx.in_cfg_test && (pending.cfg_test || pending.test || pending.bench) {
+                    let item_span = span(item);
+                    out.test_spans.push(Span {
+                        start: pending.attr_start.unwrap_or(item_span.start),
+                        end: item_span.end,
+                    });
+                }
+                handle_item(item, src, ctx, pending, out);
             }
         }
     }
 }
 
 fn collect_attr(item: Node, src: &[u8], pending: &mut PendingAttrs, out: &mut FileFacts) {
+    pending.attr_start.get_or_insert(span(item).start);
     let Some(attr) = item.named_child(0) else {
         return;
     };
@@ -1608,6 +1643,55 @@ mod tests {
         assert_eq!(by_name("super_fn").visibility.0, 1); // widened, spec §2
         assert_eq!(by_name("public_fn").visibility.0, 2);
         assert!(by_name("public_fn").exported);
+    }
+
+    #[test]
+    fn test_regions_cover_cfg_test_items_and_test_fns_attributes_included() {
+        // Line 1: fn prod. Lines 2-3: #[test] fn. Lines 4-7: #[cfg(test)] mod (inline items
+        // do NOT add nested regions — the outermost extent covers them).
+        let f = facts(
+            "pub fn prod() {}\n\
+             #[test]\n\
+             fn t() {}\n\
+             #[cfg(test)]\n\
+             mod tests {\n\
+             \x20   #[test]\n\
+             \x20   fn inner() {}\n\
+             }\n",
+        );
+        assert_eq!(
+            f.test_spans.len(),
+            2,
+            "one per outermost gated item: {:?}",
+            f.test_spans
+        );
+        let covers = |line: u32| {
+            f.test_spans
+                .iter()
+                .any(|s| s.start.0 <= line && line <= s.end.0)
+        };
+        assert!(!covers(1), "production fn stays out");
+        assert!(covers(2), "the #[test] attribute line is inside its region");
+        assert!(covers(3));
+        assert!(
+            covers(4),
+            "the #[cfg(test)] attribute line is inside its region"
+        );
+        assert!(covers(8), "the mod body's closing line is inside");
+    }
+
+    #[test]
+    fn inner_cfg_test_attribute_makes_the_whole_file_a_test_region() {
+        // `#![cfg(test)]` — a helper file compiled only under test: one region covering
+        // everything, and declarations root as test infrastructure.
+        let f = facts("#![cfg(test)]\npub fn helper() {}\n");
+        assert_eq!(f.test_spans.len(), 1);
+        assert_eq!(f.test_spans[0].start.0, 1);
+        assert!(f.test_spans[0].end.0 >= 2);
+        assert!(
+            f.roots.iter().any(|r| matches!(r.kind, RootKind::Test)),
+            "whole-file test context roots the declarations as test"
+        );
     }
 
     #[test]

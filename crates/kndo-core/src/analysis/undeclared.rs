@@ -111,6 +111,7 @@ mod tests {
             class: Some(FileClass::default()),
             package,
             unit: None,
+            test_spans: Vec::new(),
         }
     }
 

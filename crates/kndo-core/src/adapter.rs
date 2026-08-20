@@ -509,6 +509,24 @@ pub struct FileFacts {
     /// `None` for languages whose imports don't bind a namespace by the target's declared
     /// name (JS/TS).
     pub unit_name: Option<SmolStr>,
+    /// Sub-file **test regions** (contract extension surfaced by Rust — the first language
+    /// whose tests live *inside* production files): span extents whose contents are
+    /// test-role, overriding the file's claim-time role for anything span-contained. Role
+    /// stays per-file on the claim axis (a path names one role); this is the extraction-side
+    /// truth that a region of a production file is test infrastructure — Rust's
+    /// `#[cfg(test)]` items and `#[test]`/`#[bench]` functions, attribute extents included.
+    /// Consumers: `crap` and health's symbol tallies skip span-contained symbols (parity
+    /// with test files, which they skip wholesale); `dependency_hygiene` treats an import
+    /// whose site lies in a test region as a test-role usage (a `prod`-scoped dependency
+    /// used only under `#[cfg(test)]` is a `test-only dependency`, exactly as if the imports
+    /// lived in test files); assembly demotes a claimed-production file to test role when
+    /// every module-linking import reaching it originates inside a test region
+    /// (`#[cfg(test)] mod tests;` pointing at `src/tests.rs` — a whole-file test the
+    /// path-based claim cannot see). Duplicate detection deliberately does NOT consult
+    /// regions — it already fingerprints test files, so inline test clones stay findings.
+    /// Regions never overlap by construction (extraction records the outermost extent).
+    /// Empty for languages whose test detection is per-file (JS/TS, Go).
+    pub test_spans: Vec<Span>,
 }
 
 // ---------------------------------------------------------------- manifests (RFC 0011)

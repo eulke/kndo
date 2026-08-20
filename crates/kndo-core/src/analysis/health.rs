@@ -245,6 +245,15 @@ fn tally(
         if !eligible_file(graph, symbol.file, scope) {
             continue;
         }
+        // Sub-file test regions (FileFacts::test_spans): inline test infrastructure in a
+        // production file is out of the ratios entirely, exactly as test files are — it is
+        // neither dead weight nor untested production code.
+        if crate::graph::span_in_test_region(
+            &graph.files[symbol.file.0 as usize].test_spans,
+            symbol.span,
+        ) {
+            continue;
+        }
         total_symbols += 1;
         if symbol.exported {
             exported_symbols += 1;
@@ -470,6 +479,7 @@ mod tests {
             }),
             package: PackageId(package),
             unit: None,
+            test_spans: Vec::new(),
         }
     }
 
@@ -543,6 +553,48 @@ mod tests {
         assert!(h.packages.is_empty(), "single package: no breakdown");
         // No test roots: the untested category is skipped, not charged.
         assert!(!h.categories.iter().any(|c| c.category == "untested"));
+    }
+
+    #[test]
+    fn symbols_inside_test_regions_stay_out_of_the_ratios() {
+        // A dead symbol whose span sits in a test region (FileFacts::test_spans) is inline
+        // test infrastructure — neither numerator nor denominator, same as test files.
+        let mut f = file("src/a.mock", 0);
+        f.test_spans = vec![Span {
+            start: (100, 1),
+            end: (200, 999),
+        }];
+        let mut symbols = vec![symbol(0, "used"), symbol(0, "test_helper")];
+        symbols[1].span = Span {
+            start: (110, 1),
+            end: (120, 1),
+        };
+        let graph = crate::graph::ProjectGraph::for_test(
+            vec![f],
+            symbols,
+            vec![],
+            vec![
+                prod_root(0),
+                Edge {
+                    owner: crate::vocab::FileId(0),
+                    kind: EdgeKind::References {
+                        from: NodeRef::File(FileId(0)),
+                        to: SymbolId(0),
+                        kind: crate::vocab::RefKind::Read,
+                    },
+                    confidence: Confidence::Certain,
+                    source: Provenance::Adapter(SmolStr::new("mock")),
+                    span: None,
+                },
+            ],
+        );
+        let reach = reachability::compute(&graph);
+        let (cov, cyc, dup) = (CoverageMap::default(), HashSet::default(), vec![]);
+        let h = compute(&graph, &reach, &[], &inputs(&cov, &cyc, &dup));
+        assert_eq!(
+            h.score, 100.0,
+            "the unreferenced in-region symbol must not charge unused-symbols"
+        );
     }
 
     #[test]

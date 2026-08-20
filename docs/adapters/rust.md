@@ -38,10 +38,31 @@ declares them — `src/lib.rs` says `mod a;`, `a.rs` says `mod b;`, and only the
 
 `examples/**` is `test` deliberately: an example consumes the public API from outside like a
 test does, and a symbol alive *only* through its own demo is exactly the `test-only` verdict
-— dead API kept warm by its own showcase. `#[cfg(test)]` modules inside production files do
-NOT flip the file's role (role is per-file); their `#[test]` functions become in-source test
-roots (§2) and the reachability coloring takes it from there — a symbol only they reach
-colors `test-only`, which is the truth.
+— dead API kept warm by its own showcase.
+
+**Sub-file test regions.** Rust tests are whole files (the table above) *or* blocks inside
+production files — so role-by-path alone cannot separate production from test code, and the
+adapter must know the **spans** that belong to test constructs. Extraction records them as
+`FileFacts::test_spans` (contracts §2): the extent — gating attributes included — of every
+outermost `#[cfg(test)]` item (typically `mod tests { … }`), every `#[test]`/`#[bench]`
+function, and the whole file under a `#![cfg(test)]` inner attribute. Items *inside* a
+recorded region add nothing (the outermost extent covers them). The file's claimed role does
+not flip; consumers act at span granularity:
+
+- declarations inside `#[cfg(test)]` context become in-source **test roots** (§2) —
+  reachability colors from there, and the core exempts test-rooted symbols from
+  `test-only`/`untested` (a test reachable only from tests is a test);
+- `crap` and health's symbol tallies **skip** region-contained symbols — the exact exemption
+  test files get (a gnarly test helper is not untested production code); `duplicate`
+  deliberately does *not* skip them — it fingerprints test files too, so inline test clones
+  remain findings;
+- `dependency_hygiene` treats an import **sited** inside a region as a test-role usage: a
+  `[dependencies]` crate consumed only under `#[cfg(test)]` is a `test-only` dependency that
+  belongs in `[dev-dependencies]`;
+- the **out-of-line gated module** — `#[cfg(test)] mod tests;` pointing at `src/tests.rs`, a
+  whole-file test the path claim cannot see — is handled at assembly (contracts §2, phase
+  2.55): the `mod` import originates inside a test region, and a file reached *only* by
+  test-gated module links is demoted to test role (any production-sited `mod` link vetoes).
 
 ## 2. Extraction
 

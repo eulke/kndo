@@ -19,7 +19,10 @@
 //!   findings still show; demoting the confidence is the honest, available half of that rule.
 //!
 //! "Test-role" here means the importing file's own `FileClass::role == Test` (a purely
-//! syntactic, already-available signal).
+//! syntactic, already-available signal) — or, for production files with sub-file test
+//! regions (`FileFacts::test_spans`), an import whose *site* sits inside such a region: a
+//! `prod`-scoped dependency consumed only under `#[cfg(test)]` gates belongs in
+//! dev-dependencies exactly as if the imports lived in test files.
 //!
 //! **CLI-only dependencies.** A `scripts`-invoked tool (`"test": "xo && ava"`) never produces
 //! an `ImportsDependency` edge — nothing `import`s a binary — so without a second signal every
@@ -51,7 +54,18 @@ pub fn find_dependency_hygiene(graph: &ProjectGraph) -> Vec<Finding> {
     for edge in &graph.edges {
         if let EdgeKind::ImportsDependency { from, to } = edge.kind {
             let file = &graph.files[from.0 as usize];
-            let role = file.class.map(|c| c.role).unwrap_or(FileRole::Production);
+            let mut role = file.class.map(|c| c.role).unwrap_or(FileRole::Production);
+            // Sub-file test regions (FileFacts::test_spans): an import whose site sits
+            // inside a `#[cfg(test)]` region is a test-role usage even though its file is
+            // production — a prod-scoped dependency consumed only under test gates is a
+            // `test-only dependency`, exactly as if the imports lived in test files.
+            if role == FileRole::Production
+                && edge
+                    .span
+                    .is_some_and(|s| crate::graph::span_in_test_region(&file.test_spans, s))
+            {
+                role = FileRole::Test;
+            }
             importer_roles
                 .entry((to, file.package))
                 .or_default()
@@ -191,6 +205,7 @@ mod tests {
             }),
             package: PackageId(0),
             unit: None,
+            test_spans: Vec::new(),
         }
     }
 
@@ -230,6 +245,55 @@ mod tests {
                 surface: Vec::new(),
             }])
             .with_declared_dependencies(declared_deps)
+    }
+
+    #[test]
+    fn prod_dependency_imported_only_inside_a_test_region_is_test_only() {
+        // The import lives in a production FILE, but its site sits inside a
+        // `#[cfg(test)]` region (FileFacts::test_spans) — the usage is test-role.
+        let mut importer = file("src/lib.rs", FileRole::Production);
+        importer.test_spans = vec![crate::adapter::Span {
+            start: (10, 1),
+            end: (30, 999),
+        }];
+        let dependencies = vec![DependencyNode {
+            name: SmolStr::new("insta"),
+        }];
+        let mut edge = imports_dep_edge(FileId(0), DependencyId(0));
+        edge.span = Some(crate::adapter::Span {
+            start: (12, 1),
+            end: (12, 20),
+        });
+        let graph = graph_with(
+            vec![importer],
+            dependencies,
+            vec![edge],
+            vec![declared("insta", DependencyScope::Prod)],
+        );
+        let findings = find_dependency_hygiene(&graph);
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].category, "test-only");
+
+        // Same shape with the site OUTSIDE the region: used, no finding.
+        let mut importer = file("src/lib.rs", FileRole::Production);
+        importer.test_spans = vec![crate::adapter::Span {
+            start: (10, 1),
+            end: (30, 999),
+        }];
+        let mut edge = imports_dep_edge(FileId(0), DependencyId(0));
+        edge.span = Some(crate::adapter::Span {
+            start: (2, 1),
+            end: (2, 20),
+        });
+        let graph = graph_with(
+            vec![importer],
+            vec![DependencyNode {
+                name: SmolStr::new("insta"),
+            }],
+            vec![edge],
+            vec![declared("insta", DependencyScope::Prod)],
+        );
+        assert!(find_dependency_hygiene(&graph).is_empty());
     }
 
     #[test]

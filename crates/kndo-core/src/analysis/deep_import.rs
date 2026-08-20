@@ -275,6 +275,7 @@ mod tests {
             }),
             package: PackageId(package),
             unit: None,
+            test_spans: Vec::new(),
         }
     }
 

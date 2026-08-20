@@ -39,6 +39,12 @@ pub fn find_crap(graph: &ProjectGraph, coverage: &CoverageMap) -> Vec<Finding> {
         {
             continue;
         }
+        // Sub-file test regions (FileFacts::test_spans): a `#[test]` fn or a `#[cfg(test)]`
+        // module member inside a production file is test code — same exemption as test
+        // files, at span granularity.
+        if crate::graph::span_in_test_region(&file.test_spans, symbol.span) {
+            continue;
+        }
 
         let cov = coverage.function_coverage(&file.path, symbol.span);
         let score = crap_score(metrics.cyclomatic, cov.unwrap_or(0.0));
@@ -96,6 +102,7 @@ mod tests {
             class: Some(FileClass { role, origin }),
             package: crate::vocab::PackageId(0),
             unit: None,
+            test_spans: Vec::new(),
         }
     }
 
@@ -140,6 +147,28 @@ mod tests {
         assert!((crap_score(6, 1.0) - 6.0).abs() < 1e-9);
         // comp 10, cov 0.5: 100 × 0.125 + 10 = 22.5.
         assert!((crap_score(10, 0.5) - 22.5).abs() < 1e-9);
+    }
+
+    #[test]
+    fn symbols_inside_test_regions_are_exempt() {
+        // A gnarly `#[test]` fn in a production file (FileFacts::test_spans) gets the same
+        // exemption as a test file's functions; the same complexity outside the region fires.
+        let mut f = file("src/a.mock", FileRole::Production, FileOrigin::Authored);
+        f.test_spans = vec![crate::adapter::Span {
+            start: (100, 1),
+            end: (200, 999),
+        }];
+        let graph = graph_with(
+            vec![f],
+            vec![
+                symbol(FileId(0), "gnarly_test", 110, 140),
+                symbol(FileId(0), "gnarly_prod", 10, 40),
+            ],
+            vec![(SymbolId(0), metrics(6)), (SymbolId(1), metrics(6))],
+        );
+        let findings = find_crap(&graph, &CoverageMap::default());
+        assert_eq!(findings.len(), 1);
+        assert!(findings[0].message.contains("gnarly_prod"));
     }
 
     #[test]
