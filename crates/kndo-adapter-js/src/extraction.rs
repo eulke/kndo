@@ -58,11 +58,26 @@ pub fn extract(path: &str, content: &[u8]) -> FileFacts {
     for child in root.children(&mut cursor) {
         handle_statement(child, content, false, &mut out);
     }
+    // Identifiers that are *export-declaration syntax*, not uses — the `helper` in
+    // `module.exports = { helper }`, the specifiers of `export { helper }` — recorded by node
+    // id during the export passes below and excluded from the reference walk. Without this,
+    // every exported symbol of a reachable file carries a self-reference from its own export
+    // site and can never be reported `unused`, masking exactly the dead-export findings the
+    // analysis exists for. The export passes only record a skip when the public name matches
+    // the local declaration (every consumer path then resolves by name: destructured/named
+    // bindings, dotted namespace-member bindings, wildcard on escape); renamed exports
+    // (`exports.pub = internalName`, `export { a as c }`) keep their reference — consumers of
+    // the public name can't resolve to the local symbol, so the export-site reference is the
+    // conservative keep-alive (the debug-js `module.exports = setup` lesson, generalized).
+    let mut export_ref_skips: std::collections::HashSet<usize> = std::collections::HashSet::new();
     // CJS export surface (`module.exports = …`, `exports.foo = …`) — a separate top-level pass
     // *after* the declaration walk, because `exports.foo = foo` may textually precede
     // `function foo() {}` (hoisting) and the mark-existing-declaration decision needs the
     // complete declaration list.
-    collect_cjs_exports(root, content, &mut out);
+    collect_cjs_exports(root, content, &mut out, &mut export_ref_skips);
+    // ESM local export clause (`export { a, b as c }` with no `from`) — same post-declaration
+    // ordering for the same hoisting reason.
+    collect_esm_local_exports(root, content, &mut out, &mut export_ref_skips);
     // CJS imports (`require("literal")`), dynamic imports (`import(…)`), and dynamic
     // constructs (`eval`, `new Function`) — a full-tree walk like references, because any of
     // them can appear at any nesting depth, not just in top-level statements.
@@ -73,7 +88,7 @@ pub fn extract(path: &str, content: &[u8]) -> FileFacts {
     collect_namespace_uses(root, content, &mut out);
     // Separate full-tree walk (declarations above only visit top-level statements — a
     // reference can appear at any nesting depth, inside any function/block).
-    collect_references(root, content, &mut out.references);
+    collect_references(root, content, &export_ref_skips, &mut out.references);
     // Suppression pragmas: comments are `extra` nodes tree-sitter attaches wherever they
     // physically sit — a same-line trailing comment after a declaration lands *inside* that
     // declaration's own subtree (verified via the toolkit's introspect probe), not as a
@@ -170,10 +185,10 @@ fn handle_export_statement(node: Node, src: &[u8], out: &mut FileFacts) {
     if let Some(source_node) = node.child_by_field_name("source") {
         handle_reexport_statement(node, source_node, src, out);
     }
-    // Otherwise: `export { a as c }` (no `from` clause — re-exporting an already-declared
-    // local symbol under a new public name) — export-surface binding nuances (RFC 0005 §13
-    // redundant-export-binding territory); no new declarations to extract here, deliberately
-    // not attempted in this slice.
+    // Otherwise: `export { a }` / `export { a as c }` (no `from` clause) — handled by
+    // `collect_esm_local_exports`, a separate post-declaration pass (the clause may textually
+    // precede the declaration it names, so marking needs the complete declaration list —
+    // same ordering reason as `collect_cjs_exports`).
 }
 
 /// `export ... from "specifier"` — a re-export (js-ts.md §5: "Barrel files… resolved through,
@@ -742,7 +757,12 @@ fn collect_require_bindings(pattern: Node, src: &[u8]) -> Vec<ImportBinding> {
 /// mechanism yet — `Declaration` carries no confidence and `FileFacts::dynamics` isn't
 /// consumed by assembly — so those members contribute nothing for now, deferred alongside the
 /// wildcard wiring rather than modeled wrong.
-fn collect_cjs_exports(root: Node, src: &[u8], out: &mut FileFacts) {
+fn collect_cjs_exports(
+    root: Node,
+    src: &[u8],
+    out: &mut FileFacts,
+    export_ref_skips: &mut std::collections::HashSet<usize>,
+) {
     let mut cursor = root.walk();
     for statement in root.children(&mut cursor) {
         if statement.kind() != "expression_statement" {
@@ -762,9 +782,59 @@ fn collect_cjs_exports(root: Node, src: &[u8], out: &mut FileFacts) {
         };
 
         if is_module_exports(left, src) {
-            handle_cjs_module_exports(assignment, right, src, out);
+            handle_cjs_module_exports(assignment, right, src, out, export_ref_skips);
         } else if let Some(name) = cjs_named_export(left, src) {
-            handle_cjs_named_export(name, assignment, right, src, out);
+            handle_cjs_named_export(name, assignment, right, src, out, export_ref_skips);
+        }
+    }
+}
+
+/// ESM local export clause — `export { a, b as c };` with no `from` (the `from` form is a
+/// re-export, owned by `handle_reexport_statement`'s bindings). Marks the named local
+/// declarations exported, and records the reference-walk skips per the same public-name-vs-
+/// local-name rule as CJS (see `extract`'s `export_ref_skips` doc): an unaliased specifier
+/// (or `a as a`) is pure export syntax; an aliased one keeps its name-identifier reference as
+/// the conservative keep-alive; an alias identifier is never a reference (it *introduces* the
+/// public name, it doesn't look one up); a specifier naming no local declaration (re-exporting
+/// an imported binding: `import { x } …; export { x };`) keeps its reference so the original
+/// symbol stays alive through the import binding it resolves to.
+fn collect_esm_local_exports(
+    root: Node,
+    src: &[u8],
+    out: &mut FileFacts,
+    export_ref_skips: &mut std::collections::HashSet<usize>,
+) {
+    let mut cursor = root.walk();
+    for statement in root.children(&mut cursor) {
+        if statement.kind() != "export_statement"
+            || statement.child_by_field_name("source").is_some()
+        {
+            continue;
+        }
+        let mut stmt_cursor = statement.walk();
+        let Some(clause) = statement
+            .children(&mut stmt_cursor)
+            .find(|c| c.kind() == "export_clause")
+        else {
+            continue;
+        };
+        let mut clause_cursor = clause.walk();
+        for spec in clause.children(&mut clause_cursor) {
+            if spec.kind() != "export_specifier" {
+                continue;
+            }
+            let Some(name_node) = spec.child_by_field_name("name") else {
+                continue;
+            };
+            let alias = spec.child_by_field_name("alias");
+            if let Some(alias_node) = alias {
+                export_ref_skips.insert(alias_node.id());
+            }
+            let name = SmolStr::new(text(name_node, src));
+            let same_public_name = alias.is_none_or(|a| text(a, src) == name.as_str());
+            if mark_declaration_exported(&name, out) && same_public_name {
+                export_ref_skips.insert(name_node.id());
+            }
         }
     }
 }
@@ -795,7 +865,13 @@ fn cjs_named_export(node: Node, src: &[u8]) -> Option<SmolStr> {
     (property.kind() == "property_identifier").then(|| SmolStr::new(text(property, src)))
 }
 
-fn handle_cjs_module_exports(assignment: Node, right: Node, src: &[u8], out: &mut FileFacts) {
+fn handle_cjs_module_exports(
+    assignment: Node,
+    right: Node,
+    src: &[u8],
+    out: &mut FileFacts,
+    export_ref_skips: &mut std::collections::HashSet<usize>,
+) {
     // `module.exports = require("./x")` — the CJS barrel. collect_requires owns it (a
     // re-exported import binding `default` straight through to the target); synthesizing a
     // local `default` declaration here too would shadow that alias with a symbol nothing
@@ -805,19 +881,39 @@ fn handle_cjs_module_exports(assignment: Node, right: Node, src: &[u8], out: &mu
     }
     if right.kind() == "object" {
         // `module.exports = { a, b: localB, … }` — identifier members export those local
-        // declarations (spec §2: certain).
+        // declarations (spec §2: certain). A member whose public name matches the local
+        // declaration is pure export syntax, excluded from the reference walk (see
+        // `extract`'s `export_ref_skips` doc); a renamed member (`b: localB`) keeps its
+        // value-identifier reference as the conservative keep-alive, since consumers bind
+        // the public name `b`, which resolves to no symbol.
         let mut cursor = right.walk();
         for member in right.children(&mut cursor) {
-            let local = match member.kind() {
-                "shorthand_property_identifier" => Some(SmolStr::new(text(member, src))),
-                "pair" => member
-                    .child_by_field_name("value")
-                    .filter(|v| v.kind() == "identifier")
-                    .map(|v| SmolStr::new(text(v, src))),
-                _ => None, // computed/spread/literal members — no mechanism yet, see above
+            let (local, skip_node) = match member.kind() {
+                "shorthand_property_identifier" => {
+                    (Some(SmolStr::new(text(member, src))), Some(member))
+                }
+                "pair" => {
+                    let key = member.child_by_field_name("key");
+                    let value = member
+                        .child_by_field_name("value")
+                        .filter(|v| v.kind() == "identifier");
+                    let same_name = match (key, value) {
+                        (Some(k), Some(v)) => text(k, src) == text(v, src),
+                        _ => false,
+                    };
+                    (
+                        value.map(|v| SmolStr::new(text(v, src))),
+                        value.filter(|_| same_name),
+                    )
+                }
+                _ => (None, None), // computed/spread/literal members — no mechanism yet
             };
             if let Some(local) = local {
-                mark_declaration_exported(&local, out);
+                if mark_declaration_exported(&local, out) {
+                    if let Some(node) = skip_node {
+                        export_ref_skips.insert(node.id());
+                    }
+                }
             }
         }
         return;
@@ -857,12 +953,20 @@ fn handle_cjs_named_export(
     right: Node,
     src: &[u8],
     out: &mut FileFacts,
+    export_ref_skips: &mut std::collections::HashSet<usize>,
 ) {
     // In declaration-priority order: the export names an existing declaration
     // (`exports.foo = …` with `function foo` present), the value is one
     // (`exports.pub = localName`), or nothing local matches and the assignment itself is
     // the declaration (`exports.foo = function () {}`).
     if mark_declaration_exported(&name, out) {
+        // `exports.foo = foo` — public name matches the declaration the RHS names: the RHS
+        // identifier is export syntax, not a use (consumers resolve `foo` by name; see
+        // `extract`'s `export_ref_skips` doc). `exports.foo = somethingElse` keeps the RHS
+        // reference — it genuinely uses that other value.
+        if right.kind() == "identifier" && text(right, src) == name.as_str() {
+            export_ref_skips.insert(right.id());
+        }
         return;
     }
     if right.kind() == "identifier"
@@ -1243,10 +1347,20 @@ fn parse_pragma_line(line: &str) -> Option<ParsedPragma> {
     })
 }
 
-fn collect_references(node: Node, src: &[u8], out: &mut Vec<RawReference>) {
+fn collect_references(
+    node: Node,
+    src: &[u8],
+    export_ref_skips: &std::collections::HashSet<usize>,
+    out: &mut Vec<RawReference>,
+) {
     // Import statements are entirely declarative name-binding syntax (already turned into
     // `ImportBinding` facts by `collect_import_bindings`) — nothing inside one is a reference.
     if node.kind() == "import_statement" {
+        return;
+    }
+    // `export { a } from "./x"` — every identifier inside the clause names the *target
+    // module's* exports (already modeled as re-export bindings), never a local symbol.
+    if node.kind() == "export_statement" && node.child_by_field_name("source").is_some() {
         return;
     }
 
@@ -1270,7 +1384,8 @@ fn collect_references(node: Node, src: &[u8], out: &mut Vec<RawReference>) {
     if matches!(
         node.kind(),
         "identifier" | "type_identifier" | "shorthand_property_identifier"
-    ) {
+    ) && !export_ref_skips.contains(&node.id())
+    {
         out.push(RawReference {
             name: SmolStr::new(text(node, src)),
             scope_context: None,
@@ -1283,7 +1398,7 @@ fn collect_references(node: Node, src: &[u8], out: &mut Vec<RawReference>) {
         if Some(child.id()) == skip_id {
             continue;
         }
-        collect_references(child, src, out);
+        collect_references(child, src, export_ref_skips, out);
     }
 }
 
@@ -1756,6 +1871,155 @@ mod tests {
             exported_names(&facts),
             vec![("f".into(), true), ("localG".into(), true)]
         );
+    }
+
+    #[test]
+    fn module_exports_object_shorthand_members_are_not_references() {
+        // The export site is declaration syntax, not a use — without this, an exported CJS
+        // symbol in a reachable file could never be reported unused (the dead-export mask).
+        let facts = extract(
+            "f.js",
+            b"function helper() {}\nfunction legacy() {}\nmodule.exports = { helper, legacy };",
+        );
+        let names: Vec<String> = facts
+            .references
+            .iter()
+            .map(|r| r.name.to_string())
+            .collect();
+        assert!(!names.contains(&"helper".to_string()), "{names:?}");
+        assert!(!names.contains(&"legacy".to_string()), "{names:?}");
+    }
+
+    #[test]
+    fn module_exports_renamed_pair_value_keeps_its_reference() {
+        // `g: localG` — consumers bind the public name `g`, which resolves to no symbol, so
+        // the export-site reference to localG is the conservative keep-alive.
+        let facts = extract(
+            "f.js",
+            b"const localG = 1;\nmodule.exports = { g: localG };",
+        );
+        let names: Vec<String> = facts
+            .references
+            .iter()
+            .map(|r| r.name.to_string())
+            .collect();
+        assert!(names.contains(&"localG".to_string()), "{names:?}");
+    }
+
+    #[test]
+    fn module_exports_same_named_pair_value_is_not_a_reference() {
+        // `{ f: f }` is just the long spelling of shorthand — same rule.
+        let facts = extract("f.js", b"function f() {}\nmodule.exports = { f: f };");
+        let names: Vec<String> = facts
+            .references
+            .iter()
+            .map(|r| r.name.to_string())
+            .collect();
+        assert!(!names.contains(&"f".to_string()), "{names:?}");
+    }
+
+    #[test]
+    fn exports_dot_same_name_rhs_is_not_a_reference() {
+        let facts = extract("f.js", b"function foo() {}\nexports.foo = foo;");
+        let names: Vec<String> = facts
+            .references
+            .iter()
+            .map(|r| r.name.to_string())
+            .collect();
+        assert!(!names.contains(&"foo".to_string()), "{names:?}");
+    }
+
+    #[test]
+    fn exports_dot_renamed_rhs_keeps_its_reference() {
+        let facts = extract(
+            "f.js",
+            b"function internalName() {}\nexports.pub = internalName;",
+        );
+        let names: Vec<String> = facts
+            .references
+            .iter()
+            .map(|r| r.name.to_string())
+            .collect();
+        assert!(names.contains(&"internalName".to_string()), "{names:?}");
+    }
+
+    #[test]
+    fn shorthand_in_an_ordinary_object_is_still_a_reference() {
+        // The skip is scoped to `module.exports = {…}` — a plain object literal's shorthand
+        // is a genuine use of the named binding.
+        let facts = extract("f.js", b"function f() {}\nconst obj = { f };\nuse(obj);");
+        let names: Vec<String> = facts
+            .references
+            .iter()
+            .map(|r| r.name.to_string())
+            .collect();
+        assert!(names.contains(&"f".to_string()), "{names:?}");
+    }
+
+    #[test]
+    fn local_export_clause_marks_declarations_exported() {
+        // `export { a };` after (or before — hoisting) the declaration: the local symbol is
+        // exported, in both textual orders.
+        let facts = extract("f.ts", b"function a() {}\nexport { a };");
+        assert_eq!(exported_names(&facts), vec![("a".into(), true)]);
+
+        let facts = extract("f.ts", b"export { b };\nfunction b() {}");
+        assert_eq!(exported_names(&facts), vec![("b".into(), true)]);
+    }
+
+    #[test]
+    fn local_export_clause_unaliased_names_are_not_references() {
+        let facts = extract("f.ts", b"function a() {}\nexport { a };");
+        let names: Vec<String> = facts
+            .references
+            .iter()
+            .map(|r| r.name.to_string())
+            .collect();
+        assert!(!names.contains(&"a".to_string()), "{names:?}");
+    }
+
+    #[test]
+    fn local_export_clause_aliased_name_keeps_its_reference_and_alias_never_is_one() {
+        // `export { a as c }` — consumers bind `c` (unresolvable), so `a`'s reference is the
+        // keep-alive; `c` introduces a public name, it never looks one up.
+        let facts = extract(
+            "f.ts",
+            b"function a() {}\nfunction c() {}\nexport { a as c };",
+        );
+        let names: Vec<String> = facts
+            .references
+            .iter()
+            .map(|r| r.name.to_string())
+            .collect();
+        assert!(names.contains(&"a".to_string()), "{names:?}");
+        assert!(!names.contains(&"c".to_string()), "{names:?}");
+    }
+
+    #[test]
+    fn export_from_clause_contributes_no_local_references() {
+        // `export { a } from "./x"` names the target's exports — a same-named local must not
+        // be spuriously kept alive by it.
+        let facts = extract("f.ts", b"function a() {}\nexport { a } from \"./x\";");
+        let names: Vec<String> = facts
+            .references
+            .iter()
+            .map(|r| r.name.to_string())
+            .collect();
+        assert!(!names.contains(&"a".to_string()), "{names:?}");
+    }
+
+    #[test]
+    fn local_export_clause_naming_an_import_keeps_the_reference() {
+        // `import { x } …; export { x };` — the barrel-by-import shape: no local declaration
+        // named x, so the reference stays and resolves through the import binding, keeping the
+        // original symbol alive.
+        let facts = extract("f.ts", b"import { x } from \"./impl\";\nexport { x };");
+        let names: Vec<String> = facts
+            .references
+            .iter()
+            .map(|r| r.name.to_string())
+            .collect();
+        assert!(names.contains(&"x".to_string()), "{names:?}");
     }
 
     #[test]
