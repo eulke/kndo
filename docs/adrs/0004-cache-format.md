@@ -12,10 +12,17 @@ exactly its dependents (RFC 0004 §3).
   not in `cache/`) is committed.
 - **Hashing:** blake3 for all content addressing (parallel, collision-safe; also used for
   duplicate-asset detection so hashes are computed once).
-- **Serialization:** `rkyv` (zero-copy archival) for `graph.bin` / `findings.bin` so loading is
-  mmap + validate rather than deserialize; `bincode` for small per-file facts entries where
-  zero-copy buys nothing. Every artifact carries `(magic, core schema version, writer version)`;
-  any mismatch ⇒ silently rebuild that layer (cold), never migrate in place.
+- **Serialization:** `rkyv` (zero-copy archival) for graph snapshots (`graphs/<key>.bin` —
+  content-addressed like facts entries, so the several tree states diff modes assemble each run
+  coexist instead of evicting one another) and `findings.bin`, so loading is mmap + validate
+  rather than deserialize; `bincode` for small per-file facts entries where zero-copy buys
+  nothing. Every artifact carries `(magic, core schema version, writer version)`; any mismatch
+  ⇒ silently rebuild that layer (cold), never migrate in place.
+- **Blob-hash sidecar:** `blob-hashes.bin`, a `git blob id → blake3` map grown on every
+  git-tree discovery. Sound because a git blob id is itself a content address (same id ⇒ same
+  bytes ⇒ same blake3); a hit lets diff modes skip streaming a blob's content entirely — the
+  dominant warm-diff cost — with bytes re-fetched lazily only on a facts-cache miss.
+  Corrupt/absent ⇒ empty map: everything is re-fetched, slower but never wrong.
 - **Concurrency:** single-writer advisory lock; concurrent runs degrade to read-only cache use.
 
 ## Consequences

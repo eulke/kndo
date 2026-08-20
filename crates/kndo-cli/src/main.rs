@@ -235,11 +235,11 @@ fn doctor_cmd() -> ExitCode {
             c.facts_entries, c.facts_bytes
         );
         println!(
-            "  graph snapshot: {}",
-            if c.graph_snapshot_present {
-                format!("present ({} bytes)", c.graph_snapshot_bytes)
+            "  graph snapshots: {}",
+            if c.graph_snapshots > 0 {
+                format!("{} ({} bytes)", c.graph_snapshots, c.graph_snapshot_bytes)
             } else {
-                "absent".to_string()
+                "none".to_string()
             }
         );
     }

@@ -209,6 +209,72 @@ pub fn cat_blobs(repo_root: &Path, shas: &[String]) -> Result<Vec<Option<Vec<u8>
     Ok(results)
 }
 
+/// A persistent `cat-file --batch` child for on-demand, one-blob-at-a-time reads — the lazy
+/// fallback behind `discovery`'s in-memory tree reader, for the rare case where assembly asks
+/// for a blob whose content discovery skipped fetching (its hash was already known via the
+/// blob-hash sidecar, and content is only needed again on a facts-cache miss). One request in
+/// flight at a time; the caller serializes access (a `Mutex` in the reader). Worst case —
+/// every file missing facts — degrades to one pipe round-trip per file (~100 µs each), never
+/// one process spawn per file.
+pub struct BlobFetcher {
+    child: std::process::Child,
+    stdin: std::process::ChildStdin,
+    stdout: BufReader<std::process::ChildStdout>,
+}
+
+impl BlobFetcher {
+    pub fn spawn(repo_root: &Path) -> Result<BlobFetcher, GitError> {
+        let mut child = Command::new("git")
+            .arg("-C")
+            .arg(repo_root)
+            .args(["cat-file", "--batch"])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .map_err(|e| GitError(format!("failed to run `git cat-file --batch`: {e}")))?;
+        let stdin = child.stdin.take().expect("stdin was piped");
+        let stdout = BufReader::new(child.stdout.take().expect("stdout was piped"));
+        Ok(BlobFetcher {
+            child,
+            stdin,
+            stdout,
+        })
+    }
+
+    /// `Ok(None)` for an id git reports missing; `Err` only for a broken pipe/protocol (the
+    /// caller degrades either to its own not-found error).
+    pub fn fetch(&mut self, sha: &str) -> std::io::Result<Option<Vec<u8>>> {
+        self.stdin.write_all(sha.as_bytes())?;
+        self.stdin.write_all(b"\n")?;
+        self.stdin.flush()?;
+
+        let mut header = String::new();
+        self.stdout.read_line(&mut header)?;
+        let header = header.trim_end();
+        if header.ends_with(" missing") || header.is_empty() {
+            return Ok(None);
+        }
+        let size: usize = header
+            .rsplit(' ')
+            .next()
+            .and_then(|s| s.parse().ok())
+            .ok_or_else(|| std::io::Error::other(format!("malformed cat-file header: {header}")))?;
+        let mut content = vec![0u8; size];
+        self.stdout.read_exact(&mut content)?;
+        let mut newline = [0u8; 1];
+        self.stdout.read_exact(&mut newline)?;
+        Ok(Some(content))
+    }
+}
+
+impl Drop for BlobFetcher {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

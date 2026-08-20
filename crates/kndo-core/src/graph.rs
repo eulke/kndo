@@ -341,7 +341,13 @@ pub fn assemble_from_source(
     adapters: &[Box<dyn LanguageAdapter>],
     cache: Option<&crate::cache::ProjectCache>,
 ) -> Result<(ProjectGraph, Vec<Diagnostic>), DiscoveryError> {
-    let mut discovered = discovery::discover_source(source)?;
+    let known_blob_hashes = cache.map(|c| c.load_blob_hashes()).unwrap_or_default();
+    let mut discovered = discovery::discover_source(source, &known_blob_hashes)?;
+    if let Some(cache) = cache {
+        // Persist fresh (git blob → blake3) pairs immediately — the graph-snapshot hit below
+        // returns early, and the sidecar must grow even on runs that never reach extraction.
+        cache.save_blob_hashes(&discovered.new_blob_hashes);
+    }
     let mut diagnostics = std::mem::take(&mut discovered.diagnostics);
 
     // The graph-snapshot fast path (RFC 0004 §2, §4 step 1): if every input the key folds in —

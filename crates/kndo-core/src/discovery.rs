@@ -76,37 +76,80 @@ pub enum TreeSource<'a> {
 pub struct DiscoveredTree {
     pub files: Vec<DiscoveredFile>,
     pub diagnostics: Vec<Diagnostic>,
+    /// `(git blob id, blake3)` pairs computed fresh this discovery — the caller merges them
+    /// into the cache's blob-hash sidecar so the next run's git-tree discovery can skip
+    /// fetching those blobs entirely. Always empty for directory sources.
+    pub new_blob_hashes: Vec<(String, [u8; 32])>,
     reader: ContentReader,
 }
 
 enum ContentReader {
     Fs(PathBuf),
-    Memory(HashMap<ProjectPath, Vec<u8>>),
+    /// Git-tree content: blobs fetched during discovery, plus a lazy single-blob fallback for
+    /// anything discovery skipped (its hash was already known via the sidecar, so its bytes
+    /// were never streamed — they're only needed again on a facts-cache miss). The fallback is
+    /// one persistent `cat-file --batch` child behind a `Mutex` — rayon workers contend only
+    /// on this rare path, and the worst case (every file missing facts) is one pipe round-trip
+    /// per file, never one process spawn per file.
+    Memory {
+        blobs: HashMap<ProjectPath, Vec<u8>>,
+        sha_by_path: HashMap<ProjectPath, String>,
+        repo_root: PathBuf,
+        fetcher: std::sync::Mutex<Option<gitutil::BlobFetcher>>,
+    },
 }
 
 impl DiscoveredTree {
     pub fn read(&self, path: &ProjectPath) -> std::io::Result<Vec<u8>> {
+        let not_found = || {
+            std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!("{} is not in the tree snapshot", path.0),
+            )
+        };
         match &self.reader {
             ContentReader::Fs(root) => std::fs::read(root.join(path.0.as_str())),
-            ContentReader::Memory(map) => map.get(path).cloned().ok_or_else(|| {
-                std::io::Error::new(
-                    std::io::ErrorKind::NotFound,
-                    format!("{} is not in the tree snapshot", path.0),
-                )
-            }),
+            ContentReader::Memory {
+                blobs,
+                sha_by_path,
+                repo_root,
+                fetcher,
+            } => {
+                if let Some(content) = blobs.get(path) {
+                    return Ok(content.clone());
+                }
+                let sha = sha_by_path.get(path).ok_or_else(not_found)?;
+                let mut guard = fetcher.lock().map_err(|_| not_found())?;
+                if guard.is_none() {
+                    *guard = Some(
+                        gitutil::BlobFetcher::spawn(repo_root)
+                            .map_err(|e| std::io::Error::other(e.0))?,
+                    );
+                }
+                let fetcher = guard.as_mut().expect("spawned above");
+                fetcher.fetch(sha)?.ok_or_else(not_found)
+            }
         }
     }
 }
 
 /// Discover from either source, yielding the identical result shape (same paths, same hashes,
 /// same ordering) — the property the parity test in this module pins down.
-pub fn discover_source(source: &TreeSource<'_>) -> Result<DiscoveredTree, DiscoveryError> {
+/// `known_blob_hashes` is the cache's git-blob → blake3 sidecar (empty when no cache): a
+/// git-tree blob whose id is in it needs no content fetch at all, which is what makes a warm
+/// diff run's cost proportional to what *changed* rather than to repo size (RFC 0004 §4's
+/// spirit, at the discovery layer). Directory sources ignore it.
+pub fn discover_source(
+    source: &TreeSource<'_>,
+    known_blob_hashes: &HashMap<String, [u8; 32]>,
+) -> Result<DiscoveredTree, DiscoveryError> {
     match source {
         TreeSource::Directory(root) => {
             let discovered = discover(root)?;
             Ok(DiscoveredTree {
                 files: discovered.files,
                 diagnostics: discovered.diagnostics,
+                new_blob_hashes: Vec::new(),
                 reader: ContentReader::Fs(root.to_path_buf()),
             })
         }
@@ -114,7 +157,7 @@ pub fn discover_source(source: &TreeSource<'_>) -> Result<DiscoveredTree, Discov
             repo_root,
             treeish,
             prefix,
-        } => discover_git_tree(repo_root, treeish, prefix),
+        } => discover_git_tree(repo_root, treeish, prefix, known_blob_hashes),
     }
 }
 
@@ -201,6 +244,7 @@ fn discover_git_tree(
     repo_root: &Path,
     treeish: &str,
     prefix: &str,
+    known_blob_hashes: &HashMap<String, [u8; 32]>,
 ) -> Result<DiscoveredTree, DiscoveryError> {
     let entries = gitutil::ls_tree(repo_root, treeish).map_err(git_error)?;
     let mut diagnostics = Vec::new();
@@ -308,17 +352,36 @@ fn discover_git_tree(
         })
         .collect();
 
-    let shas: Vec<String> = kept.iter().map(|(_, sha)| sha.clone()).collect();
+    // A git blob id is itself a content address, so a sidecar hit means the blake3 is already
+    // known and the bytes never need to leave the object database — the dominant cost of a
+    // warm git-tree discovery (streaming every blob just to hash it) collapses to a map probe.
+    // Content for these files is served lazily by the reader's fallback if assembly ever asks.
+    let mut files = Vec::with_capacity(kept.len());
+    let mut sha_by_path: HashMap<ProjectPath, String> = HashMap::with_capacity(kept.len());
+    let mut unknown: Vec<(ProjectPath, String)> = Vec::new();
+    for (path, sha) in kept {
+        let path = ProjectPath(path.into());
+        sha_by_path.insert(path.clone(), sha.clone());
+        if let Some(hash) = known_blob_hashes.get(&sha) {
+            files.push(DiscoveredFile {
+                path,
+                content_hash: *hash,
+            });
+        } else {
+            unknown.push((path, sha));
+        }
+    }
+
+    let shas: Vec<String> = unknown.iter().map(|(_, sha)| sha.clone()).collect();
     let contents = gitutil::cat_blobs(repo_root, &shas).map_err(git_error)?;
 
-    let mut files = Vec::with_capacity(kept.len());
-    let mut blobs: HashMap<ProjectPath, Vec<u8>> = HashMap::with_capacity(kept.len());
+    let mut blobs: HashMap<ProjectPath, Vec<u8>> = HashMap::with_capacity(unknown.len());
+    let mut new_blob_hashes: Vec<(String, [u8; 32])> = Vec::with_capacity(unknown.len());
     let hashed: Vec<Option<[u8; 32]>> = contents
         .par_iter()
         .map(|c| c.as_ref().map(|bytes| *blake3::hash(bytes).as_bytes()))
         .collect();
-    for (((path, _), content), hash) in kept.into_iter().zip(contents).zip(hashed) {
-        let path = ProjectPath(path.into());
+    for (((path, sha), content), hash) in unknown.into_iter().zip(contents).zip(hashed) {
         match (content, hash) {
             (Some(content), Some(hash)) => {
                 files.push(DiscoveredFile {
@@ -326,22 +389,33 @@ fn discover_git_tree(
                     content_hash: hash,
                 });
                 blobs.insert(path, content);
+                new_blob_hashes.push((sha, hash));
             }
-            _ => diagnostics.push(Diagnostic {
-                level: DiagnosticLevel::Warn,
-                path: Some(path),
-                message: "unreadable (blob missing from the object database)".to_string(),
-                span: None,
-            }),
+            _ => {
+                sha_by_path.remove(&path); // never serve a blob the object database lacks
+                diagnostics.push(Diagnostic {
+                    level: DiagnosticLevel::Warn,
+                    path: Some(path),
+                    message: "unreadable (blob missing from the object database)".to_string(),
+                    span: None,
+                });
+            }
         }
     }
 
     files.sort_by(|a, b| a.path.0.cmp(&b.path.0));
     diagnostics.sort_by(|a, b| a.message.cmp(&b.message));
+    new_blob_hashes.sort_by(|a, b| a.0.cmp(&b.0));
     Ok(DiscoveredTree {
         files,
         diagnostics,
-        reader: ContentReader::Memory(blobs),
+        new_blob_hashes,
+        reader: ContentReader::Memory {
+            blobs,
+            sha_by_path,
+            repo_root: repo_root.to_path_buf(),
+            fetcher: std::sync::Mutex::new(None),
+        },
     })
 }
 
@@ -432,7 +506,7 @@ mod tests {
     }
 
     fn tree_files(source: &TreeSource<'_>) -> Vec<DiscoveredFile> {
-        discover_source(source).unwrap().files
+        discover_source(source, &HashMap::new()).unwrap().files
     }
 
     /// The parity contract, pinned: a committed tree discovered via git must yield the exact
@@ -523,11 +597,14 @@ mod tests {
         // Change the working tree AFTER committing — reads must come from the tree, not disk.
         fs::write(dir.join("f.ts"), "changed on disk").unwrap();
 
-        let tree = discover_source(&TreeSource::GitTree {
-            repo_root: &dir,
-            treeish: "HEAD",
-            prefix: "",
-        })
+        let tree = discover_source(
+            &TreeSource::GitTree {
+                repo_root: &dir,
+                treeish: "HEAD",
+                prefix: "",
+            },
+            &HashMap::new(),
+        )
         .unwrap();
         let content = tree.read(&ProjectPath("f.ts".into())).unwrap();
         assert_eq!(content, b"export const x = 42;");
@@ -538,11 +615,45 @@ mod tests {
         let dir = tmp("git-bad-treeish");
         fs::write(dir.join("f.ts"), "x").unwrap();
         init_and_commit_all(&dir);
-        assert!(discover_source(&TreeSource::GitTree {
-            repo_root: &dir,
-            treeish: "no-such-ref",
-            prefix: "",
-        })
+        assert!(discover_source(
+            &TreeSource::GitTree {
+                repo_root: &dir,
+                treeish: "no-such-ref",
+                prefix: "",
+            },
+            &HashMap::new(),
+        )
         .is_err());
+    }
+
+    /// The sidecar contract: a second discovery fed the first run's `(git sha, blake3)` pairs
+    /// yields the identical file list while fetching nothing (zero new hashes), and content
+    /// reads for those skipped blobs still work via the lazy fallback fetcher.
+    #[test]
+    fn known_blob_hashes_skip_fetching_but_reads_still_work() {
+        let dir = tmp("git-sidecar");
+        fs::write(dir.join("a.ts"), "export const a = 1;").unwrap();
+        fs::write(dir.join("b.ts"), "export const b = 2;").unwrap();
+        init_and_commit_all(&dir);
+
+        let source = TreeSource::GitTree {
+            repo_root: &dir,
+            treeish: "HEAD",
+            prefix: "",
+        };
+        let cold = discover_source(&source, &HashMap::new()).unwrap();
+        assert_eq!(cold.new_blob_hashes.len(), 2);
+
+        let sidecar: HashMap<String, [u8; 32]> = cold.new_blob_hashes.iter().cloned().collect();
+        let warm = discover_source(&source, &sidecar).unwrap();
+        assert_eq!(warm.files, cold.files);
+        assert!(
+            warm.new_blob_hashes.is_empty(),
+            "warm discovery must not re-hash known blobs"
+        );
+        // The warm reader streamed no blob contents up front — this read exercises the
+        // persistent cat-file fallback.
+        let content = warm.read(&ProjectPath("a.ts".into())).unwrap();
+        assert_eq!(content, b"export const a = 1;");
     }
 }

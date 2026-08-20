@@ -172,7 +172,7 @@ pub struct DoctorCacheInfo {
     pub writable: bool,
     pub facts_entries: usize,
     pub facts_bytes: u64,
-    pub graph_snapshot_present: bool,
+    pub graph_snapshots: usize,
     pub graph_snapshot_bytes: u64,
 }
 
@@ -520,7 +520,7 @@ impl Engine {
                 writable: stats.writable,
                 facts_entries: stats.facts_entries,
                 facts_bytes: stats.facts_bytes,
-                graph_snapshot_present: stats.graph_snapshot_present,
+                graph_snapshots: stats.graph_snapshots,
                 graph_snapshot_bytes: stats.graph_snapshot_bytes,
             }
         });

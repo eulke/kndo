@@ -1,25 +1,28 @@
 //! `.kndo/cache/` — the project cache (ADR 0004, RFC 0004 §2–3): a facts layer (this file's
-//! original scope) plus a graph snapshot (`graph.bin`) that lets a warm run skip assembly
-//! entirely, not just re-parsing. The patch algorithm and dirty-region incrementality (RFC 0004
-//! §4–6) — reusing *part* of a stale graph — aren't implemented yet: today it's all-or-nothing,
-//! either every input matches the last snapshot exactly, or the graph is rebuilt from scratch
-//! (cache-warm parsing still applies during that rebuild). The findings snapshot (needed for
-//! diff-mode derived effects, RFC 0004 §6) doesn't exist yet either.
+//! original scope) plus content-addressed graph snapshots (`graphs/<key>.bin`) that let a warm
+//! run skip assembly entirely, not just re-parsing. The patch algorithm and dirty-region
+//! incrementality (RFC 0004 §4–6) — reusing *part* of a stale graph — aren't implemented yet:
+//! today it's all-or-nothing, either every input matches a stored snapshot exactly, or the
+//! graph is rebuilt from scratch (cache-warm parsing still applies during that rebuild). The
+//! findings snapshot (needed for diff-mode derived effects, RFC 0004 §6) doesn't exist yet
+//! either.
 //!
 //! Layout, keying, and format decisions mirror ADR 0004 exactly:
 //! - Facts are content-addressed by `(adapter id, adapter facts-schema version, file content
 //!   hash)` — renames, branch switches, and `git stash` all hit the cache; a file reverted to
 //!   an old version re-hits its old entry. `bincode` — no zero-copy win at this per-file size.
-//! - The graph snapshot is keyed by a single digest folding in the *whole* discovered file set
+//! - Each graph snapshot is keyed by a single digest folding in the *whole* discovered file set
 //!   (every path + content hash — RFC 0004 §3's "set of (path, content hash)" already subsumes
 //!   "manifest hashes": a manifest is just one more discovered file) plus each registered
-//!   adapter's id and facts-schema version plus [`crate::graph::GRAPH_SCHEMA_VERSION`]. Two
-//!   inputs RFC 0004 §3 also lists — a kndo config hash and the active plugin set — don't exist
-//!   as subsystems yet, so they're honestly absent from the key rather than faked; extending it
-//!   is required before either subsystem ships. Any key mismatch is a full rebuild, never a
-//!   partial patch. `rkyv` + `mmap`, per ADR 0004 exactly — `get_graph` maps `graph.bin` and
-//!   validates directly against the mapped bytes; nothing is read into a heap buffer first, so
-//!   loading really is "mmap + validate," not a copy dressed up as one.
+//!   adapter's id and facts-schema version plus [`crate::graph::GRAPH_SCHEMA_VERSION`], and
+//!   stored under that key — several snapshots coexist (the working tree's, plus diff modes'
+//!   before/after tree states; see `graph_snapshot_path`). Two inputs RFC 0004 §3 also lists —
+//!   a kndo config hash and the active plugin set — don't exist as subsystems yet, so they're
+//!   honestly absent from the key rather than faked; extending it is required before either
+//!   subsystem ships. Any key mismatch is a full rebuild, never a partial patch. `rkyv` +
+//!   `mmap`, per ADR 0004 exactly — `get_graph` maps the snapshot and validates directly
+//!   against the mapped bytes; nothing is read into a heap buffer first, so loading really is
+//!   "mmap + validate," not a copy dressed up as one.
 //! - Every artifact — facts entry and graph snapshot alike — carries a magic + format-version
 //!   header; any mismatch, including a kndo upgrade that changed the on-disk shape, silently
 //!   rebuilds that layer rather than erroring or migrating in place. The cache is explicitly
@@ -27,6 +30,7 @@
 //! - Single-writer advisory lock; a concurrent run degrades to read-only cache use instead of
 //!   racing writes.
 
+use std::collections::HashMap;
 use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -57,7 +61,9 @@ pub struct CacheStats {
     pub writable: bool,
     pub facts_entries: usize,
     pub facts_bytes: u64,
-    pub graph_snapshot_present: bool,
+    /// Content-addressed graph snapshots currently on disk (`graphs/<key>.bin`) — several
+    /// coexist by design: full mode's working tree plus diff modes' before/after states.
+    pub graph_snapshots: usize,
     pub graph_snapshot_bytes: u64,
 }
 
@@ -70,6 +76,11 @@ const GRAPH_MAGIC: [u8; 4] = *b"KNG1";
 const GRAPH_FORMAT_VERSION: u32 = 1;
 const GRAPH_KEY_LEN: usize = 32;
 const GRAPH_HEADER_LEN: usize = GRAPH_MAGIC.len() + 4 + GRAPH_KEY_LEN;
+
+/// Blob-hash sidecar envelope (`blob-hashes.bin` — see [`ProjectCache::load_blob_hashes`]).
+const BLOB_MAGIC: [u8; 4] = *b"KNB1";
+const BLOB_HASHES_FORMAT_VERSION: u32 = 1;
+const BLOB_HASHES_HEADER_LEN: usize = BLOB_MAGIC.len() + 4;
 
 /// `script_invoked_dependencies` is a `HashSet<(PackageId, SmolStr)>` on the live graph — rkyv
 /// can't derive `Archive` for a bare tuple with a `#[rkyv(with = ..)]`-annotated element (the
@@ -185,6 +196,59 @@ impl ProjectCache {
         }
     }
 
+    /// The git-blob → blake3 sidecar (`blob-hashes.bin`): lets git-tree discovery skip
+    /// fetching a blob's content entirely when its git id was seen before — the content hash
+    /// is already known, and content is only ever needed again on a facts-cache miss (served
+    /// lazily then; see `discovery`'s `ContentReader`). Sound because a git blob id is itself
+    /// a content address: same id ⇒ same bytes ⇒ same blake3, to exactly the degree git's own
+    /// object model depends on. Corrupt/absent ⇒ empty map (fetch everything — slower, never
+    /// wrong), same silent-degrade contract as every other layer here.
+    pub fn load_blob_hashes(&self) -> HashMap<String, [u8; 32]> {
+        let Ok(bytes) = fs::read(self.blob_hashes_path()) else {
+            return HashMap::new();
+        };
+        if bytes.len() < BLOB_HASHES_HEADER_LEN || bytes[..BLOB_MAGIC.len()] != BLOB_MAGIC {
+            return HashMap::new();
+        }
+        let version = u32::from_le_bytes(
+            match bytes[BLOB_MAGIC.len()..BLOB_HASHES_HEADER_LEN].try_into() {
+                Ok(v) => v,
+                Err(_) => return HashMap::new(),
+            },
+        );
+        if version != BLOB_HASHES_FORMAT_VERSION {
+            return HashMap::new();
+        }
+        bincode::deserialize(&bytes[BLOB_HASHES_HEADER_LEN..]).unwrap_or_default()
+    }
+
+    /// Merge `new` pairs into the sidecar. No-op when read-only or nothing is new — the same
+    /// silent-degrade contract as [`Self::put`].
+    pub fn save_blob_hashes(&self, new: &[(String, [u8; 32])]) {
+        if !self.writable || new.is_empty() {
+            return;
+        }
+        let mut map = self.load_blob_hashes();
+        for (sha, hash) in new {
+            map.insert(sha.clone(), *hash);
+        }
+        let mut out = Vec::new();
+        out.extend_from_slice(&BLOB_MAGIC);
+        out.extend_from_slice(&BLOB_HASHES_FORMAT_VERSION.to_le_bytes());
+        if bincode::serialize_into(&mut out, &map).is_err() {
+            return;
+        }
+        let path = self.blob_hashes_path();
+        let tmp = path.with_extension("bin.tmp");
+        if fs::write(&tmp, &out).is_ok() {
+            let _ = fs::rename(&tmp, &path);
+        }
+    }
+
+    fn blob_hashes_path(&self) -> PathBuf {
+        self.cache_dir.join("blob-hashes.bin")
+    }
+
     fn entry_path(
         &self,
         adapter_id: &str,
@@ -256,13 +320,15 @@ impl ProjectCache {
     /// Best-effort LRU-by-mtime prune down to `cap_bytes` (ADR 0004 default: [`DEFAULT_CAP_BYTES`]).
     /// Called once per run after writes land — never on the hot get/put path — and only when
     /// this handle holds the write lock; a read-only handle has nothing it's entitled to delete.
+    /// One shared pool: facts entries and graph snapshots compete under the same cap, oldest
+    /// out first regardless of layer.
     pub fn prune(&self, cap_bytes: u64) {
         if !self.writable {
             return;
         }
         let mut entries: Vec<(PathBuf, u64, std::time::SystemTime)> = Vec::new();
         let mut total: u64 = 0;
-        let mut stack = vec![self.facts_dir.clone()];
+        let mut stack = vec![self.facts_dir.clone(), self.cache_dir.join("graphs")];
         while let Some(dir) = stack.pop() {
             let Ok(read_dir) = fs::read_dir(&dir) else {
                 continue;
@@ -316,13 +382,23 @@ impl ProjectCache {
                 }
             }
         }
-        let graph_bytes = fs::metadata(self.graph_path()).map(|m| m.len()).ok();
+        let mut graph_snapshots = 0usize;
+        let mut graph_snapshot_bytes = 0u64;
+        if let Ok(read_dir) = fs::read_dir(self.cache_dir.join("graphs")) {
+            for entry in read_dir.flatten() {
+                let Ok(meta) = entry.metadata() else { continue };
+                if meta.is_file() && entry.path().extension().is_some_and(|e| e == "bin") {
+                    graph_snapshots += 1;
+                    graph_snapshot_bytes += meta.len();
+                }
+            }
+        }
         CacheStats {
             writable: self.writable,
             facts_entries,
             facts_bytes,
-            graph_snapshot_present: graph_bytes.is_some(),
-            graph_snapshot_bytes: graph_bytes.unwrap_or(0),
+            graph_snapshots,
+            graph_snapshot_bytes,
         }
     }
 
@@ -343,23 +419,35 @@ impl ProjectCache {
         &self.cache_dir
     }
 
-    fn graph_path(&self) -> PathBuf {
-        self.cache_dir.join("graph.bin")
+    /// Graph snapshots are content-addressed like facts entries — one file per key under
+    /// `graphs/`, not a single mutable slot. Diff modes assemble two tree states per run
+    /// (before/after), so a single slot could never hold both: each run's second `put`
+    /// evicted the first, and the next run ping-ponged between the two keys with a 0% hit
+    /// rate — measured as the difference between `--staged` warm and full-mode warm at 5k
+    /// files. Multiple snapshots coexist (before, after, working tree) and the shared LRU
+    /// prune bounds their total size along with everything else.
+    fn graph_snapshot_path(&self, key: &[u8; GRAPH_KEY_LEN]) -> PathBuf {
+        let mut name = String::with_capacity(GRAPH_KEY_LEN * 2 + 4);
+        for byte in key {
+            let _ = write!(name, "{byte:02x}");
+        }
+        name.push_str(".bin");
+        self.cache_dir.join("graphs").join(name)
     }
 
-    /// Load the graph snapshot iff its stored key exactly matches `key` — the caller (`graph.rs`)
-    /// computes `key` from the current discovered file set + adapter versions +
-    /// [`crate::graph::GRAPH_SCHEMA_VERSION`]; any other value means *something* in that input
-    /// changed since the snapshot was written, so this is a plain miss, not an error, exactly
-    /// like a facts-entry miss (ADR 0004: any mismatch ⇒ silently rebuild).
+    /// Load the graph snapshot stored for `key` — the caller (`graph.rs`) computes `key` from
+    /// the current discovered file set + adapter versions +
+    /// [`crate::graph::GRAPH_SCHEMA_VERSION`]; an input change means a different key, whose
+    /// file simply doesn't exist yet — a plain miss, not an error, exactly like a facts-entry
+    /// miss (ADR 0004: any mismatch ⇒ silently rebuild).
     pub fn get_graph(&self, key: &[u8; GRAPH_KEY_LEN]) -> Option<(ProjectGraph, Vec<Diagnostic>)> {
-        let file = fs::File::open(self.graph_path()).ok()?;
+        let file = fs::File::open(self.graph_snapshot_path(key)).ok()?;
         let len = file.metadata().ok()?.len();
         if len < GRAPH_HEADER_LEN as u64 {
-            return None; // no snapshot yet, or a partial one — either way, nothing to map
+            return None; // partial write survived a crash — nothing to map
         }
 
-        // SAFETY: `graph.bin` is only ever replaced by `put_graph`'s write-to-tmp-then-rename,
+        // SAFETY: a snapshot is only ever replaced by `put_graph`'s write-to-tmp-then-rename,
         // which is atomic on every platform kndo targets — a concurrent writer's rename can
         // only swap this mapping onto a *complete*, previously-finished file; it can never
         // truncate or mutate the bytes of the inode currently mapped. `ProjectCache` also holds
@@ -452,7 +540,12 @@ impl ProjectCache {
         out.extend_from_slice(key);
         out.extend_from_slice(&bytes);
 
-        let path = self.graph_path();
+        let path = self.graph_snapshot_path(key);
+        if let Some(dir) = path.parent() {
+            if fs::create_dir_all(dir).is_err() {
+                return;
+            }
+        }
         let tmp = path.with_extension("bin.tmp");
         if fs::write(&tmp, &out).is_ok() {
             let _ = fs::rename(&tmp, &path);
@@ -642,24 +735,50 @@ mod tests {
     }
 
     #[test]
+    fn blob_hash_sidecar_round_trips_and_merges_across_saves() {
+        let dir = tmp("blob-sidecar");
+        let cache = ProjectCache::open(&dir);
+        assert!(cache.load_blob_hashes().is_empty());
+
+        cache.save_blob_hashes(&[("aaaa".to_string(), [1u8; 32])]);
+        cache.save_blob_hashes(&[("bbbb".to_string(), [2u8; 32])]);
+
+        let map = cache.load_blob_hashes();
+        assert_eq!(map.len(), 2, "saves merge, they don't overwrite");
+        assert_eq!(map.get("aaaa"), Some(&[1u8; 32]));
+        assert_eq!(map.get("bbbb"), Some(&[2u8; 32]));
+    }
+
+    #[test]
+    fn corrupt_blob_hash_sidecar_is_an_empty_map_not_an_error() {
+        let dir = tmp("blob-sidecar-corrupt");
+        let cache = ProjectCache::open(&dir);
+        cache.save_blob_hashes(&[("aaaa".to_string(), [1u8; 32])]);
+        fs::write(dir.join(".kndo/cache/blob-hashes.bin"), b"garbage").unwrap();
+        assert!(cache.load_blob_hashes().is_empty());
+    }
+
+    #[test]
     fn stats_reflect_facts_and_graph_state() {
         let dir = tmp("stats");
         let cache = ProjectCache::open(&dir);
         let empty = cache.stats();
         assert!(empty.writable);
         assert_eq!(empty.facts_entries, 0);
-        assert!(!empty.graph_snapshot_present);
+        assert_eq!(empty.graph_snapshots, 0);
 
         cache.put("js-ts", 1, &[1u8; 32], &sample_facts());
         cache.put("js-ts", 1, &[2u8; 32], &sample_facts());
         let after_facts = cache.stats();
         assert_eq!(after_facts.facts_entries, 2);
         assert!(after_facts.facts_bytes > 0);
-        assert!(!after_facts.graph_snapshot_present);
+        assert_eq!(after_facts.graph_snapshots, 0);
 
+        // Two different keys coexist — the property diff mode depends on (before + after).
         cache.put_graph(&[3u8; GRAPH_KEY_LEN], &sample_graph(), &[]);
+        cache.put_graph(&[4u8; GRAPH_KEY_LEN], &sample_graph(), &[]);
         let after_graph = cache.stats();
-        assert!(after_graph.graph_snapshot_present);
+        assert_eq!(after_graph.graph_snapshots, 2);
         assert!(after_graph.graph_snapshot_bytes > 0);
     }
 
@@ -816,7 +935,34 @@ mod tests {
         let cache = ProjectCache::open(&dir);
         let key = [2u8; GRAPH_KEY_LEN];
         cache.put_graph(&key, &sample_graph(), &[]);
-        fs::write(cache.graph_path(), b"not a valid snapshot").unwrap();
+        fs::write(cache.graph_snapshot_path(&key), b"not a valid snapshot").unwrap();
         assert!(cache.get_graph(&key).is_none());
+    }
+
+    #[test]
+    fn two_graph_snapshots_coexist_and_hit_independently() {
+        // The diff-mode property: before/after keys must never evict each other — a single
+        // mutable slot ping-ponged between them with a 0% hit rate on every warm diff run.
+        let dir = tmp("graph-coexist");
+        let cache = ProjectCache::open(&dir);
+        let key_a = [7u8; GRAPH_KEY_LEN];
+        let key_b = [8u8; GRAPH_KEY_LEN];
+        cache.put_graph(&key_a, &sample_graph(), &[]);
+        cache.put_graph(&key_b, &sample_graph(), &[]);
+        assert!(cache.get_graph(&key_a).is_some());
+        assert!(cache.get_graph(&key_b).is_some());
+        assert_eq!(cache.graph_hits(), 2);
+    }
+
+    #[test]
+    fn prune_covers_graph_snapshots_too() {
+        let dir = tmp("graph-prune");
+        let cache = ProjectCache::open(&dir);
+        for i in 0..4u8 {
+            cache.put_graph(&[i; GRAPH_KEY_LEN], &sample_graph(), &[]);
+        }
+        assert_eq!(cache.stats().graph_snapshots, 4);
+        cache.prune(0); // cap of zero: everything prunable must go
+        assert_eq!(cache.stats().graph_snapshots, 0);
     }
 }
