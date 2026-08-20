@@ -304,6 +304,7 @@ mod tests {
             baseline: None,
             suppressed: SuppressedSummary::default(),
             health: None,
+            timings: Vec::new(),
         }
     }
 

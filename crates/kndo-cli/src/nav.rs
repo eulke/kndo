@@ -170,6 +170,7 @@ fn render_and_print(result: &QueryResult, format: Option<&str>) {
         "human" => {
             let opts = render::RenderOptions {
                 color: crate::resolve_color(None),
+                verbose: false,
                 quiet: false,
             };
             print!("{}", render::render_query(result, &opts));

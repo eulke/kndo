@@ -403,6 +403,11 @@ pub struct RunResult {
     /// present, unlike `baseline`. In diff modes this reflects the "after" side only, mirroring
     /// how `baseline` is applied symmetrically but reported from "after" (see `run_diff`).
     pub suppressed: SuppressedSummary,
+    /// Per-phase wall times, `(phase, µs)` in execution order (RFC 0009 §6's `--verbose`
+    /// block). Diff modes carry the "after" side's phases prefixed `after:` plus one
+    /// `before-side` rollup. Deliberately NOT serialized into the JSON envelope: wall times
+    /// are run metadata, and the determinism matrix compares envelopes byte-for-byte.
+    pub timings: Vec<(String, u64)>,
     /// The health score (RFC 0005 §11, output-schema §4). Full mode: the current tree, with
     /// `previous` from the last stored snapshot when the cache holds one. Diff modes: the
     /// "after" side, with `previous` computed from "before" — the M4 exit criterion's delta.
@@ -537,6 +542,8 @@ struct AnalyzedTree {
     diagnostics: Vec<Diagnostic>,
     suppressed: SuppressedSummary,
     health: crate::analysis::health::Health,
+    /// `(phase, µs)` in execution order: assembly + coverage first, then every analysis phase.
+    timings: Vec<(String, u64)>,
 }
 
 /// Synchronous and single-instance-per-project (the cache lock, RFC 0004 §7); a serving
@@ -761,6 +768,13 @@ impl Engine {
                 }
             }
         };
+        let before_total_us: u64 = before.timings.iter().map(|(_, us)| us).sum();
+        let mut diff_timings: Vec<(String, u64)> = after
+            .timings
+            .iter()
+            .map(|(phase, us)| (format!("after:{phase}"), *us))
+            .collect();
+        diff_timings.push(("before-side".to_string(), before_total_us));
         let (before_graph, before_findings, before_diagnostics, before_health) = (
             before.graph,
             before.findings,
@@ -848,6 +862,7 @@ impl Engine {
                 });
                 Some(health)
             },
+            timings: diff_timings,
             ..RunResult::default()
         }
     }
@@ -944,12 +959,28 @@ impl Engine {
         &mut self,
         source: &discovery::TreeSource<'_>,
     ) -> Result<AnalyzedTree, Diagnostic> {
+        let assemble_start = Instant::now();
         match graph::assemble_from_source(source, &self.adapters, self.cache.as_ref()) {
             Ok((g, mut diagnostics)) => {
+                let mut timings = vec![(
+                    "assemble".to_string(),
+                    assemble_start.elapsed().as_micros() as u64,
+                )];
+                let coverage_start = Instant::now();
                 let coverage = self.ingest_coverage(&mut diagnostics);
+                timings.push((
+                    "coverage-ingest".to_string(),
+                    coverage_start.elapsed().as_micros() as u64,
+                ));
                 let outcome = analysis::run_all(&g, &coverage);
                 let (findings, analysis_diagnostics, health) =
                     (outcome.findings, outcome.diagnostics, outcome.health);
+                timings.extend(
+                    outcome
+                        .timings
+                        .into_iter()
+                        .map(|(phase, us)| (phase.to_string(), us)),
+                );
                 diagnostics.extend(analysis_diagnostics);
                 let (findings, suppressed) = crate::suppression::apply(&g, findings);
                 Ok(AnalyzedTree {
@@ -958,6 +989,7 @@ impl Engine {
                     diagnostics,
                     suppressed,
                     health,
+                    timings,
                 })
             }
             Err(crate::discovery::DiscoveryError::Root(e)) => Err(Diagnostic {
@@ -1047,6 +1079,7 @@ impl Engine {
                 diagnostics,
                 suppressed,
                 health,
+                timings,
             }) => {
                 let adapters = self
                     .adapters
@@ -1075,6 +1108,7 @@ impl Engine {
                     adapters,
                     suppressed,
                     health: Some(health),
+                    timings,
                     ..RunResult::default()
                 }
             }
@@ -1460,6 +1494,25 @@ mod tests {
         assert_eq!(result.files_discovered, 2);
         // No adapters registered in this test — files exist as nodes but nothing claims them.
         assert_eq!(result.files_claimed, 0);
+    }
+
+    #[test]
+    fn full_mode_populates_phase_timings_and_json_omits_them() {
+        let dir = std::env::temp_dir().join("kndo-engine-test-timings");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut engine = Engine::open(&dir, ConfigOverrides::default(), vec![]).unwrap();
+        let result = engine.check(CheckRequest {
+            mode: RunMode::Full,
+        });
+        let phases: Vec<&str> = result.timings.iter().map(|(p, _)| p.as_str()).collect();
+        assert!(phases.contains(&"assemble"));
+        assert!(phases.contains(&"reachability"));
+        assert!(phases.contains(&"health"));
+        // Wall times are run metadata, never envelope content (determinism matrix compares
+        // envelopes byte-for-byte).
+        let v: serde_json::Value = serde_json::from_str(&result.to_json()).unwrap();
+        assert!(v.get("timings").is_none());
     }
 
     #[test]

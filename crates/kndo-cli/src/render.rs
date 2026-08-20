@@ -40,6 +40,10 @@ use kndo::vocab::Confidence;
 pub struct RenderOptions {
     pub color: bool,
     pub quiet: bool,
+    /// RFC 0009 §6: adds the per-phase timing block and cache state to check output. (The
+    /// RFC's third `--verbose` effect — revealing `possible`-confidence findings — is inert
+    /// today: no renderer hides findings by confidence yet, so there is nothing to reveal.)
+    pub verbose: bool,
 }
 
 const GROUP_ORDER: [&str; 4] = ["defect", "waste", "risk", "hygiene"];
@@ -90,6 +94,7 @@ pub fn render(result: &RunResult, opts: &RenderOptions) -> String {
             if let Some(health) = &result.health {
                 out.push_str(&health_score_line(health));
             }
+            render_phases(&mut out, result, opts);
         }
         return out;
     }
@@ -139,7 +144,38 @@ pub fn render(result: &RunResult, opts: &RenderOptions) -> String {
     if let Some(health) = &result.health {
         out.push_str(&render_health(health, opts, false));
     }
+    render_phases(&mut out, result, opts);
     out
+}
+
+/// RFC 0009 §6's `--verbose` block: one line per engine phase (`(phase, µs)` from
+/// `RunResult::timings`), worst-first would hide the pipeline shape, so execution order is
+/// kept; sub-0.1ms phases still print — "0.0ms" is honest and keeps the block's shape stable
+/// across runs. Closes with the cache state (`enabled`/`disabled` + hits — the raw inputs
+/// behind the header's warm/cold verdict).
+fn render_phases(out: &mut String, result: &RunResult, opts: &RenderOptions) {
+    if !opts.verbose || result.timings.is_empty() {
+        return;
+    }
+    out.push_str("\nphases\n");
+    for (phase, us) in &result.timings {
+        out.push_str(&format!("  {:<22} {:>8.1}ms\n", phase, *us as f64 / 1000.0));
+    }
+    let total: u64 = result.timings.iter().map(|(_, us)| us).sum();
+    out.push_str(&format!(
+        "  {:<22} {:>8.1}ms\n",
+        "total",
+        total as f64 / 1000.0
+    ));
+    out.push_str(&format!(
+        "cache: {}, {} hits\n",
+        if result.cache_enabled {
+            "enabled"
+        } else {
+            "disabled"
+        },
+        result.cache_hits
+    ));
 }
 
 /// The §5 health block: the score/grade (+trend) line, then one bar line per category —
@@ -299,6 +335,7 @@ fn render_diff(result: &RunResult, opts: &RenderOptions) -> String {
         let fixed: Vec<&Finding> = result.fixed.iter().collect();
         render_flat(&mut out, &fixed, opts);
     }
+    render_phases(&mut out, result, opts);
     out
 }
 
@@ -682,6 +719,7 @@ mod tests {
         RenderOptions {
             color: false,
             quiet: false,
+            verbose: false,
         }
     }
 
@@ -739,6 +777,7 @@ mod tests {
             &RenderOptions {
                 color: false,
                 quiet: true,
+                verbose: false,
             },
         );
         assert_eq!(out, "kndo · staged · 1 new · 0 fixed · net +1\n");
@@ -887,5 +926,32 @@ mod tests {
             out.contains("dependency: prod · 1 importing file · used"),
             "{out}"
         );
+    }
+
+    #[test]
+    fn verbose_renders_the_phases_block_and_quiet_default_hides_it() {
+        let mut result = RunResult {
+            mode: "full".to_string(),
+            ..RunResult::default()
+        };
+        result.timings = vec![
+            ("assemble".to_string(), 18_700),
+            ("health".to_string(), 800),
+        ];
+        let base = RenderOptions {
+            color: false,
+            quiet: false,
+            verbose: false,
+        };
+        assert!(!render(&result, &base).contains("phases"));
+        let verbose = RenderOptions {
+            verbose: true,
+            ..base
+        };
+        let out = render(&result, &verbose);
+        assert!(out.contains("phases"));
+        assert!(out.contains("assemble"));
+        assert!(out.contains("18.7ms"));
+        assert!(out.contains("cache: disabled, 0 hits"));
     }
 }

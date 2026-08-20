@@ -75,51 +75,101 @@ pub fn run_all(
     graph: &crate::graph::ProjectGraph,
     coverage: &crate::coverage::CoverageMap,
 ) -> AnalysisOutcome {
-    let reach = reachability::compute(graph);
-    let mut findings = unused::find_unused_files(graph, &reach);
-    findings.extend(unused::find_unused_symbols(graph, &reach));
-    findings.extend(test_only::find_test_only_files(graph, &reach));
-    findings.extend(test_only::find_test_only_symbols(graph, &reach));
-    findings.extend(undeclared::find_undeclared_dependencies(graph));
-    findings.extend(version_skew::find_version_skew(graph));
-    findings.extend(duplicate::find_duplicate_files(graph));
-    let (duplicate_findings, duplicated) = duplicate::find_duplicate_functions(graph);
+    let mut timings = Timings::new();
+    let reach = timings.time("reachability", || reachability::compute(graph));
+
+    let mut findings = timings.time("unused", || {
+        let mut f = unused::find_unused_files(graph, &reach);
+        f.extend(unused::find_unused_symbols(graph, &reach));
+        f
+    });
+    findings.extend(timings.time("test-only", || {
+        let mut f = test_only::find_test_only_files(graph, &reach);
+        f.extend(test_only::find_test_only_symbols(graph, &reach));
+        f
+    }));
+    findings.extend(timings.time("dependencies", || {
+        let mut f = undeclared::find_undeclared_dependencies(graph);
+        f.extend(version_skew::find_version_skew(graph));
+        f.extend(dependency_hygiene::find_dependency_hygiene(graph));
+        f
+    }));
+    findings.extend(timings.time("duplicate-files", || duplicate::find_duplicate_files(graph)));
+    let (duplicate_findings, duplicated) = timings.time("duplicate-functions", || {
+        duplicate::find_duplicate_functions(graph)
+    });
     findings.extend(duplicate_findings);
-    findings.extend(dependency_hygiene::find_dependency_hygiene(graph));
-    findings.extend(internal_only::find_internal_only(graph, &reach));
-    findings.extend(private_type_leak::find_private_type_leaks(graph));
-    findings.extend(deep_import::find_deep_imports(graph));
-    let (cycle_findings, cycle_files) = cyclic::find_cycles(graph);
+    findings.extend(timings.time("internal-only", || {
+        internal_only::find_internal_only(graph, &reach)
+    }));
+    findings.extend(timings.time("private-type-leak", || {
+        private_type_leak::find_private_type_leaks(graph)
+    }));
+    findings.extend(timings.time("deep-import", || deep_import::find_deep_imports(graph)));
+    let (cycle_findings, cycle_files) = timings.time("cyclic", || cyclic::find_cycles(graph));
     findings.extend(cycle_findings);
-    findings.extend(crap::find_crap(graph, coverage));
-    let (untested_findings, untested_diagnostic) = untested::find_untested(graph, &reach);
+    findings.extend(timings.time("crap", || crap::find_crap(graph, coverage)));
+    let (untested_findings, untested_diagnostic) =
+        timings.time("untested", || untested::find_untested(graph, &reach));
     findings.extend(untested_findings);
-    findings.sort_by(|a, b| a.id.cmp(&b.id));
+    timings.time("sort-findings", || {
+        findings.sort_unstable_by(|a, b| a.id.cmp(&b.id))
+    });
 
     // Health is computed over the pre-suppression findings (the score measures the codebase,
     // not what's been acknowledged away) and the aux stats the analyses just produced.
-    let health = health::compute(
-        graph,
-        &reach,
-        &findings,
-        &health::HealthInputs {
-            coverage,
-            cycle_files: &cycle_files,
-            duplicated: &duplicated,
-        },
-    );
+    let health = timings.time("health", || {
+        health::compute(
+            graph,
+            &reach,
+            &findings,
+            &health::HealthInputs {
+                coverage,
+                cycle_files: &cycle_files,
+                duplicated: &duplicated,
+            },
+        )
+    });
 
     AnalysisOutcome {
         findings,
         diagnostics: untested_diagnostic.into_iter().collect(),
         health,
+        timings: timings.entries,
     }
 }
 
 /// Everything one analysis pass produces: findings (id-sorted), analysis-side diagnostics,
-/// and the health score computed from the same primitives (RFC 0005 §11).
+/// the health score computed from the same primitives (RFC 0005 §11), and per-phase wall
+/// times (RFC 0009 §6's `--verbose` timings; RFC 0008 §7's profiling discipline needs the
+/// numbers to be one flag away, not a rebuild away).
 pub struct AnalysisOutcome {
     pub findings: Vec<Finding>,
     pub diagnostics: Vec<Diagnostic>,
     pub health: health::Health,
+    /// `(phase, duration in µs)` in execution order. Never serialized into the JSON envelope —
+    /// wall times are run metadata, not analysis output, and the §4 determinism matrix compares
+    /// envelopes byte-for-byte.
+    pub timings: Vec<(&'static str, u64)>,
+}
+
+/// Tiny collector for the per-phase wall times above.
+struct Timings {
+    entries: Vec<(&'static str, u64)>,
+}
+
+impl Timings {
+    fn new() -> Timings {
+        Timings {
+            entries: Vec::new(),
+        }
+    }
+
+    fn time<T>(&mut self, phase: &'static str, f: impl FnOnce() -> T) -> T {
+        let start = std::time::Instant::now();
+        let out = f();
+        self.entries
+            .push((phase, start.elapsed().as_micros() as u64));
+        out
+    }
 }

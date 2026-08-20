@@ -310,6 +310,7 @@ struct Flags {
     format: Option<String>,
     color: Option<String>,
     quiet: bool,
+    verbose: bool,
     no_cache: bool,
     staged: bool,
     diff: Option<String>,
@@ -323,6 +324,7 @@ fn parse_flags(args: &[String]) -> Flags {
         format: None,
         color: None,
         quiet: false,
+        verbose: false,
         no_cache: false,
         staged: false,
         diff: None,
@@ -336,6 +338,7 @@ fn parse_flags(args: &[String]) -> Flags {
             "--format" => flags.format = it.next().cloned(),
             "--color" => flags.color = it.next().cloned(),
             "--quiet" => flags.quiet = true,
+            "--verbose" => flags.verbose = true,
             "--no-cache" => flags.no_cache = true,
             "--staged" => flags.staged = true,
             "--diff" => flags.diff = it.next().cloned(),
@@ -557,6 +560,7 @@ fn health_cmd(args: &[String]) -> ExitCode {
             let opts = render::RenderOptions {
                 color: resolve_color(flags.color.as_deref()),
                 quiet: flags.quiet,
+                verbose: flags.verbose,
             };
             let mut health = health.clone();
             if !flags.by_package {
@@ -638,6 +642,7 @@ fn check(args: &[String]) -> ExitCode {
             let opts = render::RenderOptions {
                 color: resolve_color(flags.color.as_deref()),
                 quiet: flags.quiet,
+                verbose: flags.verbose,
             };
             print!("{}", render::render(&result, &opts));
         }
@@ -703,6 +708,7 @@ mod tests {
             format: None,
             color: None,
             quiet: false,
+            verbose: false,
             no_cache: false,
             staged,
             diff: diff.map(str::to_string),

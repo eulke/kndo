@@ -221,6 +221,41 @@ called out explicitly in docs/adapters/js-ts.md §2 with the RFC 0012 §3 frame 
 
 **M4 exit criteria are all met.**
 
+## M4.5 — Performance: re-measure, re-arm, re-earn the budget
+
+Inserted before M5 deliberately: three milestones of features grew latency silently, because
+the RFC 0008 §7 enforcement (benchmark suite as a gate) was deferred out of M2 and never
+built. Measured drift (release, warm, medianas): bench5k no-op ~40 ms (M2) → ~60 ms; bench5k
+one-file change ~84 ms (M2) → ~155 ms — the pre-commit case nearly doubled, still inside the
+500 ms budget but trending wrong. Phase breakdown (one-off instrumented build, now
+productized as `--verbose`): the one-file change is ~122 ms of assembly — the all-or-nothing
+rebuild re-resolves all 5k files and writes the snapshot **inside** the critical path; the
+pathological synth corpus adds analysis costs on `HashMap<NodeRef>`/SipHash (reachability
+93 ms, internal-only 70 ms), 78 ms sorting ~90k findings, and a render that clones every
+finding before serializing (172 ms).
+
+Stages, in order — measure first, then optimize against locked numbers:
+**E0** instrumentation (`--verbose` per-phase timings, RFC 0009 §6) + the 50k fixture and
+RFC 0008 §7 scenario suite with a recorded baseline and regression gate;
+**E1** measured quick wins (FxHash, render without cloning, snapshot persist off the
+critical path per §2);
+**E2** bounded structural work: reachability over shared CSR adjacency + per-tier bitsets
+(§3, applied to the hottest algorithm only), inter-analysis parallelism with deterministic
+reduce;
+**E3** the RFC 0004 §4 patch/dirty-region decision **with 50k data**: if the one-file change
+at 50k breaks 500 ms after E1–E2 (extrapolation says it will), the incremental algorithm
+lands before M5; if not, its trigger gets real numbers instead of guesses.
+
+**Progress:** E0a landed — the engine now times every phase (`RunResult::timings`: assembly,
+coverage ingest, each analysis, sort, health; diff modes carry the after side plus a
+before-side rollup) and `--verbose` renders the block with cache state. Timings stay out of
+the JSON envelope by design: wall times are run metadata, and the §4 determinism matrix
+compares envelopes byte-for-byte.
+
+**Exit:** the RFC 0008 §7 scenarios run as a suite against a recorded baseline with a >10%
+regression gate; bench5k warm no-op and one-file change at or under their M2 marks (~40 ms /
+~90 ms); the 50k fixture answers the incremental question with data.
+
 ## M5 — Remaining languages + plugin system GA
 Adapters: Java, Kotlin, Swift, Rust, JSON, CSS (order: Java → Kotlin share infra; Rust; Swift;
 CSS+JSON close cross-language edges). First-party ecosystem plugins for detected frameworks
