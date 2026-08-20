@@ -32,7 +32,8 @@
 //! bypassed. Confidence: the strongest underlying edge's (a pair backed by one `Certain` deep
 //! edge is certainly a deep-importing pair, however many `Possible` edges ride along).
 
-use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
+use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
+use std::collections::{BTreeMap, VecDeque};
 
 use crate::analysis::{finding_id, package_discriminator, package_label};
 use crate::engine::{Finding, Location, Severity};
@@ -48,7 +49,7 @@ struct PairEvidence {
 pub fn find_deep_imports(graph: &ProjectGraph) -> Vec<Finding> {
     // BTreeMap: deterministic pair order without a post-sort on ids alone.
     let mut pairs: BTreeMap<(u32, u32), PairEvidence> = BTreeMap::new();
-    let mut seen_sites: HashSet<(u32, u32, u32, u32)> = HashSet::new();
+    let mut seen_sites: HashSet<(u32, u32, u32, u32)> = HashSet::default();
 
     for edge in &graph.edges {
         let EdgeKind::ImportsFile { from, to } = edge.kind else {
@@ -169,7 +170,7 @@ pub fn find_deep_imports(graph: &ProjectGraph) -> Vec<Finding> {
 /// `ImportsFile` edges — the file-granular "available through the public entry" set (module
 /// doc, rule 3): a re-export chain from the entry produces exactly these edges.
 fn surface_reachable_files(graph: &ProjectGraph, provider: PackageId) -> HashSet<FileId> {
-    let mut adjacency: HashMap<FileId, Vec<FileId>> = HashMap::new();
+    let mut adjacency: HashMap<FileId, Vec<FileId>> = HashMap::default();
     for edge in &graph.edges {
         if let EdgeKind::ImportsFile { from, to } = edge.kind {
             if graph.files[from.0 as usize].package == provider
@@ -179,7 +180,7 @@ fn surface_reachable_files(graph: &ProjectGraph, provider: PackageId) -> HashSet
             }
         }
     }
-    let mut reachable: HashSet<FileId> = HashSet::new();
+    let mut reachable: HashSet<FileId> = HashSet::default();
     let mut queue: VecDeque<FileId> = graph.packages[provider.0 as usize]
         .surface
         .iter()
@@ -205,8 +206,8 @@ fn touched_symbols(
     deep_targets: &HashSet<FileId>,
     reachable: &HashSet<FileId>,
 ) -> (usize, usize) {
-    let mut public = HashSet::new();
-    let mut internal = HashSet::new();
+    let mut public = HashSet::default();
+    let mut internal = HashSet::default();
     for edge in &graph.edges {
         let EdgeKind::References { from, to, .. } = edge.kind else {
             continue;

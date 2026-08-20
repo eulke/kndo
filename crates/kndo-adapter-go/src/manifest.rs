@@ -137,12 +137,12 @@ fn parse_require_entry(entry: &str) -> Option<ManifestDependency> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashSet;
+    use rustc_hash::FxHashSet as HashSet;
 
     fn ctx() -> ResolveCtx<'static> {
         static EMPTY: std::sync::OnceLock<HashSet<kndo_core::adapter::ProjectPath>> =
             std::sync::OnceLock::new();
-        ResolveCtx::new(EMPTY.get_or_init(HashSet::new))
+        ResolveCtx::new(EMPTY.get_or_init(HashSet::default))
     }
 
     #[test]

@@ -10,7 +10,7 @@
 //! core never knows which languages exist (RFC 0001 §2, the ignorance rule), and frontends
 //! never compose the product — they call `kndo::open`, which passes the registry in here.
 
-use std::collections::{HashMap, HashSet};
+use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 use std::fmt;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -39,7 +39,7 @@ fn touched_paths(before: &graph::ProjectGraph, after: &graph::ProjectGraph) -> H
         .map(|f| (f.path.0.as_str(), f.content_hash))
         .collect();
 
-    let mut touched = HashSet::new();
+    let mut touched = HashSet::default();
     for (path, hash) in &after_hashes {
         if before_hashes.get(path) != Some(hash) {
             touched.insert((*path).to_string()); // added or content-modified

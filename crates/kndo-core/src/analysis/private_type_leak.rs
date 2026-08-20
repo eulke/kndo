@@ -20,7 +20,7 @@
 //! ladder rung *scopes* when the language declared a ladder (so same-scope rungs like Java
 //! `protected`/`public` never accuse each other), raw indices otherwise.
 
-use std::collections::HashMap;
+use rustc_hash::FxHashMap as HashMap;
 
 use crate::adapter::Span;
 use crate::analysis::finding_id;
@@ -35,7 +35,7 @@ fn contains(outer: &Span, inner: &Span) -> bool {
 pub fn find_private_type_leaks(graph: &ProjectGraph) -> Vec<Finding> {
     let mut findings = Vec::new();
     // One finding per (declaration, leaked type) pair, however many signature sites repeat it.
-    let mut seen: HashMap<(SymbolId, SymbolId), ()> = HashMap::new();
+    let mut seen: HashMap<(SymbolId, SymbolId), ()> = HashMap::default();
 
     for edge in &graph.edges {
         let EdgeKind::References {

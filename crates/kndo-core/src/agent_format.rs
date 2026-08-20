@@ -474,7 +474,7 @@ fn neighbor_line(e: &NeighborEntry) -> String {
     )
 }
 
-fn sum_degree(m: &std::collections::HashMap<String, usize>) -> usize {
+fn sum_degree(m: &rustc_hash::FxHashMap<String, usize>) -> usize {
     m.values().sum()
 }
 

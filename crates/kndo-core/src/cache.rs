@@ -30,7 +30,7 @@
 //! - Single-writer advisory lock; a concurrent run degrades to read-only cache use instead of
 //!   racing writes.
 
-use std::collections::HashMap;
+use rustc_hash::FxHashMap as HashMap;
 use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -226,19 +226,19 @@ impl ProjectCache {
     /// wrong), same silent-degrade contract as every other layer here.
     pub fn load_blob_hashes(&self) -> HashMap<String, [u8; 32]> {
         let Ok(bytes) = fs::read(self.blob_hashes_path()) else {
-            return HashMap::new();
+            return HashMap::default();
         };
         if bytes.len() < BLOB_HASHES_HEADER_LEN || bytes[..BLOB_MAGIC.len()] != BLOB_MAGIC {
-            return HashMap::new();
+            return HashMap::default();
         }
         let version = u32::from_le_bytes(
             match bytes[BLOB_MAGIC.len()..BLOB_HASHES_HEADER_LEN].try_into() {
                 Ok(v) => v,
-                Err(_) => return HashMap::new(),
+                Err(_) => return HashMap::default(),
             },
         );
         if version != BLOB_HASHES_FORMAT_VERSION {
-            return HashMap::new();
+            return HashMap::default();
         }
         bincode::deserialize(&bytes[BLOB_HASHES_HEADER_LEN..]).unwrap_or_default()
     }
@@ -938,7 +938,7 @@ mod tests {
             restored.script_invoked_dependencies,
             [(PackageId(0), SmolStr::new("xo"))]
                 .into_iter()
-                .collect::<std::collections::HashSet<_>>()
+                .collect::<rustc_hash::FxHashSet<_>>()
         );
         assert_eq!(
             restored.file_id(&crate::adapter::ProjectPath("a.mock".into())),

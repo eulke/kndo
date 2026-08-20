@@ -4,7 +4,8 @@
 //! single-pass widest-path algorithm): correctness and auditability win over performance
 //! for logic this load-bearing, and three tiers make the literal version cheap anyway.
 
-use std::collections::{HashMap, HashSet, VecDeque};
+use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
+use std::collections::VecDeque;
 
 use crate::graph::ProjectGraph;
 use crate::vocab::{Confidence, EdgeKind, FileId, NodeRef, RootKind, SymbolId};
@@ -67,14 +68,14 @@ pub fn compute(graph: &ProjectGraph) -> ReachabilityMap {
     // ImportsDependency (a fact about dependency usage, not code reachability) never
     // participate — only Root (seeds, handled separately), References, ImportsFile, and
     // Wildcard's expansion contribute traversable edges.
-    let mut declared_in: HashMap<FileId, Vec<SymbolId>> = HashMap::new();
+    let mut declared_in: HashMap<FileId, Vec<SymbolId>> = HashMap::default();
     for edge in &graph.edges {
         if let EdgeKind::Declares { file, symbol } = edge.kind {
             declared_in.entry(file).or_default().push(symbol);
         }
     }
 
-    let mut adjacency: HashMap<NodeRef, Vec<(NodeRef, Confidence)>> = HashMap::new();
+    let mut adjacency: HashMap<NodeRef, Vec<(NodeRef, Confidence)>> = HashMap::default();
     for edge in &graph.edges {
         match edge.kind {
             EdgeKind::References { from, to, .. } => adjacency
@@ -101,7 +102,7 @@ pub fn compute(graph: &ProjectGraph) -> ReachabilityMap {
         }
     }
 
-    let mut seeds: HashMap<RootKind, Vec<(NodeRef, Confidence)>> = HashMap::new();
+    let mut seeds: HashMap<RootKind, Vec<(NodeRef, Confidence)>> = HashMap::default();
     for edge in &graph.edges {
         if let EdgeKind::Root { kind, target } = edge.kind {
             seeds
@@ -124,11 +125,11 @@ pub fn compute(graph: &ProjectGraph) -> ReachabilityMap {
     // node, so it traverses only once that symbol is reached — which is what makes transitive
     // death visible. Originally caught dogfooding the Go adapter: `func main()` was a root but
     // `main.go` was never enqueued, stranding everything the file referenced.
-    let mut reached: HashMap<(RootKind, Confidence), HashSet<NodeRef>> = HashMap::new();
+    let mut reached: HashMap<(RootKind, Confidence), HashSet<NodeRef>> = HashMap::default();
     for &(kind, _) in &ROOT_KINDS {
         let kind_seeds = seeds.get(&kind).cloned().unwrap_or_default();
         for &tau in &TIERS {
-            let mut visited: HashSet<NodeRef> = HashSet::new();
+            let mut visited: HashSet<NodeRef> = HashSet::default();
             let mut queue: VecDeque<NodeRef> = VecDeque::new();
             let visit =
                 |node: NodeRef, visited: &mut HashSet<NodeRef>, queue: &mut VecDeque<NodeRef>| {
@@ -161,7 +162,7 @@ pub fn compute(graph: &ProjectGraph) -> ReachabilityMap {
     // First-match precedence over every node: Production > TestOnly > ToolingOnly; within a
     // color, the strongest tau achieved. Absent nodes are left out (ReachabilityMap::get
     // supplies the (Unreachable, Certain) default).
-    let mut colors: HashMap<NodeRef, (Reachability, Confidence)> = HashMap::new();
+    let mut colors: HashMap<NodeRef, (Reachability, Confidence)> = HashMap::default();
     let all_nodes = (0..graph.files.len())
         .map(|i| NodeRef::File(FileId(i as u32)))
         .chain((0..graph.symbols.len()).map(|i| NodeRef::Symbol(SymbolId(i as u32))));

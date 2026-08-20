@@ -24,7 +24,7 @@
 //! files (`.gitkeep`, stub configs) that would otherwise collapse into one giant,
 //! unactionable finding spanning unrelated directories.
 
-use std::collections::HashMap;
+use rustc_hash::FxHashMap as HashMap;
 
 use crate::analysis::finding_id;
 use crate::engine::{Finding, Location, Severity};
@@ -34,7 +34,7 @@ use crate::vocab::{Confidence, SymbolId};
 pub fn find_duplicate_files(graph: &ProjectGraph) -> Vec<Finding> {
     let empty_hash: [u8; 32] = blake3::hash(b"").into();
 
-    let mut by_hash: HashMap<[u8; 32], Vec<&str>> = HashMap::new();
+    let mut by_hash: HashMap<[u8; 32], Vec<&str>> = HashMap::default();
     for file in &graph.files {
         if file.content_hash == empty_hash {
             continue;
@@ -115,7 +115,7 @@ const MAX_POSTING: usize = 20;
 /// only the copies beyond it count as duplicated.
 pub fn find_duplicate_functions(graph: &ProjectGraph) -> (Vec<Finding>, Vec<(SymbolId, u32)>) {
     use crate::vocab::FileOrigin;
-    use std::collections::HashSet;
+    use rustc_hash::FxHashSet as HashSet;
 
     // Eligible instances: fingerprinted callables in authored, claimed files.
     struct Instance<'g> {
@@ -149,7 +149,7 @@ pub fn find_duplicate_functions(graph: &ProjectGraph) -> (Vec<Finding>, Vec<(Sym
     }
 
     // Shared-fingerprint index → candidate pairs (same language), then Jaccard-confirm.
-    let mut postings: HashMap<(&str, u64), Vec<usize>> = HashMap::new();
+    let mut postings: HashMap<(&str, u64), Vec<usize>> = HashMap::default();
     for (i, inst) in instances.iter().enumerate() {
         for &fp in inst.fingerprints {
             postings.entry((inst.language, fp)).or_default().push(i);
@@ -163,7 +163,7 @@ pub fn find_duplicate_functions(graph: &ProjectGraph) -> (Vec<Finding>, Vec<(Sym
         }
         parent[x]
     }
-    let mut checked: HashSet<(usize, usize)> = HashSet::new();
+    let mut checked: HashSet<(usize, usize)> = HashSet::default();
     for list in postings.values() {
         if list.len() < 2 || list.len() > MAX_POSTING {
             continue;
@@ -187,7 +187,7 @@ pub fn find_duplicate_functions(graph: &ProjectGraph) -> (Vec<Finding>, Vec<(Sym
         }
     }
 
-    let mut groups: HashMap<usize, Vec<usize>> = HashMap::new();
+    let mut groups: HashMap<usize, Vec<usize>> = HashMap::default();
     for i in 0..instances.len() {
         let root = find(&mut parent, i);
         groups.entry(root).or_default().push(i);

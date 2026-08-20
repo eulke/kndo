@@ -18,7 +18,7 @@
 //! §6) is the same penalties grouped by owning package — never a different metric — and is
 //! included whenever the project has more than one package owning claimed files.
 
-use std::collections::HashSet;
+use rustc_hash::FxHashSet as HashSet;
 
 use crate::analysis::crap::{crap_score, CRAP_THRESHOLD};
 use crate::analysis::reachability::{Reachability, ReachabilityMap};
@@ -170,7 +170,7 @@ pub fn compute(
     // Per-package breakdown: only packages that own claimed files, only when there are ≥ 2
     // (a single-package repo's breakdown is the global score restated).
     let mut owning: Vec<PackageId> = Vec::new();
-    let mut seen: HashSet<u32> = HashSet::new();
+    let mut seen: HashSet<u32> = HashSet::default();
     for file in &graph.files {
         if file.language.is_some() && seen.insert(file.package.0) {
             owning.push(file.package);
@@ -534,7 +534,7 @@ mod tests {
             ],
         );
         let reach = reachability::compute(&graph);
-        let (cov, cyc, dup) = (CoverageMap::default(), HashSet::new(), vec![]);
+        let (cov, cyc, dup) = (CoverageMap::default(), HashSet::default(), vec![]);
         let h = compute(&graph, &reach, &[], &inputs(&cov, &cyc, &dup));
         assert_eq!(h.score, 100.0);
         assert_eq!(h.grade, "A");
@@ -568,7 +568,7 @@ mod tests {
             edges,
         );
         let reach = reachability::compute(&graph);
-        let (cov, cyc, dup) = (CoverageMap::default(), HashSet::new(), vec![]);
+        let (cov, cyc, dup) = (CoverageMap::default(), HashSet::default(), vec![]);
         let h = compute(&graph, &reach, &[], &inputs(&cov, &cyc, &dup));
         let unused = h
             .categories
@@ -612,7 +612,7 @@ mod tests {
             ),
         ]);
         let reach = reachability::compute(&graph);
-        let (cov, cyc) = (CoverageMap::default(), HashSet::new());
+        let (cov, cyc) = (CoverageMap::default(), HashSet::default());
         let dup = vec![(SymbolId(1), 100u32)];
         let h = compute(&graph, &reach, &[], &inputs(&cov, &cyc, &dup));
         let d = h
@@ -644,7 +644,7 @@ mod tests {
             },
         )]);
         let reach = reachability::compute(&graph);
-        let (cov, cyc, dup) = (CoverageMap::default(), HashSet::new(), vec![]);
+        let (cov, cyc, dup) = (CoverageMap::default(), HashSet::default(), vec![]);
         let h = compute(&graph, &reach, &[], &inputs(&cov, &cyc, &dup));
         let c = h.categories.iter().find(|c| c.category == "crap").unwrap();
         assert_eq!(c.count, Some(1));
@@ -711,7 +711,7 @@ mod tests {
             },
         ]);
         let reach = reachability::compute(&graph);
-        let (cov, cyc, dup) = (CoverageMap::default(), HashSet::new(), vec![]);
+        let (cov, cyc, dup) = (CoverageMap::default(), HashSet::default(), vec![]);
         let h = compute(&graph, &reach, &[], &inputs(&cov, &cyc, &dup));
         assert_eq!(h.packages.len(), 2);
         let a = h.packages.iter().find(|p| p.package == "pkg-a").unwrap();

@@ -12,7 +12,7 @@
 //! built-in in `plugin.rs`); this module owns only the format-neutral model and the
 //! span→fraction math.
 
-use std::collections::HashMap;
+use rustc_hash::FxHashMap as HashMap;
 
 use crate::adapter::{ProjectPath, Span};
 

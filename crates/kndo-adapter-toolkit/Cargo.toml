@@ -8,6 +8,7 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
+rustc-hash = { workspace = true }
 blake3 = { workspace = true }
 kndo-core = { path = "../kndo-core" }
 smol_str = { workspace = true }

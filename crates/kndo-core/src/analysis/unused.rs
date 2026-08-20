@@ -21,7 +21,7 @@
 //! `unused` (manifests are unclaimed, never eligible — see below), so rollup can never
 //! silently cross a package boundary either.
 
-use std::collections::HashMap;
+use rustc_hash::FxHashMap as HashMap;
 
 use crate::analysis::finding_id;
 use crate::analysis::reachability::{Reachability, ReachabilityMap};
@@ -32,7 +32,7 @@ use crate::vocab::{Confidence, FileId, FileOrigin, NodeRef, PackageId, SymbolId}
 
 pub fn find_unused_files(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<Finding> {
     let mut findings = Vec::new();
-    let mut unused: HashMap<&str, (FileId, PackageId)> = HashMap::new();
+    let mut unused: HashMap<&str, (FileId, PackageId)> = HashMap::default();
     for (index, file) in graph.files.iter().enumerate() {
         // Unclaimed: no adapter recognized this file, so no adapter has an opinion on whether
         // it can be a root or a target — out of scope, not a verdict.

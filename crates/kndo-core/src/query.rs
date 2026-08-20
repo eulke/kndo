@@ -18,7 +18,8 @@
 //! then a depth- and expansion-capped DFS for alternatives when `--all` is set, honestly
 //! reporting `paths_elided` when the cap is hit rather than silently truncating.
 
-use std::collections::{HashMap, HashSet, VecDeque};
+use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
+use std::collections::VecDeque;
 
 use smol_str::SmolStr;
 
@@ -437,15 +438,15 @@ fn nav_node_owning_file(graph: &ProjectGraph, node: NavNode) -> FileId {
 }
 
 fn build_nav_graph(graph: &ProjectGraph) -> NavGraph {
-    let mut declared_in: HashMap<FileId, Vec<SymbolId>> = HashMap::new();
+    let mut declared_in: HashMap<FileId, Vec<SymbolId>> = HashMap::default();
     for edge in &graph.edges {
         if let crate::vocab::EdgeKind::Declares { file, symbol } = edge.kind {
             declared_in.entry(file).or_default().push(symbol);
         }
     }
 
-    let mut forward: HashMap<NavNode, Vec<NavEdge>> = HashMap::new();
-    let mut reverse: HashMap<NavNode, Vec<NavEdge>> = HashMap::new();
+    let mut forward: HashMap<NavNode, Vec<NavEdge>> = HashMap::default();
+    let mut reverse: HashMap<NavNode, Vec<NavEdge>> = HashMap::default();
 
     for edge in &graph.edges {
         let (from, to, label, confidence): (NavNode, NavNode, EdgeLabel, Confidence) =
@@ -524,7 +525,7 @@ fn build_nav_graph(graph: &ProjectGraph) -> NavGraph {
         });
     }
 
-    let mut roots: HashMap<RootKind, Vec<(NavNode, Confidence)>> = HashMap::new();
+    let mut roots: HashMap<RootKind, Vec<(NavNode, Confidence)>> = HashMap::default();
     for edge in &graph.edges {
         if let crate::vocab::EdgeKind::Root { kind, target } = edge.kind {
             let node = match target {
@@ -887,7 +888,7 @@ pub fn describe(
 
     let sources = describe_sources(graph, resolved);
 
-    let mut elided = HashMap::new();
+    let mut elided = HashMap::default();
     if roots_elided > 0 {
         elided.insert("reached_by_roots".to_string(), roots_elided);
     }
@@ -920,7 +921,7 @@ fn dependency_scope_str(scope: crate::vocab::DependencyScope) -> &'static str {
 /// Other packages with at least one file importing a file owned by `package` — same-package
 /// edges don't count as a dependent (that's just internal cohesion, not cross-package usage).
 fn count_package_dependents(graph: &ProjectGraph, package: PackageId) -> usize {
-    let mut dependents: HashSet<PackageId> = HashSet::new();
+    let mut dependents: HashSet<PackageId> = HashSet::default();
     for edge in &graph.edges {
         if let crate::vocab::EdgeKind::ImportsFile { from, to } = edge.kind {
             if graph.files[to.0 as usize].package != package {
@@ -977,12 +978,12 @@ fn reached_by_roots(nav: &NavGraph, resolved: &Resolved) -> Vec<NavNode> {
     }
 
     let filter = EdgeFilter::liveness();
-    let mut visited: HashSet<NavNode> = HashSet::new();
+    let mut visited: HashSet<NavNode> = HashSet::default();
     visited.insert(start);
     let mut queue: VecDeque<NavNode> = VecDeque::new();
     queue.push_back(start);
     let mut found: Vec<NavNode> = Vec::new();
-    let mut found_set: HashSet<NavNode> = HashSet::new();
+    let mut found_set: HashSet<NavNode> = HashSet::default();
 
     while let Some(node) = queue.pop_front() {
         for e in nav.reverse.get(&node).map(Vec::as_slice).unwrap_or(&[]) {
@@ -999,7 +1000,7 @@ fn reached_by_roots(nav: &NavGraph, resolved: &Resolved) -> Vec<NavNode> {
 }
 
 fn describe_sources(graph: &ProjectGraph, resolved: &Resolved) -> Vec<String> {
-    let mut sources: HashSet<String> = HashSet::new();
+    let mut sources: HashSet<String> = HashSet::default();
     let mark = |sources: &mut HashSet<String>, p: &crate::vocab::Provenance| {
         sources.insert(match p {
             crate::vocab::Provenance::Adapter(id) => format!("adapter:{id}"),
@@ -1153,9 +1154,9 @@ pub fn neighbors(
     // site_file`'s doc: that derivation silently pairs the right line/column with the wrong
     // file whenever traversing `uses`, where the neighbor is `to`, not the edge's `from`).
     let mut best: HashMap<NavNode, (u32, EdgeLabel, Confidence, Option<Span>, FileId)> =
-        HashMap::new();
+        HashMap::default();
     let mut queue: VecDeque<(NavNode, u32)> = VecDeque::new();
-    let mut queued: HashSet<NavNode> = HashSet::new();
+    let mut queued: HashSet<NavNode> = HashSet::default();
     queue.push_back((start, 0));
     queued.insert(start);
 
@@ -1415,7 +1416,7 @@ fn bfs_shortest_path_multi(
         return Some(vec![goal]);
     }
     let mut visited: HashSet<NavNode> = starts.iter().copied().collect();
-    let mut parent: HashMap<NavNode, NavNode> = HashMap::new();
+    let mut parent: HashMap<NavNode, NavNode> = HashMap::default();
     let mut queue: VecDeque<NavNode> = starts.iter().copied().collect();
 
     while let Some(node) = queue.pop_front() {
@@ -1510,7 +1511,7 @@ fn enumerate_paths(
     };
     let mut results: Vec<Vec<NavNode>> = Vec::new();
     let mut stack_path: Vec<NavNode> = vec![start];
-    let mut on_stack: HashSet<NavNode> = HashSet::from([start]);
+    let mut on_stack: HashSet<NavNode> = [start].into_iter().collect();
     let mut budget = TRACE_EXPANSION_BUDGET;
     search.dfs(&mut stack_path, &mut on_stack, &mut results, &mut budget);
     results
@@ -1628,8 +1629,8 @@ pub fn impact(
     let node_ref = qnode_ref(graph, reach, resolved);
 
     // Seeds: the graph nodes whose change/removal is being simulated.
-    let mut seed_files: HashSet<FileId> = HashSet::new();
-    let mut seed_symbols: HashSet<SymbolId> = HashSet::new();
+    let mut seed_files: HashSet<FileId> = HashSet::default();
+    let mut seed_symbols: HashSet<SymbolId> = HashSet::default();
     let seeds: Vec<NavNode> = match resolved {
         Resolved::Node(ResolvedNode::File(f)) => {
             seed_files.insert(*f);
@@ -1701,9 +1702,9 @@ pub fn impact(
     let nav = build_nav_graph(graph);
     let max_depth = opts.depth.unwrap_or(u32::MAX);
     let mut best: HashMap<NavNode, (u32, EdgeLabel, Confidence, Option<Span>, FileId)> =
-        HashMap::new();
+        HashMap::default();
     let mut queue: VecDeque<(NavNode, u32)> = VecDeque::new();
-    let mut queued: HashSet<NavNode> = HashSet::new();
+    let mut queued: HashSet<NavNode> = HashSet::default();
     for &seed in &seeds {
         queue.push_back((seed, 0));
         queued.insert(seed);
@@ -1783,7 +1784,7 @@ pub fn impact(
     // entry points whose behavior a change here can reach, i.e. where retesting starts.
     let seed_set: HashSet<NavNode> = seeds.iter().copied().collect();
     let mut roots: Vec<AffectedRoot> = Vec::new();
-    let mut seen_roots: HashSet<(RootKind, NavNode)> = HashSet::new();
+    let mut seen_roots: HashSet<(RootKind, NavNode)> = HashSet::default();
     for (kind, targets) in &nav.roots {
         for &(target, _) in targets {
             if (closure.contains(&target) || seed_set.contains(&target))
@@ -1920,8 +1921,8 @@ fn simulate_deletion(
 
     // Declared dependencies with import evidence before, none after (all importers deleted) —
     // dependency_hygiene's own `unused` evidence, reported as "freed".
-    let mut had_importers: HashSet<&str> = HashSet::new();
-    let mut still_has: HashSet<&str> = HashSet::new();
+    let mut had_importers: HashSet<&str> = HashSet::default();
+    let mut still_has: HashSet<&str> = HashSet::default();
     for edge in &graph.edges {
         if let EK::ImportsDependency { from, to } = edge.kind {
             let name = graph.dependencies[to.0 as usize].name.as_str();
@@ -2538,7 +2539,10 @@ mod tests {
             .iter()
             .map(|e| e.node.selector.as_str())
             .collect();
-        assert_eq!(selectors, HashSet::from(["b.ts", "dep:lodash"]));
+        assert_eq!(
+            selectors,
+            ["b.ts", "dep:lodash"].into_iter().collect::<HashSet<_>>()
+        );
     }
 
     #[test]

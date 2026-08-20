@@ -593,19 +593,19 @@ pub struct WorkspaceMember {
 /// discovery and manifest extraction. Adapters only ever *query* it; they never touch the
 /// filesystem themselves (the purity rule, RFC 0002 §6). Read-only by construction.
 pub struct ResolveCtx<'a> {
-    known_files: &'a std::collections::HashSet<ProjectPath>,
+    known_files: &'a rustc_hash::FxHashSet<ProjectPath>,
     /// Dependency names declared in the importing file's package manifest. Feeds the
     /// declared-beats-stdlib-list shadowing rule (RFC 0002 §6); empty until the engine wires
     /// manifest facts through.
-    declared_dependencies: Option<&'a std::collections::HashSet<SmolStr>>,
+    declared_dependencies: Option<&'a rustc_hash::FxHashSet<SmolStr>>,
     /// Named in-repo packages, keyed by declared package name (RFC 0011 §4). Empty during
     /// manifest extraction itself (the map is *built from* manifest facts — no circularity),
     /// populated for import resolution.
-    workspace_members: Option<&'a std::collections::HashMap<SmolStr, WorkspaceMember>>,
+    workspace_members: Option<&'a rustc_hash::FxHashMap<SmolStr, WorkspaceMember>>,
 }
 
 impl<'a> ResolveCtx<'a> {
-    pub fn new(known_files: &'a std::collections::HashSet<ProjectPath>) -> Self {
+    pub fn new(known_files: &'a rustc_hash::FxHashSet<ProjectPath>) -> Self {
         ResolveCtx {
             known_files,
             declared_dependencies: None,
@@ -613,17 +613,14 @@ impl<'a> ResolveCtx<'a> {
         }
     }
 
-    pub fn with_declared_dependencies(
-        mut self,
-        deps: &'a std::collections::HashSet<SmolStr>,
-    ) -> Self {
+    pub fn with_declared_dependencies(mut self, deps: &'a rustc_hash::FxHashSet<SmolStr>) -> Self {
         self.declared_dependencies = Some(deps);
         self
     }
 
     pub fn with_workspace_members(
         mut self,
-        members: &'a std::collections::HashMap<SmolStr, WorkspaceMember>,
+        members: &'a rustc_hash::FxHashMap<SmolStr, WorkspaceMember>,
     ) -> Self {
         self.workspace_members = Some(members);
         self
@@ -714,7 +711,7 @@ pub trait LanguageAdapter: Send + Sync {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashSet;
+    use rustc_hash::FxHashSet as HashSet;
 
     fn files(paths: &[&str]) -> HashSet<ProjectPath> {
         paths

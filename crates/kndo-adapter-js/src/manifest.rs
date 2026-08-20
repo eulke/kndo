@@ -145,7 +145,7 @@ pub fn extract(path: &str, content: &[u8], ctx: &ResolveCtx<'_>) -> ManifestFact
     //    happening to be a script's first token (`node`, `tsc`) simply matches nothing.
     let mut script_invoked_names = Vec::new();
     if let Some(scripts) = obj.get("scripts").and_then(|v| v.as_object()) {
-        let mut seen = std::collections::HashSet::new();
+        let mut seen: rustc_hash::FxHashSet<_> = rustc_hash::FxHashSet::default();
         for command in scripts.values().filter_map(|v| v.as_str()) {
             for clause in command.split(['&', '|', ';']) {
                 if let Some(first) = clause.split_whitespace().next() {
@@ -290,7 +290,7 @@ fn collect_string_leaves(value: &serde_json::Value, out: &mut Vec<String>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashSet;
+    use rustc_hash::FxHashSet as HashSet;
 
     fn ctx_with(paths: &[&str]) -> HashSet<ProjectPath> {
         paths

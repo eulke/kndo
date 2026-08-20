@@ -6,7 +6,7 @@
 //! *how* eligible files fold into the widest non-overlapping directories is identical
 //! regardless of which verdict is asking.
 
-use std::collections::{HashMap, HashSet};
+use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 
 use crate::graph::{self, ProjectGraph};
 use crate::vocab::{FileId, PackageId};
@@ -36,7 +36,7 @@ pub(crate) fn directory_rollups<'a>(
     // Every directory that owns at least one file in the *whole project* (not just the
     // eligible ones) — an ineligible file here is exactly what should block its ancestors from
     // rolling up, so it has to be in this index too.
-    let mut dir_files: HashMap<&'a str, Vec<&'a str>> = HashMap::new();
+    let mut dir_files: HashMap<&'a str, Vec<&'a str>> = HashMap::default();
     for file in &graph.files {
         let path = file.path.0.as_str();
         for ancestor in ancestors(path) {
@@ -61,7 +61,7 @@ pub(crate) fn directory_rollups<'a>(
     fully_eligible.sort_by_key(|d| depth(d));
 
     let mut dirs = Vec::new();
-    let mut covered = HashSet::new();
+    let mut covered = HashSet::default();
     for dir in fully_eligible {
         if dirs
             .iter()

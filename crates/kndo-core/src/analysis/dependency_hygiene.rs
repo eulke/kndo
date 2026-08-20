@@ -32,7 +32,7 @@
 //! invocation is never test-role), matching the "at least one production- or
 //! tooling-reachable file" used-verdict RFC 0005 §5's table already states for real imports.
 
-use std::collections::{HashMap, HashSet};
+use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 
 use crate::analysis::{finding_id, package_discriminator, package_label};
 use crate::engine::{Finding, Location, Severity};
@@ -47,7 +47,7 @@ pub fn find_dependency_hygiene(graph: &ProjectGraph) -> Vec<Finding> {
         .map(|(i, d)| (d.name.as_str(), DependencyId(i as u32)))
         .collect();
 
-    let mut importer_roles: HashMap<(DependencyId, PackageId), Vec<FileRole>> = HashMap::new();
+    let mut importer_roles: HashMap<(DependencyId, PackageId), Vec<FileRole>> = HashMap::default();
     for edge in &graph.edges {
         if let EdgeKind::ImportsDependency { from, to } = edge.kind {
             let file = &graph.files[from.0 as usize];
@@ -60,7 +60,7 @@ pub fn find_dependency_hygiene(graph: &ProjectGraph) -> Vec<Finding> {
     }
 
     let mut findings = Vec::new();
-    let mut seen: HashSet<(PackageId, &str)> = HashSet::new();
+    let mut seen: HashSet<(PackageId, &str)> = HashSet::default();
     for dep in &graph.declared_dependencies {
         if dep.scope == DependencyScope::Peer {
             continue; // exempt entirely (RFC 0005 §5)

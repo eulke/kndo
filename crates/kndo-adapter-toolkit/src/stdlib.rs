@@ -24,7 +24,7 @@
 //! sorted unique names. The format is versioned by its magic line: a future v2 can add
 //! per-entry annotations (version ranges, deprecation) without breaking v1 loaders.
 
-use std::collections::HashSet;
+use rustc_hash::FxHashSet as HashSet;
 
 use kndo_core::adapter::ResolveCtx;
 use kndo_core::vocab::Confidence;
@@ -206,8 +206,8 @@ mod tests {
     #[test]
     fn precedence_structural_beats_all() {
         let idx = StdlibIndex::parse(GOOD).unwrap();
-        let files = std::collections::HashSet::new();
-        let mut deps = std::collections::HashSet::new();
+        let files = std::collections::HashSet::default();
+        let mut deps = std::collections::HashSet::default();
         deps.insert(SmolStr::new("alpha"));
         let ctx = ResolveCtx::new(&files).with_declared_dependencies(&deps);
         // Even a declared dep named like the specifier loses to a structural signal.
@@ -218,8 +218,8 @@ mod tests {
     #[test]
     fn precedence_declared_dependency_shadows_stdlib_list() {
         let idx = StdlibIndex::parse(GOOD).unwrap();
-        let files = std::collections::HashSet::new();
-        let mut deps = std::collections::HashSet::new();
+        let files = std::collections::HashSet::default();
+        let mut deps = std::collections::HashSet::default();
         deps.insert(SmolStr::new("alpha")); // userland package shadowing a stdlib name
         let ctx = ResolveCtx::new(&files).with_declared_dependencies(&deps);
         let r = classify_bare_specifier("alpha", SmolStr::new("alpha"), false, &idx, &ctx);
@@ -232,7 +232,7 @@ mod tests {
     #[test]
     fn precedence_stdlib_list_then_dependency() {
         let idx = StdlibIndex::parse(GOOD).unwrap();
-        let files = std::collections::HashSet::new();
+        let files = std::collections::HashSet::default();
         let ctx = ResolveCtx::new(&files);
         let r = classify_bare_specifier("beta", SmolStr::new("beta"), false, &idx, &ctx);
         assert_eq!(r, Resolution::Stdlib);

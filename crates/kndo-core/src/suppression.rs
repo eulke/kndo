@@ -18,7 +18,7 @@
 //! - Config-based suppression (`kndo.toml` glob/category disables) — no config parser exists
 //!   yet (RFC 0005 §12's second mechanism); [`SuppressedSummary::config`] stays honestly `0`.
 
-use std::collections::HashMap;
+use rustc_hash::FxHashMap as HashMap;
 
 use crate::adapter::{RawSuppression, SuppressionScope};
 use crate::engine::{Finding, SuppressedSummary};

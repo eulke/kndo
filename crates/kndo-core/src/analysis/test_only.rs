@@ -16,7 +16,7 @@
 //! reimplementation: what's "eligible" differs (`TestOnly` color vs. `Unreachable`), how
 //! eligible files fold into directories does not.
 
-use std::collections::HashMap;
+use rustc_hash::FxHashMap as HashMap;
 
 use crate::analysis::finding_id;
 use crate::analysis::reachability::{Reachability, ReachabilityMap};
@@ -27,7 +27,7 @@ use crate::vocab::{Confidence, FileId, FileOrigin, FileRole, NodeRef, PackageId,
 
 pub fn find_test_only_files(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<Finding> {
     let mut findings = Vec::new();
-    let mut test_only: HashMap<&str, (FileId, PackageId, Confidence)> = HashMap::new();
+    let mut test_only: HashMap<&str, (FileId, PackageId, Confidence)> = HashMap::default();
     for (index, file) in graph.files.iter().enumerate() {
         let Some(class) = file.class else {
             continue; // unclaimed — out of scope, not a verdict

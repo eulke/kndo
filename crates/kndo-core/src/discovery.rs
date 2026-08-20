@@ -19,7 +19,7 @@
 //! walk/hash/thread-scheduling order (RFC 0008 §4) — results are sorted by path before
 //! returning, so ids assigned from this list later are never scheduling-dependent.
 
-use std::collections::HashMap;
+use rustc_hash::FxHashMap as HashMap;
 use std::path::{Path, PathBuf};
 
 use rayon::prelude::*;
@@ -292,7 +292,7 @@ fn discover_git_tree(
     let ignore_contents = gitutil::cat_blobs(repo_root, &ignore_shas).map_err(git_error)?;
     let mut matchers: Vec<(String, ignore::gitignore::Gitignore)> = Vec::new();
     {
-        let mut by_dir: HashMap<&str, Vec<&str>> = HashMap::new();
+        let mut by_dir: HashMap<&str, Vec<&str>> = HashMap::default();
         let texts: Vec<Option<String>> = ignore_contents
             .iter()
             .map(|c| c.as_ref().map(|b| String::from_utf8_lossy(b).into_owned()))
@@ -357,7 +357,8 @@ fn discover_git_tree(
     // warm git-tree discovery (streaming every blob just to hash it) collapses to a map probe.
     // Content for these files is served lazily by the reader's fallback if assembly ever asks.
     let mut files = Vec::with_capacity(kept.len());
-    let mut sha_by_path: HashMap<ProjectPath, String> = HashMap::with_capacity(kept.len());
+    let mut sha_by_path: HashMap<ProjectPath, String> =
+        HashMap::with_capacity_and_hasher(kept.len(), Default::default());
     let mut unknown: Vec<(ProjectPath, String)> = Vec::new();
     for (path, sha) in kept {
         let path = ProjectPath(path.into());
@@ -375,7 +376,8 @@ fn discover_git_tree(
     let shas: Vec<String> = unknown.iter().map(|(_, sha)| sha.clone()).collect();
     let contents = gitutil::cat_blobs(repo_root, &shas).map_err(git_error)?;
 
-    let mut blobs: HashMap<ProjectPath, Vec<u8>> = HashMap::with_capacity(unknown.len());
+    let mut blobs: HashMap<ProjectPath, Vec<u8>> =
+        HashMap::with_capacity_and_hasher(unknown.len(), Default::default());
     let mut new_blob_hashes: Vec<(String, [u8; 32])> = Vec::with_capacity(unknown.len());
     let hashed: Vec<Option<[u8; 32]>> = contents
         .par_iter()
@@ -506,7 +508,7 @@ mod tests {
     }
 
     fn tree_files(source: &TreeSource<'_>) -> Vec<DiscoveredFile> {
-        discover_source(source, &HashMap::new()).unwrap().files
+        discover_source(source, &HashMap::default()).unwrap().files
     }
 
     /// The parity contract, pinned: a committed tree discovered via git must yield the exact
@@ -603,7 +605,7 @@ mod tests {
                 treeish: "HEAD",
                 prefix: "",
             },
-            &HashMap::new(),
+            &HashMap::default(),
         )
         .unwrap();
         let content = tree.read(&ProjectPath("f.ts".into())).unwrap();
@@ -621,7 +623,7 @@ mod tests {
                 treeish: "no-such-ref",
                 prefix: "",
             },
-            &HashMap::new(),
+            &HashMap::default(),
         )
         .is_err());
     }
@@ -641,7 +643,7 @@ mod tests {
             treeish: "HEAD",
             prefix: "",
         };
-        let cold = discover_source(&source, &HashMap::new()).unwrap();
+        let cold = discover_source(&source, &HashMap::default()).unwrap();
         assert_eq!(cold.new_blob_hashes.len(), 2);
 
         let sidecar: HashMap<String, [u8; 32]> = cold.new_blob_hashes.iter().cloned().collect();

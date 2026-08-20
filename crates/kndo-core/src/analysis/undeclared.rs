@@ -10,7 +10,7 @@
 //! every file owns the same package, so this collapses to the simpler global check it used to
 //! be — no regression there, just correctness added for the monorepo case.
 
-use std::collections::{HashMap, HashSet};
+use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 
 use crate::analysis::{finding_id, package_discriminator, package_label};
 use crate::engine::{Finding, Location, Severity};
@@ -18,7 +18,7 @@ use crate::graph::ProjectGraph;
 use crate::vocab::{Confidence, DependencyId, EdgeKind, PackageId};
 
 pub fn find_undeclared_dependencies(graph: &ProjectGraph) -> Vec<Finding> {
-    let mut declared_by_package: HashMap<PackageId, HashSet<&str>> = HashMap::new();
+    let mut declared_by_package: HashMap<PackageId, HashSet<&str>> = HashMap::default();
     for dep in &graph.declared_dependencies {
         declared_by_package
             .entry(dep.package)
@@ -26,7 +26,7 @@ pub fn find_undeclared_dependencies(graph: &ProjectGraph) -> Vec<Finding> {
             .insert(dep.name.as_str());
     }
 
-    let mut importers: HashMap<(DependencyId, PackageId), Vec<&str>> = HashMap::new();
+    let mut importers: HashMap<(DependencyId, PackageId), Vec<&str>> = HashMap::default();
     for edge in &graph.edges {
         if let EdgeKind::ImportsDependency { from, to } = edge.kind {
             let file = &graph.files[from.0 as usize];

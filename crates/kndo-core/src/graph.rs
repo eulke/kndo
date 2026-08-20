@@ -4,7 +4,7 @@
 //! language. Adapter *registration* happens at the binary level (`kndo-cli` composes core +
 //! first-party adapters) — the core must never know which languages exist.
 
-use std::collections::{HashMap, HashSet};
+use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 use std::path::Path;
 
 use rayon::prelude::*;
@@ -268,7 +268,7 @@ impl ProjectGraph {
             symbols,
             dependencies,
             declared_dependencies: Vec::new(),
-            script_invoked_dependencies: HashSet::new(),
+            script_invoked_dependencies: HashSet::default(),
             packages: vec![PackageNode {
                 manifest: None,
                 name: None,
@@ -621,7 +621,8 @@ pub fn assemble_from_source(
 
     // Phase 2 — assign FileId (already the discovery-sorted index) and build File nodes.
     let mut files = Vec::with_capacity(discovered.files.len());
-    let mut file_index = HashMap::with_capacity(discovered.files.len());
+    let mut file_index =
+        HashMap::with_capacity_and_hasher(discovered.files.len(), Default::default());
     for (i, df) in discovered.files.iter().enumerate() {
         let file_id = FileId(i as u32);
         file_index.insert(df.path.clone(), file_id);
@@ -709,15 +710,15 @@ pub fn assemble_from_source(
     // stdlib-shadowing precedence rule (RFC 0002 §6) that phase 3's resolver calls already
     // implement but, until now, were never handed anything to check against.
     let mut edges = Vec::new();
-    let mut declared_dependency_names: HashSet<SmolStr> = HashSet::new();
+    let mut declared_dependency_names: HashSet<SmolStr> = HashSet::default();
     let mut declared_dependencies: Vec<DeclaredDependency> = Vec::new();
-    let mut script_invoked_dependencies: HashSet<(PackageId, SmolStr)> = HashSet::new();
+    let mut script_invoked_dependencies: HashSet<(PackageId, SmolStr)> = HashSet::default();
     // Every file a manifest names as a production root, at that root's own confidence — used
     // after phase 3a to promote the file's *exported* symbols to production roots too (RFC
     // 0011 §5: "Published/library: its public API is a production root — external consumers
     // exist by definition"). Keyed by file, keeping the strongest confidence when more than
     // one manifest field roots the same file (e.g. both `main` and an `exports` leaf).
-    let mut library_root_files: HashMap<FileId, Confidence> = HashMap::new();
+    let mut library_root_files: HashMap<FileId, Confidence> = HashMap::default();
     for (i, slot) in manifests_per_file.iter().enumerate() {
         let Some((adapter_index, facts)) = slot else {
             continue;
@@ -775,7 +776,7 @@ pub fn assemble_from_source(
     // existence under the convention is the whole evidence. `Probable`, not certain: a
     // convention names the file, nothing declares it (same reasoning as `exports`-map leaves).
     // Production roots stay manifest/API-driven (phase 2.5) — never role-derived.
-    let mut role_root_files: HashMap<FileId, crate::vocab::RootKind> = HashMap::new();
+    let mut role_root_files: HashMap<FileId, crate::vocab::RootKind> = HashMap::default();
     for (i, slot) in claimed_per_file.iter().enumerate() {
         let Some(claimed) = slot else { continue };
         let kind = match claimed.claim.class.role {
@@ -849,13 +850,14 @@ pub fn assemble_from_source(
     let mut symbols = Vec::new();
     let mut function_metrics: Vec<(SymbolId, SymbolMetrics)> = Vec::new();
     let mut symbol_by_name_per_file: Vec<HashMap<SmolStr, SymbolId>> =
-        vec![HashMap::new(); claimed_per_file.len()];
+        vec![HashMap::default(); claimed_per_file.len()];
     // Package-scoped (not file-scoped) resolution, for languages where it's the ordinary case
     // rather than an edge case (Go's directory-is-the-package visibility unit — see
     // `FileFacts::unit`'s doc). `None` for every file whose adapter doesn't set `unit` (JS/TS
     // today), so this is purely additive: those files never populate or consult these two maps.
     let mut file_unit: Vec<Option<SmolStr>> = vec![None; claimed_per_file.len()];
-    let mut symbol_by_name_per_unit: HashMap<SmolStr, HashMap<SmolStr, SymbolId>> = HashMap::new();
+    let mut symbol_by_name_per_unit: HashMap<SmolStr, HashMap<SmolStr, SymbolId>> =
+        HashMap::default();
     // Member declarations (`member_of: Some(..)`, RFC 0012 §3) resolve on a separate track:
     // an unqualified reference must never `certain`-resolve to a member (bare member names
     // collide across owners by construction — `T.get` and `U.get` are both just `get`), so
@@ -864,9 +866,9 @@ pub fn assemble_from_source(
     // candidate's declared visibility scope (RFC 0012 §6 — replacing the interim same-file/
     // same-unit tiers). Qualified lookup (for `RawRoot` targets naming `Owner.name`) gets its
     // own exact table.
-    let mut member_by_name: HashMap<SmolStr, Vec<SymbolId>> = HashMap::new();
+    let mut member_by_name: HashMap<SmolStr, Vec<SymbolId>> = HashMap::default();
     let mut symbol_by_qualified_per_file: Vec<HashMap<String, SymbolId>> =
-        vec![HashMap::new(); claimed_per_file.len()];
+        vec![HashMap::default(); claimed_per_file.len()];
     for (i, slot) in claimed_per_file.iter().enumerate() {
         let Some(claimed) = slot else { continue };
         let file_id = FileId(i as u32);
@@ -1017,7 +1019,7 @@ pub fn assemble_from_source(
     // file-discovery order (deterministic); a repo with two same-named manifests is broken
     // in ways no resolution order fixes.
     let mut workspace_member_index: HashMap<SmolStr, crate::adapter::WorkspaceMember> =
-        HashMap::new();
+        HashMap::default();
     for (i, slot) in manifests_per_file.iter().enumerate() {
         let Some((_, facts)) = slot else { continue };
         let Some(name) = &facts.package_name else {
@@ -1099,7 +1101,7 @@ pub fn assemble_from_source(
     // table is complete now (phase 3a), so cross-file lookups are safe regardless of
     // discovery order.
     let mut dependencies = Vec::new();
-    let mut dep_index: HashMap<SmolStr, DependencyId> = HashMap::new();
+    let mut dep_index: HashMap<SmolStr, DependencyId> = HashMap::default();
     let mut suppressions: Vec<(FileId, crate::adapter::RawSuppression)> = Vec::new();
 
     for (i, slot) in claimed_per_file.iter().enumerate() {
@@ -1110,14 +1112,14 @@ pub fn assemble_from_source(
 
         // Local name -> target symbol, from this file's import bindings — the fact that lets a
         // `RawReference` to an *imported* name resolve cross-file instead of only same-file.
-        let mut bound_symbols: HashMap<SmolStr, SymbolId> = HashMap::new();
+        let mut bound_symbols: HashMap<SmolStr, SymbolId> = HashMap::default();
         // Qualifier -> resolved in-repo target file (RFC 0012 §9): the import's explicit
         // `local_alias`, or — unaliased — the *target's own* declared `unit_name`. This is
         // where the dir≠package problem dissolves: only assembly holds both sides, so the
         // qualifier for `gopkg.in/yaml.v3`-style imports comes from the target's `package`
         // clause, never from a guess about the specifier. First import wins on a duplicate
         // qualifier (Go rejects that program anyway — deterministic either way).
-        let mut qualifier_targets: HashMap<SmolStr, FileId> = HashMap::new();
+        let mut qualifier_targets: HashMap<SmolStr, FileId> = HashMap::default();
 
         for imp in &claimed.facts.imports {
             let spec = ImportSpec {

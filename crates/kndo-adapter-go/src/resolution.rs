@@ -156,7 +156,7 @@ static STDLIB: std::sync::LazyLock<kndo_adapter_toolkit::stdlib::StdlibIndex<'st
 mod tests {
     use super::*;
     use kndo_core::adapter::WorkspaceMember;
-    use std::collections::{HashMap, HashSet};
+    use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 
     fn spec(specifier: &str, from: &str) -> ImportSpec {
         ImportSpec {
@@ -167,7 +167,7 @@ mod tests {
 
     #[test]
     fn stdlib_import_resolves_as_stdlib() {
-        let known = HashSet::new();
+        let known = HashSet::default();
         let ctx = ResolveCtx::new(&known);
         assert_eq!(
             resolve(&spec("encoding/json", "a.go"), &ctx),
@@ -182,7 +182,7 @@ mod tests {
             .iter()
             .map(|p| ProjectPath(SmolStr::new(*p)))
             .collect();
-        let mut members = HashMap::new();
+        let mut members = HashMap::default();
         members.insert(
             SmolStr::new("example.com/mod"),
             WorkspaceMember {
@@ -214,7 +214,7 @@ mod tests {
             .iter()
             .map(|p| ProjectPath(SmolStr::new(*p)))
             .collect();
-        let mut members = HashMap::new();
+        let mut members = HashMap::default();
         members.insert(
             SmolStr::new("example.com/a"),
             WorkspaceMember {
@@ -256,7 +256,7 @@ mod tests {
             .iter()
             .map(|p| ProjectPath(SmolStr::new(*p)))
             .collect();
-        let mut members = HashMap::new();
+        let mut members = HashMap::default();
         members.insert(
             SmolStr::new("example.com/mod"),
             WorkspaceMember {
@@ -277,8 +277,8 @@ mod tests {
 
     #[test]
     fn external_dependency_resolves_via_longest_declared_prefix() {
-        let known = HashSet::new();
-        let mut declared = HashSet::new();
+        let known = HashSet::default();
+        let mut declared = HashSet::default();
         declared.insert(SmolStr::new("golang.org/x/net"));
         let ctx = ResolveCtx::new(&known).with_declared_dependencies(&declared);
 
@@ -291,7 +291,7 @@ mod tests {
 
     #[test]
     fn undeclared_external_import_is_unresolved() {
-        let known = HashSet::new();
+        let known = HashSet::default();
         let ctx = ResolveCtx::new(&known);
         assert_eq!(
             resolve(&spec("github.com/nowhere/nothing", "a.go"), &ctx),

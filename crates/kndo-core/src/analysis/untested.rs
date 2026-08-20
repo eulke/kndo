@@ -15,7 +15,7 @@
 //! test-unreached by definition, which is true but useless. That gate is checked once, up
 //! front, not per node.
 
-use std::collections::HashMap;
+use rustc_hash::FxHashMap as HashMap;
 
 use crate::adapter::{Diagnostic, DiagnosticLevel};
 use crate::analysis::finding_id;
@@ -77,7 +77,7 @@ fn is_untested_node(
 
 fn find_untested_files(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<Finding> {
     let mut findings = Vec::new();
-    let mut untested: HashMap<&str, (FileId, PackageId, Confidence)> = HashMap::new();
+    let mut untested: HashMap<&str, (FileId, PackageId, Confidence)> = HashMap::default();
     for (index, file) in graph.files.iter().enumerate() {
         let Some(class) = file.class else {
             continue; // unclaimed — out of scope, not a verdict

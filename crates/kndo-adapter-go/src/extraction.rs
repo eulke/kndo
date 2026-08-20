@@ -8,7 +8,7 @@
 //! resolution pass — so this file is one flat walk plus one reference pass, not JS's several
 //! sequential passes over hoisting-sensitive export/import surfaces.
 
-use std::collections::HashSet;
+use rustc_hash::FxHashSet as HashSet;
 
 use kndo_core::adapter::{
     Declaration, Diagnostic, DiagnosticLevel, FileFacts, ImportKind, RawImport, RawReference,
@@ -595,7 +595,7 @@ fn collect_references(
     // `const`/`var` specs can name more than one identifier (`const A, B = 1, 2`) — skip every
     // `name`-field child, not just the first, before recursing into the rest (the values).
     if matches!(node.kind(), "const_spec" | "var_spec") {
-        let mut skip_ids = HashSet::new();
+        let mut skip_ids = HashSet::default();
         let mut name_cursor = node.walk();
         for n in node.children_by_field_name("name", &mut name_cursor) {
             skip_ids.insert(n.id());

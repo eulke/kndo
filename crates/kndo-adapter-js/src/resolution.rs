@@ -152,7 +152,7 @@ fn package_name_from_specifier(spec: &str) -> SmolStr {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashSet;
+    use rustc_hash::FxHashSet as HashSet;
 
     fn ctx_with(paths: &[&str]) -> HashSet<ProjectPath> {
         paths
@@ -312,7 +312,7 @@ mod tests {
     // ---------------------------------------------------------------- workspace members
 
     use kndo_core::adapter::WorkspaceMember;
-    use std::collections::HashMap;
+    use rustc_hash::FxHashMap as HashMap;
 
     fn members(entries: &[(&str, &str, Option<&str>)]) -> HashMap<SmolStr, WorkspaceMember> {
         entries
@@ -387,7 +387,7 @@ mod tests {
         // `"@org/ui": "workspace:*"` is declared AND a member — it must resolve internal.
         let known = ctx_with(&["packages/ui/index.ts"]);
         let map = members(&[("@org/ui", "packages/ui", Some("packages/ui/index.ts"))]);
-        let mut deps = HashSet::new();
+        let mut deps = HashSet::default();
         deps.insert(SmolStr::new("@org/ui"));
         let ctx = ResolveCtx::new(&known)
             .with_declared_dependencies(&deps)
@@ -414,7 +414,7 @@ mod tests {
         // The userland `punycode` package is real: declared in the manifest it must resolve
         // as a dependency, not the deprecated builtin — toolkit precedence rule 2.
         let known = ctx_with(&[]);
-        let mut deps = HashSet::new();
+        let mut deps = HashSet::default();
         deps.insert(SmolStr::new("punycode"));
         let ctx = ResolveCtx::new(&known).with_declared_dependencies(&deps);
         let r = resolve(&spec("src/a.ts", "punycode"), &ctx);

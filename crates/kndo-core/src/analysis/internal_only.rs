@@ -32,7 +32,7 @@
 //! demoted to `Possible`, mirroring "confidence demotes through wildcard edges like every
 //! reachability verdict."
 
-use std::collections::{HashMap, HashSet};
+use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 
 use crate::adapter::VisibilityScope;
 use crate::analysis::finding_id;
@@ -78,7 +78,7 @@ pub fn find_internal_only(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<
         })
         .collect();
 
-    let mut refs_by_target: HashMap<SymbolId, Vec<(FileId, Confidence)>> = HashMap::new();
+    let mut refs_by_target: HashMap<SymbolId, Vec<(FileId, Confidence)>> = HashMap::default();
     for edge in &graph.edges {
         if let EdgeKind::References { from, to, .. } = edge.kind {
             refs_by_target

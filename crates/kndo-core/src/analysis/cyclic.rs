@@ -31,7 +31,7 @@
 //! note) is an optimization for the incremental-analysis mode kndo doesn't have yet — every
 //! analysis today recomputes fully per run, and Tarjan is O(V+E), noise next to assembly.
 
-use std::collections::{HashMap, HashSet};
+use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 
 use crate::adapter::{CyclePolicy, CycleTolerance, Span};
 use crate::analysis::{finding_id, package_discriminator, package_label};
@@ -46,13 +46,13 @@ use crate::vocab::{Confidence, EdgeKind, FileId, FileOrigin, PackageId};
 /// generated/vendored, exactly like the findings themselves.
 pub fn find_cycles(graph: &ProjectGraph) -> (Vec<Finding>, HashSet<FileId>) {
     let mut findings = Vec::new();
-    let mut participants: HashSet<FileId> = HashSet::new();
+    let mut participants: HashSet<FileId> = HashSet::default();
 
     // ------------------------------------------------------------- file level
     // Adjacency over ImportsFile edges, keeping the strongest-confidence edge per (from, to)
     // pair for evidence.
-    let mut file_adj: HashMap<u32, Vec<u32>> = HashMap::new();
-    let mut file_edge: HashMap<(u32, u32), (Confidence, Option<Span>)> = HashMap::new();
+    let mut file_adj: HashMap<u32, Vec<u32>> = HashMap::default();
+    let mut file_edge: HashMap<(u32, u32), (Confidence, Option<Span>)> = HashMap::default();
     for edge in &graph.edges {
         if let EdgeKind::ImportsFile { from, to } = edge.kind {
             if from == to {
@@ -115,7 +115,7 @@ pub fn find_cycles(graph: &ProjectGraph) -> (Vec<Finding>, HashSet<FileId>) {
         // every edge this replaced was O(|SCC| × |edges|), a 13-second wall on a synthetic
         // 5k-file component.
         let in_cycle: HashSet<u32> = scc.iter().copied().collect();
-        let mut indegree: HashMap<u32, usize> = HashMap::new();
+        let mut indegree: HashMap<u32, usize> = HashMap::default();
         for &from in &in_cycle {
             for to in file_adj.get(&from).map(Vec::as_slice).unwrap_or(&[]) {
                 if in_cycle.contains(to) {
@@ -182,8 +182,8 @@ pub fn find_cycles(graph: &ProjectGraph) -> (Vec<Finding>, HashSet<FileId>) {
     // ------------------------------------------------------------- package level
     // Derived package graph (real packages only): P → Q when any file in P imports a file in
     // Q. Evidence keeps one representative file edge per package edge.
-    let mut pkg_adj: HashMap<u32, Vec<u32>> = HashMap::new();
-    let mut pkg_edge: HashMap<(u32, u32), (Confidence, FileId, FileId)> = HashMap::new();
+    let mut pkg_adj: HashMap<u32, Vec<u32>> = HashMap::default();
+    let mut pkg_edge: HashMap<(u32, u32), (Confidence, FileId, FileId)> = HashMap::default();
     for edge in &graph.edges {
         if let EdgeKind::ImportsFile { from, to } = edge.kind {
             let p = graph.files[from.0 as usize].package;
@@ -358,7 +358,7 @@ fn tarjan(adjacency: &HashMap<u32, Vec<u32>>) -> Vec<Vec<u32>> {
     nodes.sort_unstable();
     nodes.dedup();
 
-    let mut state: HashMap<u32, NodeState> = HashMap::new();
+    let mut state: HashMap<u32, NodeState> = HashMap::default();
     let mut stack: Vec<u32> = Vec::new();
     let mut next_index = 0u32;
     let mut sccs: Vec<Vec<u32>> = Vec::new();
@@ -427,7 +427,7 @@ fn shortest_cycle(
     in_scc: &HashSet<u32>,
 ) -> Vec<u32> {
     use std::collections::VecDeque;
-    let mut parent: HashMap<u32, u32> = HashMap::new();
+    let mut parent: HashMap<u32, u32> = HashMap::default();
     let mut queue = VecDeque::new();
     queue.push_back(start);
     while let Some(v) = queue.pop_front() {
