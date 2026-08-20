@@ -104,7 +104,10 @@ pub fn run_fixture(
     // a `.kndo/` behind inside version-controlled fixture directories on every test run, for
     // zero benefit (fixtures are tiny and each runs once).
     let project_dir = fixture_dir.join("project");
-    let overrides = ConfigOverrides { use_cache: false };
+    let overrides = ConfigOverrides {
+        use_cache: false,
+        threads: None,
+    };
     let mut engine = Engine::open(&project_dir, overrides, adapters)
         .map_err(|e| ConformanceError(format!("opening {}: {e}", project_dir.display())))?;
     let result = engine.check(CheckRequest {

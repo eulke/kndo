@@ -65,11 +65,19 @@ pub struct ConfigOverrides {
     /// `true` — the correctness gate is that this must never change *findings*, only whether
     /// the run was warm.
     pub use_cache: bool,
+    /// `--threads N` > `KNDO_THREADS` env > default (RFC 0008 §5) — resolved to a concrete
+    /// value *before* reaching here (frontend concern, like the precedence chain itself);
+    /// `None` means "physical cores," the RFC's stated default, not "unspecified." `Some(1)` is
+    /// a first-class supported mode (determinism checks, debugging, noisy-neighbor CI runners).
+    pub threads: Option<usize>,
 }
 
 impl Default for ConfigOverrides {
     fn default() -> Self {
-        ConfigOverrides { use_cache: true }
+        ConfigOverrides {
+            use_cache: true,
+            threads: None,
+        }
     }
 }
 
@@ -434,6 +442,20 @@ pub fn json_schema() -> schemars::Schema {
     schemars::schema_for!(Envelope)
 }
 
+/// One global rayon pool per process (RFC 0008 §5) — `--threads N` > `KNDO_THREADS` env >
+/// physical cores, already resolved into `threads` by the frontend before it ever reaches here.
+/// rayon's global pool can only be *built* once per process; a second `Engine::open` call
+/// (embedders opening more than one engine, or many tests sharing one test binary) hits
+/// `build_global`'s "already initialized" error, silently ignored — whichever call came first
+/// wins the thread count for the rest of the process. This can never threaten determinism (RFC
+/// 0008 §4): thread count only ever changes *scheduling*, never which bytes come out.
+fn ensure_thread_pool(threads: Option<usize>) {
+    let n = threads.unwrap_or_else(|| num_cpus::get_physical().max(1));
+    let _ = rayon::ThreadPoolBuilder::new()
+        .num_threads(n)
+        .build_global();
+}
+
 /// Synchronous and single-instance-per-project (the cache lock, RFC 0004 §7); a serving
 /// frontend wraps it in its own concurrency model.
 pub struct Engine {
@@ -456,6 +478,7 @@ impl Engine {
         if !root.is_dir() {
             return Err(EngineError::ProjectRootNotFound(root.to_path_buf()));
         }
+        ensure_thread_pool(overrides.threads);
         let cache = overrides
             .use_cache
             .then(|| crate::cache::ProjectCache::open(root));
@@ -1135,7 +1158,10 @@ mod tests {
         // though the disk cache is populated and would otherwise hit.
         let mut uncached = Engine::open(
             &dir,
-            ConfigOverrides { use_cache: false },
+            ConfigOverrides {
+                use_cache: false,
+                threads: None,
+            },
             vec![Box::new(CacheMockAdapter)],
         )
         .unwrap();

@@ -197,7 +197,7 @@ fn doctor_cmd() -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    let engine = match kndo::open(&cwd, ConfigOverrides::default()) {
+    let engine = match kndo::open(&cwd, base_config_overrides()) {
         Ok(e) => e,
         Err(e) => {
             eprintln!("kndo: {e}");
@@ -276,7 +276,7 @@ fn baseline_cmd(args: &[String]) -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    let mut engine = match kndo::open(&cwd, ConfigOverrides::default()) {
+    let mut engine = match kndo::open(&cwd, base_config_overrides()) {
         Ok(e) => e,
         Err(e) => {
             eprintln!("kndo: {e}");
@@ -312,6 +312,7 @@ struct Flags {
     staged: bool,
     diff: Option<String>,
     fail_on: Option<String>,
+    threads: Option<String>,
 }
 
 fn parse_flags(args: &[String]) -> Flags {
@@ -323,6 +324,7 @@ fn parse_flags(args: &[String]) -> Flags {
         staged: false,
         diff: None,
         fail_on: None,
+        threads: None,
     };
     let mut it = args.iter();
     while let Some(arg) = it.next() {
@@ -334,6 +336,7 @@ fn parse_flags(args: &[String]) -> Flags {
             "--staged" => flags.staged = true,
             "--diff" => flags.diff = it.next().cloned(),
             "--fail-on" => flags.fail_on = it.next().cloned(),
+            "--threads" => flags.threads = it.next().cloned(),
             s if s.starts_with("--format=") => {
                 flags.format = Some(s["--format=".len()..].to_string())
             }
@@ -342,10 +345,46 @@ fn parse_flags(args: &[String]) -> Flags {
             s if s.starts_with("--fail-on=") => {
                 flags.fail_on = Some(s["--fail-on=".len()..].to_string())
             }
+            s if s.starts_with("--threads=") => {
+                flags.threads = Some(s["--threads=".len()..].to_string())
+            }
             _ => {}
         }
     }
     flags
+}
+
+/// `--threads N` > `KNDO_THREADS` env > default physical cores (RFC 0008 §5) — resolved to a
+/// concrete `Option<usize>` here (frontend argument-parsing concern) before it ever reaches
+/// `ConfigOverrides`; `None` means "use the default," never "unspecified but pending." `0`
+/// (either source) means the same thing explicitly: physical cores.
+fn resolve_threads(explicit: Option<&str>, env: Option<&str>) -> Result<Option<usize>, String> {
+    let raw = explicit.or(env);
+    match raw {
+        None => Ok(None),
+        Some(s) => {
+            let n: usize = s
+                .parse()
+                .map_err(|_| format!("--threads `{s}` is not a non-negative integer"))?;
+            Ok(if n == 0 { None } else { Some(n) })
+        }
+    }
+}
+
+/// The `ConfigOverrides` every subcommand *without its own* `--threads` flag should open an
+/// `Engine` with — still respects `KNDO_THREADS` (RFC 0008 §5's env-level override applies
+/// everywhere, not just `check`), just without a per-command CLI flag to parse. `check` builds
+/// its own via `resolve_threads` instead, since it alone also accepts `--threads` explicitly.
+/// A malformed `KNDO_THREADS` degrades to the default (physical cores) rather than failing the
+/// command — surfacing a parse error for an env var on every unrelated subcommand would be more
+/// surprising than just falling back.
+pub(crate) fn base_config_overrides() -> ConfigOverrides {
+    let env_threads = std::env::var("KNDO_THREADS").ok();
+    let threads = resolve_threads(None, env_threads.as_deref()).unwrap_or(None);
+    ConfigOverrides {
+        threads,
+        ..ConfigOverrides::default()
+    }
 }
 
 /// `--staged` and `--diff <ref>` select `RunMode` (RFC 0006 §2); mutually exclusive, checked
@@ -463,6 +502,14 @@ fn check(args: &[String]) -> ExitCode {
             return ExitCode::from(2);
         }
     };
+    let env_threads = std::env::var("KNDO_THREADS").ok();
+    let threads = match resolve_threads(flags.threads.as_deref(), env_threads.as_deref()) {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("kndo: {e}");
+            return ExitCode::from(2);
+        }
+    };
 
     let cwd = match std::env::current_dir() {
         Ok(d) => d,
@@ -473,6 +520,7 @@ fn check(args: &[String]) -> ExitCode {
     };
     let overrides = ConfigOverrides {
         use_cache: !flags.no_cache,
+        threads,
     };
     let mut engine = match kndo::open(&cwd, overrides) {
         Ok(e) => e,
@@ -575,6 +623,7 @@ mod tests {
             staged,
             diff: diff.map(str::to_string),
             fail_on: fail_on.map(str::to_string),
+            threads: None,
         }
     }
 
@@ -595,6 +644,40 @@ mod tests {
         let f = parse_flags(&args);
         assert_eq!(f.diff.as_deref(), Some("main"));
         assert_eq!(f.fail_on.as_deref(), Some("none"));
+
+        let args: Vec<String> = ["--threads", "4"].iter().map(|s| s.to_string()).collect();
+        let f = parse_flags(&args);
+        assert_eq!(f.threads.as_deref(), Some("4"));
+
+        let args: Vec<String> = ["--threads=1"].iter().map(|s| s.to_string()).collect();
+        let f = parse_flags(&args);
+        assert_eq!(f.threads.as_deref(), Some("1"));
+    }
+
+    #[test]
+    fn threads_explicit_flag_wins_over_env() {
+        assert_eq!(resolve_threads(Some("4"), Some("8")).unwrap(), Some(4));
+    }
+
+    #[test]
+    fn threads_falls_back_to_env_when_no_flag() {
+        assert_eq!(resolve_threads(None, Some("2")).unwrap(), Some(2));
+    }
+
+    #[test]
+    fn threads_zero_from_either_source_means_default_physical_cores() {
+        assert_eq!(resolve_threads(Some("0"), None).unwrap(), None);
+        assert_eq!(resolve_threads(None, Some("0")).unwrap(), None);
+    }
+
+    #[test]
+    fn threads_absent_everywhere_is_the_default() {
+        assert_eq!(resolve_threads(None, None).unwrap(), None);
+    }
+
+    #[test]
+    fn threads_rejects_a_non_numeric_value() {
+        assert!(resolve_threads(Some("bogus"), None).is_err());
     }
 
     #[test]
