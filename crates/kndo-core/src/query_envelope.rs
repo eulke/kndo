@@ -121,10 +121,17 @@ pub enum ResultEntry {
 }
 
 impl ResultEntry {
+    /// RFC 0007 §6: "1 | selector/path not found (`find` with zero hits, `trace` with no
+    /// path)" — only these two verbs turn an empty-but-successful computation into `not-found`;
+    /// `describe`/`uses`/`used-by` resolving to zero neighbors is a legitimate `ok` answer (e.g.
+    /// `used-by` on a genuinely-unused symbol correctly returns nothing — that IS the answer,
+    /// not a failure to compute one).
     fn status(&self) -> Status {
         match self {
             ResultEntry::Failed { status, .. } if *status == "not-found" => Status::NotFound,
             ResultEntry::Failed { .. } => Status::Error,
+            ResultEntry::Find(r) if r.matches.is_empty() => Status::NotFound,
+            ResultEntry::Trace(r) if r.paths.is_empty() => Status::NotFound,
             _ => Status::Ok,
         }
     }

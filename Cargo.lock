@@ -680,6 +680,8 @@ name = "kndo-cli"
 version = "0.1.0"
 dependencies = [
  "kndo",
+ "serde",
+ "serde_json",
  "smol_str",
 ]
 
@@ -1594,6 +1596,7 @@ version = "0.1.0"
 dependencies = [
  "kndo-adapter-toolkit",
  "kndo-core",
+ "schemars",
  "serde_json",
 ]
 

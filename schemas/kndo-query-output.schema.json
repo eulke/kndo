@@ -1,0 +1,700 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "QueryJsonEnvelope",
+  "description": "The full `--format json` query envelope (output-schema §8) — also `cargo xtask gen-schema`'s\nsecond root type. `run` is `Option` only so [`QueryResult::to_json_line`] can omit it on\nevery `kndo query` line after the first (§4.7: \"run appearing only on the first line\").",
+  "type": "object",
+  "properties": {
+    "diagnostics": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Diagnostic"
+      }
+    },
+    "kndo_version": {
+      "type": "string"
+    },
+    "query": {
+      "$ref": "#/$defs/QueryEcho"
+    },
+    "results": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ResultEntry"
+      }
+    },
+    "run": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RunEcho"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "schema_version": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "kndo_version",
+    "query",
+    "status",
+    "results",
+    "diagnostics"
+  ],
+  "$defs": {
+    "ByColor": {
+      "type": "object",
+      "properties": {
+        "production": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "test-only": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "tooling-only": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "unreachable": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "production",
+        "test-only",
+        "tooling-only",
+        "unreachable"
+      ]
+    },
+    "Confidence": {
+      "description": "Per-edge strength. Ordered by strength: `Possible < Probable < Certain`, so `max()` yields\nthe strongest evidence and \"edges at least as strong as τ\" is a simple `>=` (RFC 0005 §1).",
+      "type": "string",
+      "enum": [
+        "possible",
+        "probable",
+        "certain"
+      ]
+    },
+    "DeclarationInfo": {
+      "type": "object",
+      "properties": {
+        "exported": {
+          "type": "boolean"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "span": {
+          "$ref": "#/$defs/NodeSpan"
+        },
+        "visibility": {
+          "type": "integer",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0
+        }
+      },
+      "required": [
+        "kind",
+        "span",
+        "exported",
+        "visibility"
+      ]
+    },
+    "Degree": {
+      "type": "object",
+      "properties": {
+        "in_by_kind": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
+          }
+        },
+        "out_by_kind": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
+          }
+        }
+      },
+      "required": [
+        "in_by_kind",
+        "out_by_kind"
+      ]
+    },
+    "DependencyInfo": {
+      "type": "object",
+      "properties": {
+        "importing_files": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "manifest_scopes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "used": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "manifest_scopes",
+        "importing_files",
+        "used"
+      ]
+    },
+    "DescribeResult": {
+      "type": "object",
+      "properties": {
+        "declaration": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DeclarationInfo"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "declared_symbols": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/QNodeRef"
+          }
+        },
+        "degree": {
+          "$ref": "#/$defs/Degree"
+        },
+        "dependency": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DependencyInfo"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "elided": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
+          }
+        },
+        "file": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FileInfo"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "node": {
+          "$ref": "#/$defs/QNodeRef"
+        },
+        "package": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PackageInfo"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "reached_by_roots": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/QNodeRef"
+          }
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "node",
+        "degree",
+        "reached_by_roots",
+        "findings",
+        "sources",
+        "elided"
+      ]
+    },
+    "Diagnostic": {
+      "type": "object",
+      "properties": {
+        "level": {
+          "$ref": "#/$defs/DiagnosticLevel"
+        },
+        "message": {
+          "type": "string"
+        },
+        "path": {
+          "description": "The file this diagnostic is about, when there is one — `None` for project-level\ndiagnostics (e.g. \"cannot walk the project root\"). A diagnostic merged from many\nfiles without this field would be unattributable; adapters emit diagnostics scoped\nto the file they're extracting, the core fills this in.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProjectPath"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "span": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Span"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "level",
+        "message"
+      ]
+    },
+    "DiagnosticLevel": {
+      "type": "string",
+      "enum": [
+        "warn",
+        "info"
+      ]
+    },
+    "FileInfo": {
+      "type": "object",
+      "properties": {
+        "origin": {
+          "type": "string"
+        },
+        "role": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "role",
+        "origin"
+      ]
+    },
+    "FindResult": {
+      "type": "object",
+      "properties": {
+        "elided": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "matches": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/QNodeRef"
+          }
+        }
+      },
+      "required": [
+        "matches",
+        "elided"
+      ]
+    },
+    "Hop": {
+      "type": "object",
+      "properties": {
+        "node": {
+          "$ref": "#/$defs/QNodeRef"
+        },
+        "via": {
+          "$ref": "#/$defs/QEdgeRef"
+        }
+      },
+      "required": [
+        "node",
+        "via"
+      ]
+    },
+    "NeighborEntry": {
+      "type": "object",
+      "properties": {
+        "depth": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "node": {
+          "$ref": "#/$defs/QNodeRef"
+        },
+        "via": {
+          "$ref": "#/$defs/QEdgeRef"
+        }
+      },
+      "required": [
+        "node",
+        "via",
+        "depth"
+      ]
+    },
+    "NeighborsResult": {
+      "type": "object",
+      "properties": {
+        "by_color": {
+          "$ref": "#/$defs/ByColor"
+        },
+        "elided": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "entries": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/NeighborEntry"
+          }
+        },
+        "node": {
+          "$ref": "#/$defs/QNodeRef"
+        }
+      },
+      "required": [
+        "node",
+        "entries",
+        "by_color",
+        "elided"
+      ]
+    },
+    "NodeSpan": {
+      "description": "`{path, start, end}` — the query envelope's `NodeRef.span`/`EdgeRef.site` building block\n(output-schema §8), distinct from [`crate::engine::Location`]'s split `path`/`range` because\nthe query schema bundles them into one object.",
+      "type": "object",
+      "properties": {
+        "end": {
+          "type": "array",
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            }
+          ]
+        },
+        "path": {
+          "type": "string"
+        },
+        "start": {
+          "type": "array",
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            }
+          ]
+        }
+      },
+      "required": [
+        "path",
+        "start",
+        "end"
+      ]
+    },
+    "PackageInfo": {
+      "type": "object",
+      "properties": {
+        "dependents": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "files": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "mode": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "mode",
+        "files",
+        "dependents"
+      ]
+    },
+    "Path": {
+      "type": "object",
+      "properties": {
+        "hops": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Hop"
+          }
+        },
+        "weakest_confidence": {
+          "$ref": "#/$defs/Confidence"
+        }
+      },
+      "required": [
+        "hops",
+        "weakest_confidence"
+      ]
+    },
+    "ProjectPath": {
+      "description": "Project-relative path with `/` separators, the only path form that crosses the adapter\nboundary (case handling and symlink resolution are the core's discovery concern).",
+      "type": "string"
+    },
+    "QEdgeRef": {
+      "description": "The query envelope's `EdgeRef` building block (output-schema §8).",
+      "type": "object",
+      "properties": {
+        "confidence": {
+          "$ref": "#/$defs/Confidence"
+        },
+        "edge": {
+          "type": "string"
+        },
+        "site": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NodeSpan"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "edge",
+        "confidence"
+      ]
+    },
+    "QNodeRef": {
+      "description": "The query envelope's `NodeRef` building block (output-schema §8).",
+      "type": "object",
+      "properties": {
+        "color": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "type": "string"
+        },
+        "selector": {
+          "type": "string"
+        },
+        "span": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NodeSpan"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "selector",
+        "kind"
+      ]
+    },
+    "QueryEcho": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "selectors": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "verb": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "verb",
+        "selectors"
+      ]
+    },
+    "ResultEntry": {
+      "description": "One `results[]` entry — either a verb-specific success shape or an inline per-selector\nfailure (output-schema §8: \"a failed selector yields an inline `{status, …}` entry without\nfailing its siblings\").",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/FindResult"
+        },
+        {
+          "$ref": "#/$defs/DescribeResult"
+        },
+        {
+          "$ref": "#/$defs/NeighborsResult"
+        },
+        {
+          "$ref": "#/$defs/TraceResult"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "message": {
+              "type": "string"
+            },
+            "selector": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "status",
+            "selector",
+            "message"
+          ]
+        }
+      ]
+    },
+    "RunEcho": {
+      "type": "object",
+      "properties": {
+        "cache": {
+          "type": "string"
+        },
+        "duration_ms": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "cache",
+        "duration_ms"
+      ]
+    },
+    "Span": {
+      "description": "1-indexed line/column span, `start` inclusive, `end` exclusive. Serializes as the\n`[line, col]` pair shape the output schema uses (contracts/output-schema.md §2), not an\nobject — tuples serialize as JSON arrays by default.",
+      "type": "object",
+      "properties": {
+        "end": {
+          "type": "array",
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            }
+          ]
+        },
+        "start": {
+          "type": "array",
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            }
+          ]
+        }
+      },
+      "required": [
+        "start",
+        "end"
+      ]
+    },
+    "TraceResult": {
+      "type": "object",
+      "properties": {
+        "from": {
+          "$ref": "#/$defs/QNodeRef"
+        },
+        "paths": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Path"
+          }
+        },
+        "paths_elided": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "to": {
+          "$ref": "#/$defs/QNodeRef"
+        }
+      },
+      "required": [
+        "from",
+        "to",
+        "paths",
+        "paths_elided"
+      ]
+    }
+  }
+}

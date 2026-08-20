@@ -698,7 +698,7 @@ pub struct DescribeResult {
     pub reached_by_roots: Vec<QNodeRef>,
     pub findings: Vec<String>,
     pub sources: Vec<String>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub declared_symbols: Vec<QNodeRef>,
     pub elided: HashMap<String, usize>,
 }

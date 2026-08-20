@@ -30,6 +30,8 @@
 //!   nothing to render; `delta_origin` alone is still shown.
 
 use kndo::engine::{DeltaOrigin, Finding, RunResult};
+use kndo::query::{NeighborEntry, QNodeRef};
+use kndo::query_envelope::{QueryResult, ResultEntry};
 use kndo::vocab::Confidence;
 
 pub struct RenderOptions {
@@ -281,6 +283,143 @@ fn confidence_str(c: Confidence) -> &'static str {
         Confidence::Probable => "probable",
         Confidence::Possible => "possible",
     }
+}
+
+/// Navigation verbs (RFC 0007): a one-line header (`verb · status · Nms`), then one block per
+/// `results[]` entry — numbered only when the request batched more than one selector, matching
+/// the agent renderer's discipline (`agent_format::render_query`) but with color and glyphs.
+pub fn render_query(result: &QueryResult, opts: &RenderOptions) -> String {
+    let status = result.status();
+    let status_color = match status {
+        "ok" => "",
+        "not-found" => YELLOW,
+        _ => RED,
+    };
+    let mut out = if opts.color {
+        format!(
+            "kndo · {} · {status_color}{status}{RESET} · {}ms\n",
+            result.verb.as_str(),
+            result.duration_ms
+        )
+    } else {
+        format!(
+            "kndo · {} · {status} · {}ms\n",
+            result.verb.as_str(),
+            result.duration_ms
+        )
+    };
+
+    if opts.quiet {
+        return out;
+    }
+    out.push('\n');
+
+    let batched = result.results.len() > 1;
+    for (i, entry) in result.results.iter().enumerate() {
+        if batched {
+            let selector = result.selectors.get(i).map(String::as_str).unwrap_or("?");
+            out.push_str(&format!("[{}] {selector}\n", i + 1));
+        }
+        render_query_entry(&mut out, entry, opts);
+        out.push('\n');
+    }
+    out
+}
+
+fn render_query_entry(out: &mut String, entry: &ResultEntry, opts: &RenderOptions) {
+    match entry {
+        ResultEntry::Failed {
+            status,
+            selector,
+            message,
+        } => {
+            let color = if opts.color {
+                if *status == "not-found" {
+                    YELLOW
+                } else {
+                    RED
+                }
+            } else {
+                ""
+            };
+            let reset = if opts.color { RESET } else { "" };
+            out.push_str(&format!("{color}{status}{reset}: {selector} — {message}\n"));
+        }
+        ResultEntry::Find(r) => {
+            for (n, m) in r.matches.iter().enumerate() {
+                out.push_str(&format!("  {}. {}\n", n + 1, node_line(m)));
+            }
+            if r.elided > 0 {
+                out.push_str(&format!("  … {} more (--limit)\n", r.elided));
+            }
+        }
+        ResultEntry::Describe(d) => {
+            out.push_str(&format!("  {}\n", node_line(&d.node)));
+            out.push_str(&format!(
+                "  degree: in={} out={}\n",
+                d.degree.in_by_kind.values().sum::<usize>(),
+                d.degree.out_by_kind.values().sum::<usize>()
+            ));
+            if !d.reached_by_roots.is_empty() {
+                out.push_str("  reached by roots:\n");
+                for r in &d.reached_by_roots {
+                    out.push_str(&format!("    {}\n", node_line(r)));
+                }
+            }
+            if !d.findings.is_empty() {
+                out.push_str(&format!("  findings: {}\n", d.findings.join(", ")));
+            }
+        }
+        ResultEntry::Neighbors(r) => {
+            out.push_str(&format!("  {}\n", node_line(&r.node)));
+            for e in &r.entries {
+                out.push_str(&format!("    {}\n", neighbor_line(e)));
+            }
+            if r.elided > 0 {
+                out.push_str(&format!("  … {} more (--limit)\n", r.elided));
+            }
+        }
+        ResultEntry::Trace(r) => {
+            if r.paths.is_empty() {
+                out.push_str(&format!(
+                    "  {} -/-> {}  (no path)\n",
+                    node_line(&r.from),
+                    node_line(&r.to)
+                ));
+            }
+            for path in &r.paths {
+                let mut line = format!("  {}", node_line(&r.from));
+                for hop in &path.hops {
+                    line.push_str(&format!(" → [{}] {}", hop.via.edge, node_line(&hop.node)));
+                }
+                out.push_str(&line);
+                out.push('\n');
+            }
+            if r.paths_elided > 0 {
+                out.push_str(&format!(
+                    "  … {} more paths (--max-paths)\n",
+                    r.paths_elided
+                ));
+            }
+        }
+    }
+}
+
+fn node_line(n: &QNodeRef) -> String {
+    let loc = match &n.span {
+        Some(s) => format!(" {}:{}", s.path, s.start.0),
+        None => String::new(),
+    };
+    format!("[{}] {}{loc}", n.selector, n.kind)
+}
+
+fn neighbor_line(e: &NeighborEntry) -> String {
+    format!(
+        "{} via {} (depth {})",
+        node_line(&e.node),
+        e.via.edge,
+        e.depth
+    )
 }
 
 #[cfg(test)]

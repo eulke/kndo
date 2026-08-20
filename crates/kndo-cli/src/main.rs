@@ -13,6 +13,7 @@ use kndo::engine::{
     SCHEMA_VERSION,
 };
 
+mod nav;
 mod render;
 
 fn main() -> ExitCode {
@@ -30,12 +31,20 @@ fn main() -> ExitCode {
         Some("baseline") => baseline_cmd(&args[1..]),
         Some("doctor") => doctor_cmd(),
         Some("init") => init_cmd(&args[1..]),
+        Some("find") => nav::find_cmd(&args[1..]),
+        Some("describe") => nav::describe_cmd(&args[1..]),
+        Some("uses") => nav::uses_cmd(&args[1..]),
+        Some("used-by") => nav::used_by_cmd(&args[1..]),
+        Some("trace") => nav::trace_cmd(&args[1..]),
+        Some("query") => nav::query_cmd(),
         // Bare flags with no subcommand (`kndo --format json`) are an implicit `check`, same
         // as no arguments at all — `kndo` = `kndo check` (RFC 0006 §2).
         Some(s) if s.starts_with('-') => check(&args),
         None => check(&args),
         Some(other) => {
-            eprintln!("kndo: unknown command `{other}` (check, baseline, doctor, init, --version)");
+            eprintln!(
+                "kndo: unknown command `{other}` (check, baseline, doctor, init, find, describe, uses, used-by, trace, query, --version)"
+            );
             ExitCode::from(2)
         }
     }
@@ -408,7 +417,7 @@ fn exit_code_for_findings(findings: &[Finding], fail_on: Option<Severity>) -> Ex
 
 /// `--format` flag > `KNDO_FORMAT` env > TTY auto-detect (human on TTY, json when piped) —
 /// RFC 0006 §2.
-fn resolve_format(explicit: Option<&str>) -> String {
+pub(crate) fn resolve_format(explicit: Option<&str>) -> String {
     if let Some(f) = explicit {
         return f.to_string();
     }
@@ -426,7 +435,7 @@ fn resolve_format(explicit: Option<&str>) -> String {
 
 /// `NO_COLOR` always wins over `auto`; `--color always|never` overrides the TTY auto-detect
 /// (RFC 0009 §4).
-fn resolve_color(explicit: Option<&str>) -> bool {
+pub(crate) fn resolve_color(explicit: Option<&str>) -> bool {
     if std::env::var_os("NO_COLOR").is_some() {
         return false;
     }

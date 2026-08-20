@@ -69,21 +69,41 @@ fn main() -> ExitCode {
 }
 
 fn gen_schema() -> ExitCode {
-    let schema = kndo_core::engine::json_schema();
-    let text = match serde_json::to_string_pretty(&schema) {
-        Ok(t) => t,
-        Err(e) => {
-            eprintln!("xtask: gen-schema failed to serialize: {e}");
-            return ExitCode::FAILURE;
-        }
-    };
-    let path = match workspace_root() {
-        Ok(root) => root.join("schemas/kndo-output.schema.json"),
+    let root = match workspace_root() {
+        Ok(root) => root,
         Err(e) => {
             eprintln!("xtask: gen-schema failed: {e}");
             return ExitCode::FAILURE;
         }
     };
+    type SchemaTarget = (&'static str, fn() -> schemars::Schema);
+    let targets: [SchemaTarget; 2] = [
+        (
+            "schemas/kndo-output.schema.json",
+            kndo_core::engine::json_schema,
+        ),
+        (
+            "schemas/kndo-query-output.schema.json",
+            kndo_core::query_envelope::json_schema,
+        ),
+    ];
+    for (rel_path, schema_fn) in targets {
+        if write_schema(&root, rel_path, schema_fn()) == ExitCode::FAILURE {
+            return ExitCode::FAILURE;
+        }
+    }
+    ExitCode::SUCCESS
+}
+
+fn write_schema(root: &std::path::Path, rel_path: &str, schema: schemars::Schema) -> ExitCode {
+    let text = match serde_json::to_string_pretty(&schema) {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("xtask: gen-schema failed to serialize {rel_path}: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let path = root.join(rel_path);
     if let Some(dir) = path.parent() {
         if let Err(e) = std::fs::create_dir_all(dir) {
             eprintln!("xtask: gen-schema failed creating {}: {e}", dir.display());

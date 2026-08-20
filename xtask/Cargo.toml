@@ -11,3 +11,4 @@ publish.workspace = true
 kndo-adapter-toolkit = { path = "../crates/kndo-adapter-toolkit" }
 kndo-core = { path = "../crates/kndo-core", features = ["schema"] }
 serde_json = { workspace = true }
+schemars = { version = "1", features = ["smol_str03"] }
