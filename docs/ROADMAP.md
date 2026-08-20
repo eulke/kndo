@@ -118,8 +118,19 @@ radius on the same adjacency `uses`/`used-by` navigate (depth-annotated, color-s
 affected roots listed), and `--if-deleted` simulating removal on a patched graph copy through
 the *real* reachability engine — reporting typed flips (newly unreachable, newly test-only,
 freed dependencies) rather than synthesized findings; wired through the single verb, `kndo
-query` JSONL, human/agent/JSON renderings, and the regenerated committed schemas. Still open
-for M3 exit: the RFC 0007 §5 agent workflow running end-to-end on a fixture.
+query` JSONL, human/agent/JSON renderings, and the regenerated committed schemas.
+
+**M3 exit: met.** The four criteria, each with its standing evidence: (1) the Go conformance
+corpus passes — seven fixtures through the real engine; (2) the "only tests call this" case is
+caught in both languages — the JS `test-only/` fixture plus the Go dogfood the progress notes
+above record; (3) the RFC 0007 §5 agent workflow runs end to end —
+`crates/kndo/tests/agent_workflow.rs` drives `find` → `used-by` → `impact --if-deleted` →
+edit → `check` against the real engine on the RFC's own legacy-tax fixture, asserting the
+final check comes back clean; (4) every contract change M3 needed is documented in the
+contracts + RFCs it landed with (`unit`, `files_in_dir`, the RFC 0012 series, the RFC 0011 §4
+surface fields). One consciously carried item, recorded above and in RFC 0011 §4: the
+external-provider half of `deep-import` awaits a provider-manifest peek design — gated to
+silence until then.
 
 ## M4 — Duplication, CRAP, health
 `duplicate` (winnowing index, incremental), `cyclic` (SCCs with per-language tolerance),
