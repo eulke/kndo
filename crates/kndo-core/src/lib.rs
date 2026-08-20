@@ -23,5 +23,6 @@ pub mod plugin;
 pub mod query;
 pub mod query_envelope;
 mod rkyv_support;
+pub mod sarif;
 mod suppression;
 pub mod vocab;

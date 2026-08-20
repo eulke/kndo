@@ -556,12 +556,9 @@ fn check(args: &[String]) -> ExitCode {
             print!("{}", render::render(&result, &opts));
         }
         "agent" => println!("{}", result.to_agent_format()),
-        "sarif" => {
-            eprintln!("kndo: --format sarif isn't implemented yet (lands with M4's health/CRAP work); use human, json, or agent");
-            return ExitCode::from(2);
-        }
+        "sarif" => println!("{}", result.to_sarif()),
         other => {
-            eprintln!("kndo: unknown --format `{other}` (human, json, agent)");
+            eprintln!("kndo: unknown --format `{other}` (human, json, agent, sarif)");
             return ExitCode::from(2);
         }
     }

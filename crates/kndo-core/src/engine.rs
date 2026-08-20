@@ -454,6 +454,12 @@ impl RunResult {
     pub fn to_agent_format(&self) -> String {
         crate::agent_format::render(self)
     }
+
+    /// The `--format sarif` rendering (contracts/output-schema.md §7) — SARIF 2.1.0,
+    /// serialized core-side like every machine format.
+    pub fn to_sarif(&self) -> String {
+        crate::sarif::render(self)
+    }
 }
 
 /// The `--format json` envelope's JSON Schema, derived from [`Envelope`] itself — never a
