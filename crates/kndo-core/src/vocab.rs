@@ -188,6 +188,8 @@ impl SymbolKind {
     Clone,
     Copy,
     PartialEq,
+    PartialOrd,
+    Ord,
     Eq,
     Hash,
     serde::Serialize,
@@ -226,6 +228,8 @@ pub enum DependencyScope {
     Clone,
     Copy,
     PartialEq,
+    PartialOrd,
+    Ord,
     Eq,
     Hash,
     serde::Serialize,
@@ -270,7 +274,17 @@ pub enum Confidence {
 }
 
 #[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize,
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    PartialOrd,
+    Ord,
+    Eq,
+    Hash,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
 )]
 pub enum NodeRef {
     File(FileId),
@@ -280,7 +294,18 @@ pub enum NodeRef {
 /// How per-edge confidence combines into a node's `(color, confidence)` — including
 /// `Wildcard`'s plausible-target-set expansion — is the tiered algorithm normatively defined
 /// in RFC 0005 §1, not left to each analysis to reinvent.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    PartialOrd,
+    Ord,
+    Eq,
+    Hash,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+)]
 pub enum EdgeKind {
     /// May cross `Package` boundaries (RFC 0011 §4).
     ImportsFile {
@@ -318,13 +343,35 @@ pub enum EdgeKind {
 
 /// Identity of the component whose facts produced an edge/annotation — for attribution in
 /// output (`"sources": ["adapter:js-ts"]`).
-#[derive(Debug, Clone, PartialEq, Eq, Hash, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    PartialOrd,
+    Ord,
+    Eq,
+    Hash,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+)]
 pub enum Provenance {
     Adapter(#[rkyv(with = crate::rkyv_support::SmolStrAsString)] SmolStr),
     Plugin(#[rkyv(with = crate::rkyv_support::SmolStrAsString)] SmolStr),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    PartialOrd,
+    Ord,
+    Eq,
+    Hash,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+)]
 pub struct Edge {
     pub kind: EdgeKind,
     pub confidence: Confidence,

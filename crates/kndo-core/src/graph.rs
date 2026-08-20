@@ -1076,14 +1076,28 @@ pub fn assemble_from_source(
     // './b'`): a barrel's re-exported bindings become resolvable as *its own* exports too, not
     // merely usable inside it (js-ts.md §5: "Barrel files… resolved through, transparently").
     // Must run for every file before phase 3b resolves any file's import bindings — the same
-    // forward-reference reasoning as the 3a/3b split, one level deeper: a barrel can be
-    // imported before or after this loop reaches the barrel's own re-export statement. Scoped
-    // to one hop: a barrel re-exporting from another barrel only resolves correctly when
-    // file-discovery order happens to process the deeper barrel first in this same pass — true
-    // multi-hop chain resolution is a future increment, not attempted here.
+    // forward-reference reasoning as the 3a/3b split, one level deeper.
+    //
+    // Resolved to a **fixpoint** (RFC 0013 §3b): rounds over every unresolved re-export
+    // binding in (file, import, binding) order until a round makes no progress. The result is
+    // the least fixpoint — order-independent, so barrels chaining through other barrels
+    // resolve regardless of discovery order (the multi-hop increment js-ts.md promised), and
+    // a re-export cycle simply never resolves (no progress ⇒ termination). Collision rule,
+    // deliberate: a name already present in a file's table — its own declaration, or an
+    // earlier-in-order alias — wins over a later alias (`or_insert` semantics; the previous
+    // single-pass code let a re-export stomp a same-named own declaration, which was an
+    // artifact, not a design).
+    struct PendingReexport {
+        source_file: usize,
+        target: FileId,
+        exported_name: SmolStr,
+        local: SmolStr,
+        span: crate::adapter::Span,
+        adapter_index: usize,
+    }
+    let mut pending: Vec<PendingReexport> = Vec::new();
     for (i, slot) in claimed_per_file.iter().enumerate() {
         let Some(claimed) = slot else { continue };
-        let file_id = FileId(i as u32);
         let adapter = &adapters[claimed.adapter_index];
         for imp in claimed.facts.imports.iter().filter(|imp| imp.reexported) {
             let spec = ImportSpec {
@@ -1094,41 +1108,69 @@ pub fn assemble_from_source(
             // relative (`./b`) or a workspace-member name (`@org/ui`) — the aliasing works
             // off the concrete target file either way. (The member's ImportsDependency side
             // is phase 3b's job when it re-resolves this same import.)
-            let target_path = match adapter.resolve(&spec, &ctx) {
+            let target = match adapter.resolve(&spec, &ctx) {
                 Resolution::File(path, _) => path,
                 Resolution::WorkspaceMember { target, .. } => target,
                 _ => continue,
             };
-            let Some(&target) = file_index.get(&target_path) else {
+            let Some(&target) = file_index.get(&target) else {
                 continue;
             };
             for binding in &imp.bindings {
-                let exported_name = binding
-                    .imported
-                    .clone()
-                    .unwrap_or_else(|| SmolStr::new("default"));
-                let Some(&original_symbol) =
-                    symbol_by_name_per_file[target.0 as usize].get(&exported_name)
-                else {
-                    continue;
-                };
-                symbol_by_name_per_file[i].insert(binding.local.clone(), original_symbol);
+                pending.push(PendingReexport {
+                    source_file: i,
+                    target,
+                    exported_name: binding
+                        .imported
+                        .clone()
+                        .unwrap_or_else(|| SmolStr::new("default")),
+                    local: binding.local.clone(),
+                    span: imp.span,
+                    adapter_index: claimed.adapter_index,
+                });
+            }
+        }
+    }
+    let mut resolved_reexport: Vec<bool> = vec![false; pending.len()];
+    loop {
+        let mut progress = false;
+        for (b, reexport) in pending.iter().enumerate() {
+            if resolved_reexport[b] {
+                continue;
+            }
+            let Some(&original_symbol) =
+                symbol_by_name_per_file[reexport.target.0 as usize].get(&reexport.exported_name)
+            else {
+                continue; // maybe next round, once the target's own aliases resolve
+            };
+            resolved_reexport[b] = true;
+            progress = true;
+            let i = reexport.source_file;
+            if let std::collections::hash_map::Entry::Vacant(slot) =
+                symbol_by_name_per_file[i].entry(reexport.local.clone())
+            {
+                slot.insert(original_symbol);
                 // The barrel itself is a manifest-declared production root, so everything it
                 // re-exports is part of the package's public API too (RFC 0011 §5) — same
                 // promotion phase 3a already applies to the barrel's *own* declarations,
-                // extended through one level of re-export indirection.
-                if let Some(&confidence) = library_root_files.get(&file_id) {
+                // extended through re-export indirection.
+                if let Some(&confidence) = library_root_files.get(&FileId(i as u32)) {
                     edges.push(Edge {
                         kind: EdgeKind::Root {
                             kind: crate::vocab::RootKind::Production,
                             target: NodeRef::Symbol(original_symbol),
                         },
                         confidence,
-                        source: Provenance::Adapter(adapter.descriptor().id.clone()),
-                        span: Some(imp.span),
+                        source: Provenance::Adapter(
+                            adapters[reexport.adapter_index].descriptor().id.clone(),
+                        ),
+                        span: Some(reexport.span),
                     });
                 }
             }
+        }
+        if !progress {
+            break;
         }
     }
 
@@ -1514,6 +1556,14 @@ pub fn assemble_from_source(
         diagnostics.extend(resolved.diagnostics);
         suppressions.extend(resolved.suppressions);
     }
+
+    // Canonical order (RFC 0013 §3a): edge and diagnostic order is *data*, not construction
+    // history. Two semantically identical graphs must be identical vectors — the property the
+    // patched ≡ full-rebuild gate compares, and the property that keeps tie-breaks (e.g.
+    // cyclic's strongest-edge-per-pair evidence pick) independent of which assembly path or
+    // parallel schedule produced the graph. One total comparator, derived field order.
+    edges.sort_unstable();
+    diagnostics.sort_unstable();
 
     let graph = ProjectGraph {
         files,
@@ -2658,6 +2708,83 @@ mod tests {
                 to: a_symbol,
                 kind: crate::vocab::RefKind::Read,
             }));
+    }
+
+    #[test]
+    fn barrel_chains_resolve_regardless_of_discovery_order() {
+        // RFC 0013 §3b's fixpoint: `outer` re-exports from `zeta`, which re-exports from the
+        // real source — and `outer.mock` sorts BEFORE `zeta.mock`, exactly the discovery
+        // order the old single-pass one-hop resolution could not handle (outer's lookup ran
+        // before zeta's alias existed). The consumer must still reach the one real symbol.
+        let dir = project(
+            "barrel-chain-order",
+            &[
+                ("aaa_source.mock", "decl deep"),
+                ("outer.mock", "reexport ./zeta.mock deep"),
+                ("zeta.mock", "reexport ./aaa_source.mock deep"),
+                ("consumer.mock", "import ./outer.mock deep\nref deep"),
+            ],
+        );
+        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        assert_eq!(
+            graph
+                .symbols
+                .iter()
+                .filter(|s| s.name.as_str() == "deep")
+                .count(),
+            1
+        );
+        let deep = SymbolId(
+            graph
+                .symbols
+                .iter()
+                .position(|s| s.name.as_str() == "deep")
+                .unwrap() as u32,
+        );
+        let consumer = graph
+            .file_id(&ProjectPath(SmolStr::new("consumer.mock")))
+            .unwrap();
+        assert!(
+            graph.edges.iter().any(|e| e.kind
+                == EdgeKind::References {
+                    from: NodeRef::File(consumer),
+                    to: deep,
+                    kind: crate::vocab::RefKind::Read,
+                }),
+            "the consumer's reference must resolve through the two-hop chain"
+        );
+    }
+
+    #[test]
+    fn reexport_cycles_terminate_and_resolve_to_nothing() {
+        // RFC 0013 §3b: a cycle of re-exports makes no progress and must simply terminate —
+        // no alias ever materializes, nothing hangs, nothing panics.
+        let dir = project(
+            "barrel-cycle",
+            &[
+                ("ping.mock", "reexport ./pong.mock ghost"),
+                ("pong.mock", "reexport ./ping.mock ghost"),
+                ("consumer.mock", "import ./ping.mock ghost\nref ghost"),
+            ],
+        );
+        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        assert!(graph.symbols.iter().all(|s| s.name.as_str() != "ghost"));
+    }
+
+    #[test]
+    fn assembled_edge_and_diagnostic_order_is_canonical() {
+        // RFC 0013 §3a: order is data. Assembling the same tree twice — or any two
+        // construction paths over identical inputs — must yield identical vectors, which is
+        // what the sort guarantees; spot-check that the vector is actually sorted.
+        let dir = project(
+            "canonical-order",
+            &[
+                ("a.mock", "decl x\nref y"),
+                ("b.mock", "decl y\nimport ./a.mock x\nref x"),
+            ],
+        );
+        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        assert!(graph.edges.windows(2).all(|w| w[0] <= w[1]));
     }
 
     #[test]
