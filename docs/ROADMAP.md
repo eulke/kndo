@@ -252,6 +252,19 @@ before-side rollup) and `--verbose` renders the block with cache state. Timings 
 the JSON envelope by design: wall times are run metadata, and the §4 determinism matrix
 compares envelopes byte-for-byte.
 
+E0b landed — `cargo xtask bench`: deterministic generated fixtures at 1k/5k/50k (import
+chains from the manifest root, one dead file per decade, branchy function bodies, a clone
+family every 500 files, git-initialized so `--staged` runs the real diff path), the five
+RFC 0008 §7 scenarios measured end-to-end (wall time of the release binary, min-of-N),
+baseline recorded in `docs/perf-baseline.json`, >10%-and->10ms regression gate behind
+`--gate`. First full reading (this machine): 1k warm-noop 20 ms / 1-file 37 ms; 5k
+warm-noop 86 ms / 1-file 217 ms; **50k warm-noop 903 ms / 1-file 1 962 ms** — at 50k even
+the no-change case is over the 500 ms mark and the one-file change is 4× over, which
+settles E3's question in advance: the all-or-nothing rebuild does not scale to 50k, and the
+gap between no-op and 1-file (~1 s of pure re-resolve/re-link/persist) is exactly what
+RFC 0004 §4's patch algorithm removes. E1/E2 must first pull the no-op cost down; then the
+incremental lands.
+
 **Exit:** the RFC 0008 §7 scenarios run as a suite against a recorded baseline with a >10%
 regression gate; bench5k warm no-op and one-file change at or under their M2 marks (~40 ms /
 ~90 ms); the 50k fixture answers the incremental question with data.

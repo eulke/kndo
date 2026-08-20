@@ -1,0 +1,21 @@
+{
+  "comment": "RFC 0008 §7 benchmark baseline — end-to-end wall ms, min-of-N, release build. Machine-specific: re-record with `cargo xtask bench --update-baseline` when the measuring machine changes; the gate compares same-machine runs only.",
+  "generator_version": 1,
+  "scenarios": {
+    "1k/cold-full": 260.8,
+    "1k/staged": 46.4,
+    "1k/warm-1-file": 37.0,
+    "1k/warm-100-file": 61.4,
+    "1k/warm-noop": 19.6,
+    "50k/cold-full": 12716.5,
+    "50k/staged": 1533.3,
+    "50k/warm-1-file": 1961.6,
+    "50k/warm-100-file": 1924.6,
+    "50k/warm-noop": 903.3,
+    "5k/cold-full": 1033.0,
+    "5k/staged": 140.9,
+    "5k/warm-1-file": 217.3,
+    "5k/warm-100-file": 238.6,
+    "5k/warm-noop": 86.2
+  }
+}

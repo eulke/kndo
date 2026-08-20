@@ -19,6 +19,8 @@
 
 use std::process::{Command, ExitCode};
 
+mod bench;
+
 /// Everything language-specific about stdlib generation, as data.
 struct StdlibSource {
     /// Adapter language id — also the CLI argument and the `language:` header value.
@@ -62,6 +64,13 @@ fn main() -> ExitCode {
     match args.first().map(String::as_str) {
         Some("gen-stdlib") => gen_stdlib(args.get(1).map(String::as_str)),
         Some("gen-schema") => gen_schema(),
+        Some("bench") => match bench::run(&args[1..]) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => {
+                eprintln!("xtask: bench failed: {e}");
+                ExitCode::FAILURE
+            }
+        },
         _ => {
             eprintln!("usage: cargo xtask gen-stdlib <language>|--all");
             eprintln!(
@@ -73,6 +82,7 @@ fn main() -> ExitCode {
                     .join(", ")
             );
             eprintln!("usage: cargo xtask gen-schema");
+            eprintln!("usage: cargo xtask bench [--sizes 1k,5k,50k] [--update-baseline] [--gate]");
             ExitCode::from(2)
         }
     }
