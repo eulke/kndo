@@ -556,11 +556,21 @@ pub fn assemble_from_source(
         let file_id = FileId(i as u32);
         file_index.insert(df.path.clone(), file_id);
         let (language, class, unit) = match &claimed_per_file[i] {
-            Some(c) => (
-                Some(c.claim.language.clone()),
-                Some(c.claim.class),
-                c.facts.unit.clone(),
-            ),
+            Some(c) => {
+                // Content-derived origin override (RFC 0012 §7): extraction saw the bytes,
+                // claim only saw the path — the content wins on the origin axis. Applied here,
+                // before role-derived roots (phase 2.6) and every analysis, so all origin
+                // exemptions see the corrected value. Role is never content-corrected.
+                let mut class = c.claim.class;
+                if let Some(origin) = c.facts.detected_origin {
+                    class.origin = origin;
+                }
+                (
+                    Some(c.claim.language.clone()),
+                    Some(class),
+                    c.facts.unit.clone(),
+                )
+            }
             None => (None, None, None),
         };
         files.push(FileNode {
@@ -1352,11 +1362,15 @@ mod tests {
             //   dynamic-narrowed <dir>      -> a DynamicUse narrowed to that project dir
             //   suppress <category>         -> a Declaration-scope RawSuppression
             //   unit <key>                  -> FileFacts::unit (package-scoped resolution)
+            //   detected-generated          -> FileFacts::detected_origin = Generated (§7)
             let text = std::str::from_utf8(file.content).unwrap_or("");
             let mut facts = FileFacts::default();
             for line in text.lines() {
                 if let Some(key) = line.strip_prefix("unit ") {
                     facts.unit = Some(SmolStr::new(key));
+                } else if line == "detected-generated" {
+                    // Content-derived origin override (RFC 0012 §7).
+                    facts.detected_origin = Some(FileOrigin::Generated);
                 } else if let Some(name) = line.strip_prefix("decl ") {
                     facts.declarations.push(Declaration {
                         name: SmolStr::new(name),
@@ -1856,6 +1870,22 @@ mod tests {
         let edges = reference_edges_to(&graph, "helper");
         assert_eq!(edges.len(), 1);
         assert_eq!(edges[0].confidence, Confidence::Probable);
+    }
+
+    // -------------------------------------------------- detected_origin (RFC 0012 §7)
+
+    #[test]
+    fn detected_origin_overrides_the_claim_time_origin_on_the_file_node() {
+        // Claim classifies by path (Authored here); extraction saw a generated banner — the
+        // FileNode must carry the corrected origin so every analysis exemption sees it.
+        let dir = project(
+            "detected-origin",
+            &[("a.mock", "detected-generated\ndecl dead")],
+        );
+        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let class = graph.files[0].class.expect("claimed");
+        assert_eq!(class.origin, FileOrigin::Generated);
+        assert_eq!(class.role, FileRole::Production, "role stays claim-time");
     }
 
     #[test]

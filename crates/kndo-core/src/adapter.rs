@@ -414,6 +414,15 @@ pub struct FileFacts {
     /// safely-wrong. The adapter computes the key (for Go: the file's directory, from its own
     /// path — no extra input needed); the core only groups by it, staying language-blind.
     pub unit: Option<SmolStr>,
+    /// Content-derived correction of the claim-time origin axis (RFC 0012 §7): extraction may
+    /// report what the *content* proves about origin — a `// Code generated … DO NOT EDIT.`
+    /// banner, an `@generated` marker — which claim (path-only, by design fast and name-based)
+    /// cannot see. Assembly applies the override when building the `FileNode`, before any
+    /// role-derived roots, so every origin exemption (`unused`, `test-only`, `untested`,
+    /// `internal-only`, `private-type-leak` all exempt `Generated`) sees the corrected value.
+    /// Role stays claim-time — no use case justifies content-derived roles. `None` = the
+    /// claim-time origin stands. Rides the facts cache like every other content-derived fact.
+    pub detected_origin: Option<crate::vocab::FileOrigin>,
 }
 
 // ---------------------------------------------------------------- manifests (RFC 0011)

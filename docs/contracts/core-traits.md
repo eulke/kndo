@@ -211,6 +211,20 @@ pub struct FileFacts {
     pub diagnostics:  Vec<Diagnostic>,
     pub unit:         Option<SmolStr>,      // reference-resolution scope beyond "this file" —
                                              // see below; `None` for file-scoped languages
+    pub detected_origin: Option<FileOrigin>, // content-derived correction of the claim-time
+                                             // origin axis (RFC 0012 §7): a generated banner
+                                             // (`// Code generated … DO NOT EDIT.`,
+                                             // `@generated`) is a fact about the CONTENT,
+                                             // which claim (path-only, fast by design) can't
+                                             // see. Assembly applies it to the FileNode
+                                             // before role roots and every analysis, so all
+                                             // Generated/Vendored exemptions see the
+                                             // corrected value. Role is never content-
+                                             // corrected. None = claim-time origin stands.
+                                             // Toolkit `ContentMarkers` scans a bounded
+                                             // first-N-lines window for comment-marker
+                                             // languages; adapters with structured signals
+                                             // (Java @Generated) set it from their own AST.
 }
 ```
 

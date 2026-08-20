@@ -88,7 +88,11 @@ both languages, and §6's ladder-as-data: adapters declare `(scope, label)` visi
 assembly carries them onto the graph, and three consumers read them — `internal-only`'s
 tightest-sufficient rung (closing go.md's documented same-package under-reporting, fixture
 `internal-only-unit/`), `private-type-leak`'s scope comparison, and the member fallback's
-visibility-scoped candidacy. Remaining RFC 0012 stages (§§7–10: detected_origin,
+visibility-scoped candidacy. §7 (`detected_origin`) closed go.md's other documented trait
+limitation: extraction now corrects the origin axis from content (Go's `DO NOT EDIT.` banner,
+JS `@generated` markers, via the toolkit's bounded `ContentMarkers` scanner), so generated
+files are exempt from findings even when their paths look authored — fixture `generated-file/`
+in both languages, negative-control dogfooded. Remaining RFC 0012 stages (§§9–10:
 qualified-reference resolution, go.work) are the current in-order work queue.
 
 ## M4 — Duplication, CRAP, health
