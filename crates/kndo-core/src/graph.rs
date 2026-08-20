@@ -136,6 +136,7 @@ pub(crate) struct GraphSnapshotParts {
     pub edges: Vec<Edge>,
     pub suppressions: Vec<(FileId, crate::adapter::RawSuppression)>,
     pub visibility_ladders: Vec<(SmolStr, Vec<crate::adapter::VisibilityRung>)>,
+    pub cycle_policies: Vec<(SmolStr, crate::adapter::CyclePolicy)>,
 }
 
 /// The assembled language-neutral graph (contracts §1). Read-only once built; incremental
@@ -164,6 +165,9 @@ pub struct ProjectGraph {
     /// symbol's `VisibilityLevel` index into a checkable [`crate::adapter::VisibilityScope`]
     /// plus the language's own remediation label. Sorted by language for determinism.
     pub visibility_ladders: Vec<(SmolStr, Vec<crate::adapter::VisibilityRung>)>,
+    /// Each claimed language's cycle tolerance (RFC 0005 §8), collected exactly like the
+    /// ladders — adapter-declared data, carried here so `cyclic` stays a pure graph function.
+    pub cycle_policies: Vec<(SmolStr, crate::adapter::CyclePolicy)>,
     file_index: HashMap<ProjectPath, FileId>,
 }
 
@@ -180,6 +184,15 @@ impl ProjectGraph {
             .iter()
             .find(|(l, _)| l == language)
             .map(|(_, rungs)| rungs.as_slice())
+    }
+
+    /// The cycle policy for a claim language (RFC 0005 §8) — `None` for unclaimed files and
+    /// pre-policy snapshots (the analysis then stays silent for that participant).
+    pub fn cycle_policy_for(&self, language: &str) -> Option<crate::adapter::CyclePolicy> {
+        self.cycle_policies
+            .iter()
+            .find(|(l, _)| l == language)
+            .map(|(_, p)| *p)
     }
 
     /// The declared package name for a `PackageId`, when the owning manifest declared one
@@ -212,6 +225,7 @@ impl ProjectGraph {
             edges: parts.edges,
             suppressions: parts.suppressions,
             visibility_ladders: parts.visibility_ladders,
+            cycle_policies: parts.cycle_policies,
             file_index,
         }
     }
@@ -263,8 +277,26 @@ impl ProjectGraph {
                     },
                 ],
             )],
+            // Hazard at both levels: the shape most core tests want to exercise; override
+            // with `with_cycle_policies` where a different tolerance is the point.
+            cycle_policies: vec![(
+                SmolStr::new("mock"),
+                crate::adapter::CyclePolicy {
+                    file_cycles: crate::adapter::CycleTolerance::Hazard,
+                    package_cycles: crate::adapter::CycleTolerance::Hazard,
+                },
+            )],
             file_index,
         }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_cycle_policies(
+        mut self,
+        policies: Vec<(SmolStr, crate::adapter::CyclePolicy)>,
+    ) -> Self {
+        self.cycle_policies = policies;
+        self
     }
 
     #[cfg(test)]
@@ -345,7 +377,7 @@ pub(crate) fn package_owns(manifest_dir: &str, file_dir: &str) -> bool {
 /// an assembly-algorithm change that could produce a different graph from the same facts. Feeds
 /// [`compute_graph_key`] (RFC 0004 §3's "core graph-schema version"); a bump here invalidates
 /// every project's cached `graph.bin` on the next run, same as any other key-input change.
-pub const GRAPH_SCHEMA_VERSION: u32 = 6; // 6: PackageNode surface fields (RFC 0011 §4 deep-import); 5: ladders + FileNode.unit (RFC 0012 §6); 4: RefKind + signature_span (§5); 3: within (§4); 2: member_of (§3)
+pub const GRAPH_SCHEMA_VERSION: u32 = 7; // 7: cycle policies (RFC 0005 §8); 6: PackageNode surface (RFC 0011 §4); 5: ladders + FileNode.unit (RFC 0012 §6); 4: RefKind + signature_span (§5); 3: within (§4); 2: member_of (§3)
 
 /// The graph snapshot's cache key (RFC 0004 §3, `cache.rs`'s `graph.bin`): a single digest
 /// folding in the *whole* discovered file set (every path + content hash — this already
@@ -746,10 +778,16 @@ pub fn assemble_from_source(
     // scopes its candidates by ladder rung.
     let mut ladders: std::collections::BTreeMap<SmolStr, Vec<crate::adapter::VisibilityRung>> =
         std::collections::BTreeMap::new();
+    let mut cycle_policies: std::collections::BTreeMap<SmolStr, crate::adapter::CyclePolicy> =
+        std::collections::BTreeMap::new();
     for slot in claimed_per_file.iter().flatten() {
+        let descriptor = adapters[slot.adapter_index].descriptor();
         ladders
             .entry(slot.claim.language.clone())
-            .or_insert_with(|| adapters[slot.adapter_index].descriptor().visibility_ladder);
+            .or_insert(descriptor.visibility_ladder);
+        cycle_policies
+            .entry(slot.claim.language.clone())
+            .or_insert(descriptor.cycle_policy);
     }
 
     // Whether a declaration in `decl_file` at `scope` is visible to a reference site in
@@ -1364,6 +1402,7 @@ pub fn assemble_from_source(
         edges,
         suppressions,
         visibility_ladders: ladders.into_iter().collect(),
+        cycle_policies: cycle_policies.into_iter().collect(),
         file_index,
     };
     if let Some(cache) = cache {
@@ -1405,6 +1444,10 @@ mod tests {
                         label: SmolStr::new("exported"),
                     },
                 ],
+                cycle_policy: crate::adapter::CyclePolicy {
+                    file_cycles: crate::adapter::CycleTolerance::Hazard,
+                    package_cycles: crate::adapter::CycleTolerance::Hazard,
+                },
             }
         }
 

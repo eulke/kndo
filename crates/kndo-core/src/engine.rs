@@ -246,11 +246,27 @@ pub enum DeltaOrigin {
     Derived,
 }
 
+/// One entry of a finding's evidence chain (output-schema §2's `related` — what `kndo
+/// explain` renders): a concrete location plus its role in the story. First populated by
+/// `cyclic` (RFC 0005 §8: "a shortest cycle path in `related` as the evidence chain"); other
+/// analyses adopt it as their evidence models land — never fabricated as a placeholder.
+#[derive(Debug, Clone, serde::Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct RelatedLocation {
+    /// What this location contributes: "cycle-hop", "cause", …
+    pub role: String,
+    pub path: crate::adapter::ProjectPath,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub range: Option<crate::adapter::Span>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+}
+
 /// Typed form of the output-schema finding (grows field-by-field with the analyses in M1;
 /// every field lands in the JSON schema first — that document is normative). Not yet present:
-/// `related` (evidence chain), `evidence` (category-specific block), `sources`, `remediation`,
-/// `rolled_up` — each needs infrastructure this milestone doesn't have (an evidence model,
-/// computed remediation text) and is omitted rather than fabricated with a placeholder.
+/// `evidence` (category-specific block), `sources`, `remediation`, `rolled_up` — each needs
+/// infrastructure this milestone doesn't have (computed remediation text) and is omitted
+/// rather than fabricated with a placeholder.
 #[derive(Debug, Clone, serde::Serialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Finding {
@@ -262,6 +278,11 @@ pub struct Finding {
     pub confidence: Confidence,
     pub message: String,
     pub location: Location,
+    /// Evidence chain (output-schema §2) — empty for analyses that haven't adopted it yet.
+    /// `default` isn't for deserialization (Finding is serialize-only) — it tells the schema
+    /// generator the field is optional, matching the skip-when-empty serialization.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub related: Vec<RelatedLocation>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub delta: Option<Delta>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -974,6 +995,10 @@ mod tests {
                         label: SmolStr::new("exported"),
                     },
                 ],
+                cycle_policy: crate::adapter::CyclePolicy {
+                    file_cycles: crate::adapter::CycleTolerance::Hazard,
+                    package_cycles: crate::adapter::CycleTolerance::Hazard,
+                },
             }
         }
         fn claim(&self, path: &ProjectPath) -> Option<crate::adapter::FileClaim> {
@@ -1031,6 +1056,10 @@ mod tests {
                         label: SmolStr::new("exported"),
                     },
                 ],
+                cycle_policy: crate::adapter::CyclePolicy {
+                    file_cycles: crate::adapter::CycleTolerance::Hazard,
+                    package_cycles: crate::adapter::CycleTolerance::Hazard,
+                },
             }
         }
         fn claim(&self, path: &ProjectPath) -> Option<crate::adapter::FileClaim> {
@@ -1322,6 +1351,7 @@ mod tests {
             confidence: Confidence::Certain,
             message: "example".to_string(),
             location: Location::default(),
+            related: Vec::new(),
             delta: None,
             delta_origin: None,
         };

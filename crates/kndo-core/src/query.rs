@@ -1885,6 +1885,7 @@ fn simulate_deletion(
         edges: kept_edges,
         suppressions: graph.suppressions.clone(),
         visibility_ladders: graph.visibility_ladders.clone(),
+        cycle_policies: graph.cycle_policies.clone(),
     });
     let after = crate::analysis::reachability::compute(&sim);
 

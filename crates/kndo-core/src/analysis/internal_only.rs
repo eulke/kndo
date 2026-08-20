@@ -180,6 +180,7 @@ pub fn find_internal_only(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<
                 symbol: Some(qualified.clone()),
                 package: graph.package_name(file.package).map(str::to_string),
             },
+            related: Vec::new(),
             delta: None,
             delta_origin: None,
         });

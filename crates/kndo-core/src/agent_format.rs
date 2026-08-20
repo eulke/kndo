@@ -5,12 +5,12 @@
 //!
 //! Diff modes render `new:`/`fixed:` blocks instead of `findings:` (output-schema §9's own
 //! example), with one numbering sequence running across both. No `budget:` line: delta budgets
-//! depend on health scoring, which doesn't exist yet (M4). No `cause:`/`fix:` evidence lines
-//! under a finding, in any mode: the format "can never carry information absent from the JSON"
-//! (output-schema §9), and `RunResult` doesn't carry `related`/`remediation` data yet (deferred,
-//! see `engine::Finding`'s doc) — unlike the human renderer, this also means diff mode's NEW
-//! findings aren't visually split by `delta_origin` here; output-schema §9's own example shows
-//! one flat `new:` block, `delta_origin` traveling on each line's JSON-equivalent data only.
+//! depend on health scoring, which doesn't exist yet (M4). Findings carrying a `related`
+//! evidence chain (first populated by `cyclic`) render it as indented `evidence:` lines — the
+//! format "can never carry information absent from the JSON" (output-schema §9), and `related`
+//! now IS in the JSON. `remediation` still isn't — no `fix:` lines. Diff mode's NEW findings
+//! aren't visually split by `delta_origin` here; output-schema §9's own example shows one flat
+//! `new:` block, `delta_origin` traveling on each line's JSON-equivalent data only.
 //! `next:` names only commands that work today (`--format json`). `kndo explain` still doesn't
 //! exist (deferred — see `engine::Finding`'s doc on `related`/`remediation`), so it's not offered
 //! as if it did; the navigation verbs (`kndo used-by`, …) now do, via [`render_query`].
@@ -55,6 +55,7 @@ pub fn render(result: &RunResult) -> String {
                 n += 1;
                 out.push_str(&finding_line(n, f));
                 out.push('\n');
+                push_evidence(&mut out, f);
             }
         }
     }
@@ -91,6 +92,7 @@ fn render_diff(result: &RunResult) -> String {
                 n += 1;
                 out.push_str(&finding_line(n, f));
                 out.push('\n');
+                push_evidence(&mut out, f);
             }
         }
     }
@@ -104,6 +106,7 @@ fn render_diff(result: &RunResult) -> String {
                 n += 1;
                 out.push_str(&finding_line(n, f));
                 out.push('\n');
+                push_evidence(&mut out, f);
             }
         }
     }
@@ -215,6 +218,21 @@ fn finding_line(n: usize, f: &Finding) -> String {
         "{n}. [{}] {} {} {path} {name}{confidence}",
         f.id, f.category, f.subject_kind
     )
+}
+
+/// `related` evidence, one indented line per entry — same information as the JSON's
+/// `related[]`, nothing more (output-schema §9's carry rule).
+fn push_evidence(out: &mut String, f: &Finding) {
+    for r in &f.related {
+        let location = match r.range {
+            Some(range) => format!("{}:{}", r.path.0, range.start.0),
+            None => r.path.0.to_string(),
+        };
+        match &r.note {
+            Some(note) => out.push_str(&format!("   evidence: {location} {note}\n")),
+            None => out.push_str(&format!("   evidence: {location}\n")),
+        }
+    }
 }
 
 fn confidence_str(c: Confidence) -> &'static str {
@@ -460,6 +478,7 @@ mod tests {
                 symbol: Some("thing".to_string()),
                 package: None,
             },
+            related: Vec::new(),
             delta: None,
             delta_origin: None,
         }

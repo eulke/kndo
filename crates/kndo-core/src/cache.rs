@@ -104,6 +104,14 @@ struct LadderSnap {
     rungs: Vec<crate::adapter::VisibilityRung>,
 }
 
+/// Same wrapper shape again, for `ProjectGraph::cycle_policies` (RFC 0005 §8).
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+struct CyclePolicySnap {
+    #[rkyv(with = crate::rkyv_support::SmolStrAsString)]
+    language: SmolStr,
+    policy: crate::adapter::CyclePolicy,
+}
+
 /// The archived payload (everything after the header) — deliberately a standalone type rather
 /// than deriving `Archive` on [`ProjectGraph`] itself: `ProjectGraph::file_index` is a derived
 /// index (rebuilt on load, RFC 0004 §2 — no reason to pay to persist it), and `diagnostics`
@@ -124,6 +132,7 @@ struct GraphSnapshot {
     /// rkyv archives same-arity tuples of `Archive` types natively.
     suppressions: Vec<(FileId, RawSuppression)>,
     visibility_ladders: Vec<LadderSnap>,
+    cycle_policies: Vec<CyclePolicySnap>,
     diagnostics: Vec<Diagnostic>,
 }
 
@@ -515,6 +524,11 @@ impl ProjectCache {
                 .into_iter()
                 .map(|l| (l.language, l.rungs))
                 .collect(),
+            cycle_policies: snapshot
+                .cycle_policies
+                .into_iter()
+                .map(|p| (p.language, p.policy))
+                .collect(),
         });
         self.graph_hits.fetch_add(1, Ordering::Relaxed);
         Some((graph, snapshot.diagnostics))
@@ -551,6 +565,14 @@ impl ProjectCache {
                 .map(|(language, rungs)| LadderSnap {
                     language: language.clone(),
                     rungs: rungs.clone(),
+                })
+                .collect(),
+            cycle_policies: graph
+                .cycle_policies
+                .iter()
+                .map(|(language, policy)| CyclePolicySnap {
+                    language: language.clone(),
+                    policy: *policy,
                 })
                 .collect(),
             diagnostics: diagnostics.to_vec(),

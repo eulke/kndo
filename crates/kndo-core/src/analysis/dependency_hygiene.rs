@@ -127,6 +127,7 @@ fn unused_finding(
             package_label(graph, dep.package)
         ),
         location: dependency_location(graph, dep),
+        related: Vec::new(),
         delta: None,
         delta_origin: None,
     }
@@ -156,6 +157,7 @@ fn test_only_finding(
             package_label(graph, dep.package)
         ),
         location: dependency_location(graph, dep),
+        related: Vec::new(),
         delta: None,
         delta_origin: None,
     }

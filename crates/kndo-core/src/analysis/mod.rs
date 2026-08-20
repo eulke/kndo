@@ -2,6 +2,7 @@
 //! consumes the graph plus whatever shared engines it needs (reachability, dup-detection, …)
 //! and produces [`crate::engine::Finding`]s — never source text, never I/O.
 
+pub mod cyclic;
 pub mod deep_import;
 pub mod dependency_hygiene;
 pub mod duplicate;
@@ -78,6 +79,7 @@ pub fn run_all(graph: &crate::graph::ProjectGraph) -> (Vec<Finding>, Vec<Diagnos
     findings.extend(internal_only::find_internal_only(graph, &reach));
     findings.extend(private_type_leak::find_private_type_leaks(graph));
     findings.extend(deep_import::find_deep_imports(graph));
+    findings.extend(cyclic::find_cycles(graph));
     let (untested_findings, untested_diagnostic) = untested::find_untested(graph, &reach);
     findings.extend(untested_findings);
     findings.sort_by(|a, b| a.id.cmp(&b.id));

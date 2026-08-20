@@ -122,6 +122,7 @@ fn find_untested_files(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<Fin
                 symbol: None,
                 package: graph.package_name(package).map(str::to_string),
             },
+            related: Vec::new(),
             delta: None,
             delta_origin: None,
         });
@@ -150,6 +151,7 @@ fn directory_finding(graph: &ProjectGraph, dir: &DirGroup<'_>, confidence: Confi
             symbol: None,
             package: graph.package_name(dir.package).map(str::to_string),
         },
+        related: Vec::new(),
         delta: None,
         delta_origin: None,
     }
@@ -188,6 +190,7 @@ fn find_untested_symbols(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<F
                 symbol: Some(qualified.clone()),
                 package: graph.package_name(file.package).map(str::to_string),
             },
+            related: Vec::new(),
             delta: None,
             delta_origin: None,
         });

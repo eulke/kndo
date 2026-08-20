@@ -228,6 +228,7 @@ mod tests {
                 symbol: None,
                 package: None,
             },
+            related: Vec::new(),
             delta: None,
             delta_origin: None,
         }

@@ -156,6 +156,7 @@ pub fn find_deep_imports(graph: &ProjectGraph) -> Vec<Finding> {
                 symbol: Some(provider_name.clone()),
                 package: graph.package_name(consumer).map(str::to_string),
             },
+            related: Vec::new(),
             delta: None,
             delta_origin: None,
         });

@@ -4,8 +4,9 @@
 //! (resolution). Manifests land next, against the conformance harness.
 
 use kndo_core::adapter::{
-    AdapterDescriptor, FileClaim, FileFacts, ImportSpec, LanguageAdapter, ManifestFacts,
-    ProjectPath, Resolution, ResolveCtx, SourceFile, VisibilityRung, VisibilityScope,
+    AdapterDescriptor, CyclePolicy, CycleTolerance, FileClaim, FileFacts, ImportSpec,
+    LanguageAdapter, ManifestFacts, ProjectPath, Resolution, ResolveCtx, SourceFile,
+    VisibilityRung, VisibilityScope,
 };
 use smol_str::SmolStr;
 
@@ -61,6 +62,13 @@ impl LanguageAdapter for JsTsAdapter {
                     label: SmolStr::new("package surface"),
                 },
             ],
+            // RFC 0005 §8: JS/TS treats cycles as hazards at both levels — file cycles are
+            // init-order bugs (TDZ crashes, partially-initialized modules), and workspace
+            // package cycles break publish ordering and standalone installs.
+            cycle_policy: CyclePolicy {
+                file_cycles: CycleTolerance::Hazard,
+                package_cycles: CycleTolerance::Hazard,
+            },
         }
     }
 

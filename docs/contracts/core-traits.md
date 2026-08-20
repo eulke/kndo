@@ -83,6 +83,12 @@ pub trait LanguageAdapter: Send + Sync {
     // ProjectGraph::visibility_ladders keyed by claim language; analyses are pure graph
     // functions and never touch adapters. Consumers: internal-only's tightest-sufficient
     // rung, private-type-leak's scope comparison, the member fallback's candidate scoping.
+    // cycle_policy (RFC 0005 §8): { file_cycles, package_cycles }, each a CycleTolerance —
+    // Hazard (cycles are ecosystem hazards → warning), Idiomatic (routine → info), or
+    // Impossible (the compiler forbids them → the level is skipped outright). Same
+    // data-on-the-descriptor pattern as the ladder, carried onto
+    // ProjectGraph::cycle_policies; a mixed-language cycle takes the most severe tolerance
+    // among its participants' languages.
 
     /// Claim & classify a path (fast; name-based, content peeking only when unavoidable).
     fn claim(&self, path: &ProjectPath) -> Option<FileClaim>;   // { language, class: FileClass }

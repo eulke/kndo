@@ -736,6 +736,7 @@ mod tests {
             confidence: kndo::vocab::Confidence::Certain,
             message: "example".to_string(),
             location: Default::default(),
+            related: Vec::new(),
             delta: None,
             delta_origin: None,
         }

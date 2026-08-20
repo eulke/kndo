@@ -10,8 +10,9 @@ mod parsing;
 mod resolution;
 
 use kndo_core::adapter::{
-    AdapterDescriptor, FileClaim, ImportSpec, LanguageAdapter, ManifestFacts, ProjectPath,
-    Resolution, ResolveCtx, SourceFile, VisibilityRung, VisibilityScope,
+    AdapterDescriptor, CyclePolicy, CycleTolerance, FileClaim, ImportSpec, LanguageAdapter,
+    ManifestFacts, ProjectPath, Resolution, ResolveCtx, SourceFile, VisibilityRung,
+    VisibilityScope,
 };
 use smol_str::SmolStr;
 
@@ -53,6 +54,13 @@ impl LanguageAdapter for GoAdapter {
                     label: SmolStr::new("exported"),
                 },
             ],
+            // RFC 0005 §8's own example of Impossible: the Go compiler forbids import cycles
+            // outright, at every level — a cycle in kndo's Go graph can only be a resolution
+            // artifact, so the analysis skips the language rather than accusing.
+            cycle_policy: CyclePolicy {
+                file_cycles: CycleTolerance::Impossible,
+                package_cycles: CycleTolerance::Impossible,
+            },
         }
     }
 

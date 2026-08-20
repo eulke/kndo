@@ -67,6 +67,7 @@ pub fn find_undeclared_dependencies(graph: &ProjectGraph) -> Vec<Finding> {
                 symbol: Some(name.to_string()),
                 package: graph.package_name(package).map(str::to_string),
             },
+            related: Vec::new(),
             delta: None,
             delta_origin: None,
         });

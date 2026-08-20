@@ -136,6 +136,18 @@ silence until then.
 `duplicate` (winnowing index, incremental), `cyclic` (SCCs with per-language tolerance),
 `crap` + lcov/JaCoCo ingestion plugins (ADR 0005), `health` score + `kndo health`, SARIF output.
 
+**Progress so far:** `cyclic` landed first (RFC 0005 §8, all of it): iterative Tarjan over the
+file-import graph and the derived real-package graph, one finding per cycle anchored at its
+most-referenced node, tolerance as adapter-declared data (`CyclePolicy` on the descriptor,
+carried onto the graph like the ladders — JS/TS Hazard at both levels, Go Impossible so the
+compiler-forbidden case is skipped, mock Hazard), cross-package file cycles rolled up into the
+package-level finding, and the shortest cycle path as the finding's evidence chain — which
+made `related` real: `Finding.related` now exists end-to-end (JSON schema regenerated, human
+renderer shows `└` evidence lines, agent format `evidence:` lines), first populated by
+`cyclic`, adoptable by every other analysis as their evidence models land. The
+`npm-workspace-monorepo` fixture's expected set gained the package-cycle finding its own
+deliberate phantom-dependency loop always implied.
+
 **Exit:** duplication findings stable under reformatting (Type-2); CRAP hotlist matches manual
 audit on a real repo; health deltas shown in diff modes.
 

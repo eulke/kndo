@@ -161,7 +161,7 @@
       ]
     },
     "Finding": {
-      "description": "Typed form of the output-schema finding (grows field-by-field with the analyses in M1;\nevery field lands in the JSON schema first — that document is normative). Not yet present:\n`related` (evidence chain), `evidence` (category-specific block), `sources`, `remediation`,\n`rolled_up` — each needs infrastructure this milestone doesn't have (an evidence model,\ncomputed remediation text) and is omitted rather than fabricated with a placeholder.",
+      "description": "Typed form of the output-schema finding (grows field-by-field with the analyses in M1;\nevery field lands in the JSON schema first — that document is normative). Not yet present:\n`evidence` (category-specific block), `sources`, `remediation`, `rolled_up` — each needs\ninfrastructure this milestone doesn't have (computed remediation text) and is omitted\nrather than fabricated with a placeholder.",
       "type": "object",
       "properties": {
         "category": {
@@ -201,6 +201,13 @@
         },
         "message": {
           "type": "string"
+        },
+        "related": {
+          "description": "Evidence chain (output-schema §2) — empty for analyses that haven't adopted it yet.\n`default` isn't for deserialization (Finding is serialize-only) — it tells the schema\ngenerator the field is optional, matching the skip-when-empty serialization.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RelatedLocation"
+          }
         },
         "severity": {
           "$ref": "#/$defs/Severity"
@@ -262,6 +269,39 @@
     "ProjectPath": {
       "description": "Project-relative path with `/` separators, the only path form that crosses the adapter\nboundary (case handling and symlink resolution are the core's discovery concern).",
       "type": "string"
+    },
+    "RelatedLocation": {
+      "description": "One entry of a finding's evidence chain (output-schema §2's `related` — what `kndo\nexplain` renders): a concrete location plus its role in the story. First populated by\n`cyclic` (RFC 0005 §8: \"a shortest cycle path in `related` as the evidence chain\"); other\nanalyses adopt it as their evidence models land — never fabricated as a placeholder.",
+      "type": "object",
+      "properties": {
+        "note": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "path": {
+          "$ref": "#/$defs/ProjectPath"
+        },
+        "range": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Span"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "role": {
+          "description": "What this location contributes: \"cycle-hop\", \"cause\", …",
+          "type": "string"
+        }
+      },
+      "required": [
+        "role",
+        "path"
+      ]
     },
     "RunInfo": {
       "description": "Owned mirror of the JSON envelope's `run` object — not borrowed, unlike a hot-path type,\nbecause this exists purely to be serialized (and, behind `schema`, to derive the JSON\nSchema from): the one-time clone per `--format json` invocation is free by comparison.",

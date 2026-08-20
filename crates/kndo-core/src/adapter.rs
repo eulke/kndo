@@ -120,6 +120,10 @@ pub struct AdapterDescriptor {
     /// `Public` by the fallback's conservative default. Assembly carries the ladder onto the
     /// graph keyed by claim language, so analyses (pure graph functions) never touch adapters.
     pub visibility_ladder: Vec<VisibilityRung>,
+    /// Cycle tolerance per graph level (RFC 0005 §8) — same data-on-the-descriptor pattern as
+    /// the ladder: assembly carries it onto the graph keyed by claim language, and `cyclic`
+    /// maps `Hazard → warning`, `Idiomatic → info`, `Impossible → skip the level`.
+    pub cycle_policy: CyclePolicy,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -201,6 +205,52 @@ pub struct VisibilityRung {
     pub scope: VisibilityScope,
     #[rkyv(with = crate::rkyv_support::SmolStrAsString)]
     pub label: SmolStr,
+}
+
+/// How a language's ecosystem regards an import cycle at one graph level (RFC 0005 §8) —
+/// tolerance is a *language fact*, declared by the adapter as data, so `cyclic`'s severity
+/// stays honest per ecosystem instead of one-size-fits-none.
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    serde::Serialize,
+    serde::Deserialize,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+)]
+pub enum CycleTolerance {
+    /// The ecosystem treats cycles as hazards (JS/TS file cycles — init-order bugs) →
+    /// severity `warning`.
+    Hazard,
+    /// Idiomatic and routinely tolerated (Rust modules within a crate) → severity `info`.
+    Idiomatic,
+    /// The compiler/toolchain forbids it outright (Go package imports) — a cycle at this
+    /// level cannot exist in building code, so the analysis skips the level entirely rather
+    /// than accusing what must be a resolution artifact.
+    Impossible,
+}
+
+/// An adapter's cycle tolerance per graph level (RFC 0005 §8): file-import cycles, and
+/// package/module-graph cycles where manifests define units.
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    serde::Serialize,
+    serde::Deserialize,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+)]
+pub struct CyclePolicy {
+    pub file_cycles: CycleTolerance,
+    pub package_cycles: CycleTolerance,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

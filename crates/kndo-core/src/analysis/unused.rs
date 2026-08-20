@@ -77,6 +77,7 @@ pub fn find_unused_files(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<F
                 symbol: None,
                 package: graph.package_name(package).map(str::to_string),
             },
+            related: Vec::new(),
             delta: None,
             delta_origin: None,
         });
@@ -103,6 +104,7 @@ fn directory_finding(graph: &ProjectGraph, dir: &DirGroup<'_>) -> Finding {
             symbol: None,
             package: graph.package_name(dir.package).map(str::to_string),
         },
+        related: Vec::new(),
         delta: None,
         delta_origin: None,
     }
@@ -148,6 +150,7 @@ pub fn find_unused_symbols(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec
                 symbol: Some(qualified.clone()),
                 package: graph.package_name(file.package).map(str::to_string),
             },
+            related: Vec::new(),
             delta: None,
             delta_origin: None,
         });

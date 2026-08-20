@@ -25,9 +25,8 @@
 //!   are never truncated here.
 //! - The health/budget block (§5) — no health scoring exists yet (M4), so there's nothing to
 //!   render; the diff header's `net` count is the only summary today.
-//! - The `└ cause: …` evidence line under a derived finding — `RunResult`/`Finding` don't carry
-//!   the `related` evidence chain yet (deferred, see `engine::Finding`'s doc), so there is
-//!   nothing to render; `delta_origin` alone is still shown.
+//! - Findings that carry a `related` evidence chain (first populated by `cyclic`) render it as
+//!   indented `└` lines under the finding — role, location, note.
 
 use kndo::engine::{DeltaOrigin, Finding, RunResult};
 use kndo::query::{NeighborEntry, QNodeRef};
@@ -188,8 +187,24 @@ fn render_flat(out: &mut String, findings: &[&Finding], opts: &RenderOptions) {
         out.push_str("  ");
         out.push_str(&render_finding_line(f, opts));
         out.push('\n');
+        render_related(out, f);
     }
     out.push('\n');
+}
+
+/// The `related` evidence chain, indented under its finding (output-schema §2) — one `└` line
+/// per entry: location, then the note that explains the hop.
+fn render_related(out: &mut String, f: &Finding) {
+    for r in &f.related {
+        let location = match r.range {
+            Some(range) => format!("{}:{}", r.path.0, range.start.0),
+            None => r.path.0.to_string(),
+        };
+        match &r.note {
+            Some(note) => out.push_str(&format!("      └ {location} — {note}\n")),
+            None => out.push_str(&format!("      └ {location}\n")),
+        }
+    }
 }
 
 fn sort_findings(findings: &mut [&Finding]) {
@@ -215,6 +230,7 @@ fn render_section(out: &mut String, group: &str, findings: &[&Finding], opts: &R
         out.push_str("  ");
         out.push_str(&render_finding_line(f, opts));
         out.push('\n');
+        render_related(out, f);
     }
     out.push('\n');
 }
@@ -531,6 +547,7 @@ mod tests {
                 symbol: Some("thing".to_string()),
                 package: None,
             },
+            related: Vec::new(),
             delta: None,
             delta_origin: None,
         }

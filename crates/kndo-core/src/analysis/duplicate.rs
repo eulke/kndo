@@ -61,6 +61,7 @@ pub fn find_duplicate_files(graph: &ProjectGraph) -> Vec<Finding> {
             // Spans every copy — no single path is *the* location (the message lists them
             // all); expressing that properly is `related`, not built yet.
             location: Location::default(),
+            related: Vec::new(),
             delta: None,
             delta_origin: None,
         });
