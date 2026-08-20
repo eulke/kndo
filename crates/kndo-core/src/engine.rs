@@ -53,6 +53,17 @@ fn touched_paths(before: &graph::ProjectGraph, after: &graph::ProjectGraph) -> H
     touched
 }
 
+/// ADR 0005's freshness gate: a coverage report modified longer ago than this is ignored with
+/// a diagnostic — stale certainty is worse than absence. Configurable later with the config
+/// file (`coverage.max_age`); the default is the contract.
+const MAX_COVERAGE_AGE_DAYS: u64 = 7;
+
+/// The built-in coverage ingesters (ADR 0005) — statically linked plugins, composed here the
+/// same way the distribution layer composes adapters. Just lcov at launch.
+fn coverage_plugins() -> Vec<Box<dyn crate::plugin::Plugin>> {
+    vec![Box::new(crate::plugin::LcovPlugin)]
+}
+
 /// Mirrors the output schema's `schema_version` (contracts/output-schema.md).
 pub const SCHEMA_VERSION: &str = "1.0.0";
 
@@ -873,7 +884,8 @@ impl Engine {
     > {
         match graph::assemble_from_source(source, &self.adapters, self.cache.as_ref()) {
             Ok((g, mut diagnostics)) => {
-                let (findings, analysis_diagnostics) = analysis::run_all(&g);
+                let coverage = self.ingest_coverage(&mut diagnostics);
+                let (findings, analysis_diagnostics) = analysis::run_all(&g, &coverage);
                 diagnostics.extend(analysis_diagnostics);
                 let (findings, suppressed) = crate::suppression::apply(&g, findings);
                 Ok((g, findings, diagnostics, suppressed))
@@ -887,6 +899,62 @@ impl Engine {
                 span: None,
             }),
         }
+    }
+
+    /// Locate and ingest coverage reports (ADR 0005: "ingested, never measured") through the
+    /// built-in coverage plugins' `requested_file_access` well-known paths, freshness-checked
+    /// against [`MAX_COVERAGE_AGE_DAYS`] — a stale report gets one diagnostic and is ignored,
+    /// per the ADR's "stale certainty is worse than absence". Re-read every run, never cached:
+    /// a report's freshness varies independently of source content hashes.
+    ///
+    /// Reports are always read from the *real* project root, including for diff modes'
+    /// git-tree sides — coverage describes the working tree's test run, and applying the same
+    /// current report to both sides keeps a diff's `crap` delta about the *code* change, not
+    /// about report drift (a deliberate approximation; the report predates the diff either
+    /// way).
+    fn ingest_coverage(&self, diagnostics: &mut Vec<Diagnostic>) -> crate::coverage::CoverageMap {
+        let mut sink = crate::coverage::CoverageSink::default();
+        for plugin in coverage_plugins() {
+            for rel in plugin.descriptor().requested_file_access {
+                let path = self.root.join(rel.as_str());
+                let Ok(meta) = std::fs::metadata(&path) else {
+                    continue; // no report at this well-known path — silence, not a diagnostic
+                };
+                let age_days = meta
+                    .modified()
+                    .ok()
+                    .and_then(|m| m.elapsed().ok())
+                    .map(|e| e.as_secs() / 86_400);
+                if let Some(days) = age_days {
+                    if days > MAX_COVERAGE_AGE_DAYS {
+                        diagnostics.push(Diagnostic {
+                            level: DiagnosticLevel::Warn,
+                            path: Some(ProjectPath(smol_str::SmolStr::new(rel.as_str()))),
+                            message: format!(
+                                "coverage report {rel} ignored: {days} days old (max age \
+                                 {MAX_COVERAGE_AGE_DAYS} days) — regenerate it to restore \
+                                 coverage-aware analysis"
+                            ),
+                            span: None,
+                        });
+                        continue;
+                    }
+                }
+                match std::fs::read(&path) {
+                    Ok(content) => {
+                        let project_path = ProjectPath(smol_str::SmolStr::new(rel.as_str()));
+                        plugin.ingest_coverage(&project_path, &content, &mut sink);
+                    }
+                    Err(e) => diagnostics.push(Diagnostic {
+                        level: DiagnosticLevel::Warn,
+                        path: Some(ProjectPath(smol_str::SmolStr::new(rel.as_str()))),
+                        message: format!("coverage report {rel} could not be read: {e}"),
+                        span: None,
+                    }),
+                }
+            }
+        }
+        sink.into_map()
     }
 
     /// Full-mode `RunResult` construction — assemble + analyze at `root`, plus the run counters

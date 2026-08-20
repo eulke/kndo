@@ -2,6 +2,7 @@
 //! consumes the graph plus whatever shared engines it needs (reachability, dup-detection, …)
 //! and produces [`crate::engine::Finding`]s — never source text, never I/O.
 
+pub mod crap;
 pub mod cyclic;
 pub mod deep_import;
 pub mod dependency_hygiene;
@@ -65,8 +66,14 @@ pub(crate) fn package_label(graph: &ProjectGraph, package: PackageId) -> String 
     }
 }
 
-/// Runs every M1 analysis and returns their findings, sorted by id for deterministic output.
-pub fn run_all(graph: &crate::graph::ProjectGraph) -> (Vec<Finding>, Vec<Diagnostic>) {
+/// Runs every analysis and returns their findings, sorted by id for deterministic output.
+/// `coverage` is the run's ingested coverage (ADR 0005) — a separate input rather than part of
+/// the graph, because report freshness varies independently of source content hashes and must
+/// never be cached into a snapshot.
+pub fn run_all(
+    graph: &crate::graph::ProjectGraph,
+    coverage: &crate::coverage::CoverageMap,
+) -> (Vec<Finding>, Vec<Diagnostic>) {
     let reach = reachability::compute(graph);
     let mut findings = unused::find_unused_files(graph, &reach);
     findings.extend(unused::find_unused_symbols(graph, &reach));
@@ -81,6 +88,7 @@ pub fn run_all(graph: &crate::graph::ProjectGraph) -> (Vec<Finding>, Vec<Diagnos
     findings.extend(private_type_leak::find_private_type_leaks(graph));
     findings.extend(deep_import::find_deep_imports(graph));
     findings.extend(cyclic::find_cycles(graph));
+    findings.extend(crap::find_crap(graph, coverage));
     let (untested_findings, untested_diagnostic) = untested::find_untested(graph, &reach);
     findings.extend(untested_findings);
     findings.sort_by(|a, b| a.id.cmp(&b.id));

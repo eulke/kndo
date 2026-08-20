@@ -172,6 +172,24 @@ stable kndo finding id as partialFingerprints (SARIF's result-matching mechanism
 kndo's line-number-free ids are already built for). Diff modes emit current findings only —
 SARIF models "the results of this run"; the JSON envelope remains the delta carrier.
 
+`crap` + coverage ingestion landed next (RFC 0005 §10, ADR 0005): the `Plugin` trait gained
+its `ingest_coverage` hook (sink-based, same discipline as the contribute hooks — the contract
+was updated from its sketched `Option<CoverageData>` shape to match) with the lcov built-in as
+the first ingester; the engine locates reports at the plugins' `requested_file_access`
+well-known paths (`coverage/lcov.info`, `lcov.info`), enforces the 7-day freshness gate (stale
+→ one diagnostic, report ignored), and passes the resulting `CoverageMap` to `run_all` as a
+separate per-run input — never on the graph or its snapshot, because report freshness varies
+independently of content hashes. The analysis is the RFC's formula verbatim
+(`comp² × (1−cov)³ + comp`, findings above 30), per-function coverage as the covered fraction
+of instrumented lines inside the symbol's span, no-report functions scored pessimistically at
+cov = 0 and flagged `coverage: none`, test/generated/vendored code exempt. Dogfooded all four
+paths on the real CLI: fresh report (covered function silent, uncovered one fires with
+`coverage 0%`), full coverage silencing, stale-mtime report (diagnostic + pessimistic
+scoring), and no report at all. Perf note: the uncovered pathological corpus now legitimately
+emits 75k crap findings (every one of its 15k-clone families is complex and uncovered), which
+moves synth-repo warm to ~750 ms — linear finding-construction/serialization volume, not an
+algorithmic regression; bench5k stays at ~60 ms warm.
+
 **Exit:** duplication findings stable under reformatting (Type-2); CRAP hotlist matches manual
 audit on a real repo; health deltas shown in diff modes.
 

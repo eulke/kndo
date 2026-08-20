@@ -389,7 +389,7 @@ pub trait Plugin: Send + Sync {
     fn contribute_roots(&self, graph: &GraphView, out: &mut RootSink) {}
     fn contribute_edges(&self, graph: &GraphView, out: &mut EdgeSink) {}
     fn annotate_symbols(&self, graph: &GraphView, out: &mut AnnotationSink) {}
-    fn ingest_coverage(&self, request: &CoverageRequest) -> Option<CoverageData> { None }
+    fn ingest_coverage(&self, path: &ProjectPath, content: &[u8], out: &mut CoverageSink) {}
     fn suppress(&self, finding: &Finding) -> Option<SuppressReason> { None }
 }
 ```
@@ -398,6 +398,14 @@ pub trait Plugin: Send + Sync {
   validates (no dangling ids, no new kinds) and attributes (`Provenance::Plugin`).
 - Host-mediated file access: content for `requested_file_access` globs is provided by the core;
   no ambient fs/net (enforced natively by convention, in WASM by the sandbox).
+- `ingest_coverage` (ADR 0005: coverage is *ingested, never measured*) follows the same sink
+  discipline as the contribute hooks: the host locates reports via the plugin's
+  `requested_file_access` paths, enforces the freshness gate (default 7 days; a stale report
+  gets one diagnostic and is ignored), and hands over the bytes; the plugin parses its format
+  and writes per-file line hit counts through `CoverageSink`, normalizing report paths to
+  project-relative form (it alone knows the format's path conventions). The resulting
+  `CoverageMap` is a per-run analysis input — never part of the graph or its snapshot, because
+  report freshness varies independently of source content hashes. Built-in at launch: lcov.
 - Budget: per-hook fuel/time limit; an over-budget plugin is disabled for the run + diagnostic
   (RFC 0003 §3).
 

@@ -15,6 +15,7 @@ pub mod analysis;
 mod baseline;
 pub mod cache;
 pub mod conformance;
+pub mod coverage;
 pub mod discovery;
 pub mod engine;
 mod gitutil;
