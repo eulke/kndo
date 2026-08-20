@@ -5,6 +5,7 @@
 //! largely grammar + queries + resolver logic on top of this crate.
 
 pub mod classify;
+pub mod metrics;
 pub mod parsing;
 pub mod paths;
 pub mod stdlib;

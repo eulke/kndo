@@ -229,7 +229,17 @@ pub struct FileFacts {
                                              // wildcards over the resolved target's symbols.
     pub roots:        Vec<RawRoot>,         // language-defined only (main, pub API…), target is
                                              // *within this file* — WholeFile | Declaration(name)
-    pub functions:    Vec<FunctionMetrics>, // { symbol, cyclomatic: u32, loc, token_fingerprints }
+    pub functions:    Vec<FunctionMetrics>, // { symbol, cyclomatic: u32, loc, fingerprints }
+                                             // (RFC 0005 §6): one entry per callable, over its
+                                             // BODY. symbol uses the roots/within naming
+                                             // convention (bare, or qualified Owner.name for
+                                             // members); assembly resolves it to a SymbolId
+                                             // onto ProjectGraph::function_metrics.
+                                             // fingerprints = winnowing over the normalized
+                                             // token stream (toolkit metrics module: IDs/
+                                             // literals canonicalized, comments skipped), empty
+                                             // under the 50-token granularity gate — cyclomatic
+                                             // and loc always real (crap's inputs, M4).
     pub dynamics:     Vec<DynamicUse>,      // constructs forcing Wildcard edges (span + reason +
                                             // optional narrowed_to: a *project-relative* dir the
                                             // adapter already resolved — the core only prefix-

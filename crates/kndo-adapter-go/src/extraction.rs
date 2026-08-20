@@ -211,6 +211,59 @@ fn signature_span_of(node: Node) -> Option<Span> {
     })
 }
 
+/// Go's metric-relevant node kinds (RFC 0005 §6; the machinery is
+/// `kndo_adapter_toolkit::metrics`). Branch kinds: every `case` clause counts once (a switch
+/// with n cases is n branches, matching McCabe), plus the short-circuit operator leaves.
+const METRICS_SYNTAX: kndo_adapter_toolkit::metrics::MetricsSyntax =
+    kndo_adapter_toolkit::metrics::MetricsSyntax {
+        branch_kinds: &[
+            "if_statement",
+            "for_statement",
+            "expression_case",
+            "type_case",
+            "communication_case",
+            "&&",
+            "||",
+        ],
+        identifier_kinds: &[
+            "identifier",
+            "field_identifier",
+            "type_identifier",
+            "package_identifier",
+        ],
+        literal_kinds: &[
+            "interpreted_string_literal",
+            "raw_string_literal",
+            "int_literal",
+            "float_literal",
+            "rune_literal",
+            "imaginary_literal",
+        ],
+        skip_kinds: &["comment"],
+    };
+
+/// RFC 0005 §6's default granularity gate: bodies under 50 normalized tokens don't
+/// fingerprint (their metrics still land, for `crap`).
+const MIN_CLONE_TOKENS: usize = 50;
+
+/// One callable's [`FunctionMetrics`], computed over its *body* (the RFC's granularity —
+/// signatures are promises, bodies are the thing that gets copy-pasted). `symbol` uses the
+/// same naming convention as roots/`within`: bare for free functions, qualified `T.Method`
+/// for members, so assembly's lookup lands in the right table.
+fn push_function_metrics(out: &mut FileFacts, symbol: &str, node: Node) {
+    let Some(body) = node.child_by_field_name("body") else {
+        return;
+    };
+    let shape =
+        kndo_adapter_toolkit::metrics::function_shape(body, &METRICS_SYNTAX, MIN_CLONE_TOKENS);
+    out.functions.push(kndo_core::adapter::FunctionMetrics {
+        symbol: SmolStr::new(symbol),
+        cyclomatic: shape.cyclomatic,
+        loc: shape.loc,
+        fingerprints: shape.fingerprints,
+    });
+}
+
 /// `func Name(...) ...` or `func init() {}` / `func main() {}` (roots, docs/adapters/go.md §2 —
 /// unconditional regardless of the capitalization rule).
 fn handle_function(
@@ -232,6 +285,7 @@ fn handle_function(
         signature_span_of(node),
         promote_exports,
     );
+    push_function_metrics(out, name, node);
     if name == "init" || (name == "main" && is_main_package) {
         out.roots.push(RawRoot {
             kind: RootKind::Production,
@@ -270,6 +324,7 @@ fn handle_method(node: Node, src: &[u8], promote_exports: bool, out: &mut FileFa
         member_of: Some(SmolStr::new(&receiver_type)),
         signature_span: signature_span_of(node),
     });
+    push_function_metrics(out, &format!("{receiver_type}.{method_name}"), node);
     if exported && promote_exports {
         out.roots.push(RawRoot {
             kind: RootKind::Production,
@@ -1039,6 +1094,71 @@ type D int
         assert_eq!(by_name("secret").kind, RefKind::TypeUse);
         assert_eq!(by_name("G").kind, RefKind::Read);
         assert_eq!(by_name("s").kind, RefKind::Read);
+    }
+
+    // ------------------------------------------------- function metrics (RFC 0005 §6)
+
+    #[test]
+    fn function_bodies_emit_metrics_with_fingerprints_when_big_enough() {
+        let body: String = (0..12)
+            .map(|i| format!("\tx{i} := compute({i}) + compute({i}+1)\n"))
+            .collect();
+        let src = format!(
+            "package p\n\nfunc compute(n int) int {{ return n }}\n\nfunc Big() {{\n{body}}}\n"
+        );
+        let facts = extract("a.go", src.as_bytes());
+        let big = facts
+            .functions
+            .iter()
+            .find(|f| f.symbol.as_str() == "Big")
+            .expect("metrics for Big");
+        assert!(!big.fingerprints.is_empty());
+        assert!(big.loc >= 12);
+        // The tiny helper still gets metrics — just no fingerprints (min-tokens gate).
+        let small = facts
+            .functions
+            .iter()
+            .find(|f| f.symbol.as_str() == "compute")
+            .expect("metrics for compute");
+        assert!(small.fingerprints.is_empty());
+        assert_eq!(small.cyclomatic, 1);
+    }
+
+    #[test]
+    fn methods_emit_metrics_under_their_qualified_name() {
+        let facts = extract(
+            "a.go",
+            b"package p\n\ntype T struct{}\n\nfunc (t T) M() int { return 1 }\n",
+        );
+        assert!(facts.functions.iter().any(|f| f.symbol.as_str() == "T.M"));
+    }
+
+    #[test]
+    fn renamed_clone_bodies_fingerprint_identically() {
+        let mk = |name: &str, var: &str| {
+            let body: String = (0..12)
+                .map(|i| format!("\t{var}{i} := work({i}) + work({i}+2)\n"))
+                .collect();
+            format!(
+                "package p\n\nfunc work(n int) int {{ return n }}\n\nfunc {name}() {{\n{body}}}\n"
+            )
+        };
+        let a = extract("a.go", mk("First", "x").as_bytes());
+        let b = extract("b.go", mk("Second", "y").as_bytes());
+        let fa = &a
+            .functions
+            .iter()
+            .find(|f| f.symbol.as_str() == "First")
+            .unwrap()
+            .fingerprints;
+        let fb = &b
+            .functions
+            .iter()
+            .find(|f| f.symbol.as_str() == "Second")
+            .unwrap()
+            .fingerprints;
+        assert!(!fa.is_empty());
+        assert_eq!(fa, fb);
     }
 
     // ------------------------------------------------- detected_origin (RFC 0012 §7)

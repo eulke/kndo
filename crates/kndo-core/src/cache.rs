@@ -40,7 +40,7 @@ use crate::adapter::{Diagnostic, FileFacts, RawSuppression};
 use crate::graph::{
     DeclaredDependency, DependencyNode, FileNode, PackageNode, ProjectGraph, SymbolNode,
 };
-use crate::vocab::{Edge, FileId, PackageId};
+use crate::vocab::{Edge, FileId, PackageId, SymbolId};
 use smol_str::SmolStr;
 
 /// Facts-entry envelope header: bumped whenever the serialized shape changes, independent of
@@ -133,6 +133,7 @@ struct GraphSnapshot {
     suppressions: Vec<(FileId, RawSuppression)>,
     visibility_ladders: Vec<LadderSnap>,
     cycle_policies: Vec<CyclePolicySnap>,
+    function_metrics: Vec<(SymbolId, crate::graph::SymbolMetrics)>,
     diagnostics: Vec<Diagnostic>,
 }
 
@@ -529,6 +530,7 @@ impl ProjectCache {
                 .into_iter()
                 .map(|p| (p.language, p.policy))
                 .collect(),
+            function_metrics: snapshot.function_metrics,
         });
         self.graph_hits.fetch_add(1, Ordering::Relaxed);
         Some((graph, snapshot.diagnostics))
@@ -575,6 +577,7 @@ impl ProjectCache {
                     policy: *policy,
                 })
                 .collect(),
+            function_metrics: graph.function_metrics.clone(),
             diagnostics: diagnostics.to_vec(),
         };
         let Ok(bytes) = rkyv::to_bytes::<rkyv::rancor::Error>(&snapshot) else {

@@ -148,6 +148,22 @@ renderer shows `└` evidence lines, agent format `evidence:` lines), first popu
 `npm-workspace-monorepo` fixture's expected set gained the package-cycle finding its own
 deliberate phantom-dependency loop always implied.
 
+Structural `duplicate` landed next (RFC 0005 §6): the toolkit gained a data-driven
+function-shape module (`metrics.rs` — one walk yields cyclomatic, LOC, and winnowing
+fingerprints over the normalized token stream; K=10/W=8, blake3-derived gram hashes so cached
+facts never change meaning under a hasher upgrade), both adapters emit `FileFacts::functions`
+for callables (Go functions + methods; JS function declarations + arrow/function-bound
+consts), assembly resolves them onto `ProjectGraph::function_metrics` keyed by SymbolId, and
+the analysis groups Type-1/Type-2 clones transitively (shared-fingerprint index, same
+language, Jaccard ≥ 0.8, boilerplate postings capped) into one `info` finding per group with
+every instance in `related`. The M4 exit criterion held on the real CLI: reformatting one
+clone (whitespace, comments, line collapsing) leaves the finding id byte-identical. Perf note
+of record: the pushed `cyclic` commit carried a quadratic cycle-anchor scan (933 ms warm on
+the pathological 4996-file-SCC synthetic corpus, vs a 352 ms pre-cyclic base) — fixed here
+with a precomputed in-degree pass (~490 ms warm; the remaining ~140 ms is Tarjan + the
+duplicate index on 15k deliberately-identical functions, linear costs on a corpus built to be
+worst-case; bench5k stays comfortably in budget).
+
 **Exit:** duplication findings stable under reformatting (Type-2); CRAP hotlist matches manual
 audit on a real repo; health deltas shown in diff modes.
 

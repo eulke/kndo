@@ -185,6 +185,53 @@ fn signature_span_of(node: Node) -> Option<Span> {
     })
 }
 
+/// JS/TS metric-relevant node kinds (RFC 0005 §6; machinery in
+/// `kndo_adapter_toolkit::metrics`). Each `switch_case` counts as one branch; `??` short-
+/// circuits like `&&`/`||` and counts with them.
+const METRICS_SYNTAX: kndo_adapter_toolkit::metrics::MetricsSyntax =
+    kndo_adapter_toolkit::metrics::MetricsSyntax {
+        branch_kinds: &[
+            "if_statement",
+            "for_statement",
+            "for_in_statement",
+            "while_statement",
+            "do_statement",
+            "switch_case",
+            "catch_clause",
+            "ternary_expression",
+            "&&",
+            "||",
+            "??",
+        ],
+        identifier_kinds: &[
+            "identifier",
+            "property_identifier",
+            "type_identifier",
+            "shorthand_property_identifier",
+            "shorthand_property_identifier_pattern",
+            "private_property_identifier",
+        ],
+        literal_kinds: &["string", "template_string", "number", "regex"],
+        skip_kinds: &["comment"],
+    };
+
+/// RFC 0005 §6's default granularity gate (mirrors the Go adapter's constant).
+const MIN_CLONE_TOKENS: usize = 50;
+
+/// One callable's [`kndo_core::adapter::FunctionMetrics`], over its *body* — the part that
+/// gets copy-pasted. Used for named function declarations and for callables bound to a
+/// `const`/`let` (`const f = (x) => …`), JS's other ordinary function-definition shape.
+fn push_function_metrics(out: &mut FileFacts, symbol: &str, body: Node) {
+    let shape =
+        kndo_adapter_toolkit::metrics::function_shape(body, &METRICS_SYNTAX, MIN_CLONE_TOKENS);
+    out.functions.push(kndo_core::adapter::FunctionMetrics {
+        symbol: SmolStr::new(symbol),
+        cyclomatic: shape.cyclomatic,
+        loc: shape.loc,
+        fingerprints: shape.fingerprints,
+    });
+}
+
 /// Handles a declaration whose only shape variance is its `name` field falling back to
 /// `default` (covers `export default function foo(){}`-style named-but-default exports).
 fn handle_named(node: Node, src: &[u8], exported: bool, out: &mut FileFacts, kind: SymbolKind) {
@@ -197,6 +244,11 @@ fn handle_named(node: Node, src: &[u8], exported: bool, out: &mut FileFacts, kin
     } else {
         None
     };
+    if matches!(kind, SymbolKind::Function) {
+        if let Some(body) = node.child_by_field_name("body") {
+            push_function_metrics(out, &name, body);
+        }
+    }
     out.declarations.push(Declaration {
         name,
         kind,
@@ -396,6 +448,16 @@ fn handle_lexical(node: Node, src: &[u8], exported: bool, out: &mut FileFacts) {
         // the spec, just not in this slice's scope.
         if name_node.kind() != "identifier" {
             continue;
+        }
+        if let Some(value) = declarator.child_by_field_name("value") {
+            if matches!(
+                value.kind(),
+                "arrow_function" | "function_expression" | "generator_function"
+            ) {
+                if let Some(body) = value.child_by_field_name("body") {
+                    push_function_metrics(out, text(name_node, src), body);
+                }
+            }
         }
         out.declarations.push(Declaration {
             name: SmolStr::new(text(name_node, src)),
@@ -2631,6 +2693,46 @@ mod tests {
         let s = suppressions("// kndo:allow unused\nfunction f() {}");
         assert_eq!(s[0].span.start, (1, 1));
         assert_eq!(s[0].span.end.0, 1); // single-line comment stays on line 1
+    }
+
+    // ------------------------------------------------- function metrics (RFC 0005 §6)
+
+    #[test]
+    fn function_declarations_and_arrow_consts_emit_metrics() {
+        let body: String = (0..12)
+            .map(|i| format!("  const x{i} = work({i}) + work({i} + 1);\n"))
+            .collect();
+        let src = format!(
+            "function work(n: number): number {{ return n; }}\nexport function big() {{\n{body}}}\nexport const arrow = () => {{\n{body}}};\n"
+        );
+        let facts = extract("f.ts", src.as_bytes());
+        let big = facts
+            .functions
+            .iter()
+            .find(|f| f.symbol.as_str() == "big")
+            .expect("metrics for big");
+        assert!(!big.fingerprints.is_empty());
+        let arrow = facts
+            .functions
+            .iter()
+            .find(|f| f.symbol.as_str() == "arrow")
+            .expect("metrics for arrow const");
+        assert_eq!(
+            big.fingerprints, arrow.fingerprints,
+            "same body, different definition shape — the STREAM is what fingerprints"
+        );
+    }
+
+    #[test]
+    fn small_functions_get_metrics_without_fingerprints() {
+        let facts = extract("f.ts", b"export function tiny() { return 1; }\n");
+        let tiny = facts
+            .functions
+            .iter()
+            .find(|f| f.symbol.as_str() == "tiny")
+            .expect("metrics");
+        assert!(tiny.fingerprints.is_empty());
+        assert_eq!(tiny.cyclomatic, 1);
     }
 
     // ------------------------------------------------- detected_origin (RFC 0012 §7)

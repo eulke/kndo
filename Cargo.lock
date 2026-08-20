@@ -671,6 +671,7 @@ dependencies = [
 name = "kndo-adapter-toolkit"
 version = "0.1.0"
 dependencies = [
+ "blake3",
  "kndo-core",
  "smol_str",
  "tree-sitter",

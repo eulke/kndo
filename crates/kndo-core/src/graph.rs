@@ -73,6 +73,17 @@ impl SymbolNode {
     }
 }
 
+/// One callable's computed shape (RFC 0005 §6): cyclomatic + LOC feed `crap` (M4), the
+/// winnowing fingerprints feed structural `duplicate`. Keyed by `SymbolId` in
+/// [`ProjectGraph::function_metrics`] — the adapter-side `FunctionMetrics::symbol` name is
+/// resolved to the id at assembly and dropped.
+#[derive(Debug, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+pub struct SymbolMetrics {
+    pub cyclomatic: u32,
+    pub loc: u32,
+    pub fingerprints: Vec<u64>,
+}
+
 /// A package consumed *as a dependency* — external (npm/crates.io/…) or an in-repo workspace
 /// member imported by name (RFC 0011 §4: the workspace case carries the same
 /// declaration-contract obligations, so it lives in the same node kind; its file-level
@@ -137,6 +148,7 @@ pub(crate) struct GraphSnapshotParts {
     pub suppressions: Vec<(FileId, crate::adapter::RawSuppression)>,
     pub visibility_ladders: Vec<(SmolStr, Vec<crate::adapter::VisibilityRung>)>,
     pub cycle_policies: Vec<(SmolStr, crate::adapter::CyclePolicy)>,
+    pub function_metrics: Vec<(SymbolId, SymbolMetrics)>,
 }
 
 /// The assembled language-neutral graph (contracts §1). Read-only once built; incremental
@@ -168,6 +180,9 @@ pub struct ProjectGraph {
     /// Each claimed language's cycle tolerance (RFC 0005 §8), collected exactly like the
     /// ladders — adapter-declared data, carried here so `cyclic` stays a pure graph function.
     pub cycle_policies: Vec<(SmolStr, crate::adapter::CyclePolicy)>,
+    /// Callable shapes (RFC 0005 §6), sparse — only symbols whose adapter emitted
+    /// `FileFacts::functions` for them (callables), resolved to ids at assembly.
+    pub function_metrics: Vec<(SymbolId, SymbolMetrics)>,
     file_index: HashMap<ProjectPath, FileId>,
 }
 
@@ -226,6 +241,7 @@ impl ProjectGraph {
             suppressions: parts.suppressions,
             visibility_ladders: parts.visibility_ladders,
             cycle_policies: parts.cycle_policies,
+            function_metrics: parts.function_metrics,
             file_index,
         }
     }
@@ -286,8 +302,15 @@ impl ProjectGraph {
                     package_cycles: crate::adapter::CycleTolerance::Hazard,
                 },
             )],
+            function_metrics: Vec::new(),
             file_index,
         }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_function_metrics(mut self, metrics: Vec<(SymbolId, SymbolMetrics)>) -> Self {
+        self.function_metrics = metrics;
+        self
     }
 
     #[cfg(test)]
@@ -377,7 +400,7 @@ pub(crate) fn package_owns(manifest_dir: &str, file_dir: &str) -> bool {
 /// an assembly-algorithm change that could produce a different graph from the same facts. Feeds
 /// [`compute_graph_key`] (RFC 0004 §3's "core graph-schema version"); a bump here invalidates
 /// every project's cached `graph.bin` on the next run, same as any other key-input change.
-pub const GRAPH_SCHEMA_VERSION: u32 = 7; // 7: cycle policies (RFC 0005 §8); 6: PackageNode surface (RFC 0011 §4); 5: ladders + FileNode.unit (RFC 0012 §6); 4: RefKind + signature_span (§5); 3: within (§4); 2: member_of (§3)
+pub const GRAPH_SCHEMA_VERSION: u32 = 8; // 8: function_metrics (RFC 0005 §6); 7: cycle policies (§8); 6: PackageNode surface (RFC 0011 §4); 5: ladders + FileNode.unit (RFC 0012 §6); 4: RefKind + signature_span (§5); 3: within (§4)
 
 /// The graph snapshot's cache key (RFC 0004 §3, `cache.rs`'s `graph.bin`): a single digest
 /// folding in the *whole* discovered file set (every path + content hash — this already
@@ -822,6 +845,7 @@ pub fn assemble_from_source(
     // forward references (file 0 importing from file 5) are the common case, not an edge case,
     // so every file's declarations must exist before any file's imports are resolved.
     let mut symbols = Vec::new();
+    let mut function_metrics: Vec<(SymbolId, SymbolMetrics)> = Vec::new();
     let mut symbol_by_name_per_file: Vec<HashMap<SmolStr, SymbolId>> =
         vec![HashMap::new(); claimed_per_file.len()];
     // Package-scoped (not file-scoped) resolution, for languages where it's the ordinary case
@@ -930,6 +954,25 @@ pub fn assemble_from_source(
         // In-source roots (RawRoot — e.g. a language-level `export =`/`pub` API marker), as
         // distinct from the manifest-declared roots phase 2.5 already linked: this targets
         // something *within* the file being extracted, never a different file.
+        // Callable shapes (RFC 0005 §6): adapter names resolve exactly like root targets —
+        // bare table first, then the qualified member table; a name that matches nothing is
+        // dropped silently (defensive, same stance as unresolvable root targets).
+        for fm in &claimed.facts.functions {
+            let resolved = symbol_by_name_per_file[i]
+                .get(fm.symbol.as_str())
+                .or_else(|| symbol_by_qualified_per_file[i].get(fm.symbol.as_str()));
+            if let Some(&symbol_id) = resolved {
+                function_metrics.push((
+                    symbol_id,
+                    SymbolMetrics {
+                        cyclomatic: fm.cyclomatic,
+                        loc: fm.loc,
+                        fingerprints: fm.fingerprints.clone(),
+                    },
+                ));
+            }
+        }
+
         for root in &claimed.facts.roots {
             let target = match &root.target {
                 RawRootTarget::WholeFile => Some(NodeRef::File(file_id)),
@@ -1403,6 +1446,7 @@ pub fn assemble_from_source(
         suppressions,
         visibility_ladders: ladders.into_iter().collect(),
         cycle_policies: cycle_policies.into_iter().collect(),
+        function_metrics,
         file_index,
     };
     if let Some(cache) = cache {

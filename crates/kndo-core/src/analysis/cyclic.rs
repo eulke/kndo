@@ -98,17 +98,24 @@ pub fn find_cycles(graph: &ProjectGraph) -> Vec<Finding> {
         };
 
         // Anchor: most referenced within the cycle (in-degree from cycle members), ties to
-        // the lexicographically-first path so ids and output stay deterministic.
+        // the lexicographically-first path so ids and output stay deterministic. In-degree is
+        // precomputed in one pass over the SCC's own adjacency — the per-candidate scan over
+        // every edge this replaced was O(|SCC| × |edges|), a 13-second wall on a synthetic
+        // 5k-file component.
         let in_cycle: HashSet<u32> = scc.iter().copied().collect();
+        let mut indegree: HashMap<u32, usize> = HashMap::new();
+        for &from in &in_cycle {
+            for to in file_adj.get(&from).map(Vec::as_slice).unwrap_or(&[]) {
+                if in_cycle.contains(to) {
+                    *indegree.entry(*to).or_default() += 1;
+                }
+            }
+        }
         let anchor = *files
             .iter()
             .max_by_key(|f| {
-                let indegree = file_edge
-                    .keys()
-                    .filter(|(from, to)| *to == f.0 && in_cycle.contains(from))
-                    .count();
                 (
-                    indegree,
+                    indegree.get(&f.0).copied().unwrap_or(0),
                     std::cmp::Reverse(graph.files[f.0 as usize].path.0.as_str()),
                 )
             })

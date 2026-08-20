@@ -75,6 +75,7 @@ pub fn run_all(graph: &crate::graph::ProjectGraph) -> (Vec<Finding>, Vec<Diagnos
     findings.extend(undeclared::find_undeclared_dependencies(graph));
     findings.extend(version_skew::find_version_skew(graph));
     findings.extend(duplicate::find_duplicate_files(graph));
+    findings.extend(duplicate::find_duplicate_functions(graph));
     findings.extend(dependency_hygiene::find_dependency_hygiene(graph));
     findings.extend(internal_only::find_internal_only(graph, &reach));
     findings.extend(private_type_leak::find_private_type_leaks(graph));
