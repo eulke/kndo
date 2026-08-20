@@ -400,6 +400,15 @@ struct NavEdge {
     label: EdgeLabel,
     confidence: Confidence,
     span: Option<Span>,
+    /// The file `span` is a location *within* — always the edge's original `from` file,
+    /// regardless of which direction (`uses` vs. `used-by`) this `NavEdge` is stored under.
+    /// An import/reference/dynamic-use site always lives in the file that wrote the import,
+    /// the reference, or the `eval` — never in the file being pointed *at* — so this must be
+    /// captured once, at construction, rather than re-derived later from whichever node
+    /// happens to be "the neighbor" for a given traversal direction (that would silently pair
+    /// the right line/column with the wrong file whenever traversing `uses`, since the
+    /// neighbor there is `to`, not `from`).
+    site_file: FileId,
 }
 
 struct NavGraph {
@@ -408,12 +417,16 @@ struct NavGraph {
     roots: HashMap<RootKind, Vec<(NavNode, Confidence)>>,
 }
 
-fn nav_edge_clone(e: &NavEdge) -> NavEdge {
-    NavEdge {
-        to: e.to,
-        label: e.label,
-        confidence: e.confidence,
-        span: e.span,
+/// Every edge kind we build a [`NavEdge`] from has a `from` that's either a file or a symbol
+/// (never a dependency — dependencies only ever appear as an edge's `to`), so this always
+/// resolves to a real file.
+fn nav_node_owning_file(graph: &ProjectGraph, node: NavNode) -> FileId {
+    match node {
+        NavNode::File(f) => f,
+        NavNode::Symbol(s) => graph.symbols[s.0 as usize].file,
+        NavNode::Dependency(_) => {
+            unreachable!("a Dependency node is never an edge's `from`")
+        }
     }
 }
 
@@ -459,23 +472,27 @@ fn build_nav_graph(graph: &ProjectGraph) -> NavGraph {
                     let Some(syms) = declared_in.get(&from) else {
                         continue;
                     };
+                    let site_file = from;
                     for &s in syms {
-                        let e = NavEdge {
-                            to: NavNode::Symbol(s),
-                            label: EdgeLabel::Wildcard,
-                            confidence: Confidence::Possible,
-                            span: edge.span,
-                        };
                         forward
                             .entry(NavNode::File(from))
                             .or_default()
-                            .push(nav_edge_clone(&e));
+                            .push(NavEdge {
+                                to: NavNode::Symbol(s),
+                                label: EdgeLabel::Wildcard,
+                                confidence: Confidence::Possible,
+                                span: edge.span,
+                                site_file,
+                            });
                         reverse
                             .entry(NavNode::Symbol(s))
                             .or_default()
                             .push(NavEdge {
                                 to: NavNode::File(from),
-                                ..e
+                                label: EdgeLabel::Wildcard,
+                                confidence: Confidence::Possible,
+                                span: edge.span,
+                                site_file,
                             });
                     }
                     continue;
@@ -484,17 +501,20 @@ fn build_nav_graph(graph: &ProjectGraph) -> NavGraph {
                     continue
                 }
             };
+        let site_file = nav_node_owning_file(graph, from);
         forward.entry(from).or_default().push(NavEdge {
             to,
             label,
             confidence,
             span: edge.span,
+            site_file,
         });
         reverse.entry(to).or_default().push(NavEdge {
             to: from,
             label,
             confidence,
             span: edge.span,
+            site_file,
         });
     }
 
@@ -1114,7 +1134,12 @@ pub fn neighbors(
     };
 
     let max_depth = if transitive { u32::MAX } else { depth.max(1) };
-    let mut best: HashMap<NavNode, (u32, EdgeLabel, Confidence, Option<Span>)> = HashMap::new();
+    // `site_file`/`span` travel together from here on — both come straight off the `NavEdge`
+    // that reached this neighbor, never re-derived from the neighbor itself (see `NavEdge::
+    // site_file`'s doc: that derivation silently pairs the right line/column with the wrong
+    // file whenever traversing `uses`, where the neighbor is `to`, not the edge's `from`).
+    let mut best: HashMap<NavNode, (u32, EdgeLabel, Confidence, Option<Span>, FileId)> =
+        HashMap::new();
     let mut queue: VecDeque<(NavNode, u32)> = VecDeque::new();
     let mut queued: HashSet<NavNode> = HashSet::new();
     queue.push_back((start, 0));
@@ -1130,7 +1155,7 @@ pub fn neighbors(
             }
             let next_depth = d + 1;
             best.entry(e.to)
-                .or_insert((next_depth, e.label, e.confidence, e.span));
+                .or_insert((next_depth, e.label, e.confidence, e.span, e.site_file));
             if queued.insert(e.to) {
                 queue.push_back((e.to, next_depth));
             }
@@ -1138,9 +1163,9 @@ pub fn neighbors(
     }
     best.remove(&start);
 
-    let mut entries: Vec<(NavNode, u32, EdgeLabel, Confidence, Option<Span>)> = best
+    let mut entries: Vec<(NavNode, u32, EdgeLabel, Confidence, Option<Span>, FileId)> = best
         .into_iter()
-        .map(|(n, (d, l, c, s))| (n, d, l, c, s))
+        .map(|(n, (d, l, c, s, sf))| (n, d, l, c, s, sf))
         .collect();
     entries.sort_by(|a, b| {
         a.1.cmp(&b.1).then_with(|| {
@@ -1167,13 +1192,13 @@ pub fn neighbors(
     let out_entries = entries
         .into_iter()
         .take(limit)
-        .map(|(n, d, l, c, s)| NeighborEntry {
+        .map(|(n, d, l, c, s, sf)| NeighborEntry {
             node: qnode_ref(graph, reach, &nav_to_resolved(graph, n)),
             via: QEdgeRef {
                 edge: l.as_str().to_string(),
                 confidence: c,
                 site: s.map(|sp| NodeSpan {
-                    path: nav_edge_site_path(graph, n),
+                    path: graph.files[sf.0 as usize].path.0.to_string(),
                     start: sp.start,
                     end: sp.end,
                 }),
@@ -1187,22 +1212,6 @@ pub fn neighbors(
         entries: out_entries,
         by_color,
         elided: total.saturating_sub(limit),
-    }
-}
-
-/// The evidence span recorded on a navigation edge is relative to *some* file, but which one
-/// depends on the edge kind (an import statement lives in the importing file; a dynamic-use
-/// wildcard's span lives in the file it was declared narrowed from). Approximates with the
-/// neighbor's own file when the neighbor is a file/symbol — precise enough for "jump to the
-/// proving line" without threading a second explicit path through every `NavEdge`.
-fn nav_edge_site_path(graph: &ProjectGraph, neighbor: NavNode) -> String {
-    match neighbor {
-        NavNode::File(f) => graph.files[f.0 as usize].path.0.to_string(),
-        NavNode::Symbol(s) => graph.files[graph.symbols[s.0 as usize].file.0 as usize]
-            .path
-            .0
-            .to_string(),
-        NavNode::Dependency(_) => String::new(),
     }
 }
 
@@ -1507,9 +1516,9 @@ fn render_path(
             .forward
             .get(&from)
             .and_then(|es| es.iter().find(|e| e.to == to));
-        let (label, confidence, span) = match edge {
-            Some(e) => (e.label.as_str(), e.confidence, e.span),
-            None => ("references", Confidence::Certain, None),
+        let (label, confidence, span, site_file) = match edge {
+            Some(e) => (e.label.as_str(), e.confidence, e.span, Some(e.site_file)),
+            None => ("references", Confidence::Certain, None, None),
         };
         weakest = weakest.min(confidence);
         hops.push(Hop {
@@ -1517,8 +1526,12 @@ fn render_path(
             via: QEdgeRef {
                 edge: label.to_string(),
                 confidence,
-                site: span.map(|sp| NodeSpan {
-                    path: nav_edge_site_path(graph, to),
+                // `site_file` is `None` only in the defensive "no matching edge found" fallback
+                // above (shouldn't happen — every hop in a BFS/DFS path came from a real
+                // traversed edge — but the span/site pair still degrades honestly to absent
+                // rather than fabricating a location).
+                site: span.zip(site_file).map(|(sp, sf)| NodeSpan {
+                    path: graph.files[sf.0 as usize].path.0.to_string(),
                     start: sp.start,
                     end: sp.end,
                 }),
@@ -1933,6 +1946,106 @@ mod tests {
         assert!(selectors.contains(&"b.ts"));
         assert!(selectors.contains(&"dep:lodash"));
         assert!(selectors.contains(&"b.ts#bar"));
+    }
+
+    /// Regression: the evidence `site` on a `uses` entry must point at the *origin's* file (the
+    /// file that wrote the import/reference), not the neighbor's — an earlier implementation
+    /// derived the site path from whichever node was "the neighbor," which is only correct for
+    /// `used-by` (reverse traversal); for `uses` (forward) it silently paired the right line/
+    /// column with the wrong file, actively misleading a reader instead of just omitting evidence.
+    #[test]
+    fn uses_site_is_attributed_to_the_importing_file_not_the_imported_one() {
+        let graph = linear_graph();
+        let reach = reachability::compute(&graph);
+        let resolved = resolve(&graph, &Selector::File(ProjectPath("a.ts".into()))).unwrap();
+        let result = neighbors(
+            &graph,
+            &reach,
+            &resolved,
+            NeighborsOpts {
+                direction: Direction::Uses,
+                edges: EdgeFilter::parse(Some("imports")).unwrap(),
+                depth: 1,
+                transitive: false,
+                limit: 50,
+            },
+        );
+        let to_b = result
+            .entries
+            .iter()
+            .find(|e| e.node.selector == "b.ts")
+            .expect("b.ts should be a uses neighbor");
+        let site = to_b
+            .via
+            .site
+            .as_ref()
+            .expect("the import edge carries a span");
+        assert_eq!(
+            site.path, "a.ts",
+            "the import statement lives in a.ts, not b.ts"
+        );
+        assert_eq!(site.start, (2, 1));
+    }
+
+    #[test]
+    fn used_by_site_is_attributed_to_the_referencing_file() {
+        let graph = linear_graph();
+        let reach = reachability::compute(&graph);
+        let resolved = resolve(&graph, &Selector::File(ProjectPath("b.ts".into()))).unwrap();
+        let result = neighbors(
+            &graph,
+            &reach,
+            &resolved,
+            NeighborsOpts {
+                direction: Direction::UsedBy,
+                edges: EdgeFilter::parse(Some("imports")).unwrap(),
+                depth: 1,
+                transitive: false,
+                limit: 50,
+            },
+        );
+        let from_a = &result.entries[0];
+        assert_eq!(from_a.node.selector, "a.ts");
+        let site = from_a
+            .via
+            .site
+            .as_ref()
+            .expect("the import edge carries a span");
+        assert_eq!(
+            site.path, "a.ts",
+            "the referencing file (a.ts) wrote the import"
+        );
+    }
+
+    #[test]
+    fn trace_between_site_is_attributed_to_the_source_of_each_hop() {
+        let graph = linear_graph();
+        let reach = reachability::compute(&graph);
+        let from = resolve(&graph, &Selector::File(ProjectPath("a.ts".into()))).unwrap();
+        let to = resolve(
+            &graph,
+            &Selector::Symbol(ProjectPath("b.ts".into()), "bar".to_string()),
+        )
+        .unwrap();
+        let result = trace_between(
+            &graph,
+            &reach,
+            &from,
+            &to,
+            EdgeFilter::parse(None).unwrap(),
+            false,
+            5,
+        );
+        let hop = &result.paths[0].hops[0];
+        let site = hop
+            .via
+            .site
+            .as_ref()
+            .expect("the references edge carries a span");
+        // The reference to `bar` is written in a.ts (per linear_graph's `References` edge),
+        // even though the hop's *node* is b.ts#bar.
+        assert_eq!(site.path, "a.ts");
+        assert_eq!(site.start, (4, 1));
     }
 
     #[test]
