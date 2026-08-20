@@ -88,7 +88,14 @@ pub fn extract(path: &str, content: &[u8]) -> FileFacts {
     collect_namespace_uses(root, content, &mut out);
     // Separate full-tree walk (declarations above only visit top-level statements — a
     // reference can appear at any nesting depth, inside any function/block).
-    collect_references(root, content, &export_ref_skips, &mut out.references);
+    collect_references(
+        root,
+        content,
+        None,
+        None,
+        &export_ref_skips,
+        &mut out.references,
+    );
     // Suppression pragmas: comments are `extra` nodes tree-sitter attaches wherever they
     // physically sit — a same-line trailing comment after a declaration lands *inside* that
     // declaration's own subtree (verified via the toolkit's introspect probe), not as a
@@ -1033,10 +1040,11 @@ fn collect_namespace_uses(root: Node, src: &[u8], out: &mut FileFacts) {
     let mut ctx = NamespaceUseCtx {
         namespaces,
         seen_bindings: std::collections::HashSet::new(),
+        seen_ref_sites: std::collections::HashSet::new(),
         seen_refs: std::collections::HashSet::new(),
         exports_escape: None,
     };
-    walk_namespace_uses(root, src, &mut ctx, out);
+    walk_namespace_uses(root, src, None, None, &mut ctx, out);
     if let Some(escape_span) = ctx.exports_escape {
         out.dynamics.push(DynamicUse {
             span: escape_span,
@@ -1049,8 +1057,13 @@ fn collect_namespace_uses(root: Node, src: &[u8], out: &mut FileFacts) {
 struct NamespaceUseCtx {
     /// Local namespace name → index into `FileFacts::imports`.
     namespaces: std::collections::HashMap<SmolStr, usize>,
+    /// Bindings dedupe per (import, member) — one binding fact per name, as before.
     seen_bindings: std::collections::HashSet<(usize, SmolStr)>,
-    seen_refs: std::collections::HashSet<SmolStr>,
+    /// Reference dedupe folds the attribution in (RFC 0012 §4): one reference per
+    /// (member, within) — a use inside a dead function must not mask a live one elsewhere,
+    /// which a per-member-only key would (the first site found wins the only edge).
+    seen_ref_sites: std::collections::HashSet<(usize, SmolStr, Option<SmolStr>)>,
+    seen_refs: std::collections::HashSet<(SmolStr, Option<SmolStr>)>,
     /// First span where `exports`/`module.exports` escaped — one wildcard per file suffices.
     exports_escape: Option<Span>,
 }
@@ -1131,11 +1144,34 @@ fn find_namespace_import_name(import_statement: Node, src: &[u8]) -> Option<Smol
     name
 }
 
-fn walk_namespace_uses(node: Node, src: &[u8], ctx: &mut NamespaceUseCtx, out: &mut FileFacts) {
+fn walk_namespace_uses(
+    node: Node,
+    src: &[u8],
+    within: Option<&SmolStr>,
+    class_outer: Option<&SmolStr>,
+    ctx: &mut NamespaceUseCtx,
+    out: &mut FileFacts,
+) {
     // Import statements are pure binding syntax — the `ns` in `import * as ns` is not a use.
     if node.kind() == "import_statement" {
         return;
     }
+
+    // Same attribution pattern as `collect_references` (see `within_for`'s doc) — the two
+    // passes must agree on which symbol a site executes inside.
+    let own_within = if within.is_none() {
+        within_for(node, src)
+    } else {
+        None
+    };
+    let is_class = node.kind() == "class_declaration" && own_within.is_some();
+    let (within, class_outer) = if runs_at_class_evaluation(node) {
+        (class_outer, class_outer)
+    } else if is_class {
+        (own_within.as_ref(), within)
+    } else {
+        (own_within.as_ref().or(within), class_outer)
+    };
 
     let base: Option<NamespaceBase> = match node.kind() {
         "identifier" => {
@@ -1150,12 +1186,12 @@ fn walk_namespace_uses(node: Node, src: &[u8], ctx: &mut NamespaceUseCtx, out: &
         _ => None,
     };
     if let Some(base) = base {
-        handle_namespace_occurrence(node, base, src, ctx, out);
+        handle_namespace_occurrence(node, base, src, within, ctx, out);
     }
 
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
-        walk_namespace_uses(child, src, ctx, out);
+        walk_namespace_uses(child, src, within, class_outer, ctx, out);
     }
 }
 
@@ -1171,6 +1207,7 @@ fn handle_namespace_occurrence(
     node: Node,
     base: NamespaceBase,
     src: &[u8],
+    within: Option<&SmolStr>,
     ctx: &mut NamespaceUseCtx,
     out: &mut FileFacts,
 ) {
@@ -1204,28 +1241,30 @@ fn handle_namespace_occurrence(
         let prop_name = SmolStr::new(text(prop, src));
         match base {
             NamespaceBase::Import(idx) => {
+                // Dotted synthetic local ("ns.foo") — real identifiers can't contain a dot,
+                // so it can never collide with a genuine binding or declaration.
+                let dotted = SmolStr::new(format!("{}.{}", text(node, src), prop_name));
                 if ctx.seen_bindings.insert((idx, prop_name.clone())) {
-                    // Dotted synthetic local ("ns.foo") — real identifiers can't contain a
-                    // dot, so it can never collide with a genuine binding or declaration.
-                    let dotted = SmolStr::new(format!("{}.{}", text(node, src), prop_name));
                     out.imports[idx].bindings.push(ImportBinding {
                         local: dotted.clone(),
-                        imported: Some(prop_name),
+                        imported: Some(prop_name.clone()),
                     });
+                }
+                if ctx.seen_ref_sites.insert((idx, prop_name, within.cloned())) {
                     out.references.push(RawReference {
                         name: dotted,
                         scope_context: None,
-                        within: None, // RFC 0012 §4 taxonomy lands for JS in its own stage
+                        within: within.cloned(),
                         span: span(parent),
                     });
                 }
             }
             NamespaceBase::OwnExports => {
-                if ctx.seen_refs.insert(prop_name.clone()) {
+                if ctx.seen_refs.insert((prop_name.clone(), within.cloned())) {
                     out.references.push(RawReference {
                         name: prop_name,
                         scope_context: None,
-                        within: None, // RFC 0012 §4 taxonomy lands for JS in its own stage
+                        within: within.cloned(),
                         span: span(parent),
                     });
                 }
@@ -1288,9 +1327,62 @@ fn collect_suppressions(node: Node, src: &[u8], out: &mut Vec<RawSuppression>) {
     }
 }
 
+/// RFC 0012 §4's attribution taxonomy for JS/TS: the declared symbol whose *use* triggers this
+/// node's subtree, or `None` when the code runs at module load. Named callables cover their
+/// whole subtree, signatures included (a dead function's TS parameter/return types die with
+/// it); a `const f = () => {…}` / `const f = function () {…}` declarator attributes the
+/// callable value to `f` (the dominant modern-JS function shape — without it every arrow-bound
+/// body would read as load-time); interfaces/type aliases/enums own their bodies (using the
+/// type requires them). Everything else — top-level statements, non-callable initializers —
+/// stays `None`: load-time, file-attributed, exactly as before. Nested declarations keep the
+/// *outermost* attribution (an inner helper runs when the outer function does), except the one
+/// deliberate carve-out `collect_references` handles inline: class static blocks and static
+/// field initializers run when the class *declaration* evaluates (module load for a top-level
+/// class), not when the class is used — attributing them to the class would lose their effects
+/// once the class dies, the unsafe direction.
+fn within_for(node: Node, src: &[u8]) -> Option<SmolStr> {
+    match node.kind() {
+        "function_declaration"
+        | "generator_function_declaration"
+        | "class_declaration"
+        | "interface_declaration"
+        | "type_alias_declaration"
+        | "enum_declaration" => node
+            .child_by_field_name("name")
+            .map(|n| SmolStr::new(text(n, src))),
+        "variable_declarator" => {
+            let name = node
+                .child_by_field_name("name")
+                .filter(|n| n.kind() == "identifier")?;
+            let value = node.child_by_field_name("value")?;
+            matches!(
+                value.kind(),
+                "arrow_function" | "function_expression" | "generator_function" | "function"
+            )
+            .then(|| SmolStr::new(text(name, src)))
+        }
+        _ => None,
+    }
+}
+
+/// A class-body element that runs at class *evaluation* (load time for a top-level class):
+/// static blocks and `static x = …` field initializers — see `within_for`'s carve-out note.
+fn runs_at_class_evaluation(node: Node) -> bool {
+    if node.kind() == "class_static_block" {
+        return true;
+    }
+    if node.kind() == "public_field_definition" {
+        let mut cursor = node.walk();
+        return node.children(&mut cursor).any(|c| c.kind() == "static");
+    }
+    false
+}
+
 fn collect_references(
     node: Node,
     src: &[u8],
+    within: Option<&SmolStr>,
+    class_outer: Option<&SmolStr>,
     export_ref_skips: &std::collections::HashSet<usize>,
     out: &mut Vec<RawReference>,
 ) {
@@ -1304,6 +1396,22 @@ fn collect_references(
     if node.kind() == "export_statement" && node.child_by_field_name("source").is_some() {
         return;
     }
+
+    // Attribution (RFC 0012 §4): outermost wins; static class-evaluation elements restore the
+    // attribution that held *before* the class (tracked via `class_outer`).
+    let own_within = if within.is_none() {
+        within_for(node, src)
+    } else {
+        None
+    };
+    let is_class = node.kind() == "class_declaration" && own_within.is_some();
+    let (within, class_outer) = if runs_at_class_evaluation(node) {
+        (class_outer, class_outer)
+    } else if is_class {
+        (own_within.as_ref(), within)
+    } else {
+        (own_within.as_ref().or(within), class_outer)
+    };
 
     let skip_field: Option<&str> = match node.kind() {
         "function_declaration"
@@ -1330,7 +1438,7 @@ fn collect_references(
         out.push(RawReference {
             name: SmolStr::new(text(node, src)),
             scope_context: None,
-            within: None, // RFC 0012 §4 taxonomy lands for JS in its own stage
+            within: within.cloned(),
             span: span(node),
         });
     }
@@ -1340,7 +1448,7 @@ fn collect_references(
         if Some(child.id()) == skip_id {
             continue;
         }
-        collect_references(child, src, export_ref_skips, out);
+        collect_references(child, src, within, class_outer, export_ref_skips, out);
     }
 }
 
@@ -1532,6 +1640,104 @@ mod tests {
         let r = refs("function f() { let x: SomeType; }");
         assert!(r.contains(&"SomeType".to_string()));
         assert!(!r.contains(&"x".to_string()));
+    }
+
+    // -------------------------------------------------- within attribution (RFC 0012 §4)
+
+    fn ref_within(src: &str, name: &str) -> Option<String> {
+        extract("f.ts", src.as_bytes())
+            .references
+            .into_iter()
+            .find(|r| r.name.as_str() == name)
+            .unwrap_or_else(|| panic!("no reference named {name:?}"))
+            .within
+            .map(|w| w.to_string())
+    }
+
+    #[test]
+    fn function_body_references_carry_the_function_as_within() {
+        assert_eq!(
+            ref_within("function a() {}\nfunction caller() { a(); }", "a").as_deref(),
+            Some("caller")
+        );
+    }
+
+    #[test]
+    fn arrow_bound_const_body_attributes_to_the_const() {
+        // The dominant modern-JS function shape — without this every arrow body reads as
+        // load-time.
+        assert_eq!(
+            ref_within("function a() {}\nconst caller = () => a();", "a").as_deref(),
+            Some("caller")
+        );
+    }
+
+    #[test]
+    fn top_level_statements_are_load_time_no_within() {
+        assert_eq!(ref_within("function a() {}\na();", "a"), None);
+    }
+
+    #[test]
+    fn non_callable_initializers_are_load_time_no_within() {
+        assert_eq!(ref_within("function a() {}\nconst x = a();", "a"), None);
+    }
+
+    #[test]
+    fn class_bodies_attribute_to_the_class() {
+        assert_eq!(
+            ref_within("function a() {}\nclass C { method() { a(); } }", "a").as_deref(),
+            Some("C")
+        );
+    }
+
+    #[test]
+    fn class_static_blocks_run_at_load_no_within() {
+        // Static blocks execute when the class declaration evaluates (module load for a
+        // top-level class) — attributing them to the class would lose their effects once the
+        // class dies, the unsafe direction (within_for's carve-out).
+        assert_eq!(
+            ref_within("function a() {}\nclass C { static { a(); } }", "a"),
+            None
+        );
+    }
+
+    #[test]
+    fn signature_types_attribute_to_the_function() {
+        assert_eq!(
+            ref_within("type Arg = number;\nfunction f(x: Arg) {}", "Arg").as_deref(),
+            Some("f")
+        );
+    }
+
+    #[test]
+    fn interface_bodies_attribute_to_the_interface() {
+        assert_eq!(
+            ref_within(
+                "type Inner = number;\ninterface I { field: Inner; }",
+                "Inner"
+            )
+            .as_deref(),
+            Some("I")
+        );
+    }
+
+    #[test]
+    fn namespace_member_uses_attribute_per_enclosing_symbol() {
+        // The dedupe key folds the attribution in: the same member used from a (dead)
+        // function AND at top level must yield both references — the dead one must not mask
+        // the live one.
+        let facts = extract(
+            "f.ts",
+            b"import * as ns from \"./m\";\nfunction dead() { ns.used(); }\nns.used();\n",
+        );
+        let withins: Vec<Option<&str>> = facts
+            .references
+            .iter()
+            .filter(|r| r.name.as_str() == "ns.used")
+            .map(|r| r.within.as_deref())
+            .collect();
+        assert!(withins.contains(&Some("dead")), "{withins:?}");
+        assert!(withins.contains(&None), "{withins:?}");
     }
 
     #[test]
