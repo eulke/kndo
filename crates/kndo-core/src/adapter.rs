@@ -169,6 +169,18 @@ pub struct RawReference {
     /// Enough context for the resolution driver (enclosing scope path, receiver hints…).
     pub scope_context: Option<SmolStr>,
     pub span: Span,
+    /// The declared symbol this reference executes *inside* (RFC 0012 §4), under one
+    /// language-blind rule: **`within` = the symbol whose use triggers this code.** Bodies of
+    /// callables → that callable (a member body names it in qualified `Owner.name` form, same
+    /// convention as member root targets); code that runs at module/file *load* (top-level
+    /// statements, package-level initializers) → `None`; code that runs on a type's
+    /// instantiation/first use (constructors, field initializers) → that type. Assembly
+    /// resolves it against the file's own declarations and attributes the `References` edge to
+    /// that symbol — so a dead function's calls no longer keep its callees alive (transitive
+    /// death becomes visible). **Any `within` that doesn't resolve falls back to file
+    /// attribution — today's over-approximation, the safe direction** — and `None` (every
+    /// adapter that doesn't emit it) reproduces prior behavior exactly.
+    pub within: Option<SmolStr>,
 }
 
 /// Syntactic shape only — what the specifier text looks like, not what it resolves to.

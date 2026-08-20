@@ -280,7 +280,7 @@ pub(crate) fn package_owns(manifest_dir: &str, file_dir: &str) -> bool {
 /// an assembly-algorithm change that could produce a different graph from the same facts. Feeds
 /// [`compute_graph_key`] (RFC 0004 §3's "core graph-schema version"); a bump here invalidates
 /// every project's cached `graph.bin` on the next run, same as any other key-input change.
-pub const GRAPH_SCHEMA_VERSION: u32 = 2; // 2: SymbolNode.member_of + member-call fallback (RFC 0012 §3)
+pub const GRAPH_SCHEMA_VERSION: u32 = 3; // 3: within-attributed References (RFC 0012 §4); 2: member_of (§3)
 
 /// The graph snapshot's cache key (RFC 0004 §3, `cache.rs`'s `graph.bin`): a single digest
 /// folding in the *whole* discovered file set (every path + content hash — this already
@@ -992,11 +992,19 @@ pub fn assemble_from_source(
             }
         }
 
-        // File-granularity (`NodeRef::File`, not a specific symbol): extraction doesn't track
-        // which enclosing declaration contains a reference, only which file — sufficient for
-        // reachability (a reachable file referencing a symbol makes that symbol reachable
-        // regardless of which of the file's functions did it) though not for finer-grained
-        // "which caller" evidence later. Bound (imported) names resolve first, then same-file
+        // Edge attribution (RFC 0012 §4): a reference carrying `within` is attributed to the
+        // enclosing symbol it executes inside — resolved against this file's own declarations
+        // (bare names, then the qualified member table, same convention as member root
+        // targets). **Any miss falls back to file attribution — today's over-approximation,
+        // the safe direction** (regression-tested; this fallback is the design's load-bearing
+        // safety property). With symbol attribution, a dead function's calls no longer keep
+        // its callees alive: RFC 0005 §1's execution rule ("a symbol-attributed reference
+        // fires only when its symbol is reached") plus its module-load rule make transitive
+        // death visible. `within: None` — module-level code, and every adapter that doesn't
+        // emit the field — keeps file attribution: load-time references fire when the file
+        // loads, exactly as before.
+        //
+        // Resolution order for the *target*: bound (imported) names first, then same-file
         // declarations, then same-unit siblings (`FileFacts::unit` — Go's package-scoped
         // visibility, absent for file-scoped languages) — real JS/TS can't have both of the
         // first two share a name at module scope, so that ordering is never actually contested
@@ -1005,6 +1013,16 @@ pub fn assemble_from_source(
         // No lookup models block/parameter shadowing: a same-named local could (incorrectly,
         // but safely — see module docs) resolve to an unrelated declaration.
         for reference in &claimed.facts.references {
+            let from = reference
+                .within
+                .as_ref()
+                .and_then(|within| {
+                    symbol_by_name_per_file[i]
+                        .get(within)
+                        .or_else(|| symbol_by_qualified_per_file[i].get(within.as_str()))
+                })
+                .map(|&s| NodeRef::Symbol(s))
+                .unwrap_or(NodeRef::File(file_id));
             let target = bound_symbols
                 .get(&reference.name)
                 .or_else(|| symbol_by_name_per_file[i].get(&reference.name))
@@ -1019,7 +1037,7 @@ pub fn assemble_from_source(
             if let Some(to) = target {
                 edges.push(Edge {
                     kind: EdgeKind::References {
-                        from: NodeRef::File(file_id),
+                        from,
                         to,
                         kind: crate::vocab::RefKind::Read,
                     },
@@ -1061,7 +1079,7 @@ pub fn assemble_from_source(
                 for &to in candidates {
                     edges.push(Edge {
                         kind: EdgeKind::References {
-                            from: NodeRef::File(file_id),
+                            from, // same within-or-file attribution as the exact-match path
                             to,
                             kind: crate::vocab::RefKind::Read,
                         },
@@ -1295,11 +1313,24 @@ mod tests {
                         reexported,
                         opaque_namespace_use,
                     });
+                } else if let Some(rest) = line.strip_prefix("ref-in ") {
+                    // `ref-in <within> <name>` — a reference executing inside the named
+                    // declaration (RFC 0012 §4 attribution).
+                    let mut parts = rest.splitn(2, ' ');
+                    let within = parts.next().unwrap_or("");
+                    let name = parts.next().unwrap_or("");
+                    facts.references.push(RawReference {
+                        name: SmolStr::new(name),
+                        scope_context: None,
+                        span: Span::default(),
+                        within: Some(SmolStr::new(within)),
+                    });
                 } else if let Some(name) = line.strip_prefix("ref ") {
                     facts.references.push(RawReference {
                         name: SmolStr::new(name),
                         scope_context: None,
                         span: Span::default(),
+                        within: None,
                     });
                 } else if line == "root-file" {
                     facts.roots.push(RawRoot {
@@ -1671,6 +1702,108 @@ mod tests {
         );
         let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
         assert!(reference_edges_to(&graph, "orphan").is_empty());
+    }
+
+    // -------------------------------------------------- within attribution (RFC 0012 §4)
+
+    #[test]
+    fn within_attributes_the_reference_edge_to_the_enclosing_symbol() {
+        let dir = project(
+            "within-attribution",
+            &[("a.mock", "decl caller\ndecl callee\nref-in caller callee")],
+        );
+        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let caller = SymbolId(
+            graph
+                .symbols
+                .iter()
+                .position(|s| s.name.as_str() == "caller")
+                .unwrap() as u32,
+        );
+        let callee = SymbolId(
+            graph
+                .symbols
+                .iter()
+                .position(|s| s.name.as_str() == "callee")
+                .unwrap() as u32,
+        );
+        assert!(graph.edges.iter().any(|e| matches!(
+            e.kind,
+            EdgeKind::References { from, to, .. }
+                if from == NodeRef::Symbol(caller) && to == callee
+        )));
+    }
+
+    #[test]
+    fn unresolvable_within_falls_back_to_file_attribution() {
+        // The design's load-bearing safety property (RFC 0012 §4): a `within` naming nothing
+        // this file declares degrades to today's file attribution — keep-alive, never a new
+        // way to lose an edge.
+        let dir = project(
+            "within-fallback",
+            &[("a.mock", "decl callee\nref-in ghost callee\nroot-file")],
+        );
+        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let a = graph.file_id(&ProjectPath(SmolStr::new("a.mock"))).unwrap();
+        let callee = SymbolId(
+            graph
+                .symbols
+                .iter()
+                .position(|s| s.name.as_str() == "callee")
+                .unwrap() as u32,
+        );
+        assert!(graph.edges.iter().any(|e| matches!(
+            e.kind,
+            EdgeKind::References { from, to, .. }
+                if from == NodeRef::File(a) && to == callee
+        )));
+    }
+
+    #[test]
+    fn transitively_dead_code_is_now_visible() {
+        // The precision RFC 0012 §4 exists for: `main → a` (both alive); dead `z → b` — b must
+        // die with z instead of surviving through the live file's blanket attribution.
+        let dir = project(
+            "transitive-dead",
+            &[(
+                "a.mock",
+                "decl main\ndecl a\ndecl z\ndecl b\nref-in main a\nref-in z b\nroot-decl main",
+            )],
+        );
+        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (findings, _) = crate::analysis::run_all(&graph);
+        let unused: Vec<&str> = findings
+            .iter()
+            .filter(|f| f.category == "unused")
+            .filter_map(|f| f.location.symbol.as_deref())
+            .collect();
+        assert!(unused.contains(&"z"), "{unused:?}");
+        assert!(
+            unused.contains(&"b"),
+            "b is only called by dead z and must die with it: {unused:?}"
+        );
+        assert!(!unused.contains(&"a"), "{unused:?}");
+        assert!(!unused.contains(&"main"), "{unused:?}");
+    }
+
+    #[test]
+    fn module_level_references_still_fire_when_the_file_loads() {
+        // `within: None` = load-time code: importing the file keeps its module-level
+        // references alive exactly as before (RFC 0005 §1's module-load rule).
+        let dir = project(
+            "module-level-refs",
+            &[
+                ("entry.mock", "import ./lib.mock\nroot-file"),
+                ("lib.mock", "decl used\nref used"),
+            ],
+        );
+        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (findings, _) = crate::analysis::run_all(&graph);
+        // Alive is the claim — an `internal-only` info finding (exported, used same-file
+        // only) is separate, correct, and out of scope here.
+        assert!(!findings
+            .iter()
+            .any(|f| f.category == "unused" && f.location.symbol.as_deref() == Some("used")));
     }
 
     #[test]

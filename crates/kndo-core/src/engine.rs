@@ -1067,6 +1067,7 @@ mod tests {
                         name: SmolStr::new(name),
                         scope_context: None,
                         span: Span::default(),
+                        within: None,
                     });
                 }
             }

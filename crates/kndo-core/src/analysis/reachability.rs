@@ -114,20 +114,16 @@ pub fn compute(graph: &ProjectGraph) -> ReachabilityMap {
     // R(kind, tau) for every (kind, tau), literally: BFS seeded only by roots whose own
     // confidence is >= tau, traversing only edges with confidence >= tau.
     //
-    // One addition beyond the literal algorithm: reaching a *symbol* also reaches its *owning
-    // file*, at the same confidence. Reference edges are file-granular by design (this module's
-    // own adjacency-construction comment: "extraction doesn't track which enclosing declaration
-    // contains a reference, only which file"), so a file's outgoing References/ImportsFile edges
-    // only ever get traversed once the BFS has visited that file *as a node* — a symbol reached
-    // only via its own direct `Root` edge (RFC 0011 §5's per-export library-mode promotion; Go's
-    // `func main`/`init`/exported-declaration promotion, docs/adapters/go.md §2) never causes
-    // that visit on its own, so whatever the symbol's file references next-door goes uncolored.
-    // Caught dogfooding the Go adapter: `func main()` was correctly a root, but the sibling
-    // function it called (attributed, like every reference, to `main.go` the file) stayed
-    // Unreachable because `main.go` itself was never enqueued. A symbol's aliveness already
-    // implies its file is "in play" for every other purpose this graph models file-granular
-    // reference evidence for; propagating it here keeps that one true consistently, not just at
-    // the root symbol's own file.
+    // One addition beyond the literal algorithm — RFC 0005 §1's **module-load rule** (RFC 0012
+    // §4): reaching a *symbol* also reaches its *owning file*, at the same confidence. Using a
+    // symbol loads its module: the file's load-time (`within: None`, file-attributed)
+    // references and its ImportsFile edges must fire, and a symbol-only root (RFC 0011 §5's
+    // per-export promotion; Go's `func main`/`init`, docs/adapters/go.md §2) must not strand
+    // its own file. Its counterpart, the **execution rule**, needs no code at all: a
+    // symbol-attributed reference edge (`RawReference::within`) simply hangs off the symbol
+    // node, so it traverses only once that symbol is reached — which is what makes transitive
+    // death visible. Originally caught dogfooding the Go adapter: `func main()` was a root but
+    // `main.go` was never enqueued, stranding everything the file referenced.
     let mut reached: HashMap<(RootKind, Confidence), HashSet<NodeRef>> = HashMap::new();
     for &(kind, _) in &ROOT_KINDS {
         let kind_seeds = seeds.get(&kind).cloned().unwrap_or_default();

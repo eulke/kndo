@@ -4,9 +4,10 @@
 //! scope: a symbol whose owning file is itself `unreachable` is skipped, because the file-level
 //! finding already covers it (taxonomy rollup rule — "the file finding replaces the per-symbol
 //! findings it summarizes"; reporting both would be redundant, not more informative). Reference
-//! evidence is file-granular, not per-enclosing-symbol (see `graph::assemble`'s phase 3b and
-//! `EdgeKind::References`'s doc) — safe for this verdict either way: a symbol is `unreachable`
-//! only when *nothing*, from *any* file, references it.
+//! evidence is symbol-attributed where the adapter supplies `within` (RFC 0012 §4 — a dead
+//! function's calls keep nothing alive, so transitive death lands here as ordinary `unused`
+//! findings) and file-attributed otherwise; either way a symbol is `unreachable` only when
+//! *no reachable code anywhere* references it.
 //!
 //! Directory rollup (taxonomy rule 3: "a directory whose every file carries the same verdict
 //! rolls up once more — the widest uniform node gets one finding, not fifty") is implemented

@@ -104,6 +104,7 @@ pub fn extract(path: &str, content: &[u8]) -> FileFacts {
     collect_references(
         root,
         content,
+        None, // top level: within is established by the walk itself (RFC 0012 §4)
         &aliases,
         &mut out.imports,
         &mut seen_bindings,
@@ -414,10 +415,38 @@ fn skip_field_for(kind: &str) -> Option<&'static str> {
     }
 }
 
+/// RFC 0012 §4's attribution taxonomy, applied to Go's grammar: the symbol whose *use*
+/// triggers this node's subtree, or `None` when the enclosing code runs at package load
+/// (top-level `var`/`const` initializers — Go's package-init semantics). Functions and
+/// methods cover their whole subtree, signature included: a dead function's parameter and
+/// result types die with it. Type declarations own their bodies (struct field types,
+/// interface method signatures — using the type requires them). Nested declarations keep the
+/// *outermost* attribution — a local type inside a function runs when the function does.
+fn within_for(node: Node, src: &[u8]) -> Option<SmolStr> {
+    match node.kind() {
+        "function_declaration" => node
+            .child_by_field_name("name")
+            .map(|n| SmolStr::new(text(n, src))),
+        "method_declaration" => {
+            let receiver = node.child_by_field_name("receiver")?;
+            let receiver_type = receiver_type_name(receiver, src)?;
+            let name = node.child_by_field_name("name")?;
+            // Qualified `Owner.name` — the member convention (contracts §2), so assembly's
+            // within-resolution lands in the same qualified table member roots use.
+            Some(SmolStr::new(format!("{receiver_type}.{}", text(name, src))))
+        }
+        "type_spec" | "type_alias" => node
+            .child_by_field_name("name")
+            .map(|n| SmolStr::new(text(n, src))),
+        _ => None,
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn collect_references(
     node: Node,
     src: &[u8],
+    within: Option<&SmolStr>,
     aliases: &HashMap<SmolStr, usize>,
     imports: &mut [RawImport],
     seen_bindings: &mut HashSet<(usize, SmolStr)>,
@@ -428,6 +457,15 @@ fn collect_references(
     if matches!(node.kind(), "import_declaration" | "package_clause") {
         return;
     }
+
+    // Outermost attribution wins (within_for's doc): only compute a new `within` when we're
+    // not already inside one.
+    let own_within = if within.is_none() {
+        within_for(node, src)
+    } else {
+        None
+    };
+    let within = own_within.as_ref().or(within);
 
     // `pkg.Name` where `pkg` is a known import alias: the qualified access JS's `ns.foo`
     // handling already established a convention for (contracts §2's `ImportBinding` shape) —
@@ -451,6 +489,7 @@ fn collect_references(
                         name: dotted,
                         scope_context: None,
                         span: span(node),
+                        within: within.cloned(),
                     });
                     return; // operand/field fully handled — don't also walk them generically
                 }
@@ -471,7 +510,7 @@ fn collect_references(
             if skip_ids.contains(&child.id()) {
                 continue;
             }
-            collect_references(child, src, aliases, imports, seen_bindings, out);
+            collect_references(child, src, within, aliases, imports, seen_bindings, out);
         }
         return;
     }
@@ -484,6 +523,7 @@ fn collect_references(
             name: SmolStr::new(text(node, src)),
             scope_context: None,
             span: span(node),
+            within: within.cloned(),
         });
     }
 
@@ -500,7 +540,7 @@ fn collect_references(
         if Some(child.id()) == skip_id {
             continue;
         }
-        collect_references(child, src, aliases, imports, seen_bindings, out);
+        collect_references(child, src, within, aliases, imports, seen_bindings, out);
     }
 }
 
@@ -737,6 +777,78 @@ type D int
         let facts = extract("a.go", src);
         let specs: Vec<&str> = facts.imports.iter().map(|i| i.specifier.as_str()).collect();
         assert_eq!(specs, vec!["fmt", "encoding/json"]);
+    }
+
+    // -------------------------------------------------- within attribution (RFC 0012 §4)
+
+    fn find_ref<'a>(facts: &'a FileFacts, name: &str) -> &'a RawReference {
+        facts
+            .references
+            .iter()
+            .find(|r| r.name.as_str() == name)
+            .unwrap_or_else(|| panic!("no reference named {name:?} in {:?}", facts.references))
+    }
+
+    #[test]
+    fn function_body_references_carry_the_function_as_within() {
+        let facts = extract("a.go", b"package p\n\nfunc a() {}\nfunc caller() { a() }\n");
+        assert_eq!(find_ref(&facts, "a").within.as_deref(), Some("caller"));
+    }
+
+    #[test]
+    fn method_body_references_carry_the_qualified_member_as_within() {
+        let facts = extract(
+            "a.go",
+            b"package p\n\ntype T struct{}\nfunc helper() {}\nfunc (t *T) Run() { helper() }\n",
+        );
+        assert_eq!(find_ref(&facts, "helper").within.as_deref(), Some("T.Run"));
+    }
+
+    #[test]
+    fn function_signature_types_attribute_to_the_function() {
+        // A dead function's parameter/result types die with it (RFC 0012 §§4–5 synergy).
+        let facts = extract(
+            "a.go",
+            b"package p\n\ntype Arg struct{}\nfunc F(x Arg) {}\n",
+        );
+        assert_eq!(find_ref(&facts, "Arg").within.as_deref(), Some("F"));
+    }
+
+    #[test]
+    fn struct_field_types_attribute_to_the_struct() {
+        let facts = extract(
+            "a.go",
+            b"package p\n\ntype Inner struct{}\ntype Outer struct {\n\tfield Inner\n}\n",
+        );
+        assert_eq!(find_ref(&facts, "Inner").within.as_deref(), Some("Outer"));
+    }
+
+    #[test]
+    fn package_level_initializers_are_load_time_no_within() {
+        // Go's package-init semantics: `var x = f()` runs when the package loads (RFC 0012
+        // §4's per-language table) — attribution None ⇒ the file, exactly as before.
+        let facts = extract(
+            "a.go",
+            b"package p\n\nfunc f() int { return 1 }\n\nvar x = f()\n",
+        );
+        let init_ref = facts
+            .references
+            .iter()
+            .find(|r| r.name.as_str() == "f" && r.within.is_none());
+        assert!(
+            init_ref.is_some(),
+            "package-level initializer reference must have no within: {:?}",
+            facts.references
+        );
+    }
+
+    #[test]
+    fn qualified_import_access_inside_a_function_carries_within_too() {
+        let facts = extract(
+            "a.go",
+            b"package p\n\nimport \"fmt\"\n\nfunc F() { fmt.Println(1) }\n",
+        );
+        assert_eq!(find_ref(&facts, "fmt.Println").within.as_deref(), Some("F"));
     }
 
     #[test]

@@ -1215,6 +1215,7 @@ fn handle_namespace_occurrence(
                     out.references.push(RawReference {
                         name: dotted,
                         scope_context: None,
+                        within: None, // RFC 0012 §4 taxonomy lands for JS in its own stage
                         span: span(parent),
                     });
                 }
@@ -1224,6 +1225,7 @@ fn handle_namespace_occurrence(
                     out.references.push(RawReference {
                         name: prop_name,
                         scope_context: None,
+                        within: None, // RFC 0012 §4 taxonomy lands for JS in its own stage
                         span: span(parent),
                     });
                 }
@@ -1328,6 +1330,7 @@ fn collect_references(
         out.push(RawReference {
             name: SmolStr::new(text(node, src)),
             scope_context: None,
+            within: None, // RFC 0012 §4 taxonomy lands for JS in its own stage
             span: span(node),
         });
     }

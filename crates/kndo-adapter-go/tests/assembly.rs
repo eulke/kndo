@@ -136,3 +136,34 @@ fn unexported_method_called_through_a_variable_is_not_falsely_unused() {
         "uncalled method must still be found: {unused_symbols:?}"
     );
 }
+
+#[test]
+fn a_dead_function_s_callees_die_with_it() {
+    // RFC 0012 §4's whole point, end to end in real Go: references are attributed to the
+    // symbol they execute inside, so dead `z`'s call no longer keeps `b` alive through the
+    // (live) file's blanket attribution — transitive death is visible.
+    let dir = std::env::temp_dir().join("kndo-go-assembly-transitive-dead");
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(dir.join("go.mod"), "module example.com/m\n\ngo 1.22\n").unwrap();
+    fs::write(
+        dir.join("main.go"),
+        "package main\n\nfunc a() int { return 1 }\n\nfunc b() int { return 2 }\n\nfunc z() int { return b() }\n\nfunc main() {\n\t_ = a()\n}\n",
+    )
+    .unwrap();
+
+    let (g, diagnostics) = graph::assemble(&dir, &[Box::new(GoAdapter)]).unwrap();
+    assert!(diagnostics.is_empty(), "{diagnostics:?}");
+    let (findings, _) = analysis::run_all(&g);
+    let unused: Vec<&str> = findings
+        .iter()
+        .filter(|f| f.category == "unused")
+        .filter_map(|f| f.location.symbol.as_deref())
+        .collect();
+    assert!(unused.contains(&"z"), "{unused:?}");
+    assert!(
+        unused.contains(&"b"),
+        "b is only called by dead z and must die with it: {unused:?}"
+    );
+    assert!(!unused.contains(&"a"), "{unused:?}");
+}

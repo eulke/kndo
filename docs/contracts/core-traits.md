@@ -129,10 +129,22 @@ pub struct FileFacts {
                                              // `Owner.name` form. Display/selectors use the
                                              // qualified form; ids fold it in, so same-named
                                              // members of different owners stay distinct.
-    pub references:   Vec<RawReference>,    // { name, scope-context, span } — resolved core-side
-                                             // (graph::assemble) against same-file declarations
-                                             // and this file's own import bindings (below); no
-                                             // adapter hook, no enclosing-scope tracking assumed
+    pub references:   Vec<RawReference>,    // { name, scope-context, span, within } — resolved
+                                             // core-side (graph::assemble) against same-file
+                                             // declarations and this file's own import bindings
+                                             // (below); no adapter resolution hook.
+                                             // within (RFC 0012 §4): the declared symbol this
+                                             // reference executes INSIDE — "the symbol whose
+                                             // use triggers this code": callable bodies → the
+                                             // callable (members in qualified Owner.name form);
+                                             // load-time code → None; on-instantiation code →
+                                             // the type. Assembly attributes the References
+                                             // edge to that symbol, making transitive death
+                                             // visible (a dead function's calls no longer keep
+                                             // its callees alive). An unresolvable within falls
+                                             // back to file attribution — the safe direction —
+                                             // and None (adapters not emitting it) reproduces
+                                             // prior behavior exactly.
     pub imports:      Vec<RawImport>,       // { specifier, kind: Relative|Package, span,
                                              //   side_effect_only, type_only, confidence,
                                              //   bindings: Vec<ImportBinding>, reexported,

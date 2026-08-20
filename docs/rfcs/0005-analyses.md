@@ -81,16 +81,23 @@ Wildcard edges are not a separate mechanism — they are folded into this same c
 `annotate_symbols`, and whatever an adapter's `DynamicUse` reason narrows the scope to — a
 partial string prefix narrows it, a bare `eval` does not). One mechanism, not two.
 
-Reference edges are file-granular, not per-enclosing-symbol (contracts §2: extraction tracks
-*which file* a reference came from, not which declaration inside it made the call) — so reaching
-a *symbol* whose only root is its own direct `Root` edge, with no independent root on its
-*containing file*, would otherwise strand every reference that file makes: the traversal only
-follows a file's outgoing edges once it has visited the file itself as a node. `R(κ, τ)`'s
-traversal therefore also enqueues a reached symbol's owning file, at the same τ, alongside the
-symbol — every other case where root-worthiness lands on a file already implies this (a manifest
-root always names a file first, RFC 0011 §5), so this only changes behavior for languages whose
-roots are symbol-only by construction (Go's `func main`/`init`/exported-declaration promotion,
-docs/adapters/go.md §0, §2 — no manifest-level entry-file concept to also root).
+**Attribution and the module-load rule (RFC 0012 §4).** Reference edges are attributed to the
+declared symbol they execute *inside* when the adapter supplies it (`RawReference::within` —
+contracts §2), and to the file otherwise (module-level code, and adapters that don't emit the
+field). Two rules govern the traversal:
+
+- **Execution rule:** a symbol-attributed reference fires only when its symbol is reached — a
+  dead function's calls keep nothing alive, so transitive death is visible.
+- **Module-load rule:** reaching a symbol also reaches its owning file, at the same τ — using
+  a symbol loads its module, so the file's load-time (`within: None`) references and its
+  `ImportsFile` edges fire. This is also what makes symbol-only roots work (Go's `func
+  main`/`init`/exported-declaration promotion, docs/adapters/go.md §0, §2 — no manifest-level
+  entry file to root alongside them): `R(κ, τ)`'s traversal enqueues a reached symbol's owning
+  file alongside the symbol.
+
+File attribution (the pre-RFC-0012 behavior, still what a `within`-less adapter gets) is the
+deliberate over-approximation: everything a live file references stays alive. Every
+degradation — unresolvable `within`, absent field — falls back to it, never the other way.
 
 Every node's `(color, confidence)` comes from the first matching rule, in this fixed order:
 
