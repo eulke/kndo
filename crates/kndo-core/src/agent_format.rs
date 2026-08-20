@@ -11,15 +11,20 @@
 //! see `engine::Finding`'s doc) — unlike the human renderer, this also means diff mode's NEW
 //! findings aren't visually split by `delta_origin` here; output-schema §9's own example shows
 //! one flat `new:` block, `delta_origin` traveling on each line's JSON-equivalent data only.
-//! `next:` names only commands that work today (`--format json`) — the navigation verbs
-//! (`kndo explain`, `kndo used-by`, …) don't exist yet (RFC 0007), so they aren't offered as if
-//! they did.
+//! `next:` names only commands that work today (`--format json`). `kndo explain` still doesn't
+//! exist (deferred — see `engine::Finding`'s doc on `related`/`remediation`), so it's not offered
+//! as if it did; the navigation verbs (`kndo used-by`, …) now do, via [`render_query`].
 //!
 //! Suppressed findings are never listed here either — matching, marked findings are already
 //! absent from `RunResult.findings`/`fixed` by the time this module sees them — only appended to
 //! the result line as `| suppressed N inline, M config`, and only when non-zero.
+//!
+//! [`render_query`] renders the navigation-verb envelope (output-schema §9: "numbered entries of
+//! `[selector] kind path:line` plus the verb's specifics … same `more:`/`next:` discipline").
 
 use crate::engine::{Finding, RunResult, KNDO_VERSION};
+use crate::query::{NeighborEntry, QNodeRef};
+use crate::query_envelope::{QueryResult, ResultEntry};
 use crate::vocab::Confidence;
 
 const GROUP_ORDER: [&str; 4] = ["defect", "waste", "risk", "hygiene"];
@@ -218,6 +223,131 @@ fn confidence_str(c: Confidence) -> &'static str {
         Confidence::Probable => "probable",
         Confidence::Possible => "possible",
     }
+}
+
+/// Navigation verbs (RFC 0007), same grammar family: a header/status pair first, one block per
+/// `results[]` entry (numbered only when the request batched more than one selector), the same
+/// `more:`/`next:` discipline closing every response.
+pub fn render_query(result: &QueryResult) -> String {
+    let mut out = format!(
+        "kndo {KNDO_VERSION} agent-format {AGENT_FORMAT_VERSION} | verb {} | cache {} | {}ms\n",
+        result.verb.as_str(),
+        result.cache,
+        result.duration_ms
+    );
+    out.push_str(&format!("status: {}\n\n", result.status()));
+
+    let batched = result.results.len() > 1;
+    for (i, entry) in result.results.iter().enumerate() {
+        if batched {
+            let selector = result.selectors.get(i).map(String::as_str).unwrap_or("?");
+            out.push_str(&format!("[{}] {selector}\n", i + 1));
+        }
+        render_query_entry(&mut out, entry);
+        out.push('\n');
+    }
+
+    out.push_str("more: none\n");
+    out.push_str(&format!(
+        "next: kndo {} --format json\n",
+        result.verb.as_str()
+    ));
+    out
+}
+
+fn render_query_entry(out: &mut String, entry: &ResultEntry) {
+    match entry {
+        ResultEntry::Failed {
+            status,
+            selector,
+            message,
+        } => {
+            out.push_str(&format!("{status}: {selector} — {message}\n"));
+        }
+        ResultEntry::Find(r) => {
+            for (n, m) in r.matches.iter().enumerate() {
+                out.push_str(&format!("{}. {}\n", n + 1, node_line(m)));
+            }
+            if r.elided > 0 {
+                out.push_str(&format!("more: {} elided\n", r.elided));
+            }
+        }
+        ResultEntry::Describe(d) => {
+            out.push_str(&format!("node: {}\n", node_line(&d.node)));
+            out.push_str(&format!(
+                "degree: in={} out={}\n",
+                sum_degree(&d.degree.in_by_kind),
+                sum_degree(&d.degree.out_by_kind)
+            ));
+            if !d.reached_by_roots.is_empty() {
+                out.push_str("reached_by_roots:\n");
+                for (n, r) in d.reached_by_roots.iter().enumerate() {
+                    out.push_str(&format!("  {}. {}\n", n + 1, node_line(r)));
+                }
+            }
+            if !d.findings.is_empty() {
+                out.push_str(&format!("findings: {}\n", d.findings.join(", ")));
+            }
+            if !d.sources.is_empty() {
+                out.push_str(&format!("sources: {}\n", d.sources.join(", ")));
+            }
+        }
+        ResultEntry::Neighbors(r) => {
+            out.push_str(&format!("node: {}\n", node_line(&r.node)));
+            for (n, e) in r.entries.iter().enumerate() {
+                out.push_str(&format!("{}. {}\n", n + 1, neighbor_line(e)));
+            }
+            if r.elided > 0 {
+                out.push_str(&format!("more: {} elided\n", r.elided));
+            }
+        }
+        ResultEntry::Trace(r) => {
+            out.push_str(&format!(
+                "from: {} to: {}\n",
+                node_line(&r.from),
+                node_line(&r.to)
+            ));
+            if r.paths.is_empty() {
+                out.push_str("no path\n");
+            }
+            for (n, path) in r.paths.iter().enumerate() {
+                out.push_str(&format!("path {}: {}", n + 1, node_line(&r.from)));
+                for hop in &path.hops {
+                    out.push_str(&format!(
+                        " -[{}, {}]-> {}",
+                        hop.via.edge,
+                        confidence_str(hop.via.confidence),
+                        node_line(&hop.node)
+                    ));
+                }
+                out.push('\n');
+            }
+            if r.paths_elided > 0 {
+                out.push_str(&format!("more: {} elided\n", r.paths_elided));
+            }
+        }
+    }
+}
+
+fn node_line(n: &QNodeRef) -> String {
+    let loc = match &n.span {
+        Some(s) => format!(" {}:{}", s.path, s.start.0),
+        None => String::new(),
+    };
+    format!("[{}] {}{loc}", n.selector, n.kind)
+}
+
+fn neighbor_line(e: &NeighborEntry) -> String {
+    format!(
+        "{} via {} (depth {})",
+        node_line(&e.node),
+        e.via.edge,
+        e.depth
+    )
+}
+
+fn sum_degree(m: &std::collections::HashMap<String, usize>) -> usize {
+    m.values().sum()
 }
 
 #[cfg(test)]

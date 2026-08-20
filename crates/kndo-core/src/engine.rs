@@ -19,6 +19,7 @@ use crate::adapter::{Diagnostic, DiagnosticLevel, LanguageAdapter, ProjectPath, 
 use crate::analysis;
 use crate::gitutil;
 use crate::graph;
+use crate::query_envelope::{self, QueryRequest, QueryResult};
 use crate::vocab::Confidence;
 
 /// The set of paths that differ (added, removed, or content-changed) between two graphs' file
@@ -337,17 +338,21 @@ pub struct RunResult {
     pub suppressed: SuppressedSummary,
 }
 
+/// `"warm"` only when the cache was on *and* actually served something this run — an
+/// enabled-but-empty cache (first run ever, or every file changed) is honestly `"cold"`
+/// (RFC 0004 §2). Shared by every renderer (`RunResult`'s `to_json`/`to_agent_format` and
+/// `Engine::query`'s envelope alike) so "what counts as warm" is defined exactly once.
+fn cache_status_str(enabled: bool, hits: u64) -> &'static str {
+    if enabled && hits > 0 {
+        "warm"
+    } else {
+        "cold"
+    }
+}
+
 impl RunResult {
-    /// `"warm"` only when the cache was on *and* actually served something this run — an
-    /// enabled-but-empty cache (first run ever, or every file changed) is honestly `"cold"`
-    /// (RFC 0004 §2). Shared by every renderer (`to_json`, `to_agent_format`) so "what counts as
-    /// warm" is defined exactly once.
     pub fn cache_status(&self) -> &'static str {
-        if self.cache_enabled && self.cache_hits > 0 {
-            "warm"
-        } else {
-            "cold"
-        }
+        cache_status_str(self.cache_enabled, self.cache_hits)
     }
 }
 
@@ -727,6 +732,52 @@ impl Engine {
         }
     }
 
+    /// One navigation query (RFC 0007, contracts §5's `Engine::query`): assembles/warms the
+    /// graph exactly like full-mode `check`, then dispatches to the requested verb. Read-only —
+    /// never touches findings, the baseline, or anything beyond what assembly's own cache
+    /// read/write already does.
+    pub fn query(&mut self, req: QueryRequest) -> QueryResult {
+        self.query_batch(vec![req])
+            .into_iter()
+            .next()
+            .expect("query_batch returns exactly one result per request")
+    }
+
+    /// `kndo query`'s batching entry point (RFC 0007 §4.7): assembles/warms the graph exactly
+    /// **once** for the whole batch — the amortization the RFC's batching tenet exists for —
+    /// then answers every request against that one shared snapshot. One request failing (bad
+    /// selector, no path) never drops the others; every request sees the same graph, so answers
+    /// stay mutually consistent (no torn reads across a batch).
+    pub fn query_batch(&mut self, requests: Vec<QueryRequest>) -> Vec<QueryResult> {
+        let start = Instant::now();
+        let root = self.root.clone();
+        let (graph, findings, _diagnostics, _suppressed) = match self.assemble_and_analyze(&root) {
+            Ok(t) => t,
+            Err(d) => {
+                return requests
+                    .into_iter()
+                    .map(|req| query_envelope::build_failure(req, d.message.clone()))
+                    .collect()
+            }
+        };
+        let reach = query_envelope::compute_reachability(&graph);
+        let findings_owned = findings; // keep the Vec<Finding> alive across the borrow below
+        let locations = query_envelope::finding_locations(&findings_owned);
+        let cache = cache_status_str(
+            self.cache_enabled,
+            self.cache
+                .as_ref()
+                .map(|c| c.hits() + c.graph_hits())
+                .unwrap_or(0),
+        );
+        let duration_ms = start.elapsed().as_millis() as u64;
+
+        requests
+            .into_iter()
+            .map(|req| query_envelope::run(&graph, &reach, &locations, req, cache, duration_ms))
+            .collect()
+    }
+
     /// The lowest-level shared step: assemble the graph rooted at an arbitrary directory (the
     /// real project root for full mode; a git-materialized temp directory for diff modes'
     /// "before", and `--staged`'s "after") and run every analysis over it. `self.cache` is
@@ -888,10 +939,10 @@ mod tests {
     }
 
     /// A second mock, richer than [`CacheMockAdapter`]: understands `root-file` (a whole-file
-    /// production root), `import ./sibling.dmock` (an `ImportsFile` edge), and
-    /// `suppress-file <category>` (a File-scope `RawSuppression`) — enough to drive `unused`
-    /// (file-level) and inline suppression, exactly what the diff-mode and suppression tests
-    /// below need to produce real new/fixed/suppressed findings across two tree states.
+    /// production root), `import ./sibling.dmock` (an `ImportsFile` edge),
+    /// `suppress-file <category>` (a File-scope `RawSuppression`), `decl <name>` (an exported
+    /// Function declaration), and `ref <name>` (a file-granular reference) — enough to drive
+    /// `unused` (file-level), inline suppression, and navigation-query tests alike.
     struct DiffMockAdapter;
 
     impl LanguageAdapter for DiffMockAdapter {
@@ -944,6 +995,20 @@ mod tests {
                         bindings: vec![],
                         reexported: false,
                         opaque_namespace_use: false,
+                    });
+                } else if let Some(name) = line.strip_prefix("decl ") {
+                    facts.declarations.push(crate::adapter::Declaration {
+                        name: SmolStr::new(name),
+                        kind: crate::vocab::SymbolKind::Function,
+                        span: Span::default(),
+                        exported: true,
+                        visibility: crate::adapter::VisibilityLevel(1),
+                    });
+                } else if let Some(name) = line.strip_prefix("ref ") {
+                    facts.references.push(crate::adapter::RawReference {
+                        name: SmolStr::new(name),
+                        scope_context: None,
+                        span: Span::default(),
                     });
                 }
             }
@@ -1417,5 +1482,141 @@ mod tests {
         assert_eq!(finding_path(&result.findings[0]), "also-dead.dmock");
         // Reported from the "after" side, mirroring baseline's convention.
         assert_eq!(result.suppressed.inline, 1);
+    }
+
+    fn query_engine(dir: &std::path::Path) -> Engine {
+        Engine::open(
+            dir,
+            ConfigOverrides::default(),
+            vec![Box::new(DiffMockAdapter)],
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn query_find_locates_a_declared_symbol() {
+        let dir = std::env::temp_dir().join("kndo-engine-query-find");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("root.dmock"), "root-file\ndecl handler\n").unwrap();
+
+        let mut engine = query_engine(&dir);
+        let result = engine.query(crate::query_envelope::QueryRequest {
+            id: None,
+            verb: crate::query_envelope::Verb::Find,
+            selectors: vec!["handler".to_string()],
+            flags: crate::query_envelope::QueryFlags::default(),
+        });
+        assert_eq!(result.status(), "ok");
+        let crate::query_envelope::ResultEntry::Find(found) = &result.results[0] else {
+            panic!("expected a Find result");
+        };
+        assert_eq!(found.matches[0].selector, "root.dmock#handler");
+    }
+
+    #[test]
+    fn query_describe_reports_a_not_found_selector() {
+        let dir = std::env::temp_dir().join("kndo-engine-query-not-found");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("root.dmock"), "root-file\n").unwrap();
+
+        let mut engine = query_engine(&dir);
+        let result = engine.query(crate::query_envelope::QueryRequest {
+            id: Some("q1".to_string()),
+            verb: crate::query_envelope::Verb::Describe,
+            selectors: vec!["missing.dmock".to_string()],
+            flags: crate::query_envelope::QueryFlags::default(),
+        });
+        assert_eq!(result.status(), "not-found");
+        assert!(matches!(
+            &result.results[0],
+            crate::query_envelope::ResultEntry::Failed {
+                status: "not-found",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn query_used_by_finds_the_importing_file() {
+        let dir = std::env::temp_dir().join("kndo-engine-query-used-by");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("root.dmock"), "root-file\nimport ./lib.dmock\n").unwrap();
+        std::fs::write(dir.join("lib.dmock"), "").unwrap();
+
+        let mut engine = query_engine(&dir);
+        let result = engine.query(crate::query_envelope::QueryRequest {
+            id: None,
+            verb: crate::query_envelope::Verb::UsedBy,
+            selectors: vec!["lib.dmock".to_string()],
+            flags: crate::query_envelope::QueryFlags::default(),
+        });
+        let crate::query_envelope::ResultEntry::Neighbors(n) = &result.results[0] else {
+            panic!("expected a Neighbors result");
+        };
+        assert_eq!(n.entries.len(), 1);
+        assert_eq!(n.entries[0].node.selector, "root.dmock");
+    }
+
+    #[test]
+    fn query_trace_finds_the_liveness_path() {
+        let dir = std::env::temp_dir().join("kndo-engine-query-trace");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        // The mock adapter never populates import bindings, so a cross-file `ref` can't resolve
+        // (matches the real js-ts adapter's own binding-driven cross-file resolution — this is
+        // a same-file reference instead, which the mock's `symbol_by_name_per_file` fallback can
+        // resolve on its own).
+        std::fs::write(dir.join("root.dmock"), "root-file\ndecl bar\nref bar\n").unwrap();
+
+        let mut engine = query_engine(&dir);
+        let result = engine.query(crate::query_envelope::QueryRequest {
+            id: None,
+            verb: crate::query_envelope::Verb::Trace,
+            selectors: vec!["root.dmock#bar".to_string()],
+            flags: crate::query_envelope::QueryFlags::default(),
+        });
+        let crate::query_envelope::ResultEntry::Trace(t) = &result.results[0] else {
+            panic!("expected a Trace result");
+        };
+        assert_eq!(t.from.selector, "roots:production");
+        assert_eq!(t.paths.len(), 1);
+    }
+
+    #[test]
+    fn query_batch_shares_one_graph_load_and_aligns_results_with_requests() {
+        let dir = std::env::temp_dir().join("kndo-engine-query-batch");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("root.dmock"), "root-file\ndecl foo\ndecl bar\n").unwrap();
+
+        let mut engine = query_engine(&dir);
+        let results = engine.query_batch(vec![
+            crate::query_envelope::QueryRequest {
+                id: Some("q1".to_string()),
+                verb: crate::query_envelope::Verb::Find,
+                selectors: vec!["foo".to_string()],
+                flags: crate::query_envelope::QueryFlags::default(),
+            },
+            crate::query_envelope::QueryRequest {
+                id: Some("q2".to_string()),
+                verb: crate::query_envelope::Verb::Find,
+                selectors: vec!["bar".to_string()],
+                flags: crate::query_envelope::QueryFlags::default(),
+            },
+        ]);
+        assert_eq!(results.len(), 2);
+        assert_eq!(results[0].id.as_deref(), Some("q1"));
+        assert_eq!(results[1].id.as_deref(), Some("q2"));
+        let crate::query_envelope::ResultEntry::Find(f1) = &results[0].results[0] else {
+            panic!("expected Find");
+        };
+        assert_eq!(f1.matches[0].selector, "root.dmock#foo");
+        let crate::query_envelope::ResultEntry::Find(f2) = &results[1].results[0] else {
+            panic!("expected Find");
+        };
+        assert_eq!(f2.matches[0].selector, "root.dmock#bar");
     }
 }

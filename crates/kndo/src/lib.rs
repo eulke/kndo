@@ -12,7 +12,7 @@
 //! Embedders wanting a subset build with `--no-default-features --features js,go,…`
 //! (ADR 0006 feature-gated builds).
 
-pub use kndo_core::{adapter, discovery, engine, graph, plugin, vocab};
+pub use kndo_core::{adapter, discovery, engine, graph, plugin, query, query_envelope, vocab};
 
 use kndo_core::adapter::LanguageAdapter;
 use kndo_core::engine::{ConfigOverrides, Engine, EngineError};

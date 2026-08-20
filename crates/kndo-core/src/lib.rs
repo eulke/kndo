@@ -21,6 +21,7 @@ mod gitutil;
 pub mod graph;
 pub mod plugin;
 pub mod query;
+pub mod query_envelope;
 mod rkyv_support;
 mod suppression;
 pub mod vocab;
