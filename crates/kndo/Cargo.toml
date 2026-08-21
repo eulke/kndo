@@ -17,6 +17,7 @@ kndo-adapter-kotlin = { path = "../kndo-adapter-kotlin", optional = true }
 kndo-adapter-swift = { path = "../kndo-adapter-swift", optional = true }
 kndo-adapter-json = { path = "../kndo-adapter-json", optional = true }
 kndo-adapter-css = { path = "../kndo-adapter-css", optional = true }
+kndo-plugin-api = { path = "../kndo-plugin-api", optional = true }
 
 [dev-dependencies]
 # "schema" here is test-only, to detect a stale committed schema — the shipped binary above
@@ -24,11 +25,13 @@ kndo-adapter-css = { path = "../kndo-adapter-css", optional = true }
 kndo-core = { path = "../kndo-core", features = ["schema"] }
 jsonschema = { version = "0.49", default-features = false }
 serde_json = { workspace = true }
+wit-component = "0.219"
+tempfile = "3"
 
 [features]
 # Every first-party adapter is a feature so embedders can build slimmer binaries
 # (ADR 0006); the default is the full product.
-default = ["js", "go", "rust", "java", "kotlin", "swift", "json", "css"]
+default = ["js", "go", "rust", "java", "kotlin", "swift", "json", "css", "external-adapters"]
 js = ["dep:kndo-adapter-js"]
 go = ["dep:kndo-adapter-go"]
 rust = ["dep:kndo-adapter-rust"]
@@ -37,3 +40,9 @@ kotlin = ["dep:kndo-adapter-kotlin"]
 swift = ["dep:kndo-adapter-swift"]
 json = ["dep:kndo-adapter-json"]
 css = ["dep:kndo-adapter-css"]
+# Third-party adapters as WASM components (ADR 0003, docs/contracts/wasm-abi.md), auto-discovered
+# from `.kndo/plugins/*.wasm`. Its own feature (not folded into `default`'s language list) because
+# it pulls in a WASM runtime rather than a language grammar — an embedder who wants a minimal,
+# fully-static binary with no third-party extension surface can build with
+# `--no-default-features --features js,go,...` to drop it (ADR 0006).
+external-adapters = ["dep:kndo-plugin-api"]

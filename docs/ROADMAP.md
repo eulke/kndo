@@ -592,8 +592,65 @@ were redesigned to reference from within the declaring file itself, the same con
 spec's §2/§7 already named as a documented non-goal, now confirmed by the harness rather than
 just asserted in prose.
 
-**Exit:** all eight launch languages pass conformance; a third-party demo adapter (not in-tree)
-runs against the released binary; budget still holds with all adapters active.
+### M5 progress — WASM plugin/adapter ABI ✅ (landed 2026-08-21)
+
+`kndo-plugin-api` per `docs/contracts/wasm-abi.md`: the WASM component-model tier ADR 0003
+promised, shipped for `LanguageAdapter` — a deliberately scoped-down **v1** (adapter-only, no
+`Plugin` hooks; no manifest/resolve, `ResolveCtx` host-imports, visibility ladder, or byte
+content — the full list, and why each is a real cut rather than an oversight, is
+`wasm-abi.md` §2). The scoping question that mattered most: whether v1 needed to be
+bidirectional (host-import callbacks for `resolve()`'s `ResolveCtx` queries) or could stay
+one-directional (guest exports only). Cutting `resolve()`/manifests entirely — the host
+answers all three trivially without ever calling the guest, the same posture JSON/CSS already
+document for their own non-applicable trait methods — kept v1 one-directional, which is what
+let the reference guest target plain `wasm32-unknown-unknown` with zero WASI: the sandbox
+("no ambient fs/net", ADR 0003) becomes a property of the compilation target itself, not a
+policy the host has to enforce and hope holds.
+
+Toolchain-wise: `wit-bindgen` (guest codegen) and `wasmtime::component::bindgen!` (host
+codegen) both read the same `.wit` file at compile time, no `cargo-component` install
+required; componentizing a plain core `wasm32-unknown-unknown` module into an actual
+component binary uses the `wit-component` crate as a library
+(`ComponentEncoder::default().module(bytes)?.encode()?`) — also no external CLI, which
+matters because a v1-conformant guest (no WASI imports to satisfy) needs no adapter shim
+either. `wasmtime` is pinned to `27.0.0` (the latest version this workspace's Rust toolchain
+can build; `48.0.0` requires a newer rustc) — ADR 0003's own "versioned and conservative from
+day one" discipline applied to its runtime dependency, not just the WIT surface.
+
+`examples/kndo-plugin-demo` is the reference/compliance adapter: a deliberately invented toy
+language ("kdemo"), hand-scanned with a small lexer rather than a real grammar — pulling
+tree-sitter's C sources across the `wasm32-unknown-unknown` boundary would have been a much
+bigger yak than this demo exists to shave, and nothing about the ABI requires a WASM adapter
+to use tree-sitter at all (that's an ADR 0002 choice for *native* adapters). It lives outside
+the cargo workspace (`exclude`d, the same convention `spikes/perf` already uses) so "not
+in-tree" is structural, not a promise: it cannot be statically linked into `kndo` by accident.
+`kndo::open` auto-discovers `.kndo/plugins/*.wasm` (RFC 0003 §3's stated convention, no config
+parser needed — zero-config by default like every other discovery mechanism in the product),
+feature-gated (`external-adapters`, on by default, droppable for a minimal static build per
+ADR 0006).
+
+Compliance is two real, always-fresh (nothing checked in as a binary) end-to-end tests:
+`kndo-plugin-api/tests/compliance.rs` drives a loaded `WasmAdapter` against a hand-built
+`Engine`; `kndo/tests/external_adapter.rs` goes through the *full* product composition —
+`kndo::open`, `.kndo/plugins/` discovery included — the exact call every `kndo-cli` command
+makes, closing the exit criterion literally rather than by analogy. Both build the demo guest
+from source and componentize it in-process on every run, then assert a real `unused` finding
+(a genuinely dead function) comes back correctly through the real reachability engine while a
+called one doesn't — proof the ABI carries real graph facts, not just that it links.
+
+**Exit:** all eight launch languages pass conformance — **met** (§ per-language progress
+notes above); a third-party demo adapter (not in-tree) runs against the released binary —
+**met**, `kndo/tests/external_adapter.rs`; budget still holds with all adapters active — **met
+by construction**: `.kndo/plugins/` discovery is a single `read_dir` that's a no-op when the
+directory doesn't exist (every existing benchmark/fixture project), and no per-adapter
+overhead was touched.
+
+**Carried out of M5, not required by its stated Exit criteria:** "First-party ecosystem
+plugins for detected frameworks" (M5's own header names it, but it isn't one of the three
+bullets Exit actually checks) and the `Plugin` trait's own WASM bridge (`wasm-abi.md` §2) —
+both real M5-scoped ideas, neither built. Parking lot until a first ecosystem plugin (or real
+external-plugin demand) picks a concrete shape to build toward, same "don't build the
+mechanism before the demand" call this session made for `resolve()`'s host-imports.
 
 ## M6 — 1.0 hardening
 False-positive hunt across dogfood corpus (target < 2%, vision §6), schema/ABI freeze, docs site,

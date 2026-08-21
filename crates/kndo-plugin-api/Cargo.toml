@@ -1,0 +1,20 @@
+[package]
+name = "kndo-plugin-api"
+description = "kndo-plugin-api: the versioned WASM component-model ABI external adapters/plugins target (ADR 0003). Host-side bridge only — see docs/contracts/wasm-abi.md."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+kndo-core = { path = "../kndo-core" }
+smol_str = { workspace = true }
+# Pinned to the last major compatible with this workspace's toolchain (ADR 0003: "the ABI must
+# be versioned and conservative from day one" — the same discipline applies to its own runtime
+# dependency, not just the WIT surface).
+wasmtime = { version = "=27.0.0", features = ["component-model"] }
+
+[dev-dependencies]
+wit-component = "0.219"
+tempfile = "3"

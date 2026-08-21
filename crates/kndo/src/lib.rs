@@ -50,11 +50,45 @@ pub fn default_adapters() -> Vec<Box<dyn LanguageAdapter>> {
     }
 }
 
-/// The one-line entry point frontends use: an [`Engine`] over the full default product.
-/// Frontends needing a custom adapter set (embedders, tests) still have
-/// [`Engine::open`] directly.
+/// The one-line entry point frontends use: an [`Engine`] over the full default product plus
+/// whatever third-party WASM adapters this project has installed. Frontends needing a custom
+/// adapter set (embedders, tests) still have [`Engine::open`] directly.
 pub fn open(root: &Path, overrides: ConfigOverrides) -> Result<Engine, EngineError> {
-    Engine::open(root, overrides, default_adapters())
+    let mut adapters = default_adapters();
+    adapters.extend(external_adapters(root));
+    Engine::open(root, overrides, adapters)
+}
+
+/// Third-party adapters as WASM components (ADR 0003, `docs/contracts/wasm-abi.md`),
+/// auto-discovered from `.kndo/plugins/*.wasm` (RFC 0003 §3's stated convention) — no
+/// `kndo.toml` entry needed, the same "drop a file in, it's live" default every other
+/// zero-config surface in this product follows. A component that fails to load (not a real
+/// component binary, a version mismatch, an instantiation error) is skipped rather than
+/// failing the whole run: one broken extension must not take every other language down with
+/// it. There is no diagnostic surfaced for a *load*-time failure yet (unlike a per-call
+/// fuel/budget trip inside `WasmAdapter::extract`, which does produce one) — an honest gap,
+/// not an omission papered over; `kndo doctor`'s adapter list is the way to confirm a plugin
+/// actually loaded until one lands.
+fn external_adapters(root: &Path) -> Vec<Box<dyn LanguageAdapter>> {
+    #[cfg(feature = "external-adapters")]
+    {
+        let dir = root.join(".kndo").join("plugins");
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            return Vec::new();
+        };
+        entries
+            .filter_map(Result::ok)
+            .map(|entry| entry.path())
+            .filter(|path| path.extension().and_then(|ext| ext.to_str()) == Some("wasm"))
+            .filter_map(|path| kndo_plugin_api::WasmAdapter::load(&path).ok())
+            .map(|adapter| Box::new(adapter) as Box<dyn LanguageAdapter>)
+            .collect()
+    }
+    #[cfg(not(feature = "external-adapters"))]
+    {
+        let _ = root;
+        Vec::new()
+    }
 }
 
 #[cfg(test)]

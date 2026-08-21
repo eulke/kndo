@@ -13,9 +13,10 @@ members = [
     "crates/kndo-adapter-swift",
     "crates/kndo-adapter-json",
     "crates/kndo-adapter-css",
+    "crates/kndo-plugin-api",
     "xtask",
 ]
-exclude = ["spikes/perf"]
+exclude = ["spikes/perf", "examples/kndo-plugin-demo"]
 
 [workspace.package]
 version = "0.1.0"

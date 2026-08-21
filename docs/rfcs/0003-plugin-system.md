@@ -1,6 +1,6 @@
 # RFC 0003 — Plugin System
 
-**Status:** Accepted · **Depends on:** RFC 0001, 0002 · **Normative contract:** [contracts/core-traits.md](../contracts/core-traits.md)
+**Status:** Accepted · **Depends on:** RFC 0001, 0002 · **Normative contracts:** [contracts/core-traits.md](../contracts/core-traits.md), [contracts/wasm-abi.md](../contracts/wasm-abi.md) (the external-tier ABI's concrete v1 shape, adapters only — see that document's own scope notes)
 
 ## 1. Why plugins exist
 
@@ -40,6 +40,11 @@ Two tiers (decision in ADR 0003):
    (`kndo-plugin-api`), loaded from `.kndo/plugins/` or a configured path. Sandboxed (no fs/net;
    host-mediated file access), with per-file fuel/time limits so a plugin cannot break the 500 ms
    budget — a plugin that exceeds its budget is disabled for the run and reported as a diagnostic.
+   **Shipped for `LanguageAdapter` (M5, v1 — [contracts/wasm-abi.md](../contracts/wasm-abi.md)):**
+   `.kndo/plugins/*.wasm` adapters auto-discover through `kndo::open` and are indistinguishable
+   from a compiled-in adapter to the `Engine`. The `Plugin` hooks below are not over WASM yet —
+   their sink-based shape is a different, larger ABI surface than an adapter's three flat
+   functions, and nothing has demanded it be built ahead of real external-plugin usage.
 
 Both tiers use the same trait; built-ins are simply statically linked. Third parties can therefore
 prototype a plugin natively and ship it as WASM unchanged.
