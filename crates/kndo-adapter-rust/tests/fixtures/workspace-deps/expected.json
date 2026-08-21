@@ -1,0 +1,16 @@
+{
+  "findings": [
+    {
+      "category": "unused",
+      "subject_kind": "dependency",
+      "path": "app/Cargo.toml",
+      "symbol": "serde"
+    },
+    {
+      "category": "undeclared",
+      "subject_kind": "dependency",
+      "path": "app/Cargo.toml",
+      "symbol": "rand_chacha"
+    }
+  ]
+}

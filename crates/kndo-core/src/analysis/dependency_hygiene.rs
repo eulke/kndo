@@ -34,15 +34,28 @@
 //! only ever push a dependency out of `unused`; they can never make it `test-only` (a script
 //! invocation is never test-role), matching the "at least one production- or
 //! tooling-reachable file" used-verdict RFC 0005 §5's table already states for real imports.
+//!
+//! **Languages that can't resolve dependency usage** (`PackageNode::resolves_dependency_usage`
+//! — Java: an import's package has no reliable mapping to its Maven/Gradle coordinate without
+//! resolving the classpath, which kndo structurally never does). Their packages are skipped
+//! entirely, with one diagnostic per run rather than a false-positive `unused` flood — a
+//! dependency graph.declared_dependencies knows about but has zero recorded usage evidence for
+//! is not a meaningful "unused" claim when usage evidence can never exist in the first place.
+//! `version-skew` is unaffected: it compares declared versions across manifests directly, no
+//! usage edge needed, so it stays fully precise for every language.
 
 use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 
+use crate::adapter::{Diagnostic, DiagnosticLevel};
 use crate::analysis::{finding_id, package_discriminator, package_label};
 use crate::engine::{Finding, Location, Severity};
 use crate::graph::{DeclaredDependency, ProjectGraph};
 use crate::vocab::{Confidence, DependencyId, DependencyScope, EdgeKind, FileRole, PackageId};
 
-pub fn find_dependency_hygiene(graph: &ProjectGraph) -> Vec<Finding> {
+/// Findings plus, when at least one declared dependency belongs to a package whose language
+/// can't produce usage edges, the one diagnostic naming how many were skipped instead of a
+/// false `unused` per dependency.
+pub fn find_dependency_hygiene(graph: &ProjectGraph) -> (Vec<Finding>, Option<Diagnostic>) {
     let dep_id_by_name: HashMap<&str, DependencyId> = graph
         .dependencies
         .iter()
@@ -74,6 +87,7 @@ pub fn find_dependency_hygiene(graph: &ProjectGraph) -> Vec<Finding> {
     }
 
     let mut findings = Vec::new();
+    let mut skipped = 0u32;
     let mut seen: HashSet<(PackageId, &str)> = HashSet::default();
     for dep in &graph.declared_dependencies {
         if dep.scope == DependencyScope::Peer {
@@ -83,6 +97,10 @@ pub fn find_dependency_hygiene(graph: &ProjectGraph) -> Vec<Finding> {
         // package (a real inconsistency `version-skew` already flags) — one hygiene verdict
         // per (package, name), not one per declaration.
         if !seen.insert((dep.package, dep.name.as_str())) {
+            continue;
+        }
+        if !graph.packages[dep.package.0 as usize].resolves_dependency_usage {
+            skipped += 1;
             continue;
         }
 
@@ -114,7 +132,19 @@ pub fn find_dependency_hygiene(graph: &ProjectGraph) -> Vec<Finding> {
             findings.push(test_only_finding(graph, dep, confidence));
         }
     }
-    findings
+
+    let diagnostic = (skipped > 0).then(|| Diagnostic {
+        level: DiagnosticLevel::Info,
+        path: None,
+        message: format!(
+            "dependency-hygiene: {skipped} declared dependenc{} skipped (unused/test-only) — \
+             this language's imports don't map to manifest coordinates without resolving the \
+             classpath, so \"no usage evidence\" isn't a meaningful unused claim",
+            if skipped == 1 { "y" } else { "ies" }
+        ),
+        span: None,
+    });
+    (findings, diagnostic)
 }
 
 fn unused_finding(
@@ -243,6 +273,7 @@ mod tests {
                 private: true,
                 declares_surface: false,
                 surface: Vec::new(),
+                resolves_dependency_usage: true,
             }])
             .with_declared_dependencies(declared_deps)
     }
@@ -270,7 +301,7 @@ mod tests {
             vec![edge],
             vec![declared("insta", DependencyScope::Prod)],
         );
-        let findings = find_dependency_hygiene(&graph);
+        let findings = find_dependency_hygiene(&graph).0;
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].category, "test-only");
 
@@ -293,7 +324,30 @@ mod tests {
             vec![edge],
             vec![declared("insta", DependencyScope::Prod)],
         );
-        assert!(find_dependency_hygiene(&graph).is_empty());
+        assert!(find_dependency_hygiene(&graph).0.is_empty());
+    }
+
+    #[test]
+    fn a_language_that_cannot_resolve_dependency_usage_is_skipped_with_a_diagnostic() {
+        // Java's shape: PackageNode::resolves_dependency_usage is false, so zero usage
+        // evidence is NOT a meaningful `unused` claim — the dependency is skipped, and the
+        // run gets one informational diagnostic instead of a false-positive finding.
+        let graph = ProjectGraph::for_test(vec![], vec![], vec![], vec![])
+            .with_packages(vec![PackageNode {
+                workspace_entry: None,
+                manifest: Some(ProjectPath(SmolStr::new("pom.xml"))),
+                name: Some(SmolStr::new("demo")),
+                private: true,
+                declares_surface: false,
+                surface: Vec::new(),
+                resolves_dependency_usage: false,
+            }])
+            .with_declared_dependencies(vec![declared("guava", DependencyScope::Prod)]);
+        let (findings, diagnostic) = find_dependency_hygiene(&graph);
+        assert!(findings.is_empty(), "no false unused claim");
+        let diagnostic = diagnostic.expect("a skip diagnostic");
+        assert!(diagnostic.message.contains('1'));
+        assert!(diagnostic.message.contains("skipped"));
     }
 
     #[test]
@@ -304,7 +358,7 @@ mod tests {
             vec![],
             vec![declared("lodash", DependencyScope::Prod)],
         );
-        let findings = find_dependency_hygiene(&graph);
+        let findings = find_dependency_hygiene(&graph).0;
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].category, "unused");
         assert_eq!(findings[0].group, "waste");
@@ -326,7 +380,7 @@ mod tests {
             edges,
             vec![declared("lodash", DependencyScope::Prod)],
         );
-        assert!(find_dependency_hygiene(&graph).is_empty());
+        assert!(find_dependency_hygiene(&graph).0.is_empty());
     }
 
     #[test]
@@ -342,7 +396,7 @@ mod tests {
             edges,
             vec![declared("chai", DependencyScope::Prod)],
         );
-        let findings = find_dependency_hygiene(&graph);
+        let findings = find_dependency_hygiene(&graph).0;
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].category, "test-only");
         assert_eq!(findings[0].group, "waste");
@@ -368,7 +422,7 @@ mod tests {
             edges,
             vec![declared("lodash", DependencyScope::Prod)],
         );
-        assert!(find_dependency_hygiene(&graph).is_empty());
+        assert!(find_dependency_hygiene(&graph).0.is_empty());
     }
 
     #[test]
@@ -385,7 +439,7 @@ mod tests {
             edges,
             vec![declared("vitest", DependencyScope::Dev)],
         );
-        assert!(find_dependency_hygiene(&graph).is_empty());
+        assert!(find_dependency_hygiene(&graph).0.is_empty());
     }
 
     #[test]
@@ -396,7 +450,7 @@ mod tests {
             vec![],
             vec![declared("vitest", DependencyScope::Dev)],
         );
-        let findings = find_dependency_hygiene(&graph);
+        let findings = find_dependency_hygiene(&graph).0;
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].category, "unused");
     }
@@ -409,7 +463,7 @@ mod tests {
             vec![],
             vec![declared("react", DependencyScope::Peer)],
         );
-        assert!(find_dependency_hygiene(&graph).is_empty());
+        assert!(find_dependency_hygiene(&graph).0.is_empty());
     }
 
     #[test]
@@ -420,7 +474,7 @@ mod tests {
             vec![],
             vec![declared("fsevents", DependencyScope::Optional)],
         );
-        let findings = find_dependency_hygiene(&graph);
+        let findings = find_dependency_hygiene(&graph).0;
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].confidence, Confidence::Possible);
     }
@@ -433,8 +487,8 @@ mod tests {
             vec![],
             vec![declared("lodash", DependencyScope::Prod)],
         );
-        let a = find_dependency_hygiene(&graph);
-        let b = find_dependency_hygiene(&graph);
+        let a = find_dependency_hygiene(&graph).0;
+        let b = find_dependency_hygiene(&graph).0;
         assert_eq!(a[0].id, b[0].id);
     }
 
@@ -449,7 +503,7 @@ mod tests {
             vec![declared("xo", DependencyScope::Dev)],
         )
         .with_script_invoked_dependencies(vec![(PackageId(0), SmolStr::new("xo"))]);
-        assert!(find_dependency_hygiene(&graph).is_empty());
+        assert!(find_dependency_hygiene(&graph).0.is_empty());
     }
 
     #[test]
@@ -463,7 +517,7 @@ mod tests {
             vec![declared("prettier", DependencyScope::Prod)],
         )
         .with_script_invoked_dependencies(vec![(PackageId(0), SmolStr::new("prettier"))]);
-        assert!(find_dependency_hygiene(&graph).is_empty());
+        assert!(find_dependency_hygiene(&graph).0.is_empty());
     }
 
     #[test]
@@ -475,7 +529,7 @@ mod tests {
             vec![declared("lodash", DependencyScope::Prod)],
         )
         .with_script_invoked_dependencies(vec![(PackageId(0), SmolStr::new("tsc"))]);
-        let findings = find_dependency_hygiene(&graph);
+        let findings = find_dependency_hygiene(&graph).0;
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].category, "unused");
     }
@@ -489,7 +543,7 @@ mod tests {
             vec![declared("xo", DependencyScope::Dev)],
         )
         .with_script_invoked_dependencies(vec![(PackageId(1), SmolStr::new("xo"))]);
-        let findings = find_dependency_hygiene(&graph);
+        let findings = find_dependency_hygiene(&graph).0;
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].category, "unused");
     }
@@ -508,6 +562,6 @@ mod tests {
             vec![declared("vitest", DependencyScope::Prod)],
         )
         .with_script_invoked_dependencies(vec![(PackageId(0), SmolStr::new("vitest"))]);
-        assert!(find_dependency_hygiene(&graph).is_empty());
+        assert!(find_dependency_hygiene(&graph).0.is_empty());
     }
 }

@@ -2187,6 +2187,7 @@ mod tests {
                 private: false,
                 declares_surface: false,
                 surface: Vec::new(),
+                resolves_dependency_usage: true,
             },
             PackageNode {
                 workspace_entry: None,
@@ -2195,6 +2196,7 @@ mod tests {
                 private: false,
                 declares_surface: false,
                 surface: Vec::new(),
+                resolves_dependency_usage: true,
             },
         ]);
         match resolve(&graph, &Selector::Package("dup".into())) {

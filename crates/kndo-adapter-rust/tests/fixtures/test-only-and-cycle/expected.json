@@ -1,0 +1,56 @@
+{
+  "findings": [
+    {
+      "category": "cyclic",
+      "subject_kind": "file",
+      "path": "src/ping.rs"
+    },
+    {
+      "category": "internal-only",
+      "subject_kind": "function",
+      "path": "src/fixture_helper.rs",
+      "symbol": "build_fixture"
+    },
+    {
+      "category": "internal-only",
+      "subject_kind": "function",
+      "path": "src/ping.rs",
+      "symbol": "start"
+    },
+    {
+      "category": "internal-only",
+      "subject_kind": "function",
+      "path": "src/pong.rs",
+      "symbol": "reply"
+    },
+    {
+      "category": "test-only",
+      "subject_kind": "function",
+      "path": "src/fixture_helper.rs",
+      "symbol": "build_fixture"
+    },
+    {
+      "category": "untested",
+      "subject_kind": "file",
+      "path": "src/main.rs"
+    },
+    {
+      "category": "untested",
+      "subject_kind": "function",
+      "path": "src/ping.rs",
+      "symbol": "start"
+    },
+    {
+      "category": "untested",
+      "subject_kind": "function",
+      "path": "src/pong.rs",
+      "symbol": "reply"
+    },
+    {
+      "category": "unused",
+      "subject_kind": "function",
+      "path": "src/pong.rs",
+      "symbol": "rally"
+    }
+  ]
+}

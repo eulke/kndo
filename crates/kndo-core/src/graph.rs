@@ -167,6 +167,11 @@ pub struct PackageNode {
     /// (RFC 0013 §4: the patch rebuilds the workspace index from the snapshot; `surface`
     /// can't stand in — it drops out-of-tree entries and confidences).
     pub workspace_entry: Option<(ProjectPath, Confidence)>,
+    /// Mirrors the claiming adapter's [`crate::adapter::AdapterDescriptor::resolves_dependency_usage`]
+    /// (`true` for the implicit no-manifest package, which declares nothing). `dependency_hygiene`
+    /// reads this per `DeclaredDependency::package` to decide whether "zero usage edges" means
+    /// "genuinely unused" or "this language can't produce usage edges at all."
+    pub resolves_dependency_usage: bool,
 }
 
 /// One manifest's declaration of an external dependency — the raw fact `undeclared` and
@@ -330,6 +335,7 @@ impl ProjectGraph {
                 declares_surface: false,
                 surface: Vec::new(),
                 workspace_entry: None,
+                resolves_dependency_usage: true,
             }],
             edges,
             suppressions: Vec::new(),
@@ -690,9 +696,27 @@ fn try_patch(
                 entry: pkg.workspace_entry.clone(),
             });
     }
+    // Unit reverse-index (Java, docs/adapters/java.md §3): an import specifier there IS a
+    // unit value directly, so resolution needs unit → declaring files, not just the forward
+    // per-file `unit` already carried on `FileNode`. The surface-signature guard already
+    // ensures a changed file's `unit` never silently drifts under the patch (§2.1), so
+    // reading `graph.files`' current state here stays byte-identical to a full rebuild.
+    let mut unit_index: HashMap<SmolStr, Vec<ProjectPath>> = HashMap::default();
+    for f in &graph.files {
+        if let Some(u) = &f.unit {
+            unit_index
+                .entry(u.clone())
+                .or_default()
+                .push(f.path.clone());
+        }
+    }
+    for files in unit_index.values_mut() {
+        files.sort();
+    }
     let ctx = ResolveCtx::new(&known_files)
         .with_declared_dependencies(&declared_dependency_names)
-        .with_workspace_members(&workspace_member_index);
+        .with_workspace_members(&workspace_member_index)
+        .with_units(&unit_index);
 
     let files_len = graph.files.len();
     let mut symbol_by_name_per_file: Vec<HashMap<SmolStr, SymbolId>> =
@@ -1912,10 +1936,11 @@ pub fn assemble_from_source(
         declares_surface: false,
         surface: Vec::new(),
         workspace_entry: None,
+        resolves_dependency_usage: true,
     }];
     let mut manifest_package: Vec<Option<PackageId>> = vec![None; manifests_per_file.len()];
     for (i, slot) in manifests_per_file.iter().enumerate() {
-        if let Some((_, facts)) = slot {
+        if let Some((adapter_index, facts)) = slot {
             let package_id = PackageId(packages.len() as u32);
             // The declared surface as FileIds (RFC 0011 §4): entries naming files outside the
             // discovered tree (published build artifacts in a source checkout) drop out here —
@@ -1932,6 +1957,9 @@ pub fn assemble_from_source(
                 declares_surface: facts.declares_surface,
                 surface,
                 workspace_entry: facts.resolved_entries.first().cloned(),
+                resolves_dependency_usage: adapters[*adapter_index]
+                    .descriptor()
+                    .resolves_dependency_usage,
             });
             manifest_package[i] = Some(package_id);
         }
@@ -2177,9 +2205,24 @@ pub fn assemble_from_source(
             });
     }
 
+    // Unit reverse-index (Java, docs/adapters/java.md §3) — see try_patch's identical
+    // construction for why this mirrors the patch path byte-for-byte.
+    let mut unit_index: HashMap<SmolStr, Vec<ProjectPath>> = HashMap::default();
+    for f in &files {
+        if let Some(u) = &f.unit {
+            unit_index
+                .entry(u.clone())
+                .or_default()
+                .push(f.path.clone());
+        }
+    }
+    for fs in unit_index.values_mut() {
+        fs.sort();
+    }
     let ctx = ResolveCtx::new(&known_files)
         .with_declared_dependencies(&declared_dependency_names)
-        .with_workspace_members(&workspace_member_index);
+        .with_workspace_members(&workspace_member_index)
+        .with_units(&unit_index);
 
     // Phase 2.7 — library-surface expansion (completing RFC 0011 §5's library mode): a
     // package-surface file's *whole-surface* re-exports — `pub mod x;` in Rust, `export *
@@ -2586,6 +2629,7 @@ mod tests {
                     file_cycles: crate::adapter::CycleTolerance::Hazard,
                     package_cycles: crate::adapter::CycleTolerance::Hazard,
                 },
+                resolves_dependency_usage: true,
             }
         }
 

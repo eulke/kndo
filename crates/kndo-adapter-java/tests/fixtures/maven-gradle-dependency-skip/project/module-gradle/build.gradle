@@ -1,0 +1,5 @@
+group = 'com.b'
+
+dependencies {
+    implementation 'com.other:lib:2.0'
+}

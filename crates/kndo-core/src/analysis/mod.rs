@@ -142,12 +142,13 @@ pub fn run_all(
                 || {
                     rayon::join(
                         || {
-                            timed(&|| {
-                                let mut f = undeclared::find_undeclared_dependencies(graph);
-                                f.extend(version_skew::find_version_skew(graph));
-                                f.extend(dependency_hygiene::find_dependency_hygiene(graph));
-                                f
-                            })
+                            let start = std::time::Instant::now();
+                            let mut f = undeclared::find_undeclared_dependencies(graph);
+                            f.extend(version_skew::find_version_skew(graph));
+                            let (hygiene_findings, hygiene_diagnostic) =
+                                dependency_hygiene::find_dependency_hygiene(graph);
+                            f.extend(hygiene_findings);
+                            ((f, hygiene_diagnostic), start.elapsed().as_micros() as u64)
                         },
                         || timed(&|| duplicate::find_duplicate_files(graph)),
                     )
@@ -202,13 +203,14 @@ pub fn run_all(
     let (duplicate_findings, duplicated) = duplicate_fn_r;
     let (cycle_findings, cycle_files) = cyclic_r;
     let ((untested_findings, untested_diagnostic), untested_us) = untested_r;
+    let ((dependency_findings, hygiene_diagnostic), dependencies_us) = dependencies_r;
 
     let mut findings = unused_r.0;
     timings.entries.push(("unused", unused_r.1));
     findings.extend(test_only_r.0);
     timings.entries.push(("test-only", test_only_r.1));
-    findings.extend(dependencies_r.0);
-    timings.entries.push(("dependencies", dependencies_r.1));
+    findings.extend(dependency_findings);
+    timings.entries.push(("dependencies", dependencies_us));
     findings.extend(duplicate_files_r.0);
     timings
         .entries
@@ -250,7 +252,10 @@ pub fn run_all(
 
     AnalysisOutcome {
         findings,
-        diagnostics: untested_diagnostic.into_iter().collect(),
+        diagnostics: untested_diagnostic
+            .into_iter()
+            .chain(hygiene_diagnostic)
+            .collect(),
         health,
         timings: timings.entries,
     }

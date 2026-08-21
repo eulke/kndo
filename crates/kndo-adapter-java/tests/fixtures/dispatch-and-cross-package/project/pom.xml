@@ -1,0 +1,4 @@
+<project>
+  <artifactId>dispatch-and-cross-package</artifactId>
+  <packaging>war</packaging>
+</project>

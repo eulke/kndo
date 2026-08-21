@@ -66,6 +66,9 @@ impl LanguageAdapter for RustAdapter {
                 file_cycles: CycleTolerance::Idiomatic,
                 package_cycles: CycleTolerance::Idiomatic,
             },
+            // The crate name IS the `use` specifier's root segment — resolve() structurally
+            // identifies the declared dependency every time.
+            resolves_dependency_usage: true,
         }
     }
 

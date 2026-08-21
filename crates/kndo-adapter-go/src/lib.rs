@@ -61,6 +61,9 @@ impl LanguageAdapter for GoAdapter {
                 file_cycles: CycleTolerance::Impossible,
                 package_cycles: CycleTolerance::Impossible,
             },
+            // The module path IS the import specifier's prefix — resolve() structurally
+            // identifies the declared dependency every time.
+            resolves_dependency_usage: true,
         }
     }
 

@@ -287,6 +287,7 @@ mod tests {
             private: false,
             declares_surface,
             surface,
+            resolves_dependency_usage: true,
         }
     }
 
@@ -298,6 +299,7 @@ mod tests {
             private: false,
             declares_surface: false,
             surface: Vec::new(),
+            resolves_dependency_usage: true,
         }
     }
 

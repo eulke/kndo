@@ -1,0 +1,5 @@
+{
+  "findings": [
+    { "category": "unused", "subject_kind": "function", "path": "src/api.rs", "symbol": "private_dead" }
+  ]
+}

@@ -132,6 +132,20 @@ pub struct AdapterDescriptor {
     /// the ladder: assembly carries it onto the graph keyed by claim language, and `cyclic`
     /// maps `Hazard → warning`, `Idiomatic → info`, `Impossible → skip the level`.
     pub cycle_policy: CyclePolicy,
+    /// Whether this adapter's `resolve()` can ever produce an `ImportsDependency` edge for a
+    /// manifest-declared dependency of this language (RFC 0005 §5). `true` for every language
+    /// whose import specifier structurally identifies the declared package (npm's flat name,
+    /// Go's module-path prefix, Cargo's crate name). `false` when the language's import
+    /// namespace has no reliable mapping to its dependency-manifest coordinates without
+    /// resolving the classpath (Java: `com.google.common.*` says nothing about groupId
+    /// `com.google.guava` without asking Maven/Gradle to actually resolve it, which kndo — a
+    /// static source analyzer — structurally never does). `false` makes `dependency_hygiene`
+    /// skip this language's packages entirely (one diagnostic, not a false-positive flood of
+    /// every declared dependency reading `unused`) — `version-skew` is unaffected, since it
+    /// compares declared versions across manifests and needs no usage edge at all. Defaults to
+    /// `true` in spirit (every adapter sets it explicitly; there is no `Default` impl here so a
+    /// new adapter must make the call, not inherit a silent default).
+    pub resolves_dependency_usage: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -630,6 +644,13 @@ pub struct ResolveCtx<'a> {
     /// manifest extraction itself (the map is *built from* manifest facts — no circularity),
     /// populated for import resolution.
     workspace_members: Option<&'a rustc_hash::FxHashMap<SmolStr, WorkspaceMember>>,
+    /// Every claimed file's `unit` (RFC 0002 §2), reverse-indexed: unit key → every file that
+    /// declares it, sorted (RFC 0008 §4). Added for Java (docs/adapters/java.md §3): an
+    /// import specifier there IS a `unit` value (the declared package name) directly — unlike
+    /// Go, which turns a specifier into a directory and uses [`Self::files_in_dir`], Java has
+    /// no reliable specifier→directory mapping (the source root isn't visible to a bare
+    /// dotted package name), so resolution needs the reverse lookup this index provides.
+    units: Option<&'a rustc_hash::FxHashMap<SmolStr, Vec<ProjectPath>>>,
 }
 
 impl<'a> ResolveCtx<'a> {
@@ -638,6 +659,7 @@ impl<'a> ResolveCtx<'a> {
             known_files,
             declared_dependencies: None,
             workspace_members: None,
+            units: None,
         }
     }
 
@@ -654,6 +676,14 @@ impl<'a> ResolveCtx<'a> {
         self
     }
 
+    pub fn with_units(
+        mut self,
+        units: &'a rustc_hash::FxHashMap<SmolStr, Vec<ProjectPath>>,
+    ) -> Self {
+        self.units = Some(units);
+        self
+    }
+
     pub fn contains(&self, path: &ProjectPath) -> bool {
         self.known_files.contains(path)
     }
@@ -664,6 +694,15 @@ impl<'a> ResolveCtx<'a> {
 
     pub fn workspace_member(&self, name: &str) -> Option<&'a WorkspaceMember> {
         self.workspace_members.and_then(|m| m.get(name))
+    }
+
+    /// Every known file declaring `unit` (empty when none do, or `with_units` was never
+    /// called). Sorted by path — deterministic which entry a caller picking `.first()` gets.
+    pub fn unit_files(&self, unit: &str) -> &'a [ProjectPath] {
+        self.units
+            .and_then(|u| u.get(unit))
+            .map(Vec::as_slice)
+            .unwrap_or(&[])
     }
 
     /// Every known file whose *immediate* directory equals `dir` (`""` = project root) — one
@@ -682,6 +721,24 @@ impl<'a> ResolveCtx<'a> {
                 Some(i) => p.0[..i] == dir,
                 None => dir.is_empty(),
             })
+    }
+
+    /// Every known file under `dir` at any depth (`""` = every file in the project) — the
+    /// recursive counterpart to [`Self::files_in_dir`]. Added for Java (docs/adapters/java.md
+    /// §4): a publishable module's root promotion needs every `.java` file under its source
+    /// root (`src/main/java/**`, arbitrary package nesting), not one representative file the
+    /// way Go's directory-is-the-package model needs. Read-only; no ordering guarantee, same
+    /// as `files_in_dir`.
+    pub fn files_under(&self, dir: &str) -> impl Iterator<Item = &'a ProjectPath> {
+        let is_root = dir.is_empty();
+        let prefix = if is_root {
+            String::new()
+        } else {
+            format!("{dir}/")
+        };
+        self.known_files
+            .iter()
+            .filter(move |p| is_root || p.0.starts_with(&prefix))
     }
 }
 
@@ -770,5 +827,45 @@ mod tests {
         let known = files(&["pkg/a.go"]);
         let ctx = ResolveCtx::new(&known);
         assert_eq!(ctx.files_in_dir("nowhere").count(), 0);
+    }
+
+    #[test]
+    fn files_under_matches_at_any_depth() {
+        let known = files(&[
+            "src/main/java/com/foo/A.java",
+            "src/main/java/com/foo/bar/B.java",
+            "src/test/java/com/foo/ATest.java",
+            "pom.xml",
+        ]);
+        let ctx = ResolveCtx::new(&known);
+        let mut got: Vec<&str> = ctx
+            .files_under("src/main/java")
+            .map(|p| p.0.as_str())
+            .collect();
+        got.sort();
+        assert_eq!(
+            got,
+            vec![
+                "src/main/java/com/foo/A.java",
+                "src/main/java/com/foo/bar/B.java",
+            ]
+        );
+    }
+
+    #[test]
+    fn files_under_empty_string_means_every_file() {
+        let known = files(&["a.go", "pkg/b.go"]);
+        let ctx = ResolveCtx::new(&known);
+        assert_eq!(ctx.files_under("").count(), 2);
+    }
+
+    #[test]
+    fn files_under_does_not_match_a_sibling_with_a_shared_prefix() {
+        // "pkg-extra/file.go" must NOT match "pkg" — the trailing "/" join prevents a
+        // partial-segment collision.
+        let known = files(&["pkg/a.go", "pkg-extra/file.go"]);
+        let ctx = ResolveCtx::new(&known);
+        let got: Vec<&str> = ctx.files_under("pkg").map(|p| p.0.as_str()).collect();
+        assert_eq!(got, vec!["pkg/a.go"]);
     }
 }

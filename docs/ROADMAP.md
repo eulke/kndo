@@ -357,6 +357,44 @@ Bench gate note: the recorded perf baseline predates this container's current lo
 itself misses it by +30% — so parity was verified by interleaved A/B against HEAD (overlapping
 ranges, medians favor the adapter build); warm scenarios are unchanged or better.
 
+### M5 progress — Java adapter ✅ (landed 2026-08-21)
+
+`kndo-adapter-java` per docs/adapters/java.md: package identity is declared *and* directory-
+checked by javac (a hybrid of Rust's declared-tree model and Go's directory model) — the
+adapter sidesteps source-root detection entirely by setting `FileFacts::unit` to the
+**declared** package name, never the directory. No dogfood corpus exists for this one (kndo is
+written in Rust) — precision rests entirely on four real Maven/Gradle conformance fixtures run
+through the real `Engine`, no mock.
+
+Two structural findings changed core, not just this adapter: **`ResolveCtx::files_under`**
+(the recursive counterpart to `files_in_dir` — a publishable Java module's root promotion needs
+every `.java` file under `src/main/java/**` at arbitrary package depth, not one representative
+file) and **`ResolveCtx::with_units`/`unit_files`** (a package-name → declaring-files reverse
+index, because a Java import specifier *is* a `unit` value directly — unlike Go, which turns a
+specifier into a directory and lists it). Root promotion itself is a new shape: neither Go's
+blanket per-file `RawRoot` emission (no manifest-visible privacy signal) nor Rust's single-
+entry-file mechanism (no single entry point — every public class is API) fit, so a publishable
+module's manifest emits one `ManifestRoot` per non-test source file, reusing the existing
+per-file declaration-promotion path with zero new mechanism beyond the two `ResolveCtx`
+additions above.
+
+**`resolves_dependency_usage: false`** (new `AdapterDescriptor` field, carried onto
+`PackageNode`): Java's import namespace has no reliable mapping to Maven/Gradle coordinates
+without resolving the classpath, which kndo — a static source analyzer — structurally never
+does. Rather than flood every declared dependency with a false `unused` verdict,
+`dependency_hygiene` skips languages where this is `false`, with one diagnostic instead of a
+finding per dependency; `version-skew` is unaffected (pure manifest-fact comparison, no usage
+edge needed) and stays fully precise for Java from day one.
+
+A real, load-bearing bug the conformance fixtures caught before it shipped: the four-rung
+visibility ladder's `package-private` rung was first mapped to kndo's `VisibilityScope::Package`
+— which means "same manifest/workspace-member" (RFC 0011's `PackageId`, JS's granularity), a
+**different thing** from a Java `package` (a `com.foo` namespace; one Maven module routinely
+holds several). The fix maps `package-private` to `VisibilityScope::Unit` instead — exactly
+mirroring Go's own choice, since `FileFacts::unit` already carries the declared Java package —
+caught by a fixture exercising genuine cross-Java-package, same-Maven-module visibility, which
+misfired as a false `internal-only` before the fix and passed clean after.
+
 **Exit:** all eight launch languages pass conformance; a third-party demo adapter (not in-tree)
 runs against the released binary; budget still holds with all adapters active.
 

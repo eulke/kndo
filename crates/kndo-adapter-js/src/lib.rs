@@ -69,6 +69,9 @@ impl LanguageAdapter for JsTsAdapter {
                 file_cycles: CycleTolerance::Hazard,
                 package_cycles: CycleTolerance::Hazard,
             },
+            // npm's flat package name IS the import specifier's root segment — resolve()
+            // structurally identifies the declared dependency every time.
+            resolves_dependency_usage: true,
         }
     }
 

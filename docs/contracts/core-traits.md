@@ -89,6 +89,18 @@ pub trait LanguageAdapter: Send + Sync {
     // data-on-the-descriptor pattern as the ladder, carried onto
     // ProjectGraph::cycle_policies; a mixed-language cycle takes the most severe tolerance
     // among its participants' languages.
+    // resolves_dependency_usage (added M5, Java): whether this adapter's resolve() can ever
+    // produce an ImportsDependency edge for a manifest-declared dependency of this language —
+    // true for every language whose import specifier structurally identifies the declared
+    // package (npm's flat name, Go's module-path prefix, Cargo's crate name, Java's `java.`/
+    // `javax.` stdlib prefix). false when the import namespace has no reliable mapping to
+    // manifest coordinates without resolving the classpath (Java's third-party imports:
+    // docs/adapters/java.md §0). Carried onto PackageNode::resolves_dependency_usage per the
+    // claiming adapter (assembly phase 2a); dependency_hygiene skips unused/test-only
+    // verdicts for a package where it's false (one diagnostic, not a false-positive flood —
+    // "zero usage evidence" isn't a meaningful unused claim when usage evidence can never
+    // exist). version-skew is unaffected — it compares declared versions across manifests
+    // directly, no usage edge needed.
 
     /// Claim & classify a path (fast; name-based, content peeking only when unavoidable).
     fn claim(&self, path: &ProjectPath) -> Option<FileClaim>;   // { language, class: FileClass }

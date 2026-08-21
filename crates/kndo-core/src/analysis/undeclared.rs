@@ -183,6 +183,7 @@ mod tests {
                 private: false,
                 declares_surface: false,
                 surface: Vec::new(),
+                resolves_dependency_usage: true,
             },
             PackageNode {
                 workspace_entry: None,
@@ -191,6 +192,7 @@ mod tests {
                 private: true,
                 declares_surface: false,
                 surface: Vec::new(),
+                resolves_dependency_usage: true,
             },
             PackageNode {
                 workspace_entry: None,
@@ -199,6 +201,7 @@ mod tests {
                 private: true,
                 declares_surface: false,
                 surface: Vec::new(),
+                resolves_dependency_usage: true,
             },
         ];
         let graph = ProjectGraph::for_test(files, vec![], dependencies, edges)

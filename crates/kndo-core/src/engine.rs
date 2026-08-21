@@ -1243,6 +1243,7 @@ mod tests {
                     file_cycles: crate::adapter::CycleTolerance::Hazard,
                     package_cycles: crate::adapter::CycleTolerance::Hazard,
                 },
+                resolves_dependency_usage: true,
             }
         }
         fn claim(&self, path: &ProjectPath) -> Option<crate::adapter::FileClaim> {
@@ -1304,6 +1305,7 @@ mod tests {
                     file_cycles: crate::adapter::CycleTolerance::Hazard,
                     package_cycles: crate::adapter::CycleTolerance::Hazard,
                 },
+                resolves_dependency_usage: true,
             }
         }
         fn claim(&self, path: &ProjectPath) -> Option<crate::adapter::FileClaim> {
