@@ -106,8 +106,11 @@ capabilities nobody meant to give it.
 
 The distribution crate (`crates/kndo/src/lib.rs`) auto-discovers `.kndo/plugins/*.wasm`
 relative to the project root on every `kndo::open` call — no `kndo.toml` entry needed, the
-zero-config default RFC 0003 §3 already names. **One directory, two loaders, no naming
-convention**: every discovered `.wasm` file is tried against both `WasmAdapter::load` and
+zero-config default RFC 0003 §3 already names. This section covers that project-local
+directory; `Plugin`s (not `LanguageAdapter`s) also auto-discover from a global, per-machine
+directory, filtered by activation rules rather than unconditional — §5.5. **One directory, two
+loaders, no naming convention**: every discovered `.wasm` file is tried against both
+`WasmAdapter::load` and
 `WasmPlugin::load`; each fails to *instantiate* (not merely "doesn't look right") against a
 component built for the other package's world, since wasmtime's own component type-checking
 requires every world-declared export to be present with matching types. A component that
@@ -157,6 +160,12 @@ option<string> }`, same as `kndo_core::plugin::PluginTarget`; resolved host-side
 same bare/qualified lookup tables `RawRoot`/`RawReference` resolve against, and an unresolvable
 target is dropped silently (the same miss behavior the adapter ABI and the native `Plugin`
 trait both already have).
+
+`plugin-descriptor` also carries `activation: list<activation-rule>` — `variant activation-rule
+{ file-exists(string), manifest-dependency(string) }`, the machine-checkable counterpart to
+`detection`'s human-readable prose. `descriptor()` is the *only* call the host makes before
+deciding whether a globally installed plugin even joins composition (§5.5); a project-local
+`.kndo/plugins/*.wasm` file never has this field consulted at all.
 
 ### 5.2 v1 scope cuts, and why
 
@@ -208,6 +217,32 @@ both the graph-snapshot cache hit and the incremental patch, full-rebuilding eve
 reuse path re-invokes a plugin's hooks (WASM or native), so serving either to a plugin-bearing
 project would silently miss whatever the plugin contributes.
 
+### 5.5 Global installation & activation (RFC 0003 §4)
+
+Beyond project-local `.kndo/plugins/`, `crates/kndo/src/lib.rs`'s `activation` module also scans
+a **global** directory — `dirs::data_dir()/kndo/plugins` (XDG data dir on Linux, Application
+Support on macOS, `%APPDATA%` on Windows), overridable wholesale via the `KNDO_PLUGIN_DIR`
+env var. This directory is not tied to any one project, so presence there can't be the opt-in
+signal `.kndo/plugins/` gets to use — each candidate's `descriptor().activation` is evaluated
+against the project root *before* the plugin joins composition at all:
+
+- `file-exists(glob)` — at least one file under the project root matches (`glob` crate
+  semantics, evaluated once at `kndo::open` time, not per-analysis-run).
+- `manifest-dependency(name)` — the project root's own `package.json`/`Cargo.toml` declares a
+  dependency by this name in any dependency section (Cargo's `-`/`_` interchangeability is
+  honored; no recursive workspace-member search yet — a stated v1 gap).
+
+Any single matching rule activates the plugin; an **empty** `activation` list never
+self-activates from the global directory (silence over a guess, the zero-false-positive
+default) — such a plugin only ever runs if placed in a project's own `.kndo/plugins/` instead.
+This whole mechanism is `Plugin`-only today: `LanguageAdapter` has no `activation` field, so a
+globally installed adapter isn't something this pass adds (RFC 0003 §3/§4).
+
+Not yet built: an install/registry command (`kndo plugin install …`) — getting a `.wasm` file
+into the global directory is a manual copy, and `kndo doctor` doesn't yet report which global
+candidates were discovered and skipped versus activated (only the final composed set) — both
+stated follow-ups, not implied by the mechanism landing.
+
 ## 6. Producing a component
 
 A third-party author needs a real component-model `.wasm` binary, not a plain core module.
@@ -223,7 +258,7 @@ Two ways, both documented rather than assumed, for either package:
 
 ## 7. Compliance
 
-Three suites, all building their demo component fresh from source and componentizing it
+Four suites, all building their demo component fresh from source and componentizing it
 in-process on every run (no binary checked into the repo):
 
 - `crates/kndo-plugin-api/tests/compliance.rs` — drives a `WasmAdapter` directly against a
@@ -239,6 +274,10 @@ in-process on every run (no binary checked into the repo):
   same code path `kndo-cli` uses for every command; `external_plugin.rs` drops *both* an
   adapter and a plugin component into the same `.kndo/plugins/` directory, proving §4's
   single-directory sort actually works end to end, not just at the loader level.
+- `crates/kndo/tests/global_plugin_activation.rs` — same full-product composition, but through
+  `KNDO_PLUGIN_DIR` (§5.5): one `#[test]` opens two temp projects against the same globally
+  installed plugin — one without, one with the file that satisfies its `file-exists` rule —
+  proving activation is genuinely conditional, not just wired and always-on.
 
 ## 8. Versioning
 

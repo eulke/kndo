@@ -95,11 +95,25 @@ interface types {
         confidence: confidence,
     }
 
+    /// Machine-evaluable counterpart to `plugin-descriptor.detection`'s prose — evaluated
+    /// host-side against the project root, cheaply and without running any guest code, before a
+    /// *globally* installed plugin is even instantiated (RFC 0003 §4). A project-local
+    /// `.kndo/plugins/*.wasm` file stays unconditional; this only gates the XDG-wide install
+    /// path.
+    variant activation-rule {
+        /// At least one file under the project root matches this glob.
+        file-exists(string),
+        /// A root manifest (`package.json`, `Cargo.toml` today) declares a dependency by this
+        /// name, in any dependency section.
+        manifest-dependency(string),
+    }
+
     record plugin-descriptor {
         id: string,
         version: string,
         detection: list<string>,
         requested-file-access: list<string>,
+        activation: list<activation-rule>,
     }
 
     /// One `GraphView::files()` entry. v1 exposes path/role/origin only — `language`/`unit`/
@@ -123,7 +137,7 @@ interface types {
 world plugin {
     use types.{
         plugin-descriptor, file-class, plugin-target, contributed-root, contributed-edge,
-        wasm-file-info, wasm-symbol-info,
+        wasm-file-info, wasm-symbol-info, activation-rule,
     };
 
     /// Host-provided graph queries — the guest calls these from inside `contribute-roots`/

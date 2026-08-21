@@ -18,6 +18,13 @@ kndo-adapter-swift = { path = "../kndo-adapter-swift", optional = true }
 kndo-adapter-json = { path = "../kndo-adapter-json", optional = true }
 kndo-adapter-css = { path = "../kndo-adapter-css", optional = true }
 kndo-plugin-api = { path = "../kndo-plugin-api", optional = true }
+# Global-plugin activation (RFC 0003 §4): manifest-dependency and file-glob checks against the
+# project root. Only ever exercised behind `external-adapters` — no WASM plugins, no activation
+# to evaluate.
+serde_json = { workspace = true, optional = true }
+toml = { workspace = true, optional = true }
+glob = { version = "0.3", optional = true }
+dirs = { version = "6", optional = true }
 
 [dev-dependencies]
 # "schema" here is test-only, to detect a stale committed schema — the shipped binary above
@@ -27,6 +34,7 @@ jsonschema = { version = "0.49", default-features = false }
 serde_json = { workspace = true }
 wit-component = "0.219"
 tempfile = "3"
+smol_str = { workspace = true }
 
 [features]
 # Every first-party adapter is a feature so embedders can build slimmer binaries
@@ -45,4 +53,4 @@ css = ["dep:kndo-adapter-css"]
 # it pulls in a WASM runtime rather than a language grammar — an embedder who wants a minimal,
 # fully-static binary with no third-party extension surface can build with
 # `--no-default-features --features js,go,...` to drop it (ADR 0006).
-external-adapters = ["dep:kndo-plugin-api"]
+external-adapters = ["dep:kndo-plugin-api", "dep:serde_json", "dep:toml", "dep:glob", "dep:dirs"]

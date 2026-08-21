@@ -32,8 +32,12 @@ impl Guest for DemoPlugin {
         PluginDescriptor {
             id: "hooks-demo".to_string(),
             version: "1".to_string(),
-            detection: Vec::new(),
+            detection: vec!["a *.trigger file anywhere in the project".to_string()],
             requested_file_access: Vec::new(),
+            // Exercises RFC 0003 §4's global-install activation path: a project only picks
+            // this plugin up from a global directory if it actually contains a `*.trigger`
+            // file — proven by kndo/tests/global_plugin_activation.rs.
+            activation: vec![ActivationRule::FileExists("*.trigger".to_string())],
         }
     }
 

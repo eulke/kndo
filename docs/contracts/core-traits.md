@@ -433,7 +433,10 @@ either way yet.
 ```rust
 pub trait Plugin: Send + Sync {
     fn descriptor(&self) -> PluginDescriptor;
-    // { id, version, detection: Vec<SmolStr>, requested_file_access: Vec<SmolStr> }
+    // { id, version, detection: Vec<SmolStr>, requested_file_access: Vec<SmolStr>,
+    //   activation: Vec<ActivationRule> } — `detection` is prose for `kndo doctor`;
+    // `activation` (RFC 0003 §4) is what a *globally* installed plugin is actually
+    // evaluated against before it joins composition (wasm-abi.md §5.5).
     // No ordering-constraints field yet (RFC 0003 §5's open item) — plugins run sorted by `id`,
     // a real but interim determinism rule.
 

@@ -26,10 +26,31 @@ use crate::vocab::{Confidence, FileClass, FileId, RefKind, RootKind};
 pub struct PluginDescriptor {
     pub id: SmolStr,
     pub version: SmolStr,
-    /// Auto-detection predicates ("package.json depends on react") — shown by `kndo doctor`.
+    /// Auto-detection predicates, in prose ("package.json depends on react") — shown by
+    /// `kndo doctor`, never evaluated. [`activation`](Self::activation) is the machine-checkable
+    /// counterpart these describe.
     pub detection: Vec<SmolStr>,
     /// Globs whose content the host will provide; no ambient fs/net (RFC 0003 §5).
     pub requested_file_access: Vec<SmolStr>,
+    /// Structured, machine-evaluable version of [`detection`](Self::detection) — what actually
+    /// decides whether a *globally* installed plugin (RFC 0003 §4) turns on for a given project.
+    /// A project-local `.kndo/plugins/*.wasm` file is unconditional (its presence there already
+    /// is the opt-in); this only gates the XDG-wide install path, and only when non-empty — an
+    /// empty list means "no known structural signal," so a globally installed plugin with none
+    /// never self-activates rather than guessing.
+    pub activation: Vec<ActivationRule>,
+}
+
+/// One machine-checkable activation predicate (RFC 0003 §4). Evaluated against the project
+/// root before a globally installed plugin is even instantiated — cheap, filesystem-only checks,
+/// no code execution.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ActivationRule {
+    /// At least one file under the project root matches this glob (e.g. `"next.config.*"`).
+    FileExists(SmolStr),
+    /// A root manifest (`package.json`, `Cargo.toml` today — RFC 0003 §4's stated v1 scope)
+    /// declares a dependency with this name, in any dependency section.
+    ManifestDependency(SmolStr),
 }
 
 // ---------------------------------------------------------------- read side: GraphView
@@ -236,6 +257,10 @@ impl Plugin for LcovPlugin {
             requested_file_access: vec![
                 SmolStr::new("coverage/lcov.info"),
                 SmolStr::new("lcov.info"),
+            ],
+            activation: vec![
+                ActivationRule::FileExists(SmolStr::new("coverage/lcov.info")),
+                ActivationRule::FileExists(SmolStr::new("lcov.info")),
             ],
         }
     }

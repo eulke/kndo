@@ -787,6 +787,50 @@ single-directory sort works end to end, not just at the loader level. Full works
 bridge existing doesn't by itself give kndo react-specific knowledge, that's still its own
 design pass, same as always.
 
+### M5 progress — Global plugin install + activation (RFC 0003 §4) ✅ (landed 2026-08-21)
+
+The install-story gap the previous two sections left standing: `.kndo/plugins/` only ever
+covered one project at a time — a user with a genuinely global extension (a personal lint
+convention, an in-house framework plugin used across every repo at a company) had to copy the
+`.wasm` file into each project's `.kndo/` by hand. `kndo::open` now also scans a **global**
+directory (`dirs::data_dir()/kndo/plugins`, overridable via `KNDO_PLUGIN_DIR`), installed once
+per machine.
+
+The design problem that directory creates: presence alone can't be the opt-in signal there the
+way it is for `.kndo/plugins/` — a plugin installed globally is visible to *every* project on
+the machine, so something has to decide which ones it actually applies to. `PluginDescriptor`
+already had a `detection` field for exactly this idea ("package.json depends on react"), but it
+turned out to be pure prose for `kndo doctor` — never evaluated, nothing machine-checkable
+behind it. Rather than silently repurpose that field's meaning, a genuinely new structured
+field, `activation: Vec<ActivationRule>`, was added alongside it (`FileExists(glob)` /
+`ManifestDependency(name)`), bridged through `kndo:plugin`'s WIT world too so third-party WASM
+plugins get the same mechanism first-party ones do. Global candidates are filtered through
+`activation` before they even join `Engine::open_with_plugins`'s composition; project-local
+`.kndo/plugins/*.wasm` stays unconditional, untouched by any of this — its presence there was
+already the opt-in.
+
+The zero-false-positive-standard call: an *empty* `activation` list means "no known structural
+signal," so a globally installed plugin with none never self-activates — silence over a guess.
+`ManifestDependency` is a real, bounded v1 cut: the project root's own `package.json`/
+`Cargo.toml` only (Cargo's `-`/`_` name interchangeability honored), no recursive
+workspace-member search yet — stated in `wasm-abi.md` §5.5, not silently incomplete.
+`LanguageAdapter` doesn't get `activation` in this pass either (adapters stay project-local-only
+for now) — extending the same mechanism there is a natural, separate follow-up.
+
+`examples/kndo-plugin-hooks-demo`'s descriptor now declares a real rule (`FileExists("*.trigger"
+)`), and `kndo/tests/global_plugin_activation.rs` proves the whole path end to end: one
+`#[test]` (env vars are process-wide, so both scenarios have to run sequentially in one test,
+not two) opens two temp projects against the *same* globally installed component — one without
+a `*.trigger` file (plugin must stay inactive), one with (plugin must join and rescue the
+symbols its hooks touch) — plus six unit tests for the filter logic itself
+(`crates/kndo/src/lib.rs`'s `activation` module). Full workspace suite and `clippy -D warnings`
+both clean.
+
+**Still not built:** an install/registry command (`kndo plugin install …`) — landing a file in
+the global directory is still a manual copy; `kndo doctor` visibility into which global
+candidates were discovered-but-skipped versus activated (today it only sees the final composed
+set). Both are stated, not silent, gaps.
+
 ## M6 — 1.0 hardening
 False-positive hunt across dogfood corpus (target < 2%, vision §6), schema/ABI freeze, docs site,
 install channels (brew/cargo/npm shim/curl), **`kndo-action` GA** (RFC 0010: sticky PR comment,

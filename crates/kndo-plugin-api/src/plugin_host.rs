@@ -243,7 +243,23 @@ fn probe_descriptor(
         version: SmolStr::new(&raw.version),
         detection: raw.detection.iter().map(SmolStr::new).collect(),
         requested_file_access: raw.requested_file_access.iter().map(SmolStr::new).collect(),
+        activation: raw
+            .activation
+            .into_iter()
+            .map(from_wit_activation_rule)
+            .collect(),
     })
+}
+
+fn from_wit_activation_rule(rule: w::ActivationRule) -> kndo_core::plugin::ActivationRule {
+    match rule {
+        w::ActivationRule::FileExists(glob) => {
+            kndo_core::plugin::ActivationRule::FileExists(SmolStr::new(&glob))
+        }
+        w::ActivationRule::ManifestDependency(name) => {
+            kndo_core::plugin::ActivationRule::ManifestDependency(SmolStr::new(&name))
+        }
+    }
 }
 
 impl Plugin for WasmPlugin {

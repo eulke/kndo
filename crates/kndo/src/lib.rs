@@ -82,10 +82,14 @@ pub fn open(root: &Path, overrides: ConfigOverrides) -> Result<Engine, EngineErr
 /// fuel/budget trip inside `WasmAdapter::extract`, which does produce one) — an honest gap,
 /// not an omission papered over; `kndo doctor`'s adapter list is the way to confirm a plugin
 /// actually loaded until one lands.
+///
+/// Adapters are project-local only — [`activation`] (RFC 0003 §4) gates the *global* XDG
+/// install path, and that path only exists for `Plugin`s today (see [`external_plugins`]);
+/// extending it to `LanguageAdapter` is a natural follow-up, not done here.
 fn external_adapters(root: &Path) -> Vec<Box<dyn LanguageAdapter>> {
     #[cfg(feature = "external-adapters")]
     {
-        wasm_components(root)
+        wasm_components(&project_plugin_dir(root))
             .into_iter()
             .filter_map(|path| kndo_plugin_api::WasmAdapter::load(&path).ok())
             .map(|adapter| Box::new(adapter) as Box<dyn LanguageAdapter>)
@@ -98,23 +102,41 @@ fn external_adapters(root: &Path) -> Vec<Box<dyn LanguageAdapter>> {
     }
 }
 
-/// Third-party `Plugin`s as WASM components (`docs/contracts/wasm-abi.md` §5), same
-/// `.kndo/plugins/*.wasm` directory and zero-config discovery as [`external_adapters`]. A
-/// `.wasm` file only ever implements one of the two ABIs (`kndo:adapter` or `kndo:plugin`) — its
-/// world's exports say which, so nothing here has to *ask*: [`WasmAdapter::load`] and
+/// Third-party `Plugin`s as WASM components (`docs/contracts/wasm-abi.md` §5) from two sources:
+///
+/// - **Project-local** `.kndo/plugins/*.wasm` (RFC 0003 §3) — unconditional, same zero-config
+///   discovery [`external_adapters`] uses. A file's presence there already is the opt-in.
+/// - **Global** [`activation::global_plugin_dir`] (RFC 0003 §4) — installed once, shared across
+///   every project on the machine, so presence alone can't be the opt-in signal. Each candidate
+///   is filtered through [`activation::activates`] against `root`, evaluating its
+///   `PluginDescriptor.activation` rules; a plugin with none never self-activates from here.
+///
+/// A `.wasm` file only ever implements one of the two ABIs (`kndo:adapter` or `kndo:plugin`) —
+/// its world's exports say which, so nothing here has to *ask*: [`WasmAdapter::load`] and
 /// [`WasmPlugin::load`] both simply fail to instantiate against a component compiled for the
 /// other world's exports, and each loader silently skips what it can't load. A single directory
-/// scan feeding both loaders is deliberate, not an accident of how [`external_adapters`] already
-/// existed — a plugin author never has to name their file `*.adapter.wasm` vs `*.plugin.wasm` or
-/// sort it into a subdirectory to say which ABI it targets.
+/// scan feeding both loaders (per source) is deliberate, not an accident of how
+/// [`external_adapters`] already existed — a plugin author never has to name their file
+/// `*.adapter.wasm` vs `*.plugin.wasm` or sort it into a subdirectory to say which ABI it
+/// targets.
 fn external_plugins(root: &Path) -> Vec<Box<dyn Plugin>> {
     #[cfg(feature = "external-adapters")]
     {
-        wasm_components(root)
+        let mut plugins: Vec<Box<dyn Plugin>> = wasm_components(&project_plugin_dir(root))
             .into_iter()
             .filter_map(|path| kndo_plugin_api::WasmPlugin::load(&path).ok())
             .map(|plugin| Box::new(plugin) as Box<dyn Plugin>)
-            .collect()
+            .collect();
+        if let Some(global_dir) = activation::global_plugin_dir() {
+            plugins.extend(
+                wasm_components(&global_dir)
+                    .into_iter()
+                    .filter_map(|path| kndo_plugin_api::WasmPlugin::load(&path).ok())
+                    .filter(|plugin| activation::activates(&plugin.descriptor().activation, root))
+                    .map(|plugin| Box::new(plugin) as Box<dyn Plugin>),
+            );
+        }
+        plugins
     }
     #[cfg(not(feature = "external-adapters"))]
     {
@@ -124,9 +146,13 @@ fn external_plugins(root: &Path) -> Vec<Box<dyn Plugin>> {
 }
 
 #[cfg(feature = "external-adapters")]
-fn wasm_components(root: &Path) -> Vec<std::path::PathBuf> {
-    let dir = root.join(".kndo").join("plugins");
-    let Ok(entries) = std::fs::read_dir(&dir) else {
+fn project_plugin_dir(root: &Path) -> std::path::PathBuf {
+    root.join(".kndo").join("plugins")
+}
+
+#[cfg(feature = "external-adapters")]
+fn wasm_components(dir: &Path) -> Vec<std::path::PathBuf> {
+    let Ok(entries) = std::fs::read_dir(dir) else {
         return Vec::new();
     };
     entries
@@ -134,6 +160,162 @@ fn wasm_components(root: &Path) -> Vec<std::path::PathBuf> {
         .map(|entry| entry.path())
         .filter(|path| path.extension().and_then(|ext| ext.to_str()) == Some("wasm"))
         .collect()
+}
+
+/// RFC 0003 §4: where globally installed `Plugin`s live, and whether one activates for a given
+/// project — the machine-checkable counterpart to `PluginDescriptor.detection`'s prose.
+#[cfg(feature = "external-adapters")]
+mod activation {
+    use kndo_core::plugin::ActivationRule;
+    use std::path::{Path, PathBuf};
+
+    /// Overridable via `KNDO_PLUGIN_DIR` (tests, and any user who wants a non-default location);
+    /// otherwise `<XDG data dir>/kndo/plugins` — `~/.local/share/kndo/plugins` on Linux,
+    /// `~/Library/Application Support/kndo/plugins` on macOS, `%APPDATA%\kndo\plugins` on
+    /// Windows. `None` when neither the override nor the platform data dir can be determined
+    /// (e.g. `$HOME` unset) — global discovery is then simply skipped, not an error: a project's
+    /// own `.kndo/plugins/` keeps working regardless.
+    pub(crate) fn global_plugin_dir() -> Option<PathBuf> {
+        if let Ok(dir) = std::env::var("KNDO_PLUGIN_DIR") {
+            return Some(PathBuf::from(dir));
+        }
+        dirs::data_dir().map(|d| d.join("kndo").join("plugins"))
+    }
+
+    /// A plugin with no activation rules never self-activates from the global directory — an
+    /// empty list means "no known structural signal," not "always on" (zero-false-positive
+    /// discipline: silence over a guess). Otherwise, any single matching rule is enough.
+    pub(crate) fn activates(rules: &[ActivationRule], root: &Path) -> bool {
+        !rules.is_empty() && rules.iter().any(|rule| matches(rule, root))
+    }
+
+    fn matches(rule: &ActivationRule, root: &Path) -> bool {
+        match rule {
+            ActivationRule::FileExists(pattern) => file_exists(root, pattern),
+            ActivationRule::ManifestDependency(name) => manifest_declares(root, name),
+        }
+    }
+
+    fn file_exists(root: &Path, pattern: &str) -> bool {
+        let full_pattern = root.join(pattern);
+        let Some(full_pattern) = full_pattern.to_str() else {
+            return false;
+        };
+        glob::glob(full_pattern).is_ok_and(|mut paths| paths.any(|p| p.is_ok()))
+    }
+
+    /// v1 scope (RFC 0003 §4): the project root's own `package.json`/`Cargo.toml` only — no
+    /// recursive workspace-member search yet, an honest, stated gap rather than a silent one.
+    fn manifest_declares(root: &Path, name: &str) -> bool {
+        package_json_declares(root, name) || cargo_toml_declares(root, name)
+    }
+
+    fn package_json_declares(root: &Path, name: &str) -> bool {
+        const SECTIONS: [&str; 4] = [
+            "dependencies",
+            "devDependencies",
+            "peerDependencies",
+            "optionalDependencies",
+        ];
+        let Ok(content) = std::fs::read_to_string(root.join("package.json")) else {
+            return false;
+        };
+        let Ok(value) = serde_json::from_str::<serde_json::Value>(&content) else {
+            return false;
+        };
+        SECTIONS.iter().any(|section| {
+            value
+                .get(section)
+                .and_then(|v| v.as_object())
+                .is_some_and(|deps| deps.contains_key(name))
+        })
+    }
+
+    fn cargo_toml_declares(root: &Path, name: &str) -> bool {
+        const SECTIONS: [&str; 3] = ["dependencies", "dev-dependencies", "build-dependencies"];
+        let Ok(content) = std::fs::read_to_string(root.join("Cargo.toml")) else {
+            return false;
+        };
+        let Ok(value) = content.parse::<toml::Table>() else {
+            return false;
+        };
+        // Cargo treats `-`/`_` as interchangeable in a crate name (spec §3's own idiom
+        // elsewhere in this codebase) — a plugin author shouldn't have to guess which spelling
+        // a project used.
+        let hyphenated = name.replace('_', "-");
+        let underscored = name.replace('-', "_");
+        SECTIONS.iter().any(|section| {
+            value
+                .get(*section)
+                .and_then(|v| v.as_table())
+                .is_some_and(|deps| {
+                    deps.contains_key(name)
+                        || deps.contains_key(&hyphenated)
+                        || deps.contains_key(&underscored)
+                })
+        })
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use smol_str::SmolStr;
+
+        #[test]
+        fn no_rules_never_activates() {
+            let dir = tempfile::tempdir().unwrap();
+            assert!(!activates(&[], dir.path()));
+        }
+
+        #[test]
+        fn file_glob_rule_matches_a_present_file() {
+            let dir = tempfile::tempdir().unwrap();
+            std::fs::write(dir.path().join("next.config.js"), "").unwrap();
+            let rules = vec![ActivationRule::FileExists(SmolStr::new("next.config.*"))];
+            assert!(activates(&rules, dir.path()));
+        }
+
+        #[test]
+        fn file_glob_rule_does_not_match_when_absent() {
+            let dir = tempfile::tempdir().unwrap();
+            let rules = vec![ActivationRule::FileExists(SmolStr::new("next.config.*"))];
+            assert!(!activates(&rules, dir.path()));
+        }
+
+        #[test]
+        fn manifest_dependency_rule_matches_package_json() {
+            let dir = tempfile::tempdir().unwrap();
+            std::fs::write(
+                dir.path().join("package.json"),
+                r#"{"dependencies": {"react": "^18.0.0"}}"#,
+            )
+            .unwrap();
+            let rules = vec![ActivationRule::ManifestDependency(SmolStr::new("react"))];
+            assert!(activates(&rules, dir.path()));
+        }
+
+        #[test]
+        fn manifest_dependency_rule_matches_cargo_toml_across_hyphen_underscore() {
+            let dir = tempfile::tempdir().unwrap();
+            std::fs::write(
+                dir.path().join("Cargo.toml"),
+                "[dependencies]\nserde_json = \"1\"\n",
+            )
+            .unwrap();
+            let rules = vec![ActivationRule::ManifestDependency(SmolStr::new(
+                "serde-json",
+            ))];
+            assert!(activates(&rules, dir.path()));
+        }
+
+        #[test]
+        fn manifest_dependency_rule_does_not_match_when_absent() {
+            let dir = tempfile::tempdir().unwrap();
+            std::fs::write(dir.path().join("package.json"), r#"{"dependencies": {}}"#).unwrap();
+            let rules = vec![ActivationRule::ManifestDependency(SmolStr::new("react"))];
+            assert!(!activates(&rules, dir.path()));
+        }
+    }
 }
 
 #[cfg(test)]

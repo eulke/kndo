@@ -217,8 +217,13 @@ pub struct DoctorCacheInfo {
 
 /// One registered plugin, as `kndo doctor` reports it — static descriptor info, matching
 /// [`DoctorAdapterInfo`]'s shape. `detection`/`requested_file_access` are shown so it's visible
-/// *why* a plugin would activate, even though auto-detection evaluation itself (RFC 0003 §4)
-/// isn't wired yet — every registered plugin is unconditionally active pre-config-parser.
+/// *why* a plugin would activate. Every plugin reaching this struct is already part of the
+/// composed set `Engine` was built with — `PluginDescriptor.activation` (RFC 0003 §4) is
+/// evaluated earlier, only for globally installed plugins, by `kndo`'s composition layer
+/// (`crates/kndo/src/lib.rs`'s `activation` module), before `Engine::open_with_plugins` is even
+/// called; this report has no visibility into global candidates that were discovered and
+/// skipped, only the final set — a stated follow-up (docs/contracts/wasm-abi.md §5.5), not an
+/// omission papered over.
 #[derive(Debug, Clone)]
 pub struct DoctorPluginInfo {
     pub id: String,
@@ -1474,6 +1479,7 @@ mod tests {
                 version: SmolStr::new("1"),
                 detection: vec![],
                 requested_file_access: vec![],
+                activation: vec![],
             }
         }
 

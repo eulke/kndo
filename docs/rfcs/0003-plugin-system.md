@@ -72,14 +72,39 @@ Two tiers (decision in ADR 0003):
    three flat functions, built once real internal demand existed for it (this session), not
    speculatively ahead of it.
 
+   `.kndo/plugins/` is per-project — dropping a file there and having it live is the whole
+   opt-in. External `Plugin`s (not yet `LanguageAdapter`s — see §4) additionally auto-discover
+   from a **global** directory installed once per machine, so a plugin doesn't have to be
+   copied into every project that wants it (§4 covers how a globally installed plugin decides
+   *which* projects that is).
+
 Both tiers use the same trait; built-ins are simply statically linked. Third parties can therefore
 prototype a plugin natively and ship it as WASM unchanged.
 
 ## 4. Activation & configuration
 
-- **Auto-detection**: a plugin declares detection predicates (e.g. "package.json depends on
-  `react`", "a `build.gradle` exists"). Detected plugins activate silently; `kndo doctor` (RFC
-  0006) shows what activated and why.
+- **Auto-detection**: a plugin declares detection predicates in prose
+  (`PluginDescriptor.detection`, e.g. "package.json depends on `react`") for humans —
+  `kndo doctor` (RFC 0006) shows these, but they are never evaluated. `PluginDescriptor.activation`
+  is the machine-checkable counterpart (M5, v1 — `wasm-abi.md` §5.4): a list of `FileExists(glob)`
+  / `ManifestDependency(name)` rules, cheap filesystem-only checks against the project root, no
+  guest code run to decide.
+  - **Project-local** `.kndo/plugins/*.wasm` is unconditional — the file being there already is
+    the opt-in, `activation` plays no role.
+  - **Globally installed** plugins (§3's global directory — `<XDG data dir>/kndo/plugins`,
+    overridable via `KNDO_PLUGIN_DIR`) are filtered through `activation` before they even join
+    composition: any single matching rule activates the plugin for that project; an *empty*
+    `activation` list means "no known structural signal," so a globally installed plugin with
+    none never self-activates — the zero-false-positive default is silence, not a guess.
+  - v1 scope: `ManifestDependency` only reads the project root's own `package.json`/`Cargo.toml`
+    (no recursive workspace-member search yet); `LanguageAdapter`s don't have an `activation`
+    field yet either, so a globally installed adapter isn't a thing this pass adds — both are
+    stated gaps, not silent ones.
+  - **Not yet done**: there is no install/registry command (`kndo plugin install …`) — landing a
+    file in the global directory is still a manual `cp`, same posture `.kndo/plugins/` itself
+    has always had. `kndo doctor` doesn't yet report *which* global candidates were discovered
+    and skipped (only the final, already-activated set) — a known follow-up, not implied by this
+    section.
 - **Explicit config** (`kndo.toml`) can force-enable/disable and pass plugin-scoped options:
 
 ```toml
