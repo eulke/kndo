@@ -1,0 +1,150 @@
+// kndo-plugin-api v1 — the external-PLUGIN WASM ABI (ADR 0003, RFC 0003 §2/§3). Bridges the
+// four graph-mutation `Plugin` hooks (`classify_file`, `contribute_roots`, `contribute_edges`,
+// `annotate_symbols`) — `ingest_coverage`/`suppress` are out of v1 scope, same posture as
+// `adapter.wit` cutting `resolve()`/manifests: not demanded yet, don't build it speculatively.
+//
+// Versioned independently from `kndo:adapter` (contracts/core-traits.md §6: "WASM ABI versioned
+// independently") — the small vocabulary overlap (file-class, root-kind, ref-kind, confidence)
+// is deliberately duplicated here rather than shared across packages, so upgrading one ABI can
+// never force a lockstep bump of the other.
+//
+// Unlike `adapter.wit`, this world is BIDIRECTIONAL: `contribute_roots`/`contribute_edges`/
+// `annotate_symbols` need to *read* the graph, not just report facts about one file. Rather than
+// serializing the whole graph into every call (expensive, and most plugins only care about a
+// handful of paths), the host exposes two narrow query functions the guest calls as needed —
+// `list-files` and `symbols-in` — mirroring `kndo_core::plugin::GraphView`'s own two methods
+// exactly. The guest still can't touch anything else: no fs, no net, no other host state.
+package kndo:plugin@0.1.0;
+
+interface types {
+    enum file-role {
+        production,
+        test,
+        tooling,
+    }
+
+    enum file-origin {
+        authored,
+        generated,
+        vendored,
+    }
+
+    record file-class {
+        role: file-role,
+        origin: file-origin,
+    }
+
+    /// v1 subset of `kndo_core::vocab::SymbolKind` — same cut `adapter.wit` makes, for the same
+    /// reason (an adapter-specific `Other(name)` facet isn't representable in v1).
+    enum symbol-kind {
+        function,
+        method,
+        class,
+        %interface,
+        %struct,
+        %enum,
+        enum-member,
+        type-alias,
+        %const,
+        %static,
+        variable,
+        field,
+        module,
+    }
+
+    enum root-kind {
+        production,
+        test,
+        tooling,
+    }
+
+    enum ref-kind {
+        call,
+        read,
+        write,
+        extend,
+        implement,
+        override,
+        type-use,
+    }
+
+    enum confidence {
+        certain,
+        probable,
+        possible,
+    }
+
+    /// A named target — mirrors `kndo_core::plugin::PluginTarget` exactly: a path, plus an
+    /// optional bare-or-`Owner.name` symbol name. Resolved host-side; an unresolvable target is
+    /// dropped silently, same as the native ABI.
+    record plugin-target {
+        path: string,
+        symbol: option<string>,
+    }
+
+    record contributed-root {
+        target: plugin-target,
+        kind: root-kind,
+        confidence: confidence,
+    }
+
+    record contributed-edge {
+        %from: plugin-target,
+        %to: plugin-target,
+        kind: ref-kind,
+        confidence: confidence,
+    }
+
+    record plugin-descriptor {
+        id: string,
+        version: string,
+        detection: list<string>,
+        requested-file-access: list<string>,
+    }
+
+    /// One `GraphView::files()` entry. v1 exposes path/role/origin only — `language`/`unit`/
+    /// `test-spans` aren't surfaced yet, the same "conservative v1, grow on real demand" cut
+    /// `adapter.wit`'s own descriptor makes.
+    record wasm-file-info {
+        path: string,
+        role: file-role,
+        origin: file-origin,
+    }
+
+    /// One `GraphView::symbols_in(path)` entry.
+    record wasm-symbol-info {
+        name: string,
+        kind: symbol-kind,
+        exported: bool,
+        member-of: option<string>,
+    }
+}
+
+world plugin {
+    use types.{
+        plugin-descriptor, file-class, plugin-target, contributed-root, contributed-edge,
+        wasm-file-info, wasm-symbol-info,
+    };
+
+    /// Host-provided graph queries — the guest calls these from inside `contribute-roots`/
+    /// `contribute-edges`/`annotate-symbols` as needed; they answer from the same data
+    /// `GraphView` already holds, never touch the filesystem.
+    import list-files: func() -> list<wasm-file-info>;
+    import symbols-in: func(path: string) -> list<wasm-symbol-info>;
+
+    /// Called once at load time; the host caches the result.
+    export descriptor: func() -> plugin-descriptor;
+
+    /// See `kndo_core::plugin::Plugin::classify_file`.
+    export classify-file: func(path: string, current: file-class) -> option<file-class>;
+
+    /// Returns every root the plugin contributes this run (empty = none) — the WASM analogue of
+    /// filling `RootSink` via repeated `add()` calls, collapsed into one call-boundary crossing.
+    export contribute-roots: func() -> list<contributed-root>;
+
+    /// See above; the WASM analogue of `EdgeSink`.
+    export contribute-edges: func() -> list<contributed-edge>;
+
+    /// Returns every symbol the plugin marks externally consumed this run.
+    export annotate-symbols: func() -> list<plugin-target>;
+}

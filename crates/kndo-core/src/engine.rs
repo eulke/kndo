@@ -1484,7 +1484,7 @@ mod tests {
         ) -> Option<crate::vocab::FileClass> {
             path.0
                 .ends_with(".banner.dmock")
-                .then(|| crate::vocab::FileClass {
+                .then_some(crate::vocab::FileClass {
                     role: current.role,
                     origin: crate::vocab::FileOrigin::Generated,
                 })

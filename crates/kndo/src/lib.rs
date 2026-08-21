@@ -67,7 +67,9 @@ pub fn default_plugins() -> Vec<Box<dyn Plugin>> {
 pub fn open(root: &Path, overrides: ConfigOverrides) -> Result<Engine, EngineError> {
     let mut adapters = default_adapters();
     adapters.extend(external_adapters(root));
-    Engine::open_with_plugins(root, overrides, adapters, default_plugins())
+    let mut plugins = default_plugins();
+    plugins.extend(external_plugins(root));
+    Engine::open_with_plugins(root, overrides, adapters, plugins)
 }
 
 /// Third-party adapters as WASM components (ADR 0003, `docs/contracts/wasm-abi.md`),
@@ -83,14 +85,8 @@ pub fn open(root: &Path, overrides: ConfigOverrides) -> Result<Engine, EngineErr
 fn external_adapters(root: &Path) -> Vec<Box<dyn LanguageAdapter>> {
     #[cfg(feature = "external-adapters")]
     {
-        let dir = root.join(".kndo").join("plugins");
-        let Ok(entries) = std::fs::read_dir(&dir) else {
-            return Vec::new();
-        };
-        entries
-            .filter_map(Result::ok)
-            .map(|entry| entry.path())
-            .filter(|path| path.extension().and_then(|ext| ext.to_str()) == Some("wasm"))
+        wasm_components(root)
+            .into_iter()
             .filter_map(|path| kndo_plugin_api::WasmAdapter::load(&path).ok())
             .map(|adapter| Box::new(adapter) as Box<dyn LanguageAdapter>)
             .collect()
@@ -100,6 +96,44 @@ fn external_adapters(root: &Path) -> Vec<Box<dyn LanguageAdapter>> {
         let _ = root;
         Vec::new()
     }
+}
+
+/// Third-party `Plugin`s as WASM components (`docs/contracts/wasm-abi.md` §5), same
+/// `.kndo/plugins/*.wasm` directory and zero-config discovery as [`external_adapters`]. A
+/// `.wasm` file only ever implements one of the two ABIs (`kndo:adapter` or `kndo:plugin`) — its
+/// world's exports say which, so nothing here has to *ask*: [`WasmAdapter::load`] and
+/// [`WasmPlugin::load`] both simply fail to instantiate against a component compiled for the
+/// other world's exports, and each loader silently skips what it can't load. A single directory
+/// scan feeding both loaders is deliberate, not an accident of how [`external_adapters`] already
+/// existed — a plugin author never has to name their file `*.adapter.wasm` vs `*.plugin.wasm` or
+/// sort it into a subdirectory to say which ABI it targets.
+fn external_plugins(root: &Path) -> Vec<Box<dyn Plugin>> {
+    #[cfg(feature = "external-adapters")]
+    {
+        wasm_components(root)
+            .into_iter()
+            .filter_map(|path| kndo_plugin_api::WasmPlugin::load(&path).ok())
+            .map(|plugin| Box::new(plugin) as Box<dyn Plugin>)
+            .collect()
+    }
+    #[cfg(not(feature = "external-adapters"))]
+    {
+        let _ = root;
+        Vec::new()
+    }
+}
+
+#[cfg(feature = "external-adapters")]
+fn wasm_components(root: &Path) -> Vec<std::path::PathBuf> {
+    let dir = root.join(".kndo").join("plugins");
+    let Ok(entries) = std::fs::read_dir(&dir) else {
+        return Vec::new();
+    };
+    entries
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| path.extension().and_then(|ext| ext.to_str()) == Some("wasm"))
+        .collect()
 }
 
 #[cfg(test)]

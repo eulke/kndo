@@ -1,22 +1,25 @@
 # Contract — `kndo-plugin-api` (WASM Component-Model ABI)
 
-**Status:** Accepted, v1 shipped · Normative for the WASM tier of ADR 0003 and RFC 0003 §3.
-Code must match this document; changing either requires updating both in the same PR.
+**Status:** Accepted, both v1s shipped · Normative for the WASM tier of ADR 0003 and RFC 0003
+§§2–3. Code must match this document; changing either requires updating both in the same PR.
 
 ## 0. What this is
 
 ADR 0003 splits extensions into two tiers: first-party adapters/plugins compiled into the
 `kndo` binary, and third-party ones shipped as WASM components against a versioned ABI —
-`kndo-plugin-api`. This document is that ABI's concrete shape for **v1**: what a component
-implements, what the host (`crates/kndo-plugin-api`) guarantees around it, and what is
-deliberately out of scope.
+`kndo-plugin-api`. **Two independently-versioned WIT packages live under that one crate**, one
+per native trait: `kndo:adapter@0.1.0` bridges `LanguageAdapter` (§§1–4 below),
+`kndo:plugin@0.1.0` bridges `Plugin`'s four graph-mutation hooks (§5 below). Independent
+versioning is deliberate (contracts/core-traits.md §6: "WASM ABI versioned independently") —
+a breaking change to one package's shape never forces a lockstep bump of the other, and the
+small vocabulary overlap between them (`file-class`, `root-kind`, `ref-kind`, `confidence`) is
+duplicated rather than shared for the same reason.
 
-v1 covers **adapters only** (`LanguageAdapter`, contracts/core-traits.md §2), and only its
-*read* side — `descriptor`, `claim`, `extract`. `Plugin` hooks (RFC 0003 §2) over WASM, and
-`claim_manifest`/`extract_manifest`/`resolve`, are not part of v1; see §2 for why and what
-closing each gap would need.
+Both packages cover only their v1 scope — real, working, and deliberately smaller than the
+native trait's full surface; §2 and §5.2 each list their own cuts and why. `Plugin`'s
+`ingest_coverage`/`suppress` hooks are not bridged by either package yet.
 
-## 1. The WIT world
+## 1. The adapter WIT world
 
 `crates/kndo-plugin-api/wit/adapter.wit`, package `kndo:adapter@0.1.0`, world `adapter`:
 
@@ -41,12 +44,6 @@ Every cut below is the same shape of decision this project makes elsewhere (CSS'
 selector extraction, JSON's non-source-language non-goals): ship the honestly-smaller thing
 that's fully correct, rather than a bigger thing with a hidden gap.
 
-- **No `Plugin` hooks over WASM yet.** `Plugin`'s hooks (`contribute_roots`,
-  `contribute_edges`, `annotate_symbols`, …) take a read-only `GraphView` and write through
-  typed sinks (contracts/core-traits.md §3) — a materially different, and materially larger,
-  ABI surface than an adapter's three flat functions. RFC 0003 §3 already names external
-  plugins as a WASM-component tier; this document doesn't retract that, it just hasn't been
-  built. First real external-plugin demand should drive its shape, not a guess made here.
 - **No `claim_manifest`/`extract_manifest`/`resolve`.** The host bridge (`WasmAdapter`)
   answers all three itself without ever calling the guest: `claim_manifest` is always
   `false`, `extract_manifest` always returns `ManifestFacts::default()`, `resolve` always
@@ -85,7 +82,7 @@ for the corresponding native method (§3), not by a guest-side promise the host 
 ## 3. The host bridge (`crates/kndo-plugin-api`)
 
 `WasmAdapter::load(path: &Path) -> Result<WasmAdapter, LoadError>` loads an **already
-componentized** `.wasm` file (component-model binary — see §5 for how one gets produced) and
+componentized** `.wasm` file (component-model binary — see §6 for how one gets produced) and
 returns a value implementing `kndo_core::adapter::LanguageAdapter` directly. From the
 `Engine`'s side this is indistinguishable from a compiled-in adapter (ADR 0003: "the WASM ABI
 is a generated bridge over [the native traits]") — it goes on the very same
@@ -109,43 +106,145 @@ capabilities nobody meant to give it.
 
 The distribution crate (`crates/kndo/src/lib.rs`) auto-discovers `.kndo/plugins/*.wasm`
 relative to the project root on every `kndo::open` call — no `kndo.toml` entry needed, the
-zero-config default RFC 0003 §3 already names. A component that fails to load is skipped, not
-fatal to the run (§3's same "one bad extension doesn't take down the rest" posture, applied at
-load time as well as call time). Feature-gated (`external-adapters`, on by default) so an
+zero-config default RFC 0003 §3 already names. **One directory, two loaders, no naming
+convention**: every discovered `.wasm` file is tried against both `WasmAdapter::load` and
+`WasmPlugin::load`; each fails to *instantiate* (not merely "doesn't look right") against a
+component built for the other package's world, since wasmtime's own component type-checking
+requires every world-declared export to be present with matching types. A component that
+fails to load either way is skipped, not fatal to the run (§3's/§5.3's "one bad extension
+doesn't take down the rest" posture, applied at load time as well as call time).
+`kndo_plugin_api::WasmAdapter`/`WasmPlugin` never guess which ABI a `.wasm` file targets by its
+name, path, or a magic byte prefix — the type system already answers that, so nothing else
+needs to. Both loaders are feature-gated together (`external-adapters`, on by default) so an
 embedder building a minimal static binary can drop the WASM runtime entirely
 (`--no-default-features --features js,go,...`, ADR 0006).
 
-Demo adapters shipped **in this repository** live outside the compiled product on purpose
-(`examples/kndo-plugin-demo`, excluded from the workspace's own `members` — same convention as
-`spikes/perf`): "third-party" means never statically linked, checked by keeping it structurally
-incapable of being one.
+Demo components shipped **in this repository** live outside the compiled product on purpose
+(`examples/kndo-plugin-demo`, `examples/kndo-plugin-hooks-demo` — both excluded from the
+workspace's own `members`, same convention as `spikes/perf`): "third-party" means never
+statically linked, checked by keeping it structurally incapable of being one.
 
-## 5. Producing a component
+## 5. The Plugin ABI (`kndo:plugin`)
+
+### 5.1 The WIT world
+
+`crates/kndo-plugin-api/wit/plugin.wit`, package `kndo:plugin@0.1.0`, world `plugin`:
+
+```
+import list-files: func() -> list<wasm-file-info>;
+import symbols-in: func(path: string) -> list<wasm-symbol-info>;
+
+export descriptor: func() -> plugin-descriptor;
+export classify-file: func(path: string, current: file-class) -> option<file-class>;
+export contribute-roots: func() -> list<contributed-root>;
+export contribute-edges: func() -> list<contributed-edge>;
+export annotate-symbols: func() -> list<plugin-target>;
+```
+
+Unlike the adapter world, this one is **bidirectional** — `contribute-roots`/`contribute-
+edges`/`annotate-symbols` need to *read* the graph, not just report facts about one file. Two
+narrow host-import queries (`list-files`, `symbols-in`) mirror `kndo_core::plugin::GraphView`'s
+own two methods exactly, rather than serializing the whole graph into every call: a guest only
+pays for what it actually queries. The three "write" hooks return a `list<...>` of their
+contributions in one call, the WASM analogue of filling `RootSink`/`EdgeSink`/`AnnotationSink`
+via repeated `add()` calls collapsed into a single call-boundary crossing — cheaper, and it
+keeps the imperative sink shape out of the wire format entirely. `classify-file` needs no
+queries of its own (it only ever sees the one file it's asked about, mirroring the native
+hook's own contract) and is called against a lightweight, view-less instance.
+
+Every target is named, never addressed by an internal id — `plugin-target { path, symbol:
+option<string> }`, same as `kndo_core::plugin::PluginTarget`; resolved host-side against the
+same bare/qualified lookup tables `RawRoot`/`RawReference` resolve against, and an unresolvable
+target is dropped silently (the same miss behavior the adapter ABI and the native `Plugin`
+trait both already have).
+
+### 5.2 v1 scope cuts, and why
+
+- **No `ingest_coverage`/`suppress`.** Neither is wired to any analysis yet on the *native*
+  `Plugin` trait either (RFC 0003 §2's "landed" note) — nothing to bridge until they're real.
+- **`GraphView` exposes `files()`/`symbols_in()` only, not the full `ProjectGraph`.**
+  `wasm-file-info` carries `path`/`role`/`origin`; `wasm-symbol-info` carries `name`/`kind`/
+  `exported`/`member-of`. `language`, `unit`, `test-spans`, and every edge-level fact are not
+  surfaced — the same "conservative v1, grow on real demand" cut the adapter ABI's descriptor
+  makes, not a structural limit of the bidirectional design.
+- **`SymbolKind::Other(name)`/`CssRule`/`CssVariable` aren't representable** — same cut as
+  §2's adapter-side one; the host bridge folds them into `variable` rather than fabricate a
+  wire value.
+- **No fuel-budget layer around individual host-import calls** — the *whole* hook call
+  (guest logic plus every `list-files`/`symbols-in` round trip inside it) shares one fuel
+  allowance, refilled per hook. A guest that queries in a tight loop pays for it out of the
+  same budget its own logic does; there is no separate per-query cap.
+
+None of these are silent: every one is enforced by what the host bridge (`plugin_host.rs`)
+does and doesn't call or expose, not by a guest-side promise the host has to trust.
+
+### 5.3 The host bridge
+
+`WasmPlugin::load(path: &Path) -> Result<WasmPlugin, LoadError>` loads an already-componentized
+`.wasm` file and returns a value implementing `kndo_core::plugin::Plugin` directly — same
+"generated bridge" posture as `WasmAdapter` (ADR 0003), on the same `Vec<Box<dyn Plugin>>`
+`default_plugins()`/`Engine::open_with_plugins` accept.
+
+**Host state and the borrow problem.** `contribute_roots`/`contribute_edges`/`annotate_symbols`
+run with a real `&GraphView<'_>` borrowed for the duration of one `assemble_from_source` call
+(graph.rs, RFC 0003 §2's "landed" note); `wasmtime::Store`'s state type must be `'static`, so a
+live borrow can't sit inside it directly. `WasmPlugin` resolves this by cloning exactly what
+`list-files`/`symbols-in` can answer (`HostViewData`, built once per graph-mutation round, not
+once per query) into the store's state rather than reaching for raw-pointer plumbing across the
+FFI boundary — a WASM plugin already forces a full graph rebuild every run (§5.4), so one more
+bounded `O(files + symbols)` clone alongside that full rebuild is proportionally small, and the
+resulting code has no `unsafe`.
+
+**Fuel budget and sandbox** are the same posture and the same constant class as §3's adapter
+bridge (`FUEL_PER_CALL` in `plugin_host.rs`): an exhausted or trapped hook degrades to "this
+plugin contributed nothing this round," never a crashed `kndo check`; no WASI linked, so a
+component declaring one fails to instantiate rather than silently receiving capabilities.
+
+### 5.4 Correctness: cache and patch bypass
+
+Same rule as the native `Plugin`'s own graph-mutation hooks (contracts/core-traits.md §3): any
+registered plugin — WASM or built-in — with these four hooks makes `assemble_from_source` skip
+both the graph-snapshot cache hit and the incremental patch, full-rebuilding every run. Neither
+reuse path re-invokes a plugin's hooks (WASM or native), so serving either to a plugin-bearing
+project would silently miss whatever the plugin contributes.
+
+## 6. Producing a component
 
 A third-party author needs a real component-model `.wasm` binary, not a plain core module.
-Two ways, both documented rather than assumed:
+Two ways, both documented rather than assumed, for either package:
 
 - `cargo component build` (the `cargo-component` tool) — the ecosystem-standard path.
 - The `wit-component` crate directly, as a library, with **no extra tool install** —
   `wit_component::ComponentEncoder::default().module(&core_wasm_bytes)?.encode()?`. This is
-  exactly what `kndo-plugin-api`'s own compliance test does to build
-  `examples/kndo-plugin-demo` fresh on every run (`crates/kndo-plugin-api/tests/compliance.rs`)
-  — it works with zero WASI imports to satisfy (§2/§3), which is true of any v1-conformant
-  adapter by construction.
+  exactly what `kndo-plugin-api`'s own compliance tests do to build both
+  `examples/kndo-plugin-demo` and `examples/kndo-plugin-hooks-demo` fresh on every run — it
+  works with zero WASI imports to satisfy (§2/§3, §5.2/§5.3), which is true of any
+  v1-conformant adapter or plugin by construction.
 
-## 6. Compliance
+## 7. Compliance
 
-`crates/kndo-plugin-api/tests/compliance.rs` and `crates/kndo/tests/external_adapter.rs`
-together are the compliance suite ADR 0003 calls for: the former drives a `WasmAdapter`
-directly against a hand-built `Engine`; the latter goes through the full product composition
-(`kndo::open`, `.kndo/plugins/` discovery included) — the same code path `kndo-cli` uses for
-every command. Both build `examples/kndo-plugin-demo` from source and componentize it
-in-process on every run (no binary checked into the repo), then assert a real `unused` finding
-comes back correctly through the real reachability engine.
+Three suites, all building their demo component fresh from source and componentizing it
+in-process on every run (no binary checked into the repo):
 
-## 7. Versioning
+- `crates/kndo-plugin-api/tests/compliance.rs` — drives a `WasmAdapter` directly against a
+  hand-built `Engine`.
+- `crates/kndo-plugin-api/tests/plugin_compliance.rs` — drives a `WasmPlugin` directly against
+  a hand-built `Engine` and its own minimal `LanguageAdapter`, exercising all four hooks
+  (including the `list-files`/`symbols-in` round trip) with a baseline run proving the
+  assertions aren't vacuous; also proves the two ABIs reject each other's components
+  (`each_abi_rejects_a_component_built_for_the_other`) — the mechanism §4's discovery design
+  depends on.
+- `crates/kndo/tests/external_adapter.rs` and `crates/kndo/tests/external_plugin.rs` — go
+  through the full product composition (`kndo::open`, `.kndo/plugins/` discovery included), the
+  same code path `kndo-cli` uses for every command; `external_plugin.rs` drops *both* an
+  adapter and a plugin component into the same `.kndo/plugins/` directory, proving §4's
+  single-directory sort actually works end to end, not just at the loader level.
 
-The WIT package version (`kndo:adapter@0.1.0`) and this document change together. A breaking
-v2 (adding `resolve()`'s host-import callbacks, `Plugin` hooks, byte-content, or any of §2's
-other deferred items) is a new package version, not a silent reinterpretation of `0.1.0` — a
-component built against v1 must keep working against a v1-compatible host indefinitely.
+## 8. Versioning
+
+Each WIT package version (`kndo:adapter@0.1.0`, `kndo:plugin@0.1.0`) and the corresponding
+section of this document change together, independently of each other (§0). A breaking v2 of
+either package (the adapter side's `resolve()` host-import callbacks or byte-content; the
+plugin side's richer `GraphView` surface, `ingest_coverage`/`suppress`, or per-query fuel) is a
+new package version, not a silent reinterpretation of `0.1.0` — a component built against a v1
+package must keep working against a v1-compatible host indefinitely.

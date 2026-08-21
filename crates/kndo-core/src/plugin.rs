@@ -2,8 +2,9 @@
 //!
 //! Adapters describe what code *is*; plugins describe what an ecosystem *means* by it.
 //! All hooks are optional; the same trait serves built-ins (statically linked) and external
-//! WASM components (bridged via `kndo-plugin-api`, ADR 0003 — the graph-mutation hooks below
-//! are not bridged yet, only `LanguageAdapter` is; see docs/contracts/wasm-abi.md §4).
+//! WASM components (bridged via `kndo-plugin-api`, ADR 0003 — `kndo:plugin@0.1.0` for the four
+//! graph-mutation hooks below, `kndo:adapter@0.1.0` for `LanguageAdapter`; see
+//! docs/contracts/wasm-abi.md §5). `ingest_coverage`/`suppress` aren't bridged either way yet.
 //! `GraphView` is read-only; mutation happens only through typed sinks the core validates and
 //! attributes (`Provenance::Plugin`).
 //!

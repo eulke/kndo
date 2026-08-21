@@ -425,8 +425,10 @@ Compliance: every adapter must pass the shared conformance harness with its fixt
 ## 3. `Plugin`
 
 All hooks optional; a plugin implements what it needs (RFC 0003 §2). Same trait for built-ins
-(statically linked) and external WASM components — landed for `LanguageAdapter` (`kndo-plugin-
-api`, docs/contracts/wasm-abi.md), not yet for `Plugin`'s own graph-mutation hooks (ADR 0003).
+(statically linked) and external WASM components — both the four graph-mutation hooks
+(`kndo:plugin@0.1.0`) and `LanguageAdapter` (`kndo:adapter@0.1.0`) are bridged
+(`kndo-plugin-api`, docs/contracts/wasm-abi.md §5). `ingest_coverage`/`suppress` aren't bridged
+either way yet.
 
 ```rust
 pub trait Plugin: Send + Sync {
@@ -477,9 +479,10 @@ pub trait Plugin: Send + Sync {
   `CoverageMap` is a per-run analysis input — never part of the graph or its snapshot, because
   report freshness varies independently of source content hashes. Built-in at launch: lcov.
 - Budget: per-hook fuel/time limit; an over-budget plugin is disabled for the run + diagnostic
-  (RFC 0003 §3) — landed for `LanguageAdapter` calls over WASM (`kndo-plugin-api`'s
-  `FUEL_PER_CALL`), not yet for `Plugin`'s own hooks (all built-in/statically-linked today, so
-  there's no untrusted call to budget yet).
+  (RFC 0003 §3) — landed for both WASM tiers (`kndo-plugin-api`'s `FUEL_PER_CALL`, one constant
+  per bridge file); a trapped/exhausted `Plugin` hook over WASM degrades to "contributed
+  nothing this round," never a crashed run. Native built-in plugins have no such budget (there
+  is no untrusted call to limit for statically-linked code).
 
 ## 4. `Analysis`
 

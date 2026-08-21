@@ -16,7 +16,7 @@ members = [
     "crates/kndo-plugin-api",
     "xtask",
 ]
-exclude = ["spikes/perf", "examples/kndo-plugin-demo"]
+exclude = ["spikes/perf", "examples/kndo-plugin-demo", "examples/kndo-plugin-hooks-demo"]
 
 [workspace.package]
 version = "0.1.0"

@@ -14,15 +14,15 @@ use kndo_core::adapter::{
 };
 use kndo_core::vocab::{FileClass, FileOrigin, FileRole, RefKind, RootKind, SymbolKind};
 
-mod wit {
+mod bindings {
     wasmtime::component::bindgen!({
         path: "wit/adapter.wit",
         world: "adapter",
     });
 }
 
-use self::wit::kndo::adapter::types as w;
-use self::wit::Adapter;
+use self::bindings::kndo::adapter::types as w;
+use self::bindings::Adapter;
 
 /// Fuel budget per guest call (RFC 0003 §3: "per-file fuel/time limits so a plugin cannot break
 /// the 500 ms budget"). A trapped/exhausted call degrades to a conservative empty result plus a

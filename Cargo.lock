@@ -1236,6 +1236,7 @@ name = "kndo-plugin-api"
 version = "0.1.0"
 dependencies = [
  "kndo-core",
+ "rustc-hash",
  "smol_str",
  "tempfile",
  "wasmtime",

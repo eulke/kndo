@@ -131,6 +131,7 @@ pub(crate) fn extract(_path: &str, content: &[u8]) -> FileFacts {
     }
 
     let local_qualifiers = collect_local_qualifiers(root, content);
+    let inline_mod_names = collect_inline_mod_names(root, content);
     walk_items(
         root,
         content,
@@ -138,6 +139,7 @@ pub(crate) fn extract(_path: &str, content: &[u8]) -> FileFacts {
             owner: None,
             in_cfg_test: whole_file_test,
             local_qualifiers: &local_qualifiers,
+            inline_mod_names: &inline_mod_names,
         },
         &mut out,
     );
@@ -195,6 +197,29 @@ fn collect_local_qualifiers(root: Node, src: &[u8]) -> std::collections::HashSet
     out
 }
 
+/// Names of *inline* `mod name { .. }` blocks in this file — as opposed to file-linking
+/// `mod name;` — collected so `handle_use` can recognize a `use` path rooted at one: spec §2's
+/// flatten model already merged that module's contents into this same file's declarations, so
+/// the path names nothing outside it. Left unresolved, such a root looks exactly like an
+/// unknown external crate to `resolve_bare` (no `name.rs`/`name/mod.rs` file exists to find),
+/// fabricating an `undeclared`-dependency finding for what is really a same-file reference.
+fn collect_inline_mod_names(root: Node, src: &[u8]) -> std::collections::HashSet<String> {
+    let mut out = std::collections::HashSet::new();
+    fn walk(node: Node, src: &[u8], out: &mut std::collections::HashSet<String>) {
+        if node.kind() == "mod_item" && node.child_by_field_name("body").is_some() {
+            if let Some(name) = node.child_by_field_name("name") {
+                out.insert(text(name, src).to_string());
+            }
+        }
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            walk(child, src, out);
+        }
+    }
+    walk(root, src, &mut out);
+    out
+}
+
 /// Item-walk context: the member owner, whether we're under a `#[cfg(test)]` module (its
 /// declarations become test roots — inline test infrastructure, spec §1), and the file's
 /// local qualifier names.
@@ -202,6 +227,7 @@ struct Ctx<'a> {
     owner: Option<&'a str>,
     in_cfg_test: bool,
     local_qualifiers: &'a std::collections::HashSet<String>,
+    inline_mod_names: &'a std::collections::HashSet<String>,
 }
 
 fn span(node: Node) -> Span {
@@ -461,7 +487,27 @@ fn handle_item(item: Node, src: &[u8], ctx: &Ctx<'_>, pending: PendingAttrs, out
             }
         }
         "mod_item" => handle_mod(item, src, ctx, &pending, out),
-        "use_declaration" => handle_use(item, src, out),
+        "use_declaration" => handle_use(item, src, ctx, out),
+        // A macro invoked as an item, not a statement (`wit_bindgen::generate!({ .. });`,
+        // `export!(Guest);`) — the same construct `walk_body` already handles inside function
+        // bodies via `handle_macro`, just at item position instead of expression position.
+        // Without this arm the macro name and every identifier in its token tree (`Guest` in
+        // `export!(Guest)`) were silently invisible: no reference to the macro's own crate, no
+        // reference to whatever the macro's arguments name — real gaps a WASM-guest adapter
+        // hit immediately (top-level `generate!`/`export!` is exactly how wit-bindgen is used).
+        "macro_invocation" => {
+            handle_macro(item, src, None, ctx.local_qualifiers, out);
+        }
+        // The grammar always wraps a macro-call-as-item in `expression_statement` (there is
+        // no bare item-position `macro_invocation` node in practice) — unwrap one level to
+        // reach it. The `"macro_invocation"` arm above stays as a direct-node fallback.
+        "expression_statement" => {
+            if let Some(inner) = item.named_child(0) {
+                if inner.kind() == "macro_invocation" {
+                    handle_macro(inner, src, None, ctx.local_qualifiers, out);
+                }
+            }
+        }
         // (declaration-count bookkeeping below skips imports — they add no declarations)
         "extern_crate_declaration" => {
             if let Some(name) = item.child_by_field_name("name") {
@@ -808,6 +854,7 @@ fn handle_mod(item: Node, src: &[u8], ctx: &Ctx<'_>, pending: &PendingAttrs, out
                 owner: None,
                 in_cfg_test: ctx.in_cfg_test || pending.cfg_test,
                 local_qualifiers: ctx.local_qualifiers,
+                inline_mod_names: ctx.inline_mod_names,
             },
             out,
         ),
@@ -840,7 +887,7 @@ fn handle_mod(item: Node, src: &[u8], ctx: &Ctx<'_>, pending: &PendingAttrs, out
 
 // ---------------------------------------------------------------- use declarations
 
-fn handle_use(item: Node, src: &[u8], out: &mut FileFacts) {
+fn handle_use(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
     let reexported = {
         let mut c = item.walk();
         let found = item
@@ -851,6 +898,13 @@ fn handle_use(item: Node, src: &[u8], out: &mut FileFacts) {
     let Some(argument) = item.child_by_field_name("argument") else {
         return;
     };
+    // A path rooted at a same-file inline `mod` names nothing outside this file (see
+    // `collect_inline_mod_names`) — there is no cross-file or cross-crate relationship for
+    // the import graph to record, so this `use` contributes nothing.
+    let root = text(argument, src).split("::").next().unwrap_or("").trim();
+    if ctx.inline_mod_names.contains(root) {
+        return;
+    }
     collect_use(argument, src, "", reexported, span(item), out);
 }
 
@@ -1913,6 +1967,23 @@ mod tests {
             .iter()
             .any(|r| r.name == "format" && r.kind == RefKind::Call));
         assert!(f.references.iter().any(|r| r.name == "user_count"));
+    }
+
+    #[test]
+    fn top_level_macro_invocations_reference_the_macro_and_scan_arguments() {
+        // A macro called as an item (`export!(Guest);`, `wit_bindgen::generate!({ .. });`)
+        // parses as `expression_statement > macro_invocation`, not a bare item-position
+        // `macro_invocation` — without unwrapping that wrapper, the macro name and every
+        // identifier in its token tree (`Guest` here) were silently invisible.
+        let f = facts("struct Guest;\nexport!(Guest);\n");
+        assert!(f
+            .references
+            .iter()
+            .any(|r| r.name == "export" && r.kind == RefKind::Call));
+        assert!(f
+            .references
+            .iter()
+            .any(|r| r.name == "Guest" && r.within.is_none()));
     }
 
     #[test]

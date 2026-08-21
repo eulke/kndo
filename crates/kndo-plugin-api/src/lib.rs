@@ -8,5 +8,8 @@
 //! `Vec<Box<dyn LanguageAdapter>>` `default_adapters()` returns.
 
 mod host;
+mod plugin_host;
 
 pub use host::{LoadError, WasmAdapter};
+pub use plugin_host::LoadError as WasmPluginLoadError;
+pub use plugin_host::WasmPlugin;

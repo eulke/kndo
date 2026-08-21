@@ -61,11 +61,16 @@ Two tiers (decision in ADR 0003):
    (`kndo-plugin-api`), loaded from `.kndo/plugins/` or a configured path. Sandboxed (no fs/net;
    host-mediated file access), with per-file fuel/time limits so a plugin cannot break the 500 ms
    budget — a plugin that exceeds its budget is disabled for the run and reported as a diagnostic.
-   **Shipped for `LanguageAdapter` (M5, v1 — [contracts/wasm-abi.md](../contracts/wasm-abi.md)):**
-   `.kndo/plugins/*.wasm` adapters auto-discover through `kndo::open` and are indistinguishable
-   from a compiled-in adapter to the `Engine`. The `Plugin` hooks below are not over WASM yet —
-   their sink-based shape is a different, larger ABI surface than an adapter's three flat
-   functions, and nothing has demanded it be built ahead of real external-plugin usage.
+   **Shipped for both `LanguageAdapter` and `Plugin` (M5, v1 —
+   [contracts/wasm-abi.md](../contracts/wasm-abi.md)):** `.kndo/plugins/*.wasm` adapters and
+   plugins auto-discover through `kndo::open` from the *same* directory — each `.wasm` file is
+   tried against both loaders, and wasmtime's own component type-checking rejects whichever
+   doesn't match, so nothing needs a naming convention to say which ABI a file targets. Both are
+   indistinguishable from a compiled-in adapter/plugin to the `Engine`. `Plugin`'s bridge is
+   bidirectional (the guest calls back into two host-provided graph queries,
+   `wasm-abi.md` §5.1) — a materially different shape from the adapter ABI's one-directional
+   three flat functions, built once real internal demand existed for it (this session), not
+   speculatively ahead of it.
 
 Both tiers use the same trait; built-ins are simply statically linked. Third parties can therefore
 prototype a plugin natively and ship it as WASM unchanged.

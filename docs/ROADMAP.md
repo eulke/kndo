@@ -647,10 +647,10 @@ overhead was touched.
 
 **Carried out of M5, not required by its stated Exit criteria:** "First-party ecosystem
 plugins for detected frameworks" (M5's own header names it, but it isn't one of the three
-bullets Exit actually checks) and the `Plugin` trait's own WASM bridge (`wasm-abi.md` §2) —
-both real M5-scoped ideas, neither built. Parking lot until a first ecosystem plugin (or real
-external-plugin demand) picks a concrete shape to build toward, same "don't build the
-mechanism before the demand" call this session made for `resolve()`'s host-imports.
+bullets Exit actually checks) — a real M5-scoped idea, not built. Parking lot until a first
+ecosystem plugin (or real external-plugin demand) picks a concrete shape to build toward. The
+`Plugin` trait's own WASM bridge, named here as the other carried item, landed later the same
+day — see the two progress sections below.
 
 ### M5 progress — Plugin graph-mutation hooks wired ✅ (landed 2026-08-21)
 
@@ -717,13 +717,75 @@ plugin asserts all four would otherwise fire, so the test can't pass vacuously. 
 suite (368 kndo-core tests plus every adapter/integration crate) and `clippy -D warnings` both
 clean.
 
-**Not this pass, real remaining gaps toward the React/Next.js-style plugin the user actually
-asked about:** a first ecosystem plugin exercising this wiring for a real framework, and the
-`Plugin` trait's own WASM bridge — a materially bigger design problem than the adapter ABI
-(`contribute_roots`/`contribute_edges`/`annotate_symbols` need a WASM guest to *query* a
-read-only graph, not just emit facts about one file, so it needs either a bounded serialized
-view or host-import callback functions — undesigned). Both remain parked, same reasoning as
-above.
+**Not this pass:** a first ecosystem plugin (React/Next.js or similar) exercising this wiring
+for a real framework — still parked, same reasoning as the note above. The `Plugin` trait's own
+WASM bridge, flagged here as the other missing piece toward that, landed the same day; see the
+next section.
+
+### M5 progress — Plugin WASM bridge (`kndo:plugin`) ✅ (landed 2026-08-21)
+
+The other half of what the previous section's "not this pass" named: `kndo-plugin-api` gained a
+**second**, independently-versioned WIT package (`kndo:plugin@0.1.0`, alongside `kndo:
+adapter@0.1.0`) bridging `Plugin`'s four graph-mutation hooks over WASM — closing the gap the
+adapter ABI's own spec (`wasm-abi.md` §2, superseded) had named and explicitly deferred:
+"a materially different, and materially larger, ABI surface than an adapter's three flat
+functions... first real external-plugin demand should drive its shape, not a guess made here."
+The demand was the immediate follow-up ask in this same session.
+
+The actual design problem the deferral was naming: `contribute_roots`/`contribute_edges`/
+`annotate_symbols` need to *read* the graph (`GraphView::files()`/`symbols_in()`), not just
+report facts about one file the way `extract()` does — the adapter ABI's whole world is
+one-directional (guest exports only) specifically *because* it never needed this. Two designs
+were on the table: serialize a bounded graph snapshot into every hook call, or expose narrow
+**host-import** query functions the guest calls back into as needed. Took the second —
+`list-files`/`symbols-in`, mirroring `GraphView`'s own two methods field-for-field — since a
+real plugin only cares about a handful of paths even in a huge project, and a full-graph dump
+per hook call would be wasted work on every call regardless of what the plugin actually needs.
+The three "write" hooks stayed return-based (`list<contributed-root>` etc.) rather than
+imperative sink calls over the wire — one call-boundary crossing per hook instead of one per
+contribution, and it keeps `RootSink`/`EdgeSink`/`AnnotationSink`'s Rust-side shape out of the
+wire format entirely.
+
+The host-state design had one genuine constraint to work around: `wasmtime::Store`'s state must
+be `'static`, but `contribute_roots` etc. run with a real `&GraphView<'_>` borrowed for one
+`assemble_from_source` call. Rather than raw-pointer plumbing across the FFI boundary, the host
+bridge (`plugin_host.rs`) clones exactly what the two query functions can answer
+(`HostViewData`) once per graph-mutation round — not once per query — into the store's state.
+Accepted deliberately as a bounded, safe trade: a WASM `Plugin` already forces a full graph
+rebuild every run (the cache/patch-bypass rule `graph.rs`'s wiring landed with, `wasm-abi.md`
+§5.4), so one more `O(files + symbols)` clone alongside that full rebuild costs little extra,
+and the result has zero `unsafe`.
+
+`examples/kndo-plugin-hooks-demo` is the reference/compliance plugin: convention-based (any
+symbol named `root_*`/`wire_*`/`consumed_*` gets rooted/wired/annotated; any path containing
+`banner` gets reclassified `Generated`) rather than framework-specific — proving the mechanism,
+not modeling one real ecosystem, same posture `kndo-plugin-demo`'s invented "kdemo" language
+took for the adapter ABI. It genuinely exercises the host-import round trip: `contribute_roots`
+calls `list-files()` then `symbols-in(path)` per file to decide what to root, not just returning
+a hardcoded answer.
+
+**A load-bearing discovery-design question fell out of building this**: with two ABIs now
+sharing one `.kndo/plugins/` directory, how does `kndo::open` know whether a given `.wasm` file
+is an adapter or a plugin? Answer: it doesn't need to *know* — it tries both loaders
+(`WasmAdapter::load` and `WasmPlugin::load`), and wasmtime's own component type-checking makes
+`instantiate` fail cleanly against a component built for the other world's exports. Verified,
+not assumed: `each_abi_rejects_a_component_built_for_the_other` in `kndo-plugin-
+api/tests/plugin_compliance.rs` asserts the adapter component fails to load as a plugin and vice
+versa. No file-naming convention, no subdirectory split, no `.kndo/plugins/adapters/` vs
+`.kndo/plugins/plugins/` — a plugin author never has to say which ABI they targeted.
+
+Compliance, same "always build fresh, nothing checked in as a binary" discipline as the adapter
+suite: `kndo-plugin-api/tests/plugin_compliance.rs` drives a `WasmPlugin` against a hand-built
+`Engine` and a small local mock adapter (all four hooks, a baseline run proving the assertions
+aren't vacuous, plus the cross-loader rejection test above); `kndo/tests/external_plugin.rs`
+goes through the *full* product composition (`kndo::open`, real `.kndo/plugins/` discovery) with
+**both** the adapter and plugin demo components dropped in the same directory — proving the
+single-directory sort works end to end, not just at the loader level. Full workspace suite and
+`clippy -D warnings` both clean.
+
+**Still parked, unchanged by this:** a first real ecosystem plugin (React/Next.js) — the WASM
+bridge existing doesn't by itself give kndo react-specific knowledge, that's still its own
+design pass, same as always.
 
 ## M6 — 1.0 hardening
 False-positive hunt across dogfood corpus (target < 2%, vision §6), schema/ABI freeze, docs site,
