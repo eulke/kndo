@@ -13,7 +13,6 @@ kndo-adapter-toolkit = { path = "../kndo-adapter-toolkit" }
 smol_str = { workspace = true }
 tree-sitter = { workspace = true }
 tree-sitter-java = { workspace = true }
-roxmltree = { workspace = true }
 
 [dev-dependencies]
 rustc-hash = { workspace = true }

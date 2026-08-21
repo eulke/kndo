@@ -665,7 +665,6 @@ version = "0.1.0"
 dependencies = [
  "kndo-adapter-toolkit",
  "kndo-core",
- "roxmltree",
  "rustc-hash",
  "smol_str",
  "tree-sitter",
@@ -703,6 +702,7 @@ version = "0.1.0"
 dependencies = [
  "blake3",
  "kndo-core",
+ "roxmltree",
  "rustc-hash",
  "smol_str",
  "tree-sitter",

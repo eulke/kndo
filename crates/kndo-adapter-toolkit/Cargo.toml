@@ -14,3 +14,4 @@ kndo-core = { path = "../kndo-core" }
 smol_str = { workspace = true }
 tree-sitter = { workspace = true }
 tree-sitter-typescript = { workspace = true }
+roxmltree = { workspace = true }
