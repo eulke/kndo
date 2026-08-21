@@ -10,6 +10,7 @@ members = [
     "crates/kndo-adapter-rust",
     "crates/kndo-adapter-java",
     "crates/kndo-adapter-kotlin",
+    "crates/kndo-adapter-swift",
     "xtask",
 ]
 exclude = ["spikes/perf"]
@@ -32,6 +33,7 @@ tree-sitter-go = "0.25"
 tree-sitter-rust = "0.24"
 tree-sitter-java = "0.23"
 tree-sitter-kotlin-ng = "1.1"
+tree-sitter-swift = "0.7"
 toml = "0.8"
 roxmltree = "0.20"
 serde_json = "1"

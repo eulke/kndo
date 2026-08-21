@@ -438,6 +438,48 @@ design; `Contains` wasn't. Effect on kndo's own dogfood: health score 59.3→69.
 any code change but from ~200 previously-hidden findings (mostly `crap`/`untested`) becoming
 visible — real pre-existing debt, now visible, not something this fix set out to remediate.
 
+### M5 progress — Swift adapter ✅ (landed 2026-08-21)
+
+`kndo-adapter-swift` per docs/adapters/swift.md: the first adapter whose manifest
+(`Package.swift`) is genuine Swift source rather than a data format — `manifest.rs` parses it
+with the same tree-sitter-swift grammar `extraction` uses and reads the `Package(…)` call's
+labeled arguments, the SwiftPM analogue of Rust's structured `Cargo.toml` parse. That shape
+forced one new engine-wide guarantee to be enforced *explicitly* for the first time:
+`claim()` had to exclude `Package.swift` from the ordinary source glob it otherwise matches
+(it genuinely ends in `.swift`), or "manifests are not claimed" — load-bearing everywhere
+else in the engine because no other manifest format doubles as valid source in its own
+adapter's language — would have silently broken. Caught by a fixture, not by inspection.
+
+The other real language-fit finding was structural, not a bug: Swift's default visibility
+(no modifier at all) is `internal` ≈ `Package` scope — a *third* distinct default among the
+launch languages (Java ≈ `Unit`, Kotlin = `Public`), and it happens to be exactly the
+"same-unit usage" scope `internal-only`'s tightest-sufficient check asks for. So the common
+case — an un-annotated declaration used only within its own SPM target — never fires
+`internal-only` for Swift at all, unlike the analogous Java/Kotlin fixtures, which do (their
+defaults are wider than same-package usage requires). Documented in the conformance fixtures
+rather than worked around, since it's correct: the language's own default already is the
+tightest rung that covers the common case.
+
+A second, unplanned finding surfaced while writing the conformance fixtures: `main.swift`
+(and any `.swift` file, structurally) permits bare top-level *statements*, not just
+declarations — `source_file`'s children can be an `if_statement`, a `call_expression`, any
+expression, the same shape a function body allows. The initial extraction only dispatched
+declarations at top level, so a `helper.live()` sitting next to a top-level `let` in
+`main.swift` left no reference behind at all — `helper` and `Helper.live` both read `unused`
+in the first conformance run. Fixed by falling back to the same body-walker a function uses
+for anything `DECL_HANDLERS` doesn't recognize at top level. That same investigation surfaced
+RFC 0012 §4's already-documented "Swift lazy globals" `within` case (Swift globals are always
+lazily-initialized outside a script file — an ordinary file's top-level `let x = f()` only
+runs `f()` on `x`'s first access, so the reference belongs to `x`, not to "module load")
+which the adapter hadn't implemented yet; `main.swift` itself is the one exception, since its
+top-level code executes procedurally like a script rather than lazily.
+
+Declaration dispatch is table-driven from the start (same CRAP-gate reasoning Kotlin's session
+established). One grammar-shape gap the dispatch table needed a second entry for: a protocol's
+method requirement is its own node kind, `protocol_function_declaration` (no body field at
+all), not `function_declaration` — missed on the first pass, caught immediately by the
+`declarations_cover_the_type_zoo` conformance-style unit test.
+
 **Exit:** all eight launch languages pass conformance; a third-party demo adapter (not in-tree)
 runs against the released binary; budget still holds with all adapters active.
 
