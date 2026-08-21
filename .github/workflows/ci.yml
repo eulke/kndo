@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+  # Lets release.yml's own `test` gate call this workflow directly (RFC 0014 §3.1) instead of
+  # duplicating the job — one definition of "what green means," not two that can drift apart.
+  workflow_call:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # kndo's own dogfood step below needs `origin/<base>` locally resolvable for
+          # `kndo check --diff` (RFC 0004 §6's merge-base semantics) — a shallow checkout
+          # wouldn't have it.
+          fetch-depth: 0
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: cargo fmt --check
+        run: cargo fmt --all -- --check
+
+      - name: cargo clippy
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+      # wasm32-unknown-unknown is needed here, not for the workspace build itself (the guest
+      # crates under examples/ are excluded from the workspace, docs/contracts/wasm-abi.md §6) —
+      # the WASM-bridge integration tests invoke `cargo build --target wasm32-unknown-unknown`
+      # against those guest crates as a subprocess and componentize the result in-process.
+      - name: cargo test --workspace
+        run: cargo test --workspace --all-features
+
+      # kndo's own real-CLI dogfood: the same check the local pre-commit hook runs, over the
+      # diff this PR/push actually introduces — this is the one CI has that a plain
+      # test/clippy/fmt gate wouldn't, matching RFC 0014 §3.1's "factory packs pass end-to-end"
+      # equivalent.
+      - name: install kndo (dogfood)
+        run: cargo install --path crates/kndo-cli --locked --force
+
+      - name: kndo check --diff (dogfood)
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            kndo check --diff "origin/${{ github.event.pull_request.base.ref }}" --fail-on warning
+          else
+            kndo check --fail-on warning
+          fi

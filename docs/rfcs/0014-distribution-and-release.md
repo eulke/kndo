@@ -1,8 +1,15 @@
 # RFC 0014 — Distribution, Licensing & Release Pipeline
 
-**Status:** Draft · **Depends on:** ADR 0006 (single static binary, zero-config), ADR 0007
-(product name `kndo`), RFC 0006 (output schema, exit codes), RFC 0010 (`kndo-action`) ·
-**Ships:** M6
+**Status:** Mechanism implemented, unexercised · **Depends on:** ADR 0006 (single static binary,
+zero-config), ADR 0007 (product name `kndo`), RFC 0006 (output schema, exit codes), RFC 0010
+(`kndo-action`) · **Ships:** M6
+
+§§0-1 (license, governance) are done and live in this repo. §§2-3's pipeline (`.github/
+workflows/ci.yml`, `.github/workflows/release.yml`, `install.sh`, `cliff.toml`,
+`packaging/docker/Dockerfile`, `packaging/homebrew/kndo.rb.tmpl`) is written and passes static
+validation (`actionlint`, shellcheck, YAML parse — see §7) but has never run for real: nobody has
+pushed a `v*` tag yet. That first real tag push — a deliberate act, not something to trigger
+speculatively — is this pipeline's actual test.
 
 Adapted from a working distribution plan drafted for a sibling project (Yunta), reshaped around
 kndo's actual crate layout and the decisions ADR 0006/0007 already made.
@@ -198,3 +205,39 @@ team-server project, kept fully outside the free/open engine). Nothing here assu
 wants, an analogous plan — that's a business decision with no engineering dependency on anything
 above, and isn't invented on its behalf. If/when there's an answer, it belongs in its own
 section, added deliberately, not backfilled from a template.
+
+## 7. Implementation status & what's still needed
+
+Landed this pass: `.github/workflows/ci.yml` (test/clippy/fmt/dogfood gate, also `workflow_call`-
+reusable so `release.yml` doesn't duplicate it), `.github/workflows/release.yml` (the full §3.1
+job graph: `test` → `build` (5-target matrix) → `release` (checksums + git-cliff notes +
+`softprops/action-gh-release`) → `publish-crates` / `update-tap` / `publish-container` in
+parallel), `install.sh` (§3.2 — manually exercised end to end against a faked local release:
+download, checksum-verify, extract, PATH check, and the checksum-mismatch abort path, all
+correct), `cliff.toml` (§3.1's catch-all group for un-prefixed history), `packaging/docker/
+Dockerfile`, `packaging/homebrew/kndo.rb.tmpl`. All workflow YAML passes `actionlint` (including
+its shellcheck pass over every `run:` block) clean.
+
+**Not yet, and can't be from here — this is the punch list before a tag push does anything real:**
+
+- **`publish = false`** (workspace `Cargo.toml`, ADR 0007: "until 1.0") — deliberate, still true.
+  `publish-crates` will fail immediately, by design, until this flips.
+- **No internal dependency declares a `version =`** — every one is `{ path = "../foo" }` alone.
+  crates.io requires a version on every dependency of a published crate, path or not. Needs
+  fixing (mechanically simple — `version = "0.1.0"` alongside each `path =`) whenever the
+  workspace actually approaches publishable, alongside flipping `publish`.
+- **Secrets that don't exist yet**: `CARGO_REGISTRY_TOKEN` (crates.io, for `publish-crates`).
+  `HOMEBREW_TAP_TOKEN` (a PAT with push access to the tap repo, for `update-tap`) —
+  `publish-container` needs no extra secret, it authenticates to GHCR with the workflow's own
+  built-in `GITHUB_TOKEN`.
+- **The tap repo itself doesn't exist**: `update-tap` pushes to `eulke/homebrew-tap`, assumed
+  already created. Not created here — a new public repo is a real, visible action, the author's
+  call to make when ready, same posture as the pending `eulke/kndo` rename.
+- **Untested against a real GitHub Actions run.** Static validation (`actionlint`, shellcheck,
+  YAML parse, and a local dry-run of `install.sh`'s core logic against a faked release) is real
+  verification, but it is not the same as a live run — cross-compilation quirks, GHCR
+  permissions, and the `build-contexts` multi-arch Docker path in particular are the pieces most
+  likely to need a real push to shake out. The first `v*` tag push is that test; it should be a
+  deliberate act by the author; the pipeline aborting or partially failing on that first real run
+  is expected and fine — that's what the "one bad channel doesn't break the release" design is
+  for (§3).
