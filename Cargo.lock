@@ -639,6 +639,7 @@ name = "kndo"
 version = "0.1.0"
 dependencies = [
  "jsonschema",
+ "kndo-adapter-css",
  "kndo-adapter-go",
  "kndo-adapter-java",
  "kndo-adapter-js",
@@ -648,6 +649,20 @@ dependencies = [
  "kndo-adapter-swift",
  "kndo-core",
  "serde_json",
+]
+
+[[package]]
+name = "kndo-adapter-css"
+version = "0.1.0"
+dependencies = [
+ "kndo-adapter-js",
+ "kndo-adapter-toolkit",
+ "kndo-core",
+ "rustc-hash",
+ "smol_str",
+ "tree-sitter",
+ "tree-sitter-css",
+ "tree-sitter-scss",
 ]
 
 [[package]]
@@ -1485,6 +1500,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "tree-sitter-css"
+version = "0.25.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a5cbc5e18f29a2c6d6435891f42569525cf95435a3e01c2f1947abcde178686f"
+dependencies = [
+ "cc",
+ "tree-sitter-language",
+]
+
+[[package]]
 name = "tree-sitter-go"
 version = "0.25.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1528,6 +1553,16 @@ checksum = "439e577dbe07423ec2582ac62c7531120dbfccfa6e5f92406f93dd271a120e45"
 dependencies = [
  "cc",
  "tree-sitter-language",
+]
+
+[[package]]
+name = "tree-sitter-scss"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "33909a9ca86390ebbf3461e9949c4bbe2767d2d024b486306d27616641d4ba24"
+dependencies = [
+ "cc",
+ "tree-sitter",
 ]
 
 [[package]]

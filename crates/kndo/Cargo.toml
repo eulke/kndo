@@ -16,6 +16,7 @@ kndo-adapter-java = { path = "../kndo-adapter-java", optional = true }
 kndo-adapter-kotlin = { path = "../kndo-adapter-kotlin", optional = true }
 kndo-adapter-swift = { path = "../kndo-adapter-swift", optional = true }
 kndo-adapter-json = { path = "../kndo-adapter-json", optional = true }
+kndo-adapter-css = { path = "../kndo-adapter-css", optional = true }
 
 [dev-dependencies]
 # "schema" here is test-only, to detect a stale committed schema — the shipped binary above
@@ -27,7 +28,7 @@ serde_json = { workspace = true }
 [features]
 # Every first-party adapter is a feature so embedders can build slimmer binaries
 # (ADR 0006); the default is the full product.
-default = ["js", "go", "rust", "java", "kotlin", "swift", "json"]
+default = ["js", "go", "rust", "java", "kotlin", "swift", "json", "css"]
 js = ["dep:kndo-adapter-js"]
 go = ["dep:kndo-adapter-go"]
 rust = ["dep:kndo-adapter-rust"]
@@ -35,3 +36,4 @@ java = ["dep:kndo-adapter-java"]
 kotlin = ["dep:kndo-adapter-kotlin"]
 swift = ["dep:kndo-adapter-swift"]
 json = ["dep:kndo-adapter-json"]
+css = ["dep:kndo-adapter-css"]

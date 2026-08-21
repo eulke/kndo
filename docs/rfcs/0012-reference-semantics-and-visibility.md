@@ -147,7 +147,7 @@ and (pre-1.0) accepting baseline churn.
 | Kotlin | functions, methods | top-level property initializers | init blocks/constructors → the class; companion initializers → the class |
 | Swift | funcs, methods, closures bound to a declaration | — | lazy globals → the global's own symbol; type members → the type |
 | Rust | fn bodies | — (no load-time execution) | const/static initializers → the const/static (compile-time, but the *dependency* is real: a dead const's referents die with it) |
-| CSS | declarations inside a rule → that rule's symbol | — | — |
+| CSS | `@mixin`/`@function` bodies (SCSS only) → that callable's own symbol | plain rule bodies (no rule-level symbol exists to attribute to — selector/class/id extraction is deliberately out of v1 scope, docs/adapters/css.md §0) | — |
 
 ## 5. Reference kinds & signature spans → `private-type-leak`
 
@@ -176,7 +176,10 @@ type-position signal) and embeddings → `Extend`. TS: type positions → `TypeU
 work), `extends`/`implements` → `Extend`/`Implement`, `import type` bindings → `TypeUse`.
 Java/Kotlin/Swift: extends/implements/conformance clauses and signature type positions map
 one-to-one. Rust: `impl Trait for T` → `Implement`, path-in-type-position → `TypeUse`.
-CSS: `composes` stays `Read`. JSON: none.
+CSS: `var(--name)`/bare SCSS `$name` → `Read`, `@include`/any other call-expression → `Call` —
+no `TypeUse`/`Extend`/`Implement` analogue exists (no type system). `composes` (CSS Modules)
+would also be `Read` in spirit, but stays unimplemented in v1 alongside selector/class
+extraction (docs/adapters/css.md §0/§5) — nothing to resolve it against yet. JSON: none.
 
 ## 6. The visibility ladder as data
 

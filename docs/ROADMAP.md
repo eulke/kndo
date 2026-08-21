@@ -528,6 +528,70 @@ to remediate, and (confirmed while investigating) not something `kndo.toml`'s do
 (docs/adapters/json.md §2). Left as-is rather than papering over with a change that does
 nothing.
 
+### M5 progress — CSS adapter ✅ (landed 2026-08-21)
+
+`kndo-adapter-css` per docs/adapters/css.md: RFC 0002 §3's other "non-source language," but a
+genuinely narrower slice of what that section's prose promises than JSON turned out to need —
+"symbols are selectors/mixins/variables... class-name usage from JS/TS/HTML... enables 'unused
+CSS rule' as a normal finding" describes a mechanism that structurally doesn't exist yet. Traced
+directly through `reachability.rs` before writing any extraction code: (1) no adapter extracts
+`className`/CSS-Modules references today (checked `kndo-adapter-js/src/extraction.rs`
+directly — that's plugin territory, RFC 0003, not this adapter's), so a class selector's real
+consumers are invisible; (2) the tempting compensation — root every selector, since kndo can't
+see its real usage — was checked against the CSR construction and rejected: every symbol
+carries an implicit symbol→file edge (the "module-load rule"), so rooting a selector would make
+its *owning file* permanently reachable, silently disabling the one CSS finding this adapter
+*can* deliver honestly (an orphaned `.css` file nothing imports). Selector/class extraction
+stays out of v1 entirely rather than shipping either a false-positive flood or a broken
+file-level check — recorded as the adapter's own central open question, not a gap discovered
+by a fixture and patched around.
+
+What v1 does cover, fully verified: file claiming (same mechanism as JSON — `ResolveCtx`'s
+known-files index already resolves a `.css`/`.scss` import without any adapter existing;
+claiming is what makes the resulting `FileNode` visible to `unused` at all), the `@import`
+graph between CSS files (entirely CSS-internal, no cross-language blindness), and custom
+properties/`var()` (`SymbolKind::CssVariable`, already present in the shared vocab — the one
+symbol kind whose real consumers are, in the common case, other CSS in the same project, not
+JS/HTML). Mid-spec, on request, SCSS support was folded in as a "flavor" rather than deferred to
+a separate crate: `tree-sitter-scss` turned out to be a strict grammar *superset* of
+`tree-sitter-css` (verified directly — `declaration`/`property_name`/`import_statement`/
+`call_expression` all parse identically in both), so one shared extraction walker, dispatched
+purely on node *kind*, handles both grammars — `$variable` declarations/references (same
+`SymbolKind::CssVariable`), `@mixin`/`@function` (`SymbolKind::Other("mixin")`/`SymbolKind::
+Function` — the latter's *invocations* resolve for free through the same generic
+`call_expression`-to-`Call`-reference handling `var()`/`url()` already needed, no SCSS-specific
+resolution code required), and `@use`/`@forward` (Sass's module system, alongside plain
+`@import`, resolved through one unified candidate-list algorithm rather than two — extraction
+never tags which at-rule produced a specifier, so resolution doesn't need to branch on it
+either).
+
+Two real bugs surfaced by writing the extraction tests, not by inspection — both variants of
+the same root cause: `tree-sitter`'s `Node::children()` walks *every* child, anonymous
+punctuation tokens included, not just named ones (`to_sexp()`'s dump hides anonymous nodes
+entirely, which is what made the ground-truth probes look deceptively simple). `var(--brand)`'s
+first-argument lookup grabbed the literal `(` token instead of the argument, silently emitting
+no reference at all — fixed by filtering for `.is_named()`. Separately, `tree-sitter-css`'s
+`string_value` wraps a `string_content` child excluding the quotes, but `tree-sitter-scss`'s
+`string_value` has *no* such child — its own text *is* the quoted string — so `@use`/`@forward`
+specifiers extracted as empty/missing until the string-value reader learned to fall back to
+trimming quotes off the node's own text when `string_content` is absent. Both caught by
+conformance-style unit tests failing loudly (empty reference/import lists), not silently wrong
+output. Two upstream `tree-sitter-scss` 1.0.0 grammar bugs were also found and documented rather
+than worked around, same posture as the Kotlin session's tree-sitter-kotlin-ng issues:
+`@use "x" as y;` and `@extend %placeholder;` both produce `ERROR` nodes (`has_error()` verified
+directly for each) — the former still recovers its specifier correctly from the surviving
+partial tree, the latter is moot since `@extend` was already out of scope alongside `composes`.
+
+Four conformance fixtures, one carrying the whole SCSS increment — every one of them needed a
+JS-TS `import` to root the graph at all, since CSS declares no roots of its own (RFC 0002 §7).
+Designing them surfaced the same-file-only resolution scope's real implication twice: an
+initial draft had `var(--used)`/`$brand`/`@include flex-center`/`double(4px)` referenced from a
+*different* file than their declaration (mirroring how a human would naturally write cross-file
+CSS), which — correctly, per the adapter's own documented scope — never resolves; both fixtures
+were redesigned to reference from within the declaring file itself, the same constraint the
+spec's §2/§7 already named as a documented non-goal, now confirmed by the harness rather than
+just asserted in prose.
+
 **Exit:** all eight launch languages pass conformance; a third-party demo adapter (not in-tree)
 runs against the released binary; budget still holds with all adapters active.
 
