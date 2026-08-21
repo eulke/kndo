@@ -58,12 +58,6 @@ fn touched_paths(before: &graph::ProjectGraph, after: &graph::ProjectGraph) -> H
 /// file (`coverage.max_age`); the default is the contract.
 const MAX_COVERAGE_AGE_DAYS: u64 = 7;
 
-/// The built-in coverage ingesters (ADR 0005) — statically linked plugins, composed here the
-/// same way the distribution layer composes adapters. Just lcov at launch.
-fn coverage_plugins() -> Vec<Box<dyn crate::plugin::Plugin>> {
-    vec![Box::new(crate::plugin::LcovPlugin)]
-}
-
 impl Drop for Engine {
     /// The RFC 0008 §2 sequencing: frontends drop the engine after printing, so the deferred
     /// snapshot write completes "after results are printed, before exit".
@@ -221,15 +215,26 @@ pub struct DoctorCacheInfo {
     pub graph_snapshot_bytes: u64,
 }
 
+/// One registered plugin, as `kndo doctor` reports it — static descriptor info, matching
+/// [`DoctorAdapterInfo`]'s shape. `detection`/`requested_file_access` are shown so it's visible
+/// *why* a plugin would activate, even though auto-detection evaluation itself (RFC 0003 §4)
+/// isn't wired yet — every registered plugin is unconditionally active pre-config-parser.
+#[derive(Debug, Clone)]
+pub struct DoctorPluginInfo {
+    pub id: String,
+    pub version: String,
+    pub detection: Vec<String>,
+    pub requested_file_access: Vec<String>,
+}
+
 /// `kndo doctor` (RFC 0006 §2, contracts §5's `Engine::doctor`): everything detected about this
 /// project, without running a check — read-only and instant, so it stays useful for debugging a
-/// setup that itself might be slow or broken. `plugins` is always empty: the plugin system is
-/// internal-only pre-1.0 (RFC 0003 §6) and `Engine` doesn't wire any in yet — an honest gap, not
-/// an omission to paper over with a placeholder.
+/// setup that itself might be slow or broken.
 #[derive(Debug, Clone)]
 pub struct DoctorReport {
     pub project_root: String,
     pub adapters: Vec<DoctorAdapterInfo>,
+    pub plugins: Vec<DoctorPluginInfo>,
     pub cache_enabled: bool,
     pub cache: Option<DoctorCacheInfo>,
     pub baseline_present: bool,
@@ -563,6 +568,7 @@ struct AnalyzedTree {
 pub struct Engine {
     root: PathBuf,
     adapters: Vec<Box<dyn LanguageAdapter>>,
+    plugins: Vec<Box<dyn crate::plugin::Plugin>>,
     cache: Option<crate::cache::ProjectCache>,
     cache_enabled: bool,
     /// The in-flight background snapshot write (RFC 0008 §2: persist off the critical path)
@@ -584,6 +590,30 @@ impl Engine {
         overrides: ConfigOverrides,
         adapters: Vec<Box<dyn LanguageAdapter>>,
     ) -> Result<Engine, EngineError> {
+        // The built-in coverage ingester (ADR 0005) is the one plugin every `Engine` carries by
+        // default, same as it was when this list lived in a private `coverage_plugins()`
+        // function called only from `ingest_coverage` — unifying it into `self.plugins` (RFC
+        // 0003 §2's other three hooks needed one real registry, not two) must not silently drop
+        // it for the common `open()` caller who never heard of `open_with_plugins`.
+        Engine::open_with_plugins(
+            root,
+            overrides,
+            adapters,
+            vec![Box::new(crate::plugin::LcovPlugin)],
+        )
+    }
+
+    /// Same as [`Self::open`], additionally taking the registered plugin set (RFC 0003) —
+    /// compiled-in first-party plugins today, WASM-bridged third-party plugins later (that
+    /// bridge doesn't exist yet for `Plugin`'s graph-mutation hooks, only for `LanguageAdapter` —
+    /// docs/contracts/wasm-abi.md §4). Embedders/tests wanting *no* plugins, not even the
+    /// default lcov ingester, pass `vec![]` here directly instead of using [`Self::open`].
+    pub fn open_with_plugins(
+        root: &Path,
+        overrides: ConfigOverrides,
+        adapters: Vec<Box<dyn LanguageAdapter>>,
+        plugins: Vec<Box<dyn crate::plugin::Plugin>>,
+    ) -> Result<Engine, EngineError> {
         if !root.is_dir() {
             return Err(EngineError::ProjectRootNotFound(root.to_path_buf()));
         }
@@ -594,6 +624,7 @@ impl Engine {
         Ok(Engine {
             root: root.to_path_buf(),
             adapters,
+            plugins,
             cache,
             cache_enabled: overrides.use_cache,
             pending_persist: None,
@@ -623,6 +654,24 @@ impl Engine {
             })
             .collect();
 
+        let plugins = self
+            .plugins
+            .iter()
+            .map(|p| {
+                let d = p.descriptor();
+                DoctorPluginInfo {
+                    id: d.id.to_string(),
+                    version: d.version.to_string(),
+                    detection: d.detection.iter().map(|s| s.to_string()).collect(),
+                    requested_file_access: d
+                        .requested_file_access
+                        .iter()
+                        .map(|s| s.to_string())
+                        .collect(),
+                }
+            })
+            .collect();
+
         let cache = self.cache.as_ref().map(|c| {
             let stats = c.stats();
             DoctorCacheInfo {
@@ -638,6 +687,7 @@ impl Engine {
         DoctorReport {
             project_root: self.root.display().to_string(),
             adapters,
+            plugins,
             cache_enabled: self.cache_enabled,
             cache,
             baseline_present: baseline_entries.is_some(),
@@ -987,7 +1037,12 @@ impl Engine {
     ) -> Result<AnalyzedTree, Diagnostic> {
         self.join_persist(); // at most one background writer in flight
         let assemble_start = Instant::now();
-        match graph::assemble_from_source(source, &self.adapters, self.cache.as_ref()) {
+        match graph::assemble_from_source(
+            source,
+            &self.adapters,
+            &self.plugins,
+            self.cache.as_ref(),
+        ) {
             Ok(graph::AssembledGraph {
                 graph: g,
                 discovery_diagnostics,
@@ -1066,7 +1121,7 @@ impl Engine {
     /// way).
     fn ingest_coverage(&self, diagnostics: &mut Vec<Diagnostic>) -> crate::coverage::CoverageMap {
         let mut sink = crate::coverage::CoverageSink::default();
-        for plugin in coverage_plugins() {
+        for plugin in &self.plugins {
             for rel in plugin.descriptor().requested_file_access {
                 let path = self.root.join(rel.as_str());
                 let Ok(meta) = std::fs::metadata(&path) else {
@@ -1400,6 +1455,201 @@ mod tests {
                 crate::adapter::Resolution::Unresolved
             }
         }
+    }
+
+    // ------------------------------------------ Plugin graph-mutation hooks (RFC 0003 §2)
+
+    /// Exercises all four graph-affecting hooks in one real `Engine::check` — proof the wiring
+    /// (not just each analysis's own isolated exemption unit test) actually connects: a
+    /// `classify_file` role/origin override, a `contribute_roots` root, a `contribute_edges`
+    /// reference, and an `annotate_symbols` mark, each targeting a *different* declaration so
+    /// the test can tell which hook did what — plus one untouched control declaration that must
+    /// stay flagged, proving the plugin didn't just root everything.
+    struct DemoPlugin;
+
+    impl crate::plugin::Plugin for DemoPlugin {
+        fn descriptor(&self) -> crate::plugin::PluginDescriptor {
+            crate::plugin::PluginDescriptor {
+                id: SmolStr::new("demo"),
+                version: SmolStr::new("1"),
+                detection: vec![],
+                requested_file_access: vec![],
+            }
+        }
+
+        fn classify_file(
+            &self,
+            path: &ProjectPath,
+            current: crate::vocab::FileClass,
+        ) -> Option<crate::vocab::FileClass> {
+            path.0
+                .ends_with(".banner.dmock")
+                .then(|| crate::vocab::FileClass {
+                    role: current.role,
+                    origin: crate::vocab::FileOrigin::Generated,
+                })
+        }
+
+        fn contribute_roots(
+            &self,
+            _graph: &crate::plugin::GraphView<'_>,
+            out: &mut crate::plugin::RootSink,
+        ) {
+            out.add(
+                crate::plugin::PluginTarget::symbol(
+                    ProjectPath(SmolStr::new("handler.dmock")),
+                    "rootedByPlugin",
+                ),
+                crate::vocab::RootKind::Production,
+                Confidence::Probable,
+            );
+        }
+
+        fn contribute_edges(
+            &self,
+            _graph: &crate::plugin::GraphView<'_>,
+            out: &mut crate::plugin::EdgeSink,
+        ) {
+            out.add(
+                crate::plugin::PluginTarget::file(ProjectPath(SmolStr::new("root.dmock"))),
+                crate::plugin::PluginTarget::symbol(
+                    ProjectPath(SmolStr::new("handler.dmock")),
+                    "referencedByPlugin",
+                ),
+                RefKind::Call,
+                Confidence::Probable,
+            );
+        }
+
+        fn annotate_symbols(
+            &self,
+            _graph: &crate::plugin::GraphView<'_>,
+            out: &mut crate::plugin::AnnotationSink,
+        ) {
+            out.mark_externally_consumed(
+                ProjectPath(SmolStr::new("handler.dmock")),
+                "almostInternalOnly",
+            );
+        }
+    }
+
+    #[test]
+    fn plugin_graph_hooks_affect_a_real_check() {
+        let dir = std::env::temp_dir().join("kndo-engine-test-plugin-hooks");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        // `import ./handler` makes `handler.dmock` reachable *as a file* (an `ImportsFile`
+        // edge from the already-rooted `root.dmock`) without reaching any of its individual
+        // declarations — those need their own root/reference edge, which is exactly what
+        // distinguishes the four scenarios below instead of collapsing them into one
+        // file-level `unused` rollup.
+        std::fs::write(
+            dir.join("root.dmock"),
+            "root-file\nimport ./handler.dmock\n",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("handler.dmock"),
+            "decl rootedByPlugin\n\
+             decl referencedByPlugin\n\
+             decl almostInternalOnly\n\
+             ref almostInternalOnly\n\
+             decl trulyDead\n",
+        )
+        .unwrap();
+        std::fs::write(dir.join("noise.banner.dmock"), "decl bannerDecl\n").unwrap();
+
+        // Baseline, no plugin: every one of the four declarations the plugin later rescues
+        // must actually be flagged on its own — otherwise the assertions below would pass
+        // vacuously regardless of whether the plugin wiring does anything at all.
+        let mut baseline_engine = Engine::open(
+            &dir,
+            ConfigOverrides::default(),
+            vec![Box::new(DiffMockAdapter)],
+        )
+        .unwrap();
+        let baseline = baseline_engine.check(CheckRequest {
+            mode: RunMode::Full,
+        });
+        let baseline_unused: Vec<&str> = baseline
+            .findings
+            .iter()
+            .filter(|f| f.category == "unused")
+            .filter_map(|f| f.location.symbol.as_deref())
+            .collect();
+        assert!(
+            baseline_unused.contains(&"rootedByPlugin"),
+            "{baseline_unused:?}"
+        );
+        assert!(
+            baseline_unused.contains(&"referencedByPlugin"),
+            "{baseline_unused:?}"
+        );
+        let baseline_unused_files: Vec<String> = baseline
+            .findings
+            .iter()
+            .filter(|f| f.category == "unused" && f.subject_kind == "file")
+            .filter_map(|f| f.location.path.as_ref())
+            .map(|p| p.0.to_string())
+            .collect();
+        assert!(baseline_unused_files.contains(&"noise.banner.dmock".to_string()));
+        let baseline_internal_only: Vec<&str> = baseline
+            .findings
+            .iter()
+            .filter(|f| f.category == "internal-only")
+            .filter_map(|f| f.location.symbol.as_deref())
+            .collect();
+        assert!(baseline_internal_only.contains(&"almostInternalOnly"));
+
+        let adapters: Vec<Box<dyn LanguageAdapter>> = vec![Box::new(DiffMockAdapter)];
+        let plugins: Vec<Box<dyn crate::plugin::Plugin>> = vec![Box::new(DemoPlugin)];
+        let mut engine =
+            Engine::open_with_plugins(&dir, ConfigOverrides::default(), adapters, plugins).unwrap();
+        let result = engine.check(CheckRequest {
+            mode: RunMode::Full,
+        });
+
+        let unused_symbols: Vec<&str> = result
+            .findings
+            .iter()
+            .filter(|f| f.category == "unused")
+            .filter_map(|f| f.location.symbol.as_deref())
+            .collect();
+        assert!(
+            !unused_symbols.contains(&"rootedByPlugin"),
+            "contribute_roots should have kept this reachable: {unused_symbols:?}"
+        );
+        assert!(
+            !unused_symbols.contains(&"referencedByPlugin"),
+            "contribute_edges should have kept this reachable: {unused_symbols:?}"
+        );
+        assert!(
+            unused_symbols.contains(&"trulyDead"),
+            "the untouched control declaration must still be flagged: {unused_symbols:?}"
+        );
+
+        let unused_files: Vec<String> = result
+            .findings
+            .iter()
+            .filter(|f| f.category == "unused" && f.subject_kind == "file")
+            .filter_map(|f| f.location.path.as_ref())
+            .map(|p| p.0.to_string())
+            .collect();
+        assert!(
+            !unused_files.contains(&"noise.banner.dmock".to_string()),
+            "classify_file's Generated override should exempt this file: {unused_files:?}"
+        );
+
+        let internal_only_symbols: Vec<&str> = result
+            .findings
+            .iter()
+            .filter(|f| f.category == "internal-only")
+            .filter_map(|f| f.location.symbol.as_deref())
+            .collect();
+        assert!(
+            !internal_only_symbols.contains(&"almostInternalOnly"),
+            "annotate_symbols should have exempted this: {internal_only_symbols:?}"
+        );
     }
 
     /// A throwaway git repo for diff-mode tests — local signing disabled for the same reason

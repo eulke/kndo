@@ -242,12 +242,26 @@ pub struct ProjectGraph {
     /// RFC 0013 §4 — indexed by FileId, always `files.len()` entries; empty-defaulted for
     /// test-built graphs (the patch layer never runs there).
     pub patch_meta: Vec<FilePatchMeta>,
+    /// Symbols a plugin's `annotate_symbols` marked externally consumed this run (RFC 0003 §2;
+    /// consumed by `internal_only`/`private_type_leak` per RFC 0005 §7's documented exemption).
+    /// Sorted, deduplicated. Always empty for a cache-hit or patched graph — plugins with
+    /// graph-mutation hooks force a full rebuild every run (see `assemble_from_source`), so
+    /// there is no cached-graph case where this could go stale.
+    pub externally_consumed: Vec<SymbolId>,
     file_index: HashMap<ProjectPath, FileId>,
 }
 
 impl ProjectGraph {
     pub fn file_id(&self, path: &ProjectPath) -> Option<FileId> {
         self.file_index.get(path).copied()
+    }
+
+    /// Whether a plugin marked this symbol externally consumed (RFC 0003 §2 `annotate_symbols`,
+    /// RFC 0005 §7's exemption). `externally_consumed` is sorted — a binary search, not a scan,
+    /// since `internal_only`/`private_type_leak` call this once per symbol they'd otherwise
+    /// flag.
+    pub fn is_externally_consumed(&self, id: SymbolId) -> bool {
+        self.externally_consumed.binary_search(&id).is_ok()
     }
 
     /// The visibility ladder for a claim language (RFC 0012 §6) — `None` when the language
@@ -302,6 +316,10 @@ impl ProjectGraph {
             cycle_policies: parts.cycle_policies,
             function_metrics: parts.function_metrics,
             patch_meta: parts.patch_meta,
+            // Never populated for a snapshot hit or a patch (see the field's own doc comment):
+            // both paths are unreachable whenever a plugin with graph-mutation hooks is
+            // registered, so there is no snapshot format for this to round-trip through yet.
+            externally_consumed: Vec::new(),
             file_index,
         }
     }
@@ -367,8 +385,19 @@ impl ProjectGraph {
             )],
             function_metrics: Vec::new(),
             patch_meta: vec![FilePatchMeta::default(); files_len],
+            externally_consumed: Vec::new(),
             file_index,
         }
+    }
+
+    /// Test-only: set which symbols a plugin would have marked externally consumed, without
+    /// going through a real `Plugin`/assembly round trip.
+    #[cfg(test)]
+    pub(crate) fn with_externally_consumed(mut self, mut ids: Vec<SymbolId>) -> Self {
+        ids.sort_unstable();
+        ids.dedup();
+        self.externally_consumed = ids;
+        self
     }
 
     #[cfg(test)]
@@ -1708,8 +1737,9 @@ pub(crate) fn compute_graph_key(
 pub fn assemble(
     root: &Path,
     adapters: &[Box<dyn LanguageAdapter>],
+    plugins: &[Box<dyn crate::plugin::Plugin>],
 ) -> Result<(ProjectGraph, Vec<Diagnostic>), DiscoveryError> {
-    assemble_with_cache(root, adapters, None)
+    assemble_with_cache(root, adapters, plugins, None)
 }
 
 /// Same pipeline as [`assemble`], additionally consulting/populating a facts cache (RFC 0004
@@ -1720,9 +1750,15 @@ pub fn assemble(
 pub fn assemble_with_cache(
     root: &Path,
     adapters: &[Box<dyn LanguageAdapter>],
+    plugins: &[Box<dyn crate::plugin::Plugin>],
     cache: Option<&crate::cache::ProjectCache>,
 ) -> Result<(ProjectGraph, Vec<Diagnostic>), DiscoveryError> {
-    let assembled = assemble_from_source(&discovery::TreeSource::Directory(root), adapters, cache)?;
+    let assembled = assemble_from_source(
+        &discovery::TreeSource::Directory(root),
+        adapters,
+        plugins,
+        cache,
+    )?;
     // This convenience entry point persists inline — only the engine's own path defers the
     // write to a background thread (it owns a place to join it; callers here don't).
     if let Some(writer) = &assembled.pending_snapshot {
@@ -1733,6 +1769,37 @@ pub fn assemble_with_cache(
     Ok((assembled.graph, diagnostics))
 }
 
+/// Resolves a plugin-named [`crate::plugin::PluginTarget`] against the same bare/qualified
+/// symbol tables phase 3b's own reference resolution reads (`graph.rs` §4 of the plugin-wiring
+/// investigation) — the exact two-step fallback [`emit_file_declarations`]'s `bare_table`/
+/// `qualified_table` already use for `RawRoot`. A path or name that doesn't resolve returns
+/// `None`; callers drop it silently, the same miss behavior an adapter's own `RawRoot`/
+/// `RawReference` already has.
+fn resolve_plugin_target(
+    target: &crate::plugin::PluginTarget,
+    file_index: &HashMap<ProjectPath, FileId>,
+    symbol_by_name_per_file: &[HashMap<SmolStr, SymbolId>],
+    symbol_by_qualified_per_file: &[HashMap<String, SymbolId>],
+) -> Option<NodeRef> {
+    let file_id = *file_index.get(&target.path)?;
+    match &target.symbol {
+        None => Some(NodeRef::File(file_id)),
+        Some(name) => {
+            let idx = file_id.0 as usize;
+            symbol_by_name_per_file
+                .get(idx)
+                .and_then(|t| t.get(name))
+                .or_else(|| {
+                    symbol_by_qualified_per_file
+                        .get(idx)
+                        .and_then(|t| t.get(name.as_str()))
+                })
+                .copied()
+                .map(NodeRef::Symbol)
+        }
+    }
+}
+
 /// [`assemble_with_cache`] over any [`discovery::TreeSource`] — a directory, or a git tree-ish
 /// read in memory (diff modes, RFC 0004 §6). Everything past discovery is source-blind:
 /// identical content produces identical facts, hashes, ids, and findings whether the bytes came
@@ -1740,8 +1807,16 @@ pub fn assemble_with_cache(
 pub fn assemble_from_source(
     source: &discovery::TreeSource<'_>,
     adapters: &[Box<dyn LanguageAdapter>],
+    plugins: &[Box<dyn crate::plugin::Plugin>],
     cache: Option<&crate::cache::ProjectCache>,
 ) -> Result<AssembledGraph, DiscoveryError> {
+    // Deterministic call order (RFC 0003 §5) — interim rule pending a real ordering-constraints
+    // field on `PluginDescriptor` (ADR/RFC-tracked gap, docs/rfcs/0003-plugin-system.md §5):
+    // sort by id once, reused by every hook site below instead of re-sorting per phase.
+    let mut sorted_plugins: Vec<&Box<dyn crate::plugin::Plugin>> = plugins.iter().collect();
+    sorted_plugins.sort_by(|a, b| a.descriptor().id.cmp(&b.descriptor().id));
+    let sorted_plugins = sorted_plugins.as_slice();
+
     let mut phase_start = std::time::Instant::now();
     let mut timings: Vec<(&'static str, u64)> = Vec::new();
     let mut tick = |label: &'static str, start: &mut std::time::Instant| {
@@ -1782,7 +1857,16 @@ pub fn assemble_from_source(
     // is enough) is a plain miss; there's no partial reuse yet, only all-or-nothing.
     let graph_key = compute_graph_key(&discovered.files, adapters);
     tick("discovery", &mut phase_start);
-    if let Some(cache) = cache {
+    // Plugins with graph-mutation hooks bypass BOTH the snapshot-hit and incremental-patch fast
+    // paths (RFC 0003 §5: plugin identity should participate in the cache key so upgrading a
+    // plugin invalidates exactly what it influenced — not yet implemented, docs/rfcs/0003-
+    // plugin-system.md §5). Neither `cache.get_graph` nor `try_patch` re-invokes
+    // `contribute_roots`/`contribute_edges`/`annotate_symbols`, so serving either would silently
+    // reuse a graph a currently-registered plugin never touched. Falling through to a full
+    // rebuild is correct and, while zero shipped plugins use these hooks, free: `LcovPlugin`
+    // (the only default plugin today) only implements `ingest_coverage`, so this never fires on
+    // kndo's own dogfooding.
+    if let Some(cache) = cache.filter(|_| plugins.is_empty()) {
         if let Some((graph, graph_diagnostics)) = cache.get_graph(&graph_key) {
             tick("snapshot-load", &mut phase_start);
             return Ok(AssembledGraph {
@@ -1896,6 +1980,16 @@ pub fn assemble_from_source(
                 let mut class = c.claim.class;
                 if let Some(origin) = c.facts.detected_origin {
                     class.origin = origin;
+                }
+                // Plugin classify_file (RFC 0003 §2): ecosystem convention beats the language
+                // default (`*.stories.tsx` -> tooling). Sorted-by-id plugin order (interim
+                // determinism rule — RFC 0003 §5's full topological-ordering-constraints field
+                // doesn't exist yet, docs/rfcs/0003-plugin-system.md); each plugin sees the
+                // prior one's answer, so a later plugin can refine an earlier one's override.
+                for plugin in sorted_plugins {
+                    if let Some(overridden) = plugin.classify_file(&df.path, class) {
+                        class = overridden;
+                    }
                 }
                 (
                     Some(c.claim.language.clone()),
@@ -2525,6 +2619,102 @@ pub fn assemble_from_source(
         suppressions.extend(resolved.suppressions);
     }
 
+    // Plugin graph-mutation hooks (RFC 0003 §2): contribute_roots/contribute_edges/
+    // annotate_symbols run once, right here — Pass A's symbol tables and every file's
+    // references (phase 3b, just merged above) are both stable, and nothing downstream (the
+    // canonical sort, `ProjectGraph` construction) has run yet, so a plugin's target-by-name
+    // lookups see the real, final graph and its contributions fold into the one sort below
+    // rather than needing a second pass. Skipped whole when no plugin is registered — the
+    // `GraphView` index build is one more O(symbols) pass, negligible next to Pass A's own, but
+    // there's no reason to pay it for the common zero-plugin-with-graph-hooks case.
+    let mut externally_consumed: Vec<SymbolId> = Vec::new();
+    if !sorted_plugins.is_empty() {
+        let view = crate::plugin::GraphView::new(&files, &symbols, &file_index);
+        for plugin in sorted_plugins {
+            let provenance = crate::vocab::Provenance::Plugin(plugin.descriptor().id);
+
+            let mut root_sink = crate::plugin::RootSink::default();
+            plugin.contribute_roots(&view, &mut root_sink);
+            for root in root_sink.items {
+                let Some(target) = resolve_plugin_target(
+                    &root.target,
+                    &file_index,
+                    &symbol_by_name_per_file,
+                    &symbol_by_qualified_per_file,
+                ) else {
+                    continue;
+                };
+                let owner = match target {
+                    NodeRef::File(f) => f,
+                    NodeRef::Symbol(s) => symbols[s.0 as usize].file,
+                };
+                edges.push(Edge {
+                    kind: EdgeKind::Root {
+                        kind: root.kind,
+                        target,
+                    },
+                    confidence: root.confidence,
+                    source: provenance.clone(),
+                    span: None,
+                    owner,
+                });
+            }
+
+            let mut edge_sink = crate::plugin::EdgeSink::default();
+            plugin.contribute_edges(&view, &mut edge_sink);
+            for contributed in edge_sink.items {
+                let Some(from) = resolve_plugin_target(
+                    &contributed.from,
+                    &file_index,
+                    &symbol_by_name_per_file,
+                    &symbol_by_qualified_per_file,
+                ) else {
+                    continue;
+                };
+                // References always targets a symbol — a `to` naming a whole file (no `symbol`
+                // set) isn't a resolvable reference target and is dropped, same as a miss.
+                let Some(NodeRef::Symbol(to)) = resolve_plugin_target(
+                    &contributed.to,
+                    &file_index,
+                    &symbol_by_name_per_file,
+                    &symbol_by_qualified_per_file,
+                ) else {
+                    continue;
+                };
+                let owner = match from {
+                    NodeRef::File(f) => f,
+                    NodeRef::Symbol(s) => symbols[s.0 as usize].file,
+                };
+                edges.push(Edge {
+                    kind: EdgeKind::References {
+                        from,
+                        to,
+                        kind: contributed.kind,
+                    },
+                    confidence: contributed.confidence,
+                    source: provenance.clone(),
+                    span: None,
+                    owner,
+                });
+            }
+
+            let mut annotation_sink = crate::plugin::AnnotationSink::default();
+            plugin.annotate_symbols(&view, &mut annotation_sink);
+            for target in annotation_sink.externally_consumed {
+                if let Some(NodeRef::Symbol(id)) = resolve_plugin_target(
+                    &target,
+                    &file_index,
+                    &symbol_by_name_per_file,
+                    &symbol_by_qualified_per_file,
+                ) {
+                    externally_consumed.push(id);
+                }
+            }
+        }
+        externally_consumed.sort_unstable();
+        externally_consumed.dedup();
+    }
+
     // Canonical order (RFC 0013 §3a): edge and diagnostic order is *data*, not construction
     // history. Two semantically identical graphs must be identical vectors — the property the
     // patched ≡ full-rebuild gate compares, and the property that keeps tie-breaks (e.g.
@@ -2559,12 +2749,18 @@ pub fn assemble_from_source(
         cycle_policies: cycle_policies.into_iter().collect(),
         function_metrics,
         patch_meta,
+        externally_consumed,
         file_index,
     };
     // The snapshot is NOT written here (RFC 0008 §2: cache persist happens off the critical
     // path) — the freshly assembled graph hands back the key, and the engine defers the
     // serialize + write to a background thread that overlaps with analysis and rendering.
-    let pending_snapshot = cache.and_then(|c| c.graph_writer(graph_key));
+    // Skipped entirely when plugins are registered (see the read-side comment above): writing a
+    // plugin-influenced graph under a key that carries no plugin identity would let a *later*,
+    // plugin-less run read it back and silently inherit contributions no plugin made for it.
+    let pending_snapshot = cache
+        .filter(|_| plugins.is_empty())
+        .and_then(|c| c.graph_writer(graph_key));
     tick("resolve+link", &mut phase_start);
     Ok(AssembledGraph {
         graph,
@@ -3039,7 +3235,7 @@ mod tests {
     #[test]
     fn unclaimed_files_still_become_file_nodes() {
         let dir = project("unclaimed", &[("README.md", "hello")]);
-        let (graph, diags) = assemble(&dir, &mock_adapters()).unwrap();
+        let (graph, diags) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         assert!(diags.is_empty());
         assert_eq!(graph.files.len(), 1);
         assert!(graph.files[0].language.is_none());
@@ -3048,7 +3244,7 @@ mod tests {
     #[test]
     fn declarations_become_symbols_with_declares_edges() {
         let dir = project("decls", &[("a.mock", "decl foo\ndecl bar")]);
-        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         assert_eq!(graph.symbols.len(), 2);
         assert_eq!(graph.symbols[0].name.as_str(), "foo");
         let file_id = graph.file_id(&ProjectPath(SmolStr::new("a.mock"))).unwrap();
@@ -3069,7 +3265,7 @@ mod tests {
                 ("b.mock", "decl bar"),
             ],
         );
-        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         let a = graph.file_id(&ProjectPath(SmolStr::new("a.mock"))).unwrap();
         assert_eq!(graph.suppressions.len(), 1);
         assert_eq!(graph.suppressions[0].0, a);
@@ -3082,7 +3278,7 @@ mod tests {
             "imports-file",
             &[("a.mock", "import ./b.mock"), ("b.mock", "decl target")],
         );
-        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         let a = graph.file_id(&ProjectPath(SmolStr::new("a.mock"))).unwrap();
         let b = graph.file_id(&ProjectPath(SmolStr::new("b.mock"))).unwrap();
         assert!(graph
@@ -3102,7 +3298,7 @@ mod tests {
                 ("pkg/b.mock", "unit pkg\nprivate-decl target"),
             ],
         );
-        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         let a = graph
             .file_id(&ProjectPath(SmolStr::new("pkg/a.mock")))
             .unwrap();
@@ -3127,7 +3323,7 @@ mod tests {
                 ("pkg2/b.mock", "unit pkg2\nprivate-decl target"),
             ],
         );
-        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         let a = graph
             .file_id(&ProjectPath(SmolStr::new("pkg1/a.mock")))
             .unwrap();
@@ -3165,7 +3361,7 @@ mod tests {
                 "member-decl T helper\ndecl caller\nref helper\nroot-decl caller",
             )],
         );
-        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         let edges = reference_edges_to(&graph, "helper");
         assert_eq!(edges.len(), 1);
         assert_eq!(edges[0].confidence, Confidence::Probable);
@@ -3180,7 +3376,7 @@ mod tests {
                 "member-decl T get\nmember-decl U get\nref get\nroot-file",
             )],
         );
-        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         let t_get = SymbolId(
             graph
                 .symbols
@@ -3219,7 +3415,7 @@ mod tests {
                 ("pkg/b.mock", "unit pkg\nmember-decl T helper"),
             ],
         );
-        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         let edges = reference_edges_to(&graph, "helper");
         assert_eq!(edges.len(), 1);
         assert_eq!(edges[0].confidence, Confidence::Probable);
@@ -3236,7 +3432,7 @@ mod tests {
                 "decl helper\nmember-decl T helper\nref helper\nroot-file",
             )],
         );
-        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         let free = SymbolId(
             graph
                 .symbols
@@ -3275,7 +3471,7 @@ mod tests {
                 ("pkg2/b.mock", "unit pkg2\nmember-decl T helper"),
             ],
         );
-        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         assert!(reference_edges_to(&graph, "helper").is_empty());
     }
 
@@ -3293,7 +3489,7 @@ mod tests {
                 ("pkg2/b.mock", "unit pkg2\nmember-decl-exported T helper"),
             ],
         );
-        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         let edges = reference_edges_to(&graph, "helper");
         assert_eq!(edges.len(), 1);
         assert_eq!(edges[0].confidence, Confidence::Probable);
@@ -3310,7 +3506,7 @@ mod tests {
                 ("b.mock", "decl Marshal"),
             ],
         );
-        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         let edges = reference_edges_to(&graph, "Marshal");
         assert_eq!(edges.len(), 1);
         assert_eq!(edges[0].confidence, Confidence::Certain);
@@ -3329,7 +3525,7 @@ mod tests {
                 ("b.mock", "unit-name yaml\ndecl Parse"),
             ],
         );
-        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         let edges = reference_edges_to(&graph, "Parse");
         assert_eq!(edges.len(), 1);
         assert_eq!(edges[0].confidence, Confidence::Certain);
@@ -3347,7 +3543,7 @@ mod tests {
                 ("app/c.mock", "unit app#p\ndecl X"),
             ],
         );
-        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         let edges = reference_edges_to(&graph, "X");
         assert_eq!(edges.len(), 1);
         assert_eq!(edges[0].confidence, Confidence::Certain);
@@ -3367,7 +3563,7 @@ mod tests {
                 ("b.mock", "decl Other"),
             ],
         );
-        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         assert!(
             reference_edges_to(&graph, "Marshal").is_empty(),
             "the local free decl must not capture a qualified reference"
@@ -3386,7 +3582,7 @@ mod tests {
                 "decl helper\nmember-decl T helper\nqref t helper\nroot-file",
             )],
         );
-        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         let free = SymbolId(
             graph
                 .symbols
@@ -3423,7 +3619,7 @@ mod tests {
             "detected-origin",
             &[("a.mock", "detected-generated\ndecl dead")],
         );
-        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         let class = graph.files[0].class.expect("claimed");
         assert_eq!(class.origin, FileOrigin::Generated);
         assert_eq!(class.role, FileRole::Production, "role stays claim-time");
@@ -3436,7 +3632,7 @@ mod tests {
             "member-still-dead",
             &[("a.mock", "member-decl T orphan\ndecl live\nroot-decl live")],
         );
-        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         assert!(reference_edges_to(&graph, "orphan").is_empty());
     }
 
@@ -3456,7 +3652,7 @@ mod tests {
                 ("child.mock", "decl helper"),
             ],
         );
-        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         let child = graph
             .files
             .iter()
@@ -3491,7 +3687,7 @@ mod tests {
                 ("child.mock", "decl helper"),
             ],
         );
-        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         let child = graph
             .files
             .iter()
@@ -3512,7 +3708,7 @@ mod tests {
                 "decl-at 2 prod_fn\ntest-region 5 9\ndecl-at 6 test_helper",
             )],
         );
-        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         let sym = |name: &str| {
             SymbolId(
                 graph
@@ -3546,7 +3742,7 @@ mod tests {
             "test-span-store",
             &[("a.mock", "test-region 20 30\ntest-region 5 9\ndecl x")],
         );
-        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         assert_eq!(
             graph.files[0].test_spans,
             vec![
@@ -3597,7 +3793,7 @@ mod tests {
             "within-attribution",
             &[("a.mock", "decl caller\ndecl callee\nref-in caller callee")],
         );
-        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         let caller = SymbolId(
             graph
                 .symbols
@@ -3628,7 +3824,7 @@ mod tests {
             "within-fallback",
             &[("a.mock", "decl callee\nref-in ghost callee\nroot-file")],
         );
-        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         let a = graph.file_id(&ProjectPath(SmolStr::new("a.mock"))).unwrap();
         let callee = SymbolId(
             graph
@@ -3655,7 +3851,7 @@ mod tests {
                 "decl main\ndecl a\ndecl z\ndecl b\nref-in main a\nref-in z b\nroot-decl main",
             )],
         );
-        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         let findings =
             crate::analysis::run_all(&graph, &crate::coverage::CoverageMap::default()).findings;
         let unused: Vec<&str> = findings
@@ -3683,7 +3879,7 @@ mod tests {
                 ("lib.mock", "decl used\nref used"),
             ],
         );
-        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         let findings =
             crate::analysis::run_all(&graph, &crate::coverage::CoverageMap::default()).findings;
         // Alive is the claim — an `internal-only` info finding (exported, used same-file
@@ -3705,7 +3901,7 @@ mod tests {
                 ("pkg/b.mock", "unit pkg\nprivate-decl target"),
             ],
         );
-        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         let a = graph.file_id(&ProjectPath(SmolStr::new("a.mock"))).unwrap();
         assert!(!graph.edges.iter().any(
             |e| matches!(e.kind, EdgeKind::References { from, .. } if from == NodeRef::File(a))
@@ -3715,7 +3911,7 @@ mod tests {
     #[test]
     fn bare_import_produces_dependency_node_and_edge() {
         let dir = project("imports-dep", &[("a.mock", "import lodash")]);
-        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         assert_eq!(graph.dependencies.len(), 1);
         assert_eq!(graph.dependencies[0].name.as_str(), "lodash");
         let a = graph.file_id(&ProjectPath(SmolStr::new("a.mock"))).unwrap();
@@ -3732,14 +3928,14 @@ mod tests {
             "dep-dedup",
             &[("a.mock", "import lodash"), ("b.mock", "import lodash")],
         );
-        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         assert_eq!(graph.dependencies.len(), 1);
     }
 
     #[test]
     fn unresolved_import_produces_no_edge_and_no_diagnostic() {
         let dir = project("unresolved", &[("a.mock", "import ./missing.mock")]);
-        let (graph, diags) = assemble(&dir, &mock_adapters()).unwrap();
+        let (graph, diags) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         assert!(graph
             .edges
             .iter()
@@ -3753,7 +3949,7 @@ mod tests {
     #[test]
     fn manifest_is_not_itself_claimed_as_source() {
         let dir = project("manifest-unclaimed", &[("manifest.json", "dep lodash")]);
-        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         assert_eq!(graph.files.len(), 1);
         assert!(
             graph.files[0].language.is_none(),
@@ -3764,7 +3960,7 @@ mod tests {
     #[test]
     fn no_manifest_means_everyone_owns_the_implicit_package() {
         let dir = project("pkg-implicit", &[("a.mock", "decl f")]);
-        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         assert_eq!(graph.packages.len(), 1);
         assert!(graph.packages[0].manifest.is_none());
         assert_eq!(graph.files[0].package, PackageId(0));
@@ -3776,7 +3972,7 @@ mod tests {
             "pkg-root",
             &[("manifest.json", "dep lodash"), ("src/a.mock", "decl f")],
         );
-        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         assert_eq!(graph.packages.len(), 2);
         let manifest_id = graph
             .file_id(&ProjectPath(SmolStr::new("manifest.json")))
@@ -3799,7 +3995,7 @@ mod tests {
                 ("packages/ui/button.mock", "decl g"),
             ],
         );
-        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         // implicit(0) is never used (a root manifest exists); root manifest is 1, nested is 2 —
         // discovery order is alphabetical, so `manifest.json` (root) claims package 1 before
         // `packages/ui/manifest.json` claims package 2.
@@ -3833,7 +4029,7 @@ mod tests {
                 ("entry.mock", "decl f"),
             ],
         );
-        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         let entry = graph
             .file_id(&ProjectPath(SmolStr::new("entry.mock")))
             .unwrap();
@@ -3857,7 +4053,7 @@ mod tests {
                 ("entry.mock", "decl publicApi\nprivate-decl helper"),
             ],
         );
-        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         let symbol_id = |name: &str| {
             graph
                 .symbols
@@ -3890,7 +4086,7 @@ mod tests {
                 ("consumer.mock", "import ./barrel.mock a\nref a"),
             ],
         );
-        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         let a_symbol = SymbolId(
             graph
                 .symbols
@@ -3940,18 +4136,18 @@ mod tests {
         let cache_dir = std::env::temp_dir().join(format!("kndo-graph-test-{name}-cache"));
         let _ = fs::remove_dir_all(&cache_dir);
         let cache = crate::cache::ProjectCache::open(&cache_dir);
-        assemble_with_cache(&dir, &mock_adapters(), Some(&cache)).unwrap();
+        assemble_with_cache(&dir, &mock_adapters(), &[], Some(&cache)).unwrap();
 
         fs::write(dir.join(mutate.0), mutate.1).unwrap();
         let (patched, patched_diags) =
-            assemble_with_cache(&dir, &mock_adapters(), Some(&cache)).unwrap();
+            assemble_with_cache(&dir, &mock_adapters(), &[], Some(&cache)).unwrap();
         assert_eq!(
             cache.graph_hits() > 0,
             expect_patch,
             "patch application expectation for {name}"
         );
 
-        let (scratch, scratch_diags) = assemble(&dir, &mock_adapters()).unwrap();
+        let (scratch, scratch_diags) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         assert_eq!(
             patched, scratch,
             "patched graph must be identical to the full rebuild ({name})"
@@ -4026,16 +4222,16 @@ mod tests {
         let cache_dir = std::env::temp_dir().join(format!("kndo-graph-test-{name}-cache"));
         let _ = fs::remove_dir_all(&cache_dir);
         let cache = crate::cache::ProjectCache::open(&cache_dir);
-        assemble_with_cache(&dir, &mock_adapters(), Some(&cache)).unwrap();
+        assemble_with_cache(&dir, &mock_adapters(), &[], Some(&cache)).unwrap();
         fs::write(
             dir.join("a.mock"),
             "decl a1\nimport ./b.mock other\nref other",
         )
         .unwrap();
         // Rebinding an import binding is an import change → surface change → full rebuild.
-        let (patched, _) = assemble_with_cache(&dir, &mock_adapters(), Some(&cache)).unwrap();
+        let (patched, _) = assemble_with_cache(&dir, &mock_adapters(), &[], Some(&cache)).unwrap();
         assert_eq!(cache.graph_hits(), 0, "import change must fall back");
-        let (scratch, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (scratch, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         assert_eq!(patched, scratch);
     }
 
@@ -4058,12 +4254,12 @@ mod tests {
         let cache_dir = std::env::temp_dir().join(format!("kndo-graph-test-{name}-cache"));
         let _ = fs::remove_dir_all(&cache_dir);
         let cache = crate::cache::ProjectCache::open(&cache_dir);
-        assemble_with_cache(&dir, &mock_adapters(), Some(&cache)).unwrap();
+        assemble_with_cache(&dir, &mock_adapters(), &[], Some(&cache)).unwrap();
         fs::write(dir.join("a.mock"), "\ndecl x\nref y").unwrap();
-        let (patched, _) = assemble_with_cache(&dir, &mock_adapters(), Some(&cache)).unwrap();
+        let (patched, _) = assemble_with_cache(&dir, &mock_adapters(), &[], Some(&cache)).unwrap();
         assert!(cache.graph_hits() > 0, "the edit should patch");
         let hits_after_patch = cache.graph_hits();
-        let (warm, _) = assemble_with_cache(&dir, &mock_adapters(), Some(&cache)).unwrap();
+        let (warm, _) = assemble_with_cache(&dir, &mock_adapters(), &[], Some(&cache)).unwrap();
         assert!(
             cache.graph_hits() > hits_after_patch,
             "third run hits the key"
@@ -4079,7 +4275,7 @@ mod tests {
         let moved = project("sig-moved", &[("a.mock", "\n\ndecl x\nref y")]);
         let grown = project("sig-grown", &[("a.mock", "decl x\ndecl z\nref y")]);
         let sig = |dir: &std::path::Path| {
-            let (g, _) = assemble(dir, &mock_adapters()).unwrap();
+            let (g, _) = assemble(dir, &mock_adapters(), &[]).unwrap();
             g.patch_meta[g.file_id(&ProjectPath(SmolStr::new("a.mock"))).unwrap().0 as usize]
                 .surface_sig
                 .expect("claimed files carry a signature")
@@ -4105,7 +4301,7 @@ mod tests {
                 ("barrel.mock", "reexport ./source.mock a"),
             ],
         );
-        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         let barrel = graph
             .file_id(&ProjectPath(SmolStr::new("barrel.mock")))
             .unwrap();
@@ -4133,7 +4329,7 @@ mod tests {
                 ("consumer.mock", "import ./outer.mock deep\nref deep"),
             ],
         );
-        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         assert_eq!(
             graph
                 .symbols
@@ -4175,7 +4371,7 @@ mod tests {
                 ("consumer.mock", "import ./ping.mock ghost\nref ghost"),
             ],
         );
-        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         assert!(graph.symbols.iter().all(|s| s.name.as_str() != "ghost"));
     }
 
@@ -4191,7 +4387,7 @@ mod tests {
                 ("b.mock", "decl y\nimport ./a.mock x\nref x"),
             ],
         );
-        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         assert!(graph.edges.windows(2).all(|w| w[0] <= w[1]));
     }
 
@@ -4205,7 +4401,7 @@ mod tests {
                 ("barrel.mock", "reexport ./source.mock a"),
             ],
         );
-        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         let a_symbol = SymbolId(
             graph
                 .symbols
@@ -4226,7 +4422,7 @@ mod tests {
             "manifest-root-missing",
             &[("manifest.json", "root nope.mock")],
         );
-        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         assert!(graph
             .edges
             .iter()
@@ -4237,7 +4433,7 @@ mod tests {
     fn manifest_dependencies_reach_the_resolver_as_declared() {
         // With no manifest, `lodash` resolves undeclared (the mock demotes to `probable`).
         let dir = project("no-manifest-dep", &[("a.mock", "import lodash")]);
-        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         let edge = graph
             .edges
             .iter()
@@ -4251,7 +4447,7 @@ mod tests {
             "manifest-dep",
             &[("manifest.json", "dep lodash"), ("a.mock", "import lodash")],
         );
-        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         let edge = graph
             .edges
             .iter()
@@ -4278,7 +4474,7 @@ mod tests {
                 ("packages/b/lib.mock", "decl util"),
             ],
         );
-        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         let a_src = graph
             .file_id(&ProjectPath(SmolStr::new("packages/a/src.mock")))
             .unwrap();
@@ -4325,7 +4521,7 @@ mod tests {
                 ("packages/b/lib.mock", "decl util"),
             ],
         );
-        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         let findings =
             crate::analysis::run_all(&graph, &crate::coverage::CoverageMap::default()).findings;
         assert!(findings
@@ -4349,7 +4545,7 @@ mod tests {
                 ("packages/b/lib.mock", "root-file"),
             ],
         );
-        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         let findings =
             crate::analysis::run_all(&graph, &crate::coverage::CoverageMap::default()).findings;
         assert!(findings.iter().any(|f| f.category == "unused"
@@ -4377,7 +4573,7 @@ mod tests {
                 ("packages/b/lib.mock", "decl util\ndecl dead"),
             ],
         );
-        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         let findings =
             crate::analysis::run_all(&graph, &crate::coverage::CoverageMap::default()).findings;
         let flagged: Vec<Option<&str>> = findings
@@ -4406,7 +4602,7 @@ mod tests {
                 ("pkg/y.mock", "unit pkg\nprivate-decl target"),
             ],
         );
-        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         let findings =
             crate::analysis::run_all(&graph, &crate::coverage::CoverageMap::default()).findings;
         let flagged: Vec<Option<&str>> = findings
@@ -4422,7 +4618,7 @@ mod tests {
     #[test]
     fn cli_invoke_directive_reaches_script_invoked_dependencies() {
         let dir = project("cli-invoke", &[("manifest.json", "dep xo\ncli-invoke xo")]);
-        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         assert!(graph
             .script_invoked_dependencies
             .contains(&(PackageId(1), SmolStr::new("xo"))));
@@ -4431,7 +4627,7 @@ mod tests {
     #[test]
     fn raw_root_whole_file_becomes_root_edge_to_the_file() {
         let dir = project("raw-root-file", &[("a.mock", "root-file")]);
-        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         let a = graph.file_id(&ProjectPath(SmolStr::new("a.mock"))).unwrap();
         assert!(graph.edges.iter().any(|e| e.kind
             == EdgeKind::Root {
@@ -4443,7 +4639,7 @@ mod tests {
     #[test]
     fn raw_root_declaration_becomes_root_edge_to_the_symbol() {
         let dir = project("raw-root-decl", &[("a.mock", "decl f\nroot-decl f")]);
-        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         let f = graph.symbols.iter().position(|s| s.name == "f").unwrap() as u32;
         assert!(graph.edges.iter().any(|e| e.kind
             == EdgeKind::Root {
@@ -4455,7 +4651,7 @@ mod tests {
     #[test]
     fn raw_root_naming_an_unknown_declaration_is_dropped_not_fabricated() {
         let dir = project("raw-root-decl-missing", &[("a.mock", "root-decl ghost")]);
-        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         assert!(graph
             .edges
             .iter()
@@ -4471,7 +4667,7 @@ mod tests {
             "role-roots-test",
             &[("a.test.mock", "decl helper"), ("orphan.mock", "decl gone")],
         );
-        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         let test_file = graph
             .file_id(&ProjectPath(SmolStr::new("a.test.mock")))
             .unwrap();
@@ -4510,7 +4706,7 @@ mod tests {
                 "decl configObject\nprivate-decl helper",
             )],
         );
-        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         let findings =
             crate::analysis::run_all(&graph, &crate::coverage::CoverageMap::default()).findings;
         assert!(!findings
@@ -4534,7 +4730,7 @@ mod tests {
                 ("dead.mock", "decl gone"),
             ],
         );
-        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         let b = graph.file_id(&ProjectPath(SmolStr::new("b.mock"))).unwrap();
         let wildcard = graph
             .edges
@@ -4556,7 +4752,7 @@ mod tests {
     #[test]
     fn unnarrowed_dynamic_becomes_a_wildcard_edge_from_the_file() {
         let dir = project("dynamic-plain", &[("a.mock", "dynamic")]);
-        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         let a = graph.file_id(&ProjectPath(SmolStr::new("a.mock"))).unwrap();
         let wildcard = graph
             .edges
@@ -4578,7 +4774,7 @@ mod tests {
                 ("elsewhere/other.mock", ""),
             ],
         );
-        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         let a = graph.file_id(&ProjectPath(SmolStr::new("a.mock"))).unwrap();
         let id = |p: &str| graph.file_id(&ProjectPath(SmolStr::new(p))).unwrap();
         let imports_from_a: Vec<FileId> = graph
@@ -4623,7 +4819,7 @@ mod tests {
                 ("dead.mock", "decl gone"),
             ],
         );
-        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         let findings =
             crate::analysis::run_all(&graph, &crate::coverage::CoverageMap::default()).findings;
         let subjects: Vec<(&str, Option<&str>)> = findings
@@ -4652,7 +4848,7 @@ mod tests {
                 ("b.mock", "decl used"),
             ],
         );
-        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         let a = graph.file_id(&ProjectPath(SmolStr::new("a.mock"))).unwrap();
         let used = SymbolId(graph.symbols.iter().position(|s| s.name == "used").unwrap() as u32);
         assert!(graph.edges.iter().any(|e| e.kind
@@ -4673,7 +4869,7 @@ mod tests {
                 ("b.mock", "decl used"),
             ],
         );
-        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         let used_symbol = graph.symbols.iter().find(|s| s.name == "used").unwrap();
         assert!(graph
             .edges
@@ -4690,7 +4886,7 @@ mod tests {
                 ("b.mock", "decl default"),
             ],
         );
-        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         assert!(graph
             .edges
             .iter()
@@ -4700,7 +4896,7 @@ mod tests {
     #[test]
     fn same_file_reference_resolves_without_an_import() {
         let dir = project("ref-same-file", &[("a.mock", "decl helper\nref helper")]);
-        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         let a = graph.file_id(&ProjectPath(SmolStr::new("a.mock"))).unwrap();
         let helper = SymbolId(
             graph
@@ -4720,7 +4916,7 @@ mod tests {
     #[test]
     fn reference_to_an_unresolvable_name_produces_no_edge() {
         let dir = project("ref-unresolved", &[("a.mock", "ref ghost")]);
-        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         assert!(graph
             .edges
             .iter()
@@ -4737,8 +4933,8 @@ mod tests {
                 ("c.mock", "decl z\nimport ./a.mock"),
             ],
         );
-        let (g1, _) = assemble(&dir, &mock_adapters()).unwrap();
-        let (g2, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let (g1, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
+        let (g2, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
         assert_eq!(g1.edges, g2.edges);
         assert_eq!(
             g1.symbols
@@ -4766,14 +4962,14 @@ mod tests {
                 ("c.mock", "decl z\nimport ./a.mock"),
             ],
         );
-        let cold = assemble(&dir, &mock_adapters()).unwrap().0;
+        let cold = assemble(&dir, &mock_adapters(), &[]).unwrap().0;
 
         let cache_dir = std::env::temp_dir().join("kndo-graph-test-cache-equivalence-cache");
         let _ = fs::remove_dir_all(&cache_dir);
         let cache = crate::cache::ProjectCache::open(&cache_dir);
         // First cached run populates every entry (all misses); second is fully warm.
-        assemble_with_cache(&dir, &mock_adapters(), Some(&cache)).unwrap();
-        let warm = assemble_with_cache(&dir, &mock_adapters(), Some(&cache))
+        assemble_with_cache(&dir, &mock_adapters(), &[], Some(&cache)).unwrap();
+        let warm = assemble_with_cache(&dir, &mock_adapters(), &[], Some(&cache))
             .unwrap()
             .0;
 
@@ -4802,14 +4998,14 @@ mod tests {
         let _ = fs::remove_dir_all(&cache_dir);
         let cache = crate::cache::ProjectCache::open(&cache_dir);
 
-        assemble_with_cache(&dir, &mock_adapters(), Some(&cache)).unwrap();
+        assemble_with_cache(&dir, &mock_adapters(), &[], Some(&cache)).unwrap();
         assert_eq!(cache.hits(), 0); // first run: every file is a miss, then gets stored
         assert_eq!(cache.graph_hits(), 0);
 
         // Second run: nothing changed, so the *graph* snapshot itself hits (the stronger,
         // whole-assembly skip) before per-file facts are ever consulted — the facts layer
         // stays exactly where the first run left it.
-        assemble_with_cache(&dir, &mock_adapters(), Some(&cache)).unwrap();
+        assemble_with_cache(&dir, &mock_adapters(), &[], Some(&cache)).unwrap();
         assert_eq!(cache.hits(), 0);
         assert_eq!(cache.graph_hits(), 1);
     }
@@ -4824,12 +5020,12 @@ mod tests {
         let _ = fs::remove_dir_all(&cache_dir);
         let cache = crate::cache::ProjectCache::open(&cache_dir);
 
-        assemble_with_cache(&dir, &mock_adapters(), Some(&cache)).unwrap();
+        assemble_with_cache(&dir, &mock_adapters(), &[], Some(&cache)).unwrap();
 
         // Edit one file — the graph key changes (it folds in the whole file set), so the
         // snapshot must miss; but the *other*, untouched file's facts entry is still valid.
         fs::write(dir.join("a.mock"), "decl x2").unwrap();
-        assemble_with_cache(&dir, &mock_adapters(), Some(&cache)).unwrap();
+        assemble_with_cache(&dir, &mock_adapters(), &[], Some(&cache)).unwrap();
         assert_eq!(cache.graph_hits(), 0); // never hit — the key never matched after the edit
         assert_eq!(cache.hits(), 1); // b.mock's facts, unchanged, still served from disk
     }

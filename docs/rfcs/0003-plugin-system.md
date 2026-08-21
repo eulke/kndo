@@ -17,16 +17,37 @@ A plugin implements one or more of these hooks (trait `Plugin`, normative in con
 
 | Hook | Runs | Typical use |
 |------|------|-------------|
-| `classify_file` | discovery | adjust a file's role/origin beyond language defaults (e.g. `*.stories.tsx` → tooling) |
-| `contribute_roots` | graph assembly | framework entry points: Next.js `pages/**`, Spring `@Component`, AWS Lambda handlers, `#[test]`-like macros of alt test frameworks |
-| `contribute_edges` | graph assembly | edges invisible to the language: DI wiring, route-string → handler, Angular template → class, CSS class names used from HTML templates |
-| `annotate_symbols` | graph assembly | mark symbols "externally consumed" (public SDK surface, FFI, serialization targets like `@JsonProperty`/serde fields) |
+| `classify_file` | graph assembly, phase 2 | adjust a file's role/origin beyond language defaults (e.g. `*.stories.tsx` → tooling) |
+| `contribute_roots` | graph assembly, after phase 3b | framework entry points: Next.js `pages/**`, Spring `@Component`, AWS Lambda handlers, `#[test]`-like macros of alt test frameworks |
+| `contribute_edges` | graph assembly, after phase 3b | edges invisible to the language: DI wiring, route-string → handler, Angular template → class, CSS class names used from HTML templates |
+| `annotate_symbols` | graph assembly, after phase 3b | mark symbols "externally consumed" (public SDK surface, FFI, serialization targets like `@JsonProperty`/serde fields) |
 | `ingest_coverage` | pre-analysis | parse a coverage format (lcov, cobertura, JaCoCo, llvm-cov) into per-function coverage (RFC 0005 §10) |
 | `suppress` | reporting | domain-specific suppression (e.g. migration files are exempt from dead-code) |
 
 Plugins **cannot**: define new node/edge kinds, mutate other plugins' output, read arbitrary
 files (they request file access through the host, which enforces scope), or veto core analyses.
 This keeps the graph semantics owned by the core and results reproducible.
+
+**Landed (M5).** The first four hooks are wired into `graph::assemble_from_source`, not just
+declared on the trait: `classify_file` runs inline in phase 2's file-node build, right after RFC
+0012 §7's content-derived origin correction and before role-derived roots — a plugin's answer is
+what every downstream role/origin exemption sees. The other three run once, together, right
+after phase 3b's reference-resolution merge (symbol tables and every adapter-emitted reference
+are both stable by then) and before the canonical edge sort, through a read-only `GraphView`
+(borrows the graph's own `files`/`symbols` vectors, no copy) and three typed sinks
+(`RootSink`/`EdgeSink`/`AnnotationSink`). A plugin never names a target by internal id — every
+sink call takes a `PluginTarget` (a `ProjectPath` plus an optional bare-or-`Owner.name` symbol
+name), resolved core-side against the same bare/qualified lookup tables `RawRoot`/`RawReference`
+already resolve against; an unresolvable target is dropped silently, the same miss behavior an
+adapter's own facts already have. `contribute_edges` only ever produces a `References` edge
+(plugins can't mint new edge kinds, per this section's own rule above); `annotate_symbols`'
+marks land in a new `ProjectGraph::externally_consumed: Vec<SymbolId>` field, consumed as the
+exemption RFC 0005 §7 already documented for `internal-only`/`private-type-leak` before there
+was anything to populate it. Every contributed edge/root/annotation is attributed
+`Provenance::Plugin(id)`.
+
+`suppress` remains undeclared/unwired — no analysis calls it yet; tracked as an open item, not
+folded into "landed" above.
 
 ## 3. Packaging & distribution
 
@@ -69,11 +90,28 @@ max-age = "7d"            # stale reports are ignored (with a diagnostic), not t
 ## 5. Determinism & trust
 
 - Plugin execution order is deterministic (topological by declared ordering constraints, then
-  name). Same inputs ⇒ same graph ⇒ same findings.
+  name). Same inputs ⇒ same graph ⇒ same findings. **Landed interim rule (M5):** `PluginDescriptor`
+  has no ordering-constraints field yet, so `assemble_from_source` sorts registered plugins by
+  `id` once and reuses that order for every hook — real, but not yet the full topological rule
+  this section names; a plugin depending on another's contribution being visible through
+  `GraphView` needs the ordering-constraints field before that's expressible. Open item, not
+  silently assumed solved.
 - Plugin identity (name + version + content hash for WASM) participates in the cache key
-  (RFC 0004 §3), so enabling/upgrading a plugin invalidates exactly what it influenced.
+  (RFC 0004 §3), so enabling/upgrading a plugin invalidates exactly what it influenced. **Not
+  implemented yet** — landed instead (M5), and strictly sufficient for correctness today: any
+  registered plugin (`classify_file`/`contribute_roots`/`contribute_edges`/`annotate_symbols`,
+  none of which `LcovPlugin` — the only shipped plugin — implements) makes
+  `assemble_from_source` skip *both* the graph-snapshot cache and the incremental patch
+  entirely, full-rebuilding every run instead. Neither reuse path re-invokes a plugin's hooks, so
+  serving either would silently miss whatever a currently-registered plugin contributes; bypass
+  is the correct fallback until cache-key folding lands, and costs nothing today since it never
+  triggers for the default product. Revisit once a real plugin with these hooks ships and warm
+  performance matters for it.
 - External plugins are untrusted code: sandbox as above, and findings they influenced are
-  attributed (`"sources": ["plugin:nextjs"]` in JSON output) for auditability.
+  attributed (`"sources": ["plugin:nextjs"]` in JSON output) for auditability. The
+  `Provenance::Plugin(id)` attribution itself is landed (every edge/root/annotation a plugin
+  contributes carries it); JSON output surfacing it as `sources` is a separate, not-yet-done
+  rendering step.
 
 ## 6. What is *not* a plugin
 

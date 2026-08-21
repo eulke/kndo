@@ -425,24 +425,47 @@ Compliance: every adapter must pass the shared conformance harness with its fixt
 ## 3. `Plugin`
 
 All hooks optional; a plugin implements what it needs (RFC 0003 §2). Same trait for built-ins
-(statically linked) and external WASM components (bridged via `kndo-plugin-api`, ADR 0003).
+(statically linked) and external WASM components — landed for `LanguageAdapter` (`kndo-plugin-
+api`, docs/contracts/wasm-abi.md), not yet for `Plugin`'s own graph-mutation hooks (ADR 0003).
 
 ```rust
 pub trait Plugin: Send + Sync {
     fn descriptor(&self) -> PluginDescriptor;
-    // { id, version, ordering constraints, detection: Vec<DetectRule>, requested_file_access: Vec<Glob> }
+    // { id, version, detection: Vec<SmolStr>, requested_file_access: Vec<SmolStr> }
+    // No ordering-constraints field yet (RFC 0003 §5's open item) — plugins run sorted by `id`,
+    // a real but interim determinism rule.
 
     fn classify_file(&self, path: &ProjectPath, current: FileClass) -> Option<FileClass> { None }
-    fn contribute_roots(&self, graph: &GraphView, out: &mut RootSink) {}
-    fn contribute_edges(&self, graph: &GraphView, out: &mut EdgeSink) {}
-    fn annotate_symbols(&self, graph: &GraphView, out: &mut AnnotationSink) {}
+    fn contribute_roots(&self, graph: &GraphView<'_>, out: &mut RootSink) {}
+    fn contribute_edges(&self, graph: &GraphView<'_>, out: &mut EdgeSink) {}
+    fn annotate_symbols(&self, graph: &GraphView<'_>, out: &mut AnnotationSink) {}
     fn ingest_coverage(&self, path: &ProjectPath, content: &[u8], out: &mut CoverageSink) {}
-    fn suppress(&self, finding: &Finding) -> Option<SuppressReason> { None }
+    fn suppress(&self, finding: &Finding) -> Option<SuppressReason> { None } // not wired yet
 }
 ```
 
-- `GraphView` is **read-only**; mutation happens only through the typed sinks, which the core
-  validates (no dangling ids, no new kinds) and attributes (`Provenance::Plugin`).
+- **Landed (M5).** `GraphView<'a>` borrows the graph's own `files`/`symbols` (built, never
+  copied) and exposes `files()` plus `symbols_in(path)` — the latter backed by a one-time
+  `FileId -> [symbol index]` map built when the view is constructed, so a plugin walking every
+  file's symbols costs `O(files + symbols)`, not `O(files * symbols)`. `RootSink`/`EdgeSink`/
+  `AnnotationSink` are **write-only and id-free**: every call takes a `PluginTarget { path:
+  ProjectPath, symbol: Option<SmolStr> }` (bare or `Owner.name`), never a `FileId`/`SymbolId` —
+  the core resolves it against the same bare/qualified symbol tables `RawRoot`/`RawReference`
+  already resolve against, and drops an unresolvable target silently (an adapter's own facts
+  already have this exact miss behavior). `contribute_roots`/`contribute_edges`/
+  `annotate_symbols` all run once, together, in `graph::assemble_from_source` right after phase
+  3b's reference-resolution merge and before the canonical edge sort — every contributed
+  `Edge`/root/annotation is attributed `Provenance::Plugin(id)` and folds into that one sort, no
+  second pass. `annotate_symbols`' marks land in `ProjectGraph::externally_consumed:
+  Vec<SymbolId>` (sorted, deduplicated — `is_externally_consumed` binary-searches it), consumed
+  by `internal-only`/`private-type-leak` (RFC 0005 §7's exemption). `classify_file` runs earlier,
+  inline in phase 2's file-node build, right after RFC 0012 §7's content-derived origin
+  correction — its answer is what every downstream role/origin exemption sees.
+- Any plugin registered with a non-empty `Plugin` list makes `assemble_from_source` skip both
+  the graph-snapshot cache hit and the incremental patch, full-rebuilding every run: neither
+  reuse path re-invokes plugin hooks, and RFC 0003 §5's plugin-identity-in-the-cache-key
+  mechanism isn't built yet. Correct and free today (`LcovPlugin`, the only shipped plugin,
+  implements none of the graph-mutation hooks, so this never triggers for the default product).
 - Host-mediated file access: content for `requested_file_access` globs is provided by the core;
   no ambient fs/net (enforced natively by convention, in WASM by the sandbox).
 - `ingest_coverage` (ADR 0005: coverage is *ingested, never measured*) follows the same sink
@@ -454,7 +477,9 @@ pub trait Plugin: Send + Sync {
   `CoverageMap` is a per-run analysis input — never part of the graph or its snapshot, because
   report freshness varies independently of source content hashes. Built-in at launch: lcov.
 - Budget: per-hook fuel/time limit; an over-budget plugin is disabled for the run + diagnostic
-  (RFC 0003 §3).
+  (RFC 0003 §3) — landed for `LanguageAdapter` calls over WASM (`kndo-plugin-api`'s
+  `FUEL_PER_CALL`), not yet for `Plugin`'s own hooks (all built-in/statically-linked today, so
+  there's no untrusted call to budget yet).
 
 ## 4. `Analysis`
 
@@ -483,9 +508,16 @@ pub struct Engine { /* opaque: graph, cache, adapters, plugins */ }
 impl Engine {
     /// `adapters` is composed by the DISTRIBUTION layer (the `kndo` crate, RFC 0001 §2) —
     /// frontends call `kndo::open(root, overrides)` and never touch this parameter; only
-    /// embedders and tests pass a custom set.
+    /// embedders and tests pass a custom set. Plugins default to just the built-in lcov
+    /// ingester (RFC 0003) — see `open_with_plugins` for a custom plugin set.
     pub fn open(root: &Path, overrides: ConfigOverrides,
                 adapters: Vec<Box<dyn LanguageAdapter>>) -> Result<Engine, EngineError>;
+    /// Same as `open`, additionally taking the registered `Plugin` set explicitly (landed M5) —
+    /// `open` is a thin wrapper defaulting it to `vec![Box::new(LcovPlugin)]`, the same plugin
+    /// that list held implicitly before this existed.
+    pub fn open_with_plugins(root: &Path, overrides: ConfigOverrides,
+                adapters: Vec<Box<dyn LanguageAdapter>>,
+                plugins: Vec<Box<dyn Plugin>>) -> Result<Engine, EngineError>;
     pub fn check(&mut self, req: CheckRequest) -> RunResult;    // full | staged | diff
     pub fn query(&mut self, req: QueryRequest) -> QueryResult;  // RFC 0007 verbs, incl. batches
     pub fn explain(&self, id: FindingId) -> Option<Explanation>;
@@ -496,6 +528,7 @@ impl Engine {
 // Distribution layer (crate `kndo`) — what frontends actually call:
 // pub fn kndo::open(root: &Path, overrides: ConfigOverrides) -> Result<Engine, EngineError>
 // pub fn kndo::default_adapters() -> Vec<Box<dyn LanguageAdapter>>
+// pub fn kndo::default_plugins() -> Vec<Box<dyn Plugin>>  // just LcovPlugin today (RFC 0003 §3)
 ```
 
 - `RunResult`/`QueryResult` are the **typed forms of the output schema**

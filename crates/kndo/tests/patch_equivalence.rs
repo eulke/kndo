@@ -114,19 +114,20 @@ fn run_mutation(label: &str, mutate: impl Fn(&Path, &str) -> String) -> usize {
         let cache_dir = std::env::temp_dir().join(format!("kndo-patch-eq-{name}-cache"));
         let _ = fs::remove_dir_all(&cache_dir);
         let cache = kndo::cache::ProjectCache::open(&cache_dir);
-        assemble_with_cache(&work, &adapters(), Some(&cache))
+        assemble_with_cache(&work, &adapters(), &[], Some(&cache))
             .unwrap_or_else(|e| panic!("cold assemble failed for {name}: {e:?}"));
 
         let original = fs::read_to_string(target).unwrap();
         fs::write(target, mutate(target, &original)).unwrap();
 
-        let (cached_graph, cached_diags) = assemble_with_cache(&work, &adapters(), Some(&cache))
-            .unwrap_or_else(|e| panic!("cached assemble failed for {name}: {e:?}"));
+        let (cached_graph, cached_diags) =
+            assemble_with_cache(&work, &adapters(), &[], Some(&cache))
+                .unwrap_or_else(|e| panic!("cached assemble failed for {name}: {e:?}"));
         if cache.graph_hits() > 0 {
             patched_runs += 1;
         }
 
-        let (scratch_graph, scratch_diags) = assemble(&work, &adapters())
+        let (scratch_graph, scratch_diags) = assemble(&work, &adapters(), &[])
             .unwrap_or_else(|e| panic!("scratch assemble failed for {name}: {e:?}"));
         assert_eq!(
             cached_graph, scratch_graph,

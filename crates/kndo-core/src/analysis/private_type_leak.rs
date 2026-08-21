@@ -19,6 +19,11 @@
 //! comparing them across languages would be numerology. "Lower visibility" is compared as
 //! ladder rung *scopes* when the language declared a ladder (so same-scope rungs like Java
 //! `protected`/`public` never accuse each other), raw indices otherwise.
+//!
+//! Exemption (RFC 0005 §7, shared with `internal-only`): a leaked type a plugin's
+//! `annotate_symbols` marked externally consumed (`ProjectGraph::is_externally_consumed`) isn't
+//! actually unnameable to consumers — FFI, serialization, a public SDK surface the graph itself
+//! has no edge for — so the "lying public API" verdict doesn't hold.
 
 use rustc_hash::FxHashMap as HashMap;
 
@@ -54,6 +59,13 @@ pub fn find_private_type_leaks(graph: &ProjectGraph) -> Vec<Finding> {
         };
         if !decl.exported || !contains(&sig, &site) {
             continue;
+        }
+
+        if graph.is_externally_consumed(type_id) {
+            continue; // a plugin marked the leaked type externally consumed (RFC 0003 §2
+                      // annotate_symbols, RFC 0005 §7 exemption) — its consumers really can
+                      // name it, just not through an edge the graph itself models (FFI,
+                      // serialization, a public SDK surface the plugin knows about)
         }
 
         let leaked = &graph.symbols[type_id.0 as usize];
@@ -226,6 +238,26 @@ mod tests {
         assert_eq!(findings[0].category, "private-type-leak");
         assert_eq!(findings[0].group, "defect");
         assert!(findings[0].message.contains("secret"));
+    }
+
+    #[test]
+    fn plugin_annotated_externally_consumed_type_is_exempt() {
+        // Same leak shape as above (which fires without the annotation) — a plugin's
+        // `annotate_symbols` (RFC 0003 §2) marking the *leaked type* externally consumed means
+        // its consumers really can name it (FFI, serialization, a public SDK surface the graph
+        // has no edge for), so the "lying public API" verdict no longer holds.
+        let symbols = vec![
+            callable(FileId(0), "F", 1, span(1, 1, 1, 40)),
+            ty(FileId(0), "secret", 0),
+        ];
+        let edges = vec![type_use(
+            SymbolId(0),
+            SymbolId(1),
+            span(1, 10, 1, 16),
+            Confidence::Certain,
+        )];
+        let graph = graph_with(symbols, edges).with_externally_consumed(vec![SymbolId(1)]);
+        assert!(find_private_type_leaks(&graph).is_empty());
     }
 
     #[test]

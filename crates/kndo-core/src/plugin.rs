@@ -2,13 +2,24 @@
 //!
 //! Adapters describe what code *is*; plugins describe what an ecosystem *means* by it.
 //! All hooks are optional; the same trait serves built-ins (statically linked) and external
-//! WASM components (bridged via `kndo-plugin-api`, ADR 0003). `GraphView` is read-only;
-//! mutation happens only through typed sinks the core validates and attributes.
+//! WASM components (bridged via `kndo-plugin-api`, ADR 0003 — the graph-mutation hooks below
+//! are not bridged yet, only `LanguageAdapter` is; see docs/contracts/wasm-abi.md §4).
+//! `GraphView` is read-only; mutation happens only through typed sinks the core validates and
+//! attributes (`Provenance::Plugin`).
+//!
+//! **Targets are named, never addressed by internal id** (`ProjectPath` + an optional bare or
+//! `Owner.name` symbol name) — the same contract shape `RawRoot`/`RawReference` already use for
+//! adapters (contracts/core-traits.md §2). A plugin naming a target that doesn't resolve is a
+//! silent no-op, exactly like an adapter's own miss — no new failure mode, and it keeps
+//! `FileId`/`SymbolId` (internal, renumbered every run) off the `Plugin` trait's stable-from-1.0
+//! surface entirely.
 
+use rustc_hash::FxHashMap as HashMap;
 use smol_str::SmolStr;
 
 use crate::adapter::ProjectPath;
-use crate::vocab::FileClass;
+use crate::graph::{FileNode, SymbolNode};
+use crate::vocab::{Confidence, FileClass, FileId, RefKind, RootKind};
 
 #[derive(Debug, Clone)]
 pub struct PluginDescriptor {
@@ -20,36 +31,179 @@ pub struct PluginDescriptor {
     pub requested_file_access: Vec<SmolStr>,
 }
 
-/// Read-only view over the assembled graph. Grows with graph assembly in M1; the type exists
-/// now so hook signatures are stable from the first commit.
-#[derive(Debug, Default)]
-pub struct GraphView {}
+// ---------------------------------------------------------------- read side: GraphView
 
-/// Typed sinks — the only mutation path plugins have. The core validates every contribution
-/// (no dangling ids, no new kinds) and attributes it (`Provenance::Plugin`).
+/// Read-only view over the assembled-so-far graph, handed to `contribute_roots`/
+/// `contribute_edges`/`annotate_symbols`. Borrows the core's own `files`/`symbols` vectors
+/// directly (no copy) — by the phase these hooks run (`graph::assemble_from_source`, after
+/// phase 3b's reference resolution, before the canonical sort), both are fully populated and
+/// never mutated again for this run.
+///
+/// `symbols_in` is backed by a one-time `FileId -> Vec<symbol index>` index built when the view
+/// is constructed (one linear pass over `symbols`, not a scan per call) — a plugin that walks
+/// every file's symbols still costs `O(files + symbols)` total, not `O(files * symbols)`.
+pub struct GraphView<'a> {
+    files: &'a [FileNode],
+    symbols: &'a [SymbolNode],
+    file_index: &'a HashMap<ProjectPath, FileId>,
+    symbols_by_file: HashMap<FileId, Vec<u32>>,
+}
+
+impl<'a> GraphView<'a> {
+    pub(crate) fn new(
+        files: &'a [FileNode],
+        symbols: &'a [SymbolNode],
+        file_index: &'a HashMap<ProjectPath, FileId>,
+    ) -> Self {
+        let mut symbols_by_file: HashMap<FileId, Vec<u32>> = HashMap::default();
+        for (i, s) in symbols.iter().enumerate() {
+            symbols_by_file.entry(s.file).or_default().push(i as u32);
+        }
+        GraphView {
+            files,
+            symbols,
+            file_index,
+            symbols_by_file,
+        }
+    }
+
+    /// Every claimed and unclaimed file discovered this run, in `FileId` order (path-sorted —
+    /// the same order every other deterministic pass over `files` uses).
+    pub fn files(&self) -> impl Iterator<Item = &'a FileNode> + '_ {
+        self.files.iter()
+    }
+
+    /// This file's declarations, in extraction order — empty for an unknown or unclaimed path.
+    pub fn symbols_in(&self, path: &ProjectPath) -> impl Iterator<Item = &'a SymbolNode> + '_ {
+        let indices = self
+            .file_index
+            .get(path)
+            .and_then(|id| self.symbols_by_file.get(id))
+            .map(Vec::as_slice)
+            .unwrap_or(&[]);
+        indices.iter().map(|&i| &self.symbols[i as usize])
+    }
+}
+
+// ---------------------------------------------------------------- write side: sinks
+
+/// A named target a plugin contributes to: a file, or (with `symbol`) one of its declarations —
+/// bare name, or `Owner.name` for a member, mirroring [`crate::adapter::Declaration::name`] +
+/// `member_of`'s display convention. Resolved core-side against the same bare/qualified tables
+/// `RawRoot`/`RawReference` resolve against; an unresolvable target is dropped silently.
+#[derive(Debug, Clone)]
+pub struct PluginTarget {
+    pub path: ProjectPath,
+    pub symbol: Option<SmolStr>,
+}
+
+impl PluginTarget {
+    pub fn file(path: ProjectPath) -> Self {
+        PluginTarget { path, symbol: None }
+    }
+
+    pub fn symbol(path: ProjectPath, name: impl Into<SmolStr>) -> Self {
+        PluginTarget {
+            path,
+            symbol: Some(name.into()),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ContributedRoot {
+    pub target: PluginTarget,
+    pub kind: RootKind,
+    pub confidence: Confidence,
+}
+
+/// Framework entry points (RFC 0003 §2): routes, DI-registered beans, handlers — anything a
+/// plugin knows is invoked by the ecosystem even though nothing in-repo calls it. Same
+/// `EdgeKind::Root` mechanism adapter-emitted `RawRoot`s use, attributed `Provenance::Plugin`.
 #[derive(Debug, Default)]
-pub struct RootSink {}
+pub struct RootSink {
+    pub(crate) items: Vec<ContributedRoot>,
+}
+
+impl RootSink {
+    pub fn add(&mut self, target: PluginTarget, kind: RootKind, confidence: Confidence) {
+        self.items.push(ContributedRoot {
+            target,
+            kind,
+            confidence,
+        });
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ContributedEdge {
+    pub from: PluginTarget,
+    pub to: PluginTarget,
+    pub kind: RefKind,
+    pub confidence: Confidence,
+}
+
+/// Edges invisible to the language (RFC 0003 §2): DI wiring, route-string → handler, template →
+/// class, CSS class names used from HTML templates. Always a `References` edge — plugins can't
+/// mint new edge kinds (RFC 0003 §2: "cannot define new node/edge kinds").
 #[derive(Debug, Default)]
-pub struct EdgeSink {}
+pub struct EdgeSink {
+    pub(crate) items: Vec<ContributedEdge>,
+}
+
+impl EdgeSink {
+    pub fn add(
+        &mut self,
+        from: PluginTarget,
+        to: PluginTarget,
+        kind: RefKind,
+        confidence: Confidence,
+    ) {
+        self.items.push(ContributedEdge {
+            from,
+            to,
+            kind,
+            confidence,
+        });
+    }
+}
+
+/// Marks a symbol externally consumed (RFC 0003 §2: public SDK surface, FFI, serialization
+/// targets) — the exemption `internal-only`/`private-type-leak` already document as available
+/// "via `annotate_symbols`" (RFC 0005 §7) but had nothing to read until this landed.
 #[derive(Debug, Default)]
-pub struct AnnotationSink {}
+pub struct AnnotationSink {
+    pub(crate) externally_consumed: Vec<PluginTarget>,
+}
+
+impl AnnotationSink {
+    pub fn mark_externally_consumed(&mut self, path: ProjectPath, symbol: impl Into<SmolStr>) {
+        self.externally_consumed
+            .push(PluginTarget::symbol(path, symbol));
+    }
+}
+
+// ---------------------------------------------------------------- the trait
 
 pub trait Plugin: Send + Sync {
     fn descriptor(&self) -> PluginDescriptor;
 
     /// Adjust a file's role/origin beyond language defaults (e.g. `*.stories.tsx` → tooling).
+    /// Runs once per claimed file, right after RFC 0012 §7's content-derived origin correction
+    /// and before role-derived roots (phase 2.6) — so a plugin's answer is what every downstream
+    /// consumer (root promotion, `unused`/`test-only`'s per-file exemptions) sees.
     fn classify_file(&self, _path: &ProjectPath, _current: FileClass) -> Option<FileClass> {
         None
     }
 
     /// Framework entry points: routes, DI-registered beans, handlers…
-    fn contribute_roots(&self, _graph: &GraphView, _out: &mut RootSink) {}
+    fn contribute_roots(&self, _graph: &GraphView<'_>, _out: &mut RootSink) {}
 
     /// Edges invisible to the language: DI wiring, template → class, route → handler…
-    fn contribute_edges(&self, _graph: &GraphView, _out: &mut EdgeSink) {}
+    fn contribute_edges(&self, _graph: &GraphView<'_>, _out: &mut EdgeSink) {}
 
     /// Mark symbols externally consumed (FFI, serialization targets, public SDK surface).
-    fn annotate_symbols(&self, _graph: &GraphView, _out: &mut AnnotationSink) {}
+    fn annotate_symbols(&self, _graph: &GraphView<'_>, _out: &mut AnnotationSink) {}
 
     /// Parse one coverage report into per-file line coverage (ADR 0005, RFC 0003 §2's
     /// `ingest_coverage` hook). Content arrives via the host — the report was matched by this

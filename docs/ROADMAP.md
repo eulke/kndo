@@ -652,6 +652,79 @@ both real M5-scoped ideas, neither built. Parking lot until a first ecosystem pl
 external-plugin demand) picks a concrete shape to build toward, same "don't build the
 mechanism before the demand" call this session made for `resolve()`'s host-imports.
 
+### M5 progress — Plugin graph-mutation hooks wired ✅ (landed 2026-08-21)
+
+The `Plugin` trait (RFC 0003 §2, `plugin.rs`) had existed since M1 as a signature-stable
+placeholder — `GraphView`/`RootSink`/`EdgeSink`/`AnnotationSink` were all zero-field stubs, and
+neither `Engine` nor `graph::assemble` ever called `classify_file`/`contribute_roots`/
+`contribute_edges`/`annotate_symbols`; only `ingest_coverage` (ADR 0005, M4) was ever real,
+wired ad hoc through a private `coverage_plugins()` function `Engine` didn't even hold a field
+for. This closes that gap for the four remaining hooks — not a new feature so much as making an
+already-documented contract actually run.
+
+Design questions resolved by tracing the real `graph::assemble_from_source` pipeline first
+(insertion points, existing edge-construction code, the symbol lookup tables already built)
+rather than guessing at a shape: `GraphView<'a>` borrows `files`/`symbols` directly (no copy),
+with `symbols_in(path)` backed by a one-time `FileId -> [index]` map so a plugin walking every
+file's declarations costs `O(files + symbols)` total, not `O(files * symbols)`. Every sink call
+takes a `PluginTarget { path, symbol: Option<name> }` — never a raw `FileId`/`SymbolId` — because
+those ids are per-run and internal; targets resolve core-side against the exact same bare/
+qualified lookup tables `RawRoot`/`RawReference` already resolve against (`resolve_plugin_
+target`, a thin wrapper reusing `emit_file_declarations`'s own two-step fallback), and an
+unresolvable target is dropped silently, matching an adapter's own miss behavior rather than
+inventing a new failure mode. `contribute_roots`/`contribute_edges`/`annotate_symbols` all run
+once, together, right after phase 3b's reference-resolution merge — symbol tables and every
+adapter reference are both stable by then — and before the canonical `edges.sort_unstable()`,
+so contributed edges fold into the one sort instead of needing a second pass; `classify_file`
+runs earlier, inline in phase 2's file-node build, right after RFC 0012 §7's content-derived
+origin correction, so its answer is what every downstream role/origin exemption sees.
+
+`annotate_symbols` needed one real new piece of graph state that didn't exist at all: RFC 0005
+§7 had documented "symbols plugins mark as externally consumed" as an `internal-only`/`private-
+type-leak` exemption since M3, with nothing behind it. Landed as `ProjectGraph::
+externally_consumed: Vec<SymbolId>` (sorted, deduplicated, binary-searched by the new `is_
+externally_consumed`), consumed at exactly the same call site as the existing root-target
+exemption in both analyses — `private-type-leak`'s check is on the *leaked type*, not the
+declaring callable, since a plugin-annotated type is one its consumers genuinely can name, just
+not through an edge the graph itself models.
+
+Correctness cut, made explicit rather than deferred silently: any registered plugin with these
+hooks makes `assemble_from_source` skip *both* the graph-snapshot cache hit and the incremental
+patch, always full-rebuilding. RFC 0003 §5's "plugin identity participates in the cache key" is
+the real fix and isn't built; neither reuse path re-invokes plugin hooks, so serving either to a
+plugin-bearing project would silently miss whatever the plugin contributes. The bypass is free
+today — `LcovPlugin`, the only shipped plugin, implements none of these four hooks, so the
+condition never fires for the default product — and becomes the thing to revisit once a real
+plugin exercises it and warm performance matters.
+
+`Engine::open`'s signature was preserved (every existing call site — a few dozen across
+`engine.rs`'s own test module plus `kndo`/`kndo-adapter-go` — keeps compiling unchanged) by
+adding `Engine::open_with_plugins` as the plugin-aware entry point and making `open` a thin
+wrapper defaulting to `vec![Box::new(LcovPlugin)]`, the exact plugin the old private
+`coverage_plugins()` function silently supplied before. `kndo::default_plugins()` (mirroring
+`default_adapters()`) now composes the distribution layer's plugin list explicitly. `kndo
+doctor`'s `DoctorReport` gained a real `plugins: Vec<DoctorPluginInfo>` field — its doc comment
+had claimed "`plugins` is always empty… an honest gap" while the struct itself had no such field
+at all; fixed as a byproduct of wiring plugins in for real.
+
+Proof is a real `Engine::check` round trip (`engine.rs`'s own test module, `plugin_graph_hooks_
+affect_a_real_check`), not just each analysis's isolated unit test: a text-driven mock adapter
+declares four otherwise-identical dead/narrow declarations, a demo plugin rescues three of them
+(one via each of `contribute_roots`/`contribute_edges`/`annotate_symbols`, plus a `classify_file`
+override exempting a fourth file's `unused` finding via a Generated-origin reclassification)
+while a fifth, untouched control declaration stays flagged — and a baseline run *without* the
+plugin asserts all four would otherwise fire, so the test can't pass vacuously. Full workspace
+suite (368 kndo-core tests plus every adapter/integration crate) and `clippy -D warnings` both
+clean.
+
+**Not this pass, real remaining gaps toward the React/Next.js-style plugin the user actually
+asked about:** a first ecosystem plugin exercising this wiring for a real framework, and the
+`Plugin` trait's own WASM bridge — a materially bigger design problem than the adapter ABI
+(`contribute_roots`/`contribute_edges`/`annotate_symbols` need a WASM guest to *query* a
+read-only graph, not just emit facts about one file, so it needs either a bounded serialized
+view or host-import callback functions — undesigned). Both remain parked, same reasoning as
+above.
+
 ## M6 — 1.0 hardening
 False-positive hunt across dogfood corpus (target < 2%, vision §6), schema/ABI freeze, docs site,
 install channels (brew/cargo/npm shim/curl), **`kndo-action` GA** (RFC 0010: sticky PR comment,

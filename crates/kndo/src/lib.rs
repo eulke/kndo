@@ -19,6 +19,7 @@ pub use kndo_core::{
 
 use kndo_core::adapter::LanguageAdapter;
 use kndo_core::engine::{ConfigOverrides, Engine, EngineError};
+use kndo_core::plugin::Plugin;
 use std::path::Path;
 
 /// Every first-party adapter this build includes — the product's language registry, defined
@@ -50,13 +51,23 @@ pub fn default_adapters() -> Vec<Box<dyn LanguageAdapter>> {
     }
 }
 
+/// Every first-party plugin this build includes (RFC 0003) — the product's ecosystem registry,
+/// same shape and same reasoning as [`default_adapters`]: one entry here, nothing else in the
+/// workspace changes. Just the built-in lcov coverage ingester today; framework-convention
+/// plugins (react, nextjs, spring…) are RFC 0003 §3's stated launch set, not yet built —
+/// tracked in the ROADMAP, not silently implied by this function's name.
+pub fn default_plugins() -> Vec<Box<dyn Plugin>> {
+    vec![Box::new(kndo_core::plugin::LcovPlugin)]
+}
+
 /// The one-line entry point frontends use: an [`Engine`] over the full default product plus
 /// whatever third-party WASM adapters this project has installed. Frontends needing a custom
-/// adapter set (embedders, tests) still have [`Engine::open`] directly.
+/// adapter or plugin set (embedders, tests) still have [`Engine::open`]/[`Engine::open_with_plugins`]
+/// directly.
 pub fn open(root: &Path, overrides: ConfigOverrides) -> Result<Engine, EngineError> {
     let mut adapters = default_adapters();
     adapters.extend(external_adapters(root));
-    Engine::open(root, overrides, adapters)
+    Engine::open_with_plugins(root, overrides, adapters, default_plugins())
 }
 
 /// Third-party adapters as WASM components (ADR 0003, `docs/contracts/wasm-abi.md`),

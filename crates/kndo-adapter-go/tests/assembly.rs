@@ -49,7 +49,7 @@ fn a_root_that_is_only_a_symbol_does_not_strand_its_file_or_its_callees() {
     // `format` never propagated either. Both `main.go` and `sub/format.go` read as fully
     // unreachable despite genuinely being used.
     let dir = multi_file_module("symbol-root");
-    let (g, diagnostics) = graph::assemble(&dir, &[Box::new(GoAdapter)]).unwrap();
+    let (g, diagnostics) = graph::assemble(&dir, &[Box::new(GoAdapter)], &[]).unwrap();
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
     let findings = analysis::run_all(&g, &kndo_core::coverage::CoverageMap::default()).findings;
 
@@ -85,7 +85,7 @@ fn importing_the_module_s_own_subpackage_is_never_a_phantom_dependency() {
     // per-sibling declaration concept at all for its own subpackages; fixed by resolving to a
     // plain `Resolution::File` instead (docs/adapters/go.md, resolution.rs's `resolve_into_package`).
     let dir = multi_file_module("own-subpackage");
-    let (g, diagnostics) = graph::assemble(&dir, &[Box::new(GoAdapter)]).unwrap();
+    let (g, diagnostics) = graph::assemble(&dir, &[Box::new(GoAdapter)], &[]).unwrap();
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
     let findings = analysis::run_all(&g, &kndo_core::coverage::CoverageMap::default()).findings;
 
@@ -117,7 +117,7 @@ fn unexported_method_called_through_a_variable_is_not_falsely_unused() {
     )
     .unwrap();
 
-    let (g, diagnostics) = graph::assemble(&dir, &[Box::new(GoAdapter)]).unwrap();
+    let (g, diagnostics) = graph::assemble(&dir, &[Box::new(GoAdapter)], &[]).unwrap();
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
     let findings = analysis::run_all(&g, &kndo_core::coverage::CoverageMap::default()).findings;
 
@@ -152,7 +152,7 @@ fn a_dead_function_s_callees_die_with_it() {
     )
     .unwrap();
 
-    let (g, diagnostics) = graph::assemble(&dir, &[Box::new(GoAdapter)]).unwrap();
+    let (g, diagnostics) = graph::assemble(&dir, &[Box::new(GoAdapter)], &[]).unwrap();
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
     let findings = analysis::run_all(&g, &kndo_core::coverage::CoverageMap::default()).findings;
     let unused: Vec<&str> = findings

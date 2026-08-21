@@ -19,7 +19,10 @@
 //! Exemptions: a symbol that is itself a root target (library-mode public API, a test
 //! file's exported fixtures, a tooling config's exports — RFC 0011 §5's promotion, already
 //! wired in `graph::assemble`'s phase 3a) is externally consumed by definition, regardless of
-//! whether any in-graph reference reaches it — never a candidate. A symbol with *zero* incoming
+//! whether any in-graph reference reaches it — never a candidate. Same for a symbol a plugin's
+//! `annotate_symbols` marked externally consumed (RFC 0003 §2, `ProjectGraph::
+//! is_externally_consumed`) — FFI, serialization, a public SDK surface the graph itself has no
+//! edge for. A symbol with *zero* incoming
 //! references at all, or one that's [`Reachability::Unreachable`] outright (dead code can have a
 //! same-file self-reference and nothing else — a same-file `console.log(helper())` in a file
 //! nothing imports), is `unused`'s verdict, not this one: suggesting "narrow the visibility" on
@@ -115,6 +118,12 @@ pub fn find_internal_only(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<
         let symbol_id = SymbolId(index as u32);
         if root_targets.contains(&NodeRef::Symbol(symbol_id)) {
             continue; // roots are externally consumed by definition (RFC 0005 §7 exemption)
+        }
+        if graph.is_externally_consumed(symbol_id) {
+            continue; // a plugin marked it externally consumed (RFC 0003 §2 annotate_symbols,
+                      // RFC 0005 §7 exemption) — a narrower visibility is real advice for the
+                      // language, but not for whatever the plugin says reaches this from outside
+                      // the graph (serialization, FFI, a public SDK surface)
         }
         if reach.get(NodeRef::Symbol(symbol_id)).0 == Reachability::Unreachable {
             continue; // dead code — `unused`'s verdict, not this one
@@ -401,6 +410,41 @@ mod tests {
         let findings = find_internal_only(&graph, &reach);
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].confidence, Confidence::Possible);
+    }
+
+    #[test]
+    fn plugin_annotated_externally_consumed_symbol_is_exempt() {
+        // The file (not the symbol itself) is the root, and the only reference is a same-file,
+        // Certain-confidence call — real enough evidence to fire "should be private" on its own
+        // (asserted first, below). A plugin's `annotate_symbols` (RFC 0003 §2) marking the
+        // symbol externally consumed must suppress it exactly like a root target would.
+        let files = vec![file("src/a.ts")];
+        let symbols = vec![symbol(FileId(0), "helper", 1)];
+        let edges = vec![
+            edge(
+                EdgeKind::Root {
+                    kind: RootKind::Production,
+                    target: NodeRef::File(FileId(0)),
+                },
+                Confidence::Certain,
+            ),
+            edge(
+                EdgeKind::References {
+                    from: NodeRef::File(FileId(0)),
+                    to: SymbolId(0),
+                    kind: RefKind::Call,
+                },
+                Confidence::Certain,
+            ),
+        ];
+        let graph = ProjectGraph::for_test(files.clone(), symbols.clone(), vec![], edges.clone());
+        let reach = crate::analysis::reachability::compute(&graph);
+        assert_eq!(find_internal_only(&graph, &reach).len(), 1);
+
+        let annotated = ProjectGraph::for_test(files, symbols, vec![], edges)
+            .with_externally_consumed(vec![SymbolId(0)]);
+        let reach = crate::analysis::reachability::compute(&annotated);
+        assert!(find_internal_only(&annotated, &reach).is_empty());
     }
 
     #[test]
