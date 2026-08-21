@@ -834,9 +834,31 @@ symbols its hooks touch) — plus eight unit tests for the filter logic itself
 `node_modules`-exclusion cases). Full workspace suite and `clippy -D warnings` both clean.
 
 **Still not built:** an install/registry command (`kndo plugin install …`) — landing a file in
-the global directory is still a manual copy; `kndo doctor` visibility into which global
-candidates were discovered-but-skipped versus activated (today it only sees the final composed
-set). Both are stated, not silent, gaps.
+the global directory is still a manual copy.
+
+### M5 progress — `kndo doctor` plugin/global-candidate visibility ✅ (landed 2026-08-21)
+
+Two real gaps this section's own "still not built" line had named, closed the same day:
+
+1. `kndo doctor`'s CLI output for plugins was dead code from before the plugin system had any
+   external story — `doctor_cmd` printed a hardcoded `"plugins: none registered (plugin system
+   is internal-only pre-1.0, RFC 0003 §6)"` regardless of what `Engine::doctor()`'s `report.
+   plugins` actually held (which was already correct — `coverage-lcov`, any project-local or
+   activated global plugin, all present). Fixed by actually iterating `report.plugins`, now also
+   showing each one's `activation` rules (`DoctorPluginInfo` gained the field, rendered via a new
+   `ActivationRule::describe()`).
+2. A globally installed plugin whose rule *didn't* match was invisible — `Engine` never sees a
+   candidate that didn't activate, so `Engine::doctor()` structurally can't report it. Closed
+   with `kndo::global_plugin_candidates(root)`, a separate call `doctor_cmd` makes directly:
+   every `.wasm` file the global directory holds, activated or not, each with its rendered
+   `activation` rules. Shares its load-and-evaluate step with `external_plugins`'s own global
+   branch (`global_plugin_candidates_loaded`) rather than re-implementing it.
+
+`crates/kndo/tests/global_plugin_activation.rs` (already covering the activation path itself)
+now also asserts on `global_plugin_candidates`'s output in both its no-trigger and
+with-trigger scenarios — the skipped candidate reports `activated: false` with the exact rule
+that didn't fire, the activated one reports `true`. Full workspace suite and
+`clippy -D warnings` both clean.
 
 ## M6 — 1.0 hardening
 False-positive hunt across dogfood corpus (target < 2%, vision §6), schema/ABI freeze, docs site,

@@ -104,11 +104,11 @@ prototype a plugin natively and ship it as WASM unchanged.
     0012 §8/§10), so this couldn't be either. `LanguageAdapter`s don't have an `activation`
     field yet, so a globally installed adapter isn't a thing this pass adds — a stated gap, not
     a silent one.
-  - **Not yet done**: there is no install/registry command (`kndo plugin install …`) — landing a
-    file in the global directory is still a manual `cp`, same posture `.kndo/plugins/` itself
-    has always had. `kndo doctor` doesn't yet report *which* global candidates were discovered
-    and skipped (only the final, already-activated set) — a known follow-up, not implied by this
-    section.
+  - `kndo doctor` reports every global candidate — activated or skipped, with the exact rule
+    that did or didn't fire (`kndo::global_plugin_candidates`, separate from `Engine::doctor`,
+    which only ever sees the final composed set). **Not yet done**: there is no install/registry
+    command (`kndo plugin install …`) — landing a file in the global directory is still a
+    manual `cp`, same posture `.kndo/plugins/` itself has always had.
 - **Explicit config** (`kndo.toml`) can force-enable/disable and pass plugin-scoped options:
 
 ```toml

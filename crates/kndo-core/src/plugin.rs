@@ -48,9 +48,20 @@ pub struct PluginDescriptor {
 pub enum ActivationRule {
     /// At least one file under the project root matches this glob (e.g. `"next.config.*"`).
     FileExists(SmolStr),
-    /// A root manifest (`package.json`, `Cargo.toml` today — RFC 0003 §4's stated v1 scope)
-    /// declares a dependency with this name, in any dependency section.
+    /// Any `package.json`/`Cargo.toml` anywhere under the project root (not just the root's
+    /// own — RFC 0003 §4) declares a dependency with this name, in any dependency section.
     ManifestDependency(SmolStr),
+}
+
+impl ActivationRule {
+    /// Short, stable rendering for `kndo doctor` and any other "why did/didn't this activate"
+    /// display surface — not a serialization format, just human-readable.
+    pub fn describe(&self) -> String {
+        match self {
+            ActivationRule::FileExists(glob) => format!("file-exists: {glob}"),
+            ActivationRule::ManifestDependency(name) => format!("manifest-dependency: {name}"),
+        }
+    }
 }
 
 // ---------------------------------------------------------------- read side: GraphView

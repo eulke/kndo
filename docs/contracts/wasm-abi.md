@@ -242,10 +242,15 @@ default) — such a plugin only ever runs if placed in a project's own `.kndo/pl
 This whole mechanism is `Plugin`-only today: `LanguageAdapter` has no `activation` field, so a
 globally installed adapter isn't something this pass adds (RFC 0003 §3/§4).
 
+`kndo doctor` (`crates/kndo-cli/src/main.rs`'s `doctor_cmd`) reports both sides: `report.plugins`
+(from `Engine::doctor`) for the final composed set, and `kndo::global_plugin_candidates(root)`
+— a separate call, since `Engine` itself never sees a candidate that didn't activate — for
+*every* `.wasm` file the global directory holds, each with `activated: bool` and its
+`activation` rules rendered via `ActivationRule::describe`. A globally installed plugin whose
+rule doesn't match isn't invisible; it shows up as inactive with the rule that didn't fire.
+
 Not yet built: an install/registry command (`kndo plugin install …`) — getting a `.wasm` file
-into the global directory is a manual copy, and `kndo doctor` doesn't yet report which global
-candidates were discovered and skipped versus activated (only the final composed set) — both
-stated follow-ups, not implied by the mechanism landing.
+into the global directory is still a manual copy.
 
 ## 6. Producing a component
 

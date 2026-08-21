@@ -216,19 +216,21 @@ pub struct DoctorCacheInfo {
 }
 
 /// One registered plugin, as `kndo doctor` reports it — static descriptor info, matching
-/// [`DoctorAdapterInfo`]'s shape. `detection`/`requested_file_access` are shown so it's visible
-/// *why* a plugin would activate. Every plugin reaching this struct is already part of the
-/// composed set `Engine` was built with — `PluginDescriptor.activation` (RFC 0003 §4) is
-/// evaluated earlier, only for globally installed plugins, by `kndo`'s composition layer
+/// [`DoctorAdapterInfo`]'s shape. `detection`/`activation`/`requested_file_access` are shown so
+/// it's visible *why* a plugin would activate. Every plugin reaching this struct is already
+/// part of the composed set `Engine` was built with — `PluginDescriptor.activation` (RFC 0003
+/// §4) is evaluated earlier, only for globally installed plugins, by `kndo`'s composition layer
 /// (`crates/kndo/src/lib.rs`'s `activation` module), before `Engine::open_with_plugins` is even
 /// called; this report has no visibility into global candidates that were discovered and
-/// skipped, only the final set — a stated follow-up (docs/contracts/wasm-abi.md §5.5), not an
-/// omission papered over.
+/// *skipped* (`kndo::global_plugin_candidates` covers that, a separate call the CLI's `doctor`
+/// command makes directly — RFC 0003 §4, docs/contracts/wasm-abi.md §5.5), only the final set
+/// that actually made it into composition.
 #[derive(Debug, Clone)]
 pub struct DoctorPluginInfo {
     pub id: String,
     pub version: String,
     pub detection: Vec<String>,
+    pub activation: Vec<String>,
     pub requested_file_access: Vec<String>,
 }
 
@@ -668,6 +670,7 @@ impl Engine {
                     id: d.id.to_string(),
                     version: d.version.to_string(),
                     detection: d.detection.iter().map(|s| s.to_string()).collect(),
+                    activation: d.activation.iter().map(|r| r.describe()).collect(),
                     requested_file_access: d
                         .requested_file_access
                         .iter()
@@ -1675,6 +1678,7 @@ mod tests {
         assert_eq!(report.plugins.len(), 1);
         assert_eq!(report.plugins[0].id, "demo");
         assert_eq!(report.plugins[0].version, "1");
+        assert!(report.plugins[0].activation.is_empty());
 
         // The zero-plugin case must be zero, not the old implicit lcov default — callers who
         // ask for no plugins get no plugins.

@@ -220,7 +220,36 @@ fn doctor_cmd() -> ExitCode {
         println!("    manifests: {}", a.manifest_globs.join(", "));
     }
     println!();
-    println!("plugins: none registered (plugin system is internal-only pre-1.0, RFC 0003 §6)");
+    println!("plugins:");
+    if report.plugins.is_empty() {
+        println!("  (none registered)");
+    }
+    for p in &report.plugins {
+        println!("  {} v{}", p.id, p.version);
+        if !p.detection.is_empty() {
+            println!("    detection:   {}", p.detection.join(", "));
+        }
+        if !p.activation.is_empty() {
+            println!("    activation:  {}", p.activation.join(", "));
+        }
+        if !p.requested_file_access.is_empty() {
+            println!("    file access: {}", p.requested_file_access.join(", "));
+        }
+    }
+    let global_candidates = kndo::global_plugin_candidates(&cwd);
+    if !global_candidates.is_empty() {
+        println!();
+        println!("global plugin candidates (RFC 0003 §4, not necessarily active above):");
+        for c in &global_candidates {
+            let status = if c.activated { "active" } else { "inactive" };
+            println!("  {} v{} — {status}", c.id, c.version);
+            if !c.activation.is_empty() {
+                println!("    activation: {}", c.activation.join(", "));
+            } else {
+                println!("    activation: (none declared — never self-activates globally)");
+            }
+        }
+    }
     println!();
     println!(
         "cache: {}",

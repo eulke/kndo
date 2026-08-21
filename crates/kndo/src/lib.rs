@@ -127,15 +127,12 @@ fn external_plugins(root: &Path) -> Vec<Box<dyn Plugin>> {
             .filter_map(|path| kndo_plugin_api::WasmPlugin::load(&path).ok())
             .map(|plugin| Box::new(plugin) as Box<dyn Plugin>)
             .collect();
-        if let Some(global_dir) = activation::global_plugin_dir() {
-            plugins.extend(
-                wasm_components(&global_dir)
-                    .into_iter()
-                    .filter_map(|path| kndo_plugin_api::WasmPlugin::load(&path).ok())
-                    .filter(|plugin| activation::activates(&plugin.descriptor().activation, root))
-                    .map(|plugin| Box::new(plugin) as Box<dyn Plugin>),
-            );
-        }
+        plugins.extend(
+            global_plugin_candidates_loaded(root)
+                .into_iter()
+                .filter(|(_, activated)| *activated)
+                .map(|(plugin, _)| Box::new(plugin) as Box<dyn Plugin>),
+        );
         plugins
     }
     #[cfg(not(feature = "external-adapters"))]
@@ -143,6 +140,61 @@ fn external_plugins(root: &Path) -> Vec<Box<dyn Plugin>> {
         let _ = root;
         Vec::new()
     }
+}
+
+/// One globally installed `Plugin` candidate (RFC 0003 §4), as `kndo doctor` reports it —
+/// unlike [`kndo_core::engine::DoctorPluginInfo`] (which only ever sees plugins that already
+/// made it into composition), this covers *every* `.wasm` file the global directory holds,
+/// skipped ones included, so a plugin whose `activation` rule doesn't match isn't invisible —
+/// it shows up here with `activated: false` and the exact rule that didn't fire. Not itself
+/// feature-gated so a caller (the CLI) can handle it uniformly regardless of build config, same
+/// as `Box<dyn Plugin>` itself isn't gated even though *producing* one may be.
+pub struct GlobalPluginCandidate {
+    pub id: String,
+    pub version: String,
+    pub activation: Vec<String>,
+    pub activated: bool,
+}
+
+/// Every `.wasm` `Plugin` found in the global directory for `root`, activated or not — the CLI's
+/// `doctor` command calls this directly (not through `Engine`, which never sees a candidate that
+/// didn't activate). Loads each component fresh, same cost profile as `kndo::open` paying it
+/// once per run; `kndo doctor` is a standalone, occasional command, not the hot path.
+#[cfg(feature = "external-adapters")]
+pub fn global_plugin_candidates(root: &Path) -> Vec<GlobalPluginCandidate> {
+    global_plugin_candidates_loaded(root)
+        .into_iter()
+        .map(|(plugin, activated)| {
+            let d = plugin.descriptor();
+            GlobalPluginCandidate {
+                id: d.id.to_string(),
+                version: d.version.to_string(),
+                activation: d.activation.iter().map(|r| r.describe()).collect(),
+                activated,
+            }
+        })
+        .collect()
+}
+
+#[cfg(not(feature = "external-adapters"))]
+pub fn global_plugin_candidates(root: &Path) -> Vec<GlobalPluginCandidate> {
+    let _ = root;
+    Vec::new()
+}
+
+#[cfg(feature = "external-adapters")]
+fn global_plugin_candidates_loaded(root: &Path) -> Vec<(kndo_plugin_api::WasmPlugin, bool)> {
+    let Some(global_dir) = activation::global_plugin_dir() else {
+        return Vec::new();
+    };
+    wasm_components(&global_dir)
+        .into_iter()
+        .filter_map(|path| kndo_plugin_api::WasmPlugin::load(&path).ok())
+        .map(|plugin| {
+            let activated = activation::activates(&plugin.descriptor().activation, root);
+            (plugin, activated)
+        })
+        .collect()
 }
 
 #[cfg(feature = "external-adapters")]

@@ -4,7 +4,9 @@
 //! actually satisfy one of its `PluginDescriptor.activation` rules. Reuses the same
 //! `examples/kndo-plugin-hooks-demo` component `external_plugin.rs` already builds — that test
 //! proves the project-local `.kndo/plugins/` path is unconditional; this one proves the global
-//! path is not.
+//! path is not. Also proves `kndo::global_plugin_candidates` (the `kndo doctor` visibility into
+//! *skipped* global candidates, not just the composed set `Engine::doctor` sees) reports the
+//! same candidate correctly in both states.
 //!
 //! Both scenarios run inside one `#[test]` (rather than two) because `KNDO_PLUGIN_DIR` is
 //! process-wide state — cargo runs a test binary's `#[test]` functions concurrently by default,
@@ -113,6 +115,16 @@ fn wire_target() {
         unused_without.contains(&"root_target") && unused_without.contains(&"wire_target"),
         "with no *.trigger file the globally installed plugin must stay inactive: {unused_without:?}"
     );
+    // Doctor visibility: the candidate must still be reported, just not activated — a skipped
+    // global plugin isn't invisible, unlike a plugin that never made it into `Engine` at all.
+    let candidates_without = kndo::global_plugin_candidates(project_without_trigger.path());
+    assert_eq!(candidates_without.len(), 1);
+    assert_eq!(candidates_without[0].id, "hooks-demo");
+    assert!(!candidates_without[0].activated);
+    assert!(candidates_without[0]
+        .activation
+        .iter()
+        .any(|r| r.contains("*.trigger")));
 
     // Scenario 2: same project, plus a `*.trigger` file — now the rule matches, and the exact
     // same globally installed component must join composition and rescue both symbols.
@@ -138,6 +150,9 @@ fn wire_target() {
         "with a *.trigger file the globally installed plugin's contribute_edges should have \
          kept this reachable: {unused_with:?}"
     );
+    let candidates_with = kndo::global_plugin_candidates(project_with_trigger.path());
+    assert_eq!(candidates_with.len(), 1);
+    assert!(candidates_with[0].activated);
 
     // SAFETY: same reasoning as the set_var above — sequential within this one test.
     unsafe {
