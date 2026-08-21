@@ -391,7 +391,7 @@ Second triage, 2026-08-18:
 
 No candidates remain open. Future proposals enter through this table with the §13 acceptance
 bar; every row above is a decision of record.
-| `hollow-test` | test root whose forward closure reaches zero production symbols | the anti-slop "this test tests nothing real" detector (mocks-only tests); needs dogfood validation of the FP rate before committing |
+| `hollow-test` | test root whose forward closure reaches zero production symbols | the anti-slop "this test tests nothing real" detector (mocks-only tests); **open** — needs a named exemption mechanism for every legitimate zero-production-reach case (pure-assertion/property tests, contract tests against an external service) before it can claim zero FP, not just a low rate |
 | `speculative-abstraction` | interface/trait with exactly one implementation and at most one consumer | YAGNI materialized; trivially derivable from `Implement` edges; `probable` confidence (DI/test seams exempt via plugin annotations, library-mode public abstractions exempt); group `waste` |
 
 **Deliberately out of core: stale TODOs.** Detecting aged/orphaned TODO comments requires comment
@@ -399,4 +399,11 @@ extraction plus non-graph data (git blame age, issue-tracker state). That breaks
 static-graph model; if wanted, it is a plugin with its own data sources, not an analysis.
 
 Acceptance bar for any rule, present or future: derivable from the graph, zero-config by default,
-< 5% false-positive rate on the dogfood corpus, and explainable in one sentence.
+**zero false positives** — not a rate, a hard bar — and explainable in one sentence. A false
+positive already costs trust the rule can't earn back, so "rare" is not good enough. Any case
+where soundness can't be guaranteed statically (reflection/serialization, dynamic dispatch,
+macro-generated consumers, framework conventions the adapter doesn't model) must demote the
+finding below the report floor or exclude the case outright — never ship it at reduced
+probability. A rule that cannot reach zero FP by this mechanism does not ship, full stop, and
+does not get a row in this table either — a rule with a known unclosable blind spot is not a
+candidate to triage, it is a rule that has already failed the bar.
