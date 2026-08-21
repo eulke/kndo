@@ -38,6 +38,8 @@ pub fn default_adapters() -> Vec<Box<dyn LanguageAdapter>> {
         adapters.push(Box::new(kndo_adapter_rust::RustAdapter));
         #[cfg(feature = "java")]
         adapters.push(Box::new(kndo_adapter_java::JavaAdapter));
+        #[cfg(feature = "kotlin")]
+        adapters.push(Box::new(kndo_adapter_kotlin::KotlinAdapter));
         adapters
     }
 }

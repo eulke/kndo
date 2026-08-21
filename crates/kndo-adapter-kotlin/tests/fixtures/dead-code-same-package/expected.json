@@ -1,0 +1,22 @@
+{
+  "findings": [
+    {
+      "category": "unused",
+      "subject_kind": "method",
+      "path": "src/main/kotlin/com/foo/Helper.kt",
+      "symbol": "Helper.dead"
+    },
+    {
+      "category": "internal-only",
+      "subject_kind": "class",
+      "path": "src/main/kotlin/com/foo/Helper.kt",
+      "symbol": "Helper"
+    },
+    {
+      "category": "internal-only",
+      "subject_kind": "method",
+      "path": "src/main/kotlin/com/foo/Helper.kt",
+      "symbol": "Helper.live"
+    }
+  ]
+}

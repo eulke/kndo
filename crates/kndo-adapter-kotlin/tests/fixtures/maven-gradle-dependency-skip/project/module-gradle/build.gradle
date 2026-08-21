@@ -1,0 +1,6 @@
+group = 'com.b'
+
+dependencies {
+    implementation 'com.other:lib:2.0'
+    kapt 'com.other:processor:1.0'
+}

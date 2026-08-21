@@ -1,0 +1,14 @@
+{
+  "findings": [
+    {
+      "category": "version-skew",
+      "subject_kind": "dependency",
+      "symbol": "com.other:lib"
+    },
+    {
+      "category": "unused",
+      "subject_kind": "file",
+      "path": "module-maven/src/main/kotlin/com/a/A.kt"
+    }
+  ]
+}

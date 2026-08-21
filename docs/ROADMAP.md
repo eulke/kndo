@@ -395,6 +395,49 @@ mirroring Go's own choice, since `FileFacts::unit` already carries the declared 
 caught by a fixture exercising genuine cross-Java-package, same-Maven-module visibility, which
 misfired as a false `internal-only` before the fix and passed clean after.
 
+### M5 progress — Kotlin adapter ✅ (landed 2026-08-21)
+
+`kndo-adapter-kotlin` per docs/adapters/kotlin.md: the first adapter that shares its manifest
+layer wholesale with a sibling — `kndo-adapter-toolkit::jvm_manifest`, extracted from the Java
+adapter's `manifest.rs` in the same session (a `pom.xml`/`build.gradle`'s shape has zero
+dependency on the module's source language), parameterized by a `JvmSourceLayout`
+(`src/main/java` + `.java` for Java, `src/main/kotlin` + `.kt` for Kotlin). Same no-dogfood-
+corpus situation as Java — precision rests on four conformance fixtures.
+
+The real language-fit work was the visibility ladder, and it runs the *opposite* direction from
+Java's own bug: Kotlin's `package` carries no visibility meaning at all (default with no
+modifier is `public`, not package-scoped), so there is no `Unit`-scoped rung anywhere — instead
+`internal` maps directly to `VisibilityScope::Package` (kndo's "same manifest" granularity, a
+Kotlin compilation module) with no widening needed, the one rung Java's ladder has no
+equivalent of. `protected` (members only) still widens to `Public`, mirroring Java's own
+two-rungs-share-a-scope pattern. Getting this backwards — reusing Java's `Unit`-for-package-
+scope reflex — would have been the *same class* of bug Java's own fixture caught, inverted:
+narrowing suggestions onto declared-public code Kotlin's compiler would reject narrowing.
+`member_of` follows RFC 0012 §3 literally (top-level functions, including extension functions,
+get `None`) and companion-object members attribute to the *enclosing class* rather than the
+companion itself — `Widget.factory()` is how real code addresses them, not `Widget.Companion.
+factory()`.
+
+Declaration dispatch (9 shapes: class/object/companion/function/secondary-constructor/property/
+type-alias/init-block/enum-entry) is table-driven from the start this time — a lookup-and-call
+over `(&str, fn(...))` pairs, not a `match` with one arm per kind — after the Java session's
+own CRAP gate taught that a flat match past ~4 arms already crosses the zero-coverage
+threshold. Two independently-verified upstream tree-sitter-kotlin-ng 1.1.0 grammar edge cases
+(meta-annotated parameterless `annotation class`; any `class`/`interface`/`object` body written
+entirely on one line) are documented, not worked around — third-party grammar issues, and every
+fixture/test in this adapter simply uses realistic multi-line formatting.
+
+**A second infra fix, found while building this adapter's own `GENERATED_MARKERS`
+constant**: `kndo_adapter_toolkit::classify::LineMarker::Contains` had no guard against matching
+its *own declaration* — `kndo-adapter-java/src/extraction.rs`'s `Contains("@generated")` string
+literal was itself a textual match for the Rust adapter's identical marker scanning kndo's own
+repo, silently exempting that file from `crap`/`unused`/`untested`/`internal-only` via
+`FileOrigin::Generated`. Fixed by requiring the matched line to look like a comment (`//`, `/*`,
+`*` after trimming) — `PrefixSuffix` (Go's) was already self-safe by column-anchoring, by
+design; `Contains` wasn't. Effect on kndo's own dogfood: health score 59.3→69.3 (D→C), not from
+any code change but from ~200 previously-hidden findings (mostly `crap`/`untested`) becoming
+visible — real pre-existing debt, now visible, not something this fix set out to remediate.
+
 **Exit:** all eight launch languages pass conformance; a third-party demo adapter (not in-tree)
 runs against the released binary; budget still holds with all adapters active.
 

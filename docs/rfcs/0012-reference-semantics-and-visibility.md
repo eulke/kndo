@@ -211,7 +211,7 @@ same-unit siblings → "could be `unexported`"), and is what §3's member-fallba
 | JS/TS | 0 `File` "module-local" · 1 `Package` "exported" · 2 `Public` "package surface" | rung 2 = reachable through the `exports` map (js-ts.md §4); adapter emits 0/1 today, 2 lands with surface-awareness |
 | Go | 0 `Unit` "unexported" · 1 `Public` "exported" | `internal/` is **not** a rung: it caps *root promotion* (docs/adapters/go.md §0), a separate mechanism; a "could move under internal/" suggestion is out of scope for 1.0 |
 | Java | 0 `File` "private" · 1 `Unit` "package-private" · 2 `Public` "protected" · 3 `Public` "public" | `private` ≈ enclosing file (nested classes share it); `protected` maps conservatively to `Public` — subclasses live anywhere, never suggest narrowing onto them |
-| Kotlin | 0 `File` "private" · 1 `Package` "internal" · 2 `Public` "public" | `internal` = compilation module ≈ Package |
+| Kotlin | 0 `File` "private" · 1 `Package` "internal" · 2 `Public` "protected" · 3 `Public` "public" | `internal` = compilation module ≈ Package (unlike Java, Kotlin's `package` carries no visibility meaning at all — the default with no modifier is `public`, not package-scoped); `protected` (members only, same "package ∪ subclasses anywhere" shape as Java's) maps conservatively to `Public`, mirroring Java's own two-rungs-share-a-scope pattern |
 | Swift | 0 `File` "private" · 1 `File` "fileprivate" · 2 `Package` "internal" · 3 `Public` "public" · 4 `Public` "open" | |
 | Rust | 0 `Unit` "private" · 1 `Package` "pub(crate)" · 2 `Public` "pub" | unit = module; `pub(super)`/`pub(in …)` map to the nearest **wider** rung (conservative) |
 | CSS/JSON | `[]` | visibility analyses skip |
@@ -260,8 +260,8 @@ anything. Conventions per language, recorded so adapters stay mutually consisten
 | Language | unit key |
 |----------|----------|
 | Go | `dir#declared-package-name` — splits external test packages (`foo_test`) from `foo` in the same directory, closing the documented §1.1 imprecision of docs/adapters/go.md with zero core changes |
-| Java | source-root-relative package directory |
-| Kotlin | same as Java (package directory) |
+| Java | declared package name (dotted string from the `package` statement) — never directory-derived, sidestepping source-root detection (`src/main/java` is a build-tool convention, not language-visible from a bare file path); docs/adapters/java.md §0 |
+| Kotlin | same as Java (declared dotted package name) — but note this key carries *zero* visibility meaning for Kotlin (§6), only resolution meaning (same-package unqualified reference, wildcard import enumeration) |
 | Rust | module path (crate-root-relative; inline `mod` appends a segment) |
 | Swift | target/module name |
 | JS/TS, CSS, JSON | `None` — file-scoped languages |
