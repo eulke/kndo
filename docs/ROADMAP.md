@@ -863,10 +863,11 @@ that didn't fire, the activated one reports `true`. Full workspace suite and
 ## M6 — 1.0 hardening
 False-positive hunt across dogfood corpus (target < 2%, vision §6), schema/ABI freeze, docs site,
 **distribution & release pipeline** (RFC 0014: GitHub Releases + curl installer + `cargo install
-kndo-cli` + Homebrew tap + container image, in that order; license mismatch flagged in RFC 0014
-§0 needs a decision before the first public release), **`kndo-action` GA** (RFC 0010: sticky PR
-comment, annotations, SARIF opt-in — dogfooded on kndo's own PRs from M2 via a pre-GA workflow),
-`stale` (suppressions) rule, error-message polish.
+kndo-cli` + Homebrew tap + container image, in that order; license settled as Apache-2.0 — RFC
+0014 §0 — `Cargo.toml`/`LICENSE`/`NOTICE` now consistent; ownership/IP-clause question still
+open, blocking only the first public release), **`kndo-action` GA** (RFC 0010: sticky PR comment,
+annotations, SARIF opt-in — dogfooded on kndo's own PRs from M2 via a pre-GA workflow), `stale`
+(suppressions) rule, error-message polish.
 
 **Exit:** semver 1.0 commitments declared for the three contract surfaces; two external repos
 adopt kndo in pre-commit and stay enabled for 2 weeks.

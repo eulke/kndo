@@ -5,38 +5,46 @@
 **Ships:** M6
 
 Adapted from a working distribution plan drafted for a sibling project (Yunta), reshaped around
-kndo's actual crate layout and the decisions ADR 0006/0007 already made. Two sections are left
-open on purpose — they're calls only the author can make, not engineering decisions.
+kndo's actual crate layout and the decisions ADR 0006/0007 already made. One section is left
+open on purpose — it's a call only the author can make, not an engineering decision.
 
-## 0. Two open items, before anything else
+## 0. License: settled — Apache-2.0
 
-**License mismatch — needs a decision now, not at release time.** The repository's `LICENSE`
-file is the full Apache-2.0 text, but every crate's `Cargo.toml` (`license.workspace = true` →
-workspace `license = "MIT"`) declares MIT. Whichever one is wrong, it's wrong *today*, in the
-crate metadata that would ship to crates.io as-is. This RFC recommends **Apache-2.0** (§2), for
-the same three reasons the Yunta plan gave: an express patent grant (what corporate legal
-reviews before approving a tool), maximum permissiveness for adoption, and it's the de facto
-default for Rust tooling (often dual MIT/Apache-2.0, a valid variant if broader interoperability
-is wanted). But the fix is one line in `Cargo.toml` plus reconciling `LICENSE` — trivial to
-apply once the *choice* is confirmed, not before.
+The workspace `Cargo.toml` declared `license = "MIT"` while the repository's own `LICENSE` file
+was the full Apache-2.0 text — a real mismatch that would have shipped false crate metadata to
+crates.io as-is. Resolved: **Apache-2.0**, confirmed by the author. `Cargo.toml` now matches
+`LICENSE`; `NOTICE` added (`Copyright 2026 The kndo Authors` — the generic "Project Authors"
+phrasing common to Apache-2.0 projects that don't want to hardcode one individual's legal name;
+swap it for a specific holder if that's preferred). `CODE_OF_CONDUCT.md` and `SECURITY.md` (a
+private vulnerability-reporting channel) are still missing — needed before the first public
+release, tracked in §1.
 
-**Ownership & context — the author's call, not an engineering one.** If kndo is written on
-personal time under a personal account, the pre-first-release checklist is: confirm the
-employment agreement's IP/invention-assignment clause doesn't reach a personal OSS project (get
-it in writing if the text is ambiguous), and keep the separation clean and demonstrable (personal
-account, personal time, no commits routed through employer infrastructure). If the situation is
-different, this section doesn't apply and should say what does. Either way this blocks the
-*first public release*, not the engineering in the rest of this RFC — nothing below depends on
-the answer.
+**Ownership & context — still open, the author's call, not an engineering one.** If kndo is
+written on personal time under a personal account, the pre-first-release checklist is: confirm
+the employment agreement's IP/invention-assignment clause doesn't reach a personal OSS project
+(get it in writing if the text is ambiguous), and keep the separation clean and demonstrable
+(personal account, personal time, no commits routed through employer infrastructure). If the
+situation is different, this section doesn't apply and should say what does. Either way this
+blocks the *first public release*, not the engineering in the rest of this RFC — nothing below
+depends on the answer.
+
+**Also noticed while touching this file, unrelated to licensing:** `Cargo.toml`'s `repository`
+field already points at `https://github.com/eulke/kndo` (the ADR 0007-recommended future name),
+but `git remote -v` shows the repo is still hosted at `eulke/kondo` — the rename ADR 0007
+proposed hasn't happened yet. Not touched here (renaming a GitHub repo is an administrative
+action outside this RFC's scope); flagged so it doesn't get missed before the metadata is
+actually published somewhere that link needs to resolve.
 
 ## 1. License & repo governance
 
-Once §0's license question is resolved: `LICENSE` (already Apache-2.0 text — reconcile or swap),
-`NOTICE`, `CONTRIBUTING.md` (already exists), `CODE_OF_CONDUCT.md`, `SECURITY.md` (a private
-vulnerability-reporting channel) present from the first public release. Rejected alternatives,
-same reasoning as the Yunta plan: strong copyleft (unnecessary friction for a tool that runs
-alongside proprietary code) and source-available/BSL-style licenses (undercut the product's own
-pitch — a verifiable audit engine is a harder sell if it can't be freely inspected and run).
+`LICENSE` (Apache-2.0, now matching `Cargo.toml`), `NOTICE` (added), `CONTRIBUTING.md` (already
+existed) present. Still missing, needed before the first public release: `CODE_OF_CONDUCT.md`,
+`SECURITY.md` (a private vulnerability-reporting channel). Apache-2.0 over the alternatives, same
+reasoning as the Yunta plan: an express patent grant (what corporate legal reviews before
+approving a tool), maximum permissiveness for adoption, and it's the de facto default for Rust
+tooling — versus strong copyleft (unnecessary friction for a tool that runs alongside proprietary
+code) and source-available/BSL-style licenses (undercut the product's own pitch — a verifiable
+audit engine is a harder sell if it can't be freely inspected and run).
 
 ## 2. Distribution channels, in implementation order
 
