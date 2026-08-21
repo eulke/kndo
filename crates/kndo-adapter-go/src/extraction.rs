@@ -29,6 +29,8 @@ const GENERATED_MARKERS: kndo_adapter_toolkit::classify::ContentMarkers =
             suffix: "DO NOT EDIT.",
         }],
         scan_window_lines: 64,
+        // PrefixSuffix never consults comment_openers (self-safe by column-anchoring instead).
+        comment_openers: &[],
     };
 
 pub fn extract(path: &str, content: &[u8]) -> FileFacts {

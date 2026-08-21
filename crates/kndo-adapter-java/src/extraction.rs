@@ -34,6 +34,7 @@ const GENERATED_MARKERS: kndo_adapter_toolkit::classify::ContentMarkers =
             kndo_adapter_toolkit::classify::LineMarker::Contains("DO NOT EDIT"),
         ],
         scan_window_lines: 64,
+        comment_openers: &["//", "/*", "*"],
     };
 
 /// docs/adapters/java.md §2: ternary and `&&`/`||` count as branches same as every other

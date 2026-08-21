@@ -26,6 +26,7 @@ const GENERATED_MARKERS: kndo_adapter_toolkit::classify::ContentMarkers =
             kndo_adapter_toolkit::classify::LineMarker::Contains("DO NOT EDIT"),
         ],
         scan_window_lines: 64,
+        comment_openers: &["//", "/*", "*"],
     };
 
 /// docs/adapters/kotlin.md §2: `when_entry` counts once per arm (matching Java/JS's n-way-
