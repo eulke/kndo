@@ -1,0 +1,20 @@
+[package]
+name = "kndo-adapter-json"
+description = "JSON adapter for kndo (docs/adapters/json.md) — non-source: claims files, extracts no symbols"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+kndo-core = { path = "../kndo-core" }
+smol_str = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+rustc-hash = { workspace = true }
+# Conformance fixtures exercise cross-language claiming end to end (docs/adapters/json.md §1/§6)
+# — this adapter's real value only shows up alongside an importer, and the "manifests are not
+# claimed" guarantee is a JS-TS/JSON cross-adapter concern (§1), not this crate's own.
+kndo-adapter-js = { path = "../kndo-adapter-js" }

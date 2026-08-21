@@ -642,6 +642,7 @@ dependencies = [
  "kndo-adapter-go",
  "kndo-adapter-java",
  "kndo-adapter-js",
+ "kndo-adapter-json",
  "kndo-adapter-kotlin",
  "kndo-adapter-rust",
  "kndo-adapter-swift",
@@ -683,6 +684,17 @@ dependencies = [
  "serde_json",
  "smol_str",
  "tree-sitter",
+]
+
+[[package]]
+name = "kndo-adapter-json"
+version = "0.1.0"
+dependencies = [
+ "kndo-adapter-js",
+ "kndo-core",
+ "rustc-hash",
+ "serde_json",
+ "smol_str",
 ]
 
 [[package]]

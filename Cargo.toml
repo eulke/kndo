@@ -11,6 +11,7 @@ members = [
     "crates/kndo-adapter-java",
     "crates/kndo-adapter-kotlin",
     "crates/kndo-adapter-swift",
+    "crates/kndo-adapter-json",
     "xtask",
 ]
 exclude = ["spikes/perf"]

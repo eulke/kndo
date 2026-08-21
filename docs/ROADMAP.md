@@ -480,6 +480,54 @@ method requirement is its own node kind, `protocol_function_declaration` (no bod
 all), not `function_declaration` — missed on the first pass, caught immediately by the
 `declarations_cover_the_type_zoo` conformance-style unit test.
 
+### M5 progress — JSON adapter ✅ (landed 2026-08-21)
+
+`kndo-adapter-json` per docs/adapters/json.md: RFC 0002 §3's "non-source language" — no
+declarations, no imports, no references, no roots, no visibility ladder, no manifest of its
+own. The smallest adapter yet, both in code and in what it needed to get right, since its
+entire value is one sentence from the RFC: "JSON participates as import targets so file-level
+`unused` findings cover config/data files." Confirmed by tracing the actual resolution code
+rather than assuming: a JSON import already resolves to a real graph edge with zero JSON
+adapter in existence (`ResolveCtx`'s known-files index is built from every *discovered* file,
+claimed or not), so resolution was never the gap. Every analysis in `kndo-core/src/analysis/`
+opens with `let Some(class) = file.class else { continue; }` — an orphaned `.json` config file
+was structurally *invisible* to `unused`, not merely reachable, because nothing ever gave it a
+`FileClass`. Claiming is the entire fix.
+
+That framing also settled two things the RFC's own prose left ambiguous: `resolve()` turned out
+to be genuinely unreachable in normal operation, not just trivial — `graph.rs`'s `resolve_file`
+only ever calls the *claiming* adapter's own `resolve()` over *that file's own* `facts.imports`,
+never a fan-out to every registered adapter the trait doc comment's wording suggests. Since
+JSON's `extract()` never populates `imports` (JSON has no import syntax), its `resolve()` is
+dead code that exists only to satisfy the trait — worth recording as the mechanical
+confirmation of how cross-language target resolution actually works (the *importing* language's
+own resolver finds the target file directly, e.g. JS-TS's `resolve_relative` matching `.json`
+paths against the discovered-file index itself), since this is the first adapter where the
+distinction is observable.
+
+The one piece of real design work was `claim()`'s cross-adapter exclusion list: `package.json`
+is genuinely, unambiguously JSON syntax, so `**/*.json` would otherwise double-claim JS-TS's
+own manifest — a different shape of the "manifests are not claimed" bug from Swift's
+`Package.swift` (same adapter claiming its own manifest as source) since here it's a *different*
+adapter's manifest a generic glob would swallow. `tsconfig.json` is excluded pre-emptively too,
+per RFC 0002 §3 naming it as JS-TS's eventual manifest even though JS-TS hasn't implemented
+`tsconfig.json` parsing yet — confirmed by checking `kndo-adapter-js`'s own manifest_globs and
+resolution.rs doc comments directly rather than assuming the RFC prose was current. No tree-
+sitter grammar (ADR 0002's explicit escape hatch): `serde_json` validates in one call, with
+nothing else worth walking a syntax tree for. Two conformance fixtures, run with `JsonAdapter`
+*and* `JsTsAdapter` together — the first genuinely mixed-language fixture in the corpus, since
+a JSON-only fixture could never demonstrate the cross-language claim this adapter exists for.
+
+**Effect on kndo's own dogfood**: two `.json` files newly become claimed, hence newly visible
+to `unused` — `docs/perf-baseline.json` and `schemas/*.json`, both reached only through a Rust
+`PathBuf::join("...")` call at runtime (`xtask`/`kndo`'s own test suite), invisible to static
+analysis by construction (RFC 0002 §5). Real pre-existing debt, now visible, same as the
+Kotlin session's own `comment_openers` self-reference fix — not something this adapter set out
+to remediate, and (confirmed while investigating) not something `kndo.toml`'s documented
+`[[rule]]` path-override mechanism can silence yet either, since no parser for it exists
+(docs/adapters/json.md §2). Left as-is rather than papering over with a change that does
+nothing.
+
 **Exit:** all eight launch languages pass conformance; a third-party demo adapter (not in-tree)
 runs against the released binary; budget still holds with all adapters active.
 
