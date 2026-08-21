@@ -49,9 +49,11 @@ function, and the whole file under a `#![cfg(test)]` inner attribute. Items *ins
 recorded region add nothing (the outermost extent covers them). The file's claimed role does
 not flip; consumers act at span granularity:
 
-- declarations inside `#[cfg(test)]` context become in-source **test roots** (§2) —
-  reachability colors from there, and the core exempts test-rooted symbols from
-  `test-only`/`untested` (a test reachable only from tests is a test);
+- declarations inside a region become in-source **test roots, derived by assembly** from
+  span containment (contracts §2 — the spans are the *single* producer-side declaration;
+  extraction emits no per-declaration Test roots, so the two representations cannot drift).
+  Reachability colors from those derived seeds, and the core exempts test-rooted symbols
+  from `test-only`/`untested` (a test reachable only from tests is a test);
 - `crap` and health's symbol tallies **skip** region-contained symbols — the exact exemption
   test files get (a gnarly test helper is not untested production code); `duplicate`
   deliberately does *not* skip them — it fingerprints test files too, so inline test clones
@@ -137,7 +139,7 @@ segment paths. All `use` edges are `certain` — Rust has no bundler ambiguity.
 | `name!(…)` invocation | a `certain` reference to `name` (keeps `macro_rules!` alive), plus a scan of the token tree: `a::b` token runs are reconstructed and routed through the body-path rule — `print!("{}", render::render_query(x))` binds `render_query` through the `use`-established qualifier exactly as it would outside the macro — and lone identifier tokens stay plain reads (`format!("{}", user)` keeps `user`'s referents alive). String literals inside token trees are scanned for Rust 2021 **inline format captures**: `format!("v{VERSION}")` reads `VERSION` (`{{` escapes and positional `{}`/`{0}` contribute nothing). **No wildcard per macro** — that would drown every Rust file in `possible` edges |
 | `include!("lit")` / `include_str!` / `include_bytes!` with a literal | `probable` file edge |
 | `#[no_mangle]` / `#[export_name]` / `pub extern "C" fn` | in-source `Production` root at `probable` — an FFI consumer exists outside the graph |
-| `#[test]` / `#[bench]` | in-source `Test` root at `certain` — the runner is the consumer |
+| `#[test]` / `#[bench]` | a recorded test region (§1) — assembly derives the `certain` `Test` root from span containment; extraction emits no root of its own |
 | `#[cfg(…)]` | **both branches kept**, always: kndo analyzes the source, not one compilation; over-approximating alive is the safe direction. Two cfg-gated same-name items collapse to last-wins in the symbol table (documented artifact, harmless for liveness) |
 
 **Metrics** (`MetricsSyntax` as data): branches `if_expression`, `match_arm` (n-way match ≈

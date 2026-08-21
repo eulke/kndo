@@ -1387,6 +1387,24 @@ fn emit_file_declarations(
             owner: file_id,
         });
 
+        // In-source Test roots, DERIVED (contracts §2): a declaration inside a test region
+        // (`FileFacts::test_spans`) is test infrastructure — `#[test]` fns and everything in
+        // a `#[cfg(test)]` module alike. The spans are the single producer-side declaration;
+        // adapters never emit these roots themselves, so the two representations cannot
+        // drift. Certain: the gate is declared in source, the runner is the consumer.
+        if span_in_test_region(&facts.test_spans, decl.span) {
+            edges.push(Edge {
+                kind: EdgeKind::Root {
+                    kind: crate::vocab::RootKind::Test,
+                    target: NodeRef::Symbol(symbol_id),
+                },
+                confidence: Confidence::Certain,
+                source: provenance(),
+                span: Some(decl.span),
+                owner: file_id,
+            });
+        }
+
         // Library-mode promotion (RFC 0011 §5): this file is a manifest-declared production
         // root and this symbol is exported from it, so it's part of the package's public
         // API — a production root in its own right, not just "alive because the file is."
@@ -1613,7 +1631,7 @@ pub(crate) fn package_owns(manifest_dir: &str, file_dir: &str) -> bool {
 /// an assembly-algorithm change that could produce a different graph from the same facts. Feeds
 /// [`compute_graph_key`] (RFC 0004 §3's "core graph-schema version"); a bump here invalidates
 /// every project's cached `graph.bin` on the next run, same as any other key-input change.
-pub const GRAPH_SCHEMA_VERSION: u32 = 13; // 13: FileNode.test_spans + phase 2.55 test-gated module demotion (sub-file test regions); 12: library-surface fixpoint (phase 2.7 — same inputs now assemble surface Root edges, prior snapshots are semantically stale); 11: PackageNode.workspace_entry (RFC 0013 §4); 10: patch layer (RFC 0013 §4 — Edge.owner, FilePatchMeta, extraction-only stored diagnostics); 9: SymbolMetrics.token_count (RFC 0005 §11); 8: function_metrics (RFC 0005 §6); 7: cycle policies (§8); 6: PackageNode surface (RFC 0011 §4); 5: ladders + FileNode.unit (RFC 0012 §6); 4: RefKind + signature_span (§5); 3: within (§4)
+pub const GRAPH_SCHEMA_VERSION: u32 = 14; // 14: in-source Test roots derived from test_spans containment (adapters no longer emit them); 13: FileNode.test_spans + phase 2.55 test-gated module demotion (sub-file test regions); 12: library-surface fixpoint (phase 2.7 — same inputs now assemble surface Root edges, prior snapshots are semantically stale); 11: PackageNode.workspace_entry (RFC 0013 §4); 10: patch layer (RFC 0013 §4 — Edge.owner, FilePatchMeta, extraction-only stored diagnostics); 9: SymbolMetrics.token_count (RFC 0005 §11); 8: function_metrics (RFC 0005 §6); 7: cycle policies (§8); 6: PackageNode surface (RFC 0011 §4); 5: ladders + FileNode.unit (RFC 0012 §6); 4: RefKind + signature_span (§5); 3: within (§4)
 
 /// The graph snapshot's cache key (RFC 0004 §3, `cache.rs`'s `graph.bin`): a single digest
 /// folding in the *whole* discovered file set (every path + content hash — this already
@@ -2822,6 +2840,24 @@ mod tests {
                         opaque_namespace_use: false,
                         local_alias: Some(SmolStr::new(spec.rsplit('/').next().unwrap_or(spec))),
                     });
+                } else if let Some(rest) = line.strip_prefix("decl-at ") {
+                    // `decl-at <line> <name>` — an exported declaration spanning that line
+                    // (for test-region containment: derived Test roots, crap/health skips).
+                    let mut parts = rest.splitn(2, ' ');
+                    let line_no: u32 = parts.next().and_then(|s| s.parse().ok()).unwrap_or(0);
+                    let name = parts.next().unwrap_or("");
+                    facts.declarations.push(Declaration {
+                        name: SmolStr::new(name),
+                        kind: SymbolKind::Function,
+                        span: Span {
+                            start: (line_no, 1),
+                            end: (line_no, 50),
+                        },
+                        exported: true,
+                        visibility: VisibilityLevel(1),
+                        member_of: None,
+                        signature_span: None,
+                    });
                 } else if let Some(rest) = line.strip_prefix("import-at ") {
                     // `import-at <line> <specifier>` — a plain import sited at a line (for
                     // dependency-hygiene's test-region site role).
@@ -3418,6 +3454,46 @@ mod tests {
             .position(|f| f.path.0 == "child.mock")
             .unwrap();
         assert_eq!(graph.files[child].class.unwrap().role, FileRole::Production);
+    }
+
+    #[test]
+    fn declarations_inside_test_regions_get_derived_test_roots() {
+        // The single-producer contract (contracts §2): adapters declare only the spans;
+        // assembly derives the in-source Test roots by containment. A declaration outside
+        // every region gets none.
+        let dir = project(
+            "derived-test-roots",
+            &[(
+                "a.mock",
+                "decl-at 2 prod_fn\ntest-region 5 9\ndecl-at 6 test_helper",
+            )],
+        );
+        let (graph, _) = assemble(&dir, &mock_adapters()).unwrap();
+        let sym = |name: &str| {
+            SymbolId(
+                graph
+                    .symbols
+                    .iter()
+                    .position(|s| s.name.as_str() == name)
+                    .unwrap() as u32,
+            )
+        };
+        let test_rooted = |s: SymbolId| {
+            graph.edges.iter().any(|e| {
+                matches!(
+                    e.kind,
+                    EdgeKind::Root {
+                        kind: RootKind::Test,
+                        target: NodeRef::Symbol(t),
+                    } if t == s
+                )
+            })
+        };
+        assert!(
+            test_rooted(sym("test_helper")),
+            "span-contained declaration derives a Certain Test root"
+        );
+        assert!(!test_rooted(sym("prod_fn")));
     }
 
     #[test]

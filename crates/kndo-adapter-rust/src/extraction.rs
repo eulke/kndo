@@ -485,20 +485,10 @@ fn handle_item(item: Node, src: &[u8], ctx: &Ctx<'_>, pending: PendingAttrs, out
     // root, so reachability colors it (and everything only it reaches) test-side, and the
     // core's root-exemption keeps it out of `test-only`/`untested` findings (spec §1: the
     // inline analogue of Go's `_test.go` role).
-    if ctx.in_cfg_test {
-        for d in decls_before..out.declarations.len() {
-            let decl = &out.declarations[d];
-            let qualified = match &decl.member_of {
-                Some(owner) => format!("{owner}.{}", decl.name),
-                None => decl.name.to_string(),
-            };
-            out.roots.push(RawRoot {
-                kind: RootKind::Test,
-                target: RawRootTarget::Declaration(SmolStr::new(qualified)),
-                confidence: Confidence::Certain,
-            });
-        }
-    }
+    // No per-declaration Test rooting here: `test_spans` (recorded by `walk_items`) is the
+    // single producer-side declaration of test regions, and assembly derives the in-source
+    // Test roots for span-contained declarations (contracts §2) — one fact, one emitter.
+    let _ = decls_before;
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -551,13 +541,8 @@ fn handle_function(
     };
     push_declaration(out, name, kind, item, signature_span, owner, vis);
 
-    if pending.test || pending.bench {
-        out.roots.push(RawRoot {
-            kind: RootKind::Test,
-            target: RawRootTarget::Declaration(SmolStr::new(&qualified)),
-            confidence: Confidence::Certain,
-        });
-    }
+    // `#[test]`/`#[bench]` fns emit no root here: their extent is already a recorded test
+    // region (`walk_items`), and assembly derives the Test root from span containment.
     // Top-level `fn main`: the bin entry point (same unconditional stance as Go's main/init —
     // Probable because only bin targets actually run it; a library's stray `main` over-lives,
     // the safe direction).
@@ -1689,8 +1674,14 @@ mod tests {
         assert_eq!(f.test_spans[0].start.0, 1);
         assert!(f.test_spans[0].end.0 >= 2);
         assert!(
-            f.roots.iter().any(|r| matches!(r.kind, RootKind::Test)),
-            "whole-file test context roots the declarations as test"
+            !f.roots.iter().any(|r| matches!(r.kind, RootKind::Test)),
+            "the span is the only producer-side declaration — assembly derives the roots"
+        );
+        assert!(
+            f.declarations.iter().any(|d| d.name == "helper"
+                && f.test_spans[0].start <= d.span.start
+                && d.span.end <= f.test_spans[0].end),
+            "the declaration lies inside the region assembly will derive from"
         );
     }
 
@@ -1844,18 +1835,21 @@ mod tests {
     }
 
     #[test]
-    fn test_attribute_roots_the_function_and_ffi_roots_production() {
+    fn test_attribute_records_a_region_and_ffi_roots_production() {
         let f = facts(
             "#[test]\nfn a_test() {}\n\
              #[no_mangle]\npub extern \"C\" fn ffi_entry() {}\n\
              fn plain() {}\n",
         );
-        let test_root = f
-            .roots
+        // `#[test]` emits no root of its own (assembly derives it from the region); the fn
+        // and its attribute must lie inside a recorded test span.
+        assert!(!f.roots.iter().any(|r| r.kind == RootKind::Test));
+        let a_test = f.declarations.iter().find(|d| d.name == "a_test").unwrap();
+        assert!(f
+            .test_spans
             .iter()
-            .find(|r| r.kind == RootKind::Test)
-            .expect("#[test] roots");
-        assert!(matches!(&test_root.target, RawRootTarget::Declaration(n) if n == "a_test"));
+            .any(|s| s.start.0 == 1 && s.start <= a_test.span.start && a_test.span.end <= s.end));
+        // FFI exports still root as production directly — no region is involved.
         let ffi_root = f
             .roots
             .iter()
