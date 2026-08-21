@@ -228,9 +228,13 @@ against the project root *before* the plugin joins composition at all:
 
 - `file-exists(glob)` — at least one file under the project root matches (`glob` crate
   semantics, evaluated once at `kndo::open` time, not per-analysis-run).
-- `manifest-dependency(name)` — the project root's own `package.json`/`Cargo.toml` declares a
-  dependency by this name in any dependency section (Cargo's `-`/`_` interchangeability is
-  honored; no recursive workspace-member search yet — a stated v1 gap).
+- `manifest-dependency(name)` — any `package.json`/`Cargo.toml` under the project root declares
+  a dependency by this name in any dependency section, not just the root's own
+  (`kndo_core::discovery::find_files_named` — the same gitignore-aware walker `discover` itself
+  uses, so `node_modules` etc. are excluded exactly like everywhere else in the product; Cargo's
+  `-`/`_` interchangeability is honored). Root-only would have made every monorepo package a
+  false negative for a dependency only *it* declares — not an acceptable v1 cut, since kndo's
+  monorepo awareness is a first-class feature everywhere else (RFC 0012 §8/§10).
 
 Any single matching rule activates the plugin; an **empty** `activation` list never
 self-activates from the global directory (silence over a guess, the zero-false-positive

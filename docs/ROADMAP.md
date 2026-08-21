@@ -811,20 +811,27 @@ already the opt-in.
 
 The zero-false-positive-standard call: an *empty* `activation` list means "no known structural
 signal," so a globally installed plugin with none never self-activates — silence over a guess.
-`ManifestDependency` is a real, bounded v1 cut: the project root's own `package.json`/
-`Cargo.toml` only (Cargo's `-`/`_` name interchangeability honored), no recursive
-workspace-member search yet — stated in `wasm-abi.md` §5.5, not silently incomplete.
-`LanguageAdapter` doesn't get `activation` in this pass either (adapters stay project-local-only
-for now) — extending the same mechanism there is a natural, separate follow-up.
+`LanguageAdapter` doesn't get `activation` in this pass (adapters stay project-local-only for
+now) — extending the same mechanism there is a natural, separate follow-up.
+
+**Caught in review, fixed same-day:** the first cut of `ManifestDependency` only read the
+project root's own `package.json`/`Cargo.toml`, called out as a "stated v1 gap." Called out as
+the wrong call instead — a monorepo package the root manifest says nothing about would have been
+a false negative for a dependency only *that* package declares, and kndo's monorepo awareness is
+a first-class feature everywhere else (RFC 0012 §8/§10), not something to special-case away here.
+Fixed by adding `kndo_core::discovery::find_files_named` — reusing `discover`'s own
+gitignore-aware walker rather than a second hand-rolled one that could drift from its exclusion
+rules (`node_modules` skipped because it's gitignored, same as every other analysis) — and
+scanning every matching manifest under the root, not just the root's own.
 
 `examples/kndo-plugin-hooks-demo`'s descriptor now declares a real rule (`FileExists("*.trigger"
 )`), and `kndo/tests/global_plugin_activation.rs` proves the whole path end to end: one
 `#[test]` (env vars are process-wide, so both scenarios have to run sequentially in one test,
 not two) opens two temp projects against the *same* globally installed component — one without
 a `*.trigger` file (plugin must stay inactive), one with (plugin must join and rescue the
-symbols its hooks touch) — plus six unit tests for the filter logic itself
-(`crates/kndo/src/lib.rs`'s `activation` module). Full workspace suite and `clippy -D warnings`
-both clean.
+symbols its hooks touch) — plus eight unit tests for the filter logic itself
+(`crates/kndo/src/lib.rs`'s `activation` module, including the monorepo and
+`node_modules`-exclusion cases). Full workspace suite and `clippy -D warnings` both clean.
 
 **Still not built:** an install/registry command (`kndo plugin install …`) — landing a file in
 the global directory is still a manual copy; `kndo doctor` visibility into which global

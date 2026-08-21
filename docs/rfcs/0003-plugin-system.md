@@ -96,10 +96,14 @@ prototype a plugin natively and ship it as WASM unchanged.
     composition: any single matching rule activates the plugin for that project; an *empty*
     `activation` list means "no known structural signal," so a globally installed plugin with
     none never self-activates — the zero-false-positive default is silence, not a guess.
-  - v1 scope: `ManifestDependency` only reads the project root's own `package.json`/`Cargo.toml`
-    (no recursive workspace-member search yet); `LanguageAdapter`s don't have an `activation`
-    field yet either, so a globally installed adapter isn't a thing this pass adds — both are
-    stated gaps, not silent ones.
+  - `ManifestDependency` scans every `package.json`/`Cargo.toml` under the project root
+    (`kndo_core::discovery::find_files_named`, the same gitignore-aware walker every other
+    analysis uses — `node_modules` excluded exactly like everywhere else), not just the root's
+    own: a monorepo package the root manifest says nothing about must still activate a plugin
+    it genuinely depends on — kndo's monorepo support isn't a special case anywhere else (RFC
+    0012 §8/§10), so this couldn't be either. `LanguageAdapter`s don't have an `activation`
+    field yet, so a globally installed adapter isn't a thing this pass adds — a stated gap, not
+    a silent one.
   - **Not yet done**: there is no install/registry command (`kndo plugin install …`) — landing a
     file in the global directory is still a manual `cp`, same posture `.kndo/plugins/` itself
     has always had. `kndo doctor` doesn't yet report *which* global candidates were discovered

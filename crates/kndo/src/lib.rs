@@ -204,20 +204,31 @@ mod activation {
         glob::glob(full_pattern).is_ok_and(|mut paths| paths.any(|p| p.is_ok()))
     }
 
-    /// v1 scope (RFC 0003 §4): the project root's own `package.json`/`Cargo.toml` only — no
-    /// recursive workspace-member search yet, an honest, stated gap rather than a silent one.
+    /// Every `package.json`/`Cargo.toml` anywhere under the project root — not just the root's
+    /// own — using kndo-core's own gitignore-aware walker (`node_modules`, `.kndo/`, etc.
+    /// excluded exactly like every other analysis in this product; a second, hand-rolled walker
+    /// here would risk drifting from that). A monorepo where only one package depends on `react`
+    /// must still activate a `react` plugin — restricting this to the root manifest would have
+    /// made every monorepo a false negative, and kndo's monorepo support is not speculative
+    /// (RFC 0012 §8/§10 already resolve per-package topology for real).
     fn manifest_declares(root: &Path, name: &str) -> bool {
-        package_json_declares(root, name) || cargo_toml_declares(root, name)
+        kndo_core::discovery::find_files_named(root, &["package.json", "Cargo.toml"])
+            .into_iter()
+            .any(|path| match path.file_name().and_then(|n| n.to_str()) {
+                Some("package.json") => package_json_declares(&path, name),
+                Some("Cargo.toml") => cargo_toml_declares(&path, name),
+                _ => false,
+            })
     }
 
-    fn package_json_declares(root: &Path, name: &str) -> bool {
+    fn package_json_declares(manifest_path: &Path, name: &str) -> bool {
         const SECTIONS: [&str; 4] = [
             "dependencies",
             "devDependencies",
             "peerDependencies",
             "optionalDependencies",
         ];
-        let Ok(content) = std::fs::read_to_string(root.join("package.json")) else {
+        let Ok(content) = std::fs::read_to_string(manifest_path) else {
             return false;
         };
         let Ok(value) = serde_json::from_str::<serde_json::Value>(&content) else {
@@ -231,9 +242,9 @@ mod activation {
         })
     }
 
-    fn cargo_toml_declares(root: &Path, name: &str) -> bool {
+    fn cargo_toml_declares(manifest_path: &Path, name: &str) -> bool {
         const SECTIONS: [&str; 3] = ["dependencies", "dev-dependencies", "build-dependencies"];
-        let Ok(content) = std::fs::read_to_string(root.join("Cargo.toml")) else {
+        let Ok(content) = std::fs::read_to_string(manifest_path) else {
             return false;
         };
         let Ok(value) = content.parse::<toml::Table>() else {
@@ -312,6 +323,43 @@ mod activation {
         fn manifest_dependency_rule_does_not_match_when_absent() {
             let dir = tempfile::tempdir().unwrap();
             std::fs::write(dir.path().join("package.json"), r#"{"dependencies": {}}"#).unwrap();
+            let rules = vec![ActivationRule::ManifestDependency(SmolStr::new("react"))];
+            assert!(!activates(&rules, dir.path()));
+        }
+
+        #[test]
+        fn manifest_dependency_rule_matches_a_nested_monorepo_package() {
+            // A root manifest that itself declares nothing must not shadow a real dependency
+            // three levels down — restricting this to the root only would make every monorepo
+            // a false negative, and kndo's monorepo support isn't speculative anywhere else.
+            let dir = tempfile::tempdir().unwrap();
+            std::fs::write(dir.path().join("package.json"), r#"{"dependencies": {}}"#).unwrap();
+            let web_pkg = dir.path().join("packages").join("web");
+            std::fs::create_dir_all(&web_pkg).unwrap();
+            std::fs::write(
+                web_pkg.join("package.json"),
+                r#"{"dependencies": {"react": "^18.0.0"}}"#,
+            )
+            .unwrap();
+            let rules = vec![ActivationRule::ManifestDependency(SmolStr::new("react"))];
+            assert!(activates(&rules, dir.path()));
+        }
+
+        #[test]
+        fn manifest_dependency_rule_skips_gitignored_packages() {
+            // node_modules is exactly why this reuses discovery's own walker instead of a
+            // fresh one: a transitive dependency's own package.json declaring "react" deep in
+            // node_modules must never activate a plugin the project itself doesn't use.
+            let dir = tempfile::tempdir().unwrap();
+            std::fs::write(dir.path().join(".gitignore"), "node_modules/\n").unwrap();
+            std::fs::write(dir.path().join("package.json"), r#"{"dependencies": {}}"#).unwrap();
+            let nested = dir.path().join("node_modules").join("some-lib");
+            std::fs::create_dir_all(&nested).unwrap();
+            std::fs::write(
+                nested.join("package.json"),
+                r#"{"dependencies": {"react": "^18.0.0"}}"#,
+            )
+            .unwrap();
             let rules = vec![ActivationRule::ManifestDependency(SmolStr::new("react"))];
             assert!(!activates(&rules, dir.path()));
         }

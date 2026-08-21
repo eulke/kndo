@@ -220,6 +220,28 @@ pub fn discover(root: &Path) -> Result<Discovered, DiscoveryError> {
     discover_with_stat(root, None)
 }
 
+/// [`discover`]'s walk (same `.gitignore`/`.ignore`/`.kndo` exclusion), but for callers that
+/// only need to locate a handful of well-known files by name — no content read, no hashing, no
+/// `Discovered`/`StatEntry` bookkeeping. One caller: plugin activation's manifest-dependency
+/// check (RFC 0003 §4) needs every `package.json`/`Cargo.toml` in a monorepo, not just the
+/// root's — a hand-rolled second walker for that would risk drifting from this one's exclusion
+/// rules (skip `node_modules` because it's gitignored, skip `.kndo/`, etc.).
+pub fn find_files_named(root: &Path, names: &[&str]) -> Vec<PathBuf> {
+    ignore::WalkBuilder::new(root)
+        .require_git(false)
+        .filter_entry(|e| e.file_name() != std::ffi::OsStr::new(".kndo"))
+        .build()
+        .filter_map(Result::ok)
+        .filter(|e| e.file_type().is_some_and(|t| t.is_file()))
+        .map(|e| e.into_path())
+        .filter(|p| {
+            p.file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|n| names.contains(&n))
+        })
+        .collect()
+}
+
 /// [`discover`] with an optional stat index: files whose `(mtime, size)` matches an entry
 /// (and predate the index's write time — the racy guard) reuse the recorded hash without
 /// being read. Every returned file carries a fresh [`StatEntry`] for the caller to persist.
