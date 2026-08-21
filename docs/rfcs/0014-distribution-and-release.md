@@ -102,9 +102,21 @@ Each job packages `kndo-<version>-<target>.tar.gz` (`.zip` on Windows) with the 
 `LICENSE`, and `README.md`.
 
 **`release`** (depends on all 5 builds): collects artifacts, computes SHA-256 into
-`checksums.txt`, generates notes, creates the GitHub Release. Notes generation from conventional
-commits is the Yunta plan's mechanism — kndo would need to adopt (or confirm it already follows)
-a commit-message convention for this to apply verbatim; flagged here rather than assumed.
+`checksums.txt`, generates notes via [git-cliff](https://git-cliff.org/) (confirmed: the tool
+Yunta uses for the same job), creates the GitHub Release. git-cliff is driven by a `cliff.toml`
+at the repo root and categorizes commits by type/scope prefix (`feat:`, `fix:`, `docs(scope):`,
+…) into changelog sections — but kndo's own history isn't there yet: of the last 140 commits,
+only 63 (~45%) carry a conventional-commit prefix; the rest are plain descriptive subjects
+(`Add WASM bridge for the Plugin graph-mutation hooks`, `M5: adapter CSS + SCSS …`). Two
+consequences, not one silent assumption:
+
+- Going forward, commits should carry a real `type(scope):` prefix if their subjects are meant
+  to sort into git-cliff's changelog groups — this is a discipline change for the rest of M6 and
+  beyond, not retroactive.
+- `cliff.toml`'s `commit_parsers` needs an explicit catch-all group (typically mapped to
+  "Other" or "Miscellaneous") for the un-prefixed history already in the repo — rewriting past
+  commit messages to force them into the convention is out of scope (rewrites shared history);
+  the config should absorb the mixed reality, not paper over it by assuming a clean log.
 
 **Secondary jobs** (depend on `release`, parallel with each other):
 
