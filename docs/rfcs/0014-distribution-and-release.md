@@ -5,8 +5,7 @@
 **Ships:** M6
 
 Adapted from a working distribution plan drafted for a sibling project (Yunta), reshaped around
-kndo's actual crate layout and the decisions ADR 0006/0007 already made. One section is left
-open on purpose — it's a call only the author can make, not an engineering decision.
+kndo's actual crate layout and the decisions ADR 0006/0007 already made.
 
 ## 0. License: settled — Apache-2.0
 
@@ -21,14 +20,15 @@ exposed) added — both link to `eulke/kondo` (the repo's *current* name, delibe
 `eulke/kndo` ADR 0007 name Cargo.toml already uses: GitHub's post-rename redirect makes the old
 name resolve forever once the rename happens, while the new name 404s until it does).
 
-**Ownership & context — still open, the author's call, not an engineering one.** If kndo is
-written on personal time under a personal account, the pre-first-release checklist is: confirm
-the employment agreement's IP/invention-assignment clause doesn't reach a personal OSS project
-(get it in writing if the text is ambiguous), and keep the separation clean and demonstrable
-(personal account, personal time, no commits routed through employer infrastructure). If the
-situation is different, this section doesn't apply and should say what does. Either way this
-blocks the *first public release*, not the engineering in the rest of this RFC — nothing below
-depends on the answer.
+**Ownership & context — confirmed.** kndo is a personal project: personal account, personal
+device, on the author's own time, intended to go public once finished for anyone to use. That
+settles the separation half of the pre-first-release checklist (personal account, personal time,
+no commits routed through employer infrastructure — already true throughout this repo's
+history). One item stays the author's own to verify, not something confirmed here one way or
+the other: if there's an employment agreement in the picture, its IP/invention-assignment clause
+should be checked against a personal OSS project before the first public release (get it in
+writing if the text is ambiguous). This blocks only the *first public release*, not the
+engineering in the rest of this RFC.
 
 **Also noticed while touching this file, unrelated to licensing:** `Cargo.toml`'s `repository`
 field already points at `https://github.com/eulke/kndo` (the ADR 0007-recommended future name),
