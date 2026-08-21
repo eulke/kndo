@@ -275,3 +275,92 @@ impl Plugin for LcovPlugin {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::adapter::VisibilityLevel;
+    use crate::vocab::{FileOrigin, FileRole, PackageId, SymbolKind};
+
+    fn file(path: &str) -> FileNode {
+        FileNode {
+            path: ProjectPath(SmolStr::new(path)),
+            content_hash: [0; 32],
+            language: Some(SmolStr::new("mock")),
+            class: Some(FileClass {
+                role: FileRole::Production,
+                origin: FileOrigin::Authored,
+            }),
+            package: PackageId(0),
+            unit: None,
+            test_spans: Vec::new(),
+        }
+    }
+
+    fn symbol(file: FileId, name: &str) -> SymbolNode {
+        SymbolNode {
+            file,
+            name: SmolStr::new(name),
+            kind: SymbolKind::Function,
+            span: crate::adapter::Span::default(),
+            exported: true,
+            visibility: VisibilityLevel(0),
+            member_of: None,
+            signature_span: None,
+        }
+    }
+
+    #[test]
+    fn symbols_in_returns_only_that_files_declarations_in_extraction_order() {
+        let files = [file("a.mock"), file("b.mock")];
+        let symbols = [
+            symbol(FileId(0), "aFirst"),
+            symbol(FileId(1), "bOnly"),
+            symbol(FileId(0), "aSecond"),
+        ];
+        let mut file_index = HashMap::default();
+        for (i, f) in files.iter().enumerate() {
+            file_index.insert(f.path.clone(), FileId(i as u32));
+        }
+
+        let view = GraphView::new(&files, &symbols, &file_index);
+
+        let a_names: Vec<&str> = view
+            .symbols_in(&ProjectPath(SmolStr::new("a.mock")))
+            .map(|s| s.name.as_str())
+            .collect();
+        assert_eq!(a_names, vec!["aFirst", "aSecond"]);
+
+        let b_names: Vec<&str> = view
+            .symbols_in(&ProjectPath(SmolStr::new("b.mock")))
+            .map(|s| s.name.as_str())
+            .collect();
+        assert_eq!(b_names, vec!["bOnly"]);
+    }
+
+    #[test]
+    fn symbols_in_is_empty_for_an_unknown_path() {
+        let files = [file("a.mock")];
+        let symbols = [symbol(FileId(0), "aFirst")];
+        let mut file_index = HashMap::default();
+        file_index.insert(files[0].path.clone(), FileId(0));
+
+        let view = GraphView::new(&files, &symbols, &file_index);
+        assert_eq!(
+            view.symbols_in(&ProjectPath(SmolStr::new("nowhere.mock")))
+                .count(),
+            0
+        );
+    }
+
+    #[test]
+    fn files_iterates_every_discovered_file() {
+        let files = [file("a.mock"), file("b.mock")];
+        let symbols: [SymbolNode; 0] = [];
+        let file_index = HashMap::default();
+
+        let view = GraphView::new(&files, &symbols, &file_index);
+        let paths: Vec<&str> = view.files().map(|f| f.path.0.as_str()).collect();
+        assert_eq!(paths, vec!["a.mock", "b.mock"]);
+    }
+}

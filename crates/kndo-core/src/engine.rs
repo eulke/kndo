@@ -1652,6 +1652,31 @@ mod tests {
         );
     }
 
+    #[test]
+    fn doctor_reports_every_registered_plugin() {
+        let dir = std::env::temp_dir().join("kndo-engine-test-doctor-plugins");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let engine = Engine::open_with_plugins(
+            &dir,
+            ConfigOverrides::default(),
+            vec![],
+            vec![Box::new(DemoPlugin)],
+        )
+        .unwrap();
+        let report = engine.doctor();
+        assert_eq!(report.plugins.len(), 1);
+        assert_eq!(report.plugins[0].id, "demo");
+        assert_eq!(report.plugins[0].version, "1");
+
+        // The zero-plugin case must be zero, not the old implicit lcov default — callers who
+        // ask for no plugins get no plugins.
+        let bare =
+            Engine::open_with_plugins(&dir, ConfigOverrides::default(), vec![], vec![]).unwrap();
+        assert!(bare.doctor().plugins.is_empty());
+    }
+
     /// A throwaway git repo for diff-mode tests — local signing disabled for the same reason
     /// `gitutil`'s own test fixtures disable it (this sandbox signs every commit via an
     /// MCP-backed tool unrelated to what's under test, and it occasionally times out).
