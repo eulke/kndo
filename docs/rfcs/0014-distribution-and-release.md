@@ -15,9 +15,11 @@ was the full Apache-2.0 text — a real mismatch that would have shipped false c
 crates.io as-is. Resolved: **Apache-2.0**, confirmed by the author. `Cargo.toml` now matches
 `LICENSE`; `NOTICE` added (`Copyright 2026 The kndo Authors` — the generic "Project Authors"
 phrasing common to Apache-2.0 projects that don't want to hardcode one individual's legal name;
-swap it for a specific holder if that's preferred). `CODE_OF_CONDUCT.md` and `SECURITY.md` (a
-private vulnerability-reporting channel) are still missing — needed before the first public
-release, tracked in §1.
+swap it for a specific holder if that's preferred). `CODE_OF_CONDUCT.md` (Contributor Covenant
+2.1) and `SECURITY.md` (GitHub's private vulnerability-reporting flow, no maintainer email
+exposed) added — both link to `eulke/kondo` (the repo's *current* name, deliberately, not the
+`eulke/kndo` ADR 0007 name Cargo.toml already uses: GitHub's post-rename redirect makes the old
+name resolve forever once the rename happens, while the new name 404s until it does).
 
 **Ownership & context — still open, the author's call, not an engineering one.** If kndo is
 written on personal time under a personal account, the pre-first-release checklist is: confirm
@@ -37,9 +39,8 @@ actually published somewhere that link needs to resolve.
 
 ## 1. License & repo governance
 
-`LICENSE` (Apache-2.0, now matching `Cargo.toml`), `NOTICE` (added), `CONTRIBUTING.md` (already
-existed) present. Still missing, needed before the first public release: `CODE_OF_CONDUCT.md`,
-`SECURITY.md` (a private vulnerability-reporting channel). Apache-2.0 over the alternatives, same
+`LICENSE` (Apache-2.0, now matching `Cargo.toml`), `NOTICE`, `CODE_OF_CONDUCT.md`, `SECURITY.md`,
+and `CONTRIBUTING.md` (already existed) all present. Apache-2.0 over the alternatives, same
 reasoning as the Yunta plan: an express patent grant (what corporate legal reviews before
 approving a tool), maximum permissiveness for adoption, and it's the de facto default for Rust
 tooling — versus strong copyleft (unnecessary friction for a tool that runs alongside proprietary
