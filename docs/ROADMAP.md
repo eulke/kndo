@@ -902,7 +902,14 @@ blanket `mutates_graph` bypass to the incremental-patch path only — snapshot r
 unconditional), and 4 (`suppress` decided cut for lack of a real consumer; both `GraphView`
 widening candidates evaluated and left unbuilt for the same reason; the "shell" build —
 `--no-default-features --features external-adapters,plugin-install` — is now its own CI job
-with a real smoke check, `.github/workflows/ci.yml`'s `shell-build`)), `kndo
+with a real smoke check, `.github/workflows/ci.yml`'s `shell-build`)), **RFC 0017 — plugin
+platform: second pass** (accepted, phased in its §8, ships pre-publication: re-judges RFC
+0016's demand-gated deferrals under the platform criterion — incremental patch with plugins
+via strip & re-run, one WASM guest instance per round, the complete `GraphView` read surface
+(call-site facts, package topology, edge queries, file/symbol details) with the
+express/nextjs route/template edge detections as first consumers, the
+`AdapterDescriptor.dependencies` fixpoint, and the author kit + CI compatibility matrix;
+commits to RFC 0018 (plugin-contributed findings) as a separate design cycle), `kndo
 clean` (guided auto-removal), watch mode / LSP, custom analyses over a stable graph API,
 `kndo serve` exposing the navigation verbs 1:1 as MCP tools (RFC 0007 §7), an arbitrary graph
 query language, deep mode (compiler-grade resolvers), historical trend service, HTML report,
