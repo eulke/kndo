@@ -312,6 +312,8 @@ user's environment — their existing GitHub credential, nothing plugin-specific
 - `examples/kndo-plugin-hooks-demo` — a complete plugin: all four hooks, host-import queries,
   activation rule, empty dependencies. ~110 lines.
 - `examples/kndo-plugin-demo` — a complete adapter for an invented language.
+- `examples/kndo-adapter-wrapper-demo` — a wrapper adapter whose whole point is
+  `dependencies: ["kdemo"]` (RFC 0017 §6): activating it co-activates the adapter it wraps.
 - `crates/kndo-plugin-api/tests/plugin_compliance.rs` — the baseline-then-plugin test shape
   (§8), plus proof that the two ABIs reject each other's components.
 - `crates/kndo/tests/global_plugin_activation.rs` — the global-tier activation test shape,

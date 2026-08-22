@@ -101,7 +101,7 @@ fn a_globally_installed_adapter_only_activates_when_its_rule_matches() {
     let candidates_without = kndo::global_adapter_candidates(project_without.path());
     assert_eq!(candidates_without.len(), 1);
     assert_eq!(candidates_without[0].id, "kdemo");
-    assert!(!candidates_without[0].activated);
+    assert!(candidates_without[0].active.is_none());
     assert!(candidates_without[0]
         .activation
         .iter()
@@ -132,7 +132,10 @@ fn a_globally_installed_adapter_only_activates_when_its_rule_matches() {
     );
     let candidates_with = kndo::global_adapter_candidates(project_with.path());
     assert_eq!(candidates_with.len(), 1);
-    assert!(candidates_with[0].activated);
+    assert_eq!(
+        candidates_with[0].active,
+        Some(kndo::ActivationReason::RuleMatched)
+    );
 
     // RFC 0016 §4's claim-priority rule: project-local > global > compiled-in. Drop a second
     // copy of the same component project-local, in the same project the global one is already

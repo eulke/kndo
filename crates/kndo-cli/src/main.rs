@@ -235,22 +235,35 @@ fn doctor_cmd() -> ExitCode {
         if !a.activation.is_empty() {
             println!("    activation: {}", a.activation.join(", "));
         }
+        if !a.dependencies.is_empty() {
+            println!("    dependencies: {}", a.dependencies.join(", "));
+        }
     }
     // RFC 0016 §4's global adapter tier — every `.wasm` candidate the global directory holds,
     // activated or not, same split `plugin_resolution`'s own section below has (`Engine` never
-    // sees a candidate that didn't activate).
+    // sees a candidate that didn't activate). Reason-aware since RFC 0017 §6: a global adapter
+    // can activate as another component's dependency, not just by its own rules.
+    let adapter_resolution = kndo::adapter_resolution(&cwd);
     let global_adapters = kndo::global_adapter_candidates(&cwd);
     if !global_adapters.is_empty() {
         println!();
         println!("global adapter candidates (RFC 0016 §4, not necessarily active above):");
         for c in &global_adapters {
-            let status = if c.activated { "active" } else { "inactive" };
-            println!("  {} — {status}", c.id);
+            println!("  {} — {}", c.id, activation_status(&c.active));
             if !c.activation.is_empty() {
                 println!("    activation: {}", c.activation.join(", "));
             } else {
                 println!("    activation: (none declared — never self-activates globally)");
             }
+        }
+    }
+    if !adapter_resolution.missing_dependencies.is_empty() {
+        println!();
+        println!(
+            "missing adapter dependencies (RFC 0017 §6 — declared by an active adapter, not present):"
+        );
+        for m in &adapter_resolution.missing_dependencies {
+            println!("  {} — required by {}", m.coordinate, m.required_by);
         }
     }
     println!();
@@ -286,15 +299,12 @@ fn doctor_cmd() -> ExitCode {
         println!();
         println!("global plugin candidates (RFC 0003 §4, not necessarily active above):");
         for c in &global_candidates {
-            let status = match &c.active {
-                Some(kndo::ActivationReason::RuleMatched) => "active (rule matched)".to_string(),
-                Some(kndo::ActivationReason::ImpliedBy(by)) => {
-                    format!("active (dependency of {by})")
-                }
-                Some(_) => "active".to_string(),
-                None => "inactive".to_string(),
-            };
-            println!("  {} v{} — {status}", c.id, c.version);
+            println!(
+                "  {} v{} — {}",
+                c.id,
+                c.version,
+                activation_status(&c.active)
+            );
             if !c.activation.is_empty() {
                 println!("    activation: {}", c.activation.join(", "));
             } else {
@@ -341,6 +351,17 @@ fn doctor_cmd() -> ExitCode {
     }
 
     ExitCode::SUCCESS
+}
+
+/// One line of doctor status for a global candidate (adapter or plugin — RFC 0017 §6 made the
+/// vocabulary shared): why it's running, or the plain fact that it isn't.
+fn activation_status(active: &Option<kndo::ActivationReason>) -> String {
+    match active {
+        Some(kndo::ActivationReason::RuleMatched) => "active (rule matched)".to_string(),
+        Some(kndo::ActivationReason::ImpliedBy(by)) => format!("active (dependency of {by})"),
+        Some(_) => "active".to_string(),
+        None => "inactive".to_string(),
+    }
 }
 
 /// `kndo plugin install <coordinate>[@tag] | list | remove <coordinate>` (RFC 0015 §4) —

@@ -143,7 +143,13 @@ the project root before it joins composition, reusing the exact `activation::act
 `ActivationRule` machinery §5.5 documents for plugins — `file-exists(glob)`/
 `manifest-dependency(name)`, any single match activates, an empty list never self-activates
 globally. Project-local and compiled-in adapters are unconditional either way, same as their
-plugin-tier counterparts.
+plugin-tier counterparts. Since RFC 0017 §6, `descriptor().dependencies` participates too:
+an *active* adapter (any tier) activates every global candidate it names, transitively —
+the same co-activation fixpoint the plugin tier runs, shared as one generic implementation
+over kind-neutral candidate identities, and reported the same way (`missing_dependencies`
+on `kndo::adapter_resolution`, reason-aware status — "active (dependency of X)" — on each
+global candidate). `examples/kndo-adapter-wrapper-demo` is the reference wrapper adapter
+proving the chain against real components.
 
 **Claim priority.** With project-local, global, and compiled-in adapters all in play for the
 same file extension, composition orders the final `Vec<Box<dyn LanguageAdapter>>` project-local
@@ -422,9 +428,10 @@ through additive imports with new record types — §5.2 above — the same evol
   identically.
 - **`kndo:adapter`'s component-descriptor fields (RFC 0016 §4).** The `adapter-descriptor`
   record gained `activation: list<activation-rule>` (wired and read — §4.1) and
-  `dependencies: list<string>` (rides the wire, unevaluated — mirrors the native
-  `AdapterDescriptor`'s own dormant reservation; no adapter has ever needed cross-adapter
-  activation). No `version` field landed — §4.1's own note explains why one was never needed.
+  `dependencies: list<string>` (initially riding the wire unevaluated; RFC 0017 §6 later
+  gave it RFC 0015 §3's exact co-activation semantics in the global tier, through the same
+  fixpoint plugins use — the wire shape never changed). No `version` field landed — §4.1's
+  own note explains why one was never needed.
   A component built against the pre-§4 world has neither field; the host reads them as empty,
   the same value the dormant reservation always implied.
 

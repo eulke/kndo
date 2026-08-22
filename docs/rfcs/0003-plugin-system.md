@@ -120,10 +120,9 @@ prototype a plugin natively and ship it as WASM unchanged.
     own: a monorepo package the root manifest says nothing about must still activate a plugin
     it genuinely depends on — kndo's monorepo support isn't a special case anywhere else (RFC
     0012 §8/§10), so this couldn't be either. `LanguageAdapter` has the identical `activation`
-    field and identical global-tier gating since RFC 0016 §4 (landed) — a globally installed
-    adapter is filtered through it exactly like a plugin, with one difference: no
-    `dependencies`-implication fixpoint for adapters (nothing has ever needed cross-adapter
-    activation; the field rides the wire dormant, same posture as its native reservation).
+    field and identical global-tier gating since RFC 0016 §4 (landed), and since RFC 0017 §6
+    the identical `dependencies`-implication fixpoint too — literally the same code, generified
+    over kind-neutral candidate identities, so the two composition paths cannot drift.
   - `kndo doctor` reports every global candidate — activated or skipped, with the exact rule
     that did or didn't fire (`kndo::global_plugin_candidates`, separate from `Engine::doctor`,
     which only ever sees the final composed set). `kndo plugin install/list/remove` (RFC 0015

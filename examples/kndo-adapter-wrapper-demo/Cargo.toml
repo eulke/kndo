@@ -1,0 +1,16 @@
+[package]
+name = "kndo-adapter-wrapper-demo"
+description = "Reference wrapper adapter for kndo-plugin-api v1 — an external adapter whose descriptor declares `dependencies: [\"kdemo\"]`, proving RFC 0017 §6's adapter co-activation fixpoint with real components: when this adapter's own activation rule fires, the globally installed kdemo adapter activates by implication even though kdemo's own rule never matched. Not shipped with kndo (excluded from the workspace, docs/contracts/wasm-abi.md §4) — built and loaded as an external component by crates/kndo's adapter-dependency integration test."
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.57"
+
+[profile.release]
+opt-level = "s"
+lto = true

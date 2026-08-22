@@ -98,10 +98,11 @@ The concrete closure of RFC 0003 §4's stated gap.
    variant plus `activation`/`dependencies` fields on `adapter.wit`'s `adapter-descriptor`
    (duplicated from `plugin.wit`'s own type, same cross-package-independence reasoning that
    module already documents), read by the host bridge (`host.rs`'s `native_descriptor`).
-   `dependencies` rides the wire but stays unevaluated — no adapter has ever needed cross-adapter
-   implication, and wiring a fixpoint nothing exercises would be exactly the speculative
-   machinery this project's standing rules reject; the dormant reservation from §8 phase 0
-   covers it either way. Semantics mirror plugins exactly: compiled-in and project-local
+   `dependencies` rode the wire unevaluated at this phase's landing — no adapter had needed
+   cross-adapter implication yet, and wiring a fixpoint nothing exercised would have been
+   exactly the speculative machinery this project's standing rules reject. (RFC 0017 §6 later
+   evaluated it, under the platform criterion, with the plugin tier's own fixpoint made
+   kind-neutral.) Semantics mirror plugins exactly: compiled-in and project-local
    adapters are unconditional regardless of `activation` (their file-extension claims already
    scope the cost — an adapter claiming `.go` files is dormant in a Go-less repo); a
    **globally installed** adapter requires a matching rule to join composition, empty rules

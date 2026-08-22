@@ -305,7 +305,24 @@ nothing here precludes it.
    Proven by `GraphView` unit tests (R1 included), JS extraction tests, and the compliance
    suite's `linked_`/`sited_` guest round trips. See the §5 landing note for the one honest
    deviation (the moot route/template detections).
-4. **Adapter dependencies (§6)**.
+4. **Adapter dependencies (§6) — Landed.** The fixpoint is literally shared, not mirrored:
+   `compose_plugins`'s implication machinery was generified over a kind-neutral
+   `CandidateIdentity { id, dependencies }` (`crates/kndo/src/lib.rs`'s `activation` module)
+   and `compose_adapters` now seeds all three tiers with `Option<ActivationReason>`
+   (project-local → `ProjectLocal`, compiled-in → `BuiltinAlwaysOn` — both unconditional,
+   activation only ever gates the global tier for adapters — global → its own rules), runs
+   the same `imply_fixpoint`/`collect_missing`, and filters the composed global set by the
+   post-fixpoint state. `ResolvedAdapter` carries `dependencies` +
+   `active: Option<ActivationReason>`, `AdapterResolution`/`GlobalAdapterCandidate` and the
+   engine's `DoctorAdapterInfo` gained the §6-promised fields, and `kndo doctor` renders
+   adapter dependencies, missing adapter dependencies, and reason-aware candidate status
+   ("active (dependency of X)") through one status helper shared with the plugin sections.
+   Co-installation needed zero code: the install worklist always recursed over
+   `ProbedDescriptor.dependencies`, which `probe_as_adapter` fills identically to
+   `probe_as_plugin`. Proven against real components by
+   `examples/kndo-adapter-wrapper-demo` (`id: "kwrap"`, `dependencies: ["kdemo"]`) in
+   `crates/kndo/tests/adapter_dependency_implication.rs`: with only the wrapper's marker
+   present, kdemo joins composition as `ImpliedBy("kwrap")` and its analysis genuinely fires.
 5. **Author kit + compat matrix (§7)**.
 
 ## 9. Explicitly out of scope

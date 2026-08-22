@@ -205,6 +205,10 @@ pub struct DoctorAdapterInfo {
     /// gates a *globally installed* adapter (`kndo::global_adapter_candidates`, a separate
     /// call this report has no visibility into, same split `DoctorPluginInfo`'s own doc notes).
     pub activation: Vec<String>,
+    /// RFC 0017 §6 coordinates — same contract as [`DoctorPluginInfo::dependencies`]: rendered
+    /// so an activation chain is inspectable; whether each one was satisfied is the composition
+    /// layer's report (`kndo::adapter_resolution`), not this struct's.
+    pub dependencies: Vec<String>,
 }
 
 /// `kndo doctor`'s cache section — `None` when the cache is disabled entirely
@@ -667,6 +671,7 @@ impl Engine {
                     file_globs: d.file_globs.iter().map(|g| g.to_string()).collect(),
                     manifest_globs: d.manifest_globs.iter().map(|g| g.to_string()).collect(),
                     activation: d.activation.iter().map(|r| r.describe()).collect(),
+                    dependencies: d.dependencies.iter().map(|c| c.to_string()).collect(),
                 }
             })
             .collect();

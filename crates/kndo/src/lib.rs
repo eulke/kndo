@@ -265,24 +265,27 @@ pub enum AdapterSource {
 }
 
 /// One adapter the composition layer considered, active or not — the doctor-visible half of
-/// RFC 0016 §4, matching [`ResolvedPlugin`]'s shape. Unlike plugins, there is no
-/// `dependencies`-implication fixpoint here (out of this phase's scope — no adapter has ever
-/// declared one, and `AdapterDescriptor.dependencies` stays the dormant reservation RFC 0016
-/// §8 phase 0 added); `active: false` means only "this global candidate's own rule didn't
-/// match."
+/// RFC 0016 §4, matching [`ResolvedPlugin`]'s shape field for field since RFC 0017 §6 landed
+/// the adapter-side `dependencies` fixpoint (the wrapper-adapter case: a `.vue`-style
+/// superset language whose own extraction degrades without its base language's adapter
+/// present). `active: None` means "present but inactive" — a global candidate whose rules
+/// didn't fire and that nothing active depends on.
 #[derive(Debug, Clone)]
 pub struct ResolvedAdapter {
     pub id: String,
     pub source: AdapterSource,
     pub activation: Vec<String>,
-    pub active: bool,
+    pub dependencies: Vec<String>,
+    pub active: Option<ActivationReason>,
 }
 
-/// The full outcome of adapter composition for a project (RFC 0016 §4) — what [`open`]
-/// registered, in claim-priority order, plus every global candidate that didn't activate.
+/// The full outcome of adapter composition for a project (RFC 0016 §4, RFC 0017 §6) — what
+/// [`open`] registered, in claim-priority order, plus every global candidate that didn't
+/// activate, plus every coordinate an active adapter depends on that nothing present carries.
 #[derive(Debug, Clone, Default)]
 pub struct AdapterResolution {
     pub adapters: Vec<ResolvedAdapter>,
+    pub missing_dependencies: Vec<MissingDependency>,
 }
 
 /// [`compose_adapters`]'s report half, for frontends (`kndo doctor`) — mirrors
@@ -309,39 +312,71 @@ fn compose_adapters(root: &Path) -> (Vec<Box<dyn LanguageAdapter>>, AdapterResol
             .map(|dir| load_wasm_adapters(&dir))
             .unwrap_or_default();
         sort_by_id(&mut global_all);
-        let (global_active, global_resolved): (Vec<_>, Vec<_>) = global_all
-            .into_iter()
-            .map(|adapter| {
-                let d = adapter.descriptor();
-                let active = activation::activates(&d.activation, root);
-                let resolved = ResolvedAdapter {
-                    id: d.id.to_string(),
-                    source: AdapterSource::Global,
-                    activation: d.activation.iter().map(|r| r.describe()).collect(),
-                    active,
-                };
-                (active.then_some(adapter), resolved)
-            })
-            .unzip();
-        let global_active: Vec<_> = global_active.into_iter().flatten().collect();
-
         let builtins = default_adapters();
-        let mut resolved: Vec<ResolvedAdapter> = project_local
+
+        // Candidates in claim-priority order, then RFC 0017 §6's activation resolution: seed
+        // each tier (project-local unconditional; global by its own rules; compiled-in
+        // unconditional — a language adapter must run, `activation` only ever gates the
+        // global tier), close over `dependencies` implication with the SAME fixpoint the
+        // plugin side uses (`activation::imply_fixpoint` over kind-neutral identities), and
+        // collect what active adapters require that nothing present provides.
+        let descriptors: Vec<kndo_core::adapter::AdapterDescriptor> = project_local
             .iter()
-            .map(|a| resolved_adapter(&a.descriptor(), AdapterSource::ProjectLocal, true))
+            .map(|a| a.descriptor())
+            .chain(global_all.iter().map(|a| a.descriptor()))
+            .chain(builtins.iter().map(|a| a.descriptor()))
             .collect();
-        resolved.extend(global_resolved);
-        resolved.extend(
-            builtins
-                .iter()
-                .map(|a| resolved_adapter(&a.descriptor(), AdapterSource::Builtin, true)),
-        );
+        let sources: Vec<AdapterSource> =
+            std::iter::repeat_n(AdapterSource::ProjectLocal, project_local.len())
+                .chain(std::iter::repeat_n(AdapterSource::Global, global_all.len()))
+                .chain(std::iter::repeat_n(AdapterSource::Builtin, builtins.len()))
+                .collect();
+        let identities: Vec<activation::CandidateIdentity> = descriptors
+            .iter()
+            .map(|d| activation::CandidateIdentity {
+                id: d.id.to_string(),
+                dependencies: d.dependencies.iter().map(|c| c.to_string()).collect(),
+            })
+            .collect();
+        let mut active: Vec<Option<ActivationReason>> = descriptors
+            .iter()
+            .zip(&sources)
+            .map(|(d, source)| match source {
+                AdapterSource::ProjectLocal => Some(ActivationReason::ProjectLocal),
+                AdapterSource::Builtin => Some(ActivationReason::BuiltinAlwaysOn),
+                AdapterSource::Global => activation::activates(&d.activation, root)
+                    .then_some(ActivationReason::RuleMatched),
+            })
+            .collect();
+        activation::imply_fixpoint(&identities, &mut active);
+        let missing_dependencies = activation::collect_missing(&identities, &active);
+
+        let resolved: Vec<ResolvedAdapter> = descriptors
+            .iter()
+            .zip(&sources)
+            .zip(&active)
+            .map(|((d, source), reason)| resolved_adapter(d, *source, reason.clone()))
+            .collect();
+
+        // Global-tier reasons sit right after the project-local ones in `active`; `zip`
+        // stops at the global adapters, before the builtin tail.
+        let global_active: Vec<_> = global_all
+            .into_iter()
+            .zip(&active[project_local.len()..])
+            .filter_map(|(adapter, reason)| reason.as_ref().map(|_| adapter))
+            .collect();
 
         let mut adapters: Vec<Box<dyn LanguageAdapter>> = Vec::new();
         adapters.extend(boxed(project_local));
         adapters.extend(boxed(global_active));
         adapters.extend(builtins);
-        (adapters, AdapterResolution { adapters: resolved })
+        (
+            adapters,
+            AdapterResolution {
+                adapters: resolved,
+                missing_dependencies,
+            },
+        )
     }
     #[cfg(not(feature = "external-adapters"))]
     {
@@ -349,21 +384,34 @@ fn compose_adapters(root: &Path) -> (Vec<Box<dyn LanguageAdapter>>, AdapterResol
         let adapters = default_adapters();
         let resolved = adapters
             .iter()
-            .map(|a| resolved_adapter(&a.descriptor(), AdapterSource::Builtin, true))
+            .map(|a| {
+                resolved_adapter(
+                    &a.descriptor(),
+                    AdapterSource::Builtin,
+                    Some(ActivationReason::BuiltinAlwaysOn),
+                )
+            })
             .collect();
-        (adapters, AdapterResolution { adapters: resolved })
+        (
+            adapters,
+            AdapterResolution {
+                adapters: resolved,
+                missing_dependencies: Vec::new(),
+            },
+        )
     }
 }
 
 fn resolved_adapter(
     d: &kndo_core::adapter::AdapterDescriptor,
     source: AdapterSource,
-    active: bool,
+    active: Option<ActivationReason>,
 ) -> ResolvedAdapter {
     ResolvedAdapter {
         id: d.id.to_string(),
         source,
         activation: d.activation.iter().map(|r| r.describe()).collect(),
+        dependencies: d.dependencies.iter().map(|c| c.to_string()).collect(),
         active,
     }
 }
@@ -393,11 +441,13 @@ fn load_wasm_adapters(dir: &Path) -> Vec<kndo_plugin_api::WasmAdapter> {
 }
 
 /// One globally installed [`LanguageAdapter`] candidate, as `kndo doctor` reports it — mirrors
-/// [`GlobalPluginCandidate`].
+/// [`GlobalPluginCandidate`], but carries the full [`ActivationReason`] (RFC 0017 §6): a global
+/// adapter can now activate via another component's `dependencies`, and "active (dependency of
+/// X)" is exactly the fact a rule-only bool would erase.
 pub struct GlobalAdapterCandidate {
     pub id: String,
     pub activation: Vec<String>,
-    pub activated: bool,
+    pub active: Option<ActivationReason>,
 }
 
 /// Every `.wasm` `LanguageAdapter` found in the global directory for `root`, activated or not —
@@ -410,7 +460,7 @@ pub fn global_adapter_candidates(root: &Path) -> Vec<GlobalAdapterCandidate> {
         .map(|a| GlobalAdapterCandidate {
             id: a.id,
             activation: a.activation,
-            activated: a.active,
+            active: a.active,
         })
         .collect()
 }
@@ -520,10 +570,26 @@ mod activation {
         Vec<Option<crate::ActivationReason>>,
         Vec<crate::MissingDependency>,
     ) {
+        let identities: Vec<CandidateIdentity> = descriptors
+            .iter()
+            .map(|d| CandidateIdentity {
+                id: d.id.to_string(),
+                dependencies: d.dependencies.iter().map(|c| c.to_string()).collect(),
+            })
+            .collect();
         let mut active = seed(descriptors, sources, root);
-        imply_fixpoint(descriptors, &mut active);
-        let missing = collect_missing(descriptors, &active);
+        imply_fixpoint(&identities, &mut active);
+        let missing = collect_missing(&identities, &active);
         (active, missing)
+    }
+
+    /// The two fields the implication fixpoint and missing-dependency collection actually
+    /// read — kind-neutral on purpose (RFC 0017 §6): `PluginDescriptor` and
+    /// `AdapterDescriptor` both map into it, so plugins and adapters share one fixpoint
+    /// implementation instead of two that could drift.
+    pub(crate) struct CandidateIdentity {
+        pub id: String,
+        pub dependencies: Vec<String>,
     }
 
     fn seed(
@@ -548,8 +614,8 @@ mod activation {
     }
 
     /// Monotone over a finite set, so it terminates on any input, cycles included.
-    fn imply_fixpoint(
-        descriptors: &[kndo_core::plugin::PluginDescriptor],
+    pub(crate) fn imply_fixpoint(
+        descriptors: &[CandidateIdentity],
         active: &mut [Option<crate::ActivationReason>],
     ) {
         let mut changed = true;
@@ -566,7 +632,7 @@ mod activation {
     /// per round rather than incrementally, since the candidate set is tiny (a handful of
     /// plugins, not a dependency universe).
     fn pending_implications(
-        descriptors: &[kndo_core::plugin::PluginDescriptor],
+        descriptors: &[CandidateIdentity],
         active: &[Option<crate::ActivationReason>],
     ) -> Vec<(usize, String)> {
         descriptors
@@ -591,8 +657,8 @@ mod activation {
     /// Coordinates *active* plugins depend on that no present candidate carries as its id —
     /// inactive requirers contribute nothing (their dependencies are moot). Sorted + deduped:
     /// deterministic output regardless of candidate order (RFC 0008 §4).
-    fn collect_missing(
-        descriptors: &[kndo_core::plugin::PluginDescriptor],
+    pub(crate) fn collect_missing(
+        descriptors: &[CandidateIdentity],
         active: &[Option<crate::ActivationReason>],
     ) -> Vec<crate::MissingDependency> {
         let mut missing: Vec<crate::MissingDependency> = descriptors
@@ -604,7 +670,9 @@ mod activation {
                     .iter()
                     .map(move |dep| (d.id.to_string(), dep))
             })
-            .filter(|(_, dep)| !descriptors.iter().any(|other| other.id == **dep))
+            .filter(|(_, dep): &(String, &String)| {
+                !descriptors.iter().any(|other| other.id == **dep)
+            })
             .map(|(required_by, dep)| crate::MissingDependency {
                 required_by,
                 coordinate: dep.to_string(),

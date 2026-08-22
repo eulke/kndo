@@ -18,7 +18,12 @@ members = [
     "crates/kndo-plugin-express",
     "xtask",
 ]
-exclude = ["spikes/perf", "examples/kndo-plugin-demo", "examples/kndo-plugin-hooks-demo"]
+exclude = [
+    "spikes/perf",
+    "examples/kndo-plugin-demo",
+    "examples/kndo-plugin-hooks-demo",
+    "examples/kndo-adapter-wrapper-demo",
+]
 
 [workspace.package]
 version = "0.1.0"
