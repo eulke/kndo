@@ -31,7 +31,6 @@ wit_bindgen::generate!({
 
 use crate::kndo::adapter::types::*;
 
-// kndo:allow unused reason: constructed only via the export!() macro below, invisible to kndo's un-expanded parse
 struct DemoAdapter;
 
 // ---------------------------------------------------------------- lexer

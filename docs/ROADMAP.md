@@ -881,9 +881,14 @@ baseline-then-plugin fixtures) — and phase 3, `kndo plugin install/list/remove
 (`kndo::plugin_install`: GitHub-release fetch, checksum + identity-binding verification,
 transitive dependency closure, `plugins.lock`, stage-then-commit atomicity; policies unit-
 tested against injected source/probe edges plus one real-component identity-binding test) —
-are **all landed**: RFC 0015 is fully implemented), **`kndo-action` GA** (RFC 0010: sticky PR
-comment, annotations, SARIF
-opt-in — dogfooded on kndo's own PRs from M2 via a pre-GA workflow), **`stale` (suppressions)
+are **all landed**: RFC 0015 is fully implemented), **`kndo-action` GA — landed** (RFC 0010: `action/` composite action — installs a pinned
+release binary or builds from source, restores `.kndo/cache` via actions/cache, runs
+`kndo check --diff <base> --format json`, and publishes through `action/render.mjs`, a
+zero-dependency frontend over the JSON contract: sticky PR comment upserted in place under a
+hidden marker, diff annotations for new findings ≥ warning capped at GitHub's limit, job summary
+always, SARIF upload opt-in; fork PRs degrade to summary+annotations, never fail; exit 2 is
+annotated as infrastructure, never as findings. `ci.yml`'s dogfood step now runs the Action
+itself with `version: source`), **`stale` (suppressions)
 rule — landed** (core `suppression.rs`: a pragma naming an unknown category, attaching to no
 declaration, matching zero findings in the pre-suppression set, or meta-targeting `stale`
 itself becomes an `info`/`hygiene` finding at the pragma's own span; `plugin:` categories

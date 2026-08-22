@@ -19,6 +19,9 @@ jobs:
   test:
     name: test
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write # kndo-action's sticky PR comment (RFC 0010 §5)
     steps:
       - uses: actions/checkout@v4
         with:
@@ -48,20 +51,16 @@ jobs:
       - name: cargo test --workspace
         run: cargo test --workspace --all-features
 
-      # kndo's own real-CLI dogfood: the same check the local pre-commit hook runs, over the
-      # diff this PR/push actually introduces — this is the one CI has that a plain
-      # test/clippy/fmt gate wouldn't, matching RFC 0014 §3.1's "factory packs pass end-to-end"
-      # equivalent.
-      - name: install kndo (dogfood)
-        run: cargo install --path crates/kndo-cli --locked --force
-
-      - name: kndo check --diff (dogfood)
-        run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            kndo check --diff "origin/${{ github.event.pull_request.base.ref }}" --fail-on warning
-          else
-            kndo check --fail-on warning
-          fi
+      # kndo's own real-CLI dogfood, now through the GA Action (RFC 0010): the same check the
+      # local pre-commit hook runs, over the diff this PR/push actually introduces — plus the
+      # Action's publishing surfaces (sticky PR comment, annotations, job summary) exercised on
+      # kndo's own PRs. `version: source` builds kndo-cli from this checkout, so the Action and
+      # the code under review are the same commit.
+      - name: kndo (dogfood via kndo-action)
+        uses: ./action
+        with:
+          version: source
+          fail-on: warning
 
   # RFC 0017 §7's compatibility matrix: the two reference components, PRE-BUILT and committed
   # under crates/kndo-plugin-api/tests/compat/, run against the HEAD host. wasm-abi §8's
