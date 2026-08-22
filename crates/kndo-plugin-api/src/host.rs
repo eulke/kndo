@@ -125,6 +125,8 @@ fn instantiate_bindings(
 
 fn native_descriptor(raw: w::AdapterDescriptor) -> AdapterDescriptor {
     AdapterDescriptor {
+        activation: Vec::new(),
+        dependencies: Vec::new(),
         id: SmolStr::new(&raw.id),
         facts_schema_version: raw.facts_schema_version,
         file_globs: raw.file_globs.iter().map(SmolStr::new).collect(),

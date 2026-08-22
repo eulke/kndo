@@ -24,6 +24,8 @@ const OWNED_ELSEWHERE: &[&str] = &["package.json", "tsconfig.json"];
 impl LanguageAdapter for JsonAdapter {
     fn descriptor(&self) -> AdapterDescriptor {
         AdapterDescriptor {
+            activation: Vec::new(),
+            dependencies: Vec::new(),
             id: SmolStr::new("json"),
             facts_schema_version: 1,
             file_globs: vec![SmolStr::new("**/*.json")],

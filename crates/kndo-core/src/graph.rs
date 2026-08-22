@@ -2814,6 +2814,8 @@ mod tests {
     impl LanguageAdapter for MockAdapter {
         fn descriptor(&self) -> AdapterDescriptor {
             AdapterDescriptor {
+                activation: Vec::new(),
+                dependencies: Vec::new(),
                 id: SmolStr::new("mock"),
                 facts_schema_version: 1,
                 file_globs: vec![SmolStr::new("**/*.mock")],

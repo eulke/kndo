@@ -1292,6 +1292,8 @@ mod tests {
     impl LanguageAdapter for CacheMockAdapter {
         fn descriptor(&self) -> crate::adapter::AdapterDescriptor {
             crate::adapter::AdapterDescriptor {
+                activation: Vec::new(),
+                dependencies: Vec::new(),
                 id: SmolStr::new("mock"),
                 facts_schema_version: 1,
                 file_globs: vec![SmolStr::new("**/*.mock")],
@@ -1354,6 +1356,8 @@ mod tests {
     impl LanguageAdapter for DiffMockAdapter {
         fn descriptor(&self) -> crate::adapter::AdapterDescriptor {
             crate::adapter::AdapterDescriptor {
+                activation: Vec::new(),
+                dependencies: Vec::new(),
                 id: SmolStr::new("dmock"),
                 facts_schema_version: 1,
                 file_globs: vec![SmolStr::new("**/*.dmock")],

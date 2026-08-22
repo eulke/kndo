@@ -19,6 +19,8 @@ pub struct CssAdapter;
 impl LanguageAdapter for CssAdapter {
     fn descriptor(&self) -> AdapterDescriptor {
         AdapterDescriptor {
+            activation: Vec::new(),
+            dependencies: Vec::new(),
             id: SmolStr::new("css"),
             facts_schema_version: 1,
             file_globs: vec![SmolStr::new("**/*.css"), SmolStr::new("**/*.scss")],

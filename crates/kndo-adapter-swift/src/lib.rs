@@ -33,6 +33,8 @@ const PATH_PATTERNS: kndo_adapter_toolkit::classify::PathPatterns =
 impl LanguageAdapter for SwiftAdapter {
     fn descriptor(&self) -> AdapterDescriptor {
         AdapterDescriptor {
+            activation: Vec::new(),
+            dependencies: Vec::new(),
             id: SmolStr::new("swift"),
             facts_schema_version: 1,
             file_globs: vec![SmolStr::new("**/*.swift")],

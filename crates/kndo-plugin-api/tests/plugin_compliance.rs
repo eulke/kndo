@@ -114,6 +114,8 @@ struct MiniAdapter;
 impl LanguageAdapter for MiniAdapter {
     fn descriptor(&self) -> AdapterDescriptor {
         AdapterDescriptor {
+            activation: Vec::new(),
+            dependencies: Vec::new(),
             id: SmolStr::new("mini"),
             facts_schema_version: 1,
             file_globs: vec![SmolStr::new("**/*.mock")],

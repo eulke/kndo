@@ -31,6 +31,8 @@ const PATH_PATTERNS: kndo_adapter_toolkit::classify::PathPatterns =
 impl LanguageAdapter for KotlinAdapter {
     fn descriptor(&self) -> AdapterDescriptor {
         AdapterDescriptor {
+            activation: Vec::new(),
+            dependencies: Vec::new(),
             id: SmolStr::new("kotlin"),
             facts_schema_version: 1,
             file_globs: vec![SmolStr::new("**/*.kt")],

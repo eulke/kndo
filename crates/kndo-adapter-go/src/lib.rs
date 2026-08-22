@@ -35,6 +35,8 @@ const PATH_PATTERNS: kndo_adapter_toolkit::classify::PathPatterns =
 impl LanguageAdapter for GoAdapter {
     fn descriptor(&self) -> AdapterDescriptor {
         AdapterDescriptor {
+            activation: Vec::new(),
+            dependencies: Vec::new(),
             id: SmolStr::new("go"),
             facts_schema_version: 9, // 9: FunctionMetrics.token_count (RFC 0005 §11); 8: FunctionMetrics emission (RFC 0005 §6); 7: go.work + sibling WorkspaceMember (RFC 0012 §10); 6: scope_context/local_alias/unit_name (§9); 5: detected_origin (§7); 4: RefKind + signature_span (§5)
             file_globs: vec![SmolStr::new("**/*.go")],

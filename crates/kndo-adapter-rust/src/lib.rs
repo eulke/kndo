@@ -33,6 +33,8 @@ const PATH_PATTERNS: kndo_adapter_toolkit::classify::PathPatterns =
 impl LanguageAdapter for RustAdapter {
     fn descriptor(&self) -> AdapterDescriptor {
         AdapterDescriptor {
+            activation: Vec::new(),
+            dependencies: Vec::new(),
             id: SmolStr::new("rust"),
             // 2: test regions are the only producer-side test declaration — extraction
             // stopped emitting per-declaration Test roots (assembly derives them from

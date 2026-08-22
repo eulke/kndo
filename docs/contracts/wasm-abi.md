@@ -313,3 +313,23 @@ either package (the adapter side's `resolve()` host-import callbacks or byte-con
 plugin side's richer `GraphView` surface, `ingest_coverage`/`suppress`, or per-query fuel) is a
 new package version, not a silent reinterpretation of `0.1.0` — a component built against a v1
 package must keep working against a v1-compatible host indefinitely.
+
+**Declared forward-compatible extensions (RFC 0016 §8 phase 0).** Two evolutions are planned
+and reserved here ahead of the 1.0 freeze, so that when they ship they are read as the additive
+package revisions they were always going to be — not as post-freeze breaking changes:
+
+- **`kndo:adapter`: component-descriptor fields.** The adapter world's `descriptor` record
+  grows the component surface `PluginDescriptor` already carries — `activation` rules,
+  `dependencies` coordinates, `version` — so external adapters can be globally installed and
+  gated (RFC 0016 §4). The native `AdapterDescriptor` already carries `activation`/
+  `dependencies` as dormant fields (empty for every first-party adapter; nothing evaluates
+  them yet); the WIT-side addition is a new package version whose host accepts old components
+  by treating the missing fields as empty — exactly the dormant value.
+- **`kndo:plugin`: a `read-file` host import.** RFC 0016 §5's content channel: one host
+  function (`read-file(path) → option<list<u8>>`), callable from the four graph hooks,
+  host-enforced against the component's declared `requested-file-access` globs and metered by
+  the same per-run budgets as everything else. A new package version with one added import —
+  components built against the current world neither see nor need it.
+
+Neither reservation changes any shipped behavior; both exist so the freeze commits to the
+evolution *path*, not just the current surface.

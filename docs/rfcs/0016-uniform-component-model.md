@@ -176,7 +176,10 @@ configuration can be claimed as supported, this lands:
    host import) so they're declared forward-compatible extensions, not breaking changes;
    `AdapterDescriptor` gains the dormant `id`/`activation`/`dependencies` fields native-side
    (cheap, invisible to behavior) so first-party adapters can populate them without a contract
-   break later.
+   break later. **Landed**: wasm-abi §8 carries the two declared extensions;
+   `AdapterDescriptor.activation`/`.dependencies` exist (empty everywhere, unread) — `id`
+   needed no new field, only the §4 migration note on the existing one, deferred to phase 2
+   because renaming ids churns cache keys.
 1. **Content channel (§5)** — highest value per unit of new surface; upgrades `kndo:express`
    and `kndo:nextjs` from their documented approximations, which also makes it the phase with
    built-in dogfood.

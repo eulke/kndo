@@ -33,6 +33,8 @@ const PATH_PATTERNS: kndo_adapter_toolkit::classify::PathPatterns =
 impl LanguageAdapter for JsTsAdapter {
     fn descriptor(&self) -> AdapterDescriptor {
         AdapterDescriptor {
+            activation: Vec::new(),
+            dependencies: Vec::new(),
             id: SmolStr::new("js-ts"),
             facts_schema_version: 8, // 8: FunctionMetrics.token_count (RFC 0005 §11); 7: FunctionMetrics emission (RFC 0005 §6); 6: local_alias in the serialized shape (RFC 0012 §9); 5: detected_origin (§7); 4: RefKind + signature_span (§5); 3: within (§4)
             file_globs: EXTENSIONS

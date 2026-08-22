@@ -115,7 +115,9 @@ pub struct Diagnostic {
 
 #[derive(Debug, Clone)]
 pub struct AdapterDescriptor {
-    /// e.g. "js-ts". Participates in cache keys.
+    /// e.g. "js-ts". Participates in cache keys. RFC 0016 §4 migrates these to component
+    /// coordinates (`kndo:js-ts`, `github.com/owner/repo`) when adapters componentize —
+    /// deferred to that RFC's phase 2 because renaming ids churns cache keys.
     pub id: SmolStr,
     /// Bumping invalidates only this adapter's cached facts (RFC 0004 §3).
     pub facts_schema_version: u32,
@@ -146,6 +148,16 @@ pub struct AdapterDescriptor {
     /// `true` in spirit (every adapter sets it explicitly; there is no `Default` impl here so a
     /// new adapter must make the call, not inherit a silent default).
     pub resolves_dependency_usage: bool,
+    /// Dormant reservation (RFC 0016 §8 phase 0): the machine-checkable activation predicates
+    /// a *globally installed* adapter will be gated by when adapters componentize (RFC 0016
+    /// §4 — same rules and semantics as `PluginDescriptor::activation`). Nothing evaluates
+    /// this yet; compiled-in and project-local adapters are scoped by their file claims alone.
+    /// Reserved before the 1.0 freeze so componentization is additive, not breaking.
+    pub activation: Vec<crate::plugin::ActivationRule>,
+    /// Dormant reservation (RFC 0016 §8 phase 0): component dependencies by coordinate id,
+    /// with RFC 0015 §3's co-install/co-activate semantics once RFC 0016 §4 lands. Unread
+    /// today, same reservation rationale as [`activation`](Self::activation).
+    pub dependencies: Vec<SmolStr>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
