@@ -3479,6 +3479,7 @@ dependencies = [
  "kndo-core",
  "schemars",
  "serde_json",
+ "wit-component",
 ]
 
 [[package]]

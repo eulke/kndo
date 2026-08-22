@@ -228,8 +228,10 @@ lookup in this ABI already has.
 
 ### 5.2 v1 scope cuts, and why
 
-- **No `ingest_coverage`/`suppress`.** Neither is wired to any analysis yet on the *native*
-  `Plugin` trait either (RFC 0003 §2's "landed" note) — nothing to bridge until they're real.
+- **No `ingest_coverage`/`suppress`.** `ingest_coverage` isn't wired on the native `Plugin`
+  trait either — nothing to bridge until it's real. `suppress` went further: RFC 0016 §7
+  evaluated it against real shipped components and decided cut, not merely deferred (RFC 0003
+  §2) — it stays undeclared on both the native trait and this WIT package.
 - **`GraphView` exposes `files()`/`symbols_in()` only, not the full `ProjectGraph`.**
   `wasm-file-info` carries `path`/`role`/`origin`; `wasm-symbol-info` carries `name`/`kind`/
   `exported`/`member-of`. `language`, `unit`, `test-spans`, and every edge-level fact are not

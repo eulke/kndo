@@ -71,6 +71,10 @@ fn main() -> ExitCode {
                 ExitCode::FAILURE
             }
         },
+        Some("componentize") => componentize(
+            args.get(1).map(String::as_str),
+            args.get(2).map(String::as_str),
+        ),
         _ => {
             eprintln!("usage: cargo xtask gen-stdlib <language>|--all");
             eprintln!(
@@ -83,9 +87,41 @@ fn main() -> ExitCode {
             );
             eprintln!("usage: cargo xtask gen-schema");
             eprintln!("usage: cargo xtask bench [--sizes 1k,5k,50k] [--update-baseline] [--gate]");
+            eprintln!("usage: cargo xtask componentize <core.wasm> <out.wasm>");
             ExitCode::from(2)
         }
     }
+}
+
+/// Wraps a `wasm32-unknown-unknown` core module into a WASM component (ADR 0003) — the same
+/// `wit_component::ComponentEncoder` call `crates/kndo/tests/external_adapter.rs` and
+/// kndo-plugin-api's compliance suites already make in-process. Exposed as its own `xtask`
+/// step so CI's shell-build smoke check (RFC 0016 §7) doesn't need a separate `wasm-tools`
+/// binary install for a one-line operation this workspace already depends on doing correctly.
+fn componentize(core_path: Option<&str>, out_path: Option<&str>) -> ExitCode {
+    let (Some(core_path), Some(out_path)) = (core_path, out_path) else {
+        eprintln!("usage: cargo xtask componentize <core.wasm> <out.wasm>");
+        return ExitCode::from(2);
+    };
+    match encode_component(core_path, out_path) {
+        Ok(()) => {
+            println!("xtask: wrote {out_path}");
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("xtask: componentize failed: {e}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn encode_component(core_path: &str, out_path: &str) -> Result<(), String> {
+    let core_wasm = std::fs::read(core_path).map_err(|e| format!("reading {core_path}: {e}"))?;
+    let component = wit_component::ComponentEncoder::default()
+        .module(&core_wasm)
+        .and_then(|mut enc| enc.encode())
+        .map_err(|e| format!("encoding {core_path}: {e:#}"))?;
+    std::fs::write(out_path, &component).map_err(|e| format!("writing {out_path}: {e}"))
 }
 
 fn gen_schema() -> ExitCode {

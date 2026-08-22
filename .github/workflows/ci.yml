@@ -62,3 +62,78 @@ jobs:
           else
             kndo check --fail-on warning
           fi
+
+  # RFC 0016 §7's "shell" configuration, CI-proven rather than only documented: a `kndo` build
+  # with every first-party language grammar off and just enough to load third-party WASM
+  # adapters (ADR 0006's "an embedder can drop every language" promise, taken literally). Builds
+  # standalone from `test` (a different feature set, not a dependency of it) so a shell-only
+  # regression fails on its own line instead of hiding inside the full-features job.
+  shell-build:
+    name: shell build (external-adapters + plugin-install only)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: shell-build
+
+      - name: cargo build (shell configuration)
+        run: cargo build --release -p kndo-cli --no-default-features --features external-adapters,plugin-install
+
+      - name: cargo clippy (shell configuration)
+        run: cargo clippy -p kndo-cli --no-default-features --features external-adapters,plugin-install -- -D warnings
+
+      # examples/kndo-plugin-demo is the same reference external adapter M5's own exit bar used
+      # (crates/kndo/tests/external_adapter.rs) — componentized here via `cargo xtask
+      # componentize` (the same `wit_component::ComponentEncoder` call that test makes
+      # in-process) so this job needs no extra tool install for a one-line operation the
+      # workspace already depends on doing correctly.
+      - name: build + componentize the reference external adapter
+        run: |
+          cd examples/kndo-plugin-demo
+          cargo build --release --target wasm32-unknown-unknown
+          cd ../..
+          cargo run -p xtask -- componentize \
+            examples/kndo-plugin-demo/target/wasm32-unknown-unknown/release/kndo_plugin_demo.wasm \
+            /tmp/kdemo-component.wasm
+
+      # The smoke check itself: a fixture project with NO first-party adapter able to claim
+      # anything, and one third-party adapter dropped only into `.kndo/plugins/` — the shell
+      # binary must auto-discover and run it purely from that directory, exactly RFC 0016 §7's
+      # claimed configuration, not the full product with languages incidentally unused.
+      - name: smoke check — shell binary auto-discovers a plugin-dir-only adapter
+        run: |
+          set -eu
+          KNDO_BIN="$(pwd)/target/release/kndo"
+          fixture=$(mktemp -d)
+          mkdir -p "$fixture/.kndo/plugins"
+          cp /tmp/kdemo-component.wasm "$fixture/.kndo/plugins/kdemo.wasm"
+          printf 'pub fn main() {\n    helper();\n}\n\nfn helper() {\n}\n\nfn dead() {\n}\n' > "$fixture/program.kdemo"
+          cd "$fixture"
+
+          # Captured to a file, not piped straight into `grep -q` — `doctor_cmd` keeps
+          # writing after grep's first match closes the pipe, which raises SIGPIPE and panics
+          # (a real, orthogonal CLI robustness gap this smoke check tripped over; out of RFC
+          # 0016's scope to fix here, so the check just avoids triggering it).
+          "$KNDO_BIN" doctor > doctor-output.txt
+          cat doctor-output.txt
+          grep -q '^  kdemo  (grammar' doctor-output.txt \
+            || { echo "shell binary did not auto-discover the plugin-dir adapter"; exit 1; }
+
+          "$KNDO_BIN" check > check-output.json
+          python3 -c "
+          import json
+          with open('check-output.json') as f:
+              d = json.load(f)
+          adapters = {a['id']: a['files'] for a in d['run']['adapters']}
+          assert adapters.get('kdemo') == 1, f'expected kdemo to claim exactly 1 file, got {adapters}'
+          unused = [f['location']['symbol'] for f in d['findings'] if f.get('category') == 'unused']
+          assert unused == ['dead'], f'expected only dead to be unused, got {unused}'
+          print('shell build smoke check passed')
+          "

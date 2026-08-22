@@ -49,8 +49,10 @@ exemption RFC 0005 §7 already documented for `internal-only`/`private-type-leak
 was anything to populate it. Every contributed edge/root/annotation is attributed
 `Provenance::Plugin(id)`.
 
-`suppress` remains undeclared/unwired — no analysis calls it yet; tracked as an open item, not
-folded into "landed" above.
+`suppress` remains undeclared/unwired — RFC 0016 §7 evaluated it and decided cut, not deferred:
+no shipped component needs domain-specific suppression (every exemption `kndo:nextjs`/
+`kndo:express` need is reachable through `classify_file`/`contribute_roots` narrowing instead).
+A real use case reopens this as a new, additive hook; none exists today.
 
 ## 3. Packaging & distribution
 

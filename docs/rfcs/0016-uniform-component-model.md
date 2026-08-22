@@ -218,24 +218,56 @@ because they don't need to be — the warm-run code path a plugin-bearing projec
 no-op re-run is the identical `cache.get_graph` hit already covered by `50k/warm-noop`, not a
 new one; the mechanism, not the fixture composition, is what determines the cost.
 
-## 7. Smaller alignments
+## 7. Smaller alignments — decided
 
-- **`suppress` gets wired or cut.** Declared since RFC 0003 §2, still uncalled. This RFC's
-  position: wire it in the reporting phase for components, with suppressions attributed and
-  counted (a suppressed finding is reported as suppressed-by under `--verbose`, RFC 0005 §12's
-  transparency posture) — or, if no shipped component needs it by the time phase 3 closes,
-  delete the hook before it fossilizes as dead ABI surface. Decide with a real use case on the
-  table, not by default.
-- **`GraphView` widens only against demand**: package/unit topology (which unit is this file
-  in — nextjs's app-root logic re-derives this today) and import-edge queries ("which files
-  reference X" — route/template edge validation wants it) are the two candidates with a known
-  consumer. Each addition is judged against the ABI freeze individually; nothing widens
-  speculatively.
-- **The shell build becomes CI-proven.** A workspace job builds
-  `--no-default-features --features external-adapters,plugin-install` and runs a smoke check
-  (open a fixture project with adapters loaded purely from a plugin dir). That artifact *is*
-  the "kndo as cascarón" configuration — real, tested, and one flag away for embedders — while
-  the default binary keeps ADR 0006's promise.
+- **`suppress` is cut, not wired.** Declared since RFC 0003 §2, never called. This phase's
+  review found no shipped component — `kndo:nextjs`, `kndo:express`, or the reference examples —
+  needs domain-specific suppression: every exemption those two plugins' own detections require
+  is already reachable through `classify_file`/`contribute_roots` narrowing what gets analyzed
+  in the first place, not through suppressing a finding after the fact. Building a reporting-side
+  hook against a use case that doesn't exist yet is exactly the speculative surface this RFC's
+  own freeze discipline (§8 phase 0) argues against adding. The decision is closed, not merely
+  deferred: `suppress` is not part of either WIT package (wasm-abi §0/§5.2 already said so) and
+  stays undeclared on the native `Plugin` trait too. A real use case reopens this — nothing about
+  the freeze forecloses adding it later as a new, additive hook — but none exists today.
+- **`GraphView` does not widen.** Both candidates named in the original draft were evaluated
+  against an actual consumer, not a hypothetical one, and neither clears the bar:
+  - *Package/unit topology* — motivated by `kndo:nextjs`'s `conventions::app_roots`, which scans
+    every discovered path for a `package.json`/`next.config.*` anchor and takes its directory.
+    `FileNode` already carries `package: PackageId` and `unit: Option<SmolStr>` (RFC 0011 §3,
+    RFC 0012 §6), so exposing the package table through `GraphView` would let a plugin ask "which
+    package owns this file" — but only the `package.json` half of `app_roots`' two anchors maps
+    onto core's manifest-derived package boundary; `next.config.*` is a Next.js-specific
+    convention core has no reason to treat as a package boundary. Widening `GraphView` here would
+    add ABI surface without letting `app_roots` actually delete its own scan — a partial,
+    speculative win, not an earned one.
+  - *Import-edge queries* ("which files reference X") — motivated by route-string → handler and
+    template → class edges. §5's own landed scope explicitly keeps both out of the content
+    channel's contract (a graph-claimed source file read through the content side door, not a
+    file outside the graph) — the motivating consumer was scoped out in phase 1, before this
+    phase started. There is no current caller left to widen `GraphView` for.
+  Both stay open for a future RFC with a real, landed consumer on the table — not ruled out,
+  just not built speculatively now.
+- **The shell build is CI-proven.** `.github/workflows/ci.yml` gained a standalone `shell-build`
+  job: `cargo build -p kndo-cli --no-default-features --features external-adapters,plugin-install`
+  (plus its own `cargo clippy -D warnings` pass), then a smoke check — the reference external
+  adapter (`examples/kndo-plugin-demo`, M5's own exit-bar fixture) built to `wasm32-unknown-unknown`
+  and componentized via a new `cargo xtask componentize` step (the same
+  `wit_component::ComponentEncoder` call `crates/kndo/tests/external_adapter.rs` already makes
+  in-process, exposed as its own dev-time command so CI needs no extra tool install), dropped
+  into a fixture project's `.kndo/plugins/` with zero first-party adapters compiled in, and
+  `kndo doctor`/`kndo check` asserted to auto-discover and run it. This surfaced one real,
+  previously-latent bug: `kndo::default_adapters`'s `let mut adapters` was unconditionally
+  mutable across every feature combination, which is only true when at least one language
+  feature is on — with all eight off (the shell configuration exactly), the `mut` is unused and
+  `rustc` warns. Fixed with an `#[allow(unused_mut)]` alongside the existing
+  `#[allow(clippy::vec_init_then_push)]`, not by adding a language back. `crates/kndo-cli`
+  gained its own `[features]` table (`default-features = false` on its `kndo` dependency, one
+  pass-through feature per `kndo` feature) — without it, `--no-default-features` on `kndo-cli`
+  had nothing of its own to disable and `kndo`'s defaults would activate regardless of what
+  `kndo-cli`'s own flags said. That artifact *is* the "kndo as cascarón" configuration — real,
+  tested on every push, and one flag away for embedders — while the default binary keeps ADR
+  0006's promise unchanged.
 
 ## 8. Phases
 
@@ -279,7 +311,12 @@ new one; the mechanism, not the fixture composition, is what determines the cost
    `a_graph_mutating_plugin_now_reuses_the_snapshot_but_never_the_patch` (cold run, then an
    unchanged warm run asserting a cache hit, then an edit proving a full rebuild — not a stale
    patch — occurs) and `compute_graph_key_distinguishes_wasm_plugin_content_from_its_own_id_and_version`.
-4. **`suppress` decision + GraphView additions (§7)** — demand-gated, possibly empty.
+4. **`suppress` decision + GraphView additions + shell CI job (§7) — Landed.** `suppress`
+   decided cut (no shipped consumer); both `GraphView`-widening candidates evaluated and left
+   unbuilt (neither had a real, current, landed consumer — see §7 for each); the shell build is
+   now a standalone, CI-proven `shell-build` job (`.github/workflows/ci.yml`) with its own
+   smoke check, plus the `crates/kndo-cli` feature-passthrough and `cargo xtask componentize`
+   plumbing that job needed to exist at all.
 
 Order matters: 1 before 2 because installable external adapters are more attractive once the
 plugin side demonstrates the full component surface; 3 before the shell is advertised because

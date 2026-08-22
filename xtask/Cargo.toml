@@ -12,3 +12,7 @@ kndo-adapter-toolkit = { path = "../crates/kndo-adapter-toolkit" }
 kndo-core = { path = "../crates/kndo-core", features = ["schema"] }
 serde_json = { workspace = true }
 schemars = { version = "1", features = ["smol_str03"] }
+# `componentize` (RFC 0016 §7's shell CI job): the same core-module -> component encoding
+# `crates/kndo/tests/external_adapter.rs` and kndo-plugin-api's compliance suites already do
+# in-process, exposed as a CLI step so CI doesn't need a separate `wasm-tools` install.
+wit-component = "0.219"

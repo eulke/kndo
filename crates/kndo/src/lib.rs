@@ -32,8 +32,10 @@ pub mod plugin_install;
 /// entry here. Nothing else in the workspace changes.
 pub fn default_adapters() -> Vec<Box<dyn LanguageAdapter>> {
     // One cfg-gated push per adapter, deliberately: with eight feature-gated languages this
-    // stays the clearest composition shape (clippy's vec![] suggestion doesn't).
-    #[allow(clippy::vec_init_then_push)]
+    // stays the clearest composition shape (clippy's vec![] suggestion doesn't). `unused_mut`
+    // is a false positive in the RFC 0016 §7 shell configuration (every language feature off):
+    // none of the pushes below compile in, so nothing here needs `mut` in that build alone.
+    #[allow(clippy::vec_init_then_push, unused_mut)]
     {
         let mut adapters: Vec<Box<dyn LanguageAdapter>> = Vec::new();
         #[cfg(feature = "js")]

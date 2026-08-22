@@ -892,15 +892,17 @@ fields native-side, so the 1.0 freeze doesn't wall off the component-model phase
 adopt kndo in pre-commit and stay enabled for 2 weeks.
 
 ## Post-1.0 parking lot
-**RFC 0016 — uniform component model** (the accepted plan, phased in its §8 — phases 0
-(freeze reservations), 1 (host-mediated content channel for plugin graph hooks, unlocking the
-detections `kndo:nextjs`/`kndo:express` documented as out of scope), 2 (adapter
-componentization: identity, activation, installer acceptance, corrected claim-priority
-composition order, doctor parity for `LanguageAdapter`s), and 3 (cache-key folding: every
+**RFC 0016 — uniform component model** (the accepted plan, phased in its §8, **all four phases
+landed**: 0 freeze reservations, 1 host-mediated content channel for plugin graph hooks
+(unlocking the detections `kndo:nextjs`/`kndo:express` had documented as out of scope), 2
+adapter componentization (identity, activation, installer acceptance, corrected claim-priority
+composition order, doctor parity for `LanguageAdapter`s), 3 cache-key folding (every
 graph-mutating plugin's id/version/content-hash folds into `compute_graph_key`, narrowing the
 blanket `mutates_graph` bypass to the incremental-patch path only — snapshot reuse is now
-unconditional) are **landed**; remaining: the `suppress` decision, demand-gated `GraphView`
-additions, and a CI-proven "shell" build), `kndo
+unconditional), and 4 (`suppress` decided cut for lack of a real consumer; both `GraphView`
+widening candidates evaluated and left unbuilt for the same reason; the "shell" build —
+`--no-default-features --features external-adapters,plugin-install` — is now its own CI job
+with a real smoke check, `.github/workflows/ci.yml`'s `shell-build`)), `kndo
 clean` (guided auto-removal), watch mode / LSP, custom analyses over a stable graph API,
 `kndo serve` exposing the navigation verbs 1:1 as MCP tools (RFC 0007 §7), an arbitrary graph
 query language, deep mode (compiler-grade resolvers), historical trend service, HTML report,
