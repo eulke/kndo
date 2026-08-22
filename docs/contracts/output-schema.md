@@ -62,7 +62,8 @@ round-trip these examples in CI.
   "sources": ["adapter:js-ts"],          // provenance: adapters/plugins whose facts contributed
   "remediation": "Delete calcLegacyTax() (and its export in src/billing/index.ts).",
   "delta": "new",                        // diff modes: "new"; absent in full mode
-  "delta_origin": "derived"              // diff modes: "introduced" (inside the change set — dead on arrival) | "derived" (flipped by it); RFC 0004 §6
+  "delta_origin": "derived",             // diff modes: "introduced" (inside the change set — dead on arrival) | "derived" (flipped by it); RFC 0004 §6
+  "advisory": true                       // RFC 0018 §2.2: never influences exit codes/budgets; only ever present (as true) on plugin: findings without a [plugins.gate] opt-in
 }
 ```
 
@@ -108,9 +109,15 @@ Categories are pure verdicts (RFC 0005 taxonomy rule):
 `unused`, `test-only`, `untested`, `undeclared`, `unresolved`, `version-skew`, `duplicate`,
 `internal-only`, `private-type-leak`, `cyclic`, `deep-import`, `crap`, `stale`.
 New categories are additive (minor bump); consumers must ignore unknown categories.
-The category prefix `plugin:` and the group name `convention` are **reserved** for RFC 0018
-(plugin-contributed findings, Draft) — no core category or group may claim either, and
-nothing emits them until that RFC is accepted.
+
+**Plugin-contributed findings (RFC 0018, landed).** Categories under the `plugin:` prefix —
+`plugin:<coordinate>/<rule>`, host-assembled from the emitting plugin's registered identity —
+are third-party verdicts, always in group `convention`, and are OUTSIDE the zero-FP statement
+that covers the bare categories above (RFC 0005 §9). They carry `advisory: true` unless a
+`[plugins.gate]` entry in `kndo.toml` opts the coordinate (or `<coordinate>/<rule>`) in, at
+which point severity is capped at the configured level (lower than declared, never higher).
+An `advisory` finding never influences exit codes or budgets, whatever its `severity`. The
+prefix and group remain reserved: no core category or group may claim either.
 
 Each category maps to exactly one `group` — `defect` (unresolved, undeclared, version-skew,
 private-type-leak), `waste` (unused, test-only, duplicate, internal-only), `risk` (crap, cyclic,

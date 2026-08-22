@@ -1,11 +1,41 @@
 # RFC 0018 — Plugin-Contributed Findings
 
-**Status:** Draft (design only — nothing here is implemented, and no phase is scheduled; RFC
-0017 §9 committed to this document, not to the capability) · **Depends on:** RFC 0003 (plugin
-system), RFC 0005 (analyses & the zero-false-positive standard), RFC 0006 (CLI & gating), RFC
-0015 (identity), RFC 0016/0017 (component model & read surface) ·
-**Contract impact if accepted:** additive changes to contracts/output-schema.md §2/§6 and a
-new plugin-world export in docs/contracts/wasm-abi.md §5
+**Status:** Accepted & landed (the acceptance bar in §6 is met: the fixture suite
+`crates/kndo-core/tests/plugin_findings.rs` exercises declare → emit → render → baseline →
+suppress → gate opt-in end to end, the compliance suite drives the same path over the WASM
+boundary, and the zero-FP rescoping shipped in the same change — RFC 0005 §9's scope note and
+output-schema §2/§6) · **Depends on:** RFC 0003 (plugin system), RFC 0005 (analyses & the
+zero-false-positive standard), RFC 0006 (CLI & gating), RFC 0015 (identity), RFC 0016/0017
+(component model & read surface)
+
+**Landing notes — the open questions of the draft, decided:**
+
+1. **Config surface (was §5.1):** `[plugins.gate]` as specified in §2.2 — a flat table of
+   `"<coordinate>"` / `"<coordinate>/<rule>"` → `"off" | "error" | "warning" | "info"`,
+   per-rule key winning. It is the FIRST and only part of `kndo.toml` the core reads (the
+   RFC 0006 §7 config subsystem remains unimplemented; this table is safe to read in
+   isolation because it affects only the severity-channel mapping, never the graph or any
+   cached artifact). Path-scoped gating rides on the existing suppression machinery instead.
+2. **Rule versioning (was §5.2):** confirmed — baseline entries keyed on a renamed/retired
+   rule's category age out as stale, identical to a deleted core finding. Nothing special
+   was needed.
+3. **Budget (was §5.3):** one fuel budget for the hook (`FUEL_PER_CALL`, like every hook);
+   per-rule sub-budgets stay unbuilt until a real component needs them.
+4. **Noise ceiling (was §5.4):** yes — 500 findings per rule per run, truncation reported as
+   a run diagnostic (mirroring the content channel's budget-plus-diagnostic shape).
+5. **Severity per finding (decided during design):** a finding has NO severity of its own —
+   its severity IS its rule's declared severity, one per rule, so the wire record carries
+   none and a guest cannot vary it per emission.
+6. **WASM evolution (decided during implementation):** a world's exports are mandatory, so
+   the new exports live on a second world in the same package — `plugin-findings` = `plugin`
+   + `rules` + `contribute-findings`. The host probes `plugin-findings` first and falls back
+   to `plugin`; every already-built v1 component keeps working unchanged (the pinned compat
+   matrix proves it), and a findings-capable component is never silently demoted.
+7. **Execution point (decided during implementation):** the finding round runs POST-assembly
+   on every path — cold build, incremental patch, and warm snapshot hit — because findings
+   are output, not graph state: nothing is persisted, so nothing can go stale, and no
+   snapshot format changed. A findings-only plugin declares `mutates_graph = false` and
+   costs the graph fast paths nothing.
 
 ## 1. The capability, and why it is its own RFC
 
@@ -136,7 +166,7 @@ finding set is identical whatever else is installed. The per-plugin audit record
   `convention` sorts after core groups), carry `delta` in diff modes like any finding, and
   flow to SARIF/agent formats unchanged.
 
-## 5. Open questions (why this stays a draft)
+## 5. Open questions (as drafted — each is decided in the landing notes above)
 
 1. **Config surface.** Is `[plugins.gate]` the right shape, or does gating belong in the
    existing `[[rule]]` per-path override system (RFC 0006 §7) so path-scoped opt-in works
@@ -151,7 +181,7 @@ finding set is identical whatever else is installed. The per-plugin audit record
    truncation diagnostic) so a buggy rule cannot flood the report — leaning yes, mirroring
    the content channel's budget-plus-diagnostic shape.
 
-## 6. Acceptance bar
+## 6. Acceptance bar (met — see the Status block)
 
 This RFC graduates from Draft when (a) a real third-party-shaped rule — written as a fixture
 plugin, not hypothesized — exercises the full path (declare → emit → render → baseline →

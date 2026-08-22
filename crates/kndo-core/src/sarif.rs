@@ -256,6 +256,7 @@ mod tests {
 
     fn finding(category: &str, severity: Severity, path: Option<&str>) -> Finding {
         Finding {
+            advisory: false,
             id: format!("kndo-{category}-x"),
             category: category.to_string(),
             group: "waste".to_string(),

@@ -98,6 +98,10 @@ fn verify_plugin(
     push_list(&mut descriptor, "dependencies", &d.dependencies);
     push_list(&mut descriptor, "file access", &d.requested_file_access);
     descriptor.push(format!("mutates graph: {}", plugin.mutates_graph()));
+    // RFC 0018 §4: declared rules — what this component MAY assert as findings.
+    for rule in plugin.rules() {
+        descriptor.push(format!("rule: {} — {}", rule.name, rule.description));
+    }
 
     let mut warnings = Vec::new();
     if !d.id.contains('/') {

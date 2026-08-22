@@ -698,6 +698,94 @@ pub struct PluginContribution {
     pub dropped: Vec<String>,
 }
 
+// ---------------------------------------------------------------- findings (RFC 0018)
+
+/// A plugin rule's declared severity (RFC 0018 §2.3) — deliberately its own enum, not
+/// `engine::Severity`: the engine maps it, applying the advisory-channel rules (§2.2), and
+/// keeping the vocabularies separate means a plugin can never *construct* a gate-eligible
+/// severity directly.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PluginSeverity {
+    Error,
+    Warning,
+    Info,
+}
+
+/// One rule a plugin may emit findings under, declared up front (RFC 0018 §4) so `kndo
+/// doctor`/`kndo plugin verify` can show what a component *may* assert before it runs, and so
+/// the gate config can be validated against real names. A finding emitted under an undeclared
+/// rule is dropped with a diagnostic — declaration is the contract, not decoration.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RuleDescriptor {
+    /// Lower-kebab (`[a-z0-9-]+`); becomes the suffix of the namespaced category
+    /// `plugin:<coordinate>/<rule>`.
+    pub name: SmolStr,
+    pub description: SmolStr,
+    /// The severity every finding under this rule carries — one severity per rule, declared
+    /// once, never chosen per finding (RFC 0018 §2.3). Config can cap it lower, never raise.
+    pub severity: PluginSeverity,
+}
+
+/// Sink for [`Plugin::contribute_findings`] (RFC 0018 §4): third-party verdicts, targeted at
+/// graph nodes. Severity is NOT a parameter — it comes from the rule's declaration.
+#[derive(Debug, Default)]
+pub struct FindingSink {
+    pub(crate) items: Vec<ContributedFindingItem>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ContributedFindingItem {
+    pub rule: SmolStr,
+    pub target: PluginTarget,
+    pub confidence: Confidence,
+    pub message: String,
+}
+
+impl FindingSink {
+    pub fn add(
+        &mut self,
+        rule: impl Into<SmolStr>,
+        target: PluginTarget,
+        confidence: Confidence,
+        message: impl Into<String>,
+    ) {
+        self.items.push(ContributedFindingItem {
+            rule: rule.into(),
+            target,
+            confidence,
+            message: message.into(),
+        });
+    }
+}
+
+/// One resolved, namespaced plugin finding as the finding round (graph.rs) hands it to the
+/// engine — everything needed to build an `engine::Finding` except the advisory/gate mapping,
+/// which is config-dependent and therefore the engine's job (RFC 0018 §2.2).
+#[derive(Debug, Clone)]
+pub struct ProtoFinding {
+    /// The full namespaced category: `plugin:<coordinate>/<rule>` — assembled host-side from
+    /// the plugin's registered id, never guest-supplied (RFC 0018 §2.1).
+    pub category: String,
+    pub plugin_id: SmolStr,
+    pub rule: SmolStr,
+    pub severity: PluginSeverity,
+    pub confidence: Confidence,
+    pub message: String,
+    pub path: ProjectPath,
+    pub symbol: Option<SmolStr>,
+    pub span: Option<crate::adapter::Span>,
+    pub subject_kind: String,
+    pub package: Option<String>,
+}
+
+/// A valid rule name: lower-kebab, non-empty (RFC 0018 §2.1's charset).
+pub fn is_valid_rule_name(name: &str) -> bool {
+    !name.is_empty()
+        && name
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+}
+
 // ---------------------------------------------------------------- the trait
 
 pub trait Plugin: Send + Sync {
@@ -775,6 +863,28 @@ pub trait Plugin: Send + Sync {
         _graph: &GraphView<'_>,
         _content: &ContentView<'_>,
         _out: &mut AnnotationSink,
+    ) {
+    }
+
+    /// The rules this plugin may emit findings under (RFC 0018 §4) — declared up front, once,
+    /// so tooling can show them before any hook runs and so an emitted rule name can be
+    /// validated. Default empty: a plugin with no rules never has `contribute_findings`
+    /// called, and costs the finding round nothing.
+    fn rules(&self) -> Vec<RuleDescriptor> {
+        Vec::new()
+    }
+
+    /// Emit third-party findings (RFC 0018) — verdicts, not graph facts. NOT a graph-mutation
+    /// hook: it runs *after* assembly on every path (cold, patch, warm snapshot hit), reads
+    /// the same R1-scoped `GraphView`/`ContentView` the mutation hooks see, and its output
+    /// lands in the run's findings under the namespaced category
+    /// `plugin:<coordinate>/<rule>` on the advisory severity channel (§2.2) — it can never
+    /// touch the graph, core findings, or (without explicit user opt-in) the exit code.
+    fn contribute_findings(
+        &self,
+        _graph: &GraphView<'_>,
+        _content: &ContentView<'_>,
+        _out: &mut FindingSink,
     ) {
     }
 

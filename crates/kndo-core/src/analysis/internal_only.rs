@@ -173,6 +173,7 @@ pub fn find_internal_only(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<
         let facet = symbol.kind.facet();
         let qualified = symbol.qualified_name();
         findings.push(Finding {
+            advisory: false,
             id: finding_id("internal-only", facet, path, &qualified, ""),
             category: "internal-only".to_string(),
             group: "waste".to_string(),

@@ -48,6 +48,7 @@ pub fn find_undeclared_dependencies(graph: &ProjectGraph) -> Vec<Finding> {
         }
         let discriminator = package_discriminator(graph, package);
         findings.push(Finding {
+            advisory: false,
             id: finding_id("undeclared", "dependency", name, "", &discriminator),
             category: "undeclared".to_string(),
             group: "defect".to_string(),

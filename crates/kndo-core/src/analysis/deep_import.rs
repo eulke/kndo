@@ -133,6 +133,7 @@ pub fn find_deep_imports(graph: &ProjectGraph) -> Vec<Finding> {
         let consumer_disc = package_discriminator(graph, consumer);
         let provider_disc = package_discriminator(graph, provider);
         findings.push(Finding {
+            advisory: false,
             id: finding_id(
                 "deep-import",
                 "package",

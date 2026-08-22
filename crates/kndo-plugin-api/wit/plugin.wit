@@ -191,6 +191,35 @@ interface types {
         literal: string,
         span: wasm-span,
     }
+
+    /// RFC 0018: a rule's declared severity — its own enum, never the host's finding
+    /// severity: the host maps it under the advisory-channel rules (§2.2), so a guest can
+    /// never construct a gate-eligible severity directly.
+    enum finding-severity {
+        error,
+        warning,
+        info,
+    }
+
+    /// One rule a plugin may emit findings under (RFC 0018 §4), declared up front. `name` is
+    /// lower-kebab and becomes the suffix of the host-assembled category
+    /// `plugin:<coordinate>/<rule>`; findings emitted under an undeclared rule are dropped
+    /// with a diagnostic.
+    record rule-descriptor {
+        name: string,
+        description: string,
+        severity: finding-severity,
+    }
+
+    /// One emitted finding (RFC 0018): a verdict about a graph node. No severity field — a
+    /// finding's severity IS its rule's declared severity; no category field — the namespace
+    /// is host-assembled from the plugin's registered id, never guest-supplied.
+    record contributed-finding {
+        rule: string,
+        target: plugin-target,
+        confidence: confidence,
+        message: string,
+    }
 }
 
 world plugin {
@@ -244,4 +273,46 @@ world plugin {
 
     /// Returns every symbol the plugin marks externally consumed this run.
     export annotate-symbols: func() -> list<plugin-target>;
+}
+
+/// RFC 0018: the findings-capable plugin world — everything `world plugin` has, plus rule
+/// declaration and finding emission. Its own WORLD rather than new exports on `plugin`
+/// because a world's exports are mandatory: adding them to `plugin` would break every
+/// already-built v1 component (exactly what the compat matrix guards). The host tries this
+/// world first and falls back to `plugin` — a v1 component keeps working unchanged, with no
+/// findings; a component targeting this world gets the full surface. Same package, same
+/// types, same imports: only the two exports at the bottom are new.
+world plugin-findings {
+    use types.{
+        plugin-descriptor, file-class, plugin-target, contributed-root, contributed-edge,
+        wasm-file-info, wasm-symbol-info, activation-rule, wasm-package-info,
+        wasm-file-details, wasm-symbol-details, wasm-ref-site, wasm-call-site,
+        rule-descriptor, contributed-finding,
+    };
+
+    import list-files: func() -> list<wasm-file-info>;
+    import symbols-in: func(path: string) -> list<wasm-symbol-info>;
+    import read-file: func(path: string) -> option<list<u8>>;
+    import packages: func() -> list<wasm-package-info>;
+    import package-of: func(path: string) -> option<wasm-package-info>;
+    import file-details: func(path: string) -> option<wasm-file-details>;
+    import symbol-details: func(path: string, symbol: string) -> option<wasm-symbol-details>;
+    import imports-of: func(path: string) -> list<string>;
+    import importers-of: func(path: string) -> list<string>;
+    import references-to: func(path: string, symbol: string) -> list<wasm-ref-site>;
+    import call-sites-in: func(path: string) -> list<wasm-call-site>;
+
+    export descriptor: func() -> plugin-descriptor;
+    export classify-file: func(path: string, current: file-class) -> option<file-class>;
+    export contribute-roots: func() -> list<contributed-root>;
+    export contribute-edges: func() -> list<contributed-edge>;
+    export annotate-symbols: func() -> list<plugin-target>;
+
+    /// The rules this component may emit findings under — called once at load, cached, shown
+    /// by doctor/verify before any hook runs (RFC 0018 §4).
+    export rules: func() -> list<rule-descriptor>;
+
+    /// Emit findings for this run — called by the post-assembly finding round, over the same
+    /// host-import read surface as the mutation hooks (rule R1 applies identically).
+    export contribute-findings: func() -> list<contributed-finding>;
 }

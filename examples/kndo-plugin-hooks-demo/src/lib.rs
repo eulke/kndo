@@ -31,9 +31,11 @@
 // expander) has no way to trace back to the `wit-bindgen` crate on its own.
 use wit_bindgen as _;
 
+// RFC 0018: targets the findings-capable world — the superset of `plugin` (the pinned compat
+// components stay on `plugin`, proving the host's fallback).
 wit_bindgen::generate!({
     path: "../../crates/kndo-plugin-api/wit/plugin.wit",
-    world: "plugin",
+    world: "plugin-findings",
 });
 
 use crate::kndo::plugin::types::*;
@@ -151,6 +153,35 @@ impl Guest for DemoPlugin {
             }
         }
         targets
+    }
+
+    /// RFC 0018 §4: one declared rule, exercised end to end by the compliance suite.
+    fn rules() -> Vec<RuleDescriptor> {
+        vec![RuleDescriptor {
+            name: "flag-marked".to_string(),
+            description: "symbols named finding_* are flagged by this demo rule".to_string(),
+            severity: FindingSeverity::Warning,
+        }]
+    }
+
+    fn contribute_findings() -> Vec<ContributedFinding> {
+        let mut findings = Vec::new();
+        for file in list_files() {
+            for symbol in symbols_in(&file.path) {
+                if symbol.name.starts_with("finding_") {
+                    findings.push(ContributedFinding {
+                        rule: "flag-marked".to_string(),
+                        target: PluginTarget {
+                            path: file.path.clone(),
+                            symbol: Some(symbol.name.clone()),
+                        },
+                        confidence: Confidence::Probable,
+                        message: format!("symbol `{}` carries the demo marker", symbol.name),
+                    });
+                }
+            }
+        }
+        findings
     }
 }
 

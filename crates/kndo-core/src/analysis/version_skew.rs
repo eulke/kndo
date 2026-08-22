@@ -36,6 +36,7 @@ pub fn find_version_skew(graph: &ProjectGraph) -> Vec<Finding> {
             .collect::<Vec<_>>()
             .join(", ");
         findings.push(Finding {
+            advisory: false,
             id: finding_id("version-skew", "dependency", name, "", ""),
             category: "version-skew".to_string(),
             group: "defect".to_string(),

@@ -15,15 +15,28 @@ use kndo_core::plugin::{
 use kndo_core::vocab::{FileClass, FileOrigin, FileRole, RefKind, RootKind, SymbolKind};
 use smol_str::SmolStr;
 
+/// RFC 0018's findings-capable world (a superset of `plugin` — same imports, same v1
+/// exports, plus `rules`/`contribute-findings`). Generated FIRST because its world reaches
+/// every type in the `types` interface, making this module the canonical home the v1 world's
+/// bindings then share via `with` — one set of Rust types, one conversion layer, not two.
+mod findings_bindings {
+    wasmtime::component::bindgen!({
+        path: "wit/plugin.wit",
+        world: "plugin-findings",
+    });
+}
+
 mod bindings {
     wasmtime::component::bindgen!({
         path: "wit/plugin.wit",
         world: "plugin",
+        with: { "kndo:plugin/types": super::findings_bindings::kndo::plugin::types },
     });
 }
 
-use bindings::kndo::plugin::types as w;
 use bindings::Plugin as WitPluginBindings;
+use findings_bindings::kndo::plugin::types as w;
+use findings_bindings::PluginFindings as WitFindingsBindings;
 
 /// Same discipline as the adapter bridge (RFC 0003 §3): a trapped/exhausted hook degrades to
 /// "contributed nothing" rather than aborting the run.
@@ -291,9 +304,131 @@ impl bindings::PluginImports for HostViewData {
     }
 }
 
+/// The v2 world's imports are the identical set — pure delegation, so the two worlds can
+/// never answer a query differently.
+impl findings_bindings::PluginFindingsImports for HostViewData {
+    fn list_files(&mut self) -> Vec<w::WasmFileInfo> {
+        bindings::PluginImports::list_files(self)
+    }
+    fn symbols_in(&mut self, path: String) -> Vec<w::WasmSymbolInfo> {
+        bindings::PluginImports::symbols_in(self, path)
+    }
+    fn packages(&mut self) -> Vec<w::WasmPackageInfo> {
+        bindings::PluginImports::packages(self)
+    }
+    fn package_of(&mut self, path: String) -> Option<w::WasmPackageInfo> {
+        bindings::PluginImports::package_of(self, path)
+    }
+    fn file_details(&mut self, path: String) -> Option<w::WasmFileDetails> {
+        bindings::PluginImports::file_details(self, path)
+    }
+    fn symbol_details(&mut self, path: String, symbol: String) -> Option<w::WasmSymbolDetails> {
+        bindings::PluginImports::symbol_details(self, path, symbol)
+    }
+    fn imports_of(&mut self, path: String) -> Vec<String> {
+        bindings::PluginImports::imports_of(self, path)
+    }
+    fn importers_of(&mut self, path: String) -> Vec<String> {
+        bindings::PluginImports::importers_of(self, path)
+    }
+    fn references_to(&mut self, path: String, symbol: String) -> Vec<w::WasmRefSite> {
+        bindings::PluginImports::references_to(self, path, symbol)
+    }
+    fn call_sites_in(&mut self, path: String) -> Vec<w::WasmCallSite> {
+        bindings::PluginImports::call_sites_in(self, path)
+    }
+    fn read_file(&mut self, path: String) -> Option<Vec<u8>> {
+        bindings::PluginImports::read_file(self, path)
+    }
+}
+
+/// RFC 0018's world detection: `plugin-findings` first (a v2 component also satisfies the v1
+/// world, so probing v1 first would silently strip its findings), plain `plugin` as the
+/// fallback — how every already-built v1 component keeps working unchanged (the compat
+/// matrix's pinned components exercise exactly this path).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum WorldFlavor {
+    V1,
+    V2,
+}
+
+/// One instantiated guest, whichever world accepted it — the wrappers below give the hook
+/// code a single call surface (`rules`/`contribute-findings` are simply empty on v1).
+enum AnyBindings {
+    V1(WitPluginBindings),
+    V2(WitFindingsBindings),
+}
+
+type WStore = wasmtime::Store<HostViewData>;
+
+impl AnyBindings {
+    fn call_descriptor(&self, store: &mut WStore) -> wasmtime::Result<w::PluginDescriptor> {
+        match self {
+            AnyBindings::V1(b) => b.call_descriptor(store),
+            AnyBindings::V2(b) => b.call_descriptor(store),
+        }
+    }
+
+    fn call_classify_file(
+        &self,
+        store: &mut WStore,
+        path: &str,
+        current: w::FileClass,
+    ) -> wasmtime::Result<Option<w::FileClass>> {
+        match self {
+            AnyBindings::V1(b) => b.call_classify_file(store, path, current),
+            AnyBindings::V2(b) => b.call_classify_file(store, path, current),
+        }
+    }
+
+    fn call_contribute_roots(
+        &self,
+        store: &mut WStore,
+    ) -> wasmtime::Result<Vec<w::ContributedRoot>> {
+        match self {
+            AnyBindings::V1(b) => b.call_contribute_roots(store),
+            AnyBindings::V2(b) => b.call_contribute_roots(store),
+        }
+    }
+
+    fn call_contribute_edges(
+        &self,
+        store: &mut WStore,
+    ) -> wasmtime::Result<Vec<w::ContributedEdge>> {
+        match self {
+            AnyBindings::V1(b) => b.call_contribute_edges(store),
+            AnyBindings::V2(b) => b.call_contribute_edges(store),
+        }
+    }
+
+    fn call_annotate_symbols(&self, store: &mut WStore) -> wasmtime::Result<Vec<w::PluginTarget>> {
+        match self {
+            AnyBindings::V1(b) => b.call_annotate_symbols(store),
+            AnyBindings::V2(b) => b.call_annotate_symbols(store),
+        }
+    }
+
+    fn call_rules(&self, store: &mut WStore) -> wasmtime::Result<Vec<w::RuleDescriptor>> {
+        match self {
+            AnyBindings::V1(_) => Ok(Vec::new()),
+            AnyBindings::V2(b) => b.call_rules(store),
+        }
+    }
+
+    fn call_contribute_findings(
+        &self,
+        store: &mut WStore,
+    ) -> wasmtime::Result<Vec<w::ContributedFinding>> {
+        match self {
+            AnyBindings::V1(_) => Ok(Vec::new()),
+            AnyBindings::V2(b) => b.call_contribute_findings(store),
+        }
+    }
+}
+
 struct GuestState {
-    store: wasmtime::Store<HostViewData>,
-    bindings: WitPluginBindings,
+    store: WStore,
+    bindings: AnyBindings,
 }
 
 /// A `kndo:plugin` WASM component, bridged to the native [`Plugin`] trait — indistinguishable
@@ -314,6 +449,12 @@ pub struct WasmPlugin {
     // across the three hooks of one round and structurally cannot survive into the next.
     linker: wasmtime::component::Linker<HostViewData>,
     round_instance: Mutex<Option<GuestState>>,
+    /// Which world accepted the component at load — every later instantiation uses the same
+    /// one (a component's exports don't change under us; the file is read once).
+    flavor: WorldFlavor,
+    /// RFC 0018 §4: `rules()` probed once at load and cached — `Plugin::rules` must be cheap
+    /// (the finding round calls it to decide whether to build a view at all).
+    cached_rules: Vec<kndo_core::plugin::RuleDescriptor>,
 }
 
 impl WasmPlugin {
@@ -321,15 +462,17 @@ impl WasmPlugin {
         let bytes = read_component_bytes(path)?;
         let content_hash = *blake3::hash(&bytes).as_bytes();
         let (engine, component, linker) = build_runtime(&bytes)?;
-        let descriptor = probe_descriptor(&engine, &component, &linker)?;
+        let probe = probe_descriptor(&engine, &component, &linker)?;
 
         Ok(WasmPlugin {
             engine,
             component,
-            descriptor,
+            descriptor: probe.descriptor,
             content_hash,
             linker,
             round_instance: Mutex::new(None),
+            flavor: probe.flavor,
+            cached_rules: probe.rules,
         })
     }
 
@@ -341,6 +484,7 @@ impl WasmPlugin {
             &self.component,
             &self.linker,
             HostViewData::from_view(graph, content),
+            self.flavor,
         )
         .ok()?;
         *self
@@ -393,7 +537,9 @@ fn build_linker(
     engine: &wasmtime::Engine,
 ) -> Result<wasmtime::component::Linker<HostViewData>, LoadError> {
     let mut linker = wasmtime::component::Linker::new(engine);
-    WitPluginBindings::add_to_linker(&mut linker, |state: &mut HostViewData| state)
+    // The v2 world's import set is identical to v1's (the WIT declares them so), so ONE
+    // linker — populated through the v2 bindings — instantiates components of either world.
+    WitFindingsBindings::add_to_linker(&mut linker, |state: &mut HostViewData| state)
         .map_err(|e| LoadError::Instantiate(format!("linking host imports failed: {e}")))?;
     Ok(linker)
 }
@@ -417,45 +563,115 @@ fn build_runtime(
     Ok((engine, component, linker))
 }
 
-/// Instantiate against a caller-supplied view — shared by `load`'s throwaway descriptor probe,
-/// `refresh_instance`'s per-round instance, and `classify_file`'s view-less instance, so the
-/// fuel-budgeting/instantiate sequence is written exactly once.
+/// Instantiate against a caller-supplied view — shared by `load`'s descriptor probe,
+/// `refresh_instance`'s per-round instance, `classify_file`'s view-less instance, and the
+/// finding round's ephemeral instance, so the fuel-budgeting/instantiate sequence is written
+/// exactly once.
 fn instantiate_with(
     engine: &wasmtime::Engine,
     component: &wasmtime::component::Component,
     linker: &wasmtime::component::Linker<HostViewData>,
     view: HostViewData,
-) -> Result<(wasmtime::Store<HostViewData>, WitPluginBindings), LoadError> {
+    flavor: WorldFlavor,
+) -> Result<(WStore, AnyBindings), LoadError> {
     let mut store = wasmtime::Store::new(engine, view);
     store
         .set_fuel(FUEL_PER_CALL)
         .map_err(|e| LoadError::Instantiate(e.to_string()))?;
-    let bindings = WitPluginBindings::instantiate(&mut store, component, linker)
-        .map_err(|e| LoadError::Instantiate(e.to_string()))?;
+    let bindings = instantiate_flavor(&mut store, component, linker, flavor)?;
     Ok((store, bindings))
+}
+
+fn instantiate_flavor(
+    store: &mut WStore,
+    component: &wasmtime::component::Component,
+    linker: &wasmtime::component::Linker<HostViewData>,
+    flavor: WorldFlavor,
+) -> Result<AnyBindings, LoadError> {
+    match flavor {
+        WorldFlavor::V1 => WitPluginBindings::instantiate(&mut *store, component, linker)
+            .map(AnyBindings::V1)
+            .map_err(|e| LoadError::Instantiate(e.to_string())),
+        WorldFlavor::V2 => WitFindingsBindings::instantiate(&mut *store, component, linker)
+            .map(AnyBindings::V2)
+            .map_err(|e| LoadError::Instantiate(e.to_string())),
+    }
+}
+
+struct ProbedPlugin {
+    descriptor: PluginDescriptor,
+    flavor: WorldFlavor,
+    rules: Vec<kndo_core::plugin::RuleDescriptor>,
 }
 
 fn probe_descriptor(
     engine: &wasmtime::Engine,
     component: &wasmtime::component::Component,
     linker: &wasmtime::component::Linker<HostViewData>,
-) -> Result<PluginDescriptor, LoadError> {
-    let (mut store, bindings) = instantiate_with(engine, component, linker, HostViewData::empty())?;
+) -> Result<ProbedPlugin, LoadError> {
+    let (flavor, (mut store, bindings)) = probe_flavor(engine, component, linker)?;
     let raw = bindings
         .call_descriptor(&mut store)
         .map_err(|e| LoadError::Instantiate(format!("descriptor() failed: {e}")))?;
-    // RFC 0015 §2: the `kndo:` namespace is reserved for built-ins — an external component
-    // claiming it fails to load, exactly like an instantiation error (skipped by discovery,
-    // never trusted). This is what keeps `dependencies: ["kndo:nextjs"]` unambiguous from any
-    // source: nothing external can ever *be* `kndo:nextjs`.
-    if kndo_core::plugin::is_reserved_id(&raw.id) {
+    ensure_unreserved(&raw.id)?;
+    let _ = store.set_fuel(FUEL_PER_CALL);
+    let rules = bindings
+        .call_rules(&mut store)
+        .map_err(|e| LoadError::Instantiate(format!("rules() failed: {e}")))?
+        .into_iter()
+        .map(from_wit_rule)
+        .collect();
+    Ok(ProbedPlugin {
+        descriptor: native_plugin_descriptor(raw),
+        flavor,
+        rules,
+    })
+}
+
+/// v2 first: a findings-capable component also satisfies the v1 world, so the other order
+/// would silently strip its findings surface.
+fn probe_flavor(
+    engine: &wasmtime::Engine,
+    component: &wasmtime::component::Component,
+    linker: &wasmtime::component::Linker<HostViewData>,
+) -> Result<(WorldFlavor, (WStore, AnyBindings)), LoadError> {
+    match instantiate_with(
+        engine,
+        component,
+        linker,
+        HostViewData::empty(),
+        WorldFlavor::V2,
+    ) {
+        Ok(pair) => Ok((WorldFlavor::V2, pair)),
+        Err(_) => Ok((
+            WorldFlavor::V1,
+            instantiate_with(
+                engine,
+                component,
+                linker,
+                HostViewData::empty(),
+                WorldFlavor::V1,
+            )?,
+        )),
+    }
+}
+
+/// RFC 0015 §2: the `kndo:` namespace is reserved for built-ins — an external component
+/// claiming it fails to load, exactly like an instantiation error (skipped by discovery,
+/// never trusted). This is what keeps `dependencies: ["kndo:nextjs"]` unambiguous from any
+/// source: nothing external can ever *be* `kndo:nextjs`.
+fn ensure_unreserved(id: &str) -> Result<(), LoadError> {
+    if kndo_core::plugin::is_reserved_id(id) {
         return Err(LoadError::Instantiate(format!(
-            "descriptor claims reserved built-in id '{}' (the kndo: namespace is not claimable \
-             by external plugins — RFC 0015 §2)",
-            raw.id
+            "descriptor claims reserved built-in id '{id}' (the kndo: namespace is not \
+             claimable by external plugins — RFC 0015 §2)"
         )));
     }
-    Ok(PluginDescriptor {
+    Ok(())
+}
+
+fn native_plugin_descriptor(raw: w::PluginDescriptor) -> PluginDescriptor {
+    PluginDescriptor {
         id: SmolStr::new(&raw.id),
         version: SmolStr::new(&raw.version),
         detection: raw.detection.iter().map(SmolStr::new).collect(),
@@ -466,7 +682,19 @@ fn probe_descriptor(
             .map(from_wit_activation_rule)
             .collect(),
         dependencies: raw.dependencies.iter().map(SmolStr::new).collect(),
-    })
+    }
+}
+
+fn from_wit_rule(raw: w::RuleDescriptor) -> kndo_core::plugin::RuleDescriptor {
+    kndo_core::plugin::RuleDescriptor {
+        name: SmolStr::new(&raw.name),
+        description: SmolStr::new(&raw.description),
+        severity: match raw.severity {
+            w::FindingSeverity::Error => kndo_core::plugin::PluginSeverity::Error,
+            w::FindingSeverity::Warning => kndo_core::plugin::PluginSeverity::Warning,
+            w::FindingSeverity::Info => kndo_core::plugin::PluginSeverity::Info,
+        },
+    }
 }
 
 fn from_wit_activation_rule(rule: w::ActivationRule) -> kndo_core::plugin::ActivationRule {
@@ -500,6 +728,7 @@ impl Plugin for WasmPlugin {
             &self.component,
             &self.linker,
             HostViewData::empty(),
+            self.flavor,
         )
         .ok()?;
         let result = bindings
@@ -615,6 +844,47 @@ impl Plugin for WasmPlugin {
             if let Some(symbol) = t.symbol {
                 out.mark_externally_consumed(ProjectPath(SmolStr::new(&t.path)), symbol);
             }
+        }
+    }
+
+    fn rules(&self) -> Vec<kndo_core::plugin::RuleDescriptor> {
+        self.cached_rules.clone()
+    }
+
+    /// RFC 0018: its own single-call round on an EPHEMERAL instance over a fresh view of the
+    /// finished graph — never the mutation round's instance (that round has already closed by
+    /// the time the finding round runs, and its view predates the plugin contributions the
+    /// final graph carries; the fresh view is still R1-scoped, so nothing plugin-derived is
+    /// visible either way).
+    fn contribute_findings(
+        &self,
+        graph: &GraphView<'_>,
+        content: &ContentView<'_>,
+        out: &mut kndo_core::plugin::FindingSink,
+    ) {
+        if self.cached_rules.is_empty() {
+            return;
+        }
+        let Ok((mut store, bindings)) = instantiate_with(
+            &self.engine,
+            &self.component,
+            &self.linker,
+            HostViewData::from_view(graph, content),
+            self.flavor,
+        ) else {
+            return;
+        };
+        let _ = store.set_fuel(FUEL_PER_CALL);
+        let Ok(findings) = bindings.call_contribute_findings(&mut store) else {
+            return;
+        };
+        for f in findings {
+            out.add(
+                SmolStr::new(&f.rule),
+                from_wit_target(f.target),
+                from_wit_confidence(f.confidence),
+                f.message,
+            );
         }
     }
 }

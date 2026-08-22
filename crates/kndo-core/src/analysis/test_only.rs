@@ -66,6 +66,7 @@ pub fn find_test_only_files(graph: &ProjectGraph, reach: &ReachabilityMap) -> Ve
             continue;
         }
         findings.push(Finding {
+            advisory: false,
             id: finding_id("test-only", "file", path, "", ""),
             category: "test-only".to_string(),
             group: "waste".to_string(),
@@ -90,6 +91,7 @@ pub fn find_test_only_files(graph: &ProjectGraph, reach: &ReachabilityMap) -> Ve
 fn directory_finding(graph: &ProjectGraph, dir: &DirGroup<'_>, confidence: Confidence) -> Finding {
     let display = if dir.path.is_empty() { "." } else { dir.path };
     Finding {
+        advisory: false,
         id: finding_id("test-only", "directory", dir.path, "", ""),
         category: "test-only".to_string(),
         group: "waste".to_string(),
@@ -143,6 +145,7 @@ pub fn find_test_only_symbols(graph: &ProjectGraph, reach: &ReachabilityMap) -> 
         let facet = symbol.kind.facet();
         let qualified = symbol.qualified_name();
         findings.push(Finding {
+            advisory: false,
             id: finding_id("test-only", facet, path, &qualified, ""),
             category: "test-only".to_string(),
             group: "waste".to_string(),

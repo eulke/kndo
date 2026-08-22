@@ -140,6 +140,15 @@ fn external_wasm_plugin_hooks_affect_a_real_check() {
         Plugin::content_hash(&plugin),
         Some(*blake3::hash(&component_bytes).as_bytes())
     );
+    // RFC 0018 §4: the declared rule arrives through `rules()`, probed once at load and
+    // cached — the finding round's cheap gate.
+    let rules = Plugin::rules(&plugin);
+    assert_eq!(rules.len(), 1, "{rules:?}");
+    assert_eq!(rules[0].name, "flag-marked");
+    assert_eq!(
+        rules[0].severity,
+        kndo_core::plugin::PluginSeverity::Warning
+    );
 
     let project_dir = tempfile::tempdir().expect("temp project fixture dir");
     std::fs::write(
@@ -159,6 +168,8 @@ fn external_wasm_plugin_hooks_affect_a_real_check() {
          decl fresh_target\n\
          decl linked_target\n\
          decl sited_target\n\
+         decl finding_probe\n\
+         ref finding_probe\n\
          callsite use.site promote\n",
     )
     .unwrap();
@@ -321,6 +332,19 @@ fn external_wasm_plugin_hooks_affect_a_real_check() {
         !unused_symbols.contains(&"sited_target"),
         "call-sites-in must surface the use.site(\"promote\") fact to the guest: {unused_symbols:?}"
     );
+    // RFC 0018 end to end over the WASM boundary: `contribute-findings` ran on the
+    // post-assembly finding round, and the result is namespaced, `convention`-grouped, and
+    // advisory (no [plugins.gate] in this fixture).
+    let finding = result
+        .findings
+        .iter()
+        .find(|f| f.category.starts_with("plugin:"))
+        .expect("the demo rule's finding must be in the output");
+    assert_eq!(finding.category, "plugin:hooks-demo/flag-marked");
+    assert_eq!(finding.group, "convention");
+    assert!(finding.advisory);
+    assert_eq!(finding.location.symbol.as_deref(), Some("finding_probe"));
+
     // And the other half: a SECOND round on the same WasmPlugin must start from a fresh
     // instance. The guest roots `fresh_target` only on an instance's first contribute_roots
     // call — a leaked instance would skip it here and the symbol would go unused.

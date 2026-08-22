@@ -214,7 +214,9 @@ wit_bindgen::generate!({
     // The ABI contract, vendored by `kndo plugin new` from the kndo you ran. To retarget a
     // newer kndo: `kndo plugin wit plugin > wit/plugin.wit` and rebuild. Do not edit it.
     path: "wit/__WIT_FILE__",
-    world: "plugin",
+    // The findings-capable world (RFC 0018) — the full surface. Target `plugin` instead if
+    // you only mutate the graph and want the smallest possible export set.
+    world: "plugin-findings",
 });
 
 use crate::kndo::plugin::types::*;
@@ -278,6 +280,25 @@ impl Guest for Component {
     /// Symbols consumed from outside the graph (FFI, serialization, a public SDK surface) —
     /// exempts them from internal-only/private-type-leak, never from unused.
     fn annotate_symbols() -> Vec<PluginTarget> {
+        Vec::new()
+    }
+
+    /// Rules you may emit findings under (RFC 0018) — declare them here or they are dropped.
+    /// A finding's severity IS its rule's declared severity; without a user's explicit
+    /// [plugins.gate] opt-in your findings are advisory (shown, never gating).
+    fn rules() -> Vec<RuleDescriptor> {
+        Vec::new()
+        // Example:
+        // vec![RuleDescriptor {
+        //     name: "deprecated-v1-api".to_string(),
+        //     description: "calls to the v1 API are deprecated".to_string(),
+        //     severity: FindingSeverity::Warning,
+        // }]
+    }
+
+    /// Emit findings for the declared rules — verdicts, not graph facts. Same read surface
+    /// as the other hooks (call-sites-in, references-to, read-file, …).
+    fn contribute_findings() -> Vec<ContributedFinding> {
         Vec::new()
     }
 }

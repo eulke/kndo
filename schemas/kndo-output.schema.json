@@ -174,6 +174,10 @@
       "description": "Typed form of the output-schema finding (grows field-by-field with the analyses in M1;\nevery field lands in the JSON schema first — that document is normative). Not yet present:\n`evidence` (category-specific block), `sources`, `remediation`, `rolled_up` — each needs\ninfrastructure this milestone doesn't have (computed remediation text) and is omitted\nrather than fabricated with a placeholder.",
       "type": "object",
       "properties": {
+        "advisory": {
+          "description": "RFC 0018 §2.2's severity channel: `true` = this finding never influences exit codes or\nbudgets, whatever its `severity` says — the state of every plugin-contributed finding\n(`plugin:` categories) without an explicit `[plugins.gate]` opt-in. Always `false` for\ncore findings; serialized only when true (additive, output-schema §2).",
+          "type": "boolean"
+        },
         "category": {
           "type": "string"
         },

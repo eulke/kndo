@@ -2162,6 +2162,256 @@ fn collect_plugin_edges(
     }
 }
 
+/// RFC 0018 §2.4's noise ceiling: findings per rule per run. Truncation is loud (a
+/// diagnostic), never silent.
+const FINDINGS_PER_RULE_CAP: usize = 500;
+
+/// The finding round (RFC 0018 §4): every plugin with declared rules gets
+/// `contribute_findings` over the same R1-scoped view the mutation hooks see. Runs AFTER
+/// assembly on every path — cold build, incremental patch, and warm snapshot hit alike —
+/// because findings are *output*, not graph state: nothing here is persisted, so nothing can
+/// go stale. Zero rule-declaring plugins costs exactly one `rules()` sweep and nothing else.
+pub(crate) fn run_finding_round(
+    graph: &ProjectGraph,
+    discovered: &discovery::DiscoveredTree,
+    plugins: &[Box<dyn crate::plugin::Plugin>],
+) -> (Vec<crate::plugin::ProtoFinding>, Vec<Diagnostic>) {
+    let mut with_rules: Vec<(
+        &dyn crate::plugin::Plugin,
+        Vec<crate::plugin::RuleDescriptor>,
+    )> = plugins
+        .iter()
+        .map(|p| (p.as_ref(), p.rules()))
+        .filter(|(_, rules)| !rules.is_empty())
+        .collect();
+    if with_rules.is_empty() {
+        return (Vec::new(), Vec::new());
+    }
+    with_rules.sort_by(|a, b| a.0.descriptor().id.cmp(&b.0.descriptor().id));
+
+    // The same bare/qualified resolution environment the mutation round uses, rebuilt from
+    // the graph (the patch path's own rebuild shape) so this works identically on paths
+    // where assembly's live tables no longer exist (warm snapshot hits).
+    let (by_name, by_qualified) = finding_name_tables(graph);
+    let view = crate::plugin::GraphView::new(
+        &graph.files,
+        &graph.symbols,
+        &graph.file_index,
+        &graph.packages,
+        &graph.edges,
+    );
+
+    let mut findings = Vec::new();
+    let mut diagnostics = Vec::new();
+    for (plugin, mut rules) in with_rules {
+        let descriptor = plugin.descriptor();
+        // RFC 0018 §2.1's charset, enforced at the declaration: an invalidly named rule is
+        // excluded whole (its emissions then fall out as undeclared) — never silently.
+        rules.retain(|r| {
+            let valid = crate::plugin::is_valid_rule_name(&r.name);
+            if !valid {
+                diagnostics.push(finding_round_diagnostic(format!(
+                    "plugin '{}' declares invalidly named rule '{}' (lower-kebab \
+                     [a-z0-9-]+ required) — excluded",
+                    descriptor.id, r.name
+                )));
+            }
+            valid
+        });
+        let content = crate::plugin::ContentView::new(
+            discovered,
+            descriptor.id.clone(),
+            &descriptor.requested_file_access,
+        );
+        let mut sink = crate::plugin::FindingSink::default();
+        plugin.contribute_findings(&view, &content, &mut sink);
+        collect_plugin_findings(
+            &descriptor.id,
+            &rules,
+            sink,
+            &FindingTables {
+                graph,
+                by_name: &by_name,
+                by_qualified: &by_qualified,
+            },
+            &mut findings,
+            &mut diagnostics,
+        );
+        if let Some(diagnostic) = content.take_diagnostic() {
+            diagnostics.push(diagnostic);
+        }
+    }
+    // Canonical order (RFC 0013 §3a's rule applied to output): identical runs produce
+    // identical vectors regardless of plugin registration order.
+    findings.sort_by(|a, b| {
+        (&a.category, &a.path.0, &a.symbol, &a.message).cmp(&(
+            &b.category,
+            &b.path.0,
+            &b.symbol,
+            &b.message,
+        ))
+    });
+    diagnostics.sort_unstable();
+    (findings, diagnostics)
+}
+
+/// The finding round's resolution environment, bundled (same reason as [`PluginTargetTables`]).
+struct FindingTables<'a> {
+    graph: &'a ProjectGraph,
+    by_name: &'a [HashMap<SmolStr, SymbolId>],
+    by_qualified: &'a [HashMap<String, SymbolId>],
+}
+
+/// Bare + qualified symbol tables from the graph alone — the subset of the patch path's
+/// rebuild the finding round needs (aliases included, RFC 0013 §4's `patch_meta`).
+#[allow(clippy::type_complexity)]
+fn finding_name_tables(
+    graph: &ProjectGraph,
+) -> (
+    Vec<HashMap<SmolStr, SymbolId>>,
+    Vec<HashMap<String, SymbolId>>,
+) {
+    let mut by_name: Vec<HashMap<SmolStr, SymbolId>> = vec![HashMap::default(); graph.files.len()];
+    let mut by_qualified: Vec<HashMap<String, SymbolId>> =
+        vec![HashMap::default(); graph.files.len()];
+    for (idx, sym) in graph.symbols.iter().enumerate() {
+        index_symbol_name(sym, SymbolId(idx as u32), &mut by_name, &mut by_qualified);
+    }
+    for (i, meta) in graph.patch_meta.iter().enumerate() {
+        for alias in &meta.reexport_aliases {
+            by_name[i].entry(alias.name.clone()).or_insert(alias.symbol);
+        }
+    }
+    (by_name, by_qualified)
+}
+
+fn index_symbol_name(
+    sym: &SymbolNode,
+    id: SymbolId,
+    by_name: &mut [HashMap<SmolStr, SymbolId>],
+    by_qualified: &mut [HashMap<String, SymbolId>],
+) {
+    let i = sym.file.0 as usize;
+    match &sym.member_of {
+        None => {
+            by_name[i].insert(sym.name.clone(), id);
+        }
+        Some(owner) => {
+            by_qualified[i].insert(format!("{owner}.{}", sym.name), id);
+        }
+    }
+}
+
+/// One plugin's sink → resolved, namespaced [`ProtoFinding`]s. Host-enforced namespace
+/// (RFC 0018 §2.1): the category is assembled from the plugin's *registered* id here — a
+/// guest never supplies a category. An emitted rule that wasn't declared is dropped with a
+/// diagnostic (declaration is the contract); an unresolvable target is dropped silently
+/// (the uniform sink miss behavior).
+fn collect_plugin_findings(
+    plugin_id: &SmolStr,
+    rules: &[crate::plugin::RuleDescriptor],
+    sink: crate::plugin::FindingSink,
+    tables: &FindingTables<'_>,
+    findings: &mut Vec<crate::plugin::ProtoFinding>,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    let mut per_rule: HashMap<SmolStr, usize> = HashMap::default();
+    let mut unknown_rules: std::collections::BTreeSet<SmolStr> = Default::default();
+    for item in sink.items {
+        let Some(rule) = rules.iter().find(|r| r.name == item.rule) else {
+            unknown_rules.insert(item.rule);
+            continue;
+        };
+        let count = per_rule.entry(rule.name.clone()).or_insert(0);
+        *count += 1;
+        if *count > FINDINGS_PER_RULE_CAP {
+            continue; // the cap diagnostic below says how much was cut
+        }
+        if let Some(proto) = resolve_finding(plugin_id, rule, item, tables) {
+            findings.push(proto);
+        }
+    }
+    report_finding_drops(plugin_id, unknown_rules, per_rule, diagnostics);
+}
+
+/// The loud halves of the declaration contract and the noise ceiling — nothing here is
+/// silent (RFC 0018 §2.4).
+fn report_finding_drops(
+    plugin_id: &SmolStr,
+    unknown_rules: std::collections::BTreeSet<SmolStr>,
+    per_rule: HashMap<SmolStr, usize>,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    for rule in unknown_rules {
+        diagnostics.push(finding_round_diagnostic(format!(
+            "plugin '{plugin_id}' emitted findings under undeclared rule '{rule}' — dropped \
+             (rules must be declared via Plugin::rules, RFC 0018 §4)"
+        )));
+    }
+    for (rule, count) in per_rule {
+        if count > FINDINGS_PER_RULE_CAP {
+            diagnostics.push(finding_round_diagnostic(format!(
+                "plugin '{plugin_id}' rule '{rule}' emitted {count} findings — capped at \
+                 {FINDINGS_PER_RULE_CAP}, {} dropped (RFC 0018 §2.4's noise ceiling)",
+                count - FINDINGS_PER_RULE_CAP
+            )));
+        }
+    }
+}
+
+fn finding_round_diagnostic(message: String) -> Diagnostic {
+    Diagnostic {
+        level: crate::adapter::DiagnosticLevel::Warn,
+        path: None,
+        message,
+        span: None,
+    }
+}
+
+fn resolve_finding(
+    plugin_id: &SmolStr,
+    rule: &crate::plugin::RuleDescriptor,
+    item: crate::plugin::ContributedFindingItem,
+    tables: &FindingTables<'_>,
+) -> Option<crate::plugin::ProtoFinding> {
+    let node = resolve_plugin_target(
+        &item.target,
+        &tables.graph.file_index,
+        tables.by_name,
+        tables.by_qualified,
+    )?;
+    let (file, symbol, span, subject_kind) = match node {
+        NodeRef::File(f) => (
+            &tables.graph.files[f.0 as usize],
+            None,
+            None,
+            "file".to_string(),
+        ),
+        NodeRef::Symbol(s) => {
+            let sym = &tables.graph.symbols[s.0 as usize];
+            (
+                &tables.graph.files[sym.file.0 as usize],
+                Some(sym.name.clone()),
+                Some(sym.span),
+                sym.kind.facet().to_string(),
+            )
+        }
+    };
+    Some(crate::plugin::ProtoFinding {
+        category: format!("plugin:{plugin_id}/{}", rule.name),
+        plugin_id: plugin_id.clone(),
+        rule: rule.name.clone(),
+        severity: rule.severity,
+        confidence: item.confidence,
+        message: item.message,
+        path: file.path.clone(),
+        symbol,
+        span,
+        subject_kind,
+        package: tables.graph.package_name(file.package).map(str::to_string),
+    })
+}
+
 fn collect_plugin_annotations(
     plugin: &dyn crate::plugin::Plugin,
     view: &crate::plugin::GraphView<'_>,
@@ -2272,11 +2522,17 @@ pub fn assemble_from_source(
     if let Some(cache) = cache {
         if let Some((graph, graph_diagnostics)) = cache.get_graph(&graph_key) {
             tick("snapshot-load", &mut phase_start);
+            // The finding round runs on the WARM path too (RFC 0018 §2.4): findings are
+            // output, not graph state — nothing persisted, nothing to go stale.
+            let (plugin_findings, finding_diagnostics) =
+                run_finding_round(&graph, &discovered, plugins);
             return Ok(AssembledGraph {
                 graph,
                 discovery_diagnostics,
                 extraction_diagnostics: graph_diagnostics,
                 plugin_diagnostics: Vec::new(),
+                plugin_findings,
+                finding_diagnostics,
                 pending_snapshot: None,
                 timings,
             });
@@ -2293,11 +2549,15 @@ pub fn assemble_from_source(
         ) {
             tick("patch", &mut phase_start);
             let pending_snapshot = cache.graph_writer(graph_key, current_plugin_digest);
+            let (plugin_findings, finding_diagnostics) =
+                run_finding_round(&graph, &discovered, plugins);
             return Ok(AssembledGraph {
                 graph,
                 discovery_diagnostics,
                 extraction_diagnostics,
                 plugin_diagnostics,
+                plugin_findings,
+                finding_diagnostics,
                 pending_snapshot,
                 timings,
             });
@@ -3115,11 +3375,14 @@ pub fn assemble_from_source(
     // plugin-bearing project's *second* run, not just prove itself safe in the abstract.
     let pending_snapshot = cache.and_then(|c| c.graph_writer(graph_key, current_plugin_digest));
     tick("resolve+link", &mut phase_start);
+    let (plugin_findings, finding_diagnostics) = run_finding_round(&graph, &discovered, plugins);
     Ok(AssembledGraph {
         graph,
         discovery_diagnostics,
         extraction_diagnostics: diagnostics,
         plugin_diagnostics,
+        plugin_findings,
+        finding_diagnostics,
         pending_snapshot,
         timings,
     })
@@ -3140,6 +3403,13 @@ pub struct AssembledGraph {
     /// vector with extraction diagnostics that persist). Empty on the snapshot fast path —
     /// there `extraction_diagnostics` already carries the merged replay.
     pub plugin_diagnostics: Vec<Diagnostic>,
+    /// RFC 0018: the finding round's output — namespaced third-party verdicts, computed fresh
+    /// on EVERY path (cold, patch, warm hit; findings are output, never persisted). The engine
+    /// maps these to `Finding`s under the advisory-channel rules (§2.2).
+    pub plugin_findings: Vec<crate::plugin::ProtoFinding>,
+    /// The finding round's own diagnostics (undeclared rules, noise-cap truncation) — like
+    /// `discovery_diagnostics`, always the fresh run's, never stored or replayed.
+    pub finding_diagnostics: Vec<Diagnostic>,
     pub pending_snapshot: Option<crate::cache::GraphSnapshotWriter>,
     /// Assembly sub-phase wall times `(phase, µs)` — merged into `RunResult::timings` so
     /// `--verbose` shows where assembly goes (discovery+hash, snapshot load, extract incl.

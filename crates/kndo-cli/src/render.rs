@@ -696,6 +696,7 @@ mod tests {
 
     fn finding(category: &str, group: &str) -> Finding {
         Finding {
+            advisory: false,
             id: format!("kndo-{category}"),
             category: category.to_string(),
             group: group.to_string(),

@@ -57,6 +57,7 @@ pub fn find_duplicate_files(graph: &ProjectGraph) -> Vec<Finding> {
         // finding so far, which anchors to one file's own path).
         let discriminator = blake3::Hash::from(hash).to_hex().to_string();
         findings.push(Finding {
+            advisory: false,
             id: finding_id("duplicate", "file", "", "", &discriminator),
             category: "duplicate".to_string(),
             group: "waste".to_string(),
@@ -232,6 +233,7 @@ pub fn find_duplicate_functions(graph: &ProjectGraph) -> (Vec<Finding>, Vec<(Sym
 
         let shown: Vec<&str> = selectors.iter().map(String::as_str).collect();
         findings.push(Finding {
+            advisory: false,
             id: finding_id("duplicate", &facet, "", "", &selectors.join("\u{1}")),
             category: "duplicate".to_string(),
             group: "waste".to_string(),

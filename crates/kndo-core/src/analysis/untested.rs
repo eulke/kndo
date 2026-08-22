@@ -109,6 +109,7 @@ fn find_untested_files(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<Fin
             continue;
         }
         findings.push(Finding {
+            advisory: false,
             id: finding_id("untested", "file", path, "", ""),
             category: "untested".to_string(),
             group: "risk".to_string(),
@@ -133,6 +134,7 @@ fn find_untested_files(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<Fin
 fn directory_finding(graph: &ProjectGraph, dir: &DirGroup<'_>, confidence: Confidence) -> Finding {
     let display = if dir.path.is_empty() { "." } else { dir.path };
     Finding {
+        advisory: false,
         id: finding_id("untested", "directory", dir.path, "", ""),
         category: "untested".to_string(),
         group: "risk".to_string(),
@@ -179,6 +181,7 @@ fn find_untested_symbols(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<F
         let qualified = symbol.qualified_name();
         let confidence = reach.get(NodeRef::Symbol(symbol_id)).1;
         findings.push(Finding {
+            advisory: false,
             id: finding_id("untested", facet, path, &qualified, ""),
             category: "untested".to_string(),
             group: "risk".to_string(),

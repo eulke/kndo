@@ -154,6 +154,7 @@ fn unused_finding(
 ) -> Finding {
     let name = dep.name.as_str();
     Finding {
+        advisory: false,
         id: finding_id(
             "unused",
             "dependency",
@@ -184,6 +185,7 @@ fn test_only_finding(
 ) -> Finding {
     let name = dep.name.as_str();
     Finding {
+        advisory: false,
         id: finding_id(
             "test-only",
             "dependency",

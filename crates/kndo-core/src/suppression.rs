@@ -214,6 +214,7 @@ mod tests {
 
     fn finding_at(category: &str, subject_kind: &str, line: u32) -> Finding {
         Finding {
+            advisory: false,
             id: format!("kndo-{category}-{line}"),
             category: category.to_string(),
             group: "waste".to_string(),

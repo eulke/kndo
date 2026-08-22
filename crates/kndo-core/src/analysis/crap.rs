@@ -60,6 +60,7 @@ pub fn find_crap(graph: &ProjectGraph, coverage: &CoverageMap) -> Vec<Finding> {
             None => "coverage: none".to_string(),
         };
         findings.push(Finding {
+            advisory: false,
             id: finding_id("crap", facet, path, &qualified, ""),
             category: "crap".to_string(),
             group: "risk".to_string(),

@@ -156,6 +156,7 @@ pub fn find_cycles(graph: &ProjectGraph) -> (Vec<Finding>, HashSet<FileId>) {
             .collect();
 
         findings.push(Finding {
+            advisory: false,
             id: finding_id("cyclic", "file", &cycle_key(graph, &files), "", ""),
             category: "cyclic".to_string(),
             group: "risk".to_string(),
@@ -269,6 +270,7 @@ pub fn find_cycles(graph: &ProjectGraph) -> (Vec<Finding>, HashSet<FileId>) {
             d
         };
         findings.push(Finding {
+            advisory: false,
             id: finding_id(
                 "cyclic",
                 "package",

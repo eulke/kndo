@@ -290,6 +290,34 @@ surface to *your* users (the wrapper relationship) — every listed dependency a
 project you activate on, and pays the §2 cost there. A dependency that isn't installed is never
 an error: your plugin still runs, and `kndo doctor` names the missing coordinate.
 
+## 6b. Emitting your own findings (RFC 0018)
+
+Beyond shaping the graph, your plugin can emit **rules** — third-party findings under your
+own namespace. Target the `plugin-findings` world (the scaffold's default), declare each rule
+once in `rules()` (name, one-line description, one severity — a finding's severity IS its
+rule's), and emit from `contribute_findings()` with the same read surface every other hook
+has. What lands in the user's report:
+
+- **Your category is `plugin:<your-coordinate>/<rule-name>`** — assembled by the host from
+  your registered id; you cannot emit a bare category, another plugin's, or an undeclared
+  rule (undeclared emissions are dropped with a diagnostic; rule names are lower-kebab).
+- **Advisory by default.** Your findings are shown, attributed, baselineable, and
+  suppressible like any finding — but they never break a build until the USER opts your
+  coordinate into gating in their `kndo.toml`:
+
+  ```toml
+  [plugins.gate]
+  "github.com/you/my-framework-plugin" = "warning"     # gate, capped at warning
+  "github.com/you/my-framework-plugin/noisy-rule" = "off"  # per-rule override
+  ```
+
+  Config can lower your declared severity, never raise it. This is what makes installing
+  your plugin safe by default — earn the opt-in with precision.
+- **A noise ceiling**: 500 findings per rule per run; past it, findings are dropped and the
+  truncation is reported loudly. kndo's zero-false-positive statement covers only its own
+  bare categories (RFC 0005 §9) — but its *spirit* is your best distribution strategy:
+  silence over a guess.
+
 ## 7. Versioning & compatibility — the contract you're building against
 
 Three versions matter, and they are independent:

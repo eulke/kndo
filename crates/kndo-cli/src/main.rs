@@ -93,6 +93,10 @@ const KNDO_TOML_TEMPLATE: &str = r#"# kndo.toml — everything here is optional;
 # [[rule]]                               # per-path overrides
 # paths = ["examples/**"]
 # skip = ["unused"]
+
+# [plugins.gate]                         # RFC 0018: opt plugin findings into the exit-code gate
+# "github.com/acme/some-plugin" = "warning"        # gate this plugin's rules, capped at warning
+# "github.com/acme/some-plugin/noisy-rule" = "off" # per-rule override wins
 "#;
 
 const PRE_COMMIT_HOOK: &str = "#!/bin/sh\nexec kndo check --staged --fail-on warning\n";
@@ -284,6 +288,10 @@ fn doctor_cmd() -> ExitCode {
         }
         if !p.requested_file_access.is_empty() {
             println!("    file access:  {}", p.requested_file_access.join(", "));
+        }
+        // RFC 0018 §4: what this plugin MAY assert as findings, before it ever runs.
+        for rule in &p.rules {
+            println!("    rule: {rule}");
         }
     }
     // The composition layer's own view (RFC 0015): every candidate considered — including
@@ -815,8 +823,12 @@ fn exit_code_for_findings(findings: &[Finding], fail_on: Option<Severity>) -> Ex
     let Some(threshold) = fail_on else {
         return ExitCode::SUCCESS;
     };
+    // RFC 0018 §2.2: an advisory finding (a plugin finding without a [plugins.gate] opt-in)
+    // never moves the exit code, whatever its displayed severity and whatever the threshold —
+    // installing a finding-emitting plugin must be safe by default.
     if findings
         .iter()
+        .filter(|f| !f.advisory)
         .any(|f| severity_rank(f.severity) >= severity_rank(threshold))
     {
         ExitCode::from(1)
@@ -1181,6 +1193,7 @@ mod tests {
 
     fn finding(severity: Severity) -> Finding {
         Finding {
+            advisory: false,
             id: "kndo-000000000000".to_string(),
             category: "unused".to_string(),
             group: "waste".to_string(),

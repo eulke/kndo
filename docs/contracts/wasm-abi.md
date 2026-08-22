@@ -473,6 +473,17 @@ through additive imports with new record types — §5.2 above — the same evol
 Neither changed a byte of previously shipped behavior — both are the freeze committing to an
 evolution *path* it had already declared, landing on schedule.
 
+**A second world in the same package (RFC 0018).** `kndo:plugin@0.1.0` gained `world
+plugin-findings` — everything `world plugin` has plus two exports (`rules`,
+`contribute-findings`) and two type additions (`rule-descriptor`, `contributed-finding`).
+A world's exports are mandatory, so growing `plugin` itself would have broken every
+already-built v1 component; a sibling world is the additive shape for new *exports*, exactly
+as new imports were the additive shape for new host surface. The host probes
+`plugin-findings` first (a findings-capable component also satisfies `plugin`, so the other
+order would silently strip its findings) and falls back to `plugin` — the pinned compat
+components exercise the fallback on every push. Authors choose their world in `generate!`;
+the scaffold targets `plugin-findings`.
+
 ## 9. Threat model
 
 Written down explicitly (RFC 0017 §7) because the tool is published and components come from
@@ -494,11 +505,17 @@ anywhere. What a malicious or buggy component **cannot** do, by construction:
   from, and the lockfile pins the checksum (RFC 0015 §4).
 
 What a malicious component **can** do — the residual risk, stated honestly: **lie about graph
-facts.** A false root, edge, annotation, or `classify_file` override suppresses findings that
-should have fired (it cannot *create* false findings: plugin evidence is liveness-only, RFC
-0005 §1, and file-target edges are consumed by reachability alone). The mitigations are
-visibility, not prevention: contributions are provenance-tagged in the graph, and `kndo
-doctor` reports the per-plugin audit record from the last run — id, roots, edges, annotations
-(`plugin contributions (last recorded run)`), so "this plugin exempted 400 symbols" is a
-line in a report, not an invisible bias. Installing a component remains a trust decision at
-exactly that scope: the worst case is quieter output, never exfiltration or code execution.
+facts** and, since RFC 0018, **emit noisy findings**. A false root, edge, annotation, or
+`classify_file` override suppresses findings that should have fired (it cannot *create* false
+core findings: plugin evidence is liveness-only, RFC 0005 §1, and file-target edges are
+consumed by reachability alone). A plugin's own findings can be wrong or spammy — but they
+are namespaced (`plugin:<coordinate>/<rule>`), quota-capped per rule with loud truncation,
+excluded from health, and **advisory by default**: without an explicit `[plugins.gate]`
+opt-in they cannot move an exit code, so the blast radius of a lying rule is a mislabeled
+line in a report, not a broken build. The mitigations are visibility, not prevention:
+contributions are provenance-tagged in the graph, declared rules are shown by doctor/verify
+before a component ever runs, and `kndo doctor` reports the per-plugin audit record from the
+last run — id, roots, edges, annotations (`plugin contributions (last recorded run)`), so
+"this plugin exempted 400 symbols" is a line in a report, not an invisible bias. Installing a
+component remains a trust decision at exactly that scope: the worst case is quieter output or
+noisier advisory lines, never exfiltration or code execution.

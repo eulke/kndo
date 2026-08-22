@@ -415,3 +415,10 @@ finding below the report floor or exclude the case outright — never ship it at
 probability. A rule that cannot reach zero FP by this mechanism does not ship, full stop, and
 does not get a row in this table either — a rule with a known unclosable blind spot is not a
 candidate to triage, it is a rule that has already failed the bar.
+
+**Scope of the bar (RFC 0018).** Everything above covers kndo's own categories — the bare
+names in output-schema §6. Plugin-contributed findings (categories under the `plugin:` prefix,
+group `convention`) are third-party verdicts the host cannot audit; they live on a separate,
+advisory-by-default severity channel, structurally distinguishable by prefix, and are excluded
+from the health score and every gate unless the user opts a specific coordinate in via
+`[plugins.gate]`. The zero-FP statement neither covers them nor is diluted by them.

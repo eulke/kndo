@@ -21,6 +21,7 @@ pub mod engine;
 mod gitutil;
 pub mod graph;
 pub mod plugin;
+mod plugin_gate;
 pub mod query;
 pub mod query_envelope;
 mod rkyv_support;

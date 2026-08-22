@@ -245,6 +245,10 @@ pub struct DoctorPluginInfo {
     /// this struct's.
     pub dependencies: Vec<String>,
     pub requested_file_access: Vec<String>,
+    /// RFC 0018 §4: the rules this plugin may emit findings under, pre-rendered
+    /// (`"<name> (<severity>): <description>"`) — what a component MAY assert, visible
+    /// before it ever runs.
+    pub rules: Vec<String>,
 }
 
 /// `kndo doctor` (RFC 0006 §2, contracts §5's `Engine::doctor`): everything detected about this
@@ -362,6 +366,12 @@ pub struct Finding {
     pub delta: Option<Delta>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub delta_origin: Option<DeltaOrigin>,
+    /// RFC 0018 §2.2's severity channel: `true` = this finding never influences exit codes or
+    /// budgets, whatever its `severity` says — the state of every plugin-contributed finding
+    /// (`plugin:` categories) without an explicit `[plugins.gate]` opt-in. Always `false` for
+    /// core findings; serialized only when true (additive, output-schema §2).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub advisory: bool,
 }
 
 /// One registered adapter's contribution (`run.adapters[]`, output-schema §1).
@@ -588,6 +598,75 @@ struct AnalyzedTree {
     timings: Vec<(String, u64)>,
 }
 
+fn describe_rule(rule: &crate::plugin::RuleDescriptor) -> String {
+    let severity = match rule.severity {
+        crate::plugin::PluginSeverity::Error => "error",
+        crate::plugin::PluginSeverity::Warning => "warning",
+        crate::plugin::PluginSeverity::Info => "info",
+    };
+    format!("{} ({severity}): {}", rule.name, rule.description)
+}
+
+/// One RFC 0018 proto finding → an output [`Finding`] under the severity-channel rules
+/// (§2.2): no `[plugins.gate]` entry (or `"off"`) → advisory at the declared severity;
+/// a gate entry → gate-eligible at `min(declared, configured)` — config can lower a rule's
+/// declared severity, never raise it. The `plugin:`-namespaced category and `convention`
+/// group are already assembled host-side (graph.rs's finding round); nothing here is
+/// guest-controlled beyond message/confidence/target.
+fn plugin_finding(
+    proto: crate::plugin::ProtoFinding,
+    gate: &crate::plugin_gate::PluginsGate,
+) -> Finding {
+    let (severity, advisory) = severity_channel(&proto, gate);
+    Finding {
+        id: crate::analysis::finding_id(
+            &proto.category,
+            &proto.subject_kind,
+            proto.path.0.as_str(),
+            proto.symbol.as_deref().unwrap_or(""),
+            "",
+        ),
+        category: proto.category,
+        group: "convention".to_string(),
+        subject_kind: proto.subject_kind,
+        severity,
+        confidence: proto.confidence,
+        message: proto.message,
+        location: Location {
+            path: Some(proto.path),
+            range: proto.span,
+            symbol: proto.symbol.map(|s| s.to_string()),
+            package: proto.package,
+        },
+        related: Vec::new(),
+        delta: None,
+        delta_origin: None,
+        advisory,
+    }
+}
+
+/// §2.2's mapping: `(severity, advisory)` for one proto finding under the gate config.
+fn severity_channel(
+    proto: &crate::plugin::ProtoFinding,
+    gate: &crate::plugin_gate::PluginsGate,
+) -> (Severity, bool) {
+    let declared = declared_severity(proto.severity);
+    match gate.resolve(&proto.plugin_id, &proto.rule) {
+        None | Some(crate::plugin_gate::GateLevel::Off) => (declared, true),
+        // Severity's declared order is worst-first, so `max` picks the LESS severe of the
+        // two — the "lower, never raise" cap.
+        Some(crate::plugin_gate::GateLevel::At(cap)) => (declared.max(cap), false),
+    }
+}
+
+fn declared_severity(severity: crate::plugin::PluginSeverity) -> Severity {
+    match severity {
+        crate::plugin::PluginSeverity::Error => Severity::Error,
+        crate::plugin::PluginSeverity::Warning => Severity::Warning,
+        crate::plugin::PluginSeverity::Info => Severity::Info,
+    }
+}
+
 /// Synchronous and single-instance-per-project (the cache lock, RFC 0004 §7); a serving
 /// frontend wraps it in its own concurrency model.
 pub struct Engine {
@@ -603,6 +682,10 @@ pub struct Engine {
     /// exit"). Crash-safety is the writer's temp-file + rename; a killed process loses only
     /// cache warmth.
     pending_persist: Option<std::thread::JoinHandle<()>>,
+    /// RFC 0018 §2.2's opt-in table (`kndo.toml [plugins.gate]`), read once at open.
+    plugins_gate: crate::plugin_gate::PluginsGate,
+    /// Problems reading that table — surfaced as run diagnostics, never a failed open.
+    gate_problems: Vec<String>,
 }
 
 impl Engine {
@@ -646,6 +729,7 @@ impl Engine {
         let cache = overrides
             .use_cache
             .then(|| crate::cache::ProjectCache::open(root));
+        let (plugins_gate, gate_problems) = crate::plugin_gate::PluginsGate::load(root);
         Ok(Engine {
             root: root.to_path_buf(),
             adapters,
@@ -653,6 +737,8 @@ impl Engine {
             cache,
             cache_enabled: overrides.use_cache,
             pending_persist: None,
+            plugins_gate,
+            gate_problems,
         })
     }
 
@@ -697,6 +783,7 @@ impl Engine {
                         .iter()
                         .map(|s| s.to_string())
                         .collect(),
+                    rules: p.rules().iter().map(describe_rule).collect(),
                 }
             })
             .collect();
@@ -1082,6 +1169,8 @@ impl Engine {
                 discovery_diagnostics,
                 extraction_diagnostics,
                 plugin_diagnostics,
+                plugin_findings,
+                finding_diagnostics,
                 pending_snapshot,
                 timings: assembly_timings,
             }) => {
@@ -1113,6 +1202,13 @@ impl Engine {
                 let mut diagnostics = discovery_diagnostics;
                 diagnostics.extend(extraction_diagnostics);
                 diagnostics.extend(plugin_diagnostics);
+                diagnostics.extend(finding_diagnostics);
+                diagnostics.extend(self.gate_problems.iter().map(|p| Diagnostic {
+                    level: DiagnosticLevel::Warn,
+                    path: None,
+                    message: p.clone(),
+                    span: None,
+                }));
                 let coverage_start = Instant::now();
                 let coverage = self.ingest_coverage(&mut diagnostics);
                 timings.push((
@@ -1120,7 +1216,7 @@ impl Engine {
                     coverage_start.elapsed().as_micros() as u64,
                 ));
                 let outcome = analysis::run_all(&g, &coverage);
-                let (findings, analysis_diagnostics, health) =
+                let (mut findings, analysis_diagnostics, health) =
                     (outcome.findings, outcome.diagnostics, outcome.health);
                 timings.extend(
                     outcome
@@ -1129,6 +1225,17 @@ impl Engine {
                         .map(|(phase, us)| (phase.to_string(), us)),
                 );
                 diagnostics.extend(analysis_diagnostics);
+                // RFC 0018: plugin findings join AFTER run_all (health is computed inside it,
+                // so the score structurally cannot see them — §2.2) and BEFORE suppression,
+                // so inline `kndo:allow plugin:...` pragmas apply uniformly. Baseline is
+                // applied later by check(), uniformly too. Re-sorted by id — the same
+                // deterministic order run_all itself guarantees.
+                findings.extend(
+                    plugin_findings
+                        .into_iter()
+                        .map(|p| plugin_finding(p, &self.plugins_gate)),
+                );
+                findings.sort_unstable_by(|a, b| a.id.cmp(&b.id));
                 let (findings, suppressed) = crate::suppression::apply(&g, findings);
                 Ok(AnalyzedTree {
                     graph: g,
@@ -1970,6 +2077,7 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
 
         let finding = Finding {
+            advisory: false,
             id: "kndo-000000000000".to_string(),
             category: "version-skew".to_string(),
             group: "defect".to_string(),

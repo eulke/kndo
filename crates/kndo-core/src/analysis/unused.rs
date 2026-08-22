@@ -64,6 +64,7 @@ pub fn find_unused_files(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<F
             continue;
         }
         findings.push(Finding {
+            advisory: false,
             id: finding_id("unused", "file", path, "", ""),
             category: "unused".to_string(),
             group: "waste".to_string(),
@@ -88,6 +89,7 @@ pub fn find_unused_files(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<F
 fn directory_finding(graph: &ProjectGraph, dir: &DirGroup<'_>) -> Finding {
     let display = if dir.path.is_empty() { "." } else { dir.path };
     Finding {
+        advisory: false,
         id: finding_id("unused", "directory", dir.path, "", ""),
         category: "unused".to_string(),
         group: "waste".to_string(),
@@ -137,6 +139,7 @@ pub fn find_unused_symbols(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec
         let facet = symbol.kind.facet();
         let qualified = symbol.qualified_name();
         findings.push(Finding {
+            advisory: false,
             id: finding_id("unused", facet, path, &qualified, ""),
             category: "unused".to_string(),
             group: "waste".to_string(),

@@ -117,6 +117,7 @@ pub fn find_private_type_leaks(graph: &ProjectGraph) -> Vec<Finding> {
             .map(|p| !p.private)
             .unwrap_or(false);
         findings.push(Finding {
+            advisory: false,
             id: finding_id("private-type-leak", facet, path, &qualified, &leaked_name),
             category: "private-type-leak".to_string(),
             group: "defect".to_string(),
