@@ -227,27 +227,52 @@ fn doctor_cmd() -> ExitCode {
     for p in &report.plugins {
         println!("  {} v{}", p.id, p.version);
         if !p.detection.is_empty() {
-            println!("    detection:   {}", p.detection.join(", "));
+            println!("    detection:    {}", p.detection.join(", "));
         }
         if !p.activation.is_empty() {
-            println!("    activation:  {}", p.activation.join(", "));
+            println!("    activation:   {}", p.activation.join(", "));
+        }
+        if !p.dependencies.is_empty() {
+            println!("    dependencies: {}", p.dependencies.join(", "));
         }
         if !p.requested_file_access.is_empty() {
-            println!("    file access: {}", p.requested_file_access.join(", "));
+            println!("    file access:  {}", p.requested_file_access.join(", "));
         }
     }
-    let global_candidates = kndo::global_plugin_candidates(&cwd);
+    // The composition layer's own view (RFC 0015): every candidate considered — including
+    // global ones that did NOT activate, which `Engine` structurally never sees — plus any
+    // dependency coordinate an active plugin names that nothing present satisfies.
+    let resolution = kndo::plugin_resolution(&cwd);
+    let global_candidates: Vec<_> = resolution
+        .plugins
+        .iter()
+        .filter(|p| p.source == kndo::PluginSource::Global)
+        .collect();
     if !global_candidates.is_empty() {
         println!();
         println!("global plugin candidates (RFC 0003 §4, not necessarily active above):");
         for c in &global_candidates {
-            let status = if c.activated { "active" } else { "inactive" };
+            let status = match &c.active {
+                Some(kndo::ActivationReason::RuleMatched) => "active (rule matched)".to_string(),
+                Some(kndo::ActivationReason::ImpliedBy(by)) => {
+                    format!("active (dependency of {by})")
+                }
+                Some(_) => "active".to_string(),
+                None => "inactive".to_string(),
+            };
             println!("  {} v{} — {status}", c.id, c.version);
             if !c.activation.is_empty() {
                 println!("    activation: {}", c.activation.join(", "));
             } else {
                 println!("    activation: (none declared — never self-activates globally)");
             }
+        }
+    }
+    if !resolution.missing_dependencies.is_empty() {
+        println!();
+        println!("missing plugin dependencies (RFC 0015 §3 — declared by an active plugin, not present):");
+        for m in &resolution.missing_dependencies {
+            println!("  {} — required by {}", m.coordinate, m.required_by);
         }
     }
     println!();

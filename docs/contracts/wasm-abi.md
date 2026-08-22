@@ -167,6 +167,13 @@ trait both already have).
 deciding whether a globally installed plugin even joins composition (§5.5); a project-local
 `.kndo/plugins/*.wasm` file never has this field consulted at all.
 
+Two RFC 0015 fields ride the same record: `id` is the plugin's *coordinate* (its fetchable
+source, `github.com/<owner>/<repo>`; the `kndo:` namespace is reserved for built-ins, and the
+host **fails the load** of any external component claiming it — same skipped-not-fatal handling
+as an instantiation error), and `dependencies: list<string>` names coordinates of plugins whose
+conventions are part of this one's (install closure + activation implication, RFC 0015 §3 —
+never versions, ordering, or data flow).
+
 ### 5.2 v1 scope cuts, and why
 
 - **No `ingest_coverage`/`suppress`.** Neither is wired to any analysis yet on the *native*

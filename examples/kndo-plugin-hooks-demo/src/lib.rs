@@ -38,6 +38,10 @@ impl Guest for DemoPlugin {
             // this plugin up from a global directory if it actually contains a `*.trigger`
             // file — proven by kndo/tests/global_plugin_activation.rs.
             activation: vec![ActivationRule::FileExists("*.trigger".to_string())],
+            // Deliberately empty (RFC 0015 §3): declaring one here would make every e2e run
+            // report a missing coordinate — dependency semantics are covered by the native
+            // fixpoint tests plus the WIT round-trip assertion in plugin_compliance.rs.
+            dependencies: Vec::new(),
         }
     }
 

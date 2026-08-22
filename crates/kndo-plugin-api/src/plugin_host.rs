@@ -238,6 +238,17 @@ fn probe_descriptor(
     let raw = bindings
         .call_descriptor(&mut store)
         .map_err(|e| LoadError::Instantiate(format!("descriptor() failed: {e}")))?;
+    // RFC 0015 §2: the `kndo:` namespace is reserved for built-ins — an external component
+    // claiming it fails to load, exactly like an instantiation error (skipped by discovery,
+    // never trusted). This is what keeps `dependencies: ["kndo:nextjs"]` unambiguous from any
+    // source: nothing external can ever *be* `kndo:nextjs`.
+    if kndo_core::plugin::is_reserved_id(&raw.id) {
+        return Err(LoadError::Instantiate(format!(
+            "descriptor claims reserved built-in id '{}' (the kndo: namespace is not claimable \
+             by external plugins — RFC 0015 §2)",
+            raw.id
+        )));
+    }
     Ok(PluginDescriptor {
         id: SmolStr::new(&raw.id),
         version: SmolStr::new(&raw.version),
@@ -248,6 +259,7 @@ fn probe_descriptor(
             .into_iter()
             .map(from_wit_activation_rule)
             .collect(),
+        dependencies: raw.dependencies.iter().map(SmolStr::new).collect(),
     })
 }
 

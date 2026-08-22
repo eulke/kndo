@@ -4318,6 +4318,7 @@ mod tests {
                     detection: vec![],
                     requested_file_access: vec![],
                     activation: vec![],
+                    dependencies: vec![],
                 }
             }
         }

@@ -24,6 +24,14 @@ use crate::vocab::{Confidence, FileClass, FileId, RefKind, RootKind};
 
 #[derive(Debug, Clone)]
 pub struct PluginDescriptor {
+    /// The plugin's identity, which is also its provenance (RFC 0015 §2): built-ins use the
+    /// reserved `kndo:` namespace (`kndo:coverage-lcov`, `kndo:nextjs`) that no external
+    /// component may claim; external plugins use the source coordinate they can be fetched
+    /// from (`github.com/<owner>/<repo>`), so identity is never a name lookup and two
+    /// same-purpose plugins from different authors can never collide. A hand-dropped
+    /// `.kndo/plugins/*.wasm` may carry a plain name, but a plain name can never be the
+    /// target of a [`dependencies`](Self::dependencies) edge — depending on a plugin requires
+    /// it to be addressable.
     pub id: SmolStr,
     pub version: SmolStr,
     /// Auto-detection predicates, in prose ("package.json depends on react") — shown by
@@ -39,6 +47,23 @@ pub struct PluginDescriptor {
     /// empty list means "no known structural signal," so a globally installed plugin with none
     /// never self-activates rather than guessing.
     pub activation: Vec<ActivationRule>,
+    /// Plugins whose conventions are part of this plugin's own — the wrapper relationship
+    /// (RFC 0015 §3). Each entry is an [`id`](Self::id)-style coordinate (`kndo:nextjs`,
+    /// `github.com/owner/repo`). Exactly two coupled effects, and nothing else: installing this
+    /// plugin installs its dependencies transitively (RFC 0015 §4), and this plugin being
+    /// *active* activates every dependency that is present — computed as a fixpoint, so wrapper
+    /// chains (`company-framework → nextjs → …`) compose to any depth from one manifest match.
+    /// No version constraints and no ordering implications: plugins structurally cannot consume
+    /// each other's contributions, so there is no inter-plugin ABI to be compatible about. A
+    /// missing dependency is never a runtime error — `kndo doctor` names the missing coordinate.
+    pub dependencies: Vec<SmolStr>,
+}
+
+/// Whether `id` claims the reserved built-in namespace (RFC 0015 §2) — external components
+/// carrying such an id are rejected at load: the namespace is not claimable, which is what
+/// makes `dependencies: ["kndo:nextjs"]` unambiguous from any source.
+pub fn is_reserved_id(id: &str) -> bool {
+    id.starts_with("kndo:")
 }
 
 /// One machine-checkable activation predicate (RFC 0003 §4). Evaluated against the project
@@ -277,7 +302,9 @@ pub struct LcovPlugin;
 impl Plugin for LcovPlugin {
     fn descriptor(&self) -> PluginDescriptor {
         PluginDescriptor {
-            id: SmolStr::new("coverage-lcov"),
+            // RFC 0015 §2: built-ins live in the reserved namespace (migrated from the plain
+            // "coverage-lcov" this plugin carried pre-RFC-0015).
+            id: SmolStr::new("kndo:coverage-lcov"),
             version: SmolStr::new("1"),
             detection: vec![SmolStr::new("an lcov.info file at a well-known path")],
             // Well-known locations (ADR 0005: "located by config or well-known paths");
@@ -290,6 +317,7 @@ impl Plugin for LcovPlugin {
                 ActivationRule::FileExists(SmolStr::new("coverage/lcov.info")),
                 ActivationRule::FileExists(SmolStr::new("lcov.info")),
             ],
+            dependencies: vec![],
         }
     }
 

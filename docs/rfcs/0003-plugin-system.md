@@ -91,6 +91,13 @@ prototype a plugin natively and ship it as WASM unchanged.
   guest code run to decide.
   - **Project-local** `.kndo/plugins/*.wasm` is unconditional — the file being there already is
     the opt-in, `activation` plays no role.
+  - **Built-ins with non-empty `activation` are gated by it too** (RFC 0015 §6 phase 1's
+    consequence): a built-in convention plugin must never run — or cost the graph-cache bypass —
+    on a project it doesn't match. A built-in with *no* rules stays always-on.
+  - **`dependencies` implication** (RFC 0015 §3): an active plugin's declared dependency
+    coordinates activate any present-but-inactive candidate, as a fixpoint — wrapper chains
+    compose without the project declaring the wrapped frameworks. RFC 0015 is normative for
+    identity (`kndo:` reserved namespace, source coordinates) and installation.
   - **Globally installed** plugins (§3's global directory — `<XDG data dir>/kndo/plugins`,
     overridable via `KNDO_PLUGIN_DIR`) are filtered through `activation` before they even join
     composition: any single matching rule activates the plugin for that project; an *empty*

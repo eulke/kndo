@@ -225,7 +225,13 @@ fn external_wasm_plugin_hooks_affect_a_real_check() {
     std::fs::write(&component_path, &component_bytes).expect("writing the component artifact");
 
     let plugin = WasmPlugin::load(&component_path).expect("loading the demo WASM plugin");
-    assert_eq!(plugin.descriptor().id.as_str(), "hooks-demo");
+    let descriptor = plugin.descriptor();
+    assert_eq!(descriptor.id.as_str(), "hooks-demo");
+    // RFC 0015 §3 wire round-trip: the guest declares its activation rule and (empty)
+    // dependency list; both must survive the WIT boundary — the composition layer's fixpoint
+    // (kndo's own unit tests) is only as real as this transport.
+    assert_eq!(descriptor.activation.len(), 1);
+    assert!(descriptor.dependencies.is_empty());
 
     let project_dir = tempfile::tempdir().expect("temp project fixture dir");
     std::fs::write(

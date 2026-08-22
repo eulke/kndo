@@ -67,9 +67,164 @@ pub fn default_plugins() -> Vec<Box<dyn Plugin>> {
 pub fn open(root: &Path, overrides: ConfigOverrides) -> Result<Engine, EngineError> {
     let mut adapters = default_adapters();
     adapters.extend(external_adapters(root));
-    let mut plugins = default_plugins();
-    plugins.extend(external_plugins(root));
+    let (plugins, _resolution) = compose_plugins(root);
     Engine::open_with_plugins(root, overrides, adapters, plugins)
+}
+
+/// Where a resolved plugin came from (RFC 0015 §2's three tiers).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PluginSource {
+    Builtin,
+    ProjectLocal,
+    Global,
+}
+
+/// Why a plugin is active for this project — the doctor-visible answer to "why is this
+/// running?" (RFC 0003 §4's introspectability requirement, extended to RFC 0015 §3's
+/// implication chains).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ActivationReason {
+    /// Dropped in `.kndo/plugins/` — presence is the opt-in.
+    ProjectLocal,
+    /// A built-in with no activation rules — always on.
+    BuiltinAlwaysOn,
+    /// One of its own `activation` rules matched the project.
+    RuleMatched,
+    /// Activated because the named (active) plugin lists it in `dependencies`.
+    ImpliedBy(String),
+}
+
+/// One plugin the composition layer considered — active or not — with everything `kndo doctor`
+/// needs to explain the outcome.
+#[derive(Debug, Clone)]
+pub struct ResolvedPlugin {
+    pub id: String,
+    pub version: String,
+    pub source: PluginSource,
+    pub activation: Vec<String>,
+    pub dependencies: Vec<String>,
+    /// `None` = present but inactive (a global candidate whose rules didn't fire and that
+    /// nothing active depends on).
+    pub active: Option<ActivationReason>,
+}
+
+/// A `dependencies` coordinate an *active* plugin names that no present plugin carries as its
+/// id (RFC 0015 §3): never a runtime error — the depending plugin still runs — but reported so
+/// the gap is visible instead of silent.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct MissingDependency {
+    pub required_by: String,
+    pub coordinate: String,
+}
+
+/// The full outcome of plugin composition for a project — what [`open`] registered and why,
+/// plus what it *couldn't* satisfy. Recomputed on demand for `kndo doctor` (occasional command,
+/// not the hot path), same posture as [`global_plugin_candidates`].
+#[derive(Debug, Clone, Default)]
+pub struct PluginResolution {
+    pub plugins: Vec<ResolvedPlugin>,
+    pub missing_dependencies: Vec<MissingDependency>,
+}
+
+/// [`compose_plugins`]' report half, for frontends (`kndo doctor`).
+pub fn plugin_resolution(root: &Path) -> PluginResolution {
+    compose_plugins(root).1
+}
+
+/// Assemble the full plugin set for `root` (RFC 0015 §3): built-ins, project-local
+/// `.kndo/plugins/*.wasm`, and global candidates, seeded by their own activation rules and
+/// closed over `dependencies` implication as a fixpoint. Built-ins with non-empty `activation`
+/// are gated exactly like global candidates — a built-in convention plugin must never run (or
+/// cost the cache bypass) on a project that doesn't match it.
+fn compose_plugins(root: &Path) -> (Vec<Box<dyn Plugin>>, PluginResolution) {
+    #[cfg(feature = "external-adapters")]
+    {
+        let candidates = collect_candidates(root);
+        let descriptors: Vec<kndo_core::plugin::PluginDescriptor> =
+            candidates.iter().map(|(p, _)| p.descriptor()).collect();
+        let sources: Vec<PluginSource> = candidates.iter().map(|(_, s)| *s).collect();
+        let (active, missing_dependencies) = activation::resolve(&descriptors, &sources, root);
+
+        let resolution = PluginResolution {
+            plugins: descriptors
+                .iter()
+                .zip(&sources)
+                .zip(&active)
+                .map(|((d, source), reason)| resolved_plugin(d, *source, reason.clone()))
+                .collect(),
+            missing_dependencies,
+        };
+        let plugins = candidates
+            .into_iter()
+            .zip(active)
+            .filter_map(|((plugin, _), reason)| reason.map(|_| plugin))
+            .collect();
+        (plugins, resolution)
+    }
+    #[cfg(not(feature = "external-adapters"))]
+    {
+        let _ = root;
+        // Minimal embedder build: no WASM tier, no rule evaluation (the activation module's
+        // glob/manifest machinery is feature-gated with it) — built-ins are unconditional,
+        // exactly the pre-RFC-0015 behavior.
+        let plugins = default_plugins();
+        let resolution = PluginResolution {
+            plugins: plugins
+                .iter()
+                .map(|p| {
+                    resolved_plugin(
+                        &p.descriptor(),
+                        PluginSource::Builtin,
+                        Some(ActivationReason::BuiltinAlwaysOn),
+                    )
+                })
+                .collect(),
+            missing_dependencies: Vec::new(),
+        };
+        (plugins, resolution)
+    }
+}
+
+fn resolved_plugin(
+    d: &kndo_core::plugin::PluginDescriptor,
+    source: PluginSource,
+    active: Option<ActivationReason>,
+) -> ResolvedPlugin {
+    ResolvedPlugin {
+        id: d.id.to_string(),
+        version: d.version.to_string(),
+        source,
+        activation: d.activation.iter().map(|r| r.describe()).collect(),
+        dependencies: d.dependencies.iter().map(|c| c.to_string()).collect(),
+        active,
+    }
+}
+
+/// The three candidate tiers, in deterministic order: built-ins, project-local `.kndo/plugins/`,
+/// global directory — each `.wasm` load failure skipped, never fatal (RFC 0003 §3).
+#[cfg(feature = "external-adapters")]
+fn collect_candidates(root: &Path) -> Vec<(Box<dyn Plugin>, PluginSource)> {
+    let mut candidates: Vec<(Box<dyn Plugin>, PluginSource)> = Vec::new();
+    for plugin in default_plugins() {
+        candidates.push((plugin, PluginSource::Builtin));
+    }
+    candidates.extend(load_wasm_plugins(
+        &project_plugin_dir(root),
+        PluginSource::ProjectLocal,
+    ));
+    if let Some(global_dir) = activation::global_plugin_dir() {
+        candidates.extend(load_wasm_plugins(&global_dir, PluginSource::Global));
+    }
+    candidates
+}
+
+#[cfg(feature = "external-adapters")]
+fn load_wasm_plugins(dir: &Path, source: PluginSource) -> Vec<(Box<dyn Plugin>, PluginSource)> {
+    wasm_components(dir)
+        .into_iter()
+        .filter_map(|path| kndo_plugin_api::WasmPlugin::load(&path).ok())
+        .map(|plugin| (Box::new(plugin) as Box<dyn Plugin>, source))
+        .collect()
 }
 
 /// Third-party adapters as WASM components (ADR 0003, `docs/contracts/wasm-abi.md`),
@@ -102,53 +257,13 @@ fn external_adapters(root: &Path) -> Vec<Box<dyn LanguageAdapter>> {
     }
 }
 
-/// Third-party `Plugin`s as WASM components (`docs/contracts/wasm-abi.md` §5) from two sources:
-///
-/// - **Project-local** `.kndo/plugins/*.wasm` (RFC 0003 §3) — unconditional, same zero-config
-///   discovery [`external_adapters`] uses. A file's presence there already is the opt-in.
-/// - **Global** [`activation::global_plugin_dir`] (RFC 0003 §4) — installed once, shared across
-///   every project on the machine, so presence alone can't be the opt-in signal. Each candidate
-///   is filtered through [`activation::activates`] against `root`, evaluating its
-///   `PluginDescriptor.activation` rules; a plugin with none never self-activates from here.
-///
-/// A `.wasm` file only ever implements one of the two ABIs (`kndo:adapter` or `kndo:plugin`) —
-/// its world's exports say which, so nothing here has to *ask*: [`WasmAdapter::load`] and
-/// [`WasmPlugin::load`] both simply fail to instantiate against a component compiled for the
-/// other world's exports, and each loader silently skips what it can't load. A single directory
-/// scan feeding both loaders (per source) is deliberate, not an accident of how
-/// [`external_adapters`] already existed — a plugin author never has to name their file
-/// `*.adapter.wasm` vs `*.plugin.wasm` or sort it into a subdirectory to say which ABI it
-/// targets.
-fn external_plugins(root: &Path) -> Vec<Box<dyn Plugin>> {
-    #[cfg(feature = "external-adapters")]
-    {
-        let mut plugins: Vec<Box<dyn Plugin>> = wasm_components(&project_plugin_dir(root))
-            .into_iter()
-            .filter_map(|path| kndo_plugin_api::WasmPlugin::load(&path).ok())
-            .map(|plugin| Box::new(plugin) as Box<dyn Plugin>)
-            .collect();
-        plugins.extend(
-            global_plugin_candidates_loaded(root)
-                .into_iter()
-                .filter(|(_, activated)| *activated)
-                .map(|(plugin, _)| Box::new(plugin) as Box<dyn Plugin>),
-        );
-        plugins
-    }
-    #[cfg(not(feature = "external-adapters"))]
-    {
-        let _ = root;
-        Vec::new()
-    }
-}
-
 /// One globally installed `Plugin` candidate (RFC 0003 §4), as `kndo doctor` reports it —
 /// unlike [`kndo_core::engine::DoctorPluginInfo`] (which only ever sees plugins that already
 /// made it into composition), this covers *every* `.wasm` file the global directory holds,
 /// skipped ones included, so a plugin whose `activation` rule doesn't match isn't invisible —
-/// it shows up here with `activated: false` and the exact rule that didn't fire. Not itself
-/// feature-gated so a caller (the CLI) can handle it uniformly regardless of build config, same
-/// as `Box<dyn Plugin>` itself isn't gated even though *producing* one may be.
+/// it shows up here with `activated: false` and the exact rule that didn't fire. A thin,
+/// global-tier view over [`plugin_resolution`] — `activated` includes RFC 0015 §3 implication,
+/// not just the candidate's own rules.
 pub struct GlobalPluginCandidate {
     pub id: String,
     pub version: String,
@@ -160,39 +275,16 @@ pub struct GlobalPluginCandidate {
 /// `doctor` command calls this directly (not through `Engine`, which never sees a candidate that
 /// didn't activate). Loads each component fresh, same cost profile as `kndo::open` paying it
 /// once per run; `kndo doctor` is a standalone, occasional command, not the hot path.
-#[cfg(feature = "external-adapters")]
 pub fn global_plugin_candidates(root: &Path) -> Vec<GlobalPluginCandidate> {
-    global_plugin_candidates_loaded(root)
+    plugin_resolution(root)
+        .plugins
         .into_iter()
-        .map(|(plugin, activated)| {
-            let d = plugin.descriptor();
-            GlobalPluginCandidate {
-                id: d.id.to_string(),
-                version: d.version.to_string(),
-                activation: d.activation.iter().map(|r| r.describe()).collect(),
-                activated,
-            }
-        })
-        .collect()
-}
-
-#[cfg(not(feature = "external-adapters"))]
-pub fn global_plugin_candidates(root: &Path) -> Vec<GlobalPluginCandidate> {
-    let _ = root;
-    Vec::new()
-}
-
-#[cfg(feature = "external-adapters")]
-fn global_plugin_candidates_loaded(root: &Path) -> Vec<(kndo_plugin_api::WasmPlugin, bool)> {
-    let Some(global_dir) = activation::global_plugin_dir() else {
-        return Vec::new();
-    };
-    wasm_components(&global_dir)
-        .into_iter()
-        .filter_map(|path| kndo_plugin_api::WasmPlugin::load(&path).ok())
-        .map(|plugin| {
-            let activated = activation::activates(&plugin.descriptor().activation, root);
-            (plugin, activated)
+        .filter(|p| p.source == PluginSource::Global)
+        .map(|p| GlobalPluginCandidate {
+            id: p.id,
+            version: p.version,
+            activation: p.activation,
+            activated: p.active.is_some(),
         })
         .collect()
 }
@@ -207,11 +299,15 @@ fn wasm_components(dir: &Path) -> Vec<std::path::PathBuf> {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return Vec::new();
     };
-    entries
+    let mut paths: Vec<std::path::PathBuf> = entries
         .filter_map(Result::ok)
         .map(|entry| entry.path())
         .filter(|path| path.extension().and_then(|ext| ext.to_str()) == Some("wasm"))
-        .collect()
+        .collect();
+    // read_dir order is filesystem-dependent — sort so candidate order (and with it every
+    // downstream report) is deterministic (RFC 0008 §4's discipline applied here too).
+    paths.sort();
+    paths
 }
 
 /// RFC 0003 §4: where globally installed `Plugin`s live, and whether one activates for a given
@@ -239,6 +335,123 @@ mod activation {
     /// discipline: silence over a guess). Otherwise, any single matching rule is enough.
     pub(crate) fn activates(rules: &[ActivationRule], root: &Path) -> bool {
         !rules.is_empty() && rules.iter().any(|rule| matches(rule, root))
+    }
+
+    /// RFC 0015 §3's activation resolution: seed each candidate from its source and its own
+    /// rules, then close over `dependencies` implication as a fixpoint. Returns, per candidate,
+    /// `Some(reason)` (active) or `None` (present but inactive), plus every coordinate an
+    /// active plugin depends on that no present candidate carries as its id.
+    ///
+    /// Seeding: project-local candidates are unconditional (presence is the opt-in); built-ins
+    /// with an *empty* rule list are always-on (`LcovPlugin`'s original contract predates
+    /// rules; today it has rules and is gated like everything else); anything with rules
+    /// activates iff one matches. The fixpoint then activates any present candidate an active
+    /// plugin names in `dependencies`, transitively — the wrapper-chain case
+    /// (`company-framework → other-framework → kndo:express`) composes to arbitrary depth from
+    /// a single manifest match. Cycles terminate trivially: activation is monotone over a
+    /// finite set. Missing coordinates are collected only from *active* requirers (an inactive
+    /// candidate's dependencies are moot) and never fail the run.
+    pub(crate) fn resolve(
+        descriptors: &[kndo_core::plugin::PluginDescriptor],
+        sources: &[crate::PluginSource],
+        root: &Path,
+    ) -> (
+        Vec<Option<crate::ActivationReason>>,
+        Vec<crate::MissingDependency>,
+    ) {
+        let mut active = seed(descriptors, sources, root);
+        imply_fixpoint(descriptors, &mut active);
+        let missing = collect_missing(descriptors, &active);
+        (active, missing)
+    }
+
+    fn seed(
+        descriptors: &[kndo_core::plugin::PluginDescriptor],
+        sources: &[crate::PluginSource],
+        root: &Path,
+    ) -> Vec<Option<crate::ActivationReason>> {
+        use crate::{ActivationReason, PluginSource};
+        descriptors
+            .iter()
+            .zip(sources)
+            .map(|(d, source)| match source {
+                PluginSource::ProjectLocal => Some(ActivationReason::ProjectLocal),
+                PluginSource::Builtin if d.activation.is_empty() => {
+                    Some(ActivationReason::BuiltinAlwaysOn)
+                }
+                PluginSource::Builtin | PluginSource::Global => {
+                    activates(&d.activation, root).then_some(ActivationReason::RuleMatched)
+                }
+            })
+            .collect()
+    }
+
+    /// Monotone over a finite set, so it terminates on any input, cycles included.
+    fn imply_fixpoint(
+        descriptors: &[kndo_core::plugin::PluginDescriptor],
+        active: &mut [Option<crate::ActivationReason>],
+    ) {
+        let mut changed = true;
+        while changed {
+            changed = false;
+            for (target, requirer_id) in pending_implications(descriptors, active) {
+                active[target] = Some(crate::ActivationReason::ImpliedBy(requirer_id));
+                changed = true;
+            }
+        }
+    }
+
+    /// One implication round: `(inactive target index, active requirer id)` pairs — recomputed
+    /// per round rather than incrementally, since the candidate set is tiny (a handful of
+    /// plugins, not a dependency universe).
+    fn pending_implications(
+        descriptors: &[kndo_core::plugin::PluginDescriptor],
+        active: &[Option<crate::ActivationReason>],
+    ) -> Vec<(usize, String)> {
+        descriptors
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| active[*i].is_some())
+            .flat_map(|(_, d)| {
+                d.dependencies
+                    .iter()
+                    .map(move |dep| (d.id.to_string(), dep))
+            })
+            .filter_map(|(requirer, dep)| {
+                descriptors
+                    .iter()
+                    .position(|o| o.id == *dep)
+                    .map(|j| (j, requirer))
+            })
+            .filter(|(j, _)| active[*j].is_none())
+            .collect()
+    }
+
+    /// Coordinates *active* plugins depend on that no present candidate carries as its id —
+    /// inactive requirers contribute nothing (their dependencies are moot). Sorted + deduped:
+    /// deterministic output regardless of candidate order (RFC 0008 §4).
+    fn collect_missing(
+        descriptors: &[kndo_core::plugin::PluginDescriptor],
+        active: &[Option<crate::ActivationReason>],
+    ) -> Vec<crate::MissingDependency> {
+        let mut missing: Vec<crate::MissingDependency> = descriptors
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| active[*i].is_some())
+            .flat_map(|(_, d)| {
+                d.dependencies
+                    .iter()
+                    .map(move |dep| (d.id.to_string(), dep))
+            })
+            .filter(|(_, dep)| !descriptors.iter().any(|other| other.id == **dep))
+            .map(|(required_by, dep)| crate::MissingDependency {
+                required_by,
+                coordinate: dep.to_string(),
+            })
+            .collect();
+        missing.sort();
+        missing.dedup();
+        missing
     }
 
     fn matches(rule: &ActivationRule, root: &Path) -> bool {
@@ -414,6 +627,149 @@ mod activation {
             .unwrap();
             let rules = vec![ActivationRule::ManifestDependency(SmolStr::new("react"))];
             assert!(!activates(&rules, dir.path()));
+        }
+
+        fn descriptor(
+            id: &str,
+            activation: Vec<ActivationRule>,
+            dependencies: &[&str],
+        ) -> kndo_core::plugin::PluginDescriptor {
+            kndo_core::plugin::PluginDescriptor {
+                id: SmolStr::new(id),
+                version: SmolStr::new("1"),
+                detection: vec![],
+                requested_file_access: vec![],
+                activation,
+                dependencies: dependencies.iter().map(SmolStr::new).collect(),
+            }
+        }
+
+        #[test]
+        fn dependency_chain_activates_transitively() {
+            // The wrapper case end to end (RFC 0015 §1/§3): the project matches only the
+            // company plugin's rule; nextjs and express activate purely through the chain.
+            let dir = tempfile::tempdir().unwrap();
+            std::fs::write(
+                dir.path().join("package.json"),
+                r#"{"dependencies": {"@company/framework": "1.0.0"}}"#,
+            )
+            .unwrap();
+            let descriptors = vec![
+                descriptor(
+                    "github.com/company/framework-plugin",
+                    vec![ActivationRule::ManifestDependency(SmolStr::new(
+                        "@company/framework",
+                    ))],
+                    &["kndo:nextjs"],
+                ),
+                descriptor(
+                    "kndo:nextjs",
+                    vec![ActivationRule::ManifestDependency(SmolStr::new("next"))],
+                    &["kndo:express"],
+                ),
+                descriptor(
+                    "kndo:express",
+                    vec![ActivationRule::ManifestDependency(SmolStr::new("express"))],
+                    &[],
+                ),
+            ];
+            let sources = vec![
+                crate::PluginSource::Global,
+                crate::PluginSource::Builtin,
+                crate::PluginSource::Builtin,
+            ];
+            let (active, missing) = resolve(&descriptors, &sources, dir.path());
+            assert_eq!(active[0], Some(crate::ActivationReason::RuleMatched));
+            assert_eq!(
+                active[1],
+                Some(crate::ActivationReason::ImpliedBy(
+                    "github.com/company/framework-plugin".to_string()
+                ))
+            );
+            assert_eq!(
+                active[2],
+                Some(crate::ActivationReason::ImpliedBy(
+                    "kndo:nextjs".to_string()
+                ))
+            );
+            assert!(missing.is_empty());
+        }
+
+        #[test]
+        fn dependency_cycles_terminate_and_activate_both() {
+            let dir = tempfile::tempdir().unwrap();
+            let descriptors = vec![
+                descriptor("a", vec![], &["b"]),
+                descriptor("b", vec![], &["a"]),
+            ];
+            // `a` is project-local (unconditional); `b` only reachable through the cycle.
+            let sources = vec![
+                crate::PluginSource::ProjectLocal,
+                crate::PluginSource::Global,
+            ];
+            let (active, missing) = resolve(&descriptors, &sources, dir.path());
+            assert_eq!(active[0], Some(crate::ActivationReason::ProjectLocal));
+            assert_eq!(
+                active[1],
+                Some(crate::ActivationReason::ImpliedBy("a".to_string()))
+            );
+            assert!(missing.is_empty());
+        }
+
+        #[test]
+        fn missing_dependency_is_reported_never_fatal() {
+            let dir = tempfile::tempdir().unwrap();
+            let descriptors = vec![descriptor("a", vec![], &["github.com/x/not-installed"])];
+            let sources = vec![crate::PluginSource::ProjectLocal];
+            let (active, missing) = resolve(&descriptors, &sources, dir.path());
+            assert!(active[0].is_some(), "the requirer itself still runs");
+            assert_eq!(
+                missing,
+                vec![crate::MissingDependency {
+                    required_by: "a".to_string(),
+                    coordinate: "github.com/x/not-installed".to_string(),
+                }]
+            );
+        }
+
+        #[test]
+        fn inactive_requirers_do_not_report_missing_or_imply() {
+            // An inactive global candidate's dependencies are moot: no implication from it,
+            // no missing-coordinate noise for it.
+            let dir = tempfile::tempdir().unwrap();
+            let descriptors = vec![
+                descriptor(
+                    "inactive",
+                    vec![ActivationRule::FileExists(SmolStr::new("nope.marker"))],
+                    &["also-present", "github.com/x/absent"],
+                ),
+                descriptor("also-present", vec![], &[]),
+            ];
+            let sources = vec![crate::PluginSource::Global, crate::PluginSource::Global];
+            let (active, missing) = resolve(&descriptors, &sources, dir.path());
+            assert!(active[0].is_none());
+            assert!(
+                active[1].is_none(),
+                "nothing active implies it, and empty rules never self-activate globally"
+            );
+            assert!(missing.is_empty());
+        }
+
+        #[test]
+        fn builtin_with_rules_is_gated_and_builtin_without_is_not() {
+            let dir = tempfile::tempdir().unwrap();
+            let descriptors = vec![
+                descriptor(
+                    "kndo:gated",
+                    vec![ActivationRule::FileExists(SmolStr::new("nope.marker"))],
+                    &[],
+                ),
+                descriptor("kndo:always", vec![], &[]),
+            ];
+            let sources = vec![crate::PluginSource::Builtin, crate::PluginSource::Builtin];
+            let (active, _) = resolve(&descriptors, &sources, dir.path());
+            assert!(active[0].is_none());
+            assert_eq!(active[1], Some(crate::ActivationReason::BuiltinAlwaysOn));
         }
     }
 }

@@ -434,9 +434,12 @@ either way yet.
 pub trait Plugin: Send + Sync {
     fn descriptor(&self) -> PluginDescriptor;
     // { id, version, detection: Vec<SmolStr>, requested_file_access: Vec<SmolStr>,
-    //   activation: Vec<ActivationRule> } — `detection` is prose for `kndo doctor`;
-    // `activation` (RFC 0003 §4) is what a *globally* installed plugin is actually
-    // evaluated against before it joins composition (wasm-abi.md §5.5).
+    //   activation: Vec<ActivationRule>, dependencies: Vec<SmolStr> } — `detection` is prose
+    // for `kndo doctor`; `activation` (RFC 0003 §4) is what gates a plugin that isn't
+    // unconditionally present (globally installed, or a built-in with rules); `id` is a
+    // coordinate (`kndo:` reserved for built-ins, source coordinates for external — RFC 0015
+    // §2) and `dependencies` names coordinates whose conventions are part of this plugin's
+    // own (co-install + co-activate fixpoint, RFC 0015 §3).
     // No ordering-constraints field yet (RFC 0003 §5's open item) — plugins run sorted by `id`,
     // a real but interim determinism rule.
 

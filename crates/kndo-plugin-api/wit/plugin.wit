@@ -109,11 +109,18 @@ interface types {
     }
 
     record plugin-descriptor {
+        /// Identity = provenance (RFC 0015 §2): a source coordinate
+        /// (`github.com/<owner>/<repo>`) for external plugins. The `kndo:` namespace is
+        /// reserved for built-ins — the host rejects any component claiming it.
         id: string,
         version: string,
         detection: list<string>,
         requested-file-access: list<string>,
         activation: list<activation-rule>,
+        /// Coordinates of plugins whose conventions are part of this one's (RFC 0015 §3):
+        /// install-time closure + activation implication, nothing else — no versions, no
+        /// ordering, no inter-plugin data flow.
+        dependencies: list<string>,
     }
 
     /// One `GraphView::files()` entry. v1 exposes path/role/origin only — `language`/`unit`/

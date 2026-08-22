@@ -231,6 +231,10 @@ pub struct DoctorPluginInfo {
     pub version: String,
     pub detection: Vec<String>,
     pub activation: Vec<String>,
+    /// RFC 0015 §3 coordinates — rendered so an activation chain is inspectable; whether each
+    /// one was satisfied is the composition layer's report (`kndo::plugin_resolution`), not
+    /// this struct's.
+    pub dependencies: Vec<String>,
     pub requested_file_access: Vec<String>,
 }
 
@@ -671,6 +675,7 @@ impl Engine {
                     version: d.version.to_string(),
                     detection: d.detection.iter().map(|s| s.to_string()).collect(),
                     activation: d.activation.iter().map(|r| r.describe()).collect(),
+                    dependencies: d.dependencies.iter().map(|c| c.to_string()).collect(),
                     requested_file_access: d
                         .requested_file_access
                         .iter()
@@ -1483,6 +1488,7 @@ mod tests {
                 detection: vec![],
                 requested_file_access: vec![],
                 activation: vec![],
+                dependencies: vec![],
             }
         }
 
