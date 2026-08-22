@@ -149,10 +149,12 @@ that case on the table — not before.
    and fully testable without any network code.
 3. **`kndo plugin install/list/remove`**: the fetch/verify/lockfile machinery of §4.
 4. **First real built-ins**: `kndo:nextjs` (file-system routing roots, special exports — the
-   flagship, spec'd in `docs/plugins/nextjs.md` before implementation) and `kndo:express`
-   (express-generator layout, `views/**` templates rendered by string name — honest spec:
-   express is imperative, so its convention surface is real but modest; the spec says exactly
-   what it does and doesn't cover). Both gated by their own `activation` rules — a built-in
+   flagship, spec: [docs/plugins/nextjs.md](../plugins/nextjs.md)) and `kndo:express`
+   (script-launched entry files the import graph can't see — honest spec:
+   [docs/plugins/express.md](../plugins/express.md); express is imperative, so its convention
+   surface is real but modest, and `views/**` templates turned out to be *unclaimed* files —
+   invisible to the graph, hence producing no findings to suppress — so they're documented out
+   of scope rather than covered). Both gated by their own `activation` rules — a built-in
    convention plugin must never run (or cost cache bypass) on a project that doesn't match.
 
 ## 7. Explicitly out of scope

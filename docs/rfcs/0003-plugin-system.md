@@ -57,6 +57,12 @@ Two tiers (decision in ADR 0003):
    config. The initial set targets the dominant ecosystems of the supported languages
    (examples, each its own doc before implementation): `react`, `nextjs`, `jest/vitest`,
    `spring`, `junit`, `gradle-conventions`, `swiftui`, `coverage-lcov`, `coverage-jacoco`.
+   **Landed so far**: `kndo:coverage-lcov` (in-core), and the first two convention plugins of
+   RFC 0015 §6 phase 4 — `kndo:nextjs` ([plugins/nextjs.md](../plugins/nextjs.md)) and
+   `kndo:express` ([plugins/express.md](../plugins/express.md)), each its own crate
+   (`crates/kndo-plugin-{nextjs,express}`), feature-gated in the `kndo` distribution crate
+   (`plugin-nextjs`/`plugin-express`, on by default) and gated at composition by their own
+   `activation` rules (§4).
 2. **External plugins** — WASM components implementing the same hooks over a versioned ABI
    (`kndo-plugin-api`), loaded from `.kndo/plugins/` or a configured path. Sandboxed (no fs/net;
    host-mediated file access), with per-file fuel/time limits so a plugin cannot break the 500 ms

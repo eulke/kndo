@@ -273,3 +273,9 @@ picks you up unchanged when it lands.
   (§8), plus proof that the two ABIs reject each other's components.
 - `crates/kndo/tests/global_plugin_activation.rs` — the global-tier activation test shape,
   including `KNDO_PLUGIN_DIR`.
+- `crates/kndo-plugin-nextjs` / `crates/kndo-plugin-express` — the first real convention
+  plugins (built-in, but the trait is identical to what a WASM guest implements): pure path
+  classifiers unit-tested in isolation, spec-first design
+  ([nextjs.md](nextjs.md) / [express.md](express.md)), and
+  `crates/kndo/tests/builtin_convention_plugins.rs` as the baseline-then-plugin (§8) fixture
+  suite proving activation gating and contributed facts together.

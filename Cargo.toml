@@ -14,6 +14,8 @@ members = [
     "crates/kndo-adapter-json",
     "crates/kndo-adapter-css",
     "crates/kndo-plugin-api",
+    "crates/kndo-plugin-nextjs",
+    "crates/kndo-plugin-express",
     "xtask",
 ]
 exclude = ["spikes/perf", "examples/kndo-plugin-demo", "examples/kndo-plugin-hooks-demo"]

@@ -872,10 +872,13 @@ but has never run for real — RFC 0014 §7 has the exact punch list: flip `publ
 push the first `v*` tag), **plugin identity, dependencies & installation** (RFC 0015:
 coordinate-based ids — `github.com/owner/repo` external, reserved `kndo:` for built-ins — a
 `dependencies` field whose fixpoint co-activates wrapper chains like company-framework → nextjs
-→ express, and `kndo plugin install` with lockfile + checksums; phased in §6, phase 1 —
-`Plugin::mutates_graph()` — landed with the RFC itself), **first ecosystem plugins**
-(`kndo:nextjs`, `kndo:express` — RFC 0015 §6 phase 4, each spec'd in `docs/plugins/` before
-implementation), **`kndo-action` GA** (RFC 0010: sticky PR comment, annotations, SARIF
+→ express, and `kndo plugin install` with lockfile + checksums; phased in §6: phases 1
+(`Plugin::mutates_graph()`), 2 (identity + dependencies fixpoint) and 4 — the **first ecosystem
+plugins**, `kndo:nextjs` and `kndo:express`, spec'd in `docs/plugins/{nextjs,express}.md` and
+shipped as gated built-ins (`crates/kndo-plugin-{nextjs,express}`, feature-gated in the `kndo`
+crate, proven end to end by `crates/kndo/tests/builtin_convention_plugins.rs`'s
+baseline-then-plugin fixtures) — are **landed**; phase 3, `kndo plugin install/list/remove`,
+is the remaining piece), **`kndo-action` GA** (RFC 0010: sticky PR comment, annotations, SARIF
 opt-in — dogfooded on kndo's own PRs from M2 via a pre-GA workflow), `stale` (suppressions) rule,
 error-message polish.
 

@@ -146,7 +146,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
 
       # Dependency order (crates.io rejects a crate whose dependencies aren't indexed yet):
-      # kndo-core -> kndo-adapter-toolkit -> each kndo-adapter-* / kndo-plugin-api -> kndo ->
+      # kndo-core -> kndo-adapter-toolkit -> each kndo-adapter-* / kndo-plugin-* -> kndo ->
       # kndo-cli. `--no-verify` is not used — each publish still builds from the packaged
       # crate, catching a manifest/packaging mistake before it reaches anyone. No manual
       # index-availability polling here: cargo (1.70+) already blocks `cargo publish` until the
@@ -179,6 +179,8 @@ jobs:
             kndo-adapter-rust \
             kndo-adapter-swift \
             kndo-plugin-api \
+            kndo-plugin-nextjs \
+            kndo-plugin-express \
             kndo \
             kndo-cli; do
             echo "::group::publish $crate"

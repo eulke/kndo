@@ -1,0 +1,12 @@
+[package]
+name = "kndo-plugin-nextjs"
+description = "Built-in kndo:nextjs plugin (docs/plugins/nextjs.md) — file-system routing roots and framework-consumed exports"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+kndo-core = { path = "../kndo-core" }
+smol_str = { workspace = true }

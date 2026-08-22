@@ -53,11 +53,23 @@ pub fn default_adapters() -> Vec<Box<dyn LanguageAdapter>> {
 
 /// Every first-party plugin this build includes (RFC 0003) — the product's ecosystem registry,
 /// same shape and same reasoning as [`default_adapters`]: one entry here, nothing else in the
-/// workspace changes. Just the built-in lcov coverage ingester today; framework-convention
-/// plugins (react, nextjs, spring…) are RFC 0003 §3's stated launch set, not yet built —
-/// tracked in the ROADMAP, not silently implied by this function's name.
+/// workspace changes. These are *candidates*: each is still gated by its own
+/// `PluginDescriptor.activation` rules in [`compose_plugins`] (RFC 0003 §4), so a convention
+/// plugin never runs — or costs the graph-cache bypass — on a project it doesn't match. The
+/// rest of RFC 0003 §3's stated launch set (react, spring, jest/vitest…) is tracked in the
+/// ROADMAP, not silently implied by this function's name.
 pub fn default_plugins() -> Vec<Box<dyn Plugin>> {
-    vec![Box::new(kndo_core::plugin::LcovPlugin)]
+    // Same cfg-gated-push shape as `default_adapters`, same clippy reasoning.
+    #[allow(clippy::vec_init_then_push)]
+    {
+        let mut plugins: Vec<Box<dyn Plugin>> = Vec::new();
+        plugins.push(Box::new(kndo_core::plugin::LcovPlugin));
+        #[cfg(feature = "plugin-nextjs")]
+        plugins.push(Box::new(kndo_plugin_nextjs::NextjsPlugin));
+        #[cfg(feature = "plugin-express")]
+        plugins.push(Box::new(kndo_plugin_express::ExpressPlugin));
+        plugins
+    }
 }
 
 /// The one-line entry point frontends use: an [`Engine`] over the full default product plus
@@ -137,7 +149,7 @@ pub fn plugin_resolution(root: &Path) -> PluginResolution {
 /// are gated exactly like global candidates — a built-in convention plugin must never run (or
 /// cost the cache bypass) on a project that doesn't match it.
 fn compose_plugins(root: &Path) -> (Vec<Box<dyn Plugin>>, PluginResolution) {
-    #[cfg(feature = "external-adapters")]
+    #[cfg(feature = "plugin-activation")]
     {
         let candidates = collect_candidates(root);
         let descriptors: Vec<kndo_core::plugin::PluginDescriptor> =
@@ -161,12 +173,15 @@ fn compose_plugins(root: &Path) -> (Vec<Box<dyn Plugin>>, PluginResolution) {
             .collect();
         (plugins, resolution)
     }
-    #[cfg(not(feature = "external-adapters"))]
+    #[cfg(not(feature = "plugin-activation"))]
     {
         let _ = root;
-        // Minimal embedder build: no WASM tier, no rule evaluation (the activation module's
-        // glob/manifest machinery is feature-gated with it) — built-ins are unconditional,
-        // exactly the pre-RFC-0015 behavior.
+        // Minimal embedder build: no rule evaluation (the activation module's glob/manifest
+        // machinery is feature-gated with it) — built-ins are unconditional, exactly the
+        // pre-RFC-0015 behavior. Safe only because every gated built-in's feature
+        // (`plugin-nextjs`/`plugin-express`) implies `plugin-activation`, so the sole
+        // built-in that can land here is the lcov ingester (always-on is its original
+        // contract, and it declares `mutates_graph() == false`).
         let plugins = default_plugins();
         let resolution = PluginResolution {
             plugins: plugins
@@ -201,20 +216,27 @@ fn resolved_plugin(
 }
 
 /// The three candidate tiers, in deterministic order: built-ins, project-local `.kndo/plugins/`,
-/// global directory — each `.wasm` load failure skipped, never fatal (RFC 0003 §3).
-#[cfg(feature = "external-adapters")]
+/// global directory — each `.wasm` load failure skipped, never fatal (RFC 0003 §3). The two
+/// WASM tiers only exist with the WASM runtime (`external-adapters`); a plugins-only build
+/// (`plugin-activation` via `plugin-nextjs`/`plugin-express`) still gates its built-ins here.
+#[cfg(feature = "plugin-activation")]
 fn collect_candidates(root: &Path) -> Vec<(Box<dyn Plugin>, PluginSource)> {
     let mut candidates: Vec<(Box<dyn Plugin>, PluginSource)> = Vec::new();
     for plugin in default_plugins() {
         candidates.push((plugin, PluginSource::Builtin));
     }
-    candidates.extend(load_wasm_plugins(
-        &project_plugin_dir(root),
-        PluginSource::ProjectLocal,
-    ));
-    if let Some(global_dir) = activation::global_plugin_dir() {
-        candidates.extend(load_wasm_plugins(&global_dir, PluginSource::Global));
+    #[cfg(feature = "external-adapters")]
+    {
+        candidates.extend(load_wasm_plugins(
+            &project_plugin_dir(root),
+            PluginSource::ProjectLocal,
+        ));
+        if let Some(global_dir) = activation::global_plugin_dir() {
+            candidates.extend(load_wasm_plugins(&global_dir, PluginSource::Global));
+        }
     }
+    #[cfg(not(feature = "external-adapters"))]
+    let _ = root;
     candidates
 }
 
@@ -310,12 +332,14 @@ fn wasm_components(dir: &Path) -> Vec<std::path::PathBuf> {
     paths
 }
 
-/// RFC 0003 §4: where globally installed `Plugin`s live, and whether one activates for a given
-/// project — the machine-checkable counterpart to `PluginDescriptor.detection`'s prose.
-#[cfg(feature = "external-adapters")]
+/// RFC 0003 §4: whether a plugin activates for a given project — the machine-checkable
+/// counterpart to `PluginDescriptor.detection`'s prose — plus (with the WASM tier) where
+/// globally installed `Plugin`s live. Gated built-in convention plugins share this exact
+/// machinery, which is why it sits behind `plugin-activation` rather than `external-adapters`.
+#[cfg(feature = "plugin-activation")]
 mod activation {
     use kndo_core::plugin::ActivationRule;
-    use std::path::{Path, PathBuf};
+    use std::path::Path;
 
     /// Overridable via `KNDO_PLUGIN_DIR` (tests, and any user who wants a non-default location);
     /// otherwise `<XDG data dir>/kndo/plugins` — `~/.local/share/kndo/plugins` on Linux,
@@ -323,9 +347,10 @@ mod activation {
     /// Windows. `None` when neither the override nor the platform data dir can be determined
     /// (e.g. `$HOME` unset) — global discovery is then simply skipped, not an error: a project's
     /// own `.kndo/plugins/` keeps working regardless.
-    pub(crate) fn global_plugin_dir() -> Option<PathBuf> {
+    #[cfg(feature = "external-adapters")]
+    pub(crate) fn global_plugin_dir() -> Option<std::path::PathBuf> {
         if let Ok(dir) = std::env::var("KNDO_PLUGIN_DIR") {
-            return Some(PathBuf::from(dir));
+            return Some(std::path::PathBuf::from(dir));
         }
         dirs::data_dir().map(|d| d.join("kndo").join("plugins"))
     }

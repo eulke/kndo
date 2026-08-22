@@ -1115,6 +1115,8 @@ dependencies = [
  "kndo-adapter-swift",
  "kndo-core",
  "kndo-plugin-api",
+ "kndo-plugin-express",
+ "kndo-plugin-nextjs",
  "serde_json",
  "smol_str",
  "tempfile",
@@ -1272,6 +1274,22 @@ dependencies = [
  "tempfile",
  "wasmtime",
  "wit-component",
+]
+
+[[package]]
+name = "kndo-plugin-express"
+version = "0.1.0"
+dependencies = [
+ "kndo-core",
+ "smol_str",
+]
+
+[[package]]
+name = "kndo-plugin-nextjs"
+version = "0.1.0"
+dependencies = [
+ "kndo-core",
+ "smol_str",
 ]
 
 [[package]]
