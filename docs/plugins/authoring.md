@@ -257,12 +257,13 @@ a `kndo:plugin@0.2.0` ever exists — and `0.1.0` components keep working even t
 
 Today: hand your users the `.wasm` (they drop it in `.kndo/plugins/` or the global directory).
 
-To be installer-ready (RFC 0015 §4, `kndo plugin install <coordinate>` — phase 3, not yet
-shipped): publish GitHub releases on the repo your coordinate names, tagged `vX.Y.Z`, carrying
-the componentized `.wasm` as a release asset plus a `checksums.txt` (SHA-256) — the same
-artifact convention kndo itself releases under (RFC 0014 §3). Private repos work through the
-user's own git credentials; nothing extra to set up. Publish this shape now and the installer
-picks you up unchanged when it lands.
+To be installable by `kndo plugin install <coordinate>` (RFC 0015 §4, shipped): publish GitHub
+releases on the repo your coordinate names, tagged `vX.Y.Z`, carrying exactly one componentized
+`.wasm` release asset plus a `checksums.txt` (`sha256sum` format) — the same artifact
+convention kndo itself releases under (RFC 0014 §3). The installer verifies the checksum, then
+identity binding: your descriptor's `id` must equal the coordinate the user typed, or the
+install is refused (§4 above). Private repos need only a `GITHUB_TOKEN`/`GH_TOKEN` in the
+user's environment — their existing GitHub credential, nothing plugin-specific.
 
 ## 10. Worked references in this repository
 

@@ -120,6 +120,30 @@ is no inter-plugin ABI that would justify it.
 GitHub credentials, which is precisely the company-framework scenario. A central registry
 would have required private hosting; coordinates make privacy the repo's own access control.
 
+**Landed** (`kndo::plugin_install`, the `kndo` crate's `plugin-install` feature, on by
+default). Implementation decisions worth pinning:
+
+- Release shape enforced literally: exactly one `.wasm` asset (ambiguity is an error naming
+  every candidate) plus `checksums.txt` in `sha256sum` line format. Assets download through
+  the API asset URL with `Accept: application/octet-stream` — the one form that carries
+  auth for private repos; credentials are `GITHUB_TOKEN`/`GH_TOKEN` from the environment.
+- The whole transaction stages first and commits last: any checksum, identity, conflict, or
+  fetch failure anywhere in the closure leaves the directory and lockfile untouched.
+- `plugins.lock` maps coordinate → `{version, sha256, file}`; the on-disk name is the
+  coordinate with `/` → `__` (`github.com__owner__repo.wasm`), reversible because `__` cannot
+  appear in a GitHub owner/repo name. Files present but not in the lock are reported by
+  `kndo plugin list` as hand-installed, never hidden and never touched by `remove`.
+- The version-conflict rule has a cross-transaction twin: an explicit tag that disagrees with
+  the locked version fails, naming the installed version and the requirer — `remove` first if
+  the change is intended. Bare (untagged) requests are compatible with anything installed.
+- A `kndo:*` dependency that this build does *not* compile in is a warning in the install
+  report (and a doctor line thereafter), not an error — §3's never-fatal rule applied at
+  install time too.
+- Network and component-probing are injected edges (`ReleaseSource` + a probe fn), so every
+  policy above is proven by unit tests without either, plus one integration test driving the
+  real WASM probe: a genuine component with a plain id fetched by coordinate trips identity
+  binding and installs nothing (`crates/kndo/tests/plugin_install_probe.rs`).
+
 ## 5. Rejected: lockfile-transitive activation
 
 Considered and rejected as the mechanism for the wrapper case (matching `ManifestDependency`
@@ -147,7 +171,8 @@ that case on the table — not before.
    `kndo:` namespace reservation enforced at load, activation fixpoint in the composition
    layer, `kndo doctor` showing dependency chains and missing coordinates. Semantics complete
    and fully testable without any network code.
-3. **`kndo plugin install/list/remove`**: the fetch/verify/lockfile machinery of §4.
+3. **`kndo plugin install/list/remove`**: the fetch/verify/lockfile machinery of §4 —
+   landed, see §4's implementation notes.
 4. **First real built-ins**: `kndo:nextjs` (file-system routing roots, special exports — the
    flagship, spec: [docs/plugins/nextjs.md](../plugins/nextjs.md)) and `kndo:express`
    (script-launched entry files the import graph can't see — honest spec:

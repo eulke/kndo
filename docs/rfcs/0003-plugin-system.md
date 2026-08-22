@@ -119,9 +119,10 @@ prototype a plugin natively and ship it as WASM unchanged.
     a silent one.
   - `kndo doctor` reports every global candidate — activated or skipped, with the exact rule
     that did or didn't fire (`kndo::global_plugin_candidates`, separate from `Engine::doctor`,
-    which only ever sees the final composed set). **Not yet done**: there is no install/registry
-    command (`kndo plugin install …`) — landing a file in the global directory is still a
-    manual `cp`, same posture `.kndo/plugins/` itself has always had.
+    which only ever sees the final composed set). `kndo plugin install/list/remove` (RFC 0015
+    §4, landed) populates the same directory from GitHub releases with checksum + identity
+    verification and a `plugins.lock`; a manual `cp` still works — `kndo plugin list` reports
+    such files as hand-installed.
 - **Explicit config** (`kndo.toml`) can force-enable/disable and pass plugin-scoped options:
 
 ```toml

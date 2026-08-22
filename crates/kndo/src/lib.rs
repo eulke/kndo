@@ -22,6 +22,11 @@ use kndo_core::engine::{ConfigOverrides, Engine, EngineError};
 use kndo_core::plugin::Plugin;
 use std::path::Path;
 
+/// `kndo plugin install/list/remove` (RFC 0015 §4) — the registry-less installer over the
+/// global plugin directory.
+#[cfg(feature = "plugin-install")]
+pub mod plugin_install;
+
 /// Every first-party adapter this build includes — the product's language registry, defined
 /// exactly once. Adding a language: one dependency + feature in this crate's manifest, one
 /// entry here. Nothing else in the workspace changes.

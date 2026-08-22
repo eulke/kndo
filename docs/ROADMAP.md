@@ -835,8 +835,8 @@ symbols its hooks touch) — plus eight unit tests for the filter logic itself
 (`crates/kndo/src/lib.rs`'s `activation` module, including the monorepo and
 `node_modules`-exclusion cases). Full workspace suite and `clippy -D warnings` both clean.
 
-**Still not built:** an install/registry command (`kndo plugin install …`) — landing a file in
-the global directory is still a manual copy.
+**Since built** (RFC 0015 §6 phase 3): `kndo plugin install/list/remove` — see M6's RFC 0015
+entry below.
 
 ### M5 progress — `kndo doctor` plugin/global-candidate visibility ✅ (landed 2026-08-21)
 
@@ -877,8 +877,12 @@ coordinate-based ids — `github.com/owner/repo` external, reserved `kndo:` for 
 plugins**, `kndo:nextjs` and `kndo:express`, spec'd in `docs/plugins/{nextjs,express}.md` and
 shipped as gated built-ins (`crates/kndo-plugin-{nextjs,express}`, feature-gated in the `kndo`
 crate, proven end to end by `crates/kndo/tests/builtin_convention_plugins.rs`'s
-baseline-then-plugin fixtures) — are **landed**; phase 3, `kndo plugin install/list/remove`,
-is the remaining piece), **`kndo-action` GA** (RFC 0010: sticky PR comment, annotations, SARIF
+baseline-then-plugin fixtures) — and phase 3, `kndo plugin install/list/remove`
+(`kndo::plugin_install`: GitHub-release fetch, checksum + identity-binding verification,
+transitive dependency closure, `plugins.lock`, stage-then-commit atomicity; policies unit-
+tested against injected source/probe edges plus one real-component identity-binding test) —
+are **all landed**: RFC 0015 is fully implemented), **`kndo-action` GA** (RFC 0010: sticky PR
+comment, annotations, SARIF
 opt-in — dogfooded on kndo's own PRs from M2 via a pre-GA workflow), `stale` (suppressions) rule,
 error-message polish.
 

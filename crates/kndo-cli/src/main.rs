@@ -30,6 +30,7 @@ fn main() -> ExitCode {
         Some("check") => check(&args[1..]),
         Some("baseline") => baseline_cmd(&args[1..]),
         Some("doctor") => doctor_cmd(),
+        Some("plugin") => plugin_cmd(&args[1..]),
         Some("health") => health_cmd(&args[1..]),
         Some("init") => init_cmd(&args[1..]),
         Some("find") => nav::find_cmd(&args[1..]),
@@ -45,7 +46,7 @@ fn main() -> ExitCode {
         None => check(&args),
         Some(other) => {
             eprintln!(
-                "kndo: unknown command `{other}` (check, health, baseline, doctor, init, find, describe, uses, used-by, trace, query, --version)"
+                "kndo: unknown command `{other}` (check, health, baseline, doctor, plugin, init, find, describe, uses, used-by, trace, query, --version)"
             );
             ExitCode::from(2)
         }
@@ -307,6 +308,98 @@ fn doctor_cmd() -> ExitCode {
     }
 
     ExitCode::SUCCESS
+}
+
+/// `kndo plugin install <coordinate>[@tag] | list | remove <coordinate>` (RFC 0015 §4) —
+/// pure presentation over `kndo::plugin_install`; every policy (checksum, identity binding,
+/// dependency closure, conflicts, lockfile) lives there.
+fn plugin_cmd(args: &[String]) -> ExitCode {
+    match (args.first().map(String::as_str), args.get(1)) {
+        (Some("install"), Some(spec)) => plugin_install(spec),
+        (Some("list"), None) => plugin_list(),
+        (Some("remove"), Some(spec)) => plugin_remove(spec),
+        _ => {
+            eprintln!(
+                "kndo: usage: kndo plugin install <github.com/owner/repo[@tag]> | kndo plugin \
+                 list | kndo plugin remove <github.com/owner/repo>"
+            );
+            ExitCode::from(2)
+        }
+    }
+}
+
+fn plugin_install(spec: &str) -> ExitCode {
+    match kndo::plugin_install::install(spec) {
+        Ok(report) => {
+            print_install_report(&report);
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("kndo: plugin install: {e}");
+            ExitCode::from(2)
+        }
+    }
+}
+
+fn print_install_report(report: &kndo::plugin_install::InstallReport) {
+    for (id, tag) in &report.installed {
+        println!("installed {id} {tag}");
+    }
+    for id in &report.already_present {
+        println!("{id}: already installed (no-op)");
+    }
+    for id in &report.builtin_deps {
+        println!("dependency {id}: built into this kndo (no-op)");
+    }
+    for id in &report.unknown_builtins {
+        println!(
+            "warning: dependency {id} is not built into this kndo — those conventions \
+             won't be analyzed (kndo doctor will keep reporting the gap)"
+        );
+    }
+}
+
+fn plugin_list() -> ExitCode {
+    match kndo::plugin_install::list() {
+        Ok((dir, managed, unmanaged)) => {
+            println!("global plugin directory: {}", dir.display());
+            print_plugin_rows(&managed, &unmanaged);
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("kndo: plugin list: {e}");
+            ExitCode::from(2)
+        }
+    }
+}
+
+fn print_plugin_rows(managed: &[kndo::plugin_install::InstalledPlugin], unmanaged: &[String]) {
+    if managed.is_empty() && unmanaged.is_empty() {
+        println!("no plugins installed (kndo plugin install <github.com/owner/repo>)");
+    }
+    for p in managed {
+        println!("{} {} ({})", p.id, p.version, p.file);
+    }
+    for file in unmanaged {
+        println!("{file}: hand-installed (not managed by kndo plugin install)");
+    }
+}
+
+fn plugin_remove(spec: &str) -> ExitCode {
+    match kndo::plugin_install::remove(spec) {
+        Ok(version) => {
+            println!("removed {spec} (was {version})");
+            println!(
+                "note: anything still depending on it will show as a missing dependency in \
+                 kndo doctor — never an error (RFC 0015 §3)"
+            );
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("kndo: plugin remove: {e}");
+            ExitCode::from(2)
+        }
+    }
 }
 
 /// `kndo baseline [--update]` (RFC 0006 §6, contracts §5's `Engine::baseline`): snapshot the

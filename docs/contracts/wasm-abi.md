@@ -259,8 +259,11 @@ globally installed adapter isn't something this pass adds (RFC 0003 §3/§4).
 `activation` rules rendered via `ActivationRule::describe`. A globally installed plugin whose
 rule doesn't match isn't invisible; it shows up as inactive with the rule that didn't fire.
 
-Not yet built: an install/registry command (`kndo plugin install …`) — getting a `.wasm` file
-into the global directory is still a manual copy.
+`kndo plugin install <coordinate>` (RFC 0015 §4, `kndo::plugin_install`) populates the global
+directory from GitHub releases — checksum-verified, identity-bound (the fetched component's
+descriptor id must equal the coordinate), dependency-closed, recorded in `plugins.lock` beside
+the `.wasm` files. Hand-copying a file in still works and is still the project-local tier's
+only mechanism; `kndo plugin list` shows such files as hand-installed rather than hiding them.
 
 ## 6. Producing a component
 

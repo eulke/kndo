@@ -37,6 +37,9 @@ kndo query                    # composite queries: JSONL on stdin, one graph loa
 kndo init                     # write minimal kndo.toml, .gitignore entry, offer pre-commit hook
 kndo baseline [--update]      # create/refresh baseline from current findings (RFC 0006 §6)
 kndo doctor                   # what was detected: adapters, plugins active & why, cache state, timings
+kndo plugin install <coord>   # install a plugin (+ deps) into the global directory (RFC 0015 §4)
+kndo plugin list              # installed plugins (plugins.lock) + hand-dropped files
+kndo plugin remove <coord>    # remove a managed plugin; doctor reports any dependency gap left
 ```
 
 `--staged`/`--diff` report the **findings delta** (new + fixed, including derived effects far from
