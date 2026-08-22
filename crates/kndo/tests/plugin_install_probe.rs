@@ -22,21 +22,37 @@ fn workspace_root() -> PathBuf {
         .to_path_buf()
 }
 
+/// A process-unique `--target-dir` (not the demo crate's own shared `target/`) — see the
+/// identical helper's doc comment in `external_adapter.rs` for why: several independent test
+/// binaries build these same demo crates, and under `cargo test --workspace`'s default
+/// parallelism a reader has been observed to pick up a wrong-shaped artifact from a
+/// concurrent writer despite cargo's own target-dir lock.
+fn isolated_target_dir() -> PathBuf {
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("system clock before the epoch")
+        .as_nanos();
+    std::env::temp_dir().join(format!("kndo-wasm-target-{}-{nonce}", std::process::id()))
+}
+
 fn build_component(example_dir: &str, wasm_name: &str) -> Vec<u8> {
     let demo_dir = workspace_root().join(example_dir);
+    let target_dir = isolated_target_dir();
     let status = Command::new("cargo")
         .args(["build", "--release", "--target", "wasm32-unknown-unknown"])
+        .env("CARGO_TARGET_DIR", &target_dir)
         .current_dir(&demo_dir)
         .status()
         .unwrap_or_else(|e| panic!("failed to invoke cargo for {example_dir}: {e}"));
     assert!(status.success(), "{example_dir} guest build failed");
 
     let core_wasm = std::fs::read(
-        demo_dir
-            .join("target/wasm32-unknown-unknown/release")
+        target_dir
+            .join("wasm32-unknown-unknown/release")
             .join(wasm_name),
     )
     .expect("reading the built guest module");
+    let _ = std::fs::remove_dir_all(&target_dir);
 
     wit_component::ComponentEncoder::default()
         .module(&core_wasm)
@@ -113,6 +129,42 @@ fn a_real_component_with_a_plain_id_fails_identity_binding() {
         other => panic!("expected IdentityMismatch, got: {other}"),
     }
     // Checksum verification passed, the component genuinely loaded — and still nothing landed.
+    assert!(
+        std::fs::read_dir(dir.path()).unwrap().next().is_none(),
+        "identity rejection must leave the directory untouched"
+    );
+}
+
+/// RFC 0016 §4: `wasm_probe` must try the adapter loader too, not just the plugin one —
+/// `examples/kndo-plugin-demo` is a `kndo:adapter` component, not `kndo:plugin`. Proven the
+/// same way the plugin case is: if the probe's adapter fallback didn't work, this would fail
+/// with the "not a valid kndo:plugin or kndo:adapter component" catch-all instead of
+/// `IdentityMismatch` — reaching identity binding *is* the proof the adapter loader accepted
+/// it and reported its real id.
+#[test]
+fn a_real_adapter_component_is_probed_and_still_needs_identity_binding() {
+    let wasm = build_component("examples/kndo-plugin-demo", "kndo_plugin_demo.wasm");
+    let dir = tempfile::tempdir().expect("temp global plugin dir");
+
+    let err = install_with(
+        "github.com/someone/kdemo-adapter",
+        dir.path(),
+        &OneRelease { wasm },
+        kndo::plugin_install::wasm_probe,
+        &[],
+    )
+    .expect_err("a plain-named adapter component must not be installable by coordinate either");
+
+    match err {
+        InstallError::IdentityMismatch {
+            coordinate,
+            declared,
+        } => {
+            assert_eq!(coordinate, "github.com/someone/kdemo-adapter");
+            assert_eq!(declared, "kdemo");
+        }
+        other => panic!("expected IdentityMismatch, got: {other}"),
+    }
     assert!(
         std::fs::read_dir(dir.path()).unwrap().next().is_none(),
         "identity rejection must leave the directory untouched"

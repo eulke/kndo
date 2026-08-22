@@ -107,9 +107,10 @@ capabilities nobody meant to give it.
 The distribution crate (`crates/kndo/src/lib.rs`) auto-discovers `.kndo/plugins/*.wasm`
 relative to the project root on every `kndo::open` call — no `kndo.toml` entry needed, the
 zero-config default RFC 0003 §3 already names. This section covers that project-local
-directory; `Plugin`s (not `LanguageAdapter`s) also auto-discover from a global, per-machine
-directory, filtered by activation rules rather than unconditional — §5.5. **One directory, two
-loaders, no naming convention**: every discovered `.wasm` file is tried against both
+directory; both `Plugin`s and (since RFC 0016 §4) `LanguageAdapter`s also auto-discover from a
+global, per-machine directory, filtered by activation rules rather than unconditional — §4.1
+for adapters, §5.5 for plugins. **One directory, two loaders, no naming convention**: every
+discovered `.wasm` file is tried against both
 `WasmAdapter::load` and
 `WasmPlugin::load`; each fails to *instantiate* (not merely "doesn't look right") against a
 component built for the other package's world, since wasmtime's own component type-checking
@@ -126,6 +127,43 @@ Demo components shipped **in this repository** live outside the compiled product
 (`examples/kndo-plugin-demo`, `examples/kndo-plugin-hooks-demo` — both excluded from the
 workspace's own `members`, same convention as `spikes/perf`): "third-party" means never
 statically linked, checked by keeping it structurally incapable of being one.
+
+### 4.1 Identity, global installation & activation (RFC 0016 §4)
+
+`WasmAdapter::load` rejects any component whose descriptor claims a `kndo:`-prefixed id
+(`host.rs`, mirroring §5.1's identity binding for plugins) — the reserved namespace is not
+claimable by an external component, full stop, independent of what any first-party adapter's
+own id happens to be (none of them use the `kndo:` prefix; renaming them would only churn the
+graph cache key — RFC 0016 §4's own note on why that's not worth doing).
+
+Beyond `.kndo/plugins/`, `crates/kndo/src/lib.rs`'s `compose_adapters` also scans the same
+**global** directory the plugin tier uses (§5.5 — `dirs::data_dir()/kndo/plugins`,
+`KNDO_PLUGIN_DIR`-overridable): each candidate's `descriptor().activation` is evaluated against
+the project root before it joins composition, reusing the exact `activation::activates`/
+`ActivationRule` machinery §5.5 documents for plugins — `file-exists(glob)`/
+`manifest-dependency(name)`, any single match activates, an empty list never self-activates
+globally. Project-local and compiled-in adapters are unconditional either way, same as their
+plugin-tier counterparts.
+
+**Claim priority.** With project-local, global, and compiled-in adapters all in play for the
+same file extension, composition orders the final `Vec<Box<dyn LanguageAdapter>>` project-local
+first, then active global candidates, then compiled-in — ties within a tier broken by
+descriptor id — because `graph.rs`'s claim resolution takes the first adapter in that list
+whose `claim()` returns `Some`. Auditing this while implementing it found the *actual*
+pre-existing order was the reverse (compiled-in first, externals appended after): a
+project-local adapter could never have won a contested extension against a built-in one. That
+is corrected, not merely documented, by RFC 0016 §4.
+
+`kndo::adapter_resolution`/`kndo::global_adapter_candidates` mirror `plugin_resolution`/
+`global_plugin_candidates` (§5.5) exactly — `kndo doctor` renders both the composed set with
+each adapter's `activation` rules shown, and a "global adapter candidates" section listing
+every `.wasm` the global directory holds, activated or not.
+
+`kndo plugin install <coordinate>` (RFC 0015 §4, `kndo::plugin_install`) accepts adapter
+components too: `wasm_probe` tries the plugin loader, then the adapter loader, and whichever
+accepts the bytes carries the descriptor identity binding checks against. No installer-side
+distinction between the two kinds beyond that — checksum, identity, dependency closure, and
+`plugins.lock` are all kind-agnostic.
 
 ## 5. The Plugin ABI (`kndo:plugin`)
 
@@ -264,8 +302,8 @@ against the project root *before* the plugin joins composition at all:
 Any single matching rule activates the plugin; an **empty** `activation` list never
 self-activates from the global directory (silence over a guess, the zero-false-positive
 default) — such a plugin only ever runs if placed in a project's own `.kndo/plugins/` instead.
-This whole mechanism is `Plugin`-only today: `LanguageAdapter` has no `activation` field, so a
-globally installed adapter isn't something this pass adds (RFC 0003 §3/§4).
+`LanguageAdapter` shares this exact mechanism since RFC 0016 §4 — §4.1 covers the adapter-side
+specifics (identity, claim priority) this section doesn't repeat.
 
 `kndo doctor` (`crates/kndo-cli/src/main.rs`'s `doctor_cmd`) reports both sides: `report.plugins`
 (from `Engine::doctor`) for the final composed set, and `kndo::global_plugin_candidates(root)`
@@ -319,6 +357,13 @@ in-process on every run (no binary checked into the repo):
   `KNDO_PLUGIN_DIR` (§5.5): one `#[test]` opens two temp projects against the same globally
   installed plugin — one without, one with the file that satisfies its `file-exists` rule —
   proving activation is genuinely conditional, not just wired and always-on.
+- `crates/kndo/tests/global_adapter_activation.rs` (RFC 0016 §4) — the adapter-side mirror of
+  the above, plus a claim-priority assertion: with the same component placed both project-local
+  and in the global tier for one project, `kndo::adapter_resolution` must list the project-local
+  copy first — proving §4.1's corrected composition order, not just that both tiers activate.
+- `crates/kndo/tests/plugin_install_probe.rs` (RFC 0015 §4, extended by RFC 0016 §4) — a real
+  component through `kndo::plugin_install::wasm_probe`; one case per kind proves the probe's
+  plugin-then-adapter fallback reaches identity binding for both, not just plugins.
 
 ## 8. Versioning
 
@@ -329,22 +374,19 @@ plugin side's richer `GraphView` surface, `ingest_coverage`/`suppress`, or per-q
 new package version, not a silent reinterpretation of `0.1.0` — a component built against a v1
 package must keep working against a v1-compatible host indefinitely.
 
-**`kndo:plugin`'s `read-file` host import — landed (RFC 0016 §5).** What RFC 0016 §8 phase 0
-reserved ahead of the 1.0 freeze as a "declared forward-compatible extension" is now built: one
-added import, `read-file(path) → option<list<u8>>` (§5.1/§5.3 above). Additive, not breaking —
-a component built against the pre-§5 world simply never calls it, and the host still answers
-every existing import identically.
+**Both RFC 0016 §8 phase 0 reservations are now landed**, additively, exactly as reserved:
 
-**Declared forward-compatible extension still pending (RFC 0016 §8 phase 0).** One reservation
-from that phase remains ahead of the freeze:
+- **`kndo:plugin`'s `read-file` host import (RFC 0016 §5).** One added import,
+  `read-file(path) → option<list<u8>>` (§5.1/§5.3 above). A component built against the
+  pre-§5 world simply never calls it, and the host still answers every existing import
+  identically.
+- **`kndo:adapter`'s component-descriptor fields (RFC 0016 §4).** The `adapter-descriptor`
+  record gained `activation: list<activation-rule>` (wired and read — §4.1) and
+  `dependencies: list<string>` (rides the wire, unevaluated — mirrors the native
+  `AdapterDescriptor`'s own dormant reservation; no adapter has ever needed cross-adapter
+  activation). No `version` field landed — §4.1's own note explains why one was never needed.
+  A component built against the pre-§4 world has neither field; the host reads them as empty,
+  the same value the dormant reservation always implied.
 
-- **`kndo:adapter`: component-descriptor fields.** The adapter world's `descriptor` record
-  grows the component surface `PluginDescriptor` already carries — `activation` rules,
-  `dependencies` coordinates, `version` — so external adapters can be globally installed and
-  gated (RFC 0016 §4). The native `AdapterDescriptor` already carries `activation`/
-  `dependencies` as dormant fields (empty for every first-party adapter; nothing evaluates
-  them yet); the WIT-side addition is a new package version whose host accepts old components
-  by treating the missing fields as empty — exactly the dormant value.
-
-This reservation changes no shipped behavior; it exists so the freeze commits to the evolution
-*path*, not just the current surface.
+Neither changed a byte of previously shipped behavior — both are the freeze committing to an
+evolution *path* it had already declared, landing on schedule.

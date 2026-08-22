@@ -143,16 +143,33 @@ interface types {
         class: file-class,
     }
 
+    /// Duplicated from `kndo:plugin`'s own `activation-rule` (RFC 0016 §4 — same reasoning
+    /// `plugin.wit`'s module doc already gives for not sharing types across packages: each ABI
+    /// evolves independently). Machine-checkable counterpart to `detection`'s prose; gates
+    /// whether a *globally installed* adapter joins composition at all (RFC 0003 §4's
+    /// mechanism, extended from `Plugin` to `LanguageAdapter` here). A project-local
+    /// `.kndo/plugins/*.wasm` adapter is unconditional either way — presence there is already
+    /// the opt-in.
+    variant activation-rule {
+        file-exists(string),
+        manifest-dependency(string),
+    }
+
     /// v1 subset of `kndo_core::adapter::AdapterDescriptor`. `visibility-ladder` and
     /// `cycle-policy` aren't exposed — the host bridge fills in the same safe defaults CSS/JSON
     /// use (empty ladder, `Idiomatic` cycle tolerance both levels), and
     /// `resolves-dependency-usage` is fixed `false` (v1 never emits an `ImportsDependency`
-    /// edge, having no import extraction at all).
+    /// edge, having no import extraction at all). `activation` is landed and read (RFC 0016
+    /// §4); `dependencies` rides the wire but is not evaluated yet — the native
+    /// `AdapterDescriptor` carries it as the same dormant reservation (RFC 0016 §8 phase 0),
+    /// and this field exists only to keep the two tiers' wire shapes symmetric.
     record adapter-descriptor {
         id: string,
         facts-schema-version: u32,
         file-globs: list<string>,
         grammar-version: string,
+        activation: list<activation-rule>,
+        dependencies: list<string>,
     }
 }
 

@@ -82,9 +82,9 @@ Two tiers (decision in ADR 0003):
    speculatively ahead of it.
 
    `.kndo/plugins/` is per-project — dropping a file there and having it live is the whole
-   opt-in. External `Plugin`s (not yet `LanguageAdapter`s — see §4) additionally auto-discover
-   from a **global** directory installed once per machine, so a plugin doesn't have to be
-   copied into every project that wants it (§4 covers how a globally installed plugin decides
+   opt-in. External `Plugin`s and, since RFC 0016 §4, `LanguageAdapter`s alike additionally
+   auto-discover from a **global** directory installed once per machine, so neither has to be
+   copied into every project that wants it (§4 covers how a globally installed component decides
    *which* projects that is).
 
 Both tiers use the same trait; built-ins are simply statically linked. Third parties can therefore
@@ -117,9 +117,11 @@ prototype a plugin natively and ship it as WASM unchanged.
     analysis uses — `node_modules` excluded exactly like everywhere else), not just the root's
     own: a monorepo package the root manifest says nothing about must still activate a plugin
     it genuinely depends on — kndo's monorepo support isn't a special case anywhere else (RFC
-    0012 §8/§10), so this couldn't be either. `LanguageAdapter`s don't have an `activation`
-    field yet, so a globally installed adapter isn't a thing this pass adds — a stated gap, not
-    a silent one (RFC 0016 §4 is the plan that closes it).
+    0012 §8/§10), so this couldn't be either. `LanguageAdapter` has the identical `activation`
+    field and identical global-tier gating since RFC 0016 §4 (landed) — a globally installed
+    adapter is filtered through it exactly like a plugin, with one difference: no
+    `dependencies`-implication fixpoint for adapters (nothing has ever needed cross-adapter
+    activation; the field rides the wire dormant, same posture as its native reservation).
   - `kndo doctor` reports every global candidate — activated or skipped, with the exact rule
     that did or didn't fire (`kndo::global_plugin_candidates`, separate from `Engine::doctor`,
     which only ever sees the final composed set). `kndo plugin install/list/remove` (RFC 0015

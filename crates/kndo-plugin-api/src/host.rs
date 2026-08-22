@@ -70,6 +70,18 @@ impl WasmAdapter {
         let raw_descriptor = bindings
             .call_descriptor(&mut store)
             .map_err(|e| LoadError::Instantiate(format!("descriptor() failed: {e}")))?;
+        // RFC 0016 §4: the `kndo:` namespace is reserved for built-ins, same enforcement the
+        // plugin bridge already has (RFC 0015 §2) — a component external to this build cannot
+        // claim to be `kndo:go` or any other coordinate no external source could have been
+        // fetched from. Skipped-not-fatal, same as any other load failure.
+        if kndo_core::plugin::is_reserved_id(&raw_descriptor.id) {
+            return Err(LoadError::Instantiate(format!(
+                "descriptor claims reserved built-in id '{}' (the kndo: namespace is not \
+                 claimable by external adapters — RFC 0015 §2, extended to adapters by RFC \
+                 0016 §4)",
+                raw_descriptor.id
+            )));
+        }
 
         Ok(WasmAdapter {
             descriptor: native_descriptor(raw_descriptor),
@@ -125,8 +137,14 @@ fn instantiate_bindings(
 
 fn native_descriptor(raw: w::AdapterDescriptor) -> AdapterDescriptor {
     AdapterDescriptor {
-        activation: Vec::new(),
-        dependencies: Vec::new(),
+        activation: raw
+            .activation
+            .into_iter()
+            .map(from_wit_activation_rule)
+            .collect(),
+        // Dormant on both sides (RFC 0016 §8 phase 0 / §4's WIT note) — rides the wire,
+        // unevaluated, so the reservation is symmetric across tiers.
+        dependencies: raw.dependencies.iter().map(SmolStr::new).collect(),
         id: SmolStr::new(&raw.id),
         facts_schema_version: raw.facts_schema_version,
         file_globs: raw.file_globs.iter().map(SmolStr::new).collect(),
@@ -138,6 +156,17 @@ fn native_descriptor(raw: w::AdapterDescriptor) -> AdapterDescriptor {
             package_cycles: CycleTolerance::Idiomatic,
         },
         resolves_dependency_usage: false,
+    }
+}
+
+fn from_wit_activation_rule(rule: w::ActivationRule) -> kndo_core::plugin::ActivationRule {
+    match rule {
+        w::ActivationRule::FileExists(glob) => {
+            kndo_core::plugin::ActivationRule::FileExists(SmolStr::new(&glob))
+        }
+        w::ActivationRule::ManifestDependency(name) => {
+            kndo_core::plugin::ActivationRule::ManifestDependency(SmolStr::new(&name))
+        }
     }
 }
 

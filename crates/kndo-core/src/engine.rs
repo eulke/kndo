@@ -200,6 +200,11 @@ pub struct DoctorAdapterInfo {
     pub grammar_version: String,
     pub file_globs: Vec<String>,
     pub manifest_globs: Vec<String>,
+    /// RFC 0016 §4 — shown for the same reason `DoctorPluginInfo.activation` is: visible even
+    /// though it's dormant for every compiled-in adapter today (empty = always-on), it's what
+    /// gates a *globally installed* adapter (`kndo::global_adapter_candidates`, a separate
+    /// call this report has no visibility into, same split `DoctorPluginInfo`'s own doc notes).
+    pub activation: Vec<String>,
 }
 
 /// `kndo doctor`'s cache section — `None` when the cache is disabled entirely
@@ -661,6 +666,7 @@ impl Engine {
                     grammar_version: d.grammar_version.to_string(),
                     file_globs: d.file_globs.iter().map(|g| g.to_string()).collect(),
                     manifest_globs: d.manifest_globs.iter().map(|g| g.to_string()).collect(),
+                    activation: d.activation.iter().map(|r| r.describe()).collect(),
                 }
             })
             .collect();

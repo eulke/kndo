@@ -714,13 +714,30 @@ fn sha256_hex(bytes: &[u8]) -> String {
 }
 
 /// The real probe: land the verified bytes in a temp file (the WASM host loads from a path)
-/// and let `kndo-plugin-api`'s own loader — reserved-namespace rejection included — vet them.
-/// Public so the integration suite can run [`install_with`] against genuine components.
+/// and let `kndo-plugin-api`'s own loaders — reserved-namespace rejection included on both —
+/// vet them. RFC 0016 §4: a component can be either a `kndo:plugin` or a `kndo:adapter`; this
+/// tries both, exactly the way `kndo::open`'s own project-local discovery already tries both
+/// loaders per file and lets wasmtime's component type-checking sort out which one accepts it
+/// (docs/contracts/wasm-abi.md §4). Public so the integration suite can run [`install_with`]
+/// against genuine components.
 pub fn wasm_probe(bytes: &[u8]) -> Result<ProbedDescriptor, String> {
     let dir = tempfile_dir().map_err(|e| e.to_string())?;
     let path = dir.join("probe.wasm");
     std::fs::write(&path, bytes).map_err(|e| e.to_string())?;
-    let result = kndo_plugin_api::WasmPlugin::load(&path)
+    let result = probe_as_plugin(&path).or_else(|plugin_err| {
+        probe_as_adapter(&path).map_err(|adapter_err| {
+            format!(
+                "not a valid kndo:plugin ({plugin_err}) or kndo:adapter ({adapter_err}) \
+                 component"
+            )
+        })
+    });
+    let _ = std::fs::remove_dir_all(&dir);
+    result
+}
+
+fn probe_as_plugin(path: &Path) -> Result<ProbedDescriptor, String> {
+    kndo_plugin_api::WasmPlugin::load(path)
         .map(|plugin| {
             let d = kndo_core::plugin::Plugin::descriptor(&plugin);
             ProbedDescriptor {
@@ -729,13 +746,40 @@ pub fn wasm_probe(bytes: &[u8]) -> Result<ProbedDescriptor, String> {
                 dependencies: d.dependencies.iter().map(|s| s.to_string()).collect(),
             }
         })
-        .map_err(|e| e.to_string());
-    let _ = std::fs::remove_dir_all(&dir);
-    result
+        .map_err(|e| e.to_string())
 }
 
+/// `ProbedDescriptor.version` is unused by the install pipeline either way — `LockEntry.version`
+/// is always the release *tag* (`fetch_verified`'s own return, never this field; true for
+/// plugins too, `probe_as_plugin` above). `AdapterDescriptor` has no analogous field at all;
+/// `facts_schema_version` is the closest existing adapter concept, populated here only because
+/// `ProbedDescriptor` needs *something* in that slot.
+fn probe_as_adapter(path: &Path) -> Result<ProbedDescriptor, String> {
+    kndo_plugin_api::WasmAdapter::load(path)
+        .map(|adapter| {
+            let d = kndo_core::adapter::LanguageAdapter::descriptor(&adapter);
+            ProbedDescriptor {
+                id: d.id.to_string(),
+                version: d.facts_schema_version.to_string(),
+                dependencies: d.dependencies.iter().map(|s| s.to_string()).collect(),
+            }
+        })
+        .map_err(|e| e.to_string())
+}
+
+/// Per-*call* unique, not just per-process: `wasm_probe` is a plain function a caller can (and
+/// the test suite does) invoke concurrently within one process — Rust's own test harness runs
+/// `#[test]`s on a thread pool by default. A PID-only directory name made two concurrent probes
+/// share the exact same `probe.wasm` path, so one call's `remove_dir_all` cleanup could delete
+/// the file out from under a still-reading sibling call — a real, if narrow, correctness bug in
+/// production code, not just a test-timing inconvenience (this function backs `kndo plugin
+/// install`, and nothing here ever assumed single-threaded use).
 fn tempfile_dir() -> std::io::Result<PathBuf> {
-    let base = std::env::temp_dir().join(format!("kndo-install-{}", std::process::id()));
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let base = std::env::temp_dir().join(format!("kndo-install-{}-{nonce}", std::process::id()));
     std::fs::create_dir_all(&base)?;
     Ok(base)
 }

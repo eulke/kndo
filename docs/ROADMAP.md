@@ -892,12 +892,13 @@ fields native-side, so the 1.0 freeze doesn't wall off the component-model phase
 adopt kndo in pre-commit and stay enabled for 2 weeks.
 
 ## Post-1.0 parking lot
-**RFC 0016 — uniform component model** (the accepted plan, phased in its §8: host-mediated
-content access for plugin graph hooks — unlocking the detections `kndo:nextjs`/`kndo:express`
-documented as out of scope — then adapter componentization (identity/activation/installer for
-`LanguageAdapter`s), cache-key folding to retire the blanket `mutates_graph` bypass, and a
-CI-proven "shell" build; its §8 phase 0 freeze reservations are the one piece that belongs to
-M6), `kndo clean` (guided auto-removal), watch mode / LSP, custom analyses over a stable graph API,
+**RFC 0016 — uniform component model** (the accepted plan, phased in its §8 — phases 0
+(freeze reservations), 1 (host-mediated content channel for plugin graph hooks, unlocking the
+detections `kndo:nextjs`/`kndo:express` documented as out of scope), and 2 (adapter
+componentization: identity, activation, installer acceptance, corrected claim-priority
+composition order, doctor parity for `LanguageAdapter`s) are **landed**; remaining: cache-key
+folding to retire the blanket `mutates_graph` bypass, and a CI-proven "shell" build), `kndo
+clean` (guided auto-removal), watch mode / LSP, custom analyses over a stable graph API,
 `kndo serve` exposing the navigation verbs 1:1 as MCP tools (RFC 0007 §7), an arbitrary graph
 query language, deep mode (compiler-grade resolvers), historical trend service, HTML report,
 tsconfig project-references deep integration, deferred rules from the RFC 0005 §13 triage

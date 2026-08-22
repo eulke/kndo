@@ -219,6 +219,26 @@ fn doctor_cmd() -> ExitCode {
         println!("  {}  (grammar {})", a.id, a.grammar_version);
         println!("    files:     {}", a.file_globs.join(", "));
         println!("    manifests: {}", a.manifest_globs.join(", "));
+        if !a.activation.is_empty() {
+            println!("    activation: {}", a.activation.join(", "));
+        }
+    }
+    // RFC 0016 §4's global adapter tier — every `.wasm` candidate the global directory holds,
+    // activated or not, same split `plugin_resolution`'s own section below has (`Engine` never
+    // sees a candidate that didn't activate).
+    let global_adapters = kndo::global_adapter_candidates(&cwd);
+    if !global_adapters.is_empty() {
+        println!();
+        println!("global adapter candidates (RFC 0016 §4, not necessarily active above):");
+        for c in &global_adapters {
+            let status = if c.activated { "active" } else { "inactive" };
+            println!("  {} — {status}", c.id);
+            if !c.activation.is_empty() {
+                println!("    activation: {}", c.activation.join(", "));
+            } else {
+                println!("    activation: (none declared — never self-activates globally)");
+            }
+        }
     }
     println!();
     println!("plugins:");

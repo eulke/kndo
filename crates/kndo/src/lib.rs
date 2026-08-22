@@ -82,8 +82,7 @@ pub fn default_plugins() -> Vec<Box<dyn Plugin>> {
 /// adapter or plugin set (embedders, tests) still have [`Engine::open`]/[`Engine::open_with_plugins`]
 /// directly.
 pub fn open(root: &Path, overrides: ConfigOverrides) -> Result<Engine, EngineError> {
-    let mut adapters = default_adapters();
-    adapters.extend(external_adapters(root));
+    let (adapters, _resolution) = compose_adapters(root);
     let (plugins, _resolution) = compose_plugins(root);
     Engine::open_with_plugins(root, overrides, adapters, plugins)
 }
@@ -254,34 +253,164 @@ fn load_wasm_plugins(dir: &Path, source: PluginSource) -> Vec<(Box<dyn Plugin>, 
         .collect()
 }
 
-/// Third-party adapters as WASM components (ADR 0003, `docs/contracts/wasm-abi.md`),
-/// auto-discovered from `.kndo/plugins/*.wasm` (RFC 0003 §3's stated convention) — no
-/// `kndo.toml` entry needed, the same "drop a file in, it's live" default every other
-/// zero-config surface in this product follows. A component that fails to load (not a real
-/// component binary, a version mismatch, an instantiation error) is skipped rather than
-/// failing the whole run: one broken extension must not take every other language down with
-/// it. There is no diagnostic surfaced for a *load*-time failure yet (unlike a per-call
-/// fuel/budget trip inside `WasmAdapter::extract`, which does produce one) — an honest gap,
-/// not an omission papered over; `kndo doctor`'s adapter list is the way to confirm a plugin
-/// actually loaded until one lands.
-///
-/// Adapters are project-local only — [`activation`] (RFC 0003 §4) gates the *global* XDG
-/// install path, and that path only exists for `Plugin`s today (see [`external_plugins`]);
-/// extending it to `LanguageAdapter` is a natural follow-up, not done here.
-fn external_adapters(root: &Path) -> Vec<Box<dyn LanguageAdapter>> {
+/// Where a resolved adapter came from — mirrors [`PluginSource`] (RFC 0016 §4 brings adapters
+/// to the same three-tier shape plugins already had).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AdapterSource {
+    Builtin,
+    ProjectLocal,
+    Global,
+}
+
+/// One adapter the composition layer considered, active or not — the doctor-visible half of
+/// RFC 0016 §4, matching [`ResolvedPlugin`]'s shape. Unlike plugins, there is no
+/// `dependencies`-implication fixpoint here (out of this phase's scope — no adapter has ever
+/// declared one, and `AdapterDescriptor.dependencies` stays the dormant reservation RFC 0016
+/// §8 phase 0 added); `active: false` means only "this global candidate's own rule didn't
+/// match."
+#[derive(Debug, Clone)]
+pub struct ResolvedAdapter {
+    pub id: String,
+    pub source: AdapterSource,
+    pub activation: Vec<String>,
+    pub active: bool,
+}
+
+/// The full outcome of adapter composition for a project (RFC 0016 §4) — what [`open`]
+/// registered, in claim-priority order, plus every global candidate that didn't activate.
+#[derive(Debug, Clone, Default)]
+pub struct AdapterResolution {
+    pub adapters: Vec<ResolvedAdapter>,
+}
+
+/// [`compose_adapters`]'s report half, for frontends (`kndo doctor`) — mirrors
+/// [`plugin_resolution`].
+pub fn adapter_resolution(root: &Path) -> AdapterResolution {
+    compose_adapters(root).1
+}
+
+/// Assemble the full adapter set for `root` (RFC 0016 §4) in **claim-priority order**: a
+/// project-local `.kndo/plugins/*.wasm` adapter always wins a contested file extension over a
+/// globally installed one, which always wins over a compiled-in one — the same "presence is
+/// the strongest opt-in signal" reasoning `Plugin` composition already applies (RFC 0003 §3),
+/// now written down as policy rather than left as compiled-in-happens-to-be-first accident.
+/// Within one tier, adapters are ordered by id for deterministic claim resolution independent
+/// of filesystem enumeration. Global adapters are gated by their own `activation` exactly like
+/// global plugins (RFC 0003 §4): empty rules never self-activate from the global tier; a
+/// project-local file is unconditional either way.
+fn compose_adapters(root: &Path) -> (Vec<Box<dyn LanguageAdapter>>, AdapterResolution) {
     #[cfg(feature = "external-adapters")]
     {
-        wasm_components(&project_plugin_dir(root))
+        let mut project_local = load_wasm_adapters(&project_plugin_dir(root));
+        sort_by_id(&mut project_local);
+        let mut global_all = activation::global_plugin_dir()
+            .map(|dir| load_wasm_adapters(&dir))
+            .unwrap_or_default();
+        sort_by_id(&mut global_all);
+        let (global_active, global_resolved): (Vec<_>, Vec<_>) = global_all
             .into_iter()
-            .filter_map(|path| kndo_plugin_api::WasmAdapter::load(&path).ok())
-            .map(|adapter| Box::new(adapter) as Box<dyn LanguageAdapter>)
-            .collect()
+            .map(|adapter| {
+                let d = adapter.descriptor();
+                let active = activation::activates(&d.activation, root);
+                let resolved = ResolvedAdapter {
+                    id: d.id.to_string(),
+                    source: AdapterSource::Global,
+                    activation: d.activation.iter().map(|r| r.describe()).collect(),
+                    active,
+                };
+                (active.then_some(adapter), resolved)
+            })
+            .unzip();
+        let global_active: Vec<_> = global_active.into_iter().flatten().collect();
+
+        let builtins = default_adapters();
+        let mut resolved: Vec<ResolvedAdapter> = project_local
+            .iter()
+            .map(|a| resolved_adapter(&a.descriptor(), AdapterSource::ProjectLocal, true))
+            .collect();
+        resolved.extend(global_resolved);
+        resolved.extend(
+            builtins
+                .iter()
+                .map(|a| resolved_adapter(&a.descriptor(), AdapterSource::Builtin, true)),
+        );
+
+        let mut adapters: Vec<Box<dyn LanguageAdapter>> = Vec::new();
+        adapters.extend(boxed(project_local));
+        adapters.extend(boxed(global_active));
+        adapters.extend(builtins);
+        (adapters, AdapterResolution { adapters: resolved })
     }
     #[cfg(not(feature = "external-adapters"))]
     {
         let _ = root;
-        Vec::new()
+        let adapters = default_adapters();
+        let resolved = adapters
+            .iter()
+            .map(|a| resolved_adapter(&a.descriptor(), AdapterSource::Builtin, true))
+            .collect();
+        (adapters, AdapterResolution { adapters: resolved })
     }
+}
+
+fn resolved_adapter(
+    d: &kndo_core::adapter::AdapterDescriptor,
+    source: AdapterSource,
+    active: bool,
+) -> ResolvedAdapter {
+    ResolvedAdapter {
+        id: d.id.to_string(),
+        source,
+        activation: d.activation.iter().map(|r| r.describe()).collect(),
+        active,
+    }
+}
+
+#[cfg(feature = "external-adapters")]
+fn sort_by_id(adapters: &mut [kndo_plugin_api::WasmAdapter]) {
+    adapters.sort_by(|a, b| a.descriptor().id.cmp(&b.descriptor().id));
+}
+
+#[cfg(feature = "external-adapters")]
+fn boxed(
+    adapters: Vec<kndo_plugin_api::WasmAdapter>,
+) -> impl Iterator<Item = Box<dyn LanguageAdapter>> {
+    adapters
+        .into_iter()
+        .map(|a| Box::new(a) as Box<dyn LanguageAdapter>)
+}
+
+/// Every `.wasm` `LanguageAdapter` in `dir` — component-load failures skipped, never fatal
+/// (RFC 0003 §3), same posture the plugin tier's loader already has.
+#[cfg(feature = "external-adapters")]
+fn load_wasm_adapters(dir: &Path) -> Vec<kndo_plugin_api::WasmAdapter> {
+    wasm_components(dir)
+        .into_iter()
+        .filter_map(|path| kndo_plugin_api::WasmAdapter::load(&path).ok())
+        .collect()
+}
+
+/// One globally installed [`LanguageAdapter`] candidate, as `kndo doctor` reports it — mirrors
+/// [`GlobalPluginCandidate`].
+pub struct GlobalAdapterCandidate {
+    pub id: String,
+    pub activation: Vec<String>,
+    pub activated: bool,
+}
+
+/// Every `.wasm` `LanguageAdapter` found in the global directory for `root`, activated or not —
+/// mirrors [`global_plugin_candidates`].
+pub fn global_adapter_candidates(root: &Path) -> Vec<GlobalAdapterCandidate> {
+    adapter_resolution(root)
+        .adapters
+        .into_iter()
+        .filter(|a| a.source == AdapterSource::Global)
+        .map(|a| GlobalAdapterCandidate {
+            id: a.id,
+            activation: a.activation,
+            activated: a.active,
+        })
+        .collect()
 }
 
 /// One globally installed `Plugin` candidate (RFC 0003 §4), as `kndo doctor` reports it —

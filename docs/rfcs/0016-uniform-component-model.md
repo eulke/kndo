@@ -65,9 +65,9 @@ ComponentDescriptor (conceptual — realized as PluginDescriptor and AdapterDesc
     requested_file_access:  Vec<glob>             — the §5 content channel's scope, and part of §6's cache key
 ```
 
-`PluginDescriptor` already has all five fields. `AdapterDescriptor` gains `id`, `activation`,
-and `dependencies` (§4); its existing extension claims remain its file-claiming mechanism,
-untouched. The traits stay two: parsing/resolution/manifests belong to `LanguageAdapter`,
+`PluginDescriptor` already has all five fields. `AdapterDescriptor` already had `id`; it gains
+`activation` and `dependencies` (§4 — landed; `version` was never added, §4's own note on why).
+Its existing extension claims remain its file-claiming mechanism, untouched. The traits stay two: parsing/resolution/manifests belong to `LanguageAdapter`,
 graph hooks to `Plugin` — merging them would either weaken the adapter contract into
 uselessness or widen the plugin contract until it *is* the adapter contract renamed. "Adapters
 describe what code is; plugins describe what an ecosystem means by it" survives this RFC
@@ -78,28 +78,54 @@ installed WASM component must be indistinguishable at the descriptor, activation
 dependency, and (where applicable) installer surfaces. First-party components are simply
 components whose distribution happens to be "compiled into the default binary."
 
-## 4. Adapters become installable components
+## 4. Adapters become installable components — Landed
 
-The concrete closure of RFC 0003 §4's stated gap:
+The concrete closure of RFC 0003 §4's stated gap.
 
-1. **Identity.** First-party adapters take reserved ids (`kndo:go`, `kndo:typescript`, …);
-   external adapters use source coordinates, with §2's identity binding enforced at install
-   exactly as for plugins. The loader's `kndo:` rejection extends to the adapter ABI.
-2. **Activation.** `AdapterDescriptor.activation` with the same two rules. Semantics per tier
-   mirror plugins: compiled-in and project-local adapters with empty rules stay always-on
-   (their extension claims already scope their work — an adapter claiming `.go` files is
-   dormant in a Go-less repo at near-zero cost); **globally installed** adapters require a
-   matching rule to join composition, and empty means never self-activate — the same
-   silence-over-guessing default.
-3. **Installation.** `kndo plugin install` grows to accept adapter components. The installer
-   (`kndo::plugin_install`) needs no structural change — fetch, checksum, identity binding,
-   lockfile are kind-agnostic; the probe tries both loaders the way `kndo::open` already does
-   for project-local files. The command name stays `kndo plugin` — one more reason "component"
-   is the right internal word, but renaming the user-facing verb is churn without benefit.
-4. **Claim conflicts get one deterministic rule.** Composition order for file claims:
-   project-local externals > globally installed externals > compiled-in, ties broken by id.
-   Today's implicit "externals first" behavior becomes written contract; doctor shows which
-   adapter won a contested extension and why.
+1. **Identity, landed narrower than first drafted.** External adapters use source coordinates
+   (`github.com/<owner>/<repo>`), with §2's identity binding enforced at install exactly as for
+   plugins (`kndo::plugin_install::wasm_probe` tries the plugin loader, then the adapter loader,
+   and identity binding runs on whichever accepts the bytes). The loader's `kndo:` rejection
+   extends to the adapter ABI (`WasmAdapter::load` now checks `is_reserved_id`, mirroring
+   `WasmPlugin::load`). **First-party adapter ids stay as they are** (`"js-ts"`, `"go"`, …) — not
+   renamed into the `kndo:` namespace. Nothing requires the rename for the protection to work:
+   the reservation is "no *external* component may claim an id starting with `kndo:`,"
+   independent of what compiled-in ids actually are, and compiled-in adapters never pass through
+   the loader that rejection lives in. Renaming would only churn the graph cache key
+   (`compute_graph_key` hashes adapter ids) for zero behavioral gain — deferred indefinitely, not
+   just to this phase.
+2. **Activation.** `AdapterDescriptor.activation`, wired end to end: a new `activation-rule`
+   variant plus `activation`/`dependencies` fields on `adapter.wit`'s `adapter-descriptor`
+   (duplicated from `plugin.wit`'s own type, same cross-package-independence reasoning that
+   module already documents), read by the host bridge (`host.rs`'s `native_descriptor`).
+   `dependencies` rides the wire but stays unevaluated — no adapter has ever needed cross-adapter
+   implication, and wiring a fixpoint nothing exercises would be exactly the speculative
+   machinery this project's standing rules reject; the dormant reservation from §8 phase 0
+   covers it either way. Semantics mirror plugins exactly: compiled-in and project-local
+   adapters are unconditional regardless of `activation` (their file-extension claims already
+   scope the cost — an adapter claiming `.go` files is dormant in a Go-less repo); a
+   **globally installed** adapter requires a matching rule to join composition, empty rules
+   never self-activate globally (`kndo::compose_adapters`, reusing the plugin tier's
+   `activation::activates`/`global_plugin_dir` machinery in `crates/kndo/src/lib.rs`).
+3. **Installation.** `kndo plugin install` accepts adapter components with no structural
+   change to `kndo::plugin_install` — fetch, checksum, identity binding, and the lockfile were
+   already kind-agnostic (`ProbedDescriptor` never carried anything plugin-specific); only the
+   probe closure grew a fallback try. The command name stays `kndo plugin`.
+   `AdapterDescriptor` gains no `version` field — the release *tag* already is the version
+   (`plugins.lock` records it directly; `ProbedDescriptor.version` turns out to be unused by
+   the install pipeline for either kind, discovered auditing this, not by design) and nothing
+   inside the descriptor needs to restate it.
+4. **Claim conflicts get one deterministic rule — and the *actual* prior behavior was the
+   opposite of this RFC's first draft.** Composition order for file claims is now project-local
+   externals > globally installed externals > compiled-in, ties within a tier broken by id
+   (`kndo::compose_adapters`). Auditing the code before writing this down found the pre-existing
+   order was **compiled-in first, externals appended after** — meaning a project-local adapter
+   could never win a contested extension against a built-in one, silently. That's corrected
+   here, not merely documented: presence in `.kndo/plugins/` is deliberate, strong opt-in signal
+   (RFC 0003 §3's own framing), and a user who drops a custom adapter there almost certainly
+   means to override, not to be silently shadowed. `kndo doctor`/`kndo::adapter_resolution`
+   show the composed order so which adapter would win a contested extension is inspectable, not
+   just implied by list position.
 
 ## 5. The content channel: `requested_file_access` for graph hooks — Landed
 
@@ -205,8 +231,19 @@ configuration can be claimed as supported, this lands:
    content-derived rescue actually fires, plus native (`kndo-core`) and WASM
    (`kndo-plugin-api`'s compliance suite, `examples/kndo-plugin-hooks-demo`) round-trip tests
    for the channel mechanism itself.
-2. **Adapter componentization (§4)** — identity, activation, installer acceptance, claim-order
-   contract, doctor parity.
+2. **Adapter componentization (§4) — Landed.** Identity (loader rejection of the reserved
+   namespace), activation (wired end to end including the WIT wire format), installer
+   acceptance, the corrected claim-order contract, and doctor parity
+   (`kndo::adapter_resolution`/`global_adapter_candidates`, `kndo doctor`'s new sections).
+   Proven at every layer: `kndo-core` compiles under both the full and `--no-default-features
+   --features js` builds unchanged; `crates/kndo/tests/global_adapter_activation.rs` proves the
+   global-tier gate and the claim-priority ordering against a real WASM component; `crates/
+   kndo/tests/plugin_install_probe.rs` proves the installer's dual probe against a real adapter
+   component. Closing this phase also surfaced and fixed a real, if narrow, pre-existing
+   concurrency bug in `kndo::plugin_install::wasm_probe`'s temp-file naming (PID-only, so two
+   concurrent calls in one process could race on the same path) — found because this phase's
+   own test suite was the first caller to exercise `wasm_probe` from two `#[test]`s in the same
+   binary.
 3. **Cache-key folding (§6)** — measured on the 50k fixture; closes with the shell CI job
    (§7) turning on.
 4. **`suppress` decision + GraphView additions (§7)** — demand-gated, possibly empty.

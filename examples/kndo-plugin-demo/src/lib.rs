@@ -247,6 +247,12 @@ impl Guest for DemoAdapter {
             facts_schema_version: 1,
             file_globs: vec!["**/*.kdemo".to_string()],
             grammar_version: "hand-scanned-v1".to_string(),
+            // RFC 0016 §4: exercises the global-install activation path — irrelevant when this
+            // component is dropped project-local (unconditional either way, `kndo/tests/
+            // external_adapter.rs`'s own proof), but `kndo/tests/global_adapter_activation.rs`
+            // places it in the global tier specifically to prove this rule gates it there.
+            activation: vec![ActivationRule::FileExists("*.kdemo-enable".to_string())],
+            dependencies: Vec::new(),
         }
     }
 
