@@ -247,7 +247,8 @@ fn external_wasm_plugin_hooks_affect_a_real_check() {
          decl wire_target\n\
          decl consumed_x\n\
          ref consumed_x\n\
-         decl trulyDead\n",
+         decl trulyDead\n\
+         decl content_target\n",
     )
     .unwrap();
     std::fs::write(
@@ -255,6 +256,9 @@ fn external_wasm_plugin_hooks_affect_a_real_check() {
         "decl bannerDecl\n",
     )
     .unwrap();
+    // RFC 0016 §5: content contribute_roots reads through read-file to decide whether to root
+    // content_target — proves the WIT host import reaches a real guest computation.
+    std::fs::write(project_dir.path().join("content.demo"), "promote").unwrap();
 
     // Baseline: without the plugin, every one of the four scenarios the plugin later rescues
     // must actually be flagged on its own, so the assertions below can't pass vacuously.
@@ -282,6 +286,10 @@ fn external_wasm_plugin_hooks_affect_a_real_check() {
     );
     assert!(
         baseline_unused.contains(&"wire_target"),
+        "{baseline_unused:?}"
+    );
+    assert!(
+        baseline_unused.contains(&"content_target"),
         "{baseline_unused:?}"
     );
     let baseline_unused_files: Vec<String> = baseline_result
@@ -331,6 +339,10 @@ fn external_wasm_plugin_hooks_affect_a_real_check() {
     assert!(
         !unused_symbols.contains(&"wire_target"),
         "contribute_edges should have kept this reachable: {unused_symbols:?}"
+    );
+    assert!(
+        !unused_symbols.contains(&"content_target"),
+        "the read-file-gated root should have kept this reachable: {unused_symbols:?}"
     );
     assert!(
         unused_symbols.contains(&"trulyDead"),

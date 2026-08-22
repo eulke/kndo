@@ -1,9 +1,9 @@
 # `kndo:express` — Express conventions plugin
 
 **Status:** Normative for the built-in `kndo:express` plugin (RFC 0015 §6 phase 4) ·
-**Implements:** `contribute_roots` + `annotate_symbols` (RFC 0003 §2) · **Crate:**
-`crates/kndo-plugin-express` · **Convention set versioned against:** Express 4/5 +
-express-generator layout
+**Implements:** `contribute_roots` + `annotate_symbols` (RFC 0003 §2), both content-channel-
+aware (RFC 0016 §5) · **Crate:** `crates/kndo-plugin-express` · **Convention set versioned
+against:** Express 4/5 + express-generator layout
 
 ## 1. An honest scope statement
 
@@ -24,10 +24,13 @@ Two structural facts bound what the plugin can do about it:
   root targeting it resolves to nothing (dropped silently). Its `require('../app')` edge
   doesn't exist in the graph either. The fix that *is* expressible: root the conventional
   claimed entry files it (or `node` directly) launches.
-- **`views/**` templates** (`.pug`, `.ejs`, `.hbs`) are unclaimed for the same reason, and
-  the `res.render('index')` string → template edge would need file content, which
-  `GraphView` doesn't expose. Templates stay out of scope — they're invisible to the graph
-  altogether, so they produce no findings to suppress in the first place.
+- **`views/**` templates** (`.pug`, `.ejs`, `.hbs`) are unclaimed for the same reason. The
+  `res.render('index')` string → template edge would need parsing the *route source* (`app.js`
+  et al.) for the call's string argument — those files are already claimed by the JS/TS
+  adapter, so reading them through the content channel (RFC 0016 §5) to extract a fact the
+  adapter itself owns is out of contract, the same boundary nextjs.md §5 documents for
+  `<Link href>` edges. Moot either way: templates stay unclaimed regardless, so they produce
+  no findings to suppress in the first place — the edge would have nothing to connect *to*.
 
 ## 2. Activation
 
@@ -52,8 +55,9 @@ entry candidates** are:
 R/app.<ext>   R/server.<ext>   R/src/app.<ext>   R/src/server.<ext>
 ```
 
-for each extension the JS/TS adapter claims. Every candidate that exists as a claimed
-`js-ts` file with `Production` role gets:
+for each extension the JS/TS adapter claims — **plus** whatever `R/package.json`'s own
+`"main"`/`"scripts"` resolve to when read through the content channel (§4 below; RFC 0016
+§5). Every candidate that exists as a claimed `js-ts` file with `Production` role gets:
 
 - **File root**: `RootKind::Production` at `Probable` — a convention, not a certainty: a
   file named `app.ts` in an Express-using project is *probably* its entry, unlike a file
@@ -79,12 +83,12 @@ to a conventional name).
   ordinary code — the language adapter already sees it. String-path → handler edges add
   nothing to liveness.
 - **No `contribute_edges`, no `classify_file`** — nothing to correct.
-- **No `package.json` `"main"`/`"scripts"` parsing**: `GraphView` exposes no file content.
-  Deriving the true entry from `"scripts": {"start": ...}` is the *right* long-term fix and
-  would replace §3's name heuristic; it needs a host-mediated content channel (RFC 0003
-  §2's `requested_file_access` exists for `ingest_coverage` but is not plumbed to the graph
-  hooks). Tracked as the known gap of this spec, not silently ignored — RFC 0016 §5 is the
-  accepted plan for exactly that channel, with this spec's gaps as its first consumers.
+- **`package.json` `"main"`/`"scripts"` parsing — landed (RFC 0016 §5).** Every app root's own
+  `package.json`, read through the host-mediated content channel (`requested_file_access:
+  ["**/package.json"]`), is parsed for `"main"` and any `node`/`nodemon` invocation inside
+  `"scripts"` values; each resolved path joins §3's name-heuristic set at the same `Probable`
+  confidence. A manifest that fails to parse, or a root with none, simply falls back to the
+  name heuristic alone — this was never a guess-or-nothing upgrade.
 
 ## 5. Verification shape
 

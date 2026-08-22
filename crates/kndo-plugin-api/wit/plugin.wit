@@ -13,7 +13,9 @@
 // serializing the whole graph into every call (expensive, and most plugins only care about a
 // handful of paths), the host exposes two narrow query functions the guest calls as needed —
 // `list-files` and `symbols-in` — mirroring `kndo_core::plugin::GraphView`'s own two methods
-// exactly. The guest still can't touch anything else: no fs, no net, no other host state.
+// exactly. `read-file` (RFC 0016 §5) is the same idea applied to content outside the graph —
+// configs, manifests, templates — scoped to the component's own declared globs. The guest
+// still can't touch anything else: no fs, no net, no other host state.
 package kndo:plugin@0.1.0;
 
 interface types {
@@ -152,6 +154,15 @@ world plugin {
     /// `GraphView` already holds, never touch the filesystem.
     import list-files: func() -> list<wasm-file-info>;
     import symbols-in: func(path: string) -> list<wasm-symbol-info>;
+
+    /// RFC 0016 §5's content channel: read one file's bytes, scoped to this component's own
+    /// declared `requested-file-access` globs and metered by the host's per-run budget —
+    /// `none` covers every miss uniformly (no glob match, unreadable path, budget cutoff), the
+    /// same host-mediated, sandboxed shape `list-files`/`symbols-in` already establish (no
+    /// ambient fs; every byte the guest sees was matched and fetched host-side). The host
+    /// answers from an owned snapshot prefetched before instantiation (every declared-glob
+    /// match, budget-limited) — this call never itself touches disk mid-round.
+    import read-file: func(path: string) -> option<list<u8>>;
 
     /// Called once at load time; the host caches the result.
     export descriptor: func() -> plugin-descriptor;

@@ -136,6 +136,7 @@ statically linked, checked by keeping it structurally incapable of being one.
 ```
 import list-files: func() -> list<wasm-file-info>;
 import symbols-in: func(path: string) -> list<wasm-symbol-info>;
+import read-file: func(path: string) -> option<list<u8>>;
 
 export descriptor: func() -> plugin-descriptor;
 export classify-file: func(path: string, current: file-class) -> option<file-class>;
@@ -174,6 +175,19 @@ as an instantiation error), and `dependencies: list<string>` names coordinates o
 conventions are part of this one's (install closure + activation implication, RFC 0015 §3 —
 never versions, ordering, or data flow).
 
+**`read-file` (RFC 0016 §5's content channel, landed).** Scoped to `requested-file-access`:
+the host prefetches every discovered path matching the descriptor's declared globs, budget-
+charged and byte-read through the run's `ContentView` (`kndo_core::plugin::ContentView`) exactly
+as a native plugin's own `.read()` calls would be, *before* instantiating each round's guest —
+the guest can't make a host round-trip of its own choosing mid-call, so `read-file` on the guest
+side is a lookup into that owned snapshot, not a live filesystem call. Budget accounting is
+keyed by path, not by call: `contribute-roots`/`contribute-edges`/`annotate-symbols` each
+re-instantiate the guest against a fresh `HostViewData` this round (§5.3), so a path already
+charged in an earlier hook of the same round is served again for free rather than tripling the
+bill for reading the exact same file three times. A path outside the declared globs, or one the
+budget has cut off, comes back `none` — the same silent-miss shape every other host-mediated
+lookup in this ABI already has.
+
 ### 5.2 v1 scope cuts, and why
 
 - **No `ingest_coverage`/`suppress`.** Neither is wired to any analysis yet on the *native*
@@ -202,14 +216,15 @@ does and doesn't call or expose, not by a guest-side promise the host has to tru
 `default_plugins()`/`Engine::open_with_plugins` accept.
 
 **Host state and the borrow problem.** `contribute_roots`/`contribute_edges`/`annotate_symbols`
-run with a real `&GraphView<'_>` borrowed for the duration of one `assemble_from_source` call
-(graph.rs, RFC 0003 §2's "landed" note); `wasmtime::Store`'s state type must be `'static`, so a
-live borrow can't sit inside it directly. `WasmPlugin` resolves this by cloning exactly what
-`list-files`/`symbols-in` can answer (`HostViewData`, built once per graph-mutation round, not
-once per query) into the store's state rather than reaching for raw-pointer plumbing across the
-FFI boundary — a WASM plugin already forces a full graph rebuild every run (§5.4), so one more
-bounded `O(files + symbols)` clone alongside that full rebuild is proportionally small, and the
-resulting code has no `unsafe`.
+run with a real `&GraphView<'_>` (and, since RFC 0016 §5, a real `&ContentView<'_>`) borrowed
+for the duration of one `assemble_from_source` call (graph.rs, RFC 0003 §2's "landed" note);
+`wasmtime::Store`'s state type must be `'static`, so a live borrow can't sit inside it directly.
+`WasmPlugin` resolves this by cloning exactly what `list-files`/`symbols-in` can answer, plus
+every content-channel path the descriptor's globs match (`HostViewData`, built once per
+graph-mutation round, not once per query), into the store's state rather than reaching for
+raw-pointer plumbing across the FFI boundary — a WASM plugin already forces a full graph rebuild
+every run (§5.4), so one more bounded `O(files + symbols + content bytes)` clone alongside that
+full rebuild is proportionally small, and the resulting code has no `unsafe`.
 
 **Fuel budget and sandbox** are the same posture and the same constant class as §3's adapter
 bridge (`FUEL_PER_CALL` in `plugin_host.rs`): an exhausted or trapped hook degrades to "this
@@ -314,9 +329,14 @@ plugin side's richer `GraphView` surface, `ingest_coverage`/`suppress`, or per-q
 new package version, not a silent reinterpretation of `0.1.0` — a component built against a v1
 package must keep working against a v1-compatible host indefinitely.
 
-**Declared forward-compatible extensions (RFC 0016 §8 phase 0).** Two evolutions are planned
-and reserved here ahead of the 1.0 freeze, so that when they ship they are read as the additive
-package revisions they were always going to be — not as post-freeze breaking changes:
+**`kndo:plugin`'s `read-file` host import — landed (RFC 0016 §5).** What RFC 0016 §8 phase 0
+reserved ahead of the 1.0 freeze as a "declared forward-compatible extension" is now built: one
+added import, `read-file(path) → option<list<u8>>` (§5.1/§5.3 above). Additive, not breaking —
+a component built against the pre-§5 world simply never calls it, and the host still answers
+every existing import identically.
+
+**Declared forward-compatible extension still pending (RFC 0016 §8 phase 0).** One reservation
+from that phase remains ahead of the freeze:
 
 - **`kndo:adapter`: component-descriptor fields.** The adapter world's `descriptor` record
   grows the component surface `PluginDescriptor` already carries — `activation` rules,
@@ -325,11 +345,6 @@ package revisions they were always going to be — not as post-freeze breaking c
   `dependencies` as dormant fields (empty for every first-party adapter; nothing evaluates
   them yet); the WIT-side addition is a new package version whose host accepts old components
   by treating the missing fields as empty — exactly the dormant value.
-- **`kndo:plugin`: a `read-file` host import.** RFC 0016 §5's content channel: one host
-  function (`read-file(path) → option<list<u8>>`), callable from the four graph hooks,
-  host-enforced against the component's declared `requested-file-access` globs and metered by
-  the same per-run budgets as everything else. A new package version with one added import —
-  components built against the current world neither see nor need it.
 
-Neither reservation changes any shipped behavior; both exist so the freeze commits to the
-evolution *path*, not just the current surface.
+This reservation changes no shipped behavior; it exists so the freeze commits to the evolution
+*path*, not just the current surface.

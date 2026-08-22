@@ -25,8 +25,11 @@ A plugin implements one or more of these hooks (trait `Plugin`, normative in con
 | `suppress` | reporting | domain-specific suppression (e.g. migration files are exempt from dead-code) |
 
 Plugins **cannot**: define new node/edge kinds, mutate other plugins' output, read arbitrary
-files (they request file access through the host, which enforces scope), or veto core analyses.
-This keeps the graph semantics owned by the core and results reproducible.
+files (they request file access through the host, which enforces scope — landed for
+`contribute_roots`/`contribute_edges`/`annotate_symbols` as `ContentView`, RFC 0016 §5; `.read()`
+answers only paths matching the plugin's own declared `requested_file_access` globs, budgeted,
+never source files the language graph already covers), or veto core analyses. This keeps the
+graph semantics owned by the core and results reproducible.
 
 **Landed (M5).** The first four hooks are wired into `graph::assemble_from_source`, not just
 declared on the trait: `classify_file` runs inline in phase 2's file-node build, right after RFC

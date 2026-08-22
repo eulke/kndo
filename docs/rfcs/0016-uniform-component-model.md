@@ -101,31 +101,49 @@ The concrete closure of RFC 0003 §4's stated gap:
    Today's implicit "externals first" behavior becomes written contract; doctor shows which
    adapter won a contested extension and why.
 
-## 5. The content channel: `requested_file_access` for graph hooks
+## 5. The content channel: `requested_file_access` for graph hooks — Landed
 
-The highest-value extension, and the one both shipped plugin specs already point at.
+The highest-value extension, and the one both shipped plugin specs already pointed at.
+Implemented in full (`kndo_core::plugin::ContentView`, `crates/kndo-plugin-api`'s `read-file`
+host import — wasm-abi.md §5.1/§5.3/§8); two amendments from this section's original design,
+made at implementation time and recorded here rather than left as silent drift:
 
-- **Shape.** The four graph hooks gain access to a read-only `ContentView`: the set of project
-  files matching the component's declared globs (evaluated by the same gitignore-aware walker
-  as everything else — `node_modules` etc. excluded like everywhere), with lazily loaded
-  bytes. No ambient filesystem, no paths outside the declared globs, no writes — the WASM
-  bridge exposes it as one host import (`read-file(path) → option<bytes>`), host-enforced
-  against the descriptor, so the sandbox story (ADR 0003) is unchanged. Native components get
-  the same API; the tiers stay behaviorally identical.
-- **Budgets.** Per-component caps on files opened and total bytes (numbers set at
-  implementation time, from the 50k-fixture benchmark); exceeding them disables the component
-  for the run with a diagnostic — the same posture as the WASM fuel budget. Declaring a glob
-  is cheap; *reading* is what's metered.
-- **What it unlocks, immediately:** express reading `package.json` `main`/`scripts` instead of
-  guessing entry files by name; nextjs honoring `pageExtensions` and config; route-string →
-  page edges from `<Link href>`; `res.render("name")` → `views/**` template edges (which also
-  makes templates *claimed*, so unused-template detection becomes expressible); Spring-style
-  annotation scans over XML/properties config.
-- **The boundary that keeps this from eroding RFC 0002:** the channel is for files *outside
-  the language graph* — configs, manifests, templates. A plugin parsing `.ts` sources to
-  second-guess the TypeScript adapter is out of contract; the enforcement is review-level
-  (spec-per-plugin, as `docs/plugins/*` already practices), not mechanical, and stated here so
-  it can be pointed at.
+- **Three hooks, not four.** `contribute_roots`/`contribute_edges`/`annotate_symbols` gain
+  `content: &ContentView<'_>`; `classify_file` does not. It runs once per *file* across every
+  registered component (`graph.rs`'s phase-2 loop, `O(files × components)`), where the other
+  three run once per *component* per round — giving it the same channel would mean
+  instantiating a WASM guest's content snapshot on that hot path for a use case nothing has
+  asked for. Revisit if a real `classify_file` consumer needs it.
+- **The boundary is narrower than "outside the graph" alone suggests.** The channel is for
+  files the language graph doesn't itself claim and parse — configs, manifests, templates.
+  What it does *not* cover, even though nothing stops a component from trying: reading a
+  claimed source file to extract a fact the adapter itself owns. Concretely, this ruled out
+  two items this section originally listed as unlocked — route-string → page edges from
+  `<Link href="...">` and `res.render("name")` → template edges both require parsing `.tsx`/
+  `.jsx` *source*, which the JS/TS adapter already claims; second-guessing it through the
+  content-channel side door is exactly RFC 0002's boundary this RFC promised not to erode
+  (docs/plugins/nextjs.md §5 records the final call). What *did* land as real consumers:
+  `kndo:express` reading `package.json` `main`/`scripts` instead of guessing entry files by
+  name (docs/plugins/express.md §3/§4), and `kndo:nextjs` statically reading a literal
+  `pageExtensions: [...]` array out of `next.config.*` to narrow which extensions count as
+  routed (docs/plugins/nextjs.md §5) — both bounded, both degrade to the pre-channel behavior
+  on anything they can't statically read.
+- **Shape, as built.** Glob matching runs in memory against paths this run already discovered
+  (no second disk walk; source-blind — identical behavior for a directory or an in-memory git
+  tree, RFC 0004 §6) rather than against the real filesystem the way `ActivationRule::
+  FileExists` does, so a recursive glob like `**/package.json` never touches `node_modules`
+  regardless of gitignore state. The WASM bridge prefetches every glob-matched path into an
+  owned snapshot before instantiating each round's guest (`HostViewData`, mirroring how it
+  already snapshots `list-files`/`symbols-in`); `read-file` on the guest side is a lookup into
+  that snapshot, never a live call.
+- **Budgets.** Per-component caps on distinct paths read and total bytes (`CONTENT_MAX_FILES`/
+  `CONTENT_MAX_BYTES` in `kndo_core::plugin`) — conservative constants for the channel's
+  stated scope (configs/manifests/templates, never source), not derived from a benchmark
+  sweep; exceeding them cuts the component off from further reads for the rest of the run,
+  with one diagnostic recording why — the same posture as the WASM fuel budget. Accounting is
+  keyed by *path*, not by call: the WASM bridge re-instantiates its guest once per hook (three
+  times per component per round, an existing documented cost), and without path-keyed
+  dedup that would triple-charge a WASM component for reads a native component pays for once.
 - **Determinism note:** content-derived contributions are already correct under the
   `mutates_graph` bypass (RFC 0003 §5) — every run re-reads. §6 is what makes them *fast*.
 
@@ -180,9 +198,13 @@ configuration can be claimed as supported, this lands:
    `AdapterDescriptor.activation`/`.dependencies` exist (empty everywhere, unread) — `id`
    needed no new field, only the §4 migration note on the existing one, deferred to phase 2
    because renaming ids churns cache keys.
-1. **Content channel (§5)** — highest value per unit of new surface; upgrades `kndo:express`
-   and `kndo:nextjs` from their documented approximations, which also makes it the phase with
-   built-in dogfood.
+1. **Content channel (§5) — Landed.** Highest value per unit of new surface; upgrades
+   `kndo:express` and `kndo:nextjs` from their documented approximations, which also made it
+   the phase with built-in dogfood — both plugins' own baseline-then-plugin fixture suites
+   (`crates/kndo/tests/builtin_convention_plugins.rs`) grew a scenario apiece proving the
+   content-derived rescue actually fires, plus native (`kndo-core`) and WASM
+   (`kndo-plugin-api`'s compliance suite, `examples/kndo-plugin-hooks-demo`) round-trip tests
+   for the channel mechanism itself.
 2. **Adapter componentization (§4)** — identity, activation, installer acceptance, claim-order
    contract, doctor parity.
 3. **Cache-key folding (§6)** — measured on the 50k fixture; closes with the shell CI job

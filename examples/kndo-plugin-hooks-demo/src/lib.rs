@@ -12,6 +12,10 @@
 //!   proving the query/contribute round trip works, not modeling one specific framework).
 //! - `annotate_symbols`: any symbol whose name starts with `consumed_` is marked externally
 //!   consumed.
+//! - `contribute_roots` also exercises RFC 0016 §5's content channel: any symbol whose name
+//!   starts with `content_` is rooted only if `read-file("content.demo")` returns exactly
+//!   `b"promote"` — proving the host-mediated read reaches a real guest computation, not just
+//!   that the WIT world type-checks.
 
 // Marks the dependency used explicitly — the macro invocation below is a fully-qualified
 // path with no `use`, which kndo's own Rust adapter (a static extractor, not a macro
@@ -33,7 +37,9 @@ impl Guest for DemoPlugin {
             id: "hooks-demo".to_string(),
             version: "1".to_string(),
             detection: vec!["a *.trigger file anywhere in the project".to_string()],
-            requested_file_access: Vec::new(),
+            // RFC 0016 §5: declares access to a companion file outside the language graph —
+            // contribute_roots below reads it through the host-mediated channel.
+            requested_file_access: vec!["content.demo".to_string()],
             // Exercises RFC 0003 §4's global-install activation path: a project only picks
             // this plugin up from a global directory if it actually contains a `*.trigger`
             // file — proven by kndo/tests/global_plugin_activation.rs.
@@ -57,10 +63,13 @@ impl Guest for DemoPlugin {
     }
 
     fn contribute_roots() -> Vec<ContributedRoot> {
+        let content_promoted = read_file("content.demo").as_deref() == Some(b"promote".as_slice());
         let mut roots = Vec::new();
         for file in list_files() {
             for symbol in symbols_in(&file.path) {
-                if symbol.name.starts_with("root_") {
+                let should_root = symbol.name.starts_with("root_")
+                    || (content_promoted && symbol.name.starts_with("content_"));
+                if should_root {
                     roots.push(ContributedRoot {
                         target: PluginTarget {
                             path: file.path.clone(),

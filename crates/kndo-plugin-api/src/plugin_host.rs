@@ -9,7 +9,8 @@ use std::sync::Mutex;
 
 use kndo_core::adapter::ProjectPath;
 use kndo_core::plugin::{
-    AnnotationSink, EdgeSink, GraphView, Plugin, PluginDescriptor, PluginTarget, RootSink,
+    AnnotationSink, ContentView, EdgeSink, GraphView, Plugin, PluginDescriptor, PluginTarget,
+    RootSink,
 };
 use kndo_core::vocab::{FileClass, FileOrigin, FileRole, RefKind, RootKind, SymbolKind};
 use smol_str::SmolStr;
@@ -56,6 +57,11 @@ impl std::error::Error for LoadError {}
 struct HostViewData {
     files: Vec<w::WasmFileInfo>,
     symbols_by_file: rustc_hash::FxHashMap<smol_str::SmolStr, Vec<w::WasmSymbolInfo>>,
+    // RFC 0016 §5: every path this component's declared globs matched, fetched and budget-
+    // charged against the caller's `ContentView` *before* instantiation — the guest can't make
+    // a host round-trip of its own choosing mid-call the way a native plugin calls
+    // `ContentView::read` directly, so `read-file` just serves a lookup into this snapshot.
+    content_by_path: rustc_hash::FxHashMap<String, Vec<u8>>,
 }
 
 impl HostViewData {
@@ -63,10 +69,11 @@ impl HostViewData {
         HostViewData {
             files: Vec::new(),
             symbols_by_file: rustc_hash::FxHashMap::default(),
+            content_by_path: rustc_hash::FxHashMap::default(),
         }
     }
 
-    fn from_view(graph: &GraphView<'_>) -> Self {
+    fn from_view(graph: &GraphView<'_>, content: &ContentView<'_>) -> Self {
         let mut files = Vec::new();
         let mut symbols_by_file: rustc_hash::FxHashMap<SmolStr, Vec<w::WasmSymbolInfo>> =
             rustc_hash::FxHashMap::default();
@@ -90,9 +97,16 @@ impl HostViewData {
                 .collect();
             symbols_by_file.insert(file.path.0.clone(), symbols);
         }
+        let mut content_by_path = rustc_hash::FxHashMap::default();
+        for path in content.matching_paths() {
+            if let Some(bytes) = content.read(path) {
+                content_by_path.insert(path.0.to_string(), bytes);
+            }
+        }
         HostViewData {
             files,
             symbols_by_file,
+            content_by_path,
         }
     }
 }
@@ -109,6 +123,10 @@ impl bindings::PluginImports for HostViewData {
             .get(path.as_str())
             .cloned()
             .unwrap_or_default()
+    }
+
+    fn read_file(&mut self, path: String) -> Option<Vec<u8>> {
+        self.content_by_path.get(&path).cloned()
     }
 }
 
@@ -146,14 +164,14 @@ impl WasmPlugin {
         })
     }
 
-    /// (Re)instantiate the component against a fresh snapshot of `graph`, replacing whatever
-    /// instance served the previous graph-mutation round.
-    fn refresh_instance(&self, graph: &GraphView<'_>) -> Option<()> {
+    /// (Re)instantiate the component against a fresh snapshot of `graph`/`content`, replacing
+    /// whatever instance served the previous graph-mutation round.
+    fn refresh_instance(&self, graph: &GraphView<'_>, content: &ContentView<'_>) -> Option<()> {
         let (store, bindings) = instantiate_with(
             &self.engine,
             &self.component,
             &self.linker,
-            HostViewData::from_view(graph),
+            HostViewData::from_view(graph, content),
         )
         .ok()?;
         *self.last_hooks.lock().expect("wasm plugin store poisoned") =
@@ -308,8 +326,13 @@ impl Plugin for WasmPlugin {
         })
     }
 
-    fn contribute_roots(&self, graph: &GraphView<'_>, out: &mut RootSink) {
-        if self.refresh_instance(graph).is_none() {
+    fn contribute_roots(
+        &self,
+        graph: &GraphView<'_>,
+        content: &ContentView<'_>,
+        out: &mut RootSink,
+    ) {
+        if self.refresh_instance(graph, content).is_none() {
             return;
         }
         let mut guard = self.last_hooks.lock().expect("wasm plugin store poisoned");
@@ -328,8 +351,13 @@ impl Plugin for WasmPlugin {
         }
     }
 
-    fn contribute_edges(&self, graph: &GraphView<'_>, out: &mut EdgeSink) {
-        if self.refresh_instance(graph).is_none() {
+    fn contribute_edges(
+        &self,
+        graph: &GraphView<'_>,
+        content: &ContentView<'_>,
+        out: &mut EdgeSink,
+    ) {
+        if self.refresh_instance(graph, content).is_none() {
             return;
         }
         let mut guard = self.last_hooks.lock().expect("wasm plugin store poisoned");
@@ -349,8 +377,13 @@ impl Plugin for WasmPlugin {
         }
     }
 
-    fn annotate_symbols(&self, graph: &GraphView<'_>, out: &mut AnnotationSink) {
-        if self.refresh_instance(graph).is_none() {
+    fn annotate_symbols(
+        &self,
+        graph: &GraphView<'_>,
+        content: &ContentView<'_>,
+        out: &mut AnnotationSink,
+    ) {
+        if self.refresh_instance(graph, content).is_none() {
             return;
         }
         let mut guard = self.last_hooks.lock().expect("wasm plugin store poisoned");

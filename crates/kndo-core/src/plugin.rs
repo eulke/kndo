@@ -6,7 +6,12 @@
 //! graph-mutation hooks below, `kndo:adapter@0.1.0` for `LanguageAdapter`; see
 //! docs/contracts/wasm-abi.md §5). `ingest_coverage`/`suppress` aren't bridged either way yet.
 //! `GraphView` is read-only; mutation happens only through typed sinks the core validates and
-//! attributes (`Provenance::Plugin`).
+//! attributes (`Provenance::Plugin`). `contribute_roots`/`contribute_edges`/`annotate_symbols`
+//! additionally get [`ContentView`], RFC 0016 §5's host-mediated content channel for files
+//! *outside* the language graph (configs, manifests, templates) — scoped to the descriptor's
+//! own `requested_file_access` globs and budgeted; `classify_file` does not (it runs once per
+//! file across every component, not once per component per round — see `ContentView`'s own
+//! doc for why that hook is left out).
 //!
 //! **Targets are named, never addressed by internal id** (`ProjectPath` + an optional bare or
 //! `Owner.name` symbol name) — the same contract shape `RawRoot`/`RawReference` already use for
@@ -15,10 +20,12 @@
 //! `FileId`/`SymbolId` (internal, renumbered every run) off the `Plugin` trait's stable-from-1.0
 //! surface entirely.
 
+use std::cell::RefCell;
+
 use rustc_hash::FxHashMap as HashMap;
 use smol_str::SmolStr;
 
-use crate::adapter::ProjectPath;
+use crate::adapter::{Diagnostic, DiagnosticLevel, ProjectPath};
 use crate::graph::{FileNode, SymbolNode};
 use crate::vocab::{Confidence, FileClass, FileId, RefKind, RootKind};
 
@@ -140,6 +147,156 @@ impl<'a> GraphView<'a> {
             .map(Vec::as_slice)
             .unwrap_or(&[]);
         indices.iter().map(|&i| &self.symbols[i as usize])
+    }
+}
+
+// ---------------------------------------------------------------- read side: ContentView
+
+/// Per-run cap on distinct paths a single component may read through the content channel
+/// (RFC 0016 §5) — generous for the channel's stated scope (configs, manifests, templates,
+/// never source: reading language-graph files through this side door is a review-level
+/// boundary the channel doesn't mechanically enforce, but no shipped consumer does it), tight
+/// enough that a component can't use it to walk the whole project file by file.
+const CONTENT_MAX_FILES: usize = 200;
+/// Per-run cap on total bytes read through the content channel by a single component —
+/// generous for text configs/manifests/templates, small next to the 500 ms analysis budget's
+/// own I/O.
+const CONTENT_MAX_BYTES: usize = 8 * 1024 * 1024;
+
+#[derive(Default)]
+struct ContentBudget {
+    // Keyed by path, not a call counter: the WASM bridge re-instantiates its guest once per
+    // graph-mutation hook (three times per plugin per round, `kndo-plugin-api`'s existing,
+    // documented cost) and re-fetches the same glob-matched set each time. Charging by call
+    // would make a WASM component pay 3x a native one for identical reads; charging by
+    // first-seen path makes the budget mean what its doc comment says — distinct paths.
+    seen: rustc_hash::FxHashSet<ProjectPath>,
+    bytes_read: usize,
+    cut_off: bool,
+}
+
+/// Host-mediated, read-only access to file content *outside* the language graph — configs,
+/// manifests, templates (RFC 0016 §5's content channel). Scoped to the calling component's own
+/// `PluginDescriptor::requested_file_access` globs: a path outside the declared set is treated
+/// exactly like one that doesn't exist, the same "declare then get" contract the WASM fuel
+/// budget and `ingest_coverage`'s well-known-path scoping already use elsewhere in this trait.
+/// Metered by [`CONTENT_MAX_FILES`]/[`CONTENT_MAX_BYTES`]: once exceeded, every further read
+/// this run returns `None` and one diagnostic records why — "degrade to silence, never crash
+/// the run," the same posture the WASM per-call fuel budget already established (RFC 0003 §3).
+///
+/// Source-blind by construction (borrows [`crate::discovery::DiscoveredTree`], the same reader
+/// extraction itself uses): identical behavior whether this run's source is a real directory or
+/// an in-memory git tree (RFC 0004 §6's diff modes), with no second disk walk of its own — glob
+/// matching runs in memory against paths this run already discovered.
+pub struct ContentView<'a> {
+    tree: &'a crate::discovery::DiscoveredTree,
+    globs: Vec<glob::Pattern>,
+    component_id: SmolStr,
+    budget: RefCell<ContentBudget>,
+    diagnostic: RefCell<Option<Diagnostic>>,
+}
+
+impl<'a> ContentView<'a> {
+    pub(crate) fn new(
+        tree: &'a crate::discovery::DiscoveredTree,
+        component_id: SmolStr,
+        requested_file_access: &[SmolStr],
+    ) -> Self {
+        // An unparsable glob is dropped silently rather than erroring the whole component —
+        // same "malformed input degrades, never aborts" posture as everything else a component
+        // declares (an activation rule that fails to compile is likewise just never satisfied).
+        let globs = requested_file_access
+            .iter()
+            .filter_map(|g| glob::Pattern::new(g.as_str()).ok())
+            .collect();
+        ContentView {
+            tree,
+            globs,
+            component_id,
+            budget: RefCell::new(ContentBudget::default()),
+            diagnostic: RefCell::new(None),
+        }
+    }
+
+    /// Read one file's bytes, if it matches this component's declared globs and the run's
+    /// content budget isn't exhausted. Every miss — no glob match, an unreadable/missing path,
+    /// or a budget cutoff — is indistinguishable to the caller as `None`, matching every other
+    /// host-mediated lookup's miss behavior in this trait (an adapter's own claim miss, a
+    /// `PluginTarget` that doesn't resolve).
+    pub fn read(&self, path: &ProjectPath) -> Option<Vec<u8>> {
+        if !self.globs.iter().any(|g| g.matches(path.0.as_str())) {
+            return None;
+        }
+        if self.already_seen(path) {
+            // A previously charged path is served again for free (no rebudgeting on repeat
+            // access) even after a cutoff — the cutoff is about *new* reads, not about
+            // punishing a caller for asking twice.
+            return self.tree.read(path).ok();
+        }
+        if self.budget.borrow().cut_off {
+            return None;
+        }
+        let bytes = self.tree.read(path).ok()?;
+        self.charge(path, bytes.len());
+        Some(bytes)
+    }
+
+    fn already_seen(&self, path: &ProjectPath) -> bool {
+        self.budget.borrow().seen.contains(path)
+    }
+
+    /// Records a fresh path against the budget and flips `cut_off` (plus the one diagnostic)
+    /// the moment either cap is crossed. Called only for a path not yet in `seen`, with the
+    /// byte count of a read that already happened — never re-reads to find out.
+    fn charge(&self, path: &ProjectPath, len: usize) {
+        let mut budget = self.budget.borrow_mut();
+        budget.seen.insert(path.clone());
+        budget.bytes_read += len;
+        let over_budget =
+            budget.seen.len() > CONTENT_MAX_FILES || budget.bytes_read > CONTENT_MAX_BYTES;
+        budget.cut_off |= over_budget;
+        drop(budget);
+        if over_budget {
+            self.record_cutoff();
+        }
+    }
+
+    /// Every discovered path matching this component's declared globs, in path order. Native
+    /// components don't need this (they already know the one path they want — `package.json`
+    /// relative to a known app root — and call [`read`](Self::read) directly); it exists for
+    /// the WASM tier's bridge, which must prefetch every matching path into an owned snapshot
+    /// before instantiating a guest that can't make host round-trips of its own choosing
+    /// mid-call (`kndo-plugin-api`'s `HostViewData`, mirroring how it already snapshots
+    /// `list-files`/`symbols-in`).
+    pub fn matching_paths(&self) -> impl Iterator<Item = &ProjectPath> + '_ {
+        self.tree
+            .files
+            .iter()
+            .map(|f| &f.path)
+            .filter(move |p| self.globs.iter().any(|g| g.matches(p.0.as_str())))
+    }
+
+    fn record_cutoff(&self) {
+        let mut diagnostic = self.diagnostic.borrow_mut();
+        if diagnostic.is_none() {
+            *diagnostic = Some(Diagnostic {
+                level: DiagnosticLevel::Warn,
+                path: None,
+                message: format!(
+                    "plugin {} exceeded its content-channel budget ({CONTENT_MAX_FILES} files \
+                     / {CONTENT_MAX_BYTES} bytes this run) — further content reads return \
+                     nothing for the rest of this run",
+                    self.component_id
+                ),
+                span: None,
+            });
+        }
+    }
+
+    /// Drains the one budget-cutoff diagnostic, if this run tripped it — called once per
+    /// component per assembly, after its hooks have all run.
+    pub(crate) fn take_diagnostic(&self) -> Option<Diagnostic> {
+        self.diagnostic.borrow_mut().take()
     }
 }
 
@@ -271,14 +428,39 @@ pub trait Plugin: Send + Sync {
         None
     }
 
-    /// Framework entry points: routes, DI-registered beans, handlers…
-    fn contribute_roots(&self, _graph: &GraphView<'_>, _out: &mut RootSink) {}
+    /// Framework entry points: routes, DI-registered beans, handlers… `content` is the RFC
+    /// 0016 §5 host-mediated channel, scoped to this plugin's own declared
+    /// `requested_file_access` globs — configs, manifests, templates the language graph itself
+    /// never sees (`package.json` scripts, `next.config.*`, `views/**`); reading source files
+    /// the graph already covers through this side door is out of contract even though nothing
+    /// here stops it mechanically (spec'd per plugin, e.g. docs/plugins/*.md).
+    fn contribute_roots(
+        &self,
+        _graph: &GraphView<'_>,
+        _content: &ContentView<'_>,
+        _out: &mut RootSink,
+    ) {
+    }
 
-    /// Edges invisible to the language: DI wiring, template → class, route → handler…
-    fn contribute_edges(&self, _graph: &GraphView<'_>, _out: &mut EdgeSink) {}
+    /// Edges invisible to the language: DI wiring, template → class, route → handler… See
+    /// [`contribute_roots`](Self::contribute_roots) for `content`'s scope.
+    fn contribute_edges(
+        &self,
+        _graph: &GraphView<'_>,
+        _content: &ContentView<'_>,
+        _out: &mut EdgeSink,
+    ) {
+    }
 
-    /// Mark symbols externally consumed (FFI, serialization targets, public SDK surface).
-    fn annotate_symbols(&self, _graph: &GraphView<'_>, _out: &mut AnnotationSink) {}
+    /// Mark symbols externally consumed (FFI, serialization targets, public SDK surface). See
+    /// [`contribute_roots`](Self::contribute_roots) for `content`'s scope.
+    fn annotate_symbols(
+        &self,
+        _graph: &GraphView<'_>,
+        _content: &ContentView<'_>,
+        _out: &mut AnnotationSink,
+    ) {
+    }
 
     /// Parse one coverage report into per-file line coverage (ADR 0005, RFC 0003 §2's
     /// `ingest_coverage` hook). Content arrives via the host — the report was matched by this
@@ -453,5 +635,130 @@ mod tests {
         let view = GraphView::new(&files, &symbols, &file_index);
         let paths: Vec<&str> = view.files().map(|f| f.path.0.as_str()).collect();
         assert_eq!(paths, vec!["a.mock", "b.mock"]);
+    }
+
+    // ------------------------------------------------------------ ContentView (RFC 0016 §5)
+
+    fn content_tree_fixture(
+        name: &str,
+        files: &[(&str, &str)],
+    ) -> crate::discovery::DiscoveredTree {
+        let dir = std::env::temp_dir().join(format!("kndo-plugin-content-test-{name}"));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        for (path, content) in files {
+            let full = dir.join(path);
+            std::fs::create_dir_all(full.parent().unwrap()).unwrap();
+            std::fs::write(full, content).unwrap();
+        }
+        crate::discovery::discover_source(
+            &crate::discovery::TreeSource::Directory(&dir),
+            &HashMap::default(),
+            None,
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn content_view_reads_a_path_matching_its_declared_glob() {
+        let tree = content_tree_fixture(
+            "reads-declared",
+            &[("package.json", "{\"main\":\"index.js\"}")],
+        );
+        let view = ContentView::new(
+            &tree,
+            SmolStr::new("test-plugin"),
+            &[SmolStr::new("package.json")],
+        );
+        let bytes = view.read(&ProjectPath(SmolStr::new("package.json")));
+        assert_eq!(bytes.as_deref(), Some(&b"{\"main\":\"index.js\"}"[..]));
+    }
+
+    #[test]
+    fn content_view_refuses_a_path_outside_its_declared_globs() {
+        let tree = content_tree_fixture(
+            "refuses-undeclared",
+            &[("package.json", "{}"), ("src/index.js", "code")],
+        );
+        // Declares only package.json — src/index.js is source the language graph already
+        // covers, and the point of scoping is that a plugin can't read it through this door
+        // even though the file genuinely exists and is genuinely readable.
+        let view = ContentView::new(
+            &tree,
+            SmolStr::new("test-plugin"),
+            &[SmolStr::new("package.json")],
+        );
+        assert_eq!(view.read(&ProjectPath(SmolStr::new("src/index.js"))), None);
+    }
+
+    #[test]
+    fn content_view_matching_paths_reflects_the_glob_not_the_whole_tree() {
+        let tree = content_tree_fixture(
+            "matching-paths",
+            &[
+                ("views/index.ejs", "a"),
+                ("views/about.ejs", "b"),
+                ("package.json", "{}"),
+            ],
+        );
+        let view = ContentView::new(
+            &tree,
+            SmolStr::new("test-plugin"),
+            &[SmolStr::new("views/*.ejs")],
+        );
+        let mut matched: Vec<&str> = view.matching_paths().map(|p| p.0.as_str()).collect();
+        matched.sort_unstable();
+        assert_eq!(matched, vec!["views/about.ejs", "views/index.ejs"]);
+    }
+
+    #[test]
+    fn content_view_cuts_off_after_its_file_budget_and_emits_one_diagnostic() {
+        let files: Vec<(String, String)> = (0..CONTENT_MAX_FILES + 5)
+            .map(|i| (format!("f{i}.marker"), "x".to_string()))
+            .collect();
+        let file_refs: Vec<(&str, &str)> = files
+            .iter()
+            .map(|(p, c)| (p.as_str(), c.as_str()))
+            .collect();
+        let tree = content_tree_fixture("budget-cutoff", &file_refs);
+        let view = ContentView::new(
+            &tree,
+            SmolStr::new("greedy-plugin"),
+            &[SmolStr::new("*.marker")],
+        );
+        let mut successes = 0;
+        for (path, _) in &files {
+            if view
+                .read(&ProjectPath(SmolStr::new(path.as_str())))
+                .is_some()
+            {
+                successes += 1;
+            }
+        }
+        // Every read up to and including the one that trips the cutoff still succeeds (it had
+        // already happened); everything after returns None.
+        assert_eq!(successes, CONTENT_MAX_FILES + 1);
+        let diagnostic = view
+            .take_diagnostic()
+            .expect("exceeding the file budget must record one diagnostic");
+        assert!(diagnostic.message.contains("greedy-plugin"));
+        // A second drain finds nothing left — the diagnostic is emitted exactly once per view.
+        assert!(view.take_diagnostic().is_none());
+    }
+
+    #[test]
+    fn content_view_an_unparsable_glob_is_dropped_not_fatal() {
+        let tree = content_tree_fixture("bad-glob", &[("package.json", "{}")]);
+        // "[" is an unterminated character class — invalid glob syntax.
+        let view = ContentView::new(
+            &tree,
+            SmolStr::new("test-plugin"),
+            &[SmolStr::new("["), SmolStr::new("package.json")],
+        );
+        assert_eq!(
+            view.read(&ProjectPath(SmolStr::new("package.json")))
+                .as_deref(),
+            Some(&b"{}"[..])
+        );
     }
 }

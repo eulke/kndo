@@ -1,9 +1,9 @@
 # `kndo:nextjs` — Next.js conventions plugin
 
 **Status:** Normative for the built-in `kndo:nextjs` plugin (RFC 0015 §6 phase 4) ·
-**Implements:** `contribute_roots` + `annotate_symbols` (RFC 0003 §2) · **Crate:**
-`crates/kndo-plugin-nextjs` · **Convention set versioned against:** Next.js 13–15 (pages
-router + app router)
+**Implements:** `contribute_roots` + `annotate_symbols` (RFC 0003 §2), both content-channel-
+aware (RFC 0016 §5) · **Crate:** `crates/kndo-plugin-nextjs` · **Convention set versioned
+against:** Next.js 13–15 (pages router + app router)
 
 ## 1. What Next.js breaks about import analysis
 
@@ -54,6 +54,8 @@ or not):
 
 > An app root is any directory that directly contains a `package.json` or a `next.config.*`
 > file. The set is computed once per run from file paths alone — no file content is read.
+> (§5's `pageExtensions` narrowing is a separate, later step over an already-derived root —
+> it reads content, root derivation itself never does.)
 
 For each app root `R` (where `R` may be the project root itself), the convention
 directories are exactly:
@@ -134,17 +136,24 @@ conventions are module-level.
 
 ## 5. What this plugin does *not* do
 
-- **No `contribute_edges`**: route-string → page edges (`<Link href="/about">`) need file
-  content, which `GraphView` deliberately does not expose. Dead-page detection therefore
-  stays conservative: a page no `<Link>` points to is still rooted (it is externally
-  routable by URL — that's not deadness).
+- **No `contribute_edges`**: route-string → page edges (`<Link href="/about">`) would need
+  reading `.tsx`/`.jsx` *source* — files the language graph already claims and parses. RFC
+  0016 §5's content channel is deliberately scoped to files *outside* the graph (configs,
+  manifests, templates); second-guessing the JS/TS adapter's own claimed files through the
+  side door stays out of contract even now that content access exists. Dead-page detection
+  therefore stays conservative: a page no `<Link>` points to is still rooted (it is
+  externally routable by URL — that's not deadness).
 - **No `classify_file`**: the JS adapter's role/origin classification is already right for
   Next projects.
-- **No `pageExtensions` / custom-config awareness**: reading `next.config.js` would need
-  content access *and* JS evaluation. Projects remapping convention directories or
-  extensions fall back to plain reachability — degrade toward silence. (RFC 0016 §5's
-  content channel covers the access half; the JS-evaluation half keeps full config
-  awareness out of scope even then — only statically readable values would upgrade.)
+- **`pageExtensions` awareness — landed (RFC 0016 §5), statically only.** Every app root's
+  own `next.config.*` (`requested_file_access: ["**/next.config.*"]`) is scanned for a
+  literal `pageExtensions: [...]` array of quoted strings; when found, it *narrows* which
+  extensions qualify a file under `pages/`/`app/` as routed (real Next.js behavior: a plain
+  `.tsx` under `pages/` stops being a page once `pageExtensions` is customized to e.g.
+  `["page.tsx"]`). JS evaluation stays explicitly out of scope — a dynamic value
+  (`pageExtensions: DEFAULT_EXTENSIONS`, a spread, anything not a literal array of strings)
+  is left unrecognized, and that root keeps this plugin's original unfiltered behavior
+  rather than guessing.
 - **No React-generic conventions** (a future `kndo:react` concern, not folded in here).
 
 ## 6. Verification shape

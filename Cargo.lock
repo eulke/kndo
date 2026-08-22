@@ -1361,6 +1361,7 @@ dependencies = [
  "bincode",
  "blake3",
  "chrono",
+ "glob",
  "ignore",
  "memmap2",
  "num_cpus",
@@ -1390,6 +1391,7 @@ name = "kndo-plugin-express"
 version = "0.1.0"
 dependencies = [
  "kndo-core",
+ "serde_json",
  "smol_str",
 ]
 

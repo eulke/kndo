@@ -1490,7 +1490,9 @@ mod tests {
                 id: SmolStr::new("demo"),
                 version: SmolStr::new("1"),
                 detection: vec![],
-                requested_file_access: vec![],
+                // RFC 0016 §5: declares access to a companion config-like file outside the
+                // language graph — `contribute_roots` below reads it to gate a fifth root.
+                requested_file_access: vec![SmolStr::new("content.marker")],
                 activation: vec![],
                 dependencies: vec![],
             }
@@ -1512,6 +1514,7 @@ mod tests {
         fn contribute_roots(
             &self,
             _graph: &crate::plugin::GraphView<'_>,
+            content: &crate::plugin::ContentView<'_>,
             out: &mut crate::plugin::RootSink,
         ) {
             out.add(
@@ -1522,11 +1525,29 @@ mod tests {
                 crate::vocab::RootKind::Production,
                 Confidence::Probable,
             );
+            // RFC 0016 §5: a real content-channel read gates a real root — proves the host
+            // plumbing (glob scoping, budget-tracked read) actually reaches a graph-mutation
+            // hook, not just that the type-checker accepts the new parameter.
+            if content
+                .read(&ProjectPath(SmolStr::new("content.marker")))
+                .as_deref()
+                == Some(b"promote".as_slice())
+            {
+                out.add(
+                    crate::plugin::PluginTarget::symbol(
+                        ProjectPath(SmolStr::new("handler.dmock")),
+                        "contentGatedRoot",
+                    ),
+                    crate::vocab::RootKind::Production,
+                    Confidence::Probable,
+                );
+            }
         }
 
         fn contribute_edges(
             &self,
             _graph: &crate::plugin::GraphView<'_>,
+            _content: &crate::plugin::ContentView<'_>,
             out: &mut crate::plugin::EdgeSink,
         ) {
             out.add(
@@ -1543,6 +1564,7 @@ mod tests {
         fn annotate_symbols(
             &self,
             _graph: &crate::plugin::GraphView<'_>,
+            _content: &crate::plugin::ContentView<'_>,
             out: &mut crate::plugin::AnnotationSink,
         ) {
             out.mark_externally_consumed(
@@ -1573,10 +1595,15 @@ mod tests {
              decl referencedByPlugin\n\
              decl almostInternalOnly\n\
              ref almostInternalOnly\n\
-             decl trulyDead\n",
+             decl trulyDead\n\
+             decl contentGatedRoot\n",
         )
         .unwrap();
         std::fs::write(dir.join("noise.banner.dmock"), "decl bannerDecl\n").unwrap();
+        // RFC 0016 §5: content the plugin's contribute_roots reads through the host-mediated
+        // channel to decide whether to root `contentGatedRoot` — not itself part of the
+        // language graph (the mock adapter never claims `.marker` files).
+        std::fs::write(dir.join("content.marker"), "promote").unwrap();
 
         // Baseline, no plugin: every one of the four declarations the plugin later rescues
         // must actually be flagged on its own — otherwise the assertions below would pass
@@ -1602,6 +1629,10 @@ mod tests {
         );
         assert!(
             baseline_unused.contains(&"referencedByPlugin"),
+            "{baseline_unused:?}"
+        );
+        assert!(
+            baseline_unused.contains(&"contentGatedRoot"),
             "{baseline_unused:?}"
         );
         let baseline_unused_files: Vec<String> = baseline
@@ -1641,6 +1672,10 @@ mod tests {
         assert!(
             !unused_symbols.contains(&"referencedByPlugin"),
             "contribute_edges should have kept this reachable: {unused_symbols:?}"
+        );
+        assert!(
+            !unused_symbols.contains(&"contentGatedRoot"),
+            "the content-channel-gated root should have kept this reachable: {unused_symbols:?}"
         );
         assert!(
             unused_symbols.contains(&"trulyDead"),

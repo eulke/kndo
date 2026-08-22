@@ -8,8 +8,11 @@
 //! exports, plus externally-consumed annotations for the `internal-only`/`private-type-leak`
 //! exemption (RFC 0005 §7).
 
+use std::collections::BTreeMap;
+
 use kndo_core::plugin::{
-    ActivationRule, AnnotationSink, GraphView, Plugin, PluginDescriptor, PluginTarget, RootSink,
+    ActivationRule, AnnotationSink, ContentView, GraphView, Plugin, PluginDescriptor, PluginTarget,
+    RootSink,
 };
 use kndo_core::vocab::{Confidence, FileRole, RootKind};
 use smol_str::SmolStr;
@@ -26,7 +29,12 @@ impl Plugin for NextjsPlugin {
             detection: vec![SmolStr::new(
                 "a package.json under the project root depends on next",
             )],
-            requested_file_access: vec![],
+            // RFC 0016 §5: every app root's own next.config.* through the content channel, to
+            // statically read `pageExtensions` (§4's known gap). This is a distinct mechanism
+            // from `activation` below — content-channel globs match only already-discovered,
+            // gitignore-filtered paths (no disk walk of their own), so unlike an
+            // ActivationRule::FileExists glob, recursion here never touches node_modules.
+            requested_file_access: vec![SmolStr::new("**/next.config.*")],
             // One rule, deliberately (spec §2): every real Next project declares `next`
             // somewhere, and the manifest scan is gitignore-aware and monorepo-wide. A
             // recursive FileExists("**/next.config.*") would raw-glob through node_modules on
@@ -36,8 +44,13 @@ impl Plugin for NextjsPlugin {
         }
     }
 
-    fn contribute_roots(&self, graph: &GraphView<'_>, out: &mut RootSink) {
-        for (file, tier) in convention_files(graph) {
+    fn contribute_roots(
+        &self,
+        graph: &GraphView<'_>,
+        content: &ContentView<'_>,
+        out: &mut RootSink,
+    ) {
+        for (file, tier) in convention_files(graph, content) {
             // Being routed/loaded by the framework is definitional once the directory is a
             // convention directory — Certain, not a heuristic (spec §4).
             out.add(
@@ -64,10 +77,15 @@ impl Plugin for NextjsPlugin {
         }
     }
 
-    fn annotate_symbols(&self, graph: &GraphView<'_>, out: &mut AnnotationSink) {
+    fn annotate_symbols(
+        &self,
+        graph: &GraphView<'_>,
+        content: &ContentView<'_>,
+        out: &mut AnnotationSink,
+    ) {
         // The framework is the external consumer of every rooted export (spec §4.4) — a
         // page's exported props type must never be told to narrow its visibility.
-        for (file, _tier) in convention_files(graph) {
+        for (file, _tier) in convention_files(graph, content) {
             for symbol in framework_visible_exports(graph, file) {
                 out.mark_externally_consumed(file.path.clone(), symbol.name.clone());
             }
@@ -79,13 +97,51 @@ impl Plugin for NextjsPlugin {
 /// shared iteration both hooks classify against.
 fn convention_files<'a>(
     graph: &'a GraphView<'_>,
+    content: &ContentView<'_>,
 ) -> Vec<(&'a kndo_core::graph::FileNode, conventions::Tier)> {
     let app_roots = conventions::app_roots(graph.files().map(|f| f.path.0.as_str()));
+    let page_extensions = page_extensions_by_root(&app_roots, content);
     graph
         .files()
         .filter(|f| is_production_js(f))
-        .filter_map(|f| conventions::classify(f.path.0.as_str(), &app_roots).map(|t| (f, t)))
+        .filter_map(|f| {
+            conventions::classify(f.path.0.as_str(), &app_roots, &page_extensions).map(|t| (f, t))
+        })
         .collect()
+}
+
+/// Each app root's own `next.config.*`, read through the content channel and statically
+/// scanned for a `pageExtensions` array (RFC 0016 §5's upgrade over the spec's original "no
+/// content access" cut, §4). A root with no config file, an unparsable one, or a dynamic
+/// `pageExtensions` value simply gets no entry — `conventions::classify` treats a missing
+/// entry as this product's original unfiltered behavior for that root, never a guess.
+fn page_extensions_by_root(
+    app_roots: &[String],
+    content: &ContentView<'_>,
+) -> BTreeMap<String, Vec<String>> {
+    let mut by_root = BTreeMap::new();
+    for path in content.matching_paths() {
+        let Some(root) = config_root(path.0.as_str(), app_roots) else {
+            continue;
+        };
+        let Some(bytes) = content.read(path) else {
+            continue;
+        };
+        let Ok(text) = std::str::from_utf8(&bytes) else {
+            continue;
+        };
+        if let Some(extensions) = conventions::static_page_extensions(text) {
+            by_root.insert(root, extensions);
+        }
+    }
+    by_root
+}
+
+/// Which app root, if any, a matched `next.config.*` path sits directly in — mirrors how
+/// `conventions::app_roots` itself derives roots from these same files.
+fn config_root(path: &str, app_roots: &[String]) -> Option<String> {
+    let dir = path.rsplit_once('/').map_or("", |(dir, _)| dir);
+    app_roots.iter().find(|root| root.as_str() == dir).cloned()
 }
 
 /// Production role only (spec §4): rooting a stray `pages/index.test.tsx` as production would

@@ -132,6 +132,47 @@ fn nextjs_app_router_matches_reserved_basenames_per_monorepo_package() {
 }
 
 #[test]
+fn nextjs_custom_page_extensions_narrow_the_pages_tier() {
+    // RFC 0016 §5: next.config.js customizes pageExtensions to only the `.page.tsx` suffix —
+    // read through the content channel, this must stop treating a plain `.tsx` under pages/
+    // as routed (real Next.js wouldn't route it either), while the `.page.tsx` sibling still
+    // gets rooted.
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    write(
+        root,
+        "package.json",
+        r#"{"dependencies": {"react": "18", "next": "14"}}"#,
+    );
+    write(
+        root,
+        "next.config.js",
+        "module.exports = { pageExtensions: ['page.tsx'] };\n",
+    );
+    write(
+        root,
+        "pages/index.page.tsx",
+        "export default function Home() { return null; }\n",
+    );
+    write(
+        root,
+        "pages/about.tsx",
+        "export default function About() { return null; }\n",
+    );
+
+    let result = check(root);
+    let unused = unused_paths(&result);
+    assert!(
+        !unused.iter().any(|p| p == "pages/index.page.tsx"),
+        "the custom-suffixed page is still routed: {unused:?}"
+    );
+    assert!(
+        unused.iter().any(|p| p == "pages/about.tsx"),
+        "a plain .tsx no longer qualifies once pageExtensions is customized: {unused:?}"
+    );
+}
+
+#[test]
 fn express_conventional_entry_is_gated_by_the_manifest() {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path();
@@ -166,4 +207,33 @@ fn express_conventional_entry_is_gated_by_the_manifest() {
         "the rooted entry keeps itself and everything it imports live: {unused_with:?}"
     );
     assert!(active_ids(root).contains(&"kndo:express".to_string()));
+}
+
+#[test]
+fn express_manifest_derived_entry_rescues_a_non_conventionally_named_file() {
+    // RFC 0016 §5: `main-entry.js` matches none of §3's name conventions (app/server, at the
+    // root or under src/) — only reading package.json's `"scripts"."start"` (the content
+    // channel's own upgrade) can identify it as the real entry.
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    write(
+        root,
+        "main-entry.js",
+        "import { router } from './routes.js';\nexport const app = { router };\n",
+    );
+    write(root, "routes.js", "export const router = {};\n");
+    write(
+        root,
+        "package.json",
+        r#"{"dependencies": {"express": "4"}, "scripts": {"start": "node ./main-entry.js"}}"#,
+    );
+
+    let result = check(root);
+    let unused = unused_paths(&result);
+    assert!(
+        !unused
+            .iter()
+            .any(|p| p == "main-entry.js" || p == "routes.js"),
+        "package.json's scripts.start should have rescued the manifest-named entry: {unused:?}"
+    );
 }

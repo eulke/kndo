@@ -11,6 +11,10 @@ publish.workspace = true
 smol_str = { workspace = true }
 blake3 = { workspace = true }
 ignore = { workspace = true }
+# Content-channel glob matching (RFC 0016 §5): a component's `requested_file_access` entries
+# are glob patterns matched in-memory against discovered paths — no disk walk, source-blind
+# (works identically for a directory or a git-tree source, RFC 0004 §6).
+glob = "0.3"
 rayon = { workspace = true }
 rustc-hash = { workspace = true }
 serde = { workspace = true }

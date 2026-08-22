@@ -45,10 +45,26 @@ A plugin gets exactly four graph-mutation hooks (RFC 0003 §2) plus its descript
   SDK surface, FFI, serialization targets): exempts them from `internal-only`/
   `private-type-leak` narrowing suggestions.
 
-The three graph-reading hooks may call two host imports — `list-files()` (every claimed file:
-path, role, origin) and `symbols-in(path)` (each symbol: name, kind, exported, member-of).
-**That is the entire visible universe.** Deliberately not exposed in v1: file *content*, symbol
-spans, existing edges, imports, annotations/attributes, manifests. If your convention needs
+`contribute-roots`/`contribute-edges`/`annotate-symbols` may call three host imports:
+`list-files()` (every claimed file: path, role, origin), `symbols-in(path)` (each symbol:
+name, kind, exported, member-of), and `read-file(path) -> option<list<u8>>` (RFC 0016 §5's
+content channel). `classify-file` gets none of these — it sees one file at a time and nothing
+else.
+
+**`read-file` is scoped, not general.** It only ever answers a path matching *your own*
+`requested-file-access` globs (declare them on your descriptor — an empty list means every
+call returns `none`), and it's for files the language graph doesn't already claim and parse:
+configs, manifests, templates. Reading a source file the adapter itself claims to
+second-guess it — parsing a `.tsx` yourself instead of trusting `symbols-in` — is out of
+contract even though nothing stops you mechanically; kndo's own `kndo:express` (reads
+`package.json`'s `main`/`scripts`) and `kndo:nextjs` (reads `next.config.*` for a literal
+`pageExtensions` array, no JS evaluation) are the reference examples, and both fall back to
+their pre-channel behavior on anything they can't read or parse — never a guess. Reads are
+budgeted (a generous but real per-run cap on distinct paths and total bytes); going over cuts
+your plugin off from further reads for the rest of that run, not the run itself.
+
+**That is the entire visible universe.** Still not exposed in v1: symbol spans, existing
+edges, imports, annotations/attributes claimed-file content. If your convention needs
 something the view doesn't carry (e.g. Java annotations for a Spring-style plugin), that's a
 `GraphView` extension to propose upstream — not something to work around.
 
@@ -59,11 +75,12 @@ you are certain about. kndo's standard for its own analyses is zero false positi
 that roots things speculatively degrades every verdict downstream of it, and findings your
 contributions influence are attributed to your plugin id (`Provenance::Plugin`).
 
-What a plugin can never do, by construction: touch the filesystem or network (no WASI is
-linked — a component importing WASI **fails to instantiate**), see another plugin's
-contributions, create new finding categories, or crash the run — each hook call has a fuel
-budget (50M units); a trap or exhaustion degrades to "this plugin contributed nothing this
-round", never a failed `kndo check`.
+What a plugin can never do, by construction: touch the filesystem or network *directly* (no
+WASI is linked — a component importing WASI **fails to instantiate**; every byte you see
+through `read-file` was matched against your own declared globs and fetched host-side, not a
+live syscall you make), see another plugin's contributions, create new finding categories, or
+crash the run — each hook call has a fuel budget (50M units); a trap or exhaustion degrades to
+"this plugin contributed nothing this round", never a failed `kndo check`.
 
 **Cost model you must know:** any registered plugin with graph-mutation hooks — every WASM
 plugin, always — forces a full graph rebuild on every run (the snapshot cache and incremental

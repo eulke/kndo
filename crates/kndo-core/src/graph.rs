@@ -2638,10 +2638,20 @@ pub fn assemble_from_source(
     if !sorted_plugins.is_empty() {
         let view = crate::plugin::GraphView::new(&files, &symbols, &file_index);
         for plugin in sorted_plugins {
-            let provenance = crate::vocab::Provenance::Plugin(plugin.descriptor().id);
+            let descriptor = plugin.descriptor();
+            let provenance = crate::vocab::Provenance::Plugin(descriptor.id.clone());
+            // RFC 0016 §5: one ContentView per plugin per round, scoped to that plugin's own
+            // declared globs — budget and the at-most-one cutoff diagnostic are per plugin,
+            // never shared across plugins (one component exceeding its budget must not starve
+            // another's legitimate reads).
+            let content = crate::plugin::ContentView::new(
+                &discovered,
+                descriptor.id,
+                &descriptor.requested_file_access,
+            );
 
             let mut root_sink = crate::plugin::RootSink::default();
-            plugin.contribute_roots(&view, &mut root_sink);
+            plugin.contribute_roots(&view, &content, &mut root_sink);
             for root in root_sink.items {
                 let Some(target) = resolve_plugin_target(
                     &root.target,
@@ -2668,7 +2678,7 @@ pub fn assemble_from_source(
             }
 
             let mut edge_sink = crate::plugin::EdgeSink::default();
-            plugin.contribute_edges(&view, &mut edge_sink);
+            plugin.contribute_edges(&view, &content, &mut edge_sink);
             for contributed in edge_sink.items {
                 let Some(from) = resolve_plugin_target(
                     &contributed.from,
@@ -2706,7 +2716,7 @@ pub fn assemble_from_source(
             }
 
             let mut annotation_sink = crate::plugin::AnnotationSink::default();
-            plugin.annotate_symbols(&view, &mut annotation_sink);
+            plugin.annotate_symbols(&view, &content, &mut annotation_sink);
             for target in annotation_sink.externally_consumed {
                 if let Some(NodeRef::Symbol(id)) = resolve_plugin_target(
                     &target,
@@ -2716,6 +2726,9 @@ pub fn assemble_from_source(
                 ) {
                     externally_consumed.push(id);
                 }
+            }
+            if let Some(diagnostic) = content.take_diagnostic() {
+                diagnostics.push(diagnostic);
             }
         }
         externally_consumed.sort_unstable();
