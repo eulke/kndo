@@ -212,10 +212,13 @@ component declaring one fails to instantiate rather than silently receiving capa
 ### 5.4 Correctness: cache and patch bypass
 
 Same rule as the native `Plugin`'s own graph-mutation hooks (contracts/core-traits.md §3): any
-registered plugin — WASM or built-in — with these four hooks makes `assemble_from_source` skip
-both the graph-snapshot cache hit and the incremental patch, full-rebuilding every run. Neither
-reuse path re-invokes a plugin's hooks (WASM or native), so serving either to a plugin-bearing
-project would silently miss whatever the plugin contributes.
+registered plugin — WASM or built-in — that declares `mutates_graph()` (a `kndo:plugin`
+component always does: the world exports all four hooks, so `WasmPlugin` keeps the trait's
+`true` default) makes `assemble_from_source` skip both the graph-snapshot cache hit and the
+incremental patch, full-rebuilding every run. Neither reuse path re-invokes a plugin's hooks
+(WASM or native), so serving either to a plugin-bearing project would silently miss whatever
+the plugin contributes. Coverage-only plugins (`LcovPlugin`) declare `false` and leave both
+fast paths intact.
 
 ### 5.5 Global installation & activation (RFC 0003 §4)
 

@@ -133,14 +133,16 @@ max-age = "7d"            # stale reports are ignored (with a diagnostic), not t
 - Plugin identity (name + version + content hash for WASM) participates in the cache key
   (RFC 0004 §3), so enabling/upgrading a plugin invalidates exactly what it influenced. **Not
   implemented yet** — landed instead (M5), and strictly sufficient for correctness today: any
-  registered plugin (`classify_file`/`contribute_roots`/`contribute_edges`/`annotate_symbols`,
-  none of which `LcovPlugin` — the only shipped plugin — implements) makes
-  `assemble_from_source` skip *both* the graph-snapshot cache and the incremental patch
-  entirely, full-rebuilding every run instead. Neither reuse path re-invokes a plugin's hooks, so
-  serving either would silently miss whatever a currently-registered plugin contributes; bypass
-  is the correct fallback until cache-key folding lands, and costs nothing today since it never
-  triggers for the default product. Revisit once a real plugin with these hooks ships and warm
-  performance matters for it.
+  registered plugin declaring `mutates_graph()` (the trait default; `LcovPlugin` — coverage
+  ingestion only — declares `false`) makes `assemble_from_source` skip *both* the graph-snapshot
+  cache and the incremental patch entirely, full-rebuilding every run instead. Neither reuse
+  path re-invokes a plugin's hooks, so serving either would silently miss whatever a
+  currently-registered plugin contributes; bypass is the correct fallback until cache-key
+  folding lands. The `mutates_graph` gate matters: an earlier cut keyed the bypass on
+  raw-registry emptiness, which — with `LcovPlugin` unconditionally registered — silently
+  disabled both fast paths on every real run. The declaration is self-enforcing (assembly only
+  calls the four hooks on plugins claiming `true`), never trusted. Revisit cache-key folding
+  once a real graph-mutating plugin ships and warm performance matters for it.
 - External plugins are untrusted code: sandbox as above, and findings they influenced are
   attributed (`"sources": ["plugin:nextjs"]` in JSON output) for auditability. The
   `Provenance::Plugin(id)` attribution itself is landed (every edge/root/annotation a plugin

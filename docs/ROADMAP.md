@@ -692,10 +692,12 @@ Correctness cut, made explicit rather than deferred silently: any registered plu
 hooks makes `assemble_from_source` skip *both* the graph-snapshot cache hit and the incremental
 patch, always full-rebuilding. RFC 0003 §5's "plugin identity participates in the cache key" is
 the real fix and isn't built; neither reuse path re-invokes plugin hooks, so serving either to a
-plugin-bearing project would silently miss whatever the plugin contributes. The bypass is free
-today — `LcovPlugin`, the only shipped plugin, implements none of these four hooks, so the
-condition never fires for the default product — and becomes the thing to revisit once a real
-plugin exercises it and warm performance matters.
+plugin-bearing project would silently miss whatever the plugin contributes. **This section
+originally claimed the bypass was "free today" because `LcovPlugin` implements none of the four
+hooks — that was wrong**: the shipped condition checked raw-registry emptiness, not hook usage,
+and `LcovPlugin`'s unconditional registration made it never-empty — the snapshot cache and the
+incremental patch were silently dead on every real run from this wiring until the
+`Plugin::mutates_graph()` fix landed (regression-tested from both directions in `graph.rs`).
 
 `Engine::open`'s signature was preserved (every existing call site — a few dozen across
 `engine.rs`'s own test module plus `kndo`/`kndo-adapter-go` — keeps compiling unchanged) by
@@ -867,7 +869,13 @@ present, personal-project context confirmed — §§0-1 done; the `ci.yml`/`rele
 `install.sh`/`cliff.toml`/Docker/Homebrew mechanism itself is written and statically validated
 but has never run for real — RFC 0014 §7 has the exact punch list: flip `publish = false`, add
 `version =` to internal path deps, create the tap repo, add the crates.io/Homebrew secrets, then
-push the first `v*` tag), **`kndo-action` GA** (RFC 0010: sticky PR comment, annotations, SARIF
+push the first `v*` tag), **plugin identity, dependencies & installation** (RFC 0015:
+coordinate-based ids — `github.com/owner/repo` external, reserved `kndo:` for built-ins — a
+`dependencies` field whose fixpoint co-activates wrapper chains like company-framework → nextjs
+→ express, and `kndo plugin install` with lockfile + checksums; phased in §6, phase 1 —
+`Plugin::mutates_graph()` — landed with the RFC itself), **first ecosystem plugins**
+(`kndo:nextjs`, `kndo:express` — RFC 0015 §6 phase 4, each spec'd in `docs/plugins/` before
+implementation), **`kndo-action` GA** (RFC 0010: sticky PR comment, annotations, SARIF
 opt-in — dogfooded on kndo's own PRs from M2 via a pre-GA workflow), `stale` (suppressions) rule,
 error-message polish.
 

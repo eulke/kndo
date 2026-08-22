@@ -221,6 +221,23 @@ impl AnnotationSink {
 pub trait Plugin: Send + Sync {
     fn descriptor(&self) -> PluginDescriptor;
 
+    /// Whether this plugin participates in graph assembly at all — i.e. implements any of the
+    /// four graph-mutation hooks (`classify_file`/`contribute_roots`/`contribute_edges`/
+    /// `annotate_symbols`). Load-bearing for performance, not a hint: any registered
+    /// graph-mutating plugin forces `graph::assemble_from_source` to bypass the snapshot cache
+    /// AND the incremental patch (neither reuse path re-invokes plugin hooks — RFC 0013), so a
+    /// plugin that only implements `ingest_coverage`/`suppress` (like [`LcovPlugin`]) must
+    /// return `false` here or its mere registration kills incremental analysis for the whole
+    /// product. The declaration is self-enforcing rather than trusted: assembly only *calls*
+    /// the four hooks on plugins that return `true`, so returning `false` while implementing a
+    /// hook means the hook never runs (identically on cold and cached runs) — never that a
+    /// cached graph silently misses its contributions. Default `true`: the conservative
+    /// direction for the common case of a plugin that exists precisely to contribute graph
+    /// facts.
+    fn mutates_graph(&self) -> bool {
+        true
+    }
+
     /// Adjust a file's role/origin beyond language defaults (e.g. `*.stories.tsx` → tooling).
     /// Runs once per claimed file, right after RFC 0012 §7's content-derived origin correction
     /// and before role-derived roots (phase 2.6) — so a plugin's answer is what every downstream
@@ -274,6 +291,15 @@ impl Plugin for LcovPlugin {
                 ActivationRule::FileExists(SmolStr::new("lcov.info")),
             ],
         }
+    }
+
+    /// Coverage ingestion only — no graph-mutation hooks. Without this override, this plugin's
+    /// unconditional registration in `default_plugins()` would force every real `kndo` run to
+    /// bypass the graph-snapshot cache and the incremental patch (see the trait method's doc) —
+    /// which is exactly the bug this override fixed: both fast paths were silently dead in the
+    /// shipped product from the day the graph hooks were wired until this landed.
+    fn mutates_graph(&self) -> bool {
+        false
     }
 
     /// The lcov subset that matters: `SF:<path>` opens a file section, `DA:<line>,<hits>`

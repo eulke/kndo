@@ -466,11 +466,17 @@ pub trait Plugin: Send + Sync {
   by `internal-only`/`private-type-leak` (RFC 0005 §7's exemption). `classify_file` runs earlier,
   inline in phase 2's file-node build, right after RFC 0012 §7's content-derived origin
   correction — its answer is what every downstream role/origin exemption sees.
-- Any plugin registered with a non-empty `Plugin` list makes `assemble_from_source` skip both
-  the graph-snapshot cache hit and the incremental patch, full-rebuilding every run: neither
-  reuse path re-invokes plugin hooks, and RFC 0003 §5's plugin-identity-in-the-cache-key
-  mechanism isn't built yet. Correct and free today (`LcovPlugin`, the only shipped plugin,
-  implements none of the graph-mutation hooks, so this never triggers for the default product).
+- Any registered plugin whose `mutates_graph()` returns `true` (the trait default) makes
+  `assemble_from_source` skip both the graph-snapshot cache hit and the incremental patch,
+  full-rebuilding every run: neither reuse path re-invokes plugin hooks, and RFC 0003 §5's
+  plugin-identity-in-the-cache-key mechanism isn't built yet. A plugin that only implements
+  `ingest_coverage`/`suppress` (like `LcovPlugin`) declares `mutates_graph() == false` and is
+  invisible to both fast paths — and the declaration is self-enforcing, not trusted: assembly
+  only ever *calls* the four graph-mutation hooks on plugins that claim `true`, so a false
+  claim means the hooks never run (identically cold or cached), never a stale cached graph.
+  (History note: this predicate originally checked raw-registry emptiness, which — with
+  `LcovPlugin` unconditionally registered — silently disabled both fast paths on every real
+  run; `mutates_graph` is the fix.)
 - Host-mediated file access: content for `requested_file_access` globs is provided by the core;
   no ambient fs/net (enforced natively by convention, in WASM by the sandbox).
 - `ingest_coverage` (ADR 0005: coverage is *ingested, never measured*) follows the same sink

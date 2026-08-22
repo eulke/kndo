@@ -1810,10 +1810,15 @@ pub fn assemble_from_source(
     plugins: &[Box<dyn crate::plugin::Plugin>],
     cache: Option<&crate::cache::ProjectCache>,
 ) -> Result<AssembledGraph, DiscoveryError> {
-    // Deterministic call order (RFC 0003 §5) — interim rule pending a real ordering-constraints
-    // field on `PluginDescriptor` (ADR/RFC-tracked gap, docs/rfcs/0003-plugin-system.md §5):
+    // Only graph-mutating plugins (`Plugin::mutates_graph`) participate in assembly at all —
+    // both in the hook call sites below AND in the cache/patch bypass decision. Filtering here,
+    // at the single entry point, is what makes the declaration self-enforcing: a plugin
+    // claiming `false` never has its hooks called, so it can't be the reason a cached graph
+    // is stale. Deterministic call order (RFC 0003 §5) — interim rule pending a real
+    // ordering-constraints field on `PluginDescriptor` (docs/rfcs/0003-plugin-system.md §5):
     // sort by id once, reused by every hook site below instead of re-sorting per phase.
-    let mut sorted_plugins: Vec<&Box<dyn crate::plugin::Plugin>> = plugins.iter().collect();
+    let mut sorted_plugins: Vec<&Box<dyn crate::plugin::Plugin>> =
+        plugins.iter().filter(|p| p.mutates_graph()).collect();
     sorted_plugins.sort_by(|a, b| a.descriptor().id.cmp(&b.descriptor().id));
     let sorted_plugins = sorted_plugins.as_slice();
 
@@ -1857,16 +1862,18 @@ pub fn assemble_from_source(
     // is enough) is a plain miss; there's no partial reuse yet, only all-or-nothing.
     let graph_key = compute_graph_key(&discovered.files, adapters);
     tick("discovery", &mut phase_start);
-    // Plugins with graph-mutation hooks bypass BOTH the snapshot-hit and incremental-patch fast
-    // paths (RFC 0003 §5: plugin identity should participate in the cache key so upgrading a
-    // plugin invalidates exactly what it influenced — not yet implemented, docs/rfcs/0003-
-    // plugin-system.md §5). Neither `cache.get_graph` nor `try_patch` re-invokes
-    // `contribute_roots`/`contribute_edges`/`annotate_symbols`, so serving either would silently
-    // reuse a graph a currently-registered plugin never touched. Falling through to a full
-    // rebuild is correct and, while zero shipped plugins use these hooks, free: `LcovPlugin`
-    // (the only default plugin today) only implements `ingest_coverage`, so this never fires on
-    // kndo's own dogfooding.
-    if let Some(cache) = cache.filter(|_| plugins.is_empty()) {
+    // Graph-mutating plugins bypass BOTH the snapshot-hit and incremental-patch fast paths
+    // (RFC 0003 §5: plugin identity should participate in the cache key so upgrading a plugin
+    // invalidates exactly what it influenced — not yet implemented, docs/rfcs/0003-plugin-
+    // system.md §5). Neither `cache.get_graph` nor `try_patch` re-invokes `contribute_roots`/
+    // `contribute_edges`/`annotate_symbols`, so serving either would silently reuse a graph a
+    // currently-registered plugin never touched. The condition is `sorted_plugins` (already
+    // filtered to `mutates_graph()` plugins), NOT the raw registry: this line originally
+    // checked `plugins.is_empty()`, which — with `LcovPlugin` unconditionally registered by
+    // `default_plugins()` — was never true in the shipped product, silently disabling the
+    // snapshot cache and the incremental patch on every real run. A coverage-only plugin must
+    // not cost the fast paths anything.
+    if let Some(cache) = cache.filter(|_| sorted_plugins.is_empty()) {
         if let Some((graph, graph_diagnostics)) = cache.get_graph(&graph_key) {
             tick("snapshot-load", &mut phase_start);
             return Ok(AssembledGraph {
@@ -2755,11 +2762,12 @@ pub fn assemble_from_source(
     // The snapshot is NOT written here (RFC 0008 §2: cache persist happens off the critical
     // path) — the freshly assembled graph hands back the key, and the engine defers the
     // serialize + write to a background thread that overlaps with analysis and rendering.
-    // Skipped entirely when plugins are registered (see the read-side comment above): writing a
-    // plugin-influenced graph under a key that carries no plugin identity would let a *later*,
+    // Skipped entirely when graph-mutating plugins are registered (see the read-side comment
+    // above, including why the condition is the filtered set and not the raw registry): writing
+    // a plugin-influenced graph under a key that carries no plugin identity would let a *later*,
     // plugin-less run read it back and silently inherit contributions no plugin made for it.
     let pending_snapshot = cache
-        .filter(|_| plugins.is_empty())
+        .filter(|_| sorted_plugins.is_empty())
         .and_then(|c| c.graph_writer(graph_key));
     tick("resolve+link", &mut phase_start);
     Ok(AssembledGraph {
@@ -4265,6 +4273,67 @@ mod tests {
             "third run hits the key"
         );
         assert_eq!(patched, warm);
+    }
+
+    #[test]
+    fn a_coverage_only_plugin_keeps_the_snapshot_fast_path() {
+        // Regression guard for a real shipped bug: the cache/patch bypass was keyed on
+        // `plugins.is_empty()`, and `LcovPlugin` is registered unconditionally by
+        // `default_plugins()` — so the graph-snapshot cache and the incremental patch were
+        // silently dead on every real `kndo` run from the day the graph hooks were wired.
+        // A plugin with `mutates_graph() == false` must be invisible to both fast paths.
+        let name = "coverage-plugin-keeps-cache";
+        let dir = project(name, &[("a.mock", "decl x\nref y"), ("b.mock", "decl y")]);
+        let cache_dir = std::env::temp_dir().join(format!("kndo-graph-test-{name}-cache"));
+        let _ = fs::remove_dir_all(&cache_dir);
+        let cache = crate::cache::ProjectCache::open(&cache_dir);
+        let plugins: Vec<Box<dyn crate::plugin::Plugin>> =
+            vec![Box::new(crate::plugin::LcovPlugin)];
+        assemble_with_cache(&dir, &mock_adapters(), &plugins, Some(&cache)).unwrap();
+        let (warm, _) =
+            assemble_with_cache(&dir, &mock_adapters(), &plugins, Some(&cache)).unwrap();
+        assert!(
+            cache.graph_hits() > 0,
+            "a coverage-only plugin must not bypass the snapshot cache"
+        );
+        let (cold, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
+        assert_eq!(
+            warm, cold,
+            "the served snapshot must equal a plugin-less cold build"
+        );
+    }
+
+    #[test]
+    fn a_graph_mutating_plugin_still_bypasses_the_snapshot() {
+        // The other direction of the same rule: a plugin that participates in graph assembly
+        // (the trait's `mutates_graph` default — hooks all defaulted is enough, the *claim* is
+        // what gates) must keep forcing full rebuilds, since neither the snapshot hit nor the
+        // patch re-invokes its hooks.
+        struct HookedPlugin;
+        impl crate::plugin::Plugin for HookedPlugin {
+            fn descriptor(&self) -> crate::plugin::PluginDescriptor {
+                crate::plugin::PluginDescriptor {
+                    id: SmolStr::new("hooked"),
+                    version: SmolStr::new("1"),
+                    detection: vec![],
+                    requested_file_access: vec![],
+                    activation: vec![],
+                }
+            }
+        }
+        let name = "mutating-plugin-bypasses-cache";
+        let dir = project(name, &[("a.mock", "decl x\nref y"), ("b.mock", "decl y")]);
+        let cache_dir = std::env::temp_dir().join(format!("kndo-graph-test-{name}-cache"));
+        let _ = fs::remove_dir_all(&cache_dir);
+        let cache = crate::cache::ProjectCache::open(&cache_dir);
+        let plugins: Vec<Box<dyn crate::plugin::Plugin>> = vec![Box::new(HookedPlugin)];
+        assemble_with_cache(&dir, &mock_adapters(), &plugins, Some(&cache)).unwrap();
+        assemble_with_cache(&dir, &mock_adapters(), &plugins, Some(&cache)).unwrap();
+        assert_eq!(
+            cache.graph_hits(),
+            0,
+            "a graph-mutating plugin must bypass the snapshot cache on every run"
+        );
     }
 
     #[test]
