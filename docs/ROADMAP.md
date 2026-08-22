@@ -884,13 +884,20 @@ tested against injected source/probe edges plus one real-component identity-bind
 are **all landed**: RFC 0015 is fully implemented), **`kndo-action` GA** (RFC 0010: sticky PR
 comment, annotations, SARIF
 opt-in — dogfooded on kndo's own PRs from M2 via a pre-GA workflow), `stale` (suppressions) rule,
-error-message polish.
+error-message polish, and **RFC 0016 §8 phase 0** (freeze reservations: declare the planned
+additive ABI evolutions in wasm-abi §8 and add the dormant `AdapterDescriptor` component
+fields native-side, so the 1.0 freeze doesn't wall off the component-model phases).
 
 **Exit:** semver 1.0 commitments declared for the three contract surfaces; two external repos
 adopt kndo in pre-commit and stay enabled for 2 weeks.
 
 ## Post-1.0 parking lot
-`kndo clean` (guided auto-removal), watch mode / LSP, custom analyses over a stable graph API,
+**RFC 0016 — uniform component model** (the accepted plan, phased in its §8: host-mediated
+content access for plugin graph hooks — unlocking the detections `kndo:nextjs`/`kndo:express`
+documented as out of scope — then adapter componentization (identity/activation/installer for
+`LanguageAdapter`s), cache-key folding to retire the blanket `mutates_graph` bypass, and a
+CI-proven "shell" build; its §8 phase 0 freeze reservations are the one piece that belongs to
+M6), `kndo clean` (guided auto-removal), watch mode / LSP, custom analyses over a stable graph API,
 `kndo serve` exposing the navigation verbs 1:1 as MCP tools (RFC 0007 §7), an arbitrary graph
 query language, deep mode (compiler-grade resolvers), historical trend service, HTML report,
 tsconfig project-references deep integration, deferred rules from the RFC 0005 §13 triage

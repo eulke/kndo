@@ -116,7 +116,7 @@ prototype a plugin natively and ship it as WASM unchanged.
     it genuinely depends on — kndo's monorepo support isn't a special case anywhere else (RFC
     0012 §8/§10), so this couldn't be either. `LanguageAdapter`s don't have an `activation`
     field yet, so a globally installed adapter isn't a thing this pass adds — a stated gap, not
-    a silent one.
+    a silent one (RFC 0016 §4 is the plan that closes it).
   - `kndo doctor` reports every global candidate — activated or skipped, with the exact rule
     that did or didn't fire (`kndo::global_plugin_candidates`, separate from `Engine::doctor`,
     which only ever sees the final composed set). `kndo plugin install/list/remove` (RFC 0015
@@ -165,7 +165,9 @@ max-age = "7d"            # stale reports are ignored (with a diagnostic), not t
 
 ## 6. What is *not* a plugin
 
-- Languages (adapters have a richer contract: parsing, resolution, manifests).
+- Languages (adapters have a richer contract: parsing, resolution, manifests). RFC 0016
+  converges the two kinds' *operational* surfaces (identity, activation, installation) into
+  one component model without merging the traits — the semantic split stays.
 - Output formats — reporting stays in the core for schema stability; new formats are core PRs.
 - Custom *analyses* over the graph: deliberately post-1.0. First we stabilize the graph schema,
   then we can expose a query/analysis API safely. Tracked as an open question in the ROADMAP.

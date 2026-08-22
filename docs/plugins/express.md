@@ -83,7 +83,8 @@ to a conventional name).
   Deriving the true entry from `"scripts": {"start": ...}` is the *right* long-term fix and
   would replace §3's name heuristic; it needs a host-mediated content channel (RFC 0003
   §2's `requested_file_access` exists for `ingest_coverage` but is not plumbed to the graph
-  hooks). Tracked as the known gap of this spec, not silently ignored.
+  hooks). Tracked as the known gap of this spec, not silently ignored — RFC 0016 §5 is the
+  accepted plan for exactly that channel, with this spec's gaps as its first consumers.
 
 ## 5. Verification shape
 

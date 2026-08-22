@@ -142,7 +142,9 @@ conventions are module-level.
   Next projects.
 - **No `pageExtensions` / custom-config awareness**: reading `next.config.js` would need
   content access *and* JS evaluation. Projects remapping convention directories or
-  extensions fall back to plain reachability — degrade toward silence.
+  extensions fall back to plain reachability — degrade toward silence. (RFC 0016 §5's
+  content channel covers the access half; the JS-evaluation half keeps full config
+  awareness out of scope even then — only statically readable values would upgrade.)
 - **No React-generic conventions** (a future `kndo:react` concern, not folded in here).
 
 ## 6. Verification shape
