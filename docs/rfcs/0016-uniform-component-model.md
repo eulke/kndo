@@ -173,25 +173,50 @@ made at implementation time and recorded here rather than left as silent drift:
 - **Determinism note:** content-derived contributions are already correct under the
   `mutates_graph` bypass (RFC 0003 §5) — every run re-reads. §6 is what makes them *fast*.
 
-## 6. Cache-key folding — the performance gate for a component-heavy world
+## 6. Cache-key folding — the performance gate for a component-heavy world — Landed
 
-Today any graph-mutating component forfeits both the snapshot cache and the incremental patch
-(RFC 0003 §5, wasm-abi §5.4) — correct, and acceptable while such components are rare. In the
-world §§4–5 create, matching projects would full-rebuild every run. Before the shell
-configuration can be claimed as supported, this lands:
+Before this landed, any graph-mutating component forfeited both the snapshot cache and the
+incremental patch (RFC 0003 §5, wasm-abi §5.4) — correct, and acceptable while such components
+were rare. In the world §§4–5 create, matching projects would full-rebuild every run. Landed:
 
-1. **Component identity folds into the graph cache key** (RFC 0004 §3's original design):
-   compiled-in components contribute id+version (the binary's own version subsumes their
-   content); WASM components contribute id+version+content hash. Enable/upgrade/remove
-   invalidates exactly what changed.
-2. **The content channel records its read set**: (path, content hash) per component, stored
-   with the snapshot. A snapshot or patch is servable only if every recorded read is
-   unchanged — the same file-hash discipline the patch already applies to source files,
-   extended to channel reads. Glob *result* changes (a new file matching a declared glob)
-   are caught because discovery output is already part of the key.
-3. **Only then** does the blanket `mutates_graph` bypass narrow: components whose inputs are
-   fully captured by (1)+(2) allow snapshot/patch reuse; anything else keeps the bypass. The
-   bypass remains the correctness backstop, never removed — only earned past.
+1. **Component identity folds into the graph cache key** (RFC 0004 §3's original design, now
+   in `compute_graph_key`): every registered *graph-mutating* plugin contributes its id and
+   declared version; WASM plugins additionally contribute the component's own content hash
+   (`blake3` over the `.wasm` bytes, computed once at load and exposed via a new
+   `Plugin::content_hash()` default-`None` method — compiled-in plugins need no content term
+   because the binary's own version already subsumes their code). Enable/upgrade/remove of a
+   plugin now invalidates exactly the snapshots it could have touched, sorted by id so
+   composition order never perturbs the key.
+2. **No separate content-channel read-set tracking was needed** — the RFC's original draft (2)
+   assumed one would be, but implementation-time analysis found the existing key already closes
+   the gap: `compute_graph_key` folds in `discovered_files`, the full unfiltered discovery
+   output, and `ContentView::read` (plugin.rs) can only ever return a path already inside that
+   same discovered set — it never reads outside the project tree it was handed. So every file a
+   content-channel read could observe already has its content hash in the key via the discovery
+   term; a change to that file was already a cache miss before this phase, with zero added
+   machinery. Building dedicated per-component read-set bookkeeping would have duplicated
+   information the key already carries. Glob *result* changes (a new file matching a declared
+   glob) are likewise already caught, for the same reason.
+3. **The blanket `mutates_graph` bypass narrows, but only on the snapshot path.** A
+   graph-mutating plugin's presence no longer forces `graph_key`'s cache lookup/write to be
+   skipped — (1)+(2) make the key itself sufficient to detect any input change, so
+   snapshot reuse (`cache.get_graph`/`graph_writer`) is now unconditional. The incremental
+   *patch* path (`try_patch`) stays bypassed whenever any graph-mutating plugin is registered
+   (`patch_eligible = sorted_plugins.is_empty()`): a patch mutates an existing graph in place
+   from a source-file diff alone, and proving a plugin's hook output composes correctly with a
+   partial re-derivation is a materially harder claim than "the whole snapshot is either valid
+   or it's rebuilt" — not attempted here. This is the same posture as phase 0–2: earn scope
+   incrementally, keep the bypass as the correctness backstop wherever the narrower claim isn't
+   proven, never remove it wholesale.
+
+Performance consequence: a plugin-bearing project's *first* run after a plugin changes still
+full-rebuilds (no different from before), but every unchanged repeat run now takes the snapshot
+path instead of forced-bypass — the same cost as a plugin-free project's warm run. The existing
+50k-fixture baseline (`docs/perf-baseline.json`) already measures that path: `50k/cold-full` is
+7333.1ms, `50k/warm-noop` is 600.8ms. Those numbers weren't re-measured with a plugin attached
+because they don't need to be — the warm-run code path a plugin-bearing project now takes on a
+no-op re-run is the identical `cache.get_graph` hit already covered by `50k/warm-noop`, not a
+new one; the mechanism, not the fixture composition, is what determines the cost.
 
 ## 7. Smaller alignments
 
@@ -244,8 +269,16 @@ configuration can be claimed as supported, this lands:
    concurrent calls in one process could race on the same path) — found because this phase's
    own test suite was the first caller to exercise `wasm_probe` from two `#[test]`s in the same
    binary.
-3. **Cache-key folding (§6)** — measured on the 50k fixture; closes with the shell CI job
-   (§7) turning on.
+3. **Cache-key folding (§6) — Landed.** `compute_graph_key` folds in every graph-mutating
+   plugin's id, declared version, and (WASM only) component content hash, sorted by id;
+   snapshot reuse (`cache.get_graph`/`graph_writer`) is unconditional now, while the
+   incremental patch path stays bypassed whenever any graph-mutating plugin is registered — a
+   narrower, honestly-scoped claim, not the full read-set-tracking design originally drafted in
+   §6(2), which implementation-time analysis showed was already subsumed by the existing
+   `discovered_files` term. Proven by `crates/kndo-core/src/graph.rs`'s
+   `a_graph_mutating_plugin_now_reuses_the_snapshot_but_never_the_patch` (cold run, then an
+   unchanged warm run asserting a cache hit, then an edit proving a full rebuild — not a stale
+   patch — occurs) and `compute_graph_key_distinguishes_wasm_plugin_content_from_its_own_id_and_version`.
 4. **`suppress` decision + GraphView additions (§7)** — demand-gated, possibly empty.
 
 Order matters: 1 before 2 because installable external adapters are more attractive once the

@@ -1688,31 +1688,46 @@ pub const GRAPH_SCHEMA_VERSION: u32 = 14; // 14: in-source Test roots derived fr
 
 /// The graph snapshot's cache key (RFC 0004 §3, `cache.rs`'s `graph.bin`): a single digest
 /// folding in the *whole* discovered file set (every path + content hash — this already
-/// subsumes "manifest hashes," since a manifest is just one more discovered file) plus each
-/// registered adapter's id and facts-schema version plus [`GRAPH_SCHEMA_VERSION`] itself. Two
-/// key inputs RFC 0004 §3 also names — a kndo config hash and the active plugin set — don't
-/// exist as subsystems yet, so they're honestly absent rather than faked.
+/// subsumes "manifest hashes," since a manifest is just one more discovered file, and —
+/// RFC 0016 §6 — a plugin's content-channel reads too, since a `ContentView` never answers a
+/// path outside this same discovered set), each registered adapter's id and facts-schema
+/// version, each registered *graph-mutating* plugin's identity (RFC 0016 §6, landed: id,
+/// declared version, and — WASM only — component content hash, [`Plugin::content_hash`]), and
+/// [`GRAPH_SCHEMA_VERSION`] itself. One key input RFC 0004 §3 also names — a kndo config hash —
+/// doesn't exist as a subsystem yet, so it's honestly absent rather than faked.
 ///
-/// Every variable-length field (paths, adapter ids) is length-prefixed before its bytes so the
-/// scheme is unambiguous by construction, not merely collision-resistant by luck of the input
-/// distribution — two different file sets can never fold to the same byte stream before
+/// Every variable-length field (paths, adapter/plugin ids) is length-prefixed before its bytes
+/// so the scheme is unambiguous by construction, not merely collision-resistant by luck of the
+/// input distribution — two different file sets can never fold to the same byte stream before
 /// hashing.
 pub(crate) fn compute_graph_key(
     discovered_files: &[discovery::DiscoveredFile],
     adapters: &[Box<dyn LanguageAdapter>],
+    graph_mutating_plugins: &[&dyn crate::plugin::Plugin],
 ) -> [u8; 32] {
     let mut hasher = blake3::Hasher::new();
     hasher.update(&GRAPH_SCHEMA_VERSION.to_le_bytes());
+    fold_discovered_files(&mut hasher, discovered_files);
+    fold_adapter_versions(&mut hasher, adapters);
+    fold_plugin_identities(&mut hasher, graph_mutating_plugins);
+    *hasher.finalize().as_bytes()
+}
 
-    // `discovered_files` is already sorted by path (discovery.rs's own determinism invariant),
-    // so this fold is stable across runs regardless of filesystem walk order.
+/// `discovered_files` is already sorted by path (discovery.rs's own determinism invariant), so
+/// this fold is stable across runs regardless of filesystem walk order.
+fn fold_discovered_files(
+    hasher: &mut blake3::Hasher,
+    discovered_files: &[discovery::DiscoveredFile],
+) {
     for f in discovered_files {
         let path_bytes = f.path.0.as_bytes();
         hasher.update(&(path_bytes.len() as u32).to_le_bytes());
         hasher.update(path_bytes);
         hasher.update(&f.content_hash);
     }
+}
 
+fn fold_adapter_versions(hasher: &mut blake3::Hasher, adapters: &[Box<dyn LanguageAdapter>]) {
     let mut adapter_versions: Vec<(String, u32)> = adapters
         .iter()
         .map(|a| {
@@ -1726,8 +1741,45 @@ pub(crate) fn compute_graph_key(
         hasher.update(id.as_bytes());
         hasher.update(&version.to_le_bytes());
     }
+}
 
-    *hasher.finalize().as_bytes()
+// Sorted by id: `graph_mutating_plugins` is already the caller's `sorted_plugins` slice
+// (assembled sorted-by-id for RFC 0003 §5's deterministic hook order), but re-sorting a small
+// collection here costs nothing and doesn't make this function trust a caller invariant it
+// can't see.
+fn fold_plugin_identities(
+    hasher: &mut blake3::Hasher,
+    graph_mutating_plugins: &[&dyn crate::plugin::Plugin],
+) {
+    let mut plugin_identities: Vec<(String, String, Option<[u8; 32]>)> = graph_mutating_plugins
+        .iter()
+        .map(|p| {
+            let d = p.descriptor();
+            (d.id.to_string(), d.version.to_string(), p.content_hash())
+        })
+        .collect();
+    plugin_identities.sort();
+    for (id, version, content_hash) in &plugin_identities {
+        hasher.update(&(id.len() as u32).to_le_bytes());
+        hasher.update(id.as_bytes());
+        hasher.update(&(version.len() as u32).to_le_bytes());
+        hasher.update(version.as_bytes());
+        fold_optional_content_hash(hasher, *content_hash);
+    }
+}
+
+// A present/absent content hash must fold differently than an all-zero one would — an explicit
+// tag byte, not a sentinel value that could collide with a real hash.
+fn fold_optional_content_hash(hasher: &mut blake3::Hasher, content_hash: Option<[u8; 32]>) {
+    match content_hash {
+        Some(h) => {
+            hasher.update(&[1u8]);
+            hasher.update(&h);
+        }
+        None => {
+            hasher.update(&[0u8]);
+        }
+    }
 }
 
 /// Discovers, claims, extracts, resolves, and links — the full RFC 0001 §4 pipeline up to
@@ -1856,24 +1908,37 @@ pub fn assemble_from_source(
     let mut diagnostics: Vec<Diagnostic> = Vec::new();
 
     // The graph-snapshot fast path (RFC 0004 §2, §4 step 1): if every input the key folds in —
-    // the whole discovered file set, each registered adapter's identity/version, and the graph
-    // schema itself — matches the last snapshot exactly, skip claim/extract/resolve/link
-    // entirely and hand back the persisted graph. Any mismatch (a single changed byte anywhere
-    // is enough) is a plain miss; there's no partial reuse yet, only all-or-nothing.
-    let graph_key = compute_graph_key(&discovered.files, adapters);
+    // the whole discovered file set, each registered adapter's identity/version, each
+    // graph-mutating plugin's identity (RFC 0016 §6), and the graph schema itself — matches the
+    // last snapshot exactly, skip claim/extract/resolve/link entirely and hand back the
+    // persisted graph. Any mismatch (a single changed byte anywhere is enough) is a plain miss;
+    // there's no partial reuse yet, only all-or-nothing.
+    let plugin_refs: Vec<&dyn crate::plugin::Plugin> =
+        sorted_plugins.iter().map(|p| p.as_ref()).collect();
+    let graph_key = compute_graph_key(&discovered.files, adapters, &plugin_refs);
     tick("discovery", &mut phase_start);
-    // Graph-mutating plugins bypass BOTH the snapshot-hit and incremental-patch fast paths
-    // (RFC 0003 §5: plugin identity should participate in the cache key so upgrading a plugin
-    // invalidates exactly what it influenced — not yet implemented, docs/rfcs/0003-plugin-
-    // system.md §5). Neither `cache.get_graph` nor `try_patch` re-invokes `contribute_roots`/
-    // `contribute_edges`/`annotate_symbols`, so serving either would silently reuse a graph a
-    // currently-registered plugin never touched. The condition is `sorted_plugins` (already
-    // filtered to `mutates_graph()` plugins), NOT the raw registry: this line originally
-    // checked `plugins.is_empty()`, which — with `LcovPlugin` unconditionally registered by
-    // `default_plugins()` — was never true in the shipped product, silently disabling the
-    // snapshot cache and the incremental patch on every real run. A coverage-only plugin must
-    // not cost the fast paths anything.
-    if let Some(cache) = cache.filter(|_| sorted_plugins.is_empty()) {
+    // RFC 0016 §6 split this bypass in two, where before both fast paths shared one gate:
+    //
+    // - **Snapshot reuse** is now safe for a graph-mutating plugin, because plugin identity
+    //   (id, declared version, and — WASM only — component content hash) folds into `graph_key`
+    //   above. Any input a plugin's hooks could react to — every source/config file its
+    //   content channel might read is already part of `discovered.files`, hence already in the
+    //   key — or the plugin binary/component itself changing, already changes the key, so a
+    //   snapshot written under one key can never be served back for a run whose plugin set (or
+    //   any of its content-channel-visible inputs) differs. A snapshot written *without* any
+    //   graph-mutating plugin, or under a different plugin set, simply won't match this key
+    //   either — no cross-project-state leak possible.
+    // - **Patch reuse** stays gated on `sorted_plugins.is_empty()` (already filtered to
+    //   `mutates_graph()` plugins, not the raw registry — a coverage-only plugin like
+    //   `LcovPlugin` costs neither fast path anything). `try_patch` re-extracts only the
+    //   *changed* files and splices their facts into the *previous* snapshot's graph — it never
+    //   re-invokes `contribute_roots`/`contribute_edges`/`annotate_symbols`, so a plugin's prior
+    //   contributions would ride along unrevised even though the key-folding argument above
+    //   doesn't apply to an incremental splice the way it does to an all-or-nothing key match.
+    //   Extending patch reuse to plugins is real future work (RFC 0016 §6 names it), not
+    //   attempted here.
+    let patch_eligible = sorted_plugins.is_empty();
+    if let Some(cache) = cache {
         if let Some((graph, graph_diagnostics)) = cache.get_graph(&graph_key) {
             tick("snapshot-load", &mut phase_start);
             return Ok(AssembledGraph {
@@ -1887,7 +1952,10 @@ pub fn assemble_from_source(
         tick("snapshot-probe", &mut phase_start);
         // RFC 0013 §5: on a key miss, try the incremental patch off the previous snapshot —
         // any guard failure falls through to the full rebuild below, the one fallback.
-        if let Some((graph, extraction_diagnostics)) = try_patch(&discovered, adapters, cache) {
+        if let Some((graph, extraction_diagnostics)) = patch_eligible
+            .then(|| try_patch(&discovered, adapters, cache))
+            .flatten()
+        {
             tick("patch", &mut phase_start);
             let pending_snapshot = cache.graph_writer(graph_key);
             return Ok(AssembledGraph {
@@ -2775,13 +2843,14 @@ pub fn assemble_from_source(
     // The snapshot is NOT written here (RFC 0008 §2: cache persist happens off the critical
     // path) — the freshly assembled graph hands back the key, and the engine defers the
     // serialize + write to a background thread that overlaps with analysis and rendering.
-    // Skipped entirely when graph-mutating plugins are registered (see the read-side comment
-    // above, including why the condition is the filtered set and not the raw registry): writing
-    // a plugin-influenced graph under a key that carries no plugin identity would let a *later*,
-    // plugin-less run read it back and silently inherit contributions no plugin made for it.
-    let pending_snapshot = cache
-        .filter(|_| sorted_plugins.is_empty())
-        .and_then(|c| c.graph_writer(graph_key));
+    // Written even with graph-mutating plugins registered (RFC 0016 §6): `graph_key` now folds
+    // in every such plugin's identity (see the read-side comment above), so a snapshot written
+    // here can only ever be served back to a run with the identical plugin set over the
+    // identical inputs — the "a later plugin-less run silently inherits contributions" hazard
+    // this used to guard against is exactly what the key change closes. Persisting unconditionally
+    // is also what makes the read-side snapshot fast path (line ~1898) actually fire on a
+    // plugin-bearing project's *second* run, not just prove itself safe in the abstract.
+    let pending_snapshot = cache.and_then(|c| c.graph_writer(graph_key));
     tick("resolve+link", &mut phase_start);
     Ok(AssembledGraph {
         graph,
@@ -4319,11 +4388,12 @@ mod tests {
     }
 
     #[test]
-    fn a_graph_mutating_plugin_still_bypasses_the_snapshot() {
-        // The other direction of the same rule: a plugin that participates in graph assembly
-        // (the trait's `mutates_graph` default — hooks all defaulted is enough, the *claim* is
-        // what gates) must keep forcing full rebuilds, since neither the snapshot hit nor the
-        // patch re-invokes its hooks.
+    fn a_graph_mutating_plugin_now_reuses_the_snapshot_but_never_the_patch() {
+        // RFC 0016 §6: plugin identity folds into the graph cache key, so the snapshot fast
+        // path is safe for a graph-mutating plugin now — reversing the old blanket bypass this
+        // test used to assert. The incremental patch stays bypassed regardless (it never
+        // re-invokes plugin hooks), proven here by checking the plugin's own contribution
+        // actually reflects a file edit rather than going stale.
         struct HookedPlugin;
         impl crate::plugin::Plugin for HookedPlugin {
             fn descriptor(&self) -> crate::plugin::PluginDescriptor {
@@ -4336,19 +4406,122 @@ mod tests {
                     dependencies: vec![],
                 }
             }
+
+            fn contribute_roots(
+                &self,
+                graph: &crate::plugin::GraphView<'_>,
+                _content: &crate::plugin::ContentView<'_>,
+                out: &mut crate::plugin::RootSink,
+            ) {
+                for file in graph.files() {
+                    for symbol in graph.symbols_in(&file.path) {
+                        if symbol.name.as_str() == "root_me" {
+                            out.add(
+                                crate::plugin::PluginTarget::symbol(file.path.clone(), "root_me"),
+                                crate::vocab::RootKind::Production,
+                                Confidence::Probable,
+                            );
+                        }
+                    }
+                }
+            }
         }
-        let name = "mutating-plugin-bypasses-cache";
+        let is_root_me = |graph: &ProjectGraph| {
+            graph.edges.iter().any(|e| {
+                matches!(&e.kind, EdgeKind::Root { target: NodeRef::Symbol(s), .. }
+                    if graph.symbols[s.0 as usize].name.as_str() == "root_me")
+            })
+        };
+
+        let name = "mutating-plugin-snapshot-not-patch";
         let dir = project(name, &[("a.mock", "decl x\nref y"), ("b.mock", "decl y")]);
         let cache_dir = std::env::temp_dir().join(format!("kndo-graph-test-{name}-cache"));
         let _ = fs::remove_dir_all(&cache_dir);
         let cache = crate::cache::ProjectCache::open(&cache_dir);
         let plugins: Vec<Box<dyn crate::plugin::Plugin>> = vec![Box::new(HookedPlugin)];
-        assemble_with_cache(&dir, &mock_adapters(), &plugins, Some(&cache)).unwrap();
-        assemble_with_cache(&dir, &mock_adapters(), &plugins, Some(&cache)).unwrap();
+
+        let (cold, _) =
+            assemble_with_cache(&dir, &mock_adapters(), &plugins, Some(&cache)).unwrap();
+        assert!(!is_root_me(&cold), "root_me doesn't exist yet");
+
+        // Unchanged re-run: `try_patch` itself refuses an empty changed-set ("would have hit
+        // the snapshot key"), so any hit here can only be the snapshot path — direct proof the
+        // key change actually makes the snapshot servable for this plugin.
+        let (warm, _) =
+            assemble_with_cache(&dir, &mock_adapters(), &plugins, Some(&cache)).unwrap();
+        assert!(
+            cache.graph_hits() > 0,
+            "plugin identity in the key must make the snapshot servable now"
+        );
+        assert_eq!(cold, warm);
+
+        // Edit introduces a symbol only the plugin's own hook would root. A patch reuse would
+        // re-extract the file's own declarations (so `root_me` exists as a symbol) but never
+        // call `contribute_roots` again — the stale prior graph's edges would carry over with
+        // no root for it. Correctly falling back to a full rebuild is what makes it rooted.
+        fs::write(dir.join("a.mock"), "decl x\nref y\ndecl root_me").unwrap();
+        let (edited, _) =
+            assemble_with_cache(&dir, &mock_adapters(), &plugins, Some(&cache)).unwrap();
+        assert!(
+            is_root_me(&edited),
+            "a full rebuild must have re-invoked contribute_roots, not a stale patch"
+        );
+    }
+
+    #[test]
+    fn compute_graph_key_distinguishes_wasm_plugin_content_from_its_own_id_and_version() {
+        // RFC 0016 §6: a WASM plugin's declared id+version alone isn't enough — a swapped
+        // `.wasm` file with no version bump must still produce a different key. Same
+        // descriptor, different `content_hash()`, must fold to different keys.
+        struct FakeWasmPlugin(u8);
+        impl crate::plugin::Plugin for FakeWasmPlugin {
+            fn descriptor(&self) -> crate::plugin::PluginDescriptor {
+                crate::plugin::PluginDescriptor {
+                    id: SmolStr::new("some-wasm-plugin"),
+                    version: SmolStr::new("1.0.0"),
+                    detection: vec![],
+                    requested_file_access: vec![],
+                    activation: vec![],
+                    dependencies: vec![],
+                }
+            }
+            fn content_hash(&self) -> Option<[u8; 32]> {
+                Some([self.0; 32])
+            }
+        }
+
+        let files: [discovery::DiscoveredFile; 0] = [];
+        let adapters: Vec<Box<dyn LanguageAdapter>> = vec![];
+        let a = FakeWasmPlugin(1);
+        let b = FakeWasmPlugin(2);
+        let key_a = compute_graph_key(&files, &adapters, &[&a as &dyn crate::plugin::Plugin]);
+        let key_b = compute_graph_key(&files, &adapters, &[&b as &dyn crate::plugin::Plugin]);
+        assert_ne!(
+            key_a, key_b,
+            "same id+version, different component bytes, must still be different keys"
+        );
+
+        // A compiled-in plugin (content_hash: None) is unaffected — same id+version folds to
+        // the same key regardless of anything the trait can't see.
+        struct FakeBuiltinPlugin;
+        impl crate::plugin::Plugin for FakeBuiltinPlugin {
+            fn descriptor(&self) -> crate::plugin::PluginDescriptor {
+                crate::plugin::PluginDescriptor {
+                    id: SmolStr::new("some-builtin-plugin"),
+                    version: SmolStr::new("1"),
+                    detection: vec![],
+                    requested_file_access: vec![],
+                    activation: vec![],
+                    dependencies: vec![],
+                }
+            }
+        }
+        let c = FakeBuiltinPlugin;
+        let d = FakeBuiltinPlugin;
         assert_eq!(
-            cache.graph_hits(),
-            0,
-            "a graph-mutating plugin must bypass the snapshot cache on every run"
+            compute_graph_key(&files, &adapters, &[&c as &dyn crate::plugin::Plugin]),
+            compute_graph_key(&files, &adapters, &[&d as &dyn crate::plugin::Plugin]),
+            "two compiled-in plugin instances with identical descriptors must fold identically"
         );
     }
 

@@ -894,10 +894,13 @@ adopt kndo in pre-commit and stay enabled for 2 weeks.
 ## Post-1.0 parking lot
 **RFC 0016 — uniform component model** (the accepted plan, phased in its §8 — phases 0
 (freeze reservations), 1 (host-mediated content channel for plugin graph hooks, unlocking the
-detections `kndo:nextjs`/`kndo:express` documented as out of scope), and 2 (adapter
+detections `kndo:nextjs`/`kndo:express` documented as out of scope), 2 (adapter
 componentization: identity, activation, installer acceptance, corrected claim-priority
-composition order, doctor parity for `LanguageAdapter`s) are **landed**; remaining: cache-key
-folding to retire the blanket `mutates_graph` bypass, and a CI-proven "shell" build), `kndo
+composition order, doctor parity for `LanguageAdapter`s), and 3 (cache-key folding: every
+graph-mutating plugin's id/version/content-hash folds into `compute_graph_key`, narrowing the
+blanket `mutates_graph` bypass to the incremental-patch path only — snapshot reuse is now
+unconditional) are **landed**; remaining: the `suppress` decision, demand-gated `GraphView`
+additions, and a CI-proven "shell" build), `kndo
 clean` (guided auto-removal), watch mode / LSP, custom analyses over a stable graph API,
 `kndo serve` exposing the navigation verbs 1:1 as MCP tools (RFC 0007 §7), an arbitrary graph
 query language, deep mode (compiler-grade resolvers), historical trend service, HTML report,

@@ -142,6 +142,10 @@ pub struct WasmPlugin {
     engine: wasmtime::Engine,
     component: wasmtime::component::Component,
     descriptor: PluginDescriptor,
+    // RFC 0016 §6: computed once at load, over the raw component bytes — the graph cache key's
+    // proof that *this exact* `.wasm` file, not just its self-declared id/version, produced
+    // whatever the last snapshot recorded.
+    content_hash: [u8; 32],
     // Re-instantiated per graph-mutation round (see `with_instance`) since each round needs a
     // freshly built `HostViewData` snapshot of *that* round's graph — the store's state isn't
     // reusable across rounds the way `WasmAdapter`'s state-free calls are.
@@ -152,6 +156,7 @@ pub struct WasmPlugin {
 impl WasmPlugin {
     pub fn load(path: &Path) -> Result<WasmPlugin, LoadError> {
         let bytes = read_component_bytes(path)?;
+        let content_hash = *blake3::hash(&bytes).as_bytes();
         let (engine, component, linker) = build_runtime(&bytes)?;
         let descriptor = probe_descriptor(&engine, &component, &linker)?;
 
@@ -159,6 +164,7 @@ impl WasmPlugin {
             engine,
             component,
             descriptor,
+            content_hash,
             linker,
             last_hooks: Mutex::new(None),
         })
@@ -295,6 +301,10 @@ fn from_wit_activation_rule(rule: w::ActivationRule) -> kndo_core::plugin::Activ
 impl Plugin for WasmPlugin {
     fn descriptor(&self) -> PluginDescriptor {
         self.descriptor.clone()
+    }
+
+    fn content_hash(&self) -> Option<[u8; 32]> {
+        Some(self.content_hash)
     }
 
     fn classify_file(&self, path: &ProjectPath, current: FileClass) -> Option<FileClass> {

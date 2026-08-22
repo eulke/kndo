@@ -274,11 +274,25 @@ component declaring one fails to instantiate rather than silently receiving capa
 Same rule as the native `Plugin`'s own graph-mutation hooks (contracts/core-traits.md §3): any
 registered plugin — WASM or built-in — that declares `mutates_graph()` (a `kndo:plugin`
 component always does: the world exports all four hooks, so `WasmPlugin` keeps the trait's
-`true` default) makes `assemble_from_source` skip both the graph-snapshot cache hit and the
-incremental patch, full-rebuilding every run. Neither reuse path re-invokes a plugin's hooks
-(WASM or native), so serving either to a plugin-bearing project would silently miss whatever
-the plugin contributes. Coverage-only plugins (`LcovPlugin`) declare `false` and leave both
-fast paths intact.
+`true` default) participates in `assemble_from_source`'s cache-key folding (RFC 0016 §6).
+Coverage-only plugins (`LcovPlugin`) declare `false` and were never part of either bypass.
+
+**The snapshot cache is reusable, the incremental patch is not — landed asymmetrically, on
+purpose.** `Plugin::content_hash()` (`WasmPlugin` overrides it to the blake3 hash of its own
+component bytes, computed once at `load()`; a native plugin's default `None` relies on
+`PluginDescriptor.version` as its trust boundary, same discipline `AdapterDescriptor
+.facts_schema_version` already established) folds into the graph cache key alongside every
+discovered file's content hash. A `ContentView` never answers a path outside that same
+discovered set (§5.1), so any input a plugin's hooks — including its content-channel reads —
+could react to was already part of the key. That makes the graph-snapshot fast path safe: a
+snapshot written under one plugin's identity can only ever match a run with the identical
+component (bytes and all, for WASM) over identical inputs. The incremental patch stays
+bypassed regardless: it splices only the *changed* files into the *previous* snapshot's graph
+and never re-invokes `contribute_roots`/`contribute_edges`/`annotate_symbols`, so the
+key-folding argument doesn't cover it — a stale patch would carry a plugin's prior
+contributions forward unrevised. Serving either fast path without this reasoning would
+silently miss whatever the plugin contributes; that's still true of the patch path today, by
+design, not by omission.
 
 ### 5.5 Global installation & activation (RFC 0003 §4)
 

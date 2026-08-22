@@ -251,6 +251,13 @@ fn external_wasm_plugin_hooks_affect_a_real_check() {
     // (kndo's own unit tests) is only as real as this transport.
     assert_eq!(descriptor.activation.len(), 1);
     assert!(descriptor.dependencies.is_empty());
+    // RFC 0016 §6: WasmPlugin::content_hash() must be the real component bytes' own hash, not
+    // a placeholder — this is the graph cache key's proof that a swapped .wasm file (even with
+    // an unchanged declared version) invalidates a stale snapshot.
+    assert_eq!(
+        Plugin::content_hash(&plugin),
+        Some(*blake3::hash(&component_bytes).as_bytes())
+    );
 
     let project_dir = tempfile::tempdir().expect("temp project fixture dir");
     std::fs::write(

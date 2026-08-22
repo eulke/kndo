@@ -13,13 +13,18 @@
 //!   an old version re-hits its old entry. `bincode` — no zero-copy win at this per-file size.
 //! - Each graph snapshot is keyed by a single digest folding in the *whole* discovered file set
 //!   (every path + content hash — RFC 0004 §3's "set of (path, content hash)" already subsumes
-//!   "manifest hashes": a manifest is just one more discovered file) plus each registered
-//!   adapter's id and facts-schema version plus [`crate::graph::GRAPH_SCHEMA_VERSION`], and
-//!   stored under that key — several snapshots coexist (the working tree's, plus diff modes'
-//!   before/after tree states; see `graph_snapshot_path`). Two inputs RFC 0004 §3 also lists —
-//!   a kndo config hash and the active plugin set — don't exist as subsystems yet, so they're
-//!   honestly absent from the key rather than faked; extending it is required before either
-//!   subsystem ships. Any key mismatch is a full rebuild, never a partial patch. `rkyv` +
+//!   "manifest hashes": a manifest is just one more discovered file, and — RFC 0016 §6 — a
+//!   plugin's content-channel reads too, since a `ContentView` never answers a path outside
+//!   this same set), each registered adapter's id and facts-schema version, each registered
+//!   *graph-mutating* plugin's identity (id, declared version, and — WASM only — component
+//!   content hash), and [`crate::graph::GRAPH_SCHEMA_VERSION`] — and stored under that key —
+//!   several snapshots coexist (the working tree's, plus diff modes' before/after tree states;
+//!   see `graph_snapshot_path`). One input RFC 0004 §3 also lists — a kndo config hash —
+//!   doesn't exist as a subsystem yet, so it's honestly absent from the key rather than faked;
+//!   extending it is required before that subsystem ships. Any key mismatch is a full rebuild,
+//!   never a partial patch (`graph.rs`'s incremental patch is a separate reuse path with its
+//!   own, narrower eligibility — RFC 0016 §6 landed plugin identity for the snapshot key only,
+//!   the patch path stays bypassed for any graph-mutating plugin). `rkyv` +
 //!   `mmap`, per ADR 0004 exactly — `get_graph` maps the snapshot and validates directly
 //!   against the mapped bytes; nothing is read into a heap buffer first, so loading really is
 //!   "mmap + validate," not a copy dressed up as one.

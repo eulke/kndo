@@ -1378,6 +1378,7 @@ dependencies = [
 name = "kndo-plugin-api"
 version = "0.1.0"
 dependencies = [
+ "blake3",
  "kndo-core",
  "rustc-hash",
  "smol_str",

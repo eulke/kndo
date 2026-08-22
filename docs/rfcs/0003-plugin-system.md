@@ -149,19 +149,27 @@ max-age = "7d"            # stale reports are ignored (with a diagnostic), not t
   this section names; a plugin depending on another's contribution being visible through
   `GraphView` needs the ordering-constraints field before that's expressible. Open item, not
   silently assumed solved.
-- Plugin identity (name + version + content hash for WASM) participates in the cache key
-  (RFC 0004 §3), so enabling/upgrading a plugin invalidates exactly what it influenced. **Not
-  implemented yet** — landed instead (M5), and strictly sufficient for correctness today: any
-  registered plugin declaring `mutates_graph()` (the trait default; `LcovPlugin` — coverage
-  ingestion only — declares `false`) makes `assemble_from_source` skip *both* the graph-snapshot
-  cache and the incremental patch entirely, full-rebuilding every run instead. Neither reuse
-  path re-invokes a plugin's hooks, so serving either would silently miss whatever a
-  currently-registered plugin contributes; bypass is the correct fallback until cache-key
-  folding lands. The `mutates_graph` gate matters: an earlier cut keyed the bypass on
-  raw-registry emptiness, which — with `LcovPlugin` unconditionally registered — silently
-  disabled both fast paths on every real run. The declaration is self-enforcing (assembly only
-  calls the four hooks on plugins claiming `true`), never trusted. Revisit cache-key folding
-  once a real graph-mutating plugin ships and warm performance matters for it.
+- **Plugin identity (id + version + content hash for WASM) participates in the cache key —
+  landed (RFC 0016 §6).** Every graph-mutating plugin (`mutates_graph()`, the trait default;
+  `LcovPlugin` — coverage ingestion only — declares `false` and was never gated by any of
+  this) folds its identity into `compute_graph_key` alongside every discovered file's own
+  content hash and every adapter's id/version. That second part is what makes the plugin case
+  safe without extra machinery: a `ContentView` never answers a path outside the discovered
+  file set, so anything a plugin's content channel could read was already part of the key
+  before plugin identity was. Two consequences, split from the single blanket bypass this
+  section originally described:
+  - **The graph-snapshot cache is now reusable** for a graph-mutating plugin — any input that
+    could change its contribution (source, a content-channel-read config file, or the plugin's
+    own version/component bytes) already changes the key, so a stale or cross-project match is
+    structurally impossible, not merely avoided by policy.
+  - **The incremental patch stays bypassed.** `try_patch` splices only the *changed* files'
+    facts into the *previous* snapshot's graph and never re-invokes `contribute_roots`/
+    `contribute_edges`/`annotate_symbols` — the key-folding argument doesn't extend to an
+    incremental splice the way it does to an all-or-nothing key match. Extending patch reuse
+    to plugins is real, undone future work (RFC 0016 §6).
+
+  `mutates_graph()`'s self-enforcing rule (assembly only calls the four hooks on plugins
+  claiming `true`) is unchanged and remains what the whole scheme is built on.
 - External plugins are untrusted code: sandbox as above, and findings they influenced are
   attributed (`"sources": ["plugin:nextjs"]` in JSON output) for auditability. The
   `Provenance::Plugin(id)` attribution itself is landed (every edge/root/annotation a plugin

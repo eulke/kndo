@@ -11,6 +11,10 @@ publish.workspace = true
 kndo-core = { path = "../kndo-core" }
 smol_str = { workspace = true }
 rustc-hash = { workspace = true }
+# WasmPlugin's Plugin::content_hash (RFC 0016 §6): the graph cache key needs the component's
+# own content identity, not just its declared id/version — same hasher kndo-core's own cache
+# and graph keys use.
+blake3 = { workspace = true }
 # Pinned to the last major compatible with this workspace's toolchain (ADR 0003: "the ABI must
 # be versioned and conservative from day one" — the same discipline applies to its own runtime
 # dependency, not just the WIT surface).

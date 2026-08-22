@@ -406,18 +406,34 @@ pub trait Plugin: Send + Sync {
     /// Whether this plugin participates in graph assembly at all — i.e. implements any of the
     /// four graph-mutation hooks (`classify_file`/`contribute_roots`/`contribute_edges`/
     /// `annotate_symbols`). Load-bearing for performance, not a hint: any registered
-    /// graph-mutating plugin forces `graph::assemble_from_source` to bypass the snapshot cache
-    /// AND the incremental patch (neither reuse path re-invokes plugin hooks — RFC 0013), so a
-    /// plugin that only implements `ingest_coverage`/`suppress` (like [`LcovPlugin`]) must
-    /// return `false` here or its mere registration kills incremental analysis for the whole
-    /// product. The declaration is self-enforcing rather than trusted: assembly only *calls*
-    /// the four hooks on plugins that return `true`, so returning `false` while implementing a
-    /// hook means the hook never runs (identically on cold and cached runs) — never that a
-    /// cached graph silently misses its contributions. Default `true`: the conservative
-    /// direction for the common case of a plugin that exists precisely to contribute graph
-    /// facts.
+    /// graph-mutating plugin forces `graph::assemble_from_source` to bypass the incremental
+    /// patch (RFC 0013's patch never re-invokes plugin hooks, so it can't safely reuse a graph
+    /// one influenced — RFC 0016 §6 landed the snapshot half of this differently: plugin
+    /// identity now folds into the graph cache key, §6's own reasoning, so the snapshot fast
+    /// path stays available — any input a plugin's hooks could react to, including everything
+    /// its content channel might read, was already part of the key before this trait method
+    /// existed). A plugin that only implements `ingest_coverage`/`suppress` (like
+    /// [`LcovPlugin`]) must still return `false` here, or its mere registration keeps the
+    /// incremental patch off for the whole product even though it never touches the graph.
+    /// The declaration is self-enforcing rather than trusted: assembly only *calls* the four
+    /// hooks on plugins that return `true`, so returning `false` while implementing a hook
+    /// means the hook never runs (identically on cold and cached runs) — never that a cached
+    /// graph silently misses its contributions. Default `true`: the conservative direction for
+    /// the common case of a plugin that exists precisely to contribute graph facts.
     fn mutates_graph(&self) -> bool {
         true
+    }
+
+    /// Content identity for the graph cache key (RFC 0016 §6). `None` for compiled-in
+    /// plugins — `PluginDescriptor.version` is already the trust boundary there, the same
+    /// discipline `AdapterDescriptor.facts_schema_version` established: the author bumps it
+    /// when behavior changes, and a new kndo binary release is what ships that change anyway.
+    /// A WASM plugin overrides this to the content hash of its own component bytes, because a
+    /// `.wasm` file can be swapped in `.kndo/plugins/` (or the global directory) with no
+    /// version bump at all — id+version alone would silently miss exactly the case this exists
+    /// to catch.
+    fn content_hash(&self) -> Option<[u8; 32]> {
+        None
     }
 
     /// Adjust a file's role/origin beyond language defaults (e.g. `*.stories.tsx` → tooling).
