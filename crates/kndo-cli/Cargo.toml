@@ -15,9 +15,17 @@ path = "src/main.rs"
 kndo = { path = "../kndo", default-features = false }
 serde = { workspace = true }
 serde_json = { workspace = true }
+# Restoring SIGPIPE's default disposition at startup (see main.rs) — Unix only; Windows has
+# no SIGPIPE and the cfg gate keeps this dependency off that target entirely.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
 
 [dev-dependencies]
 smol_str = { workspace = true }
+tempfile = "3"
+
+[target.'cfg(unix)'.dev-dependencies]
+libc = "0.2"
 
 [features]
 # Mirrors `kndo`'s own default set exactly (`default-features = false` above means this crate,

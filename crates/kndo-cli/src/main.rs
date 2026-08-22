@@ -17,6 +17,19 @@ mod nav;
 mod render;
 
 fn main() -> ExitCode {
+    // The Rust runtime starts every process with SIGPIPE ignored, so a write to a pipe whose
+    // reader already exited surfaces as an EPIPE error — which `println!` turns into a panic
+    // with a backtrace on stderr. kndo's output is *designed* to be piped (`kndo check | jq`,
+    // `kndo doctor | grep`, RFC 0006's json-when-piped default), so the conventional Unix
+    // filter behavior is the correct one: restore the default disposition and let the process
+    // die silently with signal 13 (exit 141 in a shell) the way grep, cat, and git do.
+    // Windows has no SIGPIPE; writes there keep their normal error path.
+    #[cfg(unix)]
+    // SAFETY: `signal` with SIG_DFL only resets a handler, before any other thread exists.
+    unsafe {
+        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+    }
+
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.first().map(String::as_str) {
         Some("--version" | "-V") => {

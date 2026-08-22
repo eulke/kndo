@@ -1349,9 +1349,11 @@ name = "kndo-cli"
 version = "0.1.0"
 dependencies = [
  "kndo",
+ "libc",
  "serde",
  "serde_json",
  "smol_str",
+ "tempfile",
 ]
 
 [[package]]

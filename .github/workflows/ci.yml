@@ -117,10 +117,10 @@ jobs:
           printf 'pub fn main() {\n    helper();\n}\n\nfn helper() {\n}\n\nfn dead() {\n}\n' > "$fixture/program.kdemo"
           cd "$fixture"
 
-          # Captured to a file, not piped straight into `grep -q` — `doctor_cmd` keeps
-          # writing after grep's first match closes the pipe, which raises SIGPIPE and panics
-          # (a real, orthogonal CLI robustness gap this smoke check tripped over; out of RFC
-          # 0016's scope to fix here, so the check just avoids triggering it).
+          # Captured to a file so the full doctor output lands in the job log before the
+          # assertion. (Piping straight into `grep -q` also works now — main restores the
+          # default SIGPIPE disposition, proven by crates/kndo-cli/tests/sigpipe.rs — this is
+          # purely for log readability.)
           "$KNDO_BIN" doctor > doctor-output.txt
           cat doctor-output.txt
           grep -q '^  kdemo  (grammar' doctor-output.txt \
