@@ -677,6 +677,20 @@ impl AnnotationSink {
     }
 }
 
+/// What one plugin actually landed in the graph during a round (RFC 0017 §7's auditability
+/// requirement): counts of resolved contributions — sink items whose targets missed resolution
+/// are not counted, because they changed nothing. Recorded per round by
+/// `graph::run_plugin_round`, persisted as the cache's last-run record, rendered by
+/// `kndo doctor` — the observable half of the threat model (a component can only lie about
+/// graph facts, and here is exactly what facts it asserted).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct PluginContribution {
+    pub id: String,
+    pub roots: u32,
+    pub edges: u32,
+    pub annotations: u32,
+}
+
 // ---------------------------------------------------------------- the trait
 
 pub trait Plugin: Send + Sync {

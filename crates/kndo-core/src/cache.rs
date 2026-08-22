@@ -706,6 +706,32 @@ impl ProjectCache {
     fn latest_pointer_path(&self) -> PathBuf {
         self.cache_dir.join("graphs").join("latest")
     }
+
+    /// Persist the last plugin round's per-plugin contribution counts (RFC 0017 §7) — a tiny
+    /// JSON sidecar, not part of any snapshot: written whenever a round actually runs (cold
+    /// build or incremental patch; a warm snapshot hit skips the round but also changes
+    /// nothing, so the record stays accurate), read back by `Engine::doctor`. Same
+    /// degrade-to-silence posture as every other cache write: an unwritable cache no-ops.
+    pub fn record_plugin_contributions(&self, contributions: &[crate::plugin::PluginContribution]) {
+        if !self.writable {
+            return;
+        }
+        if let Ok(json) = serde_json::to_vec_pretty(contributions) {
+            let _ = fs::write(self.plugin_contributions_path(), json);
+        }
+    }
+
+    /// The last recorded plugin round's contribution counts, if any run has recorded one —
+    /// `None` covers both "no record yet" and an unreadable/garbled file (a disposable cache
+    /// artifact, never worth erroring over).
+    pub fn plugin_contributions(&self) -> Option<Vec<crate::plugin::PluginContribution>> {
+        let bytes = fs::read(self.plugin_contributions_path()).ok()?;
+        serde_json::from_slice(&bytes).ok()
+    }
+
+    fn plugin_contributions_path(&self) -> PathBuf {
+        self.cache_dir.join("plugin-contributions.json")
+    }
 }
 
 /// See [`ProjectCache::graph_writer`]. Writing stays crash-safe regardless of which thread

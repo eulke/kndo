@@ -257,6 +257,11 @@ pub struct DoctorReport {
     pub plugins: Vec<DoctorPluginInfo>,
     pub cache_enabled: bool,
     pub cache: Option<DoctorCacheInfo>,
+    /// The last recorded plugin round's per-plugin contribution counts (RFC 0017 §7's audit
+    /// record, read from the cache's sidecar) — empty when no round has been recorded (no
+    /// cache, no plugins, or no run yet). The one field here that reflects a *past run*
+    /// rather than static configuration; still a plain file read, keeping doctor instant.
+    pub plugin_contributions: Vec<crate::plugin::PluginContribution>,
     pub baseline_present: bool,
     pub baseline_entries: usize,
 }
@@ -714,6 +719,11 @@ impl Engine {
             plugins,
             cache_enabled: self.cache_enabled,
             cache,
+            plugin_contributions: self
+                .cache
+                .as_ref()
+                .and_then(|c| c.plugin_contributions())
+                .unwrap_or_default(),
             baseline_present: baseline_entries.is_some(),
             baseline_entries: baseline_entries.map(|e| e.len()).unwrap_or(0),
         }

@@ -323,7 +323,24 @@ nothing here precludes it.
    `examples/kndo-adapter-wrapper-demo` (`id: "kwrap"`, `dependencies: ["kdemo"]`) in
    `crates/kndo/tests/adapter_dependency_implication.rs`: with only the wrapper's marker
    present, kdemo joins composition as `ImpliedBy("kwrap")` and its analysis genuinely fires.
-5. **Author kit + compat matrix (§7)**.
+5. **Author kit + compat matrix (§7) — Landed.** `kndo plugin verify <component.wasm>`
+   (`kndo::verify`, CLI presentation only): the discovery loaders decide the kind, the
+   descriptor is reported with lint-grade warnings (plain-name id, empty activation), and the
+   hooks are driven for real — the component dropped project-local into a synthesized fixture
+   project, one genuine full check, contributions read back from the audit record. That audit
+   record is the doctor deliverable: `run_plugin_round` counts what each plugin *resolved*
+   into the graph (roots, edges, annotations), both build paths persist it as a tiny cache
+   sidecar (`plugin-contributions.json` — warm snapshot hits change nothing, so the record
+   stays accurate without living in the snapshot), and `kndo doctor` renders it
+   ("plugin contributions (last recorded run)"). The compat matrix is
+   `crates/kndo-plugin-api/tests/compat_matrix.rs` over **pre-built components committed**
+   under `tests/compat/` (the reference adapter and hooks-demo plugin as built at landing),
+   loaded and hook-driven with no wasm toolchain in the loop, plus its own named CI job; the
+   shared `tests/harness/mini_adapter.rs` keeps its fixture identical to the compliance
+   suite's. The authoring skeleton already lived in authoring.md §3 — it gained the `verify`
+   inner loop, and the threat model is now explicit as wasm-abi.md §9 (residual risk: lying
+   about graph facts, i.e. suppressed findings — mitigated by provenance tags and the doctor
+   audit record; never exfiltration or code execution).
 
 ## 9. Explicitly out of scope
 

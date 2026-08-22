@@ -27,6 +27,11 @@ use std::path::Path;
 #[cfg(feature = "plugin-install")]
 pub mod plugin_install;
 
+/// `kndo plugin verify <component.wasm>` (RFC 0017 §7) — the author kit's local compliance
+/// run over one component file.
+#[cfg(feature = "external-adapters")]
+pub mod verify;
+
 /// Every first-party adapter this build includes — the product's language registry, defined
 /// exactly once. Adding a language: one dependency + feature in this crate's manifest, one
 /// entry here. Nothing else in the workspace changes.

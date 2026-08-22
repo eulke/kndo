@@ -206,6 +206,20 @@ std::fs::write("my-framework-plugin.wasm", component)?;
 
 (`cargo component build` produces the same artifact if you prefer the tool.)
 
+Then point kndo at the artifact (RFC 0017 §7 — the author kit's inner loop):
+
+```bash
+kndo plugin verify my-framework-plugin.wasm
+```
+
+`verify` loads the component through the exact loaders `kndo::open` discovery uses, reports
+which world accepted it and everything its descriptor declares, warns about the legal-but-
+probably-wrong shapes this guide calls out (plain-name ids, empty `activation`), and then
+drives every hook for real: your component is dropped project-local into a synthesized
+fixture project and a genuine full check runs — what you contributed comes back from the
+run's audit record. Zero contributions on the generic fixture is a note, not a failure; for
+convention-specific behavior, follow §8's baseline-then-plugin fixture shape.
+
 ## 4. Identity: your id IS your coordinate (RFC 0015 §2)
 
 - **External plugins**: `id` must be the source coordinate the plugin can be fetched from —
@@ -274,7 +288,10 @@ Three versions matter, and they are independent:
    and `dependencies` were added to the descriptor record after the first cut), and a record
    gaining a field is a break for already-built components. Pre-1.0 plugin authors should
    expect to re-vendor the WIT and rebuild against new kndo releases. This is exactly what the
-   M6 "schema/ABI freeze" milestone ends.
+   M6 "schema/ABI freeze" milestone ends. The compatibility promise itself is CI-enforced, not
+   aspirational: pre-built, committed v1 components run against the HEAD host on every push
+   (`crates/kndo-plugin-api/tests/compat_matrix.rs` — RFC 0017 §7), so a host change that
+   would break your already-shipped binary breaks kndo's own build first.
 3. **kndo's own binary version** — irrelevant to you beyond which WIT version it hosts.
 
 Maintenance checklist per kndo release, until the freeze: diff your vendored `wit/plugin.wit`
@@ -283,9 +300,13 @@ a `kndo:plugin@0.2.0` ever exists — and `0.1.0` components keep working even t
 
 ## 8. Testing your plugin
 
+- **First**: `kndo plugin verify your-component.wasm` (§3) — load, descriptor lint, and a
+  generic fixture drive in one command, before you build any fixture of your own.
 - **Locally, end to end**: build + componentize (§3), drop the `.wasm` into a test project's
   `.kndo/plugins/`, run `kndo check` and `kndo doctor` there. Doctor shows whether you loaded,
-  activated, and why. For the global tier, point `KNDO_PLUGIN_DIR` at a scratch directory.
+  activated, and why — plus, after a run, what every plugin actually contributed (roots,
+  edges, annotations: the RFC 0017 §7 audit record). For the global tier, point
+  `KNDO_PLUGIN_DIR` at a scratch directory.
 - **Assertion-style**: make a fixture project exhibiting your conventions, run kndo *without*
   your plugin (baseline — the findings your plugin should fix must actually fire, or your test
   is vacuous), then *with* it, and assert the delta. This is precisely how kndo's own

@@ -319,6 +319,18 @@ fn doctor_cmd() -> ExitCode {
             println!("  {} — required by {}", m.coordinate, m.required_by);
         }
     }
+    // RFC 0017 §7's audit record: what each plugin actually asserted into the graph on the
+    // last run that ran the plugin round — the observable half of the threat model.
+    if !report.plugin_contributions.is_empty() {
+        println!();
+        println!("plugin contributions (last recorded run):");
+        for c in &report.plugin_contributions {
+            println!(
+                "  {} — {} roots, {} edges, {} annotations",
+                c.id, c.roots, c.edges, c.annotations
+            );
+        }
+    }
     println!();
     println!(
         "cache: {}",
@@ -369,16 +381,59 @@ fn activation_status(active: &Option<kndo::ActivationReason>) -> String {
 /// dependency closure, conflicts, lockfile) lives there.
 fn plugin_cmd(args: &[String]) -> ExitCode {
     match (args.first().map(String::as_str), args.get(1)) {
-        (Some("install"), Some(spec)) => plugin_install(spec),
         (Some("list"), None) => plugin_list(),
-        (Some("remove"), Some(spec)) => plugin_remove(spec),
-        _ => {
-            eprintln!(
-                "kndo: usage: kndo plugin install <github.com/owner/repo[@tag]> | kndo plugin \
-                 list | kndo plugin remove <github.com/owner/repo>"
-            );
+        (Some(sub), Some(arg)) => plugin_cmd_with_arg(sub, arg),
+        _ => plugin_usage(),
+    }
+}
+
+fn plugin_cmd_with_arg(sub: &str, arg: &str) -> ExitCode {
+    match sub {
+        "install" => plugin_install(arg),
+        "remove" => plugin_remove(arg),
+        "verify" => plugin_verify(arg),
+        _ => plugin_usage(),
+    }
+}
+
+fn plugin_usage() -> ExitCode {
+    eprintln!(
+        "kndo: usage: kndo plugin install <github.com/owner/repo[@tag]> | kndo plugin \
+         list | kndo plugin remove <github.com/owner/repo> | kndo plugin verify \
+         <component.wasm>"
+    );
+    ExitCode::from(2)
+}
+
+/// `kndo plugin verify <component.wasm>` (RFC 0017 §7): pure presentation over
+/// `kndo::verify::verify` — load, descriptor report, warnings, and a real fixture drive.
+fn plugin_verify(path: &str) -> ExitCode {
+    match kndo::verify::verify(std::path::Path::new(path)) {
+        Ok(report) => {
+            print_verify_report(path, &report);
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("kndo: plugin verify: {e}");
             ExitCode::from(2)
         }
+    }
+}
+
+fn print_verify_report(path: &str, report: &kndo::verify::VerifyReport) {
+    println!("{path}: loads as a {} component", report.kind.as_str());
+    print_report_section("descriptor", &report.descriptor);
+    if !report.warnings.is_empty() {
+        print_report_section("warnings", &report.warnings);
+    }
+    print_report_section("fixture drive", &report.fixture);
+}
+
+fn print_report_section(header: &str, lines: &[String]) {
+    println!();
+    println!("{header}:");
+    for line in lines {
+        println!("  {line}");
     }
 }
 

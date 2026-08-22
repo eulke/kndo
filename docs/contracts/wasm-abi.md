@@ -380,8 +380,10 @@ Two ways, both documented rather than assumed, for either package:
 
 ## 7. Compliance
 
-Four suites, all building their demo component fresh from source and componentizing it
-in-process on every run (no binary checked into the repo):
+The suites below build their demo component fresh from source and componentize it in-process
+on every run — testing today's guest source against today's host. The one deliberate
+exception is the compat matrix (last entry), whose whole point is *committed, pinned* binary
+components:
 
 - `crates/kndo-plugin-api/tests/compliance.rs` — drives a `WasmAdapter` directly against a
   hand-built `Engine`.
@@ -407,6 +409,20 @@ in-process on every run (no binary checked into the repo):
 - `crates/kndo/tests/plugin_install_probe.rs` (RFC 0015 §4, extended by RFC 0016 §4) — a real
   component through `kndo::plugin_install::wasm_probe`; one case per kind proves the probe's
   plugin-then-adapter fallback reaches identity binding for both, not just plugins.
+- `crates/kndo/tests/adapter_dependency_implication.rs` (RFC 0017 §6) — two real components
+  in the global tier; satisfying only the wrapper's activation rule must activate the adapter
+  it depends on (`ImpliedBy`), all the way to that adapter's findings actually firing.
+- `crates/kndo-plugin-api/tests/compat_matrix.rs` (RFC 0017 §7) — the ABI compatibility
+  matrix: the two reference components **pre-built and committed** under `tests/compat/`,
+  loaded and hook-driven against the HEAD host with no wasm toolchain in the loop. This is
+  §8's "a v1 component keeps working indefinitely" promise as a build-breaking CI job (its
+  own named job in `ci.yml`, plus the ordinary workspace test run). Pre-1.0, a WIT change
+  that breaks the pinned binaries is legal (authoring.md §7) — the rebuild of `tests/compat/`
+  in the same commit is the explicit, reviewable record that a break happened.
+
+`kndo plugin verify <component.wasm>` (RFC 0017 §7) packages the public half of this for
+plugin authors: the exact discovery loaders, a descriptor report with lint-grade warnings,
+and a real fixture-project check reporting what the component contributed.
 
 ## 8. Versioning
 
@@ -437,3 +453,33 @@ through additive imports with new record types — §5.2 above — the same evol
 
 Neither changed a byte of previously shipped behavior — both are the freeze committing to an
 evolution *path* it had already declared, landing on schedule.
+
+## 9. Threat model
+
+Written down explicitly (RFC 0017 §7) because the tool is published and components come from
+anywhere. What a malicious or buggy component **cannot** do, by construction:
+
+- **Read outside its grant.** No filesystem, no environment, no clocks, no network: the WASM
+  sandbox has no WASI world at all — every byte a component sees arrives through a host
+  import. The content channel (RFC 0016 §5) serves only files matching the component's own
+  declared `requested_file_access` globs, from the already-discovered, gitignore-filtered
+  tree, under a per-round byte budget whose cutoff is surfaced as a diagnostic.
+- **Write anything.** There is no write-shaped import. Hook outputs are *claims about the
+  graph*, applied by the host under the sink vocabulary (§5.1) — no new node/edge kinds, no
+  finding creation, no file mutation.
+- **Hang or exhaust the host.** Every hook call runs under a wasmtime fuel budget, re-armed
+  per call (RFC 0017 §4); an exhausted or trapping call is dropped like any other component
+  error — skipped, never fatal to the run.
+- **Impersonate.** Reserved-namespace ids fail the load (§4.1/§5.5); the installer's identity
+  binding refuses a component whose descriptor id differs from the coordinate it was fetched
+  from, and the lockfile pins the checksum (RFC 0015 §4).
+
+What a malicious component **can** do — the residual risk, stated honestly: **lie about graph
+facts.** A false root, edge, annotation, or `classify_file` override suppresses findings that
+should have fired (it cannot *create* false findings: plugin evidence is liveness-only, RFC
+0005 §1, and file-target edges are consumed by reachability alone). The mitigations are
+visibility, not prevention: contributions are provenance-tagged in the graph, and `kndo
+doctor` reports the per-plugin audit record from the last run — id, roots, edges, annotations
+(`plugin contributions (last recorded run)`), so "this plugin exempted 400 symbols" is a
+line in a report, not an invisible bias. Installing a component remains a trust decision at
+exactly that scope: the worst case is quieter output, never exfiltration or code execution.

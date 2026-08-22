@@ -63,6 +63,28 @@ jobs:
             kndo check --fail-on warning
           fi
 
+  # RFC 0017 §7's compatibility matrix: the two reference components, PRE-BUILT and committed
+  # under crates/kndo-plugin-api/tests/compat/, run against the HEAD host. wasm-abi §8's
+  # "a v1 component keeps working against every v1-compatible host" promise as a job that
+  # fails the build instead of the ecosystem. Runs inside `test` too (it's an ordinary cargo
+  # test) — this standalone job exists so a compat break fails on its own named line, and to
+  # prove the run needs no wasm toolchain at all (no wasm32 target installed here).
+  compat-matrix:
+    name: ABI compat matrix (pinned v1 components vs HEAD host)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: compat-matrix
+
+      - name: run the pinned components against the HEAD host
+        run: cargo test -p kndo-plugin-api --test compat_matrix
+
   # RFC 0016 §7's "shell" configuration, CI-proven rather than only documented: a `kndo` build
   # with every first-party language grammar off and just enough to load third-party WASM
   # adapters (ADR 0006's "an embedder can drop every language" promise, taken literally). Builds

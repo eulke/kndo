@@ -1029,6 +1029,9 @@ fn try_patch(
     graph.edges.extend(round.edges);
     graph.externally_consumed = round.externally_consumed;
     let plugin_diagnostics = round.diagnostics;
+    // RFC 0017 §7: the patch re-ran the round, so it refreshes the audit record exactly like
+    // a full build would.
+    cache.record_plugin_contributions(&round.contributions);
 
     graph.edges.sort_unstable();
     graph.suppressions.sort_by_key(|(f, _)| *f);
@@ -1935,6 +1938,9 @@ struct PluginRound {
     edges: Vec<Edge>,
     externally_consumed: Vec<SymbolId>,
     diagnostics: Vec<Diagnostic>,
+    /// Per-plugin resolved-contribution counts (RFC 0017 §7), in the round's own id-sorted
+    /// call order — recorded to the cache as the last-run audit record for `kndo doctor`.
+    contributions: Vec<crate::plugin::PluginContribution>,
 }
 
 /// The plugin graph-mutation hooks (RFC 0003 §2): `contribute_roots`/`contribute_edges`/
@@ -1960,6 +1966,7 @@ fn run_plugin_round(
         edges: Vec::new(),
         externally_consumed: Vec::new(),
         diagnostics: Vec::new(),
+        contributions: Vec::new(),
     };
     if sorted_plugins.is_empty() {
         // The `GraphView` index build is one more O(symbols) pass, negligible next to
@@ -1982,13 +1989,26 @@ fn run_plugin_round(
         // another's legitimate reads).
         let content = crate::plugin::ContentView::new(
             discovered,
-            descriptor.id,
+            descriptor.id.clone(),
             &descriptor.requested_file_access,
         );
 
+        // Counted by delta around each collector: only contributions that *resolved* (landed
+        // in the round) count — a sink item whose target missed changed nothing, and the
+        // audit record's job is to say what a plugin actually asserted into the graph.
+        let edges_before = round.edges.len();
         collect_plugin_roots(*plugin, &view, &content, &provenance, &tables, &mut round);
+        let roots_after = round.edges.len();
         collect_plugin_edges(*plugin, &view, &content, &provenance, &tables, &mut round);
+        let edges_after = round.edges.len();
+        let annotations_before = round.externally_consumed.len();
         collect_plugin_annotations(*plugin, &view, &content, &tables, &mut round);
+        round.contributions.push(crate::plugin::PluginContribution {
+            id: descriptor.id.to_string(),
+            roots: (roots_after - edges_before) as u32,
+            edges: (edges_after - roots_after) as u32,
+            annotations: (round.externally_consumed.len() - annotations_before) as u32,
+        });
         if let Some(diagnostic) = content.take_diagnostic() {
             round.diagnostics.push(diagnostic);
         }
@@ -2990,6 +3010,11 @@ pub fn assemble_from_source(
     edges.extend(plugin_round.edges);
     let externally_consumed = plugin_round.externally_consumed;
     let plugin_diagnostics = plugin_round.diagnostics;
+    // RFC 0017 §7: the round just ran, so its counts are the current audit record — written
+    // even when empty (no plugins → an empty record replaces any stale one).
+    if let Some(cache) = cache {
+        cache.record_plugin_contributions(&plugin_round.contributions);
+    }
 
     // Canonical order (RFC 0013 §3a): edge and diagnostic order is *data*, not construction
     // history. Two semantically identical graphs must be identical vectors — the property the
@@ -4739,6 +4764,46 @@ mod tests {
         assert!(
             has_root_me_root(&rebuilt),
             "the full rebuild still runs the new set's round"
+        );
+    }
+
+    #[test]
+    fn the_contribution_record_tracks_what_the_round_actually_landed() {
+        // RFC 0017 §7's audit record: the cache's last-run sidecar reflects what each plugin
+        // resolved into the graph, and a patch (which re-runs the round) refreshes it — the
+        // marker flip changes the recorded root count from 0 to 1.
+        let name = "contribution-record";
+        let dir = marker_project(name);
+        let cache_dir = std::env::temp_dir().join(format!("kndo-graph-test-{name}-cache"));
+        let _ = fs::remove_dir_all(&cache_dir);
+        let cache = crate::cache::ProjectCache::open(&cache_dir);
+        let plugins: Vec<Box<dyn crate::plugin::Plugin>> =
+            vec![Box::new(MarkerGatedPlugin { version: "1" })];
+
+        assemble_with_cache(&dir, &mock_adapters(), &plugins, Some(&cache)).unwrap();
+        let cold_record = cache
+            .plugin_contributions()
+            .expect("the cold build must leave a contribution record");
+        assert_eq!(
+            cold_record,
+            vec![crate::plugin::PluginContribution {
+                id: "marker-gated".to_string(),
+                roots: 0,
+                edges: 0,
+                annotations: 1,
+            }],
+            "marker off: only the unconditional annotation landed"
+        );
+
+        fs::write(dir.join("marker.txt"), "on").unwrap();
+        assemble_with_cache(&dir, &mock_adapters(), &plugins, Some(&cache)).unwrap();
+        assert!(cache.graph_hits() > 0, "the flip goes through the patch");
+        let patched_record = cache
+            .plugin_contributions()
+            .expect("the patch re-runs the round and must refresh the record");
+        assert_eq!(
+            patched_record[0].roots, 1,
+            "marker on: the re-run round's gated root is now in the record: {patched_record:?}"
         );
     }
 
