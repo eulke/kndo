@@ -553,6 +553,46 @@ pub struct FileFacts {
     /// Regions never overlap by construction (extraction records the outermost extent).
     /// Empty for languages whose test detection is per-file (JS/TS, Go).
     pub test_spans: Vec<Span>,
+    /// Call sites whose argument is a **string literal** (RFC 0017 §5.4): `(callee dotted
+    /// path, the literal, span)` — `res.render("index")`, `app.get("/users", …)`,
+    /// `flags.isEnabled("checkout-v2")`. A generic, ecosystem-blind fact: the adapter
+    /// records "a call with a string-literal argument", never what any framework means by
+    /// it — interpretation belongs to plugins, which read these through
+    /// `GraphView::string_call_sites_in` (natively) or `call-sites-in` (WASM) instead of
+    /// re-parsing claimed source through the content channel. Optional per adapter,
+    /// default empty (same contract posture as [`Self::test_spans`]); JS/TS implements it
+    /// first. Only the call's *first* string-literal argument is recorded — the
+    /// convention-bearing position in every motivating pattern — and only for direct
+    /// literals, never computed strings (determinism over coverage, the RFC 0002 §5 rule).
+    pub string_call_args: Vec<StringCallArg>,
+}
+
+/// One [`FileFacts::string_call_args`] entry. Carries rkyv derives because assembly persists
+/// these onto [`crate::graph::FileNode`] (the graph snapshot round-trips them), same pattern
+/// as [`RawSuppression`].
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    serde::Serialize,
+    serde::Deserialize,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+)]
+pub struct StringCallArg {
+    /// The callee as written, dotted path form: `res.render`, `app.get`, `require`. No
+    /// resolution — this is the *syntactic* callee, which is what convention matching wants.
+    #[rkyv(with = crate::rkyv_support::SmolStrAsString)]
+    pub callee: SmolStr,
+    /// The first string-literal argument's value, unescaped.
+    #[rkyv(with = crate::rkyv_support::SmolStrAsString)]
+    pub literal: SmolStr,
+    /// The whole call expression's extent.
+    pub span: Span,
 }
 
 // ---------------------------------------------------------------- manifests (RFC 0011)

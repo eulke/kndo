@@ -46,6 +46,11 @@ pub struct FileNode {
     /// contained import site as test-role usage. Empty for languages whose test detection
     /// is per-file.
     pub test_spans: Vec<Span>,
+    /// String-literal call sites ([`crate::adapter::FileFacts::string_call_args`], RFC 0017
+    /// §5.4), canonically sorted. Persisted onto the graph so plugins query them through
+    /// [`crate::plugin::GraphView::string_call_sites_in`] (natively) or `call-sites-in`
+    /// (WASM) on warm paths too — no analysis consumes them directly; they are plugin fuel.
+    pub string_call_sites: Vec<crate::adapter::StringCallArg>,
 }
 
 /// Whether `span` lies inside any of `regions` — inclusive containment on the `(line,
@@ -718,6 +723,12 @@ fn try_patch(
             let mut spans = claimed.facts.test_spans.clone();
             spans.sort_unstable();
             graph.files[c].test_spans = spans;
+            // Same body-level refresh for string call sites (RFC 0017 §5.4): a changed
+            // literal or a new call flows through the patch, and the plugin round below
+            // reads the current values off the FileNode.
+            let mut sites = claimed.facts.string_call_args.clone();
+            sites.sort_unstable();
+            graph.files[c].string_call_sites = sites;
             graph.patch_meta[c].surface_sig = Some(claimed.surface_sig);
         }
     }
@@ -1010,6 +1021,8 @@ fn try_patch(
         &graph.file_index,
         &symbol_by_name_per_file,
         &symbol_by_qualified_per_file,
+        &graph.packages,
+        &graph.edges,
         discovered,
         sorted_plugins,
     );
@@ -1729,7 +1742,7 @@ pub(crate) fn package_owns(manifest_dir: &str, file_dir: &str) -> bool {
 /// an assembly-algorithm change that could produce a different graph from the same facts. Feeds
 /// [`compute_graph_key`] (RFC 0004 §3's "core graph-schema version"); a bump here invalidates
 /// every project's cached `graph.bin` on the next run, same as any other key-input change.
-pub const GRAPH_SCHEMA_VERSION: u32 = 14; // 14: in-source Test roots derived from test_spans containment (adapters no longer emit them); 13: FileNode.test_spans + phase 2.55 test-gated module demotion (sub-file test regions); 12: library-surface fixpoint (phase 2.7 — same inputs now assemble surface Root edges, prior snapshots are semantically stale); 11: PackageNode.workspace_entry (RFC 0013 §4); 10: patch layer (RFC 0013 §4 — Edge.owner, FilePatchMeta, extraction-only stored diagnostics); 9: SymbolMetrics.token_count (RFC 0005 §11); 8: function_metrics (RFC 0005 §6); 7: cycle policies (§8); 6: PackageNode surface (RFC 0011 §4); 5: ladders + FileNode.unit (RFC 0012 §6); 4: RefKind + signature_span (§5); 3: within (§4)
+pub const GRAPH_SCHEMA_VERSION: u32 = 15; // 15: FileNode.string_call_sites + EdgeKind::ReferencesFile (RFC 0017 §5.4); 14: in-source Test roots derived from test_spans containment (adapters no longer emit them); 13: FileNode.test_spans + phase 2.55 test-gated module demotion (sub-file test regions); 12: library-surface fixpoint (phase 2.7 — same inputs now assemble surface Root edges, prior snapshots are semantically stale); 11: PackageNode.workspace_entry (RFC 0013 §4); 10: patch layer (RFC 0013 §4 — Edge.owner, FilePatchMeta, extraction-only stored diagnostics); 9: SymbolMetrics.token_count (RFC 0005 §11); 8: function_metrics (RFC 0005 §6); 7: cycle policies (§8); 6: PackageNode surface (RFC 0011 §4); 5: ladders + FileNode.unit (RFC 0012 §6); 4: RefKind + signature_span (§5); 3: within (§4)
 
 /// The graph snapshot's cache key (RFC 0004 §3, `cache.rs`'s `graph.bin`): a single digest
 /// folding in the *whole* discovered file set (every path + content hash — this already
@@ -1931,12 +1944,15 @@ struct PluginRound {
 /// and the name tables are in their final, identical state, which is what makes the patched
 /// graph byte-identical to a full rebuild's. Hooks are deterministic functions of the graph
 /// and the discovered tree; nothing here reads clocks, randomness, or other plugins' output.
+#[allow(clippy::too_many_arguments)] // one parameter per graph facet the view exposes; a bundle struct would just rename the list
 fn run_plugin_round(
     files: &[FileNode],
     symbols: &[SymbolNode],
     file_index: &HashMap<ProjectPath, FileId>,
     symbol_by_name_per_file: &[HashMap<SmolStr, SymbolId>],
     symbol_by_qualified_per_file: &[HashMap<String, SymbolId>],
+    packages: &[PackageNode],
+    edges: &[Edge],
     discovered: &discovery::DiscoveredTree,
     sorted_plugins: &[&dyn crate::plugin::Plugin],
 ) -> PluginRound {
@@ -1950,7 +1966,7 @@ fn run_plugin_round(
         // extraction's own — but there's no reason to pay it for the common zero-plugin case.
         return round;
     }
-    let view = crate::plugin::GraphView::new(files, symbols, file_index);
+    let view = crate::plugin::GraphView::new(files, symbols, file_index, packages, edges);
     let tables = PluginTargetTables {
         symbols,
         file_index,
@@ -2056,17 +2072,21 @@ fn collect_plugin_edges(
         let Some(from) = tables.resolve(&contributed.from) else {
             continue;
         };
-        // References always targets a symbol — a `to` naming a whole file (no `symbol`
-        // set) isn't a resolvable reference target and is dropped, same as a miss.
-        let Some(NodeRef::Symbol(to)) = tables.resolve(&contributed.to) else {
-            continue;
-        };
-        round.edges.push(Edge {
-            kind: EdgeKind::References {
+        let kind = match tables.resolve(&contributed.to) {
+            // A symbol target is an ordinary reference.
+            Some(NodeRef::Symbol(to)) => EdgeKind::References {
                 from,
                 to,
                 kind: contributed.kind,
             },
+            // A `to` naming a whole file (no `symbol` set) is RFC 0017 §5.4's file-liveness
+            // edge — the template/asset shape. The contributed `RefKind` doesn't apply to a
+            // file target and is dropped; liveness is the whole semantics.
+            Some(NodeRef::File(to)) => EdgeKind::ReferencesFile { from, to },
+            None => continue,
+        };
+        round.edges.push(Edge {
+            kind,
             confidence: contributed.confidence,
             source: provenance.clone(),
             span: None,
@@ -2328,6 +2348,14 @@ pub fn assemble_from_source(
             }
             None => Vec::new(),
         };
+        let string_call_sites = match &claimed_per_file[i] {
+            Some(c) => {
+                let mut sites = c.facts.string_call_args.clone();
+                sites.sort_unstable(); // canonical order invariant (RFC 0013 §3)
+                sites
+            }
+            None => Vec::new(),
+        };
         files.push(FileNode {
             path: df.path.clone(),
             content_hash: df.content_hash,
@@ -2336,6 +2364,7 @@ pub fn assemble_from_source(
             package: PackageId(0), // patched in phase 2a once ownership is computed
             unit,
             test_spans,
+            string_call_sites,
         });
     }
 
@@ -2953,6 +2982,8 @@ pub fn assemble_from_source(
         &file_index,
         &symbol_by_name_per_file,
         &symbol_by_qualified_per_file,
+        &packages,
+        &edges,
         &discovered,
         sorted_plugins,
     );

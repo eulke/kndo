@@ -232,11 +232,19 @@ shape every other host-mediated lookup in this ABI already has.
   trait either — nothing to bridge until it's real. `suppress` went further: RFC 0016 §7
   evaluated it against real shipped components and decided cut, not merely deferred (RFC 0003
   §2) — it stays undeclared on both the native trait and this WIT package.
-- **`GraphView` exposes `files()`/`symbols_in()` only, not the full `ProjectGraph`.**
-  `wasm-file-info` carries `path`/`role`/`origin`; `wasm-symbol-info` carries `name`/`kind`/
-  `exported`/`member-of`. `language`, `unit`, `test-spans`, and every edge-level fact are not
-  surfaced — the same "conservative v1, grow on real demand" cut the adapter ABI's descriptor
-  makes, not a structural limit of the bidirectional design.
+- **The frozen v1 records stay frozen; the read surface grew by imports instead (RFC 0017
+  §5).** `wasm-file-info` (path/role/origin) and `wasm-symbol-info`
+  (name/kind/exported/member-of) never gain fields — growing a record is a breaking change in
+  the component model. Everything else the graph stably holds arrives through the additive
+  imports `packages`/`package-of`, `file-details`/`symbol-details`,
+  `imports-of`/`importers-of`/`references-to`, and `call-sites-in` (each with its own new
+  record type — `wasm-package-info`, `wasm-file-details`, `wasm-symbol-details`,
+  `wasm-ref-site`, `wasm-call-site`, `wasm-span`). All answer from the same
+  pre-instantiation snapshot as `list-files`/`symbols-in`, sorted and deterministic, and from
+  **adapter-derived data only** (RFC 0017 §2's rule R1): no plugin ever observes another
+  plugin's contributions, which is what keeps runs identical across plugin compositions. The
+  snapshot clone grows accordingly — bounded `O(files + symbols + edges + content bytes)`
+  per round.
 - **`SymbolKind::Other(name)`/`CssRule`/`CssVariable` aren't representable** — same cut as
   §2's adapter-side one; the host bridge folds them into `variable` rather than fabricate a
   wire value.
@@ -399,9 +407,12 @@ in-process on every run (no binary checked into the repo):
 Each WIT package version (`kndo:adapter@0.1.0`, `kndo:plugin@0.1.0`) and the corresponding
 section of this document change together, independently of each other (§0). A breaking v2 of
 either package (the adapter side's `resolve()` host-import callbacks or byte-content; the
-plugin side's richer `GraphView` surface, `ingest_coverage`/`suppress`, or per-query fuel) is a
-new package version, not a silent reinterpretation of `0.1.0` — a component built against a v1
-package must keep working against a v1-compatible host indefinitely.
+plugin side's `ingest_coverage`, or per-query fuel) is a new package version, not a silent
+reinterpretation of `0.1.0` — a component built against a v1 package must keep working
+against a v1-compatible host indefinitely. (The "richer `GraphView` surface" this paragraph
+once listed as a breaking-v2 example turned out not to need one: RFC 0017 §5 grew it entirely
+through additive imports with new record types — §5.2 above — the same evolution shape as
+`read-file`.)
 
 **Both RFC 0016 §8 phase 0 reservations are now landed**, additively, exactly as reserved:
 

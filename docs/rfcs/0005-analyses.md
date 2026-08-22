@@ -54,6 +54,14 @@ Most detections derive from one computation. Roots are partitioned by `RootKind`
 - **Tooling roots** — build/config scripts (webpack.config, build.gradle, migrations…): they keep
   their imports alive but are not production code themselves.
 
+**Plugin-contributed edges are liveness evidence, never architecture evidence (RFC 0017
+§5.4).** A plugin's `References`/`ReferencesFile` contributions feed reachability — where a
+false positive can only *suppress* findings, the safe direction — and are ignored by `cyclic`
+and by every analysis that would *create* a finding from an edge's existence. This is a
+contract, not an implementation accident: it is what lets the platform accept
+lower-precision, convention-derived edges from third-party plugins without ever risking the
+zero-false-positive bar.
+
 Two reachability passes (production-only roots; then all roots) assign every symbol/file a color:
 
 | Color | Meaning |

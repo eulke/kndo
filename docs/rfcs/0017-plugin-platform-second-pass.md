@@ -124,7 +124,21 @@ test proving state visibly carries between hooks in one round and visibly resets
 rounds. Doing this *before* publication is the point: today it is an internal change with an
 internal test; after third parties ship components, it would be a behavior migration.
 
-## 5. The complete read surface
+## 5. The complete read surface — Landed
+
+*(Landing note, one honest deviation: the route/template edge detections §5.4's draft named
+as first consumers were **not** built, because both plugins' own specs prove them effect-free
+today — `views/**` templates are unclaimed files, outside the `unused` verdict's scope
+entirely (express.md §1: "the edge would have nothing to connect to"), and Next.js pages are
+already `Certain` roots that no route edge can make more alive. Building detections whose
+specs prove they change zero findings would be the exact speculative theater this project
+rejects. What landed is the complete mechanism they — and the real future consumers: a
+feature-flag plugin (`dead-feature-flag` is on the ROADMAP), DI-container wiring, CSS classes
+used from HTML templates once an HTML adapter exists — need: call-site facts, file-target
+plugin edges with the §5.4 containment rule, and every query below, each proven end to end
+through the reference guest and, for `packages()`, a first-party consumer that deleted real
+code: `kndo:express` now derives its app roots from the graph's package topology instead of
+path-scanning the whole file list.)*
 
 Derived by closure over what the graph stably holds (§2), exposed natively on `GraphView`
 and over WASM as **additive imports with new record types** — existing WIT records are
@@ -280,9 +294,17 @@ nothing here precludes it.
    reference guest's `staged_`/`fresh_` scenarios (state must carry roots → edges within a
    round; a second round on the same `WasmPlugin` must start clean), asserted by the
    compliance suite's `external_wasm_plugin_hooks_affect_a_real_check`.
-3. **Read surface (§5)** — call-site facts + packages + edges + details in one cycle: they
-   share the schema bump, the WIT additions, and the wasm-abi documentation pass. The
-   express/nextjs edge detections land here as the surface's first proof.
+3. **Read surface (§5) — Landed.** Call-site facts (`FileFacts.string_call_args`, JS-TS
+   extracting first; persisted onto `FileNode`, refreshed by the patch), the native
+   `GraphView` v2 (`packages`/`package_of`, `imports_of`/`importers_of`/`references_to` with
+   R1+R2, `string_call_sites_in`, plus the bulk accessors host bridges snapshot from), the
+   eight additive WASM imports with their new records, `EdgeKind::ReferencesFile` + the
+   file-target edge sink mapping + reachability consumption + the RFC 0005 containment rule,
+   and `kndo:express` consuming `packages()`. One shared invalidation:
+   `GRAPH_SCHEMA_VERSION` 15, facts `ENTRY_FORMAT_VERSION` 2, js `facts_schema_version` 9.
+   Proven by `GraphView` unit tests (R1 included), JS extraction tests, and the compliance
+   suite's `linked_`/`sited_` guest round trips. See the §5 landing note for the one honest
+   deviation (the moot route/template detections).
 4. **Adapter dependencies (§6)**.
 5. **Author kit + compat matrix (§7)**.
 

@@ -45,11 +45,25 @@ A plugin gets exactly four graph-mutation hooks (RFC 0003 §2) plus its descript
   SDK surface, FFI, serialization targets): exempts them from `internal-only`/
   `private-type-leak` narrowing suggestions.
 
-`contribute-roots`/`contribute-edges`/`annotate-symbols` may call three host imports:
+`contribute-roots`/`contribute-edges`/`annotate-symbols` may call the host imports:
 `list-files()` (every claimed file: path, role, origin), `symbols-in(path)` (each symbol:
-name, kind, exported, member-of), and `read-file(path) -> option<list<u8>>` (RFC 0016 §5's
-content channel). `classify-file` gets none of these — it sees one file at a time and nothing
-else.
+name, kind, exported, member-of), `read-file(path) -> option<list<u8>>` (RFC 0016 §5's
+content channel), and RFC 0017 §5's complete read surface — `packages()` / `package-of(path)`
+(RFC 0011 package topology), `file-details(path)` (language, unit, package root),
+`symbol-details(path, symbol)` (visibility rung, span), `imports-of(path)` /
+`importers-of(path)` (file-import edges, both directions), `references-to(path, symbol)`
+(every site referencing a symbol), and `call-sites-in(path)` (string-literal call sites the
+adapter extracted — `res.render("index")`, `flags.isEnabled("checkout-v2")` — the fact to
+build framework conventions on instead of ever re-parsing source). Everything answers from
+adapter-derived data only: you never see another plugin's contributions, so your results
+can't depend on what else is installed. `classify-file` gets none of these — it sees one
+file at a time and nothing else.
+
+**Edges can target whole files.** A `contributed-edge` whose `to` has no `symbol` becomes a
+file-liveness edge ("if `from` is alive, that file is in use" — the template/asset shape).
+Liveness is its entire meaning: it can rescue a file from `unused`, and it is ignored by
+every analysis that would create a finding from an edge's existence, so a wrong edge can
+never produce a false positive — only hide a true one, which is still a reason to be sure.
 
 **`read-file` is scoped, not general.** It only ever answers a path matching *your own*
 `requested-file-access` globs (declare them on your descriptor — an empty list means every

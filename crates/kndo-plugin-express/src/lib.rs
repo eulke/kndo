@@ -94,7 +94,14 @@ fn entry_files<'a>(
     graph: &'a GraphView<'_>,
     content: &ContentView<'_>,
 ) -> Vec<&'a kndo_core::graph::FileNode> {
-    let app_roots = conventions::app_roots(graph.files().map(|f| f.path.0.as_str()));
+    // App roots ARE the graph's package roots (RFC 0017 §5.2): every directory holding a
+    // manifest is a `PackageNode`, so the topology query replaces this plugin's former
+    // path-basename scan over the whole file list — same set, owned by the core.
+    let app_roots = conventions::app_roots(
+        graph
+            .packages()
+            .filter_map(|p| p.manifest.map(|m| m.0.as_str())),
+    );
     let manifest_candidates = manifest_entries(&app_roots, content);
     graph
         .files()

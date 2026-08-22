@@ -111,7 +111,45 @@ pub struct GraphView<'a> {
     files: &'a [FileNode],
     symbols: &'a [SymbolNode],
     file_index: &'a HashMap<ProjectPath, FileId>,
+    packages: &'a [crate::graph::PackageNode],
+    /// The adapter-derived edge list as of this round. Queries answer from
+    /// `Provenance::Adapter` edges only (RFC 0017 §2's rule R1): a plugin never sees another
+    /// plugin's contributions — without that, results would depend on registration order and
+    /// determinism across compositions would silently break.
+    edges: &'a [crate::vocab::Edge],
     symbols_by_file: HashMap<FileId, Vec<u32>>,
+    /// Reverse/forward `ImportsFile` index, built lazily on the first edge query (RFC 0017
+    /// §2's rule R2): a plugin that never asks pays nothing. `RefCell`, not a lock — a view
+    /// lives inside one single-threaded plugin round, same pattern as `ContentView`'s budget.
+    import_index: RefCell<Option<ImportIndex>>,
+}
+
+/// Forward and reverse file-import adjacency, `FileId`-indexed, targets sorted — built once
+/// per view on first use.
+struct ImportIndex {
+    imports_of: HashMap<FileId, Vec<FileId>>,
+    importers_of: HashMap<FileId, Vec<FileId>>,
+}
+
+/// One [`GraphView::packages`] entry — RFC 0011 §3's package topology, plugin-visible
+/// (RFC 0017 §5.2). `root_dir` is the manifest's own directory (`""` for the implicit
+/// package that owns whatever no manifest governs).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PackageView<'a> {
+    pub manifest: Option<&'a ProjectPath>,
+    pub name: Option<&'a str>,
+    pub root_dir: &'a str,
+}
+
+/// One [`GraphView::references_to`] result — a site referencing the queried symbol, named by
+/// path/symbol like every other plugin-facing value (never internal ids).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RefSiteView<'a> {
+    pub from_path: &'a ProjectPath,
+    /// `None` when the adapter only knew the referencing *file* (file-granularity site).
+    pub from_symbol: Option<&'a str>,
+    pub kind: RefKind,
+    pub confidence: Confidence,
 }
 
 impl<'a> GraphView<'a> {
@@ -119,6 +157,8 @@ impl<'a> GraphView<'a> {
         files: &'a [FileNode],
         symbols: &'a [SymbolNode],
         file_index: &'a HashMap<ProjectPath, FileId>,
+        packages: &'a [crate::graph::PackageNode],
+        edges: &'a [crate::vocab::Edge],
     ) -> Self {
         let mut symbols_by_file: HashMap<FileId, Vec<u32>> = HashMap::default();
         for (i, s) in symbols.iter().enumerate() {
@@ -128,7 +168,10 @@ impl<'a> GraphView<'a> {
             files,
             symbols,
             file_index,
+            packages,
+            edges,
             symbols_by_file,
+            import_index: RefCell::new(None),
         }
     }
 
@@ -147,6 +190,236 @@ impl<'a> GraphView<'a> {
             .map(Vec::as_slice)
             .unwrap_or(&[]);
         indices.iter().map(|&i| &self.symbols[i as usize])
+    }
+
+    /// Package topology (RFC 0011 §3, plugin-visible per RFC 0017 §5.2), in `PackageId`
+    /// order: the implicit package first, then one entry per manifest.
+    pub fn packages(&self) -> impl Iterator<Item = PackageView<'a>> + '_ {
+        self.packages.iter().map(package_view)
+    }
+
+    /// The package owning `path` (ownership is total — RFC 0011 §3's
+    /// nearest-manifest-ancestor rule); `None` only for a path not in this run's file set.
+    pub fn package_of(&self, path: &ProjectPath) -> Option<PackageView<'a>> {
+        let file = *self.file_index.get(path)?;
+        self.packages
+            .get(self.files[file.0 as usize].package.0 as usize)
+            .map(package_view)
+    }
+
+    /// Files `path` imports (`ImportsFile` edges, adapter-derived only — rule R1), sorted by
+    /// path. Empty for an unknown path or a file with no imports.
+    pub fn imports_of(&self, path: &ProjectPath) -> Vec<&'a ProjectPath> {
+        let Some(&file) = self.file_index.get(path) else {
+            return Vec::new();
+        };
+        self.with_import_index(|idx| {
+            idx.imports_of
+                .get(&file)
+                .map(|targets| {
+                    targets
+                        .iter()
+                        .map(|t| &self.files[t.0 as usize].path)
+                        .collect()
+                })
+                .unwrap_or_default()
+        })
+    }
+
+    /// Files importing `path` — [`Self::imports_of`]'s reverse, same rules.
+    pub fn importers_of(&self, path: &ProjectPath) -> Vec<&'a ProjectPath> {
+        let Some(&file) = self.file_index.get(path) else {
+            return Vec::new();
+        };
+        self.with_import_index(|idx| {
+            idx.importers_of
+                .get(&file)
+                .map(|sources| {
+                    sources
+                        .iter()
+                        .map(|s| &self.files[s.0 as usize].path)
+                        .collect()
+                })
+                .unwrap_or_default()
+        })
+    }
+
+    /// Every adapter-derived reference site targeting `path`'s symbol named `symbol` (bare
+    /// name), sorted by referencing path then symbol. Linear over the edge list — reference
+    /// queries are rare per round and a full reverse index over References edges would cost
+    /// every round what only some plugins use; revisit with a real hot consumer.
+    pub fn references_to(&self, path: &ProjectPath, symbol: &str) -> Vec<RefSiteView<'a>> {
+        let Some(&file) = self.file_index.get(path) else {
+            return Vec::new();
+        };
+        let Some(target) = self
+            .symbols_by_file
+            .get(&file)
+            .and_then(|indices| {
+                indices
+                    .iter()
+                    .find(|&&i| self.symbols[i as usize].name.as_str() == symbol)
+            })
+            .copied()
+        else {
+            return Vec::new();
+        };
+        let mut sites: Vec<RefSiteView<'a>> = self
+            .edges
+            .iter()
+            .filter(|e| matches!(e.source, crate::vocab::Provenance::Adapter(_)))
+            .filter_map(|e| match e.kind {
+                crate::vocab::EdgeKind::References { from, to, kind } if to.0 == target => {
+                    let (from_path, from_symbol) = match from {
+                        crate::vocab::NodeRef::File(f) => (&self.files[f.0 as usize].path, None),
+                        crate::vocab::NodeRef::Symbol(s) => {
+                            let sym = &self.symbols[s.0 as usize];
+                            (
+                                &self.files[sym.file.0 as usize].path,
+                                Some(sym.name.as_str()),
+                            )
+                        }
+                    };
+                    Some(RefSiteView {
+                        from_path,
+                        from_symbol,
+                        kind,
+                        confidence: e.confidence,
+                    })
+                }
+                _ => None,
+            })
+            .collect();
+        sites.sort_by(|a, b| (a.from_path, a.from_symbol).cmp(&(b.from_path, b.from_symbol)));
+        sites
+    }
+
+    /// `path`'s string-literal call sites ([`crate::adapter::FileFacts::string_call_args`],
+    /// RFC 0017 §5.4), canonically sorted; empty for an unknown path or an adapter that
+    /// doesn't extract them.
+    pub fn string_call_sites_in(&self, path: &ProjectPath) -> &'a [crate::adapter::StringCallArg] {
+        self.file_index
+            .get(path)
+            .map(|f| self.files[f.0 as usize].string_call_sites.as_slice())
+            .unwrap_or(&[])
+    }
+
+    /// Every adapter-derived `ImportsFile` edge, fully named, in edge-list order — the bulk
+    /// form host bridges use to snapshot the graph before instantiating a guest (wasm-abi
+    /// §5.3's borrow constraint); per-path queries stay on [`Self::imports_of`]. Rule R1
+    /// applies here too.
+    pub fn all_import_edges(
+        &self,
+    ) -> impl Iterator<Item = (&'a ProjectPath, &'a ProjectPath)> + '_ {
+        self.edges
+            .iter()
+            .filter(|e| matches!(e.source, crate::vocab::Provenance::Adapter(_)))
+            .filter_map(|e| match e.kind {
+                crate::vocab::EdgeKind::ImportsFile { from, to } => Some((
+                    &self.files[from.0 as usize].path,
+                    &self.files[to.0 as usize].path,
+                )),
+                _ => None,
+            })
+    }
+
+    /// Every adapter-derived reference edge as `(target path, target bare name, site)` — the
+    /// bulk counterpart of [`Self::references_to`], same bridge rationale as
+    /// [`Self::all_import_edges`].
+    pub fn all_reference_sites(
+        &self,
+    ) -> impl Iterator<Item = (&'a ProjectPath, &'a str, RefSiteView<'a>)> + '_ {
+        self.edges
+            .iter()
+            .filter(|e| matches!(e.source, crate::vocab::Provenance::Adapter(_)))
+            .filter_map(|e| match e.kind {
+                crate::vocab::EdgeKind::References { from, to, kind } => {
+                    let target = &self.symbols[to.0 as usize];
+                    let (from_path, from_symbol) = match from {
+                        crate::vocab::NodeRef::File(f) => (&self.files[f.0 as usize].path, None),
+                        crate::vocab::NodeRef::Symbol(s) => {
+                            let sym = &self.symbols[s.0 as usize];
+                            (
+                                &self.files[sym.file.0 as usize].path,
+                                Some(sym.name.as_str()),
+                            )
+                        }
+                    };
+                    Some((
+                        &self.files[target.file.0 as usize].path,
+                        target.name.as_str(),
+                        RefSiteView {
+                            from_path,
+                            from_symbol,
+                            kind,
+                            confidence: e.confidence,
+                        },
+                    ))
+                }
+                _ => None,
+            })
+    }
+
+    fn with_import_index<R>(&self, f: impl FnOnce(&ImportIndex) -> R) -> R {
+        let mut slot = self.import_index.borrow_mut();
+        let idx = slot.get_or_insert_with(|| build_import_index(self.files, self.edges));
+        f(idx)
+    }
+}
+
+/// See [`GraphView::with_import_index`]: forward + reverse `ImportsFile` adjacency from the
+/// adapter-derived edges (rule R1), targets path-sorted and deduplicated so results are
+/// deterministic regardless of edge-list order (the full build hands the view a
+/// pre-canonical-sort list; the patch path a sorted one).
+fn build_import_index(files: &[FileNode], edges: &[crate::vocab::Edge]) -> ImportIndex {
+    let mut imports_of: HashMap<FileId, Vec<FileId>> = HashMap::default();
+    let mut importers_of: HashMap<FileId, Vec<FileId>> = HashMap::default();
+    for (from, to) in adapter_import_pairs(edges) {
+        imports_of.entry(from).or_default().push(to);
+        importers_of.entry(to).or_default().push(from);
+    }
+    for ids in imports_of.values_mut() {
+        sort_ids_by_path(files, ids);
+    }
+    for ids in importers_of.values_mut() {
+        sort_ids_by_path(files, ids);
+    }
+    ImportIndex {
+        imports_of,
+        importers_of,
+    }
+}
+
+/// The adapter-derived (rule R1) `ImportsFile` pairs in `edges`, edge-list order.
+fn adapter_import_pairs(
+    edges: &[crate::vocab::Edge],
+) -> impl Iterator<Item = (FileId, FileId)> + '_ {
+    edges
+        .iter()
+        .filter(|e| matches!(e.source, crate::vocab::Provenance::Adapter(_)))
+        .filter_map(|e| match e.kind {
+            crate::vocab::EdgeKind::ImportsFile { from, to } => Some((from, to)),
+            _ => None,
+        })
+}
+
+fn sort_ids_by_path(files: &[FileNode], ids: &mut Vec<FileId>) {
+    ids.sort_by(|a, b| files[a.0 as usize].path.cmp(&files[b.0 as usize].path));
+    ids.dedup();
+}
+
+fn package_view(p: &crate::graph::PackageNode) -> PackageView<'_> {
+    PackageView {
+        manifest: p.manifest.as_ref(),
+        name: p.name.as_deref(),
+        root_dir: p
+            .manifest
+            .as_ref()
+            .map(|m| {
+                let s = m.0.as_str();
+                s.rfind('/').map(|i| &s[..i]).unwrap_or("")
+            })
+            .unwrap_or(""),
     }
 }
 
@@ -359,8 +632,14 @@ pub(crate) struct ContributedEdge {
 }
 
 /// Edges invisible to the language (RFC 0003 §2): DI wiring, route-string → handler, template →
-/// class, CSS class names used from HTML templates. Always a `References` edge — plugins can't
-/// mint new edge kinds (RFC 0003 §2: "cannot define new node/edge kinds").
+/// class, CSS class names used from HTML templates. A symbol-target `to` becomes a
+/// `References` edge; a file-target `to` (no `symbol` set) becomes RFC 0017 §5.4's
+/// file-liveness edge (`EdgeKind::ReferencesFile` — "if `from` is alive, that file is in
+/// use", the template/asset shape; the `kind` argument doesn't apply there and is ignored).
+/// Either way plugins can't mint new edge kinds (RFC 0003 §2: "cannot define new node/edge
+/// kinds") — the two mappings above are the whole vocabulary, and plugin edges are liveness
+/// evidence only: `cyclic` and every analysis that would *create* a finding from an edge's
+/// existence ignore them (RFC 0005).
 #[derive(Debug, Default)]
 pub struct EdgeSink {
     pub(crate) items: Vec<ContributedEdge>,
@@ -583,6 +862,7 @@ mod tests {
             package: PackageId(0),
             unit: None,
             test_spans: Vec::new(),
+            string_call_sites: Vec::new(),
         }
     }
 
@@ -612,7 +892,7 @@ mod tests {
             file_index.insert(f.path.clone(), FileId(i as u32));
         }
 
-        let view = GraphView::new(&files, &symbols, &file_index);
+        let view = GraphView::new(&files, &symbols, &file_index, &[], &[]);
 
         let a_names: Vec<&str> = view
             .symbols_in(&ProjectPath(SmolStr::new("a.mock")))
@@ -634,7 +914,7 @@ mod tests {
         let mut file_index = HashMap::default();
         file_index.insert(files[0].path.clone(), FileId(0));
 
-        let view = GraphView::new(&files, &symbols, &file_index);
+        let view = GraphView::new(&files, &symbols, &file_index, &[], &[]);
         assert_eq!(
             view.symbols_in(&ProjectPath(SmolStr::new("nowhere.mock")))
                 .count(),
@@ -648,9 +928,177 @@ mod tests {
         let symbols: [SymbolNode; 0] = [];
         let file_index = HashMap::default();
 
-        let view = GraphView::new(&files, &symbols, &file_index);
+        let view = GraphView::new(&files, &symbols, &file_index, &[], &[]);
         let paths: Vec<&str> = view.files().map(|f| f.path.0.as_str()).collect();
         assert_eq!(paths, vec!["a.mock", "b.mock"]);
+    }
+
+    // -------------------------------------------------- GraphView v2 (RFC 0017 §5)
+
+    fn edge(kind: crate::vocab::EdgeKind, source: crate::vocab::Provenance) -> crate::vocab::Edge {
+        crate::vocab::Edge {
+            kind,
+            confidence: Confidence::Certain,
+            source,
+            span: None,
+            owner: FileId(0),
+        }
+    }
+
+    fn adapter_import(from: u32, to: u32) -> crate::vocab::Edge {
+        edge(
+            crate::vocab::EdgeKind::ImportsFile {
+                from: FileId(from),
+                to: FileId(to),
+            },
+            crate::vocab::Provenance::Adapter(SmolStr::new("mock")),
+        )
+    }
+
+    #[test]
+    fn package_topology_is_queryable_and_ownership_is_total() {
+        let mut files = [file("a.mock"), file("pkg/b.mock")];
+        files[1].package = crate::vocab::PackageId(1);
+        let implicit = crate::graph::PackageNode {
+            manifest: None,
+            name: None,
+            private: false,
+            declares_surface: false,
+            surface: Vec::new(),
+            workspace_entry: None,
+            resolves_dependency_usage: true,
+        };
+        let mut real = implicit.clone();
+        real.manifest = Some(ProjectPath(SmolStr::new("pkg/package.json")));
+        real.name = Some(SmolStr::new("pkg"));
+        let packages = [implicit, real];
+        let mut file_index = HashMap::default();
+        for (i, f) in files.iter().enumerate() {
+            file_index.insert(f.path.clone(), FileId(i as u32));
+        }
+        let view = GraphView::new(&files, &[], &file_index, &packages, &[]);
+
+        let pkgs: Vec<_> = view.packages().collect();
+        assert_eq!(pkgs.len(), 2);
+        assert_eq!(
+            pkgs[0].root_dir, "",
+            "implicit package roots at the project root"
+        );
+        assert_eq!(pkgs[1].root_dir, "pkg");
+        assert_eq!(pkgs[1].name, Some("pkg"));
+
+        let owner = view
+            .package_of(&ProjectPath(SmolStr::new("pkg/b.mock")))
+            .expect("ownership is total");
+        assert_eq!(owner.root_dir, "pkg");
+        let implicit = view
+            .package_of(&ProjectPath(SmolStr::new("a.mock")))
+            .expect("ownership is total");
+        assert_eq!(implicit.manifest, None);
+        assert!(view
+            .package_of(&ProjectPath(SmolStr::new("nowhere.mock")))
+            .is_none());
+    }
+
+    #[test]
+    fn import_queries_answer_both_directions_sorted_and_adapter_only() {
+        let files = [file("a.mock"), file("b.mock"), file("c.mock")];
+        let mut file_index = HashMap::default();
+        for (i, f) in files.iter().enumerate() {
+            file_index.insert(f.path.clone(), FileId(i as u32));
+        }
+        let edges = [
+            adapter_import(2, 0), // c -> a
+            adapter_import(1, 0), // b -> a
+            // Rule R1: another plugin's contributed file edge must be invisible.
+            edge(
+                crate::vocab::EdgeKind::ReferencesFile {
+                    from: crate::vocab::NodeRef::File(FileId(0)),
+                    to: FileId(1),
+                },
+                crate::vocab::Provenance::Plugin(SmolStr::new("other-plugin")),
+            ),
+        ];
+        let view = GraphView::new(&files, &[], &file_index, &[], &edges);
+
+        let importers: Vec<&str> = view
+            .importers_of(&ProjectPath(SmolStr::new("a.mock")))
+            .into_iter()
+            .map(|p| p.0.as_str())
+            .collect();
+        assert_eq!(importers, vec!["b.mock", "c.mock"], "sorted by path");
+
+        let imports: Vec<&str> = view
+            .imports_of(&ProjectPath(SmolStr::new("b.mock")))
+            .into_iter()
+            .map(|p| p.0.as_str())
+            .collect();
+        assert_eq!(imports, vec!["a.mock"]);
+
+        assert!(
+            view.imports_of(&ProjectPath(SmolStr::new("a.mock")))
+                .is_empty(),
+            "the plugin-contributed edge must not answer (rule R1)"
+        );
+    }
+
+    #[test]
+    fn references_to_names_the_sites_and_ignores_plugin_edges() {
+        let files = [file("a.mock"), file("b.mock")];
+        let symbols = [symbol(FileId(0), "target"), symbol(FileId(1), "caller")];
+        let mut file_index = HashMap::default();
+        for (i, f) in files.iter().enumerate() {
+            file_index.insert(f.path.clone(), FileId(i as u32));
+        }
+        let edges = [
+            edge(
+                crate::vocab::EdgeKind::References {
+                    from: crate::vocab::NodeRef::Symbol(crate::vocab::SymbolId(1)),
+                    to: crate::vocab::SymbolId(0),
+                    kind: RefKind::Call,
+                },
+                crate::vocab::Provenance::Adapter(SmolStr::new("mock")),
+            ),
+            edge(
+                crate::vocab::EdgeKind::References {
+                    from: crate::vocab::NodeRef::Symbol(crate::vocab::SymbolId(1)),
+                    to: crate::vocab::SymbolId(0),
+                    kind: RefKind::Read,
+                },
+                crate::vocab::Provenance::Plugin(SmolStr::new("other-plugin")),
+            ),
+        ];
+        let view = GraphView::new(&files, &symbols, &file_index, &[], &edges);
+
+        let sites = view.references_to(&ProjectPath(SmolStr::new("a.mock")), "target");
+        assert_eq!(sites.len(), 1, "the plugin edge is invisible (rule R1)");
+        assert_eq!(sites[0].from_path.0.as_str(), "b.mock");
+        assert_eq!(sites[0].from_symbol, Some("caller"));
+        assert_eq!(sites[0].kind, RefKind::Call);
+        assert!(view
+            .references_to(&ProjectPath(SmolStr::new("a.mock")), "missing")
+            .is_empty());
+    }
+
+    #[test]
+    fn string_call_sites_come_off_the_file_node() {
+        let mut files = [file("a.mock")];
+        files[0].string_call_sites = vec![crate::adapter::StringCallArg {
+            callee: SmolStr::new("res.render"),
+            literal: SmolStr::new("index"),
+            span: crate::adapter::Span::default(),
+        }];
+        let mut file_index = HashMap::default();
+        file_index.insert(files[0].path.clone(), FileId(0));
+        let view = GraphView::new(&files, &[], &file_index, &[], &[]);
+
+        let sites = view.string_call_sites_in(&ProjectPath(SmolStr::new("a.mock")));
+        assert_eq!(sites.len(), 1);
+        assert_eq!(sites[0].callee.as_str(), "res.render");
+        assert_eq!(sites[0].literal.as_str(), "index");
+        assert!(view
+            .string_call_sites_in(&ProjectPath(SmolStr::new("nowhere.mock")))
+            .is_empty());
     }
 
     // ------------------------------------------------------------ ContentView (RFC 0016 §5)

@@ -54,6 +54,7 @@ impl std::error::Error for LoadError {}
 /// for that requirement rather than reaching for unsafe raw-pointer plumbing — a WASM plugin
 /// already forces a full graph rebuild every run (docs/contracts/wasm-abi.md §5), so one more
 /// `O(files + symbols)` clone alongside that is proportionally small.
+#[derive(Default)]
 struct HostViewData {
     files: Vec<w::WasmFileInfo>,
     symbols_by_file: rustc_hash::FxHashMap<smol_str::SmolStr, Vec<w::WasmSymbolInfo>>,
@@ -62,52 +63,161 @@ struct HostViewData {
     // a host round-trip of its own choosing mid-call the way a native plugin calls
     // `ContentView::read` directly, so `read-file` just serves a lookup into this snapshot.
     content_by_path: rustc_hash::FxHashMap<String, Vec<u8>>,
+    // RFC 0017 §5's read surface, snapshotted for the same borrow reason as everything above
+    // (wasm-abi §5.3): the store's state must be 'static, so what a query might answer is
+    // cloned per round — bounded O(files + symbols + edges + content bytes), the documented
+    // acceptance. Every projection is adapter-derived only (rule R1) and pre-sorted.
+    packages: Vec<w::WasmPackageInfo>,
+    file_details: rustc_hash::FxHashMap<String, w::WasmFileDetails>,
+    symbol_details: rustc_hash::FxHashMap<String, Vec<(String, w::WasmSymbolDetails)>>,
+    imports_of: rustc_hash::FxHashMap<String, Vec<String>>,
+    importers_of: rustc_hash::FxHashMap<String, Vec<String>>,
+    ref_sites: rustc_hash::FxHashMap<(String, String), Vec<w::WasmRefSite>>,
+    call_sites: rustc_hash::FxHashMap<String, Vec<w::WasmCallSite>>,
+}
+
+fn to_wit_span(span: kndo_core::adapter::Span) -> w::WasmSpan {
+    w::WasmSpan {
+        start_line: span.start.0,
+        start_col: span.start.1,
+        end_line: span.end.0,
+        end_col: span.end.1,
+    }
+}
+
+fn to_wit_package(p: &kndo_core::plugin::PackageView<'_>) -> w::WasmPackageInfo {
+    w::WasmPackageInfo {
+        manifest: p.manifest.map(|m| m.0.to_string()),
+        name: p.name.map(str::to_string),
+        root: p.root_dir.to_string(),
+    }
 }
 
 impl HostViewData {
     fn empty() -> Self {
-        HostViewData {
-            files: Vec::new(),
-            symbols_by_file: rustc_hash::FxHashMap::default(),
-            content_by_path: rustc_hash::FxHashMap::default(),
-        }
+        HostViewData::default()
     }
 
     fn from_view(graph: &GraphView<'_>, content: &ContentView<'_>) -> Self {
-        let mut files = Vec::new();
-        let mut symbols_by_file: rustc_hash::FxHashMap<SmolStr, Vec<w::WasmSymbolInfo>> =
-            rustc_hash::FxHashMap::default();
+        let mut data = HostViewData {
+            packages: graph.packages().map(|p| to_wit_package(&p)).collect(),
+            ..HostViewData::default()
+        };
         for file in graph.files() {
-            let Some(class) = file.class else {
-                continue; // unclaimed — nothing a plugin can usefully query about it
-            };
-            files.push(w::WasmFileInfo {
-                path: file.path.0.to_string(),
-                role: to_wit_role(class.role),
-                origin: to_wit_origin(class.origin),
-            });
-            let symbols = graph
-                .symbols_in(&file.path)
-                .map(|s| w::WasmSymbolInfo {
-                    name: s.name.to_string(),
-                    kind: to_wit_symbol_kind(s.kind.clone()),
-                    exported: s.exported,
-                    member_of: s.member_of.as_ref().map(|m| m.to_string()),
-                })
-                .collect();
-            symbols_by_file.insert(file.path.0.clone(), symbols);
+            collect_file_projections(graph, file, &mut data);
+            collect_symbol_projections(graph, file, &mut data);
         }
-        let mut content_by_path = rustc_hash::FxHashMap::default();
+        collect_ref_sites(graph, &mut data);
         for path in content.matching_paths() {
             if let Some(bytes) = content.read(path) {
-                content_by_path.insert(path.0.to_string(), bytes);
+                data.content_by_path.insert(path.0.to_string(), bytes);
             }
         }
-        HostViewData {
-            files,
-            symbols_by_file,
-            content_by_path,
-        }
+        data
+    }
+}
+
+/// File-level projections (RFC 0017 §5.1–§5.4): details, both import directions, call sites.
+/// Answers exist for unclaimed files too — a template can be asked about even though it has
+/// no symbols.
+fn collect_file_projections(
+    graph: &GraphView<'_>,
+    file: &kndo_core::graph::FileNode,
+    data: &mut HostViewData,
+) {
+    let path = file.path.0.to_string();
+    data.file_details.insert(
+        path.clone(),
+        w::WasmFileDetails {
+            language: file.language.as_ref().map(|l| l.to_string()),
+            unit: file.unit.as_ref().map(|u| u.to_string()),
+            package_root: graph
+                .package_of(&file.path)
+                .map(|p| p.root_dir.to_string())
+                .unwrap_or_default(),
+        },
+    );
+    let imports: Vec<String> = graph
+        .imports_of(&file.path)
+        .into_iter()
+        .map(|p| p.0.to_string())
+        .collect();
+    if !imports.is_empty() {
+        data.imports_of.insert(path.clone(), imports);
+    }
+    let importers: Vec<String> = graph
+        .importers_of(&file.path)
+        .into_iter()
+        .map(|p| p.0.to_string())
+        .collect();
+    if !importers.is_empty() {
+        data.importers_of.insert(path.clone(), importers);
+    }
+    let call_sites: Vec<w::WasmCallSite> = graph
+        .string_call_sites_in(&file.path)
+        .iter()
+        .map(|c| w::WasmCallSite {
+            callee: c.callee.to_string(),
+            literal: c.literal.to_string(),
+            span: to_wit_span(c.span),
+        })
+        .collect();
+    if !call_sites.is_empty() {
+        data.call_sites.insert(path, call_sites);
+    }
+}
+
+/// The frozen v1 file/symbol records plus §5.1's per-symbol details — claimed files only
+/// (an unclaimed file structurally has no symbols).
+fn collect_symbol_projections(
+    graph: &GraphView<'_>,
+    file: &kndo_core::graph::FileNode,
+    data: &mut HostViewData,
+) {
+    let Some(class) = file.class else {
+        return;
+    };
+    data.files.push(w::WasmFileInfo {
+        path: file.path.0.to_string(),
+        role: to_wit_role(class.role),
+        origin: to_wit_origin(class.origin),
+    });
+    let mut symbols = Vec::new();
+    let mut details = Vec::new();
+    for s in graph.symbols_in(&file.path) {
+        symbols.push(w::WasmSymbolInfo {
+            name: s.name.to_string(),
+            kind: to_wit_symbol_kind(s.kind.clone()),
+            exported: s.exported,
+            member_of: s.member_of.as_ref().map(|m| m.to_string()),
+        });
+        details.push((
+            s.name.to_string(),
+            w::WasmSymbolDetails {
+                visibility: s.visibility.0 as u32,
+                span: to_wit_span(s.span),
+            },
+        ));
+    }
+    data.symbols_by_file.insert(file.path.0.clone(), symbols);
+    data.symbol_details.insert(file.path.0.to_string(), details);
+}
+
+/// §5.3's `references-to` projection, keyed by (target path, target bare name), sites sorted.
+fn collect_ref_sites(graph: &GraphView<'_>, data: &mut HostViewData) {
+    for (target_path, target_name, site) in graph.all_reference_sites() {
+        data.ref_sites
+            .entry((target_path.0.to_string(), target_name.to_string()))
+            .or_default()
+            .push(w::WasmRefSite {
+                from_path: site.from_path.0.to_string(),
+                from_symbol: site.from_symbol.map(str::to_string),
+                kind: to_wit_ref_kind_out(site.kind),
+                confidence: to_wit_confidence_out(site.confidence),
+            });
+    }
+    for sites in data.ref_sites.values_mut() {
+        sites.sort_by(|a, b| (&a.from_path, &a.from_symbol).cmp(&(&b.from_path, &b.from_symbol)));
     }
 }
 
@@ -120,6 +230,57 @@ impl bindings::PluginImports for HostViewData {
 
     fn symbols_in(&mut self, path: String) -> Vec<w::WasmSymbolInfo> {
         self.symbols_by_file
+            .get(path.as_str())
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    fn packages(&mut self) -> Vec<w::WasmPackageInfo> {
+        self.packages.clone()
+    }
+
+    fn package_of(&mut self, path: String) -> Option<w::WasmPackageInfo> {
+        // Ownership is total for known paths (RFC 0011 §3); an unknown path is a plain miss.
+        let details = self.file_details.get(path.as_str())?;
+        let root = details.package_root.clone();
+        self.packages.iter().find(|p| p.root == root).cloned()
+    }
+
+    fn file_details(&mut self, path: String) -> Option<w::WasmFileDetails> {
+        self.file_details.get(path.as_str()).cloned()
+    }
+
+    fn symbol_details(&mut self, path: String, symbol: String) -> Option<w::WasmSymbolDetails> {
+        self.symbol_details
+            .get(path.as_str())?
+            .iter()
+            .find(|(name, _)| *name == symbol)
+            .map(|(_, d)| *d)
+    }
+
+    fn imports_of(&mut self, path: String) -> Vec<String> {
+        self.imports_of
+            .get(path.as_str())
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    fn importers_of(&mut self, path: String) -> Vec<String> {
+        self.importers_of
+            .get(path.as_str())
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    fn references_to(&mut self, path: String, symbol: String) -> Vec<w::WasmRefSite> {
+        self.ref_sites
+            .get(&(path, symbol))
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    fn call_sites_in(&mut self, path: String) -> Vec<w::WasmCallSite> {
+        self.call_sites
             .get(path.as_str())
             .cloned()
             .unwrap_or_default()
@@ -542,6 +703,34 @@ const REF_KIND_TABLE: &[(w::RefKind, RefKind)] = &[
 /// Every row above is exhaustive by construction (one per WIT enum variant) — a miss here can
 /// only mean this file and `wit/plugin.wit` have drifted, not something a well-formed
 /// component could trigger at runtime.
+/// [`from_wit_ref_kind`]'s inverse, derived from it rather than written as a second
+/// hand-maintained match: the wire enum below enumerates every variant once, and the round
+/// trip through the one authoritative mapping guarantees the two directions can never drift.
+const WIRE_REF_KINDS: [w::RefKind; 7] = [
+    w::RefKind::Call,
+    w::RefKind::Read,
+    w::RefKind::Write,
+    w::RefKind::Extend,
+    w::RefKind::Implement,
+    w::RefKind::Override,
+    w::RefKind::TypeUse,
+];
+
+fn to_wit_ref_kind_out(kind: RefKind) -> w::RefKind {
+    *WIRE_REF_KINDS
+        .iter()
+        .find(|wire| from_wit_ref_kind(**wire) == kind)
+        .expect("both enums enumerate the same seven variants")
+}
+
+fn to_wit_confidence_out(confidence: kndo_core::vocab::Confidence) -> w::Confidence {
+    match confidence {
+        kndo_core::vocab::Confidence::Certain => w::Confidence::Certain,
+        kndo_core::vocab::Confidence::Probable => w::Confidence::Probable,
+        kndo_core::vocab::Confidence::Possible => w::Confidence::Possible,
+    }
+}
+
 fn from_wit_ref_kind(kind: w::RefKind) -> RefKind {
     REF_KIND_TABLE
         .iter()

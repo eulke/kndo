@@ -53,7 +53,7 @@ use smol_str::SmolStr;
 /// any adapter's own `facts_schema_version` (which already keys the entry's path) — this is
 /// the belt to that suspenders, guarding against a kndo binary upgrade whose `FileFacts` type
 /// changed shape while an adapter's declared version didn't move.
-const ENTRY_FORMAT_VERSION: u32 = 1;
+const ENTRY_FORMAT_VERSION: u32 = 2; // 2: FileFacts.string_call_args (RFC 0017 §5.4 — bincode has no field defaults, so the layout change invalidates all entries once)
 const FACTS_MAGIC: [u8; 4] = *b"KNF1";
 const HEADER_LEN: usize = FACTS_MAGIC.len() + 4;
 
@@ -1043,6 +1043,7 @@ mod tests {
                 package: PackageId(0),
                 unit: None,
                 test_spans: Vec::new(),
+                string_call_sites: Vec::new(),
             }],
             vec![SymbolNode {
                 file: FileId(0),

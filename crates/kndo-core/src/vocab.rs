@@ -359,6 +359,19 @@ pub enum EdgeKind {
     Wildcard {
         from: FileId,
     },
+    /// A **liveness** edge to a whole file (RFC 0017 §5.4): "if `from` is alive, `to` is in
+    /// use" — the shape a template/asset relationship has (`res.render("index")` →
+    /// `views/index.ejs`, a CSS class used from an HTML template) when the target file has no
+    /// symbols to reference. Today produced only by plugin file-target contributions (the
+    /// plugin edge sink; adapters keep emitting `ImportsFile` for real imports). Contract
+    /// (RFC 0005): liveness evidence, never architecture evidence — reachability consumes it
+    /// exactly like `ImportsFile`, while `cyclic` and every analysis that would *create* a
+    /// finding from an edge's existence ignore it. A false edge can therefore only ever
+    /// suppress findings, preserving the zero-false-positive bar by construction.
+    ReferencesFile {
+        from: NodeRef,
+        to: FileId,
+    },
 }
 
 /// Identity of the component whose facts produced an edge/annotation — for attribution in

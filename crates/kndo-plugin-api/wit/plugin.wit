@@ -141,12 +141,63 @@ interface types {
         exported: bool,
         member-of: option<string>,
     }
+
+    /// RFC 0017 §5's read-surface records. `wasm-file-info`/`wasm-symbol-info` above are
+    /// FROZEN (growing a record is a breaking change in the component model); everything the
+    /// graph additionally holds arrives through these new records on new imports instead —
+    /// the same additive evolution `read-file` established.
+    record wasm-span {
+        start-line: u32,
+        start-col: u32,
+        end-line: u32,
+        end-col: u32,
+    }
+
+    /// One package (RFC 0011 §3 topology): `root` is the manifest's own directory (`""` for
+    /// the implicit package owning whatever no manifest governs).
+    record wasm-package-info {
+        manifest: option<string>,
+        name: option<string>,
+        root: string,
+    }
+
+    /// The rest of what `FileNode` commits to beyond `wasm-file-info`'s frozen trio.
+    record wasm-file-details {
+        language: option<string>,
+        unit: option<string>,
+        package-root: string,
+    }
+
+    /// The rest of what `SymbolNode` commits to beyond `wasm-symbol-info`'s frozen four.
+    /// `visibility` is the rung index into the language's declared ladder (RFC 0012 §6) —
+    /// 0 is always the most private rung.
+    record wasm-symbol-details {
+        visibility: u32,
+        span: wasm-span,
+    }
+
+    /// One adapter-derived reference site targeting a queried symbol.
+    record wasm-ref-site {
+        from-path: string,
+        from-symbol: option<string>,
+        kind: ref-kind,
+        confidence: confidence,
+    }
+
+    /// One string-literal call site (RFC 0017 §5.4) — the generic, adapter-extracted fact
+    /// framework plugins interpret.
+    record wasm-call-site {
+        callee: string,
+        literal: string,
+        span: wasm-span,
+    }
 }
 
 world plugin {
     use types.{
         plugin-descriptor, file-class, plugin-target, contributed-root, contributed-edge,
-        wasm-file-info, wasm-symbol-info, activation-rule,
+        wasm-file-info, wasm-symbol-info, activation-rule, wasm-package-info,
+        wasm-file-details, wasm-symbol-details, wasm-ref-site, wasm-call-site,
     };
 
     /// Host-provided graph queries — the guest calls these from inside `contribute-roots`/
@@ -163,6 +214,20 @@ world plugin {
     /// answers from an owned snapshot prefetched before instantiation (every declared-glob
     /// match, budget-limited) — this call never itself touches disk mid-round.
     import read-file: func(path: string) -> option<list<u8>>;
+
+    /// RFC 0017 §5's complete read surface — additive imports answering from the same
+    /// pre-instantiation snapshot as `list-files`/`symbols-in` (no filesystem, no budget:
+    /// these read memory the host already holds). Results are deterministic and sorted;
+    /// every query answers from ADAPTER-derived data only (rule R1) — no plugin ever sees
+    /// another plugin's contributions.
+    import packages: func() -> list<wasm-package-info>;
+    import package-of: func(path: string) -> option<wasm-package-info>;
+    import file-details: func(path: string) -> option<wasm-file-details>;
+    import symbol-details: func(path: string, symbol: string) -> option<wasm-symbol-details>;
+    import imports-of: func(path: string) -> list<string>;
+    import importers-of: func(path: string) -> list<string>;
+    import references-to: func(path: string, symbol: string) -> list<wasm-ref-site>;
+    import call-sites-in: func(path: string) -> list<wasm-call-site>;
 
     /// Called once at load time; the host caches the result.
     export descriptor: func() -> plugin-descriptor;

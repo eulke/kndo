@@ -81,7 +81,9 @@ to a conventional name).
 
 - **No route edges** (`app.use('/users', usersRouter)`): the router module is imported by
   ordinary code — the language adapter already sees it. String-path → handler edges add
-  nothing to liveness.
+  nothing to liveness. (The *mechanism* for such edges now exists — RFC 0017 §5.4's
+  call-site facts and file-target plugin edges — the reason not to emit them here is
+  unchanged: they would provably alter zero findings.)
 - **No `contribute_edges`, no `classify_file`** — nothing to correct.
 - **`package.json` `"main"`/`"scripts"` parsing — landed (RFC 0016 §5).** Every app root's own
   `package.json`, read through the host-mediated content channel (`requested_file_access:
@@ -91,6 +93,10 @@ to a conventional name).
   name heuristic alone — this was never a guess-or-nothing upgrade.
 
 ## 5. Verification shape
+
+App roots are derived from the graph's own package topology (`GraphView::packages()`, RFC
+0017 §5.2) — every directory holding a `package.json` is a `PackageNode`, so the plugin no
+longer path-scans the whole file list for manifest basenames.
 
 Pure classifiers (entry-candidate matching per app root) unit-tested in the crate;
 end-to-end baseline-then-plugin fixture through `kndo::open` (authoring.md §8): an

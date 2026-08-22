@@ -22,7 +22,7 @@
 
 use kndo_core::adapter::{
     Declaration, Diagnostic, DiagnosticLevel, DynamicUse, FileFacts, ImportBinding, ImportKind,
-    RawImport, RawReference, RawSuppression, Span, VisibilityLevel,
+    RawImport, RawReference, RawSuppression, Span, StringCallArg, VisibilityLevel,
 };
 use kndo_core::vocab::{Confidence, RefKind, SymbolKind};
 use smol_str::SmolStr;
@@ -625,6 +625,7 @@ fn collect_requires(node: Node, path: &str, src: &[u8], out: &mut FileFacts) {
 }
 
 fn handle_call_expression(node: Node, path: &str, src: &[u8], out: &mut FileFacts) {
+    record_string_call_arg(node, src, out);
     let Some(function) = node.child_by_field_name("function") else {
         return;
     };
@@ -760,6 +761,59 @@ fn static_prefix_dir(arg: Node, path: &str, src: &[u8]) -> Option<SmolStr> {
     let dir =
         kndo_adapter_toolkit::paths::join(kndo_adapter_toolkit::paths::dirname(path), dir_spec);
     (!dir.is_empty()).then(|| SmolStr::new(dir))
+}
+
+/// RFC 0017 §5.4's generic call-site fact: any call whose callee is a plain dotted path,
+/// identifier or member chain — `require`, `res.render`, `a.b.c` — and whose arguments
+/// include a string literal is recorded as callee + first string literal + span. The
+/// adapter stays framework-blind: it records "a call passed this literal", never what any
+/// ecosystem means by it; interpretation is plugin territory via
+/// `GraphView::string_call_sites_in`. Direct literals only, computed strings never
+/// [determinism over coverage, RFC 0002 §5], and uniformly every matching call with no
+/// callee filtering: a name-based exclusion list would be exactly the ecosystem knowledge
+/// this layer must not carry.
+fn record_string_call_arg(node: Node, src: &[u8], out: &mut FileFacts) {
+    let Some(function) = node.child_by_field_name("function") else {
+        return;
+    };
+    let Some(callee) = dotted_callee(function, src) else {
+        return;
+    };
+    let Some(args) = node.child_by_field_name("arguments") else {
+        return;
+    };
+    let mut cursor = args.walk();
+    let literal = args
+        .named_children(&mut cursor)
+        .filter(|a| a.kind() == "string")
+        .find_map(|a| string_literal_value(a, src));
+    if let Some(literal) = literal {
+        out.string_call_args.push(StringCallArg {
+            callee,
+            literal,
+            span: span(node),
+        });
+    }
+}
+
+/// The syntactic callee as a dotted path — `None` for anything that isn't a plain
+/// identifier/member chain (a call result, a subscript, an IIFE): those have no stable name
+/// a convention could match on.
+fn dotted_callee(function: Node, src: &[u8]) -> Option<SmolStr> {
+    match function.kind() {
+        "identifier" => Some(SmolStr::new(text(function, src))),
+        "this" => Some(SmolStr::new("this")),
+        "member_expression" => {
+            let object = function.child_by_field_name("object")?;
+            let property = function.child_by_field_name("property")?;
+            if property.kind() != "property_identifier" {
+                return None;
+            }
+            let base = dotted_callee(object, src)?;
+            Some(SmolStr::new(format!("{base}.{}", text(property, src))))
+        }
+        _ => None,
+    }
 }
 
 /// The `require("literal")` import itself — `certain` (spec §3), bindings from the enclosing
@@ -2407,6 +2461,53 @@ mod tests {
     }
 
     // ---------------------------------------------------------------- dynamic constructs
+
+    #[test]
+    fn string_call_args_record_dotted_callees_and_first_string_literal() {
+        // RFC 0017 §5.4: the generic call-site fact — framework-blind, direct literals only.
+        let facts = extract(
+            "app.js",
+            br#"
+res.render("index");
+app.get("/users", handler);
+flags.isEnabled("checkout-v2", extra);
+t(key);
+compute()("not-a-dotted-callee");
+obj["dynamic"]("skipped-subscript-callee");
+tmpl(`computed-${x}`);
+deep.a.b.c("nested");
+"#,
+        );
+        let got: Vec<(&str, &str)> = facts
+            .string_call_args
+            .iter()
+            .map(|c| (c.callee.as_str(), c.literal.as_str()))
+            .collect();
+        assert!(got.contains(&("res.render", "index")), "{got:?}");
+        assert!(got.contains(&("app.get", "/users")), "{got:?}");
+        assert!(got.contains(&("flags.isEnabled", "checkout-v2")), "{got:?}");
+        assert!(got.contains(&("deep.a.b.c", "nested")), "{got:?}");
+        assert!(
+            !got.iter()
+                .any(|(_, l)| l.contains("not-a-dotted") || l.contains("skipped")),
+            "non-dotted callees are skipped: {got:?}"
+        );
+        assert!(
+            !got.iter().any(|(c, _)| *c == "t" || *c == "tmpl"),
+            "calls with no direct string literal record nothing: {got:?}"
+        );
+    }
+
+    #[test]
+    fn string_call_args_take_the_first_string_literal_not_the_first_argument() {
+        let facts = extract("a.js", br#"send(cb, "topic", "second");"#);
+        let got: Vec<(&str, &str)> = facts
+            .string_call_args
+            .iter()
+            .map(|c| (c.callee.as_str(), c.literal.as_str()))
+            .collect();
+        assert_eq!(got, vec![("send", "topic")]);
+    }
 
     #[test]
     fn literal_dynamic_import_is_a_probable_import() {

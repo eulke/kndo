@@ -103,6 +103,7 @@ mod tests {
             package: crate::vocab::PackageId(0),
             unit: None,
             test_spans: Vec::new(),
+            string_call_sites: Vec::new(),
         }
     }
 

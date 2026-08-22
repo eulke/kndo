@@ -219,6 +219,7 @@ mod tests {
             package: crate::vocab::PackageId(0),
             unit: None,
             test_spans: Vec::new(),
+            string_call_sites: Vec::new(),
         }
     }
 
@@ -482,6 +483,7 @@ mod tests {
             package: crate::vocab::PackageId(0),
             unit: None,
             test_spans: Vec::new(),
+            string_call_sites: Vec::new(),
         }];
         let symbols = vec![symbol(FileId(0), "helper", 1)];
         let edges = vec![edge(

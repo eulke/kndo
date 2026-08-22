@@ -112,6 +112,7 @@ mod tests {
             package,
             unit: None,
             test_spans: Vec::new(),
+            string_call_sites: Vec::new(),
         }
     }
 

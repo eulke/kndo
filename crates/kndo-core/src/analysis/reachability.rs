@@ -136,6 +136,9 @@ pub fn compute(graph: &ProjectGraph) -> ReachabilityMap {
         match edge.kind {
             EdgeKind::References { from, .. } => count(&mut degree, node_index(from), 1),
             EdgeKind::ImportsFile { from, .. } => count(&mut degree, from.0 as usize, 1),
+            // RFC 0017 §5.4's plugin file-liveness edge: traversed exactly like ImportsFile
+            // (from alive ⇒ to in use), just from a NodeRef and only ever plugin-contributed.
+            EdgeKind::ReferencesFile { from, .. } => count(&mut degree, node_index(from), 1),
             EdgeKind::Wildcard { from } => count(
                 &mut degree,
                 from.0 as usize,
@@ -175,6 +178,12 @@ pub fn compute(graph: &ProjectGraph) -> ReachabilityMap {
             EdgeKind::ImportsFile { from, to } => {
                 push_edge(&mut cursor, from.0 as usize, to.0 as usize, edge.confidence)
             }
+            EdgeKind::ReferencesFile { from, to } => push_edge(
+                &mut cursor,
+                node_index(from),
+                to.0 as usize,
+                edge.confidence,
+            ),
             EdgeKind::Wildcard { from } => {
                 // Plausible target set, absent narrower DynamicUse metadata (RFC 0005 §1):
                 // every symbol declared in the same file, at `possible`.
@@ -283,6 +292,7 @@ mod tests {
             package: crate::vocab::PackageId(0),
             unit: None,
             test_spans: Vec::new(),
+            string_call_sites: Vec::new(),
         }
     }
 

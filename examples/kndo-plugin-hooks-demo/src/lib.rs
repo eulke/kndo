@@ -16,6 +16,10 @@
 //!   starts with `content_` is rooted only if `read-file("content.demo")` returns exactly
 //!   `b"promote"` — proving the host-mediated read reaches a real guest computation, not just
 //!   that the WIT world type-checks.
+//! - RFC 0017 §5's read surface, exercised for real: `linked_` symbols are rooted only when
+//!   `importers-of` reports their file has at least one importer, and `sited_` symbols only
+//!   when `call-sites-in` shows a `use.site("promote")` call site in their file — proving the
+//!   edge and call-site queries reach real guest computations.
 //! - RFC 0017 §4's round lifecycle, made observable through two statics: `staged_` symbols
 //!   are wired by `contribute_edges` only when `contribute_roots` already ran in this same
 //!   instance (state persists across one round's hooks), and `fresh_` symbols are rooted only
@@ -84,7 +88,13 @@ impl Guest for DemoPlugin {
             for symbol in symbols_in(&file.path) {
                 let should_root = symbol.name.starts_with("root_")
                     || (content_promoted && symbol.name.starts_with("content_"))
-                    || (first_call_on_this_instance && symbol.name.starts_with("fresh_"));
+                    || (first_call_on_this_instance && symbol.name.starts_with("fresh_"))
+                    || (symbol.name.starts_with("linked_")
+                        && !importers_of(&file.path).is_empty())
+                    || (symbol.name.starts_with("sited_")
+                        && call_sites_in(&file.path)
+                            .iter()
+                            .any(|c| c.callee == "use.site" && c.literal == "promote"));
                 if should_root {
                     roots.push(ContributedRoot {
                         target: PluginTarget {

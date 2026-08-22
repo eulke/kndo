@@ -36,7 +36,7 @@ impl LanguageAdapter for JsTsAdapter {
             activation: Vec::new(),
             dependencies: Vec::new(),
             id: SmolStr::new("js-ts"),
-            facts_schema_version: 8, // 8: FunctionMetrics.token_count (RFC 0005 §11); 7: FunctionMetrics emission (RFC 0005 §6); 6: local_alias in the serialized shape (RFC 0012 §9); 5: detected_origin (§7); 4: RefKind + signature_span (§5); 3: within (§4)
+            facts_schema_version: 9, // 9: string_call_args (RFC 0017 §5.4); 8: FunctionMetrics.token_count (RFC 0005 §11); 7: FunctionMetrics emission (RFC 0005 §6); 6: local_alias in the serialized shape (RFC 0012 §9); 5: detected_origin (§7); 4: RefKind + signature_span (§5); 3: within (§4)
             file_globs: EXTENSIONS
                 .iter()
                 .map(|e| SmolStr::new(format!("**/*.{e}")))

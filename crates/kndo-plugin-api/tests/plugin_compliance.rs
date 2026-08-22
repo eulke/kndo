@@ -208,6 +208,17 @@ impl LanguageAdapter for MiniAdapter {
                     within: None,
                     kind: RefKind::Read,
                 });
+            } else if let Some(rest) = line.strip_prefix("callsite ") {
+                // `callsite <callee> <literal>` — the RFC 0017 §5.4 fact, mini-syntax form.
+                if let Some((callee, literal)) = rest.split_once(' ') {
+                    facts
+                        .string_call_args
+                        .push(kndo_core::adapter::StringCallArg {
+                            callee: SmolStr::new(callee),
+                            literal: SmolStr::new(literal),
+                            span: Span::default(),
+                        });
+                }
             }
         }
         facts
@@ -274,7 +285,10 @@ fn external_wasm_plugin_hooks_affect_a_real_check() {
          decl trulyDead\n\
          decl content_target\n\
          decl staged_target\n\
-         decl fresh_target\n",
+         decl fresh_target\n\
+         decl linked_target\n\
+         decl sited_target\n\
+         callsite use.site promote\n",
     )
     .unwrap();
     std::fs::write(
@@ -324,6 +338,14 @@ fn external_wasm_plugin_hooks_affect_a_real_check() {
     );
     assert!(
         baseline_unused.contains(&"fresh_target"),
+        "{baseline_unused:?}"
+    );
+    assert!(
+        baseline_unused.contains(&"linked_target"),
+        "{baseline_unused:?}"
+    );
+    assert!(
+        baseline_unused.contains(&"sited_target"),
         "{baseline_unused:?}"
     );
     let baseline_unused_files: Vec<String> = baseline_result
@@ -417,6 +439,16 @@ fn external_wasm_plugin_hooks_affect_a_real_check() {
     assert!(
         !unused_symbols.contains(&"fresh_target"),
         "the round's first contribute_roots call must root fresh_ symbols: {unused_symbols:?}"
+    );
+    // RFC 0017 §5's read surface, end to end: importers-of and call-sites-in must reach real
+    // guest computations, not just type-check.
+    assert!(
+        !unused_symbols.contains(&"linked_target"),
+        "importers-of must report aux.mock's importer to the guest: {unused_symbols:?}"
+    );
+    assert!(
+        !unused_symbols.contains(&"sited_target"),
+        "call-sites-in must surface the use.site(\"promote\") fact to the guest: {unused_symbols:?}"
     );
     // And the other half: a SECOND round on the same WasmPlugin must start from a fresh
     // instance. The guest roots `fresh_target` only on an instance's first contribute_roots

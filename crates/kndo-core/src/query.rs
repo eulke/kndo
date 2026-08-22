@@ -334,15 +334,18 @@ enum EdgeLabel {
     ImportsDependency,
     References,
     Wildcard,
+    /// RFC 0017 §5.4's plugin-contributed file-liveness edge — navigable so `uses`/`used-by`
+    /// explain why a template/asset counts as in use, labeled distinctly from a real import.
+    ReferencesFile,
 }
 
 impl EdgeLabel {
     fn as_str(self) -> &'static str {
         match self {
-            EdgeLabel::ImportsFile => "imports",
-            EdgeLabel::ImportsDependency => "imports",
+            EdgeLabel::ImportsFile | EdgeLabel::ImportsDependency => "imports",
             EdgeLabel::References => "references",
             EdgeLabel::Wildcard => "wildcard",
+            EdgeLabel::ReferencesFile => "references-file",
         }
     }
 }
@@ -394,9 +397,10 @@ impl EdgeFilter {
 
     fn allows(self, label: EdgeLabel) -> bool {
         match label {
-            EdgeLabel::ImportsFile => self.imports,
-            EdgeLabel::ImportsDependency => self.imports,
-            EdgeLabel::References => self.references,
+            EdgeLabel::ImportsFile | EdgeLabel::ImportsDependency => self.imports,
+            // A plugin's file-liveness edge is a reference in navigation terms — `--edges
+            // references` shows it, `--edges imports` (real module structure only) doesn't.
+            EdgeLabel::References | EdgeLabel::ReferencesFile => self.references,
             EdgeLabel::Wildcard => self.wildcard,
         }
     }
@@ -472,6 +476,18 @@ fn build_nav_graph(graph: &ProjectGraph) -> NavGraph {
                         from,
                         NavNode::Symbol(to),
                         EdgeLabel::References,
+                        edge.confidence,
+                    )
+                }
+                crate::vocab::EdgeKind::ReferencesFile { from, to } => {
+                    let from = match from {
+                        NodeRef::File(f) => NavNode::File(f),
+                        NodeRef::Symbol(s) => NavNode::Symbol(s),
+                    };
+                    (
+                        from,
+                        NavNode::File(to),
+                        EdgeLabel::ReferencesFile,
                         edge.confidence,
                     )
                 }
@@ -1867,6 +1883,13 @@ fn simulate_deletion(
                 NodeRef::Symbol(s) => deleted_symbols.contains(&s),
             },
             EK::Wildcard { from } => deleted_files.contains(&from),
+            EK::ReferencesFile { from, to } => {
+                deleted_files.contains(&to)
+                    || match from {
+                        NodeRef::File(f) => deleted_files.contains(&f),
+                        NodeRef::Symbol(s) => deleted_symbols.contains(&s),
+                    }
+            }
         }
     };
 
@@ -1989,6 +2012,7 @@ mod tests {
             package: PackageId(0),
             unit: None,
             test_spans: Vec::new(),
+            string_call_sites: Vec::new(),
         }
     }
 
