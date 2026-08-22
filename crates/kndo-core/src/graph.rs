@@ -1995,19 +1995,39 @@ fn run_plugin_round(
 
         // Counted by delta around each collector: only contributions that *resolved* (landed
         // in the round) count — a sink item whose target missed changed nothing, and the
-        // audit record's job is to say what a plugin actually asserted into the graph.
+        // audit record's job is to say what a plugin actually asserted into the graph. The
+        // misses themselves are recorded too (`dropped`): silent in the graph by contract,
+        // but the author kit's whole debugging story for "contributed 0 roots".
+        let mut dropped = Vec::new();
         let edges_before = round.edges.len();
-        collect_plugin_roots(*plugin, &view, &content, &provenance, &tables, &mut round);
+        collect_plugin_roots(
+            *plugin,
+            &view,
+            &content,
+            &provenance,
+            &tables,
+            &mut round,
+            &mut dropped,
+        );
         let roots_after = round.edges.len();
-        collect_plugin_edges(*plugin, &view, &content, &provenance, &tables, &mut round);
+        collect_plugin_edges(
+            *plugin,
+            &view,
+            &content,
+            &provenance,
+            &tables,
+            &mut round,
+            &mut dropped,
+        );
         let edges_after = round.edges.len();
         let annotations_before = round.externally_consumed.len();
-        collect_plugin_annotations(*plugin, &view, &content, &tables, &mut round);
+        collect_plugin_annotations(*plugin, &view, &content, &tables, &mut round, &mut dropped);
         round.contributions.push(crate::plugin::PluginContribution {
             id: descriptor.id.to_string(),
             roots: (roots_after - edges_before) as u32,
             edges: (edges_after - roots_after) as u32,
             annotations: (round.externally_consumed.len() - annotations_before) as u32,
+            dropped,
         });
         if let Some(diagnostic) = content.take_diagnostic() {
             round.diagnostics.push(diagnostic);
@@ -2051,6 +2071,25 @@ impl PluginTargetTables<'_> {
     }
 }
 
+/// Cap on recorded miss descriptions per plugin per round — enough to debug with, bounded so
+/// a pathological component can't bloat the audit record.
+const DROPPED_CAP: usize = 25;
+
+/// Record one unresolved sink target, respecting [`DROPPED_CAP`] (the cap entry itself says
+/// how much was elided — no silent truncation).
+fn record_dropped(dropped: &mut Vec<String>, what: &str, target: &crate::plugin::PluginTarget) {
+    if dropped.len() < DROPPED_CAP {
+        let t = match &target.symbol {
+            Some(symbol) => format!("{}#{symbol}", target.path.0),
+            None => target.path.0.to_string(),
+        };
+        dropped.push(format!("{what} `{t}` did not resolve"));
+    } else if dropped.len() == DROPPED_CAP {
+        dropped.push("(further unresolved targets elided)".to_string());
+    }
+}
+
+#[allow(clippy::too_many_arguments)] // the collector trio shares one call shape; a bundle struct would just rename the list
 fn collect_plugin_roots(
     plugin: &dyn crate::plugin::Plugin,
     view: &crate::plugin::GraphView<'_>,
@@ -2058,11 +2097,13 @@ fn collect_plugin_roots(
     provenance: &crate::vocab::Provenance,
     tables: &PluginTargetTables<'_>,
     round: &mut PluginRound,
+    dropped: &mut Vec<String>,
 ) {
     let mut root_sink = crate::plugin::RootSink::default();
     plugin.contribute_roots(view, content, &mut root_sink);
     for root in root_sink.items {
         let Some(target) = tables.resolve(&root.target) else {
+            record_dropped(dropped, "root target", &root.target);
             continue;
         };
         round.edges.push(Edge {
@@ -2078,6 +2119,7 @@ fn collect_plugin_roots(
     }
 }
 
+#[allow(clippy::too_many_arguments)] // same shape as collect_plugin_roots
 fn collect_plugin_edges(
     plugin: &dyn crate::plugin::Plugin,
     view: &crate::plugin::GraphView<'_>,
@@ -2085,11 +2127,13 @@ fn collect_plugin_edges(
     provenance: &crate::vocab::Provenance,
     tables: &PluginTargetTables<'_>,
     round: &mut PluginRound,
+    dropped: &mut Vec<String>,
 ) {
     let mut edge_sink = crate::plugin::EdgeSink::default();
     plugin.contribute_edges(view, content, &mut edge_sink);
     for contributed in edge_sink.items {
         let Some(from) = tables.resolve(&contributed.from) else {
+            record_dropped(dropped, "edge source", &contributed.from);
             continue;
         };
         let kind = match tables.resolve(&contributed.to) {
@@ -2103,7 +2147,10 @@ fn collect_plugin_edges(
             // edge — the template/asset shape. The contributed `RefKind` doesn't apply to a
             // file target and is dropped; liveness is the whole semantics.
             Some(NodeRef::File(to)) => EdgeKind::ReferencesFile { from, to },
-            None => continue,
+            None => {
+                record_dropped(dropped, "edge target", &contributed.to);
+                continue;
+            }
         };
         round.edges.push(Edge {
             kind,
@@ -2121,12 +2168,15 @@ fn collect_plugin_annotations(
     content: &crate::plugin::ContentView<'_>,
     tables: &PluginTargetTables<'_>,
     round: &mut PluginRound,
+    dropped: &mut Vec<String>,
 ) {
     let mut annotation_sink = crate::plugin::AnnotationSink::default();
     plugin.annotate_symbols(view, content, &mut annotation_sink);
     for target in annotation_sink.externally_consumed {
         if let Some(NodeRef::Symbol(id)) = tables.resolve(&target) {
             round.externally_consumed.push(id);
+        } else {
+            record_dropped(dropped, "annotation target", &target);
         }
     }
 }
@@ -4631,6 +4681,17 @@ mod tests {
             content: &crate::plugin::ContentView<'_>,
             out: &mut crate::plugin::RootSink,
         ) {
+            // Unconditional miss: no file declares `ghost_symbol`, so this target never
+            // resolves — the contribution-record test asserts it lands in `dropped` (the
+            // author kit's debugging record) instead of vanishing without trace.
+            out.add(
+                crate::plugin::PluginTarget::symbol(
+                    ProjectPath(SmolStr::new("a.mock")),
+                    "ghost_symbol",
+                ),
+                crate::vocab::RootKind::Production,
+                Confidence::Probable,
+            );
             let marker_on = content
                 .read(&ProjectPath(SmolStr::new("marker.txt")))
                 .is_some_and(|bytes| bytes == b"on");
@@ -4791,8 +4852,10 @@ mod tests {
                 roots: 0,
                 edges: 0,
                 annotations: 1,
+                dropped: vec!["root target `a.mock#ghost_symbol` did not resolve".to_string()],
             }],
-            "marker off: only the unconditional annotation landed"
+            "marker off: only the unconditional annotation landed, and the unresolvable \
+             ghost target is recorded as dropped, not silently lost"
         );
 
         fs::write(dir.join("marker.txt"), "on").unwrap();

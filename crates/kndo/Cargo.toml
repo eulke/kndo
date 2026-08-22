@@ -28,6 +28,9 @@ toml = { workspace = true, optional = true }
 glob = { version = "0.3", optional = true }
 # Global XDG plugin directory only (external-adapters).
 dirs = { version = "6", optional = true }
+# `kndo plugin build` (RFC 0017 §7 author kit): componentize a core wasm module in-process —
+# the same encoder call xtask and the compliance suites already make.
+wit-component = { version = "0.219", optional = true }
 # `kndo plugin install` (RFC 0015 §4, plugin-install): release fetch + checksum verification.
 ureq = { version = "3", optional = true, features = ["platform-verifier"] }
 sha2 = { version = "0.10", optional = true }
@@ -74,7 +77,7 @@ css = ["dep:kndo-adapter-css"]
 # it pulls in a WASM runtime rather than a language grammar — an embedder who wants a minimal,
 # fully-static binary with no third-party extension surface can build with
 # `--no-default-features --features js,go,...` to drop it (ADR 0006).
-external-adapters = ["dep:kndo-plugin-api", "dep:dirs", "plugin-activation"]
+external-adapters = ["dep:kndo-plugin-api", "dep:dirs", "dep:wit-component", "plugin-activation"]
 # Built-in convention plugins (RFC 0015 §6 phase 4) — each pulls in `plugin-activation`
 # because a gated built-in without rule evaluation would be always-on, costing every
 # non-matching project the graph-cache bypass (RFC 0003 §5).

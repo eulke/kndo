@@ -689,6 +689,13 @@ pub struct PluginContribution {
     pub roots: u32,
     pub edges: u32,
     pub annotations: u32,
+    /// Sink items whose targets did NOT resolve, described one per line — the miss itself
+    /// stays a silent no-op in the graph (the [`PluginTarget`] contract), but the *author*
+    /// debugging "contributed 0 roots" needs the why, and `kndo plugin verify` prints these.
+    /// Capped per round (`graph::DROPPED_CAP`) so a pathological plugin can't bloat the
+    /// record.
+    #[serde(default)]
+    pub dropped: Vec<String>,
 }
 
 // ---------------------------------------------------------------- the trait

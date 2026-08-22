@@ -13,3 +13,13 @@ mod plugin_host;
 pub use host::{LoadError, WasmAdapter};
 pub use plugin_host::LoadError as WasmPluginLoadError;
 pub use plugin_host::WasmPlugin;
+
+/// The `kndo:plugin` WIT world this host was built against, verbatim (RFC 0017 §7's author
+/// kit): what `kndo plugin new` writes into a scaffold and `kndo plugin wit` prints, so an
+/// author vendors the ABI from the binary they actually run — never from a possibly-mismatched
+/// git checkout.
+pub const PLUGIN_WIT: &str = include_str!("../wit/plugin.wit");
+
+/// The `kndo:adapter` WIT world this host was built against, verbatim — same contract as
+/// [`PLUGIN_WIT`].
+pub const ADAPTER_WIT: &str = include_str!("../wit/adapter.wit");

@@ -46,13 +46,32 @@ pub struct VerifyReport {
     pub fixture: Vec<String>,
 }
 
-/// Verify one component file. `Err` = the component doesn't load under either world — the
-/// combined per-world errors, same shape `plugin_install`'s probe reports.
+/// Verify one component file against the synthesized generic fixture. `Err` = the component
+/// doesn't load under either world — the combined per-world errors, same shape
+/// `plugin_install`'s probe reports.
 pub fn verify(component: &Path) -> Result<VerifyReport, String> {
+    verify_impl(component, None)
+}
+
+/// Verify against the author's own fixture project instead of the synthesized one: `project`
+/// is copied whole into a temp root (never mutated — `.git`/`.kndo`/`target`/`node_modules`
+/// excluded), the component staged project-local there, and the same full check runs. This is
+/// the assertion half of authoring.md §8's baseline-then-plugin loop as one command.
+pub fn verify_in_project(component: &Path, project: &Path) -> Result<VerifyReport, String> {
+    if !project.is_dir() {
+        return Err(format!(
+            "--project {} is not a directory",
+            project.display()
+        ));
+    }
+    verify_impl(component, Some(project))
+}
+
+fn verify_impl(component: &Path, project: Option<&Path>) -> Result<VerifyReport, String> {
     match kndo_plugin_api::WasmPlugin::load(component) {
-        Ok(plugin) => Ok(verify_plugin(component, &plugin)),
+        Ok(plugin) => Ok(verify_plugin(component, &plugin, project)),
         Err(plugin_err) => match kndo_plugin_api::WasmAdapter::load(component) {
-            Ok(adapter) => Ok(verify_adapter(component, &adapter)),
+            Ok(adapter) => Ok(verify_adapter(component, &adapter, project)),
             Err(adapter_err) => Err(format!(
                 "not a valid kndo:plugin ({plugin_err}) or kndo:adapter ({adapter_err}) \
                  component"
@@ -61,7 +80,11 @@ pub fn verify(component: &Path) -> Result<VerifyReport, String> {
     }
 }
 
-fn verify_plugin(component: &Path, plugin: &kndo_plugin_api::WasmPlugin) -> VerifyReport {
+fn verify_plugin(
+    component: &Path,
+    plugin: &kndo_plugin_api::WasmPlugin,
+    project: Option<&Path>,
+) -> VerifyReport {
     use kndo_core::plugin::Plugin as _;
     let d = plugin.descriptor();
 
@@ -93,7 +116,7 @@ fn verify_plugin(component: &Path, plugin: &kndo_plugin_api::WasmPlugin) -> Veri
         );
     }
 
-    let fixture = drive_fixture(component, &[], Some(d.id.as_str()));
+    let fixture = drive_fixture(component, &[], Some(d.id.as_str()), project);
     VerifyReport {
         kind: VerifiedKind::Plugin,
         id: d.id.to_string(),
@@ -103,7 +126,11 @@ fn verify_plugin(component: &Path, plugin: &kndo_plugin_api::WasmPlugin) -> Veri
     }
 }
 
-fn verify_adapter(component: &Path, adapter: &kndo_plugin_api::WasmAdapter) -> VerifyReport {
+fn verify_adapter(
+    component: &Path,
+    adapter: &kndo_plugin_api::WasmAdapter,
+    project: Option<&Path>,
+) -> VerifyReport {
     use kndo_core::adapter::LanguageAdapter as _;
     let d = adapter.descriptor();
 
@@ -138,7 +165,7 @@ fn verify_adapter(component: &Path, adapter: &kndo_plugin_api::WasmAdapter) -> V
     }
 
     let samples: Vec<String> = d.file_globs.iter().map(|g| sample_for_glob(g)).collect();
-    let fixture = drive_fixture(component, &samples, None);
+    let fixture = drive_fixture(component, &samples, None, project);
     VerifyReport {
         kind: VerifiedKind::Adapter,
         id: d.id.to_string(),
@@ -149,18 +176,20 @@ fn verify_adapter(component: &Path, adapter: &kndo_plugin_api::WasmAdapter) -> V
 }
 
 /// The hook drive: a temp fixture project with the component dropped project-local
-/// (unconditional activation, RFC 0003 §3), `sample_files` synthesized from the adapter's own
-/// globs (empty for plugins), one real full check, then the audit record read back.
+/// (unconditional activation, RFC 0003 §3), one real full check, then the audit record read
+/// back. The fixture is either synthesized (a generic manifest plus `sample_files` derived
+/// from the adapter's own globs) or, with `project` set, a copy of the author's own.
 fn drive_fixture(
     component: &Path,
     sample_files: &[String],
     plugin_id: Option<&str>,
+    project: Option<&Path>,
 ) -> Vec<String> {
     let dir = match fixture_dir() {
         Ok(d) => d,
         Err(e) => return vec![format!("fixture drive skipped: temp dir failed ({e})")],
     };
-    let out = drive_fixture_in(dir.as_path(), component, sample_files, plugin_id);
+    let out = drive_fixture_in(dir.as_path(), component, sample_files, plugin_id, project);
     let _ = std::fs::remove_dir_all(&dir);
     out
 }
@@ -170,8 +199,9 @@ fn drive_fixture_in(
     component: &Path,
     sample_files: &[String],
     plugin_id: Option<&str>,
+    project: Option<&Path>,
 ) -> Vec<String> {
-    if let Err(e) = stage_fixture(root, component, sample_files) {
+    if let Err(e) = prepare_fixture(root, component, sample_files, project) {
         return vec![format!("fixture drive skipped: {e}")];
     }
     let mut engine = match crate::open(
@@ -189,18 +219,38 @@ fn drive_fixture_in(
     });
     let mut out = run_report(&result, sample_files);
     if let Some(id) = plugin_id {
-        out.push(contribution_line(&engine, id));
+        out.extend(contribution_lines(&engine, id));
     }
     out
 }
 
-/// The component into `.kndo/plugins/`, a generic manifest (so manifest-driven activation and
-/// content reads have something real to see), and the adapter's own glob-derived samples.
-fn stage_fixture(root: &Path, component: &Path, sample_files: &[String]) -> Result<(), String> {
+/// Populate the fixture root (the author's copied project, or the synthesized generic one)
+/// and stage the component project-local.
+fn prepare_fixture(
+    root: &Path,
+    component: &Path,
+    sample_files: &[String],
+    project: Option<&Path>,
+) -> Result<(), String> {
+    match project {
+        Some(source) => copy_tree(source, root)?,
+        None => synthesize_fixture(root, sample_files)?,
+    }
+    stage_component(root, component)
+}
+
+/// The component into `.kndo/plugins/` — the tier where activation is unconditional.
+fn stage_component(root: &Path, component: &Path) -> Result<(), String> {
     let plugins_dir = root.join(".kndo").join("plugins");
     std::fs::create_dir_all(&plugins_dir)
         .and_then(|()| std::fs::copy(component, plugins_dir.join("verify.wasm")))
-        .map_err(|e| format!("staging the component failed ({e})"))?;
+        .map(|_| ())
+        .map_err(|e| format!("staging the component failed ({e})"))
+}
+
+/// The generic fixture: a manifest (so manifest-driven activation and content reads have
+/// something real to see) plus the adapter's own glob-derived samples.
+fn synthesize_fixture(root: &Path, sample_files: &[String]) -> Result<(), String> {
     let _ = std::fs::write(
         root.join("package.json"),
         "{\n  \"name\": \"kndo-verify-fixture\",\n  \"version\": \"0.0.0\"\n}\n",
@@ -212,6 +262,52 @@ fn stage_fixture(root: &Path, component: &Path, sample_files: &[String]) -> Resu
         let _ = std::fs::write(root.join(name), "hello\n");
     }
     Ok(())
+}
+
+/// Copy the author's fixture into the temp root — their directory is never mutated (`verify`
+/// must be safe to point at a real project). Housekeeping trees are skipped: `.git`,
+/// `.kndo` (a stale cache or resident components would contaminate the drive), `target`,
+/// `node_modules`.
+fn copy_tree(source: &Path, dest: &Path) -> Result<(), String> {
+    let entries =
+        std::fs::read_dir(source).map_err(|e| format!("reading {}: {e}", source.display()))?;
+    for entry in entries {
+        copy_dir_entry(entry, dest)?;
+    }
+    Ok(())
+}
+
+fn copy_dir_entry(entry: std::io::Result<std::fs::DirEntry>, dest: &Path) -> Result<(), String> {
+    let entry = entry.map_err(|e| e.to_string())?;
+    if is_housekeeping(&entry.file_name()) {
+        return Ok(());
+    }
+    copy_entry(&entry, &dest.join(entry.file_name()))
+}
+
+/// Trees that must not ride into the fixture copy: VCS state, a stale kndo cache or resident
+/// components, and build output.
+fn is_housekeeping(name: &std::ffi::OsStr) -> bool {
+    [".git", ".kndo", "target", "node_modules"]
+        .iter()
+        .any(|s| name == std::ffi::OsStr::new(s))
+}
+
+fn copy_entry(entry: &std::fs::DirEntry, to: &Path) -> Result<(), String> {
+    let from = entry.path();
+    let file_type = entry.file_type().map_err(|e| e.to_string())?;
+    if file_type.is_dir() {
+        std::fs::create_dir_all(to).map_err(|e| e.to_string())?;
+        copy_tree(&from, to)
+    } else if file_type.is_file() {
+        std::fs::copy(&from, to)
+            .map(|_| ())
+            .map_err(|e| format!("copying {}: {e}", from.display()))
+    } else {
+        // Symlinks are skipped: a fixture project shouldn't need them, and following one
+        // could escape the tree being copied.
+        Ok(())
+    }
 }
 
 fn run_report(result: &kndo_core::engine::RunResult, sample_files: &[String]) -> Vec<String> {
@@ -242,22 +338,31 @@ fn run_report(result: &kndo_core::engine::RunResult, sample_files: &[String]) ->
     out
 }
 
-fn contribution_line(engine: &kndo_core::engine::Engine, id: &str) -> String {
-    match engine
+fn contribution_lines(engine: &kndo_core::engine::Engine, id: &str) -> Vec<String> {
+    let Some(c) = engine
         .doctor()
         .plugin_contributions
         .iter()
         .find(|c| c.id == id)
-    {
-        Some(c) => format!(
-            "contributed {} root(s), {} edge(s), {} annotation(s) on the generic fixture \
-             (zero is normal for a convention plugin the fixture doesn't match)",
-            c.roots, c.edges, c.annotations
-        ),
-        None => "no contribution record — the plugin's graph-mutation hooks did not run \
-                 (mutates graph: false, or the round was skipped)"
-            .to_string(),
+        .cloned()
+    else {
+        return vec![
+            "no contribution record — the plugin's graph-mutation hooks did not run \
+             (mutates graph: false, or the round was skipped)"
+                .to_string(),
+        ];
+    };
+    let mut out = vec![format!(
+        "contributed {} root(s), {} edge(s), {} annotation(s) on the fixture \
+         (zero is normal for a convention plugin the fixture doesn't match)",
+        c.roots, c.edges, c.annotations
+    )];
+    // The author kit's answer to "why did I contribute 0" — the misses the graph contract
+    // keeps silent, spelled out one per line.
+    for miss in &c.dropped {
+        out.push(format!("dropped: {miss}"));
     }
+    out
 }
 
 /// Per-call-unique fixture root under the system temp dir — same reasoning (and shape) as

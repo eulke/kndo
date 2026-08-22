@@ -117,6 +117,24 @@ pipeline phase; share nothing with it.
 Requirements: Rust with the `wasm32-unknown-unknown` target (`rustup target add
 wasm32-unknown-unknown`). No cargo-component, no wasm-tools, no WASI SDK.
 
+The whole idea→working-component loop is four commands (RFC 0017 §7):
+
+```bash
+kndo plugin new my-framework-plugin        # scaffold (add --adapter for a language adapter)
+cd my-framework-plugin                     # edit src/lib.rs — your conventions go here
+kndo plugin build                          # cargo build + componentize -> my-framework-plugin.wasm
+kndo plugin verify my-framework-plugin.wasm
+```
+
+`new` writes a compilable crate with the ABI contract already vendored from the kndo binary
+you ran — `Cargo.toml`, `src/lib.rs` (descriptor + every hook, with the conventions of this
+guide as inline comments), `wit/plugin.wit`, and a README with this exact loop. To retarget
+an existing crate at a newer kndo: `kndo plugin wit plugin > wit/plugin.wit` (or `... wit
+adapter`) and rebuild — the printed WIT is byte-identical to what that binary's host was
+compiled against, never a possibly-mismatched git checkout.
+
+What the scaffold contains, for reference (or for setting a crate up by hand):
+
 ```toml
 # Cargo.toml
 [package]
@@ -141,8 +159,7 @@ lto = true
 use wit_bindgen as _; // marks the dep used — the macro below is a fully-qualified path
 
 wit_bindgen::generate!({
-    // Vendor kndo's WIT file into your repo (wit/plugin.wit) and point at it. It is the ABI
-    // contract — copy it verbatim from the kndo version you target; do not edit it.
+    // The ABI contract, vendored by `kndo plugin new` (or `kndo plugin wit`). Do not edit it.
     path: "wit/plugin.wit",
     world: "plugin",
 });
@@ -191,20 +208,20 @@ impl Guest for MyPlugin {
 export!(MyPlugin);
 ```
 
-Build and componentize (what kndo's own compliance suites do — no external tool):
+`kndo plugin build` runs the cargo build and componentizes the result in one step — the same
+`wit_component::ComponentEncoder` call kndo's own compliance suites make. Doing it by hand
+(CI without a kndo binary, or just preference) is two steps:
 
 ```bash
 cargo build --release --target wasm32-unknown-unknown
 ```
 
 ```rust
-// a tiny xtask/build script, or do it in CI — wit-component as a library:
+// wit-component as a library (or `cargo component build`, same artifact):
 let core = std::fs::read("target/wasm32-unknown-unknown/release/my_framework_plugin.wasm")?;
 let component = wit_component::ComponentEncoder::default().module(&core)?.encode()?;
 std::fs::write("my-framework-plugin.wasm", component)?;
 ```
-
-(`cargo component build` produces the same artifact if you prefer the tool.)
 
 Then point kndo at the artifact (RFC 0017 §7 — the author kit's inner loop):
 
@@ -302,7 +319,16 @@ a `kndo:plugin@0.2.0` ever exists — and `0.1.0` components keep working even t
 
 - **First**: `kndo plugin verify your-component.wasm` (§3) — load, descriptor lint, and a
   generic fixture drive in one command, before you build any fixture of your own.
-- **Locally, end to end**: build + componentize (§3), drop the `.wasm` into a test project's
+- **Against your own fixture**: `kndo plugin verify your-component.wasm --project
+  path/to/fixture` runs the same drive over a copy of a project you provide (your directory
+  is never touched). Build a fixture exhibiting your conventions and this becomes your test
+  command.
+- **When a contribution doesn't land**: a root/edge/annotation whose target doesn't resolve
+  is silently dropped in production (guide §2's miss contract) — but `verify` lists every
+  dropped item with the exact target that failed to resolve ("root target `src/app.ts#foo`
+  did not resolve"), and `kndo doctor` shows the per-plugin dropped count from the last run.
+  "Contributed 0 roots" is a debuggable fact, not a dead end.
+- **Locally, end to end**: `kndo plugin build` (§3), drop the `.wasm` into a test project's
   `.kndo/plugins/`, run `kndo check` and `kndo doctor` there. Doctor shows whether you loaded,
   activated, and why — plus, after a run, what every plugin actually contributed (roots,
   edges, annotations: the RFC 0017 §7 audit record). For the global tier, point

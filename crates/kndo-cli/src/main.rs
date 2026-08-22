@@ -329,6 +329,13 @@ fn doctor_cmd() -> ExitCode {
                 "  {} — {} roots, {} edges, {} annotations",
                 c.id, c.roots, c.edges, c.annotations
             );
+            if !c.dropped.is_empty() {
+                println!(
+                    "    {} contribution(s) dropped (unresolved targets — kndo plugin \
+                     verify lists them)",
+                    c.dropped.len()
+                );
+            }
         }
     }
     println!();
@@ -380,35 +387,116 @@ fn activation_status(active: &Option<kndo::ActivationReason>) -> String {
 /// pure presentation over `kndo::plugin_install`; every policy (checksum, identity binding,
 /// dependency closure, conflicts, lockfile) lives there.
 fn plugin_cmd(args: &[String]) -> ExitCode {
-    match (args.first().map(String::as_str), args.get(1)) {
-        (Some("list"), None) => plugin_list(),
-        (Some(sub), Some(arg)) => plugin_cmd_with_arg(sub, arg),
+    let sub = args.first().map(String::as_str).unwrap_or("");
+    let rest = args.get(1..).unwrap_or(&[]);
+    if matches!(sub, "install" | "list" | "remove") {
+        plugin_registry_cmd(sub, rest)
+    } else {
+        plugin_author_cmd(sub, rest)
+    }
+}
+
+fn plugin_registry_cmd(sub: &str, rest: &[String]) -> ExitCode {
+    match (sub, rest.first()) {
+        ("install", Some(spec)) => plugin_install(spec),
+        ("remove", Some(spec)) => plugin_remove(spec),
+        ("list", None) => plugin_list(),
         _ => plugin_usage(),
     }
 }
 
-fn plugin_cmd_with_arg(sub: &str, arg: &str) -> ExitCode {
+/// The author-kit half of `kndo plugin` (RFC 0017 §7): `new`/`build` scaffold and produce a
+/// component, `wit`/`verify` inspect the contract and the result.
+fn plugin_author_cmd(sub: &str, rest: &[String]) -> ExitCode {
     match sub {
-        "install" => plugin_install(arg),
-        "remove" => plugin_remove(arg),
-        "verify" => plugin_verify(arg),
+        "new" => plugin_new(rest),
+        "build" => plugin_build(rest),
+        _ => plugin_inspect_cmd(sub, rest),
+    }
+}
+
+fn plugin_inspect_cmd(sub: &str, rest: &[String]) -> ExitCode {
+    match sub {
+        "wit" => plugin_wit(rest),
+        "verify" => plugin_verify(rest),
         _ => plugin_usage(),
     }
 }
 
 fn plugin_usage() -> ExitCode {
     eprintln!(
-        "kndo: usage: kndo plugin install <github.com/owner/repo[@tag]> | kndo plugin \
-         list | kndo plugin remove <github.com/owner/repo> | kndo plugin verify \
-         <component.wasm>"
+        "kndo: usage: kndo plugin install <github.com/owner/repo[@tag]> | list | remove \
+         <coordinate> | new <dir> [--adapter] | build [dir] | wit [plugin|adapter] | verify \
+         <component.wasm> [--project <dir>]"
     );
     ExitCode::from(2)
 }
 
-/// `kndo plugin verify <component.wasm>` (RFC 0017 §7): pure presentation over
-/// `kndo::verify::verify` — load, descriptor report, warnings, and a real fixture drive.
-fn plugin_verify(path: &str) -> ExitCode {
-    match kndo::verify::verify(std::path::Path::new(path)) {
+/// `kndo plugin new <dir> [--adapter]`: scaffold a component crate with the ABI vendored.
+fn plugin_new(rest: &[String]) -> ExitCode {
+    let Some(dir) = rest.first() else {
+        return plugin_usage();
+    };
+    let kind = if rest.iter().any(|a| a == "--adapter") {
+        kndo::author::ComponentKind::Adapter
+    } else {
+        kndo::author::ComponentKind::Plugin
+    };
+    match kndo::author::scaffold(std::path::Path::new(dir), kind) {
+        Ok(created) => {
+            for rel in &created {
+                println!("created {dir}/{rel}");
+            }
+            println!();
+            println!("next: cd {dir} && kndo plugin build");
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("kndo: plugin new: {e}");
+            ExitCode::from(2)
+        }
+    }
+}
+
+/// `kndo plugin build [dir]`: cargo build + componentize, no wasm tooling knowledge needed.
+fn plugin_build(rest: &[String]) -> ExitCode {
+    let dir = rest.first().map(String::as_str).unwrap_or(".");
+    match kndo::author::build(std::path::Path::new(dir)) {
+        Ok(artifact) => {
+            println!("built {}", artifact.display());
+            println!("next: kndo plugin verify {}", artifact.display());
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("kndo: plugin build: {e}");
+            ExitCode::from(2)
+        }
+    }
+}
+
+/// `kndo plugin wit [plugin|adapter]`: print the WIT world this binary was built against —
+/// pipe it into `wit/` to retarget an existing crate at this kndo version.
+fn plugin_wit(rest: &[String]) -> ExitCode {
+    let kind = match rest.first().map(String::as_str) {
+        None | Some("plugin") => kndo::author::ComponentKind::Plugin,
+        Some("adapter") => kndo::author::ComponentKind::Adapter,
+        Some(other) => {
+            eprintln!("kndo: plugin wit: unknown world `{other}` (plugin, adapter)");
+            return ExitCode::from(2);
+        }
+    };
+    print!("{}", kind.wit());
+    ExitCode::SUCCESS
+}
+
+/// `kndo plugin verify <component.wasm> [--project <dir>]` (RFC 0017 §7): pure presentation
+/// over `kndo::verify` — load, descriptor report, warnings, and a real fixture drive
+/// (synthesized, or the author's own fixture with `--project`).
+fn plugin_verify(rest: &[String]) -> ExitCode {
+    let Some((path, project)) = parse_verify_args(rest) else {
+        return plugin_usage();
+    };
+    match run_verify(path, project) {
         Ok(report) => {
             print_verify_report(path, &report);
             ExitCode::SUCCESS
@@ -417,6 +505,25 @@ fn plugin_verify(path: &str) -> ExitCode {
             eprintln!("kndo: plugin verify: {e}");
             ExitCode::from(2)
         }
+    }
+}
+
+/// `<component.wasm> [--project <dir>]` — `None` on any other shape.
+fn parse_verify_args(rest: &[String]) -> Option<(&str, Option<&str>)> {
+    let path = rest.first()?;
+    match rest.get(1..).unwrap_or(&[]) {
+        [] => Some((path, None)),
+        [flag, dir] if flag == "--project" => Some((path, Some(dir))),
+        _ => None,
+    }
+}
+
+fn run_verify(path: &str, project: Option<&str>) -> Result<kndo::verify::VerifyReport, String> {
+    match project {
+        Some(dir) => {
+            kndo::verify::verify_in_project(std::path::Path::new(path), std::path::Path::new(dir))
+        }
+        None => kndo::verify::verify(std::path::Path::new(path)),
     }
 }
 

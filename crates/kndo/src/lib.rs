@@ -32,6 +32,11 @@ pub mod plugin_install;
 #[cfg(feature = "external-adapters")]
 pub mod verify;
 
+/// `kndo plugin new`/`build`/`wit` (RFC 0017 §7, second pass) — the author kit's scaffold
+/// and componentize halves.
+#[cfg(feature = "external-adapters")]
+pub mod author;
+
 /// Every first-party adapter this build includes — the product's language registry, defined
 /// exactly once. Adding a language: one dependency + feature in this crate's manifest, one
 /// entry here. Nothing else in the workspace changes.
