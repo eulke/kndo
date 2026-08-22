@@ -19,7 +19,9 @@ framework in a private repo. Three things must work:
    whose descriptor says `id: "react"` — and then *which* react activates is undefined.
 
 RFC 0003 §4's `activation` rules answer "does *this* plugin apply to *this* project?" but say
-nothing about plugins composing. This RFC adds exactly that, and nothing else.
+nothing about plugins composing. This RFC adds exactly that, and nothing else. The practical
+author-facing companion (toolchain, project setup, testing shape, maintenance checklist) is
+[docs/plugins/authoring.md](../plugins/authoring.md).
 
 ## 2. Identity: the coordinate IS the id (the Go-modules move)
 

@@ -264,6 +264,10 @@ into the global directory is still a manual copy.
 
 ## 6. Producing a component
 
+(The full author-facing walkthrough — project setup, descriptor fields, testing shape,
+versioning/maintenance — is [docs/plugins/authoring.md](../plugins/authoring.md); this section
+is only the componentization mechanics.)
+
 A third-party author needs a real component-model `.wasm` binary, not a plain core module.
 Two ways, both documented rather than assumed, for either package:
 
