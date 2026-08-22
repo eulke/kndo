@@ -25,9 +25,9 @@ mod bindings {
 use bindings::kndo::plugin::types as w;
 use bindings::Plugin as WitPluginBindings;
 
-/// Same discipline as the adapter bridge's `FUEL_PER_CALL` (RFC 0003 §3): a trapped/exhausted
-/// hook degrades to "contributed nothing" rather than aborting the run.
-const FUEL_PER_CALL: u64 = 50_000_000;
+/// Same discipline as the adapter bridge (RFC 0003 §3): a trapped/exhausted hook degrades to
+/// "contributed nothing" rather than aborting the run.
+use crate::engine::FUEL_PER_CALL;
 
 #[derive(Debug)]
 pub enum LoadError {
@@ -375,9 +375,10 @@ fn read_component_bytes(path: &Path) -> Result<Vec<u8>, LoadError> {
 }
 
 fn fuel_budgeted_engine() -> Result<wasmtime::Engine, LoadError> {
-    let mut config = wasmtime::Config::new();
-    config.consume_fuel(true);
-    wasmtime::Engine::new(&config).map_err(|e| LoadError::Instantiate(e.to_string()))
+    // The process-wide shared engine (crate::engine): identical config for both bridges,
+    // one JIT code cache, and the disk compilation cache enabled — `Engine` is a cheap
+    // Arc-backed handle, so cloning it here keeps this function's signature.
+    Ok(crate::engine::shared_engine().clone())
 }
 
 fn load_component(

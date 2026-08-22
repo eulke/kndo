@@ -7,6 +7,7 @@
 //! in adapter — the distribution layer (`kndo` crate) can push a `WasmAdapter` onto the same
 //! `Vec<Box<dyn LanguageAdapter>>` `default_adapters()` returns.
 
+mod engine;
 mod host;
 mod plugin_host;
 

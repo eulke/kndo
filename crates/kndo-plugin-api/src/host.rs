@@ -3,9 +3,12 @@
 
 use std::fmt;
 use std::path::Path;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
 
 use smol_str::SmolStr;
+
+use crate::engine::{shared_engine, FUEL_PER_CALL};
 
 use kndo_core::adapter::{
     AdapterDescriptor, CyclePolicy, CycleTolerance, Declaration, Diagnostic, DiagnosticLevel,
@@ -23,12 +26,6 @@ mod bindings {
 
 use self::bindings::kndo::adapter::types as w;
 use self::bindings::Adapter;
-
-/// Fuel budget per guest call (RFC 0003 §3: "per-file fuel/time limits so a plugin cannot break
-/// the 500 ms budget"). A trapped/exhausted call degrades to a conservative empty result plus a
-/// diagnostic rather than aborting the run — one misbehaving external adapter must not take
-/// down `kndo check` for every other language in the project.
-const FUEL_PER_CALL: u64 = 50_000_000;
 
 #[derive(Debug)]
 pub enum LoadError {
@@ -54,75 +51,98 @@ struct GuestState {
 
 /// A `kndo:adapter` WASM component, bridged to the native [`LanguageAdapter`] trait. From the
 /// `Engine`'s perspective this is indistinguishable from a compiled-in adapter (ADR 0003: "the
-/// WASM ABI is a generated bridge over [the native traits]").
+/// WASM ABI is a generated bridge over [the native traits]") — including under parallelism:
+/// `claim`/`extract` run on a *pool* of guest instances, one checked out per concurrent call,
+/// so rayon's parallel extraction phase (graph.rs phase 1) parallelizes a WASM adapter's files
+/// exactly as it does a compiled-in adapter's. The compiled [`Component`] is shared; an
+/// instance is a cheap instantiation of it (µs against the shared engine), created on demand
+/// when the pool is empty, returned after the call, and *discarded* after a trap — a trapped
+/// instance's state is not something any later call should inherit.
+///
+/// Sound because the contract already required it: `extract` must be a pure function of
+/// `(path, content)` — the facts cache (ADR 0004) has always served any file's facts from any
+/// prior run's extraction, so a guest depending on cross-call instance state was already
+/// broken. The pool makes that long-standing implication normative (wasm-abi §3).
 pub struct WasmAdapter {
     descriptor: AdapterDescriptor,
-    state: Mutex<GuestState>,
+    component: wasmtime::component::Component,
+    pool: Mutex<Vec<GuestState>>,
+    instances_created: AtomicUsize,
 }
 
 impl WasmAdapter {
     /// Load an already-componentized `.wasm` file (component-model binary, not a plain core
-    /// module — third-party authors produce one with `cargo component build`, `wasm-tools
-    /// component new`, or the `wit-component` crate directly, same as this crate's own
-    /// compliance test builds its demo adapter).
+    /// module — third-party authors produce one with `kndo plugin build`, `cargo component
+    /// build`, or the `wit-component` crate directly, same as this crate's own compliance
+    /// test builds its demo adapter).
     pub fn load(path: &Path) -> Result<WasmAdapter, LoadError> {
-        let (mut store, bindings) = instantiate(path)?;
-        let raw_descriptor = bindings
-            .call_descriptor(&mut store)
-            .map_err(|e| LoadError::Instantiate(format!("descriptor() failed: {e}")))?;
-        // RFC 0016 §4: the `kndo:` namespace is reserved for built-ins, same enforcement the
-        // plugin bridge already has (RFC 0015 §2) — a component external to this build cannot
-        // claim to be `kndo:go` or any other coordinate no external source could have been
-        // fetched from. Skipped-not-fatal, same as any other load failure.
-        if kndo_core::plugin::is_reserved_id(&raw_descriptor.id) {
-            return Err(LoadError::Instantiate(format!(
-                "descriptor claims reserved built-in id '{}' (the kndo: namespace is not \
-                 claimable by external adapters — RFC 0015 §2, extended to adapters by RFC \
-                 0016 §4)",
-                raw_descriptor.id
-            )));
-        }
-
+        let bytes = std::fs::read(path).map_err(LoadError::Io)?;
+        let component = wasmtime::component::Component::from_binary(shared_engine(), &bytes)
+            .map_err(|e| LoadError::Instantiate(e.to_string()))?;
+        let (first, raw_descriptor) = probe_descriptor(&component)?;
         Ok(WasmAdapter {
             descriptor: native_descriptor(raw_descriptor),
-            state: Mutex::new(GuestState { store, bindings }),
+            component,
+            pool: Mutex::new(vec![first]),
+            instances_created: AtomicUsize::new(1),
         })
+    }
+
+    /// A ready instance: the pool's, or a fresh instantiation of the shared compiled
+    /// component when every pooled instance is checked out by a concurrent call. The pool
+    /// therefore grows to the actual concurrency level and no further.
+    fn checkout(&self) -> Result<GuestState, LoadError> {
+        if let Some(state) = self.pool.lock().expect("wasm adapter pool poisoned").pop() {
+            return Ok(state);
+        }
+        let state = instantiate_bindings(&self.component)?;
+        self.instances_created.fetch_add(1, Ordering::Relaxed);
+        Ok(state)
+    }
+
+    fn checkin(&self, state: GuestState) {
+        self.pool
+            .lock()
+            .expect("wasm adapter pool poisoned")
+            .push(state);
+    }
+
+    /// How many guest instances this adapter has ever instantiated — 1 until concurrent
+    /// calls force pool growth. Observability for the parallel-extraction test; not API.
+    #[doc(hidden)]
+    pub fn instances_created(&self) -> usize {
+        self.instances_created.load(Ordering::Relaxed)
     }
 }
 
-/// Reads, engine-configures, instantiates. Split out of [`WasmAdapter::load`] — and split
-/// again internally — purely for readability and to keep each step's own complexity low: one
-/// fallible step per function reads as a pipeline, not a wall of `?`s (the same instinct
-/// behind the CRAP-driven declaration-dispatch tables Kotlin/Swift's adapters settled on).
-fn instantiate(path: &Path) -> Result<(wasmtime::Store<()>, Adapter), LoadError> {
-    let bytes = read_component_bytes(path)?;
-    let engine = fuel_budgeted_engine()?;
-    let component = load_component(&engine, &bytes)?;
-    instantiate_bindings(&engine, &component)
-}
-
-fn read_component_bytes(path: &Path) -> Result<Vec<u8>, LoadError> {
-    std::fs::read(path).map_err(LoadError::Io)
-}
-
-fn fuel_budgeted_engine() -> Result<wasmtime::Engine, LoadError> {
-    let mut config = wasmtime::Config::new();
-    config.consume_fuel(true);
-    wasmtime::Engine::new(&config).map_err(|e| LoadError::Instantiate(e.to_string()))
-}
-
-fn load_component(
-    engine: &wasmtime::Engine,
-    bytes: &[u8],
-) -> Result<wasmtime::component::Component, LoadError> {
-    wasmtime::component::Component::from_binary(engine, bytes)
-        .map_err(|e| LoadError::Instantiate(e.to_string()))
+/// Instantiate once and read + vet the descriptor. RFC 0016 §4: the `kndo:` namespace is
+/// reserved for built-ins, same enforcement the plugin bridge already has (RFC 0015 §2) — a
+/// component external to this build cannot claim to be `kndo:go` or any other coordinate no
+/// external source could have been fetched from. Skipped-not-fatal, same as any other load
+/// failure. The probing instance seeds the pool — never a throwaway.
+fn probe_descriptor(
+    component: &wasmtime::component::Component,
+) -> Result<(GuestState, w::AdapterDescriptor), LoadError> {
+    let mut first = instantiate_bindings(component)?;
+    let raw = first
+        .bindings
+        .call_descriptor(&mut first.store)
+        .map_err(|e| LoadError::Instantiate(format!("descriptor() failed: {e}")))?;
+    if kndo_core::plugin::is_reserved_id(&raw.id) {
+        return Err(LoadError::Instantiate(format!(
+            "descriptor claims reserved built-in id '{}' (the kndo: namespace is not \
+             claimable by external adapters — RFC 0015 §2, extended to adapters by RFC \
+             0016 §4)",
+            raw.id
+        )));
+    }
+    Ok((first, raw))
 }
 
 fn instantiate_bindings(
-    engine: &wasmtime::Engine,
     component: &wasmtime::component::Component,
-) -> Result<(wasmtime::Store<()>, Adapter), LoadError> {
+) -> Result<GuestState, LoadError> {
+    let engine = shared_engine();
     let mut store = wasmtime::Store::new(engine, ());
     store
         .set_fuel(FUEL_PER_CALL)
@@ -132,7 +152,7 @@ fn instantiate_bindings(
     let bindings = Adapter::instantiate(&mut store, component, &linker)
         .map_err(|e| LoadError::Instantiate(e.to_string()))?;
 
-    Ok((store, bindings))
+    Ok(GuestState { store, bindings })
 }
 
 fn native_descriptor(raw: w::AdapterDescriptor) -> AdapterDescriptor {
@@ -176,17 +196,25 @@ impl LanguageAdapter for WasmAdapter {
     }
 
     fn claim(&self, path: &ProjectPath) -> Option<FileClaim> {
-        let mut guard = self.state.lock().expect("wasm adapter store poisoned");
-        let GuestState { store, bindings } = &mut *guard;
-        let _ = store.set_fuel(FUEL_PER_CALL);
-
-        let claimed = bindings.call_claim(&mut *store, path.0.as_str()).ok()?;
-
-        claimed.map(|c| FileClaim {
+        // A checkout failure (instantiation refused mid-run) degrades to "not mine" — the
+        // uniform miss behavior, never a panic in a parallel phase.
+        let mut state = self.checkout().ok()?;
+        let _ = state.store.set_fuel(FUEL_PER_CALL);
+        let call = state.bindings.call_claim(&mut state.store, path.0.as_str());
+        let claimed = match call {
+            Ok(claimed) => {
+                self.checkin(state);
+                claimed?
+            }
+            // A trapped instance is dropped, not pooled — later calls must never inherit a
+            // guest that died mid-call.
+            Err(_) => return None,
+        };
+        Some(FileClaim {
             language: self.descriptor.id.clone(),
             class: FileClass {
-                role: from_wit_role(c.class.role),
-                origin: from_wit_origin(c.class.origin),
+                role: from_wit_role(claimed.class.role),
+                origin: from_wit_origin(claimed.class.origin),
             },
         })
     }
@@ -198,28 +226,28 @@ impl LanguageAdapter for WasmAdapter {
     }
 
     fn extract(&self, file: &SourceFile<'_>) -> FileFacts {
-        let mut guard = self.state.lock().expect("wasm adapter store poisoned");
-        let GuestState { store, bindings } = &mut *guard;
-        let _ = store.set_fuel(FUEL_PER_CALL);
+        let mut state = match self.checkout() {
+            Ok(state) => state,
+            Err(e) => return error_facts(&self.descriptor.id, file.path, &e.to_string()),
+        };
+        let _ = state.store.set_fuel(FUEL_PER_CALL);
 
         let content = String::from_utf8_lossy(file.content);
-        let call = bindings.call_extract(&mut *store, file.path.0.as_str(), &content);
+        let call = state
+            .bindings
+            .call_extract(&mut state.store, file.path.0.as_str(), &content);
 
         match call {
-            Ok(facts) => from_wit_facts(facts),
-            Err(e) => {
-                let mut facts = FileFacts::default();
-                facts.diagnostics.push(Diagnostic {
-                    level: DiagnosticLevel::Warn,
-                    path: Some(file.path.clone()),
-                    message: format!(
-                        "external adapter '{}' exceeded its call budget or trapped: {e}",
-                        self.descriptor.id
-                    ),
-                    span: None,
-                });
-                facts
+            Ok(facts) => {
+                self.checkin(state);
+                from_wit_facts(facts)
             }
+            // Trapped/exhausted instance dropped, not pooled (same reasoning as `claim`).
+            Err(e) => error_facts(
+                &self.descriptor.id,
+                file.path,
+                &format!("exceeded its call budget or trapped: {e}"),
+            ),
         }
     }
 
@@ -235,6 +263,19 @@ impl LanguageAdapter for WasmAdapter {
         // (docs/adapters/json.md).
         Resolution::Unresolved
     }
+}
+
+/// The conservative empty result plus a diagnostic — one misbehaving external adapter must
+/// not take down `kndo check` for every other language in the project (RFC 0003 §3).
+fn error_facts(adapter_id: &str, path: &ProjectPath, detail: &str) -> FileFacts {
+    let mut facts = FileFacts::default();
+    facts.diagnostics.push(Diagnostic {
+        level: DiagnosticLevel::Warn,
+        path: Some(path.clone()),
+        message: format!("external adapter '{adapter_id}' {detail}"),
+        span: None,
+    });
+    facts
 }
 
 fn from_wit_role(role: w::FileRole) -> FileRole {

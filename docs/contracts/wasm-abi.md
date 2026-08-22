@@ -102,6 +102,25 @@ satisfy, so there is nothing to grant. This is stronger than a policy promise: a
 that somehow declared a WASI import would fail to *instantiate*, not silently receive
 capabilities nobody meant to give it.
 
+**Execution model: an instance pool, performance parity as a contract.** The component is
+Cranelift-compiled once per load (against a process-wide shared engine whose disk compilation
+cache makes a previously seen component's load skip codegen entirely), and `claim`/`extract`
+run against a **pool of instances**: each concurrent call checks one out — instantiating a
+fresh one from the shared compiled component when all are busy — and returns it afterward.
+Graph assembly's parallel extraction phase therefore parallelizes a WASM adapter's files
+exactly as it does a compiled-in adapter's; nothing serializes on a shared guest. Two
+consequences are normative:
+
+- **`claim`/`extract` must be pure functions of their arguments.** Calls may land on any
+  instance in any order; instance state must not be relied on between calls. This was always
+  the contract in effect — the facts cache (ADR 0004) has served any file's facts from any
+  prior run since M1, so a call-order-dependent guest was already broken — the pool just makes
+  it observable. (Contrast the `kndo:plugin` side, where RFC 0017 §4 *guarantees* one instance
+  across a round's hooks — graph-mutation rounds are sequential by design; per-file extraction
+  is parallel by design. Two execution models, each documented where it binds.)
+- **A trapped instance is discarded, never re-pooled** — no later call inherits a guest that
+  died mid-call.
+
 ## 4. Discovery (`kndo::open`, RFC 0003 §3)
 
 The distribution crate (`crates/kndo/src/lib.rs`) auto-discovers `.kndo/plugins/*.wasm`
