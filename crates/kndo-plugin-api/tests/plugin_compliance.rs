@@ -272,7 +272,9 @@ fn external_wasm_plugin_hooks_affect_a_real_check() {
          decl consumed_x\n\
          ref consumed_x\n\
          decl trulyDead\n\
-         decl content_target\n",
+         decl content_target\n\
+         decl staged_target\n\
+         decl fresh_target\n",
     )
     .unwrap();
     std::fs::write(
@@ -314,6 +316,14 @@ fn external_wasm_plugin_hooks_affect_a_real_check() {
     );
     assert!(
         baseline_unused.contains(&"content_target"),
+        "{baseline_unused:?}"
+    );
+    assert!(
+        baseline_unused.contains(&"staged_target"),
+        "{baseline_unused:?}"
+    );
+    assert!(
+        baseline_unused.contains(&"fresh_target"),
         "{baseline_unused:?}"
     );
     let baseline_unused_files: Vec<String> = baseline_result
@@ -394,5 +404,35 @@ fn external_wasm_plugin_hooks_affect_a_real_check() {
     assert!(
         !internal_only_symbols.contains(&"consumed_x"),
         "annotate_symbols should have exempted this: {internal_only_symbols:?}"
+    );
+
+    // RFC 0017 §4's round lifecycle, both halves. The guest wires `staged_target` in
+    // contribute_edges ONLY when contribute_roots already ran on the same instance — under
+    // the old instance-per-hook model this rescue is observably impossible.
+    assert!(
+        !unused_symbols.contains(&"staged_target"),
+        "guest state must persist from contribute_roots to contribute_edges within one \
+         round: {unused_symbols:?}"
+    );
+    assert!(
+        !unused_symbols.contains(&"fresh_target"),
+        "the round's first contribute_roots call must root fresh_ symbols: {unused_symbols:?}"
+    );
+    // And the other half: a SECOND round on the same WasmPlugin must start from a fresh
+    // instance. The guest roots `fresh_target` only on an instance's first contribute_roots
+    // call — a leaked instance would skip it here and the symbol would go unused.
+    let second = engine.check(CheckRequest {
+        mode: RunMode::Full,
+    });
+    let second_unused: Vec<&str> = second
+        .findings
+        .iter()
+        .filter(|f| f.category == "unused")
+        .filter_map(|f| f.location.symbol.as_deref())
+        .collect();
+    assert!(
+        !second_unused.contains(&"fresh_target"),
+        "guest state must NOT survive across rounds — the second round's instance must be \
+         fresh: {second_unused:?}"
     );
 }

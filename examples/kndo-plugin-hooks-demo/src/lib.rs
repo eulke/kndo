@@ -16,6 +16,11 @@
 //!   starts with `content_` is rooted only if `read-file("content.demo")` returns exactly
 //!   `b"promote"` — proving the host-mediated read reaches a real guest computation, not just
 //!   that the WIT world type-checks.
+//! - RFC 0017 §4's round lifecycle, made observable through two statics: `staged_` symbols
+//!   are wired by `contribute_edges` only when `contribute_roots` already ran in this same
+//!   instance (state persists across one round's hooks), and `fresh_` symbols are rooted only
+//!   on the instance's FIRST `contribute_roots` call (so a leaked instance from a previous
+//!   round observably stops rooting them — every fresh round must root them again).
 
 // Marks the dependency used explicitly — the macro invocation below is a fully-qualified
 // path with no `use`, which kndo's own Rust adapter (a static extractor, not a macro
@@ -28,6 +33,13 @@ wit_bindgen::generate!({
 });
 
 use crate::kndo::plugin::types::*;
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+
+/// RFC 0017 §4's observable round state (a WASM guest is single-threaded; atomics are just
+/// the no-`unsafe` way to hold mutable statics). Both reset with the instance — which is
+/// exactly what the compliance suite asserts.
+static ROOTS_RAN_THIS_INSTANCE: AtomicBool = AtomicBool::new(false);
+static ROOTS_CALLS_THIS_INSTANCE: AtomicU32 = AtomicU32::new(0);
 
 struct DemoPlugin;
 
@@ -63,12 +75,16 @@ impl Guest for DemoPlugin {
     }
 
     fn contribute_roots() -> Vec<ContributedRoot> {
+        ROOTS_RAN_THIS_INSTANCE.store(true, Ordering::Relaxed);
+        let first_call_on_this_instance =
+            ROOTS_CALLS_THIS_INSTANCE.fetch_add(1, Ordering::Relaxed) == 0;
         let content_promoted = read_file("content.demo").as_deref() == Some(b"promote".as_slice());
         let mut roots = Vec::new();
         for file in list_files() {
             for symbol in symbols_in(&file.path) {
                 let should_root = symbol.name.starts_with("root_")
-                    || (content_promoted && symbol.name.starts_with("content_"));
+                    || (content_promoted && symbol.name.starts_with("content_"))
+                    || (first_call_on_this_instance && symbol.name.starts_with("fresh_"));
                 if should_root {
                     roots.push(ContributedRoot {
                         target: PluginTarget {
@@ -85,10 +101,15 @@ impl Guest for DemoPlugin {
     }
 
     fn contribute_edges() -> Vec<ContributedEdge> {
+        // `staged_` wiring depends on state `contribute_roots` set in THIS instance — under
+        // the old instance-per-hook model this is observably false here (RFC 0017 §4).
+        let roots_already_ran = ROOTS_RAN_THIS_INSTANCE.load(Ordering::Relaxed);
         let mut edges = Vec::new();
         for file in list_files() {
             for symbol in symbols_in(&file.path) {
-                if symbol.name.starts_with("wire_") {
+                if symbol.name.starts_with("wire_")
+                    || (roots_already_ran && symbol.name.starts_with("staged_"))
+                {
                     edges.push(ContributedEdge {
                         from: PluginTarget {
                             path: file.path.clone(),

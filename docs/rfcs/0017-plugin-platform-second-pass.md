@@ -99,7 +99,7 @@ Cost: patch as today + one plugin round (O(files + symbols) + budget-capped cont
 milliseconds. The performance story becomes uniform: a plugin-bearing project pays for its
 plugins' hooks, never again for their *presence*.
 
-## 4. One guest instance per round
+## 4. One guest instance per round — Landed
 
 The plugin bridge instantiates its guest before each hook — three instantiations per plugin
 per round. It was the simplest correct thing when zero external plugins existed, and it
@@ -272,8 +272,14 @@ nothing here precludes it.
    marker flip, invisible to every adapter guard, must surface through a patch — plus
    byte-equality against a scratch rebuild), `a_changed_plugin_set_refuses_the_patch_and_rebuilds`,
    and `externally_consumed_round_trips_through_the_snapshot`.
-2. **Persistent instance (§4)** — behavior contract fixed before any new imports land, so
-   §5's additions are born under the final lifecycle.
+2. **Persistent instance (§4) — Landed.** `contribute-roots` opens the round with a fresh
+   instance, `contribute-edges` reuses it, `annotate-symbols` reuses it and closes the round
+   by dropping it (unconditionally — success or trap); fuel is re-armed to `FUEL_PER_CALL`
+   before every hook, keeping per-call budget semantics exactly; an out-of-order hook gets a
+   defensively fresh instance, never another round's state. Made observable through the
+   reference guest's `staged_`/`fresh_` scenarios (state must carry roots → edges within a
+   round; a second round on the same `WasmPlugin` must start clean), asserted by the
+   compliance suite's `external_wasm_plugin_hooks_affect_a_real_check`.
 3. **Read surface (§5)** — call-site facts + packages + edges + details in one cycle: they
    share the schema bump, the WIT additions, and the wasm-abi documentation pass. The
    express/nextjs edge detections land here as the surface's first proof.

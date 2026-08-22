@@ -82,10 +82,21 @@ live syscall you make), see another plugin's contributions, create new finding c
 crash the run — each hook call has a fuel budget (50M units); a trap or exhaustion degrades to
 "this plugin contributed nothing this round", never a failed `kndo check`.
 
-**Cost model you must know:** any registered plugin with graph-mutation hooks — every WASM
-plugin, always — forces a full graph rebuild on every run (the snapshot cache and incremental
-patch are bypassed, because neither re-invokes your hooks; wasm-abi.md §5.4). This is exactly
-why activation rules (§5) matter: your plugin should run *only* on projects it applies to.
+**Cost model you must know:** your plugin costs its hooks' own runtime, never a cache
+penalty. Both of kndo's fast paths work with plugins registered (wasm-abi.md §5.4): the
+snapshot cache folds your identity — id, version, and your component's own content hash —
+into its key, and the incremental patch strips your previous contributions and re-runs your
+hooks against the patched graph (RFC 0017 §3). An unchanged re-run costs a project the same
+whether your plugin is installed or not. Activation rules (§5) still matter for a different
+reason: a plugin that doesn't apply to a project shouldn't run its hooks there at all.
+
+**Instance lifecycle (RFC 0017 §4):** your component is instantiated once per graph-mutation
+round — `contribute-roots` first, then `contribute-edges` and `annotate-symbols` against the
+same instance, which is dropped when `annotate-symbols` returns. You may keep state in
+statics across the three hooks of one round (compute something in `contribute-roots`, reuse
+it in `contribute-edges`); you can never carry state across rounds or runs — don't try, the
+drop is unconditional. `classify-file` runs on separate, view-less instances at an earlier
+pipeline phase; share nothing with it.
 
 ## 3. Toolchain & project setup
 

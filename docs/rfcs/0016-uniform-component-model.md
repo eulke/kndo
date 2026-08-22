@@ -167,9 +167,10 @@ made at implementation time and recorded here rather than left as silent drift:
   stated scope (configs/manifests/templates, never source), not derived from a benchmark
   sweep; exceeding them cuts the component off from further reads for the rest of the run,
   with one diagnostic recording why — the same posture as the WASM fuel budget. Accounting is
-  keyed by *path*, not by call: the WASM bridge re-instantiates its guest once per hook (three
-  times per component per round, an existing documented cost), and without path-keyed
-  dedup that would triple-charge a WASM component for reads a native component pays for once.
+  keyed by *path*, not by call: a component's read scope shouldn't depend on how many hooks
+  look at the same file. (When this landed, the keying also compensated the WASM bridge's
+  then-current instance-per-hook triple-fetch; RFC 0017 §4's one-instance-per-round lifecycle
+  removed that motivation, and the keying stays on its own merits.)
 - **Determinism note:** content-derived contributions are already correct under the
   `mutates_graph` bypass (RFC 0003 §5) — every run re-reads. §6 is what makes them *fast*.
 

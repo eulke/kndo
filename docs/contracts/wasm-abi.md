@@ -219,12 +219,12 @@ charged and byte-read through the run's `ContentView` (`kndo_core::plugin::Conte
 as a native plugin's own `.read()` calls would be, *before* instantiating each round's guest —
 the guest can't make a host round-trip of its own choosing mid-call, so `read-file` on the guest
 side is a lookup into that owned snapshot, not a live filesystem call. Budget accounting is
-keyed by path, not by call: `contribute-roots`/`contribute-edges`/`annotate-symbols` each
-re-instantiate the guest against a fresh `HostViewData` this round (§5.3), so a path already
-charged in an earlier hook of the same round is served again for free rather than tripling the
-bill for reading the exact same file three times. A path outside the declared globs, or one the
-budget has cut off, comes back `none` — the same silent-miss shape every other host-mediated
-lookup in this ABI already has.
+keyed by path, not by call: a component's read scope shouldn't depend on how many hooks look at
+the same file — a path already charged is served again for free within the round. (This keying
+predates RFC 0017 §4's one-instance-per-round lifecycle, §5.3, which removed its original
+triple-charge motivation; it stays because it is the right semantics regardless.) A path outside
+the declared globs, or one the budget has cut off, comes back `none` — the same silent-miss
+shape every other host-mediated lookup in this ABI already has.
 
 ### 5.2 v1 scope cuts, and why
 
@@ -262,14 +262,28 @@ for the duration of one `assemble_from_source` call (graph.rs, RFC 0003 §2's "l
 `WasmPlugin` resolves this by cloning exactly what `list-files`/`symbols-in` can answer, plus
 every content-channel path the descriptor's globs match (`HostViewData`, built once per
 graph-mutation round, not once per query), into the store's state rather than reaching for
-raw-pointer plumbing across the FFI boundary — a WASM plugin already forces a full graph rebuild
-every run (§5.4), so one more bounded `O(files + symbols + content bytes)` clone alongside that
-full rebuild is proportionally small, and the resulting code has no `unsafe`.
+raw-pointer plumbing across the FFI boundary — a bounded `O(files + symbols + content bytes)`
+clone, once per round, and the resulting code has no `unsafe`.
+
+**Guest lifecycle (RFC 0017 §4): one instance per graph-mutation round.** The bridge
+instantiates the component when `contribute-roots` — the round's first hook in the world's
+declaration order — is invoked; `contribute-edges` and `annotate-symbols` run against that
+same instance, and it is dropped when `annotate-symbols` returns. Two consequences a guest
+author may rely on, and one it must never rely on: guest state (statics, lazily built caches)
+*persists across the three hooks of one round* — compute something in `contribute-roots`,
+reuse it in `contribute-edges`; guest state *never survives into the next round or run* — the
+drop is unconditional, success or trap; and a hook invoked out of order by a non-core host
+gets a defensively fresh instance rather than another round's state. Stateless
+request/response guests (what `wit-bindgen` produces by default) behave identically under
+either lifecycle. Proven observable by the compliance suite's `staged_`/`fresh_` scenarios
+against `examples/kndo-plugin-hooks-demo`.
 
 **Fuel budget and sandbox** are the same posture and the same constant class as §3's adapter
-bridge (`FUEL_PER_CALL` in `plugin_host.rs`): an exhausted or trapped hook degrades to "this
-plugin contributed nothing this round," never a crashed `kndo check`; no WASI linked, so a
-component declaring one fails to instantiate rather than silently receiving capabilities.
+bridge (`FUEL_PER_CALL` in `plugin_host.rs`), re-armed before *every* hook call — the per-call
+budget semantics are unchanged by the shared instance; a heavy `contribute-roots` can't starve
+`annotate-symbols`. An exhausted or trapped hook degrades to "this plugin contributed nothing
+this round," never a crashed `kndo check`; no WASI linked, so a component declaring one fails
+to instantiate rather than silently receiving capabilities.
 
 ### 5.4 Correctness: cache and patch bypass
 
@@ -288,13 +302,12 @@ discovered file's content hash. A `ContentView` never answers a path outside tha
 discovered set (§5.1), so any input a plugin's hooks — including its content-channel reads —
 could react to was already part of the key. That makes the graph-snapshot fast path safe: a
 snapshot written under one plugin's identity can only ever match a run with the identical
-component (bytes and all, for WASM) over identical inputs. The incremental patch stays
-bypassed regardless: it splices only the *changed* files into the *previous* snapshot's graph
-and never re-invokes `contribute_roots`/`contribute_edges`/`annotate_symbols`, so the
-key-folding argument doesn't cover it — a stale patch would carry a plugin's prior
-contributions forward unrevised. Serving either fast path without this reasoning would
-silently miss whatever the plugin contributes; that's still true of the patch path today, by
-design, not by omission.
+component (bytes and all, for WASM) over identical inputs. The incremental patch (RFC 0017
+§3) covers the other fast path without needing the key-folding argument at all: every plugin
+contribution is provenance-tagged, so the patch strips them, splices the source change, and
+re-runs the full plugin round against the patched graph — byte-identical to a full rebuild by
+the equivalence gate, guarded by a snapshot-stored plugin-set digest (a changed set
+full-rebuilds once). Nothing a plugin contributes ever rides either fast path unrevised.
 
 ### 5.5 Global installation & activation (RFC 0003 §4)
 

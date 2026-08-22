@@ -146,11 +146,13 @@ pub struct WasmPlugin {
     // proof that *this exact* `.wasm` file, not just its self-declared id/version, produced
     // whatever the last snapshot recorded.
     content_hash: [u8; 32],
-    // Re-instantiated per graph-mutation round (see `with_instance`) since each round needs a
-    // freshly built `HostViewData` snapshot of *that* round's graph — the store's state isn't
-    // reusable across rounds the way `WasmAdapter`'s state-free calls are.
+    // One instance per graph-mutation ROUND (RFC 0017 §4), not per hook: `contribute_roots` —
+    // the round's first hook in declaration order — (re)instantiates against that round's
+    // fresh `HostViewData` snapshot; `contribute_edges`/`annotate_symbols` reuse it, and the
+    // instance is dropped when `annotate_symbols` returns. Guest state deliberately persists
+    // across the three hooks of one round and structurally cannot survive into the next.
     linker: wasmtime::component::Linker<HostViewData>,
-    last_hooks: Mutex<Option<GuestState>>,
+    round_instance: Mutex<Option<GuestState>>,
 }
 
 impl WasmPlugin {
@@ -166,12 +168,12 @@ impl WasmPlugin {
             descriptor,
             content_hash,
             linker,
-            last_hooks: Mutex::new(None),
+            round_instance: Mutex::new(None),
         })
     }
 
     /// (Re)instantiate the component against a fresh snapshot of `graph`/`content`, replacing
-    /// whatever instance served the previous graph-mutation round.
+    /// whatever instance is currently live — how every round begins (RFC 0017 §4).
     fn refresh_instance(&self, graph: &GraphView<'_>, content: &ContentView<'_>) -> Option<()> {
         let (store, bindings) = instantiate_with(
             &self.engine,
@@ -180,9 +182,27 @@ impl WasmPlugin {
             HostViewData::from_view(graph, content),
         )
         .ok()?;
-        *self.last_hooks.lock().expect("wasm plugin store poisoned") =
-            Some(GuestState { store, bindings });
+        *self
+            .round_instance
+            .lock()
+            .expect("wasm plugin store poisoned") = Some(GuestState { store, bindings });
         Some(())
+    }
+
+    /// Make sure a round instance is live without discarding one that already is — the reuse
+    /// path for the round's later hooks. A hook invoked with no live instance (a caller
+    /// driving the trait out of the core's roots → edges → annotate order) instantiates
+    /// defensively against ITS OWN view rather than ever touching another round's state.
+    fn ensure_instance(&self, graph: &GraphView<'_>, content: &ContentView<'_>) -> bool {
+        if self
+            .round_instance
+            .lock()
+            .expect("wasm plugin store poisoned")
+            .is_some()
+        {
+            return true;
+        }
+        self.refresh_instance(graph, content).is_some()
     }
 }
 
@@ -336,6 +356,11 @@ impl Plugin for WasmPlugin {
         })
     }
 
+    // The round lifecycle (RFC 0017 §4): `contribute_roots` opens the round with a fresh
+    // instance, `contribute_edges` reuses it, `annotate_symbols` reuses it and closes the
+    // round by dropping it. Fuel is re-armed to `FUEL_PER_CALL` before every hook call, so
+    // the per-call budget semantics are identical to the old instance-per-hook model — a
+    // heavy `contribute_roots` can't starve `annotate_symbols`.
     fn contribute_roots(
         &self,
         graph: &GraphView<'_>,
@@ -345,10 +370,16 @@ impl Plugin for WasmPlugin {
         if self.refresh_instance(graph, content).is_none() {
             return;
         }
-        let mut guard = self.last_hooks.lock().expect("wasm plugin store poisoned");
+        let mut guard = self
+            .round_instance
+            .lock()
+            .expect("wasm plugin store poisoned");
         let Some(GuestState { store, bindings }) = guard.as_mut() else {
             return;
         };
+        if store.set_fuel(FUEL_PER_CALL).is_err() {
+            return;
+        }
         let Ok(roots) = bindings.call_contribute_roots(&mut *store) else {
             return;
         };
@@ -367,13 +398,19 @@ impl Plugin for WasmPlugin {
         content: &ContentView<'_>,
         out: &mut EdgeSink,
     ) {
-        if self.refresh_instance(graph, content).is_none() {
+        if !self.ensure_instance(graph, content) {
             return;
         }
-        let mut guard = self.last_hooks.lock().expect("wasm plugin store poisoned");
+        let mut guard = self
+            .round_instance
+            .lock()
+            .expect("wasm plugin store poisoned");
         let Some(GuestState { store, bindings }) = guard.as_mut() else {
             return;
         };
+        if store.set_fuel(FUEL_PER_CALL).is_err() {
+            return;
+        }
         let Ok(edges) = bindings.call_contribute_edges(&mut *store) else {
             return;
         };
@@ -393,14 +430,23 @@ impl Plugin for WasmPlugin {
         content: &ContentView<'_>,
         out: &mut AnnotationSink,
     ) {
-        if self.refresh_instance(graph, content).is_none() {
+        if !self.ensure_instance(graph, content) {
             return;
         }
-        let mut guard = self.last_hooks.lock().expect("wasm plugin store poisoned");
+        let mut guard = self
+            .round_instance
+            .lock()
+            .expect("wasm plugin store poisoned");
         let Some(GuestState { store, bindings }) = guard.as_mut() else {
             return;
         };
-        let Ok(targets) = bindings.call_annotate_symbols(&mut *store) else {
+        if store.set_fuel(FUEL_PER_CALL).is_err() {
+            return;
+        }
+        let result = bindings.call_annotate_symbols(&mut *store);
+        // End of round, success or not: the instance never survives into the next one.
+        *guard = None;
+        let Ok(targets) = result else {
             return;
         };
         for t in targets {

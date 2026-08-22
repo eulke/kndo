@@ -165,11 +165,11 @@ const CONTENT_MAX_BYTES: usize = 8 * 1024 * 1024;
 
 #[derive(Default)]
 struct ContentBudget {
-    // Keyed by path, not a call counter: the WASM bridge re-instantiates its guest once per
-    // graph-mutation hook (three times per plugin per round, `kndo-plugin-api`'s existing,
-    // documented cost) and re-fetches the same glob-matched set each time. Charging by call
-    // would make a WASM component pay 3x a native one for identical reads; charging by
-    // first-seen path makes the budget mean what its doc comment says — distinct paths.
+    // Keyed by path, not a call counter: a component's read scope shouldn't depend on how
+    // many hooks look at the same file — charging by first-seen path makes the budget mean
+    // what its doc comment says, distinct paths. (Historically this also compensated the
+    // WASM bridge's instance-per-hook triple-fetch; RFC 0017 §4's one-instance-per-round
+    // lifecycle removed that motivation, and the keying stays on its own merits.)
     seen: rustc_hash::FxHashSet<ProjectPath>,
     bytes_read: usize,
     cut_off: bool,
