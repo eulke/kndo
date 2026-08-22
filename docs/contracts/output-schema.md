@@ -108,6 +108,9 @@ Categories are pure verdicts (RFC 0005 taxonomy rule):
 `unused`, `test-only`, `untested`, `undeclared`, `unresolved`, `version-skew`, `duplicate`,
 `internal-only`, `private-type-leak`, `cyclic`, `deep-import`, `crap`, `stale`.
 New categories are additive (minor bump); consumers must ignore unknown categories.
+The category prefix `plugin:` and the group name `convention` are **reserved** for RFC 0018
+(plugin-contributed findings, Draft) — no core category or group may claim either, and
+nothing emits them until that RFC is accepted.
 
 Each category maps to exactly one `group` — `defect` (unresolved, undeclared, version-skew,
 private-type-leak), `waste` (unused, test-only, duplicate, internal-only), `risk` (crap, cyclic,
