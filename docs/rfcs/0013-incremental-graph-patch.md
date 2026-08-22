@@ -175,9 +175,13 @@ makes this checkable (order is canonical). Enforcement:
   0004's status note.
 - **Patching across file-set changes** (add/remove/rename): FileId renumbering invalidates
   the id-stability proof wholesale; the honest v1 answer is the fallback.
-- **Plugin contributions** (RFC 0004 §4 step 4c): the plugin system contributes nothing to
-  the graph yet (only coverage, which is per-run by design, ADR 0005); `Edge.owner` is the
-  hook their invalidation will use.
+- **Plugin contributions** (RFC 0004 §4 step 4c): out of scope here when written — the plugin
+  system contributed nothing to the graph yet. Since landed by RFC 0017 §3, and not via
+  `Edge.owner` as this bullet guessed: plugin edges carry `Provenance::Plugin`, so the patch
+  strips them all and re-runs the plugin round against the patched graph (same function as
+  the full build), guarded by a snapshot-stored plugin-set identity digest. The §6
+  equivalence obligation extends unchanged: patched ≡ full rebuild, plugin round included
+  (`the_patch_re_derives_plugin_contributions_instead_of_bypassing`).
 
 ## 8. Rollout
 

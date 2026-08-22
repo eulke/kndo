@@ -64,7 +64,7 @@ round, O(edges) — a plugin that never queries them costs nothing, and the zero
 costs exactly what it costs today. No budget applies to graph queries: they touch memory
 already loaded, never disk.
 
-## 3. Incremental patch with plugins: strip & re-run
+## 3. Incremental patch with plugins: strip & re-run — Landed
 
 RFC 0016 §6 folded plugin identity into the snapshot key but left `try_patch` (RFC 0013)
 bypassed whenever a graph-mutating plugin is registered, because composing a plugin's hook
@@ -260,8 +260,18 @@ nothing here precludes it.
 
 ## 8. Phases
 
-1. **Patch with plugins (§3)** — the performance cliff goes first; everything later benefits
-   from the uniform incremental story.
+1. **Patch with plugins (§3) — Landed.** `run_plugin_round` factored out of
+   `assemble_from_source` and called by both build paths; `try_patch` strips
+   `Provenance::Plugin` edges + `externally_consumed`, splices, re-runs the round, and
+   refuses on a plugin-set digest mismatch (the digest and a plugin-diagnostics partition
+   now live in the snapshot, format v2). Landing this surfaced and fixed a real RFC 0016 §6
+   regression: snapshots never persisted `externally_consumed` — safe while no snapshot was
+   ever written with plugins registered, silently dropping `annotate_symbols` exemptions
+   (RFC 0005 §7) on every warm hit once writes became unconditional. Proven by
+   `the_patch_re_derives_plugin_contributions_instead_of_bypassing` (a content-channel
+   marker flip, invisible to every adapter guard, must surface through a patch — plus
+   byte-equality against a scratch rebuild), `a_changed_plugin_set_refuses_the_patch_and_rebuilds`,
+   and `externally_consumed_round_trips_through_the_snapshot`.
 2. **Persistent instance (§4)** — behavior contract fixed before any new imports land, so
    §5's additions are born under the final lifecycle.
 3. **Read surface (§5)** — call-site facts + packages + edges + details in one cycle: they

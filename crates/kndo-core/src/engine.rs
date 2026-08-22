@@ -1066,6 +1066,7 @@ impl Engine {
                 graph: g,
                 discovery_diagnostics,
                 extraction_diagnostics,
+                plugin_diagnostics,
                 pending_snapshot,
                 timings: assembly_timings,
             }) => {
@@ -1080,16 +1081,23 @@ impl Engine {
                 );
                 let g = std::sync::Arc::new(g);
                 if let Some(writer) = pending_snapshot {
-                    // Extraction + manifest diagnostics only (RFC 0013 §3c) — exactly what a
+                    // Extraction + manifest diagnostics and the plugin round's own, in the
+                    // snapshot's two partitions (RFC 0013 §3c, RFC 0017 §3) — exactly what a
                     // warm path replays; discovery diagnostics stay fresh per walk.
                     let graph_for_writer = std::sync::Arc::clone(&g);
                     let diagnostics_for_writer = extraction_diagnostics.clone();
+                    let plugin_diagnostics_for_writer = plugin_diagnostics.clone();
                     self.pending_persist = Some(std::thread::spawn(move || {
-                        writer.write(&graph_for_writer, &diagnostics_for_writer);
+                        writer.write(
+                            &graph_for_writer,
+                            &diagnostics_for_writer,
+                            &plugin_diagnostics_for_writer,
+                        );
                     }));
                 }
                 let mut diagnostics = discovery_diagnostics;
                 diagnostics.extend(extraction_diagnostics);
+                diagnostics.extend(plugin_diagnostics);
                 let coverage_start = Instant::now();
                 let coverage = self.ingest_coverage(&mut diagnostics);
                 timings.push((

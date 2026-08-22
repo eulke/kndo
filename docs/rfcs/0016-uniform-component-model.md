@@ -200,14 +200,17 @@ were rare. In the world §§4–5 create, matching projects would full-rebuild e
 3. **The blanket `mutates_graph` bypass narrows, but only on the snapshot path.** A
    graph-mutating plugin's presence no longer forces `graph_key`'s cache lookup/write to be
    skipped — (1)+(2) make the key itself sufficient to detect any input change, so
-   snapshot reuse (`cache.get_graph`/`graph_writer`) is now unconditional. The incremental
-   *patch* path (`try_patch`) stays bypassed whenever any graph-mutating plugin is registered
-   (`patch_eligible = sorted_plugins.is_empty()`): a patch mutates an existing graph in place
-   from a source-file diff alone, and proving a plugin's hook output composes correctly with a
-   partial re-derivation is a materially harder claim than "the whole snapshot is either valid
-   or it's rebuilt" — not attempted here. This is the same posture as phase 0–2: earn scope
-   incrementally, keep the bypass as the correctness backstop wherever the narrower claim isn't
-   proven, never remove it wholesale.
+   snapshot reuse (`cache.get_graph`/`graph_writer`) is now unconditional. At this phase's
+   landing, the incremental *patch* path (`try_patch`) stayed bypassed whenever any
+   graph-mutating plugin was registered: a patch mutates an existing graph in place from a
+   source-file diff alone, and proving a plugin's hook output composes correctly with a
+   partial re-derivation was a materially harder claim than "the whole snapshot is either
+   valid or it's rebuilt" — not attempted here. *(Subsequently closed: RFC 0017 §3 removed
+   that bypass structurally — the patch strips provenance-tagged plugin contributions and
+   re-runs the round, guarded by a snapshot-stored plugin-set digest — so the composition
+   proof this paragraph declined to attempt was never needed.)* The posture is the same as
+   phase 0–2: earn scope incrementally, keep the bypass as the correctness backstop wherever
+   the narrower claim isn't proven, never remove it wholesale.
 
 Performance consequence: a plugin-bearing project's *first* run after a plugin changes still
 full-rebuilds (no different from before), but every unchanged repeat run now takes the snapshot
@@ -303,14 +306,15 @@ new one; the mechanism, not the fixture composition, is what determines the cost
    binary.
 3. **Cache-key folding (§6) — Landed.** `compute_graph_key` folds in every graph-mutating
    plugin's id, declared version, and (WASM only) component content hash, sorted by id;
-   snapshot reuse (`cache.get_graph`/`graph_writer`) is unconditional now, while the
-   incremental patch path stays bypassed whenever any graph-mutating plugin is registered — a
-   narrower, honestly-scoped claim, not the full read-set-tracking design originally drafted in
-   §6(2), which implementation-time analysis showed was already subsumed by the existing
-   `discovered_files` term. Proven by `crates/kndo-core/src/graph.rs`'s
-   `a_graph_mutating_plugin_now_reuses_the_snapshot_but_never_the_patch` (cold run, then an
-   unchanged warm run asserting a cache hit, then an edit proving a full rebuild — not a stale
-   patch — occurs) and `compute_graph_key_distinguishes_wasm_plugin_content_from_its_own_id_and_version`.
+   snapshot reuse (`cache.get_graph`/`graph_writer`) is unconditional now — a narrower,
+   honestly-scoped claim, not the full read-set-tracking design originally drafted in §6(2),
+   which implementation-time analysis showed was already subsumed by the existing
+   `discovered_files` term. The half this phase left bypassed — the incremental patch — was
+   subsequently closed by RFC 0017 §3 (strip & re-run, with the plugin-set digest guard);
+   `crates/kndo-core/src/graph.rs`'s
+   `the_patch_re_derives_plugin_contributions_instead_of_bypassing` proves the combined
+   result, and `compute_graph_key_distinguishes_wasm_plugin_content_from_its_own_id_and_version`
+   the key term.
 4. **`suppress` decision + GraphView additions + shell CI job (§7) — Landed.** `suppress`
    decided cut (no shipped consumer); both `GraphView`-widening candidates evaluated and left
    unbuilt (neither had a real, current, landed consumer — see §7 for each); the shell build is

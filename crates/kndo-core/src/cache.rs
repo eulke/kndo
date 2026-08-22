@@ -21,10 +21,11 @@
 //!   several snapshots coexist (the working tree's, plus diff modes' before/after tree states;
 //!   see `graph_snapshot_path`). One input RFC 0004 §3 also lists — a kndo config hash —
 //!   doesn't exist as a subsystem yet, so it's honestly absent from the key rather than faked;
-//!   extending it is required before that subsystem ships. Any key mismatch is a full rebuild,
-//!   never a partial patch (`graph.rs`'s incremental patch is a separate reuse path with its
-//!   own, narrower eligibility — RFC 0016 §6 landed plugin identity for the snapshot key only,
-//!   the patch path stays bypassed for any graph-mutating plugin). `rkyv` +
+//!   extending it is required before that subsystem ships. Any key mismatch is a full rebuild
+//!   or `graph.rs`'s incremental patch — a separate reuse path with its own, narrower guards,
+//!   and since RFC 0017 §3 open to plugin-bearing runs too: the snapshot stores the
+//!   plugin-set digest and a plugin-diagnostics partition so the patch can discard and
+//!   re-derive everything plugin-produced instead of bypassing. `rkyv` +
 //!   `mmap`, per ADR 0004 exactly — `get_graph` maps the snapshot and validates directly
 //!   against the mapped bytes; nothing is read into a heap buffer first, so loading really is
 //!   "mmap + validate," not a copy dressed up as one.
@@ -78,7 +79,7 @@ pub struct CacheStats {
 /// handful of byte comparisons, never a full `rkyv` validation of a payload about to be thrown
 /// away.
 const GRAPH_MAGIC: [u8; 4] = *b"KNG1";
-const GRAPH_FORMAT_VERSION: u32 = 1;
+const GRAPH_FORMAT_VERSION: u32 = 2; // 2: plugin_diagnostics + plugin_set_digest (RFC 0017 §3)
 const GRAPH_KEY_LEN: usize = 32;
 const GRAPH_HEADER_LEN: usize = GRAPH_MAGIC.len() + 4 + GRAPH_KEY_LEN;
 
@@ -145,6 +146,33 @@ struct GraphSnapshot {
     function_metrics: Vec<(SymbolId, crate::graph::SymbolMetrics)>,
     patch_meta: Vec<crate::graph::FilePatchMeta>,
     diagnostics: Vec<Diagnostic>,
+    /// `annotate_symbols` output (RFC 0003 §2) — wholly plugin-derived, but unlike the edges
+    /// it has no per-item provenance, so it must round-trip through the snapshot explicitly:
+    /// omitting it would silently drop RFC 0005 §7's exemptions on every warm hit now that
+    /// snapshots are written with plugins registered (RFC 0016 §6).
+    externally_consumed: Vec<SymbolId>,
+    /// Plugin-round diagnostics (content-budget cutoffs), stored apart from the extraction
+    /// `diagnostics` above because the two have different patch-time fates (RFC 0017 §3): the
+    /// incremental patch keeps extraction diagnostics for unchanged files but discards and
+    /// re-derives everything plugin-produced — `Diagnostic` carries no provenance, so the
+    /// partition has to live here, in the storage layer, or stale plugin diagnostics would be
+    /// indistinguishable from adapter ones and ride the patch unrevised.
+    plugin_diagnostics: Vec<Diagnostic>,
+    /// Identity digest of the graph-mutating plugin set that built this snapshot
+    /// (`crate::graph::plugin_set_digest`). The patch's guard (RFC 0017 §3): plugin *edges*
+    /// are provenance-tagged and re-derivable, but `classify_file` overrides are baked into
+    /// `FileNode.class` with no tag — safe to reuse only when the plugin set is unchanged.
+    plugin_set_digest: [u8; 32],
+}
+
+/// A fully deserialized snapshot with its parts kept apart — what [`ProjectCache::latest_graph`]
+/// hands the incremental patch, which needs the partition (see the field docs on
+/// `GraphSnapshot`); the exact-key warm path ([`ProjectCache::get_graph`]) merges instead.
+pub struct LoadedSnapshot {
+    pub graph: ProjectGraph,
+    pub extraction_diagnostics: Vec<Diagnostic>,
+    pub plugin_diagnostics: Vec<Diagnostic>,
+    pub plugin_set_digest: [u8; 32],
 }
 
 struct LockFile(PathBuf);
@@ -520,21 +548,28 @@ impl ProjectCache {
     /// the current discovered file set + adapter versions +
     /// [`crate::graph::GRAPH_SCHEMA_VERSION`]; an input change means a different key, whose
     /// file simply doesn't exist yet — a plain miss, not an error, exactly like a facts-entry
-    /// miss (ADR 0004: any mismatch ⇒ silently rebuild).
+    /// miss (ADR 0004: any mismatch ⇒ silently rebuild). The returned diagnostics merge the
+    /// stored extraction and plugin partitions back into one canonically sorted replay — the
+    /// split only matters to the patch, which uses [`Self::latest_graph`] instead.
     pub fn get_graph(&self, key: &[u8; GRAPH_KEY_LEN]) -> Option<(ProjectGraph, Vec<Diagnostic>)> {
         let out = self.get_graph_uncounted(key)?;
         self.graph_hits.fetch_add(1, Ordering::Relaxed);
-        Some(out)
+        let LoadedSnapshot {
+            graph,
+            mut extraction_diagnostics,
+            plugin_diagnostics,
+            ..
+        } = out;
+        extraction_diagnostics.extend(plugin_diagnostics);
+        extraction_diagnostics.sort_unstable();
+        Some((graph, extraction_diagnostics))
     }
 
     /// [`Self::get_graph`] without the hit counter — the patch's *probe* (RFC 0013 §5) loads
     /// the previous snapshot speculatively; whether the cache actually served the run is only
     /// known when the patch applies, and [`Self::count_graph_hit`] records it then. A failed
     /// probe followed by a full rebuild must not report a warm graph layer it didn't have.
-    fn get_graph_uncounted(
-        &self,
-        key: &[u8; GRAPH_KEY_LEN],
-    ) -> Option<(ProjectGraph, Vec<Diagnostic>)> {
+    fn get_graph_uncounted(&self, key: &[u8; GRAPH_KEY_LEN]) -> Option<LoadedSnapshot> {
         let file = fs::File::open(self.graph_snapshot_path(key)).ok()?;
         let len = file.metadata().ok()?.len();
         if len < GRAPH_HEADER_LEN as u64 {
@@ -605,29 +640,41 @@ impl ProjectCache {
                 .collect(),
             function_metrics: snapshot.function_metrics,
             patch_meta: snapshot.patch_meta,
+            externally_consumed: snapshot.externally_consumed,
         });
-        Some((graph, snapshot.diagnostics))
+        Some(LoadedSnapshot {
+            graph,
+            extraction_diagnostics: snapshot.diagnostics,
+            plugin_diagnostics: snapshot.plugin_diagnostics,
+            plugin_set_digest: snapshot.plugin_set_digest,
+        })
     }
 
-    /// Persist `graph`/`diagnostics` under `key`. No-op when the cache opened read-only or
-    /// encoding fails, same silent-degrade contract as [`Self::put`].
+    /// Persist `graph`/`diagnostics` under `key`, with no plugin data (empty plugin round,
+    /// empty-set digest) — the test-facing convenience; real assembly goes through
+    /// [`Self::graph_writer`] with the actual partition. No-op when the cache opened
+    /// read-only or encoding fails, same silent-degrade contract as [`Self::put`].
     pub fn put_graph(
         &self,
         key: &[u8; GRAPH_KEY_LEN],
         graph: &ProjectGraph,
         diagnostics: &[Diagnostic],
     ) {
-        if let Some(writer) = self.graph_writer(*key) {
-            writer.write(graph, diagnostics);
+        if let Some(writer) = self.graph_writer(*key, crate::graph::plugin_set_digest(&[])) {
+            writer.write(graph, diagnostics, &[]);
         }
     }
 
     /// A detachable snapshot writer (RFC 0008 §2: "cache persist — off the critical path"):
-    /// owns everything it needs (paths only), so the engine can hand it to a background
-    /// thread and let serialization + write overlap with rendering. `None` when the cache is
-    /// read-only — the caller then simply has nothing to defer, same silent-degrade contract
-    /// as [`Self::put`].
-    pub fn graph_writer(&self, key: [u8; GRAPH_KEY_LEN]) -> Option<GraphSnapshotWriter> {
+    /// owns everything it needs (paths + the plugin-set digest, RFC 0017 §3), so the engine
+    /// can hand it to a background thread and let serialization + write overlap with
+    /// rendering. `None` when the cache is read-only — the caller then simply has nothing to
+    /// defer, same silent-degrade contract as [`Self::put`].
+    pub fn graph_writer(
+        &self,
+        key: [u8; GRAPH_KEY_LEN],
+        plugin_set_digest: [u8; 32],
+    ) -> Option<GraphSnapshotWriter> {
         if !self.writable {
             return None;
         }
@@ -635,14 +682,16 @@ impl ProjectCache {
             path: self.graph_snapshot_path(&key),
             latest_path: self.latest_pointer_path(),
             key,
+            plugin_set_digest,
         })
     }
 
     /// The previous run's snapshot, via the `graphs/latest` pointer (RFC 0013 §4) — what the
-    /// incremental patch starts from on a graph-key miss. Any failure (no pointer, evicted
-    /// snapshot, bad bytes) is a plain `None`: the caller full-rebuilds, the fallback-honesty
-    /// rule.
-    pub fn latest_graph(&self) -> Option<(ProjectGraph, Vec<Diagnostic>)> {
+    /// incremental patch starts from on a graph-key miss, parts kept apart (the patch keeps
+    /// extraction diagnostics for unchanged files but discards and re-derives everything
+    /// plugin-produced, RFC 0017 §3). Any failure (no pointer, evicted snapshot, bad bytes)
+    /// is a plain `None`: the caller full-rebuilds, the fallback-honesty rule.
+    pub fn latest_graph(&self) -> Option<LoadedSnapshot> {
         let bytes = fs::read(self.latest_pointer_path()).ok()?;
         let key: [u8; GRAPH_KEY_LEN] = bytes.as_slice().try_into().ok()?;
         self.get_graph_uncounted(&key)
@@ -666,10 +715,16 @@ pub struct GraphSnapshotWriter {
     path: std::path::PathBuf,
     latest_path: std::path::PathBuf,
     key: [u8; GRAPH_KEY_LEN],
+    plugin_set_digest: [u8; 32],
 }
 
 impl GraphSnapshotWriter {
-    pub fn write(&self, graph: &ProjectGraph, diagnostics: &[Diagnostic]) {
+    pub fn write(
+        &self,
+        graph: &ProjectGraph,
+        diagnostics: &[Diagnostic],
+        plugin_diagnostics: &[Diagnostic],
+    ) {
         let key = &self.key;
         let snapshot = GraphSnapshot {
             files: graph.files.clone(),
@@ -704,6 +759,9 @@ impl GraphSnapshotWriter {
             function_metrics: graph.function_metrics.clone(),
             patch_meta: graph.patch_meta.clone(),
             diagnostics: diagnostics.to_vec(),
+            externally_consumed: graph.externally_consumed.clone(),
+            plugin_diagnostics: plugin_diagnostics.to_vec(),
+            plugin_set_digest: self.plugin_set_digest,
         };
         let Ok(bytes) = rkyv::to_bytes::<rkyv::rancor::Error>(&snapshot) else {
             return;
@@ -1105,9 +1163,15 @@ mod tests {
         assert_eq!(cache.graph_hits(), 1); // unchanged — the miss above didn't count
 
         // The latest pointer names the written snapshot — the patch's entry point on a
-        // future miss (RFC 0013 §4).
-        let (latest, _) = cache.latest_graph().expect("latest pointer resolves");
-        assert_eq!(latest.files.len(), restored.files.len());
+        // future miss (RFC 0013 §4). `put_graph` writes the empty-set plugin digest, and the
+        // parts come back apart (RFC 0017 §3).
+        let latest = cache.latest_graph().expect("latest pointer resolves");
+        assert_eq!(latest.graph.files.len(), restored.files.len());
+        assert_eq!(
+            latest.plugin_set_digest,
+            crate::graph::plugin_set_digest(&[])
+        );
+        assert!(latest.plugin_diagnostics.is_empty());
     }
 
     #[test]

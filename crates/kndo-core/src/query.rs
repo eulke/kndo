@@ -1889,6 +1889,7 @@ fn simulate_deletion(
         cycle_policies: graph.cycle_policies.clone(),
         function_metrics: graph.function_metrics.clone(),
         patch_meta: graph.patch_meta.clone(),
+        externally_consumed: graph.externally_consumed.clone(),
     });
     let after = crate::analysis::reachability::compute(&sim);
 

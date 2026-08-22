@@ -164,11 +164,14 @@ max-age = "7d"            # stale reports are ignored (with a diagnostic), not t
     could change its contribution (source, a content-channel-read config file, or the plugin's
     own version/component bytes) already changes the key, so a stale or cross-project match is
     structurally impossible, not merely avoided by policy.
-  - **The incremental patch stays bypassed.** `try_patch` splices only the *changed* files'
-    facts into the *previous* snapshot's graph and never re-invokes `contribute_roots`/
-    `contribute_edges`/`annotate_symbols` — the key-folding argument doesn't extend to an
-    incremental splice the way it does to an all-or-nothing key match. Extending patch reuse
-    to plugins is real, undone future work (RFC 0016 §6).
+  - **The incremental patch re-derives instead of bypassing (RFC 0017 §3, landed).**
+    `try_patch` strips every `Provenance::Plugin` edge and the `externally_consumed` set from
+    the previous snapshot, splices the source change, and re-runs the plugin round — the same
+    function the full build calls — against the patched graph, byte-identical by the
+    equivalence gate. One guard: the snapshot stores the plugin-set identity digest, and a
+    changed set full-rebuilds once (`classify_file` overrides are baked into `FileNode.class`
+    untagged, so they can't be stripped — but they're path-only, so under an identical set
+    they're identical too).
 
   `mutates_graph()`'s self-enforcing rule (assembly only calls the four hooks on plugins
   claiming `true`) is unchanged and remains what the whole scheme is built on.

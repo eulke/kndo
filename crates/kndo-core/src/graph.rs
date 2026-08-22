@@ -205,6 +205,7 @@ pub(crate) struct GraphSnapshotParts {
     pub cycle_policies: Vec<(SmolStr, crate::adapter::CyclePolicy)>,
     pub function_metrics: Vec<(SymbolId, SymbolMetrics)>,
     pub patch_meta: Vec<FilePatchMeta>,
+    pub externally_consumed: Vec<SymbolId>,
 }
 
 /// The assembled language-neutral graph (contracts §1). Read-only once built; incremental
@@ -316,10 +317,11 @@ impl ProjectGraph {
             cycle_policies: parts.cycle_policies,
             function_metrics: parts.function_metrics,
             patch_meta: parts.patch_meta,
-            // Never populated for a snapshot hit or a patch (see the field's own doc comment):
-            // both paths are unreachable whenever a plugin with graph-mutation hooks is
-            // registered, so there is no snapshot format for this to round-trip through yet.
-            externally_consumed: Vec::new(),
+            // Round-trips through the snapshot since RFC 0016 §6 made snapshot writes
+            // unconditional — before that, no snapshot was ever written with a graph-mutating
+            // plugin registered and this was safely absent; afterwards, dropping it here would
+            // silently lose `annotate_symbols` exemptions (RFC 0005 §7) on every warm hit.
+            externally_consumed: parts.externally_consumed,
             file_index,
         }
     }
@@ -553,11 +555,24 @@ fn claim_and_extract(
 fn try_patch(
     discovered: &discovery::DiscoveredTree,
     adapters: &[Box<dyn LanguageAdapter>],
+    sorted_plugins: &[&dyn crate::plugin::Plugin],
+    current_plugin_digest: [u8; 32],
     cache: &crate::cache::ProjectCache,
-) -> Option<(ProjectGraph, Vec<Diagnostic>)> {
-    let (mut graph, mut extraction_diagnostics) = cache.latest_graph()?;
+) -> Option<(ProjectGraph, Vec<Diagnostic>, Vec<Diagnostic>)> {
+    let crate::cache::LoadedSnapshot {
+        mut graph,
+        mut extraction_diagnostics,
+        plugin_diagnostics: _, // stale — the plugin round below re-derives its diagnostics whole
+        plugin_set_digest: snapshot_plugin_digest,
+    } = cache.latest_graph()?;
 
     // ---- guards, in cheapest-first order ----
+    // RFC 0017 §3: a changed plugin set means the snapshot's `FileNode.class` values may
+    // carry another set's `classify_file` overrides — untagged and unstrippable, unlike the
+    // provenance-tagged edges below. Full rebuild once; the snapshot key would miss anyway.
+    if snapshot_plugin_digest != current_plugin_digest {
+        return None;
+    }
     if graph.files.len() != discovered.files.len() {
         return None;
     }
@@ -669,6 +684,17 @@ fn try_patch(
     }
 
     // ---- every guard passed: mutation begins ----
+    // RFC 0017 §3, first: discard every plugin contribution — provenance-tagged edges and the
+    // wholly plugin-derived `externally_consumed` set — before anything below reads the edge
+    // list. Order matters beyond hygiene: the library-root scan further down derives roots
+    // from KEPT edges, and in the full build it runs on adapter data only (plugins haven't
+    // run yet at that point); a surviving plugin Root edge here could masquerade as a library
+    // root and break byte-identity. The round re-runs at the end, on the patched graph.
+    graph
+        .edges
+        .retain(|e| !matches!(e.source, crate::vocab::Provenance::Plugin(_)));
+    graph.externally_consumed.clear();
+
     let changed_set: HashSet<u32> = changed.iter().map(|&c| c as u32).collect();
     let changed_paths: HashSet<ProjectPath> = changed
         .iter()
@@ -972,12 +998,31 @@ fn try_patch(
     function_metrics.extend(new_metrics);
     function_metrics.sort_by_key(|(id, _)| *id);
     graph.function_metrics = function_metrics;
+
+    // RFC 0017 §3: re-run the plugin round against the patched graph — the same function the
+    // full build calls, over the same state shape it would see there (files/symbols in final
+    // form, name tables current, aliases included), so every contribution and its diagnostics
+    // re-derive exactly as a full rebuild would derive them. The stale contributions were
+    // stripped at mutation start; nothing plugin-produced ever rides a patch unrevised.
+    let round = run_plugin_round(
+        &graph.files,
+        &graph.symbols,
+        &graph.file_index,
+        &symbol_by_name_per_file,
+        &symbol_by_qualified_per_file,
+        discovered,
+        sorted_plugins,
+    );
+    graph.edges.extend(round.edges);
+    graph.externally_consumed = round.externally_consumed;
+    let plugin_diagnostics = round.diagnostics;
+
     graph.edges.sort_unstable();
     graph.suppressions.sort_by_key(|(f, _)| *f);
     extraction_diagnostics.sort_unstable();
 
     cache.count_graph_hit(); // the previous snapshot genuinely served this run
-    Some((graph, extraction_diagnostics))
+    Some((graph, extraction_diagnostics, plugin_diagnostics))
 }
 
 /// One file's phase-3b output, merged deterministically in FileId order.
@@ -1713,6 +1758,19 @@ pub(crate) fn compute_graph_key(
     *hasher.finalize().as_bytes()
 }
 
+/// Identity digest of a graph-mutating plugin set alone — the same
+/// [`fold_plugin_identities`] term [`compute_graph_key`] folds, standalone. Stored with every
+/// snapshot and checked by the incremental patch (RFC 0017 §3): plugin *edges* are
+/// provenance-tagged and re-derived by the patch, but `classify_file` overrides are baked
+/// into `FileNode.class` untagged, so a snapshot is patchable only under the identical
+/// plugin set. The empty set folds to a fixed, non-zero digest — "no plugins" is itself an
+/// identity, distinguishable from any real set.
+pub(crate) fn plugin_set_digest(graph_mutating_plugins: &[&dyn crate::plugin::Plugin]) -> [u8; 32] {
+    let mut hasher = blake3::Hasher::new();
+    fold_plugin_identities(&mut hasher, graph_mutating_plugins);
+    *hasher.finalize().as_bytes()
+}
+
 /// `discovered_files` is already sorted by path (discovery.rs's own determinism invariant), so
 /// this fold is stable across runs regardless of filesystem walk order.
 fn fold_discovered_files(
@@ -1814,10 +1872,15 @@ pub fn assemble_with_cache(
     // This convenience entry point persists inline — only the engine's own path defers the
     // write to a background thread (it owns a place to join it; callers here don't).
     if let Some(writer) = &assembled.pending_snapshot {
-        writer.write(&assembled.graph, &assembled.extraction_diagnostics);
+        writer.write(
+            &assembled.graph,
+            &assembled.extraction_diagnostics,
+            &assembled.plugin_diagnostics,
+        );
     }
     let mut diagnostics = assembled.discovery_diagnostics;
     diagnostics.extend(assembled.extraction_diagnostics);
+    diagnostics.extend(assembled.plugin_diagnostics);
     Ok((assembled.graph, diagnostics))
 }
 
@@ -1852,6 +1915,182 @@ fn resolve_plugin_target(
     }
 }
 
+/// Everything one plugin graph-mutation round produces — kept apart from adapter output
+/// because the two have different reuse fates (RFC 0017 §3): adapter edges/diagnostics
+/// persist and patch incrementally; plugin output is discarded and re-derived whole.
+struct PluginRound {
+    edges: Vec<Edge>,
+    externally_consumed: Vec<SymbolId>,
+    diagnostics: Vec<Diagnostic>,
+}
+
+/// The plugin graph-mutation hooks (RFC 0003 §2): `contribute_roots`/`contribute_edges`/
+/// `annotate_symbols`, once per registered graph-mutating plugin, in id-sorted order. One
+/// function for both build paths (RFC 0017 §3): the full build runs it after phase 3b's
+/// reference merge, the incremental patch after splicing — in both cases `files`/`symbols`
+/// and the name tables are in their final, identical state, which is what makes the patched
+/// graph byte-identical to a full rebuild's. Hooks are deterministic functions of the graph
+/// and the discovered tree; nothing here reads clocks, randomness, or other plugins' output.
+fn run_plugin_round(
+    files: &[FileNode],
+    symbols: &[SymbolNode],
+    file_index: &HashMap<ProjectPath, FileId>,
+    symbol_by_name_per_file: &[HashMap<SmolStr, SymbolId>],
+    symbol_by_qualified_per_file: &[HashMap<String, SymbolId>],
+    discovered: &discovery::DiscoveredTree,
+    sorted_plugins: &[&dyn crate::plugin::Plugin],
+) -> PluginRound {
+    let mut round = PluginRound {
+        edges: Vec::new(),
+        externally_consumed: Vec::new(),
+        diagnostics: Vec::new(),
+    };
+    if sorted_plugins.is_empty() {
+        // The `GraphView` index build is one more O(symbols) pass, negligible next to
+        // extraction's own — but there's no reason to pay it for the common zero-plugin case.
+        return round;
+    }
+    let view = crate::plugin::GraphView::new(files, symbols, file_index);
+    let tables = PluginTargetTables {
+        symbols,
+        file_index,
+        symbol_by_name_per_file,
+        symbol_by_qualified_per_file,
+    };
+    for plugin in sorted_plugins {
+        let descriptor = plugin.descriptor();
+        let provenance = crate::vocab::Provenance::Plugin(descriptor.id.clone());
+        // RFC 0016 §5: one ContentView per plugin per round, scoped to that plugin's own
+        // declared globs — budget and the at-most-one cutoff diagnostic are per plugin,
+        // never shared across plugins (one component exceeding its budget must not starve
+        // another's legitimate reads).
+        let content = crate::plugin::ContentView::new(
+            discovered,
+            descriptor.id,
+            &descriptor.requested_file_access,
+        );
+
+        collect_plugin_roots(*plugin, &view, &content, &provenance, &tables, &mut round);
+        collect_plugin_edges(*plugin, &view, &content, &provenance, &tables, &mut round);
+        collect_plugin_annotations(*plugin, &view, &content, &tables, &mut round);
+        if let Some(diagnostic) = content.take_diagnostic() {
+            round.diagnostics.push(diagnostic);
+        }
+    }
+    round.externally_consumed.sort_unstable();
+    round.externally_consumed.dedup();
+    // Same canonical-order rule the adapter-side vectors follow (RFC 0013 §3a) — these are
+    // persisted (the snapshot's plugin partition) and compared by the equivalence gate.
+    round.diagnostics.sort_unstable();
+    round
+}
+
+/// The lookup state [`resolve_plugin_target`] and edge-owner derivation need, bundled so the
+/// per-hook collectors below stay under the workspace's own CRAP gate without seven-argument
+/// signatures.
+struct PluginTargetTables<'a> {
+    symbols: &'a [SymbolNode],
+    file_index: &'a HashMap<ProjectPath, FileId>,
+    symbol_by_name_per_file: &'a [HashMap<SmolStr, SymbolId>],
+    symbol_by_qualified_per_file: &'a [HashMap<String, SymbolId>],
+}
+
+impl PluginTargetTables<'_> {
+    fn resolve(&self, target: &crate::plugin::PluginTarget) -> Option<NodeRef> {
+        resolve_plugin_target(
+            target,
+            self.file_index,
+            self.symbol_by_name_per_file,
+            self.symbol_by_qualified_per_file,
+        )
+    }
+
+    /// The file whose change invalidates this contribution under the patch (RFC 0013 §2's
+    /// `Edge.owner` discipline): the target's own file.
+    fn owner_of(&self, node: NodeRef) -> FileId {
+        match node {
+            NodeRef::File(f) => f,
+            NodeRef::Symbol(s) => self.symbols[s.0 as usize].file,
+        }
+    }
+}
+
+fn collect_plugin_roots(
+    plugin: &dyn crate::plugin::Plugin,
+    view: &crate::plugin::GraphView<'_>,
+    content: &crate::plugin::ContentView<'_>,
+    provenance: &crate::vocab::Provenance,
+    tables: &PluginTargetTables<'_>,
+    round: &mut PluginRound,
+) {
+    let mut root_sink = crate::plugin::RootSink::default();
+    plugin.contribute_roots(view, content, &mut root_sink);
+    for root in root_sink.items {
+        let Some(target) = tables.resolve(&root.target) else {
+            continue;
+        };
+        round.edges.push(Edge {
+            kind: EdgeKind::Root {
+                kind: root.kind,
+                target,
+            },
+            confidence: root.confidence,
+            source: provenance.clone(),
+            span: None,
+            owner: tables.owner_of(target),
+        });
+    }
+}
+
+fn collect_plugin_edges(
+    plugin: &dyn crate::plugin::Plugin,
+    view: &crate::plugin::GraphView<'_>,
+    content: &crate::plugin::ContentView<'_>,
+    provenance: &crate::vocab::Provenance,
+    tables: &PluginTargetTables<'_>,
+    round: &mut PluginRound,
+) {
+    let mut edge_sink = crate::plugin::EdgeSink::default();
+    plugin.contribute_edges(view, content, &mut edge_sink);
+    for contributed in edge_sink.items {
+        let Some(from) = tables.resolve(&contributed.from) else {
+            continue;
+        };
+        // References always targets a symbol — a `to` naming a whole file (no `symbol`
+        // set) isn't a resolvable reference target and is dropped, same as a miss.
+        let Some(NodeRef::Symbol(to)) = tables.resolve(&contributed.to) else {
+            continue;
+        };
+        round.edges.push(Edge {
+            kind: EdgeKind::References {
+                from,
+                to,
+                kind: contributed.kind,
+            },
+            confidence: contributed.confidence,
+            source: provenance.clone(),
+            span: None,
+            owner: tables.owner_of(from),
+        });
+    }
+}
+
+fn collect_plugin_annotations(
+    plugin: &dyn crate::plugin::Plugin,
+    view: &crate::plugin::GraphView<'_>,
+    content: &crate::plugin::ContentView<'_>,
+    tables: &PluginTargetTables<'_>,
+    round: &mut PluginRound,
+) {
+    let mut annotation_sink = crate::plugin::AnnotationSink::default();
+    plugin.annotate_symbols(view, content, &mut annotation_sink);
+    for target in annotation_sink.externally_consumed {
+        if let Some(NodeRef::Symbol(id)) = tables.resolve(&target) {
+            round.externally_consumed.push(id);
+        }
+    }
+}
+
 /// [`assemble_with_cache`] over any [`discovery::TreeSource`] — a directory, or a git tree-ish
 /// read in memory (diff modes, RFC 0004 §6). Everything past discovery is source-blind:
 /// identical content produces identical facts, hashes, ids, and findings whether the bytes came
@@ -1869,8 +2108,11 @@ pub fn assemble_from_source(
     // is stale. Deterministic call order (RFC 0003 §5) — interim rule pending a real
     // ordering-constraints field on `PluginDescriptor` (docs/rfcs/0003-plugin-system.md §5):
     // sort by id once, reused by every hook site below instead of re-sorting per phase.
-    let mut sorted_plugins: Vec<&Box<dyn crate::plugin::Plugin>> =
-        plugins.iter().filter(|p| p.mutates_graph()).collect();
+    let mut sorted_plugins: Vec<&dyn crate::plugin::Plugin> = plugins
+        .iter()
+        .filter(|p| p.mutates_graph())
+        .map(|p| p.as_ref())
+        .collect();
     sorted_plugins.sort_by(|a, b| a.descriptor().id.cmp(&b.descriptor().id));
     let sorted_plugins = sorted_plugins.as_slice();
 
@@ -1913,31 +2155,30 @@ pub fn assemble_from_source(
     // last snapshot exactly, skip claim/extract/resolve/link entirely and hand back the
     // persisted graph. Any mismatch (a single changed byte anywhere is enough) is a plain miss;
     // there's no partial reuse yet, only all-or-nothing.
-    let plugin_refs: Vec<&dyn crate::plugin::Plugin> =
-        sorted_plugins.iter().map(|p| p.as_ref()).collect();
-    let graph_key = compute_graph_key(&discovered.files, adapters, &plugin_refs);
+    let graph_key = compute_graph_key(&discovered.files, adapters, sorted_plugins);
+    let current_plugin_digest = plugin_set_digest(sorted_plugins);
     tick("discovery", &mut phase_start);
-    // RFC 0016 §6 split this bypass in two, where before both fast paths shared one gate:
+    // Neither fast path bypasses on plugins anymore (RFC 0016 §6 landed the snapshot half,
+    // RFC 0017 §3 the patch half):
     //
-    // - **Snapshot reuse** is now safe for a graph-mutating plugin, because plugin identity
-    //   (id, declared version, and — WASM only — component content hash) folds into `graph_key`
-    //   above. Any input a plugin's hooks could react to — every source/config file its
-    //   content channel might read is already part of `discovered.files`, hence already in the
-    //   key — or the plugin binary/component itself changing, already changes the key, so a
-    //   snapshot written under one key can never be served back for a run whose plugin set (or
-    //   any of its content-channel-visible inputs) differs. A snapshot written *without* any
-    //   graph-mutating plugin, or under a different plugin set, simply won't match this key
-    //   either — no cross-project-state leak possible.
-    // - **Patch reuse** stays gated on `sorted_plugins.is_empty()` (already filtered to
-    //   `mutates_graph()` plugins, not the raw registry — a coverage-only plugin like
-    //   `LcovPlugin` costs neither fast path anything). `try_patch` re-extracts only the
-    //   *changed* files and splices their facts into the *previous* snapshot's graph — it never
-    //   re-invokes `contribute_roots`/`contribute_edges`/`annotate_symbols`, so a plugin's prior
-    //   contributions would ride along unrevised even though the key-folding argument above
-    //   doesn't apply to an incremental splice the way it does to an all-or-nothing key match.
-    //   Extending patch reuse to plugins is real future work (RFC 0016 §6 names it), not
-    //   attempted here.
-    let patch_eligible = sorted_plugins.is_empty();
+    // - **Snapshot reuse**: plugin identity (id, declared version, and — WASM only —
+    //   component content hash) folds into `graph_key` above. Any input a plugin's hooks
+    //   could react to — every source/config file its content channel might read is already
+    //   part of `discovered.files`, hence already in the key — or the plugin binary/component
+    //   itself changing, already changes the key, so a snapshot written under one key can
+    //   never be served back for a run whose plugin set (or any of its content-channel-visible
+    //   inputs) differs.
+    // - **Patch reuse**: `try_patch` strips every `Provenance::Plugin` edge and the
+    //   `externally_consumed` set from the previous snapshot, splices the source change, and
+    //   re-runs the plugin round (`run_plugin_round` — the same function the full build calls)
+    //   against the patched graph, so no plugin contribution ever rides a patch unrevised. The
+    //   one plugin effect that can't be stripped — `classify_file` overrides baked into
+    //   `FileNode.class` untagged — is covered by the snapshot's stored plugin-set digest:
+    //   `try_patch` refuses when the set changed, and `classify_file` is path-only, so under an
+    //   identical set its decisions are identical too.
+    //
+    // `sorted_plugins` is already filtered to `mutates_graph()` plugins, not the raw registry —
+    // a coverage-only plugin like `LcovPlugin` costs neither fast path anything.
     if let Some(cache) = cache {
         if let Some((graph, graph_diagnostics)) = cache.get_graph(&graph_key) {
             tick("snapshot-load", &mut phase_start);
@@ -1945,6 +2186,7 @@ pub fn assemble_from_source(
                 graph,
                 discovery_diagnostics,
                 extraction_diagnostics: graph_diagnostics,
+                plugin_diagnostics: Vec::new(),
                 pending_snapshot: None,
                 timings,
             });
@@ -1952,16 +2194,20 @@ pub fn assemble_from_source(
         tick("snapshot-probe", &mut phase_start);
         // RFC 0013 §5: on a key miss, try the incremental patch off the previous snapshot —
         // any guard failure falls through to the full rebuild below, the one fallback.
-        if let Some((graph, extraction_diagnostics)) = patch_eligible
-            .then(|| try_patch(&discovered, adapters, cache))
-            .flatten()
-        {
+        if let Some((graph, extraction_diagnostics, plugin_diagnostics)) = try_patch(
+            &discovered,
+            adapters,
+            sorted_plugins,
+            current_plugin_digest,
+            cache,
+        ) {
             tick("patch", &mut phase_start);
-            let pending_snapshot = cache.graph_writer(graph_key);
+            let pending_snapshot = cache.graph_writer(graph_key, current_plugin_digest);
             return Ok(AssembledGraph {
                 graph,
                 discovery_diagnostics,
                 extraction_diagnostics,
+                plugin_diagnostics,
                 pending_snapshot,
                 timings,
             });
@@ -2694,114 +2940,25 @@ pub fn assemble_from_source(
         suppressions.extend(resolved.suppressions);
     }
 
-    // Plugin graph-mutation hooks (RFC 0003 §2): contribute_roots/contribute_edges/
-    // annotate_symbols run once, right here — Pass A's symbol tables and every file's
-    // references (phase 3b, just merged above) are both stable, and nothing downstream (the
-    // canonical sort, `ProjectGraph` construction) has run yet, so a plugin's target-by-name
-    // lookups see the real, final graph and its contributions fold into the one sort below
-    // rather than needing a second pass. Skipped whole when no plugin is registered — the
-    // `GraphView` index build is one more O(symbols) pass, negligible next to Pass A's own, but
-    // there's no reason to pay it for the common zero-plugin-with-graph-hooks case.
-    let mut externally_consumed: Vec<SymbolId> = Vec::new();
-    if !sorted_plugins.is_empty() {
-        let view = crate::plugin::GraphView::new(&files, &symbols, &file_index);
-        for plugin in sorted_plugins {
-            let descriptor = plugin.descriptor();
-            let provenance = crate::vocab::Provenance::Plugin(descriptor.id.clone());
-            // RFC 0016 §5: one ContentView per plugin per round, scoped to that plugin's own
-            // declared globs — budget and the at-most-one cutoff diagnostic are per plugin,
-            // never shared across plugins (one component exceeding its budget must not starve
-            // another's legitimate reads).
-            let content = crate::plugin::ContentView::new(
-                &discovered,
-                descriptor.id,
-                &descriptor.requested_file_access,
-            );
-
-            let mut root_sink = crate::plugin::RootSink::default();
-            plugin.contribute_roots(&view, &content, &mut root_sink);
-            for root in root_sink.items {
-                let Some(target) = resolve_plugin_target(
-                    &root.target,
-                    &file_index,
-                    &symbol_by_name_per_file,
-                    &symbol_by_qualified_per_file,
-                ) else {
-                    continue;
-                };
-                let owner = match target {
-                    NodeRef::File(f) => f,
-                    NodeRef::Symbol(s) => symbols[s.0 as usize].file,
-                };
-                edges.push(Edge {
-                    kind: EdgeKind::Root {
-                        kind: root.kind,
-                        target,
-                    },
-                    confidence: root.confidence,
-                    source: provenance.clone(),
-                    span: None,
-                    owner,
-                });
-            }
-
-            let mut edge_sink = crate::plugin::EdgeSink::default();
-            plugin.contribute_edges(&view, &content, &mut edge_sink);
-            for contributed in edge_sink.items {
-                let Some(from) = resolve_plugin_target(
-                    &contributed.from,
-                    &file_index,
-                    &symbol_by_name_per_file,
-                    &symbol_by_qualified_per_file,
-                ) else {
-                    continue;
-                };
-                // References always targets a symbol — a `to` naming a whole file (no `symbol`
-                // set) isn't a resolvable reference target and is dropped, same as a miss.
-                let Some(NodeRef::Symbol(to)) = resolve_plugin_target(
-                    &contributed.to,
-                    &file_index,
-                    &symbol_by_name_per_file,
-                    &symbol_by_qualified_per_file,
-                ) else {
-                    continue;
-                };
-                let owner = match from {
-                    NodeRef::File(f) => f,
-                    NodeRef::Symbol(s) => symbols[s.0 as usize].file,
-                };
-                edges.push(Edge {
-                    kind: EdgeKind::References {
-                        from,
-                        to,
-                        kind: contributed.kind,
-                    },
-                    confidence: contributed.confidence,
-                    source: provenance.clone(),
-                    span: None,
-                    owner,
-                });
-            }
-
-            let mut annotation_sink = crate::plugin::AnnotationSink::default();
-            plugin.annotate_symbols(&view, &content, &mut annotation_sink);
-            for target in annotation_sink.externally_consumed {
-                if let Some(NodeRef::Symbol(id)) = resolve_plugin_target(
-                    &target,
-                    &file_index,
-                    &symbol_by_name_per_file,
-                    &symbol_by_qualified_per_file,
-                ) {
-                    externally_consumed.push(id);
-                }
-            }
-            if let Some(diagnostic) = content.take_diagnostic() {
-                diagnostics.push(diagnostic);
-            }
-        }
-        externally_consumed.sort_unstable();
-        externally_consumed.dedup();
-    }
+    // Plugin graph-mutation hooks (RFC 0003 §2), factored into `run_plugin_round` so the
+    // incremental patch re-derives contributions through the identical code path (RFC 0017
+    // §3). Runs right here — Pass A's symbol tables and every file's references (phase 3b,
+    // just merged above) are both stable, and nothing downstream (the canonical sort,
+    // `ProjectGraph` construction) has run yet, so a plugin's target-by-name lookups see the
+    // real, final graph and its contributions fold into the one sort below rather than
+    // needing a second pass.
+    let plugin_round = run_plugin_round(
+        &files,
+        &symbols,
+        &file_index,
+        &symbol_by_name_per_file,
+        &symbol_by_qualified_per_file,
+        &discovered,
+        sorted_plugins,
+    );
+    edges.extend(plugin_round.edges);
+    let externally_consumed = plugin_round.externally_consumed;
+    let plugin_diagnostics = plugin_round.diagnostics;
 
     // Canonical order (RFC 0013 §3a): edge and diagnostic order is *data*, not construction
     // history. Two semantically identical graphs must be identical vectors — the property the
@@ -2850,12 +3007,13 @@ pub fn assemble_from_source(
     // this used to guard against is exactly what the key change closes. Persisting unconditionally
     // is also what makes the read-side snapshot fast path (line ~1898) actually fire on a
     // plugin-bearing project's *second* run, not just prove itself safe in the abstract.
-    let pending_snapshot = cache.and_then(|c| c.graph_writer(graph_key));
+    let pending_snapshot = cache.and_then(|c| c.graph_writer(graph_key, current_plugin_digest));
     tick("resolve+link", &mut phase_start);
     Ok(AssembledGraph {
         graph,
         discovery_diagnostics,
         extraction_diagnostics: diagnostics,
+        plugin_diagnostics,
         pending_snapshot,
         timings,
     })
@@ -2871,6 +3029,11 @@ pub struct AssembledGraph {
     /// Extraction + manifest diagnostics — what the snapshot stores and warm paths replay
     /// (their producers were skipped). Canonically sorted, like the edges.
     pub extraction_diagnostics: Vec<Diagnostic>,
+    /// The plugin round's diagnostics (content-budget cutoffs), stored in the snapshot's own
+    /// partition (RFC 0017 §3: the patch discards and re-derives them, so they can't share a
+    /// vector with extraction diagnostics that persist). Empty on the snapshot fast path —
+    /// there `extraction_diagnostics` already carries the merged replay.
+    pub plugin_diagnostics: Vec<Diagnostic>,
     pub pending_snapshot: Option<crate::cache::GraphSnapshotWriter>,
     /// Assembly sub-phase wall times `(phase, µs)` — merged into `RunResult::timings` so
     /// `--verbose` shows where assembly goes (discovery+hash, snapshot load, extract incl.
@@ -4387,84 +4550,194 @@ mod tests {
         );
     }
 
-    #[test]
-    fn a_graph_mutating_plugin_now_reuses_the_snapshot_but_never_the_patch() {
-        // RFC 0016 §6: plugin identity folds into the graph cache key, so the snapshot fast
-        // path is safe for a graph-mutating plugin now — reversing the old blanket bypass this
-        // test used to assert. The incremental patch stays bypassed regardless (it never
-        // re-invokes plugin hooks), proven here by checking the plugin's own contribution
-        // actually reflects a file edit rather than going stale.
-        struct HookedPlugin;
-        impl crate::plugin::Plugin for HookedPlugin {
-            fn descriptor(&self) -> crate::plugin::PluginDescriptor {
-                crate::plugin::PluginDescriptor {
-                    id: SmolStr::new("hooked"),
-                    version: SmolStr::new("1"),
-                    detection: vec![],
-                    requested_file_access: vec![],
-                    activation: vec![],
-                    dependencies: vec![],
-                }
+    /// A test plugin exercising every contribution kind the patch must re-derive (RFC 0017
+    /// §3): a root gated on a content-channel file's *content* (so a stale round is
+    /// observable), plus an unconditional `annotate_symbols` mark (so the snapshot's
+    /// `externally_consumed` round-trip is observable too).
+    struct MarkerGatedPlugin {
+        version: &'static str,
+    }
+    impl crate::plugin::Plugin for MarkerGatedPlugin {
+        fn descriptor(&self) -> crate::plugin::PluginDescriptor {
+            crate::plugin::PluginDescriptor {
+                id: SmolStr::new("marker-gated"),
+                version: SmolStr::new(self.version),
+                detection: vec![],
+                requested_file_access: vec![SmolStr::new("marker.txt")],
+                activation: vec![],
+                dependencies: vec![],
             }
+        }
 
-            fn contribute_roots(
-                &self,
-                graph: &crate::plugin::GraphView<'_>,
-                _content: &crate::plugin::ContentView<'_>,
-                out: &mut crate::plugin::RootSink,
-            ) {
-                for file in graph.files() {
-                    for symbol in graph.symbols_in(&file.path) {
-                        if symbol.name.as_str() == "root_me" {
-                            out.add(
-                                crate::plugin::PluginTarget::symbol(file.path.clone(), "root_me"),
-                                crate::vocab::RootKind::Production,
-                                Confidence::Probable,
-                            );
-                        }
+        fn contribute_roots(
+            &self,
+            graph: &crate::plugin::GraphView<'_>,
+            content: &crate::plugin::ContentView<'_>,
+            out: &mut crate::plugin::RootSink,
+        ) {
+            let marker_on = content
+                .read(&ProjectPath(SmolStr::new("marker.txt")))
+                .is_some_and(|bytes| bytes == b"on");
+            if !marker_on {
+                return;
+            }
+            for file in graph.files() {
+                for symbol in graph.symbols_in(&file.path) {
+                    if symbol.name.as_str() == "root_me" {
+                        out.add(
+                            crate::plugin::PluginTarget::symbol(file.path.clone(), "root_me"),
+                            crate::vocab::RootKind::Production,
+                            Confidence::Probable,
+                        );
                     }
                 }
             }
         }
-        let is_root_me = |graph: &ProjectGraph| {
-            graph.edges.iter().any(|e| {
-                matches!(&e.kind, EdgeKind::Root { target: NodeRef::Symbol(s), .. }
-                    if graph.symbols[s.0 as usize].name.as_str() == "root_me")
-            })
-        };
 
-        let name = "mutating-plugin-snapshot-not-patch";
-        let dir = project(name, &[("a.mock", "decl x\nref y"), ("b.mock", "decl y")]);
+        fn annotate_symbols(
+            &self,
+            graph: &crate::plugin::GraphView<'_>,
+            _content: &crate::plugin::ContentView<'_>,
+            out: &mut crate::plugin::AnnotationSink,
+        ) {
+            for file in graph.files() {
+                for symbol in graph.symbols_in(&file.path) {
+                    if symbol.name.as_str() == "root_me" {
+                        out.mark_externally_consumed(file.path.clone(), "root_me");
+                    }
+                }
+            }
+        }
+    }
+
+    fn has_root_me_root(graph: &ProjectGraph) -> bool {
+        graph.edges.iter().any(|e| {
+            matches!(&e.kind, EdgeKind::Root { target: NodeRef::Symbol(s), .. }
+                if graph.symbols[s.0 as usize].name.as_str() == "root_me")
+        })
+    }
+
+    /// The fixture behind the three RFC 0017 §3 tests below: `root_me` exists from the start
+    /// (so the marker flip is the ONLY change), 20 filler files keep one changed file under
+    /// the patch's 5% work threshold, and `marker.txt` is unclaimed — its content change is
+    /// invisible to every adapter guard and only a re-run plugin round can react to it.
+    fn marker_project(name: &str) -> std::path::PathBuf {
+        let filler: Vec<(String, String)> = (0..20)
+            .map(|i| (format!("filler{i}.mock"), format!("decl filler{i}")))
+            .collect();
+        let mut all: Vec<(&str, &str)> = vec![
+            ("a.mock", "decl x\ndecl root_me\nref y"),
+            ("b.mock", "decl y"),
+            ("marker.txt", "off"),
+        ];
+        all.extend(filler.iter().map(|(n, c)| (n.as_str(), c.as_str())));
+        project(name, &all)
+    }
+
+    #[test]
+    fn the_patch_re_derives_plugin_contributions_instead_of_bypassing() {
+        // RFC 0017 §3: the patch strips every plugin contribution and re-runs the round
+        // against the patched graph — proven by flipping a content-channel file the plugin's
+        // own gate reads. The flip is invisible to every adapter-side guard (the file is
+        // unclaimed), so ONLY a genuinely re-run round can produce the new root.
+        let name = "patch-rederives-plugin-round";
+        let dir = marker_project(name);
         let cache_dir = std::env::temp_dir().join(format!("kndo-graph-test-{name}-cache"));
         let _ = fs::remove_dir_all(&cache_dir);
         let cache = crate::cache::ProjectCache::open(&cache_dir);
-        let plugins: Vec<Box<dyn crate::plugin::Plugin>> = vec![Box::new(HookedPlugin)];
+        let plugins: Vec<Box<dyn crate::plugin::Plugin>> =
+            vec![Box::new(MarkerGatedPlugin { version: "1" })];
 
         let (cold, _) =
             assemble_with_cache(&dir, &mock_adapters(), &plugins, Some(&cache)).unwrap();
-        assert!(!is_root_me(&cold), "root_me doesn't exist yet");
+        assert!(
+            !has_root_me_root(&cold),
+            "marker is off — no gated root yet"
+        );
+        assert!(
+            !cold.externally_consumed.is_empty(),
+            "the unconditional annotation is present from the cold build"
+        );
 
-        // Unchanged re-run: `try_patch` itself refuses an empty changed-set ("would have hit
-        // the snapshot key"), so any hit here can only be the snapshot path — direct proof the
-        // key change actually makes the snapshot servable for this plugin.
+        fs::write(dir.join("marker.txt"), "on").unwrap();
+        let (patched, patched_diags) =
+            assemble_with_cache(&dir, &mock_adapters(), &plugins, Some(&cache)).unwrap();
+        assert!(
+            cache.graph_hits() > 0,
+            "a content flip on an unclaimed file must go through the patch, plugins included"
+        );
+        assert!(
+            has_root_me_root(&patched),
+            "the re-run round must see the new marker content — a stale ride-along would not"
+        );
+
+        // RFC 0013 §6's equivalence obligation now extends to plugin-bearing runs: the
+        // patched graph — plugin round included — is byte-identical to a scratch rebuild.
+        let (scratch, scratch_diags) = assemble(&dir, &mock_adapters(), &plugins).unwrap();
+        assert_eq!(
+            patched, scratch,
+            "patched ≡ full rebuild, plugin round included"
+        );
+        assert_eq!(patched_diags, scratch_diags, "diagnostics too");
+    }
+
+    #[test]
+    fn a_changed_plugin_set_refuses_the_patch_and_rebuilds() {
+        // RFC 0017 §3's one new guard: `classify_file` overrides are baked into
+        // `FileNode.class` untagged, so the snapshot's stored plugin-set digest must match —
+        // a version bump alone (same id, same hooks) is a different set and full-rebuilds.
+        let name = "patch-plugin-set-changed";
+        let dir = marker_project(name);
+        let cache_dir = std::env::temp_dir().join(format!("kndo-graph-test-{name}-cache"));
+        let _ = fs::remove_dir_all(&cache_dir);
+        let cache = crate::cache::ProjectCache::open(&cache_dir);
+
+        let v1: Vec<Box<dyn crate::plugin::Plugin>> =
+            vec![Box::new(MarkerGatedPlugin { version: "1" })];
+        assemble_with_cache(&dir, &mock_adapters(), &v1, Some(&cache)).unwrap();
+
+        fs::write(dir.join("marker.txt"), "on").unwrap();
+        let v2: Vec<Box<dyn crate::plugin::Plugin>> =
+            vec![Box::new(MarkerGatedPlugin { version: "2" })];
+        let (rebuilt, _) = assemble_with_cache(&dir, &mock_adapters(), &v2, Some(&cache)).unwrap();
+        assert_eq!(
+            cache.graph_hits(),
+            0,
+            "digest mismatch must refuse the patch (and the key already missed)"
+        );
+        assert!(
+            has_root_me_root(&rebuilt),
+            "the full rebuild still runs the new set's round"
+        );
+    }
+
+    #[test]
+    fn externally_consumed_round_trips_through_the_snapshot() {
+        // Regression (introduced by RFC 0016 §6, fixed with RFC 0017 §3's snapshot format):
+        // snapshot writes became unconditional with plugins registered, but the snapshot
+        // didn't persist `externally_consumed` — every warm hit silently dropped
+        // `annotate_symbols` output, losing RFC 0005 §7 exemptions. `ProjectGraph`'s derived
+        // `PartialEq` covers the field, so plain equality is the whole assertion.
+        let name = "externally-consumed-roundtrip";
+        let dir = marker_project(name);
+        let cache_dir = std::env::temp_dir().join(format!("kndo-graph-test-{name}-cache"));
+        let _ = fs::remove_dir_all(&cache_dir);
+        let cache = crate::cache::ProjectCache::open(&cache_dir);
+        let plugins: Vec<Box<dyn crate::plugin::Plugin>> =
+            vec![Box::new(MarkerGatedPlugin { version: "1" })];
+
+        let (cold, _) =
+            assemble_with_cache(&dir, &mock_adapters(), &plugins, Some(&cache)).unwrap();
+        assert!(!cold.externally_consumed.is_empty());
         let (warm, _) =
             assemble_with_cache(&dir, &mock_adapters(), &plugins, Some(&cache)).unwrap();
         assert!(
             cache.graph_hits() > 0,
-            "plugin identity in the key must make the snapshot servable now"
+            "second run must be the snapshot hit"
         );
-        assert_eq!(cold, warm);
-
-        // Edit introduces a symbol only the plugin's own hook would root. A patch reuse would
-        // re-extract the file's own declarations (so `root_me` exists as a symbol) but never
-        // call `contribute_roots` again — the stale prior graph's edges would carry over with
-        // no root for it. Correctly falling back to a full rebuild is what makes it rooted.
-        fs::write(dir.join("a.mock"), "decl x\nref y\ndecl root_me").unwrap();
-        let (edited, _) =
-            assemble_with_cache(&dir, &mock_adapters(), &plugins, Some(&cache)).unwrap();
-        assert!(
-            is_root_me(&edited),
-            "a full rebuild must have re-invoked contribute_roots, not a stale patch"
+        assert_eq!(
+            cold, warm,
+            "the warm graph must carry the annotations, not silently drop them"
         );
     }
 
