@@ -1236,7 +1236,22 @@ impl Engine {
                         .map(|p| plugin_finding(p, &self.plugins_gate)),
                 );
                 findings.sort_unstable_by(|a, b| a.id.cmp(&b.id));
-                let (findings, suppressed) = crate::suppression::apply(&g, findings);
+                // The dynamic half of suppression category validation (module docs of
+                // `suppression`): every `plugin:<coordinate>/<rule>` category the active
+                // plugins declare, whether or not the rule emitted anything this run.
+                let plugin_categories: rustc_hash::FxHashSet<String> = self
+                    .plugins
+                    .iter()
+                    .flat_map(|p| {
+                        let id = p.descriptor().id;
+                        p.rules()
+                            .into_iter()
+                            .filter(|r| crate::plugin::is_valid_rule_name(&r.name))
+                            .map(move |r| format!("plugin:{id}/{}", r.name))
+                    })
+                    .collect();
+                let (findings, suppressed) =
+                    crate::suppression::apply(&g, findings, &plugin_categories);
                 Ok(AnalyzedTree {
                     graph: g,
                     findings,
@@ -2354,6 +2369,43 @@ mod tests {
         );
         assert_eq!(result.suppressed.inline, 1);
         assert_eq!(result.suppressed.config, 0);
+    }
+
+    #[test]
+    fn a_matchless_pragma_surfaces_as_a_stale_finding_in_full_mode() {
+        let dir = std::env::temp_dir().join("kndo-engine-test-stale-full");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        // A root file (never `unused`) acknowledging a category it will never produce: the
+        // pragma suppresses nothing, so the M6 `stale` rule flags the pragma itself.
+        std::fs::write(
+            dir.join("root.dmock"),
+            "root-file\nsuppress-file version-skew\n",
+        )
+        .unwrap();
+
+        let mut engine = Engine::open(
+            &dir,
+            ConfigOverrides::default(),
+            vec![Box::new(DiffMockAdapter)],
+        )
+        .unwrap();
+        let result = engine.check(CheckRequest {
+            mode: RunMode::Full,
+        });
+
+        let stale: Vec<_> = result
+            .findings
+            .iter()
+            .filter(|f| f.category == "stale")
+            .collect();
+        assert_eq!(stale.len(), 1, "{:?}", result.findings);
+        assert_eq!(stale[0].group, "hygiene");
+        assert_eq!(stale[0].subject_kind, "suppression");
+        assert_eq!(stale[0].severity, Severity::Info);
+        assert_eq!(finding_path(stale[0]), "root.dmock");
+        assert!(stale[0].message.contains("version-skew"));
+        assert_eq!(result.suppressed.inline, 0);
     }
 
     #[test]

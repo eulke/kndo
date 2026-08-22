@@ -883,8 +883,12 @@ transitive dependency closure, `plugins.lock`, stage-then-commit atomicity; poli
 tested against injected source/probe edges plus one real-component identity-binding test) —
 are **all landed**: RFC 0015 is fully implemented), **`kndo-action` GA** (RFC 0010: sticky PR
 comment, annotations, SARIF
-opt-in — dogfooded on kndo's own PRs from M2 via a pre-GA workflow), `stale` (suppressions) rule,
-error-message polish, and **RFC 0016 §8 phase 0** (freeze reservations: declare the planned
+opt-in — dogfooded on kndo's own PRs from M2 via a pre-GA workflow), **`stale` (suppressions)
+rule — landed** (core `suppression.rs`: a pragma naming an unknown category, attaching to no
+declaration, matching zero findings in the pre-suppression set, or meta-targeting `stale`
+itself becomes an `info`/`hygiene` finding at the pragma's own span; `plugin:` categories
+validate against the rules active plugins declare, and undeclared ones are skipped rather than
+flagged so staleness never flickers with plugin activation), error-message polish, and **RFC 0016 §8 phase 0** (freeze reservations: declare the planned
 additive ABI evolutions in wasm-abi §8 and add the dormant `AdapterDescriptor` component
 fields native-side, so the 1.0 freeze doesn't wall off the component-model phases — **landed**).
 

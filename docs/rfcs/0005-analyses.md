@@ -382,7 +382,7 @@ Triage of 2026-08-18 (earlier promotions: `internal-only` → §7, `cyclic` → 
 | `duplicate-asset` | **Adopted** — folded into `duplicate` with subject `file` (§6): byte-identical files, free on the blake3 hashes we already compute; lands M1 |
 | `orphan-export` | **Dropped, subsumed** — fully covered by `internal-only` (§7), whose remediation ("lower the visibility") is strictly better than "maybe delete the export" |
 | `unused-css-variable` | **Dropped, subsumed** — falls out as `unused:css-variable` once the CSS adapter extracts custom-property declarations and `var()` uses, which is already in its §RFC 0002 scope |
-| `stale` on suppressions | **Already committed** — in the category registry and scheduled for M6 |
+| `stale` on suppressions | **Already committed** — in the category registry; **landed in M6** (core `suppression.rs`: unknown-category, unbound, matched-nothing, and `kndo:allow stale` meta-suppression, all `info`/`hygiene` on the pragma's own span) |
 | `barrel-abuse` | **Plugin territory** — a JS/TS ecosystem convention, not a language or graph fact; belongs to the js ecosystem plugin, post-1.0 |
 | `dead-feature-flag` | **Plugin territory** — the useful version needs flag-system knowledge (LaunchDarkly, Unleash…); a constant-propagation assist in the core may follow real plugin demand |
 | `layer-violation` | **Deferred post-1.0** — needs a layering-rules config DSL and does nothing under zero config; parking lot |
