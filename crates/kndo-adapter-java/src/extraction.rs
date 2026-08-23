@@ -76,6 +76,10 @@ const MIN_CLONE_TOKENS: usize = 50;
 /// `member_of` attribution (RFC 0012 §3).
 struct Ctx<'a> {
     owner: Option<&'a str>,
+    /// Inside an `interface_body`/`annotation_type_body`: members with no modifier are
+    /// implicitly `public` (JLS §9.4) — the package-private default would misread every
+    /// modifier-less interface method as unexported (M6 FP hunt, junit4 corpus).
+    implicit_public: bool,
 }
 
 pub(crate) fn extract(_path: &str, content: &[u8]) -> FileFacts {
@@ -128,7 +132,15 @@ fn handle_top_level(item: Node, src: &[u8], out: &mut FileFacts) {
         | "interface_declaration"
         | "enum_declaration"
         | "record_declaration"
-        | "annotation_type_declaration" => handle_type(item, src, &Ctx { owner: None }, out),
+        | "annotation_type_declaration" => handle_type(
+            item,
+            src,
+            &Ctx {
+                owner: None,
+                implicit_public: false,
+            },
+            out,
+        ),
         _ => {}
     }
 }
@@ -241,9 +253,14 @@ fn make_import(
 /// `[File "private", Package "package-private", Public "protected", Public "public"]` (spec
 /// §0). Reads the `modifiers` node's direct child tokens; a top-level type never carries
 /// `private`/`protected` (illegal Java), so this naturally yields only levels 1/3 for them.
-fn visibility(node: Node) -> (u8, bool) {
+fn visibility(node: Node, ctx: &Ctx<'_>) -> (u8, bool) {
+    let default = if ctx.implicit_public {
+        (3, true) // interface members: implicitly public (JLS §9.4)
+    } else {
+        (1, false) // package-private default
+    };
     let Some(modifiers) = modifiers_node(node) else {
-        return (1, false); // package-private default
+        return default;
     };
     let mut c = modifiers.walk();
     let mut private = false;
@@ -260,11 +277,14 @@ fn visibility(node: Node) -> (u8, bool) {
     if public {
         (3, true)
     } else if protected {
-        (2, false)
+        // Exported: `protected` is subclass-consumable API — an external subclass of a
+        // published library overrides these (junit4's BlockJUnit4ClassRunner.methodBlock),
+        // matching its Public-scope, surface-transitive rung (lib.rs).
+        (2, true)
     } else if private {
         (0, false)
     } else {
-        (1, false)
+        default
     }
 }
 
@@ -307,7 +327,7 @@ fn handle_type(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
         return;
     };
     let name = text(name_node, src);
-    let vis = visibility(item);
+    let vis = visibility(item, ctx);
     let symbol_kind = match kind {
         "class_declaration" => SymbolKind::Class,
         "interface_declaration" => SymbolKind::Interface,
@@ -385,11 +405,16 @@ fn last_type_name<'a>(node: Node, src: &'a [u8]) -> Option<&'a str> {
 /// function for all four body kinds — their member shapes overlap enough (fields, methods,
 /// constructors, nested types) that a single dispatch is honest, not a lossy generalization.
 fn handle_body(body: Node, src: &[u8], owner: &str, out: &mut FileFacts) {
-    let ctx = Ctx { owner: Some(owner) };
+    let ctx = Ctx {
+        owner: Some(owner),
+        implicit_public: matches!(body.kind(), "interface_body" | "annotation_type_body"),
+    };
     let mut cursor = body.walk();
     for member in body.children(&mut cursor) {
         match member.kind() {
-            "field_declaration" => handle_field(member, src, &ctx, out),
+            // `constant_declaration` is the interface-body spelling of a field (JLS §9.3,
+            // implicitly public static final) — same declarator shape (M6 FP hunt).
+            "field_declaration" | "constant_declaration" => handle_field(member, src, &ctx, out),
             "method_declaration" => handle_method(member, src, &ctx, out),
             "constructor_declaration" => handle_constructor(member, src, &ctx, out),
             "class_declaration"
@@ -448,7 +473,7 @@ fn handle_body(body: Node, src: &[u8], owner: &str, out: &mut FileFacts) {
 }
 
 fn handle_field(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
-    let vis = visibility(item);
+    let vis = visibility(item, ctx);
     let Some(ty) = item.child_by_field_name("type") else {
         return;
     };
@@ -460,6 +485,12 @@ fn handle_field(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
         let Some(name_node) = declarator.child_by_field_name("name") else {
             continue;
         };
+        // The serialization-contract marker (`private static final long serialVersionUID`)
+        // is read reflectively by the JVM, never by code — declaring it would guarantee an
+        // `unused` accusation on every Serializable class (M6 FP hunt, docs/adapters/java.md).
+        if text(name_node, src) == "serialVersionUID" {
+            continue;
+        }
         push_declaration(
             out,
             text(name_node, src),
@@ -481,7 +512,7 @@ fn handle_method(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
         return;
     };
     let name = text(name_node, src);
-    let vis = visibility(item);
+    let vis = visibility(item, ctx);
     let body = item.child_by_field_name("body");
     let signature_span = body.map(|b| Span {
         start: span(item).start,
@@ -502,8 +533,18 @@ fn handle_method(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
         });
     }
     // `@Override` dispatch rooting (spec §0) — the JDK/collections call site never names the
-    // override, so the duck-typed fallback can't be trusted to see it.
-    if has_annotation(item, src, "Override") {
+    // override, so the duck-typed fallback can't be trusted to see it. The Serializable
+    // contract's hook methods get the same treatment (M6 FP hunt, junit4's
+    // `Result.readObject`): the JVM invokes them reflectively during (de)serialization —
+    // no source call site can exist, by specification.
+    const SERIALIZATION_HOOKS: [&str; 5] = [
+        "readObject",
+        "writeObject",
+        "readResolve",
+        "writeReplace",
+        "readObjectNoData",
+    ];
+    if has_annotation(item, src, "Override") || SERIALIZATION_HOOKS.contains(&name) {
         out.roots.push(RawRoot {
             kind: RootKind::Production,
             target: RawRootTarget::Declaration(SmolStr::new(&qualified)),
@@ -543,7 +584,7 @@ fn handle_method(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
 
 fn handle_constructor(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
     let Some(owner) = ctx.owner else { return };
-    let vis = visibility(item);
+    let vis = visibility(item, ctx);
     let qualified = format!("{owner}.<init>");
     let body = item.child_by_field_name("body");
     let signature_span = body.map(|b| Span {
@@ -553,7 +594,7 @@ fn handle_constructor(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts
     push_declaration(
         out,
         "<init>",
-        SymbolKind::Method,
+        SymbolKind::Constructor,
         item,
         signature_span,
         Some(owner),
@@ -927,13 +968,29 @@ mod tests {
         assert_eq!(
             decl(&f, "c").visibility.0,
             2,
-            "protected widens to Public scope, not exported here"
+            "protected sits on the Public-scope rung"
         );
-        assert!(!decl(&f, "c").exported);
+        assert!(
+            decl(&f, "c").exported,
+            "protected is subclass-consumable API — exported (M6, junit4 corpus)"
+        );
+
         assert_eq!(decl(&f, "d").visibility.0, 3);
         assert!(decl(&f, "d").exported);
         // Top-level type itself: public/package-private only.
         assert_eq!(decl(&f, "C").visibility.0, 1);
+
+        // Interface members with no modifier are implicitly public (JLS §9.4).
+        let i = facts(
+            "package p;\n\
+             public interface I {\n\
+             \x20   void run();\n\
+             \x20   int LIMIT = 3;\n\
+             }\n",
+        );
+        assert_eq!(decl(&i, "run").visibility.0, 3);
+        assert!(decl(&i, "run").exported);
+        assert_eq!(decl(&i, "LIMIT").visibility.0, 3);
     }
 
     #[test]

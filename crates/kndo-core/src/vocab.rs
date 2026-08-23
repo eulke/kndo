@@ -163,6 +163,10 @@ impl Default for FileClass {
 pub enum SymbolKind {
     Function,
     Method,
+    /// A type's constructor (Java/Kotlin `<init>`, Swift `init`): instantiation references
+    /// the *type*, never the constructor symbol, so a constructor's liveness follows its
+    /// class — `unused` exempts the kind outright (M6 FP hunt).
+    Constructor,
     Class,
     Interface,
     Struct,
@@ -185,6 +189,7 @@ impl SymbolKind {
         match self {
             SymbolKind::Function => "function",
             SymbolKind::Method => "method",
+            SymbolKind::Constructor => "constructor",
             SymbolKind::Class => "class",
             SymbolKind::Interface => "interface",
             SymbolKind::Struct => "struct",
@@ -391,6 +396,12 @@ pub enum EdgeKind {
 pub enum Provenance {
     Adapter(#[rkyv(with = crate::rkyv_support::SmolStrAsString)] SmolStr),
     Plugin(#[rkyv(with = crate::rkyv_support::SmolStrAsString)] SmolStr),
+    /// The core's surface-closure phase (RFC 0011 §5, RFC 0012 §6): Root edges derived from
+    /// named re-exports out of surface files and from surface-transitive members of surface
+    /// types. A distinct provenance so the incremental patch can strip and recompute the
+    /// whole closure exactly (it is cross-file by nature — no single owner file's change
+    /// scopes it).
+    Surface,
 }
 
 #[derive(

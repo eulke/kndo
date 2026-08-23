@@ -25,7 +25,10 @@ pub(crate) const EXTENSIONS: &[&str] = &["ts", "tsx", "js", "jsx", "mjs", "cjs",
 const PATH_PATTERNS: kndo_adapter_toolkit::classify::PathPatterns =
     kndo_adapter_toolkit::classify::PathPatterns {
         test_name_markers: &[".test.", ".spec."],
-        test_dirs: &["__tests__", "__mocks__"],
+        // `test`/`tests` are mocha's and node:test's default lookup directories — express-style
+        // repos keep plain-named specs there (`test/res.cookie.js`), with no name marker to
+        // catch them (M6 FP hunt).
+        test_dirs: &["__tests__", "__mocks__", "test", "tests"],
         tooling_name_markers: &[".config."],
         tooling_dirs: &[".storybook"],
     };
@@ -54,14 +57,17 @@ impl LanguageAdapter for JsTsAdapter {
                 VisibilityRung {
                     scope: VisibilityScope::File,
                     label: SmolStr::new("module-local"),
+                    surface_transitive: false,
                 },
                 VisibilityRung {
                     scope: VisibilityScope::Package,
                     label: SmolStr::new("exported"),
+                    surface_transitive: true,
                 },
                 VisibilityRung {
                     scope: VisibilityScope::Public,
                     label: SmolStr::new("package surface"),
+                    surface_transitive: true,
                 },
             ],
             // RFC 0005 §8: JS/TS treats cycles as hazards at both levels — file cycles are

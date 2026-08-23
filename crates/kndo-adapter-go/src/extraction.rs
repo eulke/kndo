@@ -87,24 +87,28 @@ pub fn extract(path: &str, content: &[u8]) -> FileFacts {
     // auto-promoted; a test file's declarations are never library-mode public API either.
     let is_internal = path.split('/').any(|seg| seg == "internal");
     let is_test_file = path.ends_with("_test.go");
-    let promote_exports = !is_internal && !is_test_file;
+    let flags = Flags {
+        promote_exports: !is_internal && !is_test_file,
+        // Only the compiler-enforced wall caps the *visibility rung* (ladder rung 1 —
+        // lib.rs): a _test.go file's exports keep Public rung, its non-API nature is the
+        // Test role's concern, not visibility's.
+        is_internal,
+    };
 
     let mut cursor = root.walk();
     for child in root.children(&mut cursor) {
         match child.kind() {
             "import_declaration" => handle_import_declaration(child, content, &mut out),
             "function_declaration" => {
-                handle_function(child, content, is_main_package, promote_exports, &mut out)
+                handle_function(child, content, is_main_package, flags, &mut out)
             }
-            "method_declaration" => handle_method(child, content, promote_exports, &mut out),
-            "type_declaration" => {
-                handle_type_declaration(child, content, promote_exports, &mut out)
-            }
+            "method_declaration" => handle_method(child, content, flags, &mut out),
+            "type_declaration" => handle_type_declaration(child, content, flags, &mut out),
             "const_declaration" => handle_value_declaration(
                 child,
                 content,
                 "const_spec",
-                promote_exports,
+                flags,
                 SymbolKind::Const,
                 &mut out,
             ),
@@ -112,7 +116,7 @@ pub fn extract(path: &str, content: &[u8]) -> FileFacts {
                 child,
                 content,
                 "var_spec",
-                promote_exports,
+                flags,
                 SymbolKind::Variable,
                 &mut out,
             ),
@@ -152,8 +156,26 @@ fn is_exported(name: &str) -> bool {
     name.chars().next().is_some_and(char::is_uppercase)
 }
 
-fn visibility(exported: bool) -> VisibilityLevel {
-    VisibilityLevel(if exported { 1 } else { 0 })
+/// Per-file extraction facts derived from the path once (docs/adapters/go.md §0, §4).
+#[derive(Clone, Copy)]
+struct Flags {
+    /// Library-mode root promotion for exported declarations — off under `internal/` and in
+    /// `_test.go` files (neither is externally consumed by definition).
+    promote_exports: bool,
+    /// Under an `internal/` path element: the compiler walls these packages off from external
+    /// modules, so exported declarations sit on the capped middle rung (lib.rs ladder).
+    is_internal: bool,
+}
+
+/// Rungs of the three-step ladder (lib.rs): unexported → 0; exported under `internal/` → 1
+/// (Package scope — compiler-walled from external modules, RFC 0012 §6's capped rung);
+/// exported elsewhere → 2 (Public).
+fn visibility(exported: bool, internal: bool) -> VisibilityLevel {
+    VisibilityLevel(match (exported, internal) {
+        (false, _) => 0,
+        (true, true) => 1,
+        (true, false) => 2,
+    })
 }
 
 fn package_name(root: Node, src: &[u8]) -> Option<String> {
@@ -177,7 +199,7 @@ fn push_declaration(
     kind: SymbolKind,
     node_span: Span,
     signature_span: Option<Span>,
-    promote_exports: bool,
+    flags: Flags,
 ) {
     let exported = is_exported(name);
     out.declarations.push(Declaration {
@@ -185,11 +207,11 @@ fn push_declaration(
         kind,
         span: node_span,
         exported,
-        visibility: visibility(exported),
+        visibility: visibility(exported, flags.is_internal),
         member_of: None,
         signature_span,
     });
-    if exported && promote_exports {
+    if exported && flags.promote_exports {
         out.roots.push(RawRoot {
             kind: RootKind::Production,
             target: RawRootTarget::Declaration(SmolStr::new(name)),
@@ -273,7 +295,7 @@ fn handle_function(
     node: Node,
     src: &[u8],
     is_main_package: bool,
-    promote_exports: bool,
+    flags: Flags,
     out: &mut FileFacts,
 ) {
     let Some(name_node) = node.child_by_field_name("name") else {
@@ -286,7 +308,7 @@ fn handle_function(
         SymbolKind::Function,
         span(node),
         signature_span_of(node),
-        promote_exports,
+        flags,
     );
     push_function_metrics(out, name, node);
     if name == "init" || (name == "main" && is_main_package) {
@@ -303,7 +325,7 @@ fn handle_function(
 /// a structured fact is what lets the core resolve a bare method-call reference through the
 /// duck-typed fallback instead of missing entirely — before this, an unexported method used
 /// only in-package false-positived as `unused:method`.
-fn handle_method(node: Node, src: &[u8], promote_exports: bool, out: &mut FileFacts) {
+fn handle_method(node: Node, src: &[u8], flags: Flags, out: &mut FileFacts) {
     let (Some(receiver), Some(name_node)) = (
         node.child_by_field_name("receiver"),
         node.child_by_field_name("name"),
@@ -323,12 +345,12 @@ fn handle_method(node: Node, src: &[u8], promote_exports: bool, out: &mut FileFa
         kind: SymbolKind::Method,
         span: span(node),
         exported,
-        visibility: visibility(exported),
+        visibility: visibility(exported, flags.is_internal),
         member_of: Some(SmolStr::new(&receiver_type)),
         signature_span: signature_span_of(node),
     });
     push_function_metrics(out, &format!("{receiver_type}.{method_name}"), node);
-    if exported && promote_exports {
+    if exported && flags.promote_exports {
         out.roots.push(RawRoot {
             kind: RootKind::Production,
             // Member root targets use the qualified form (contracts §2, RFC 0012 §3) — the
@@ -363,7 +385,7 @@ fn receiver_type_name(receiver: Node, src: &[u8]) -> Option<String> {
     None
 }
 
-fn handle_type_declaration(node: Node, src: &[u8], promote_exports: bool, out: &mut FileFacts) {
+fn handle_type_declaration(node: Node, src: &[u8], flags: Flags, out: &mut FileFacts) {
     let mut cursor = node.walk();
     for spec in node.children(&mut cursor) {
         let Some(name_node) = spec.child_by_field_name("name") else {
@@ -381,14 +403,7 @@ fn handle_type_declaration(node: Node, src: &[u8], promote_exports: bool, out: &
             },
             _ => continue,
         };
-        push_declaration(
-            out,
-            text(name_node, src),
-            kind,
-            span(spec),
-            None,
-            promote_exports,
-        );
+        push_declaration(out, text(name_node, src), kind, span(spec), None, flags);
     }
 }
 
@@ -396,7 +411,7 @@ fn handle_value_declaration(
     node: Node,
     src: &[u8],
     spec_kind: &str,
-    promote_exports: bool,
+    flags: Flags,
     symbol_kind: SymbolKind,
     out: &mut FileFacts,
 ) {
@@ -414,7 +429,7 @@ fn handle_value_declaration(
                 symbol_kind.clone(),
                 span(name_node),
                 None,
-                promote_exports,
+                flags,
             );
         }
     }
@@ -720,7 +735,63 @@ mod tests {
         let d = decl(&facts, "Helper");
         assert_eq!(d.kind, SymbolKind::Function);
         assert!(d.exported);
+        assert_eq!(d.visibility, VisibilityLevel(2));
+    }
+
+    #[test]
+    fn exported_function_under_internal_is_module_capped() {
+        // Go's internal-package rule: exported, but the compiler walls it off from external
+        // modules — the middle rung (Package scope), so the library-surface exemptions never
+        // treat it as consumable API (M6 FP hunt).
+        let facts = extract(
+            "internal/util/a.go",
+            b"package util\n\nfunc Helper() int { return 1 }\n",
+        );
+        let d = decl(&facts, "Helper");
+        assert!(d.exported);
         assert_eq!(d.visibility, VisibilityLevel(1));
+    }
+
+    #[test]
+    fn exported_under_internal_sits_on_the_capped_middle_rung() {
+        // Go's internal-package rule is compiler-enforced: exported, but never consumable
+        // from outside the module — rung 1 (Package scope, surface_transitive: false), so
+        // the core's library-surface machinery structurally cannot treat it as API while
+        // `internal-only` can still advise narrowing it (M6, RFC 0012 §6).
+        let facts = extract(
+            "internal/util/a.go",
+            b"package util
+
+func Helper() int { return 1 }
+",
+        );
+        let d = decl(&facts, "Helper");
+        assert!(d.exported);
+        assert_eq!(d.visibility, VisibilityLevel(1));
+        assert!(
+            facts.roots.is_empty(),
+            "internal/ exports are never promoted"
+        );
+    }
+
+    #[test]
+    fn test_file_exports_keep_the_public_rung() {
+        // A _test.go file's non-API nature is the Test role's concern; its visibility rung
+        // stays what the language says (capitalized = exported), so visibility analyses keep
+        // full precision inside test packages.
+        let facts = extract(
+            "a_test.go",
+            b"package p
+
+func TestHelper() {}
+",
+        );
+        let d = decl(&facts, "TestHelper");
+        assert_eq!(d.visibility, VisibilityLevel(2));
+        assert!(
+            facts.roots.is_empty(),
+            "test-file exports are never promoted"
+        );
     }
 
     #[test]

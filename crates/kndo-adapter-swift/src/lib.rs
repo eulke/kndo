@@ -55,22 +55,27 @@ impl LanguageAdapter for SwiftAdapter {
                 VisibilityRung {
                     scope: VisibilityScope::File,
                     label: SmolStr::new("private"),
+                    surface_transitive: false,
                 },
                 VisibilityRung {
                     scope: VisibilityScope::File,
                     label: SmolStr::new("fileprivate"),
+                    surface_transitive: false,
                 },
                 VisibilityRung {
                     scope: VisibilityScope::Package,
                     label: SmolStr::new("internal"),
+                    surface_transitive: false,
                 },
                 VisibilityRung {
                     scope: VisibilityScope::Public,
                     label: SmolStr::new("public"),
+                    surface_transitive: true,
                 },
                 VisibilityRung {
                     scope: VisibilityScope::Public,
                     label: SmolStr::new("open"),
+                    surface_transitive: true,
                 },
             ],
             // File cycles (two `.swift` files in the same target referencing each other) are

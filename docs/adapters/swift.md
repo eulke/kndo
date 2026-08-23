@@ -234,9 +234,20 @@ argument to be labeled, so this is exact, not a heuristic):
 | `dependencies:` (array of `.package(url:, from:/exact:/branch:/revision:/…)` calls) | one `ManifestDependency` per entry — `name` = the URL's last path segment with a trailing `.git` stripped (`https://github.com/Alamofire/Alamofire.git` → `Alamofire`; a best-effort identity, since the repo name and the module(s) it exports aren't guaranteed identical — §0's last bullet), `version_req` = whichever of `from:`/`exact:`/`branch:`/`revision:` is present (first match, string value as-is — no semver comparison attempted beyond what `version-skew` already does generically), `scope` = `Prod` always (SwiftPM's dependency model has no Maven-style compile/test/provided split at the declaration site — a documented v1 simplification, §7) |
 | `targets:` (array of `.target(name:, dependencies:)` / `.testTarget(…)` / `.executableTarget(…)` / others) | `ManifestFacts::workspace_members`, one entry per target `name:` — RFC 0011 §3's local topology; a target's own `dependencies:` array (naming other local targets or external product names) is **not** cross-referenced against the top-level `dependencies:` list in v1 (§7) |
 
+**Conformance-witness roots (M6, Alamofire corpus)**: a non-private method of a type (or
+extension) that declares any inheritance/conformance entry roots `Production`/`Possible` — it
+may witness a protocol requirement invoked by machinery outside the repo (a custom
+`KeyedEncodingContainerProtocol`'s methods are called by the stdlib's Codable synthesis; no
+source call site can exist). External protocols' requirements aren't statically enumerable, so
+witness-vs-dead is undecidable — degrade toward silence at the `Possible` dynamic tier, the
+same reasoning as `override` rooting but one confidence rung lower. `deinit` extracts as a
+`Constructor`-kind `<deinit>` member: runtime-invoked, liveness follows the type, body walked.
+
 **Root promotion**: for every target named in a `.library(…)` product's `targets:` list (i.e.
 publicly exported, not merely locally declared) and not itself a test target, one
-`ManifestRoot{Production, Certain}` per non-test `.swift` file under `Sources/<TargetName>/**`
+`ManifestRoot{Production, Certain}` per non-test `.swift` file under the target's source tree —
+its explicit `path:` argument when declared (Alamofire's `.target(name: "Alamofire", path:
+"Source")`, M6 FP hunt), `Sources/<TargetName>/**` under the Standard Directory Layout otherwise
 — reusing `ResolveCtx::files_under` exactly like Java/Kotlin's mechanism (docs/adapters/
 java.md §4), just parameterized per-target instead of once per manifest (a `Package.swift` can
 declare several independently-public-or-not targets, unlike a Maven/Gradle module's single

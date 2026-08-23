@@ -56,18 +56,22 @@ impl LanguageAdapter for KotlinAdapter {
                 VisibilityRung {
                     scope: VisibilityScope::File,
                     label: SmolStr::new("private"),
+                    surface_transitive: false,
                 },
                 VisibilityRung {
                     scope: VisibilityScope::Package,
                     label: SmolStr::new("internal"),
+                    surface_transitive: false,
                 },
                 VisibilityRung {
                     scope: VisibilityScope::Public,
                     label: SmolStr::new("protected"),
+                    surface_transitive: true,
                 },
                 VisibilityRung {
                     scope: VisibilityScope::Public,
                     label: SmolStr::new("public"),
+                    surface_transitive: true,
                 },
             ],
             // Same reasoning as Java's: no compiler enforcement against circular package

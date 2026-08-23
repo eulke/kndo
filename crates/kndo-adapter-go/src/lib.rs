@@ -50,10 +50,21 @@ impl LanguageAdapter for GoAdapter {
                 VisibilityRung {
                     scope: VisibilityScope::Unit,
                     label: SmolStr::new("unexported"),
+                    surface_transitive: false,
+                },
+                // Exported under an `internal/` path element: the compiler itself walls these
+                // off from external modules (Go internal-package rule), so their true scope is
+                // the module, never Public — which keeps them out of the library-surface
+                // exemptions (M6 FP hunt) while staying accusable by `internal-only`.
+                VisibilityRung {
+                    scope: VisibilityScope::Package,
+                    label: SmolStr::new("exported (internal)"),
+                    surface_transitive: false,
                 },
                 VisibilityRung {
                     scope: VisibilityScope::Public,
                     label: SmolStr::new("exported"),
+                    surface_transitive: true,
                 },
             ],
             // RFC 0005 §8's own example of Impossible: the Go compiler forbids import cycles

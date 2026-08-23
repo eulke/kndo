@@ -29,10 +29,12 @@ impl LanguageAdapter for MiniAdapter {
                 kndo_core::adapter::VisibilityRung {
                     scope: kndo_core::adapter::VisibilityScope::Unit,
                     label: SmolStr::new("private"),
+                    surface_transitive: false,
                 },
                 kndo_core::adapter::VisibilityRung {
                     scope: kndo_core::adapter::VisibilityScope::Public,
                     label: SmolStr::new("exported"),
+                    surface_transitive: true,
                 },
             ],
             cycle_policy: kndo_core::adapter::CyclePolicy {

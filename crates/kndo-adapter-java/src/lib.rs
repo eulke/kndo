@@ -27,7 +27,9 @@ const PATH_PATTERNS: kndo_adapter_toolkit::classify::PathPatterns =
     kndo_adapter_toolkit::classify::PathPatterns {
         test_name_markers: &["Test.java", "Tests.java", "TestCase.java"],
         test_dirs: &["src/test/java"],
-        tooling_name_markers: &[],
+        // `package-info.java`/`module-info.java` are descriptors consumed by javac/javadoc,
+        // not by code — Tooling role, so their reachability is healthy (M6 FP hunt).
+        tooling_name_markers: &["package-info.java", "module-info.java"],
         tooling_dirs: &[],
     };
 
@@ -64,18 +66,22 @@ impl LanguageAdapter for JavaAdapter {
                 VisibilityRung {
                     scope: VisibilityScope::File,
                     label: SmolStr::new("private"),
+                    surface_transitive: false,
                 },
                 VisibilityRung {
                     scope: VisibilityScope::Unit,
                     label: SmolStr::new("package-private"),
+                    surface_transitive: false,
                 },
                 VisibilityRung {
                     scope: VisibilityScope::Public,
                     label: SmolStr::new("protected"),
+                    surface_transitive: true,
                 },
                 VisibilityRung {
                     scope: VisibilityScope::Public,
                     label: SmolStr::new("public"),
+                    surface_transitive: true,
                 },
             ],
             // Circular package dependencies are routine in real Java codebases (no compiler

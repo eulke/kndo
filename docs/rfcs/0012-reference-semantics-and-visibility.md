@@ -189,7 +189,7 @@ into — each rung declaring its **scope** (a graph concept the core already own
 "in the language's own terms, supplied by the adapter"):
 
 ```rust
-pub struct VisibilityRung { pub scope: VisibilityScope, pub label: SmolStr }
+pub struct VisibilityRung { pub scope: VisibilityScope, pub label: SmolStr, pub surface_transitive: bool }
 pub enum VisibilityScope { File, Unit, Package, Public }
 // AdapterDescriptor gains: pub visibility_ladder: Vec<VisibilityRung>  (index = VisibilityLevel)
 ```
@@ -198,6 +198,18 @@ pub enum VisibilityScope { File, Unit, Package, Public }
 (RFC 0011) · `Public` = everywhere. Two rungs may share a scope (the ladder is the language's
 own level list; the scope is what the core can check). Empty ladder = visibility analyses
 skip the language entirely (CSS, JSON).
+
+**`surface_transitive` (M6):** whether a re-export chain can carry a declaration at this rung
+*outside its package* — an axis `scope` cannot express. Rust `pub` and a JS `export` are
+**relative** (as visible as the module path re-exporting them → `true`); Rust `pub(crate)`,
+Java package-private, Swift `internal`, and Go exports under an `internal/` path element are
+**capped** (no re-export widens them → `false`). Two core mechanisms read it: library-mode
+symbol promotion (RFC 0011 §5 — only transitive rungs are consumable surface) and the
+surface-member closure (a surface type's transitive members are surface too — a `pub` method
+of a re-exported struct is consumer-callable API even with zero in-package references).
+Note Java `protected` and JS "exported" are transitive despite non-`Public`-looking
+consumption paths: external subclasses override `protected`, and a JS entry file's exports
+are the package surface by definition.
 
 **Core mechanism — `internal-only` generalized:** tightest-sufficient visibility = the lowest
 rung whose scope contains **every** incoming reference's origin (checked per edge against
@@ -212,8 +224,8 @@ same-unit siblings → "could be `unexported`"), and is what §3's member-fallba
 | Language | ladder (index → scope, label) | notes |
 |----------|-------------------------------|-------|
 | JS/TS | 0 `File` "module-local" · 1 `Package` "exported" · 2 `Public` "package surface" | rung 2 = reachable through the `exports` map (js-ts.md §4); adapter emits 0/1 today, 2 lands with surface-awareness |
-| Go | 0 `Unit` "unexported" · 1 `Public` "exported" | `internal/` is **not** a rung: it caps *root promotion* (docs/adapters/go.md §0), a separate mechanism; a "could move under internal/" suggestion is out of scope for 1.0 |
-| Java | 0 `File` "private" · 1 `Unit` "package-private" · 2 `Public` "protected" · 3 `Public` "public" | `private` ≈ enclosing file (nested classes share it); `protected` maps conservatively to `Public` — subclasses live anywhere, never suggest narrowing onto them |
+| Go | 0 `Unit` "unexported" · 1 `Package` "exported (internal)" · 2 `Public` "exported" | rung 1 (M6): an export under an `internal/` path element — the compiler itself walls it off from external modules, so it is capped (`surface_transitive: false`) and Package-scoped, keeping it out of the library-surface machinery while `internal-only` can still advise narrowing; the adapter assigns it by path, the one visibility fact Go keeps outside the identifier |
+| Java | 0 `File` "private" · 1 `Unit` "package-private" · 2 `Public` "protected" · 3 `Public` "public" | `private` ≈ enclosing file (nested classes share it); `protected` maps conservatively to `Public` — subclasses live anywhere, never suggest narrowing onto them — and is **exported** (subclass-consumable API, M6); interface/annotation members with no modifier are implicitly `public` (JLS §9.4) |
 | Kotlin | 0 `File` "private" · 1 `Package` "internal" · 2 `Public` "protected" · 3 `Public` "public" | `internal` = compilation module ≈ Package (unlike Java, Kotlin's `package` carries no visibility meaning at all — the default with no modifier is `public`, not package-scoped); `protected` (members only, same "package ∪ subclasses anywhere" shape as Java's) maps conservatively to `Public`, mirroring Java's own two-rungs-share-a-scope pattern |
 | Swift | 0 `File` "private" · 1 `File` "fileprivate" · 2 `Package` "internal" · 3 `Public` "public" · 4 `Public` "open" | the ladder applies uniformly at top-level and member position (no restricted subset); `internal` — the default with no modifier at all — is a *third* distinct default among the launch languages (Java ≈ `Unit`, Kotlin = `Public`); `open` (subclassable outside the module) maps conservatively to `Public` alongside `public`, mirroring Java's `protected`/`public` collapse — kndo's scope model can't distinguish the two |
 | Rust | 0 `Unit` "private" · 1 `Package` "pub(crate)" · 2 `Public` "pub" | unit = module; `pub(super)`/`pub(in …)` map to the nearest **wider** rung (conservative) |

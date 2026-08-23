@@ -165,8 +165,13 @@ fn collect_local_qualifiers(root: Node, src: &[u8]) -> std::collections::HashSet
                     out.insert(text(alias, src).to_string());
                 }
             }
+            // The bound tail of a full-path use OR of a scoped item inside a use list
+            // (`use a::{doc::version}` binds `version`) — the latter shape fabricated
+            // phantom `version::…` package references before (M6 FP hunt, ripgrep corpus).
             "scoped_identifier" | "identifier"
-                if node.parent().is_some_and(|p| p.kind() == "use_declaration") =>
+                if node
+                    .parent()
+                    .is_some_and(|p| matches!(p.kind(), "use_declaration" | "use_list")) =>
             {
                 let t = text(node, src);
                 out.insert(t.rsplit("::").next().unwrap_or(t).to_string());
@@ -473,9 +478,10 @@ fn handle_item(item: Node, src: &[u8], ctx: &Ctx<'_>, pending: PendingAttrs, out
         "type_item" => handle_type_decl(item, src, ctx, SymbolKind::TypeAlias, out),
         "macro_definition" => {
             if let Some(name) = item.child_by_field_name("name") {
+                let macro_name = text(name, src);
                 push_declaration(
                     out,
-                    text(name, src),
+                    macro_name,
                     SymbolKind::Other(SmolStr::new("macro")),
                     item,
                     None,
@@ -484,6 +490,16 @@ fn handle_item(item: Node, src: &[u8], ctx: &Ctx<'_>, pending: PendingAttrs, out
                     // the common case is crate-visible — Package level, exported.
                     (1, true),
                 );
+                // The expansion templates reference real code (ripgrep's err_message! calls
+                // `crate::messages::set_errored()` — M6 FP hunt): scan each rule's right-hand
+                // token tree with the same reconstruction macro *invocations* get, attributed
+                // within the macro so a dead macro keeps nothing alive.
+                let mut mc = item.walk();
+                for rule in item.children(&mut mc).filter(|n| n.kind() == "macro_rule") {
+                    if let Some(body) = rule.child_by_field_name("right") {
+                        scan_token_tree(body, src, Some(macro_name), ctx.local_qualifiers, out);
+                    }
+                }
             }
         }
         "mod_item" => handle_mod(item, src, ctx, &pending, out),
@@ -1133,6 +1149,17 @@ fn walk_body(
 ) {
     match node.kind() {
         "line_comment" | "block_comment" => return,
+        "use_declaration" => {
+            // A body-scoped `use` is an import, not an expression: route it through the same
+            // extraction item-level uses get. Walking it generically fabricated phantom
+            // package references from its intermediate path segments (`use std::{fs::File,
+            // os::{fd::AsFd, unix::fs::FileTypeExt}}` → "fs"/"os"/"fd"/"unix" as packages —
+            // M6 FP hunt, ripgrep corpus).
+            if let Some(argument) = node.child_by_field_name("argument") {
+                collect_use(argument, src, "", false, span(node), out);
+            }
+            return;
+        }
         "identifier" => {
             if is_reference_position(node) {
                 out.references.push(RawReference {
@@ -1487,6 +1514,37 @@ fn scan_token_tree(
     let mut i = 0;
     while i < children.len() {
         let tok = children[i];
+        if tok.kind() == "use" {
+            // A `use` statement inside a macro body (`rgtest!(…, { use std::{thread::sleep,
+            // time::Duration}; … })`): its inner segments are import structure, not
+            // expression paths — reconstructing them as paths fabricated `thread`/`time`
+            // phantom packages (M6 FP hunt, ripgrep corpus). Keep the root as a side-effect
+            // import (the real dependency edge; stdlib resolves harmlessly) and skip the
+            // statement's remaining tokens through its `;`.
+            if let Some(root) = children.get(i + 1).filter(|n| n.kind() == "identifier") {
+                let name = text(*root, src);
+                if !PRIMITIVES.contains(&name) && !quals.contains(name) {
+                    out.imports.push(RawImport {
+                        specifier: SmolStr::new(name),
+                        kind: ImportKind::Package,
+                        span: span(*root),
+                        side_effect_only: true,
+                        type_only: false,
+                        confidence: Confidence::Probable,
+                        bindings: Vec::new(),
+                        reexported: false,
+                        opaque_namespace_use: false,
+                        local_alias: None,
+                    });
+                }
+            }
+            let mut j = i + 1;
+            while j < children.len() && children[j].kind() != ";" {
+                j += 1;
+            }
+            i = j + 1;
+            continue;
+        }
         if matches!(tok.kind(), "identifier" | "crate" | "self" | "super") {
             let mut segments = vec![text(tok, src)];
             let mut j = i + 1;
@@ -1599,6 +1657,78 @@ mod tests {
             .iter()
             .map(|d| (d.name.as_str(), d.exported))
             .collect()
+    }
+
+    #[test]
+    fn body_scoped_use_is_an_import_never_phantom_package_references() {
+        // ripgrep's is_readable_stdin shape (M6 FP hunt): a `use` inside a function body with
+        // nested groups must extract as imports rooted at `std`, never as `fs`/`os`/`fd`/
+        // `unix` package references (which became phantom `undeclared` findings).
+        let f = facts(
+            "pub fn imp() -> bool {\n\
+             \x20   use std::{fs::File, os::{fd::AsFd, unix::fs::FileTypeExt}};\n\
+             \x20   true\n\
+             }\n",
+        );
+        for phantom in ["fs", "os", "fd", "unix"] {
+            assert!(
+                !f.imports.iter().any(|i| i.specifier == phantom),
+                "phantom package import '{phantom}': {:?}",
+                f.imports
+                    .iter()
+                    .map(|i| i.specifier.as_str())
+                    .collect::<Vec<_>>()
+            );
+        }
+        assert!(
+            f.imports.iter().any(|i| i.specifier.starts_with("std::")),
+            "the body use still extracts as std imports: {:?}",
+            f.imports
+                .iter()
+                .map(|i| i.specifier.as_str())
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn scoped_use_list_items_register_their_tails_as_local_qualifiers() {
+        // ripgrep's help.rs shape (M6 FP hunt): `use crate::flags::{doc::version}` binds
+        // `version`, so a later `version::generate()` is that import's alias — emitting a
+        // root package import for it fabricated a phantom `version` dependency.
+        let f = facts(
+            "use crate::flags::{Category, doc::version};\n\
+             pub fn render() { version::generate(); }\n",
+        );
+        assert!(
+            !f.imports.iter().any(|i| i.specifier == "version"),
+            "{:?}",
+            f.imports
+                .iter()
+                .map(|i| i.specifier.as_str())
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn use_inside_a_macro_body_never_fabricates_phantom_packages() {
+        // ripgrep's rgtest! shape (M6 FP hunt): a `use` inside a macro token tree must not
+        // reconstruct its inner segments as expression paths.
+        let f = facts(
+            "rgtest!(sorts, |dir: Dir| {\n\
+             \x20   use std::{thread::sleep, time::Duration};\n\
+             \x20   sleep(Duration::from_millis(1));\n\
+             });\n",
+        );
+        for phantom in ["thread", "time"] {
+            assert!(
+                !f.imports.iter().any(|i| i.specifier == phantom),
+                "phantom package import '{phantom}': {:?}",
+                f.imports
+                    .iter()
+                    .map(|i| i.specifier.as_str())
+                    .collect::<Vec<_>>()
+            );
+        }
     }
 
     #[test]

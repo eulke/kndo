@@ -151,6 +151,21 @@ literals; skipped → `line_comment`, `block_comment`. Winnowing parameters shar
 
 **Suppressions** — `// kndo:allow …` via the toolkit scanner, like every language.
 
+**Extraction refinements from the M6 FP hunt (ripgrep corpus):**
+- A body-scoped `use` (inside a function) routes through the same `collect_use` extraction as
+  item-level uses — walking it as expressions fabricated phantom package references from its
+  intermediate segments (`use std::{fs::File, os::{fd::AsFd, …}}` → "fs"/"os"/"fd" as
+  packages).
+- Scoped items inside use lists register their bound tails as local qualifiers
+  (`use crate::flags::{doc::version}` binds `version`, so `version::generate()` is that
+  import's alias, never a phantom root import).
+- A `use` inside a macro *invocation's* token tree keeps only its root as a side-effect import
+  and skips through its `;` — inner segments are import structure, not expression paths.
+- `macro_rules!` expansion templates (each rule's right-hand token tree) are scanned with the
+  same reconstruction macro invocations get, attributed `within` the macro — ripgrep's
+  `err_message!` calls `crate::messages::set_errored()` from a template, which was otherwise
+  invisible and false-positived the callee as `unused`.
+
 ## 3. Resolution
 
 The specifier grammar is Rust paths; every step is arithmetic over `ResolveCtx`'s known

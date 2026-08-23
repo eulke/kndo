@@ -239,6 +239,14 @@ pub struct VisibilityRung {
     pub scope: VisibilityScope,
     #[rkyv(with = crate::rkyv_support::SmolStrAsString)]
     pub label: SmolStr,
+    /// Whether a re-export chain can carry a declaration at this rung *outside its package* —
+    /// the axis `scope` alone cannot express (RFC 0012 §6, M6). Rust `pub` and a JS `export`
+    /// are **relative**: as visible as the module path that re-exports them (`true`). Rust
+    /// `pub(crate)`, Java package-private, Swift `internal`, and Go exports under an
+    /// `internal/` path element are **capped**: no re-export makes them consumable from
+    /// outside (`false`). The core's library-surface promotion and surface closure promote
+    /// only transitive rungs; capped rungs keep full `unused`/`internal-only` precision.
+    pub surface_transitive: bool,
 }
 
 /// How a language's ecosystem regards an import cycle at one graph level (RFC 0005 §8) —

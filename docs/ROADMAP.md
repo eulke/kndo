@@ -900,6 +900,47 @@ fields native-side, so the 1.0 freeze doesn't wall off the component-model phase
 **Exit:** semver 1.0 commitments declared for the three contract surfaces; two external repos
 adopt kndo in pre-commit and stay enabled for 2 weeks.
 
+### M6 progress — false-positive hunt, first pass ✅ (landed 2026-08-23)
+
+Corpus: six real repos, one per launch language — expressjs/express (JS), gin-gonic/gin (Go),
+BurntSushi/ripgrep (Rust), junit-team/junit4 (Java), square/moshi (Kotlin), Alamofire (Swift).
+Full-scan findings fell **7,029 → 3,229** with every workspace test green and both conformance
+suites intact; what remains sampled overwhelmingly as true positives. The mechanisms, all
+principled (no analysis-side heuristics — each fix names the language/model fact it encodes):
+
+- **Surface model completed** (RFC 0011 §5, RFC 0012 §6): `VisibilityRung.surface_transitive`
+  — the capped-vs-relative axis `scope` can't express (`pub(crate)`/Swift `internal`/Go
+  `internal/` exports never travel through re-exports; Rust `pub`/JS exports do) — gates
+  library-mode symbol promotion, and a new **surface-member closure** (assembly, idempotent
+  strip-and-recompute at the engine choke point, O(V+E), ~32ms at 50k) roots the transitive
+  members of surface types: a `pub` method of a re-exported struct is consumer-callable API
+  with zero in-package references (ripgrep's `MmapChoice::auto`). Go's ladder gained the capped
+  `exported (internal)` rung; Java `protected` is exported (subclass API); JVM interface
+  members are implicitly public (JLS §9.4) and interface constants extract.
+- **Constructors modeled** (`SymbolKind::Constructor`): instantiation references the *type* —
+  a Certain container→constructor edge ties ctor liveness (and everything ctor bodies
+  reference: fields assigned only in constructors, Swift `deinit` teardown closures) to the
+  class; `unused`/`internal-only` never accuse the kind directly.
+- **private-type-leak hardened**: Certain-evidence only, effective surface through the
+  `member_of` chain, test-role exempt — 295 corpus findings → 1, and that one is real (a
+  private `type FnVisitor` alias in `ignore`'s public `WalkParallel::run` signature).
+- **Reflective/dynamic consumers**: test-role files root every declaration (XCTest/JUnit
+  reach members reflectively); Java `Serializable` hooks (`readObject` et al) root like
+  `@Override`; Swift conformance-witness methods root at `Possible` (external protocols'
+  requirements aren't enumerable — degrade toward silence); `serialVersionUID` never declares;
+  `package-info`/`module-info` are Tooling.
+- **Extraction/manifest bugs**: Rust body-scoped `use`, use-list qualifier tails, `use` inside
+  macro token trees, and `macro_rules!` expansion templates now extract correctly (15 phantom
+  `undeclared` in ripgrep → 0); SwiftPM `path:` overrides honored (Alamofire's whole `Source/`
+  was un-promoted); Gradle/Maven manifests are **multi-claimer** (identity from the first,
+  roots merged from all — Kotlin never saw Gradle manifests behind Java in registration order,
+  un-promoting moshi entirely); Kotlin promotes `src/main/java` `.kt` files; JS `test`/`tests`
+  dirs classify as tests; go.mod `// indirect` entries are not declared dependencies.
+
+Follow-ups tracked: Rust bin-crate resolution chains (inline-mod qualified refs, aliased scoped
+re-exports), and the M5 perf-drift re-attribution (bench went unenforced through M5; the M6
+changes themselves measure +0 cold / +32ms warm at 50k).
+
 ## Post-1.0 parking lot
 **RFC 0016 — uniform component model** (the accepted plan, phased in its §8, **all four phases
 landed**: 0 freeze reservations, 1 host-mediated content channel for plugin graph hooks

@@ -1015,13 +1015,18 @@ fn reached_by_roots(nav: &NavGraph, resolved: &Resolved) -> Vec<NavNode> {
     found
 }
 
+fn provenance_label(p: &crate::vocab::Provenance) -> String {
+    match p {
+        crate::vocab::Provenance::Adapter(id) => format!("adapter:{id}"),
+        crate::vocab::Provenance::Plugin(id) => format!("plugin:{id}"),
+        crate::vocab::Provenance::Surface => "core:surface".to_string(),
+    }
+}
+
 fn describe_sources(graph: &ProjectGraph, resolved: &Resolved) -> Vec<String> {
     let mut sources: HashSet<String> = HashSet::default();
     let mark = |sources: &mut HashSet<String>, p: &crate::vocab::Provenance| {
-        sources.insert(match p {
-            crate::vocab::Provenance::Adapter(id) => format!("adapter:{id}"),
-            crate::vocab::Provenance::Plugin(id) => format!("plugin:{id}"),
-        });
+        sources.insert(provenance_label(p));
     };
     for edge in &graph.edges {
         if edge_touches(&edge.kind, resolved) {

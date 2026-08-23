@@ -44,7 +44,13 @@ pub fn extract(path: &str, content: &[u8], _ctx: &ResolveCtx<'_>) -> ManifestFac
                 in_require_block = false;
                 continue;
             }
-            out.dependencies.extend(parse_require_entry(line));
+            // `// indirect` entries (checked pre-strip) are transitive requirements `go mod
+            // tidy` maintains, not the author's declarations — nothing in the module imports
+            // them BY DESIGN, so counting them as declared guarantees a false `unused`
+            // dependency per entry (M6 FP hunt, gin corpus).
+            if !raw_line.contains("// indirect") {
+                out.dependencies.extend(parse_require_entry(line));
+            }
             continue;
         }
 
@@ -53,7 +59,9 @@ pub fn extract(path: &str, content: &[u8], _ctx: &ResolveCtx<'_>) -> ManifestFac
         } else if line == "require (" {
             in_require_block = true;
         } else if let Some(rest) = line.strip_prefix("require ") {
-            out.dependencies.extend(parse_require_entry(rest.trim()));
+            if !raw_line.contains("// indirect") {
+                out.dependencies.extend(parse_require_entry(rest.trim()));
+            }
         }
         // `go 1.x`, `toolchain`, `replace`, `exclude` directives: not surfaced — none of them
         // are dependency declarations. A local `replace` whose target declares the same module
@@ -117,12 +125,10 @@ fn strip_line_comment(line: &str) -> &str {
     }
 }
 
-/// `github.com/pkg/errors v0.9.1` (the `// indirect` marker, if any, is already stripped by the
-/// caller) → one dependency. Go has exactly one scope (docs/adapters/go.md §4) — `// indirect`
-/// (transitively pulled, not imported by this module directly) isn't surfaced as a different
-/// one: kndo's scope taxonomy has no "transitive" concept, and treating it as anything but
-/// `Prod` would misrepresent it as unused/optional when it's exactly as required as a direct
-/// dependency, from `go build`'s point of view.
+/// `github.com/pkg/errors v0.9.1` → one dependency. Only DIRECT requirements reach here —
+/// the caller drops `// indirect` entries before comment-stripping (M6): they are `go mod
+/// tidy`'s transitive bookkeeping, not author declarations, and nothing in the module imports
+/// them by design. Go has exactly one scope for what remains (docs/adapters/go.md §4).
 fn parse_require_entry(entry: &str) -> Option<ManifestDependency> {
     let mut parts = entry.split_whitespace();
     let name = parts.next()?;
@@ -166,10 +172,16 @@ mod tests {
     }
 
     #[test]
-    fn require_block_with_indirect_comment_is_parsed() {
+    fn indirect_require_entries_are_not_declared_dependencies() {
+        // `// indirect` entries are `go mod tidy`'s bookkeeping of transitive requirements —
+        // nothing in the module imports them by design, so declaring them would guarantee a
+        // false `unused` dependency each (M6 FP hunt, gin corpus). Single-line and block
+        // forms alike.
         let facts = extract(
             "go.mod",
             br#"module m
+
+require gopkg.in/yaml.v3 v3.0.1 // indirect
 
 require (
 	github.com/pkg/errors v0.9.1
@@ -179,7 +191,7 @@ require (
             &ctx(),
         );
         let names: Vec<&str> = facts.dependencies.iter().map(|d| d.name.as_str()).collect();
-        assert_eq!(names, vec!["github.com/pkg/errors", "golang.org/x/net"]);
+        assert_eq!(names, vec!["github.com/pkg/errors"]);
     }
 
     #[test]

@@ -112,20 +112,31 @@ fn directory_finding(graph: &ProjectGraph, dir: &DirGroup<'_>) -> Finding {
     }
 }
 
+/// The per-symbol scope gate: symbols in unclaimed/generated/vendored files are out of
+/// jurisdiction; symbols in unreachable files roll up to the file finding; constructors are
+/// never accused directly — instantiation references the *type*, so a constructor's
+/// unreachability is structurally unknowable and its liveness follows the class (whose own
+/// finding/rollup covers real death — M6 FP hunt).
+fn symbol_in_scope(
+    graph: &ProjectGraph,
+    reach: &ReachabilityMap,
+    symbol: &crate::graph::SymbolNode,
+) -> bool {
+    let file = &graph.files[symbol.file.0 as usize];
+    let Some(class) = file.class else {
+        return false;
+    };
+    !matches!(class.origin, FileOrigin::Generated | FileOrigin::Vendored)
+        && reach.get(NodeRef::File(symbol.file)).0 != Reachability::Unreachable
+        && symbol.kind != crate::vocab::SymbolKind::Constructor
+}
+
 pub fn find_unused_symbols(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<Finding> {
     let mut findings = Vec::new();
     for (index, symbol) in graph.symbols.iter().enumerate() {
         let file = &graph.files[symbol.file.0 as usize];
-        // Symbols only ever exist for claimed files (graph::assemble only extracts
-        // declarations through an adapter) — defensive, not expected to actually skip.
-        let Some(class) = file.class else {
+        if !symbol_in_scope(graph, reach, symbol) {
             continue;
-        };
-        if matches!(class.origin, FileOrigin::Generated | FileOrigin::Vendored) {
-            continue;
-        }
-        if reach.get(NodeRef::File(symbol.file)).0 == Reachability::Unreachable {
-            continue; // rollup: the file-level finding already covers every symbol in it
         }
 
         let symbol_id = SymbolId(index as u32);

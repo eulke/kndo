@@ -374,10 +374,12 @@ impl ProjectGraph {
                     crate::adapter::VisibilityRung {
                         scope: crate::adapter::VisibilityScope::Unit,
                         label: SmolStr::new("private"),
+                        surface_transitive: false,
                     },
                     crate::adapter::VisibilityRung {
                         scope: crate::adapter::VisibilityScope::Public,
                         label: SmolStr::new("exported"),
+                        surface_transitive: true,
                     },
                 ],
             )],
@@ -910,6 +912,11 @@ fn try_patch(
                 &symbol_by_qualified_per_file[c],
                 &library_root_files,
                 &role_root_files,
+                graph.files[c]
+                    .language
+                    .as_deref()
+                    .and_then(|l| ladders.get(l))
+                    .map(|l| l.as_slice()),
             );
             new_edges.extend(em.edges);
             new_metrics.extend(em.metrics);
@@ -1471,6 +1478,148 @@ struct DeclarationEmissions {
     metrics: Vec<(SymbolId, SymbolMetrics)>,
 }
 
+/// Surface-member closure (RFC 0011 §5 completed, M6 FP hunt): the last gap in "which symbols
+/// can an external consumer name?". Manifest promotion, phase 2.7's whole-surface expansion,
+/// and the barrel-indirection promotion already root every *directly* re-exported symbol; what
+/// none of them cover is **members**: a `pub` method of a surface type is consumer-callable
+/// API even though nothing in-package references it (ripgrep's `MmapChoice::auto`). One rule,
+/// to a fixpoint for nested containers: a member of a surface symbol whose own rung is
+/// surface-transitive (RFC 0012 §6) is surface.
+///
+/// Idempotent by construction: strips every `Provenance::Surface` edge and recomputes from the
+/// current graph — the engine calls it once per run on every path (cold, patch, warm snapshot
+/// hit) before analysis. A snapshot may carry a previous run's closure edges; strip-first
+/// makes the carryover irrelevant, and the incremental patch needs no cross-file ownership
+/// story for them. O(symbols + edges).
+pub(crate) fn recompute_surface_closure(graph: &mut ProjectGraph) {
+    graph
+        .edges
+        .retain(|e| e.source != crate::vocab::Provenance::Surface);
+
+    // Seed: every symbol already rooted as production surface; a project with no members at
+    // all has nothing to close over. Borrowed keys throughout — this runs on every path
+    // including warm no-ops, so it allocates no strings per symbol (RFC 0008 §2).
+    let surface: HashSet<SymbolId> = graph
+        .edges
+        .iter()
+        .filter_map(|e| match e.kind {
+            EdgeKind::Root {
+                kind: crate::vocab::RootKind::Production,
+                target: NodeRef::Symbol(s),
+            } => Some(s),
+            _ => None,
+        })
+        .collect();
+    if surface.is_empty() || !graph.symbols.iter().any(|s| s.member_of.is_some()) {
+        return;
+    }
+
+    let members_of = surface_member_index(graph);
+    let emitted = propagate_surface_members(graph, surface, &members_of);
+    graph.edges.extend(emitted.into_iter().map(|m| Edge {
+        kind: EdgeKind::Root {
+            kind: crate::vocab::RootKind::Production,
+            target: NodeRef::Symbol(m),
+        },
+        // Derived, not declared: the member is API because its container is — Probable, the
+        // derived-promotion tier (RFC 0005 §1).
+        confidence: Confidence::Probable,
+        source: crate::vocab::Provenance::Surface,
+        span: Some(graph.symbols[m.0 as usize].span),
+        owner: graph.symbols[m.0 as usize].file,
+    }));
+}
+
+/// Members grouped under their same-file container (`member_of` is a name, contracts §2 —
+/// prefer the container whose span encloses the member, the nesting the name refers to).
+fn surface_member_index(graph: &ProjectGraph) -> HashMap<SymbolId, Vec<SymbolId>> {
+    let mut by_file_name: HashMap<(u32, &str), Vec<SymbolId>> = HashMap::default();
+    for (i, sym) in graph.symbols.iter().enumerate() {
+        by_file_name
+            .entry((sym.file.0, sym.name.as_str()))
+            .or_default()
+            .push(SymbolId(i as u32));
+    }
+    let mut members_of: HashMap<SymbolId, Vec<SymbolId>> = HashMap::default();
+    for (i, sym) in graph.symbols.iter().enumerate() {
+        let Some(container_name) = sym.member_of.as_deref() else {
+            continue;
+        };
+        let Some(candidates) = by_file_name.get(&(sym.file.0, container_name)) else {
+            continue;
+        };
+        let container = candidates
+            .iter()
+            .find(|c| {
+                let cs = &graph.symbols[c.0 as usize];
+                cs.span.start <= sym.span.start && sym.span.end <= cs.span.end
+            })
+            .or_else(|| candidates.first());
+        if let Some(&c) = container {
+            members_of.entry(c).or_default().push(SymbolId(i as u32));
+        }
+    }
+    members_of
+}
+
+/// One membership test of the fixpoint: not already in, exported, and on a
+/// surface-transitive rung of its language's ladder.
+fn member_joins_surface(
+    graph: &ProjectGraph,
+    ladders: &std::collections::BTreeMap<&str, &[crate::adapter::VisibilityRung]>,
+    m: SymbolId,
+    surface: &HashSet<SymbolId>,
+) -> bool {
+    let sym = &graph.symbols[m.0 as usize];
+    let ladder = graph.files[sym.file.0 as usize]
+        .language
+        .as_deref()
+        .and_then(|l| ladders.get(l).copied());
+    !surface.contains(&m) && sym.exported && rung_surface_transitive(ladder, sym.visibility)
+}
+
+/// The fixpoint (deterministic: seeds sorted, output sorted): a member of a surface symbol
+/// joins the surface when its own rung is surface-transitive; nested containers cascade.
+fn propagate_surface_members(
+    graph: &ProjectGraph,
+    mut surface: HashSet<SymbolId>,
+    members_of: &HashMap<SymbolId, Vec<SymbolId>>,
+) -> Vec<SymbolId> {
+    let ladders: std::collections::BTreeMap<&str, &[crate::adapter::VisibilityRung]> = graph
+        .visibility_ladders
+        .iter()
+        .map(|(l, r)| (l.as_str(), r.as_slice()))
+        .collect();
+    let mut queue: Vec<SymbolId> = surface.iter().copied().collect();
+    queue.sort_unstable();
+    let mut emitted: Vec<SymbolId> = Vec::new();
+    while let Some(container) = queue.pop() {
+        for &m in members_of.get(&container).into_iter().flatten() {
+            if member_joins_surface(graph, &ladders, m, &surface) {
+                surface.insert(m);
+                emitted.push(m);
+                queue.push(m);
+            }
+        }
+    }
+    emitted.sort_unstable();
+    emitted
+}
+
+/// Whether a declaration's rung can travel through a re-export chain to outside its package
+/// (`VisibilityRung::surface_transitive`, RFC 0012 §6). No ladder (or an index the ladder
+/// doesn't cover) falls back to `true` — the `exported` bit alone governs, the pre-ladder
+/// behavior for binary-visibility languages.
+fn rung_surface_transitive(
+    ladder: Option<&[crate::adapter::VisibilityRung]>,
+    vis: crate::adapter::VisibilityLevel,
+) -> bool {
+    match ladder {
+        Some(l) => l.get(vis.0 as usize).is_none_or(|r| r.surface_transitive),
+        None => true,
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn emit_file_declarations(
     i: usize,
@@ -1482,6 +1631,7 @@ fn emit_file_declarations(
     qualified_table: &HashMap<String, SymbolId>,
     library_root_files: &HashMap<FileId, Confidence>,
     role_root_files: &HashMap<FileId, crate::vocab::RootKind>,
+    ladder: Option<&[crate::adapter::VisibilityRung]>,
 ) -> DeclarationEmissions {
     let file_id = FileId(i as u32);
     let provenance = || Provenance::Adapter(SmolStr::new(adapter_id));
@@ -1500,6 +1650,27 @@ fn emit_file_declarations(
             span: Some(decl.span),
             owner: file_id,
         });
+
+        // A constructor is engaged by *naming its type* (`new Foo()`, Swift's `Foo(...)`) —
+        // no reference ever binds to the `<init>` symbol itself, so its liveness follows its
+        // container's (M6 FP hunt, RFC 0012 §3's spirit): a Certain References edge from the
+        // container keeps the constructor — and everything its body references, like fields
+        // assigned only in constructors — exactly as alive as the type, and exactly as dead.
+        if decl.kind == crate::vocab::SymbolKind::Constructor {
+            if let Some(&container) = decl.member_of.as_deref().and_then(|n| bare_table.get(n)) {
+                edges.push(Edge {
+                    kind: EdgeKind::References {
+                        from: NodeRef::Symbol(container),
+                        to: symbol_id,
+                        kind: crate::vocab::RefKind::Call,
+                    },
+                    confidence: Confidence::Certain,
+                    source: provenance(),
+                    span: Some(decl.span),
+                    owner: file_id,
+                });
+            }
+        }
 
         // In-source Test roots, DERIVED (contracts §2): a declaration inside a test region
         // (`FileFacts::test_spans`) is test infrastructure — `#[test]` fns and everything in
@@ -1522,7 +1693,11 @@ fn emit_file_declarations(
         // Library-mode promotion (RFC 0011 §5): this file is a manifest-declared production
         // root and this symbol is exported from it, so it's part of the package's public
         // API — a production root in its own right, not just "alive because the file is."
-        if decl.exported {
+        // Library-mode promotion is gated on surface transitivity (RFC 0012 §6): a
+        // declaration is consumable API only if a re-export chain can actually carry it
+        // outside the package — `pub(crate)`/`internal` satisfy `exported` yet are
+        // definitionally walled in, so promoting them fabricated surface (M6 FP hunt).
+        if decl.exported && rung_surface_transitive(ladder, decl.visibility) {
             if let Some(&confidence) = library_root_files.get(&file_id) {
                 edges.push(Edge {
                     kind: EdgeKind::Root {
@@ -1535,10 +1710,18 @@ fn emit_file_declarations(
                     owner: file_id,
                 });
             }
-            // Same promotion for role-derived roots: a config file's exports ARE its
-            // interface to the tool that loads it, and a test file's exports may be shared
-            // fixtures — the consumer is outside the graph either way.
-            if let Some(&kind) = role_root_files.get(&file_id) {
+        }
+
+        // Role-derived promotion: a config file's exports ARE its interface to the tool that
+        // loads it, and a test file's exports may be shared fixtures — the consumer is
+        // outside the graph either way. Test-role files promote EVERY declaration, not just
+        // exported ones (M6 FP hunt): test frameworks reach members reflectively — XCTest and
+        // JUnit discover `internal`/package-visible test methods inside test classes by
+        // naming convention, so an unexported member of a test file being "unreachable" is
+        // the runner's edge missing from the graph, never dead code. Tooling stays
+        // exported-only.
+        if let Some(&kind) = role_root_files.get(&file_id) {
+            if kind == crate::vocab::RootKind::Test || decl.exported {
                 edges.push(Edge {
                     kind: EdgeKind::Root {
                         kind,
@@ -1745,7 +1928,7 @@ pub(crate) fn package_owns(manifest_dir: &str, file_dir: &str) -> bool {
 /// an assembly-algorithm change that could produce a different graph from the same facts. Feeds
 /// [`compute_graph_key`] (RFC 0004 §3's "core graph-schema version"); a bump here invalidates
 /// every project's cached `graph.bin` on the next run, same as any other key-input change.
-pub const GRAPH_SCHEMA_VERSION: u32 = 15; // 15: FileNode.string_call_sites + EdgeKind::ReferencesFile (RFC 0017 §5.4); 14: in-source Test roots derived from test_spans containment (adapters no longer emit them); 13: FileNode.test_spans + phase 2.55 test-gated module demotion (sub-file test regions); 12: library-surface fixpoint (phase 2.7 — same inputs now assemble surface Root edges, prior snapshots are semantically stale); 11: PackageNode.workspace_entry (RFC 0013 §4); 10: patch layer (RFC 0013 §4 — Edge.owner, FilePatchMeta, extraction-only stored diagnostics); 9: SymbolMetrics.token_count (RFC 0005 §11); 8: function_metrics (RFC 0005 §6); 7: cycle policies (§8); 6: PackageNode surface (RFC 0011 §4); 5: ladders + FileNode.unit (RFC 0012 §6); 4: RefKind + signature_span (§5); 3: within (§4)
+pub const GRAPH_SCHEMA_VERSION: u32 = 16; // 16: VisibilityRung.surface_transitive + surface closure (Provenance::Surface Root edges; RFC 0012 §6, M6); 15: FileNode.string_call_sites + EdgeKind::ReferencesFile (RFC 0017 §5.4); 14: in-source Test roots derived from test_spans containment (adapters no longer emit them); 13: FileNode.test_spans + phase 2.55 test-gated module demotion (sub-file test regions); 12: library-surface fixpoint (phase 2.7 — same inputs now assemble surface Root edges, prior snapshots are semantically stale); 11: PackageNode.workspace_entry (RFC 0013 §4); 10: patch layer (RFC 0013 §4 — Edge.owner, FilePatchMeta, extraction-only stored diagnostics); 9: SymbolMetrics.token_count (RFC 0005 §11); 8: function_metrics (RFC 0005 §6); 7: cycle policies (§8); 6: PackageNode surface (RFC 0011 §4); 5: ladders + FileNode.unit (RFC 0012 §6); 4: RefKind + signature_span (§5); 3: within (§4)
 
 /// The graph snapshot's cache key (RFC 0004 §3, `cache.rs`'s `graph.bin`): a single digest
 /// folding in the *whole* discovered file set (every path + content hash — this already
@@ -2602,8 +2785,18 @@ pub fn assemble_from_source(
         .files
         .par_iter()
         .map(|df| {
-            let Some(adapter_index) = adapters.iter().position(|a| a.claim_manifest(&df.path))
-            else {
+            // Every claiming adapter extracts (a `build.gradle` is Java's AND Kotlin's — the
+            // module's `.kt` files under Gradle's shared source sets are the second claimer's
+            // to promote; first-claimer-only silently dropped Kotlin's library surface, M6 FP
+            // hunt, moshi corpus). The FIRST claimer owns package identity/topology; later
+            // claimers contribute only their `roots`, deduplicated.
+            let claimers: Vec<usize> = adapters
+                .iter()
+                .enumerate()
+                .filter(|(_, a)| a.claim_manifest(&df.path))
+                .map(|(i, _)| i)
+                .collect();
+            let Some(&adapter_index) = claimers.first() else {
                 return Ok(None);
             };
             let content = discovered.read(&df.path).map_err(|e| Diagnostic {
@@ -2616,7 +2809,19 @@ pub fn assemble_from_source(
                 path: &df.path,
                 content: &content,
             };
-            let facts = adapters[adapter_index].extract_manifest(&source, &manifest_ctx);
+            let mut facts = adapters[adapter_index].extract_manifest(&source, &manifest_ctx);
+            for &other in &claimers[1..] {
+                let extra = adapters[other].extract_manifest(&source, &manifest_ctx);
+                for root in extra.roots {
+                    if !facts
+                        .roots
+                        .iter()
+                        .any(|r| r.target == root.target && r.kind == root.kind)
+                    {
+                        facts.roots.push(root);
+                    }
+                }
+            }
             Ok(Some((adapter_index, facts)))
         })
         .collect();
@@ -3120,6 +3325,11 @@ pub fn assemble_from_source(
             &symbol_by_qualified_per_file[i],
             &library_root_files,
             &role_root_files,
+            files[i]
+                .language
+                .as_deref()
+                .and_then(|l| ladders.get(l))
+                .map(|l| l.as_slice()),
         );
         edges.extend(out.edges);
         function_metrics.extend(out.metrics);
@@ -3428,6 +3638,82 @@ mod tests {
     use crate::vocab::{DependencyScope, FileOrigin, FileRole, RefKind, RootKind};
     use std::fs;
 
+    #[test]
+    fn surface_closure_promotes_transitive_members_of_surface_types_only() {
+        use crate::adapter::{ProjectPath, Span, VisibilityLevel};
+        let file = FileNode {
+            path: ProjectPath(SmolStr::new("src/lib.mock")),
+            content_hash: [0; 32],
+            language: Some(SmolStr::new("mock")),
+            class: Some(crate::vocab::FileClass {
+                role: FileRole::Production,
+                origin: FileOrigin::Authored,
+            }),
+            package: crate::vocab::PackageId(0),
+            unit: None,
+            test_spans: Vec::new(),
+            string_call_sites: Vec::new(),
+        };
+        let sym = |name: &str, vis: u8, member_of: Option<&str>, start: u32, end: u32| SymbolNode {
+            file: FileId(0),
+            name: SmolStr::new(name),
+            kind: crate::vocab::SymbolKind::Struct,
+            span: Span {
+                start: (start, 1),
+                end: (end, 1),
+            },
+            exported: vis > 0,
+            visibility: VisibilityLevel(vis),
+            member_of: member_of.map(SmolStr::new),
+            signature_span: None,
+        };
+        let symbols = vec![
+            sym("Widget", 1, None, 1, 20),            // surface seed (rooted below)
+            sym("run", 1, Some("Widget"), 3, 5),      // exported member → surface
+            sym("hidden", 0, Some("Widget"), 7, 9),   // private member → never surface
+            sym("Orphan", 1, None, 30, 40),           // exported but unrooted → not surface
+            sym("gadget", 1, Some("Orphan"), 32, 34), // member of non-surface type → no
+        ];
+        let edges = vec![Edge {
+            kind: EdgeKind::Root {
+                kind: RootKind::Production,
+                target: NodeRef::Symbol(SymbolId(0)),
+            },
+            confidence: Confidence::Certain,
+            source: Provenance::Adapter(SmolStr::new("mock")),
+            span: None,
+            owner: FileId(0),
+        }];
+        // for_test's mock ladder: [private (capped), exported (surface-transitive)].
+        let mut graph = ProjectGraph::for_test(vec![file], symbols, vec![], edges);
+
+        recompute_surface_closure(&mut graph);
+        let surface_roots: Vec<SymbolId> = graph
+            .edges
+            .iter()
+            .filter_map(|e| match (&e.source, &e.kind) {
+                (
+                    Provenance::Surface,
+                    EdgeKind::Root {
+                        target: NodeRef::Symbol(s),
+                        ..
+                    },
+                ) => Some(*s),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            surface_roots,
+            vec![SymbolId(1)],
+            "only Widget.run joins the surface"
+        );
+
+        // Idempotent: a second run (the warm/patch path) reproduces, never duplicates.
+        let before = graph.edges.len();
+        recompute_surface_closure(&mut graph);
+        assert_eq!(graph.edges.len(), before);
+    }
+
     /// A minimal in-memory adapter for graph tests. kndo-core must never depend on a real
     /// language adapter (that would invert the ignorance rule, RFC 0001 §2) — even in tests.
     struct MockAdapter;
@@ -3446,10 +3732,12 @@ mod tests {
                     crate::adapter::VisibilityRung {
                         scope: crate::adapter::VisibilityScope::Unit,
                         label: SmolStr::new("private"),
+                        surface_transitive: false,
                     },
                     crate::adapter::VisibilityRung {
                         scope: crate::adapter::VisibilityScope::Public,
                         label: SmolStr::new("exported"),
+                        surface_transitive: true,
                     },
                 ],
                 cycle_policy: crate::adapter::CyclePolicy {

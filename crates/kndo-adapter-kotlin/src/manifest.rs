@@ -7,7 +7,10 @@ use kndo_adapter_toolkit::jvm_manifest::{self, JvmSourceLayout};
 use kndo_core::adapter::{ManifestFacts, ResolveCtx};
 
 const LAYOUT: JvmSourceLayout = JvmSourceLayout {
-    source_root: "src/main/kotlin",
+    // Gradle's `main` source set registers both by default, and real projects (moshi) keep
+    // `.kt` files under `src/main/java` — the `.kt` extension filter scopes each root to
+    // Kotlin files (M6 FP hunt).
+    source_roots: &["src/main/kotlin", "src/main/java"],
     source_ext: ".kt",
     skip_file_names: &[],
 };

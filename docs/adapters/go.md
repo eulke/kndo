@@ -74,7 +74,10 @@ see §1.1.
 
 **`VisibilityLevel`**: `0` (unexported — lowercase first rune) or `1` (exported — uppercase first
 rune), computed per declaration, never read from syntax the way JS reads an `export` keyword. The
-descriptor declares the matching ladder (RFC 0012 §6): `[Unit "unexported", Public "exported"]` —
+descriptor declares the matching ladder (RFC 0012 §6): `[Unit "unexported", Package "exported
+(internal)", Public "exported"]` — the middle rung (M6) is an export under an `internal/` path
+element: compiler-walled from external modules, so capped (`surface_transitive: false`) and
+Package-scoped, assigned by path at extraction time —
 level 0 is **package**-grained (`Unit` = the `dir#package` key, §1.1), not file-grained, because an
 unexported symbol is visible to every file in its package. That data closed this doc's own
 previously-documented under-reporting: `internal-only` now computes the tightest-sufficient *rung*,
@@ -216,7 +219,9 @@ specifiers (`gopkg.in/yaml.v3` binds as `yaml`).
 `go.mod` is a small line-oriented grammar (`module`, `go`, `require`/`replace`/`exclude` blocks) —
 hand-parsed here rather than pulling in a dependency, the same "no more machinery than the format
 needs" stance `package.json`'s `serde_json` parse takes for a format that *does* warrant a real
-parser.
+parser. `// indirect` require entries are **dropped** (M6, gin corpus): they are `go mod tidy`'s
+bookkeeping of transitive requirements, not author declarations — nothing in the module imports
+them by design, so declaring them would fabricate one false `unused` dependency each.
 
 | `package.json` concept | `go.mod` equivalent | notes |
 |---|---|---|

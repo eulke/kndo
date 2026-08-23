@@ -50,14 +50,17 @@ impl LanguageAdapter for RustAdapter {
                 VisibilityRung {
                     scope: VisibilityScope::File,
                     label: SmolStr::new("private"),
+                    surface_transitive: false,
                 },
                 VisibilityRung {
                     scope: VisibilityScope::Package,
                     label: SmolStr::new("pub(crate)"),
+                    surface_transitive: false,
                 },
                 VisibilityRung {
                     scope: VisibilityScope::Public,
                     label: SmolStr::new("pub"),
+                    surface_transitive: true,
                 },
             ],
             // docs/adapters/rust.md §5: module cycles inside a crate are legal and common

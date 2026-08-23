@@ -65,6 +65,14 @@ const MIN_CLONE_TOKENS: usize = 50;
 /// type's name here (spec §0), not any name of the extension block itself (which has none).
 struct Ctx<'a> {
     owner: Option<&'a str>,
+    /// The owner type (or extension) declares at least one inheritance/conformance entry:
+    /// its non-private methods may be protocol witnesses invoked through machinery outside
+    /// the repo (a custom `KeyedEncodingContainerProtocol` implementation is called by the
+    /// stdlib's Codable synthesis — no source call site can exist). Requirements of external
+    /// protocols aren't enumerable statically, so such methods root at `Possible` — the
+    /// dynamic-dispatch tier, degrading toward silence (RFC 0012 §2; M6 FP hunt, Alamofire
+    /// corpus).
+    owner_conforms: bool,
     /// RFC 0012 §4: a top-level (`owner: None`) `let`/`var` is a lazily-initialized global in
     /// an ordinary file — its initializer only runs on first access, so `within` names the
     /// global itself, not `None` (spec §2). `main.swift`'s top-level code is the one exception:
@@ -82,6 +90,7 @@ const DECL_HANDLERS: &[(&str, DeclHandler)] = &[
     // A protocol's method requirement — no body, just a signature (spec §2).
     ("protocol_function_declaration", handle_function),
     ("init_declaration", handle_init),
+    ("deinit_declaration", handle_deinit),
     ("property_declaration", handle_property),
     ("typealias_declaration", handle_type_alias),
     ("enum_entry", handle_enum_entry),
@@ -149,6 +158,7 @@ fn is_main_swift(path: &str) -> bool {
 fn walk_top_level(root: Node, content: &[u8], top_level_lazy: bool, out: &mut FileFacts) {
     let top = Ctx {
         owner: None,
+        owner_conforms: false,
         top_level_lazy,
     };
     for item in root.children(&mut root.walk()) {
@@ -278,7 +288,7 @@ fn handle_type(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
     emit_main_root_if_attributed(item, src, name, out);
     emit_type_inheritance_refs(item, src, name, out);
     if let Some(body) = find_any_child(item, &["class_body", "enum_class_body"]) {
-        handle_body(body, src, name, out);
+        handle_body(body, src, name, has_conformances(item), out);
     }
 }
 
@@ -296,6 +306,13 @@ fn emit_main_root_if_attributed(item: Node, src: &[u8], name: &str, out: &mut Fi
 
 /// Superclass/protocol conformance (spec §2): both the single `inherits_from`-fielded specifier
 /// most declarations carry and any additional ones in a multi-conformance list.
+fn has_conformances(item: Node) -> bool {
+    item.child_by_field_name("inherits_from").is_some()
+        || item
+            .children(&mut item.walk())
+            .any(|c| c.kind() == "inheritance_specifier")
+}
+
 fn emit_type_inheritance_refs(item: Node, src: &[u8], name: &str, out: &mut FileFacts) {
     if let Some(inherited) = item.child_by_field_name("inherits_from") {
         walk_extend_refs(inherited, src, name, out);
@@ -330,15 +347,16 @@ fn handle_protocol(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
         }
     }
     if let Some(body) = find_child(item, "protocol_body") {
-        handle_body(body, src, name, out);
+        handle_body(body, src, name, has_conformances(item), out);
     }
 }
 
 /// Iterates a `class_body`/`enum_class_body`/`protocol_body`'s members through the shared
 /// declaration dispatch table.
-fn handle_body(body: Node, src: &[u8], owner: &str, out: &mut FileFacts) {
+fn handle_body(body: Node, src: &[u8], owner: &str, owner_conforms: bool, out: &mut FileFacts) {
     let ctx = Ctx {
         owner: Some(owner),
+        owner_conforms,
         top_level_lazy: false, // unused once `owner` is `Some` — members have their own `within`
     };
     for member in body.children(&mut body.walk()) {
@@ -362,6 +380,15 @@ fn handle_function(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
     });
     push_declaration(out, name, kind, item, signature_span, ctx.owner, vis);
     root_if_dispatch_target(item, &qualified, out);
+    // Possible-confidence witness root (Ctx::owner_conforms docs): internal or wider only —
+    // a private method can never witness a protocol requirement.
+    if ctx.owner_conforms && vis.0 >= 2 {
+        out.roots.push(RawRoot {
+            kind: RootKind::Production,
+            target: RawRootTarget::Declaration(SmolStr::new(&qualified)),
+            confidence: Confidence::Possible,
+        });
+    }
 
     walk_function_signature(item, src, Some(&qualified), out);
     if let Some(body) = body {
@@ -407,6 +434,29 @@ fn walk_signature_child(child: Node, src: &[u8], within: Option<&str>, out: &mut
     }
 }
 
+/// `deinit { … }` — the runtime invokes it when an instance dies, so like `init` it gets the
+/// Constructor treatment: liveness follows the type (the core's container→constructor edge),
+/// and its body's references (a stored closure fired on teardown — M6 FP hunt, Alamofire's
+/// `Token.onDeinit`) stay visible instead of silently unwalked.
+fn handle_deinit(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
+    let Some(owner) = ctx.owner else {
+        return;
+    };
+    let qualified = format!("{owner}.<deinit>");
+    push_declaration(
+        out,
+        "<deinit>",
+        SymbolKind::Constructor,
+        item,
+        None,
+        Some(owner),
+        visibility(item),
+    );
+    if let Some(body) = find_child(item, "function_body") {
+        walk_body(body, src, Some(&qualified), out);
+    }
+}
+
 fn handle_init(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
     let Some(owner) = ctx.owner else {
         return;
@@ -421,7 +471,7 @@ fn handle_init(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
     push_declaration(
         out,
         "<init>",
-        SymbolKind::Method,
+        SymbolKind::Constructor,
         item,
         signature_span,
         Some(owner),
@@ -951,10 +1001,29 @@ mod tests {
             .expect("override roots");
         assert_eq!(root.kind, RootKind::Production);
         assert_eq!(root.confidence, Confidence::Probable);
+        // A conforming type's other non-private methods are possible protocol witnesses
+        // (Ctx::owner_conforms docs) — rooted, but only at the Possible dynamic tier,
+        // strictly below the override's Probable.
+        let plain = f
+            .roots
+            .iter()
+            .find(|r| matches!(&r.target, RawRootTarget::Declaration(n) if n == "C.plain"))
+            .expect("conformance witness roots at Possible");
+        assert_eq!(plain.confidence, Confidence::Possible);
+    }
+
+    #[test]
+    fn methods_of_a_nonconforming_type_are_not_witness_rooted() {
+        let f = facts(
+            "class Plain {
+                 func work() {}
+             }
+",
+        );
         assert!(!f
             .roots
             .iter()
-            .any(|r| matches!(&r.target, RawRootTarget::Declaration(n) if n == "C.plain")));
+            .any(|r| matches!(&r.target, RawRootTarget::Declaration(n) if n == "Plain.work")));
     }
 
     #[test]

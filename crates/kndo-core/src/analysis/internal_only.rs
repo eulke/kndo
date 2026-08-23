@@ -115,6 +115,13 @@ pub fn find_internal_only(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<
             continue; // already the tightest rung there is — nothing to narrow
         }
 
+        if symbol.kind == crate::vocab::SymbolKind::Constructor {
+            continue; // a constructor's only in-graph reference is the synthetic
+                      // container→constructor liveness edge (graph.rs, M6) — same-file by
+                      // construction, so any verdict here would accuse kndo's own modeling,
+                      // not the code; real call sites reference the type, which is measured
+        }
+
         let symbol_id = SymbolId(index as u32);
         if root_targets.contains(&NodeRef::Symbol(symbol_id)) {
             continue; // roots are externally consumed by definition (RFC 0005 §7 exemption)
@@ -641,6 +648,7 @@ mod tests {
         crate::adapter::VisibilityRung {
             scope,
             label: SmolStr::new(label),
+            surface_transitive: matches!(scope, crate::adapter::VisibilityScope::Public),
         }
     }
 

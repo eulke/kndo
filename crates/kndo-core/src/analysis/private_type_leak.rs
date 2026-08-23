@@ -14,7 +14,10 @@
 //!
 //! Severity per RFC 0005 §7: warning in library-mode packages (a lying public API), info in
 //! app packages — the package's publish signal (`PackageNode::private`, RFC 0011 §5) is the
-//! mode. Confidence: the evidence edge's own confidence. Cross-language pairs are skipped —
+//! mode. Only **certain**-confidence evidence edges accuse (M6 FP hunt: fallback bindings
+//! routinely pick the wrong same-name type), the declaration's *effective* surface is computed
+//! through its `member_of` chain (an exported-looking member of an unexported container is not
+//! public API), and test-role code is exempt. Cross-language pairs are skipped —
 //! visibility levels only mean anything *within one language's ladder* (RFC 0012 §6) and
 //! comparing them across languages would be numerology. "Lower visibility" is compared as
 //! ladder rung *scopes* when the language declared a ladder (so same-scope rungs like Java
@@ -31,16 +34,67 @@ use crate::adapter::Span;
 use crate::analysis::finding_id;
 use crate::engine::{Finding, Location, Severity};
 use crate::graph::ProjectGraph;
-use crate::vocab::{EdgeKind, FileOrigin, NodeRef, RefKind, SymbolId};
+use crate::vocab::{Confidence, EdgeKind, FileOrigin, FileRole, NodeRef, RefKind, SymbolId};
 
 fn contains(outer: &Span, inner: &Span) -> bool {
     outer.start <= inner.start && inner.end <= outer.end
+}
+
+/// The declaration's *effective* surface through its `member_of` chain (M6 FP hunt): a
+/// capitalized Go method on an unexported receiver, or a public method of a private nested
+/// Java class, is not public API — a member is only as visible as every container above it.
+/// `exported` is the conjunction along the chain; `visibility` the lowest rung. `None` when a
+/// container name doesn't resolve to a same-file declaration (a generic impl target like
+/// `impl<M> Trait for &M` — no surface we can vouch for; degrade toward silence, RFC 0012 §2).
+struct EffectiveSurface {
+    exported: bool,
+    visibility: crate::adapter::VisibilityLevel,
+}
+
+fn effective_surface(
+    graph: &ProjectGraph,
+    by_file_name: &HashMap<(u32, &str), Vec<SymbolId>>,
+    decl_id: SymbolId,
+) -> Option<EffectiveSurface> {
+    let decl = &graph.symbols[decl_id.0 as usize];
+    let mut exported = decl.exported;
+    let mut visibility = decl.visibility;
+    let mut current = decl;
+    for _ in 0..8 {
+        let Some(container_name) = current.member_of.as_deref() else {
+            return Some(EffectiveSurface {
+                exported,
+                visibility,
+            });
+        };
+        let candidates = by_file_name.get(&(current.file.0, container_name))?;
+        // Prefer the container whose span encloses the member; fall back to the first.
+        let container_id = candidates
+            .iter()
+            .find(|c| {
+                let s = &graph.symbols[c.0 as usize];
+                contains(&s.span, &current.span)
+            })
+            .or_else(|| candidates.first())?;
+        let container = &graph.symbols[container_id.0 as usize];
+        exported &= container.exported;
+        visibility = visibility.min(container.visibility);
+        current = container;
+    }
+    None // pathological nesting depth — vouch for nothing
 }
 
 pub fn find_private_type_leaks(graph: &ProjectGraph) -> Vec<Finding> {
     let mut findings = Vec::new();
     // One finding per (declaration, leaked type) pair, however many signature sites repeat it.
     let mut seen: HashMap<(SymbolId, SymbolId), ()> = HashMap::default();
+    let mut by_file_name: HashMap<(u32, &str), Vec<SymbolId>> = HashMap::default();
+    for (i, s) in graph.symbols.iter().enumerate() {
+        by_file_name
+            .entry((s.file.0, s.name.as_str()))
+            .or_default()
+            .push(SymbolId(i as u32));
+    }
 
     for edge in &graph.edges {
         let EdgeKind::References {
@@ -51,6 +105,13 @@ pub fn find_private_type_leaks(graph: &ProjectGraph) -> Vec<Finding> {
         else {
             continue;
         };
+        // A defect-group accusation needs certain evidence: a duck-typed or qualified-table
+        // fallback binding (Probable/Possible) routinely picks the wrong same-name type
+        // across files — the M6 FP hunt's Alamofire corpus bound stdlib `Error` mentions to
+        // arbitrary nested `Error` enums. Degrade toward silence (RFC 0012 §2).
+        if edge.confidence != Confidence::Certain {
+            continue;
+        }
         let Some(site) = edge.span else { continue };
 
         let decl = &graph.symbols[decl_id.0 as usize];
@@ -58,6 +119,14 @@ pub fn find_private_type_leaks(graph: &ProjectGraph) -> Vec<Finding> {
             continue; // no declared signature — nothing to distinguish from the body
         };
         if !decl.exported || !contains(&sig, &site) {
+            continue;
+        }
+        // The effective surface through the container chain — and only from production code:
+        // a test file's exports are not an API promise.
+        let Some(surface) = effective_surface(graph, &by_file_name, decl_id) else {
+            continue;
+        };
+        if !surface.exported {
             continue;
         }
 
@@ -78,6 +147,11 @@ pub fn find_private_type_leaks(graph: &ProjectGraph) -> Vec<Finding> {
         if matches!(class.origin, FileOrigin::Generated | FileOrigin::Vendored) {
             continue;
         }
+        if class.role == FileRole::Test
+            || crate::graph::span_in_test_region(&decl_file.test_spans, decl.span)
+        {
+            continue; // a test file's exports are not an API promise (M6 FP hunt)
+        }
         if decl_file.language != leaked_file.language {
             continue; // visibility levels only compare within one language (module doc)
         }
@@ -93,11 +167,11 @@ pub fn find_private_type_leaks(graph: &ProjectGraph) -> Vec<Finding> {
         let leaks = match ladder.map(|l| {
             (
                 l.get(leaked.visibility.0 as usize),
-                l.get(decl.visibility.0 as usize),
+                l.get(surface.visibility.0 as usize),
             )
         }) {
             Some((Some(leaked_rung), Some(decl_rung))) => leaked_rung.scope < decl_rung.scope,
-            _ => leaked.visibility < decl.visibility,
+            _ => leaked.visibility < surface.visibility,
         };
         if !leaks {
             continue; // the type is at least as visible as the promise — no leak
@@ -381,6 +455,7 @@ mod tests {
         let rung = |scope, label: &str| VisibilityRung {
             scope,
             label: SmolStr::new(label),
+            surface_transitive: matches!(scope, crate::adapter::VisibilityScope::Public),
         };
         let symbols = vec![
             callable(FileId(0), "F", 3, span(1, 1, 1, 40)),
@@ -405,7 +480,10 @@ mod tests {
     }
 
     #[test]
-    fn confidence_is_the_evidence_edge_s_own() {
+    fn a_non_certain_evidence_edge_never_accuses() {
+        // M6 FP hunt: duck-typed/qualified-table fallback bindings (Probable/Possible)
+        // routinely pick the wrong same-name type — a defect-group accusation needs certain
+        // evidence (RFC 0012 §2: degrade toward silence).
         let symbols = vec![
             callable(FileId(0), "F", 1, span(1, 1, 1, 40)),
             ty(FileId(0), "secret", 0),
@@ -417,6 +495,43 @@ mod tests {
             Confidence::Probable,
         )];
         let findings = find_private_type_leaks(&graph_with(symbols, edges));
-        assert_eq!(findings[0].confidence, Confidence::Probable);
+        assert!(findings.is_empty());
+    }
+
+    #[test]
+    fn a_member_of_an_unexported_container_is_not_public_surface() {
+        // gin's `timeCodec.Decode` shape (M6 FP hunt): an exported-looking method on an
+        // unexported receiver is not public API — no leak to accuse.
+        let mut method = callable(FileId(0), "Decode", 1, span(3, 1, 3, 40));
+        method.member_of = Some(smol_str::SmolStr::new("timeCodec"));
+        method.span = span(3, 1, 5, 2);
+        let mut receiver = ty(FileId(0), "timeCodec", 0);
+        receiver.span = span(1, 1, 10, 2);
+        let symbols = vec![method, receiver];
+        let edges = vec![type_use(
+            SymbolId(0),
+            SymbolId(1),
+            span(3, 10, 3, 16),
+            Confidence::Certain,
+        )];
+        let findings = find_private_type_leaks(&graph_with(symbols, edges));
+        assert!(findings.is_empty(), "{findings:?}");
+    }
+
+    #[test]
+    fn an_unresolvable_container_name_vouches_for_nothing() {
+        // ripgrep's `impl<M> Matcher for &M` shape: member_of names a generic parameter that
+        // is no declaration — skip rather than accuse.
+        let mut method = callable(FileId(0), "captures", 1, span(3, 1, 3, 40));
+        method.member_of = Some(smol_str::SmolStr::new("M"));
+        let symbols = vec![method, ty(FileId(0), "secret", 0)];
+        let edges = vec![type_use(
+            SymbolId(0),
+            SymbolId(1),
+            span(3, 10, 3, 16),
+            Confidence::Certain,
+        )];
+        let findings = find_private_type_leaks(&graph_with(symbols, edges));
+        assert!(findings.is_empty(), "{findings:?}");
     }
 }

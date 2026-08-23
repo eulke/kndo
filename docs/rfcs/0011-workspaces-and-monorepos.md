@@ -125,7 +125,14 @@ verdict, not silently absorbed.
 Each Package independently resolves its mode from manifest signals, overridable in config:
 
 - **Published/library** (`private` absent, publish metadata, or a lib target): its public API
-  is a production root — external consumers exist by definition.
+  is a production root — external consumers exist by definition. "Public API" is computed
+  precisely (M6): manifest-declared entry files' surface-transitive exports, extended through
+  whole-surface re-exports (`pub mod`/`export *` — assembly's library-surface fixpoint) and
+  named re-exports (barrel indirection), and completed by the **surface-member closure**: a
+  surface type's members whose rung is `surface_transitive` (RFC 0012 §6) are surface too — a
+  `pub` method of a re-exported struct is consumer-callable API even with zero in-package
+  references. Capped rungs (`pub(crate)`, Swift `internal`, Go `internal/` exports) never
+  join the surface, keeping `unused`/`internal-only` at full precision for them.
 - **Private/app** (`private: true`, bins, app targets): exports are *not* roots; an export is
   alive only if a real edge (same package or sibling) consumes it. Cross-package consumption
   keeps internal-package exports honest without root-inflation — this is where monorepo dead

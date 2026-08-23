@@ -92,13 +92,15 @@ output (`kndo-adapter-java/src/parsing.rs`'s two `#[ignore]`d ground-truth dumps
   claimed (language `java`, ordinary `.java` glob) but its root node is `module_declaration`,
   none of the class/interface/enum/record shapes extraction walks for, so it naturally yields
   zero declarations — no special-casing needed in `claim()`. `package-info.java` (package-level
-  Javadoc/annotations, no type declarations) behaves the same way, for the same reason.
+  Javadoc/annotations, no type declarations) behaves the same way, for the same reason. Both
+  additionally classify as **Tooling role** (M6): their consumer is javac/javadoc, so their
+  "reachability" is healthy by definition rather than an `unused` accusation.
 
 ## 1. Claiming & classification
 
 | Claim | Files |
 |-------|-------|
-| Language `java` | `**/*.java` (`module-info.java`/`package-info.java` included — see §0's last bullet; both yield zero declarations, harmlessly) |
+| Language `java` | `**/*.java` (`module-info.java`/`package-info.java` included — see §0's last bullet; both yield zero declarations and classify as Tooling role) |
 | Manifests | `**/pom.xml` (Maven), `**/build.gradle` + `**/build.gradle.kts` (Gradle), `**/settings.gradle` + `**/settings.gradle.kts` (Gradle multi-project topology only — §4) |
 | Role `test` | `src/test/java/**` (Maven/Gradle Standard Directory Layout — the authoritative signal) OR a bare filename matching Maven Surefire's own default include patterns (`Test*.java`, `*Test.java`, `*Tests.java`, `*TestCase.java`) — a belt-and-suspenders fallback for non-standard layouts (flat scripts, Bazel-built Java) that still follow Surefire's naming convention. An OR, not additive: role is single-valued, and a `src/test/java` file is typically *also* Surefire-named, so the two signals agree far more than they diverge |
 | Role `tooling` | not detected in this slice — same stance as Go (§0 there): no ecosystem-wide config-file convention comparable to `webpack.config.js` exists for Java source files (the manifests themselves — `pom.xml`/`build.gradle` — are pure manifest facts, never role-classified as source) |
@@ -118,6 +120,20 @@ the absence of a modifier IS the level, matching how Go reads capitalization rat
 keyword). §0 has the full ladder derivation and reasoning.
 
 ## 2. Extraction
+
+**Idioms with structural exemptions (M6 FP hunt, junit4 corpus):**
+- Constructors declare as `SymbolKind::Constructor` named `<init>`: `new Foo()` references the
+  *type*, never the constructor symbol, so the core ties a constructor's liveness to its
+  container (a Certain class→constructor References edge in assembly) and `unused` never
+  accuses the kind directly — a private utility-class constructor exists precisely to never be
+  called, and deleting it would change behavior.
+- `serialVersionUID` fields are not declared at all: the JVM reads them reflectively, so a
+  declaration would guarantee a false `unused` on every `Serializable` class.
+- Interface/annotation members with no modifier are implicitly `public` (JLS §9.4) — extraction
+  applies the interface-body default, and interface constants (`constant_declaration`) extract
+  like fields.
+- `protected` members are **exported** (external subclasses of a published library override
+  them) on the Public-scope rung — RFC 0012 §6's ladder table.
 
 **Declarations** — top-level and nested (`member_of`-owned, RFC 0012 §3) alike:
 `class_declaration`, `interface_declaration`, `enum_declaration` (+ `enum_constant` as

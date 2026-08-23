@@ -1183,6 +1183,17 @@ impl Engine {
                         .into_iter()
                         .map(|(phase, us)| (format!("assemble:{phase}"), us)),
                 );
+                // Surface-member closure (graph.rs docs): idempotent strip-and-recompute at
+                // this single choke point — cold, patch, and warm snapshot paths all analyze
+                // the same derived surface. A snapshot may persist the edges; the strip-first
+                // recompute makes that carryover irrelevant.
+                let mut g = g;
+                let closure_start = Instant::now();
+                crate::graph::recompute_surface_closure(&mut g);
+                timings.push((
+                    "surface-closure".to_string(),
+                    closure_start.elapsed().as_micros() as u64,
+                ));
                 let g = std::sync::Arc::new(g);
                 if let Some(writer) = pending_snapshot {
                     // Extraction + manifest diagnostics and the plugin round's own, in the
@@ -1454,10 +1465,12 @@ mod tests {
                     crate::adapter::VisibilityRung {
                         scope: crate::adapter::VisibilityScope::Unit,
                         label: SmolStr::new("private"),
+                        surface_transitive: false,
                     },
                     crate::adapter::VisibilityRung {
                         scope: crate::adapter::VisibilityScope::Public,
                         label: SmolStr::new("exported"),
+                        surface_transitive: true,
                     },
                 ],
                 cycle_policy: crate::adapter::CyclePolicy {
@@ -1518,10 +1531,12 @@ mod tests {
                     crate::adapter::VisibilityRung {
                         scope: crate::adapter::VisibilityScope::Unit,
                         label: SmolStr::new("private"),
+                        surface_transitive: false,
                     },
                     crate::adapter::VisibilityRung {
                         scope: crate::adapter::VisibilityScope::Public,
                         label: SmolStr::new("exported"),
+                        surface_transitive: true,
                     },
                 ],
                 cycle_policy: crate::adapter::CyclePolicy {

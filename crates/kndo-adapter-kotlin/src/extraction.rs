@@ -474,7 +474,7 @@ fn handle_secondary_constructor(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut
     push_declaration(
         out,
         "<init>",
-        SymbolKind::Method,
+        SymbolKind::Constructor,
         item,
         signature_span,
         Some(owner),

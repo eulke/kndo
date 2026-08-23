@@ -73,11 +73,16 @@ pub trait LanguageAdapter: Send + Sync {
     // { id: "js-ts", facts_schema_version: u32, file_globs, manifest_globs, grammar_version,
     //   visibility_ladder: Vec<VisibilityRung> }
     // visibility_ladder (RFC 0012 §6): what VisibilityLevel indexes into — each rung a
-    // { scope: File|Unit|Package|Public, label } pair; the scope is what the core can check
+    // { scope: File|Unit|Package|Public, label, surface_transitive } triple; the scope is what the core can check
     // (same file / same FileFacts::unit / same PackageId / anywhere — nested, narrowest to
     // widest), the label is the language's own word, used verbatim in remediation text.
     // Empty ladder = no visibility semantics (CSS, JSON): visibility analyses skip the
-    // language. Conservative-mapping rule: a language level with no exact scope maps to the
+    // language. surface_transitive (M6): whether a re-export chain can carry this rung
+    // outside its package — relative rungs (Rust pub, JS export, Java public/protected)
+    // are true; capped rungs (pub(crate), package-private, Swift internal, Go exports under
+    // internal/) are false. Library-mode symbol promotion and the surface-member closure
+    // (RFC 0011 §5) promote only transitive rungs. Conservative-mapping rule: a language
+    // level with no exact scope maps to the
     // nearest WIDER one (Java protected → Public) — over-approximating who may see a symbol
     // can only suppress a finding, never fabricate one. Assembly copies the ladder onto
     // ProjectGraph::visibility_ladders keyed by claim language; analyses are pure graph

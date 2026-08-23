@@ -47,8 +47,16 @@ pub(crate) fn extract(path: &str, content: &[u8], ctx: &ResolveCtx<'_>) -> Manif
     out.workspace_members = target_names.iter().map(SmolStr::new).collect();
 
     let dir = kndo_adapter_toolkit::paths::dirname(path);
+    let custom_paths = collect_target_paths(targets, content);
     for name in exported_target_names(products, content) {
-        promote_target_roots(dir, &name, ctx, &mut out);
+        // A target's sources live under its `path:` argument when declared (Alamofire's
+        // `.target(name: "Alamofire", path: "Source")` — M6 FP hunt), under the SwiftPM
+        // Standard Directory Layout `Sources/<name>` otherwise.
+        let source_root = custom_paths
+            .get(&name)
+            .cloned()
+            .unwrap_or_else(|| format!("Sources/{name}"));
+        promote_target_roots(dir, &source_root, ctx, &mut out);
     }
     out
 }
@@ -197,11 +205,37 @@ fn target_name(call: Node, src: &[u8]) -> Option<String> {
     labeled_arg(call, "name", src).and_then(|v| string_literal_text(v, src))
 }
 
+/// Each target's explicit `path:` argument, when declared — the override for the Standard
+/// Directory Layout's `Sources/<name>`.
+fn collect_target_paths(
+    targets: Option<Node>,
+    src: &[u8],
+) -> std::collections::HashMap<String, String> {
+    let Some(targets) = targets else {
+        return Default::default();
+    };
+    targets
+        .children(&mut targets.walk())
+        .filter(|n| n.kind() == "call_expression")
+        .filter_map(|call| {
+            let name = target_name(call, src)?;
+            let path = labeled_arg(call, "path", src).and_then(|v| string_literal_text(v, src))?;
+            Some((name, path))
+        })
+        .collect()
+}
+
 /// One `ManifestRoot{Production, Certain}` per non-test `.swift` file under a publicly-
-/// exported target's `Sources/<target>/**` tree — the same per-file promotion mechanism Java/
-/// Kotlin use (docs/adapters/java.md §4), parameterized per-target instead of per-manifest.
-fn promote_target_roots(dir: &str, target: &str, ctx: &ResolveCtx<'_>, out: &mut ManifestFacts) {
-    let source_root = join(dir, &format!("Sources/{target}"));
+/// exported target's source tree (its `path:` override or `Sources/<target>`) — the same
+/// per-file promotion mechanism Java/Kotlin use (docs/adapters/java.md §4), parameterized
+/// per-target instead of per-manifest.
+fn promote_target_roots(
+    dir: &str,
+    source_rel: &str,
+    ctx: &ResolveCtx<'_>,
+    out: &mut ManifestFacts,
+) {
+    let source_root = join(dir, source_rel);
     let mut files: Vec<ProjectPath> = ctx
         .files_under(&source_root.0)
         .filter(|p| p.0.ends_with(".swift"))

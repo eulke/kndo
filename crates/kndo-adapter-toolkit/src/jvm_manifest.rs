@@ -22,8 +22,12 @@ use smol_str::SmolStr;
 /// Per-language source-tree conventions a JVM-family adapter's manifest extraction needs
 /// (everything else about Maven/Gradle fidelity is language-blind).
 pub struct JvmSourceLayout {
-    /// Source root relative to the manifest's directory, e.g. `"src/main/java"`.
-    pub source_root: &'static str,
+    /// Source roots relative to the manifest's directory, in promotion order. More than one
+    /// when Gradle registers several for a language: Kotlin's `main` source set includes
+    /// both `src/main/kotlin` and `src/main/java`, and real projects (moshi — M6 FP hunt)
+    /// keep `.kt` files under the latter. The `source_ext` filter keeps each language's
+    /// promotion to its own files even in a shared directory.
+    pub source_roots: &'static [&'static str],
     /// Extension (with leading dot) a file must have to be promoted as a module root.
     pub source_ext: &'static str,
     /// File basenames that declare nothing promotable (Java's `module-info.java`,
@@ -85,8 +89,10 @@ fn extract_maven(
     // `<packaging>pom</packaging>` with no source tree contributes topology only.
     if !out.private {
         let dir = crate::paths::dirname(path);
-        let source_root = join(dir, layout.source_root);
-        promote_source_roots(&source_root, ctx, &mut out, layout);
+        for root in layout.source_roots {
+            let source_root = join(dir, root);
+            promote_source_roots(&source_root, ctx, &mut out, layout);
+        }
     }
     out
 }
@@ -225,8 +231,10 @@ fn extract_gradle_build(
 
     if !out.private {
         let dir = crate::paths::dirname(path);
-        let source_root = join(dir, layout.source_root);
-        promote_source_roots(&source_root, ctx, &mut out, layout);
+        for root in layout.source_roots {
+            let source_root = join(dir, root);
+            promote_source_roots(&source_root, ctx, &mut out, layout);
+        }
     }
     out
 }
