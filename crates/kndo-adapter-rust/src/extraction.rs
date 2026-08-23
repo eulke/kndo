@@ -144,8 +144,113 @@ pub(crate) fn extract(_path: &str, content: &[u8]) -> FileFacts {
         },
         &mut out,
     );
+    expand_pathed_mod_specifiers(&collect_pathed_mod_paths(root, content), &mut out);
     collect_suppressions(root, content, &mut out);
     out
+}
+
+/// `#[path = "…"]`-remapped `mod name;` declarations, name → every declared location — a
+/// name maps to SEVERAL when cfg-alternated (`#[cfg(feature)] #[path = "enabled.rs"] mod
+/// imp;` / `#[cfg(not(...))] #[path = "disabled.rs"] mod imp;`): under kndo's
+/// whole-source view every alternate exists in some configuration, so all of them count.
+fn collect_pathed_mod_paths(
+    root: Node,
+    src: &[u8],
+) -> std::collections::HashMap<String, Vec<String>> {
+    let mut out = std::collections::HashMap::new();
+    walk_pathed_mods(root, src, &mut out);
+    out
+}
+
+/// `collect_pathed_mod_paths`'s recursive walk: `#[path]` attributes are pending state
+/// consumed by the next item, exactly like `walk_items`' attribute handling.
+fn walk_pathed_mods(
+    node: Node,
+    src: &[u8],
+    out: &mut std::collections::HashMap<String, Vec<String>>,
+) {
+    let mut pending_path: Option<String> = None;
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        match child.kind() {
+            "attribute_item" => pending_path = path_attr_literal(child, src).or(pending_path),
+            "line_comment" | "block_comment" => {}
+            _ => {
+                record_pathed_mod(child, src, pending_path.take(), out);
+                walk_pathed_mods(child, src, out);
+            }
+        }
+    }
+}
+
+/// One item in `collect_pathed_mod_paths`'s walk: a body-less `mod name;` preceded by a
+/// `#[path]` attribute records its declared location (anything else consumes the pending
+/// attribute silently — attributes bind to the next item only).
+fn record_pathed_mod(
+    item: Node,
+    src: &[u8],
+    pending_path: Option<String>,
+    out: &mut std::collections::HashMap<String, Vec<String>>,
+) {
+    if item.kind() != "mod_item" || item.child_by_field_name("body").is_some() {
+        return;
+    }
+    if let (Some(name), Some(p)) = (item.child_by_field_name("name"), pending_path) {
+        out.entry(text(name, src).to_string()).or_default().push(p);
+    }
+}
+
+/// The string literal of a `#[path = "…"]` attribute item, if that's what this is.
+fn path_attr_literal(item: Node, src: &[u8]) -> Option<String> {
+    let attr = item.named_child(0)?;
+    if text(attr.child(0)?, src) != "path" {
+        return None;
+    }
+    let value = attr.child_by_field_name("value")?;
+    Some(text(value, src).trim_matches('"').to_string())
+}
+
+/// Post-walk rewrite: a specifier that is exactly `self::<mod>` where `<mod>` is a
+/// `#[path]`-remapped file mod re-derives the child's location by convention and misses —
+/// the mod declaration IS the location of record. Each such import expands to one
+/// `file:`-anchored clone per declared alternate (ripgrep's `pub(crate) use self::imp::*`
+/// over cfg-alternated `#[path]` mods — without this the glob resolved to nothing and the
+/// alternates' whole surface read as dead).
+fn expand_pathed_mod_specifiers(
+    pathed: &std::collections::HashMap<String, Vec<String>>,
+    out: &mut FileFacts,
+) {
+    if pathed.is_empty() {
+        return;
+    }
+    let mut expanded = Vec::with_capacity(out.imports.len());
+    for imp in std::mem::take(&mut out.imports) {
+        match pathed_alternates(&imp.specifier, pathed) {
+            Some(paths) => push_located_clones(imp, paths, &mut expanded),
+            None => expanded.push(imp),
+        }
+    }
+    out.imports = expanded;
+}
+
+/// One `file:`-anchored clone of the import per declared alternate location.
+fn push_located_clones(imp: RawImport, paths: &[String], expanded: &mut Vec<RawImport>) {
+    for p in paths {
+        let mut clone = imp.clone();
+        clone.specifier = SmolStr::new(format!("file:{p}"));
+        expanded.push(clone);
+    }
+}
+
+/// The declared locations a specifier of exactly `self::<pathed-mod>` expands to, if any.
+fn pathed_alternates<'a>(
+    specifier: &str,
+    pathed: &'a std::collections::HashMap<String, Vec<String>>,
+) -> Option<&'a Vec<String>> {
+    specifier
+        .strip_prefix("self::")
+        .filter(|rest| !rest.contains("::"))
+        .and_then(|name| pathed.get(name))
 }
 
 /// Names that qualify paths locally — `use` tails/aliases and `mod` names, anywhere in the
@@ -356,6 +461,9 @@ fn collect_attr(item: Node, src: &[u8], pending: &mut PendingAttrs, out: &mut Fi
         "test" => pending.test = true,
         "bench" => pending.bench = true,
         "macro_use" => pending.macro_use = true,
+        // Runtime hooks: the language runtime consumes the item directly — no in-graph
+        // reference will ever exist, same externally-invoked semantics as `#[no_mangle]`.
+        "global_allocator" | "panic_handler" | "alloc_error_handler" => pending.ffi_export = true,
         "no_mangle" | "export_name" | "unsafe" => {
             // `#[unsafe(no_mangle)]` (Rust 2024) nests the real attribute in a token tree —
             // scan the attribute text for the export markers rather than modeling the nesting.
@@ -520,8 +628,10 @@ fn handle_item(item: Node, src: &[u8], ctx: &Ctx<'_>, pending: PendingAttrs, out
         "enum_item" => handle_enum(item, src, ctx, out),
         "trait_item" => handle_trait(item, src, ctx, out),
         "impl_item" => handle_impl(item, src, ctx, out),
-        "const_item" => handle_simple_decl(item, src, ctx, SymbolKind::Const, owner, out),
-        "static_item" => handle_simple_decl(item, src, ctx, SymbolKind::Static, owner, out),
+        "const_item" => handle_simple_decl(item, src, ctx, SymbolKind::Const, owner, &pending, out),
+        "static_item" => {
+            handle_simple_decl(item, src, ctx, SymbolKind::Static, owner, &pending, out)
+        }
         "type_item" => handle_type_decl(item, src, ctx, SymbolKind::TypeAlias, out),
         "macro_definition" => {
             if let Some(name) = item.child_by_field_name("name") {
@@ -922,6 +1032,19 @@ fn handle_impl(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
                             Some(&self_type),
                             visibility(member),
                         );
+                        // Same dispatch rule as trait-impl methods: an associated
+                        // type/const in `impl Trait for T` (`type Output = …` in an `Add`
+                        // impl) is consumed through the trait's machinery, never by name.
+                        if is_trait_impl {
+                            out.roots.push(RawRoot {
+                                kind: RootKind::Production,
+                                target: RawRootTarget::Declaration(SmolStr::new(format!(
+                                    "{self_type}.{}",
+                                    text(mname, src)
+                                ))),
+                                confidence: Confidence::Probable,
+                            });
+                        }
                     }
                 }
                 _ => {}
@@ -951,6 +1074,7 @@ fn handle_simple_decl(
     ctx: &Ctx<'_>,
     kind: SymbolKind,
     owner: Option<&str>,
+    pending: &PendingAttrs,
     out: &mut FileFacts,
 ) {
     let Some(name) = item.child_by_field_name("name") else {
@@ -958,6 +1082,15 @@ fn handle_simple_decl(
     };
     let vis = visibility(item);
     push_declaration(out, text(name, src), kind, item, None, owner, vis);
+    // Runtime-consumed item (`#[global_allocator]` — the runtime is the caller, same
+    // reasoning as `#[no_mangle]` on a fn): a root, no in-graph reference will ever exist.
+    if pending.ffi_export {
+        out.roots.push(RawRoot {
+            kind: RootKind::Production,
+            target: RawRootTarget::Declaration(SmolStr::new(text(name, src))),
+            confidence: Confidence::Probable,
+        });
+    }
     // Initializer expressions run at load: within = None (RFC 0012 §4's load-time rule).
     if let Some(value) = item.child_by_field_name("value") {
         walk_body(
@@ -1993,6 +2126,44 @@ mod tests {
         assert_eq!(by_name("super_fn").visibility.0, 1); // top-level: super leaves the file
         assert_eq!(by_name("public_fn").visibility.0, 2);
         assert!(by_name("public_fn").exported);
+    }
+
+    #[test]
+    fn a_use_through_a_pathed_mod_expands_to_every_declared_alternate() {
+        // ripgrep's index/mod.rs shape: `use self::imp::*` where `imp` is declared twice
+        // with cfg-alternated `#[path]`s. The mod declarations are the location of record —
+        // the use expands to one `file:` import per alternate (union over configurations).
+        let f = facts(
+            "pub(crate) use self::imp::*;\n\
+             #[cfg(not(feature = \"x\"))]\n\
+             #[path = \"disabled.rs\"]\n\
+             mod imp;\n\
+             #[cfg(feature = \"x\")]\n\
+             #[path = \"enabled.rs\"]\n\
+             mod imp;\n",
+        );
+        let globs: Vec<&str> = f
+            .imports
+            .iter()
+            .filter(|i| i.opaque_namespace_use && i.reexported)
+            .map(|i| i.specifier.as_str())
+            .collect();
+        assert_eq!(globs, vec!["file:disabled.rs", "file:enabled.rs"]);
+    }
+
+    #[test]
+    fn global_allocator_roots_the_static() {
+        // The runtime consumes the item directly — no in-graph reference will ever exist
+        // (`#[cfg]`-gated in real code, like ripgrep's musl jemalloc ALLOC).
+        let f = facts(
+            "#[global_allocator]\n\
+             static ALLOC: MyAlloc = MyAlloc;\n\
+             struct MyAlloc;\n",
+        );
+        assert!(f.roots.iter().any(|r| matches!(
+            &r.target,
+            kndo_core::adapter::RawRootTarget::Declaration(n) if n.as_str() == "ALLOC"
+        )));
     }
 
     #[test]

@@ -196,6 +196,15 @@ literals; skipped → `line_comment`, `block_comment`. Winnowing parameters shar
   prefix (`crate::logger`) becomes the import specifier binding the type (`Logger`), the
   type is referenced, and the trailing item resolves through the member table — an unsplit
   specifier resolved to no file and the whole chain read as dead.
+- Every member of an `impl Trait for T` — methods AND associated types/consts (`type
+  Output = …` in an `Add` impl) — roots at `Probable`: trait-impl items are consumed
+  through the trait's dispatch machinery (`dyn`, generic bounds, operators, `for` loops),
+  never by name, so the name-based fallback cannot see their consumption (the RFC 0012 §3
+  dispatch rule made concrete; same stance as Swift's conformance witnesses). Twin impls
+  (`impl Add for Stats` twice with different RHS) each root — the core lands a
+  declaration-targeted root on every declaration sharing the selector.
+- `#[global_allocator]` / `#[panic_handler]` / `#[alloc_error_handler]` root the item: the
+  runtime is the consumer, same externally-invoked semantics as `#[no_mangle]`.
 
 ## 3. Resolution
 

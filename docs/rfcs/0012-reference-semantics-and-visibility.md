@@ -296,6 +296,21 @@ machinery (`ns.foo`) under the same core rule. Deferred because its current blas
 small (external targets have no in-graph symbols to mis-bind; in-repo dir≠package mismatches
 are rare) and §§3–6 change the same code paths — land those first, then refactor once.
 
+**As landed (M6, extended):** a matched qualifier resolves in order — the target file's bare
+table, its unit siblings, then its *member table*: the alias may name a TYPE rather than a
+module (`Thing::from_low_args()` through `use crate::thing::Thing`), where the member lookup
+follows the qualifier symbol to its home file first (a barrel's re-export alias lands on the
+original, so `SearchMode::Standard` through `use crate::flags::{SearchMode}` reaches the
+declaring file's members). Hit or miss, a matched *alias* still settles. A qualifier matching
+no alias but matching an **import binding** resolves `Original.member` in the bound symbol's
+home file at Certain — and on a miss does NOT settle: a binding is a value/type, not a closed
+namespace, so an unknown member falls through to the §3 duck-typed fallback exactly like a
+receiver expression. Re-exported GLOBS (`pub use x::*`, `export * from './x'`) alias the
+target's exported surface into the barrel inside the RFC 0013 §3b fixpoint (or-insert
+collision rule; alternates that lose the collision stay alive through the glob's Wildcard
+edge). In-source roots targeting a declaration name land on EVERY declaration sharing the
+selector — twins are legitimate (two `impl Add for Stats` blocks both declare `Stats.add`).
+
 ## 10. Multi-module topology (`go.work` et al) — adapter work, one recorded divergence
 
 `go.work` becomes a second claimed manifest contributing `workspace_members` (the field

@@ -1281,13 +1281,16 @@ fn resolve_file(
         // Qualified references (RFC 0012 §9): `q.name` where `q` matches an import
         // qualifier resolves `name` inside that target (its own declarations, then its
         // unit siblings — a Go import names a package, and the symbol may live in any of
-        // the package's files) at Certain. Hit or miss, a matched qualifier *settles*
-        // resolution — the name lives in that target or nowhere; this file's own tables
-        // are never candidates. A qualifier matching no import is a receiver expression
-        // (`t.helper()`): the name is a member access by construction, so it skips the
-        // free-name tables and goes straight to the duck-typed member fallback below —
-        // where before §9 a same-file free function sharing the member's name would have
-        // (incorrectly, if safely) captured the reference.
+        // the package's files, then the target's member table under `q` itself — an alias
+        // can name a TYPE in the target, and then `name` is that type's member: Rust's
+        // `Thing::from_low_args()` through `use crate::thing::Thing`) at Certain. Hit or
+        // miss, a matched qualifier *settles* resolution — the name lives in that target
+        // or nowhere; this file's own tables are never candidates. A qualifier matching
+        // no import is a receiver expression (`t.helper()`): the name is a member access
+        // by construction, so it skips the free-name tables and goes straight to the
+        // duck-typed member fallback below — where before §9 a same-file free function
+        // sharing the member's name would have (incorrectly, if safely) captured the
+        // reference.
         let mut is_receiver_access = false;
         if let Some(q) = &reference.scope_context {
             match qualifier_targets.get(q) {
@@ -1301,6 +1304,22 @@ fn resolve_file(
                                     .get(unit)
                                     .and_then(|tab| tab.get(&reference.name))
                             })
+                        })
+                        .or_else(|| {
+                            // The alias may name a TYPE rather than a module: resolve the
+                            // qualifier itself as a symbol in the target (its bare table
+                            // includes the re-export fixpoint's aliases, so a barrel-routed
+                            // type lands on its original), then look the member up in the
+                            // file where that symbol actually lives — `SearchMode::Standard`
+                            // through `use crate::flags::{SearchMode}` reaches
+                            // `lowargs.rs`'s member table via `flags/mod.rs`'s alias.
+                            symbol_by_name_per_file[t]
+                                .get(q.as_str())
+                                .and_then(|&type_symbol| {
+                                    let home = symbols[type_symbol.0 as usize].file.0 as usize;
+                                    symbol_by_qualified_per_file[home]
+                                        .get(format!("{q}.{}", reference.name).as_str())
+                                })
                         })
                         .copied();
                     if let Some(to) = sym {
@@ -1318,7 +1337,37 @@ fn resolve_file(
                     }
                     continue;
                 }
-                None => is_receiver_access = true,
+                None => {
+                    // Not an alias — but an IMPORTED NAME used as a qualifier refers to
+                    // the bound symbol itself (`SearchMode::Standard` after `use …::{…,
+                    // SearchMode, …}`): its members live in the symbol's home file, keyed
+                    // by the symbol's ORIGINAL name (an `as`-renamed binding still owns
+                    // `Original.member`). A hit is Certain; a miss does NOT settle — a
+                    // binding is a value/type, not a closed namespace, so an unknown
+                    // member is a dynamic-looking access and falls through to the
+                    // duck-typed fallback exactly like a receiver expression.
+                    if let Some(&bound) = bound_symbols.get(q.as_str()) {
+                        let owner = &symbols[bound.0 as usize];
+                        let home = owner.file.0 as usize;
+                        if let Some(&to) = symbol_by_qualified_per_file[home]
+                            .get(format!("{}.{}", owner.name, reference.name).as_str())
+                        {
+                            out.edges.push(Edge {
+                                owner: file_id,
+                                kind: EdgeKind::References {
+                                    from,
+                                    to,
+                                    kind: reference.kind,
+                                },
+                                confidence: Confidence::Certain,
+                                source: provenance(),
+                                span: Some(reference.span),
+                            });
+                            continue;
+                        }
+                    }
+                    is_receiver_access = true;
+                }
             }
         }
 
@@ -1766,16 +1815,14 @@ fn emit_file_declarations(
     }
 
     // In-source roots (RawRoot), as distinct from manifest-declared ones: they target
-    // something *within* the file being extracted, never a different file.
+    // something *within* the file being extracted, never a different file. Resolved
+    // against ALL of this file's declarations sharing the name — a single-slot table
+    // lookup silently dropped legitimate twins (two `impl Add for Stats` blocks each
+    // declare `Stats.add`/`Stats.Output`; the adapter roots both, so both must land).
+    // The index is built lazily, once, only when a Declaration-targeted root exists.
+    let mut root_name_index: Option<HashMap<String, Vec<u32>>> = None;
     for root in &facts.roots {
-        let target = match &root.target {
-            RawRootTarget::WholeFile => Some(NodeRef::File(file_id)),
-            RawRootTarget::Declaration(name) => bare_table
-                .get(name)
-                .or_else(|| qualified_table.get(name.as_str()))
-                .map(|&s| NodeRef::Symbol(s)),
-        };
-        if let Some(target) = target {
+        let mut emit_root = |target: NodeRef| {
             let span = match target {
                 NodeRef::Symbol(s) => Some(symbols[s.0 as usize].span),
                 NodeRef::File(_) => None,
@@ -1790,10 +1837,37 @@ fn emit_file_declarations(
                 span,
                 owner: file_id,
             });
+        };
+        match &root.target {
+            RawRootTarget::WholeFile => emit_root(NodeRef::File(file_id)),
+            RawRootTarget::Declaration(name) => {
+                let index = root_name_index
+                    .get_or_insert_with(|| declaration_name_index(&facts.declarations));
+                for &d in index.get(name.as_str()).map(Vec::as_slice).unwrap_or(&[]) {
+                    emit_root(NodeRef::Symbol(SymbolId(first_symbol + d)));
+                }
+            }
         }
     }
 
     DeclarationEmissions { edges, metrics }
+}
+
+/// Every declaration of a file keyed by its root-target selector — the bare name for free
+/// declarations, `Owner.name` for members — with EVERY declaration index per key (twins
+/// preserved: multiple trait impls legitimately re-declare the same member selector).
+fn declaration_name_index(
+    declarations: &[crate::adapter::Declaration],
+) -> HashMap<String, Vec<u32>> {
+    let mut index: HashMap<String, Vec<u32>> = HashMap::default();
+    for (d, decl) in declarations.iter().enumerate() {
+        let key = match &decl.member_of {
+            Some(owner) => format!("{owner}.{}", decl.name),
+            None => decl.name.to_string(),
+        };
+        index.entry(key).or_default().push(d as u32);
+    }
+    index
 }
 
 /// The span-normalized surface signature (RFC 0013 §4): everything about a file that OTHER
@@ -1957,7 +2031,7 @@ pub(crate) fn package_owns(manifest_dir: &str, file_dir: &str) -> bool {
 /// an assembly-algorithm change that could produce a different graph from the same facts. Feeds
 /// [`compute_graph_key`] (RFC 0004 §3's "core graph-schema version"); a bump here invalidates
 /// every project's cached `graph.bin` on the next run, same as any other key-input change.
-pub const GRAPH_SCHEMA_VERSION: u32 = 17; // 17: SymbolKind::Macro (expansion symbols — first-class kind with visibility-scope exemption semantics); 16: VisibilityRung.surface_transitive + surface closure (Provenance::Surface Root edges; RFC 0012 §6, M6); 15: FileNode.string_call_sites + EdgeKind::ReferencesFile (RFC 0017 §5.4); 14: in-source Test roots derived from test_spans containment (adapters no longer emit them); 13: FileNode.test_spans + phase 2.55 test-gated module demotion (sub-file test regions); 12: library-surface fixpoint (phase 2.7 — same inputs now assemble surface Root edges, prior snapshots are semantically stale); 11: PackageNode.workspace_entry (RFC 0013 §4); 10: patch layer (RFC 0013 §4 — Edge.owner, FilePatchMeta, extraction-only stored diagnostics); 9: SymbolMetrics.token_count (RFC 0005 §11); 8: function_metrics (RFC 0005 §6); 7: cycle policies (§8); 6: PackageNode surface (RFC 0011 §4); 5: ladders + FileNode.unit (RFC 0012 §6); 4: RefKind + signature_span (§5); 3: within (§4)
+pub const GRAPH_SCHEMA_VERSION: u32 = 18; // 18: qualified refs reach the target's member table + glob re-exports alias the target's exported surface (same inputs now assemble more edges — prior snapshots are semantically stale); 17: SymbolKind::Macro (expansion symbols — first-class kind with visibility-scope exemption semantics); 16: VisibilityRung.surface_transitive + surface closure (Provenance::Surface Root edges; RFC 0012 §6, M6); 15: FileNode.string_call_sites + EdgeKind::ReferencesFile (RFC 0017 §5.4); 14: in-source Test roots derived from test_spans containment (adapters no longer emit them); 13: FileNode.test_spans + phase 2.55 test-gated module demotion (sub-file test regions); 12: library-surface fixpoint (phase 2.7 — same inputs now assemble surface Root edges, prior snapshots are semantically stale); 11: PackageNode.workspace_entry (RFC 0013 §4); 10: patch layer (RFC 0013 §4 — Edge.owner, FilePatchMeta, extraction-only stored diagnostics); 9: SymbolMetrics.token_count (RFC 0005 §11); 8: function_metrics (RFC 0005 §6); 7: cycle policies (§8); 6: PackageNode surface (RFC 0011 §4); 5: ladders + FileNode.unit (RFC 0012 §6); 4: RefKind + signature_span (§5); 3: within (§4)
 
 /// The graph snapshot's cache key (RFC 0004 §3, `cache.rs`'s `graph.bin`): a single digest
 /// folding in the *whole* discovered file set (every path + content hash — this already
@@ -3391,6 +3465,7 @@ pub fn assemble_from_source(
         adapter_index: usize,
     }
     let mut pending: Vec<PendingReexport> = Vec::new();
+    let mut glob_reexports: Vec<(usize, FileId, crate::adapter::Span, usize)> = Vec::new();
     for (i, slot) in claimed_per_file.iter().enumerate() {
         let Some(claimed) = slot else { continue };
         let adapter = &adapters[claimed.adapter_index];
@@ -3411,6 +3486,15 @@ pub fn assemble_from_source(
             let Some(&target) = file_index.get(&target) else {
                 continue;
             };
+            if imp.bindings.is_empty() && imp.opaque_namespace_use {
+                // A re-exported GLOB (`pub use x::*`, `export * from './x'`): no binding
+                // names exist up front — the names are whatever the target *exports*, so
+                // the aliasing enumerates the target's table inside the fixpoint instead.
+                if FileId(i as u32) != target {
+                    glob_reexports.push((i, target, imp.span, claimed.adapter_index));
+                }
+                continue;
+            }
             for binding in &imp.bindings {
                 pending.push(PendingReexport {
                     source_file: i,
@@ -3466,6 +3550,46 @@ pub fn assemble_from_source(
                         ),
                         span: Some(reexport.span),
                     });
+                }
+            }
+        }
+        // Glob re-exports alias the target's *exported* surface wholesale, under the same
+        // or_insert collision rule — first alias of a name wins, later alternates (two
+        // `#[path]`-alternated mods glob-re-exported through one barrel) stay reachable
+        // through the glob's own Wildcard edge instead. Re-enumerated every round so a
+        // chained barrel's freshly-landed aliases propagate (same least-fixpoint reasoning
+        // as the binding loop above).
+        for &(source, target, span, adapter_index) in &glob_reexports {
+            let target_exports: Vec<(SmolStr, SymbolId)> = symbol_by_name_per_file
+                [target.0 as usize]
+                .iter()
+                .filter(|(_, &sym)| symbols[sym.0 as usize].exported)
+                .map(|(name, &sym)| (name.clone(), sym))
+                .collect();
+            for (name, original_symbol) in target_exports {
+                if let std::collections::hash_map::Entry::Vacant(slot) =
+                    symbol_by_name_per_file[source].entry(name.clone())
+                {
+                    slot.insert(original_symbol);
+                    progress = true;
+                    patch_meta[source].reexport_aliases.push(AliasEntry {
+                        name,
+                        symbol: original_symbol,
+                    });
+                    if let Some(&confidence) = library_root_files.get(&FileId(source as u32)) {
+                        edges.push(Edge {
+                            owner: FileId(source as u32),
+                            kind: EdgeKind::Root {
+                                kind: crate::vocab::RootKind::Production,
+                                target: NodeRef::Symbol(original_symbol),
+                            },
+                            confidence,
+                            source: Provenance::Adapter(
+                                adapters[adapter_index].descriptor().id.clone(),
+                            ),
+                            span: Some(span),
+                        });
+                    }
                 }
             }
         }
@@ -3874,11 +3998,16 @@ mod tests {
                     });
                 } else if let Some(rest) = line
                     .strip_prefix("import ")
+                    .or_else(|| line.strip_prefix("reexport-opaque "))
                     .or_else(|| line.strip_prefix("reexport "))
                     .or_else(|| line.strip_prefix("import-opaque "))
                 {
-                    let reexported = line.starts_with("reexport ");
-                    let opaque_namespace_use = line.starts_with("import-opaque ");
+                    // `reexport-opaque <spec>` — a re-exported glob (`export * from './x'`,
+                    // Rust `pub use x::*`): reexported with no bindings, namespace-opaque.
+                    let reexported =
+                        line.starts_with("reexport ") || line.starts_with("reexport-opaque ");
+                    let opaque_namespace_use =
+                        line.starts_with("import-opaque ") || line.starts_with("reexport-opaque ");
                     let mut parts = rest.splitn(2, ' ');
                     let spec = parts.next().unwrap_or("");
                     let bindings = parts
@@ -4498,6 +4627,113 @@ mod tests {
         let edges = reference_edges_to(&graph, "X");
         assert_eq!(edges.len(), 1);
         assert_eq!(edges[0].confidence, Confidence::Certain);
+    }
+
+    #[test]
+    fn a_type_naming_qualifier_resolves_the_targets_member() {
+        // The alias names a TYPE in the target, and the reference is that type's member —
+        // Rust's `Thing::from_low_args()` through `use crate::thing::Thing`. The bare table
+        // misses (members aren't in it); the target's member table under the qualifier
+        // itself is the hit, at Certain.
+        let dir = project(
+            "qref-type-member",
+            &[
+                (
+                    "a.mock",
+                    "import-as Thing ./b.mock\nqref Thing from_low\nroot-file",
+                ),
+                ("b.mock", "decl Thing\nmember-decl-exported Thing from_low"),
+            ],
+        );
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
+        let edges = reference_edges_to(&graph, "from_low");
+        assert_eq!(edges.len(), 1);
+        assert_eq!(edges[0].confidence, Confidence::Certain);
+    }
+
+    #[test]
+    fn an_imported_name_as_qualifier_reaches_the_bound_symbols_members() {
+        // `use …::{…, SearchMode, …}` then `SearchMode::Standard`: the grouped use-list
+        // registers no alias, but the BINDING names the type — the member resolves in the
+        // bound symbol's home file at Certain. A member the type doesn't have must NOT
+        // settle: it falls through to the duck fallback like any receiver access.
+        let dir = project(
+            "qref-bound-type-member",
+            &[
+                (
+                    "a.mock",
+                    "import ./b.mock Mode\nqref Mode Standard\nqref Mode stray\nroot-file",
+                ),
+                (
+                    "b.mock",
+                    "decl Mode\nmember-decl-exported Mode Standard\n\
+                     decl Other\nmember-decl-exported Other stray",
+                ),
+            ],
+        );
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
+        let standard = reference_edges_to(&graph, "Standard");
+        assert_eq!(standard.len(), 1);
+        assert_eq!(standard[0].confidence, Confidence::Certain);
+        // `Mode::stray` doesn't exist on Mode — the duck fallback still finds Other.stray
+        // as a plausible candidate instead of settling to silence.
+        let stray = reference_edges_to(&graph, "stray");
+        assert_eq!(stray.len(), 1);
+        assert_eq!(stray[0].confidence, Confidence::Probable);
+    }
+
+    #[test]
+    fn a_barrel_routed_type_qualifier_reaches_the_originals_members() {
+        // The importer binds the type through a BARREL (`use crate::flags::{SearchMode}` →
+        // flags/mod.rs re-exports it from lowargs.rs): the alias lands on the barrel file,
+        // whose bare table holds the fixpoint's alias to the original symbol — the member
+        // lookup must follow that symbol home, not stop at the barrel's own member table.
+        let dir = project(
+            "qref-barrel-type-member",
+            &[
+                (
+                    "a.mock",
+                    "import-as SearchMode ./barrel.mock\nqref SearchMode Standard\nroot-file",
+                ),
+                ("barrel.mock", "reexport ./leaf.mock SearchMode"),
+                (
+                    "leaf.mock",
+                    "decl SearchMode\nmember-decl-exported SearchMode Standard",
+                ),
+            ],
+        );
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
+        let edges = reference_edges_to(&graph, "Standard");
+        assert_eq!(edges.len(), 1);
+        assert_eq!(edges[0].confidence, Confidence::Certain);
+    }
+
+    #[test]
+    fn a_reexported_glob_aliases_the_targets_exported_surface() {
+        // `export * from './leaf'` / `pub use x::*`: the barrel has no binding names up
+        // front, yet a consumer reaching through it (`qref b read` with `b` aliased to the
+        // barrel) must land on the leaf's export — and the leaf's private names must NOT
+        // travel. Chained through a second barrel to exercise the fixpoint rounds.
+        let dir = project(
+            "reexport-glob",
+            &[
+                (
+                    "a.mock",
+                    "import-as b ./barrel.mock\nqref b read\nroot-file",
+                ),
+                ("barrel.mock", "reexport-opaque ./mid.mock"),
+                ("mid.mock", "reexport-opaque ./leaf.mock"),
+                ("leaf.mock", "decl read\nprivate-decl hidden"),
+            ],
+        );
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
+        let edges = reference_edges_to(&graph, "read");
+        assert_eq!(edges.len(), 1, "glob re-export chain must resolve `read`");
+        assert_eq!(edges[0].confidence, Confidence::Certain);
+        assert!(
+            reference_edges_to(&graph, "hidden").is_empty(),
+            "a private name never travels through a glob re-export"
+        );
     }
 
     #[test]

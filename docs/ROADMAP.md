@@ -983,6 +983,40 @@ vs `disabled.rs` — cfg modeling is out of scope), duck-typed member accesses t
 where top-level `pub(super)`'s widened rung meets a parent-module private trait
 (`parse.rs#lookup` — accepted until rungs are module-relative; recorded in the adapter spec).
 
+### M6 progress — FP hunt, third pass: the "cfg" residuals dissolved ✅ (landed 2026-08-23)
+
+Investigating the "cfg-selected alternate modules" residual proved the label wrong: none of
+the causes required modeling `cfg` at all. Six mechanisms, each reproduced as a conformance
+fixture first (five new, all green), ripgrep full-scan **1,340 → 1,209** across the whole M6
+arc (`unused` 127 → 19, and the survivors sample as genuine dead utilities and feature-gated
+dependencies; `internal-only` 222 → 163):
+
+- **Type-qualified members through import bindings** (core, RFC 0012 §9 extension — the big
+  one): `Thing::from_low_args()` after `use …::Thing` matched the auto-alias, missed the
+  target's bare table, and "settled" to nothing — killing whole call chains by symbol
+  attribution (`HiArgs::from_low_args` → everything `hiargs.rs` calls). Qualified resolution
+  now reaches the target's member table, follows a barrel alias to the original's home file,
+  and resolves qualifiers that match an import *binding* in the bound symbol's home — where
+  a member miss falls through to the duck fallback instead of settling (a binding is not a
+  closed namespace). All language-blind; enum-variant and assoc-fn uses land at Certain.
+- **Glob re-exports** (core, RFC 0013 §3b): `pub use x::*` / `export * from './x'` had no
+  bindings for the fixpoint to iterate, so barrels re-exported nothing. The fixpoint now
+  aliases the target's exported surface wholesale (or-insert collisions; alternates stay
+  alive through the glob's Wildcard edge).
+- **`self::<mod>` honors `#[path]`** (adapter): the mod declaration is the location of
+  record; `use self::imp::*` over two cfg-alternated `#[path]` mods expands to one `file:`
+  import per alternate — union over configurations, no cfg evaluation anywhere.
+- **Trait-impl members root at Probable** — associated types/consts included (`type Output`
+  in an `Add` impl), matching the Swift conformance-witness stance; and declaration-targeted
+  roots now land on EVERY declaration sharing the selector (twin `impl Add for Stats` blocks
+  both declare `Stats.add` — the single-slot table dropped one).
+- **Runtime hooks root** (adapter): `#[global_allocator]`/`#[panic_handler]`/
+  `#[alloc_error_handler]` — the runtime is the consumer, like `#[no_mangle]`.
+
+Remaining `internal-only` on `pub(crate)` members consumed only via untyped receivers
+(`args.matcher()`) fires demoted to `Possible` by design — the honest ceiling until local
+receiver-type flow exists (a possible future stage, not a patch).
+
 ## Post-1.0 parking lot
 **RFC 0016 — uniform component model** (the accepted plan, phased in its §8, **all four phases
 landed**: 0 freeze reservations, 1 host-mediated content channel for plugin graph hooks
