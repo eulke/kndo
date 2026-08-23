@@ -863,7 +863,12 @@ that didn't fire, the activated one reports `true`. Full workspace suite and
 `clippy -D warnings` both clean.
 
 ## M6 — 1.0 hardening
-False-positive hunt across dogfood corpus (target < 2%, vision §6), schema/ABI freeze, docs site,
+False-positive hunt across dogfood corpus (target < 2%, vision §6), schema/ABI freeze
+(**deferred by owner decision, 2026-08-23** — not before it is explicitly requested), **docs
+site — landed** (`site/`, mdBook: introduction, install, getting started, the rules,
+configuration & suppression, the GitHub Action, agents, plugins, languages, FAQ — written
+user-first from the RFCs; `.github/workflows/docs.yml` builds it on every touching PR and
+deploys to GitHub Pages from main once Pages is enabled),
 **distribution & release pipeline** (RFC 0014: license settled as Apache-2.0, governance files
 present, personal-project context confirmed — §§0-1 done; the `ci.yml`/`release.yml`/
 `install.sh`/`cliff.toml`/Docker/Homebrew mechanism itself is written and statically validated

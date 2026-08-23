@@ -91,7 +91,7 @@ fn main() -> ExitCode {
         None => check(&args),
         Some(other) => {
             eprintln!(
-                "kndo: unknown command `{other}` (check, health, baseline, doctor, plugin, init, find, describe, uses, used-by, trace, query, --version)"
+                "kndo: unknown command `{other}` (check, health, baseline, doctor, plugin, init, find, describe, uses, used-by, trace, impact, query, help, --version)"
             );
             ExitCode::from(2)
         }
