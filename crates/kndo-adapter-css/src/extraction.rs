@@ -289,6 +289,7 @@ fn handle_import_like(
         bindings: Vec::new(),
         reexported: false,
         opaque_namespace_use: false,
+        module_names_visible: false,
         local_alias: None,
     });
 }

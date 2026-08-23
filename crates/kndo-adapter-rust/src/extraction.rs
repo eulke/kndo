@@ -1049,6 +1049,7 @@ fn emit_attr_path(segments: &[&str], at: Span, out: &mut FileFacts) {
             }],
             reexported: false,
             opaque_namespace_use: false,
+            module_names_visible: false,
             local_alias: None,
         });
         out.references.push(RawReference {
@@ -1179,6 +1180,7 @@ fn handle_item(item: Node, src: &[u8], ctx: &Ctx<'_>, pending: PendingAttrs, out
                     bindings: Vec::new(),
                     reexported: false,
                     opaque_namespace_use: false,
+                    module_names_visible: false,
                     local_alias: None,
                 });
             }
@@ -1629,6 +1631,44 @@ fn mark_implicitly_invoked(out: &mut FileFacts, owner: &str, name: &str) {
     }
 }
 
+/// Is `name` one of the impl's OWN type parameters (`impl<'a, M: Matcher> … for &'a M`)?
+fn is_impl_type_parameter(item: Node, src: &[u8], name: &str) -> bool {
+    let Some(params) = item.child_by_field_name("type_parameters") else {
+        return false;
+    };
+    let mut c = params.walk();
+    let found = params
+        .children(&mut c)
+        .any(|p| type_parameter_named(p, src, name));
+    found
+}
+
+/// One `type_parameters` child declaring exactly `name` (plain, constrained, or the bare
+/// `type_identifier` shape older grammar nodes use).
+fn type_parameter_named(p: Node, src: &[u8], name: &str) -> bool {
+    if !matches!(
+        p.kind(),
+        "type_parameter" | "constrained_type_parameter" | "type_identifier"
+    ) {
+        return false;
+    }
+    match p.child_by_field_name("name") {
+        Some(n) => text(n, src) == name,
+        None => p.kind() == "type_identifier" && text(p, src) == name,
+    }
+}
+
+/// Self sits behind a forwarding wrapper: `&T` / `&mut T` (`reference_type`) or `Box<T>`.
+fn is_wrapped_self(type_node: Node) -> bool {
+    match type_node.kind() {
+        "reference_type" => true,
+        "generic_type" => type_node
+            .child_by_field_name("type")
+            .is_some_and(|t| t.kind() == "type_identifier"),
+        _ => false,
+    }
+}
+
 fn handle_impl(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
     // The self type's bare name: `impl S`, `impl S<T>`, `impl a::S` all own members under `S`.
     let Some(type_node) = item.child_by_field_name("type") else {
@@ -1636,11 +1676,34 @@ fn handle_impl(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
     };
     let self_type = last_type_identifier(type_node, src);
     let Some(self_type) = self_type else { return };
+    let trait_name = item
+        .child_by_field_name("trait")
+        .and_then(|t| last_type_identifier(t, src).map(|n| n.to_string()));
+
+    // Blanket forwarding (`impl<'a, M: Matcher> Matcher for &'a M`, `for &mut S`, `for
+    // Box<S>`): Self is one of the impl's OWN type parameters behind a reference/Box —
+    // there is no nominal type to own the members (the bare parameter name is a phantom no
+    // receiver ever unifies with), and the impl executes precisely when the trait is used
+    // through that wrapper. Model it as machinery OF THE TRAIT: members attribute to the
+    // trait's name and mark implicitly_invoked, so reaching the trait plausibly reaches the
+    // forwarding shims (RFC 0005 §1, degrade toward silence — ripgrep audit, ~40 members
+    // across matcher/sink).
+    let forwards_to_trait = trait_name.as_deref().is_some_and(|_| {
+        is_impl_type_parameter(item, src, &self_type) && is_wrapped_self(type_node)
+    });
+    let (self_type, is_forwarding) = if forwards_to_trait {
+        (trait_name.clone().unwrap(), true)
+    } else {
+        (self_type, false)
+    };
 
     // `impl Trait for T` — the Implement reference that keeps dispatch-aware liveness honest
-    // (RFC 0012 §3): using the trait keeps its implementations alive.
-    if let Some(trait_node) = item.child_by_field_name("trait") {
-        if let Some(trait_name) = last_type_identifier(trait_node, src) {
+    // (RFC 0012 §3): using the trait keeps its implementations alive. A forwarding impl
+    // skips it (the trait implementing itself is a no-op loop).
+    if !is_forwarding {
+        if let (Some(trait_node), Some(trait_name)) =
+            (item.child_by_field_name("trait"), trait_name.as_deref())
+        {
             out.references.push(RawReference {
                 name: SmolStr::new(trait_name),
                 scope_context: None,
@@ -1655,10 +1718,11 @@ fn handle_impl(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
     // Machinery traits (RFC 0005 §1's machinery-dispatch rule): the call site never writes
     // the method's name — an operator, a `{}` hook, a scope end, a `for` loop — so members
     // of these impls are marked `implicitly_invoked` and inherit their owner's colors.
-    let is_machinery = item
-        .child_by_field_name("trait")
-        .and_then(|t| last_type_identifier(t, src))
-        .is_some_and(|t| is_machinery_trait(&t));
+    let is_machinery = is_forwarding
+        || item
+            .child_by_field_name("trait")
+            .and_then(|t| last_type_identifier(t, src))
+            .is_some_and(|t| is_machinery_trait(&t));
     if let Some(body) = item.child_by_field_name("body") {
         let mut members = body.walk();
         let mut pending = PendingAttrs::default();
@@ -1845,6 +1909,7 @@ fn handle_mod(item: Node, src: &[u8], ctx: &Ctx<'_>, pending: &PendingAttrs, out
                 // crate scope — invocations anywhere reach its `macro_rules!` without an
                 // import, which no binding can express (RFC 0005 §1's wildcard rule).
                 opaque_namespace_use: pending.macro_use,
+                module_names_visible: false,
                 local_alias: Some(SmolStr::new(text(name, src))),
             });
         }
@@ -1900,6 +1965,7 @@ fn push_entry_import(specifier: &str, at: Span, out: &mut FileFacts) {
         bindings: Vec::new(),
         reexported: false,
         opaque_namespace_use: false,
+        module_names_visible: false,
         local_alias: None,
     });
 }
@@ -1915,6 +1981,7 @@ fn make_import(specifier: &str, kind_span: (ImportKind, Span), reexported: bool)
         bindings: Vec::new(),
         reexported,
         opaque_namespace_use: false,
+        module_names_visible: false,
         local_alias: None,
     }
 }
@@ -2093,6 +2160,25 @@ fn walk_type_refs(
 fn walk_body(node: Node, src: &[u8], within: Option<&str>, env: PathEnv<'_>, out: &mut FileFacts) {
     match node.kind() {
         "line_comment" | "block_comment" => return,
+        // The RUNTIME spelling of Cargo's bin handshake — `env::var_os("CARGO_BIN_EXE_rg")`
+        // (ripgrep's own harness) — carries the same documented literal as the `env!` macro
+        // form below in `handle_macro`. Only the documented prefix, only a literal; the name
+        // still resolves against the manifest's declared executables or drops.
+        "string_literal" | "raw_string_literal" => {
+            if let Some(exe) = text(node, src)
+                .trim_matches(|c| c == '"' || c == 'r' || c == '#')
+                .strip_prefix("CARGO_BIN_EXE_")
+                .filter(|exe| {
+                    !exe.is_empty()
+                        && exe
+                            .chars()
+                            .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
+                })
+            {
+                out.invoked_executables.push(SmolStr::new(exe));
+            }
+            return;
+        }
         "use_declaration" => {
             // A body-scoped `use` is an import, not an expression: route it through the same
             // extraction item-level uses get. Walking it generically fabricated phantom
@@ -2305,6 +2391,7 @@ fn emit_path(
             }],
             reexported: false,
             opaque_namespace_use: false,
+            module_names_visible: false,
             local_alias: None,
         });
         if bound != *last {
@@ -2389,37 +2476,60 @@ fn emit_path(
                 bindings: Vec::new(),
                 reexported: false,
                 opaque_namespace_use: false,
+                module_names_visible: false,
                 local_alias: None,
             });
         }
-        if import_worthy && rest.len() > 1 && !root.chars().next().is_some_and(char::is_uppercase) {
+        // The parent-path MODULE import is emitted regardless of `locals`: that guard
+        // exists to stop fabricated ROOT/dependency imports for names a `use` already
+        // covers, but a deep path (`kndo_core::discovery::find_files_named`) through a
+        // use-covered root still needs ITS OWN module import to resolve — `use
+        // kndo_core::{discovery}` binds `discovery`, not this path (kondo dogfood: a
+        // sibling `use aa::{x}` silently killed every `aa::y::f()` inline path in the
+        // file). The duplicate dependency edge the root would add is exactly what the
+        // guard still prevents below.
+        let module_worthy = !PRIMITIVES.contains(&root);
+        if module_worthy && rest.len() > 1 && !root.chars().next().is_some_and(char::is_uppercase) {
             out.imports.push(RawImport {
                 specifier: SmolStr::new(rest.join("::")),
                 kind: ImportKind::Package,
                 span: at,
                 side_effect_only: false,
                 type_only: kind == RefKind::TypeUse,
-                confidence: Confidence::Probable,
+                // A locals-covered root (`io::x::y` after `use std::io`) reconstructs at
+                // Possible: the import exists for resolution keep-alive; it is NOT evidence
+                // of a crate named `io` (`undeclared` ignores the Possible tier — the old
+                // guard suppressed these entirely and killed real cross-crate paths, kondo
+                // dogfood).
+                confidence: if import_worthy {
+                    Confidence::Probable
+                } else {
+                    Confidence::Possible
+                },
                 bindings: vec![ImportBinding {
                     local: SmolStr::new(*last),
                     imported: Some(SmolStr::new(*last)),
                 }],
                 reexported: false,
                 opaque_namespace_use: false,
+                module_names_visible: false,
                 local_alias: None,
             });
-            out.imports.push(RawImport {
-                specifier: SmolStr::new(root),
-                kind: ImportKind::Package,
-                span: at,
-                side_effect_only: true,
-                type_only: false,
-                confidence: Confidence::Probable,
-                bindings: Vec::new(),
-                reexported: false,
-                opaque_namespace_use: false,
-                local_alias: None,
-            });
+            if import_worthy {
+                out.imports.push(RawImport {
+                    specifier: SmolStr::new(root),
+                    kind: ImportKind::Package,
+                    span: at,
+                    side_effect_only: true,
+                    type_only: false,
+                    confidence: Confidence::Probable,
+                    bindings: Vec::new(),
+                    reexported: false,
+                    opaque_namespace_use: false,
+                    module_names_visible: false,
+                    local_alias: None,
+                });
+            }
             // The binding resolves the plain name — no qualifier needed for this one.
             out.references.push(RawReference {
                 name: SmolStr::new(*last),
@@ -2478,6 +2588,7 @@ fn handle_macro(
                 bindings: Vec::new(),
                 reexported: false,
                 opaque_namespace_use: false,
+                module_names_visible: false,
                 local_alias: None,
             });
             return;
@@ -2556,6 +2667,7 @@ fn scan_token_tree(
                         bindings: Vec::new(),
                         reexported: false,
                         opaque_namespace_use: false,
+                        module_names_visible: false,
                         local_alias: None,
                     });
                 }

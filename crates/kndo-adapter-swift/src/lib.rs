@@ -36,7 +36,7 @@ impl LanguageAdapter for SwiftAdapter {
             activation: Vec::new(),
             dependencies: Vec::new(),
             id: SmolStr::new("swift"),
-            facts_schema_version: 1,
+            facts_schema_version: 3, // 3: default-parameter-value refs (dot-shorthand typed by the param); 2: implicitly_invoked on `override` members (RFC 0005 §1 machinery dispatch)
             file_globs: vec![SmolStr::new("**/*.swift")],
             manifest_globs: vec![SmolStr::new("**/Package.swift")],
             grammar_version: SmolStr::new("tree-sitter-swift 0.7.3"),

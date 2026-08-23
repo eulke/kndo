@@ -1171,6 +1171,55 @@ cleared; `jsont.rs`'s stayed, honestly: its types are exercised only through the
 subprocess harness). Remaining untested top families are now real blind spots or the
 recorded WASM-boundary divergence.
 
+### M6 progress — corpus-verified FP sweep: dispatch parity across all languages ✅ (landed 2026-08-23)
+
+A five-agent verification pass over the full corpus adjudicated every remaining `untested`
+family against real code and named the mechanism behind each false positive. Everything
+nameable landed, measured per repo (full-scan totals, session start → close):
+ripgrep 678 → 545 (`untested` 229 → 97), Alamofire 789 → 684 (184 → 87), moshi 548 → 449
+(212 → 113), junit4 255 → 205 (105 → 54), express 68 → 63, gin 149 → 147, kondo 390 → 379.
+
+- **Dispatch parity** (the audit's headline): the implement-dispatch fan-out now runs on
+  `Extend` edges too — base-class dispatch is the same vtable fact as interface dispatch —
+  which lights up Java/Kotlin/Swift/Go supertype clauses the adapters already emitted.
+  Where the supertype is EXTERNAL (KSP's `SymbolProcessor`, framework listeners), explicit
+  `override` members mark `implicitly_invoked` in the Kotlin/Java/Swift adapters (junit
+  `@Override` + `Serializable` hooks included), reconnecting moshi's entire codegen tree
+  through two overrides. Go gets the explicit witness (`var API Core = jsonApi{}` emits
+  Implement) and stdlib-marshaler machinery (`MarshalJSON`/`String`/`Error` et al).
+- **Swift module scoping was structurally broken and masked**: `import Alamofire` binds no
+  names, so cross-file references resolved only inside single files (surface promotion and
+  the duck fallback hid the hole). `RawImport::module_names_visible` (Swift sets it) lets
+  bare-name resolution consult the imported module's whole unit; `ManifestFacts::
+  unit_overrides` assigns units to SwiftPM `path:` targets the `Sources/<name>` convention
+  misses (Alamofire's whole `Source/` had no unit — resolution tables now read the
+  overridden FileNode, not raw facts). Default parameter values extract as refs `within`
+  the function, dot-shorthand typed by the parameter's own annotation (`= .numeric`).
+- **Rust residuals**: blanket forwarding impls (`impl<M: Matcher> Matcher for &M`/`Box<S>`)
+  model as machinery of the trait (the phantom `M` owner no receiver unifies with is gone);
+  the runtime spelling of Cargo's bin handshake (`env::var_os("CARGO_BIN_EXE_rg")` —
+  ripgrep's harness) now declares the invoked executable like the `env!` macro form, so the
+  whole `hiargs.rs` cluster clears through the process boundary; inline cross-crate paths
+  (`kndo_core::discovery::f()`) resolve — the `locals` guard that suppressed their module
+  import (meant only to stop phantom root deps) now tiers them at `Possible` instead, with
+  dependency claims capped at the import's confidence so `undeclared` never accuses from
+  that tier; associated-type items are exempt from `untested` (no runtime footprint).
+- **Java `<clinit>` semantics via attribution**: field-initializer references sit `within`
+  the field, so a static import of the constant reaches its whole builder chain
+  (RuleMemberValidator's 17); annotation class literals (`@RunWith(Categories.class)`)
+  emit Call references — the annotation's machinery instantiates exactly that class.
+- **CJS default attribution**: `module.exports = local` records `FileFacts::
+  default_export_alias`; assembly aliases `default` → the local (vacant-only, persisted in
+  patch_meta), so `var res = require('./response')` credits a real cross-file reference —
+  express's `res`/`req`/`View` internal-only false positives clear without resurrecting
+  the documented phantom-`default` one.
+
+Recorded, deliberate residuals: Kotlin↔Java cross-language receiver typing (moshi's
+`JsonWriter.setTag`, one finding — Java locals have no TypeEnv yet), Swift return-type
+member_types (the DownloadRequest case cleared via module scoping; chains through returns
+remain future precision), and the standing build-tag/`cfg`, subprocess-harness, and
+WASM-boundary divergences.
+
 ## Post-1.0 parking lot
 **RFC 0016 — uniform component model** (the accepted plan, phased in its §8, **all four phases
 landed**: 0 freeze reservations, 1 host-mediated content channel for plugin graph hooks

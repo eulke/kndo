@@ -58,6 +58,20 @@ pub(crate) fn extract(path: &str, content: &[u8], ctx: &ResolveCtx<'_>) -> Manif
             .unwrap_or_else(|| format!("Sources/{name}"));
         promote_target_roots(dir, &source_root, ctx, &mut out);
     }
+    // Custom `path:` targets sit outside the `Sources/<name>` convention that
+    // `unit_for_path` reads at extraction time, so their files carry no unit — and with it
+    // no same-unit resolution at all (the whole module goes dark to cross-file references).
+    // The manifest is the only place the mapping exists; assembly applies it to files whose
+    // extraction left `unit` unset (ManifestFacts::unit_overrides).
+    for (name, custom) in &custom_paths {
+        let prefix = if dir.is_empty() {
+            custom.clone()
+        } else {
+            format!("{dir}/{custom}")
+        };
+        out.unit_overrides
+            .push((ProjectPath(SmolStr::new(prefix)), SmolStr::new(name)));
+    }
     out
 }
 

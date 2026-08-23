@@ -192,12 +192,15 @@ fn link_owners_to_hooks(
 
 /// The implement-dispatch rule's implicit `(trait member, impl member)` edges (RFC 0005
 /// §1): calling through a trait IS plausibly executing every implementation — the vtable,
-/// as declared. Derived entirely from `RefKind::Implement` edges (`impl Trait for T` emits
-/// one from the implementing type's symbol to the trait's) and `member_of`: for each such
-/// edge, every member of the TRAIT fans out to the implementing type's same-named member in
-/// the impl's own file (the edge's owner — an impl block need not share its type's file).
-/// `Probable`, degrade toward silence; an Implement edge whose `from` fell back to file
-/// attribution contributes nothing, and a trait member nothing reaches propagates nothing.
+/// as declared. Derived entirely from `RefKind::Implement`/`RefKind::Extend` edges (`impl
+/// Trait for T`, `class C implements I`, `class C extends B`, Kotlin/Swift supertype
+/// clauses — all emit one from the subtype's symbol to the supertype's) and `member_of`:
+/// for each such edge, every member of the SUPERTYPE fans out to the subtype's same-named
+/// member in the edge's own file (the edge's owner — an impl block need not share its
+/// type's file). Extend qualifies because base-class dispatch is the same vtable fact as
+/// interface dispatch: calling through the base plausibly executes every override.
+/// `Probable`, degrade toward silence; an edge whose `from` fell back to file attribution
+/// contributes nothing, and a supertype member nothing reaches propagates nothing.
 fn implement_dispatch_edges(graph: &ProjectGraph, files_len: usize) -> Vec<(u32, u32)> {
     let mut members: HashMap<(u32, &smol_str::SmolStr), Vec<u32>> = HashMap::default();
     for (i, s) in graph.symbols.iter().enumerate() {
@@ -210,7 +213,7 @@ fn implement_dispatch_edges(graph: &ProjectGraph, files_len: usize) -> Vec<(u32,
         let EdgeKind::References {
             from: NodeRef::Symbol(t),
             to,
-            kind: crate::vocab::RefKind::Implement,
+            kind: crate::vocab::RefKind::Implement | crate::vocab::RefKind::Extend,
         } = edge.kind
         else {
             continue;

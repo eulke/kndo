@@ -349,7 +349,23 @@ fn handle_method(node: Node, src: &[u8], flags: Flags, out: &mut FileFacts) {
         visibility: visibility(exported, flags.is_internal),
         member_of: Some(SmolStr::new(&receiver_type)),
         signature_span: signature_span_of(node),
-        implicitly_invoked: false,
+        // Stdlib-interface machinery (RFC 0005 §1): `encoding/json` calls `MarshalJSON`
+        // reflectively, `fmt` calls `String`/`Error`/`GoString`, the encoding packages
+        // call the Text/Binary pairs — no source call site ever writes these names (gin
+        // audit: `Error.MarshalJSON` exercised by every `json.Marshal(err)` in tests,
+        // reachable by no reference).
+        implicitly_invoked: matches!(
+            method_name,
+            "MarshalJSON"
+                | "UnmarshalJSON"
+                | "MarshalText"
+                | "UnmarshalText"
+                | "MarshalBinary"
+                | "UnmarshalBinary"
+                | "String"
+                | "Error"
+                | "GoString"
+        ),
     });
     push_function_metrics(out, &format!("{receiver_type}.{method_name}"), node);
     if exported && flags.promote_exports {
@@ -434,6 +450,47 @@ fn handle_value_declaration(
                 flags,
             );
         }
+        emit_explicit_witness(spec, src, out);
+    }
+}
+
+/// An interface-typed var initialized with a composite literal — `var API Core = jsonApi{}`
+/// — is Go's explicit dispatch witness: the declaration itself asserts `jsonApi` satisfies
+/// `Core`, so calling through `Core` plausibly executes `jsonApi`'s methods (the one place
+/// structural satisfaction is nameable without a typechecker — gin audit, `json.API`).
+/// Emits an Implement reference from the literal's type to the declared type; either name
+/// failing to resolve drops the edge silently.
+fn emit_explicit_witness(spec: Node, src: &[u8], out: &mut FileFacts) {
+    let Some(declared) = spec
+        .child_by_field_name("type")
+        .filter(|t| t.kind() == "type_identifier")
+    else {
+        return;
+    };
+    let Some(value) = spec.child_by_field_name("value") else {
+        return;
+    };
+    let mut stack = vec![value];
+    while let Some(n) = stack.pop() {
+        if n.kind() == "composite_literal" {
+            if let Some(lit_ty) = n
+                .child_by_field_name("type")
+                .filter(|t| t.kind() == "type_identifier")
+            {
+                out.references.push(RawReference {
+                    name: SmolStr::new(text(declared, src)),
+                    scope_context: None,
+                    span: span(declared),
+                    within: Some(SmolStr::new(text(lit_ty, src))),
+                    kind: RefKind::Implement,
+                });
+            }
+            continue;
+        }
+        let mut c = n.walk();
+        for child in n.children(&mut c) {
+            stack.push(child);
+        }
     }
 }
 
@@ -489,6 +546,7 @@ fn handle_import_spec(node: Node, src: &[u8], out: &mut FileFacts) {
         bindings: Vec::new(),            // Go imports bind a namespace, not names (RFC 0012 §9)
         reexported: false,
         opaque_namespace_use,
+        module_names_visible: false,
         local_alias,
     });
 }

@@ -34,7 +34,7 @@ impl LanguageAdapter for KotlinAdapter {
             activation: Vec::new(),
             dependencies: Vec::new(),
             id: SmolStr::new("kotlin"),
-            facts_schema_version: 1,
+            facts_schema_version: 2, // 2: implicitly_invoked on `override` members (RFC 0005 §1 machinery dispatch)
             file_globs: vec![SmolStr::new("**/*.kt")],
             manifest_globs: vec![
                 SmolStr::new("**/pom.xml"),

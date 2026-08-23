@@ -193,6 +193,10 @@ fn handle_import(item: Node, src: &[u8], out: &mut FileFacts) {
         }],
         reexported: false,
         opaque_namespace_use: false,
+        // `import Alamofire` puts every top-level name of the module in bare scope — no
+        // per-name binding syntax exists. The core's bare-name fallback consults the
+        // resolved target's whole unit for imports carrying this (spec §3).
+        module_names_visible: true,
         local_alias: None,
     });
 }
@@ -415,23 +419,102 @@ fn root_if_dispatch_target(item: Node, qualified: &str, out: &mut FileFacts) {
         target: RawRootTarget::Declaration(SmolStr::new(qualified)),
         confidence: Confidence::Probable,
     });
+    // Machinery dispatch (RFC 0005 §1): an explicit `override` is invoked through the
+    // superclass — a tested owner plausibly has its overrides executed. Protocol witnesses
+    // deliberately stay out (no keyword marks them; blanket-marking every method of a
+    // conforming type would erase real untested signal — degrade toward silence only on
+    // the precise fact).
+    if let Some(d) = out
+        .declarations
+        .last_mut()
+        .filter(|d| d.member_of.is_some())
+    {
+        d.implicitly_invoked = true;
+    }
 }
 
-/// The function's own signature children — parameters/return type/generic bounds.
-/// `function_body`'s kind never matches the whitelist below, so it's naturally skipped.
+/// The function's own signature children — parameters/return type/generic bounds — plus
+/// default parameter values. A default expression is a SIBLING of its `parameter` (after a
+/// bare `=` token, tree-sitter-swift 0.7): calling the function with the argument omitted
+/// executes the default, so its references belong `within` the function like body code
+/// (M6 corpus: Alamofire's `boolEncoding: BoolEncoding = .numeric` — tests construct the
+/// encoder bare and still exercise `.numeric`'s arm). Dot-shorthand defaults qualify by the
+/// parameter's own declared type — the one place the type is textually certain.
+/// `function_body`'s kind never matches any arm below, so it's naturally skipped.
 fn walk_function_signature(item: Node, src: &[u8], within: Option<&str>, out: &mut FileFacts) {
+    let mut param_type: Option<String> = None;
+    let mut pending_default = false;
     for child in item.children(&mut item.walk()) {
-        walk_signature_child(child, src, within, out);
+        if matches!(
+            child.kind(),
+            "user_type" | "optional_type" | "type_parameters" | "parameter"
+        ) {
+            walk_type_refs(child, src, within, out);
+            note_parameter(child, src, &mut param_type, &mut pending_default);
+        } else {
+            pending_default = default_step(child, src, pending_default, &param_type, within, out);
+        }
     }
 }
 
-fn walk_signature_child(child: Node, src: &[u8], within: Option<&str>, out: &mut FileFacts) {
-    if matches!(
-        child.kind(),
-        "user_type" | "optional_type" | "parameter" | "type_parameters"
-    ) {
-        walk_type_refs(child, src, within, out);
+/// The `= <expr>` state machine outside type/parameter children: `=` arms it (only after a
+/// typed parameter), the very next child is the default expression, anything else disarms.
+fn default_step(
+    child: Node,
+    src: &[u8],
+    pending: bool,
+    param_type: &Option<String>,
+    within: Option<&str>,
+    out: &mut FileFacts,
+) -> bool {
+    if child.kind() == "=" {
+        return param_type.is_some();
     }
+    if pending {
+        walk_default_value(child, src, param_type.as_deref(), within, out);
+    }
+    false
+}
+
+/// Remembers a `parameter`'s declared type for the default-value walk; other signature
+/// children leave the state untouched.
+fn note_parameter(
+    child: Node,
+    src: &[u8],
+    param_type: &mut Option<String>,
+    pending_default: &mut bool,
+) {
+    if child.kind() != "parameter" {
+        return;
+    }
+    *param_type = find_child(child, "user_type").map(|t| text(t, src).to_string());
+    *pending_default = false;
+}
+
+/// One default-value expression: dot-shorthand (`.numeric`, a `prefix_expression` led by
+/// `.`) resolves against the parameter's declared type — emitted as a member reference with
+/// that type as `scope_context`; every other shape is ordinary body code.
+fn walk_default_value(
+    expr: Node,
+    src: &[u8],
+    param_type: Option<&str>,
+    within: Option<&str>,
+    out: &mut FileFacts,
+) {
+    let shorthand = expr.kind() == "prefix_expression" && text(expr, src).starts_with('.');
+    if let (true, Some(ty)) = (shorthand, param_type) {
+        if let Some(member) = find_child(expr, "simple_identifier") {
+            out.references.push(RawReference {
+                name: SmolStr::new(text(member, src)),
+                scope_context: Some(SmolStr::new(ty)),
+                span: span(expr),
+                within: within.map(SmolStr::new),
+                kind: RefKind::Read,
+            });
+            return;
+        }
+    }
+    walk_body(expr, src, within, out);
 }
 
 /// `deinit { … }` — the runtime invokes it when an instance dies, so like `init` it gets the
@@ -477,11 +560,9 @@ fn handle_init(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
         Some(owner),
         vis,
     );
-    for param in item.children(&mut item.walk()) {
-        if param.kind() == "parameter" {
-            walk_type_refs(param, src, Some(&qualified), out);
-        }
-    }
+    // Same signature walk as functions — inits are where default parameter values matter
+    // most (Alamofire's `Session.init` carries 13 of them).
+    walk_function_signature(item, src, Some(&qualified), out);
     if let Some(body) = body {
         walk_body(body, src, Some(&qualified), out);
         push_function_metrics(out, &qualified, body);

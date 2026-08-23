@@ -1252,7 +1252,17 @@ fn resolve_file(
     // qualifier for `gopkg.in/yaml.v3`-style imports comes from the target's `package`
     // clause, never from a guess about the specifier. First import wins on a duplicate
     // qualifier (Go rejects that program anyway — deterministic either way).
-    let mut qualifier_targets: HashMap<SmolStr, FileId> = HashMap::default();
+    // The bool is settling strength: a qualifier from an explicit alias or the target's
+    // own declared unit name SETTLES resolution on a member miss (the name lives there or
+    // nowhere); one derived from a specifier's last path segment is weaker provenance — a
+    // same-named type in scope is entirely possible — so a miss falls through to the
+    // in-scope/duck ladder instead (ripgrep regression: a tail-registered qualifier
+    // settling `BinaryDetection.from_low_args` to the wrong file killed a live method).
+    let mut qualifier_targets: HashMap<SmolStr, (FileId, bool)> = HashMap::default();
+    // Units whose every top-level name this file sees bare (`RawImport::module_names_visible`
+    // — Swift's `import Alamofire`): the bare-name fallback consults these unit tables after
+    // the file's own, at Certain — it is the language's scoping rule, not a guess.
+    let mut visible_units: Vec<SmolStr> = Vec::new();
 
     for imp in &facts.imports {
         let spec = ImportSpec {
@@ -1289,6 +1299,13 @@ fn resolve_file(
                     source: provenance(),
                     span: Some(imp.span),
                 });
+                if imp.module_names_visible {
+                    if let Some(unit) = &file_unit[to.0 as usize] {
+                        if !visible_units.contains(unit) {
+                            visible_units.push(unit.clone());
+                        }
+                    }
+                }
                 for binding in &imp.bindings {
                     let exported_name = binding
                         .imported
@@ -1317,9 +1334,24 @@ fn resolve_file(
                 let qualifier = imp
                     .local_alias
                     .clone()
-                    .or_else(|| unit_name_by_file[to.0 as usize].clone());
-                if let Some(q) = qualifier {
-                    qualifier_targets.entry(q).or_insert(to);
+                    .or_else(|| unit_name_by_file[to.0 as usize].clone())
+                    .map(|q| (q, true))
+                    // A `::`-path specifier (Rust inline module paths, Java static-import
+                    // classes) puts its LAST segment in scope as the qualifier at the use
+                    // site: `kndo_core::discovery::find_files_named(..)` reaches
+                    // `discovery`'s file under the qualifier `discovery` — without this the
+                    // reference's scope_context matched nothing and the whole path fell to
+                    // the duck fallback (kondo dogfood: a cross-crate inline path with zero
+                    // resolved references). Non-settling (see qualifier_targets).
+                    .or_else(|| {
+                        imp.specifier
+                            .rsplit("::")
+                            .next()
+                            .filter(|_| imp.specifier.contains("::"))
+                            .map(|q| (SmolStr::new(q), false))
+                    });
+                if let Some((q, settles)) = qualifier {
+                    qualifier_targets.entry(q).or_insert((to, settles));
                 }
                 // The namespace escaped static tracking (`ns[key]`, ns passed
                 // along) — every symbol in the target is plausibly used
@@ -1336,6 +1368,11 @@ fn resolve_file(
             }
         }
         if let Some((name, confidence)) = dep_target {
+            // The dependency CLAIM is only as strong as the import that makes it: a
+            // Possible-tier reconstructed module import (Rust locals-covered roots) must
+            // not surface as a Certain dependency accusation downstream (`undeclared`
+            // ignores the Possible tier).
+            let confidence = confidence.min(imp.confidence);
             out.dep_imports
                 .push((name, confidence, imp.span, file_id, provenance()));
         }
@@ -1388,8 +1425,14 @@ fn resolve_file(
         // reference.
         let mut is_receiver_access = false;
         if let Some(q) = &reference.scope_context {
-            match qualifier_targets.get(q) {
-                Some(&target_file) => {
+            // A weak (tail-derived) qualifier whose target yields nothing does NOT settle:
+            // the name may belong to an in-scope type instead, so it takes the in-scope
+            // ladder below exactly as an unregistered qualifier would (ripgrep regression:
+            // settling `BinaryDetection.from_low_args` to the wrong file killed a live
+            // method).
+            let qualified_targets = qualifier_targets
+                .get(q)
+                .and_then(|&(target_file, settles)| {
                     let t = target_file.0 as usize;
                     let bare = symbol_by_name_per_file[t]
                         .get(&reference.name)
@@ -1423,6 +1466,10 @@ fn resolve_file(
                             })
                             .unwrap_or_default(),
                     };
+                    (!targets.is_empty() || settles).then_some(targets)
+                });
+            match qualified_targets {
+                Some(targets) => {
                     for to in targets {
                         out.edges.push(Edge {
                             owner: file_id,
@@ -1505,6 +1552,13 @@ fn resolve_file(
                 .or_else(|| symbol_by_name_per_file[i].get(&reference.name))
                 .or_else(|| {
                     file_unit[i].as_ref().and_then(|unit| {
+                        symbol_by_name_per_unit
+                            .get(unit)
+                            .and_then(|t| t.get(&reference.name))
+                    })
+                })
+                .or_else(|| {
+                    visible_units.iter().find_map(|unit| {
                         symbol_by_name_per_unit
                             .get(unit)
                             .and_then(|t| t.get(&reference.name))
@@ -3281,6 +3335,26 @@ pub fn assemble_from_source(
 
     tick("extract", &mut phase_start);
 
+    // Manifest unit overrides (RFC 0012 §8): per-target unit assignment the path convention
+    // can't derive — SwiftPM's `.target(name:, path:)`. Longest matching prefix wins;
+    // applied only where extraction left `unit` unset (the convention, where it fired,
+    // already told the truth).
+    let mut unit_overrides: Vec<(crate::adapter::ProjectPath, SmolStr)> = manifests_per_file
+        .iter()
+        .flatten()
+        .flat_map(|(_, m)| m.unit_overrides.iter().cloned())
+        .collect();
+    unit_overrides.sort_by(|a, b| b.0 .0.len().cmp(&a.0 .0.len()));
+    let override_unit = |path: &str| -> Option<SmolStr> {
+        unit_overrides
+            .iter()
+            .find(|(prefix, _)| {
+                path.strip_prefix(prefix.0.as_str())
+                    .is_some_and(|rest| rest.starts_with('/'))
+            })
+            .map(|(_, unit)| unit.clone())
+    };
+
     // Phase 2 — assign FileId (already the discovery-sorted index) and build File nodes.
     let mut files = Vec::with_capacity(discovered.files.len());
     let mut file_index =
@@ -3311,7 +3385,10 @@ pub fn assemble_from_source(
                 (
                     Some(c.claim.language.clone()),
                     Some(class),
-                    c.facts.unit.clone(),
+                    c.facts
+                        .unit
+                        .clone()
+                        .or_else(|| override_unit(df.path.0.as_str())),
                 )
             }
             None => (None, None, None),
@@ -3722,7 +3799,10 @@ pub fn assemble_from_source(
     let mut symbol_range_per_file: Vec<(u32, u32)> = vec![(0, 0); claimed_per_file.len()];
     for (i, slot) in claimed_per_file.iter().enumerate() {
         let Some(claimed) = slot else { continue };
-        file_unit[i] = claimed.facts.unit.clone();
+        // The FILE NODE's unit, not the raw facts' — phase 2 already applied the manifest
+        // unit overrides there (SwiftPM `path:` targets); reading facts here would leave
+        // the resolution tables blind to exactly the files the override exists for.
+        file_unit[i] = files[i].unit.clone();
         let start = symbols.len() as u32;
 
         for decl in &claimed.facts.declarations {
@@ -3730,7 +3810,7 @@ pub fn assemble_from_source(
             match &decl.member_of {
                 None => {
                     symbol_by_name_per_file[i].insert(decl.name.clone(), symbol_id);
-                    if let Some(unit) = &claimed.facts.unit {
+                    if let Some(unit) = &file_unit[i] {
                         symbol_by_name_per_unit
                             .entry(unit.clone())
                             .or_default()
@@ -3761,6 +3841,21 @@ pub fn assemble_from_source(
                 signature_span: decl.signature_span,
                 implicitly_invoked: decl.implicitly_invoked,
             });
+        }
+        // CJS default alias (FileFacts::default_export_alias): `module.exports = local` —
+        // a consumer's whole-module `default` binding resolves to the local, vacant-only
+        // exactly like re-export aliases, and persisted in patch_meta so the incremental
+        // path reconstructs the same table.
+        if let Some(local) = &claimed.facts.default_export_alias {
+            if let Some(&sym) = symbol_by_name_per_file[i].get(local) {
+                if !symbol_by_name_per_file[i].contains_key("default") {
+                    symbol_by_name_per_file[i].insert(SmolStr::new("default"), sym);
+                    patch_meta[i].reexport_aliases.push(AliasEntry {
+                        name: SmolStr::new("default"),
+                        symbol: sym,
+                    });
+                }
+            }
         }
         symbol_range_per_file[i] = (start, symbols.len() as u32);
     }
@@ -4424,6 +4519,7 @@ mod tests {
                         bindings,
                         reexported,
                         opaque_namespace_use,
+                        module_names_visible: false,
                         local_alias: None,
                     });
                 } else if let Some(rest) = line.strip_prefix("import-as ") {
@@ -4442,6 +4538,7 @@ mod tests {
                         bindings: Vec::new(),
                         reexported: false,
                         opaque_namespace_use: false,
+                        module_names_visible: false,
                         local_alias: Some(SmolStr::new(alias)),
                     });
                 } else if let Some(rest) = line.strip_prefix("member-type ") {
@@ -4560,6 +4657,7 @@ mod tests {
                         bindings: Vec::new(),
                         reexported: false,
                         opaque_namespace_use: false,
+                        module_names_visible: false,
                         local_alias: Some(SmolStr::new(spec.rsplit('/').next().unwrap_or(spec))),
                     });
                 } else if let Some(rest) = line.strip_prefix("decl-at ") {
@@ -4600,6 +4698,7 @@ mod tests {
                         bindings: Vec::new(),
                         reexported: false,
                         opaque_namespace_use: false,
+                        module_names_visible: false,
                         local_alias: None,
                     });
                 }

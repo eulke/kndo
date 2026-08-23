@@ -349,6 +349,7 @@ fn handle_reexport_statement(node: Node, source_node: Node, src: &[u8], out: &mu
         bindings,
         reexported: true,
         opaque_namespace_use: false,
+        module_names_visible: false,
         local_alias: None,
     });
 }
@@ -522,6 +523,7 @@ fn handle_import_statement(node: Node, src: &[u8], out: &mut FileFacts) {
         bindings,
         reexported: false,
         opaque_namespace_use: false,
+        module_names_visible: false,
         local_alias: None,
     });
 }
@@ -713,6 +715,7 @@ fn push_dynamic_import(
         bindings: Vec::new(),
         reexported: false,
         opaque_namespace_use: false,
+        module_names_visible: false,
         local_alias: None,
     });
 }
@@ -873,6 +876,7 @@ fn handle_literal_require(node: Node, string_node: Node, src: &[u8], out: &mut F
         bindings,
         reexported,
         opaque_namespace_use: false,
+        module_names_visible: false,
         local_alias: None,
     });
 }
@@ -1111,6 +1115,9 @@ fn handle_cjs_module_exports(
     if right.kind() == "identifier"
         && mark_declaration_exported(&SmolStr::new(text(right, src)), out)
     {
+        // The consumer-side counterpart (FileFacts::default_export_alias): a whole-module
+        // binding elsewhere resolves `default` to this very local.
+        out.default_export_alias = Some(SmolStr::new(text(right, src)));
         return;
     }
     // `module.exports = <anonymous expr>` — the synthetic `default`, exactly the name a
@@ -1158,6 +1165,9 @@ fn handle_cjs_named_export(
     if right.kind() == "identifier"
         && mark_declaration_exported(&SmolStr::new(text(right, src)), out)
     {
+        // The consumer-side counterpart (FileFacts::default_export_alias): a whole-module
+        // binding elsewhere resolves `default` to this very local.
+        out.default_export_alias = Some(SmolStr::new(text(right, src)));
         return;
     }
     let kind = match right.kind() {

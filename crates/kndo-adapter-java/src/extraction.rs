@@ -246,6 +246,7 @@ fn make_import(
         bindings,
         reexported: false,
         opaque_namespace_use,
+        module_names_visible: false,
         local_alias: None,
     }
 }
@@ -305,6 +306,41 @@ fn has_modifier(item: Node, keyword: &str) -> bool {
     found
 }
 
+/// Class literals inside annotation arguments (`@RunWith(Categories.class)`): the named
+/// type IS instantiated by the annotation's machinery — JUnit's `AnnotatedBuilder` calls
+/// `runnerClass.getConstructor(..).newInstance(..)` on exactly the class the literal names
+/// (junit4 audit). One Call reference per literal, attributed to the annotated declaration;
+/// the constructor follows through the core's container→constructor edge.
+fn walk_annotation_class_literals(
+    node: Node,
+    src: &[u8],
+    within: Option<&str>,
+    out: &mut FileFacts,
+) {
+    let Some(modifiers) = modifiers_node(node) else {
+        return;
+    };
+    let mut stack = vec![modifiers];
+    while let Some(n) = stack.pop() {
+        if n.kind() == "class_literal" {
+            if let Some(ty) = n.named_child(0).filter(|t| t.kind() == "type_identifier") {
+                out.references.push(RawReference {
+                    name: SmolStr::new(text(ty, src)),
+                    scope_context: None,
+                    span: span(ty),
+                    within: within.map(SmolStr::new),
+                    kind: RefKind::Call,
+                });
+            }
+            continue;
+        }
+        let mut c = n.walk();
+        for child in n.children(&mut c) {
+            stack.push(child);
+        }
+    }
+}
+
 fn has_annotation(node: Node, src: &[u8], name: &str) -> bool {
     let Some(modifiers) = modifiers_node(node) else {
         return false;
@@ -337,6 +373,7 @@ fn handle_type(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
         _ => return,
     };
     push_declaration(out, name, symbol_kind, item, None, ctx.owner, vis);
+    walk_annotation_class_literals(item, src, Some(name), out);
 
     // superclass / implements / extends_interfaces → Extend; everything else in the header
     // (type parameters' bounds) → TypeUse, walked generically below.
@@ -491,9 +528,10 @@ fn handle_field(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
         if text(name_node, src) == "serialVersionUID" {
             continue;
         }
+        let name = text(name_node, src);
         push_declaration(
             out,
-            text(name_node, src),
+            name,
             SymbolKind::Field,
             declarator,
             None,
@@ -502,7 +540,17 @@ fn handle_field(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
         );
         walk_type_refs(ty, src, ctx.owner, out);
         if let Some(value) = declarator.child_by_field_name("value") {
-            walk_body(value, src, ctx.owner, out);
+            // `<clinit>`/`<init>` semantics via attribution (RFC 0012 §4): a field's
+            // initializer expression runs when the FIELD is used — `public static final
+            // RuleMemberValidator CLASS_RULE_VALIDATOR = classRuleValidatorBuilder()…` is
+            // reached by a test's static import of the constant, and the whole builder
+            // chain must follow (junit4 audit: crediting the read but not the initializer
+            // left 17 members falsely untested).
+            let field_within = ctx
+                .owner
+                .map(|o| format!("{o}.{name}"))
+                .unwrap_or_else(|| name.to_string());
+            walk_body(value, src, Some(&field_within), out);
         }
     }
 }
@@ -550,6 +598,12 @@ fn handle_method(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
             target: RawRootTarget::Declaration(SmolStr::new(&qualified)),
             confidence: Confidence::Probable,
         });
+        // Machinery dispatch (RFC 0005 §1): the same no-source-call-site fact that roots
+        // these for liveness lets test reach inherit from the owner — a tested owner
+        // plausibly has its overrides and serialization hooks executed.
+        if let Some(d) = out.declarations.last_mut().filter(|d| d.name == name) {
+            d.implicitly_invoked = true;
+        }
     }
 
     let mut c = item.walk();

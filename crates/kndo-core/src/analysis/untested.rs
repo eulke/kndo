@@ -159,6 +159,20 @@ fn directory_finding(graph: &ProjectGraph, dir: &DirGroup<'_>, confidence: Confi
     }
 }
 
+/// Symbols the per-symbol pass never flags: type aliases (no runtime footprint — `type
+/// Output = Stats` can never be "covered"; ripgrep audit, the alias hid the actually-dead
+/// enclosing impl), whole-file rollups, and anything not untested itself.
+fn symbol_skipped(
+    symbol: &crate::graph::SymbolNode,
+    class: crate::vocab::FileClass,
+    reach: &ReachabilityMap,
+    symbol_id: SymbolId,
+) -> bool {
+    matches!(symbol.kind, crate::vocab::SymbolKind::TypeAlias)
+        || is_untested_node(class.role, class.origin, reach, NodeRef::File(symbol.file))
+        || !is_untested_node(class.role, class.origin, reach, NodeRef::Symbol(symbol_id))
+}
+
 fn find_untested_symbols(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<Finding> {
     let mut findings = Vec::new();
     let test_roots = crate::analysis::test_root_symbols(graph);
@@ -169,10 +183,7 @@ fn find_untested_symbols(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<F
         let file = &graph.files[symbol.file.0 as usize];
         let Some(class) = file.class else { continue };
         let symbol_id = SymbolId(index as u32);
-        if is_untested_node(class.role, class.origin, reach, NodeRef::File(symbol.file)) {
-            continue; // rollup: the file-level finding already covers every symbol in it
-        }
-        if !is_untested_node(class.role, class.origin, reach, NodeRef::Symbol(symbol_id)) {
+        if symbol_skipped(symbol, class, reach, symbol_id) {
             continue;
         }
 

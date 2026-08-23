@@ -184,6 +184,7 @@ pub fn extract(path: &str, content: &[u8], ctx: &ResolveCtx<'_>) -> ManifestFact
         dependencies,
         entry_points,
         script_invoked_names,
+        unit_overrides: Vec::new(),
         roots,
         resolved_entries,
         declares_surface,

@@ -1607,6 +1607,7 @@ mod tests {
                         bindings: vec![],
                         reexported: false,
                         opaque_namespace_use: false,
+                        module_names_visible: false,
                         local_alias: None,
                     });
                 } else if let Some(name) = line.strip_prefix("decl ") {

@@ -29,6 +29,15 @@ pub fn find_undeclared_dependencies(graph: &ProjectGraph) -> Vec<Finding> {
     let mut importers: HashMap<(DependencyId, PackageId), Vec<&str>> = HashMap::default();
     for edge in &graph.edges {
         if let EdgeKind::ImportsDependency { from, to } = edge.kind {
+            // Possible-tier dependency claims never accuse: that tier marks derived module
+            // imports whose root was already covered by a `use` in scope (`use std::io;`
+            // then `io::x::y` — the reconstructed `io::x` import exists for resolution
+            // keep-alive, not as evidence anyone imports a crate named `io`). Certain and
+            // Probable — real `use`/`import` statements and uncovered path roots — keep
+            // accusing exactly as before.
+            if edge.confidence < Confidence::Probable {
+                continue;
+            }
             let file = &graph.files[from.0 as usize];
             importers
                 .entry((to, file.package))

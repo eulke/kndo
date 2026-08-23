@@ -39,7 +39,7 @@ impl LanguageAdapter for JavaAdapter {
             activation: Vec::new(),
             dependencies: Vec::new(),
             id: SmolStr::new("java"),
-            facts_schema_version: 1,
+            facts_schema_version: 3, // 3: field-initializer refs within the field + annotation class literals; 2: implicitly_invoked on @Override/serialization hooks (RFC 0005 §1 machinery dispatch)
             file_globs: vec![SmolStr::new("**/*.java")],
             manifest_globs: vec![
                 SmolStr::new("**/pom.xml"),

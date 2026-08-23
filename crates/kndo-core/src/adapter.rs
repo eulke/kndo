@@ -421,6 +421,14 @@ pub struct RawImport {
     /// namespace's exports" rule. Statically-tracked accesses (`ns.foo`) don't set this; they
     /// resolve precisely through `bindings` instead.
     pub opaque_namespace_use: bool,
+    /// Swift module-import semantics (docs/adapters/swift.md §3): `import Alamofire` puts
+    /// every top-level name of the imported MODULE (the whole unit, not one file) in bare
+    /// scope — no per-name bindings exist in the syntax. Assembly then lets this file's
+    /// bare-name resolution fall back to the resolved target's unit table at Certain (it
+    /// is the language's own scoping rule, not a guess). `false` everywhere bindings or
+    /// qualifiers carry the visibility (JS/Go/Java/Kotlin/Rust).
+    #[serde(default)]
+    pub module_names_visible: bool,
     /// The *explicit* local alias this import binds its target under (RFC 0012 §9): Go's
     /// `import j "encoding/json"` → `Some("j")`. `None` for unaliased imports — assembly then
     /// derives the qualifier from the resolved target's own [`FileFacts::unit_name`], which is
@@ -601,6 +609,16 @@ pub struct FileFacts {
     /// type's home. Every hop is a declared-annotation fact → Certain; any miss falls to
     /// the duck fallback. Default empty; Rust implements it first.
     pub member_types: Vec<RawMemberType>,
+    /// CJS's "the local IS the module value" fact (`module.exports = res` — js-ts.md §2):
+    /// the named LOCAL declaration is what a consumer's whole-module/default binding
+    /// receives. Assembly aliases `default` → that symbol in this file's own table
+    /// (vacant-only, like re-export aliases), so `var res = require('./response')` credits
+    /// a real cross-file reference to the local instead of silently finding no symbol —
+    /// liveness never needed it, but `internal-only`'s "only used within its own file" did
+    /// (express corpus). No synthetic symbol: the documented phantom-`default` false
+    /// positive stays fixed.
+    #[serde(default)]
+    pub default_export_alias: Option<SmolStr>,
     /// Names of workspace executable targets this file invokes **as a subprocess** — the
     /// process boundary no import edge can cross (RFC 0005 §1's invoked-program rule). Only
     /// declared, literal invocations the language itself vouches for (Rust:
@@ -740,6 +758,12 @@ pub struct ManifestFacts {
     /// source file's [`FileFacts::invoked_executables`] resolves against — the name is the
     /// process-boundary identity, which no import specifier carries.
     pub executables: Vec<ExecutableTarget>,
+    /// Per-target unit assignment the path CONVENTION can't derive (RFC 0012 §8): SwiftPM's
+    /// `.target(name: "Alamofire", path: "Source")` puts a whole module outside
+    /// `Sources/<name>/`. Each entry is `(path prefix, unit name)`; assembly assigns the
+    /// unit to files under the prefix whose extraction left `unit` unset — the convention,
+    /// where it fired, already told the truth. Longest prefix wins.
+    pub unit_overrides: Vec<(ProjectPath, SmolStr)>,
     pub diagnostics: Vec<Diagnostic>,
 }
 

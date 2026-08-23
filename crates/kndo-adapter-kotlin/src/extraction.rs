@@ -208,6 +208,7 @@ fn make_import(
         bindings,
         reexported: false,
         opaque_namespace_use,
+        module_names_visible: false,
         local_alias,
     }
 }
@@ -431,6 +432,15 @@ fn root_function_if_entry_point(
             confidence: Confidence::Probable,
         });
     }
+    // An `override` member is invoked through a supertype the call site never names — when
+    // the supertype is external (KSP's SymbolProcessor, a framework listener) no reference
+    // graph can reach it by name. Machinery dispatch (RFC 0005 §1): reaching the owner
+    // plausibly reaches its overrides.
+    if is_override {
+        if let Some(decl) = out.declarations.last_mut().filter(|d| d.name == name) {
+            decl.implicitly_invoked = true;
+        }
+    }
 }
 
 fn is_top_level_main(owner: Option<&str>, name: &str) -> bool {
@@ -505,6 +515,17 @@ fn push_function_metrics(out: &mut FileFacts, qualified: &str, body: Node) {
 
 // ---------------------------------------------------------------- properties, type aliases, init
 
+/// Flip `implicitly_invoked` on the just-pushed declaration when the item carries the
+/// `override` modifier — dispatch machinery, RFC 0005 §1.
+fn mark_override_implicit(item: Node, name: &str, out: &mut FileFacts) {
+    if !has_modifier_wrapper(item, "member_modifier", "override") {
+        return;
+    }
+    if let Some(d) = out.declarations.last_mut().filter(|d| d.name == name) {
+        d.implicitly_invoked = true;
+    }
+}
+
 fn handle_property(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
     let Some(decl) = find_child(item, "variable_declaration") else {
         return;
@@ -518,7 +539,11 @@ fn handle_property(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
     } else {
         SymbolKind::Variable
     };
-    push_declaration(out, text(name_node, src), kind, item, None, ctx.owner, vis);
+    let name = text(name_node, src);
+    push_declaration(out, name, kind, item, None, ctx.owner, vis);
+    // `override val` is dispatch machinery exactly like `override fun` (see
+    // root_function_if_entry_point): the supertype's accessor call never names this member.
+    mark_override_implicit(item, name, out);
     if let Some(ty) = find_any_child(decl, &["user_type", "nullable_type"]) {
         walk_type_refs(ty, src, ctx.owner, out);
     }
