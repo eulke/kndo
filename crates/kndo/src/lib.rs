@@ -85,6 +85,8 @@ pub fn default_plugins() -> Vec<Box<dyn Plugin>> {
         plugins.push(Box::new(kndo_plugin_nextjs::NextjsPlugin));
         #[cfg(feature = "plugin-express")]
         plugins.push(Box::new(kndo_plugin_express::ExpressPlugin));
+        #[cfg(feature = "plugin-serde")]
+        plugins.push(Box::new(kndo_plugin_serde::SerdePlugin));
         plugins
     }
 }

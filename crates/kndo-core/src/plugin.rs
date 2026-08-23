@@ -668,11 +668,25 @@ impl EdgeSink {
 #[derive(Debug, Default)]
 pub struct AnnotationSink {
     pub(crate) externally_consumed: Vec<PluginTarget>,
+    pub(crate) implicitly_invoked: Vec<PluginTarget>,
 }
 
 impl AnnotationSink {
     pub fn mark_externally_consumed(&mut self, path: ProjectPath, symbol: impl Into<SmolStr>) {
         self.externally_consumed
+            .push(PluginTarget::symbol(path, symbol));
+    }
+
+    /// Marks a member as invoked by a FRAMEWORK's machinery through its owner — the plugin
+    /// counterpart of the contract's `Declaration::implicitly_invoked` (RFC 0005 §1's
+    /// machinery-dispatch rule): serde calling `serialize`, an ORM calling lifecycle hooks —
+    /// dispatch the language adapter cannot know because the trait belongs to a third-party
+    /// crate. `symbol` uses the qualified `Owner.name` member selector (the same form
+    /// `RawRoot` member targets use); reachability then lets the member inherit its owner's
+    /// colors at `Probable`. Native plugins only for now (the WIT ABI v1 surface does not
+    /// carry it — an ABI v2 candidate, recorded in docs/plugins/serde.md).
+    pub fn mark_implicitly_invoked(&mut self, path: ProjectPath, symbol: impl Into<SmolStr>) {
+        self.implicitly_invoked
             .push(PluginTarget::symbol(path, symbol));
     }
 }

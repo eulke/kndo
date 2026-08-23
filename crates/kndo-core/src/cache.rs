@@ -151,6 +151,9 @@ struct GraphSnapshot {
     /// omitting it would silently drop RFC 0005 §7's exemptions on every warm hit now that
     /// snapshots are written with plugins registered (RFC 0016 §6).
     externally_consumed: Vec<SymbolId>,
+    /// `mark_implicitly_invoked` output — same plugin-derived, no-per-item-provenance
+    /// round-trip rationale as `externally_consumed` above.
+    plugin_implicitly_invoked: Vec<SymbolId>,
     /// Plugin-round diagnostics (content-budget cutoffs), stored apart from the extraction
     /// `diagnostics` above because the two have different patch-time fates (RFC 0017 §3): the
     /// incremental patch keeps extraction diagnostics for unchanged files but discards and
@@ -641,6 +644,7 @@ impl ProjectCache {
             function_metrics: snapshot.function_metrics,
             patch_meta: snapshot.patch_meta,
             externally_consumed: snapshot.externally_consumed,
+            plugin_implicitly_invoked: snapshot.plugin_implicitly_invoked,
         });
         Some(LoadedSnapshot {
             graph,
@@ -786,6 +790,7 @@ impl GraphSnapshotWriter {
             patch_meta: graph.patch_meta.clone(),
             diagnostics: diagnostics.to_vec(),
             externally_consumed: graph.externally_consumed.clone(),
+            plugin_implicitly_invoked: graph.plugin_implicitly_invoked.clone(),
             plugin_diagnostics: plugin_diagnostics.to_vec(),
             plugin_set_digest: self.plugin_set_digest,
         };

@@ -185,6 +185,12 @@ literals; skipped → `line_comment`, `block_comment`. Winnowing parameters shar
   with no import for a binding to express, which is precisely RFC 0005 §1's wildcard truth.
   The per-macro no-wildcard stance (§2's table) is untouched; this is one edge per
   `#[macro_use]`, not one per invocation.
+- Member chains inside macro token trees get the same receiver typing as body code:
+  `write!(col2, "{}", flag.doc_short())` arrives as token soup, but the receiver's type is
+  a declared fact — the reference carries qualifier `Flag` exactly as outside the macro
+  (untyped receivers keep the raw name, the duck route; argument token trees are still
+  scanned). Before this, every member call inside `write!`/`format!` degraded to a bare
+  read that resolved to nothing — ripgrep's whole help generator was invisible.
 - A path through a same-file **inline mod** (`convert::usize(…)` with `mod convert { … }`
   right there) emits a *bare* reference: extraction flattens inline-mod bodies, so the
   target is a same-file symbol — routing it through qualifier resolution had nothing to

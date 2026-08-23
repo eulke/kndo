@@ -16,6 +16,7 @@ members = [
     "crates/kndo-plugin-api",
     "crates/kndo-plugin-nextjs",
     "crates/kndo-plugin-express",
+    "crates/kndo-plugin-serde",
     "xtask",
 ]
 exclude = [

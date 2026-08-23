@@ -1136,6 +1136,41 @@ Production roots: the root keeps hooks alive with zero owner usage, the edge is 
 Third-party traits (serde et al.) stay unmodeled — the curated fact table beyond the stdlib
 is the recorded future source.
 
+### M6 progress — trait dispatch: implement-dispatch fan-out + macro receiver typing + `kndo:serde` ✅ (landed 2026-08-23)
+
+The last big `untested` family, in three composing pieces (tasks #90–#92; ripgrep's
+`defs.rs` alone held 448 findings — 112 `impl Flag for …` × 4 methods, dyn-dispatched, no
+member ever named at a call site kndo could see):
+
+- **Macro receiver typing** (adapter, facts v10): member chains inside macro token trees —
+  `write!(col2, "{}", flag.doc_short())` — now carry the same receiver-typed qualifiers as
+  body code (typed receiver → the declared type; untyped → the raw name, the duck route;
+  argument token trees still scanned). Before, every member call inside `write!`/`format!`
+  degraded to a bare read resolving to nothing — ripgrep's whole help generator was
+  invisible.
+- **Implement-dispatch rule** (core, RFC 0005 §1): calling through a trait IS plausibly
+  executing every implementation — for each `RefKind::Implement` edge, every trait member
+  fans out to the implementor's same-named member at `Probable`. Derived entirely from
+  facts already in the graph; no trait lists in core. One test exercising a `&dyn Flag`
+  site now test-reaches all 112 flag impls.
+- **`kndo:serde`** (plugin, docs/plugins/serde.md): serde's traits are third-party, so the
+  adapter's machinery list and the fan-out both deliberately stop short of them — the gap
+  closes as a plugin fact instead: `AnnotationSink::mark_implicitly_invoked`, the framework
+  counterpart of `Declaration::implicitly_invoked`, landing in a new graph plugin partition
+  (`plugin_implicitly_invoked`, snapshot-round-tripped, patch-re-derived) that the
+  machinery-dispatch rule reads alongside the adapter's flags. Two sources, one rule; the
+  core learns nothing about serde. Native-only (WIT ABI v2 candidate, recorded in the spec).
+
+Precision paid for itself on the way: the typed receivers killed a spurious duck edge that
+had been "covering" ripgrep's `Types.definitions` (two same-named methods — the true
+target has tests, the accused one genuinely doesn't; the new finding is a TP). Schema v25,
+conformance fixture `dyn-dispatch-fanout`. **ripgrep: `untested` 701 → 229, total findings
+1,151 → 678, one new finding and it's true.** kondo: `untested` 114 → 32. The serde marks
+inherit — they clear only where the owner is genuinely test-reached (`Stats.serialize`
+cleared; `jsont.rs`'s stayed, honestly: its types are exercised only through the unmodeled
+subprocess harness). Remaining untested top families are now real blind spots or the
+recorded WASM-boundary divergence.
+
 ## Post-1.0 parking lot
 **RFC 0016 — uniform component model** (the accepted plan, phased in its §8, **all four phases
 landed**: 0 freeze reservations, 1 host-mediated content channel for plugin graph hooks

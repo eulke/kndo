@@ -1946,6 +1946,7 @@ fn simulate_deletion(
         function_metrics: graph.function_metrics.clone(),
         patch_meta: graph.patch_meta.clone(),
         externally_consumed: graph.externally_consumed.clone(),
+        plugin_implicitly_invoked: graph.plugin_implicitly_invoked.clone(),
     });
     let after = crate::analysis::reachability::compute(&sim);
 

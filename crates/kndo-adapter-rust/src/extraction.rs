@@ -2568,42 +2568,177 @@ fn scan_token_tree(
             continue;
         }
         if matches!(tok.kind(), "identifier" | "crate" | "self" | "super") {
-            let mut segments = vec![text(tok, src)];
-            let mut j = i + 1;
-            while j + 1 < children.len()
-                && children[j].kind() == "::"
-                && matches!(
-                    children[j + 1].kind(),
-                    "identifier" | "crate" | "self" | "super"
-                )
-            {
-                segments.push(text(children[j + 1], src));
-                j += 2;
-            }
-            let kind = if children.get(j).is_some_and(|n| n.kind() == "token_tree") {
-                RefKind::Call
-            } else {
-                RefKind::Read
-            };
-            if segments.len() == 1 {
-                if tok.kind() == "identifier" {
-                    out.references.push(RawReference {
-                        name: SmolStr::new(segments[0]),
-                        scope_context: None,
-                        span: span(tok),
-                        within: within.map(SmolStr::new),
-                        kind: RefKind::Read,
-                    });
-                }
-            } else {
-                emit_path(&segments, span(tok), within, kind, env, out);
-            }
-            i = j;
+            i = scan_identifier_run(&children, i, src, within, env, out);
         } else {
             scan_token_tree(tok, src, within, env, out);
             i += 1;
         }
     }
+}
+
+/// One identifier-led token run: a reconstructed `a::b` path (routed through the body-path
+/// rule), a `recv.member(…)` chain ([`scan_member_chain`]), or a lone identifier read.
+/// Returns the index after the consumed run.
+fn scan_identifier_run(
+    children: &[Node],
+    i: usize,
+    src: &[u8],
+    within: Option<&str>,
+    env: PathEnv<'_>,
+    out: &mut FileFacts,
+) -> usize {
+    let tok = children[i];
+    let (segments, j) = collect_path_segments(children, i, src);
+    if segments.len() > 1 {
+        let kind = if children.get(j).is_some_and(|n| n.kind() == "token_tree") {
+            RefKind::Call
+        } else {
+            RefKind::Read
+        };
+        emit_path(&segments, span(tok), within, kind, env, out);
+        return j;
+    }
+    if let Some(next) = scan_member_chain(children, tok, j, src, within, env, out) {
+        return next;
+    }
+    if tok.kind() == "identifier" {
+        out.references.push(RawReference {
+            name: SmolStr::new(segments[0]),
+            scope_context: None,
+            span: span(tok),
+            within: within.map(SmolStr::new),
+            kind: RefKind::Read,
+        });
+    }
+    j
+}
+
+/// A `::`-joined identifier run starting at `i`: the reconstructed segments plus the index
+/// after them.
+fn collect_path_segments<'a>(children: &[Node], i: usize, src: &'a [u8]) -> (Vec<&'a str>, usize) {
+    let mut segments = vec![text(children[i], src)];
+    let mut j = i + 1;
+    while j + 1 < children.len()
+        && children[j].kind() == "::"
+        && matches!(
+            children[j + 1].kind(),
+            "identifier" | "crate" | "self" | "super"
+        )
+    {
+        segments.push(text(children[j + 1], src));
+        j += 2;
+    }
+    (segments, j)
+}
+
+/// A member chain inside a macro token tree — `write!(w, "{}", flag.doc_short())` arrives
+/// as loose `identifier . identifier token_tree` tokens, the token soup's counterpart of
+/// the body's receiver typing. The receiver types through the same [`TypeEnv`] the body
+/// uses (`flag: &dyn Flag` → qualifier `Flag`; untyped falls back to the raw receiver name,
+/// the duck route, exactly as outside macros); each further hop extends the dotted pointer
+/// for the core's member-type chain resolution. Emits the receiver's own read plus one
+/// member reference per hop, and returns the index after the consumed chain — `None` when
+/// no chain starts at `j` (the caller's plain-read path stands).
+/// The chain's starting qualifier: the receiver's TypeEnv type (its raw name when untyped —
+/// the duck route), `self` through the impl owner. Emits the receiver's own read.
+fn chain_receiver_qualifier(
+    receiver: Node,
+    src: &[u8],
+    within: Option<&str>,
+    env: PathEnv<'_>,
+    out: &mut FileFacts,
+) -> Option<String> {
+    match receiver.kind() {
+        "identifier" => {
+            let name = text(receiver, src);
+            out.references.push(RawReference {
+                name: SmolStr::new(name),
+                scope_context: None,
+                span: span(receiver),
+                within: within.map(SmolStr::new),
+                kind: RefKind::Read,
+            });
+            Some(
+                env.types
+                    .bindings
+                    .get(name)
+                    .cloned()
+                    .unwrap_or_else(|| name.to_string()),
+            )
+        }
+        "self" => env.types.owner.clone(),
+        _ => None,
+    }
+}
+
+fn scan_member_chain(
+    children: &[Node],
+    receiver: Node,
+    j: usize,
+    src: &[u8],
+    within: Option<&str>,
+    env: PathEnv<'_>,
+    out: &mut FileFacts,
+) -> Option<usize> {
+    let follows_dot_ident = |at: usize| {
+        children.get(at).is_some_and(|n| n.kind() == ".")
+            && children
+                .get(at + 1)
+                .is_some_and(|n| n.kind() == "identifier")
+    };
+    if !follows_dot_ident(j) {
+        return None;
+    }
+    let qualifier = chain_receiver_qualifier(receiver, src, within, env, out)?;
+    Some(walk_chain(children, j, qualifier, src, within, env, out))
+}
+
+/// The chain's hops, one member reference each, the qualifier extending per hop; argument
+/// token trees are real code — consumed here, so scanned here. Returns the index after the
+/// chain.
+#[allow(clippy::too_many_arguments)] // the token-scan state, same shape as its callers
+fn walk_chain(
+    children: &[Node],
+    j: usize,
+    mut qualifier: String,
+    src: &[u8],
+    within: Option<&str>,
+    env: PathEnv<'_>,
+    out: &mut FileFacts,
+) -> usize {
+    let follows_dot_ident = |at: usize| {
+        children.get(at).is_some_and(|n| n.kind() == ".")
+            && children
+                .get(at + 1)
+                .is_some_and(|n| n.kind() == "identifier")
+    };
+    let mut at = j;
+    while follows_dot_ident(at) {
+        let member = children[at + 1];
+        let name = text(member, src);
+        let args = children
+            .get(at + 2)
+            .filter(|n| n.kind() == "token_tree")
+            .copied();
+        out.references.push(RawReference {
+            name: SmolStr::new(name),
+            scope_context: Some(SmolStr::new(&qualifier)),
+            span: span(member),
+            within: within.map(SmolStr::new),
+            kind: if args.is_some() {
+                RefKind::Call
+            } else {
+                RefKind::Read
+            },
+        });
+        qualifier = format!("{qualifier}.{name}");
+        at += 2;
+        if let Some(args) = args {
+            scan_token_tree(args, src, within, env, out);
+            at += 1;
+        }
+    }
+    at
 }
 
 /// The identifier-shaped inline captures of a format string body: `{name}` and `{name:spec}`,
@@ -2937,6 +3072,51 @@ mod tests {
             .expect("return fact");
         assert_eq!(m.yields, "Result");
         assert_eq!(m.yields_params, ["ConfiguredHIR", "Error"]);
+    }
+
+    #[test]
+    fn member_calls_inside_macro_token_trees_get_receiver_typing() {
+        // The ripgrep help.rs shape: `write!(col2, "{}", flag.doc_short())` — the call
+        // lives in token soup, but the receiver's type is a declared fact (`&dyn Flag`),
+        // so the reference carries the same qualifier it would outside the macro.
+        let f = facts(
+            "struct Col;\n\
+             fn render(flag: &dyn Flag, items: Vec<u8>) {\n\
+             \x20   let col = Col;\n\
+             \x20   write!(col, \"{}\", flag.doc_short());\n\
+             \x20   for untyped in items {\n\
+             \x20       write!(col, \"{}\", untyped.mystery().deeper());\n\
+             \x20   }\n\
+             }\n",
+        );
+        let by_name = |n: &str| {
+            f.references
+                .iter()
+                .find(|r| r.name == n)
+                .unwrap_or_else(|| panic!("no ref named {n}"))
+        };
+        assert_eq!(
+            by_name("doc_short").scope_context.as_deref(),
+            Some("Flag"),
+            "typed receiver resolves through TypeEnv inside the macro"
+        );
+        assert_eq!(by_name("doc_short").kind, RefKind::Call);
+        assert_eq!(
+            by_name("mystery").scope_context.as_deref(),
+            Some("untyped"),
+            "untyped receiver keeps the raw name — the duck route, same as outside"
+        );
+        assert_eq!(
+            by_name("deeper").scope_context.as_deref(),
+            Some("untyped.mystery"),
+            "hops extend the dotted pointer"
+        );
+        assert!(
+            f.references
+                .iter()
+                .any(|r| r.name == "flag" && r.kind == RefKind::Read),
+            "the receiver itself stays read"
+        );
     }
 
     #[test]

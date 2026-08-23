@@ -1224,6 +1224,7 @@ dependencies = [
  "kndo-plugin-api",
  "kndo-plugin-express",
  "kndo-plugin-nextjs",
+ "kndo-plugin-serde",
  "serde_json",
  "sha2",
  "smol_str",
@@ -1402,6 +1403,14 @@ dependencies = [
 
 [[package]]
 name = "kndo-plugin-nextjs"
+version = "0.1.0"
+dependencies = [
+ "kndo-core",
+ "smol_str",
+]
+
+[[package]]
+name = "kndo-plugin-serde"
 version = "0.1.0"
 dependencies = [
  "kndo-core",

@@ -20,6 +20,7 @@ kndo-adapter-css = { path = "../kndo-adapter-css", optional = true }
 kndo-plugin-api = { path = "../kndo-plugin-api", optional = true }
 kndo-plugin-nextjs = { path = "../kndo-plugin-nextjs", optional = true }
 kndo-plugin-express = { path = "../kndo-plugin-express", optional = true }
+kndo-plugin-serde = { path = "../kndo-plugin-serde", optional = true }
 # Plugin activation-rule evaluation (RFC 0003 §4): manifest-dependency and file-glob checks
 # against the project root. Behind `plugin-activation` — needed by the WASM tier's global
 # install path AND by any gated built-in convention plugin (RFC 0015 §6 phase 4).
@@ -62,6 +63,7 @@ default = [
     "external-adapters",
     "plugin-nextjs",
     "plugin-express",
+    "plugin-serde",
     "plugin-install",
 ]
 js = ["dep:kndo-adapter-js"]
@@ -83,6 +85,7 @@ external-adapters = ["dep:kndo-plugin-api", "dep:dirs", "dep:wit-component", "pl
 # non-matching project the graph-cache bypass (RFC 0003 §5).
 plugin-nextjs = ["dep:kndo-plugin-nextjs", "plugin-activation"]
 plugin-express = ["dep:kndo-plugin-express", "plugin-activation"]
+plugin-serde = ["dep:kndo-plugin-serde", "plugin-activation"]
 # `kndo plugin install/list/remove` (RFC 0015 §4): fetch a coordinate's GitHub release, verify
 # checksum + identity binding, close over dependencies, write the global directory +
 # plugins.lock. Implies `external-adapters` — installing targets the WASM tier's global

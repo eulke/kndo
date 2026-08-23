@@ -127,7 +127,23 @@ field). Two rules govern the traversal:
   composes with (not replaces) the dispatch rule's `Probable` Production roots on
   trait-impl members: the root keeps a hook alive with zero owner usage, the implicit edge
   lets it *inherit the owner's colors* — which is what `untested` (§9) needs to stop
-  calling a formatting hook a test-blind spot when its type is test-covered.
+  calling a formatting hook a test-blind spot when its type is test-covered. The rule reads
+  TWO sources of the same fact: the adapter's `Declaration::implicitly_invoked` (the
+  language's own machinery) and a plugin's `mark_implicitly_invoked` annotation (a
+  *framework's* machinery — serde calling `serialize`; `kndo:serde`, docs/plugins/serde.md
+  — third-party dispatch the language adapter must never learn about).
+- **Implement-dispatch rule:** calling through a trait IS plausibly executing every
+  implementation — the vtable, as declared. For each `RefKind::Implement` edge
+  (`impl Trait for T` emits one from the implementing type's symbol to the trait's), every
+  member of the TRAIT fans out to the implementing type's same-named member in the impl's
+  own file (the edge's owner — an impl block need not share its type's file), at
+  `Probable`. Fully derived from facts already in the graph — no trait lists in the core; a
+  trait member nothing reaches propagates nothing, an Implement edge whose source fell back
+  to file attribution contributes nothing, and an out-of-repo trait (serde) never resolves
+  an Implement edge at all (that gap is the `kndo:serde` plugin's, above). This is what
+  turns one test exercising a `&dyn Flag` call site into test-reachability for every flag
+  impl: the site resolves to the trait's member (the dyn receiver's *declared* type), and
+  the fan-out inherits from there.
 
 File attribution (the pre-RFC-0012 behavior, still what a `within`-less adapter gets) is the
 deliberate over-approximation: everything a live file references stays alive. Every

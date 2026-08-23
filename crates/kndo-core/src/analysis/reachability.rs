@@ -19,7 +19,7 @@
 use rustc_hash::FxHashMap as HashMap;
 
 use crate::graph::ProjectGraph;
-use crate::vocab::{Confidence, EdgeKind, NodeRef, RootKind};
+use crate::vocab::{Confidence, EdgeKind, NodeRef, RootKind, SymbolId};
 
 /// The four colors, named exactly as RFC 0005 §1's table names them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -156,7 +156,11 @@ fn machinery_members_by_owner(
 ) -> HashMap<(u32, &smol_str::SmolStr), Vec<u32>> {
     let mut members: HashMap<(u32, &smol_str::SmolStr), Vec<u32>> = HashMap::default();
     for (i, s) in graph.symbols.iter().enumerate() {
-        if s.implicitly_invoked {
+        // Two sources of the same fact: the adapter's declaration flag (the language's own
+        // machinery — `{}` → fmt) and a plugin's annotation (a framework's — serde →
+        // serialize; `mark_implicitly_invoked`).
+        let marked = s.implicitly_invoked || graph.is_plugin_implicitly_invoked(SymbolId(i as u32));
+        if marked {
             if let Some(owner) = &s.member_of {
                 members
                     .entry((s.file.0, owner))
@@ -186,6 +190,67 @@ fn link_owners_to_hooks(
     edges
 }
 
+/// The implement-dispatch rule's implicit `(trait member, impl member)` edges (RFC 0005
+/// §1): calling through a trait IS plausibly executing every implementation — the vtable,
+/// as declared. Derived entirely from `RefKind::Implement` edges (`impl Trait for T` emits
+/// one from the implementing type's symbol to the trait's) and `member_of`: for each such
+/// edge, every member of the TRAIT fans out to the implementing type's same-named member in
+/// the impl's own file (the edge's owner — an impl block need not share its type's file).
+/// `Probable`, degrade toward silence; an Implement edge whose `from` fell back to file
+/// attribution contributes nothing, and a trait member nothing reaches propagates nothing.
+fn implement_dispatch_edges(graph: &ProjectGraph, files_len: usize) -> Vec<(u32, u32)> {
+    let mut members: HashMap<(u32, &smol_str::SmolStr), Vec<u32>> = HashMap::default();
+    for (i, s) in graph.symbols.iter().enumerate() {
+        if let Some(owner) = &s.member_of {
+            members.entry((s.file.0, owner)).or_default().push(i as u32);
+        }
+    }
+    let mut edges: Vec<(u32, u32)> = Vec::new();
+    for edge in &graph.edges {
+        let EdgeKind::References {
+            from: NodeRef::Symbol(t),
+            to,
+            kind: crate::vocab::RefKind::Implement,
+        } = edge.kind
+        else {
+            continue;
+        };
+        fan_out_trait_members(graph, files_len, &members, t, to, edge.owner, &mut edges);
+    }
+    edges
+}
+
+/// One Implement edge's fan-out: every member of the trait paired with the implementor's
+/// same-named member declared in the impl's file.
+fn fan_out_trait_members(
+    graph: &ProjectGraph,
+    files_len: usize,
+    members: &HashMap<(u32, &smol_str::SmolStr), Vec<u32>>,
+    implementor: crate::vocab::SymbolId,
+    trait_symbol: crate::vocab::SymbolId,
+    impl_file: crate::vocab::FileId,
+    edges: &mut Vec<(u32, u32)>,
+) {
+    let trait_symbol = &graph.symbols[trait_symbol.0 as usize];
+    let Some(trait_members) = members.get(&(trait_symbol.file.0, &trait_symbol.name)) else {
+        return;
+    };
+    let implementor = &graph.symbols[implementor.0 as usize].name;
+    let Some(impl_members) = members.get(&(impl_file.0, implementor)) else {
+        return;
+    };
+    for &tm in trait_members {
+        for &im in impl_members {
+            if graph.symbols[im as usize].name == graph.symbols[tm as usize].name {
+                edges.push((
+                    (files_len + tm as usize) as u32,
+                    (files_len + im as usize) as u32,
+                ));
+            }
+        }
+    }
+}
+
 pub fn compute(graph: &ProjectGraph) -> ReachabilityMap {
     let files_len = graph.files.len();
     let n = files_len + graph.symbols.len();
@@ -207,7 +272,11 @@ pub fn compute(graph: &ProjectGraph) -> ReachabilityMap {
     }
 
     let prod_roots_by_file = production_root_symbols_per_file(graph, files_len);
-    let machinery_edges = machinery_dispatch_edges(graph, files_len);
+    // The two member-inheritance rules share one edge shape: implicit `Probable` edges into
+    // members the source can never name (machinery hooks) or never statically pick
+    // (dispatch through a trait).
+    let mut machinery_edges = machinery_dispatch_edges(graph, files_len);
+    machinery_edges.extend(implement_dispatch_edges(graph, files_len));
 
     let mut degree: Vec<u32> = vec![0; n];
     let count = |degree: &mut Vec<u32>, from: usize, extra: usize| degree[from] += extra as u32;
@@ -816,6 +885,66 @@ mod tests {
             reach.get(NodeRef::Symbol(SymbolId(3))).0,
             Reachability::Unreachable,
             "an unreached owner propagates nothing"
+        );
+    }
+
+    #[test]
+    fn implement_dispatch_fans_a_reached_trait_member_to_its_overrides() {
+        // The ripgrep `Flag` shape: a test-reached call site resolves to the TRAIT's member
+        // (`Flag.doc_short` — the dyn receiver's declared type), and the Implement edge
+        // (`impl Flag for AfterContext`) fans it out to the override at Probable — the
+        // vtable, as declared. A trait member with no same-named override links nothing.
+        let files = vec![file("mod.ts"), file("defs.ts")];
+        let symbols = vec![
+            symbol(FileId(0), "Flag"), // the trait
+            SymbolNode {
+                member_of: Some(SmolStr::new("Flag")),
+                ..symbol(FileId(0), "doc_short")
+            },
+            SymbolNode {
+                member_of: Some(SmolStr::new("Flag")),
+                ..symbol(FileId(0), "update")
+            },
+            symbol(FileId(1), "AfterContext"), // the implementor
+            SymbolNode {
+                member_of: Some(SmolStr::new("AfterContext")),
+                ..symbol(FileId(1), "doc_short")
+            },
+        ];
+        let edges = vec![
+            edge(
+                EdgeKind::Root {
+                    kind: RootKind::Test,
+                    target: NodeRef::Symbol(SymbolId(1)), // the trait member, test-reached
+                },
+                Confidence::Certain,
+            ),
+            Edge {
+                owner: FileId(1), // the impl block's file
+                kind: EdgeKind::References {
+                    from: NodeRef::Symbol(SymbolId(3)),
+                    to: SymbolId(0),
+                    kind: RefKind::Implement,
+                },
+                confidence: Confidence::Certain,
+                source: Provenance::Adapter(SmolStr::new("mock")),
+                span: None,
+            },
+        ];
+        let graph = ProjectGraph::for_test(files, symbols, vec![], edges);
+        let reach = compute(&graph);
+        assert!(
+            reach.reachable_from(RootKind::Test, NodeRef::Symbol(SymbolId(4))),
+            "the override inherits the trait member's reachability"
+        );
+        assert_eq!(
+            reach.get(NodeRef::Symbol(SymbolId(4))).1,
+            Confidence::Probable,
+            "capped at Probable — dispatch is plausible, not witnessed"
+        );
+        assert!(
+            !reach.reachable_from(RootKind::Test, NodeRef::Symbol(SymbolId(2))),
+            "an unreached trait member propagates nothing"
         );
     }
 

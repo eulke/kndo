@@ -39,12 +39,14 @@ impl LanguageAdapter for RustAdapter {
             // 2: test regions are the only producer-side test declaration — extraction
             // stopped emitting per-declaration Test roots (assembly derives them from
             // `test_spans` containment, contracts §2).
+            // 10: member calls inside macro token trees carry receiver-typed qualifiers
+            //     (`write!(w, "{}", flag.doc_short())` resolves like body code);
             // 9: implicitly_invoked on machinery-trait impl members (the machinery-dispatch
             //    rule); 8: invoked_executables (`env!("CARGO_BIN_EXE_…")` — the
             //    invoked-program rule);
             // 7: yields_params carries every type argument (`?N` indexed projection);
             // 6: member-type facts + typed-receiver qualifiers.
-            facts_schema_version: 9,
+            facts_schema_version: 10,
             file_globs: vec![SmolStr::new("**/*.rs")],
             manifest_globs: vec![SmolStr::new("**/Cargo.toml")],
             grammar_version: SmolStr::new("tree-sitter-rust 0.24"),

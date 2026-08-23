@@ -231,6 +231,7 @@ pub(crate) struct GraphSnapshotParts {
     pub function_metrics: Vec<(SymbolId, SymbolMetrics)>,
     pub patch_meta: Vec<FilePatchMeta>,
     pub externally_consumed: Vec<SymbolId>,
+    pub plugin_implicitly_invoked: Vec<SymbolId>,
 }
 
 /// The assembled language-neutral graph (contracts §1). Read-only once built; incremental
@@ -274,6 +275,11 @@ pub struct ProjectGraph {
     /// graph-mutation hooks force a full rebuild every run (see `assemble_from_source`), so
     /// there is no cached-graph case where this could go stale.
     pub externally_consumed: Vec<SymbolId>,
+    /// Members a plugin's `annotate_symbols` marked machinery-invoked this run (the
+    /// framework counterpart of `SymbolNode::implicitly_invoked` — RFC 0005 §1's
+    /// machinery-dispatch rule reads both). Sorted, deduplicated; same snapshot round-trip
+    /// rationale as `externally_consumed`.
+    pub plugin_implicitly_invoked: Vec<SymbolId>,
     file_index: HashMap<ProjectPath, FileId>,
 }
 
@@ -288,6 +294,12 @@ impl ProjectGraph {
     /// flag.
     pub fn is_externally_consumed(&self, id: SymbolId) -> bool {
         self.externally_consumed.binary_search(&id).is_ok()
+    }
+
+    /// Whether a plugin marked this member machinery-invoked (`mark_implicitly_invoked` —
+    /// RFC 0005 §1's machinery-dispatch rule). Sorted input, binary search.
+    pub fn is_plugin_implicitly_invoked(&self, id: SymbolId) -> bool {
+        self.plugin_implicitly_invoked.binary_search(&id).is_ok()
     }
 
     /// The visibility ladder for a claim language (RFC 0012 §6) — `None` when the language
@@ -347,6 +359,7 @@ impl ProjectGraph {
             // plugin registered and this was safely absent; afterwards, dropping it here would
             // silently lose `annotate_symbols` exemptions (RFC 0005 §7) on every warm hit.
             externally_consumed: parts.externally_consumed,
+            plugin_implicitly_invoked: parts.plugin_implicitly_invoked,
             file_index,
         }
     }
@@ -417,6 +430,7 @@ impl ProjectGraph {
             function_metrics: Vec::new(),
             patch_meta: vec![FilePatchMeta::default(); files_len],
             externally_consumed: Vec::new(),
+            plugin_implicitly_invoked: Vec::new(),
             file_index,
         }
     }
@@ -723,6 +737,7 @@ fn try_patch(
         .edges
         .retain(|e| !matches!(e.source, crate::vocab::Provenance::Plugin(_)));
     graph.externally_consumed.clear();
+    graph.plugin_implicitly_invoked.clear();
 
     let changed_set: HashSet<u32> = changed.iter().map(|&c| c as u32).collect();
     let changed_paths: HashSet<ProjectPath> = changed
@@ -1077,6 +1092,7 @@ fn try_patch(
     );
     graph.edges.extend(round.edges);
     graph.externally_consumed = round.externally_consumed;
+    graph.plugin_implicitly_invoked = round.implicitly_invoked;
     let plugin_diagnostics = round.diagnostics;
     // RFC 0017 §7: the patch re-ran the round, so it refreshes the audit record exactly like
     // a full build would.
@@ -2341,7 +2357,7 @@ pub(crate) fn package_owns(manifest_dir: &str, file_dir: &str) -> bool {
 /// an assembly-algorithm change that could produce a different graph from the same facts. Feeds
 /// [`compute_graph_key`] (RFC 0004 §3's "core graph-schema version"); a bump here invalidates
 /// every project's cached `graph.bin` on the next run, same as any other key-input change.
-pub const GRAPH_SCHEMA_VERSION: u32 = 24; // 24: machinery-dispatch rule — SymbolNode.implicitly_invoked (rkyv layout change; reachability derives implicit owner → member edges at Probable); 23: invoked-program rule — PackageNode.executables + EdgeKind::InvokesFile (a test running its workspace binary reaches the binary's Production roots; same inputs assemble more edges, and the rkyv layouts changed); 22: RawMemberType.yields_params list + indexed '?N' projection (rkyv layout change: Option → Vec); 21: RawMemberType.yields_param + N-hop '?'-marked pointer resolution (payload unwrapping); 20: member-type facts (FilePatchMeta.member_types + chained-pointer resolution — RFC 0012 §3-bis cross-file tier); 19: receiver-typed qualifiers (in-scope declarations resolve members; qualified twins each get the edge — same inputs assemble different edges); 18: qualified refs reach the target's member table + glob re-exports alias the target's exported surface (same inputs now assemble more edges — prior snapshots are semantically stale); 17: SymbolKind::Macro (expansion symbols — first-class kind with visibility-scope exemption semantics); 16: VisibilityRung.surface_transitive + surface closure (Provenance::Surface Root edges; RFC 0012 §6, M6); 15: FileNode.string_call_sites + EdgeKind::ReferencesFile (RFC 0017 §5.4); 14: in-source Test roots derived from test_spans containment (adapters no longer emit them); 13: FileNode.test_spans + phase 2.55 test-gated module demotion (sub-file test regions); 12: library-surface fixpoint (phase 2.7 — same inputs now assemble surface Root edges, prior snapshots are semantically stale); 11: PackageNode.workspace_entry (RFC 0013 §4); 10: patch layer (RFC 0013 §4 — Edge.owner, FilePatchMeta, extraction-only stored diagnostics); 9: SymbolMetrics.token_count (RFC 0005 §11); 8: function_metrics (RFC 0005 §6); 7: cycle policies (§8); 6: PackageNode surface (RFC 0011 §4); 5: ladders + FileNode.unit (RFC 0012 §6); 4: RefKind + signature_span (§5); 3: within (§4)
+pub const GRAPH_SCHEMA_VERSION: u32 = 25; // 25: plugin_implicitly_invoked snapshot partition (mark_implicitly_invoked — framework machinery dispatch via plugins; rkyv layout change) + implement-dispatch fan-out (same graph now colors more members reachable); 24: machinery-dispatch rule — SymbolNode.implicitly_invoked (rkyv layout change; reachability derives implicit owner → member edges at Probable); 23: invoked-program rule — PackageNode.executables + EdgeKind::InvokesFile (a test running its workspace binary reaches the binary's Production roots; same inputs assemble more edges, and the rkyv layouts changed); 22: RawMemberType.yields_params list + indexed '?N' projection (rkyv layout change: Option → Vec); 21: RawMemberType.yields_param + N-hop '?'-marked pointer resolution (payload unwrapping); 20: member-type facts (FilePatchMeta.member_types + chained-pointer resolution — RFC 0012 §3-bis cross-file tier); 19: receiver-typed qualifiers (in-scope declarations resolve members; qualified twins each get the edge — same inputs assemble different edges); 18: qualified refs reach the target's member table + glob re-exports alias the target's exported surface (same inputs now assemble more edges — prior snapshots are semantically stale); 17: SymbolKind::Macro (expansion symbols — first-class kind with visibility-scope exemption semantics); 16: VisibilityRung.surface_transitive + surface closure (Provenance::Surface Root edges; RFC 0012 §6, M6); 15: FileNode.string_call_sites + EdgeKind::ReferencesFile (RFC 0017 §5.4); 14: in-source Test roots derived from test_spans containment (adapters no longer emit them); 13: FileNode.test_spans + phase 2.55 test-gated module demotion (sub-file test regions); 12: library-surface fixpoint (phase 2.7 — same inputs now assemble surface Root edges, prior snapshots are semantically stale); 11: PackageNode.workspace_entry (RFC 0013 §4); 10: patch layer (RFC 0013 §4 — Edge.owner, FilePatchMeta, extraction-only stored diagnostics); 9: SymbolMetrics.token_count (RFC 0005 §11); 8: function_metrics (RFC 0005 §6); 7: cycle policies (§8); 6: PackageNode surface (RFC 0011 §4); 5: ladders + FileNode.unit (RFC 0012 §6); 4: RefKind + signature_span (§5); 3: within (§4)
 
 /// The graph snapshot's cache key (RFC 0004 §3, `cache.rs`'s `graph.bin`): a single digest
 /// folding in the *whole* discovered file set (every path + content hash — this already
@@ -2533,6 +2549,7 @@ fn resolve_plugin_target(
 struct PluginRound {
     edges: Vec<Edge>,
     externally_consumed: Vec<SymbolId>,
+    implicitly_invoked: Vec<SymbolId>,
     diagnostics: Vec<Diagnostic>,
     /// Per-plugin resolved-contribution counts (RFC 0017 §7), in the round's own id-sorted
     /// call order — recorded to the cache as the last-run audit record for `kndo doctor`.
@@ -2561,6 +2578,7 @@ fn run_plugin_round(
     let mut round = PluginRound {
         edges: Vec::new(),
         externally_consumed: Vec::new(),
+        implicitly_invoked: Vec::new(),
         diagnostics: Vec::new(),
         contributions: Vec::new(),
     };
@@ -2616,13 +2634,14 @@ fn run_plugin_round(
             &mut dropped,
         );
         let edges_after = round.edges.len();
-        let annotations_before = round.externally_consumed.len();
+        let annotations_before = round.externally_consumed.len() + round.implicitly_invoked.len();
         collect_plugin_annotations(*plugin, &view, &content, &tables, &mut round, &mut dropped);
+        let annotations_after = round.externally_consumed.len() + round.implicitly_invoked.len();
         round.contributions.push(crate::plugin::PluginContribution {
             id: descriptor.id.to_string(),
             roots: (roots_after - edges_before) as u32,
             edges: (edges_after - roots_after) as u32,
-            annotations: (round.externally_consumed.len() - annotations_before) as u32,
+            annotations: (annotations_after - annotations_before) as u32,
             dropped,
         });
         if let Some(diagnostic) = content.take_diagnostic() {
@@ -2631,6 +2650,8 @@ fn run_plugin_round(
     }
     round.externally_consumed.sort_unstable();
     round.externally_consumed.dedup();
+    round.implicitly_invoked.sort_unstable();
+    round.implicitly_invoked.dedup();
     // Same canonical-order rule the adapter-side vectors follow (RFC 0013 §3a) — these are
     // persisted (the snapshot's plugin partition) and compared by the equivalence gate.
     round.diagnostics.sort_unstable();
@@ -3021,6 +3042,13 @@ fn collect_plugin_annotations(
     for target in annotation_sink.externally_consumed {
         if let Some(NodeRef::Symbol(id)) = tables.resolve(&target) {
             round.externally_consumed.push(id);
+        } else {
+            record_dropped(dropped, "annotation target", &target);
+        }
+    }
+    for target in annotation_sink.implicitly_invoked {
+        if let Some(NodeRef::Symbol(id)) = tables.resolve(&target) {
+            round.implicitly_invoked.push(id);
         } else {
             record_dropped(dropped, "annotation target", &target);
         }
@@ -4018,6 +4046,7 @@ pub fn assemble_from_source(
     );
     edges.extend(plugin_round.edges);
     let externally_consumed = plugin_round.externally_consumed;
+    let plugin_implicitly_invoked = plugin_round.implicitly_invoked;
     let plugin_diagnostics = plugin_round.diagnostics;
     // RFC 0017 §7: the round just ran, so its counts are the current audit record — written
     // even when empty (no plugins → an empty record replaces any stale one).
@@ -4061,6 +4090,7 @@ pub fn assemble_from_source(
         function_metrics,
         patch_meta,
         externally_consumed,
+        plugin_implicitly_invoked,
         file_index,
     };
     // The snapshot is NOT written here (RFC 0008 §2: cache persist happens off the critical
@@ -6155,6 +6185,63 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn a_plugin_marked_member_inherits_its_owners_colors() {
+        // The kndo:serde shape end-to-end at the core level: a plugin's
+        // `mark_implicitly_invoked` (qualified `Owner.name` selector, plus one bogus
+        // selector that must drop silently) lands in the graph's plugin partition, and the
+        // machinery-dispatch rule then lets the member inherit its owner's colors.
+        struct MarkSerialize;
+        impl crate::plugin::Plugin for MarkSerialize {
+            fn descriptor(&self) -> crate::plugin::PluginDescriptor {
+                crate::plugin::PluginDescriptor {
+                    id: SmolStr::new("kndo:mark-serialize"),
+                    version: SmolStr::new("1"),
+                    detection: vec![],
+                    requested_file_access: vec![],
+                    activation: vec![],
+                    dependencies: vec![],
+                }
+            }
+            fn annotate_symbols(
+                &self,
+                _graph: &crate::plugin::GraphView<'_>,
+                _content: &crate::plugin::ContentView<'_>,
+                out: &mut crate::plugin::AnnotationSink,
+            ) {
+                let path = crate::adapter::ProjectPath(SmolStr::new("a.mock"));
+                out.mark_implicitly_invoked(path.clone(), "Glob.serialize");
+                out.mark_implicitly_invoked(path, "Ghost.nothing");
+            }
+        }
+        let dir = project(
+            "plugin-implicit-member",
+            &[(
+                "a.mock",
+                "decl Glob\nmember-decl Glob serialize\nroot-decl Glob",
+            )],
+        );
+        let plugins: Vec<Box<dyn crate::plugin::Plugin>> = vec![Box::new(MarkSerialize)];
+        let (graph, _) = assemble(&dir, &mock_adapters(), &plugins).unwrap();
+        let serialize = SymbolId(
+            graph
+                .symbols
+                .iter()
+                .position(|s| s.name == "serialize")
+                .unwrap() as u32,
+        );
+        assert!(graph.is_plugin_implicitly_invoked(serialize));
+        let reach = crate::analysis::reachability::compute(&graph);
+        assert_eq!(
+            reach.get(NodeRef::Symbol(serialize)),
+            (
+                crate::analysis::reachability::Reachability::Production,
+                Confidence::Probable
+            ),
+            "the member inherits the rooted owner's color through the machinery rule"
+        );
     }
 
     fn has_root_me_root(graph: &ProjectGraph) -> bool {
