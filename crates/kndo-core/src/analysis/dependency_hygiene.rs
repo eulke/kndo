@@ -272,6 +272,7 @@ mod tests {
             .with_packages(vec![PackageNode {
                 workspace_entry: None,
                 targets: Vec::new(),
+                executables: Vec::new(),
                 manifest: Some(ProjectPath(SmolStr::new("package.json"))),
                 name: Some(SmolStr::new("demo")),
                 private: true,
@@ -340,6 +341,7 @@ mod tests {
             .with_packages(vec![PackageNode {
                 workspace_entry: None,
                 targets: Vec::new(),
+                executables: Vec::new(),
                 manifest: Some(ProjectPath(SmolStr::new("pom.xml"))),
                 name: Some(SmolStr::new("demo")),
                 private: true,

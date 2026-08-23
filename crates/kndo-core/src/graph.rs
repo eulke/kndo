@@ -184,6 +184,11 @@ pub struct PackageNode {
     /// Persisted for the same RFC 0013 §4 reason as `workspace_entry`: the patch rebuilds
     /// the workspace index from the snapshot.
     pub targets: Vec<ProjectPath>,
+    /// The manifest's named executable targets, verbatim (`ManifestFacts::executables`) —
+    /// what a file's `invoked_executables` names resolve against (RFC 0005 §1's
+    /// invoked-program rule). Persisted for the same RFC 0013 §4 reason as `targets`: the
+    /// patch rebuilds the name index from the snapshot.
+    pub executables: Vec<crate::adapter::ExecutableTarget>,
     /// Mirrors the claiming adapter's [`crate::adapter::AdapterDescriptor::resolves_dependency_usage`]
     /// (`true` for the implicit no-manifest package, which declares nothing). `dependency_hygiene`
     /// reads this per `DeclaredDependency::package` to decide whether "zero usage edges" means
@@ -373,6 +378,7 @@ impl ProjectGraph {
                 surface: Vec::new(),
                 workspace_entry: None,
                 targets: Vec::new(),
+                executables: Vec::new(),
                 resolves_dependency_usage: true,
             }],
             edges,
@@ -897,6 +903,7 @@ fn try_patch(
     let mut new_metrics: Vec<(SymbolId, SymbolMetrics)> = Vec::new();
     let mut resolved_outputs: Vec<ResolvedFile> = Vec::new();
     {
+        let executable_by_name = executable_name_index(&graph.packages, &graph.file_index);
         let tables = ResolveTables {
             files: &graph.files,
             file_index: &graph.file_index,
@@ -910,6 +917,7 @@ fn try_patch(
             file_unit: &file_unit,
             unit_name_by_file: &unit_name_by_file,
             ladders: &ladders,
+            executable_by_name: &executable_by_name,
             ctx: &ctx,
         };
         for cf in &changed_files {
@@ -1142,7 +1150,26 @@ struct ResolveTables<'a> {
     file_unit: &'a [Option<SmolStr>],
     unit_name_by_file: &'a [Option<SmolStr>],
     ladders: &'a std::collections::BTreeMap<SmolStr, Vec<crate::adapter::VisibilityRung>>,
+    /// Workspace executable name → entry file (RFC 0005 §1's invoked-program rule) — what
+    /// a file's `invoked_executables` names resolve against. See [`executable_name_index`].
+    executable_by_name: &'a HashMap<SmolStr, FileId>,
     ctx: &'a ResolveCtx<'a>,
+}
+
+/// Every package's named executable targets as one name → entry-file index. First
+/// declaration wins on a duplicate name (deterministic — packages iterate in discovery
+/// order); an entry naming a file outside the discovered tree drops out, same as surfaces.
+fn executable_name_index(
+    packages: &[PackageNode],
+    file_index: &HashMap<ProjectPath, FileId>,
+) -> HashMap<SmolStr, FileId> {
+    let mut index: HashMap<SmolStr, FileId> = HashMap::default();
+    for exe in packages.iter().flat_map(|p| &p.executables) {
+        if let Some(&file) = file_index.get(&exe.entry) {
+            index.entry(exe.name.clone()).or_insert(file);
+        }
+    }
+    index
 }
 
 /// One file's phase-3b contributions (imports, bindings, references, dynamics, diagnostics,
@@ -1166,6 +1193,7 @@ fn resolve_file(
         file_unit,
         unit_name_by_file,
         ladders,
+        executable_by_name,
         ctx,
     } = t;
     let file_id = FileId(i as u32);
@@ -1176,6 +1204,25 @@ fn resolve_file(
         diagnostics: Vec::new(),
         suppressions: Vec::new(),
     };
+
+    // Invoked-program edges (RFC 0005 §1): a declared subprocess invocation of a workspace
+    // executable target, resolved by name against every manifest's declarations. The name
+    // and the target are both declared facts → Certain; an unknown name emits nothing
+    // (silence, never a guess).
+    for name in &facts.invoked_executables {
+        if let Some(&to) = executable_by_name.get(name) {
+            out.edges.push(Edge {
+                owner: file_id,
+                kind: EdgeKind::InvokesFile {
+                    from: NodeRef::File(file_id),
+                    to,
+                },
+                confidence: Confidence::Certain,
+                source: provenance(),
+                span: None,
+            });
+        }
+    }
 
     // Local name -> target symbol, from this file's import bindings — the fact that lets a
     // `RawReference` to an *imported* name resolve cross-file instead of only same-file.
@@ -2291,7 +2338,7 @@ pub(crate) fn package_owns(manifest_dir: &str, file_dir: &str) -> bool {
 /// an assembly-algorithm change that could produce a different graph from the same facts. Feeds
 /// [`compute_graph_key`] (RFC 0004 §3's "core graph-schema version"); a bump here invalidates
 /// every project's cached `graph.bin` on the next run, same as any other key-input change.
-pub const GRAPH_SCHEMA_VERSION: u32 = 22; // 22: RawMemberType.yields_params list + indexed '?N' projection (rkyv layout change: Option → Vec); 21: RawMemberType.yields_param + N-hop '?'-marked pointer resolution (payload unwrapping); 20: member-type facts (FilePatchMeta.member_types + chained-pointer resolution — RFC 0012 §3-bis cross-file tier); 19: receiver-typed qualifiers (in-scope declarations resolve members; qualified twins each get the edge — same inputs assemble different edges); 18: qualified refs reach the target's member table + glob re-exports alias the target's exported surface (same inputs now assemble more edges — prior snapshots are semantically stale); 17: SymbolKind::Macro (expansion symbols — first-class kind with visibility-scope exemption semantics); 16: VisibilityRung.surface_transitive + surface closure (Provenance::Surface Root edges; RFC 0012 §6, M6); 15: FileNode.string_call_sites + EdgeKind::ReferencesFile (RFC 0017 §5.4); 14: in-source Test roots derived from test_spans containment (adapters no longer emit them); 13: FileNode.test_spans + phase 2.55 test-gated module demotion (sub-file test regions); 12: library-surface fixpoint (phase 2.7 — same inputs now assemble surface Root edges, prior snapshots are semantically stale); 11: PackageNode.workspace_entry (RFC 0013 §4); 10: patch layer (RFC 0013 §4 — Edge.owner, FilePatchMeta, extraction-only stored diagnostics); 9: SymbolMetrics.token_count (RFC 0005 §11); 8: function_metrics (RFC 0005 §6); 7: cycle policies (§8); 6: PackageNode surface (RFC 0011 §4); 5: ladders + FileNode.unit (RFC 0012 §6); 4: RefKind + signature_span (§5); 3: within (§4)
+pub const GRAPH_SCHEMA_VERSION: u32 = 23; // 23: invoked-program rule — PackageNode.executables + EdgeKind::InvokesFile (a test running its workspace binary reaches the binary's Production roots; same inputs assemble more edges, and the rkyv layouts changed); 22: RawMemberType.yields_params list + indexed '?N' projection (rkyv layout change: Option → Vec); 21: RawMemberType.yields_param + N-hop '?'-marked pointer resolution (payload unwrapping); 20: member-type facts (FilePatchMeta.member_types + chained-pointer resolution — RFC 0012 §3-bis cross-file tier); 19: receiver-typed qualifiers (in-scope declarations resolve members; qualified twins each get the edge — same inputs assemble different edges); 18: qualified refs reach the target's member table + glob re-exports alias the target's exported surface (same inputs now assemble more edges — prior snapshots are semantically stale); 17: SymbolKind::Macro (expansion symbols — first-class kind with visibility-scope exemption semantics); 16: VisibilityRung.surface_transitive + surface closure (Provenance::Surface Root edges; RFC 0012 §6, M6); 15: FileNode.string_call_sites + EdgeKind::ReferencesFile (RFC 0017 §5.4); 14: in-source Test roots derived from test_spans containment (adapters no longer emit them); 13: FileNode.test_spans + phase 2.55 test-gated module demotion (sub-file test regions); 12: library-surface fixpoint (phase 2.7 — same inputs now assemble surface Root edges, prior snapshots are semantically stale); 11: PackageNode.workspace_entry (RFC 0013 §4); 10: patch layer (RFC 0013 §4 — Edge.owner, FilePatchMeta, extraction-only stored diagnostics); 9: SymbolMetrics.token_count (RFC 0005 §11); 8: function_metrics (RFC 0005 §6); 7: cycle policies (§8); 6: PackageNode surface (RFC 0011 §4); 5: ladders + FileNode.unit (RFC 0012 §6); 4: RefKind + signature_span (§5); 3: within (§4)
 
 /// The graph snapshot's cache key (RFC 0004 §3, `cache.rs`'s `graph.bin`): a single digest
 /// folding in the *whole* discovered file set (every path + content hash — this already
@@ -3279,6 +3326,7 @@ pub fn assemble_from_source(
         surface: Vec::new(),
         workspace_entry: None,
         targets: Vec::new(),
+        executables: Vec::new(),
         resolves_dependency_usage: true,
     }];
     let mut manifest_package: Vec<Option<PackageId>> = vec![None; manifests_per_file.len()];
@@ -3301,6 +3349,7 @@ pub fn assemble_from_source(
                 surface,
                 workspace_entry: facts.resolved_entries.first().cloned(),
                 targets: manifest_targets(facts),
+                executables: facts.executables.clone(),
                 resolves_dependency_usage: adapters[*adapter_index]
                     .descriptor()
                     .resolves_dependency_usage,
@@ -3894,6 +3943,7 @@ pub fn assemble_from_source(
         })
         .collect();
 
+    let executable_by_name = executable_name_index(&packages, &file_index);
     let tables = ResolveTables {
         files: &files,
         file_index: &file_index,
@@ -3907,6 +3957,7 @@ pub fn assemble_from_source(
         file_unit: &file_unit,
         unit_name_by_file: &unit_name_by_file,
         ladders: &ladders,
+        executable_by_name: &executable_by_name,
         ctx: &ctx,
     };
     let resolved_files: Vec<Option<ResolvedFile>> = claimed_per_file
@@ -4351,6 +4402,10 @@ mod tests {
                             .map(|list| list.split(',').map(SmolStr::new).collect())
                             .unwrap_or_default(),
                     });
+                } else if let Some(name) = line.strip_prefix("invokes-executable ") {
+                    // A declared subprocess invocation of a workspace executable target
+                    // (RFC 0005 §1's invoked-program rule).
+                    facts.invoked_executables.push(SmolStr::new(name));
                 } else if let Some(name) = line.strip_prefix("unit-name ") {
                     // The name importers bind this unit by (RFC 0012 §9).
                     facts.unit_name = Some(SmolStr::new(name));
@@ -4525,6 +4580,18 @@ mod tests {
                     }
                 } else if let Some(name) = line.strip_prefix("cli-invoke ") {
                     facts.script_invoked_names.push(SmolStr::new(name));
+                } else if let Some(rest) = line.strip_prefix("executable ") {
+                    // `executable <name> <path>` — a named executable target (RFC 0005 §1's
+                    // invoked-program rule), resolved to its entry if the file exists.
+                    let mut parts = rest.splitn(2, ' ');
+                    let name = parts.next().unwrap_or("");
+                    let entry = ProjectPath(SmolStr::new(parts.next().unwrap_or("")));
+                    if ctx.contains(&entry) {
+                        facts.executables.push(crate::adapter::ExecutableTarget {
+                            name: SmolStr::new(name),
+                            entry,
+                        });
+                    }
                 } else if let Some(name) = line.strip_prefix("name ") {
                     facts.package_name = Some(SmolStr::new(name));
                 } else if let Some(p) = line.strip_prefix("entry ") {
@@ -5075,6 +5142,50 @@ mod tests {
                 EdgeKind::References { to, kind: RefKind::Read, .. } if to == SymbolId(value)
             )),
             "the projected parameter type is credited with a Read from the site"
+        );
+    }
+
+    #[test]
+    fn a_declared_executable_invocation_emits_an_invokes_file_edge() {
+        // `invokes-executable app` resolves through the manifest's named executable
+        // targets to the bin's entry file (RFC 0005 §1's invoked-program rule); a name no
+        // manifest declares emits nothing — silence, never a guess.
+        let dir = project(
+            "invoked-program",
+            &[
+                ("manifest.json", "name app\nexecutable app src/main.mock"),
+                ("src/main.mock", "decl main\nroot-decl main"),
+                (
+                    "tests/e2e.test.mock",
+                    "invokes-executable app\ninvokes-executable ghost",
+                ),
+            ],
+        );
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
+        let file_id = |suffix: &str| {
+            FileId(
+                graph
+                    .files
+                    .iter()
+                    .position(|f| f.path.0.ends_with(suffix))
+                    .unwrap() as u32,
+            )
+        };
+        let invokes: Vec<(NodeRef, FileId)> = graph
+            .edges
+            .iter()
+            .filter_map(|e| match e.kind {
+                EdgeKind::InvokesFile { from, to } => Some((from, to)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            invokes,
+            vec![(
+                NodeRef::File(file_id("e2e.test.mock")),
+                file_id("src/main.mock")
+            )],
+            "the declared name resolves to the bin entry; the unknown one stays silent"
         );
     }
 

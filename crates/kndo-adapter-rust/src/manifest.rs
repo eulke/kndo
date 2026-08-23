@@ -9,8 +9,8 @@
 //! a crate's surface IS its `pub` items, and `deep-import`'s gate is closed deliberately.
 
 use kndo_core::adapter::{
-    Diagnostic, DiagnosticLevel, ManifestDependency, ManifestFacts, ManifestRoot, ProjectPath,
-    ResolveCtx,
+    Diagnostic, DiagnosticLevel, ExecutableTarget, ManifestDependency, ManifestFacts, ManifestRoot,
+    ProjectPath, ResolveCtx,
 };
 use kndo_core::vocab::{Confidence, DependencyScope, RootKind};
 use smol_str::SmolStr;
@@ -95,13 +95,17 @@ pub(crate) fn extract(path: &str, content: &[u8], ctx: &ResolveCtx<'_>) -> Manif
         return out;
     }
 
-    // --- bins: production roots, unconditionally ---
-    let mut bin_paths: Vec<ProjectPath> = Vec::new();
+    // --- bins: production roots unconditionally, each under its cargo-assigned name —
+    // the identity `env!("CARGO_BIN_EXE_<name>")` invokes it by (RFC 0005 §1's
+    // invoked-program rule) ---
+    let mut bins: Vec<(Option<SmolStr>, ProjectPath)> = Vec::new();
     let main_rs = join("src/main.rs");
     if ctx.contains(&main_rs) {
-        bin_paths.push(main_rs);
+        // Cargo names the default bin after the package itself.
+        bins.push((out.package_name.clone(), main_rs));
     }
-    // Autobins: every .rs directly under src/bin/ (sorted — deterministic, RFC 0008 §4).
+    // Autobins: every .rs directly under src/bin/, named by file stem (sorted —
+    // deterministic, RFC 0008 §4).
     let bin_dir = if dir.is_empty() {
         "src/bin".to_string()
     } else {
@@ -113,19 +117,27 @@ pub(crate) fn extract(path: &str, content: &[u8], ctx: &ResolveCtx<'_>) -> Manif
         .cloned()
         .collect();
     autobins.sort();
-    bin_paths.extend(autobins);
-    // Explicit [[bin]] entries with a path.
-    if let Some(bins) = value.get("bin").and_then(|b| b.as_array()) {
-        for bin in bins {
+    bins.extend(autobins.into_iter().map(|p| (bin_stem(&p), p)));
+    // Explicit [[bin]] entries with a path (name is cargo-required; a pathless entry names
+    // an autobin already collected above).
+    if let Some(entries) = value.get("bin").and_then(|b| b.as_array()) {
+        for bin in entries {
             if let Some(p) = bin.get("path").and_then(|p| p.as_str()) {
                 let target = join(p);
                 if ctx.contains(&target) {
-                    bin_paths.push(target);
+                    let name = bin.get("name").and_then(|n| n.as_str()).map(SmolStr::new);
+                    bins.push((name, target));
                 }
             }
         }
     }
-    for target in bin_paths {
+    for (name, target) in bins {
+        if let Some(name) = name {
+            out.executables.push(ExecutableTarget {
+                name,
+                entry: target.clone(),
+            });
+        }
         out.entry_points.push(target.0.clone());
         out.roots.push(ManifestRoot {
             kind: RootKind::Production,
@@ -202,6 +214,15 @@ fn collect_deps(table: Option<&toml::Value>, scope: DependencyScope, out: &mut M
             scope,
         });
     }
+}
+
+/// An autobin's cargo-assigned name: the file stem (`src/bin/foo.rs` → `foo`).
+fn bin_stem(path: &ProjectPath) -> Option<SmolStr> {
+    path.0
+        .rsplit('/')
+        .next()
+        .and_then(|f| f.strip_suffix(".rs"))
+        .map(SmolStr::new)
 }
 
 fn diag(message: &str) -> Diagnostic {
@@ -318,6 +339,40 @@ cc = "1"
         assert!(f.package_name.is_none());
         assert_eq!(f.workspace_members, vec!["crates/*", "xtask"]);
         assert!(f.roots.is_empty());
+    }
+
+    #[test]
+    fn bins_carry_their_cargo_assigned_names() {
+        let f = facts(
+            "crates/x/Cargo.toml",
+            "[package]\nname = \"app\"\n\n[[bin]]\nname = \"custom\"\npath = \"tools/custom.rs\"\n",
+            &[
+                "crates/x/src/main.rs",
+                "crates/x/src/bin/extra.rs",
+                "crates/x/tools/custom.rs",
+            ],
+        );
+        let exe = |n: &str| {
+            f.executables
+                .iter()
+                .find(|e| e.name == n)
+                .map(|e| e.entry.0.as_str())
+        };
+        assert_eq!(
+            exe("app"),
+            Some("crates/x/src/main.rs"),
+            "default bin = package name"
+        );
+        assert_eq!(
+            exe("extra"),
+            Some("crates/x/src/bin/extra.rs"),
+            "autobin = file stem"
+        );
+        assert_eq!(
+            exe("custom"),
+            Some("crates/x/tools/custom.rs"),
+            "[[bin]] = declared name"
+        );
     }
 
     #[test]

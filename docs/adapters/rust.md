@@ -151,6 +151,7 @@ segment paths. All `use` edges are `certain` — Rust has no bundler ambiguity.
 |-----------|--------|
 | `name!(…)` invocation | a `certain` reference to `name` (keeps `macro_rules!` alive), plus a scan of the token tree: `a::b` token runs are reconstructed and routed through the body-path rule — `print!("{}", render::render_query(x))` binds `render_query` through the `use`-established qualifier exactly as it would outside the macro — and lone identifier tokens stay plain reads (`format!("{}", user)` keeps `user`'s referents alive). String literals inside token trees are scanned for Rust 2021 **inline format captures**: `format!("v{VERSION}")` reads `VERSION` (`{{` escapes and positional `{}`/`{0}` contribute nothing). **No wildcard per macro** — that would drown every Rust file in `possible` edges |
 | `include!("lit")` / `include_str!` / `include_bytes!` with a literal | `probable` file edge |
+| `env!("CARGO_BIN_EXE_<name>")` / `option_env!` | `invoked_executables` fact: Cargo's own handshake for "this test executes the workspace binary `<name>`" — the core resolves the name through the manifest's named bins (§4) and emits an `InvokesFile` edge, RFC 0005 §1's invoked-program rule. Only the documented prefix, only a literal |
 | `#[no_mangle]` / `#[export_name]` / `pub extern "C" fn` | in-source `Production` root at `probable` — an FFI consumer exists outside the graph |
 | `#[test]` / `#[bench]` | a recorded test region (§1) — assembly derives the `certain` `Test` root from span containment; extraction emits no root of its own |
 | `#[cfg(…)]` | **both branches kept**, always: kndo analyzes the source, not one compilation; over-approximating alive is the safe direction. Two cfg-gated same-name items collapse to last-wins in the symbol table (documented artifact, harmless for liveness) |
@@ -305,6 +306,11 @@ it is a one-line, reviewed change.
   entry (`src/lib.rs` or `[lib] path`) → `Production` root **only when the package is
   publishable** (library mode, RFC 0011 §5); an unpublished crate's `pub` API must earn its
   keep through actual imports. `build.rs` → `Tooling` root.
+- Executables (`ManifestFacts::executables`, RFC 0005 §1's invoked-program rule): every bin
+  root also registers under its cargo-assigned **name** — the package name for
+  `src/main.rs`, the file stem for autobins, the declared `name` for `[[bin]]` entries.
+  This is the identity `env!("CARGO_BIN_EXE_<name>")` invokes it by (see §2), letting a
+  test that *executes* the binary — never imports it — reach the binary's whole call tree.
 - `resolved_entries`: the lib entry — what a sibling's `use this_crate::…` resolves
   through.
 - `declares_surface: false`, always: Cargo has no `exports` map; a Rust crate's surface IS

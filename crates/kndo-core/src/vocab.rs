@@ -384,6 +384,20 @@ pub enum EdgeKind {
         from: NodeRef,
         to: FileId,
     },
+    /// A **process-boundary invocation** (RFC 0005 §1's invoked-program rule): `from`
+    /// executes the file `to` as a program — a test running its own workspace binary
+    /// (`env!("CARGO_BIN_EXE_…")`), resolved through the manifest's named executable
+    /// targets. Unlike `ImportsFile` (importing runs only load-time code), *executing* a
+    /// program runs its entry point: reachability traverses this edge to the target file
+    /// AND to every Production `Root` target declared inside it, so the invoked program's
+    /// whole call tree inherits the invoker's colors. Same liveness-only contract as
+    /// [`Self::ReferencesFile`]: never architecture evidence — `cyclic` and every analysis
+    /// that would *create* a finding from an edge's existence ignore it, so a false edge
+    /// can only ever suppress findings.
+    InvokesFile {
+        from: NodeRef,
+        to: FileId,
+    },
 }
 
 /// Identity of the component whose facts produced an edge/annotation — for attribution in

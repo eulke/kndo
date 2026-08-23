@@ -1095,6 +1095,28 @@ structural and just indexes — a projection with no parameter at that position 
 (schema v22, facts v7). Behavior-neutral on the corpus: ripgrep identical counts, zero
 regressions.
 
+### M6 progress — `untested` noise: the invoked-program rule ✅ (landed 2026-08-23)
+
+`untested` was the loudest category, and its top false family was the process boundary: an
+e2e test *executes* the workspace binary, never imports it, so the whole CLI read as
+test-blind. Modeled statically, self-sufficient by design (no coverage report involved):
+the manifest declares **named executable targets** (`ManifestFacts::executables` — Cargo:
+package name for `src/main.rs`, file stem for autobins, `[[bin]] name`; persisted on
+`PackageNode` for the patch), a file declares the targets it runs as a subprocess
+(`FileFacts::invoked_executables` — Rust: `env!("CARGO_BIN_EXE_<name>")`, Cargo's own
+handshake, literal-only), and the core resolves name → entry into the new
+`EdgeKind::InvokesFile`. Reachability's **invoked-program rule** (RFC 0005 §1): the edge
+reaches the target file AND its Production roots — executing a program runs its entry
+point, unlike importing (load-time code only) — so the binary's whole call tree inherits
+the invoker's colors; non-Production roots stay out, and like `ReferencesFile` the edge is
+liveness-only (no finding-creating analysis reads it — a false edge can only suppress).
+Conformance fixture `bin-e2e-invoke` judges the chain end-to-end (schema v23, rust facts
+v8). Dogfood: `untested` 190 → 128 — **kndo-cli 48 → 0** (two e2e tests reach the whole
+CLI through `main`), `kndo` 26 → 17, `kndo-core` 24 → 19; every other category unchanged.
+Remaining top family: the WASM host↔guest boundary (`kndo-plugin-api`, 71) — a recorded
+divergence, no honest static fact without heuristics. Next: implicit trait-machinery
+dispatch (`fmt` et al.), task #89.
+
 ## Post-1.0 parking lot
 **RFC 0016 — uniform component model** (the accepted plan, phased in its §8, **all four phases
 landed**: 0 freeze reservations, 1 host-mediated content channel for plugin graph hooks

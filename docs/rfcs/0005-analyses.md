@@ -102,6 +102,17 @@ field). Two rules govern the traversal:
   main`/`init`/exported-declaration promotion, docs/adapters/go.md §0, §2 — no manifest-level
   entry file to root alongside them): `R(κ, τ)`'s traversal enqueues a reached symbol's owning
   file alongside the symbol.
+- **Invoked-program rule:** an `InvokesFile` edge — a file executing another file **as a
+  program**, the process boundary no import crosses (a test running its own workspace binary
+  via `env!("CARGO_BIN_EXE_…")`, resolved through the manifest's named executable targets,
+  `ManifestFacts::executables` × `FileFacts::invoked_executables`) — traverses to the target
+  file AND to every Production `Root` target declared inside it, each at the weaker of the
+  invocation's and the root's own confidence. Importing a module runs only its load-time
+  code; *executing* a program runs its entry point, so the invoked binary's whole call tree
+  inherits the invoker's colors. Non-Production roots inside the invoked file stay out
+  (running the binary runs neither its inline tests nor its tooling entries). Like
+  `ReferencesFile`, this is liveness evidence only — no finding-creating analysis reads it,
+  so a false edge can only ever suppress findings.
 
 File attribution (the pre-RFC-0012 behavior, still what a `within`-less adapter gets) is the
 deliberate over-approximation: everything a live file references stays alive. Every

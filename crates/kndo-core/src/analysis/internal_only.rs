@@ -624,6 +624,7 @@ mod tests {
                 crate::graph::PackageNode {
                     workspace_entry: None,
                     targets: Vec::new(),
+                    executables: Vec::new(),
                     manifest: None,
                     name: None,
                     private: false,
@@ -634,6 +635,7 @@ mod tests {
                 crate::graph::PackageNode {
                     workspace_entry: None,
                     targets: Vec::new(),
+                    executables: Vec::new(),
                     manifest: None,
                     name: None,
                     private: false,
@@ -787,6 +789,7 @@ mod tests {
                 crate::graph::PackageNode {
                     workspace_entry: None,
                     targets: Vec::new(),
+                    executables: Vec::new(),
                     manifest: None,
                     name: None,
                     private: false,
@@ -797,6 +800,7 @@ mod tests {
                 crate::graph::PackageNode {
                     workspace_entry: None,
                     targets: Vec::new(),
+                    executables: Vec::new(),
                     manifest: None,
                     name: None,
                     private: false,

@@ -159,6 +159,10 @@ pub struct FileFacts {
                                             // owner.member evaluates to (field types, method returns);
                                             // yields_params: the annotation's type arguments in order,
                                             // projected by `?N` pointer markers; RFC 0012 §3-bis
+    pub invoked_executables: Vec<SmolStr>,  // workspace executable targets this file runs as a
+                                            // subprocess (Rust: env!("CARGO_BIN_EXE_<name>")) —
+                                            // resolved against ManifestFacts::executables into
+                                            // InvokesFile edges (RFC 0005 §1's invoked-program rule)
     pub declarations: Vec<Declaration>,     // { name, kind: SymbolKind, span, exported: bool,
                                              //   visibility, member_of: Option<Name>,
                                              //   signature_span: Option<Span> }
@@ -392,6 +396,12 @@ pub struct ManifestFacts {
                                                        // for it; cross-referenced by name against
                                                        // declared dependencies downstream, so an
                                                        // unrelated match is simply never looked up
+    pub executables: Vec<ExecutableTarget>,            // named executable targets { name, entry } —
+                                                       // the identity a subprocess invocation uses
+                                                       // (Cargo bin names, npm `bin` keys); resolved
+                                                       // against FileFacts::invoked_executables into
+                                                       // InvokesFile edges (RFC 0005 §1's
+                                                       // invoked-program rule)
     pub diagnostics:        Vec<Diagnostic>,
 }
 ```

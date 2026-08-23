@@ -39,9 +39,10 @@ impl LanguageAdapter for RustAdapter {
             // 2: test regions are the only producer-side test declaration — extraction
             // stopped emitting per-declaration Test roots (assembly derives them from
             // `test_spans` containment, contracts §2).
+            // 8: invoked_executables (`env!("CARGO_BIN_EXE_…")` — the invoked-program rule);
             // 7: yields_params carries every type argument (`?N` indexed projection);
             // 6: member-type facts + typed-receiver qualifiers.
-            facts_schema_version: 7,
+            facts_schema_version: 8,
             file_globs: vec![SmolStr::new("**/*.rs")],
             manifest_globs: vec![SmolStr::new("**/Cargo.toml")],
             grammar_version: SmolStr::new("tree-sitter-rust 0.24"),

@@ -572,6 +572,57 @@ mod tests {
     }
 
     #[test]
+    fn a_test_invoking_the_binary_clears_the_bins_untested_findings() {
+        // The e2e shape (RFC 0005 §1's invoked-program rule): the test never imports the
+        // bin — it executes it. The InvokesFile edge reaches the bin's Production root and
+        // its call tree, so neither the file nor `main`/`helper` are test-blind spots.
+        let files = vec![
+            file("tests/e2e.test.mock", FileRole::Test),
+            file("src/main.mock", FileRole::Production),
+        ];
+        let symbols = vec![symbol(FileId(1), "main"), symbol(FileId(1), "helper")];
+        let edges = vec![
+            edge(
+                EdgeKind::Root {
+                    kind: RootKind::Test,
+                    target: NodeRef::File(FileId(0)),
+                },
+                Confidence::Certain,
+            ),
+            edge(
+                EdgeKind::Root {
+                    kind: RootKind::Production,
+                    target: NodeRef::Symbol(SymbolId(0)),
+                },
+                Confidence::Certain,
+            ),
+            edge(
+                EdgeKind::InvokesFile {
+                    from: NodeRef::File(FileId(0)),
+                    to: FileId(1),
+                },
+                Confidence::Certain,
+            ),
+            edge(
+                EdgeKind::References {
+                    from: NodeRef::Symbol(SymbolId(0)),
+                    to: SymbolId(1),
+                    kind: RefKind::Call,
+                },
+                Confidence::Certain,
+            ),
+        ];
+        let graph = ProjectGraph::for_test(files, symbols, vec![], edges);
+        let reach = reachability::compute(&graph);
+        let (findings, _) = find_untested(&graph, &reach);
+        assert!(
+            findings.is_empty(),
+            "unexpected findings: {:?}",
+            findings.iter().map(|f| &f.message).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
     fn finding_id_is_stable_across_runs() {
         let files = vec![
             file("tests/spec.test.mock", FileRole::Test),

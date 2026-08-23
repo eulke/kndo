@@ -187,6 +187,9 @@ pub fn extract(path: &str, content: &[u8], ctx: &ResolveCtx<'_>) -> ManifestFact
         roots,
         resolved_entries,
         declares_surface,
+        // `bin` names are the natural analog (docs/adapters/js-ts.md); adoption tracks a
+        // real test-runner-invokes-own-bin corpus case, same posture as other opt-in facts.
+        executables: Vec::new(),
         diagnostics: Vec::new(),
     }
 }

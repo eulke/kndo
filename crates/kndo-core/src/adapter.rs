@@ -590,6 +590,15 @@ pub struct FileFacts {
     /// type's home. Every hop is a declared-annotation fact → Certain; any miss falls to
     /// the duck fallback. Default empty; Rust implements it first.
     pub member_types: Vec<RawMemberType>,
+    /// Names of workspace executable targets this file invokes **as a subprocess** — the
+    /// process boundary no import edge can cross (RFC 0005 §1's invoked-program rule). Only
+    /// declared, literal invocations the language itself vouches for (Rust:
+    /// `env!("CARGO_BIN_EXE_<name>")`, Cargo's own documented handshake for exactly this);
+    /// never inferred from arbitrary strings — determinism over coverage (RFC 0002 §5).
+    /// Assembly resolves each name against the workspace's [`ManifestFacts::executables`]
+    /// and emits an `InvokesFile` edge to the target's entry file; an unknown name emits
+    /// nothing. Default empty; Rust implements it first.
+    pub invoked_executables: Vec<SmolStr>,
 }
 
 /// One [`FileFacts::member_types`] entry: accessing `owner.member` yields a value of the
@@ -712,7 +721,25 @@ pub struct ManifestFacts {
     /// classification, cross-referenced against declared dependency names downstream (a name
     /// that happens to match nothing declared is simply never looked up).
     pub script_invoked_names: Vec<SmolStr>,
+    /// The manifest's **named executable targets** (RFC 0005 §1's invoked-program rule): the
+    /// name a build tool exposes the binary under, resolved to its entry file by the
+    /// adapter (same posture as [`Self::roots`] — a manifest always names a *different*
+    /// file). Cargo: `src/main.rs` under the package name, `src/bin/foo.rs` under `foo`,
+    /// `[[bin]] name`/`path` as declared; npm's `bin` map is the same shape. This is what a
+    /// source file's [`FileFacts::invoked_executables`] resolves against — the name is the
+    /// process-boundary identity, which no import specifier carries.
+    pub executables: Vec<ExecutableTarget>,
     pub diagnostics: Vec<Diagnostic>,
+}
+
+/// One named executable target: invoking `name` as a subprocess executes `entry`. Carries
+/// rkyv derives because the graph snapshot persists these per package (`PackageNode`) — the
+/// incremental patch rebuilds the name index without re-extracting unchanged manifests.
+#[derive(Debug, Clone, PartialEq, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+pub struct ExecutableTarget {
+    #[rkyv(with = crate::rkyv_support::SmolStrAsString)]
+    pub name: SmolStr,
+    pub entry: ProjectPath,
 }
 
 // ---------------------------------------------------------------- resolution

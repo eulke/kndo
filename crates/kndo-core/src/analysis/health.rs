@@ -748,6 +748,7 @@ mod tests {
             PackageNode {
                 workspace_entry: None,
                 targets: Vec::new(),
+                executables: Vec::new(),
                 manifest: None,
                 name: None,
                 private: false,
@@ -758,6 +759,7 @@ mod tests {
             PackageNode {
                 workspace_entry: None,
                 targets: Vec::new(),
+                executables: Vec::new(),
                 manifest: Some(ProjectPath(SmolStr::new("a/pkg.json"))),
                 name: Some(SmolStr::new("pkg-a")),
                 private: false,
@@ -768,6 +770,7 @@ mod tests {
             PackageNode {
                 workspace_entry: None,
                 targets: Vec::new(),
+                executables: Vec::new(),
                 manifest: Some(ProjectPath(SmolStr::new("b/pkg.json"))),
                 name: Some(SmolStr::new("pkg-b")),
                 private: false,

@@ -2398,6 +2398,20 @@ fn handle_macro(
         kind: RefKind::Call,
     });
 
+    // env!("CARGO_BIN_EXE_<name>"): Cargo's own handshake for "this test executes the
+    // workspace binary <name>" — the declared subprocess invocation the core resolves
+    // through the manifest's named bins (RFC 0005 §1's invoked-program rule). Only the
+    // documented prefix, only a literal: never inferred from arbitrary strings.
+    if matches!(name, "env" | "option_env") {
+        if let Some(exe) = first_string_literal(node, src)
+            .and_then(|lit| lit.strip_prefix("CARGO_BIN_EXE_"))
+            .filter(|exe| !exe.is_empty())
+        {
+            out.invoked_executables.push(SmolStr::new(exe));
+        }
+        // Fall through: the token tree may still name identifiers worth scanning.
+    }
+
     // include!/include_str!/include_bytes! with a literal: a probable file edge (spec §2).
     if matches!(name, "include" | "include_str" | "include_bytes") {
         if let Some(lit) = first_string_literal(node, src) {
@@ -2870,6 +2884,18 @@ mod tests {
             .expect("return fact");
         assert_eq!(m.yields, "Result");
         assert_eq!(m.yields_params, ["ConfiguredHIR", "Error"]);
+    }
+
+    #[test]
+    fn cargo_bin_exe_env_macros_declare_invoked_executables() {
+        let f = facts(
+            "fn e2e() {\n\
+             \x20   let bin = env!(\"CARGO_BIN_EXE_kndo\");\n\
+             \x20   let opt = option_env!(\"CARGO_BIN_EXE_helper\");\n\
+             \x20   let unrelated = env!(\"HOME\");\n\
+             }\n",
+        );
+        assert_eq!(f.invoked_executables, ["kndo", "helper"]);
     }
 
     #[test]

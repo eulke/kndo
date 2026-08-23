@@ -130,6 +130,23 @@ pub fn compute(graph: &ProjectGraph) -> ReachabilityMap {
         }
     }
 
+    // The invoked-program rule's target sets (RFC 0005 §1): per file, its Production `Root`
+    // symbols. *Executing* a file as a program runs its entry point — unlike importing it,
+    // which runs only load-time code — so an `InvokesFile` edge fans out to these implicit
+    // targets besides the file itself. Test/Tooling roots inside the invoked file stay out:
+    // running the binary does not run its inline tests.
+    let mut prod_roots_by_file: Vec<Vec<(u32, Confidence)>> = vec![Vec::new(); files_len];
+    for edge in &graph.edges {
+        if let EdgeKind::Root {
+            kind: RootKind::Production,
+            target: NodeRef::Symbol(s),
+        } = edge.kind
+        {
+            let owner = graph.symbols[s.0 as usize].file.0 as usize;
+            prod_roots_by_file[owner].push(((files_len + s.0 as usize) as u32, edge.confidence));
+        }
+    }
+
     let mut degree: Vec<u32> = vec![0; n];
     let count = |degree: &mut Vec<u32>, from: usize, extra: usize| degree[from] += extra as u32;
     for edge in &graph.edges {
@@ -139,6 +156,12 @@ pub fn compute(graph: &ProjectGraph) -> ReachabilityMap {
             // RFC 0017 §5.4's plugin file-liveness edge: traversed exactly like ImportsFile
             // (from alive ⇒ to in use), just from a NodeRef and only ever plugin-contributed.
             EdgeKind::ReferencesFile { from, .. } => count(&mut degree, node_index(from), 1),
+            // Invoked-program rule: the file plus its Production root symbols.
+            EdgeKind::InvokesFile { from, to } => count(
+                &mut degree,
+                node_index(from),
+                1 + prod_roots_by_file[to.0 as usize].len(),
+            ),
             EdgeKind::Wildcard { from } => count(
                 &mut degree,
                 from.0 as usize,
@@ -184,6 +207,24 @@ pub fn compute(graph: &ProjectGraph) -> ReachabilityMap {
                 to.0 as usize,
                 edge.confidence,
             ),
+            EdgeKind::InvokesFile { from, to } => {
+                push_edge(
+                    &mut cursor,
+                    node_index(from),
+                    to.0 as usize,
+                    edge.confidence,
+                );
+                // Executing the program runs its entry points: each Production root in the
+                // invoked file, at the weaker of the invocation and the root's own strength.
+                for &(root, root_conf) in &prod_roots_by_file[to.0 as usize] {
+                    push_edge(
+                        &mut cursor,
+                        node_index(from),
+                        root as usize,
+                        edge.confidence.min(root_conf),
+                    );
+                }
+            }
             EdgeKind::Wildcard { from } => {
                 // Plausible target set, absent narrower DynamicUse metadata (RFC 0005 §1):
                 // every symbol declared in the same file, at `possible`.
@@ -591,6 +632,74 @@ mod tests {
         assert_eq!(
             reach.get(NodeRef::Symbol(SymbolId(1))).0,
             Reachability::Unreachable
+        );
+    }
+
+    #[test]
+    fn invoking_a_program_reaches_its_production_roots_and_their_call_tree() {
+        // The invoked-program rule: a test file executing `bin.ts` as a subprocess reaches
+        // the file AND its Production root (`main`), and through `main`'s references the
+        // whole call tree — while a non-Production root in the same file stays untouched
+        // (executing the program runs its entry point, not its tooling entries).
+        let files = vec![file("e2e.test.ts"), file("bin.ts")];
+        let symbols = vec![
+            symbol(FileId(1), "main"),
+            symbol(FileId(1), "helper"),
+            symbol(FileId(1), "codegen"),
+        ];
+        let edges = vec![
+            edge(
+                EdgeKind::Root {
+                    kind: RootKind::Test,
+                    target: NodeRef::File(FileId(0)),
+                },
+                Confidence::Certain,
+            ),
+            edge(
+                EdgeKind::Root {
+                    kind: RootKind::Production,
+                    target: NodeRef::Symbol(SymbolId(0)),
+                },
+                Confidence::Certain,
+            ),
+            edge(
+                EdgeKind::Root {
+                    kind: RootKind::Tooling,
+                    target: NodeRef::Symbol(SymbolId(2)),
+                },
+                Confidence::Certain,
+            ),
+            edge(
+                EdgeKind::InvokesFile {
+                    from: NodeRef::File(FileId(0)),
+                    to: FileId(1),
+                },
+                Confidence::Certain,
+            ),
+            edge(
+                EdgeKind::References {
+                    from: NodeRef::Symbol(SymbolId(0)),
+                    to: SymbolId(1),
+                    kind: RefKind::Call,
+                },
+                Confidence::Certain,
+            ),
+        ];
+        let graph = ProjectGraph::for_test(files, symbols, vec![], edges);
+        let reach = compute(&graph);
+        for node in [
+            NodeRef::File(FileId(1)),
+            NodeRef::Symbol(SymbolId(0)),
+            NodeRef::Symbol(SymbolId(1)),
+        ] {
+            assert!(
+                reach.reachable_from(RootKind::Test, node),
+                "the invoked bin, its entry, and the entry's callees are all test-reached"
+            );
+        }
+        assert!(
+            !reach.reachable_from(RootKind::Test, NodeRef::Symbol(SymbolId(2))),
+            "a non-Production root in the invoked file is not part of the program's execution"
         );
     }
 

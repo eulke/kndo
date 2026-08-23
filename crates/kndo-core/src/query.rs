@@ -337,6 +337,9 @@ enum EdgeLabel {
     /// RFC 0017 §5.4's plugin-contributed file-liveness edge — navigable so `uses`/`used-by`
     /// explain why a template/asset counts as in use, labeled distinctly from a real import.
     ReferencesFile,
+    /// RFC 0005 §1's invoked-program edge — a test executing its workspace binary as a
+    /// subprocess. Navigable for the same reason as `ReferencesFile`.
+    InvokesFile,
 }
 
 impl EdgeLabel {
@@ -345,8 +348,18 @@ impl EdgeLabel {
             EdgeLabel::ImportsFile | EdgeLabel::ImportsDependency => "imports",
             EdgeLabel::References => "references",
             EdgeLabel::Wildcard => "wildcard",
-            EdgeLabel::ReferencesFile => "references-file",
+            other => file_liveness_label(other),
         }
+    }
+}
+
+/// Display names of the file-liveness pair — the edges that carry "this file is in use"
+/// without being imports (RFC 0017 §5.4's plugin edge, RFC 0005 §1's invoked-program edge).
+fn file_liveness_label(label: EdgeLabel) -> &'static str {
+    if matches!(label, EdgeLabel::InvokesFile) {
+        "invokes-file"
+    } else {
+        "references-file"
     }
 }
 
@@ -398,9 +411,12 @@ impl EdgeFilter {
     fn allows(self, label: EdgeLabel) -> bool {
         match label {
             EdgeLabel::ImportsFile | EdgeLabel::ImportsDependency => self.imports,
-            // A plugin's file-liveness edge is a reference in navigation terms — `--edges
-            // references` shows it, `--edges imports` (real module structure only) doesn't.
-            EdgeLabel::References | EdgeLabel::ReferencesFile => self.references,
+            // A file-liveness edge (plugin's or the invoked-program's) is a reference in
+            // navigation terms — `--edges references` shows it, `--edges imports` (real
+            // module structure only) doesn't.
+            EdgeLabel::References | EdgeLabel::ReferencesFile | EdgeLabel::InvokesFile => {
+                self.references
+            }
             EdgeLabel::Wildcard => self.wildcard,
         }
     }
@@ -488,6 +504,18 @@ fn build_nav_graph(graph: &ProjectGraph) -> NavGraph {
                         from,
                         NavNode::File(to),
                         EdgeLabel::ReferencesFile,
+                        edge.confidence,
+                    )
+                }
+                crate::vocab::EdgeKind::InvokesFile { from, to } => {
+                    let from = match from {
+                        NodeRef::File(f) => NavNode::File(f),
+                        NodeRef::Symbol(s) => NavNode::Symbol(s),
+                    };
+                    (
+                        from,
+                        NavNode::File(to),
+                        EdgeLabel::InvokesFile,
                         edge.confidence,
                     )
                 }
@@ -1888,7 +1916,7 @@ fn simulate_deletion(
                 NodeRef::Symbol(s) => deleted_symbols.contains(&s),
             },
             EK::Wildcard { from } => deleted_files.contains(&from),
-            EK::ReferencesFile { from, to } => {
+            EK::ReferencesFile { from, to } | EK::InvokesFile { from, to } => {
                 deleted_files.contains(&to)
                     || match from {
                         NodeRef::File(f) => deleted_files.contains(&f),
@@ -2213,6 +2241,7 @@ mod tests {
             PackageNode {
                 workspace_entry: None,
                 targets: Vec::new(),
+                executables: Vec::new(),
                 manifest: Some(ProjectPath("a/package.json".into())),
                 name: Some("dup".into()),
                 private: false,
@@ -2223,6 +2252,7 @@ mod tests {
             PackageNode {
                 workspace_entry: None,
                 targets: Vec::new(),
+                executables: Vec::new(),
                 manifest: Some(ProjectPath("b/package.json".into())),
                 name: Some("dup".into()),
                 private: false,
