@@ -88,6 +88,7 @@ impl LanguageAdapter for MiniAdapter {
                     visibility: kndo_core::adapter::VisibilityLevel(1),
                     member_of: None,
                     signature_span: None,
+                    implicitly_invoked: false,
                 });
             } else if let Some(name) = line.strip_prefix("ref ") {
                 facts.references.push(RawReference {

@@ -606,6 +606,7 @@ fn push_declaration(
         exported,
         visibility: kndo_core::adapter::VisibilityLevel(level),
         member_of: member_of.map(SmolStr::new),
+        implicitly_invoked: false,
         signature_span,
     });
 }

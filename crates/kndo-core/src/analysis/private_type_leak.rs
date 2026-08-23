@@ -263,6 +263,7 @@ mod tests {
             visibility: VisibilityLevel(visibility),
             member_of: None,
             signature_span: Some(sig),
+            implicitly_invoked: false,
         }
     }
 
@@ -276,6 +277,7 @@ mod tests {
             visibility: VisibilityLevel(visibility),
             member_of: None,
             signature_span: None,
+            implicitly_invoked: false,
         }
     }
 

@@ -165,7 +165,13 @@ pub struct FileFacts {
                                             // InvokesFile edges (RFC 0005 §1's invoked-program rule)
     pub declarations: Vec<Declaration>,     // { name, kind: SymbolKind, span, exported: bool,
                                              //   visibility, member_of: Option<Name>,
-                                             //   signature_span: Option<Span> }
+                                             //   signature_span: Option<Span>,
+                                             //   implicitly_invoked: bool — the language's own
+                                             //   machinery invokes this member through its owner,
+                                             //   never by name at the call site (`{}` → fmt,
+                                             //   `==` → eq); reachability derives the implicit
+                                             //   owner → member edge (RFC 0005 §1's
+                                             //   machinery-dispatch rule) }
                                              // signature_span (RFC 0012 §5): the declaration's
                                              // *promise* — everything before the body block
                                              // (name, parameters, return/result types).

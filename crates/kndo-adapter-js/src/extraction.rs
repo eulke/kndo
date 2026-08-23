@@ -258,6 +258,7 @@ fn handle_named(node: Node, src: &[u8], exported: bool, out: &mut FileFacts, kin
         exported,
         visibility: visibility(exported),
         member_of: None,
+        implicitly_invoked: false,
         signature_span,
     });
 }
@@ -283,6 +284,7 @@ fn handle_export_statement(node: Node, src: &[u8], out: &mut FileFacts) {
             visibility: visibility(true),
             member_of: None,
             signature_span: None,
+            implicitly_invoked: false,
         });
         return;
     }
@@ -392,6 +394,7 @@ fn handle_enum(node: Node, src: &[u8], exported: bool, out: &mut FileFacts) {
         visibility: visibility(exported),
         member_of: None,
         signature_span: None,
+        implicitly_invoked: false,
     });
 
     let Some(body) = node.child_by_field_name("body") else {
@@ -415,6 +418,7 @@ fn handle_enum(node: Node, src: &[u8], exported: bool, out: &mut FileFacts) {
                 visibility: visibility(exported),
                 member_of: None,
                 signature_span: None,
+                implicitly_invoked: false,
             });
         }
     }
@@ -469,6 +473,7 @@ fn handle_lexical(node: Node, src: &[u8], exported: bool, out: &mut FileFacts) {
             visibility: visibility(exported),
             member_of: None,
             signature_span: None,
+            implicitly_invoked: false,
         });
     }
 }
@@ -1124,6 +1129,7 @@ fn handle_cjs_module_exports(
         visibility: visibility(true),
         member_of: None,
         signature_span: None,
+        implicitly_invoked: false,
     });
 }
 
@@ -1167,6 +1173,7 @@ fn handle_cjs_named_export(
         visibility: visibility(true),
         member_of: None,
         signature_span: None,
+        implicitly_invoked: false,
     });
 }
 

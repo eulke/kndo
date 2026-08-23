@@ -209,6 +209,7 @@ fn push_declaration(
         exported,
         visibility: visibility(exported, flags.is_internal),
         member_of: None,
+        implicitly_invoked: false,
         signature_span,
     });
     if exported && flags.promote_exports {
@@ -348,6 +349,7 @@ fn handle_method(node: Node, src: &[u8], flags: Flags, out: &mut FileFacts) {
         visibility: visibility(exported, flags.is_internal),
         member_of: Some(SmolStr::new(&receiver_type)),
         signature_span: signature_span_of(node),
+        implicitly_invoked: false,
     });
     push_function_metrics(out, &format!("{receiver_type}.{method_name}"), node);
     if exported && flags.promote_exports {

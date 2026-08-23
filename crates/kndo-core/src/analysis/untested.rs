@@ -240,6 +240,7 @@ mod tests {
             visibility: VisibilityLevel(1),
             member_of: None,
             signature_span: None,
+            implicitly_invoked: false,
         }
     }
 
@@ -618,6 +619,64 @@ mod tests {
         assert!(
             findings.is_empty(),
             "unexpected findings: {:?}",
+            findings.iter().map(|f| &f.message).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn a_machinery_hook_on_a_test_reached_type_is_not_untested() {
+        // `LoadError.fmt` shape: the impl method is Production-rooted (dispatch rule) but no
+        // test ever writes `.fmt(` — the machinery-dispatch rule lets it inherit the
+        // owner's test-reachability instead of false-positiving as a blind spot.
+        let files = vec![
+            file("tests/spec.test.mock", FileRole::Test),
+            file("src/error.mock", FileRole::Production),
+        ];
+        let symbols = vec![
+            symbol(FileId(1), "LoadError"),
+            SymbolNode {
+                member_of: Some(SmolStr::new("LoadError")),
+                implicitly_invoked: true,
+                ..symbol(FileId(1), "fmt")
+            },
+        ];
+        let edges = vec![
+            edge(
+                EdgeKind::Root {
+                    kind: RootKind::Test,
+                    target: NodeRef::File(FileId(0)),
+                },
+                Confidence::Certain,
+            ),
+            edge(
+                EdgeKind::Root {
+                    kind: RootKind::Production,
+                    target: NodeRef::Symbol(SymbolId(0)),
+                },
+                Confidence::Certain,
+            ),
+            edge(
+                EdgeKind::Root {
+                    kind: RootKind::Production,
+                    target: NodeRef::Symbol(SymbolId(1)),
+                },
+                Confidence::Probable,
+            ),
+            edge(
+                EdgeKind::References {
+                    from: NodeRef::File(FileId(0)),
+                    to: SymbolId(0),
+                    kind: RefKind::Read,
+                },
+                Confidence::Certain,
+            ),
+        ];
+        let graph = ProjectGraph::for_test(files, symbols, vec![], edges);
+        let reach = reachability::compute(&graph);
+        let (findings, _) = find_untested(&graph, &reach);
+        assert!(
+            !findings.iter().any(|f| f.message.contains("fmt")),
+            "unexpected: {:?}",
             findings.iter().map(|f| &f.message).collect::<Vec<_>>()
         );
     }

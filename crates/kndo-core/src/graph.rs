@@ -78,6 +78,9 @@ pub struct SymbolNode {
     pub member_of: Option<SmolStr>,
     /// Mirrors [`crate::adapter::Declaration::signature_span`] (RFC 0012 §5).
     pub signature_span: Option<Span>,
+    /// Mirrors [`crate::adapter::Declaration::implicitly_invoked`] (RFC 0005 §1's
+    /// machinery-dispatch rule) — reachability derives the implicit owner → member edge.
+    pub implicitly_invoked: bool,
 }
 
 impl SymbolNode {
@@ -2338,7 +2341,7 @@ pub(crate) fn package_owns(manifest_dir: &str, file_dir: &str) -> bool {
 /// an assembly-algorithm change that could produce a different graph from the same facts. Feeds
 /// [`compute_graph_key`] (RFC 0004 §3's "core graph-schema version"); a bump here invalidates
 /// every project's cached `graph.bin` on the next run, same as any other key-input change.
-pub const GRAPH_SCHEMA_VERSION: u32 = 23; // 23: invoked-program rule — PackageNode.executables + EdgeKind::InvokesFile (a test running its workspace binary reaches the binary's Production roots; same inputs assemble more edges, and the rkyv layouts changed); 22: RawMemberType.yields_params list + indexed '?N' projection (rkyv layout change: Option → Vec); 21: RawMemberType.yields_param + N-hop '?'-marked pointer resolution (payload unwrapping); 20: member-type facts (FilePatchMeta.member_types + chained-pointer resolution — RFC 0012 §3-bis cross-file tier); 19: receiver-typed qualifiers (in-scope declarations resolve members; qualified twins each get the edge — same inputs assemble different edges); 18: qualified refs reach the target's member table + glob re-exports alias the target's exported surface (same inputs now assemble more edges — prior snapshots are semantically stale); 17: SymbolKind::Macro (expansion symbols — first-class kind with visibility-scope exemption semantics); 16: VisibilityRung.surface_transitive + surface closure (Provenance::Surface Root edges; RFC 0012 §6, M6); 15: FileNode.string_call_sites + EdgeKind::ReferencesFile (RFC 0017 §5.4); 14: in-source Test roots derived from test_spans containment (adapters no longer emit them); 13: FileNode.test_spans + phase 2.55 test-gated module demotion (sub-file test regions); 12: library-surface fixpoint (phase 2.7 — same inputs now assemble surface Root edges, prior snapshots are semantically stale); 11: PackageNode.workspace_entry (RFC 0013 §4); 10: patch layer (RFC 0013 §4 — Edge.owner, FilePatchMeta, extraction-only stored diagnostics); 9: SymbolMetrics.token_count (RFC 0005 §11); 8: function_metrics (RFC 0005 §6); 7: cycle policies (§8); 6: PackageNode surface (RFC 0011 §4); 5: ladders + FileNode.unit (RFC 0012 §6); 4: RefKind + signature_span (§5); 3: within (§4)
+pub const GRAPH_SCHEMA_VERSION: u32 = 24; // 24: machinery-dispatch rule — SymbolNode.implicitly_invoked (rkyv layout change; reachability derives implicit owner → member edges at Probable); 23: invoked-program rule — PackageNode.executables + EdgeKind::InvokesFile (a test running its workspace binary reaches the binary's Production roots; same inputs assemble more edges, and the rkyv layouts changed); 22: RawMemberType.yields_params list + indexed '?N' projection (rkyv layout change: Option → Vec); 21: RawMemberType.yields_param + N-hop '?'-marked pointer resolution (payload unwrapping); 20: member-type facts (FilePatchMeta.member_types + chained-pointer resolution — RFC 0012 §3-bis cross-file tier); 19: receiver-typed qualifiers (in-scope declarations resolve members; qualified twins each get the edge — same inputs assemble different edges); 18: qualified refs reach the target's member table + glob re-exports alias the target's exported surface (same inputs now assemble more edges — prior snapshots are semantically stale); 17: SymbolKind::Macro (expansion symbols — first-class kind with visibility-scope exemption semantics); 16: VisibilityRung.surface_transitive + surface closure (Provenance::Surface Root edges; RFC 0012 §6, M6); 15: FileNode.string_call_sites + EdgeKind::ReferencesFile (RFC 0017 §5.4); 14: in-source Test roots derived from test_spans containment (adapters no longer emit them); 13: FileNode.test_spans + phase 2.55 test-gated module demotion (sub-file test regions); 12: library-surface fixpoint (phase 2.7 — same inputs now assemble surface Root edges, prior snapshots are semantically stale); 11: PackageNode.workspace_entry (RFC 0013 §4); 10: patch layer (RFC 0013 §4 — Edge.owner, FilePatchMeta, extraction-only stored diagnostics); 9: SymbolMetrics.token_count (RFC 0005 §11); 8: function_metrics (RFC 0005 §6); 7: cycle policies (§8); 6: PackageNode surface (RFC 0011 §4); 5: ladders + FileNode.unit (RFC 0012 §6); 4: RefKind + signature_span (§5); 3: within (§4)
 
 /// The graph snapshot's cache key (RFC 0004 §3, `cache.rs`'s `graph.bin`): a single digest
 /// folding in the *whole* discovered file set (every path + content hash — this already
@@ -3728,6 +3731,7 @@ pub fn assemble_from_source(
                 visibility: decl.visibility,
                 member_of: decl.member_of.clone(),
                 signature_span: decl.signature_span,
+                implicitly_invoked: decl.implicitly_invoked,
             });
         }
         symbol_range_per_file[i] = (start, symbols.len() as u32);
@@ -4152,6 +4156,7 @@ mod tests {
             visibility: VisibilityLevel(vis),
             member_of: member_of.map(SmolStr::new),
             signature_span: None,
+            implicitly_invoked: false,
         };
         let symbols = vec![
             sym("Widget", 1, None, 1, 20),            // surface seed (rooted below)
@@ -4294,6 +4299,7 @@ mod tests {
                         visibility: VisibilityLevel(1),
                         member_of: None,
                         signature_span: None,
+                        implicitly_invoked: false,
                     });
                 } else if let Some(name) = line.strip_prefix("private-decl ") {
                     facts.declarations.push(Declaration {
@@ -4304,6 +4310,7 @@ mod tests {
                         visibility: VisibilityLevel(0),
                         member_of: None,
                         signature_span: None,
+                        implicitly_invoked: false,
                     });
                 } else if let Some(rest) = line
                     .strip_prefix("member-decl ")
@@ -4325,6 +4332,24 @@ mod tests {
                         visibility: VisibilityLevel(exported as u8),
                         member_of: Some(SmolStr::new(owner)),
                         signature_span: None,
+                        implicitly_invoked: false,
+                    });
+                } else if let Some(rest) = line.strip_prefix("member-implicit ") {
+                    // `member-implicit <owner> <name>` — a machinery-dispatched member
+                    // (RFC 0005 §1's machinery-dispatch rule): invoked through its owner,
+                    // never by name at the call site.
+                    let mut parts = rest.splitn(2, ' ');
+                    let owner = parts.next().unwrap_or("");
+                    let name = parts.next().unwrap_or("");
+                    facts.declarations.push(Declaration {
+                        name: SmolStr::new(name),
+                        kind: SymbolKind::Method,
+                        span: Span::default(),
+                        exported: false,
+                        visibility: VisibilityLevel(0),
+                        member_of: Some(SmolStr::new(owner)),
+                        signature_span: None,
+                        implicitly_invoked: true,
                     });
                 } else if let Some(rest) = line
                     .strip_prefix("import ")
@@ -4524,6 +4549,7 @@ mod tests {
                         visibility: VisibilityLevel(1),
                         member_of: None,
                         signature_span: None,
+                        implicitly_invoked: false,
                     });
                 } else if let Some(rest) = line.strip_prefix("import-at ") {
                     // `import-at <line> <specifier>` — a plain import sited at a line (for

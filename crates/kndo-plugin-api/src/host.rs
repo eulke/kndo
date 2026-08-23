@@ -385,6 +385,7 @@ fn from_wit_facts(facts: w::FileFacts) -> FileFacts {
             visibility: kndo_core::adapter::VisibilityLevel(0),
             member_of: d.member_of.map(|s| SmolStr::new(&s)),
             signature_span: None,
+            implicitly_invoked: false,
         })
         .collect();
 

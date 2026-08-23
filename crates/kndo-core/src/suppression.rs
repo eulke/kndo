@@ -472,6 +472,7 @@ mod tests {
             visibility: VisibilityLevel(0),
             member_of: None,
             signature_span: None,
+            implicitly_invoked: false,
         }
     }
 

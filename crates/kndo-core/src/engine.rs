@@ -1618,6 +1618,7 @@ mod tests {
                         visibility: crate::adapter::VisibilityLevel(1),
                         member_of: None,
                         signature_span: None,
+                        implicitly_invoked: false,
                     });
                 } else if let Some(name) = line.strip_prefix("ref ") {
                     facts.references.push(crate::adapter::RawReference {

@@ -264,6 +264,7 @@ mod tests {
             visibility: VisibilityLevel(visibility),
             member_of: None,
             signature_span: None,
+            implicitly_invoked: false,
         }
     }
 

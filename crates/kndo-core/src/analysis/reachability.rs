@@ -16,6 +16,8 @@
 //! only once it's reached. (The symbol→owner edge was originally caught dogfooding the Go
 //! adapter: `func main()` was a root but `main.go` was never enqueued.)
 
+use rustc_hash::FxHashMap as HashMap;
+
 use crate::graph::ProjectGraph;
 use crate::vocab::{Confidence, EdgeKind, NodeRef, RootKind};
 
@@ -110,6 +112,80 @@ fn kind_index(kind: RootKind) -> usize {
     }
 }
 
+/// The invoked-program rule's target sets (RFC 0005 §1): per file, its Production `Root`
+/// symbols as dense node indices. *Executing* a file as a program runs its entry point —
+/// unlike importing it, which runs only load-time code — so an `InvokesFile` edge fans out
+/// to these implicit targets besides the file itself. Test/Tooling roots inside the invoked
+/// file stay out: running the binary does not run its inline tests.
+fn production_root_symbols_per_file(
+    graph: &ProjectGraph,
+    files_len: usize,
+) -> Vec<Vec<(u32, Confidence)>> {
+    let mut roots: Vec<Vec<(u32, Confidence)>> = vec![Vec::new(); files_len];
+    for edge in &graph.edges {
+        if let EdgeKind::Root {
+            kind: RootKind::Production,
+            target: NodeRef::Symbol(s),
+        } = edge.kind
+        {
+            let owner = graph.symbols[s.0 as usize].file.0 as usize;
+            roots[owner].push(((files_len + s.0 as usize) as u32, edge.confidence));
+        }
+    }
+    roots
+}
+
+/// The machinery-dispatch rule's implicit `(owner, member)` edges (RFC 0005 §1): a member
+/// marked `implicitly_invoked` is exercised by the language's own machinery whenever its
+/// OWNER is used — the call site never writes its name, so no reference edge can exist. The
+/// owner resolves in the member's own file (the `member_of` convention); every same-name
+/// candidate links (twins included). Traversed at `Probable` — using the type is plausibly
+/// using the hook, degrade toward silence.
+fn machinery_dispatch_edges(graph: &ProjectGraph, files_len: usize) -> Vec<(u32, u32)> {
+    let members = machinery_members_by_owner(graph, files_len);
+    if members.is_empty() {
+        return Vec::new();
+    }
+    link_owners_to_hooks(graph, files_len, &members)
+}
+
+/// The flagged members, grouped under `(file, owner name)` — the key their owner resolves by.
+fn machinery_members_by_owner(
+    graph: &ProjectGraph,
+    files_len: usize,
+) -> HashMap<(u32, &smol_str::SmolStr), Vec<u32>> {
+    let mut members: HashMap<(u32, &smol_str::SmolStr), Vec<u32>> = HashMap::default();
+    for (i, s) in graph.symbols.iter().enumerate() {
+        if s.implicitly_invoked {
+            if let Some(owner) = &s.member_of {
+                members
+                    .entry((s.file.0, owner))
+                    .or_default()
+                    .push((files_len + i) as u32);
+            }
+        }
+    }
+    members
+}
+
+/// Each owner declaration paired with its file's flagged members of that name.
+fn link_owners_to_hooks(
+    graph: &ProjectGraph,
+    files_len: usize,
+    members: &HashMap<(u32, &smol_str::SmolStr), Vec<u32>>,
+) -> Vec<(u32, u32)> {
+    let mut edges: Vec<(u32, u32)> = Vec::new();
+    for (i, s) in graph.symbols.iter().enumerate() {
+        if s.member_of.is_none() {
+            if let Some(hooks) = members.get(&(s.file.0, &s.name)) {
+                let owner = (files_len + i) as u32;
+                edges.extend(hooks.iter().map(|&m| (owner, m)));
+            }
+        }
+    }
+    edges
+}
+
 pub fn compute(graph: &ProjectGraph) -> ReachabilityMap {
     let files_len = graph.files.len();
     let n = files_len + graph.symbols.len();
@@ -130,22 +206,8 @@ pub fn compute(graph: &ProjectGraph) -> ReachabilityMap {
         }
     }
 
-    // The invoked-program rule's target sets (RFC 0005 §1): per file, its Production `Root`
-    // symbols. *Executing* a file as a program runs its entry point — unlike importing it,
-    // which runs only load-time code — so an `InvokesFile` edge fans out to these implicit
-    // targets besides the file itself. Test/Tooling roots inside the invoked file stay out:
-    // running the binary does not run its inline tests.
-    let mut prod_roots_by_file: Vec<Vec<(u32, Confidence)>> = vec![Vec::new(); files_len];
-    for edge in &graph.edges {
-        if let EdgeKind::Root {
-            kind: RootKind::Production,
-            target: NodeRef::Symbol(s),
-        } = edge.kind
-        {
-            let owner = graph.symbols[s.0 as usize].file.0 as usize;
-            prod_roots_by_file[owner].push(((files_len + s.0 as usize) as u32, edge.confidence));
-        }
-    }
+    let prod_roots_by_file = production_root_symbols_per_file(graph, files_len);
+    let machinery_edges = machinery_dispatch_edges(graph, files_len);
 
     let mut degree: Vec<u32> = vec![0; n];
     let count = |degree: &mut Vec<u32>, from: usize, extra: usize| degree[from] += extra as u32;
@@ -173,6 +235,10 @@ pub fn compute(graph: &ProjectGraph) -> ReachabilityMap {
     // The module-load rule's implicit symbol → owner edge, one per symbol.
     for i in 0..graph.symbols.len() {
         degree[files_len + i] += 1;
+    }
+    // The machinery-dispatch rule's implicit owner → member edges.
+    for &(owner, _) in &machinery_edges {
+        degree[owner as usize] += 1;
     }
 
     let mut offsets: Vec<u32> = Vec::with_capacity(n + 1);
@@ -246,6 +312,14 @@ pub fn compute(graph: &ProjectGraph) -> ReachabilityMap {
             files_len + i,
             symbol.file.0 as usize,
             Confidence::Certain,
+        );
+    }
+    for &(owner, member) in &machinery_edges {
+        push_edge(
+            &mut cursor,
+            owner as usize,
+            member as usize,
+            Confidence::Probable,
         );
     }
 
@@ -347,6 +421,7 @@ mod tests {
             visibility: VisibilityLevel(1),
             member_of: None,
             signature_span: None,
+            implicitly_invoked: false,
         }
     }
 
@@ -700,6 +775,47 @@ mod tests {
         assert!(
             !reach.reachable_from(RootKind::Test, NodeRef::Symbol(SymbolId(2))),
             "a non-Production root in the invoked file is not part of the program's execution"
+        );
+    }
+
+    #[test]
+    fn machinery_dispatched_members_inherit_their_owners_colors() {
+        // The machinery-dispatch rule: `fmt` is never written at a call site — using the
+        // owner IS plausibly using the hook, so the member inherits the owner's colors at
+        // Probable. An owner nothing reaches propagates nothing.
+        let files = vec![file("a.ts")];
+        let symbols = vec![
+            symbol(FileId(0), "Token"),
+            SymbolNode {
+                member_of: Some(SmolStr::new("Token")),
+                implicitly_invoked: true,
+                ..symbol(FileId(0), "fmt")
+            },
+            symbol(FileId(0), "Orphan"),
+            SymbolNode {
+                member_of: Some(SmolStr::new("Orphan")),
+                implicitly_invoked: true,
+                ..symbol(FileId(0), "drop")
+            },
+        ];
+        let edges = vec![edge(
+            EdgeKind::Root {
+                kind: RootKind::Test,
+                target: NodeRef::Symbol(SymbolId(0)),
+            },
+            Confidence::Certain,
+        )];
+        let graph = ProjectGraph::for_test(files, symbols, vec![], edges);
+        let reach = compute(&graph);
+        assert_eq!(
+            reach.get(NodeRef::Symbol(SymbolId(1))),
+            (Reachability::TestOnly, Confidence::Probable),
+            "the hook inherits the owner's color, capped at Probable"
+        );
+        assert_eq!(
+            reach.get(NodeRef::Symbol(SymbolId(3))).0,
+            Reachability::Unreachable,
+            "an unreached owner propagates nothing"
         );
     }
 

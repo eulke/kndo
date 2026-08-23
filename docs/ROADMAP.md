@@ -1117,6 +1117,25 @@ Remaining top family: the WASM host↔guest boundary (`kndo-plugin-api`, 71) —
 divergence, no honest static fact without heuristics. Next: implicit trait-machinery
 dispatch (`fmt` et al.), task #89.
 
+### M6 progress — `untested` noise: the machinery-dispatch rule ✅ (landed 2026-08-23)
+
+The second false family (task #89): `LoadError.fmt` and every hook the language machinery
+invokes **namelessly** — a `{}` calls `fmt`, `==` calls `eq`, scope end calls `drop`, `for`
+calls `next` — can never earn a reference edge, so no test ever "reached" one.
+`Declaration.implicitly_invoked` is the contract fact (curated criterion: *the call site
+never writes the method's name* — WHICH traits qualify is the adapter's knowledge; Rust
+marks the stdlib fmt hooks, operators, `Drop`, `Default`, comparison + `Hash`,
+`Index`/`Deref`, `Iterator`, `Future`, `FromStr`, `Error`; name-called methods like
+`.clone()` stay out, the duck fallback covers them). Reachability's **machinery-dispatch
+rule** derives the implicit owner → member edge at `Probable` — inherit the owner's colors,
+degrade toward silence — composing with (not replacing) the dispatch rule's `Probable`
+Production roots: the root keeps hooks alive with zero owner usage, the edge is what lets a
+`Display` impl on a test-covered type stop reading as a blind spot. Conformance fixture
+`machinery-display-impl` (schema v24, rust facts v9). Dogfood: `untested` 128 → 114 (the
+`fmt`/`drop` family exactly); ripgrep 744 → 701 untested, every other category untouched.
+Third-party traits (serde et al.) stay unmodeled — the curated fact table beyond the stdlib
+is the recorded future source.
+
 ## Post-1.0 parking lot
 **RFC 0016 — uniform component model** (the accepted plan, phased in its §8, **all four phases
 landed**: 0 freeze reservations, 1 host-mediated content channel for plugin graph hooks

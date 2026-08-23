@@ -1213,6 +1213,7 @@ fn push_declaration(
         exported,
         visibility: kndo_core::adapter::VisibilityLevel(level),
         member_of: member_of.map(SmolStr::new),
+        implicitly_invoked: false,
         signature_span,
     });
 }
@@ -1586,6 +1587,48 @@ fn handle_trait(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
     }
 }
 
+/// Stdlib traits whose methods the language machinery invokes **namelessly** — the curated
+/// criterion is "the call site never writes the method's name": formatting hooks (`{}`,
+/// `{:?}` and the numeric formats), destructors (scope end), comparison and arithmetic
+/// operators, indexing/deref sugar, loop and await protocols, `str::parse`'s `from_str`,
+/// error-chain reporting, and `Default`'s derive/`unwrap_or_default` machinery. Name-called
+/// trait methods (`.clone()`, `.into()`, `.as_ref()`) are deliberately absent — the duck
+/// fallback already reaches those from their call sites. Third-party traits (serde et al.)
+/// stay unmodeled: a curated fact table beyond the stdlib is the recorded future source.
+fn is_machinery_trait(name: &str) -> bool {
+    matches!(
+        name,
+        // fmt hooks
+        "Display" | "Debug" | "Octal" | "Binary" | "LowerHex" | "UpperHex" | "LowerExp"
+            | "UpperExp" | "Pointer"
+            // lifecycle
+            | "Drop" | "Default"
+            // comparison + hashing machinery
+            | "PartialEq" | "Eq" | "PartialOrd" | "Ord" | "Hash"
+            // operator overloads
+            | "Add" | "Sub" | "Mul" | "Div" | "Rem" | "Neg" | "Not" | "BitAnd" | "BitOr"
+            | "BitXor" | "Shl" | "Shr" | "AddAssign" | "SubAssign" | "MulAssign"
+            | "DivAssign" | "RemAssign" | "BitAndAssign" | "BitOrAssign" | "BitXorAssign"
+            | "ShlAssign" | "ShrAssign"
+            // sugar + protocols
+            | "Index" | "IndexMut" | "Deref" | "DerefMut" | "Iterator" | "IntoIterator"
+            | "DoubleEndedIterator" | "ExactSizeIterator" | "Future" | "FromStr" | "Error"
+    )
+}
+
+/// Flip [`kndo_core::adapter::Declaration::implicitly_invoked`] on the just-pushed member —
+/// searched from the end, where `handle_function` left it.
+fn mark_implicitly_invoked(out: &mut FileFacts, owner: &str, name: &str) {
+    if let Some(decl) = out
+        .declarations
+        .iter_mut()
+        .rev()
+        .find(|d| d.name == name && d.member_of.as_deref() == Some(owner))
+    {
+        decl.implicitly_invoked = true;
+    }
+}
+
 fn handle_impl(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
     // The self type's bare name: `impl S`, `impl S<T>`, `impl a::S` all own members under `S`.
     let Some(type_node) = item.child_by_field_name("type") else {
@@ -1609,6 +1652,13 @@ fn handle_impl(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
     }
 
     let is_trait_impl = item.child_by_field_name("trait").is_some();
+    // Machinery traits (RFC 0005 §1's machinery-dispatch rule): the call site never writes
+    // the method's name — an operator, a `{}` hook, a scope end, a `for` loop — so members
+    // of these impls are marked `implicitly_invoked` and inherit their owner's colors.
+    let is_machinery = item
+        .child_by_field_name("trait")
+        .and_then(|t| last_type_identifier(t, src))
+        .is_some_and(|t| is_machinery_trait(&t));
     if let Some(body) = item.child_by_field_name("body") {
         let mut members = body.walk();
         let mut pending = PendingAttrs::default();
@@ -1638,6 +1688,9 @@ fn handle_impl(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
                                 ))),
                                 confidence: Confidence::Probable,
                             });
+                            if is_machinery {
+                                mark_implicitly_invoked(out, &self_type, text(mname, src));
+                            }
                         }
                     }
                 }
@@ -2884,6 +2937,36 @@ mod tests {
             .expect("return fact");
         assert_eq!(m.yields, "Result");
         assert_eq!(m.yields_params, ["ConfiguredHIR", "Error"]);
+    }
+
+    #[test]
+    fn machinery_trait_impl_members_are_implicitly_invoked() {
+        let f = facts(
+            "use std::fmt;\n\
+             struct Token;\n\
+             impl fmt::Display for Token {\n\
+             \x20   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { todo!() }\n\
+             }\n\
+             impl Parser for Token {\n\
+             \x20   fn parse(&self) -> u8 { 0 }\n\
+             }\n\
+             impl Token {\n\
+             \x20   fn label(&self) -> u8 { 1 }\n\
+             }\n",
+        );
+        let flagged = |name: &str| {
+            f.declarations
+                .iter()
+                .find(|d| d.name == name && d.member_of.as_deref() == Some("Token"))
+                .unwrap()
+                .implicitly_invoked
+        };
+        assert!(flagged("fmt"), "Display's hook is machinery-dispatched");
+        assert!(
+            !flagged("parse"),
+            "a non-machinery trait's methods dispatch by other means (roots cover them)"
+        );
+        assert!(!flagged("label"), "inherent methods are name-called");
     }
 
     #[test]

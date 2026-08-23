@@ -113,6 +113,21 @@ field). Two rules govern the traversal:
   (running the binary runs neither its inline tests nor its tooling entries). Like
   `ReferencesFile`, this is liveness evidence only — no finding-creating analysis reads it,
   so a false edge can only ever suppress findings.
+- **Machinery-dispatch rule:** a member the adapter marked `implicitly_invoked`
+  (contracts §2) is exercised by the language's own machinery whenever its OWNER is used —
+  an operator (`==` → `eq`), a formatting hook (`{}` → `fmt`), a destructor (scope end →
+  `drop`), a loop protocol (`for` → `next`). The call site never writes the method's name,
+  which is exactly why no reference edge can exist for it. Reachability derives an implicit
+  owner → member edge at `Probable` (using the type IS plausibly using the hook — degrade
+  toward silence), the owner resolved by `member_of` in the member's own file, twins
+  included; an unreached owner propagates nothing. WHICH traits/protocols qualify is each
+  adapter's curated knowledge (Rust: the stdlib fmt hooks, operators, `Drop`, `Hash`,
+  `Iterator`, `Future`, `FromStr`, `Error` — docs/adapters/rust.md §2); name-called trait
+  methods (`.clone()`, `.into()`) stay out — the duck fallback already reaches those. This
+  composes with (not replaces) the dispatch rule's `Probable` Production roots on
+  trait-impl members: the root keeps a hook alive with zero owner usage, the implicit edge
+  lets it *inherit the owner's colors* — which is what `untested` (§9) needs to stop
+  calling a formatting hook a test-blind spot when its type is test-covered.
 
 File attribution (the pre-RFC-0012 behavior, still what a `within`-less adapter gets) is the
 deliberate over-approximation: everything a live file references stays alive. Every

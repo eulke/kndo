@@ -322,6 +322,7 @@ fn push_declaration(out: &mut FileFacts, name: &str, kind: SymbolKind, item: Nod
         visibility: VisibilityLevel(0),
         member_of: None,
         signature_span: None,
+        implicitly_invoked: false,
     });
 }
 

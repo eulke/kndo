@@ -69,6 +69,7 @@ impl LanguageAdapter for MiniAdapter {
                     visibility: kndo_core::adapter::VisibilityLevel(1),
                     member_of: None,
                     signature_span: None,
+                    implicitly_invoked: false,
                 });
             } else if let Some(category) = line.strip_prefix("allow ") {
                 facts.suppressions.push(RawSuppression {

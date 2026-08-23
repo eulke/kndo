@@ -326,6 +326,17 @@ pub struct Declaration {
     /// `private-type-leak` is deliberately callables-only rather than falsely accusing
     /// exported-struct/unexported-field shapes).
     pub signature_span: Option<Span>,
+    /// This member is invoked by the language's own machinery when its OWNER is used, never
+    /// by name at the call site (RFC 0005 §1's machinery-dispatch rule): an operator overload
+    /// (`==` → `eq`), a formatting hook (`{}` → `fmt`), a destructor (scope end → `drop`), a
+    /// loop protocol (`for` → `next`). WHICH traits/protocols qualify is the adapter's
+    /// curated knowledge — the criterion is "the call site never writes the method's name",
+    /// which is exactly why no reference edge can ever exist for these. Reachability derives
+    /// an implicit owner → member edge at `Probable` (using the type IS plausibly using the
+    /// hook — degrade toward silence); requires `member_of`, ignored without it. Name-called
+    /// trait methods (`.clone()`, `.into()`) stay out — the duck fallback already reaches
+    /// those. Default `false`.
+    pub implicitly_invoked: bool,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
