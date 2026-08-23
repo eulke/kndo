@@ -172,6 +172,14 @@ pub struct PackageNode {
     /// (RFC 0013 §4: the patch rebuilds the workspace index from the snapshot; `surface`
     /// can't stand in — it drops out-of-tree entries and confidences).
     pub workspace_entry: Option<(ProjectPath, Confidence)>,
+    /// Every resolved target file this manifest declares — the union of
+    /// `ManifestFacts::roots` and `ManifestFacts::resolved_entries`, deduped in declaration
+    /// order. These are the package's module-tree anchors: what a resolver anchors
+    /// intra-package paths on when the language's directory convention doesn't hold (a Rust
+    /// `[[bin]] path = "crates/core/main.rs"` places a whole module tree outside `src/`).
+    /// Persisted for the same RFC 0013 §4 reason as `workspace_entry`: the patch rebuilds
+    /// the workspace index from the snapshot.
+    pub targets: Vec<ProjectPath>,
     /// Mirrors the claiming adapter's [`crate::adapter::AdapterDescriptor::resolves_dependency_usage`]
     /// (`true` for the implicit no-manifest package, which declares nothing). `dependency_hygiene`
     /// reads this per `DeclaredDependency::package` to decide whether "zero usage edges" means
@@ -360,6 +368,7 @@ impl ProjectGraph {
                 declares_surface: false,
                 surface: Vec::new(),
                 workspace_entry: None,
+                targets: Vec::new(),
                 resolves_dependency_usage: true,
             }],
             edges,
@@ -762,6 +771,7 @@ fn try_patch(
             .or_insert_with(|| crate::adapter::WorkspaceMember {
                 dir: SmolStr::new(core_dirname(manifest.0.as_str())),
                 entry: pkg.workspace_entry.clone(),
+                targets: pkg.targets.clone(),
             });
     }
     // Unit reverse-index (Java, docs/adapters/java.md §3): an import specifier there IS a
@@ -1910,6 +1920,25 @@ pub(crate) fn core_dirname(path: &str) -> &str {
     }
 }
 
+/// A manifest's resolved target files (`PackageNode::targets` / `WorkspaceMember::targets`):
+/// the union of its root targets (bins) and import entries (lib/main/module/exports),
+/// deduped in declaration order. Shared by the full-build member index and the package-node
+/// builder so both carry the same anchors.
+fn manifest_targets(facts: &crate::adapter::ManifestFacts) -> Vec<crate::adapter::ProjectPath> {
+    let mut targets: Vec<crate::adapter::ProjectPath> = Vec::new();
+    for path in facts
+        .roots
+        .iter()
+        .map(|r| &r.target)
+        .chain(facts.resolved_entries.iter().map(|(path, _)| path))
+    {
+        if !targets.contains(path) {
+            targets.push(path.clone());
+        }
+    }
+    targets
+}
+
 /// Does `ancestor_dir` govern (contain, at any depth, or equal) `dir`? The empty (project-root)
 /// dir governs everything. Doubles as both RFC 0011 §3's nearest-manifest-ancestor test (this
 /// module's own use) and a generic "is A an ancestor-or-self of B" check other analyses reuse
@@ -1928,7 +1957,7 @@ pub(crate) fn package_owns(manifest_dir: &str, file_dir: &str) -> bool {
 /// an assembly-algorithm change that could produce a different graph from the same facts. Feeds
 /// [`compute_graph_key`] (RFC 0004 §3's "core graph-schema version"); a bump here invalidates
 /// every project's cached `graph.bin` on the next run, same as any other key-input change.
-pub const GRAPH_SCHEMA_VERSION: u32 = 16; // 16: VisibilityRung.surface_transitive + surface closure (Provenance::Surface Root edges; RFC 0012 §6, M6); 15: FileNode.string_call_sites + EdgeKind::ReferencesFile (RFC 0017 §5.4); 14: in-source Test roots derived from test_spans containment (adapters no longer emit them); 13: FileNode.test_spans + phase 2.55 test-gated module demotion (sub-file test regions); 12: library-surface fixpoint (phase 2.7 — same inputs now assemble surface Root edges, prior snapshots are semantically stale); 11: PackageNode.workspace_entry (RFC 0013 §4); 10: patch layer (RFC 0013 §4 — Edge.owner, FilePatchMeta, extraction-only stored diagnostics); 9: SymbolMetrics.token_count (RFC 0005 §11); 8: function_metrics (RFC 0005 §6); 7: cycle policies (§8); 6: PackageNode surface (RFC 0011 §4); 5: ladders + FileNode.unit (RFC 0012 §6); 4: RefKind + signature_span (§5); 3: within (§4)
+pub const GRAPH_SCHEMA_VERSION: u32 = 17; // 17: SymbolKind::Macro (expansion symbols — first-class kind with visibility-scope exemption semantics); 16: VisibilityRung.surface_transitive + surface closure (Provenance::Surface Root edges; RFC 0012 §6, M6); 15: FileNode.string_call_sites + EdgeKind::ReferencesFile (RFC 0017 §5.4); 14: in-source Test roots derived from test_spans containment (adapters no longer emit them); 13: FileNode.test_spans + phase 2.55 test-gated module demotion (sub-file test regions); 12: library-surface fixpoint (phase 2.7 — same inputs now assemble surface Root edges, prior snapshots are semantically stale); 11: PackageNode.workspace_entry (RFC 0013 §4); 10: patch layer (RFC 0013 §4 — Edge.owner, FilePatchMeta, extraction-only stored diagnostics); 9: SymbolMetrics.token_count (RFC 0005 §11); 8: function_metrics (RFC 0005 §6); 7: cycle policies (§8); 6: PackageNode surface (RFC 0011 §4); 5: ladders + FileNode.unit (RFC 0012 §6); 4: RefKind + signature_span (§5); 3: within (§4)
 
 /// The graph snapshot's cache key (RFC 0004 §3, `cache.rs`'s `graph.bin`): a single digest
 /// folding in the *whole* discovered file set (every path + content hash — this already
@@ -2915,6 +2944,7 @@ pub fn assemble_from_source(
         declares_surface: false,
         surface: Vec::new(),
         workspace_entry: None,
+        targets: Vec::new(),
         resolves_dependency_usage: true,
     }];
     let mut manifest_package: Vec<Option<PackageId>> = vec![None; manifests_per_file.len()];
@@ -2936,6 +2966,7 @@ pub fn assemble_from_source(
                 declares_surface: facts.declares_surface,
                 surface,
                 workspace_entry: facts.resolved_entries.first().cloned(),
+                targets: manifest_targets(facts),
                 resolves_dependency_usage: adapters[*adapter_index]
                     .descriptor()
                     .resolves_dependency_usage,
@@ -3181,6 +3212,7 @@ pub fn assemble_from_source(
             .or_insert_with(|| crate::adapter::WorkspaceMember {
                 dir: SmolStr::new(core_dirname(files[i].path.0.as_str())),
                 entry: facts.resolved_entries.first().cloned(),
+                targets: manifest_targets(facts),
             });
     }
 

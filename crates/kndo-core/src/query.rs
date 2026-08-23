@@ -2212,6 +2212,7 @@ mod tests {
         graph = graph.with_packages(vec![
             PackageNode {
                 workspace_entry: None,
+                targets: Vec::new(),
                 manifest: Some(ProjectPath("a/package.json".into())),
                 name: Some("dup".into()),
                 private: false,
@@ -2221,6 +2222,7 @@ mod tests {
             },
             PackageNode {
                 workspace_entry: None,
+                targets: Vec::new(),
                 manifest: Some(ProjectPath("b/package.json".into())),
                 name: Some("dup".into()),
                 private: false,

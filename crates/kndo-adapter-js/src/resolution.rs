@@ -323,6 +323,7 @@ mod tests {
                     WorkspaceMember {
                         dir: SmolStr::new(dir),
                         entry: entry.map(|e| (ProjectPath(SmolStr::new(e)), Confidence::Certain)),
+                        targets: Vec::new(),
                     },
                 )
             })

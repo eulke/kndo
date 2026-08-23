@@ -188,6 +188,7 @@ mod tests {
             WorkspaceMember {
                 dir: SmolStr::new(""),
                 entry: None,
+                targets: Vec::new(),
             },
         );
         let ctx = ResolveCtx::new(&known).with_workspace_members(&members);
@@ -220,6 +221,7 @@ mod tests {
             WorkspaceMember {
                 dir: SmolStr::new("moda"),
                 entry: None,
+                targets: Vec::new(),
             },
         );
         members.insert(
@@ -227,6 +229,7 @@ mod tests {
             WorkspaceMember {
                 dir: SmolStr::new("modb"),
                 entry: None,
+                targets: Vec::new(),
             },
         );
         let ctx = ResolveCtx::new(&known).with_workspace_members(&members);
@@ -262,6 +265,7 @@ mod tests {
             WorkspaceMember {
                 dir: SmolStr::new(""),
                 entry: None,
+                targets: Vec::new(),
             },
         );
         let ctx = ResolveCtx::new(&known).with_workspace_members(&members);

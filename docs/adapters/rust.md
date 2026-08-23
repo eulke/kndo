@@ -73,7 +73,9 @@ units in v1), `enum` + variants (variants as `EnumMember` members of the enum, R
 `union`, `trait` (+ its method signatures as members of the trait), `impl` methods and
 associated consts/types (members of the **self type**'s name; `impl Trait for T` methods are
 members of `T` and additionally emit an `Implement` reference to `Trait`), `const`,
-`static`, `type` aliases, `macro_rules!` (kind `Other("macro")`). Inline modules
+`static`, `type` aliases, `macro_rules!` (kind `Macro` — the contract's expansion-symbol
+kind: visibility-scope analyses skip it as a subject and treat references attributed to it
+as expansion-site-wide, core-traits.md §1). Inline modules
 (`mod x { … }`) **flatten**: their items extract at file level, undecorated — file ≈ module
 is this adapter's standing approximation, stated once here and leaned on everywhere.
 `mod foo;` (the file-declaring form) is an import, not a declaration (§0).
@@ -88,10 +90,21 @@ is this adapter's standing approximation, stated once here and leaned on everywh
   is `File` scope. Descendant files reaching a parent's private item is real Rust and will
   read as a `possible`-confidence resolution miss, not a false `unused` — accepted, rare.
 - `pub(crate)` → level 1 (`Package` scope — crate = kndo package, exactly).
-- `pub(super)` / `pub(in path)` → level 1 as well, deliberately **widened**: mapping them
-  down to `File` would fabricate `internal-only`/leak findings; widening to the crate rung
-  only ever silences, never accuses. Recorded as the conservative direction.
-- `pub` → level 2. `exported` = any `pub*` form.
+- `pub(self)` → level 0 — it IS `private`, spelled long.
+- `pub(super)` on an item **inside an inline mod** → level 0, not exported: `super` of an
+  inline mod is a module within this same file, so under file ≈ module the item never
+  leaves the file (widening it to the crate rung fabricated `internal-only` on ripgrep's
+  `mod convert { pub(super) fn … }` — M6 residuals).
+- Top-level `pub(super)` / `pub(in path)` → level 1, deliberately **widened**: `super` of
+  the file's own module leaves the file, and mapping these down to `File` would fabricate
+  `internal-only`/leak findings; widening to the crate rung only ever silences an
+  `internal-only`, never accuses. Recorded as the conservative direction — with one known
+  residual on the other side: `private-type-leak` can pair a widened `pub(super)` subject
+  with a genuinely narrower type from the *parent* module (ripgrep's
+  `parse.rs#lookup(… dyn Flag)`) and accuse where real Rust visibility is coherent.
+  Accepted until rungs are module-relative rather than file-relative.
+- `pub` → level 2. `exported` = any `pub*` form except `pub(self)` and
+  inline-mod `pub(super)`.
 
 **Unit:** `None`. Rust files never resolve each other's names implicitly — everything
 travels through `use` or a qualified path — so Go's `unit` machinery stays off.
@@ -165,6 +178,24 @@ literals; skipped → `line_comment`, `block_comment`. Winnowing parameters shar
   same reconstruction macro invocations get, attributed `within` the macro — ripgrep's
   `err_message!` calls `crate::messages::set_errored()` from a template, which was otherwise
   invisible and false-positived the callee as `unused`.
+- `#[macro_use] mod x;` sets `opaque_namespace_use: true` on the mod import: it globs the
+  child's macro namespace into crate scope — invocations anywhere reach its `macro_rules!`
+  with no import for a binding to express, which is precisely RFC 0005 §1's wildcard truth.
+  The per-macro no-wildcard stance (§2's table) is untouched; this is one edge per
+  `#[macro_use]`, not one per invocation.
+- A path through a same-file **inline mod** (`convert::usize(…)` with `mod convert { … }`
+  right there) emits a *bare* reference: extraction flattens inline-mod bodies, so the
+  target is a same-file symbol — routing it through qualifier resolution had nothing to
+  bind to and false-positived the target as `unused`.
+- A qualified path whose qualifier is a **type** (`logger::Logger::init()`) additionally
+  references the type itself (`Logger`, resolved through the segment before it): the
+  traversal uses the type, and without the reference it read as file-local and
+  `internal-only` advised narrowing it.
+- A `crate::`/`self::`/`super::` path that crosses into type space
+  (`crate::logger::Logger::init()`) splits at the first uppercase segment: the module
+  prefix (`crate::logger`) becomes the import specifier binding the type (`Logger`), the
+  type is referenced, and the trailing item resolves through the member table — an unsplit
+  specifier resolved to no file and the whole chain read as dead.
 
 ## 3. Resolution
 
@@ -174,6 +205,12 @@ file set:
 1. **Anchor.** `crate::` → the owning package's crate root: the nearest ancestor directory
    with a `Cargo.toml` whose `src/lib.rs` exists (else `src/main.rs`; both existing prefers
    `lib.rs` — bins re-import through the lib in every workspace kndo has to care about).
+   When the convention misses entirely, the manifest's **declared targets** decide
+   (`WorkspaceMember::targets`, fed by `[[bin]] path` / `[lib] path`): among the owning
+   member's target files whose directory contains the importing file, the deepest wins and
+   its directory is the anchor — ripgrep's root manifest declares
+   `[[bin]] path = "crates/core/main.rs"`, and without this every `crate::` path in that
+   tree was unresolvable and the whole subtree read as dead.
    `self::` → the importing file's own module directory (a *directory-owner* file — `mod.rs`,
    `lib.rs`, `main.rs` — owns its directory; a named file `a.rs` owns child directory `a/`).
    `super::` → one module step up, iterated.

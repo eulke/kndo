@@ -330,8 +330,11 @@ fn module_file_for_dir(dir: &str, ctx: &ResolveCtx<'_>) -> Option<String> {
     None
 }
 
-/// The owning package's `src` directory and crate-root file (`lib.rs` preferred over
-/// `main.rs`, spec §3): nearest ancestor with a Cargo.toml.
+/// The owning package's module-tree anchor: its source directory and crate-root file
+/// (`lib.rs` preferred over `main.rs`, spec §3). Nearest ancestor with a Cargo.toml; when
+/// that package doesn't follow the `src/` convention, the manifest's own declared targets
+/// decide — a `[[bin]] path = "crates/core/main.rs"` roots a whole module tree there, and
+/// every `crate::` path inside it anchors on the target file's directory.
 fn crate_root(from: &str, ctx: &ResolveCtx<'_>) -> Option<(String, String)> {
     let mut dir = dirname(from).to_string();
     loop {
@@ -352,13 +355,45 @@ fn crate_root(from: &str, ctx: &ResolveCtx<'_>) -> Option<(String, String)> {
                     return Some((src, path));
                 }
             }
-            return None;
+            return manifest_target_anchor(from, &dir, ctx);
         }
         if dir.is_empty() {
             return None;
         }
         dir = dirname(&dir).to_string();
     }
+}
+
+/// Convention miss (no `src/lib.rs` / `src/main.rs` under the owning manifest): anchor on
+/// the manifest's *declared* targets instead. Among the owning member's target files whose
+/// directory contains `from`, the deepest wins (the target owns its module subtree);
+/// same-directory ties prefer `lib.rs`, mirroring the convention path's preference.
+fn manifest_target_anchor(
+    from: &str,
+    manifest_dir: &str,
+    ctx: &ResolveCtx<'_>,
+) -> Option<(String, String)> {
+    let member = ctx
+        .workspace_members_iter()
+        .find(|m| m.dir.as_str() == manifest_dir)?;
+    let from_dir = dirname(from);
+    member
+        .targets
+        .iter()
+        .map(|t| t.0.as_str())
+        .filter(|t| dir_contains(dirname(t), from_dir))
+        .max_by_key(|t| (dirname(t).len(), basename(t) == "lib.rs"))
+        .map(|t| (dirname(t).to_string(), t.to_string()))
+}
+
+/// Whether `dir` is `from_dir` itself or a path ancestor of it (`""`, the project root,
+/// contains everything).
+fn dir_contains(dir: &str, from_dir: &str) -> bool {
+    dir.is_empty()
+        || from_dir == dir
+        || (from_dir.len() > dir.len()
+            && from_dir.starts_with(dir)
+            && from_dir.as_bytes()[dir.len()] == b'/')
 }
 
 /// Normalize `a/b/../c` and `./` segments — include!/#[path] literals use them.
@@ -502,6 +537,7 @@ mod tests {
                     ProjectPath(SmolStr::new("crates/sib/src/lib.rs")),
                     Confidence::Certain,
                 )),
+                targets: Vec::new(),
             },
         );
         let ctx = ResolveCtx::new(&files)
@@ -540,6 +576,49 @@ mod tests {
     }
 
     #[test]
+    fn declared_targets_anchor_a_module_tree_outside_src() {
+        // ripgrep's shape: the root manifest declares `[[bin]] path = "crates/core/main.rs"`
+        // and there is no `src/` at all — the bin target's directory owns the module tree,
+        // so `crate::` paths from anywhere inside it anchor there (spec §3).
+        let files = known(&[
+            "Cargo.toml",
+            "crates/core/main.rs",
+            "crates/core/logger.rs",
+            "crates/core/flags/mod.rs",
+            "crates/core/flags/parse.rs",
+        ]);
+        let mut members: FxHashMap<SmolStr, WorkspaceMember> = FxHashMap::default();
+        members.insert(
+            SmolStr::new("ripgrep"),
+            WorkspaceMember {
+                dir: SmolStr::new(""),
+                entry: None,
+                targets: vec![ProjectPath(SmolStr::new("crates/core/main.rs"))],
+            },
+        );
+        let ctx = ResolveCtx::new(&files).with_workspace_members(&members);
+        assert_eq!(
+            file_of(resolve(&spec("crate::flags", "crates/core/main.rs"), &ctx)),
+            "crates/core/flags/mod.rs"
+        );
+        // …and from a file two module levels deep, back to a crate-root sibling.
+        assert_eq!(
+            file_of(resolve(
+                &spec("crate::logger", "crates/core/flags/parse.rs"),
+                &ctx
+            )),
+            "crates/core/logger.rs"
+        );
+        assert_eq!(
+            file_of(resolve(
+                &spec("crate::flags::parse", "crates/core/flags/mod.rs"),
+                &ctx
+            )),
+            "crates/core/flags/parse.rs"
+        );
+    }
+
+    #[test]
     fn workspace_subpaths_are_deep_imports_into_the_sibling() {
         let files = known(&["crates/sib/src/lib.rs", "crates/sib/src/internal.rs"]);
         let mut members: FxHashMap<SmolStr, WorkspaceMember> = FxHashMap::default();
@@ -551,6 +630,7 @@ mod tests {
                     ProjectPath(SmolStr::new("crates/sib/src/lib.rs")),
                     Confidence::Certain,
                 )),
+                targets: Vec::new(),
             },
         );
         let ctx = ResolveCtx::new(&files).with_workspace_members(&members);

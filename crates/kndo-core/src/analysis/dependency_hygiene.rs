@@ -271,6 +271,7 @@ mod tests {
         ProjectGraph::for_test(files, vec![], dependencies, edges)
             .with_packages(vec![PackageNode {
                 workspace_entry: None,
+                targets: Vec::new(),
                 manifest: Some(ProjectPath(SmolStr::new("package.json"))),
                 name: Some(SmolStr::new("demo")),
                 private: true,
@@ -338,6 +339,7 @@ mod tests {
         let graph = ProjectGraph::for_test(vec![], vec![], vec![], vec![])
             .with_packages(vec![PackageNode {
                 workspace_entry: None,
+                targets: Vec::new(),
                 manifest: Some(ProjectPath(SmolStr::new("pom.xml"))),
                 name: Some(SmolStr::new("demo")),
                 private: true,

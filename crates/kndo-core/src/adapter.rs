@@ -695,6 +695,11 @@ pub struct WorkspaceMember {
     /// still imported *through its entry* by other members; privateness only says its exports
     /// aren't roots on their own.
     pub entry: Option<(ProjectPath, Confidence)>,
+    /// Every resolved target file the member's manifest declares (`PackageNode::targets`):
+    /// the module-tree anchors a resolver can anchor intra-package paths on when the
+    /// language's directory convention doesn't hold (a Rust `[[bin]] path` placing a module
+    /// tree outside `src/`).
+    pub targets: Vec<ProjectPath>,
 }
 
 /// Index of claimable paths and manifest facts the core exposes to resolvers — populated from
@@ -760,6 +765,13 @@ impl<'a> ResolveCtx<'a> {
 
     pub fn workspace_member(&self, name: &str) -> Option<&'a WorkspaceMember> {
         self.workspace_members.and_then(|m| m.get(name))
+    }
+
+    /// Every named workspace member, unordered — for resolvers that need to locate the
+    /// member owning a *directory* (e.g. anchoring intra-package module paths on its
+    /// declared targets) rather than look one up by name.
+    pub fn workspace_members_iter(&self) -> impl Iterator<Item = &'a WorkspaceMember> {
+        self.workspace_members.into_iter().flat_map(|m| m.values())
     }
 
     /// Every known file declaring `unit` (empty when none do, or `with_units` was never

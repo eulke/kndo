@@ -1097,6 +1097,7 @@ mod tests {
             declares_surface: false,
             surface: Vec::new(),
             workspace_entry: None,
+            targets: Vec::new(),
             resolves_dependency_usage: true,
         };
         let mut real = implicit.clone();

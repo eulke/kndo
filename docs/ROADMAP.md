@@ -953,6 +953,36 @@ Follow-ups tracked: Rust bin-crate resolution chains (inline-mod qualified refs,
 re-exports), and the M5 perf-drift re-attribution (bench went unenforced through M5; the M6
 changes themselves measure +0 cold / +32ms warm at 50k).
 
+### M6 progress — FP hunt, second pass: Rust resolution chains ✅ (landed 2026-08-23)
+
+The tracked Rust residuals, reproduced as conformance fixtures first (six new, all green) and
+fixed at the model level — ripgrep full-scan fell **1,340 → 1,272** (`unused` 127 → 57), with
+`crates/core`'s false graveyard (the whole `flags/` subtree, `logger`, `messages`) resolved:
+
+- **Manifest targets as module-tree anchors** (`PackageNode::targets` → `WorkspaceMember::
+  targets`, schema v17): resolution's `crate::` anchor now falls back to the manifest's
+  *declared* targets when the `src/` convention misses — ripgrep declares
+  `[[bin]] path = "crates/core/main.rs"` at the repo root, and every `crate::` path inside
+  that tree was unresolvable (the single root cause of ~60 `unused` on real, called code).
+- **`SymbolKind::Macro` as contract vocabulary** (same precedent as `Constructor`): an
+  expansion symbol — invoked textually, body executes at expansion sites. `internal-only`
+  skips the kind as subject and treats macro-attributed reference origins as
+  expansion-site-wide; core keys on the variant, never on language-specific strings.
+- **`#[macro_use] mod x;`** → namespace wildcard over the child (RFC 0005 §1's glob rule):
+  crate-scoped textual macro availability that no import binding can express.
+- **Path shapes**: `crate::…::Type::item` splits at the type boundary (module prefix imports
+  and binds the type; the item resolves through the member table); qualified paths through
+  same-file inline mods emit bare references (flatten semantics); a type-naming qualifier
+  (`logger::Logger::init()`) references the type itself.
+- **`pub(super)` inside inline mods** is file-scoped (`super` never leaves the file under
+  flatten) — the widened mapping stays only where `super` genuinely leaves the file.
+
+Known residuals, deliberate: `cfg`-selected alternate modules (ripgrep's `index/enabled.rs`
+vs `disabled.rs` — cfg modeling is out of scope), duck-typed member accesses that keep
+`internal-only` at `Possible` on some `pub(crate)` members, and one `private-type-leak`
+where top-level `pub(super)`'s widened rung meets a parent-module private trait
+(`parse.rs#lookup` — accepted until rungs are module-relative; recorded in the adapter spec).
+
 ## Post-1.0 parking lot
 **RFC 0016 — uniform component model** (the accepted plan, phased in its §8, **all four phases
 landed**: 0 freeze reservations, 1 host-mediated content channel for plugin graph hooks

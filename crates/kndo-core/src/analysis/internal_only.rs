@@ -81,13 +81,23 @@ pub fn find_internal_only(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<
         })
         .collect();
 
-    let mut refs_by_target: HashMap<SymbolId, Vec<(FileId, Confidence)>> = HashMap::default();
+    // A reference attributed to a macro symbol executes at the macro's *expansion sites*,
+    // not where the template is written — origins the graph cannot enumerate (a
+    // `macro_rules!` body calling a `pub(crate)` fn expands wherever the macro is invoked).
+    // Such a use requires the widest scope: degrade toward silence, never toward accusation
+    // (RFC 0012 §2).
+    let from_macro = |from: NodeRef| match from {
+        NodeRef::Symbol(s) => graph.symbols[s.0 as usize].kind == crate::vocab::SymbolKind::Macro,
+        NodeRef::File(_) => false,
+    };
+    let mut refs_by_target: HashMap<SymbolId, Vec<(FileId, Confidence, bool)>> = HashMap::default();
     for edge in &graph.edges {
         if let EdgeKind::References { from, to, .. } = edge.kind {
-            refs_by_target
-                .entry(to)
-                .or_default()
-                .push((origin_file(graph, from), edge.confidence));
+            refs_by_target.entry(to).or_default().push((
+                origin_file(graph, from),
+                edge.confidence,
+                from_macro(from),
+            ));
         }
     }
 
@@ -121,6 +131,12 @@ pub fn find_internal_only(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<
                       // construction, so any verdict here would accuse kndo's own modeling,
                       // not the code; real call sites reference the type, which is measured
         }
+        if symbol.kind == crate::vocab::SymbolKind::Macro {
+            continue; // an expansion symbol's invocations resolve textually (SymbolKind::Macro
+                      // contract), not through the module ladder the graph measures — the
+                      // observed use scope is structurally underestimated, so any narrowing
+                      // advice would be a guess (M6 residuals, ripgrep's messages.rs)
+        }
 
         let symbol_id = SymbolId(index as u32);
         if root_targets.contains(&NodeRef::Symbol(symbol_id)) {
@@ -142,16 +158,23 @@ pub fn find_internal_only(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<
         // Strong (≥ Probable) references define what the declaration *must* cover; a weak
         // (Possible) reference from wider than that doesn't widen the requirement — it
         // demotes the verdict's confidence instead.
+        let origin_scope = |f: FileId, via_macro: bool| {
+            if via_macro {
+                VisibilityScope::Public
+            } else {
+                required_scope(graph, symbol.file, f)
+            }
+        };
         let required = refs
             .iter()
-            .filter(|&&(_, c)| c >= Confidence::Probable)
-            .map(|&(f, _)| required_scope(graph, symbol.file, f))
+            .filter(|&&(_, c, _)| c >= Confidence::Probable)
+            .map(|&(f, _, m)| origin_scope(f, m))
             .max()
             .unwrap_or(VisibilityScope::File);
         let weak_wider = refs
             .iter()
-            .filter(|&&(_, c)| c < Confidence::Probable)
-            .any(|&(f, _)| required_scope(graph, symbol.file, f) > required);
+            .filter(|&&(_, c, _)| c < Confidence::Probable)
+            .any(|&(f, _, m)| origin_scope(f, m) > required);
 
         // The tightest sufficient rung: lowest index whose scope covers every strong origin.
         let Some((tightest_index, tightest)) = ladder
@@ -600,6 +623,7 @@ mod tests {
             ProjectGraph::for_test(vec![f0, f1], symbols, vec![], edges).with_packages(vec![
                 crate::graph::PackageNode {
                     workspace_entry: None,
+                    targets: Vec::new(),
                     manifest: None,
                     name: None,
                     private: false,
@@ -609,6 +633,7 @@ mod tests {
                 },
                 crate::graph::PackageNode {
                     workspace_entry: None,
+                    targets: Vec::new(),
                     manifest: None,
                     name: None,
                     private: false,
@@ -687,6 +712,65 @@ mod tests {
     }
 
     #[test]
+    fn a_macro_subject_is_never_accused() {
+        // Macro invocations resolve textually, not through the module ladder — the graph
+        // structurally underestimates a macro's use scope, so no narrowing advice is safe.
+        let files = vec![file("src/a.ts")];
+        let mut m = symbol(FileId(0), "shout", 2);
+        m.kind = SymbolKind::Macro;
+        let edges = root_and_ref(FileId(0), FileId(0), SymbolId(0));
+        let graph = ProjectGraph::for_test(files, vec![m], vec![], edges);
+        let reach = crate::analysis::reachability::compute(&graph);
+        assert!(find_internal_only(&graph, &reach).is_empty());
+    }
+
+    #[test]
+    fn a_use_from_inside_a_macro_counts_as_expansion_site_wide() {
+        // `helper` is exported and its only strong reference comes from a same-file macro's
+        // template — but that template executes wherever the macro expands, so the use does
+        // not justify narrowing (ripgrep's `err_message! → set_errored` shape). The identical
+        // graph with a function as the referrer must still accuse (asserted second).
+        let files = vec![file("src/a.ts")];
+        let referrer_kinds = [SymbolKind::Macro, SymbolKind::Function];
+        let verdicts: Vec<usize> = referrer_kinds
+            .map(|kind| {
+                let mut referrer = symbol(FileId(0), "emit", 0);
+                referrer.kind = kind;
+                let symbols = vec![symbol(FileId(0), "helper", 1), referrer];
+                let edges = vec![
+                    edge(
+                        EdgeKind::Root {
+                            kind: RootKind::Production,
+                            target: NodeRef::File(FileId(0)),
+                        },
+                        Confidence::Certain,
+                    ),
+                    edge(
+                        EdgeKind::References {
+                            from: NodeRef::File(FileId(0)),
+                            to: SymbolId(1),
+                            kind: RefKind::Call,
+                        },
+                        Confidence::Certain,
+                    ),
+                    edge(
+                        EdgeKind::References {
+                            from: NodeRef::Symbol(SymbolId(1)),
+                            to: SymbolId(0),
+                            kind: RefKind::Call,
+                        },
+                        Confidence::Certain,
+                    ),
+                ];
+                let graph = ProjectGraph::for_test(files.clone(), symbols, vec![], edges);
+                let reach = crate::analysis::reachability::compute(&graph);
+                find_internal_only(&graph, &reach).len()
+            })
+            .to_vec();
+        assert_eq!(verdicts, vec![0, 1]);
+    }
+
+    #[test]
     fn same_scope_rungs_never_accuse_each_other() {
         // Java-shaped tail [.., Public "protected", Public "public"]: a symbol declared at
         // the top rung whose uses require Public must NOT be told to become "protected" —
@@ -702,6 +786,7 @@ mod tests {
             .with_packages(vec![
                 crate::graph::PackageNode {
                     workspace_entry: None,
+                    targets: Vec::new(),
                     manifest: None,
                     name: None,
                     private: false,
@@ -711,6 +796,7 @@ mod tests {
                 },
                 crate::graph::PackageNode {
                     workspace_entry: None,
+                    targets: Vec::new(),
                     manifest: None,
                     name: None,
                     private: false,

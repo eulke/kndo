@@ -20,11 +20,19 @@ pub enum FileOrigin { Authored, Generated, Vendored }
 pub struct FileClass { pub role: FileRole, pub origin: FileOrigin }
 
 pub enum SymbolKind {
-    Function, Method, Class, Interface, Struct, Enum, EnumMember, TypeAlias,
-    Const, Static, Variable, Field, Module, CssRule, CssVariable, Other(SmolStr),
+    Function, Method, Constructor, Macro, Class, Interface, Struct, Enum, EnumMember,
+    TypeAlias, Const, Static, Variable, Field, Module, CssRule, CssVariable, Other(SmolStr),
 }
 // kebab-case names are `subject_kind` facet values (alongside file | directory | dependency |
-// import | suppression) used in output and `category:subject` targeting (RFC 0005)
+// import | suppression) used in output and `category:subject` targeting (RFC 0005).
+// Two kinds carry analysis semantics beyond the label:
+// - Constructor (Java/Kotlin `<init>`, Swift `init`/`<deinit>`): instantiation references the
+//   *type*, never the constructor symbol — liveness follows the container (a synthetic
+//   container→constructor edge), and visibility analyses skip the kind.
+// - Macro (Rust `macro_rules!`, a C preprocessor macro): an *expansion* symbol — invoked
+//   textually outside the module-visibility model, and its body executes at expansion sites.
+//   Visibility-scope analyses skip the kind as a subject and treat references attributed to a
+//   Macro as originating from its (unknowable) expansion sites, i.e. requiring the widest scope.
 
 pub enum RootKind { Production, Test, Tooling }
 

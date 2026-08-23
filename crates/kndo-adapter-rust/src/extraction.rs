@@ -79,6 +79,7 @@ struct PendingAttrs {
     bench: bool,
     ffi_export: bool,
     cfg_test: bool,
+    macro_use: bool,
     mod_path: Option<String>,
     derives: Vec<(SmolStr, Span)>,
     /// Start of the first attribute in this pending run — a test region's extent covers the
@@ -208,6 +209,18 @@ fn collect_local_qualifiers(root: Node, src: &[u8]) -> std::collections::HashSet
 /// the path names nothing outside it. Left unresolved, such a root looks exactly like an
 /// unknown external crate to `resolve_bare` (no `name.rs`/`name/mod.rs` file exists to find),
 /// fabricating an `undeclared`-dependency finding for what is really a same-file reference.
+/// The name environment body-path emission resolves against — `locals` (use tails/aliases and
+/// mod names: names that already have an import or declaration, so no root import should be
+/// fabricated for them) and, separately, the file's *inline* `mod` names: extraction flattens
+/// inline-mod bodies into the file (spec §2), so a qualified `convert::usize(..)` is really a
+/// same-file bare reference — resolving it as a member/package path lost the binding and
+/// false-positived the target as `unused` (M6 residuals, ripgrep corpus).
+#[derive(Clone, Copy)]
+struct PathEnv<'a> {
+    locals: &'a std::collections::HashSet<String>,
+    inline_mods: &'a std::collections::HashSet<String>,
+}
+
 fn collect_inline_mod_names(root: Node, src: &[u8]) -> std::collections::HashSet<String> {
     let mut out = std::collections::HashSet::new();
     fn walk(node: Node, src: &[u8], out: &mut std::collections::HashSet<String>) {
@@ -252,21 +265,54 @@ fn text<'a>(node: Node, src: &'a [u8]) -> &'a str {
     std::str::from_utf8(&src[node.byte_range()]).unwrap_or("")
 }
 
-/// `(level, exported)` per the ladder [File "private", Package "pub(crate)", Public "pub"];
-/// `pub(super)`/`pub(in …)` widen to the crate rung (spec §2, conservative direction).
+/// `(level, exported)` per the ladder [File "private", Package "pub(crate)", Public "pub"].
+/// Rungs are relative to the FILE's module (inline mods are flattened, spec §2):
+/// `pub(crate)`/`pub(in …)` map to the crate rung; `pub(self)` is private; `pub(super)`
+/// reaches the file's parent module — the crate rung — unless the item sits inside an
+/// inline mod, where `super` is a module within this same file and the item is file-scoped.
 fn visibility(node: Node) -> (u8, bool) {
     let mut cursor = node.walk();
-    for child in node.children(&mut cursor) {
-        if child.kind() == "visibility_modifier" {
-            let has_restriction = child.child_count() > 1; // `pub` + `(` `crate`/`super`/… `)`
-            return if has_restriction {
-                (1, true)
-            } else {
-                (2, true)
-            };
-        }
+    let modifier = node
+        .children(&mut cursor)
+        .find(|child| child.kind() == "visibility_modifier");
+    match modifier {
+        Some(m) => visibility_of_modifier(m, node),
+        None => (0, false),
     }
-    (0, false)
+}
+
+/// One `pub…` modifier mapped to the ladder: bare `pub` is the top rung; `pub(self)` is
+/// private everywhere; `pub(super)` is private only when `super` stays inside the file.
+fn visibility_of_modifier(modifier: Node, item: Node) -> (u8, bool) {
+    if modifier.child_count() <= 1 {
+        return (2, true); // bare `pub`
+    }
+    let mut cursor = modifier.walk();
+    let level = modifier
+        .children(&mut cursor)
+        .find_map(|c| restriction_level(c, item))
+        .unwrap_or(1); // pub(crate), pub(in …), top-level pub(super)
+    (level, level > 0)
+}
+
+fn restriction_level(restriction: Node, item: Node) -> Option<u8> {
+    match restriction.kind() {
+        "self" => Some(0),
+        "super" if inside_inline_mod(item) => Some(0),
+        _ => None,
+    }
+}
+
+/// Whether an item node sits inside an inline `mod … {}` body (any depth).
+fn inside_inline_mod(node: Node) -> bool {
+    let mut cur = node.parent();
+    while let Some(n) = cur {
+        if n.kind() == "mod_item" {
+            return true;
+        }
+        cur = n.parent();
+    }
+    false
 }
 
 /// Item-list walker (source_file, inline-mod bodies — flattened, spec §2). Attributes are
@@ -309,6 +355,7 @@ fn collect_attr(item: Node, src: &[u8], pending: &mut PendingAttrs, out: &mut Fi
     match name {
         "test" => pending.test = true,
         "bench" => pending.bench = true,
+        "macro_use" => pending.macro_use = true,
         "no_mangle" | "export_name" | "unsafe" => {
             // `#[unsafe(no_mangle)]` (Rust 2024) nests the real attribute in a token tree —
             // scan the attribute text for the export markers rather than modeling the nesting.
@@ -482,7 +529,7 @@ fn handle_item(item: Node, src: &[u8], ctx: &Ctx<'_>, pending: PendingAttrs, out
                 push_declaration(
                     out,
                     macro_name,
-                    SymbolKind::Other(SmolStr::new("macro")),
+                    SymbolKind::Macro,
                     item,
                     None,
                     None,
@@ -497,7 +544,16 @@ fn handle_item(item: Node, src: &[u8], ctx: &Ctx<'_>, pending: PendingAttrs, out
                 let mut mc = item.walk();
                 for rule in item.children(&mut mc).filter(|n| n.kind() == "macro_rule") {
                     if let Some(body) = rule.child_by_field_name("right") {
-                        scan_token_tree(body, src, Some(macro_name), ctx.local_qualifiers, out);
+                        scan_token_tree(
+                            body,
+                            src,
+                            Some(macro_name),
+                            PathEnv {
+                                locals: ctx.local_qualifiers,
+                                inline_mods: ctx.inline_mod_names,
+                            },
+                            out,
+                        );
                     }
                 }
             }
@@ -512,7 +568,16 @@ fn handle_item(item: Node, src: &[u8], ctx: &Ctx<'_>, pending: PendingAttrs, out
         // reference to whatever the macro's arguments name — real gaps a WASM-guest adapter
         // hit immediately (top-level `generate!`/`export!` is exactly how wit-bindgen is used).
         "macro_invocation" => {
-            handle_macro(item, src, None, ctx.local_qualifiers, out);
+            handle_macro(
+                item,
+                src,
+                None,
+                PathEnv {
+                    locals: ctx.local_qualifiers,
+                    inline_mods: ctx.inline_mod_names,
+                },
+                out,
+            );
         }
         // The grammar always wraps a macro-call-as-item in `expression_statement` (there is
         // no bare item-position `macro_invocation` node in practice) — unwrap one level to
@@ -520,7 +585,16 @@ fn handle_item(item: Node, src: &[u8], ctx: &Ctx<'_>, pending: PendingAttrs, out
         "expression_statement" => {
             if let Some(inner) = item.named_child(0) {
                 if inner.kind() == "macro_invocation" {
-                    handle_macro(inner, src, None, ctx.local_qualifiers, out);
+                    handle_macro(
+                        inner,
+                        src,
+                        None,
+                        PathEnv {
+                            locals: ctx.local_qualifiers,
+                            inline_mods: ctx.inline_mod_names,
+                        },
+                        out,
+                    );
                 }
             }
         }
@@ -638,10 +712,28 @@ fn handle_function(
         if child.by_ref_is_body(body) {
             continue;
         }
-        walk_type_refs(child, src, Some(&qualified), ctx.local_qualifiers, out);
+        walk_type_refs(
+            child,
+            src,
+            Some(&qualified),
+            PathEnv {
+                locals: ctx.local_qualifiers,
+                inline_mods: ctx.inline_mod_names,
+            },
+            out,
+        );
     }
     if let Some(body) = body {
-        walk_body(body, src, Some(&qualified), ctx.local_qualifiers, out);
+        walk_body(
+            body,
+            src,
+            Some(&qualified),
+            PathEnv {
+                locals: ctx.local_qualifiers,
+                inline_mods: ctx.inline_mod_names,
+            },
+            out,
+        );
         let shape = function_shape(body, &METRICS_SYNTAX, MIN_CLONE_TOKENS);
         out.functions.push(FunctionMetrics {
             symbol: SmolStr::new(&qualified),
@@ -673,7 +765,16 @@ fn handle_type_decl(item: Node, src: &[u8], ctx: &Ctx<'_>, kind: SymbolKind, out
     let type_name = text(name, src).to_string();
     let mut c = item.walk();
     for child in item.children(&mut c) {
-        walk_type_refs(child, src, Some(&type_name), ctx.local_qualifiers, out);
+        walk_type_refs(
+            child,
+            src,
+            Some(&type_name),
+            PathEnv {
+                locals: ctx.local_qualifiers,
+                inline_mods: ctx.inline_mod_names,
+            },
+            out,
+        );
     }
 }
 
@@ -699,7 +800,16 @@ fn handle_enum(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
                         vis, // variants share the enum's visibility (Rust rule)
                     );
                 }
-                walk_type_refs(variant, src, Some(name), ctx.local_qualifiers, out);
+                walk_type_refs(
+                    variant,
+                    src,
+                    Some(name),
+                    PathEnv {
+                        locals: ctx.local_qualifiers,
+                        inline_mods: ctx.inline_mod_names,
+                    },
+                    out,
+                );
             }
         }
     }
@@ -850,10 +960,28 @@ fn handle_simple_decl(
     push_declaration(out, text(name, src), kind, item, None, owner, vis);
     // Initializer expressions run at load: within = None (RFC 0012 §4's load-time rule).
     if let Some(value) = item.child_by_field_name("value") {
-        walk_body(value, src, None, ctx.local_qualifiers, out);
+        walk_body(
+            value,
+            src,
+            None,
+            PathEnv {
+                locals: ctx.local_qualifiers,
+                inline_mods: ctx.inline_mod_names,
+            },
+            out,
+        );
     }
     if let Some(ty) = item.child_by_field_name("type") {
-        walk_type_refs(ty, src, None, ctx.local_qualifiers, out);
+        walk_type_refs(
+            ty,
+            src,
+            None,
+            PathEnv {
+                locals: ctx.local_qualifiers,
+                inline_mods: ctx.inline_mod_names,
+            },
+            out,
+        );
     }
 }
 
@@ -894,7 +1022,10 @@ fn handle_mod(item: Node, src: &[u8], ctx: &Ctx<'_>, pending: &PendingAttrs, out
                 bindings: Vec::new(),
                 reexported: is_pub,
                 // The child module's items are addressable through `name::…` qualifiers.
-                opaque_namespace_use: false,
+                // `#[macro_use] mod x;` additionally globs the child's macro namespace into
+                // crate scope — invocations anywhere reach its `macro_rules!` without an
+                // import, which no binding can express (RFC 0005 §1's wildcard rule).
+                opaque_namespace_use: pending.macro_use,
                 local_alias: Some(SmolStr::new(text(name, src))),
             });
         }
@@ -1103,7 +1234,7 @@ fn walk_type_refs(
     node: Node,
     src: &[u8],
     within: Option<&str>,
-    quals: &std::collections::HashSet<String>,
+    env: PathEnv<'_>,
     out: &mut FileFacts,
 ) {
     match node.kind() {
@@ -1116,7 +1247,7 @@ fn walk_type_refs(
             kind: RefKind::TypeUse,
         }),
         "scoped_type_identifier" => {
-            handle_scoped_path(node, src, within, RefKind::TypeUse, quals, out);
+            handle_scoped_path(node, src, within, RefKind::TypeUse, env, out);
         }
         // Field/variant attributes (`#[rkyv(with = crate::…::SmolStrAsString)]`, `#[serde(…)]`)
         // are token soup below the type body — same scan as item-level unknown attributes, so
@@ -1131,7 +1262,7 @@ fn walk_type_refs(
         _ => {
             let mut cursor = node.walk();
             for child in node.children(&mut cursor) {
-                walk_type_refs(child, src, within, quals, out);
+                walk_type_refs(child, src, within, env, out);
             }
         }
     }
@@ -1140,13 +1271,7 @@ fn walk_type_refs(
 /// Expression bodies: calls, qualified paths, member accesses, macro invocations, plain
 /// identifier reads (locals shadowing a top-level name over-approximate ALIVE — the safe
 /// direction, spec §2).
-fn walk_body(
-    node: Node,
-    src: &[u8],
-    within: Option<&str>,
-    quals: &std::collections::HashSet<String>,
-    out: &mut FileFacts,
-) {
+fn walk_body(node: Node, src: &[u8], within: Option<&str>, env: PathEnv<'_>, out: &mut FileFacts) {
     match node.kind() {
         "line_comment" | "block_comment" => return,
         "use_declaration" => {
@@ -1182,7 +1307,7 @@ fn walk_body(
             } else {
                 RefKind::Read
             };
-            handle_scoped_path(node, src, within, kind, quals, out);
+            handle_scoped_path(node, src, within, kind, env, out);
             return;
         }
         "field_expression" => {
@@ -1226,11 +1351,11 @@ fn walk_body(
                 within: within.map(SmolStr::new),
                 kind,
             });
-            walk_body(value, src, within, quals, out);
+            walk_body(value, src, within, env, out);
             return;
         }
         "macro_invocation" => {
-            handle_macro(node, src, within, quals, out);
+            handle_macro(node, src, within, env, out);
             return;
         }
         "type_identifier" => {
@@ -1244,14 +1369,14 @@ fn walk_body(
             return;
         }
         "scoped_type_identifier" => {
-            handle_scoped_path(node, src, within, RefKind::TypeUse, quals, out);
+            handle_scoped_path(node, src, within, RefKind::TypeUse, env, out);
             return;
         }
         _ => {}
     }
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
-        walk_body(child, src, within, quals, out);
+        walk_body(child, src, within, env, out);
     }
 }
 
@@ -1294,7 +1419,7 @@ fn handle_scoped_path(
     src: &[u8],
     within: Option<&str>,
     kind: RefKind,
-    quals: &std::collections::HashSet<String>,
+    env: PathEnv<'_>,
     out: &mut FileFacts,
 ) {
     let full = text(node, src);
@@ -1303,7 +1428,7 @@ fn handle_scoped_path(
         .split("::")
         .filter(|s| !s.is_empty() && !s.starts_with('<'))
         .collect();
-    emit_path(&segments, span(node), within, kind, quals, out);
+    emit_path(&segments, span(node), within, kind, env, out);
 }
 
 /// The path emissions shared by AST-shaped paths (`handle_scoped_path`) and token-soup paths
@@ -1313,7 +1438,7 @@ fn emit_path(
     at: Span,
     within: Option<&str>,
     kind: RefKind,
-    quals: &std::collections::HashSet<String>,
+    env: PathEnv<'_>,
     out: &mut FileFacts,
 ) {
     let [rest @ .., last] = segments else {
@@ -1324,21 +1449,61 @@ fn emit_path(
     }
     let root = rest[0];
     if matches!(root, "crate" | "self" | "super") {
+        // Import resolution maps MODULE paths to files, so the specifier must stop before
+        // the path crosses into type space: in `crate::logger::Logger::init()` the module
+        // prefix is `crate::logger`, `Logger` is a symbol inside that file, and `init` is
+        // that type's associated item. Splitting there lets the type bind through the
+        // import and the item reach the member table — an unsplit `crate::logger::Logger`
+        // specifier resolved to no file and the whole chain read as dead (M6 residuals,
+        // ripgrep's logger).
+        let type_pos = rest[1..]
+            .iter()
+            .position(|s| s.chars().next().is_some_and(char::is_uppercase))
+            .map(|p| p + 1);
+        let (module_path, bound) = match type_pos {
+            Some(i) => (&rest[..i], rest[i]),
+            None => (rest, *last),
+        };
         out.imports.push(RawImport {
-            specifier: SmolStr::new(rest.join("::")),
+            specifier: SmolStr::new(module_path.join("::")),
             kind: ImportKind::Relative,
             span: at,
             side_effect_only: false,
             type_only: kind == RefKind::TypeUse,
             confidence: Confidence::Certain,
             bindings: vec![ImportBinding {
-                local: SmolStr::new(*last),
-                imported: Some(SmolStr::new(*last)),
+                local: SmolStr::new(bound),
+                imported: Some(SmolStr::new(bound)),
             }],
             reexported: false,
             opaque_namespace_use: false,
             local_alias: None,
         });
+        if bound != *last {
+            // The type itself is used by the traversal, and the trailing item resolves as
+            // its member — the same two emissions the bare-root branch below makes for
+            // `logger::Logger::init()`.
+            out.references.push(RawReference {
+                name: SmolStr::new(bound),
+                scope_context: None,
+                span: at,
+                within: within.map(SmolStr::new),
+                kind: RefKind::Read,
+            });
+        }
+        out.references.push(RawReference {
+            name: SmolStr::new(*last),
+            scope_context: (bound != *last).then(|| SmolStr::new(rest[rest.len() - 1])),
+            span: at,
+            within: within.map(SmolStr::new),
+            kind,
+        });
+    } else if rest.len() == 1 && env.inline_mods.contains(root) {
+        // A path through a same-file *inline* mod (`convert::usize(..)` with `mod convert
+        // { .. }` right here): extraction flattens inline-mod bodies into the file (spec §2),
+        // so the target is a same-file bare symbol — emit the reference bare. Routing it
+        // through qualifier resolution had no alias/member to bind to and false-positived
+        // the target as `unused` (M6 residuals, ripgrep's `convert::usize`).
         out.references.push(RawReference {
             name: SmolStr::new(*last),
             scope_context: None,
@@ -1359,12 +1524,27 @@ fn emit_path(
             within: within.map(SmolStr::new),
             kind,
         });
+        // An uppercase qualifier NAMES a type: `logger::Logger::init()` is a use of `Logger`
+        // itself, not only of `init` — without this the type read as file-local to its
+        // declaration and `internal-only` advised narrowing it (M6 residuals). The extra
+        // reference resolves through the segment before it (or bare at path root); an
+        // unresolvable one (`Vec` of `Vec::new`) binds nothing and is dropped silently.
+        if qualifier.chars().next().is_some_and(char::is_uppercase) {
+            let type_scope = (rest.len() >= 2).then(|| rest[rest.len() - 2]);
+            out.references.push(RawReference {
+                name: SmolStr::new(qualifier),
+                scope_context: type_scope.map(SmolStr::new),
+                span: at,
+                within: within.map(SmolStr::new),
+                kind: RefKind::Read,
+            });
+        }
         // Multi-segment bare paths (`cycles::mod::item`, `serde_json::x::y`): the parent
         // path imports with the tail as its binding (so the item resolves in the deep
         // target), and the bare root imports alone as well — a deep path traverses the
         // crate's module tree from its entry, so the entry stays alive (spec §3). For an
         // external crate the extra root import just duplicates the dependency edge.
-        let import_worthy = !PRIMITIVES.contains(&root) && !quals.contains(root);
+        let import_worthy = !PRIMITIVES.contains(&root) && !env.locals.contains(root);
         if import_worthy && rest.len() == 1 && !root.chars().next().is_some_and(char::is_uppercase)
         {
             // Single-qualifier bare path (`helpers::run()`, `rand_chacha::x()`): the root
@@ -1428,7 +1608,7 @@ fn handle_macro(
     node: Node,
     src: &[u8],
     within: Option<&str>,
-    quals: &std::collections::HashSet<String>,
+    env: PathEnv<'_>,
     out: &mut FileFacts,
 ) {
     let Some(macro_name) = node.child_by_field_name("macro") else {
@@ -1464,7 +1644,7 @@ fn handle_macro(
 
     // Identifier tokens inside the macro's token tree: plain reads (`format!("{}", user)`
     // keeps `user`'s referents alive). No wildcard per macro — spec §2's bounded stance.
-    scan_token_tree(node, src, within, quals, out);
+    scan_token_tree(node, src, within, env, out);
 }
 
 fn first_string_literal<'a>(node: Node, src: &'a [u8]) -> Option<&'a str> {
@@ -1484,7 +1664,7 @@ fn scan_token_tree(
     node: Node,
     src: &[u8],
     within: Option<&str>,
-    quals: &std::collections::HashSet<String>,
+    env: PathEnv<'_>,
     out: &mut FileFacts,
 ) {
     // Rust 2021 inline format captures: `format!("v{VERSION}")` reads `VERSION` from inside
@@ -1523,7 +1703,7 @@ fn scan_token_tree(
             // statement's remaining tokens through its `;`.
             if let Some(root) = children.get(i + 1).filter(|n| n.kind() == "identifier") {
                 let name = text(*root, src);
-                if !PRIMITIVES.contains(&name) && !quals.contains(name) {
+                if !PRIMITIVES.contains(&name) && !env.locals.contains(name) {
                     out.imports.push(RawImport {
                         specifier: SmolStr::new(name),
                         kind: ImportKind::Package,
@@ -1574,11 +1754,11 @@ fn scan_token_tree(
                     });
                 }
             } else {
-                emit_path(&segments, span(tok), within, kind, quals, out);
+                emit_path(&segments, span(tok), within, kind, env, out);
             }
             i = j;
         } else {
-            scan_token_tree(tok, src, within, quals, out);
+            scan_token_tree(tok, src, within, env, out);
             i += 1;
         }
     }
@@ -1810,9 +1990,29 @@ mod tests {
         assert_eq!(by_name("private_fn").visibility.0, 0);
         assert!(!by_name("private_fn").exported);
         assert_eq!(by_name("crate_fn").visibility.0, 1);
-        assert_eq!(by_name("super_fn").visibility.0, 1); // widened, spec §2
+        assert_eq!(by_name("super_fn").visibility.0, 1); // top-level: super leaves the file
         assert_eq!(by_name("public_fn").visibility.0, 2);
         assert!(by_name("public_fn").exported);
+    }
+
+    #[test]
+    fn pub_super_inside_an_inline_mod_is_file_scoped() {
+        // `super` of an inline mod is a module within this same file, so the item never
+        // leaves the file: bottom rung, not exported. `pub(crate)` still leaves the file.
+        let f = facts(
+            "mod inner {\n\
+             \x20   pub(super) fn reaches_file_only() {}\n\
+             \x20   pub(self) fn mod_private() {}\n\
+             \x20   pub(crate) fn reaches_crate() {}\n\
+             }\n",
+        );
+        let by_name = |n: &str| f.declarations.iter().find(|d| d.name == n).unwrap();
+        assert_eq!(by_name("reaches_file_only").visibility.0, 0);
+        assert!(!by_name("reaches_file_only").exported);
+        assert_eq!(by_name("mod_private").visibility.0, 0);
+        assert!(!by_name("mod_private").exported);
+        assert_eq!(by_name("reaches_crate").visibility.0, 1);
+        assert!(by_name("reaches_crate").exported);
     }
 
     #[test]

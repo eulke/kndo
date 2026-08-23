@@ -284,6 +284,7 @@ mod tests {
     fn package(name: &str, declares_surface: bool, surface: Vec<FileId>) -> PackageNode {
         PackageNode {
             workspace_entry: None,
+            targets: Vec::new(),
             manifest: Some(ProjectPath(SmolStr::new(format!("{name}/package.json")))),
             name: Some(SmolStr::new(name)),
             private: false,
@@ -296,6 +297,7 @@ mod tests {
     fn implicit_package() -> PackageNode {
         PackageNode {
             workspace_entry: None,
+            targets: Vec::new(),
             manifest: None,
             name: None,
             private: false,

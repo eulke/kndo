@@ -167,6 +167,12 @@ pub enum SymbolKind {
     /// the *type*, never the constructor symbol, so a constructor's liveness follows its
     /// class — `unused` exempts the kind outright (M6 FP hunt).
     Constructor,
+    /// An expansion symbol (Rust `macro_rules!`, a C preprocessor macro): invoked
+    /// *textually*, outside the language's module-visibility model, and its body executes
+    /// at the expansion sites, not where the template is written. Visibility-scope analyses
+    /// therefore cannot trust observed use sites for this kind — neither for the macro
+    /// itself nor as the *origin* of references attributed to it (M6 FP hunt).
+    Macro,
     Class,
     Interface,
     Struct,
@@ -190,6 +196,7 @@ impl SymbolKind {
             SymbolKind::Function => "function",
             SymbolKind::Method => "method",
             SymbolKind::Constructor => "constructor",
+            SymbolKind::Macro => "macro",
             SymbolKind::Class => "class",
             SymbolKind::Interface => "interface",
             SymbolKind::Struct => "struct",
