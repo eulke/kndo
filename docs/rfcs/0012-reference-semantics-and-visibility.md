@@ -311,6 +311,19 @@ collision rule; alternates that lose the collision stay alive through the glob's
 edge). In-source roots targeting a declaration name land on EVERY declaration sharing the
 selector — twins are legitimate (two `impl Add for Stats` blocks both declare `Stats.add`).
 
+**§3-bis, receiver typing (M6):** adapters may pin a receiver's TYPE from facts local to the
+file (Rust: `self`/`Self` → impl owner, typed params/lets, struct-literal and `T::assoc(…)`
+initializers with chain flow — see the adapter spec) and emit the type as `scope_context`
+instead of the opaque receiver name. Core-side, the qualifier resolution above gains one
+tier: a qualifier matching a name in scope — an import binding OR a same-file declaration —
+resolves `Original.member` in that symbol's home file at Certain, and on a miss falls
+through to the §3 duck fallback (never settles: a name in scope is a value/type, not a
+closed namespace). Qualified-member hits land on EVERY declaration sharing the selector
+(cfg-alternated twin impls both own `Data.from_path`; the single-slot table's displaced
+twins are tracked and each gets the edge). The reliability invariant, both sides: a wrong
+receiver type can only miss into the fallback or hit a member the named type genuinely
+declares — silence-direction errors only.
+
 ## 10. Multi-module topology (`go.work` et al) — adapter work, one recorded divergence
 
 `go.work` becomes a second claimed manifest contributing `workspace_members` (the field

@@ -801,6 +801,8 @@ fn try_patch(
         vec![HashMap::default(); files_len];
     let mut symbol_by_qualified_per_file: Vec<HashMap<String, SymbolId>> =
         vec![HashMap::default(); files_len];
+    let mut qualified_twins_per_file: Vec<HashMap<String, Vec<SymbolId>>> =
+        vec![HashMap::default(); files_len];
     let mut symbol_by_name_per_unit: HashMap<SmolStr, HashMap<SmolStr, SymbolId>> =
         HashMap::default();
     let mut member_by_name: HashMap<SmolStr, Vec<SymbolId>> = HashMap::default();
@@ -819,7 +821,12 @@ fn try_patch(
             }
             Some(owner) => {
                 member_by_name.entry(sym.name.clone()).or_default().push(id);
-                symbol_by_qualified_per_file[i].insert(format!("{owner}.{}", sym.name), id);
+                insert_qualified(
+                    &mut symbol_by_qualified_per_file[i],
+                    &mut qualified_twins_per_file[i],
+                    format!("{owner}.{}", sym.name),
+                    id,
+                );
             }
         }
     }
@@ -884,6 +891,7 @@ fn try_patch(
             symbols: &graph.symbols,
             symbol_by_name_per_file: &symbol_by_name_per_file,
             symbol_by_qualified_per_file: &symbol_by_qualified_per_file,
+            qualified_twins_per_file: &qualified_twins_per_file,
             symbol_by_name_per_unit: &symbol_by_name_per_unit,
             member_by_name: &member_by_name,
             file_unit: &file_unit,
@@ -1110,6 +1118,9 @@ struct ResolveTables<'a> {
     symbols: &'a [SymbolNode],
     symbol_by_name_per_file: &'a [HashMap<SmolStr, SymbolId>],
     symbol_by_qualified_per_file: &'a [HashMap<String, SymbolId>],
+    /// Extra declarations sharing a qualified selector already in the single-slot table
+    /// (cfg-alternated twin impls: two `Data.from_path`) — populated only on collision.
+    qualified_twins_per_file: &'a [HashMap<String, Vec<SymbolId>>],
     symbol_by_name_per_unit: &'a HashMap<SmolStr, HashMap<SmolStr, SymbolId>>,
     member_by_name: &'a HashMap<SmolStr, Vec<SymbolId>>,
     file_unit: &'a [Option<SmolStr>],
@@ -1132,6 +1143,7 @@ fn resolve_file(
         symbols,
         symbol_by_name_per_file,
         symbol_by_qualified_per_file,
+        qualified_twins_per_file,
         symbol_by_name_per_unit,
         member_by_name,
         file_unit,
@@ -1296,7 +1308,7 @@ fn resolve_file(
             match qualifier_targets.get(q) {
                 Some(&target_file) => {
                     let t = target_file.0 as usize;
-                    let sym = symbol_by_name_per_file[t]
+                    let bare = symbol_by_name_per_file[t]
                         .get(&reference.name)
                         .or_else(|| {
                             file_unit[t].as_ref().and_then(|unit| {
@@ -1305,24 +1317,30 @@ fn resolve_file(
                                     .and_then(|tab| tab.get(&reference.name))
                             })
                         })
-                        .or_else(|| {
-                            // The alias may name a TYPE rather than a module: resolve the
-                            // qualifier itself as a symbol in the target (its bare table
-                            // includes the re-export fixpoint's aliases, so a barrel-routed
-                            // type lands on its original), then look the member up in the
-                            // file where that symbol actually lives — `SearchMode::Standard`
-                            // through `use crate::flags::{SearchMode}` reaches
-                            // `lowargs.rs`'s member table via `flags/mod.rs`'s alias.
-                            symbol_by_name_per_file[t]
-                                .get(q.as_str())
-                                .and_then(|&type_symbol| {
-                                    let home = symbols[type_symbol.0 as usize].file.0 as usize;
-                                    symbol_by_qualified_per_file[home]
-                                        .get(format!("{q}.{}", reference.name).as_str())
-                                })
-                        })
                         .copied();
-                    if let Some(to) = sym {
+                    let targets = match bare {
+                        Some(s) => vec![s],
+                        // The alias may name a TYPE rather than a module: resolve the
+                        // qualifier itself as a symbol in the target (its bare table
+                        // includes the re-export fixpoint's aliases, so a barrel-routed
+                        // type lands on its original), then look the member up in the
+                        // file where that symbol actually lives — `SearchMode::Standard`
+                        // through `use crate::flags::{SearchMode}` reaches
+                        // `lowargs.rs`'s member table via `flags/mod.rs`'s alias. Twins
+                        // included: cfg-alternated impls both own the selector.
+                        None => symbol_by_name_per_file[t]
+                            .get(q.as_str())
+                            .map(|&type_symbol| {
+                                let home = symbols[type_symbol.0 as usize].file.0 as usize;
+                                qualified_member_targets(
+                                    &symbol_by_qualified_per_file[home],
+                                    &qualified_twins_per_file[home],
+                                    format!("{q}.{}", reference.name).as_str(),
+                                )
+                            })
+                            .unwrap_or_default(),
+                    };
+                    for to in targets {
                         out.edges.push(Edge {
                             owner: file_id,
                             kind: EdgeKind::References {
@@ -1338,31 +1356,42 @@ fn resolve_file(
                     continue;
                 }
                 None => {
-                    // Not an alias — but an IMPORTED NAME used as a qualifier refers to
-                    // the bound symbol itself (`SearchMode::Standard` after `use …::{…,
-                    // SearchMode, …}`): its members live in the symbol's home file, keyed
-                    // by the symbol's ORIGINAL name (an `as`-renamed binding still owns
-                    // `Original.member`). A hit is Certain; a miss does NOT settle — a
-                    // binding is a value/type, not a closed namespace, so an unknown
-                    // member is a dynamic-looking access and falls through to the
-                    // duck-typed fallback exactly like a receiver expression.
-                    if let Some(&bound) = bound_symbols.get(q.as_str()) {
+                    // Not an alias — but a NAME IN SCOPE used as a qualifier refers to
+                    // that symbol itself: an imported binding (`SearchMode::Standard`
+                    // after `use …::{…, SearchMode, …}`) or a same-file declaration (an
+                    // adapter that typed a receiver rewrites `args.matcher()` to qualifier
+                    // `HiArgs`, which may be declared right here). Its members live in the
+                    // symbol's home file, keyed by the symbol's ORIGINAL name (an
+                    // `as`-renamed binding still owns `Original.member`). A hit is
+                    // Certain; a miss does NOT settle — a name in scope is a value/type,
+                    // not a closed namespace, so an unknown member is a dynamic-looking
+                    // access and falls through to the duck-typed fallback exactly like a
+                    // receiver expression.
+                    let in_scope = bound_symbols
+                        .get(q.as_str())
+                        .or_else(|| symbol_by_name_per_file[i].get(q.as_str()));
+                    if let Some(&bound) = in_scope {
                         let owner = &symbols[bound.0 as usize];
                         let home = owner.file.0 as usize;
-                        if let Some(&to) = symbol_by_qualified_per_file[home]
-                            .get(format!("{}.{}", owner.name, reference.name).as_str())
-                        {
-                            out.edges.push(Edge {
-                                owner: file_id,
-                                kind: EdgeKind::References {
-                                    from,
-                                    to,
-                                    kind: reference.kind,
-                                },
-                                confidence: Confidence::Certain,
-                                source: provenance(),
-                                span: Some(reference.span),
-                            });
+                        let targets = qualified_member_targets(
+                            &symbol_by_qualified_per_file[home],
+                            &qualified_twins_per_file[home],
+                            format!("{}.{}", owner.name, reference.name).as_str(),
+                        );
+                        if !targets.is_empty() {
+                            for to in targets {
+                                out.edges.push(Edge {
+                                    owner: file_id,
+                                    kind: EdgeKind::References {
+                                        from,
+                                        to,
+                                        kind: reference.kind,
+                                    },
+                                    confidence: Confidence::Certain,
+                                    source: provenance(),
+                                    span: Some(reference.span),
+                                });
+                            }
                             continue;
                         }
                     }
@@ -1853,6 +1882,41 @@ fn emit_file_declarations(
     DeclarationEmissions { edges, metrics }
 }
 
+/// Insert into a file's single-slot qualified table, preserving twins: a selector already
+/// present keeps last-wins semantics in the table (unchanged), and the displaced
+/// declaration lands in the twins side-map — cfg-alternated impls legitimately declare
+/// `Data.from_path` twice, and a qualified reference targets whichever is compiled.
+fn insert_qualified(
+    table: &mut HashMap<String, SymbolId>,
+    twins: &mut HashMap<String, Vec<SymbolId>>,
+    key: String,
+    id: SymbolId,
+) {
+    match table.entry(key) {
+        std::collections::hash_map::Entry::Occupied(mut slot) => {
+            let displaced = std::mem::replace(slot.get_mut(), id);
+            twins.entry(slot.key().clone()).or_default().push(displaced);
+        }
+        std::collections::hash_map::Entry::Vacant(slot) => {
+            slot.insert(id);
+        }
+    }
+}
+
+/// Every declaration a qualified selector names in `home` — the table's winner plus any
+/// displaced twins. Empty when the selector names nothing there.
+fn qualified_member_targets(
+    qualified: &HashMap<String, SymbolId>,
+    twins: &HashMap<String, Vec<SymbolId>>,
+    key: &str,
+) -> Vec<SymbolId> {
+    let mut targets: Vec<SymbolId> = qualified.get(key).copied().into_iter().collect();
+    if let Some(extra) = twins.get(key) {
+        targets.extend(extra.iter().copied());
+    }
+    targets
+}
+
 /// Every declaration of a file keyed by its root-target selector — the bare name for free
 /// declarations, `Owner.name` for members — with EVERY declaration index per key (twins
 /// preserved: multiple trait impls legitimately re-declare the same member selector).
@@ -2031,7 +2095,7 @@ pub(crate) fn package_owns(manifest_dir: &str, file_dir: &str) -> bool {
 /// an assembly-algorithm change that could produce a different graph from the same facts. Feeds
 /// [`compute_graph_key`] (RFC 0004 §3's "core graph-schema version"); a bump here invalidates
 /// every project's cached `graph.bin` on the next run, same as any other key-input change.
-pub const GRAPH_SCHEMA_VERSION: u32 = 18; // 18: qualified refs reach the target's member table + glob re-exports alias the target's exported surface (same inputs now assemble more edges — prior snapshots are semantically stale); 17: SymbolKind::Macro (expansion symbols — first-class kind with visibility-scope exemption semantics); 16: VisibilityRung.surface_transitive + surface closure (Provenance::Surface Root edges; RFC 0012 §6, M6); 15: FileNode.string_call_sites + EdgeKind::ReferencesFile (RFC 0017 §5.4); 14: in-source Test roots derived from test_spans containment (adapters no longer emit them); 13: FileNode.test_spans + phase 2.55 test-gated module demotion (sub-file test regions); 12: library-surface fixpoint (phase 2.7 — same inputs now assemble surface Root edges, prior snapshots are semantically stale); 11: PackageNode.workspace_entry (RFC 0013 §4); 10: patch layer (RFC 0013 §4 — Edge.owner, FilePatchMeta, extraction-only stored diagnostics); 9: SymbolMetrics.token_count (RFC 0005 §11); 8: function_metrics (RFC 0005 §6); 7: cycle policies (§8); 6: PackageNode surface (RFC 0011 §4); 5: ladders + FileNode.unit (RFC 0012 §6); 4: RefKind + signature_span (§5); 3: within (§4)
+pub const GRAPH_SCHEMA_VERSION: u32 = 19; // 19: receiver-typed qualifiers (in-scope declarations resolve members; qualified twins each get the edge — same inputs assemble different edges); 18: qualified refs reach the target's member table + glob re-exports alias the target's exported surface (same inputs now assemble more edges — prior snapshots are semantically stale); 17: SymbolKind::Macro (expansion symbols — first-class kind with visibility-scope exemption semantics); 16: VisibilityRung.surface_transitive + surface closure (Provenance::Surface Root edges; RFC 0012 §6, M6); 15: FileNode.string_call_sites + EdgeKind::ReferencesFile (RFC 0017 §5.4); 14: in-source Test roots derived from test_spans containment (adapters no longer emit them); 13: FileNode.test_spans + phase 2.55 test-gated module demotion (sub-file test regions); 12: library-surface fixpoint (phase 2.7 — same inputs now assemble surface Root edges, prior snapshots are semantically stale); 11: PackageNode.workspace_entry (RFC 0013 §4); 10: patch layer (RFC 0013 §4 — Edge.owner, FilePatchMeta, extraction-only stored diagnostics); 9: SymbolMetrics.token_count (RFC 0005 §11); 8: function_metrics (RFC 0005 §6); 7: cycle policies (§8); 6: PackageNode surface (RFC 0011 §4); 5: ladders + FileNode.unit (RFC 0012 §6); 4: RefKind + signature_span (§5); 3: within (§4)
 
 /// The graph snapshot's cache key (RFC 0004 §3, `cache.rs`'s `graph.bin`): a single digest
 /// folding in the *whole* discovered file set (every path + content hash — this already
@@ -3267,6 +3331,8 @@ pub fn assemble_from_source(
     let mut member_by_name: HashMap<SmolStr, Vec<SymbolId>> = HashMap::default();
     let mut symbol_by_qualified_per_file: Vec<HashMap<String, SymbolId>> =
         vec![HashMap::default(); claimed_per_file.len()];
+    let mut qualified_twins_per_file: Vec<HashMap<String, Vec<SymbolId>>> =
+        vec![HashMap::default(); claimed_per_file.len()];
     // Workspace-member index (RFC 0011 §4): every *named* manifest in the graph, keyed by
     // package name, with its directory and adapter-resolved primary entry — what lets a bare
     // specifier (`@org/ui`) resolve to the sibling's internal files instead of an external
@@ -3400,8 +3466,12 @@ pub fn assemble_from_source(
                         .entry(decl.name.clone())
                         .or_default()
                         .push(symbol_id);
-                    symbol_by_qualified_per_file[i]
-                        .insert(format!("{owner}.{}", decl.name), symbol_id);
+                    insert_qualified(
+                        &mut symbol_by_qualified_per_file[i],
+                        &mut qualified_twins_per_file[i],
+                        format!("{owner}.{}", decl.name),
+                        symbol_id,
+                    );
                 }
             }
             symbols.push(SymbolNode {
@@ -3624,6 +3694,7 @@ pub fn assemble_from_source(
         symbols: &symbols,
         symbol_by_name_per_file: &symbol_by_name_per_file,
         symbol_by_qualified_per_file: &symbol_by_qualified_per_file,
+        qualified_twins_per_file: &qualified_twins_per_file,
         symbol_by_name_per_unit: &symbol_by_name_per_unit,
         member_by_name: &member_by_name,
         file_unit: &file_unit,
@@ -4680,6 +4751,53 @@ mod tests {
         let stray = reference_edges_to(&graph, "stray");
         assert_eq!(stray.len(), 1);
         assert_eq!(stray[0].confidence, Confidence::Probable);
+    }
+
+    #[test]
+    fn a_qualified_member_hit_lands_on_every_twin_declaration() {
+        // cfg-alternated impls declare `Data.from_path` twice; the qualified reference
+        // targets whichever is compiled, so BOTH must receive the edge — the single-slot
+        // table's winner alone left the displaced twin reading as dead.
+        let dir = project(
+            "qref-twin-members",
+            &[(
+                "a.mock",
+                "decl Data\nmember-decl-exported Data from_path\n\
+                 member-decl-exported Data from_path\nqref Data from_path\nroot-file",
+            )],
+        );
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
+        let hit: std::collections::HashSet<SymbolId> = graph
+            .edges
+            .iter()
+            .filter_map(|e| match e.kind {
+                EdgeKind::References { to, .. }
+                    if graph.symbols[to.0 as usize].name == "from_path"
+                        && e.confidence == Confidence::Certain =>
+                {
+                    Some(to)
+                }
+                _ => None,
+            })
+            .collect();
+        assert_eq!(hit.len(), 2, "a Certain edge lands on EACH twin: {hit:?}");
+    }
+
+    #[test]
+    fn a_same_file_declared_type_as_qualifier_reaches_its_members() {
+        // An adapter that types a receiver rewrites `args.matcher()` to qualifier `Mode`,
+        // and `Mode` may be declared in the referencing file itself — no import involved.
+        let dir = project(
+            "qref-local-type-member",
+            &[(
+                "a.mock",
+                "decl Mode\nmember-decl-exported Mode Standard\nqref Mode Standard\nroot-file",
+            )],
+        );
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
+        let edges = reference_edges_to(&graph, "Standard");
+        assert_eq!(edges.len(), 1);
+        assert_eq!(edges[0].confidence, Confidence::Certain);
     }
 
     #[test]

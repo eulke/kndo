@@ -1017,6 +1017,32 @@ Remaining `internal-only` on `pub(crate)` members consumed only via untyped rece
 (`args.matcher()`) fires demoted to `Possible` by design — the honest ceiling until local
 receiver-type flow exists (a possible future stage, not a patch).
 
+### M6 progress — receiver typing (RFC 0012 §3-bis) ✅ (landed 2026-08-23)
+
+The "future stage" made current: a per-function `TypeEnv` in the Rust adapter pins receiver
+types from facts local to the file — `self`/`Self` → impl owner, typed fn/closure params
+and annotated `let`s (dispatch-base reduction: `&`/`Box/Rc/Arc` stripped, `impl/dyn Trait`
+→ the trait), struct-literal and `T::assoc(…)` initializers with the type flowing through
+call chains (builders), and a conflict-drop rule (a name bound to two types anywhere is
+"unknown", never a guess). `args.matcher()` now emits qualifier `HiArgs` and resolves at
+Certain. Core gained the matching tier (language-blind): a qualifier naming a same-file
+declaration resolves members in its home like an import binding does, and qualified-member
+hits land on EVERY twin declaration (the `Data.from_path` cfg-pair — caught as a one-finding
+regression mid-stage and fixed with a twins side-table, mirroring the roots fix).
+
+ripgrep: `internal-only` 163 → 144 (crates/core 25 → 16), `unused` stable at 19, zero
+regressions, scan time unchanged. The reliability invariant is structural: a wrong receiver
+type can only miss into the duck fallback (previous behavior) or hit a member the named
+type genuinely declares — silence-direction errors only, and the core never "settles" on a
+receiver-typed qualifier miss.
+
+Mechanism map — deliberately NOT included, each a future fact-source, none a patch:
+cross-file **field types** (`low.context_separator.into_bytes()` — the next real tier;
+needs member-type facts in the contract), `match`/`if let` payload types, untyped closure
+params, multi-bound generics, and Go/JS receiver typing (Go's method receivers are the
+same one-map fact; JS is structurally untypable statically). The residual `internal-only`
+class after this stage is dominated by exactly the field-type shape.
+
 ## Post-1.0 parking lot
 **RFC 0016 — uniform component model** (the accepted plan, phased in its §8, **all four phases
 landed**: 0 freeze reservations, 1 host-mediated content channel for plugin graph hooks

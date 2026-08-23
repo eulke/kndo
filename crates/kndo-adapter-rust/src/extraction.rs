@@ -324,6 +324,267 @@ fn collect_local_qualifiers(root: Node, src: &[u8]) -> std::collections::HashSet
 struct PathEnv<'a> {
     locals: &'a std::collections::HashSet<String>,
     inline_mods: &'a std::collections::HashSet<String>,
+    /// Receiver-type environment of the enclosing function ([`TypeEnv`]) — empty outside
+    /// function bodies (const initializers, macro templates).
+    types: &'a TypeEnv,
+}
+
+/// Local receiver types, from language FACTS visible in this file (RFC 0012 §3-bis): the
+/// `impl` owner (`self`/`Self`), typed parameters (fn and closure), annotated `let`s, and
+/// initializer shapes that name their type (`T { .. }` struct literals, `T::assoc(…)`
+/// calls). A name bound to CONFLICTING types anywhere in the function is dropped outright —
+/// ambiguity degrades to the duck-typed fallback, never to a guess. With a known receiver
+/// type, `args.matcher()` emits qualifier `HiArgs` instead of the opaque `args`, and the
+/// core resolves the member in the type's home file at Certain (the same qualified path
+/// `HiArgs::matcher` would take). A wrong inference can only miss (→ duck fallback, today's
+/// behavior) or hit a member the type genuinely declares — both degrade toward silence.
+#[derive(Default)]
+struct TypeEnv {
+    /// The enclosing `impl` block's self type — what `self.method()` and `Self::assoc()`
+    /// resolve their qualifier to.
+    owner: Option<String>,
+    /// Simple identifier → base type name, conflict-free by construction.
+    bindings: std::collections::HashMap<String, String>,
+}
+
+impl TypeEnv {
+    /// The environment for one function: owner + every conflict-free typed binding in it.
+    fn for_function(item: Node, src: &[u8], owner: Option<&str>) -> TypeEnv {
+        let mut bindings = std::collections::HashMap::new();
+        let mut conflicted = std::collections::HashSet::new();
+        collect_typed_bindings(item, src, &mut bindings, &mut conflicted);
+        for name in &conflicted {
+            bindings.remove(name);
+        }
+        resolve_self_bindings(&mut bindings, owner);
+        TypeEnv {
+            owner: owner.map(str::to_string),
+            bindings,
+        }
+    }
+
+    fn empty() -> &'static TypeEnv {
+        static EMPTY: std::sync::OnceLock<TypeEnv> = std::sync::OnceLock::new();
+        EMPTY.get_or_init(TypeEnv::default)
+    }
+}
+
+/// `let x = Self::new()` / `x: Self` — the alias resolves through the impl owner; with no
+/// owner in scope the binding says nothing.
+fn resolve_self_bindings(
+    bindings: &mut std::collections::HashMap<String, String>,
+    owner: Option<&str>,
+) {
+    match owner {
+        Some(owner_name) => {
+            for ty in bindings.values_mut() {
+                if ty == "Self" {
+                    *ty = owner_name.to_string();
+                }
+            }
+        }
+        None => bindings.retain(|_, ty| ty != "Self"),
+    }
+}
+
+/// One binding candidate into the [`TypeEnv`]: same name + same type is idempotent, same
+/// name + different type poisons the name (shadowing across branches is not tracked — the
+/// reliable answer for a name that isn't consistently one type is "unknown").
+fn bind_type(
+    name: &str,
+    ty: String,
+    bindings: &mut std::collections::HashMap<String, String>,
+    conflicted: &mut std::collections::HashSet<String>,
+) {
+    match bindings.get(name) {
+        Some(prior) if *prior != ty => {
+            conflicted.insert(name.to_string());
+        }
+        Some(_) => {}
+        None => {
+            bindings.insert(name.to_string(), ty);
+        }
+    }
+}
+
+/// Every typed simple binding under `node`: fn/closure `parameter`s with a type, annotated
+/// `let`s, and un-annotated `let`s whose initializer names its type. Nested functions are
+/// not descended into — their bodies build their own environment.
+fn collect_typed_bindings(
+    node: Node,
+    src: &[u8],
+    bindings: &mut std::collections::HashMap<String, String>,
+    conflicted: &mut std::collections::HashSet<String>,
+) {
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        match child.kind() {
+            "function_item" if child.id() != node.id() => continue, // own env
+            "parameter" | "let_declaration" => {
+                record_typed_binding(child, src, bindings, conflicted);
+                collect_typed_bindings(child, src, bindings, conflicted);
+            }
+            _ => collect_typed_bindings(child, src, bindings, conflicted),
+        }
+    }
+}
+
+/// A `parameter`/`let_declaration` with a simple identifier pattern: the annotated type
+/// wins; an un-annotated `let` falls back to what its initializer names.
+fn record_typed_binding(
+    item: Node,
+    src: &[u8],
+    bindings: &mut std::collections::HashMap<String, String>,
+    conflicted: &mut std::collections::HashSet<String>,
+) {
+    let Some(name) = item
+        .child_by_field_name("pattern")
+        .and_then(|pattern| simple_pattern_name(pattern, src))
+    else {
+        return; // destructuring binds parts of a type, not the type
+    };
+    let ty = match item.child_by_field_name("type") {
+        Some(ty) => base_type_name(ty, src),
+        None => item
+            .child_by_field_name("value")
+            .and_then(|value| initializer_type_name(value, src)),
+    };
+    if let Some(ty) = ty {
+        bind_type(name, ty, bindings, conflicted);
+    }
+}
+
+/// The bound identifier of a simple (possibly `mut`) pattern — destructuring yields none.
+fn simple_pattern_name<'a>(pattern: Node, src: &'a [u8]) -> Option<&'a str> {
+    let node = match pattern.kind() {
+        "identifier" => pattern,
+        "mut_pattern" => pattern.named_child(0)?,
+        _ => return None,
+    };
+    (node.kind() == "identifier").then(|| text(node, src))
+}
+
+/// The base type a receiver of this declared type dispatches methods on: strips references
+/// and the std pointer wrappers that auto-deref (`&`, `&mut`, `Box/Rc/Arc`), takes the
+/// bound of `impl Trait`/`dyn Trait`, and the path's last segment. Shapes with no single
+/// base (tuples, fn pointers, slices) yield nothing.
+fn base_type_name(ty: Node, src: &[u8]) -> Option<String> {
+    match ty.kind() {
+        "generic_type" => generic_base_type(ty, src),
+        "type_identifier" | "scoped_type_identifier" => {
+            let t = text(ty, src);
+            Some(t.rsplit("::").next().unwrap_or(t).to_string())
+        }
+        _ => unwrapped_type(ty).and_then(|inner| base_type_name(inner, src)),
+    }
+}
+
+/// Transparent type wrappers around a dispatch base: references (`&T`, `&mut T`) and
+/// `impl Trait` / `dyn Trait` (a single-trait bound IS the dispatch surface).
+fn unwrapped_type(ty: Node) -> Option<Node> {
+    match ty.kind() {
+        "reference_type" => ty.child_by_field_name("type"),
+        "abstract_type" | "dynamic_type" => ty.named_child(0),
+        _ => None,
+    }
+}
+
+/// A generic type's dispatch base: `Vec<T>` is `Vec`, but the auto-deref pointer wrappers
+/// (`Box/Rc/Arc<T>`) dispatch methods on the pointee.
+fn generic_base_type(ty: Node, src: &[u8]) -> Option<String> {
+    let base = ty.child_by_field_name("type")?;
+    let base_name = text(base, src);
+    if matches!(base_name, "Box" | "Rc" | "Arc") {
+        let args = ty.child_by_field_name("type_arguments")?;
+        base_type_name(args.named_child(0)?, src)
+    } else {
+        Some(base_name.to_string())
+    }
+}
+
+/// The type an initializer expression names, when it names one as a language fact or a
+/// hit-gated convention: `T { .. }` struct literals (certain) and `T::assoc(…)` calls
+/// (`T::new()`, builders — the convention that associated constructors return their type;
+/// a wrong guess can only miss into the duck fallback or hit a member `T` genuinely
+/// declares, both silence-direction).
+fn initializer_type_name(value: Node, src: &[u8]) -> Option<String> {
+    match value.kind() {
+        "struct_expression" => value
+            .child_by_field_name("name")
+            .and_then(|n| base_type_name(n, src)),
+        "call_expression" => value
+            .child_by_field_name("function")
+            .and_then(|f| scoped_call_type_root(f, src)),
+        "reference_expression" | "parenthesized_expression" => value
+            .named_child(0)
+            .and_then(|inner| initializer_type_name(inner, src)),
+        _ => None,
+    }
+}
+
+/// The receiver expression's type, when the file's facts pin one ([`TypeEnv`] doc):
+/// a typed identifier, `self` (→ owner), or a call chain rooted at a type
+/// (`SearchWorkerBuilder::new().opt(x).build()` — every link's receiver types as the root;
+/// a link returning something else can only miss into the duck fallback or hit a member
+/// the root genuinely declares, both silence-direction).
+fn receiver_type(value: Node, types: &TypeEnv, src: &[u8]) -> Option<String> {
+    match value.kind() {
+        "identifier" => types.bindings.get(text(value, src)).cloned(),
+        "self" => types.owner.clone(),
+        "call_expression" => value
+            .child_by_field_name("function")
+            .and_then(|f| call_chain_type(f, types, src)),
+        _ => unwrapped_receiver(value).and_then(|inner| receiver_type(inner, types, src)),
+    }
+}
+
+/// Transparent expression wrappers around a receiver (`(&x)`, `&x`) — anything else ends
+/// the walk.
+fn unwrapped_receiver(value: Node) -> Option<Node> {
+    matches!(
+        value.kind(),
+        "parenthesized_expression" | "reference_expression"
+    )
+    .then(|| value.named_child(0))
+    .flatten()
+}
+
+/// A call's result type as a chain link: `T::assoc(…)` / `Self::assoc(…)` name the root
+/// type; `x.method(…)` flows the receiver's own type through (hit-gated — see
+/// [`receiver_type`]'s reliability note).
+fn call_chain_type(function: Node, types: &TypeEnv, src: &[u8]) -> Option<String> {
+    match function.kind() {
+        "scoped_identifier" | "generic_function" => {
+            scoped_call_type_root(function, src).and_then(|root| resolve_self_type(root, types))
+        }
+        "field_expression" => function
+            .child_by_field_name("value")
+            .and_then(|v| receiver_type(v, types, src)),
+        _ => None,
+    }
+}
+
+/// `Self` resolves through the impl owner; any other root stands as-is.
+fn resolve_self_type(root: String, types: &TypeEnv) -> Option<String> {
+    if root != "Self" {
+        return Some(root);
+    }
+    types.owner.clone()
+}
+
+/// The uppercase root type of a `T::assoc` / `T::assoc::<X>` callee path, if that is the
+/// shape (`Self` resolves through the caller's owner before this is consulted).
+fn scoped_call_type_root(function: Node, src: &[u8]) -> Option<String> {
+    let path = match function.kind() {
+        "scoped_identifier" => text(function, src),
+        "generic_function" => text(function.child_by_field_name("function")?, src),
+        _ => return None,
+    };
+    let root = path.split("::").next().unwrap_or("");
+    root.chars()
+        .next()
+        .is_some_and(char::is_uppercase)
+        .then(|| root.to_string())
 }
 
 fn collect_inline_mod_names(root: Node, src: &[u8]) -> std::collections::HashSet<String> {
@@ -661,6 +922,7 @@ fn handle_item(item: Node, src: &[u8], ctx: &Ctx<'_>, pending: PendingAttrs, out
                             PathEnv {
                                 locals: ctx.local_qualifiers,
                                 inline_mods: ctx.inline_mod_names,
+                                types: TypeEnv::empty(),
                             },
                             out,
                         );
@@ -685,6 +947,7 @@ fn handle_item(item: Node, src: &[u8], ctx: &Ctx<'_>, pending: PendingAttrs, out
                 PathEnv {
                     locals: ctx.local_qualifiers,
                     inline_mods: ctx.inline_mod_names,
+                    types: TypeEnv::empty(),
                 },
                 out,
             );
@@ -702,6 +965,7 @@ fn handle_item(item: Node, src: &[u8], ctx: &Ctx<'_>, pending: PendingAttrs, out
                         PathEnv {
                             locals: ctx.local_qualifiers,
                             inline_mods: ctx.inline_mod_names,
+                            types: TypeEnv::empty(),
                         },
                         out,
                     );
@@ -829,11 +1093,15 @@ fn handle_function(
             PathEnv {
                 locals: ctx.local_qualifiers,
                 inline_mods: ctx.inline_mod_names,
+                types: TypeEnv::empty(),
             },
             out,
         );
     }
     if let Some(body) = body {
+        // Receiver-type environment (RFC 0012 §3-bis): owner + typed bindings, so member
+        // accesses on known receivers emit their TYPE as the qualifier.
+        let types = TypeEnv::for_function(item, src, owner);
         walk_body(
             body,
             src,
@@ -841,6 +1109,7 @@ fn handle_function(
             PathEnv {
                 locals: ctx.local_qualifiers,
                 inline_mods: ctx.inline_mod_names,
+                types: &types,
             },
             out,
         );
@@ -882,6 +1151,7 @@ fn handle_type_decl(item: Node, src: &[u8], ctx: &Ctx<'_>, kind: SymbolKind, out
             PathEnv {
                 locals: ctx.local_qualifiers,
                 inline_mods: ctx.inline_mod_names,
+                types: TypeEnv::empty(),
             },
             out,
         );
@@ -917,6 +1187,7 @@ fn handle_enum(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
                     PathEnv {
                         locals: ctx.local_qualifiers,
                         inline_mods: ctx.inline_mod_names,
+                        types: TypeEnv::empty(),
                     },
                     out,
                 );
@@ -1100,6 +1371,7 @@ fn handle_simple_decl(
             PathEnv {
                 locals: ctx.local_qualifiers,
                 inline_mods: ctx.inline_mod_names,
+                types: TypeEnv::empty(),
             },
             out,
         );
@@ -1112,6 +1384,7 @@ fn handle_simple_decl(
             PathEnv {
                 locals: ctx.local_qualifiers,
                 inline_mods: ctx.inline_mod_names,
+                types: TypeEnv::empty(),
             },
             out,
         );
@@ -1444,8 +1717,11 @@ fn walk_body(node: Node, src: &[u8], within: Option<&str>, env: PathEnv<'_>, out
             return;
         }
         "field_expression" => {
-            // `x.method()` / `x.field` — a member access by construction: the duck-typed
-            // fallback territory (RFC 0012 §3), mirrored from the Go adapter.
+            // `x.method()` / `x.field` — a member access by construction. With the
+            // receiver's TYPE known ([`TypeEnv`], RFC 0012 §3-bis) the qualifier is the
+            // type name — the core resolves the member in the type's home file at Certain,
+            // exactly like the qualified `Type::member` path. Unknown receivers keep the
+            // opaque qualifier and land in the duck-typed fallback (RFC 0012 §3).
             let (Some(value), Some(field)) = (
                 node.child_by_field_name("value"),
                 node.child_by_field_name("field"),
@@ -1457,15 +1733,21 @@ fn walk_body(node: Node, src: &[u8], within: Option<&str>, env: PathEnv<'_>, out
             } else {
                 RefKind::Read
             };
-            if matches!(value.kind(), "identifier" | "self") {
-                out.references.push(RawReference {
-                    name: SmolStr::new(text(field, src)),
-                    scope_context: Some(SmolStr::new(text(value, src))),
-                    span: span(node),
-                    within: within.map(SmolStr::new),
-                    kind,
-                });
-                if value.kind() == "identifier" {
+            let typed = receiver_type(value, env.types, src);
+            let qualifier = typed.as_deref().unwrap_or(match value.kind() {
+                "identifier" | "self" => text(value, src),
+                _ => "<expr>",
+            });
+            out.references.push(RawReference {
+                name: SmolStr::new(text(field, src)),
+                scope_context: Some(SmolStr::new(qualifier)),
+                span: span(node),
+                within: within.map(SmolStr::new),
+                kind,
+            });
+            match value.kind() {
+                "identifier" => {
+                    // The receiver variable itself is read either way.
                     out.references.push(RawReference {
                         name: SmolStr::new(text(value, src)),
                         scope_context: None,
@@ -1474,17 +1756,9 @@ fn walk_body(node: Node, src: &[u8], within: Option<&str>, env: PathEnv<'_>, out
                         kind: RefKind::Read,
                     });
                 }
-                return;
+                "self" => {}
+                _ => walk_body(value, src, within, env, out),
             }
-            // Complex receiver: member ref with no usable qualifier, then walk the receiver.
-            out.references.push(RawReference {
-                name: SmolStr::new(text(field, src)),
-                scope_context: Some(SmolStr::new("<expr>")),
-                span: span(node),
-                within: within.map(SmolStr::new),
-                kind,
-            });
-            walk_body(value, src, within, env, out);
             return;
         }
         "macro_invocation" => {
@@ -1557,10 +1831,18 @@ fn handle_scoped_path(
 ) {
     let full = text(node, src);
     // Strip generic turbofish (`Vec::<u8>::new` → segments without the `::<u8>` part).
-    let segments: Vec<&str> = full
+    let mut segments: Vec<&str> = full
         .split("::")
         .filter(|s| !s.is_empty() && !s.starts_with('<'))
         .collect();
+    // `Self::assoc()` inside an impl IS `Owner::assoc()` — the language fact the enclosing
+    // impl states (RFC 0012 §3-bis); without the substitution the member table has no
+    // `Self.assoc` to hit and the reference fell to the duck fallback.
+    if segments.first() == Some(&"Self") {
+        if let Some(owner) = &env.types.owner {
+            segments[0] = owner.as_str();
+        }
+    }
     emit_path(&segments, span(node), within, kind, env, out);
 }
 
@@ -2126,6 +2408,86 @@ mod tests {
         assert_eq!(by_name("super_fn").visibility.0, 1); // top-level: super leaves the file
         assert_eq!(by_name("public_fn").visibility.0, 2);
         assert!(by_name("public_fn").exported);
+    }
+
+    fn scope_of<'a>(f: &'a FileFacts, name: &str) -> Option<&'a str> {
+        f.references
+            .iter()
+            .find(|r| r.name == name)
+            .and_then(|r| r.scope_context.as_deref())
+    }
+
+    #[test]
+    fn self_receivers_qualify_with_the_impl_owner() {
+        let f = facts(
+            "struct T;\n\
+             impl T {\n\
+             \x20   fn a(&self) { self.b(); }\n\
+             \x20   fn b(&self) {}\n\
+             }\n",
+        );
+        assert_eq!(scope_of(&f, "b"), Some("T"));
+    }
+
+    #[test]
+    fn typed_parameters_and_lets_qualify_receivers_with_their_type() {
+        // Params (`&HiArgs` strips the reference), annotated lets (`Box<Thing>` strips the
+        // auto-deref wrapper), and struct-literal initializers all pin the receiver type.
+        let f = facts(
+            "fn f(args: &HiArgs) { args.matcher(); }\n\
+             fn g() { let x: Box<Thing> = make(); x.go(); }\n\
+             fn h() { let t = Widget { n: 1 }; t.spin(); }\n",
+        );
+        assert_eq!(scope_of(&f, "matcher"), Some("HiArgs"));
+        assert_eq!(scope_of(&f, "go"), Some("Thing"));
+        assert_eq!(scope_of(&f, "spin"), Some("Widget"));
+    }
+
+    #[test]
+    fn assoc_constructor_chains_type_every_link() {
+        // `Builder::new()` names its type by convention; the chain links keep it — the
+        // ripgrep shape `SearchWorkerBuilder::new().opt(x).build()`.
+        let f = facts(
+            "fn f() {\n\
+             \x20   let b = Builder::new();\n\
+             \x20   b.step();\n\
+             \x20   Builder::new().opt(1).build();\n\
+             }\n",
+        );
+        assert_eq!(scope_of(&f, "step"), Some("Builder"));
+        assert_eq!(scope_of(&f, "opt"), Some("Builder"));
+        assert_eq!(scope_of(&f, "build"), Some("Builder"));
+    }
+
+    #[test]
+    fn conflicting_bindings_drop_to_the_duck_fallback() {
+        // The same name bound to two types across branches: the reliable answer is
+        // "unknown" — the qualifier stays the opaque receiver name.
+        let f = facts(
+            "fn f(cond: bool) {\n\
+             \x20   let x: Alpha = a();\n\
+             \x20   let x: Beta = b();\n\
+             \x20   x.run();\n\
+             }\n",
+        );
+        assert_eq!(scope_of(&f, "run"), Some("x"));
+    }
+
+    #[test]
+    fn self_scoped_paths_substitute_the_impl_owner() {
+        let f = facts(
+            "struct T;\n\
+             impl T {\n\
+             \x20   fn a() { Self::b(); }\n\
+             \x20   fn b() {}\n\
+             }\n",
+        );
+        let r = f
+            .references
+            .iter()
+            .find(|r| r.name == "b" && r.kind == RefKind::Call)
+            .expect("Self::b() reference");
+        assert_eq!(r.scope_context.as_deref(), Some("T"));
     }
 
     #[test]

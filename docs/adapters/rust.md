@@ -206,6 +206,30 @@ literals; skipped → `line_comment`, `block_comment`. Winnowing parameters shar
 - `#[global_allocator]` / `#[panic_handler]` / `#[alloc_error_handler]` root the item: the
   runtime is the consumer, same externally-invoked semantics as `#[no_mangle]`.
 
+**Receiver typing (RFC 0012 §3-bis)** — a per-function `TypeEnv` built from language FACTS
+visible in the file pins receiver types, so `args.matcher()` emits its TYPE as the
+qualifier (`HiArgs`) and the core resolves the member in the type's home file at Certain,
+exactly like the explicit `HiArgs::matcher` path. The sources, in order of certainty:
+
+- `self` / `Self` → the enclosing `impl`'s self type (including `Self::assoc()` paths and
+  `let x = Self::new()` initializers).
+- Typed parameters — fn and closure alike — and annotated `let`s. The declared type is
+  reduced to its dispatch base: `&`/`&mut` stripped, `Box/Rc/Arc<T>` auto-deref to `T`,
+  `impl Trait`/`dyn Trait` to the trait, `Vec<T>` stays `Vec`.
+- Struct-literal initializers (`let t = Widget { .. }` — certain) and `T::assoc(…)`
+  initializers (`T::new()`, builders — the constructor convention), with the type flowing
+  through call chains (`SearchWorkerBuilder::new().opt(x).build()` types every link).
+- A name bound to CONFLICTING types anywhere in the function is dropped outright:
+  ambiguity degrades to the duck-typed fallback (RFC 0012 §3), never to a guess.
+
+Reliability bound, stated once: a wrong inference can only MISS (→ duck fallback, exactly
+today's behavior — the core never settles on a receiver-typed qualifier) or hit a member
+the named type genuinely declares — both degrade toward silence, never toward accusation.
+Untracked (deliberately, each a future fact-source, not a patch): field types
+(`low.context_separator.into_bytes()` — needs cross-file field-type facts, a contract
+addition), `match`/`if let` bindings (the scrutinee's payload type is not local), untyped
+closure params, and multi-bound generics.
+
 ## 3. Resolution
 
 The specifier grammar is Rust paths; every step is arithmetic over `ResolveCtx`'s known
