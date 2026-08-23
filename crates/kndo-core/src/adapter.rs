@@ -616,6 +616,12 @@ pub struct RawMemberType {
     /// (references stripped, auto-deref wrappers unwrapped, `Self` already resolved).
     #[rkyv(with = crate::rkyv_support::SmolStrAsString)]
     pub yields: SmolStr,
+    /// The base name of the FIRST type parameter, when `yields` is parameterized — the
+    /// payload an unwrapping operation extracts (`Result<ConfiguredHIR, Error>` →
+    /// `ConfiguredHIR`, `Option<Widget>` → `Widget`). A pointer segment marked `?` (the
+    /// language's try/unwrap operator) resolves through THIS instead of `yields`.
+    #[rkyv(with = rkyv::with::Map<crate::rkyv_support::SmolStrAsString>)]
+    pub yields_param: Option<SmolStr>,
 }
 
 /// One [`FileFacts::string_call_args`] entry. Carries rkyv derives because assembly persists

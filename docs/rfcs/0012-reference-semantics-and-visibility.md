@@ -334,7 +334,11 @@ scope, and the final member resolves in the yielded type's home — twins includ
 a declared fact, Certain on hit, duck fallback on any miss (never a settle). The resolved
 chain also credits the yielded TYPE with a Read from the site. Facts are part of the
 RFC 0013 §4 surface signature (an annotation change re-resolves dependents) and persist in
-`FilePatchMeta` for the patch path.
+`FilePatchMeta` for the patch path. `RawMemberType.yields_param` carries the first type
+parameter's base (`Result<ConfiguredHIR, Error>` → `ConfiguredHIR`); a pointer segment
+marked `?` — the language's try/unwrap operator, emitted by the adapter — resolves through
+the payload instead of the wrapper, and pointers compose to N hops (each hop a declared
+fact, each resolved hop's type credited with a Read from the site).
 
 ## 10. Multi-module topology (`go.work` et al) — adapter work, one recorded divergence
 

@@ -1066,6 +1066,21 @@ clusters resolved); `unused` stable at 19; one new `Possible`-confidence finding
 reduces to `Result` and drops the payload; parameterized `yields` for `?`-unwrapping is the
 recorded next contract step). Scan time unchanged.
 
+### M6 progress — parameterized yields: `?` unwrapping, N-hop pointers ✅ (landed 2026-08-23)
+
+The recorded step made current (task #86). `RawMemberType.yields_param` carries the first
+type parameter's base; the Rust adapter marks try-operator hops with `?`
+(`let chir = self.config.build_many(x)?` binds the pointer `Config.build_many?` — `self.
+config` typed through the file's own field facts, now the single-source pre-pass), binds
+initializers pointer-first (`Builder.new` over the constructor-name convention), and caps
+pointer depth at four segments. Core resolves pointers to N hops, each `?`-marked hop
+through the payload, every resolved hop's type credited with a Read (schema v21, facts v6).
+ripgrep: `internal-only` 129 → 127 — the recorded trade-in (`ConfiguredHIR.line_terminator`)
+and its sibling `non_matching_bytes` both resolved to Certain; zero new findings, zero
+regressions. Still deliberately unmodeled: `.unwrap()`/`.expect()` (stdlib method
+semantics — a curated fact table is the legitimate future source), `match` payloads,
+untyped closures, multi-bound generics.
+
 ## Post-1.0 parking lot
 **RFC 0016 — uniform component model** (the accepted plan, phased in its §8, **all four phases
 landed**: 0 freeze reservations, 1 host-mediated content channel for plugin graph hooks

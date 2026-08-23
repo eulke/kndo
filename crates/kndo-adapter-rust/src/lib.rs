@@ -39,7 +39,7 @@ impl LanguageAdapter for RustAdapter {
             // 2: test regions are the only producer-side test declaration — extraction
             // stopped emitting per-declaration Test roots (assembly derives them from
             // `test_spans` containment, contracts §2).
-            facts_schema_version: 5,
+            facts_schema_version: 6,
             file_globs: vec![SmolStr::new("**/*.rs")],
             manifest_globs: vec![SmolStr::new("**/Cargo.toml")],
             grammar_version: SmolStr::new("tree-sitter-rust 0.24"),

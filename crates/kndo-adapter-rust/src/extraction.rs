@@ -133,6 +133,11 @@ pub(crate) fn extract(_path: &str, content: &[u8]) -> FileFacts {
 
     let local_qualifiers = collect_local_qualifiers(root, content);
     let inline_mod_names = collect_inline_mod_names(root, content);
+    // Field facts pre-pass (RFC 0012 §3-bis): the single source for struct/union field
+    // types — the contract's member_types AND the TypeEnv's `self.field` resolution.
+    let field_facts = collect_field_facts(root, content);
+    let field_types = field_type_map(&field_facts);
+    out.member_types.extend(field_facts);
     walk_items(
         root,
         content,
@@ -141,6 +146,7 @@ pub(crate) fn extract(_path: &str, content: &[u8]) -> FileFacts {
             in_cfg_test: whole_file_test,
             local_qualifiers: &local_qualifiers,
             inline_mod_names: &inline_mod_names,
+            field_types: &field_types,
         },
         &mut out,
     );
@@ -326,7 +332,7 @@ struct PathEnv<'a> {
     inline_mods: &'a std::collections::HashSet<String>,
     /// Receiver-type environment of the enclosing function ([`TypeEnv`]) — empty outside
     /// function bodies (const initializers, macro templates).
-    types: &'a TypeEnv,
+    types: &'a TypeEnv<'a>,
 }
 
 /// Local receiver types, from language FACTS visible in this file (RFC 0012 §3-bis): the
@@ -338,21 +344,34 @@ struct PathEnv<'a> {
 /// core resolves the member in the type's home file at Certain (the same qualified path
 /// `HiArgs::matcher` would take). A wrong inference can only miss (→ duck fallback, today's
 /// behavior) or hit a member the type genuinely declares — both degrade toward silence.
-#[derive(Default)]
-struct TypeEnv {
+type FieldTypes = std::collections::HashMap<(String, String), String>;
+
+struct TypeEnv<'a> {
     /// The enclosing `impl` block's self type — what `self.method()` and `Self::assoc()`
     /// resolve their qualifier to.
     owner: Option<String>,
-    /// Simple identifier → base type name, conflict-free by construction.
+    /// Simple identifier → base type name OR dotted pointer, conflict-free by construction.
     bindings: std::collections::HashMap<String, String>,
+    /// The file's declared field/return types ((owner, member) → base type) — what lets
+    /// `self.config` type as `Config` when the struct is declared in this same file.
+    file_members: &'a FieldTypes,
 }
 
-impl TypeEnv {
+impl TypeEnv<'_> {
     /// The environment for one function: owner + every conflict-free typed binding in it.
-    fn for_function(item: Node, src: &[u8], owner: Option<&str>) -> TypeEnv {
+    fn for_function<'a>(
+        item: Node,
+        src: &[u8],
+        owner: Option<&str>,
+        file_members: &'a FieldTypes,
+    ) -> TypeEnv<'a> {
         let mut bindings = std::collections::HashMap::new();
         let mut conflicted = std::collections::HashSet::new();
-        collect_typed_bindings(item, src, &mut bindings, &mut conflicted);
+        let init = InitCtx {
+            owner,
+            file_members,
+        };
+        collect_typed_bindings(item, src, &init, &mut bindings, &mut conflicted);
         for name in &conflicted {
             bindings.remove(name);
         }
@@ -360,13 +379,27 @@ impl TypeEnv {
         TypeEnv {
             owner: owner.map(str::to_string),
             bindings,
+            file_members,
         }
     }
 
-    fn empty() -> &'static TypeEnv {
-        static EMPTY: std::sync::OnceLock<TypeEnv> = std::sync::OnceLock::new();
-        EMPTY.get_or_init(TypeEnv::default)
+    fn empty() -> &'static TypeEnv<'static> {
+        static EMPTY_MAP: std::sync::OnceLock<FieldTypes> = std::sync::OnceLock::new();
+        static EMPTY: std::sync::OnceLock<TypeEnv<'static>> = std::sync::OnceLock::new();
+        EMPTY.get_or_init(|| TypeEnv {
+            owner: None,
+            bindings: std::collections::HashMap::new(),
+            file_members: EMPTY_MAP.get_or_init(std::collections::HashMap::new),
+        })
     }
+}
+
+/// What the binding collector can resolve initializers against: the impl owner and the
+/// file's declared member types — both available before any [`TypeEnv`] exists.
+#[derive(Clone, Copy)]
+struct InitCtx<'a> {
+    owner: Option<&'a str>,
+    file_members: &'a FieldTypes,
 }
 
 /// `let x = Self::new()` / `x: Self` — the alias resolves through the impl owner; with no
@@ -413,6 +446,7 @@ fn bind_type(
 fn collect_typed_bindings(
     node: Node,
     src: &[u8],
+    init: &InitCtx<'_>,
     bindings: &mut std::collections::HashMap<String, String>,
     conflicted: &mut std::collections::HashSet<String>,
 ) {
@@ -421,10 +455,10 @@ fn collect_typed_bindings(
         match child.kind() {
             "function_item" if child.id() != node.id() => continue, // own env
             "parameter" | "let_declaration" => {
-                record_typed_binding(child, src, bindings, conflicted);
-                collect_typed_bindings(child, src, bindings, conflicted);
+                record_typed_binding(child, src, init, bindings, conflicted);
+                collect_typed_bindings(child, src, init, bindings, conflicted);
             }
-            _ => collect_typed_bindings(child, src, bindings, conflicted),
+            _ => collect_typed_bindings(child, src, init, bindings, conflicted),
         }
     }
 }
@@ -434,6 +468,7 @@ fn collect_typed_bindings(
 fn record_typed_binding(
     item: Node,
     src: &[u8],
+    init: &InitCtx<'_>,
     bindings: &mut std::collections::HashMap<String, String>,
     conflicted: &mut std::collections::HashSet<String>,
 ) {
@@ -447,7 +482,7 @@ fn record_typed_binding(
         Some(ty) => base_type_name(ty, src),
         None => item
             .child_by_field_name("value")
-            .and_then(|value| initializer_type_name(value, src)),
+            .and_then(|value| init_qualifier(value, init, src)),
     };
     if let Some(ty) = ty {
         bind_type(name, ty, bindings, conflicted);
@@ -502,23 +537,93 @@ fn generic_base_type(ty: Node, src: &[u8]) -> Option<String> {
     }
 }
 
-/// The type an initializer expression names, when it names one as a language fact or a
-/// hit-gated convention: `T { .. }` struct literals (certain) and `T::assoc(…)` calls
-/// (`T::new()`, builders — the convention that associated constructors return their type;
-/// a wrong guess can only miss into the duck fallback or hit a member `T` genuinely
-/// declares, both silence-direction).
-fn initializer_type_name(value: Node, src: &[u8]) -> Option<String> {
+/// The QUALIFIER an initializer binds its name to: a plain type for `T { .. }` struct
+/// literals, a dotted POINTER for calls (`T::assoc(…)` → `T.assoc`;
+/// `self.config.build_many(…)` → `Config.build_many` through the file's member types),
+/// `?`-marked when a try expression unwraps the value — `let chir =
+/// self.config.build_many(x)?` binds `chir` to `Config.build_many?`, and the core takes
+/// the return's payload parameter.
+fn init_qualifier(value: Node, init: &InitCtx<'_>, src: &[u8]) -> Option<String> {
     match value.kind() {
         "struct_expression" => value
             .child_by_field_name("name")
             .and_then(|n| base_type_name(n, src)),
         "call_expression" => value
             .child_by_field_name("function")
-            .and_then(|f| scoped_call_type_root(f, src)),
-        "reference_expression" | "parenthesized_expression" => value
-            .named_child(0)
-            .and_then(|inner| initializer_type_name(inner, src)),
+            .and_then(|f| init_callee_pointer(f, init, src)),
+        _ => init_wrapped_qualifier(value, init, src),
+    }
+}
+
+/// Wrapper initializers: `expr?` appends the unwrap marker; `&expr` / `(expr)` pass
+/// through.
+fn init_wrapped_qualifier(value: Node, init: &InitCtx<'_>, src: &[u8]) -> Option<String> {
+    let inner = value.named_child(0)?;
+    match value.kind() {
+        "try_expression" => init_qualifier(inner, init, src).map(|q| format!("{q}?")),
+        "reference_expression" | "parenthesized_expression" => init_qualifier(inner, init, src),
         _ => None,
+    }
+}
+
+/// A call initializer's pointer: `T::assoc`/`Self::assoc` scoped callees, or a member
+/// callee whose base resolves through `self` and the file's declared field types
+/// (`self.config.build_many` → `Config.build_many`).
+fn init_callee_pointer(function: Node, init: &InitCtx<'_>, src: &[u8]) -> Option<String> {
+    match function.kind() {
+        "scoped_identifier" | "generic_function" => init_scoped_pointer(function, init, src),
+        "field_expression" => init_field_pointer(function, init, src),
+        _ => None,
+    }
+}
+
+/// `T::assoc` / `Self::assoc` scoped callee → `"T.assoc"` (owner-resolved).
+fn init_scoped_pointer(function: Node, init: &InitCtx<'_>, src: &[u8]) -> Option<String> {
+    let root = scoped_call_type_root(function, src)?;
+    let root = if root == "Self" {
+        init.owner?.to_string()
+    } else {
+        root
+    };
+    let path = scoped_callee_text(function, src)?;
+    let assoc = path.rsplit("::").next().unwrap_or(path);
+    Some(format!("{root}.{assoc}"))
+}
+
+/// `self.field.method` member callee → `"FieldType.method"`.
+fn init_field_pointer(function: Node, init: &InitCtx<'_>, src: &[u8]) -> Option<String> {
+    let base = function.child_by_field_name("value")?;
+    let field = function.child_by_field_name("field")?;
+    let base_type = init_base_type(base, init, src)?;
+    Some(format!("{base_type}.{}", text(field, src)))
+}
+
+/// The collector's mini receiver chain: `self` → the impl owner; `self.field` → the file's
+/// declared field type. Two levels — enough for the idiomatic `self.field.method(…)` shape.
+fn init_base_type(base: Node, init: &InitCtx<'_>, src: &[u8]) -> Option<String> {
+    match base.kind() {
+        "self" => init.owner.map(str::to_string),
+        "field_expression" => init_field_base(base, init, src),
+        _ => None,
+    }
+}
+
+/// One `base.field` level of the collector's mini chain, through the file's field facts.
+fn init_field_base(base: Node, init: &InitCtx<'_>, src: &[u8]) -> Option<String> {
+    let inner = base.child_by_field_name("value")?;
+    let field = base.child_by_field_name("field")?;
+    let owner_type = init_base_type(inner, init, src)?;
+    init.file_members
+        .get(&(owner_type, text(field, src).to_string()))
+        .cloned()
+}
+
+/// The textual path of a scoped callee (`T::assoc`, turbofish stripped via the inner
+/// function of a `generic_function`).
+fn scoped_callee_text<'a>(function: Node, src: &'a [u8]) -> Option<&'a str> {
+    match function.kind() {
+        "generic_function" => Some(text(function.child_by_field_name("function")?, src)),
+        _ => Some(text(function, src)),
     }
 }
 
@@ -540,6 +645,12 @@ fn receiver_pointer(value: Node, types: &TypeEnv, src: &[u8]) -> Option<String> 
         "call_expression" => value
             .child_by_field_name("function")
             .and_then(|f| callee_pointer(f, types, src)),
+        // `foo()?.method()` — the try operator unwraps: mark the hop so the core takes
+        // the payload parameter instead of the wrapper.
+        "try_expression" => value
+            .named_child(0)
+            .and_then(|inner| receiver_pointer(inner, types, src))
+            .map(|p| format!("{p}?")),
         _ => None,
     }
 }
@@ -553,12 +664,32 @@ fn callee_pointer(function: Node, types: &TypeEnv, src: &[u8]) -> Option<String>
     }
 }
 
-/// `base.member` where `base`'s type is pinned → pointer `"Type.member"`.
+/// `base.member` where `base`'s type is pinned → pointer `"Type.member"`. Pointer depth is
+/// capped: a base already three hops deep stops extending (duck fallback instead) — chains
+/// that long carry too little signal to be worth unbounded strings.
 fn member_pointer(field_expr: Node, types: &TypeEnv, src: &[u8]) -> Option<String> {
     let base = field_expr.child_by_field_name("value")?;
     let field = field_expr.child_by_field_name("field")?;
     let base_type = receiver_type(base, types, src)?;
+    if base_type.matches('.').count() >= 3 {
+        return None;
+    }
     Some(format!("{base_type}.{}", text(field, src)))
+}
+
+/// A field access resolved through the file's own declared member types: base type pinned
+/// (not a pointer — pointers can't key the local map), field looked up on it.
+fn local_field_type(field_expr: Node, types: &TypeEnv, src: &[u8]) -> Option<String> {
+    let base = field_expr.child_by_field_name("value")?;
+    let field = field_expr.child_by_field_name("field")?;
+    let base_type = receiver_type(base, types, src)?;
+    if base_type.contains('.') {
+        return None;
+    }
+    types
+        .file_members
+        .get(&(base_type, text(field, src).to_string()))
+        .cloned()
 }
 
 /// `T::assoc` / `Self::assoc` as a callee → pointer `"T.assoc"` (owner-resolved).
@@ -581,6 +712,16 @@ fn receiver_type(value: Node, types: &TypeEnv, src: &[u8]) -> Option<String> {
     match value.kind() {
         "identifier" => types.bindings.get(text(value, src)).cloned(),
         "self" => types.owner.clone(),
+        // `self.config` (and deeper) through the file's OWN declared field types — a local
+        // fact; cross-file fields go through the pointer machinery instead.
+        "field_expression" => local_field_type(value, types, src),
+        _ => indirect_receiver_type(value, types, src),
+    }
+}
+
+/// Call and wrapper receiver shapes, split from [`receiver_type`]'s direct lookups.
+fn indirect_receiver_type(value: Node, types: &TypeEnv, src: &[u8]) -> Option<String> {
+    match value.kind() {
         "call_expression" => value
             .child_by_field_name("function")
             .and_then(|f| call_chain_type(f, types, src)),
@@ -662,6 +803,9 @@ struct Ctx<'a> {
     in_cfg_test: bool,
     local_qualifiers: &'a std::collections::HashSet<String>,
     inline_mod_names: &'a std::collections::HashSet<String>,
+    /// The file's declared field types (pre-pass) — [`TypeEnv`]s resolve `self.field`
+    /// through these.
+    field_types: &'a FieldTypes,
 }
 
 fn span(node: Node) -> Span {
@@ -1151,7 +1295,7 @@ fn handle_function(
     if let Some(body) = body {
         // Receiver-type environment (RFC 0012 §3-bis): owner + typed bindings, so member
         // accesses on known receivers emit their TYPE as the qualifier.
-        let types = TypeEnv::for_function(item, src, owner);
+        let types = TypeEnv::for_function(item, src, owner, ctx.field_types);
         walk_body(
             body,
             src,
@@ -1192,7 +1336,6 @@ fn handle_type_decl(item: Node, src: &[u8], ctx: &Ctx<'_>, kind: SymbolKind, out
     push_declaration(out, text(name, src), kind, item, None, None, vis);
     // Field/alias types are load-bearing for the type: TypeUse refs, within = the type.
     let type_name = text(name, src).to_string();
-    collect_field_member_types(item, src, &type_name, out);
     let mut c = item.walk();
     for child in item.children(&mut c) {
         walk_type_refs(
@@ -1212,12 +1355,17 @@ fn handle_type_decl(item: Node, src: &[u8], ctx: &Ctx<'_>, kind: SymbolKind, out
 /// Member-type facts from a struct/union body (RFC 0012 §3-bis): named fields keyed by
 /// name, tuple fields by position (`"0"`, `"1"` — `x.0.method()` chains too). Only fields
 /// whose annotation reduces to a base type contribute; the rest simply have no fact.
-fn collect_field_member_types(item: Node, src: &[u8], owner: &str, out: &mut FileFacts) {
+fn collect_field_member_types(
+    item: Node,
+    src: &[u8],
+    owner: &str,
+    sink: &mut Vec<kndo_core::adapter::RawMemberType>,
+) {
     let Some(body) = item.child_by_field_name("body") else {
         return;
     };
     if body.kind() == "ordered_field_declaration_list" {
-        collect_tuple_member_types(body, src, owner, out);
+        collect_tuple_member_types(body, src, owner, sink);
         return;
     }
     let mut cursor = body.walk();
@@ -1229,13 +1377,50 @@ fn collect_field_member_types(item: Node, src: &[u8], owner: &str, out: &mut Fil
             field.child_by_field_name("name"),
             field.child_by_field_name("type"),
         ) {
-            push_member_type(out, owner, text(n, src), t, src);
+            push_member_type(sink, owner, text(n, src), t, src);
         }
     }
 }
 
+/// Pre-pass over the whole file: every struct/union's field facts, collected BEFORE the
+/// item walk so [`TypeEnv`]s can resolve `self.field` against them ([`FieldTypes`]).
+fn collect_field_facts(root: Node, src: &[u8]) -> Vec<kndo_core::adapter::RawMemberType> {
+    let mut sink = Vec::new();
+    fn walk(node: Node, src: &[u8], sink: &mut Vec<kndo_core::adapter::RawMemberType>) {
+        if matches!(node.kind(), "struct_item" | "union_item") {
+            if let Some(name) = node.child_by_field_name("name") {
+                collect_field_member_types(node, src, text(name, src), sink);
+            }
+        }
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            walk(child, src, sink);
+        }
+    }
+    walk(root, src, &mut sink);
+    sink
+}
+
+/// The [`TypeEnv`] lookup view of the field facts: (owner, member) → base type.
+fn field_type_map(facts: &[kndo_core::adapter::RawMemberType]) -> FieldTypes {
+    facts
+        .iter()
+        .map(|m| {
+            (
+                (m.owner.to_string(), m.member.to_string()),
+                m.yields.to_string(),
+            )
+        })
+        .collect()
+}
+
 /// Tuple-struct fields, keyed by position.
-fn collect_tuple_member_types(list: Node, src: &[u8], owner: &str, out: &mut FileFacts) {
+fn collect_tuple_member_types(
+    list: Node,
+    src: &[u8],
+    owner: &str,
+    sink: &mut Vec<kndo_core::adapter::RawMemberType>,
+) {
     let mut cursor = list.walk();
     for (position, ty) in list
         .children(&mut cursor)
@@ -1244,27 +1429,66 @@ fn collect_tuple_member_types(list: Node, src: &[u8], owner: &str, out: &mut Fil
         })
         .enumerate()
     {
-        push_member_type(out, owner, &position.to_string(), ty, src);
+        push_member_type(sink, owner, &position.to_string(), ty, src);
     }
 }
 
 /// One member-type fact, when the annotation reduces to a base type. `Self` resolves to
-/// the owner — the annotation was written inside the owner's own impl/body.
-fn push_member_type(out: &mut FileFacts, owner: &str, member: &str, ty: Node, src: &[u8]) {
-    if let Some(yields) = base_type_name(ty, src) {
-        let yields = if yields == "Self" { owner } else { &yields };
-        out.member_types.push(kndo_core::adapter::RawMemberType {
+/// the owner — the annotation was written inside the owner's own impl/body. The payload
+/// parameter (`Result<T, E>` → `T`) rides along for `?`-marked pointer hops.
+fn push_member_type(
+    sink: &mut Vec<kndo_core::adapter::RawMemberType>,
+    owner: &str,
+    member: &str,
+    ty: Node,
+    src: &[u8],
+) {
+    let resolve_self = |name: String| {
+        if name == "Self" {
+            owner.to_string()
+        } else {
+            name
+        }
+    };
+    if let Some(yields) = base_type_name(ty, src).map(resolve_self) {
+        let yields_param = first_type_param_name(ty, src).map(resolve_self);
+        sink.push(kndo_core::adapter::RawMemberType {
             owner: SmolStr::new(owner),
             member: SmolStr::new(member),
             yields: SmolStr::new(yields),
+            yields_param: yields_param.map(SmolStr::new),
         });
+    }
+}
+
+/// The base name of a parameterized annotation's FIRST type argument — the payload an
+/// unwrap extracts (`Result<ConfiguredHIR, Error>` → `ConfiguredHIR`). References and the
+/// auto-deref wrappers are looked through, matching [`base_type_name`]'s reduction.
+fn first_type_param_name(ty: Node, src: &[u8]) -> Option<String> {
+    match ty.kind() {
+        "reference_type" => ty
+            .child_by_field_name("type")
+            .and_then(|inner| first_type_param_name(inner, src)),
+        "generic_type" => generic_first_param(ty, src),
+        _ => None,
+    }
+}
+
+/// A generic annotation's first argument, looking through the auto-deref wrappers.
+fn generic_first_param(ty: Node, src: &[u8]) -> Option<String> {
+    let base = text(ty.child_by_field_name("type")?, src);
+    let first = ty.child_by_field_name("type_arguments")?.named_child(0)?;
+    if matches!(base, "Box" | "Rc" | "Arc") {
+        first_type_param_name(first, src)
+    } else {
+        base_type_name(first, src)
     }
 }
 
 /// A member-type fact for an impl item that carries a name field (fn return, const type).
 fn push_owner_member_type(out: &mut FileFacts, owner: &str, item: Node, ty: Node, src: &[u8]) {
     if let Some(name) = item.child_by_field_name("name") {
-        push_member_type(out, owner, text(name, src), ty, src);
+        push_member_type(&mut out.member_types, owner, text(name, src), ty, src);
     }
 }
 
@@ -1525,6 +1749,7 @@ fn handle_mod(item: Node, src: &[u8], ctx: &Ctx<'_>, pending: &PendingAttrs, out
                 in_cfg_test: ctx.in_cfg_test || pending.cfg_test,
                 local_qualifiers: ctx.local_qualifiers,
                 inline_mod_names: ctx.inline_mod_names,
+                field_types: ctx.field_types,
             },
             out,
         ),
@@ -2565,10 +2790,9 @@ mod tests {
 
     #[test]
     fn assoc_constructor_chains_type_every_link() {
-        // `let b = Builder::new()` types `b` by the constructor convention; chain links
-        // emit fact-first POINTERS (`Builder.new`, `Builder.opt`) that the core resolves
-        // through declared return types — the ripgrep shape
-        // `SearchWorkerBuilder::new().opt(x).build()`.
+        // `let b = Builder::new()` binds `b` to the POINTER `Builder.new` (the declared
+        // return is the fact, not the constructor-name convention); chain links emit
+        // pointers likewise — the ripgrep shape `SearchWorkerBuilder::new().opt(x).build()`.
         let f = facts(
             "fn f() {\n\
              \x20   let b = Builder::new();\n\
@@ -2576,7 +2800,7 @@ mod tests {
              \x20   Builder::new().opt(1).build();\n\
              }\n",
         );
-        assert_eq!(scope_of(&f, "step"), Some("Builder"));
+        assert_eq!(scope_of(&f, "step"), Some("Builder.new"));
         assert_eq!(scope_of(&f, "opt"), Some("Builder.new"));
         assert_eq!(scope_of(&f, "build"), Some("Builder.opt"));
     }
@@ -2612,6 +2836,46 @@ mod tests {
             Some("LowArgs"),
             "Self resolves to owner"
         );
+    }
+
+    #[test]
+    fn parameterized_returns_carry_their_payload_type() {
+        let f = facts(
+            "struct Config;\n\
+             impl Config {\n\
+             \x20   pub(crate) fn build(&self) -> Result<ConfiguredHIR, Error> {\n\
+             \x20       todo!()\n\
+             \x20   }\n\
+             }\n",
+        );
+        let m = f
+            .member_types
+            .iter()
+            .find(|m| m.owner == "Config" && m.member == "build")
+            .expect("return fact");
+        assert_eq!(m.yields, "Result");
+        assert_eq!(m.yields_param.as_deref(), Some("ConfiguredHIR"));
+    }
+
+    #[test]
+    fn try_initializers_bind_unwrap_marked_pointers() {
+        // The ripgrep shape end-to-end on the adapter side: `self.config` types through
+        // the file's own field facts, the call forms the pointer, `?` marks the unwrap —
+        // `chir`'s uses carry `Config.build_many?` for the core to resolve to the payload.
+        let f = facts(
+            "struct Builder {\n\
+             \x20   config: Config,\n\
+             }\n\
+             struct Config;\n\
+             impl Builder {\n\
+             \x20   fn build(&self) -> Result<u8, u8> {\n\
+             \x20       let chir = self.config.build_many(1)?;\n\
+             \x20       chir.line_terminator();\n\
+             \x20       Ok(0)\n\
+             \x20   }\n\
+             }\n",
+        );
+        assert_eq!(scope_of(&f, "line_terminator"), Some("Config.build_many?"));
     }
 
     #[test]

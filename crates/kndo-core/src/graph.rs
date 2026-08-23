@@ -852,7 +852,7 @@ fn try_patch(
     // Member-type facts (RFC 0012 §3-bis) from the persisted patch metadata — valid under
     // the surface-signature guard for changed files too (an annotation change declines the
     // patch), same reasoning as `unit_name`.
-    let member_types_per_file: Vec<HashMap<(SmolStr, SmolStr), SmolStr>> = graph
+    let member_types_per_file: Vec<MemberTypeIndex> = graph
         .patch_meta
         .iter()
         .map(|m| index_member_types(&m.member_types))
@@ -1136,7 +1136,7 @@ struct ResolveTables<'a> {
     qualified_twins_per_file: &'a [HashMap<String, Vec<SymbolId>>],
     /// Per-file member-type facts (RFC 0012 §3-bis): (owner, member) → the base type the
     /// access yields — what a dotted qualifier pointer resolves its hops through.
-    member_types_per_file: &'a [HashMap<(SmolStr, SmolStr), SmolStr>],
+    member_types_per_file: &'a [MemberTypeIndex],
     symbol_by_name_per_unit: &'a HashMap<SmolStr, HashMap<SmolStr, SymbolId>>,
     member_by_name: &'a HashMap<SmolStr, Vec<SymbolId>>,
     file_unit: &'a [Option<SmolStr>],
@@ -1386,35 +1386,29 @@ fn resolve_file(
                     // not a closed namespace, so an unknown member is a dynamic-looking
                     // access and falls through to the duck-typed fallback exactly like a
                     // receiver expression.
-                    let targets = match q.split_once('.') {
-                        Some((base, member)) => {
-                            let (targets, yielded_type) = chained_member_targets(
-                                base,
-                                member,
-                                &reference.name,
-                                &bound_symbols,
-                                i,
-                                t,
-                            );
-                            // Reaching a value THROUGH the member uses its type from this
-                            // file — without this edge a type consumed only via fields read
-                            // as file-local and `internal-only` advised narrowing it.
-                            if let Some(ty) = yielded_type {
-                                out.edges.push(Edge {
-                                    owner: file_id,
-                                    kind: EdgeKind::References {
-                                        from,
-                                        to: ty,
-                                        kind: crate::vocab::RefKind::Read,
-                                    },
-                                    confidence: Confidence::Certain,
-                                    source: provenance(),
-                                    span: Some(reference.span),
-                                });
-                            }
-                            targets
+                    let targets = if q.contains('.') {
+                        let (targets, yielded_types) =
+                            chained_member_targets(q, &reference.name, &bound_symbols, i, t);
+                        // Reaching a value THROUGH a member uses its type from this file —
+                        // every resolved hop's type, not just the last (without these edges
+                        // a type consumed only via fields read as file-local and
+                        // `internal-only` advised narrowing it).
+                        for ty in yielded_types {
+                            out.edges.push(Edge {
+                                owner: file_id,
+                                kind: EdgeKind::References {
+                                    from,
+                                    to: ty,
+                                    kind: crate::vocab::RefKind::Read,
+                                },
+                                confidence: Confidence::Certain,
+                                source: provenance(),
+                                span: Some(reference.span),
+                            });
                         }
-                        None => in_scope_member_targets(q, &reference.name, &bound_symbols, i, t),
+                        targets
+                    } else {
+                        in_scope_member_targets(q, &reference.name, &bound_symbols, i, t)
                     };
                     if !targets.is_empty() {
                         for to in targets {
@@ -1974,53 +1968,101 @@ fn in_scope_member_targets(
 /// what they mean where they were written), and the final member in the yielded type's
 /// home, twins included. Any miss yields no targets — duck fallback, never a settle.
 fn chained_member_targets(
-    base: &str,
-    member: &str,
+    pointer: &str,
     name: &str,
     bound_symbols: &HashMap<SmolStr, SymbolId>,
     i: usize,
     t: &ResolveTables<'_>,
-) -> (Vec<SymbolId>, Option<SymbolId>) {
+) -> (Vec<SymbolId>, Vec<SymbolId>) {
+    let mut segments = pointer.split('.');
+    let base = segments.next().unwrap_or("");
     let base_symbol = bound_symbols
         .get(base)
         .or_else(|| t.symbol_by_name_per_file[i].get(base));
     let Some(&base_symbol) = base_symbol else {
-        return (Vec::new(), None);
+        return (Vec::new(), Vec::new());
     };
-    let owner = &t.symbols[base_symbol.0 as usize];
-    let home = owner.file.0 as usize;
-    // The yielded type name resolves where the annotation was WRITTEN (the owner's home:
-    // its declarations and re-export aliases), then in the reference site's own scope —
-    // the home's import bindings are resolve-time-local and invisible here, but the common
-    // shape (`self.context_separator.into_bytes()` inside the very file that imported the
-    // field's type) makes the site's bindings the right stand-in. Both missing → no fact.
-    let yielded = t.member_types_per_file[home]
-        .get(&(owner.name.clone(), SmolStr::new(member)))
-        .and_then(|yields| {
-            t.symbol_by_name_per_file[home]
-                .get(yields.as_str())
-                .or_else(|| bound_symbols.get(yields.as_str()))
-                .or_else(|| t.symbol_by_name_per_file[i].get(yields.as_str()))
-        });
-    let Some(&yielded_type) = yielded else {
-        return (Vec::new(), None);
-    };
-    let yielded_home = t.symbols[yielded_type.0 as usize].file.0 as usize;
+    let mut current = base_symbol;
+    let mut yielded_types = Vec::new();
+    for segment in segments {
+        let Some(next) = chain_hop(current, segment, bound_symbols, i, t) else {
+            return (Vec::new(), yielded_types);
+        };
+        current = next;
+        yielded_types.push(next);
+    }
+    let home = t.symbols[current.0 as usize].file.0 as usize;
     let members = qualified_member_targets(
-        &t.symbol_by_qualified_per_file[yielded_home],
-        &t.qualified_twins_per_file[yielded_home],
-        format!("{}.{}", t.symbols[yielded_type.0 as usize].name, name).as_str(),
+        &t.symbol_by_qualified_per_file[home],
+        &t.qualified_twins_per_file[home],
+        format!("{}.{}", t.symbols[current.0 as usize].name, name).as_str(),
     );
-    (members, Some(yielded_type))
+    (members, yielded_types)
 }
 
-/// One file's member-type facts as a lookup: (owner, member) → yields.
-fn index_member_types(
-    entries: &[crate::adapter::RawMemberType],
-) -> HashMap<(SmolStr, SmolStr), SmolStr> {
+/// One hop of a chained pointer: the member's declared yields on the CURRENT type — the
+/// payload parameter when the segment carries the `?` unwrap marker — resolved to a type
+/// symbol. The yielded type name resolves where the annotation was WRITTEN (the owner's
+/// home: its declarations and re-export aliases), then in the reference site's own scope —
+/// the home's import bindings are resolve-time-local and invisible here, but the common
+/// shape (the field's type imported by the very file doing the access) makes the site's
+/// bindings the right stand-in.
+fn chain_hop(
+    current: SymbolId,
+    segment: &str,
+    bound_symbols: &HashMap<SmolStr, SymbolId>,
+    i: usize,
+    t: &ResolveTables<'_>,
+) -> Option<SymbolId> {
+    let (member, unwrap) = match segment.strip_suffix('?') {
+        Some(m) => (m, true),
+        None => (segment, false),
+    };
+    let owner = &t.symbols[current.0 as usize];
+    let home = owner.file.0 as usize;
+    let fact = t.member_types_per_file[home].get(&(owner.name.clone(), SmolStr::new(member)))?;
+    let type_name = hop_type_name(fact, unwrap)?;
+    resolve_annotation_name(type_name, home, bound_symbols, i, t)
+}
+
+/// The type a hop lands on: the payload parameter under the `?` marker, the wrapper itself
+/// otherwise.
+fn hop_type_name(fact: &(SmolStr, Option<SmolStr>), unwrap: bool) -> Option<&SmolStr> {
+    if unwrap {
+        fact.1.as_ref()
+    } else {
+        Some(&fact.0)
+    }
+}
+
+/// An annotation's type name resolved where it was written (the home's declarations and
+/// re-export aliases), then in the reference site's own scope (see [`chain_hop`]'s doc).
+fn resolve_annotation_name(
+    type_name: &SmolStr,
+    home: usize,
+    bound_symbols: &HashMap<SmolStr, SymbolId>,
+    i: usize,
+    t: &ResolveTables<'_>,
+) -> Option<SymbolId> {
+    t.symbol_by_name_per_file[home]
+        .get(type_name.as_str())
+        .or_else(|| bound_symbols.get(type_name.as_str()))
+        .or_else(|| t.symbol_by_name_per_file[i].get(type_name.as_str()))
+        .copied()
+}
+
+/// One file's member-type facts as a lookup: (owner, member) → (yields, yields_param).
+type MemberTypeIndex = HashMap<(SmolStr, SmolStr), (SmolStr, Option<SmolStr>)>;
+
+fn index_member_types(entries: &[crate::adapter::RawMemberType]) -> MemberTypeIndex {
     entries
         .iter()
-        .map(|m| ((m.owner.clone(), m.member.clone()), m.yields.clone()))
+        .map(|m| {
+            (
+                (m.owner.clone(), m.member.clone()),
+                (m.yields.clone(), m.yields_param.clone()),
+            )
+        })
         .collect()
 }
 
@@ -2107,7 +2149,7 @@ fn surface_signature(
         dynamics: Vec<(&'a str, Option<&'a str>)>,
         /// Member-type facts are cross-file resolution inputs (RFC 0012 §3-bis): a changed
         /// field/return annotation changes what other files' chained qualifiers resolve to.
-        member_types: Vec<(&'a str, &'a str, &'a str)>,
+        member_types: Vec<(&'a str, &'a str, &'a str, Option<&'a str>)>,
     }
     let view = View {
         adapter_id,
@@ -2168,7 +2210,14 @@ fn surface_signature(
         member_types: facts
             .member_types
             .iter()
-            .map(|m| (m.owner.as_str(), m.member.as_str(), m.yields.as_str()))
+            .map(|m| {
+                (
+                    m.owner.as_str(),
+                    m.member.as_str(),
+                    m.yields.as_str(),
+                    m.yields_param.as_deref(),
+                )
+            })
             .collect(),
     };
     let bytes = bincode::serialize(&view).unwrap_or_default();
@@ -2224,7 +2273,7 @@ pub(crate) fn package_owns(manifest_dir: &str, file_dir: &str) -> bool {
 /// an assembly-algorithm change that could produce a different graph from the same facts. Feeds
 /// [`compute_graph_key`] (RFC 0004 §3's "core graph-schema version"); a bump here invalidates
 /// every project's cached `graph.bin` on the next run, same as any other key-input change.
-pub const GRAPH_SCHEMA_VERSION: u32 = 20; // 20: member-type facts (FilePatchMeta.member_types + chained-pointer resolution — RFC 0012 §3-bis cross-file tier); 19: receiver-typed qualifiers (in-scope declarations resolve members; qualified twins each get the edge — same inputs assemble different edges); 18: qualified refs reach the target's member table + glob re-exports alias the target's exported surface (same inputs now assemble more edges — prior snapshots are semantically stale); 17: SymbolKind::Macro (expansion symbols — first-class kind with visibility-scope exemption semantics); 16: VisibilityRung.surface_transitive + surface closure (Provenance::Surface Root edges; RFC 0012 §6, M6); 15: FileNode.string_call_sites + EdgeKind::ReferencesFile (RFC 0017 §5.4); 14: in-source Test roots derived from test_spans containment (adapters no longer emit them); 13: FileNode.test_spans + phase 2.55 test-gated module demotion (sub-file test regions); 12: library-surface fixpoint (phase 2.7 — same inputs now assemble surface Root edges, prior snapshots are semantically stale); 11: PackageNode.workspace_entry (RFC 0013 §4); 10: patch layer (RFC 0013 §4 — Edge.owner, FilePatchMeta, extraction-only stored diagnostics); 9: SymbolMetrics.token_count (RFC 0005 §11); 8: function_metrics (RFC 0005 §6); 7: cycle policies (§8); 6: PackageNode surface (RFC 0011 §4); 5: ladders + FileNode.unit (RFC 0012 §6); 4: RefKind + signature_span (§5); 3: within (§4)
+pub const GRAPH_SCHEMA_VERSION: u32 = 21; // 21: RawMemberType.yields_param + N-hop '?'-marked pointer resolution (payload unwrapping); 20: member-type facts (FilePatchMeta.member_types + chained-pointer resolution — RFC 0012 §3-bis cross-file tier); 19: receiver-typed qualifiers (in-scope declarations resolve members; qualified twins each get the edge — same inputs assemble different edges); 18: qualified refs reach the target's member table + glob re-exports alias the target's exported surface (same inputs now assemble more edges — prior snapshots are semantically stale); 17: SymbolKind::Macro (expansion symbols — first-class kind with visibility-scope exemption semantics); 16: VisibilityRung.surface_transitive + surface closure (Provenance::Surface Root edges; RFC 0012 §6, M6); 15: FileNode.string_call_sites + EdgeKind::ReferencesFile (RFC 0017 §5.4); 14: in-source Test roots derived from test_spans containment (adapters no longer emit them); 13: FileNode.test_spans + phase 2.55 test-gated module demotion (sub-file test regions); 12: library-surface fixpoint (phase 2.7 — same inputs now assemble surface Root edges, prior snapshots are semantically stale); 11: PackageNode.workspace_entry (RFC 0013 §4); 10: patch layer (RFC 0013 §4 — Edge.owner, FilePatchMeta, extraction-only stored diagnostics); 9: SymbolMetrics.token_count (RFC 0005 §11); 8: function_metrics (RFC 0005 §6); 7: cycle policies (§8); 6: PackageNode surface (RFC 0011 §4); 5: ladders + FileNode.unit (RFC 0012 §6); 4: RefKind + signature_span (§5); 3: within (§4)
 
 /// The graph snapshot's cache key (RFC 0004 §3, `cache.rs`'s `graph.bin`): a single digest
 /// folding in the *whole* discovered file set (every path + content hash — this already
@@ -3818,7 +3867,7 @@ pub fn assemble_from_source(
     let mut suppressions: Vec<(FileId, crate::adapter::RawSuppression)> = Vec::new();
 
     // Member-type facts (RFC 0012 §3-bis), indexed per file for chained-pointer resolution.
-    let member_types_per_file: Vec<HashMap<(SmolStr, SmolStr), SmolStr>> = claimed_per_file
+    let member_types_per_file: Vec<MemberTypeIndex> = claimed_per_file
         .iter()
         .map(|slot| {
             slot.as_ref()
@@ -4272,12 +4321,14 @@ mod tests {
                         local_alias: Some(SmolStr::new(alias)),
                     });
                 } else if let Some(rest) = line.strip_prefix("member-type ") {
-                    // `member-type <owner> <member> <yields>` — RFC 0012 §3-bis fact.
-                    let mut parts = rest.splitn(3, ' ');
+                    // `member-type <owner> <member> <yields> [param]` — RFC 0012 §3-bis
+                    // fact; the optional 4th token is the payload type parameter.
+                    let mut parts = rest.splitn(4, ' ');
                     facts.member_types.push(crate::adapter::RawMemberType {
                         owner: SmolStr::new(parts.next().unwrap_or("")),
                         member: SmolStr::new(parts.next().unwrap_or("")),
                         yields: SmolStr::new(parts.next().unwrap_or("")),
+                        yields_param: parts.next().map(SmolStr::new),
                     });
                 } else if let Some(name) = line.strip_prefix("unit-name ") {
                     // The name importers bind this unit by (RFC 0012 §9).
@@ -4928,6 +4979,44 @@ mod tests {
         let edges = reference_edges_to(&graph, "into_bytes");
         assert_eq!(edges.len(), 1);
         assert_eq!(edges[0].confidence, Confidence::Certain);
+    }
+
+    #[test]
+    fn an_unwrap_marked_hop_resolves_through_the_payload_parameter() {
+        // `let chir = config.build()?` then `chir.line_terminator()`: the pointer
+        // `Config.build?` takes the member's yields_param (the Result payload), not the
+        // wrapper — and the payload type itself gets the Read credit.
+        let dir = project(
+            "qref-unwrap-hop",
+            &[
+                (
+                    "a.mock",
+                    "import ./b.mock Config\nqref Config.build? line_terminator\nroot-file",
+                ),
+                (
+                    "b.mock",
+                    "decl Config\ndecl ConfiguredHIR\n\
+                     member-type Config build Result ConfiguredHIR\n\
+                     member-decl-exported ConfiguredHIR line_terminator",
+                ),
+            ],
+        );
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
+        let edges = reference_edges_to(&graph, "line_terminator");
+        assert_eq!(edges.len(), 1);
+        assert_eq!(edges[0].confidence, Confidence::Certain);
+        let hir = graph
+            .symbols
+            .iter()
+            .position(|s| s.name == "ConfiguredHIR")
+            .unwrap() as u32;
+        assert!(
+            graph.edges.iter().any(|e| matches!(
+                e.kind,
+                EdgeKind::References { to, kind: RefKind::Read, .. } if to == SymbolId(hir)
+            )),
+            "the payload type is credited with a Read from the site"
+        );
     }
 
     #[test]

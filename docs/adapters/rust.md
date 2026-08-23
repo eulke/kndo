@@ -235,10 +235,20 @@ facts (and also credits the *yielded type* with a Read from the site: consuming 
 through a field IS a use of its type). Fact-first ordering: pointer, then the TypeEnv's
 direct type, then the opaque receiver (duck fallback).
 
-Untracked (deliberately, each a future fact-source, not a patch): `expr?`/generic
-unwrapping (a `-> Result<ConfiguredHIR>` return reduces to `Result` — parameterized
-`yields` is the next contract step), `match`/`if let` bindings (the scrutinee's payload
-type is not local), untyped closure params, and multi-bound generics.
+**Payload unwrapping (`yields_param`)**: a parameterized annotation also records its first
+type argument (`Result<ConfiguredHIR, Error>` → param `ConfiguredHIR`), and the try
+operator marks its pointer hop with `?` — `let chir = self.config.build_many(x)?` binds
+`chir` to `Config.build_many?`, resolved by the core through the payload instead of the
+wrapper. The `?` is the language's own operator (a fact); `.unwrap()`/`.expect()` are plain
+method names and stay unmodeled (a curated stdlib-semantics fact table is the future step).
+Initializer bindings are pointer-first too (`let b = Builder::new()` binds `Builder.new` —
+the declared return is the fact, the constructor-name convention only backs mid-chain
+bases), `self.field` types through the file's own field facts, and pointer depth caps at
+four segments (deeper chains fall to the duck fallback).
+
+Untracked (deliberately, each a future fact-source, not a patch): `.unwrap()`/`.expect()`
+(stdlib method semantics), `match`/`if let` bindings (the scrutinee's payload type is not
+local), untyped closure params, and multi-bound generics.
 
 ## 3. Resolution
 
