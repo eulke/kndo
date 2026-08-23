@@ -235,12 +235,16 @@ facts (and also credits the *yielded type* with a Read from the site: consuming 
 through a field IS a use of its type). Fact-first ordering: pointer, then the TypeEnv's
 direct type, then the opaque receiver (duck fallback).
 
-**Payload unwrapping (`yields_param`)**: a parameterized annotation also records its first
-type argument (`Result<ConfiguredHIR, Error>` → param `ConfiguredHIR`), and the try
-operator marks its pointer hop with `?` — `let chir = self.config.build_many(x)?` binds
-`chir` to `Config.build_many?`, resolved by the core through the payload instead of the
-wrapper. The `?` is the language's own operator (a fact); `.unwrap()`/`.expect()` are plain
-method names and stay unmodeled (a curated stdlib-semantics fact table is the future step).
+**Payload unwrapping (`yields_params`)**: a parameterized annotation also records its type
+arguments, in order (`Result<ConfiguredHIR, Error>` → params `[ConfiguredHIR, Error]`;
+`Box`/`Rc`/`Arc` are looked through), and an unwrapping operation marks its pointer hop
+with `?N` — the index of the parameter it extracts. The try operator extracts the success
+payload, parameter 0 (`?` is shorthand for `?0`): `let chir = self.config.build_many(x)?`
+binds `chir` to `Config.build_many?`, resolved by the core through that parameter instead
+of the wrapper. WHICH index an operation projects is this adapter's knowledge — the core
+only follows the marker. The `?` is the language's own operator (a fact);
+`.unwrap()`/`.expect()` are plain method names and stay unmodeled (a curated
+stdlib-semantics fact table is the future step).
 Initializer bindings are pointer-first too (`let b = Builder::new()` binds `Builder.new` —
 the declared return is the fact, the constructor-name convention only backs mid-chain
 bases), `self.field` types through the file's own field facts, and pointer depth caps at

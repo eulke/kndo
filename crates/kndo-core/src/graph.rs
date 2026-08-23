@@ -2001,7 +2001,7 @@ fn chained_member_targets(
 }
 
 /// One hop of a chained pointer: the member's declared yields on the CURRENT type — the
-/// payload parameter when the segment carries the `?` unwrap marker — resolved to a type
+/// indexed type parameter when the segment carries a `?N` projection marker — resolved to a type
 /// symbol. The yielded type name resolves where the annotation was WRITTEN (the owner's
 /// home: its declarations and re-export aliases), then in the reference site's own scope —
 /// the home's import bindings are resolve-time-local and invisible here, but the common
@@ -2014,24 +2014,42 @@ fn chain_hop(
     i: usize,
     t: &ResolveTables<'_>,
 ) -> Option<SymbolId> {
-    let (member, unwrap) = match segment.strip_suffix('?') {
-        Some(m) => (m, true),
-        None => (segment, false),
-    };
+    let (member, projection) = split_projection(segment);
     let owner = &t.symbols[current.0 as usize];
     let home = owner.file.0 as usize;
     let fact = t.member_types_per_file[home].get(&(owner.name.clone(), SmolStr::new(member)))?;
-    let type_name = hop_type_name(fact, unwrap)?;
+    let type_name = hop_type_name(fact, projection)?;
     resolve_annotation_name(type_name, home, bound_symbols, i, t)
 }
 
-/// The type a hop lands on: the payload parameter under the `?` marker, the wrapper itself
-/// otherwise.
-fn hop_type_name(fact: &(SmolStr, Option<SmolStr>), unwrap: bool) -> Option<&SmolStr> {
-    if unwrap {
-        fact.1.as_ref()
+/// A segment's projection marker, purely structural: `member` → none, `member?` → parameter
+/// 0, `member?N` → parameter N. WHICH parameter an operation extracts is the emitting
+/// adapter's knowledge — the core only selects.
+fn split_projection(segment: &str) -> (&str, Option<usize>) {
+    let Some((member, index)) = segment.split_once('?') else {
+        return (segment, None);
+    };
+    match projection_index(index) {
+        Some(n) => (member, Some(n)),
+        None => (segment, None),
+    }
+}
+
+/// The marker's parameter index: bare `?` is shorthand for `?0`.
+fn projection_index(index: &str) -> Option<usize> {
+    if index.is_empty() {
+        Some(0)
     } else {
-        Some(&fact.0)
+        index.parse().ok()
+    }
+}
+
+/// The type a hop lands on: the projected type parameter under a `?N` marker, the yielded
+/// type itself otherwise.
+fn hop_type_name(fact: &(SmolStr, Vec<SmolStr>), projection: Option<usize>) -> Option<&SmolStr> {
+    match projection {
+        Some(n) => fact.1.get(n),
+        None => Some(&fact.0),
     }
 }
 
@@ -2051,8 +2069,8 @@ fn resolve_annotation_name(
         .copied()
 }
 
-/// One file's member-type facts as a lookup: (owner, member) → (yields, yields_param).
-type MemberTypeIndex = HashMap<(SmolStr, SmolStr), (SmolStr, Option<SmolStr>)>;
+/// One file's member-type facts as a lookup: (owner, member) → (yields, yields_params).
+type MemberTypeIndex = HashMap<(SmolStr, SmolStr), (SmolStr, Vec<SmolStr>)>;
 
 fn index_member_types(entries: &[crate::adapter::RawMemberType]) -> MemberTypeIndex {
     entries
@@ -2060,7 +2078,7 @@ fn index_member_types(entries: &[crate::adapter::RawMemberType]) -> MemberTypeIn
         .map(|m| {
             (
                 (m.owner.clone(), m.member.clone()),
-                (m.yields.clone(), m.yields_param.clone()),
+                (m.yields.clone(), m.yields_params.clone()),
             )
         })
         .collect()
@@ -2149,7 +2167,7 @@ fn surface_signature(
         dynamics: Vec<(&'a str, Option<&'a str>)>,
         /// Member-type facts are cross-file resolution inputs (RFC 0012 §3-bis): a changed
         /// field/return annotation changes what other files' chained qualifiers resolve to.
-        member_types: Vec<(&'a str, &'a str, &'a str, Option<&'a str>)>,
+        member_types: Vec<(&'a str, &'a str, &'a str, Vec<&'a str>)>,
     }
     let view = View {
         adapter_id,
@@ -2215,7 +2233,7 @@ fn surface_signature(
                     m.owner.as_str(),
                     m.member.as_str(),
                     m.yields.as_str(),
-                    m.yields_param.as_deref(),
+                    m.yields_params.iter().map(SmolStr::as_str).collect(),
                 )
             })
             .collect(),
@@ -2273,7 +2291,7 @@ pub(crate) fn package_owns(manifest_dir: &str, file_dir: &str) -> bool {
 /// an assembly-algorithm change that could produce a different graph from the same facts. Feeds
 /// [`compute_graph_key`] (RFC 0004 §3's "core graph-schema version"); a bump here invalidates
 /// every project's cached `graph.bin` on the next run, same as any other key-input change.
-pub const GRAPH_SCHEMA_VERSION: u32 = 21; // 21: RawMemberType.yields_param + N-hop '?'-marked pointer resolution (payload unwrapping); 20: member-type facts (FilePatchMeta.member_types + chained-pointer resolution — RFC 0012 §3-bis cross-file tier); 19: receiver-typed qualifiers (in-scope declarations resolve members; qualified twins each get the edge — same inputs assemble different edges); 18: qualified refs reach the target's member table + glob re-exports alias the target's exported surface (same inputs now assemble more edges — prior snapshots are semantically stale); 17: SymbolKind::Macro (expansion symbols — first-class kind with visibility-scope exemption semantics); 16: VisibilityRung.surface_transitive + surface closure (Provenance::Surface Root edges; RFC 0012 §6, M6); 15: FileNode.string_call_sites + EdgeKind::ReferencesFile (RFC 0017 §5.4); 14: in-source Test roots derived from test_spans containment (adapters no longer emit them); 13: FileNode.test_spans + phase 2.55 test-gated module demotion (sub-file test regions); 12: library-surface fixpoint (phase 2.7 — same inputs now assemble surface Root edges, prior snapshots are semantically stale); 11: PackageNode.workspace_entry (RFC 0013 §4); 10: patch layer (RFC 0013 §4 — Edge.owner, FilePatchMeta, extraction-only stored diagnostics); 9: SymbolMetrics.token_count (RFC 0005 §11); 8: function_metrics (RFC 0005 §6); 7: cycle policies (§8); 6: PackageNode surface (RFC 0011 §4); 5: ladders + FileNode.unit (RFC 0012 §6); 4: RefKind + signature_span (§5); 3: within (§4)
+pub const GRAPH_SCHEMA_VERSION: u32 = 22; // 22: RawMemberType.yields_params list + indexed '?N' projection (rkyv layout change: Option → Vec); 21: RawMemberType.yields_param + N-hop '?'-marked pointer resolution (payload unwrapping); 20: member-type facts (FilePatchMeta.member_types + chained-pointer resolution — RFC 0012 §3-bis cross-file tier); 19: receiver-typed qualifiers (in-scope declarations resolve members; qualified twins each get the edge — same inputs assemble different edges); 18: qualified refs reach the target's member table + glob re-exports alias the target's exported surface (same inputs now assemble more edges — prior snapshots are semantically stale); 17: SymbolKind::Macro (expansion symbols — first-class kind with visibility-scope exemption semantics); 16: VisibilityRung.surface_transitive + surface closure (Provenance::Surface Root edges; RFC 0012 §6, M6); 15: FileNode.string_call_sites + EdgeKind::ReferencesFile (RFC 0017 §5.4); 14: in-source Test roots derived from test_spans containment (adapters no longer emit them); 13: FileNode.test_spans + phase 2.55 test-gated module demotion (sub-file test regions); 12: library-surface fixpoint (phase 2.7 — same inputs now assemble surface Root edges, prior snapshots are semantically stale); 11: PackageNode.workspace_entry (RFC 0013 §4); 10: patch layer (RFC 0013 §4 — Edge.owner, FilePatchMeta, extraction-only stored diagnostics); 9: SymbolMetrics.token_count (RFC 0005 §11); 8: function_metrics (RFC 0005 §6); 7: cycle policies (§8); 6: PackageNode surface (RFC 0011 §4); 5: ladders + FileNode.unit (RFC 0012 §6); 4: RefKind + signature_span (§5); 3: within (§4)
 
 /// The graph snapshot's cache key (RFC 0004 §3, `cache.rs`'s `graph.bin`): a single digest
 /// folding in the *whole* discovered file set (every path + content hash — this already
@@ -4321,14 +4339,17 @@ mod tests {
                         local_alias: Some(SmolStr::new(alias)),
                     });
                 } else if let Some(rest) = line.strip_prefix("member-type ") {
-                    // `member-type <owner> <member> <yields> [param]` — RFC 0012 §3-bis
-                    // fact; the optional 4th token is the payload type parameter.
+                    // `member-type <owner> <member> <yields> [p0,p1,…]` — RFC 0012 §3-bis
+                    // fact; the optional 4th token lists the type parameters in order.
                     let mut parts = rest.splitn(4, ' ');
                     facts.member_types.push(crate::adapter::RawMemberType {
                         owner: SmolStr::new(parts.next().unwrap_or("")),
                         member: SmolStr::new(parts.next().unwrap_or("")),
                         yields: SmolStr::new(parts.next().unwrap_or("")),
-                        yields_param: parts.next().map(SmolStr::new),
+                        yields_params: parts
+                            .next()
+                            .map(|list| list.split(',').map(SmolStr::new).collect())
+                            .unwrap_or_default(),
                     });
                 } else if let Some(name) = line.strip_prefix("unit-name ") {
                     // The name importers bind this unit by (RFC 0012 §9).
@@ -5016,6 +5037,44 @@ mod tests {
                 EdgeKind::References { to, kind: RefKind::Read, .. } if to == SymbolId(hir)
             )),
             "the payload type is credited with a Read from the site"
+        );
+    }
+
+    #[test]
+    fn an_indexed_projection_selects_that_type_parameter() {
+        // `Registry.get?1` projects the SECOND type argument of the member's annotation
+        // (`Map<Key, Value>` → `Value`): the `?N` marker is structural — which index an
+        // operation extracts is the adapter's knowledge, the core just follows it.
+        let dir = project(
+            "qref-indexed-hop",
+            &[
+                (
+                    "a.mock",
+                    "import ./b.mock Registry\nqref Registry.get?1 into_bytes\nroot-file",
+                ),
+                (
+                    "b.mock",
+                    "decl Registry\ndecl Key\ndecl Value\n\
+                     member-type Registry get Map Key,Value\n\
+                     member-decl-exported Value into_bytes",
+                ),
+            ],
+        );
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
+        let edges = reference_edges_to(&graph, "into_bytes");
+        assert_eq!(edges.len(), 1);
+        assert_eq!(edges[0].confidence, Confidence::Certain);
+        let value = graph
+            .symbols
+            .iter()
+            .position(|s| s.name == "Value")
+            .unwrap() as u32;
+        assert!(
+            graph.edges.iter().any(|e| matches!(
+                e.kind,
+                EdgeKind::References { to, kind: RefKind::Read, .. } if to == SymbolId(value)
+            )),
+            "the projected parameter type is credited with a Read from the site"
         );
     }
 

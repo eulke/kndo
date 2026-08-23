@@ -1434,8 +1434,8 @@ fn collect_tuple_member_types(
 }
 
 /// One member-type fact, when the annotation reduces to a base type. `Self` resolves to
-/// the owner — the annotation was written inside the owner's own impl/body. The payload
-/// parameter (`Result<T, E>` → `T`) rides along for `?`-marked pointer hops.
+/// the owner — the annotation was written inside the owner's own impl/body. The type
+/// parameters (`Result<T, E>` → `[T, E]`) ride along for `?N`-marked pointer hops.
 fn push_member_type(
     sink: &mut Vec<kndo_core::adapter::RawMemberType>,
     owner: &str,
@@ -1451,38 +1451,53 @@ fn push_member_type(
         }
     };
     if let Some(yields) = base_type_name(ty, src).map(resolve_self) {
-        let yields_param = first_type_param_name(ty, src).map(resolve_self);
+        let yields_params = type_param_names(ty, src)
+            .into_iter()
+            .map(resolve_self)
+            .map(SmolStr::new)
+            .collect();
         sink.push(kndo_core::adapter::RawMemberType {
             owner: SmolStr::new(owner),
             member: SmolStr::new(member),
             yields: SmolStr::new(yields),
-            yields_param: yields_param.map(SmolStr::new),
+            yields_params,
         });
     }
 }
 
-/// The base name of a parameterized annotation's FIRST type argument — the payload an
-/// unwrap extracts (`Result<ConfiguredHIR, Error>` → `ConfiguredHIR`). References and the
-/// auto-deref wrappers are looked through, matching [`base_type_name`]'s reduction.
-fn first_type_param_name(ty: Node, src: &[u8]) -> Option<String> {
+/// The base names of a parameterized annotation's type arguments, in order —
+/// `Result<ConfiguredHIR, Error>` → `["ConfiguredHIR", "Error"]`; an argument with no
+/// single base (a lifetime, a fn type) contributes nothing at its position, so consumers
+/// see only nameable parameters. References and the auto-deref wrappers are looked
+/// through, matching [`base_type_name`]'s reduction.
+fn type_param_names(ty: Node, src: &[u8]) -> Vec<String> {
     match ty.kind() {
         "reference_type" => ty
             .child_by_field_name("type")
-            .and_then(|inner| first_type_param_name(inner, src)),
-        "generic_type" => generic_first_param(ty, src),
-        _ => None,
+            .map(|inner| type_param_names(inner, src))
+            .unwrap_or_default(),
+        "generic_type" => generic_param_names(ty, src),
+        _ => Vec::new(),
     }
 }
 
-/// A generic annotation's first argument, looking through the auto-deref wrappers.
-fn generic_first_param(ty: Node, src: &[u8]) -> Option<String> {
-    let base = text(ty.child_by_field_name("type")?, src);
-    let first = ty.child_by_field_name("type_arguments")?.named_child(0)?;
-    if matches!(base, "Box" | "Rc" | "Arc") {
-        first_type_param_name(first, src)
-    } else {
-        base_type_name(first, src)
+/// A generic annotation's argument bases, looking through the auto-deref wrappers.
+fn generic_param_names(ty: Node, src: &[u8]) -> Vec<String> {
+    let base = ty.child_by_field_name("type").map(|b| text(b, src));
+    let Some(args) = ty.child_by_field_name("type_arguments") else {
+        return Vec::new();
+    };
+    if matches!(base, Some("Box" | "Rc" | "Arc")) {
+        return args
+            .named_child(0)
+            .map(|inner| type_param_names(inner, src))
+            .unwrap_or_default();
     }
+    let mut cursor = args.walk();
+    args.children(&mut cursor)
+        .filter(|n| n.is_named())
+        .filter_map(|arg| base_type_name(arg, src))
+        .collect()
 }
 
 /// A member-type fact for an impl item that carries a name field (fn return, const type).
@@ -2854,7 +2869,7 @@ mod tests {
             .find(|m| m.owner == "Config" && m.member == "build")
             .expect("return fact");
         assert_eq!(m.yields, "Result");
-        assert_eq!(m.yields_param.as_deref(), Some("ConfiguredHIR"));
+        assert_eq!(m.yields_params, ["ConfiguredHIR", "Error"]);
     }
 
     #[test]

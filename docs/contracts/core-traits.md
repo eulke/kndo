@@ -155,8 +155,10 @@ pub trait LanguageAdapter: Send + Sync {
 
 ```rust
 pub struct FileFacts {
-    pub member_types: Vec<RawMemberType>,   // { owner, member, yields } — what accessing owner.member
-                                            // evaluates to (field types, method returns); RFC 0012 §3-bis
+    pub member_types: Vec<RawMemberType>,   // { owner, member, yields, yields_params } — what accessing
+                                            // owner.member evaluates to (field types, method returns);
+                                            // yields_params: the annotation's type arguments in order,
+                                            // projected by `?N` pointer markers; RFC 0012 §3-bis
     pub declarations: Vec<Declaration>,     // { name, kind: SymbolKind, span, exported: bool,
                                              //   visibility, member_of: Option<Name>,
                                              //   signature_span: Option<Span> }

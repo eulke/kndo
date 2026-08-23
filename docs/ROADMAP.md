@@ -1081,6 +1081,20 @@ regressions. Still deliberately unmodeled: `.unwrap()`/`.expect()` (stdlib metho
 semantics — a curated fact table is the legitimate future source), `match` payloads,
 untyped closures, multi-bound generics.
 
+### M6 progress — `yields_params` list + indexed `?N` projection ✅ (landed 2026-08-23)
+
+The singular-first-parameter shortcut generalized before anyone builds on it (task #87):
+`RawMemberType.yields_param: Option` → `yields_params: Vec` — every type argument of a
+parameterized annotation, in order (`Result<ConfiguredHIR, Error>` →
+`[ConfiguredHIR, Error]`) — and the pointer marker gains an index: `?N` projects parameter
+N, bare `?` is shorthand for `?0`. The split of knowledge is the point: WHICH parameter an
+operation extracts is the emitting adapter's fact (Rust's try operator → 0; a future
+map-index or Option-of-tuple source picks its own), the core's `split_projection` is purely
+structural and just indexes — a projection with no parameter at that position is a miss
+(duck fallback, never a settle), so multi-generic languages get the mechanism for free
+(schema v22, facts v7). Behavior-neutral on the corpus: ripgrep identical counts, zero
+regressions.
+
 ## Post-1.0 parking lot
 **RFC 0016 — uniform component model** (the accepted plan, phased in its §8, **all four phases
 landed**: 0 freeze reservations, 1 host-mediated content channel for plugin graph hooks

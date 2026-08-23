@@ -616,12 +616,14 @@ pub struct RawMemberType {
     /// (references stripped, auto-deref wrappers unwrapped, `Self` already resolved).
     #[rkyv(with = crate::rkyv_support::SmolStrAsString)]
     pub yields: SmolStr,
-    /// The base name of the FIRST type parameter, when `yields` is parameterized — the
-    /// payload an unwrapping operation extracts (`Result<ConfiguredHIR, Error>` →
-    /// `ConfiguredHIR`, `Option<Widget>` → `Widget`). A pointer segment marked `?` (the
-    /// language's try/unwrap operator) resolves through THIS instead of `yields`.
+    /// The base names of EVERY type parameter, in declaration order, when `yields` is
+    /// parameterized (`Result<ConfiguredHIR, Error>` → `["ConfiguredHIR", "Error"]`,
+    /// `Map<Key, Value>` → `["Key", "Value"]`). A pointer segment marked `?N` projects
+    /// parameter N instead of `yields` itself (`?` alone is `?0`); WHICH parameter an
+    /// operation extracts is the adapter's knowledge (Rust's try operator → 0, a future
+    /// map-index fact → 1) — the core's selection is purely structural.
     #[rkyv(with = rkyv::with::Map<crate::rkyv_support::SmolStrAsString>)]
-    pub yields_param: Option<SmolStr>,
+    pub yields_params: Vec<SmolStr>,
 }
 
 /// One [`FileFacts::string_call_args`] entry. Carries rkyv derives because assembly persists
