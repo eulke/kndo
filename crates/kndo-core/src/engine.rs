@@ -890,7 +890,12 @@ impl Engine {
     fn run_diff(&mut self, mode: &RunMode) -> RunResult {
         let git_root = match gitutil::repo_root(&self.root) {
             Ok(r) => r,
-            Err(e) => return Self::git_failure(e),
+            Err(e) => {
+                return Self::git_failure(
+                    "--staged/--diff need a git repository — run inside one, or drop the flag for a full scan",
+                    e,
+                )
+            }
         };
         // Canonicalize both sides before computing the prefix: `repo_root` comes back
         // canonicalized from git, while `self.root` is whatever the frontend passed.
@@ -910,21 +915,33 @@ impl Engine {
         };
         let before_treeish = match before_treeish {
             Ok(t) => t,
-            Err(e) => return Self::git_failure(e),
+            Err(e) => {
+                let context = match mode {
+                    RunMode::Diff { base } => format!(
+                        "the diff base `{base}` does not resolve — check the ref name, or fetch it first (`git fetch origin {base}`)"
+                    ),
+                    _ => "HEAD does not resolve — the repository may have no commits yet; commit once, or drop --staged for a full scan".to_string(),
+                };
+                return Self::git_failure(&context, e);
+            }
         };
 
         // `--staged`'s "after" is the index as a tree object (`write-tree` — the one
         // object-database write diff mode performs; it never touches the real index or working
         // tree). `--diff`'s "after" is the working tree itself. Owned locals (not borrows of
         // `self`) because `assemble_and_analyze` needs `&mut self` right after.
-        let after_treeish: Option<String> = match mode {
-            RunMode::Staged => match gitutil::write_tree(&git_root) {
-                Ok(t) => Some(t),
-                Err(e) => return Self::git_failure(e),
-            },
-            RunMode::Diff { .. } => None,
-            RunMode::Full => unreachable!("run_diff is only called for Staged/Diff"),
-        };
+        let after_treeish: Option<String> =
+            match mode {
+                RunMode::Staged => match gitutil::write_tree(&git_root) {
+                    Ok(t) => Some(t),
+                    Err(e) => return Self::git_failure(
+                        "cannot snapshot the git index for --staged — check repository permissions",
+                        e,
+                    ),
+                },
+                RunMode::Diff { .. } => None,
+                RunMode::Full => unreachable!("run_diff is only called for Staged/Diff"),
+            };
         let work_root = self.root.clone();
 
         let before_source = discovery::TreeSource::GitTree {
@@ -1058,12 +1075,16 @@ impl Engine {
         }
     }
 
-    fn git_failure(e: gitutil::GitError) -> RunResult {
+    /// A diff-mode git failure is an **error**, not a degradation (RFC 0006 §5, RFC 0009 §6):
+    /// the user explicitly asked for `--staged`/`--diff`, the analysis never ran, and an empty
+    /// result at exit 0 would fail open in CI (a typo'd base ref silently passing the gate —
+    /// M6 error polish). Problem + probable cause + next command, per RFC 0009.
+    fn git_failure(context: &str, e: gitutil::GitError) -> RunResult {
         RunResult {
             diagnostics: vec![Diagnostic {
-                level: DiagnosticLevel::Warn,
+                level: DiagnosticLevel::Error,
                 path: None,
-                message: format!("diff mode unavailable: {e}"),
+                message: format!("{context} ({e})"),
                 span: None,
             }],
             ..RunResult::default()
@@ -2246,7 +2267,7 @@ mod tests {
     }
 
     #[test]
-    fn diff_mode_outside_a_git_repo_degrades_to_a_diagnostic_not_a_panic() {
+    fn diff_mode_outside_a_git_repo_is_an_error_diagnostic_not_a_panic() {
         let dir = std::env::temp_dir().join("kndo-engine-difftest-no-git");
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
@@ -2263,8 +2284,13 @@ mod tests {
         });
 
         assert!(result.findings.is_empty());
-        assert!(!result.diagnostics.is_empty());
-        assert!(result.diagnostics[0].message.contains("diff mode"));
+        let err = &result.diagnostics[0];
+        assert_eq!(err.level, crate::adapter::DiagnosticLevel::Error);
+        assert!(
+            err.message.contains("need a git repository"),
+            "problem + next step (M6 error polish): {}",
+            err.message
+        );
     }
 
     /// Running diff mode from a subdirectory of the repo scopes both sides to that
@@ -2421,6 +2447,46 @@ mod tests {
         assert_eq!(finding_path(stale[0]), "root.dmock");
         assert!(stale[0].message.contains("version-skew"));
         assert_eq!(result.suppressed.inline, 0);
+    }
+
+    #[test]
+    fn a_bad_diff_base_is_an_error_level_diagnostic_never_a_clean_empty_pass() {
+        // M6 error polish: the old Warn + empty result failed open — a typo'd base ref in CI
+        // read as zero findings at exit 0. RFC 0006 §5: this is the exit-2 tier, signaled
+        // through the one channel every format carries (an error-level diagnostic).
+        let dir = git_repo("bad-diff-base");
+        std::fs::write(
+            dir.join("root.dmock"),
+            "root-file
+",
+        )
+        .unwrap();
+        git_add_all_commit(&dir, "base");
+
+        let mut engine = Engine::open(
+            &dir,
+            ConfigOverrides::default(),
+            vec![Box::new(DiffMockAdapter)],
+        )
+        .unwrap();
+        let result = engine.check(CheckRequest {
+            mode: RunMode::Diff {
+                base: "no-such-ref".to_string(),
+            },
+        });
+
+        assert!(result.findings.is_empty());
+        let err = result
+            .diagnostics
+            .iter()
+            .find(|d| d.level == crate::adapter::DiagnosticLevel::Error)
+            .expect("an error-level diagnostic");
+        assert!(err.message.contains("no-such-ref"), "{}", err.message);
+        assert!(
+            err.message.contains("check the ref name"),
+            "problem + next step, RFC 0009 §6: {}",
+            err.message
+        );
     }
 
     #[test]

@@ -164,10 +164,19 @@
       ]
     },
     "DiagnosticLevel": {
-      "type": "string",
-      "enum": [
-        "warn",
-        "info"
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "warn",
+            "info"
+          ]
+        },
+        {
+          "description": "The run could not do what was asked (RFC 0006 §5's exit-2 tier): a requested mode is\nimpossible (`--diff` base that doesn't resolve), not merely degraded. Frontends exit 2\nwhen any error-level diagnostic is present — reporting zero findings because the\nanalysis never ran must never read as a clean pass (M6 error polish: the old Warn here\nmade a typo'd base ref fail open in CI).",
+          "type": "string",
+          "const": "error"
+        }
       ]
     },
     "Finding": {

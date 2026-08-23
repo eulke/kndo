@@ -80,6 +80,12 @@ pub struct SourceFile<'a> {
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "lowercase")]
 pub enum DiagnosticLevel {
+    /// The run could not do what was asked (RFC 0006 §5's exit-2 tier): a requested mode is
+    /// impossible (`--diff` base that doesn't resolve), not merely degraded. Frontends exit 2
+    /// when any error-level diagnostic is present — reporting zero findings because the
+    /// analysis never ran must never read as a clean pass (M6 error polish: the old Warn here
+    /// made a typo'd base ref fail open in CI).
+    Error,
     Warn,
     Info,
 }

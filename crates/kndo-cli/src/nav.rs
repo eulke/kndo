@@ -242,6 +242,14 @@ impl From<QueryLineFlags> for QueryFlags {
 /// JSON-only by design (no human format — this is the machine/agent transport).
 pub fn query_cmd() -> ExitCode {
     let stdin = std::io::stdin();
+    // A human typing `kndo query` at a terminal would just see it hang waiting for stdin
+    // (M6 error polish) — say what the command wants instead.
+    if std::io::IsTerminal::is_terminal(&stdin) {
+        eprintln!(
+            "kndo: query reads JSON request lines from stdin (RFC 0007 §5) — pipe them in,              e.g. `echo '{{\"verb\":\"find\",\"selectors\":[\"foo*\"]}}' | kndo query`"
+        );
+        return ExitCode::from(2);
+    }
     let mut requests = Vec::new();
     let mut parse_errors: Vec<(usize, String)> = Vec::new();
     let mut truncated = false;

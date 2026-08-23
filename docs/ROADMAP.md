@@ -893,7 +893,14 @@ rule — landed** (core `suppression.rs`: a pragma naming an unknown category, a
 declaration, matching zero findings in the pre-suppression set, or meta-targeting `stale`
 itself becomes an `info`/`hygiene` finding at the pragma's own span; `plugin:` categories
 validate against the rules active plugins declare, and undeclared ones are skipped rather than
-flagged so staleness never flickers with plugin activation), error-message polish, and **RFC 0016 §8 phase 0** (freeze reservations: declare the planned
+flagged so staleness never flickers with plugin activation), **error-message polish — landed** (M6: RFC 0009 §6's "problem + probable cause + next command"
+audited empirically across the CLI's failure modes; fixed the four violations found — unknown
+flags/missing values were silently ignored (a typo'd `--fail-onn` un-gated CI: now exit 2),
+`kndo --help` ran a full analysis instead of printing usage (now a real usage screen),
+diff-mode git failures failed OPEN (empty result at exit 0 on a typo'd base ref: now
+`DiagnosticLevel::Error` — additive schema level — with problem+cause+next and exit 2, engine-
+tested), and a bare `kndo query` on a TTY hung silently (now explains it reads stdin)),
+and **RFC 0016 §8 phase 0** (freeze reservations: declare the planned
 additive ABI evolutions in wasm-abi §8 and add the dormant `AdapterDescriptor` component
 fields native-side, so the 1.0 freeze doesn't wall off the component-model phases — **landed**).
 

@@ -16,6 +16,30 @@ use kndo::engine::{
 mod nav;
 mod render;
 
+const USAGE: &str = "kndo — find what your codebase no longer needs
+
+usage: kndo [command] [flags]
+
+commands
+  check            analyze the project (the default: bare `kndo` = `kndo check`)
+  health           health score with per-category breakdown (--by-package)
+  baseline         acknowledge current findings (.kndo/baseline.json; --update to refresh)
+  doctor           what kndo sees: adapters, cache, plugins, config
+  plugin           install | list | remove | new | build | wit | verify
+  init             write kndo.toml (--hook also installs the pre-commit hook)
+  find|describe|uses|used-by|trace|impact   graph navigation verbs (JSON envelopes)
+  query            batched navigation requests from stdin (one JSON per line)
+
+check flags
+  --staged         analyze what `git commit` would commit, vs HEAD
+  --diff <ref>     analyze the change vs merge-base(<ref>, HEAD)
+  --fail-on <sev>  exit 1 at/above: error | warning (diff default) | info | none (full default)
+  --format <f>     human (tty default) | json (piped default) | agent | sarif
+  --quiet | --verbose | --no-cache | --threads <n> | --color <auto|always|never>
+
+kndo --version   ·   full docs: docs/ in the repository
+";
+
 fn main() -> ExitCode {
     // The Rust runtime starts every process with SIGPIPE ignored, so a write to a pipe whose
     // reader already exited surfaces as an EPIPE error — which `println!` turns into a panic
@@ -31,6 +55,14 @@ fn main() -> ExitCode {
     }
 
     let args: Vec<String> = std::env::args().skip(1).collect();
+    // `--help` anywhere wins over everything else (RFC 0009: asking for help must never
+    // trigger an analysis run, whatever else is on the line).
+    if args.iter().any(|a| a == "--help" || a == "-h")
+        || args.first().map(String::as_str) == Some("help")
+    {
+        print!("{USAGE}");
+        return ExitCode::SUCCESS;
+    }
     match args.first().map(String::as_str) {
         Some("--version" | "-V") => {
             println!(
@@ -677,6 +709,7 @@ fn baseline_cmd(args: &[String]) -> ExitCode {
     }
 }
 
+#[derive(Debug)]
 struct Flags {
     format: Option<String>,
     color: Option<String>,
@@ -690,7 +723,7 @@ struct Flags {
     by_package: bool,
 }
 
-fn parse_flags(args: &[String]) -> Flags {
+fn parse_flags(args: &[String]) -> Result<Flags, String> {
     let mut flags = Flags {
         format: None,
         color: None,
@@ -703,18 +736,26 @@ fn parse_flags(args: &[String]) -> Flags {
         threads: None,
         by_package: false,
     };
+    // A valued flag with no value, and any token kndo doesn't know, are hard errors (M6
+    // error polish, RFC 0009 §6): a typo'd `--fail-onn warning` silently un-gating CI is
+    // worse than any friction rejecting it costs.
+    let value = |it: &mut std::slice::Iter<'_, String>, flag: &str| {
+        it.next()
+            .cloned()
+            .ok_or_else(|| format!("{flag} needs a value — see `kndo --help`"))
+    };
     let mut it = args.iter();
     while let Some(arg) = it.next() {
         match arg.as_str() {
-            "--format" => flags.format = it.next().cloned(),
-            "--color" => flags.color = it.next().cloned(),
+            "--format" => flags.format = Some(value(&mut it, "--format")?),
+            "--color" => flags.color = Some(value(&mut it, "--color")?),
             "--quiet" => flags.quiet = true,
             "--verbose" => flags.verbose = true,
             "--no-cache" => flags.no_cache = true,
             "--staged" => flags.staged = true,
-            "--diff" => flags.diff = it.next().cloned(),
-            "--fail-on" => flags.fail_on = it.next().cloned(),
-            "--threads" => flags.threads = it.next().cloned(),
+            "--diff" => flags.diff = Some(value(&mut it, "--diff")?),
+            "--fail-on" => flags.fail_on = Some(value(&mut it, "--fail-on")?),
+            "--threads" => flags.threads = Some(value(&mut it, "--threads")?),
             "--by-package" => flags.by_package = true,
             s if s.starts_with("--format=") => {
                 flags.format = Some(s["--format=".len()..].to_string())
@@ -727,10 +768,14 @@ fn parse_flags(args: &[String]) -> Flags {
             s if s.starts_with("--threads=") => {
                 flags.threads = Some(s["--threads=".len()..].to_string())
             }
-            _ => {}
+            other => {
+                return Err(format!(
+                    "unknown argument `{other}` — see `kndo --help` for flags"
+                ))
+            }
         }
     }
-    flags
+    Ok(flags)
 }
 
 /// `--threads N` > `KNDO_THREADS` env > default physical cores (RFC 0008 §5) — resolved to a
@@ -874,7 +919,13 @@ pub(crate) fn resolve_color(explicit: Option<&str>) -> bool {
 /// Never a gate: always exits 0 — budgets (RFC 0006 §5) are the gating mechanism, and they
 /// arrive with the config file.
 fn health_cmd(args: &[String]) -> ExitCode {
-    let flags = parse_flags(args);
+    let flags = match parse_flags(args) {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!("kndo: {e}");
+            return ExitCode::from(2);
+        }
+    };
     let format = resolve_format(flags.format.as_deref());
     let env_threads = std::env::var("KNDO_THREADS").ok();
     let threads = match resolve_threads(flags.threads.as_deref(), env_threads.as_deref()) {
@@ -907,6 +958,7 @@ fn health_cmd(args: &[String]) -> ExitCode {
     });
     for d in &result.diagnostics {
         let level = match d.level {
+            kndo::adapter::DiagnosticLevel::Error => "error",
             kndo::adapter::DiagnosticLevel::Warn => "warning",
             kndo::adapter::DiagnosticLevel::Info => "info",
         };
@@ -952,7 +1004,13 @@ fn health_cmd(args: &[String]) -> ExitCode {
 }
 
 fn check(args: &[String]) -> ExitCode {
-    let flags = parse_flags(args);
+    let flags = match parse_flags(args) {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!("kndo: {e}");
+            return ExitCode::from(2);
+        }
+    };
     let format = resolve_format(flags.format.as_deref());
     let mode = match resolve_mode(&flags) {
         Ok(m) => m,
@@ -1002,6 +1060,7 @@ fn check(args: &[String]) -> ExitCode {
     // in every format; stdout stays the pure report (RFC 0009 §6), JSON included.
     for d in &result.diagnostics {
         let level = match d.level {
+            kndo::adapter::DiagnosticLevel::Error => "error",
             kndo::adapter::DiagnosticLevel::Warn => "warning",
             kndo::adapter::DiagnosticLevel::Info => "info",
         };
@@ -1029,6 +1088,15 @@ fn check(args: &[String]) -> ExitCode {
         }
     }
 
+    if result
+        .diagnostics
+        .iter()
+        .any(|d| d.level == kndo::adapter::DiagnosticLevel::Error)
+    {
+        // The run could not do what was asked (an error-level diagnostic): RFC 0006 §5's
+        // exit-2 tier — never let an analysis that didn't run read as a clean pass.
+        return ExitCode::from(2);
+    }
     exit_code_for_findings(&result.findings, fail_on)
 }
 
@@ -1099,7 +1167,7 @@ mod tests {
             .iter()
             .map(|s| s.to_string())
             .collect();
-        let f = parse_flags(&args);
+        let f = parse_flags(&args).unwrap();
         assert!(f.staged);
         assert_eq!(f.fail_on.as_deref(), Some("error"));
 
@@ -1107,17 +1175,28 @@ mod tests {
             .iter()
             .map(|s| s.to_string())
             .collect();
-        let f = parse_flags(&args);
+        let f = parse_flags(&args).unwrap();
         assert_eq!(f.diff.as_deref(), Some("main"));
         assert_eq!(f.fail_on.as_deref(), Some("none"));
 
         let args: Vec<String> = ["--threads", "4"].iter().map(|s| s.to_string()).collect();
-        let f = parse_flags(&args);
+        let f = parse_flags(&args).unwrap();
         assert_eq!(f.threads.as_deref(), Some("4"));
 
         let args: Vec<String> = ["--threads=1"].iter().map(|s| s.to_string()).collect();
-        let f = parse_flags(&args);
+        let f = parse_flags(&args).unwrap();
         assert_eq!(f.threads.as_deref(), Some("1"));
+    }
+
+    #[test]
+    fn unknown_arguments_and_missing_values_are_rejected() {
+        // M6 error polish: a typo'd flag silently un-gating CI is worse than any friction.
+        let args: Vec<String> = vec!["--fail-onn".into(), "warning".into()];
+        assert!(parse_flags(&args).unwrap_err().contains("--fail-onn"));
+        let args: Vec<String> = vec!["--diff".into()];
+        assert!(parse_flags(&args).unwrap_err().contains("needs a value"));
+        let args: Vec<String> = vec!["stray".into()];
+        assert!(parse_flags(&args).unwrap_err().contains("stray"));
     }
 
     #[test]

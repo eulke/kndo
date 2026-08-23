@@ -37,6 +37,11 @@ round-trip these examples in CI.
 }
 ```
 
+Diagnostic levels: `info` · `warn` (the run degraded but ran) · `error` (M6, additive) — the
+run could not do what was asked (a `--diff` base that doesn't resolve): frontends exit 2 when
+any error-level diagnostic is present, so an analysis that never ran can never read as a clean
+pass. Consumers must treat unknown levels as at least `warn`.
+
 ## 2. Finding
 
 ```jsonc
