@@ -1,6 +1,6 @@
 //! Bridges `SmolStr` into rkyv's archive model — `smol_str` has no native rkyv support (only
 //! `serde`/`borsh`), so every `SmolStr` field in the graph vocabulary that participates in the
-//! `graph.bin` snapshot (`cache.rs`, ADR 0004) carries a `#[rkyv(with = SmolStrAsString)]` (or,
+//! `graph.bin` snapshot (`cache.rs`) carries a `#[rkyv(with = SmolStrAsString)]` (or,
 //! for `Option<SmolStr>`, `#[rkyv(with = rkyv::with::Map<SmolStrAsString>)]`) annotation
 //! pointing here. This is the only place that knows the bridge exists; archived form is a plain
 //! `rkyv::string::ArchivedString` — nothing about the *live* types' in-memory representation

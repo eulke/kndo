@@ -1,7 +1,6 @@
-//! Kotlin language adapter (docs/adapters/kotlin.md). The fifth `LanguageAdapter`, sharing its
+//! Kotlin language adapter, sharing its
 //! manifest infrastructure wholesale with the Java adapter (`kndo-adapter-toolkit::
-//! jvm_manifest` — ROADMAP "Java → Kotlin share infra"). Like Java, no dogfood corpus of its
-//! own (kndo is written in Rust) — precision rests entirely on the conformance fixtures.
+//! jvm_manifest`). Like Java's, precision rests entirely on the conformance fixtures.
 
 mod extraction;
 mod manifest;
@@ -17,7 +16,7 @@ use smol_str::SmolStr;
 
 pub struct KotlinAdapter;
 
-/// docs/adapters/kotlin.md §1: `src/test/kotlin/**` (Kotlin Gradle plugin's Standard Directory
+/// `src/test/kotlin/**` (Kotlin Gradle plugin's Standard Directory
 /// Layout) is the authoritative test-role signal; a Surefire-style filename fallback covers
 /// non-standard layouts. No tooling-role convention exists (same stance as Java/Go).
 const PATH_PATTERNS: kndo_adapter_toolkit::classify::PathPatterns =
@@ -34,7 +33,7 @@ impl LanguageAdapter for KotlinAdapter {
             activation: Vec::new(),
             dependencies: Vec::new(),
             id: SmolStr::new("kotlin"),
-            facts_schema_version: 2, // 2: implicitly_invoked on `override` members (RFC 0005 §1 machinery dispatch)
+            facts_schema_version: 2, // bump whenever the serialized facts shape or the emission semantics change
             file_globs: vec![SmolStr::new("**/*.kt")],
             manifest_globs: vec![
                 SmolStr::new("**/pom.xml"),
@@ -44,7 +43,7 @@ impl LanguageAdapter for KotlinAdapter {
                 SmolStr::new("**/settings.gradle.kts"),
             ],
             grammar_version: SmolStr::new("tree-sitter-kotlin-ng 1.1.0"),
-            // docs/adapters/kotlin.md §0: `package` carries no visibility meaning in Kotlin
+            // `package` carries no visibility meaning in Kotlin
             // (unlike Java) — the default with no modifier is `public`, not package-scoped, so
             // there is no `Unit`-scoped rung anywhere here. `internal` genuinely IS
             // `VisibilityScope::Package` (kndo's "same manifest" granularity — a Kotlin
@@ -80,7 +79,7 @@ impl LanguageAdapter for KotlinAdapter {
                 file_cycles: CycleTolerance::Hazard,
                 package_cycles: CycleTolerance::Hazard,
             },
-            // docs/adapters/kotlin.md §0/§3: identical root cause to Java's — Kotlin rides
+            // Identical root cause to Java's — Kotlin rides
             // Maven/Gradle coordinates with no structural import→coordinate mapping.
             resolves_dependency_usage: false,
         }

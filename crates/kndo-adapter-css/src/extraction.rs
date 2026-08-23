@@ -1,8 +1,8 @@
-//! CSS/SCSS extraction (docs/adapters/css.md §2), written against tree-sitter-css 0.25.0 and
-//! tree-sitter-scss 1.0.0 node shapes verified by `parsing`'s `#[ignore]`d ground-truth dumps.
+//! CSS/SCSS extraction, written against tree-sitter-css 0.25.0 and tree-sitter-scss 1.0.0
+//! node shapes verified by `parsing`'s `#[ignore]`d ground-truth dumps.
 //! One shared walker for both grammars — `tree-sitter-scss` is a strict grammar superset, not a
 //! fork with renamed nodes, so dispatch is purely on node *kind*, never on which grammar parsed
-//! the tree. Selector/class/id declarations are deliberately not extracted (spec §0) — only
+//! the tree. Selector/class/id declarations are deliberately not extracted — only
 //! custom properties / SCSS variables, mixins, and functions are.
 
 use kndo_adapter_toolkit::classify::{ContentMarkers, LineMarker};
@@ -25,7 +25,7 @@ const GENERATED_MARKERS: ContentMarkers = ContentMarkers {
     comment_openers: &["/*"],
 };
 
-/// `within` attribution (spec §2): `None` everywhere except inside a `@mixin`/`@function`
+/// `within` attribution: `None` everywhere except inside a `@mixin`/`@function`
 /// body, where it names that callable — the one place in this adapter a reference belongs to
 /// something other than "module load."
 struct Ctx<'a> {
@@ -153,8 +153,8 @@ fn handle_function(
 }
 
 /// `@mixin`/`@function` share one shape: a `name` field, an optional `parameters` list, a
-/// `block` body — both become callable `Declaration`s and both root their own body's `within`
-/// (spec §2).
+/// `block` body — both become callable `Declaration`s and both root their own body's
+/// `within`.
 fn handle_named_callable(
     item: Node,
     src: &[u8],
@@ -199,7 +199,7 @@ fn handle_call(
     walk_children(item, src, ctx, seen, out, "function_name");
 }
 
-/// `var(--name, <fallback>)` (spec §2): the first argument, when it's a custom-property name,
+/// `var(--name, <fallback>)`: the first argument, when it's a custom-property name,
 /// is the reference — the fallback (if any) is ordinary value content, walked normally by the
 /// generic recursion `handle_call` already does over every non-`function_name` child.
 fn emit_var_call_reference(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
@@ -266,7 +266,7 @@ fn emit_reference(
 
 /// `@import`/`@use`/`@forward` all reduce to the same shape here: find the first string literal
 /// anywhere in the statement's subtree (handles both `@import "x.css";` and `@import
-/// url("x.css");`, spec §2) and emit one side-effect-only `RawImport`. `resolve()` (§3) is what
+/// url("x.css");`) and emit one side-effect-only `RawImport`. `resolve()` is what
 /// actually tells a plain-CSS relative path apart from an SCSS module specifier, via its
 /// candidate list — extraction doesn't need to know which at-rule produced the specifier.
 fn handle_import_like(
@@ -507,7 +507,7 @@ mod tests {
 
     #[test]
     fn use_with_alias_is_a_known_upstream_grammar_bug_but_still_recovers_the_specifier() {
-        // docs/adapters/css.md §5: `tree-sitter-scss` 1.0.0 errors on `as t`, but the
+        // `tree-sitter-scss` 1.0.0 errors on `as t`, but the
         // `string_value` child survives the partial parse — the specifier still extracts.
         let f = scss("@use \"tokens\" as t;\n");
         assert_eq!(f.diagnostics.len(), 1);

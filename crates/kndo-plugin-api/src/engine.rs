@@ -6,15 +6,14 @@
 //! code cache within the process. Second, the *disk* compilation cache hangs off engine
 //! config: with it enabled, `Component::from_binary` on a component wasmtime has seen before
 //! (any prior kndo run, same component bytes) skips Cranelift entirely and maps the cached
-//! native code — the "recompiles the guest every run" cost the performance-parity work
-//! (RFC 0017 §4's follow-through) removes. Cache setup is best-effort: an unwritable cache
-//! directory degrades to compile-every-load, never to a failed load — the same
-//! degrade-don't-fail posture as kndo's own facts cache (ADR 0004).
+//! native code, sparing the cost of recompiling the guest every run. Cache setup is
+//! best-effort: an unwritable cache directory degrades to compile-every-load, never to a
+//! failed load — the same degrade-don't-fail posture as kndo's own facts cache.
 
 use std::sync::OnceLock;
 
-/// Fuel budget per guest call (RFC 0003 §3: "per-file fuel/time limits so a plugin cannot
-/// break the 500 ms budget"). One constant for both bridges — adapters and plugins are held
+/// Fuel budget per guest call — a per-file fuel/time limit so a plugin cannot break the
+/// 500 ms budget. One constant for both bridges — adapters and plugins are held
 /// to the same per-call ceiling.
 pub(crate) const FUEL_PER_CALL: u64 = 50_000_000;
 

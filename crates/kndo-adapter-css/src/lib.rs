@@ -1,7 +1,7 @@
-//! CSS/SCSS adapter (docs/adapters/css.md) — RFC 0002 §3's "non-source language," narrower in
-//! v1 than that section's own prose promises: no selector/class/id declarations (§0's verified
-//! reachability-seeding argument for why not), just file claiming, the `@import`/`@use`/
-//! `@forward` graph, and custom-property/SCSS-variable/mixin/function declarations.
+//! CSS/SCSS adapter — a non-source language, deliberately narrow: no selector/class/id
+//! declarations (extracting them would seed reachability with symbols nothing in the graph
+//! can be shown to consume), just file claiming, the `@import`/`@use`/`@forward` graph, and
+//! custom-property/SCSS-variable/mixin/function declarations.
 
 mod extraction;
 mod parsing;
@@ -24,11 +24,11 @@ impl LanguageAdapter for CssAdapter {
             id: SmolStr::new("css"),
             facts_schema_version: 1,
             file_globs: vec![SmolStr::new("**/*.css"), SmolStr::new("**/*.scss")],
-            // No manifest format of its own (§0/§4).
+            // No manifest format of its own.
             manifest_globs: vec![],
             grammar_version: SmolStr::new("tree-sitter-css 0.25.0 + tree-sitter-scss 1.0.0"),
-            // RFC 0012 §6: empty ladder — no visibility semantics, selectors/classes aren't
-            // extracted at all (§0), and the few symbols that do exist (custom properties,
+            // Empty ladder — no visibility semantics, selectors/classes aren't
+            // extracted at all, and the few symbols that do exist (custom properties,
             // SCSS variables/mixins/functions) have no language-level visibility modifiers.
             visibility_ladder: vec![],
             // Moot: this adapter's own declared symbols never have outgoing edges of their
@@ -39,7 +39,7 @@ impl LanguageAdapter for CssAdapter {
                 file_cycles: CycleTolerance::Idiomatic,
                 package_cycles: CycleTolerance::Idiomatic,
             },
-            // Moot: this adapter never contributes a manifest/PackageNode (§4), so
+            // Moot: this adapter never contributes a manifest/PackageNode, so
             // `dependency_hygiene` never consults this flag for it.
             resolves_dependency_usage: false,
         }
@@ -52,7 +52,7 @@ impl LanguageAdapter for CssAdapter {
         }
         Some(FileClaim {
             language: SmolStr::new("css"),
-            // No path-pattern-driven role/origin split (§0/§1): every claimed file is
+            // No path-pattern-driven role/origin split: every claimed file is
             // production; origin is corrected at extract time by generated-marker detection.
             class: FileClass {
                 role: FileRole::Production,
@@ -70,7 +70,7 @@ impl LanguageAdapter for CssAdapter {
     }
 
     fn extract_manifest(&self, _file: &SourceFile<'_>, _ctx: &ResolveCtx<'_>) -> ManifestFacts {
-        // Never called — `claim_manifest` always returns `false` (§4).
+        // Never called — `claim_manifest` always returns `false`.
         ManifestFacts::default()
     }
 

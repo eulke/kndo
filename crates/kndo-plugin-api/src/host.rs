@@ -1,5 +1,5 @@
 //! The wasmtime host bridge: loads a `kndo:adapter` WASM component and wraps it as a native
-//! [`LanguageAdapter`]. See `docs/contracts/wasm-abi.md` for the v1 scope this bridges.
+//! [`LanguageAdapter`]. The v1 scope is one-directional: file claiming and extraction only.
 
 use std::fmt;
 use std::path::Path;
@@ -50,8 +50,8 @@ struct GuestState {
 }
 
 /// A `kndo:adapter` WASM component, bridged to the native [`LanguageAdapter`] trait. From the
-/// `Engine`'s perspective this is indistinguishable from a compiled-in adapter (ADR 0003: "the
-/// WASM ABI is a generated bridge over [the native traits]") — including under parallelism:
+/// `Engine`'s perspective this is indistinguishable from a compiled-in adapter (the
+/// WASM ABI is a generated bridge over the native traits) — including under parallelism:
 /// `claim`/`extract` run on a *pool* of guest instances, one checked out per concurrent call,
 /// so rayon's parallel extraction phase (graph.rs phase 1) parallelizes a WASM adapter's files
 /// exactly as it does a compiled-in adapter's. The compiled [`Component`] is shared; an
@@ -59,10 +59,10 @@ struct GuestState {
 /// when the pool is empty, returned after the call, and *discarded* after a trap — a trapped
 /// instance's state is not something any later call should inherit.
 ///
-/// Sound because the contract already required it: `extract` must be a pure function of
-/// `(path, content)` — the facts cache (ADR 0004) has always served any file's facts from any
-/// prior run's extraction, so a guest depending on cross-call instance state was already
-/// broken. The pool makes that long-standing implication normative (wasm-abi §3).
+/// Sound because the contract requires it: `extract` must be a pure function of
+/// `(path, content)` — the facts cache serves any file's facts from any prior run's
+/// extraction, so a guest depending on cross-call instance state is broken by contract.
+/// The pool makes that implication normative.
 pub struct WasmAdapter {
     descriptor: AdapterDescriptor,
     component: wasmtime::component::Component,
@@ -115,8 +115,8 @@ impl WasmAdapter {
     }
 }
 
-/// Instantiate once and read + vet the descriptor. RFC 0016 §4: the `kndo:` namespace is
-/// reserved for built-ins, same enforcement the plugin bridge already has (RFC 0015 §2) — a
+/// Instantiate once and read + vet the descriptor. The `kndo:` namespace is
+/// reserved for built-ins, the same enforcement the plugin bridge applies — a
 /// component external to this build cannot claim to be `kndo:go` or any other coordinate no
 /// external source could have been fetched from. Skipped-not-fatal, same as any other load
 /// failure. The probing instance seeds the pool — never a throwaway.
@@ -131,8 +131,7 @@ fn probe_descriptor(
     if kndo_core::plugin::is_reserved_id(&raw.id) {
         return Err(LoadError::Instantiate(format!(
             "descriptor claims reserved built-in id '{}' (the kndo: namespace is not \
-             claimable by external adapters — RFC 0015 §2, extended to adapters by RFC \
-             0016 §4)",
+             claimable by external adapters)",
             raw.id
         )));
     }
@@ -162,8 +161,8 @@ fn native_descriptor(raw: w::AdapterDescriptor) -> AdapterDescriptor {
             .into_iter()
             .map(from_wit_activation_rule)
             .collect(),
-        // Dormant on both sides (RFC 0016 §8 phase 0 / §4's WIT note) — rides the wire,
-        // unevaluated, so the reservation is symmetric across tiers.
+        // Dormant on both sides — rides the wire, unevaluated, so the reservation is
+        // symmetric across tiers.
         dependencies: raw.dependencies.iter().map(SmolStr::new).collect(),
         id: SmolStr::new(&raw.id),
         facts_schema_version: raw.facts_schema_version,
@@ -220,8 +219,8 @@ impl LanguageAdapter for WasmAdapter {
     }
 
     fn claim_manifest(&self, _path: &ProjectPath) -> bool {
-        // v1 scope cut (docs/contracts/wasm-abi.md §2): no manifest extraction over the WASM
-        // boundary yet. Never calls into the guest.
+        // v1 scope cut: no manifest extraction over the WASM boundary. Never calls into
+        // the guest.
         false
     }
 
@@ -252,21 +251,21 @@ impl LanguageAdapter for WasmAdapter {
     }
 
     fn extract_manifest(&self, _file: &SourceFile<'_>, _ctx: &ResolveCtx<'_>) -> ManifestFacts {
-        // v1 scope cut, mirrors `claim_manifest` — see docs/contracts/wasm-abi.md §2.
+        // v1 scope cut, mirrors `claim_manifest`.
         ManifestFacts::default()
     }
 
     fn resolve(&self, _spec: &ImportSpec, _ctx: &ResolveCtx<'_>) -> Resolution {
-        // v1 never extracts imports (no `resolve()` guest export exists yet), so this is
+        // v1 never extracts imports (no `resolve()` guest export exists), so this is
         // structurally unreachable in practice — kept `Unresolved` for trait completeness,
-        // matching the JSON/CSS adapters' own "genuinely unreachable in normal operation" note
-        // (docs/adapters/json.md).
+        // matching the JSON adapter's own "structurally unreachable in normal operation"
+        // note.
         Resolution::Unresolved
     }
 }
 
 /// The conservative empty result plus a diagnostic — one misbehaving external adapter must
-/// not take down `kndo check` for every other language in the project (RFC 0003 §3).
+/// not take down `kndo check` for every other language in the project.
 fn error_facts(adapter_id: &str, path: &ProjectPath, detail: &str) -> FileFacts {
     let mut facts = FileFacts::default();
     facts.diagnostics.push(Diagnostic {
@@ -294,8 +293,8 @@ fn from_wit_origin(origin: w::FileOrigin) -> FileOrigin {
     }
 }
 
-// Table-driven rather than a match-per-variant (same shape the Kotlin/Swift adapters settled
-// on for their own declaration-dispatch tables): a flat match this wide reads as more
+// Table-driven rather than a match-per-variant (same shape the Kotlin/Swift adapters use
+// for their own declaration-dispatch tables): a flat match this wide reads as more
 // cyclomatic risk than a straight 1:1 enum mirror actually carries, and `crap` has no way to
 // tell the difference without a coverage report. An explicit pair table keeps each
 // correspondence spelled out (no fragile reliance on both enums sharing declaration order)

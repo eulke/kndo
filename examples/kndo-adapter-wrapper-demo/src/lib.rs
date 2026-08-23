@@ -1,6 +1,6 @@
-//! kndo-adapter-wrapper-demo — the reference *wrapper* adapter for kndo-plugin-api v1
-//! (docs/contracts/wasm-abi.md), existing for exactly one contract point: its descriptor
-//! declares `dependencies: ["kdemo"]` (RFC 0017 §6). RFC 0015 §1's wrapper-framework story —
+//! kndo-adapter-wrapper-demo — the reference *wrapper* adapter for kndo-plugin-api v1,
+//! existing for exactly one contract point: its descriptor
+//! declares `dependencies: ["kdemo"]`. The wrapper-framework story —
 //! "a company framework's component implies the components it builds on" — applies to
 //! adapters the same way it does to plugins, and this component is the real-WASM half of
 //! that proof: `crates/kndo/tests/adapter_dependency_implication.rs` installs it globally

@@ -1,7 +1,7 @@
-//! kndo — the composed product, as a library (RFC 0001 §2 layering).
+//! kndo — the composed product, as a library.
 //!
 //! This is the **distribution layer**: it owns the composition "kndo = core + these
-//! languages (+ these built-in plugins, when they land)". That knowledge belongs to the
+//! languages + these built-in plugins". That knowledge belongs to the
 //! product, not to any presentation layer — a frontend (CLI, `kndo serve`/MCP, LSP, GUI, CI
 //! action) depends on this crate alone and can never accidentally ship a kndo missing
 //! languages, nor does adding a language ever touch a frontend.
@@ -10,7 +10,7 @@
 //! crate sits *above* both and points downward at each.
 //!
 //! Embedders wanting a subset build with `--no-default-features --features js,go,…`
-//! (ADR 0006 feature-gated builds).
+//! (feature-gated builds).
 
 pub use kndo_core::{
     adapter, analysis, cache, coverage, discovery, engine, graph, plugin, query, query_envelope,
@@ -22,17 +22,17 @@ use kndo_core::engine::{ConfigOverrides, Engine, EngineError};
 use kndo_core::plugin::Plugin;
 use std::path::Path;
 
-/// `kndo plugin install/list/remove` (RFC 0015 §4) — the registry-less installer over the
+/// `kndo plugin install/list/remove` — the registry-less installer over the
 /// global plugin directory.
 #[cfg(feature = "plugin-install")]
 pub mod plugin_install;
 
-/// `kndo plugin verify <component.wasm>` (RFC 0017 §7) — the author kit's local compliance
+/// `kndo plugin verify <component.wasm>` — the author kit's local compliance
 /// run over one component file.
 #[cfg(feature = "external-adapters")]
 pub mod verify;
 
-/// `kndo plugin new`/`build`/`wit` (RFC 0017 §7, second pass) — the author kit's scaffold
+/// `kndo plugin new`/`build`/`wit` — the author kit's scaffold
 /// and componentize halves.
 #[cfg(feature = "external-adapters")]
 pub mod author;
@@ -43,7 +43,7 @@ pub mod author;
 pub fn default_adapters() -> Vec<Box<dyn LanguageAdapter>> {
     // One cfg-gated push per adapter, deliberately: with eight feature-gated languages this
     // stays the clearest composition shape (clippy's vec![] suggestion doesn't). `unused_mut`
-    // is a false positive in the RFC 0016 §7 shell configuration (every language feature off):
+    // is a false positive in the shell configuration (every language feature off):
     // none of the pushes below compile in, so nothing here needs `mut` in that build alone.
     #[allow(clippy::vec_init_then_push, unused_mut)]
     {
@@ -68,13 +68,12 @@ pub fn default_adapters() -> Vec<Box<dyn LanguageAdapter>> {
     }
 }
 
-/// Every first-party plugin this build includes (RFC 0003) — the product's ecosystem registry,
+/// Every first-party plugin this build includes — the product's ecosystem registry,
 /// same shape and same reasoning as [`default_adapters`]: one entry here, nothing else in the
 /// workspace changes. These are *candidates*: each is still gated by its own
-/// `PluginDescriptor.activation` rules in [`compose_plugins`] (RFC 0003 §4), so a convention
-/// plugin never runs — or costs the graph-cache bypass — on a project it doesn't match. The
-/// rest of RFC 0003 §3's stated launch set (react, spring, jest/vitest…) is tracked in the
-/// ROADMAP, not silently implied by this function's name.
+/// `PluginDescriptor.activation` rules in [`compose_plugins`], so a convention
+/// plugin never runs — or costs the graph-cache bypass — on a project it doesn't match.
+/// Only what is listed here ships built-in; the function's name implies nothing more.
 pub fn default_plugins() -> Vec<Box<dyn Plugin>> {
     // Same cfg-gated-push shape as `default_adapters`, same clippy reasoning.
     #[allow(clippy::vec_init_then_push)]
@@ -101,7 +100,7 @@ pub fn open(root: &Path, overrides: ConfigOverrides) -> Result<Engine, EngineErr
     Engine::open_with_plugins(root, overrides, adapters, plugins)
 }
 
-/// Where a resolved plugin came from (RFC 0015 §2's three tiers).
+/// Where a resolved plugin came from — one of the three tiers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PluginSource {
     Builtin,
@@ -110,8 +109,7 @@ pub enum PluginSource {
 }
 
 /// Why a plugin is active for this project — the doctor-visible answer to "why is this
-/// running?" (RFC 0003 §4's introspectability requirement, extended to RFC 0015 §3's
-/// implication chains).
+/// running?", dependency implication chains included.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ActivationReason {
     /// Dropped in `.kndo/plugins/` — presence is the opt-in.
@@ -139,7 +137,7 @@ pub struct ResolvedPlugin {
 }
 
 /// A `dependencies` coordinate an *active* plugin names that no present plugin carries as its
-/// id (RFC 0015 §3): never a runtime error — the depending plugin still runs — but reported so
+/// id: never a runtime error — the depending plugin still runs — but reported so
 /// the gap is visible instead of silent.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct MissingDependency {
@@ -161,7 +159,7 @@ pub fn plugin_resolution(root: &Path) -> PluginResolution {
     compose_plugins(root).1
 }
 
-/// Assemble the full plugin set for `root` (RFC 0015 §3): built-ins, project-local
+/// Assemble the full plugin set for `root`: built-ins, project-local
 /// `.kndo/plugins/*.wasm`, and global candidates, seeded by their own activation rules and
 /// closed over `dependencies` implication as a fixpoint. Built-ins with non-empty `activation`
 /// are gated exactly like global candidates — a built-in convention plugin must never run (or
@@ -195,11 +193,10 @@ fn compose_plugins(root: &Path) -> (Vec<Box<dyn Plugin>>, PluginResolution) {
     {
         let _ = root;
         // Minimal embedder build: no rule evaluation (the activation module's glob/manifest
-        // machinery is feature-gated with it) — built-ins are unconditional, exactly the
-        // pre-RFC-0015 behavior. Safe only because every gated built-in's feature
-        // (`plugin-nextjs`/`plugin-express`) implies `plugin-activation`, so the sole
-        // built-in that can land here is the lcov ingester (always-on is its original
-        // contract, and it declares `mutates_graph() == false`).
+        // machinery is feature-gated with it) — built-ins are unconditional. Safe only
+        // because every gated built-in's feature (`plugin-nextjs`/`plugin-express`) implies
+        // `plugin-activation`, so the sole built-in that can appear here is the lcov
+        // ingester (always-on by contract, and it declares `mutates_graph() == false`).
         let plugins = default_plugins();
         let resolution = PluginResolution {
             plugins: plugins
@@ -234,7 +231,7 @@ fn resolved_plugin(
 }
 
 /// The three candidate tiers, in deterministic order: built-ins, project-local `.kndo/plugins/`,
-/// global directory — each `.wasm` load failure skipped, never fatal (RFC 0003 §3). The two
+/// global directory — each `.wasm` load failure skipped, never fatal. The two
 /// WASM tiers only exist with the WASM runtime (`external-adapters`); a plugins-only build
 /// (`plugin-activation` via `plugin-nextjs`/`plugin-express`) still gates its built-ins here.
 #[cfg(feature = "plugin-activation")]
@@ -267,8 +264,8 @@ fn load_wasm_plugins(dir: &Path, source: PluginSource) -> Vec<(Box<dyn Plugin>, 
         .collect()
 }
 
-/// Where a resolved adapter came from — mirrors [`PluginSource`] (RFC 0016 §4 brings adapters
-/// to the same three-tier shape plugins already had).
+/// Where a resolved adapter came from — mirrors [`PluginSource`]: adapters share the same
+/// three-tier shape as plugins.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AdapterSource {
     Builtin,
@@ -277,8 +274,8 @@ pub enum AdapterSource {
 }
 
 /// One adapter the composition layer considered, active or not — the doctor-visible half of
-/// RFC 0016 §4, matching [`ResolvedPlugin`]'s shape field for field since RFC 0017 §6 landed
-/// the adapter-side `dependencies` fixpoint (the wrapper-adapter case: a `.vue`-style
+/// adapter composition, matching [`ResolvedPlugin`]'s shape field for field; the adapter-side
+/// `dependencies` fixpoint covers the wrapper-adapter case (a `.vue`-style
 /// superset language whose own extraction degrades without its base language's adapter
 /// present). `active: None` means "present but inactive" — a global candidate whose rules
 /// didn't fire and that nothing active depends on.
@@ -291,7 +288,7 @@ pub struct ResolvedAdapter {
     pub active: Option<ActivationReason>,
 }
 
-/// The full outcome of adapter composition for a project (RFC 0016 §4, RFC 0017 §6) — what
+/// The full outcome of adapter composition for a project — what
 /// [`open`] registered, in claim-priority order, plus every global candidate that didn't
 /// activate, plus every coordinate an active adapter depends on that nothing present carries.
 #[derive(Debug, Clone, Default)]
@@ -306,14 +303,14 @@ pub fn adapter_resolution(root: &Path) -> AdapterResolution {
     compose_adapters(root).1
 }
 
-/// Assemble the full adapter set for `root` (RFC 0016 §4) in **claim-priority order**: a
+/// Assemble the full adapter set for `root` in **claim-priority order**: a
 /// project-local `.kndo/plugins/*.wasm` adapter always wins a contested file extension over a
 /// globally installed one, which always wins over a compiled-in one — the same "presence is
-/// the strongest opt-in signal" reasoning `Plugin` composition already applies (RFC 0003 §3),
-/// now written down as policy rather than left as compiled-in-happens-to-be-first accident.
+/// the strongest opt-in signal" reasoning `Plugin` composition applies, held as policy
+/// rather than left as compiled-in-happens-to-be-first accident.
 /// Within one tier, adapters are ordered by id for deterministic claim resolution independent
 /// of filesystem enumeration. Global adapters are gated by their own `activation` exactly like
-/// global plugins (RFC 0003 §4): empty rules never self-activate from the global tier; a
+/// global plugins: empty rules never self-activate from the global tier; a
 /// project-local file is unconditional either way.
 fn compose_adapters(root: &Path) -> (Vec<Box<dyn LanguageAdapter>>, AdapterResolution) {
     #[cfg(feature = "external-adapters")]
@@ -326,7 +323,7 @@ fn compose_adapters(root: &Path) -> (Vec<Box<dyn LanguageAdapter>>, AdapterResol
         sort_by_id(&mut global_all);
         let builtins = default_adapters();
 
-        // Candidates in claim-priority order, then RFC 0017 §6's activation resolution: seed
+        // Candidates in claim-priority order, then activation resolution: seed
         // each tier (project-local unconditional; global by its own rules; compiled-in
         // unconditional — a language adapter must run, `activation` only ever gates the
         // global tier), close over `dependencies` implication with the SAME fixpoint the
@@ -442,8 +439,8 @@ fn boxed(
         .map(|a| Box::new(a) as Box<dyn LanguageAdapter>)
 }
 
-/// Every `.wasm` `LanguageAdapter` in `dir` — component-load failures skipped, never fatal
-/// (RFC 0003 §3), same posture the plugin tier's loader already has.
+/// Every `.wasm` `LanguageAdapter` in `dir` — component-load failures skipped, never fatal,
+/// same posture as the plugin tier's loader.
 #[cfg(feature = "external-adapters")]
 fn load_wasm_adapters(dir: &Path) -> Vec<kndo_plugin_api::WasmAdapter> {
     wasm_components(dir)
@@ -453,8 +450,8 @@ fn load_wasm_adapters(dir: &Path) -> Vec<kndo_plugin_api::WasmAdapter> {
 }
 
 /// One globally installed [`LanguageAdapter`] candidate, as `kndo doctor` reports it — mirrors
-/// [`GlobalPluginCandidate`], but carries the full [`ActivationReason`] (RFC 0017 §6): a global
-/// adapter can now activate via another component's `dependencies`, and "active (dependency of
+/// [`GlobalPluginCandidate`], but carries the full [`ActivationReason`]: a global
+/// adapter can activate via another component's `dependencies`, and "active (dependency of
 /// X)" is exactly the fact a rule-only bool would erase.
 pub struct GlobalAdapterCandidate {
     pub id: String,
@@ -477,12 +474,12 @@ pub fn global_adapter_candidates(root: &Path) -> Vec<GlobalAdapterCandidate> {
         .collect()
 }
 
-/// One globally installed `Plugin` candidate (RFC 0003 §4), as `kndo doctor` reports it —
+/// One globally installed `Plugin` candidate, as `kndo doctor` reports it —
 /// unlike [`kndo_core::engine::DoctorPluginInfo`] (which only ever sees plugins that already
 /// made it into composition), this covers *every* `.wasm` file the global directory holds,
 /// skipped ones included, so a plugin whose `activation` rule doesn't match isn't invisible —
 /// it shows up here with `activated: false` and the exact rule that didn't fire. A thin,
-/// global-tier view over [`plugin_resolution`] — `activated` includes RFC 0015 §3 implication,
+/// global-tier view over [`plugin_resolution`] — `activated` includes dependency implication,
 /// not just the candidate's own rules.
 pub struct GlobalPluginCandidate {
     pub id: String,
@@ -525,12 +522,12 @@ fn wasm_components(dir: &Path) -> Vec<std::path::PathBuf> {
         .filter(|path| path.extension().and_then(|ext| ext.to_str()) == Some("wasm"))
         .collect();
     // read_dir order is filesystem-dependent — sort so candidate order (and with it every
-    // downstream report) is deterministic (RFC 0008 §4's discipline applied here too).
+    // downstream report) is deterministic.
     paths.sort();
     paths
 }
 
-/// RFC 0003 §4: whether a plugin activates for a given project — the machine-checkable
+/// Whether a plugin activates for a given project — the machine-checkable
 /// counterpart to `PluginDescriptor.detection`'s prose — plus (with the WASM tier) where
 /// globally installed `Plugin`s live. Gated built-in convention plugins share this exact
 /// machinery, which is why it sits behind `plugin-activation` rather than `external-adapters`.
@@ -560,14 +557,13 @@ mod activation {
         !rules.is_empty() && rules.iter().any(|rule| matches(rule, root))
     }
 
-    /// RFC 0015 §3's activation resolution: seed each candidate from its source and its own
+    /// Activation resolution: seed each candidate from its source and its own
     /// rules, then close over `dependencies` implication as a fixpoint. Returns, per candidate,
     /// `Some(reason)` (active) or `None` (present but inactive), plus every coordinate an
     /// active plugin depends on that no present candidate carries as its id.
     ///
     /// Seeding: project-local candidates are unconditional (presence is the opt-in); built-ins
-    /// with an *empty* rule list are always-on (`LcovPlugin`'s original contract predates
-    /// rules; today it has rules and is gated like everything else); anything with rules
+    /// with an *empty* rule list are always-on; anything with rules
     /// activates iff one matches. The fixpoint then activates any present candidate an active
     /// plugin names in `dependencies`, transitively — the wrapper-chain case
     /// (`company-framework → other-framework → kndo:express`) composes to arbitrary depth from
@@ -596,7 +592,7 @@ mod activation {
     }
 
     /// The two fields the implication fixpoint and missing-dependency collection actually
-    /// read — kind-neutral on purpose (RFC 0017 §6): `PluginDescriptor` and
+    /// read — kind-neutral on purpose: `PluginDescriptor` and
     /// `AdapterDescriptor` both map into it, so plugins and adapters share one fixpoint
     /// implementation instead of two that could drift.
     pub(crate) struct CandidateIdentity {
@@ -668,7 +664,7 @@ mod activation {
 
     /// Coordinates *active* plugins depend on that no present candidate carries as its id —
     /// inactive requirers contribute nothing (their dependencies are moot). Sorted + deduped:
-    /// deterministic output regardless of candidate order (RFC 0008 §4).
+    /// deterministic output regardless of candidate order.
     pub(crate) fn collect_missing(
         descriptors: &[CandidateIdentity],
         active: &[Option<crate::ActivationReason>],
@@ -714,9 +710,9 @@ mod activation {
     /// own — using kndo-core's own gitignore-aware walker (`node_modules`, `.kndo/`, etc.
     /// excluded exactly like every other analysis in this product; a second, hand-rolled walker
     /// here would risk drifting from that). A monorepo where only one package depends on `react`
-    /// must still activate a `react` plugin — restricting this to the root manifest would have
-    /// made every monorepo a false negative, and kndo's monorepo support is not speculative
-    /// (RFC 0012 §8/§10 already resolve per-package topology for real).
+    /// must still activate a `react` plugin — restricting this to the root manifest would
+    /// make every monorepo a false negative, and kndo's monorepo support is not speculative:
+    /// the product resolves per-package topology for real.
     fn manifest_declares(root: &Path, name: &str) -> bool {
         kndo_core::discovery::find_files_named(root, &["package.json", "Cargo.toml"])
             .into_iter()
@@ -756,9 +752,8 @@ mod activation {
         let Ok(value) = content.parse::<toml::Table>() else {
             return false;
         };
-        // Cargo treats `-`/`_` as interchangeable in a crate name (spec §3's own idiom
-        // elsewhere in this codebase) — a plugin author shouldn't have to guess which spelling
-        // a project used.
+        // Cargo treats `-`/`_` as interchangeable in a crate name — a plugin author
+        // shouldn't have to guess which spelling a project used.
         let hyphenated = name.replace('_', "-");
         let underscored = name.replace('-', "_");
         SECTIONS.iter().any(|section| {
@@ -887,7 +882,7 @@ mod activation {
 
         #[test]
         fn dependency_chain_activates_transitively() {
-            // The wrapper case end to end (RFC 0015 §1/§3): the project matches only the
+            // The wrapper case end to end: the project matches only the
             // company plugin's rule; nextjs and express activate purely through the chain.
             let dir = tempfile::tempdir().unwrap();
             std::fs::write(

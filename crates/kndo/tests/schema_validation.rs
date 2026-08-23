@@ -1,11 +1,11 @@
-//! ROADMAP M1 exit criterion: "JSON validates against generated schema." Two checks:
+//! Two checks:
 //! 1. Real `--format json` output from a real `Engine` run validates against the committed
 //!    schema (`schemas/kndo-output.schema.json`).
-//! 2. That committed file isn't stale — it matches what `cargo xtask gen-schema` would write
-//!    right now, from the same `kndo_core::engine::Envelope` type.
+//! 2. That committed file matches what `cargo xtask gen-schema` writes from the same
+//!    `kndo_core::engine::Envelope` type.
 //!
-//! The same two checks repeat for the navigation-query envelope (RFC 0007, output-schema §8)
-//! against `schemas/kndo-query-output.schema.json`.
+//! The same two checks repeat for the navigation-query envelope against
+//! `schemas/kndo-query-output.schema.json`.
 
 use std::fs;
 use std::path::PathBuf;
@@ -57,8 +57,8 @@ fn real_json_output_validates_against_the_committed_schema() {
     )
     .unwrap();
     fs::write(dir.join("src/index.ts"), "console.log(\"alive\");\n").unwrap();
-    // Not `main`'s own exports (those are the package's public API, and a production root in
-    // their own right — RFC 0011 §5) — an orphan file nothing imports, still genuinely dead.
+    // Not `main`'s own exports (those are the package's public API, a production root in
+    // their own right) — an orphan file nothing imports, genuinely dead.
     fs::write(
         dir.join("src/orphan.ts"),
         "export function dead(): void {}\n",

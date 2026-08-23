@@ -1,22 +1,22 @@
-//! Import resolution — spec docs/adapters/js-ts.md §3, first slice.
+//! Import resolution.
 //!
 //! Covers: relative/absolute specifiers against the discovered-file index (extension
 //! resolution order + directory `index.*` fallback), `node:`-prefixed and bare Node builtins
-//! (→ `Stdlib`), workspace-member names and subpaths (RFC 0011 §4 — `resolve_workspace`), and
-//! bare package specifiers via the subpath→package mapping (→ `Dependency`). Deferred to
-//! later commits (each already named in the spec, not silently missing): self-reference
+//! (→ `Stdlib`), workspace-member names and subpaths (`resolve_workspace`), and
+//! bare package specifiers via the subpath→package mapping (→ `Dependency`). Not covered
+//! (deliberately, not silently missing): self-reference
 //! `imports` (`#internal/*`), `exports`/`tsconfig paths` maps, pnpm symlink layouts.
 
 use kndo_core::adapter::{ImportSpec, ProjectPath, Resolution, ResolveCtx};
 use kndo_core::vocab::Confidence;
 use smol_str::SmolStr;
 
-/// Order matters: TS extensions before JS, per spec §3.
+/// Order matters: TS extensions before JS.
 const TS_EXTS: &[&str] = &["ts", "tsx", "mts", "cts"];
 const JS_EXTS: &[&str] = &["js", "jsx", "mjs", "cjs"];
 
 /// The js-ts stdlib dataset — generated data via the shared `kndo-stdlib v1` mechanism
-/// (toolkit `stdlib` module, RFC 0002 §6). Regenerate with `cargo xtask gen-stdlib js-ts`;
+/// (toolkit `stdlib` module). Regenerate with `cargo xtask gen-stdlib js-ts`;
 /// never hand-edit. The bare-name set is frozen by Node's own policy (new builtins are
 /// `node:`-prefix-only — that prefix is the *structural* signal passed to the classifier).
 static STDLIB: std::sync::LazyLock<kndo_adapter_toolkit::stdlib::StdlibIndex<'static>> =
@@ -29,7 +29,7 @@ pub fn resolve(spec: &ImportSpec, ctx: &ResolveCtx<'_>) -> Resolution {
     let s = spec.specifier.as_str();
 
     if s.starts_with('#') {
-        // Self-reference `imports` map — needs package.json `imports`, not yet parsed.
+        // Self-reference `imports` map — needs package.json `imports`, which is not parsed.
         return Resolution::Unresolved;
     }
 
@@ -37,13 +37,13 @@ pub fn resolve(spec: &ImportSpec, ctx: &ResolveCtx<'_>) -> Resolution {
         return resolve_relative(spec.from.0.as_str(), s, ctx);
     }
 
-    // Workspace members first (RFC 0011 §4, js-ts.md §3: "name matches against sibling
-    // manifests resolve to internal files"): a bare specifier naming an in-repo package
+    // Workspace members first (a name matching a sibling manifest resolves to internal
+    // files): a bare specifier naming an in-repo package
     // outranks the entire external-specifier ladder below — the code demonstrably lives in
     // this repo, the strongest possible statement of what the name means. Checking before
     // even the structural-stdlib rule is safe by construction: npm package names cannot
     // contain `:`, so `node:fs` can never collide with a workspace name. This check sits in
-    // the adapter rather than the toolkit's shared precedence (RFC 0002 §6) because subpath
+    // the adapter rather than the toolkit's shared precedence because subpath
     // resolution needs this language's own candidate ladder, which the toolkit deliberately
     // doesn't own.
     let package_name = package_name_from_specifier(s);
@@ -54,9 +54,8 @@ pub fn resolve(spec: &ImportSpec, ctx: &ResolveCtx<'_>) -> Resolution {
         // No concrete in-repo file matched (the member's entries are build artifacts absent
         // from a source checkout, or the subpath names a built layout) — fall through to the
         // external ladder below: the specifier still names a *consumed package*, and losing
-        // the ImportsDependency evidence would silently un-count a genuinely used dependency
-        // (found dogfooding against colinhacks/zod, whose published entries are build
-        // outputs). Only the file edge is unknowable, and it points at nothing in-tree.
+        // the ImportsDependency evidence would silently un-count a genuinely used
+        // dependency. Only the file edge is unknowable, and it points at nothing in-tree.
     }
 
     // Bare specifier: the toolkit owns the precedence (structural stdlib > declared dep >
@@ -72,9 +71,9 @@ pub fn resolve(spec: &ImportSpec, ctx: &ResolveCtx<'_>) -> Resolution {
 }
 
 /// `@org/ui` → the member's resolved entry; `@org/ui/button` → the subpath against the
-/// member's own directory via the same candidate ladder relative imports use — a deep import
-/// (RFC 0011 §4): its edge is recorded from M1 (reachability must stay correct — deep-imported
-/// code IS used); the `deep-import` *verdict* lands M3. `None` when no concrete in-repo file
+/// member's own directory via the same candidate ladder relative imports use — a deep import:
+/// its edge is always recorded (reachability must stay correct — deep-imported
+/// code IS used); the `deep-import` *verdict* is a separate analysis. `None` when no concrete in-repo file
 /// matches — the caller then falls through to the external ladder so the dependency-usage
 /// evidence survives (see the call site).
 fn resolve_workspace(
@@ -137,7 +136,7 @@ pub(crate) fn candidates(base: &str) -> Vec<String> {
     out
 }
 
-/// `lodash/fp` → `lodash`; `@scope/pkg/sub` → `@scope/pkg` (spec §3).
+/// `lodash/fp` → `lodash`; `@scope/pkg/sub` → `@scope/pkg`.
 fn package_name_from_specifier(spec: &str) -> SmolStr {
     let mut segs = spec.split('/');
     let first = segs.next().unwrap_or("");
@@ -280,7 +279,7 @@ mod tests {
     }
 
     #[test]
-    fn self_reference_import_is_deferred_not_wrong() {
+    fn self_reference_import_is_unresolved_not_wrong() {
         let known = ctx_with(&[]);
         let r = resolve(
             &spec("src/a.ts", "#internal/util"),
@@ -292,7 +291,7 @@ mod tests {
     #[test]
     fn builtin_subpath_is_stdlib() {
         // fs/promises is its own entry in module.builtinModules — the generated data
-        // carries all of these; a hand list historically missed several.
+        // carries all of these; a hand-maintained list misses entries.
         let known = ctx_with(&[]);
         let r = resolve(&spec("src/a.ts", "fs/promises"), &ResolveCtx::new(&known));
         assert_eq!(r, Resolution::Stdlib);
@@ -348,8 +347,8 @@ mod tests {
 
     #[test]
     fn workspace_subpath_resolves_against_the_members_directory() {
-        // The deep-import shape (RFC 0011 §4) — the edge is recorded from M1, the verdict
-        // lands M3.
+        // The deep-import shape — the edge is always recorded; the verdict is a separate
+        // analysis.
         let known = ctx_with(&["packages/ui/button.ts"]);
         let map = members(&[("@org/ui", "packages/ui", None)]);
         let ctx = ResolveCtx::new(&known).with_workspace_members(&map);
@@ -366,8 +365,8 @@ mod tests {
 
     #[test]
     fn unresolvable_member_falls_through_to_the_external_ladder() {
-        // A member whose entries are build artifacts absent from a source checkout (the
-        // colinhacks/zod shape): no in-repo file matches, but the specifier still names a
+        // A member whose entries are build artifacts absent from a source checkout:
+        // no in-repo file matches, but the specifier still names a
         // consumed package — falling to Unresolved would silently un-count a genuinely used
         // dependency. Only the file edge is unknowable; the dependency evidence survives.
         let known = ctx_with(&[]);

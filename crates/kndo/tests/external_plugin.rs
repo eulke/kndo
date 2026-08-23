@@ -1,5 +1,5 @@
-//! Proves the `Plugin` WASM bridge (`docs/contracts/wasm-abi.md` §5) through the *full* product
-//! composition — `kndo::open`'s real `.kndo/plugins/*.wasm` auto-discovery, not a hand-built
+//! Proves the `Plugin` WASM bridge through the *full* product composition —
+//! `kndo::open`'s real `.kndo/plugins/*.wasm` auto-discovery, not a hand-built
 //! `Engine` — mirroring `external_adapter.rs`'s own discipline for the adapter ABI. Both an
 //! external adapter (`examples/kndo-plugin-demo`) and an external plugin
 //! (`examples/kndo-plugin-hooks-demo`) are dropped into the *same* `.kndo/plugins/` directory,

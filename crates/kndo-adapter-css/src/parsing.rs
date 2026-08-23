@@ -1,4 +1,4 @@
-//! Parsing (docs/adapters/css.md §0): `tree-sitter-css` for `.css`, `tree-sitter-scss` for
+//! Parsing: `tree-sitter-css` for `.css`, `tree-sitter-scss` for
 //! `.scss` — dispatched by extension, never by content sniffing. The two grammars share almost
 //! their entire node vocabulary verbatim (`tree-sitter-scss` is a strict superset, not a fork
 //! with renamed nodes), so `extraction.rs` walks either resulting tree with one shared function
@@ -33,8 +33,8 @@ mod tests {
         parse(path, src).unwrap().root_node().to_sexp()
     }
 
-    /// Ground-truth node shapes (docs/adapters/css.md §2), verified against tree-sitter-css
-    /// 0.25.0 and tree-sitter-scss 1.0.0 directly. Kept `#[ignore]`d — run with `--ignored
+    /// Ground-truth node shapes, verified against tree-sitter-css 0.25.0 and
+    /// tree-sitter-scss 1.0.0 directly. Kept `#[ignore]`d — run with `--ignored
     /// --nocapture` to re-verify against a grammar version bump.
     #[test]
     #[ignore]
@@ -62,9 +62,9 @@ mod tests {
     /// SCSS-only shapes: `$variable` declaration (same `declaration`/`property_name` node as a
     /// custom property, `$`-prefixed) and bare-`variable`-leaf reference (no `var(...)` call
     /// wrapper needed, unlike custom properties); `@mixin`/`@include`; `@function`/ordinary
-    /// call-expression invocation; `@use`/`@forward`. docs/adapters/css.md §2/§5 — `@use "x" as
-    /// y;` and `@extend %x;` are upstream tree-sitter-scss 1.0.0 parse bugs, both reproduced
-    /// here (`has_error()` on the dump distinguishes them from the clean shapes).
+    /// call-expression invocation; `@use`/`@forward`. `@use "x" as y;` and `@extend %x;` are
+    /// upstream tree-sitter-scss 1.0.0 parse bugs, both reproduced here (`has_error()` on the
+    /// dump distinguishes them from the clean shapes).
     #[test]
     #[ignore]
     fn probe_scss_variables_mixins_functions_and_use() {

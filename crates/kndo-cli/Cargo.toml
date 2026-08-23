@@ -1,6 +1,6 @@
 [package]
 name = "kndo-cli"
-description = "One frontend: terminal UI, exit codes, human rendering (RFC 0009). Zero analysis logic."
+description = "The kndo command-line frontend: terminal UI, exit codes, human rendering. Zero analysis logic."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -31,10 +31,10 @@ libc = "0.2"
 # Mirrors `kndo`'s own default set exactly (`default-features = false` above means this crate,
 # not the workspace default, now decides what ships) — plain `cargo build -p kndo-cli` is
 # unchanged. Named per-feature passthrough (rather than one opaque "full" flag) is what lets CI
-# build the RFC 0016 §7 "shell" configuration — `--no-default-features --features
+# build the "shell" configuration — `--no-default-features --features
 # external-adapters,plugin-install` — without touching this file again: a lean host binary that
 # knows how to load WASM components but ships with zero first-party language grammars compiled
-# in, real and CI-proven rather than only documented (ADR 0006).
+# in, real and CI-proven rather than only documented.
 default = [
     "js",
     "go",

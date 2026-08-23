@@ -1,4 +1,4 @@
-//! Directory rollup (taxonomy rule 3, RFC 0005 §4: "a directory whose every file carries the
+//! Directory rollup (the taxonomy rule: "a directory whose every file carries the
 //! same verdict rolls up once more — the widest uniform node gets one finding, not fifty").
 //! Shared by every file-granularity analysis with a verdict that can span a whole directory
 //! (`unused`, `test-only`, …) — one mechanism, not one reimplementation per verdict: what

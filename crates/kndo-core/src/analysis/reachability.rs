@@ -1,27 +1,27 @@
-//! Reachability with confidence (RFC 0005 §1) — the tiered algorithm every "is this alive"
+//! Reachability with confidence — the tiered algorithm every "is this alive"
 //! analysis is built on. This is a **literal, direct** implementation of the formalized
 //! algorithm (three explicit confidence-tier passes per root kind, not a cleverer
 //! single-pass widest-path algorithm): correctness and auditability win over performance
 //! for logic this load-bearing.
 //!
-//! The *data layout* is where performance lives (RFC 0008 §3, applied to the hottest
+//! The *data layout* is where performance lives (applied to the hottest
 //! algorithm): nodes get dense indices (files first, then symbols), the traversable edges are
 //! built once into CSR-style columnar adjacency (offsets + targets + confidences — BFS walks
 //! contiguous `u32` columns, not hash buckets), and each of the nine per-`(kind, tier)`
-//! reached sets is a bitset. The module-load rule (reaching a symbol reaches its owning file,
-//! RFC 0012 §4) becomes an ordinary implicit CSR edge `symbol → owner` at `Certain` — the
+//! reached sets is a bitset. The module-load rule (reaching a symbol reaches its owning
+//! file) becomes an ordinary implicit CSR edge `symbol → owner` at `Certain` — the
 //! same semantics the special-cased visit had, since a certain edge passes every tier's
 //! filter exactly like the unconditional visit did. Its counterpart, the execution rule,
 //! still needs no code: symbol-attributed references hang off the symbol node and traverse
-//! only once it's reached. (The symbol→owner edge was originally caught dogfooding the Go
-//! adapter: `func main()` was a root but `main.go` was never enqueued.)
+//! only once it's reached. (Without the symbol→owner edge, a rooted Go `func main()`
+//! would never enqueue `main.go`.)
 
 use rustc_hash::FxHashMap as HashMap;
 
 use crate::graph::ProjectGraph;
 use crate::vocab::{Confidence, EdgeKind, NodeRef, RootKind, SymbolId};
 
-/// The four colors, named exactly as RFC 0005 §1's table names them.
+/// The four colors, named exactly as the table names them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Reachability {
     Production,
@@ -58,7 +58,7 @@ impl BitSet {
 }
 
 /// Every graph node's resolved `(color, confidence)` — total over every file and symbol.
-/// Absence from every tier resolves to `(Unreachable, Certain)`, per RFC 0005 §1's
+/// Absence from every tier resolves to `(Unreachable, Certain)`'s
 /// consequence: dead is always certain.
 pub struct ReachabilityMap {
     files_len: usize,
@@ -67,7 +67,7 @@ pub struct ReachabilityMap {
     /// Per root kind, the `Possible`-tier reached set — the loosest tier's BFS, whose set is
     /// the union of every stronger tier's. Kept because `colors` only records each node's
     /// *winning* color (Production beats TestOnly beats ToolingOnly), which is exactly wrong
-    /// for a query like `untested` (RFC 0005 §9): "is this Production-colored node *also*
+    /// for a query like `untested`: "is this Production-colored node *also*
     /// reachable from a test root" needs the kind that lost the precedence race.
     reached_possible: [BitSet; 3],
 }
@@ -92,7 +92,7 @@ impl ReachabilityMap {
     }
 }
 
-/// Strongest to weakest — the order rule 1–3 of RFC 0005 §1 checks a node against.
+/// Strongest to weakest — the order the tier rules check a node against.
 const TIERS: [Confidence; 3] = [
     Confidence::Certain,
     Confidence::Probable,
@@ -112,7 +112,7 @@ fn kind_index(kind: RootKind) -> usize {
     }
 }
 
-/// The invoked-program rule's target sets (RFC 0005 §1): per file, its Production `Root`
+/// The invoked-program rule's target sets: per file, its Production `Root`
 /// symbols as dense node indices. *Executing* a file as a program runs its entry point —
 /// unlike importing it, which runs only load-time code — so an `InvokesFile` edge fans out
 /// to these implicit targets besides the file itself. Test/Tooling roots inside the invoked
@@ -135,7 +135,7 @@ fn production_root_symbols_per_file(
     roots
 }
 
-/// The machinery-dispatch rule's implicit `(owner, member)` edges (RFC 0005 §1): a member
+/// The machinery-dispatch rule's implicit `(owner, member)` edges: a member
 /// marked `implicitly_invoked` is exercised by the language's own machinery whenever its
 /// OWNER is used — the call site never writes its name, so no reference edge can exist. The
 /// owner resolves in the member's own file (the `member_of` convention); every same-name
@@ -190,8 +190,8 @@ fn link_owners_to_hooks(
     edges
 }
 
-/// The implement-dispatch rule's implicit `(trait member, impl member)` edges (RFC 0005
-/// §1): calling through a trait IS plausibly executing every implementation — the vtable,
+/// The implement-dispatch rule's implicit `(trait member, impl member)`
+/// edges: calling through a trait IS plausibly executing every implementation — the vtable,
 /// as declared. Derived entirely from `RefKind::Implement`/`RefKind::Extend` edges (`impl
 /// Trait for T`, `class C implements I`, `class C extends B`, Kotlin/Swift supertype
 /// clauses — all emit one from the subtype's symbol to the supertype's) and `member_of`:
@@ -287,7 +287,7 @@ pub fn compute(graph: &ProjectGraph) -> ReachabilityMap {
         match edge.kind {
             EdgeKind::References { from, .. } => count(&mut degree, node_index(from), 1),
             EdgeKind::ImportsFile { from, .. } => count(&mut degree, from.0 as usize, 1),
-            // RFC 0017 §5.4's plugin file-liveness edge: traversed exactly like ImportsFile
+            // the plugin file-liveness edge: traversed exactly like ImportsFile
             // (from alive ⇒ to in use), just from a NodeRef and only ever plugin-contributed.
             EdgeKind::ReferencesFile { from, .. } => count(&mut degree, node_index(from), 1),
             // Invoked-program rule: the file plus its Production root symbols.
@@ -364,7 +364,7 @@ pub fn compute(graph: &ProjectGraph) -> ReachabilityMap {
                 }
             }
             EdgeKind::Wildcard { from } => {
-                // Plausible target set, absent narrower DynamicUse metadata (RFC 0005 §1):
+                // Plausible target set, absent narrower DynamicUse metadata:
                 // every symbol declared in the same file, at `possible`.
                 for &sym in &declared_in[from.0 as usize] {
                     push_edge(
@@ -554,7 +554,7 @@ mod tests {
 
     #[test]
     fn disconnected_file_is_unreachable_at_certain_confidence() {
-        // "Dead is always certain" — RFC 0005 §1 consequence.
+        // "Dead is always certain" — a consequence of the tiered algorithm.
         let files = vec![file("orphan.ts")];
         let graph = ProjectGraph::for_test(files, vec![], vec![], vec![]);
         let reach = compute(&graph);
@@ -566,7 +566,7 @@ mod tests {
 
     #[test]
     fn color_precedence_beats_confidence_tier() {
-        // The RFC 0005 §1 worked example: S is production-reachable only via a probable
+        // The worked example: S is production-reachable only via a probable
         // (duck-typed) edge, AND test-reachable via a certain edge. Production must still
         // win, at probable confidence — "maybe still used for real" beats "definitely only
         // used by tests."
@@ -724,9 +724,9 @@ mod tests {
 
     #[test]
     fn a_symbol_only_root_pulls_its_owning_file_into_reachability_too() {
-        // The exact shape a symbol-targeted root produces (RFC 0011 §5's per-export library-
-        // mode promotion; Go's `func main`/exported-declaration promotion, docs/adapters/go.md
-        // §2): `main` is a root, declared in `main.ts`, and `main.ts` (not the `main` symbol
+        // The exact shape a symbol-targeted root produces (the per-export library-
+        // mode promotion; Go's `func main`/exported-declaration
+        // promotion): `main` is a root, declared in `main.ts`, and `main.ts` (not the `main` symbol
         // itself — references are file-granular, this module's own adjacency doc) references
         // `helper`, declared in a *different* file. `helper` must end up reachable — which
         // requires `main.ts` itself to be visited by the BFS, not just the `main` symbol.
@@ -893,7 +893,7 @@ mod tests {
 
     #[test]
     fn implement_dispatch_fans_a_reached_trait_member_to_its_overrides() {
-        // The ripgrep `Flag` shape: a test-reached call site resolves to the TRAIT's member
+        // The dyn-trait shape: a test-reached call site resolves to the TRAIT's member
         // (`Flag.doc_short` — the dyn receiver's declared type), and the Implement edge
         // (`impl Flag for AfterContext`) fans it out to the override at Probable — the
         // vtable, as declared. A trait member with no same-named override links nothing.

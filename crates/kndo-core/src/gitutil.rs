@@ -1,4 +1,4 @@
-//! Git plumbing for diff modes (RFC 0004 §6, RFC 0006 §2) — `--staged`/`--diff <ref>` need to
+//! Git plumbing for diff modes — `--staged`/`--diff <ref>` need to
 //! assemble the project graph at two different tree states (the comparison's "before" and,
 //! for `--staged`, "after" too) without disturbing the user's real working tree or index.
 //!
@@ -10,11 +10,11 @@
 //!
 //! Trees are read **in memory, never materialized to disk**: [`ls_tree`] enumerates a
 //! tree-ish's paths + blob ids without touching the filesystem, and [`cat_blobs`] streams the
-//! blob contents needed over one `cat-file --batch` pipe. An earlier implementation checked
-//! whole trees out into temp directories (`read-tree` + `checkout-index`) so the existing
-//! directory-walking pipeline could run on them unchanged — measured at ~0.5 s of pure
-//! file-creation syscalls per tree at 5k files (×2 trees for `--staged`, plus cleanup), it was
-//! the dominant cost of diff mode and blew RFC 0008's warm budget; enumerating + streaming the
+//! blob contents needed over one `cat-file --batch` pipe. Checking whole trees out into
+//! temp directories (`read-tree` + `checkout-index`) so the
+//! directory-walking pipeline could run on them unchanged measures at ~0.5 s of pure
+//! file-creation syscalls per tree at 5k files (×2 trees for `--staged`, plus cleanup) —
+//! the dominant cost of diff mode, blowing the warm budget; enumerating + streaming the
 //! same tree costs milliseconds. Everything here is read-only against the repository — the
 //! only object-database *write* diff mode ever performs is `write-tree` (staged mode's
 //! "after"), which adds a tree object without touching the index or working tree.

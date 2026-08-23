@@ -1,6 +1,6 @@
 [package]
 name = "kndo-plugin-express"
-description = "Built-in kndo:express plugin (docs/plugins/express.md) — script-launched entry files the import graph can't see"
+description = "Built-in kndo:express plugin — script-launched entry files the import graph can't see"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -10,6 +10,6 @@ publish.workspace = true
 [dependencies]
 kndo-core = { path = "../kndo-core" }
 smol_str = { workspace = true }
-# RFC 0016 §5: parses package.json's main/scripts through the content channel to derive the
-# true entry file instead of guessing by name alone (docs/plugins/express.md §3's known gap).
+# Parses package.json's main/scripts through the content channel to derive the
+# true entry file instead of guessing by name alone.
 serde_json = { workspace = true }

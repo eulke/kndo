@@ -1,4 +1,4 @@
-//! `unused`/`test-only` on declared dependencies (RFC 0005 §5): a `ManifestDependency`
+//! `unused`/`test-only` on declared dependencies: a `ManifestDependency`
 //! classified by who, if anyone, actually imports it.
 //!
 //! | Importers (this dependency's own package) | Finding |
@@ -7,15 +7,15 @@
 //! | only test-role files (`prod`/`optional` scope) | `test-only` — belongs in `devDependencies` |
 //! | anything else | used — no finding |
 //!
-//! Scope rules from the RFC, applied literally:
+//! Scope rules, applied literally:
 //! - **`peer`** is exempt from both verdicts entirely — a peer dependency is a contract with
 //!   the consumer, not a usage claim.
 //! - **`dev`/`build`** only ever get `unused` (checked against *all* importers, test-role
 //!   included) — `test-only` isn't a meaningful classification for a scope that is *supposed*
 //!   to be test/tooling-only; that's not a misdeclaration, it's correct.
 //! - **`optional`** gets the same two verdicts as `prod` but at `possible` confidence
-//!   (runtime-conditional by design). The RFC says this belongs "below the default report
-//!   floor" — there is no such floor/`--verbose` filtering built yet (M2+), so today these
+//!   (runtime-conditional by design). These verdicts belong "below the default report
+//!   floor" — no such floor/`--verbose` filtering is built, so these
 //!   findings still show; demoting the confidence is the honest, available half of that rule.
 //!
 //! "Test-role" here means the importing file's own `FileClass::role == Test` (a purely
@@ -27,13 +27,13 @@
 //! **CLI-only dependencies.** A `scripts`-invoked tool (`"test": "xo && ava"`) never produces
 //! an `ImportsDependency` edge — nothing `import`s a binary — so without a second signal every
 //! CLI-only devDependency reads as declared-but-never-imported and gets falsely flagged
-//! `unused`. `graph.script_invoked_dependencies` (built from each manifest's `scripts`, adapter
-//! §7 open-question-2-adjacent) supplies it: a script-invoked name counts as one synthetic
+//! `unused`. `graph.script_invoked_dependencies` (built from each manifest's
+//! `scripts`) supplies it: a script-invoked name counts as one synthetic
 //! `FileRole::Tooling` importer, folded into the same importer-roles classification table
 //! everything else already goes through — not a parallel code path. Tooling-role "importers"
 //! only ever push a dependency out of `unused`; they can never make it `test-only` (a script
 //! invocation is never test-role), matching the "at least one production- or
-//! tooling-reachable file" used-verdict RFC 0005 §5's table already states for real imports.
+//! tooling-reachable file" used-verdict the table already states for real imports.
 //!
 //! **Languages that can't resolve dependency usage** (`PackageNode::resolves_dependency_usage`
 //! — Java: an import's package has no reliable mapping to its Maven/Gradle coordinate without
@@ -91,7 +91,7 @@ pub fn find_dependency_hygiene(graph: &ProjectGraph) -> (Vec<Finding>, Option<Di
     let mut seen: HashSet<(PackageId, &str)> = HashSet::default();
     for dep in &graph.declared_dependencies {
         if dep.scope == DependencyScope::Peer {
-            continue; // exempt entirely (RFC 0005 §5)
+            continue; // exempt entirely
         }
         // Multiple manifest fields (or manifests) can redeclare the same name for the same
         // package (a real inconsistency `version-skew` already flags) — one hygiene verdict
@@ -196,7 +196,7 @@ fn test_only_finding(
         category: "test-only".to_string(),
         group: "waste".to_string(),
         subject_kind: "dependency".to_string(),
-        severity: Severity::Info, // RFC 0005 §3: info by default
+        severity: Severity::Info, // info by default
         confidence,
         message: format!(
             "{name} is declared in {}'s manifest but only imported by test files — belongs in devDependencies",

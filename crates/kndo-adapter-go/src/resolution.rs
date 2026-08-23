@@ -1,4 +1,4 @@
-//! Import resolution (docs/adapters/go.md §3). Structurally simpler than JS's in one dimension
+//! Import resolution. Structurally simpler than JS's in one dimension
 //! (no relative imports, no dynamic-confidence ladder — every import is a fully-qualified path
 //! at `Confidence::Certain`) and genuinely harder in another: a Go import names a *package* (a
 //! directory of files), not a file, and `go.mod` module paths have no fixed segment count the
@@ -12,8 +12,8 @@ use smol_str::SmolStr;
 pub fn resolve(spec: &ImportSpec, ctx: &ResolveCtx<'_>) -> Resolution {
     let s = spec.specifier.as_str();
 
-    // 1. Same-module (or, once go.work lands, sibling-module) internal package: every named
-    //    manifest in the graph is registered as a workspace member (RFC 0011 §4), including
+    // 1. Same-module (or sibling-module, via go.work) internal package: every named
+    //    manifest in the graph is registered as a workspace member, including
     //    this project's own single `go.mod` — "the monorepo model with n = 1" — so a plain
     //    longest-prefix search over registered module paths covers both cases with the same
     //    lookup, no special-casing "is this my own module." Segment-by-segment from the full
@@ -33,22 +33,22 @@ pub fn resolve(spec: &ImportSpec, ctx: &ResolveCtx<'_>) -> Resolution {
         }
     }
 
-    // 2. Stdlib: no structural prefix exists in Go the way `node:` does (docs/adapters/go.md
-    //    §3), and no subpath→package split applies either (stdlib import paths are referenced
+    // 2. Stdlib: no structural prefix exists in Go the way `node:` does,
+    //    and no subpath→package split applies either (stdlib import paths are referenced
     //    in full, `"encoding/json"`, never shortened) — the whole precedence collapses to "is
     //    this exact path in the generated list." `kndo-adapter-toolkit::stdlib
     //    ::classify_bare_specifier` doesn't fit here: it's built around JS's "package_name is
     //    already the subpath-stripped name" shape and its fallback unconditionally returns
     //    `Dependency`, which would misclassify every one of Go's variable-length module paths
-    //    (RFC 0002 §6: "an adapter supplies only what it alone knows" — this adapter checks the
+    //    (an adapter supplies only what it alone knows — this adapter checks the
     //    shared `StdlibIndex` directly instead of forcing JS's precedence shape onto it).
     if STDLIB.contains(s) {
         return Resolution::Stdlib;
     }
 
-    // 3. External dependency: longest-declared-`require`-prefix match — the one genuinely new
-    //    resolution primitive Go needs that JS's fixed-segment-count convention doesn't
-    //    (docs/adapters/go.md §3).
+    // 3. External dependency: longest-declared-`require`-prefix match — the one genuinely
+    //    Go-specific resolution primitive that JS's fixed-segment-count convention doesn't
+    //    need.
     if let Some(name) = longest_declared_prefix(s, ctx) {
         return Resolution::Dependency(SmolStr::new(&name), Confidence::Certain);
     }
@@ -59,23 +59,22 @@ pub fn resolve(spec: &ImportSpec, ctx: &ResolveCtx<'_>) -> Resolution {
 /// `candidate` is a workspace member's declared module path that `s` is prefixed by (checked by
 /// the caller before this runs); resolves the remaining subpath to a concrete file within that
 /// package directory. `""` subpath (importing the module path exactly) still needs *some* file
-/// to point a resolution at — Go packages are directories, contracts §2 has no multi-file
-/// resolution target (docs/adapters/go.md §3) — so both cases go through `pick_package_file`.
+/// to point a resolution at — Go packages are directories, and the contract has no multi-file
+/// resolution target — so both cases go through `pick_package_file`.
 ///
-/// Which *variant* depends on whose module the importing file lives in (RFC 0012 §10):
+/// Which *variant* depends on whose module the importing file lives in:
 ///
 /// - **Own module** (the matched member's directory is an ancestor of the importing file):
 ///   plain `Resolution::File`. A module's own subpackages need no `require` entry — a module
-///   can't require itself. Using `WorkspaceMember` here was the first cut's bug, caught
-///   dogfooding: a module importing its own subpackage read as `undeclared` (a "phantom
-///   dependency on itself").
+///   can't require itself. Resolving this as `WorkspaceMember` instead would make a module
+///   importing its own subpackage read as `undeclared` (a "phantom dependency on itself").
 /// - **Sibling module** (a `go.work` workspace member the importer does *not* live in):
-///   `Resolution::WorkspaceMember` — assembly derives BOTH edge kinds from it (contracts §2):
+///   `Resolution::WorkspaceMember` — assembly derives BOTH edge kinds from it:
 ///   `ImportsFile` for real cross-module reachability, `ImportsDependency` for the declaration
 ///   contract, which go.work does **not** waive — each module's `go.mod` must still `require`
 ///   its siblings for standalone builds (`go mod tidy` adds them), so an undeclared sibling
 ///   import is a genuine phantom dependency and a declared-but-unimported one is genuinely
-///   unused, exactly RFC 0011 §4's model.
+///   unused.
 ///
 /// A module nested inside another module's directory tree would blur the ancestry test; Go
 /// itself strongly discourages nested modules and the tie simply resolves toward the safer
@@ -113,11 +112,11 @@ fn dir_owns(dir: &str, sub: &str) -> bool {
     dir.is_empty() || sub == dir || sub.starts_with(&format!("{dir}/"))
 }
 
-/// The lexicographically-first non-test `.go` file directly in `dir` — deterministic (RFC 0008
-/// §4; `ResolveCtx::files_in_dir`'s own iteration order isn't), and *which* file doesn't matter
-/// for correctness beyond existing: `FileFacts::unit` (contracts §2) makes every file in the
+/// The lexicographically-first non-test `.go` file directly in `dir` — deterministic
+/// (`ResolveCtx::files_in_dir`'s own iteration order isn't), and *which* file doesn't matter
+/// for correctness beyond existing: `FileFacts::unit` makes every file in the
 /// directory equally reachable for symbol resolution regardless of which one `Resolution::File`
-/// nominally names (docs/adapters/go.md §3).
+/// nominally names.
 fn pick_package_file(dir: &str, ctx: &ResolveCtx<'_>) -> Option<ProjectPath> {
     ctx.files_in_dir(dir)
         .filter(|p| p.0.ends_with(".go") && !p.0.ends_with("_test.go"))
@@ -144,7 +143,7 @@ fn longest_declared_prefix(s: &str, ctx: &ResolveCtx<'_>) -> Option<String> {
     }
 }
 
-/// The `kndo-stdlib v1` dataset (RFC 0002 §6), sourced from `go list std`. Regenerate with
+/// The `kndo-stdlib v1` dataset, sourced from `go list std`. Regenerate with
 /// `cargo xtask gen-stdlib go`; never hand-edit.
 static STDLIB: std::sync::LazyLock<kndo_adapter_toolkit::stdlib::StdlibIndex<'static>> =
     std::sync::LazyLock::new(|| {
@@ -207,7 +206,7 @@ mod tests {
 
     #[test]
     fn sibling_module_import_resolves_as_workspace_member() {
-        // RFC 0012 §10: the importer lives in moda/, the target module in modb/ — a genuine
+        // The importer lives in moda/, the target module in modb/ — a genuine
         // cross-module edge. WorkspaceMember gives assembly both edge kinds: reachability AND
         // the dependency contract (go.work does not waive `require`; an undeclared sibling is
         // a phantom dependency).

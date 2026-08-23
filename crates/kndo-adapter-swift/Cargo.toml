@@ -1,6 +1,6 @@
 [package]
 name = "kndo-adapter-swift"
-description = "Swift language adapter for kndo (docs/adapters/swift.md)"
+description = "Swift language adapter for kndo"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

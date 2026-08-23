@@ -1,6 +1,6 @@
 [package]
 name = "kndo-plugin-api"
-description = "kndo-plugin-api: the versioned WASM component-model ABI external adapters/plugins target (ADR 0003). Host-side bridge only — see docs/contracts/wasm-abi.md."
+description = "kndo-plugin-api: the versioned WASM component-model ABI external adapters/plugins target. Host-side bridge only."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -11,13 +11,13 @@ publish.workspace = true
 kndo-core = { path = "../kndo-core" }
 smol_str = { workspace = true }
 rustc-hash = { workspace = true }
-# WasmPlugin's Plugin::content_hash (RFC 0016 §6): the graph cache key needs the component's
+# WasmPlugin's Plugin::content_hash: the graph cache key needs the component's
 # own content identity, not just its declared id/version — same hasher kndo-core's own cache
 # and graph keys use.
 blake3 = { workspace = true }
-# Pinned to the last major compatible with this workspace's toolchain (ADR 0003: "the ABI must
-# be versioned and conservative from day one" — the same discipline applies to its own runtime
-# dependency, not just the WIT surface).
+# Pinned to the last major compatible with this workspace's toolchain — the ABI is versioned
+# and conservative, and the same discipline applies to its own runtime dependency, not just
+# the WIT surface.
 wasmtime = { version = "=27.0.0", features = ["component-model"] }
 
 [dev-dependencies]

@@ -31,7 +31,7 @@ version = "0.1.0"
 edition = "2021"
 license = "Apache-2.0"
 repository = "https://github.com/eulke/kndo"
-publish = false # until 1.0 (ADR 0007: reserve names early regardless)
+publish = false # pre-1.0: nothing is published; crate names are reserved regardless
 
 [workspace.dependencies]
 smol_str = { version = "0.3", features = ["serde"] }

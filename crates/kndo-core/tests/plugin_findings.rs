@@ -1,4 +1,4 @@
-//! RFC 0018's acceptance bar, exercised end to end with a real third-party-shaped rule:
+//! The plugin-findings acceptance bar, exercised end to end with a real third-party-shaped rule:
 //! declare → emit → render → baseline → suppress → gate opt-in, through a genuine
 //! `Engine::check`. Also proves the structural guarantees: the namespaced category and
 //! `convention` group are host-assembled, findings are advisory without a `[plugins.gate]`

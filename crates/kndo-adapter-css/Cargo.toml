@@ -1,6 +1,6 @@
 [package]
 name = "kndo-adapter-css"
-description = "CSS/SCSS adapter for kndo (docs/adapters/css.md) — file claiming, @import/@use graph, custom-property/variable/mixin/function declarations"
+description = "CSS/SCSS adapter for kndo — file claiming, @import/@use graph, custom-property/variable/mixin/function declarations"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

@@ -1,5 +1,5 @@
 // Two public exports, neither calling the other or called by anything else in this repo —
-// mirrors a real-world case found dogfooding against sindresorhus/p-limit: a library's public
+// the standalone-utility library shape: a library's public
 // API must count as reachable even when nothing in the package's own code calls it.
 export function first(): string {
   return "first";

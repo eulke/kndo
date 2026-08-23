@@ -1,4 +1,4 @@
-//! `untested` — static test-blind spots (RFC 0005 §9): "the exact inverse of `test-only`,
+//! `untested` — static test-blind spots: "the exact inverse of `test-only`,
 //! computed from the same coloring passes at zero extra cost." Fires on nodes colored
 //! [`Reachability::Production`] that are *also* unreached by every test root, at every
 //! confidence tier — not "low coverage" (needs a report) but "no test even imports this,
@@ -27,8 +27,8 @@ use crate::vocab::{
     Confidence, EdgeKind, FileId, FileOrigin, FileRole, NodeRef, PackageId, RootKind, SymbolId,
 };
 
-/// Findings plus, when the project has no test roots at all, the one diagnostic RFC 0005 §9
-/// asks for instead of a false positive per production node.
+/// Findings plus, when the project has no test roots at all, one diagnostic
+/// instead of a false positive per production node.
 pub fn find_untested(
     graph: &ProjectGraph,
     reach: &ReachabilityMap,
@@ -114,7 +114,7 @@ fn find_untested_files(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<Fin
             category: "untested".to_string(),
             group: "risk".to_string(),
             subject_kind: "file".to_string(),
-            severity: Severity::Info, // RFC 0005 §9: info
+            severity: Severity::Info, // info by default
             confidence,
             message: format!("{path} is production-reachable but no test reaches it"),
             location: Location {
@@ -160,8 +160,8 @@ fn directory_finding(graph: &ProjectGraph, dir: &DirGroup<'_>, confidence: Confi
 }
 
 /// Symbols the per-symbol pass never flags: type aliases (no runtime footprint — `type
-/// Output = Stats` can never be "covered"; ripgrep audit, the alias hid the actually-dead
-/// enclosing impl), whole-file rollups, and anything not untested itself.
+/// Output = Stats` can never be "covered", and flagging the alias would hide the
+/// actually-dead enclosing impl), whole-file rollups, and anything not untested itself.
 fn symbol_skipped(
     symbol: &crate::graph::SymbolNode,
     class: crate::vocab::FileClass,
@@ -585,7 +585,7 @@ mod tests {
 
     #[test]
     fn a_test_invoking_the_binary_clears_the_bins_untested_findings() {
-        // The e2e shape (RFC 0005 §1's invoked-program rule): the test never imports the
+        // The e2e shape (the invoked-program rule): the test never imports the
         // bin — it executes it. The InvokesFile edge reaches the bin's Production root and
         // its call tree, so neither the file nor `main`/`helper` are test-blind spots.
         let files = vec![

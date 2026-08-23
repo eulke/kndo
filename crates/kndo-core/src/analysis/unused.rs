@@ -1,10 +1,10 @@
-//! `unused` — unreachable files and symbols (RFC 0005 §2, §4).
+//! `unused` — unreachable files and symbols.
 //!
 //! Symbol-level findings only fire for symbols in files granularity has already ruled *in*
 //! scope: a symbol whose owning file is itself `unreachable` is skipped, because the file-level
 //! finding already covers it (taxonomy rollup rule — "the file finding replaces the per-symbol
 //! findings it summarizes"; reporting both would be redundant, not more informative). Reference
-//! evidence is symbol-attributed where the adapter supplies `within` (RFC 0012 §4 — a dead
+//! evidence is symbol-attributed where the adapter supplies `within` (a dead
 //! function's calls keep nothing alive, so transitive death lands here as ordinary `unused`
 //! findings) and file-attributed otherwise; either way a symbol is `unreachable` only when
 //! *no reachable code anywhere* references it.
@@ -39,14 +39,14 @@ pub fn find_unused_files(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<F
         let Some(class) = file.class else {
             continue;
         };
-        // Generated/vendored origins are exempt by default (RFC 0005 §4).
+        // Generated/vendored origins are exempt by default.
         if matches!(class.origin, FileOrigin::Generated | FileOrigin::Vendored) {
             continue;
         }
 
         let file_id = FileId(index as u32);
         let (color, confidence) = reach.get(NodeRef::File(file_id));
-        // Rule 4 (RFC 0005 §1): unreachable at every root kind and every confidence tier —
+        // Rule 4: unreachable at every root kind and every confidence tier —
         // dead is always certain, so this is the only case `unused` ever fires for.
         if color != Reachability::Unreachable {
             continue;
@@ -116,7 +116,7 @@ fn directory_finding(graph: &ProjectGraph, dir: &DirGroup<'_>) -> Finding {
 /// jurisdiction; symbols in unreachable files roll up to the file finding; constructors are
 /// never accused directly — instantiation references the *type*, so a constructor's
 /// unreachability is structurally unknowable and its liveness follows the class (whose own
-/// finding/rollup covers real death — M6 FP hunt).
+/// finding/rollup covers real death).
 fn symbol_in_scope(
     graph: &ProjectGraph,
     reach: &ReachabilityMap,

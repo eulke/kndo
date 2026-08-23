@@ -1,15 +1,15 @@
-//! Manifest extraction (docs/adapters/kotlin.md §4): a thin Kotlin-specific layout over
-//! `kndo_adapter_toolkit::jvm_manifest`, shared verbatim with the Java adapter — see
-//! docs/adapters/java.md §4 for the full Maven/Gradle fidelity description; nothing here
+//! Manifest extraction: a thin Kotlin-specific layout over
+//! `kndo_adapter_toolkit::jvm_manifest`, shared verbatim with the Java adapter —
+//! `jvm_manifest` owns every Maven/Gradle fidelity detail; nothing here
 //! diverges except the source-root convention.
 
 use kndo_adapter_toolkit::jvm_manifest::{self, JvmSourceLayout};
 use kndo_core::adapter::{ManifestFacts, ResolveCtx};
 
 const LAYOUT: JvmSourceLayout = JvmSourceLayout {
-    // Gradle's `main` source set registers both by default, and real projects (moshi) keep
+    // Gradle's `main` source set registers both by default, and real projects keep
     // `.kt` files under `src/main/java` — the `.kt` extension filter scopes each root to
-    // Kotlin files (M6 FP hunt).
+    // Kotlin files.
     source_roots: &["src/main/kotlin", "src/main/java"],
     source_ext: ".kt",
     skip_file_names: &[],

@@ -1,34 +1,30 @@
-//! `.kndo/cache/` — the project cache (ADR 0004, RFC 0004 §2–3): a facts layer (this file's
-//! original scope) plus content-addressed graph snapshots (`graphs/<key>.bin`) that let a warm
-//! run skip assembly entirely, not just re-parsing. The patch algorithm and dirty-region
-//! incrementality (RFC 0004 §4–6) — reusing *part* of a stale graph — aren't implemented yet:
-//! today it's all-or-nothing, either every input matches a stored snapshot exactly, or the
-//! graph is rebuilt from scratch (cache-warm parsing still applies during that rebuild). The
-//! findings snapshot (needed for diff-mode derived effects, RFC 0004 §6) doesn't exist yet
-//! either.
+//! `.kndo/cache/` — the project cache: a facts layer (this file's original scope) plus
+//! content-addressed graph snapshots (`graphs/<key>.bin`) that let a warm run skip assembly
+//! entirely, not just re-parsing. A key match reuses the snapshot outright; a mismatch either
+//! rebuilds from scratch (cache-warm parsing still applies) or, when its guards hold, takes
+//! `graph.rs`'s incremental patch — reusing part of the stale graph instead of a full rebuild.
 //!
-//! Layout, keying, and format decisions mirror ADR 0004 exactly:
+//! Layout, keying, and format decisions:
 //! - Facts are content-addressed by `(adapter id, adapter facts-schema version, file content
 //!   hash)` — renames, branch switches, and `git stash` all hit the cache; a file reverted to
 //!   an old version re-hits its old entry. `bincode` — no zero-copy win at this per-file size.
-//! - Each graph snapshot is keyed by a single digest folding in the *whole* discovered file set
-//!   (every path + content hash — RFC 0004 §3's "set of (path, content hash)" already subsumes
-//!   "manifest hashes": a manifest is just one more discovered file, and — RFC 0016 §6 — a
-//!   plugin's content-channel reads too, since a `ContentView` never answers a path outside
-//!   this same set), each registered adapter's id and facts-schema version, each registered
+//! - Each graph snapshot is keyed by a single digest folding in the *whole* discovered file
+//!   set (every path + content hash — the "set of (path, content hash)" already subsumes
+//!   "manifest hashes": a manifest is just one more discovered file, and a plugin's
+//!   content-channel reads too, since a `ContentView` never answers a path outside this same
+//!   set), each registered adapter's id and facts-schema version, each registered
 //!   *graph-mutating* plugin's identity (id, declared version, and — WASM only — component
-//!   content hash), and [`crate::graph::GRAPH_SCHEMA_VERSION`] — and stored under that key —
-//!   several snapshots coexist (the working tree's, plus diff modes' before/after tree states;
-//!   see `graph_snapshot_path`). One input RFC 0004 §3 also lists — a kndo config hash —
-//!   doesn't exist as a subsystem yet, so it's honestly absent from the key rather than faked;
-//!   extending it is required before that subsystem ships. Any key mismatch is a full rebuild
-//!   or `graph.rs`'s incremental patch — a separate reuse path with its own, narrower guards,
-//!   and since RFC 0017 §3 open to plugin-bearing runs too: the snapshot stores the
-//!   plugin-set digest and a plugin-diagnostics partition so the patch can discard and
-//!   re-derive everything plugin-produced instead of bypassing. `rkyv` +
-//!   `mmap`, per ADR 0004 exactly — `get_graph` maps the snapshot and validates directly
-//!   against the mapped bytes; nothing is read into a heap buffer first, so loading really is
-//!   "mmap + validate," not a copy dressed up as one.
+//!   content hash), and [`crate::graph::GRAPH_SCHEMA_VERSION`] — and stored under that key,
+//!   so several snapshots coexist (the working tree's, plus diff modes' before/after tree
+//!   states; see `graph_snapshot_path`). A kndo config hash is honestly absent from the key
+//!   rather than faked, since no such subsystem exists yet; extending it is required before
+//!   that subsystem ships. Any key mismatch is a full rebuild or the incremental patch — a
+//!   separate reuse path with its own, narrower guards, open to plugin-bearing runs too: the
+//!   snapshot stores the plugin-set digest and a plugin-diagnostics partition so the patch
+//!   can discard and re-derive everything plugin-produced instead of bypassing.
+//! - `rkyv` + `mmap` — `get_graph` maps the snapshot and validates directly against the
+//!   mapped bytes; nothing is read into a heap buffer first, so loading really is "mmap +
+//!   validate," not a copy dressed up as one.
 //! - Every artifact — facts entry and graph snapshot alike — carries a magic + format-version
 //!   header; any mismatch, including a kndo upgrade that changed the on-disk shape, silently
 //!   rebuilds that layer rather than erroring or migrating in place. The cache is explicitly
@@ -53,14 +49,14 @@ use smol_str::SmolStr;
 /// any adapter's own `facts_schema_version` (which already keys the entry's path) — this is
 /// the belt to that suspenders, guarding against a kndo binary upgrade whose `FileFacts` type
 /// changed shape while an adapter's declared version didn't move.
-const ENTRY_FORMAT_VERSION: u32 = 3; // 3: RawImport.module_names_visible (Swift module imports); 2: FileFacts.string_call_args (RFC 0017 §5.4 — bincode has no field defaults, so the layout change invalidates all entries once)
+const ENTRY_FORMAT_VERSION: u32 = 3; // bump whenever the serialized FileFacts shape changes (bincode has no field defaults, so any layout change invalidates all entries once)
 const FACTS_MAGIC: [u8; 4] = *b"KNF1";
 const HEADER_LEN: usize = FACTS_MAGIC.len() + 4;
 
-/// ADR 0004's default facts-store cap; `prune` enforces it, LRU-by-mtime.
+/// The default facts-store cap; `prune` enforces it, LRU-by-mtime.
 pub const DEFAULT_CAP_BYTES: u64 = 256 * 1024 * 1024;
 
-/// On-disk cache state, as reported by `kndo doctor` (RFC 0006 §2). Read-only — never mutates
+/// On-disk cache state, as reported by `kndo doctor`. Read-only — never mutates
 /// anything, unlike the facts/graph get/put paths.
 #[derive(Debug, Clone, Copy)]
 pub struct CacheStats {
@@ -79,7 +75,7 @@ pub struct CacheStats {
 /// handful of byte comparisons, never a full `rkyv` validation of a payload about to be thrown
 /// away.
 const GRAPH_MAGIC: [u8; 4] = *b"KNG1";
-const GRAPH_FORMAT_VERSION: u32 = 2; // 2: plugin_diagnostics + plugin_set_digest (RFC 0017 §3)
+const GRAPH_FORMAT_VERSION: u32 = 2; // bump whenever the snapshot envelope's serialized shape changes
 const GRAPH_KEY_LEN: usize = 32;
 const GRAPH_HEADER_LEN: usize = GRAPH_MAGIC.len() + 4 + GRAPH_KEY_LEN;
 
@@ -105,7 +101,7 @@ struct ScriptInvokedDepSnap {
 }
 
 /// Same tuple-with-`SmolStr` limitation as [`ScriptInvokedDepSnap`], for
-/// `ProjectGraph::visibility_ladders` (RFC 0012 §6) — `VisibilityRung` carries its own rkyv
+/// `ProjectGraph::visibility_ladders` — `VisibilityRung` carries its own rkyv
 /// derives (adapter.rs), only the language key needs the wrapper.
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 struct LadderSnap {
@@ -114,7 +110,7 @@ struct LadderSnap {
     rungs: Vec<crate::adapter::VisibilityRung>,
 }
 
-/// Same wrapper shape again, for `ProjectGraph::cycle_policies` (RFC 0005 §8).
+/// Same wrapper shape again, for `ProjectGraph::cycle_policies`.
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 struct CyclePolicySnap {
     #[rkyv(with = crate::rkyv_support::SmolStrAsString)]
@@ -124,10 +120,10 @@ struct CyclePolicySnap {
 
 /// The archived payload (everything after the header) — deliberately a standalone type rather
 /// than deriving `Archive` on [`ProjectGraph`] itself: `ProjectGraph::file_index` is a derived
-/// index (rebuilt on load, RFC 0004 §2 — no reason to pay to persist it), and `diagnostics`
+/// index (rebuilt on load — no reason to pay to persist it), and `diagnostics`
 /// lives outside `ProjectGraph` entirely on the live path (`assemble`'s second return value) but
-/// belongs in the snapshot so a full-hit warm run doesn't silently drop them (RFC 0001 §6:
-/// diagnostics degrade, never vanish — including across a "nothing changed" cache hit).
+/// belongs in the snapshot so a full-hit warm run doesn't silently drop them (diagnostics
+/// degrade, never vanish — including across a "nothing changed" cache hit).
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 struct GraphSnapshot {
     files: Vec<FileNode>,
@@ -146,23 +142,23 @@ struct GraphSnapshot {
     function_metrics: Vec<(SymbolId, crate::graph::SymbolMetrics)>,
     patch_meta: Vec<crate::graph::FilePatchMeta>,
     diagnostics: Vec<Diagnostic>,
-    /// `annotate_symbols` output (RFC 0003 §2) — wholly plugin-derived, but unlike the edges
+    /// `annotate_symbols` output — wholly plugin-derived, but unlike the edges
     /// it has no per-item provenance, so it must round-trip through the snapshot explicitly:
-    /// omitting it would silently drop RFC 0005 §7's exemptions on every warm hit now that
-    /// snapshots are written with plugins registered (RFC 0016 §6).
+    /// omitting it would silently drop the exemptions on every warm hit, since
+    /// snapshots are written with plugins registered.
     externally_consumed: Vec<SymbolId>,
     /// `mark_implicitly_invoked` output — same plugin-derived, no-per-item-provenance
     /// round-trip rationale as `externally_consumed` above.
     plugin_implicitly_invoked: Vec<SymbolId>,
     /// Plugin-round diagnostics (content-budget cutoffs), stored apart from the extraction
-    /// `diagnostics` above because the two have different patch-time fates (RFC 0017 §3): the
+    /// `diagnostics` above because the two have different patch-time fates: the
     /// incremental patch keeps extraction diagnostics for unchanged files but discards and
     /// re-derives everything plugin-produced — `Diagnostic` carries no provenance, so the
     /// partition has to live here, in the storage layer, or stale plugin diagnostics would be
     /// indistinguishable from adapter ones and ride the patch unrevised.
     plugin_diagnostics: Vec<Diagnostic>,
     /// Identity digest of the graph-mutating plugin set that built this snapshot
-    /// (`crate::graph::plugin_set_digest`). The patch's guard (RFC 0017 §3): plugin *edges*
+    /// (`crate::graph::plugin_set_digest`). The patch's guard: plugin *edges*
     /// are provenance-tagged and re-derivable, but `classify_file` overrides are baked into
     /// `FileNode.class` with no tag — safe to reuse only when the plugin set is unchanged.
     plugin_set_digest: [u8; 32],
@@ -198,7 +194,7 @@ pub struct ProjectCache {
     /// `false` when another process already holds the write lock, or the cache directory
     /// couldn't be created (read-only filesystem, permissions…) — reads still work in either
     /// case, writes silently no-op. A disposable cache degrading instead of failing the run is
-    /// the point (ADR 0004): analysis correctness never depends on the cache being writable.
+    /// the point: analysis correctness never depends on the cache being writable.
     writable: bool,
     _lock: Option<LockFile>,
     hits: AtomicU64,
@@ -219,7 +215,7 @@ fn hex32(bytes: &[u8; 32]) -> String {
 impl ProjectCache {
     /// Opens (creating if needed) the cache under `root`. Never fails the caller — an
     /// unwritable or uncreatable cache directory just yields a read-mostly-empty, write-nothing
-    /// handle rather than aborting analysis (RFC 0001 §6's "diagnostics degrade, never vanish"
+    /// handle rather than aborting analysis (the "diagnostics degrade, never vanish"
     /// spirit, applied to a subsystem that's allowed to not exist at all).
     pub fn open(root: &Path) -> ProjectCache {
         let kndo_dir = root.join(".kndo");
@@ -235,8 +231,8 @@ impl ProjectCache {
                 graph_hits: AtomicU64::new(0),
             };
         }
-        // Makes the cache disposable regardless of the project's own root `.gitignore` — a
-        // `kndo init` hook installer is a separate M2 deliverable (the pre-commit hook), but a
+        // Makes the cache disposable regardless of the project's own root `.gitignore` — the
+        // `kndo init` hook installer is a separate concern, but a
         // cache that could get committed by accident is a correctness bug on its own, not
         // something worth waiting on that command to prevent.
         let _ = fs::write(kndo_dir.join(".gitignore"), "cache/\n");
@@ -284,7 +280,7 @@ impl ProjectCache {
         bincode::deserialize(&bytes[BLOB_HASHES_HEADER_LEN..]).unwrap_or_default()
     }
 
-    /// The stat sidecar (RFC 0004 §4 step 2, `discovery::StatIndex`): `(mtime, size) →
+    /// The stat sidecar (`discovery::StatIndex`): `(mtime, size) →
     /// blake3` per file, so an unchanged file is never re-read, let alone re-hashed. Any
     /// read/format failure is a plain miss — every file just gets re-hashed.
     pub fn load_stat_index(&self) -> Option<crate::discovery::StatIndex> {
@@ -389,7 +385,7 @@ impl ProjectCache {
 
     /// Fetch cached facts for this exact `(adapter, schema version, content)` triple. A
     /// missing, unreadable, or version-mismatched entry is a plain miss — never an error the
-    /// caller has to handle; the entry is simply rebuilt from source (ADR 0004).
+    /// caller has to handle; the entry is simply rebuilt from source.
     pub fn get(
         &self,
         adapter_id: &str,
@@ -429,7 +425,7 @@ impl ProjectCache {
         }
     }
 
-    /// Best-effort LRU-by-mtime prune down to `cap_bytes` (ADR 0004 default: [`DEFAULT_CAP_BYTES`]).
+    /// Best-effort LRU-by-mtime prune down to `cap_bytes` (default: [`DEFAULT_CAP_BYTES`]).
     /// Called once per run after writes land — never on the hot get/put path — and only when
     /// this handle holds the write lock; a read-only handle has nothing it's entitled to delete.
     /// One shared pool: facts entries and graph snapshots compete under the same cap, oldest
@@ -472,8 +468,8 @@ impl ProjectCache {
         }
     }
 
-    /// Read-only snapshot of on-disk cache state for `kndo doctor` (RFC 0006 §2, contracts §5's
-    /// `Engine::doctor`) — never called on the hot check path, so a full facts-directory walk
+    /// Read-only snapshot of on-disk cache state for `kndo doctor`
+    /// (`Engine::doctor`) — never called on the hot check path, so a full facts-directory walk
     /// here (same traversal as `prune`, just counting instead of deleting) is fine.
     pub fn stats(&self) -> CacheStats {
         let mut facts_entries = 0usize;
@@ -551,7 +547,7 @@ impl ProjectCache {
     /// the current discovered file set + adapter versions +
     /// [`crate::graph::GRAPH_SCHEMA_VERSION`]; an input change means a different key, whose
     /// file simply doesn't exist yet — a plain miss, not an error, exactly like a facts-entry
-    /// miss (ADR 0004: any mismatch ⇒ silently rebuild). The returned diagnostics merge the
+    /// miss (any mismatch ⇒ silently rebuild). The returned diagnostics merge the
     /// stored extraction and plugin partitions back into one canonically sorted replay — the
     /// split only matters to the patch, which uses [`Self::latest_graph`] instead.
     pub fn get_graph(&self, key: &[u8; GRAPH_KEY_LEN]) -> Option<(ProjectGraph, Vec<Diagnostic>)> {
@@ -568,7 +564,7 @@ impl ProjectCache {
         Some((graph, extraction_diagnostics))
     }
 
-    /// [`Self::get_graph`] without the hit counter — the patch's *probe* (RFC 0013 §5) loads
+    /// [`Self::get_graph`] without the hit counter — the patch's *probe* loads
     /// the previous snapshot speculatively; whether the cache actually served the run is only
     /// known when the patch applies, and [`Self::count_graph_hit`] records it then. A failed
     /// probe followed by a full rebuild must not report a warm graph layer it didn't have.
@@ -581,9 +577,9 @@ impl ProjectCache {
 
         // SAFETY: a snapshot is only ever replaced by `put_graph`'s write-to-tmp-then-rename,
         // which is atomic on every platform kndo targets — a concurrent writer's rename can
-        // only swap this mapping onto a *complete*, previously-finished file; it can never
+        // only swap this mapping onto a *complete*, already-finished file; it can never
         // truncate or mutate the bytes of the inode currently mapped. `ProjectCache` also holds
-        // a single-writer advisory lock for the whole cache (ADR 0004 §7), so no other kndo
+        // a single-writer advisory lock for the whole cache, so no other kndo
         // process is writing this file at the same time in the first place. The one hazard
         // `Mmap::map` genuinely can't rule out — some other, non-kndo process truncating or
         // overwriting the file in place while it's mapped — is the same hazard any mmap-based
@@ -669,8 +665,8 @@ impl ProjectCache {
         }
     }
 
-    /// A detachable snapshot writer (RFC 0008 §2: "cache persist — off the critical path"):
-    /// owns everything it needs (paths + the plugin-set digest, RFC 0017 §3), so the engine
+    /// A detachable snapshot writer ("cache persist — off the critical path"):
+    /// owns everything it needs (paths + the plugin-set digest), so the engine
     /// can hand it to a background thread and let serialization + write overlap with
     /// rendering. `None` when the cache is read-only — the caller then simply has nothing to
     /// defer, same silent-degrade contract as [`Self::put`].
@@ -690,10 +686,10 @@ impl ProjectCache {
         })
     }
 
-    /// The previous run's snapshot, via the `graphs/latest` pointer (RFC 0013 §4) — what the
+    /// The previous run's snapshot, via the `graphs/latest` pointer — what the
     /// incremental patch starts from on a graph-key miss, parts kept apart (the patch keeps
     /// extraction diagnostics for unchanged files but discards and re-derives everything
-    /// plugin-produced, RFC 0017 §3). Any failure (no pointer, evicted snapshot, bad bytes)
+    /// plugin-produced). Any failure (no pointer, evicted snapshot, bad bytes)
     /// is a plain `None`: the caller full-rebuilds, the fallback-honesty rule.
     pub fn latest_graph(&self) -> Option<LoadedSnapshot> {
         let bytes = fs::read(self.latest_pointer_path()).ok()?;
@@ -711,7 +707,7 @@ impl ProjectCache {
         self.cache_dir.join("graphs").join("latest")
     }
 
-    /// Persist the last plugin round's per-plugin contribution counts (RFC 0017 §7) — a tiny
+    /// Persist the last plugin round's per-plugin contribution counts — a tiny
     /// JSON sidecar, not part of any snapshot: written whenever a round actually runs (cold
     /// build or incremental patch; a warm snapshot hit skips the round but also changes
     /// nothing, so the record stays accurate), read back by `Engine::doctor`. Same
@@ -811,7 +807,7 @@ impl GraphSnapshotWriter {
         }
         let tmp = path.with_extension("bin.tmp");
         if fs::write(&tmp, &out).is_ok() && fs::rename(&tmp, path).is_ok() {
-            // The `latest` pointer (RFC 0013 §4) — written only after the snapshot itself is
+            // The `latest` pointer — written only after the snapshot itself is
             // durably in place, so the pointer never names a missing or partial file. Same
             // atomic temp + rename discipline.
             let latest_tmp = self.latest_path.with_extension("tmp");
@@ -1167,7 +1163,7 @@ mod tests {
         );
         assert_eq!(
             restored.patch_meta, graph.patch_meta,
-            "RFC 0013 §4: the patch layer's per-file metadata must round-trip"
+            "the patch layer's per-file metadata must round-trip"
         );
         assert_eq!(
             restored.file_id(&crate::adapter::ProjectPath("a.mock".into())),
@@ -1197,8 +1193,8 @@ mod tests {
         assert_eq!(cache.graph_hits(), 1); // unchanged — the miss above didn't count
 
         // The latest pointer names the written snapshot — the patch's entry point on a
-        // future miss (RFC 0013 §4). `put_graph` writes the empty-set plugin digest, and the
-        // parts come back apart (RFC 0017 §3).
+        // future miss. `put_graph` writes the empty-set plugin digest, and the
+        // parts come back apart.
         let latest = cache.latest_graph().expect("latest pointer resolves");
         assert_eq!(latest.graph.files.len(), restored.files.len());
         assert_eq!(

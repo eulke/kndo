@@ -1,9 +1,10 @@
-//! kndo-plugin-demo — the reference external adapter for kndo-plugin-api v1
-//! (docs/contracts/wasm-abi.md). Targets a deliberately tiny, invented language ("kdemo") so
+//! kndo-plugin-demo — the reference external adapter for kndo-plugin-api v1.
+//! Targets a deliberately tiny, invented language ("kdemo") so
 //! this crate can hand-scan it with no dependency beyond `wit-bindgen` — pulling in a real
 //! tree-sitter grammar here would mean cross-compiling its C sources to `wasm32-unknown-
-//! unknown`, a much bigger yak than this demo exists to shave (ADR 0002's grammar choice is a
-//! *native*-adapter concern; nothing about the ABI requires a WASM adapter to use it).
+//! unknown`, a much bigger yak than this demo exists to shave (the tree-sitter grammar
+//! choice is a *native*-adapter concern; nothing about the ABI requires a WASM adapter to
+//! use it).
 //!
 //! kdemo syntax, the whole of it:
 //! ```text
@@ -15,7 +16,7 @@
 //! }
 //! ```
 //! `pub fn` declarations are exported; a function literally named `main` is a production root
-//! (RFC 0002 §3-style: language-defined roots only, the same rule every launch adapter follows).
+//! (language-defined roots only, the same rule every launch adapter follows).
 //! Everything else is unreachable unless called from a root's transitive closure — exactly the
 //! shape needed to prove `unused` fires correctly through a real external WASM adapter.
 
@@ -246,7 +247,7 @@ impl Guest for DemoAdapter {
             facts_schema_version: 1,
             file_globs: vec!["**/*.kdemo".to_string()],
             grammar_version: "hand-scanned-v1".to_string(),
-            // RFC 0016 §4: exercises the global-install activation path — irrelevant when this
+            // Exercises the global-install activation path — irrelevant when this
             // component is dropped project-local (unconditional either way, `kndo/tests/
             // external_adapter.rs`'s own proof), but `kndo/tests/global_adapter_activation.rs`
             // places it in the global tier specifically to prove this rule gates it there.

@@ -1,6 +1,6 @@
 //! Pure `ProjectPath` string manipulation shared by every adapter's resolver.
 //!
-//! Nothing here touches the filesystem (the adapter purity rule, RFC 0002 §6) and nothing is
+//! Nothing here touches the filesystem (the adapter purity rule) and nothing is
 //! language-specific: relative-specifier joining is the same operation for a TS `import`, a
 //! CSS `@import`, or a Go relative path. One implementation, tested once.
 

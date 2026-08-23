@@ -1,5 +1,4 @@
-//! Rust language adapter (docs/adapters/rust.md). The third `LanguageAdapter`, and the first
-//! whose dogfood corpus is kndo's own repository. The one Rust-shaped idea the whole adapter
+//! Rust language adapter. The one Rust-shaped idea the whole adapter
 //! is built on: **the module tree IS the file graph** — `mod foo;` is an import (the parent's
 //! certain `ImportsFile` edge to the child), and a file no `mod` chain reaches is dead to the
 //! compiler, a verdict reachability then reproduces for free.
@@ -18,7 +17,7 @@ use smol_str::SmolStr;
 
 pub struct RustAdapter;
 
-/// docs/adapters/rust.md §1: integration tests, benches, and examples are test-role
+/// Integration tests, benches, and examples are test-role
 /// (an example consumes the API from outside exactly like a test — a symbol alive only
 /// through its own demo is the `test-only` verdict); `build.rs`, `.cargo/`, and the
 /// de-facto `xtask/` task-runner convention are tooling.
@@ -36,21 +35,12 @@ impl LanguageAdapter for RustAdapter {
             activation: Vec::new(),
             dependencies: Vec::new(),
             id: SmolStr::new("rust"),
-            // 2: test regions are the only producer-side test declaration — extraction
-            // stopped emitting per-declaration Test roots (assembly derives them from
-            // `test_spans` containment, contracts §2).
-            // 10: member calls inside macro token trees carry receiver-typed qualifiers
-            //     (`write!(w, "{}", flag.doc_short())` resolves like body code);
-            // 9: implicitly_invoked on machinery-trait impl members (the machinery-dispatch
-            //    rule); 8: invoked_executables (`env!("CARGO_BIN_EXE_…")` — the
-            //    invoked-program rule);
-            // 7: yields_params carries every type argument (`?N` indexed projection);
-            // 6: member-type facts + typed-receiver qualifiers.
-            facts_schema_version: 10,
+            // Bump whenever the serialized facts shape or the emission semantics change.
+            facts_schema_version: 11,
             file_globs: vec![SmolStr::new("**/*.rs")],
             manifest_globs: vec![SmolStr::new("**/Cargo.toml")],
             grammar_version: SmolStr::new("tree-sitter-rust 0.24"),
-            // docs/adapters/rust.md §2: [File "private", Package "pub(crate)", Public "pub"].
+            // [File "private", Package "pub(crate)", Public "pub"].
             // pub(super)/pub(in …) are widened to the crate rung — widening only ever
             // silences; narrowing would fabricate internal-only accusations.
             visibility_ladder: vec![
@@ -70,8 +60,8 @@ impl LanguageAdapter for RustAdapter {
                     surface_transitive: true,
                 },
             ],
-            // docs/adapters/rust.md §5: module cycles inside a crate are legal and common
-            // (RFC 0005 §8's own Idiomatic example). Package cycles are NOT Impossible —
+            // Module cycles inside a crate are legal and common
+            // (the canonical Idiomatic example). Package cycles are NOT Impossible —
             // dev-dependency cycles are legal cargo, and kndo's package edges include test
             // files — so Impossible would suppress real, visible structure.
             cycle_policy: CyclePolicy {

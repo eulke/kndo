@@ -1,4 +1,4 @@
-//! Proves RFC 0003 §4's global-install activation path: a `Plugin` dropped into
+//! Proves the global-install activation path: a `Plugin` dropped into
 //! `KNDO_PLUGIN_DIR` (the override for the platform XDG data dir — see
 //! `kndo::activation::global_plugin_dir`) only joins composition for a project whose files
 //! actually satisfy one of its `PluginDescriptor.activation` rules. Reuses the same
@@ -72,9 +72,9 @@ fn unused_symbols(result: &kndo_core::engine::RunResult) -> Vec<&str> {
 
 #[test]
 fn a_globally_installed_plugin_only_activates_when_its_rule_matches() {
-    // The adapter demo stays project-local (RFC 0003 §4's global-activation path is `Plugin`-
-    // only, see `kndo::external_adapters`'s doc comment) — every project below needs it just to
-    // get its `.kdemo` file claimed at all, independent of what's under test here.
+    // The adapter demo stays project-local (the global-activation path is `Plugin`-only, see
+    // `kndo::external_adapters`'s doc comment) — every project below needs it just to get its
+    // `.kdemo` file claimed at all, independent of what's under test here.
     let adapter_bytes = build_component("examples/kndo-plugin-demo", "kndo_plugin_demo.wasm");
     let plugin_bytes = build_component(
         "examples/kndo-plugin-hooks-demo",

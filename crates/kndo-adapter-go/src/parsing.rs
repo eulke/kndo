@@ -16,8 +16,8 @@ pub fn parse(source: &[u8]) -> Option<Tree> {
 
 #[cfg(test)]
 mod introspect {
-    //! Not adapter tests — a ground-truth probe of tree-sitter-go's real node/field names, run
-    //! once to write extraction.rs against verified facts instead of assumptions (same
+    //! Not adapter tests — a ground-truth probe of tree-sitter-go's real node/field names;
+    //! extraction.rs is written against verified facts instead of assumptions (same
     //! methodology `kndo-adapter-toolkit::parsing`'s introspect module uses for TS).
     //! `cargo test -p kndo-adapter-go introspect -- --nocapture --ignored`.
 

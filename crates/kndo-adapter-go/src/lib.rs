@@ -1,8 +1,7 @@
-//! Go language adapter (docs/adapters/go.md). Second `LanguageAdapter` implementation —
-//! deliberately structurally different from JS/TS (RFC 0002 §1's contract claim needs a second,
-//! different language to mean anything): no relative imports, visibility is capitalization
-//! rather than a keyword, and a package is a directory of files (`FileFacts::unit`, contracts
-//! §2 — a core extension this adapter's design surfaced before any Go code was written).
+//! Go language adapter. Deliberately structurally different from JS/TS (the adapter
+//! contract's claims only mean something across genuinely different languages):
+//! no relative imports, visibility is capitalization
+//! rather than a keyword, and a package is a directory of files (`FileFacts::unit`).
 
 mod extraction;
 mod manifest;
@@ -21,9 +20,8 @@ pub struct GoAdapter;
 /// `_test.go` is Go's sole, compiler-recognized test convention — a suffix, but `classify`'s
 /// name-marker matcher is a substring check, and a marker that ends a file name is exactly a
 /// suffix match (nothing can follow `.go`), so no toolkit change is needed to express it. No
-/// tooling-role convention worth pattern-matching yet (docs/adapters/go.md §1, §7 open question
-/// 4) — `vendor/` is already in the toolkit's universal list, so nothing Go-specific there
-/// either.
+/// tooling-role convention worth pattern-matching — `vendor/` is already in the toolkit's
+/// universal list, so nothing Go-specific there either.
 const PATH_PATTERNS: kndo_adapter_toolkit::classify::PathPatterns =
     kndo_adapter_toolkit::classify::PathPatterns {
         test_name_markers: &["_test.go"],
@@ -38,14 +36,14 @@ impl LanguageAdapter for GoAdapter {
             activation: Vec::new(),
             dependencies: Vec::new(),
             id: SmolStr::new("go"),
-            facts_schema_version: 9, // 9: FunctionMetrics.token_count (RFC 0005 §11); 8: FunctionMetrics emission (RFC 0005 §6); 7: go.work + sibling WorkspaceMember (RFC 0012 §10); 6: scope_context/local_alias/unit_name (§9); 5: detected_origin (§7); 4: RefKind + signature_span (§5)
+            facts_schema_version: 10, // bump whenever the serialized facts shape or the emission semantics change
             file_globs: vec![SmolStr::new("**/*.go")],
             manifest_globs: vec![SmolStr::new("**/go.mod"), SmolStr::new("**/go.work")],
             grammar_version: SmolStr::new("tree-sitter-go 0.25"),
-            // RFC 0012 §6's Go ladder: capitalization is the language's entire visibility
+            // The Go ladder: capitalization is the language's entire visibility
             // system — unexported is package-scoped (`Unit` = the dir#package key), exported
             // is public. `internal/` is NOT a rung: it caps root *promotion* (a separate
-            // mechanism, docs/adapters/go.md §0), not who can name a symbol.
+            // mechanism), not who can name a symbol.
             visibility_ladder: vec![
                 VisibilityRung {
                     scope: VisibilityScope::Unit,
@@ -55,7 +53,7 @@ impl LanguageAdapter for GoAdapter {
                 // Exported under an `internal/` path element: the compiler itself walls these
                 // off from external modules (Go internal-package rule), so their true scope is
                 // the module, never Public — which keeps them out of the library-surface
-                // exemptions (M6 FP hunt) while staying accusable by `internal-only`.
+                // exemptions while staying accusable by `internal-only`.
                 VisibilityRung {
                     scope: VisibilityScope::Package,
                     label: SmolStr::new("exported (internal)"),
@@ -67,7 +65,7 @@ impl LanguageAdapter for GoAdapter {
                     surface_transitive: true,
                 },
             ],
-            // RFC 0005 §8's own example of Impossible: the Go compiler forbids import cycles
+            // The canonical example of Impossible: the Go compiler forbids import cycles
             // outright, at every level — a cycle in kndo's Go graph can only be a resolution
             // artifact, so the analysis skips the language rather than accusing.
             cycle_policy: CyclePolicy {
@@ -146,7 +144,7 @@ mod tests {
         let a = GoAdapter;
         assert!(a.claim_manifest(&path("go.mod")));
         assert!(a.claim_manifest(&path("pkg/go.mod")));
-        assert!(a.claim_manifest(&path("go.work"))); // RFC 0012 §10
+        assert!(a.claim_manifest(&path("go.work")));
         assert!(!a.claim_manifest(&path("go.sum")));
         assert!(!a.claim_manifest(&path("go.work.sum")));
     }

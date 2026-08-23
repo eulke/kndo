@@ -1,5 +1,5 @@
-//! Project Graph assembly (RFC 0001 §3–4) — turns discovered files into the language-neutral
-//! graph via registered adapters. This module is **language-blind** (RFC 0001 §2, the
+//! Project Graph assembly — turns discovered files into the language-neutral
+//! graph via registered adapters. This module is **language-blind** (the
 //! ignorance rule): it references only the `LanguageAdapter` trait, never a concrete
 //! language. Adapter *registration* happens at the binary level (`kndo-cli` composes core +
 //! first-party adapters) — the core must never know which languages exist.
@@ -26,15 +26,15 @@ pub struct FileNode {
     pub content_hash: [u8; 32],
     /// `None` when no registered adapter claims this file — it still exists as a File node
     /// (e.g. a README, or a CSS file before a CSS adapter exists) so import edges *to* it
-    /// still resolve, per RFC 0002 §4's cross-language model.
+    /// still resolve, per the cross-language model.
     #[rkyv(with = rkyv::with::Map<crate::rkyv_support::SmolStrAsString>)]
     pub language: Option<SmolStr>,
     pub class: Option<FileClass>,
-    /// Every file belongs to exactly one Package (RFC 0011 §3, nearest-manifest-ancestor).
+    /// Every file belongs to exactly one Package (nearest-manifest-ancestor).
     /// `PackageId(0)` is always the implicit package (see [`ProjectGraph::packages`]) — never
     /// `None`, since ownership is total even when nothing real claims a file.
     pub package: PackageId,
-    /// The file's `FileFacts::unit` key, persisted onto the graph (RFC 0012 §6): visibility-
+    /// The file's `FileFacts::unit` key, persisted onto the graph: visibility-
     /// scope containment checks (`internal-only`'s tightest-sufficient computation, the
     /// member fallback's candidate scoping) need "same unit?" answerable from the graph
     /// alone, warm path included. `None` for file-scoped languages, exactly as in the facts.
@@ -46,8 +46,8 @@ pub struct FileNode {
     /// contained import site as test-role usage. Empty for languages whose test detection
     /// is per-file.
     pub test_spans: Vec<Span>,
-    /// String-literal call sites ([`crate::adapter::FileFacts::string_call_args`], RFC 0017
-    /// §5.4), canonically sorted. Persisted onto the graph so plugins query them through
+    /// String-literal call sites ([`crate::adapter::FileFacts::string_call_args`]),
+    /// canonically sorted. Persisted onto the graph so plugins query them through
     /// [`crate::plugin::GraphView::string_call_sites_in`] (natively) or `call-sites-in`
     /// (WASM) on warm paths too — no analysis consumes them directly; they are plugin fuel.
     pub string_call_sites: Vec<crate::adapter::StringCallArg>,
@@ -65,8 +65,8 @@ pub fn span_in_test_region(regions: &[Span], span: Span) -> bool {
 #[derive(Debug, Clone, PartialEq, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct SymbolNode {
     pub file: FileId,
-    /// Bare name — for members, ownership lives in `member_of`, never in the name string
-    /// (RFC 0012 §3). Renderers and selectors use [`SymbolNode::qualified_name`].
+    /// Bare name — for members, ownership lives in `member_of`, never in the name string.
+    /// Renderers and selectors use [`SymbolNode::qualified_name`].
     #[rkyv(with = crate::rkyv_support::SmolStrAsString)]
     pub name: SmolStr,
     pub kind: SymbolKind,
@@ -76,9 +76,9 @@ pub struct SymbolNode {
     /// Mirrors [`crate::adapter::Declaration::member_of`].
     #[rkyv(with = rkyv::with::Map<crate::rkyv_support::SmolStrAsString>)]
     pub member_of: Option<SmolStr>,
-    /// Mirrors [`crate::adapter::Declaration::signature_span`] (RFC 0012 §5).
+    /// Mirrors [`crate::adapter::Declaration::signature_span`].
     pub signature_span: Option<Span>,
-    /// Mirrors [`crate::adapter::Declaration::implicitly_invoked`] (RFC 0005 §1's
+    /// Mirrors [`crate::adapter::Declaration::implicitly_invoked`] (the
     /// machinery-dispatch rule) — reachability derives the implicit owner → member edge.
     pub implicitly_invoked: bool,
 }
@@ -86,8 +86,8 @@ pub struct SymbolNode {
 impl SymbolNode {
     /// The display/selector form: `Owner.name` for members, the bare name otherwise. This is
     /// what finding messages, `location.symbol`, finding ids, and selector round-trips use —
-    /// so ids stay distinct for same-named members of different owners, and stay *stable* for
-    /// adapters that previously encoded the owner into the name itself.
+    /// so ids stay distinct for same-named members of different owners, and stay *stable*
+    /// even for adapters that encode the owner into the name itself.
     pub fn qualified_name(&self) -> String {
         match &self.member_of {
             Some(owner) => format!("{owner}.{}", self.name),
@@ -96,7 +96,7 @@ impl SymbolNode {
     }
 }
 
-/// One callable's computed shape (RFC 0005 §6): cyclomatic + LOC feed `crap` (M4), the
+/// One callable's computed shape: cyclomatic + LOC feed `crap`, the
 /// winnowing fingerprints feed structural `duplicate`. Keyed by `SymbolId` in
 /// [`ProjectGraph::function_metrics`] — the adapter-side `FunctionMetrics::symbol` name is
 /// resolved to the id at assembly and dropped.
@@ -104,30 +104,30 @@ impl SymbolNode {
 pub struct SymbolMetrics {
     pub cyclomatic: u32,
     pub loc: u32,
-    /// Normalized-stream token count (RFC 0005 §11's duplication ratio basis).
+    /// Normalized-stream token count (the duplication ratio basis).
     pub token_count: u32,
     pub fingerprints: Vec<u64>,
 }
 
-/// Per-file state the incremental patch (RFC 0013 §4) needs beyond the graph proper —
+/// Per-file state the incremental patch needs beyond the graph proper —
 /// indexed by FileId, parallel to [`ProjectGraph::files`]. Grouped here rather than
 /// scattered onto [`FileNode`]: these fields serve the patch layer, not graph consumers.
 #[derive(
     Debug, Clone, Default, PartialEq, Eq, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize,
 )]
 pub struct FilePatchMeta {
-    /// RFC 0013 §4's span-normalized surface signature; `None` for unclaimed files (nothing
+    /// The span-normalized surface signature; `None` for unclaimed files (nothing
     /// derived to guard).
     pub surface_sig: Option<[u8; 32]>,
-    /// The file's declared unit name (Go `package` clause — RFC 0012 §9's qualifier default),
+    /// The file's declared unit name (Go `package` clause — the qualifier default),
     /// persisted so the patch never re-fetches an unchanged target's facts.
     #[rkyv(with = rkyv::with::Map<crate::rkyv_support::SmolStrAsString>)]
     pub unit_name: Option<SmolStr>,
     /// The re-export aliases phase 3a-bis resolved *into this file's own table* — the one
-    /// resolution table not derivable from `symbols`. Order-independent state after RFC 0013
-    /// §3b's fixpoint, hence safe to persist and reuse.
+    /// resolution table not derivable from `symbols`. Order-independent state after the
+    /// re-export fixpoint, hence safe to persist and reuse.
     pub reexport_aliases: Vec<AliasEntry>,
-    /// The file's declared member-type facts (`FileFacts::member_types`, RFC 0012 §3-bis),
+    /// The file's declared member-type facts (`FileFacts::member_types`),
     /// persisted verbatim: the patch resolves CHANGED files' chained qualifiers against
     /// UNCHANGED files' member types without re-fetching their facts.
     pub member_types: Vec<crate::adapter::RawMemberType>,
@@ -142,7 +142,7 @@ pub struct AliasEntry {
 }
 
 /// A package consumed *as a dependency* — external (npm/crates.io/…) or an in-repo workspace
-/// member imported by name (RFC 0011 §4: the workspace case carries the same
+/// member imported by name (the workspace case carries the same
 /// declaration-contract obligations, so it lives in the same node kind; its file-level
 /// reachability is carried separately by the `ImportsFile` edge the same resolution emits).
 #[derive(Debug, Clone, PartialEq, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
@@ -151,7 +151,7 @@ pub struct DependencyNode {
     pub name: SmolStr,
 }
 
-/// A workspace unit: one manifest + the file tree it governs (RFC 0011 §3). `PackageId(0)` is
+/// A workspace unit: one manifest + the file tree it governs. `PackageId(0)` is
 /// always the implicit package with `manifest: None` — "a repo with no manifest at all is one
 /// implicit Package" generalizes to "whatever no real manifest's subtree claims," so ownership
 /// is total (every file has a package) even in a repo with zero manifests, or with manifests
@@ -161,11 +161,11 @@ pub struct PackageNode {
     pub manifest: Option<ProjectPath>,
     #[rkyv(with = rkyv::with::Map<crate::rkyv_support::SmolStrAsString>)]
     pub name: Option<SmolStr>,
-    /// Publish signal from the manifest — mirrors `ManifestFacts::private` (RFC 0011 §5).
+    /// Publish signal from the manifest — mirrors `ManifestFacts::private`.
     pub private: bool,
     /// Whether the manifest declares an explicit entry-point surface (an `exports` map or the
     /// language's equivalent) — mirrors `ManifestFacts::declares_surface`, and is the
-    /// **contract gate** for `deep-import` (RFC 0011 §4): no declared surface = no declared
+    /// **contract gate** for `deep-import`: no declared surface = no declared
     /// boundary = never a finding, so monorepos where sibling deep imports are accepted
     /// practice see zero noise.
     pub declares_surface: bool,
@@ -176,7 +176,7 @@ pub struct PackageNode {
     pub surface: Vec<FileId>,
     /// The member's primary entry as the manifest's adapter resolved it — the
     /// `WorkspaceMember::entry` input for bare-specifier resolution, persisted verbatim
-    /// (RFC 0013 §4: the patch rebuilds the workspace index from the snapshot; `surface`
+    /// (the patch rebuilds the workspace index from the snapshot; `surface`
     /// can't stand in — it drops out-of-tree entries and confidences).
     pub workspace_entry: Option<(ProjectPath, Confidence)>,
     /// Every resolved target file this manifest declares — the union of
@@ -184,12 +184,12 @@ pub struct PackageNode {
     /// order. These are the package's module-tree anchors: what a resolver anchors
     /// intra-package paths on when the language's directory convention doesn't hold (a Rust
     /// `[[bin]] path = "crates/core/main.rs"` places a whole module tree outside `src/`).
-    /// Persisted for the same RFC 0013 §4 reason as `workspace_entry`: the patch rebuilds
+    /// Persisted for the same reason as `workspace_entry`: the patch rebuilds
     /// the workspace index from the snapshot.
     pub targets: Vec<ProjectPath>,
     /// The manifest's named executable targets, verbatim (`ManifestFacts::executables`) —
-    /// what a file's `invoked_executables` names resolve against (RFC 0005 §1's
-    /// invoked-program rule). Persisted for the same RFC 0013 §4 reason as `targets`: the
+    /// what a file's `invoked_executables` names resolve against (the
+    /// invoked-program rule). Persisted for the same reason as `targets`: the
     /// patch rebuilds the name index from the snapshot.
     pub executables: Vec<crate::adapter::ExecutableTarget>,
     /// Mirrors the claiming adapter's [`crate::adapter::AdapterDescriptor::resolves_dependency_usage`]
@@ -234,8 +234,8 @@ pub(crate) struct GraphSnapshotParts {
     pub plugin_implicitly_invoked: Vec<SymbolId>,
 }
 
-/// The assembled language-neutral graph (contracts §1). Read-only once built; incremental
-/// patching lands with the cache (RFC 0004).
+/// The assembled language-neutral graph. Read-only once built; the incremental
+/// patch constructs a fresh graph off the cached snapshot rather than mutating in place.
 #[derive(Debug, Default, PartialEq)]
 pub struct ProjectGraph {
     pub files: Vec<FileNode>,
@@ -243,7 +243,7 @@ pub struct ProjectGraph {
     pub dependencies: Vec<DependencyNode>,
     pub declared_dependencies: Vec<DeclaredDependency>,
     /// `(package, name)` pairs a manifest's `scripts` invoke as a leading command — dependency
-    /// hygiene's (RFC 0005 §5) only usage evidence for CLI-only tools, which never produce an
+    /// hygiene's only usage evidence for CLI-only tools, which never produce an
     /// `ImportsDependency` edge (nothing `import`s a binary). Names here aren't necessarily
     /// declared dependencies — cross-referencing is `dependency_hygiene`'s job, not assembly's.
     pub script_invoked_dependencies: HashSet<(PackageId, SmolStr)>,
@@ -251,32 +251,32 @@ pub struct ProjectGraph {
     pub edges: Vec<Edge>,
     /// `kndo:allow`/`kndo:allow-file` pragmas as extracted, one per file — binding (line
     /// adjacency to a declaration), validation and marking of matched findings is core logic
-    /// downstream of assembly, not here (contracts §2.1). Persisted through the graph-snapshot
+    /// downstream of assembly, not here. Persisted through the graph-snapshot
     /// cache like everything else in this struct, so a warm run never silently drops them.
     pub suppressions: Vec<(FileId, crate::adapter::RawSuppression)>,
-    /// Each claimed language's visibility ladder (RFC 0012 §6), copied off the claiming
+    /// Each claimed language's visibility ladder, copied off the claiming
     /// adapter's descriptor at assembly time and keyed by the claim language `FileNode::
     /// language` stores — so analyses (pure graph functions, no adapter access) can turn a
     /// symbol's `VisibilityLevel` index into a checkable [`crate::adapter::VisibilityScope`]
     /// plus the language's own remediation label. Sorted by language for determinism.
     pub visibility_ladders: Vec<(SmolStr, Vec<crate::adapter::VisibilityRung>)>,
-    /// Each claimed language's cycle tolerance (RFC 0005 §8), collected exactly like the
+    /// Each claimed language's cycle tolerance, collected exactly like the
     /// ladders — adapter-declared data, carried here so `cyclic` stays a pure graph function.
     pub cycle_policies: Vec<(SmolStr, crate::adapter::CyclePolicy)>,
-    /// Callable shapes (RFC 0005 §6), sparse — only symbols whose adapter emitted
+    /// Callable shapes, sparse — only symbols whose adapter emitted
     /// `FileFacts::functions` for them (callables), resolved to ids at assembly.
     pub function_metrics: Vec<(SymbolId, SymbolMetrics)>,
-    /// RFC 0013 §4 — indexed by FileId, always `files.len()` entries; empty-defaulted for
-    /// test-built graphs (the patch layer never runs there).
+    /// Per-file patch metadata — indexed by FileId, always `files.len()` entries;
+    /// empty-defaulted for test-built graphs (the patch layer never runs there).
     pub patch_meta: Vec<FilePatchMeta>,
-    /// Symbols a plugin's `annotate_symbols` marked externally consumed this run (RFC 0003 §2;
-    /// consumed by `internal_only`/`private_type_leak` per RFC 0005 §7's documented exemption).
+    /// Symbols a plugin's `annotate_symbols` marked externally consumed this run
+    /// (consumed by `internal_only`/`private_type_leak` as their documented exemption).
     /// Sorted, deduplicated. Always empty for a cache-hit or patched graph — plugins with
     /// graph-mutation hooks force a full rebuild every run (see `assemble_from_source`), so
     /// there is no cached-graph case where this could go stale.
     pub externally_consumed: Vec<SymbolId>,
     /// Members a plugin's `annotate_symbols` marked machinery-invoked this run (the
-    /// framework counterpart of `SymbolNode::implicitly_invoked` — RFC 0005 §1's
+    /// framework counterpart of `SymbolNode::implicitly_invoked` — the
     /// machinery-dispatch rule reads both). Sorted, deduplicated; same snapshot round-trip
     /// rationale as `externally_consumed`.
     pub plugin_implicitly_invoked: Vec<SymbolId>,
@@ -288,8 +288,8 @@ impl ProjectGraph {
         self.file_index.get(path).copied()
     }
 
-    /// Whether a plugin marked this symbol externally consumed (RFC 0003 §2 `annotate_symbols`,
-    /// RFC 0005 §7's exemption). `externally_consumed` is sorted — a binary search, not a scan,
+    /// Whether a plugin marked this symbol externally consumed (via `annotate_symbols`).
+    /// `externally_consumed` is sorted — a binary search, not a scan,
     /// since `internal_only`/`private_type_leak` call this once per symbol they'd otherwise
     /// flag.
     pub fn is_externally_consumed(&self, id: SymbolId) -> bool {
@@ -297,12 +297,12 @@ impl ProjectGraph {
     }
 
     /// Whether a plugin marked this member machinery-invoked (`mark_implicitly_invoked` —
-    /// RFC 0005 §1's machinery-dispatch rule). Sorted input, binary search.
+    /// the machinery-dispatch rule). Sorted input, binary search.
     pub fn is_plugin_implicitly_invoked(&self, id: SymbolId) -> bool {
         self.plugin_implicitly_invoked.binary_search(&id).is_ok()
     }
 
-    /// The visibility ladder for a claim language (RFC 0012 §6) — `None` when the language
+    /// The visibility ladder for a claim language — `None` when the language
     /// never declared one (unclaimed files, pre-ladder snapshots). An empty ladder is a
     /// deliberate declaration ("no visibility semantics") and returns `Some(&[])`.
     pub fn ladder_for(&self, language: &str) -> Option<&[crate::adapter::VisibilityRung]> {
@@ -312,7 +312,7 @@ impl ProjectGraph {
             .map(|(_, rungs)| rungs.as_slice())
     }
 
-    /// The cycle policy for a claim language (RFC 0005 §8) — `None` for unclaimed files and
+    /// The cycle policy for a claim language — `None` for unclaimed files and
     /// pre-policy snapshots (the analysis then stays silent for that participant).
     pub fn cycle_policy_for(&self, language: &str) -> Option<crate::adapter::CyclePolicy> {
         self.cycle_policies
@@ -328,7 +328,7 @@ impl ProjectGraph {
         self.packages[package.0 as usize].name.as_deref()
     }
 
-    /// Rebuilds a full graph from its persisted parts (RFC 0004 §2's `graph.bin`, `cache.rs`) —
+    /// Rebuilds a full graph from its persisted parts (`cache.rs`'s `graph.bin`) —
     /// the warm-path counterpart to [`assemble`]: same shape, but skipping claim/extract/
     /// resolve/link entirely when nothing changed. `file_index` isn't itself persisted (cheap
     /// to rebuild, and doing so means the cache format never has to carry a second, derived
@@ -354,10 +354,9 @@ impl ProjectGraph {
             cycle_policies: parts.cycle_policies,
             function_metrics: parts.function_metrics,
             patch_meta: parts.patch_meta,
-            // Round-trips through the snapshot since RFC 0016 §6 made snapshot writes
-            // unconditional — before that, no snapshot was ever written with a graph-mutating
-            // plugin registered and this was safely absent; afterwards, dropping it here would
-            // silently lose `annotate_symbols` exemptions (RFC 0005 §7) on every warm hit.
+            // Snapshots are written even with graph-mutating plugins registered, so this
+            // must round-trip through the snapshot — dropping it here would silently lose
+            // `annotate_symbols` exemptions on every warm hit.
             externally_consumed: parts.externally_consumed,
             plugin_implicitly_invoked: parts.plugin_implicitly_invoked,
             file_index,
@@ -506,14 +505,14 @@ struct Claimed {
     claim: FileClaim,
     facts: crate::adapter::FileFacts,
     adapter_index: usize,
-    /// RFC 0013 §4's surface signature, computed once per (adapter, content) in phase 1's
+    /// The span-normalized surface signature, computed once per (adapter, content) in phase 1's
     /// parallel pass — cached and fresh facts get it identically.
     surface_sig: [u8; 32],
 }
 
 /// Phase 1's per-file work — claim, fetch-or-extract facts (facts cache first), compute the
 /// surface signature — shared verbatim by the parallel full build and the incremental
-/// patch's re-extraction of changed files (RFC 0013 §5).
+/// patch's re-extraction of changed files.
 fn claim_and_extract(
     df: &discovery::DiscoveredFile,
     adapters: &[Box<dyn LanguageAdapter>],
@@ -584,16 +583,16 @@ fn claim_and_extract(
     }))
 }
 
-/// RFC 0013 §5 — the incremental patch. Applies when the previous snapshot exists, the file
+/// The incremental patch. Applies when the previous snapshot exists, the file
 /// **set** is unchanged, no changed file is a manifest, at most 30% of files changed, and
 /// every changed claimed file's surface signature is unchanged — in which case the dirty set
-/// is exactly the changed files (§2.1: no resolution input moved). Everything else returns
+/// is exactly the changed files (no resolution input moved). Everything else returns
 /// `None` and the caller full-rebuilds: one fallback, always correct. Every guard runs
 /// BEFORE any mutation — a half-patched graph must be unrepresentable.
 ///
-/// The correctness obligation (§6): the returned graph is byte-identical to what the full
+/// The correctness obligation: the returned graph is byte-identical to what the full
 /// rebuild of the same tree produces — enforced by the equivalence suite, made possible by
-/// the canonical-order invariant (§3a) and by sharing the exact per-file machinery
+/// the canonical-order invariant and by sharing the exact per-file machinery
 /// ([`claim_and_extract`], [`emit_file_declarations`], [`resolve_file`]) with the full path.
 fn try_patch(
     discovered: &discovery::DiscoveredTree,
@@ -610,7 +609,7 @@ fn try_patch(
     } = cache.latest_graph()?;
 
     // ---- guards, in cheapest-first order ----
-    // RFC 0017 §3: a changed plugin set means the snapshot's `FileNode.class` values may
+    // A changed plugin set means the snapshot's `FileNode.class` values may
     // carry another set's `classify_file` overrides — untagged and unstrippable, unlike the
     // provenance-tagged edges below. Full rebuild once; the snapshot key would miss anyway.
     if snapshot_plugin_digest != current_plugin_digest {
@@ -625,7 +624,7 @@ fn try_patch(
         .zip(&discovered.files)
         .any(|(old, new)| old.path != new.path)
     {
-        return None; // adds/removes/renames renumber FileIds — §7's honest fallback
+        return None; // adds/removes/renames renumber FileIds — the honest fallback
     }
     let changed: Vec<usize> = graph
         .files
@@ -639,10 +638,9 @@ fn try_patch(
         return None; // identical tree would have hit the snapshot key — defensive
     }
     if changed.len() * 20 > graph.files.len() {
-        // Stricter than RFC 0004 §5's 30% ceiling, and measured rather than assumed: the
-        // patch's fixed costs (snapshot load, table rebuild) beat the saved resolution once
-        // more than ~5% of files changed — the E0b suite's 1k/100-file scenario regressed
-        // +22% under a 30% threshold and recovers at 5%. RFC 0013 §5 records the number.
+        // Measured, not assumed: the patch's fixed costs (snapshot load, table rebuild)
+        // stop beating the saved resolution once more than ~5% of files changed, so a
+        // larger dirty set full-rebuilds instead.
         return None;
     }
     for &c in &changed {
@@ -650,7 +648,7 @@ fn try_patch(
             .iter()
             .any(|a| a.claim_manifest(&discovered.files[c].path))
         {
-            return None; // manifests feed global inputs (§2.1) — full rebuild
+            return None; // manifests feed global inputs — full rebuild
         }
     }
 
@@ -675,7 +673,7 @@ fn try_patch(
             }
             Ok(Some(claimed)) => {
                 if graph.patch_meta[c].surface_sig != Some(claimed.surface_sig) {
-                    return None; // §2.1: some resolution input moved — full rebuild
+                    return None; // some resolution input moved — full rebuild
                 }
                 changed_files.push(ChangedFile {
                     index: c,
@@ -727,7 +725,7 @@ fn try_patch(
     }
 
     // ---- every guard passed: mutation begins ----
-    // RFC 0017 §3, first: discard every plugin contribution — provenance-tagged edges and the
+    // First: discard every plugin contribution — provenance-tagged edges and the
     // wholly plugin-derived `externally_consumed` set — before anything below reads the edge
     // list. Order matters beyond hygiene: the library-root scan further down derives roots
     // from KEPT edges, and in the full build it runs on adapter data only (plugins haven't
@@ -762,7 +760,7 @@ fn try_patch(
             let mut spans = claimed.facts.test_spans.clone();
             spans.sort_unstable();
             graph.files[c].test_spans = spans;
-            // Same body-level refresh for string call sites (RFC 0017 §5.4): a changed
+            // Same body-level refresh for string call sites: a changed
             // literal or a new call flows through the patch, and the plugin round below
             // reads the current values off the FileNode.
             let mut sites = claimed.facts.string_call_args.clone();
@@ -772,7 +770,7 @@ fn try_patch(
         }
     }
 
-    // Remove everything the changed files own — exact, thanks to Edge.owner (§2).
+    // Remove everything the changed files own — exact, thanks to Edge.owner.
     graph.edges.retain(|e| !changed_set.contains(&e.owner.0));
     let mut function_metrics = std::mem::take(&mut graph.function_metrics);
     function_metrics.retain(|(id, _)| !changed_set.contains(&graph.symbols[id.0 as usize].file.0));
@@ -781,7 +779,7 @@ fn try_patch(
         .retain(|(f, _)| !changed_set.contains(&f.0));
     extraction_diagnostics.retain(|d| d.path.as_ref().is_none_or(|p| !changed_paths.contains(p)));
 
-    // ---- rebuild the resolution environment from the snapshot (§4: everything derivable) ----
+    // ---- rebuild the resolution environment from the snapshot (everything derivable) ----
     let known_files: HashSet<ProjectPath> = graph.files.iter().map(|f| f.path.clone()).collect();
     let declared_dependency_names: HashSet<SmolStr> = graph
         .declared_dependencies
@@ -802,10 +800,10 @@ fn try_patch(
                 targets: pkg.targets.clone(),
             });
     }
-    // Unit reverse-index (Java, docs/adapters/java.md §3): an import specifier there IS a
-    // unit value directly, so resolution needs unit → declaring files, not just the forward
+    // Unit reverse-index (Java: an import specifier there IS a
+    // unit value directly), so resolution needs unit → declaring files, not just the forward
     // per-file `unit` already carried on `FileNode`. The surface-signature guard already
-    // ensures a changed file's `unit` never silently drifts under the patch (§2.1), so
+    // ensures a changed file's `unit` never silently drifts under the patch, so
     // reading `graph.files`' current state here stays byte-identical to a full rebuild.
     let mut unit_index: HashMap<SmolStr, Vec<ProjectPath>> = HashMap::default();
     for f in &graph.files {
@@ -873,7 +871,7 @@ fn try_patch(
         .iter()
         .map(|m| m.unit_name.clone())
         .collect();
-    // Member-type facts (RFC 0012 §3-bis) from the persisted patch metadata — valid under
+    // Member-type facts from the persisted patch metadata — valid under
     // the surface-signature guard for changed files too (an annotation change declines the
     // patch), same reasoning as `unit_name`.
     let member_types_per_file: Vec<MemberTypeIndex> = graph
@@ -1041,7 +1039,7 @@ fn try_patch(
         }
     }
 
-    // ---- apply, then restore the canonical order (§3a) ----
+    // ---- apply, then restore the canonical order ----
     let mut dep_index: HashMap<SmolStr, DependencyId> = graph
         .dependencies
         .iter()
@@ -1074,7 +1072,7 @@ fn try_patch(
     function_metrics.sort_by_key(|(id, _)| *id);
     graph.function_metrics = function_metrics;
 
-    // RFC 0017 §3: re-run the plugin round against the patched graph — the same function the
+    // Re-run the plugin round against the patched graph — the same function the
     // full build calls, over the same state shape it would see there (files/symbols in final
     // form, name tables current, aliases included), so every contribution and its diagnostics
     // re-derive exactly as a full rebuild would derive them. The stale contributions were
@@ -1094,7 +1092,7 @@ fn try_patch(
     graph.externally_consumed = round.externally_consumed;
     graph.plugin_implicitly_invoked = round.implicitly_invoked;
     let plugin_diagnostics = round.diagnostics;
-    // RFC 0017 §7: the patch re-ran the round, so it refreshes the audit record exactly like
+    // The patch re-ran the round, so it refreshes the audit record exactly like
     // a full build would.
     cache.record_plugin_contributions(&round.contributions);
 
@@ -1123,7 +1121,7 @@ struct ResolvedFile {
 }
 
 // Whether a declaration in `decl_file` at `scope` is visible to a reference site in
-// `site_file` (RFC 0012 §6). Scopes nest (File ⊂ Unit ⊂ Package ⊂ Public), so each arm
+// `site_file`. Scopes nest (File ⊂ Unit ⊂ Package ⊂ Public), so each arm
 // accepts everything the narrower one would: a Unit-scoped Go method is visible to its own
 // file whether or not the adapter set a unit key.
 fn scope_contains_site(
@@ -1149,7 +1147,7 @@ fn scope_contains_site(
 }
 
 /// Everything phase 3b's per-file resolution reads — immutable once the symbol tables are
-/// built. A named struct (not captured locals) because the incremental patch (RFC 0013 §5)
+/// built. A named struct (not captured locals) because the incremental patch
 /// builds the same tables from the snapshot and calls the same [`resolve_file`]: one
 /// resolution semantics, two data sources, zero drift.
 struct ResolveTables<'a> {
@@ -1161,7 +1159,7 @@ struct ResolveTables<'a> {
     /// Extra declarations sharing a qualified selector already in the single-slot table
     /// (cfg-alternated twin impls: two `Data.from_path`) — populated only on collision.
     qualified_twins_per_file: &'a [HashMap<String, Vec<SymbolId>>],
-    /// Per-file member-type facts (RFC 0012 §3-bis): (owner, member) → the base type the
+    /// Per-file member-type facts: (owner, member) → the base type the
     /// access yields — what a dotted qualifier pointer resolves its hops through.
     member_types_per_file: &'a [MemberTypeIndex],
     symbol_by_name_per_unit: &'a HashMap<SmolStr, HashMap<SmolStr, SymbolId>>,
@@ -1169,7 +1167,7 @@ struct ResolveTables<'a> {
     file_unit: &'a [Option<SmolStr>],
     unit_name_by_file: &'a [Option<SmolStr>],
     ladders: &'a std::collections::BTreeMap<SmolStr, Vec<crate::adapter::VisibilityRung>>,
-    /// Workspace executable name → entry file (RFC 0005 §1's invoked-program rule) — what
+    /// Workspace executable name → entry file (the invoked-program rule) — what
     /// a file's `invoked_executables` names resolve against. See [`executable_name_index`].
     executable_by_name: &'a HashMap<SmolStr, FileId>,
     ctx: &'a ResolveCtx<'a>,
@@ -1224,7 +1222,7 @@ fn resolve_file(
         suppressions: Vec::new(),
     };
 
-    // Invoked-program edges (RFC 0005 §1): a declared subprocess invocation of a workspace
+    // Invoked-program edges: a declared subprocess invocation of a workspace
     // executable target, resolved by name against every manifest's declarations. The name
     // and the target are both declared facts → Certain; an unknown name emits nothing
     // (silence, never a guess).
@@ -1246,7 +1244,7 @@ fn resolve_file(
     // Local name -> target symbol, from this file's import bindings — the fact that lets a
     // `RawReference` to an *imported* name resolve cross-file instead of only same-file.
     let mut bound_symbols: HashMap<SmolStr, SymbolId> = HashMap::default();
-    // Qualifier -> resolved in-repo target file (RFC 0012 §9): the import's explicit
+    // Qualifier -> resolved in-repo target file: the import's explicit
     // `local_alias`, or — unaliased — the *target's own* declared `unit_name`. This is
     // where the dir≠package problem dissolves: only assembly holds both sides, so the
     // qualifier for `gopkg.in/yaml.v3`-style imports comes from the target's `package`
@@ -1256,11 +1254,11 @@ fn resolve_file(
     // own declared unit name SETTLES resolution on a member miss (the name lives there or
     // nowhere); one derived from a specifier's last path segment is weaker provenance — a
     // same-named type in scope is entirely possible — so a miss falls through to the
-    // in-scope/duck ladder instead (ripgrep regression: a tail-registered qualifier
-    // settling `BinaryDetection.from_low_args` to the wrong file killed a live method).
+    // in-scope/duck ladder instead (a tail-derived qualifier that settled a member miss
+    // could bind the access to the wrong file and kill a live method).
     let mut qualifier_targets: HashMap<SmolStr, (FileId, bool)> = HashMap::default();
     // Units whose every top-level name this file sees bare (`RawImport::module_names_visible`
-    // — Swift's `import Alamofire`): the bare-name fallback consults these unit tables after
+    // — Swift's `import SomeKit`): the bare-name fallback consults these unit tables after
     // the file's own, at Certain — it is the language's scoping rule, not a guess.
     let mut visible_units: Vec<SmolStr> = Vec::new();
 
@@ -1269,14 +1267,14 @@ fn resolve_file(
             specifier: imp.specifier.clone(),
             from: files[i].path.clone(),
         };
-        // A workspace-member resolution is BOTH targets at once (RFC 0011 §4): the
+        // A workspace-member resolution is BOTH targets at once: the
         // concrete internal file (reachability is real, cross-package) and the named
         // dependency (the declaration contract is real too — undeclared siblings are
         // phantom internal dependencies, declared-but-unimported ones are unused).
         // Stdlib: not a graph node — there is nothing to point an edge at. Unresolved:
         // resolution is intentionally incomplete right now (self-reference imports,
-        // exports maps — spec §3); turning it into a finding is the future `unresolved`
-        // analysis's job, not assembly's (RFC 0005 §5).
+        // exports maps); turning it into a finding is the future `unresolved`
+        // analysis's job, not assembly's.
         let (file_target, dep_target) = match adapter.resolve(&spec, ctx) {
             Resolution::File(path, confidence) => (Some((path, confidence)), None),
             Resolution::Dependency(name, confidence) => (None, Some((name, confidence))),
@@ -1312,10 +1310,10 @@ fn resolve_file(
                         .clone()
                         .unwrap_or_else(|| SmolStr::new("default"));
                     // Same-file first; then the target file's own unit (package-scoped
-                    // languages, RFC 0002 §2 `FileFacts::unit`) — a Go import names a
+                    // languages, `FileFacts::unit`) — a Go import names a
                     // *package* (a directory of files), and `Resolution::File`'s target is
-                    // necessarily just one representative file in it (contracts §2 has no
-                    // multi-file resolution target), so the symbol a qualified access binds
+                    // necessarily just one representative file in it (resolution has no
+                    // multi-file target), so the symbol a qualified access binds
                     // to may live in any of that directory's other files.
                     let symbol_id = symbol_by_name_per_file[to.0 as usize]
                         .get(&exported_name)
@@ -1341,8 +1339,8 @@ fn resolve_file(
                     // site: `kndo_core::discovery::find_files_named(..)` reaches
                     // `discovery`'s file under the qualifier `discovery` — without this the
                     // reference's scope_context matched nothing and the whole path fell to
-                    // the duck fallback (kondo dogfood: a cross-crate inline path with zero
-                    // resolved references). Non-settling (see qualifier_targets).
+                    // the duck fallback (a cross-crate inline path would resolve zero
+                    // references). Non-settling (see qualifier_targets).
                     .or_else(|| {
                         imp.specifier
                             .rsplit("::")
@@ -1355,7 +1353,7 @@ fn resolve_file(
                 }
                 // The namespace escaped static tracking (`ns[key]`, ns passed
                 // along) — every symbol in the target is plausibly used
-                // (RFC 0005 §1: "wildcard over that namespace's exports").
+                // ("wildcard over that namespace's exports").
                 if imp.opaque_namespace_use {
                     out.edges.push(Edge {
                         owner: file_id,
@@ -1378,17 +1376,17 @@ fn resolve_file(
         }
     }
 
-    // Edge attribution (RFC 0012 §4): a reference carrying `within` is attributed to the
+    // Edge attribution: a reference carrying `within` is attributed to the
     // enclosing symbol it executes inside — resolved against this file's own declarations
     // (bare names, then the qualified member table, same convention as member root
     // targets). **Any miss falls back to file attribution — today's over-approximation,
     // the safe direction** (regression-tested; this fallback is the design's load-bearing
-    // safety property). With symbol attribution, a dead function's calls no longer keep
-    // its callees alive: RFC 0005 §1's execution rule ("a symbol-attributed reference
+    // safety property). With symbol attribution, a dead function's calls don't keep
+    // its callees alive: the execution rule ("a symbol-attributed reference
     // fires only when its symbol is reached") plus its module-load rule make transitive
     // death visible. `within: None` — module-level code, and every adapter that doesn't
     // emit the field — keeps file attribution: load-time references fire when the file
-    // loads, exactly as before.
+    // loads.
     //
     // Resolution order for the *target*: bound (imported) names first, then same-file
     // declarations, then same-unit siblings (`FileFacts::unit` — Go's package-scoped
@@ -1410,26 +1408,25 @@ fn resolve_file(
             .map(|&s| NodeRef::Symbol(s))
             .unwrap_or(NodeRef::File(file_id));
 
-        // Qualified references (RFC 0012 §9): `q.name` where `q` matches an import
+        // Qualified references: `q.name` where `q` matches an import
         // qualifier resolves `name` inside that target (its own declarations, then its
         // unit siblings — a Go import names a package, and the symbol may live in any of
         // the package's files, then the target's member table under `q` itself — an alias
         // can name a TYPE in the target, and then `name` is that type's member: Rust's
-        // `Thing::from_low_args()` through `use crate::thing::Thing`) at Certain. Hit or
+        // `Thing::from_parts()` through `use crate::thing::Thing`) at Certain. Hit or
         // miss, a matched qualifier *settles* resolution — the name lives in that target
         // or nowhere; this file's own tables are never candidates. A qualifier matching
         // no import is a receiver expression (`t.helper()`): the name is a member access
         // by construction, so it skips the free-name tables and goes straight to the
-        // duck-typed member fallback below — where before §9 a same-file free function
-        // sharing the member's name would have (incorrectly, if safely) captured the
+        // duck-typed member fallback below — otherwise a same-file free function
+        // sharing the member's name would (incorrectly, if safely) capture the
         // reference.
         let mut is_receiver_access = false;
         if let Some(q) = &reference.scope_context {
             // A weak (tail-derived) qualifier whose target yields nothing does NOT settle:
             // the name may belong to an in-scope type instead, so it takes the in-scope
-            // ladder below exactly as an unregistered qualifier would (ripgrep regression:
-            // settling `BinaryDetection.from_low_args` to the wrong file killed a live
-            // method).
+            // ladder below exactly as an unregistered qualifier would (settling the miss
+            // to the wrong file would kill a live method).
             let qualified_targets = qualifier_targets
                 .get(q)
                 .and_then(|&(target_file, settles)| {
@@ -1450,9 +1447,9 @@ fn resolve_file(
                         // qualifier itself as a symbol in the target (its bare table
                         // includes the re-export fixpoint's aliases, so a barrel-routed
                         // type lands on its original), then look the member up in the
-                        // file where that symbol actually lives — `SearchMode::Standard`
-                        // through `use crate::flags::{SearchMode}` reaches
-                        // `lowargs.rs`'s member table via `flags/mod.rs`'s alias. Twins
+                        // file where that symbol actually lives — `Mode::Standard`
+                        // through `use crate::opts::{Mode}` reaches
+                        // `types.rs`'s member table via `opts/mod.rs`'s alias. Twins
                         // included: cfg-alternated impls both own the selector.
                         None => symbol_by_name_per_file[t]
                             .get(q.as_str())
@@ -1487,11 +1484,11 @@ fn resolve_file(
                 }
                 None => {
                     // Not an alias — but a NAME IN SCOPE used as a qualifier refers to
-                    // that symbol itself: an imported binding (`SearchMode::Standard`
-                    // after `use …::{…, SearchMode, …}`) or a same-file declaration (an
-                    // adapter that typed a receiver rewrites `args.matcher()` to qualifier
-                    // `HiArgs`, which may be declared right here). A DOTTED qualifier is a
-                    // chained pointer (`LowArgs.context_separator` — RFC 0012 §3-bis): the
+                    // that symbol itself: an imported binding (`Mode::Standard`
+                    // after `use …::{…, Mode, …}`) or a same-file declaration (an
+                    // adapter that typed a receiver rewrites `args.helper()` to qualifier
+                    // `Args`, which may be declared right here). A DOTTED qualifier is a
+                    // chained pointer (`Config.separator`): the
                     // receiver is the value that member YIELDS, resolved hop by hop
                     // through the member-type facts. Either way the members live in the
                     // resolved symbol's home file, keyed by its ORIGINAL name. A hit is
@@ -1581,18 +1578,18 @@ fn resolve_file(
             continue;
         }
 
-        // Duck-typed member fallback (RFC 0012 §3, implementing RFC 0002 §5's ladder rule
+        // Duck-typed member fallback (implementing the ladder rule
         // "duck-typed method with one candidate → probable"): an unresolved name that
         // matches member declarations plausibly targets any of them — extraction has no
         // receiver types, so honesty lives in the confidence, not in a guess. The
-        // plausible set is scoped by each candidate's own declared visibility (RFC 0012
-        // §6): a member is a candidate iff its visibility scope *contains this reference
+        // plausible set is scoped by each candidate's own declared
+        // visibility: a member is a candidate iff its visibility scope *contains this reference
         // site* — an unexported Go method (scope Unit) only for sites in its own unit, a
         // public member (scope Public) project-wide. A rung the ladder doesn't cover
         // (index out of range, no ladder declared) counts as Public — the conservative
         // wider mapping: over-approximating who may see a member only adds keep-alive
         // edges. Cross-language candidates are excluded (a bare-name site never plausibly
-        // calls another language's member — same reasoning as §5's ladder-index guard).
+        // calls another language's member — same reasoning as the ladder-index guard).
         // One candidate ⇒ Probable, several ⇒ Possible each — all get edges (conservative
         // keep-alive; dead-is-certain is untouched, since a member no call-site anywhere
         // matches still has zero edges).
@@ -1641,7 +1638,7 @@ fn resolve_file(
         }
     }
 
-    // Dynamic constructs → wildcard edges (RFC 0005 §1: "one mechanism, not two").
+    // Dynamic constructs → wildcard edges ("one mechanism, not two").
     // Un-narrowed (`eval`, `require(expr)` with no static prefix): a `Wildcard` edge from
     // this file — reachability expands it over the file's own symbols at `possible`.
     // Narrowed (`import(`./locales/${x}`)` → that directory): the plausible target set is
@@ -1708,22 +1705,22 @@ fn resolve_file(
 }
 
 /// One file's declaration-derived emissions — Declares edges, library/role export promotions
-/// (RFC 0011 §5), in-source roots, and function metrics — given the file's facts and its
+///, in-source roots, and function metrics — given the file's facts and its
 /// already-assigned contiguous symbol run starting at `first_symbol`. THE single emitter for
-/// this logic: the full build's pass B and the incremental patch (RFC 0013 §5) both call it,
+/// this logic: the full build's pass B and the incremental patch both call it,
 /// so the two paths cannot drift.
 struct DeclarationEmissions {
     edges: Vec<Edge>,
     metrics: Vec<(SymbolId, SymbolMetrics)>,
 }
 
-/// Surface-member closure (RFC 0011 §5 completed, M6 FP hunt): the last gap in "which symbols
+/// Surface-member closure — completes "which symbols
 /// can an external consumer name?". Manifest promotion, phase 2.7's whole-surface expansion,
 /// and the barrel-indirection promotion already root every *directly* re-exported symbol; what
 /// none of them cover is **members**: a `pub` method of a surface type is consumer-callable
-/// API even though nothing in-package references it (ripgrep's `MmapChoice::auto`). One rule,
+/// API even though nothing in-package references it. One rule,
 /// to a fixpoint for nested containers: a member of a surface symbol whose own rung is
-/// surface-transitive (RFC 0012 §6) is surface.
+/// surface-transitive is surface.
 ///
 /// Idempotent by construction: strips every `Provenance::Surface` edge and recomputes from the
 /// current graph — the engine calls it once per run on every path (cold, patch, warm snapshot
@@ -1737,7 +1734,7 @@ pub(crate) fn recompute_surface_closure(graph: &mut ProjectGraph) {
 
     // Seed: every symbol already rooted as production surface; a project with no members at
     // all has nothing to close over. Borrowed keys throughout — this runs on every path
-    // including warm no-ops, so it allocates no strings per symbol (RFC 0008 §2).
+    // including warm no-ops, so it allocates no strings per symbol.
     let surface: HashSet<SymbolId> = graph
         .edges
         .iter()
@@ -1761,7 +1758,7 @@ pub(crate) fn recompute_surface_closure(graph: &mut ProjectGraph) {
             target: NodeRef::Symbol(m),
         },
         // Derived, not declared: the member is API because its container is — Probable, the
-        // derived-promotion tier (RFC 0005 §1).
+        // derived-promotion tier.
         confidence: Confidence::Probable,
         source: crate::vocab::Provenance::Surface,
         span: Some(graph.symbols[m.0 as usize].span),
@@ -1769,7 +1766,7 @@ pub(crate) fn recompute_surface_closure(graph: &mut ProjectGraph) {
     }));
 }
 
-/// Members grouped under their same-file container (`member_of` is a name, contracts §2 —
+/// Members grouped under their same-file container (`member_of` is a name —
 /// prefer the container whose span encloses the member, the nesting the name refers to).
 fn surface_member_index(graph: &ProjectGraph) -> HashMap<SymbolId, Vec<SymbolId>> {
     let mut by_file_name: HashMap<(u32, &str), Vec<SymbolId>> = HashMap::default();
@@ -1846,7 +1843,7 @@ fn propagate_surface_members(
 }
 
 /// Whether a declaration's rung can travel through a re-export chain to outside its package
-/// (`VisibilityRung::surface_transitive`, RFC 0012 §6). No ladder (or an index the ladder
+/// (`VisibilityRung::surface_transitive`). No ladder (or an index the ladder
 /// doesn't cover) falls back to `true` — the `exported` bit alone governs, the pre-ladder
 /// behavior for binary-visibility languages.
 fn rung_surface_transitive(
@@ -1892,7 +1889,7 @@ fn emit_file_declarations(
 
         // A constructor is engaged by *naming its type* (`new Foo()`, Swift's `Foo(...)`) —
         // no reference ever binds to the `<init>` symbol itself, so its liveness follows its
-        // container's (M6 FP hunt, RFC 0012 §3's spirit): a Certain References edge from the
+        // container's: a Certain References edge from the
         // container keeps the constructor — and everything its body references, like fields
         // assigned only in constructors — exactly as alive as the type, and exactly as dead.
         if decl.kind == crate::vocab::SymbolKind::Constructor {
@@ -1911,7 +1908,7 @@ fn emit_file_declarations(
             }
         }
 
-        // In-source Test roots, DERIVED (contracts §2): a declaration inside a test region
+        // In-source Test roots, DERIVED: a declaration inside a test region
         // (`FileFacts::test_spans`) is test infrastructure — `#[test]` fns and everything in
         // a `#[cfg(test)]` module alike. The spans are the single producer-side declaration;
         // adapters never emit these roots themselves, so the two representations cannot
@@ -1929,13 +1926,13 @@ fn emit_file_declarations(
             });
         }
 
-        // Library-mode promotion (RFC 0011 §5): this file is a manifest-declared production
+        // Library-mode promotion: this file is a manifest-declared production
         // root and this symbol is exported from it, so it's part of the package's public
         // API — a production root in its own right, not just "alive because the file is."
-        // Library-mode promotion is gated on surface transitivity (RFC 0012 §6): a
+        // Library-mode promotion is gated on surface transitivity: a
         // declaration is consumable API only if a re-export chain can actually carry it
         // outside the package — `pub(crate)`/`internal` satisfy `exported` yet are
-        // definitionally walled in, so promoting them fabricated surface (M6 FP hunt).
+        // definitionally walled in, so promoting them would fabricate surface.
         if decl.exported && rung_surface_transitive(ladder, decl.visibility) {
             if let Some(&confidence) = library_root_files.get(&file_id) {
                 edges.push(Edge {
@@ -1954,7 +1951,7 @@ fn emit_file_declarations(
         // Role-derived promotion: a config file's exports ARE its interface to the tool that
         // loads it, and a test file's exports may be shared fixtures — the consumer is
         // outside the graph either way. Test-role files promote EVERY declaration, not just
-        // exported ones (M6 FP hunt): test frameworks reach members reflectively — XCTest and
+        // exported ones: test frameworks reach members reflectively — XCTest and
         // JUnit discover `internal`/package-visible test methods inside test classes by
         // naming convention, so an unexported member of a test file being "unreachable" is
         // the runner's edge missing from the graph, never dead code. Tooling stays
@@ -1975,7 +1972,7 @@ fn emit_file_declarations(
         }
     }
 
-    // Callable shapes (RFC 0005 §6): adapter names resolve exactly like root targets — bare
+    // Callable shapes: adapter names resolve exactly like root targets — bare
     // table first, then the qualified member table; a no-match is dropped silently.
     for fm in &facts.functions {
         let resolved = bare_table
@@ -2054,9 +2051,9 @@ fn insert_qualified(
     }
 }
 
-/// A plain in-scope qualifier (`SearchMode::Standard`, or a receiver typed `HiArgs`): the
+/// A plain in-scope qualifier (`Mode::Standard`, or a receiver typed `Args`): the
 /// symbol the name resolves to — an import binding or a same-file declaration — owns the
-/// member in its home file (RFC 0012 §9 as landed, M6).
+/// member in its home file.
 fn in_scope_member_targets(
     q: &str,
     name: &str,
@@ -2081,7 +2078,7 @@ fn in_scope_member_targets(
     }
 }
 
-/// A dotted qualifier pointer `Base.member` (RFC 0012 §3-bis, the cross-file tier): the
+/// A dotted qualifier pointer `Base.member` (the cross-file tier): the
 /// reference's receiver is the value that member YIELDS. Every hop is a declared-annotation
 /// fact — the base name in the reference's scope, `yields` from the OWNER's home file's
 /// member-type facts, the yielded type name resolved in that same home (annotations mean
@@ -2235,10 +2232,10 @@ fn declaration_name_index(
     index
 }
 
-/// The span-normalized surface signature (RFC 0013 §4): everything about a file that OTHER
+/// The span-normalized surface signature: everything about a file that OTHER
 /// files' resolution — or this file's own derived-id stability — can depend on, hashed;
 /// bodies, spans, references, metrics, and suppressions excluded, so they move freely under
-/// the patch guard. Field-for-field per the RFC's table; serde+bincode gives an unambiguous
+/// the patch guard. serde+bincode gives an unambiguous
 /// byte layout without hand-rolled framing.
 fn surface_signature(
     adapter_id: &str,
@@ -2285,7 +2282,7 @@ fn surface_signature(
             Confidence,
         )>,
         dynamics: Vec<(&'a str, Option<&'a str>)>,
-        /// Member-type facts are cross-file resolution inputs (RFC 0012 §3-bis): a changed
+        /// Member-type facts are cross-file resolution inputs: a changed
         /// field/return annotation changes what other files' chained qualifiers resolve to.
         member_types: Vec<(&'a str, &'a str, &'a str, Vec<&'a str>)>,
     }
@@ -2394,7 +2391,7 @@ fn manifest_targets(facts: &crate::adapter::ManifestFacts) -> Vec<crate::adapter
 }
 
 /// Does `ancestor_dir` govern (contain, at any depth, or equal) `dir`? The empty (project-root)
-/// dir governs everything. Doubles as both RFC 0011 §3's nearest-manifest-ancestor test (this
+/// dir governs everything. Doubles as both the nearest-manifest-ancestor test (this
 /// module's own use) and a generic "is A an ancestor-or-self of B" check other analyses reuse
 /// (e.g. `unused`'s directory rollup, deciding whether a narrower rollup is already covered by
 /// a wider one).
@@ -2409,19 +2406,19 @@ pub(crate) fn package_owns(manifest_dir: &str, file_dir: &str) -> bool {
 /// Bumped whenever the *persisted* shape of a graph snapshot changes in a way that isn't
 /// already covered by an adapter's own `facts_schema_version` — e.g. a new node/edge kind, or
 /// an assembly-algorithm change that could produce a different graph from the same facts. Feeds
-/// [`compute_graph_key`] (RFC 0004 §3's "core graph-schema version"); a bump here invalidates
+/// [`compute_graph_key`] (the "core graph-schema version"); a bump here invalidates
 /// every project's cached `graph.bin` on the next run, same as any other key-input change.
-pub const GRAPH_SCHEMA_VERSION: u32 = 25; // 25: plugin_implicitly_invoked snapshot partition (mark_implicitly_invoked — framework machinery dispatch via plugins; rkyv layout change) + implement-dispatch fan-out (same graph now colors more members reachable); 24: machinery-dispatch rule — SymbolNode.implicitly_invoked (rkyv layout change; reachability derives implicit owner → member edges at Probable); 23: invoked-program rule — PackageNode.executables + EdgeKind::InvokesFile (a test running its workspace binary reaches the binary's Production roots; same inputs assemble more edges, and the rkyv layouts changed); 22: RawMemberType.yields_params list + indexed '?N' projection (rkyv layout change: Option → Vec); 21: RawMemberType.yields_param + N-hop '?'-marked pointer resolution (payload unwrapping); 20: member-type facts (FilePatchMeta.member_types + chained-pointer resolution — RFC 0012 §3-bis cross-file tier); 19: receiver-typed qualifiers (in-scope declarations resolve members; qualified twins each get the edge — same inputs assemble different edges); 18: qualified refs reach the target's member table + glob re-exports alias the target's exported surface (same inputs now assemble more edges — prior snapshots are semantically stale); 17: SymbolKind::Macro (expansion symbols — first-class kind with visibility-scope exemption semantics); 16: VisibilityRung.surface_transitive + surface closure (Provenance::Surface Root edges; RFC 0012 §6, M6); 15: FileNode.string_call_sites + EdgeKind::ReferencesFile (RFC 0017 §5.4); 14: in-source Test roots derived from test_spans containment (adapters no longer emit them); 13: FileNode.test_spans + phase 2.55 test-gated module demotion (sub-file test regions); 12: library-surface fixpoint (phase 2.7 — same inputs now assemble surface Root edges, prior snapshots are semantically stale); 11: PackageNode.workspace_entry (RFC 0013 §4); 10: patch layer (RFC 0013 §4 — Edge.owner, FilePatchMeta, extraction-only stored diagnostics); 9: SymbolMetrics.token_count (RFC 0005 §11); 8: function_metrics (RFC 0005 §6); 7: cycle policies (§8); 6: PackageNode surface (RFC 0011 §4); 5: ladders + FileNode.unit (RFC 0012 §6); 4: RefKind + signature_span (§5); 3: within (§4)
+pub const GRAPH_SCHEMA_VERSION: u32 = 25; // bump whenever the persisted snapshot shape (rkyv layouts included) or the assembly semantics that derive a graph from the same facts change
 
-/// The graph snapshot's cache key (RFC 0004 §3, `cache.rs`'s `graph.bin`): a single digest
+/// The graph snapshot's cache key (`cache.rs`'s `graph.bin`): a single digest
 /// folding in the *whole* discovered file set (every path + content hash — this already
-/// subsumes "manifest hashes," since a manifest is just one more discovered file, and —
-/// RFC 0016 §6 — a plugin's content-channel reads too, since a `ContentView` never answers a
+/// subsumes "manifest hashes," since a manifest is just one more discovered file, and a
+/// plugin's content-channel reads too, since a `ContentView` never answers a
 /// path outside this same discovered set), each registered adapter's id and facts-schema
-/// version, each registered *graph-mutating* plugin's identity (RFC 0016 §6, landed: id,
+/// version, each registered *graph-mutating* plugin's identity (id,
 /// declared version, and — WASM only — component content hash, [`Plugin::content_hash`]), and
-/// [`GRAPH_SCHEMA_VERSION`] itself. One key input RFC 0004 §3 also names — a kndo config hash —
-/// doesn't exist as a subsystem yet, so it's honestly absent rather than faked.
+/// [`GRAPH_SCHEMA_VERSION`] itself. A kndo config hash is not folded in — no config
+/// subsystem exists yet, so it's honestly absent rather than faked.
 ///
 /// Every variable-length field (paths, adapter/plugin ids) is length-prefixed before its bytes
 /// so the scheme is unambiguous by construction, not merely collision-resistant by luck of the
@@ -2442,7 +2439,7 @@ pub(crate) fn compute_graph_key(
 
 /// Identity digest of a graph-mutating plugin set alone — the same
 /// [`fold_plugin_identities`] term [`compute_graph_key`] folds, standalone. Stored with every
-/// snapshot and checked by the incremental patch (RFC 0017 §3): plugin *edges* are
+/// snapshot and checked by the incremental patch: plugin *edges* are
 /// provenance-tagged and re-derived by the patch, but `classify_file` overrides are baked
 /// into `FileNode.class` untagged, so a snapshot is patchable only under the identical
 /// plugin set. The empty set folds to a fixed, non-zero digest — "no plugins" is itself an
@@ -2484,7 +2481,7 @@ fn fold_adapter_versions(hasher: &mut blake3::Hasher, adapters: &[Box<dyn Langua
 }
 
 // Sorted by id: `graph_mutating_plugins` is already the caller's `sorted_plugins` slice
-// (assembled sorted-by-id for RFC 0003 §5's deterministic hook order), but re-sorting a small
+// (assembled sorted-by-id for the deterministic hook order), but re-sorting a small
 // collection here costs nothing and doesn't make this function trust a caller invariant it
 // can't see.
 fn fold_plugin_identities(
@@ -2522,9 +2519,9 @@ fn fold_optional_content_hash(hasher: &mut blake3::Hasher, content_hash: Option<
     }
 }
 
-/// Discovers, claims, extracts, resolves, and links — the full RFC 0001 §4 pipeline up to
+/// Discovers, claims, extracts, resolves, and links — the full assembly pipeline up to
 /// (not including) analyses. Diagnostics accumulate rather than abort: a graph that omits one
-/// unreadable file's facts is far more useful than no graph at all (RFC 0001 §6). Always cold
+/// unreadable file's facts is far more useful than no graph at all. Always cold
 /// (no facts cache consulted) — see [`assemble_with_cache`] for the warm path.
 pub fn assemble(
     root: &Path,
@@ -2534,11 +2531,11 @@ pub fn assemble(
     assemble_with_cache(root, adapters, plugins, None)
 }
 
-/// Same pipeline as [`assemble`], additionally consulting/populating a facts cache (RFC 0004
-/// §2–4, ADR 0004): a file whose content hash already has a cached-and-current entry skips
+/// Same pipeline as [`assemble`], additionally consulting/populating a facts
+/// cache: a file whose content hash already has a cached-and-current entry skips
 /// re-parsing entirely, which is the warm path's dominant win since parsing dominates cold-run
-/// cost (spike 0001). `cache: None` is exactly [`assemble`]'s behavior — this must hold
-/// byte-for-byte, since `--no-cache` ≡ cached results is an RFC 0004 §4 correctness gate.
+/// cost. `cache: None` is exactly [`assemble`]'s behavior — this must hold
+/// byte-for-byte, since `--no-cache` ≡ cached results is a correctness gate.
 pub fn assemble_with_cache(
     root: &Path,
     adapters: &[Box<dyn LanguageAdapter>],
@@ -2567,8 +2564,8 @@ pub fn assemble_with_cache(
 }
 
 /// Resolves a plugin-named [`crate::plugin::PluginTarget`] against the same bare/qualified
-/// symbol tables phase 3b's own reference resolution reads (`graph.rs` §4 of the plugin-wiring
-/// investigation) — the exact two-step fallback [`emit_file_declarations`]'s `bare_table`/
+/// symbol tables phase 3b's own reference resolution
+/// reads — the exact two-step fallback [`emit_file_declarations`]'s `bare_table`/
 /// `qualified_table` already use for `RawRoot`. A path or name that doesn't resolve returns
 /// `None`; callers drop it silently, the same miss behavior an adapter's own `RawRoot`/
 /// `RawReference` already has.
@@ -2598,21 +2595,21 @@ fn resolve_plugin_target(
 }
 
 /// Everything one plugin graph-mutation round produces — kept apart from adapter output
-/// because the two have different reuse fates (RFC 0017 §3): adapter edges/diagnostics
+/// because the two have different reuse fates: adapter edges/diagnostics
 /// persist and patch incrementally; plugin output is discarded and re-derived whole.
 struct PluginRound {
     edges: Vec<Edge>,
     externally_consumed: Vec<SymbolId>,
     implicitly_invoked: Vec<SymbolId>,
     diagnostics: Vec<Diagnostic>,
-    /// Per-plugin resolved-contribution counts (RFC 0017 §7), in the round's own id-sorted
+    /// Per-plugin resolved-contribution counts, in the round's own id-sorted
     /// call order — recorded to the cache as the last-run audit record for `kndo doctor`.
     contributions: Vec<crate::plugin::PluginContribution>,
 }
 
-/// The plugin graph-mutation hooks (RFC 0003 §2): `contribute_roots`/`contribute_edges`/
+/// The plugin graph-mutation hooks: `contribute_roots`/`contribute_edges`/
 /// `annotate_symbols`, once per registered graph-mutating plugin, in id-sorted order. One
-/// function for both build paths (RFC 0017 §3): the full build runs it after phase 3b's
+/// function for both build paths: the full build runs it after phase 3b's
 /// reference merge, the incremental patch after splicing — in both cases `files`/`symbols`
 /// and the name tables are in their final, identical state, which is what makes the patched
 /// graph byte-identical to a full rebuild's. Hooks are deterministic functions of the graph
@@ -2651,7 +2648,7 @@ fn run_plugin_round(
     for plugin in sorted_plugins {
         let descriptor = plugin.descriptor();
         let provenance = crate::vocab::Provenance::Plugin(descriptor.id.clone());
-        // RFC 0016 §5: one ContentView per plugin per round, scoped to that plugin's own
+        // One ContentView per plugin per round, scoped to that plugin's own
         // declared globs — budget and the at-most-one cutoff diagnostic are per plugin,
         // never shared across plugins (one component exceeding its budget must not starve
         // another's legitimate reads).
@@ -2661,8 +2658,8 @@ fn run_plugin_round(
             &descriptor.requested_file_access,
         );
 
-        // Counted by delta around each collector: only contributions that *resolved* (landed
-        // in the round) count — a sink item whose target missed changed nothing, and the
+        // Counted by delta around each collector: only contributions that *resolved* (made
+        // it into the round) count — a sink item whose target missed changed nothing, and the
         // audit record's job is to say what a plugin actually asserted into the graph. The
         // misses themselves are recorded too (`dropped`): silent in the graph by contract,
         // but the author kit's whole debugging story for "contributed 0 roots".
@@ -2706,7 +2703,7 @@ fn run_plugin_round(
     round.externally_consumed.dedup();
     round.implicitly_invoked.sort_unstable();
     round.implicitly_invoked.dedup();
-    // Same canonical-order rule the adapter-side vectors follow (RFC 0013 §3a) — these are
+    // Same canonical-order rule the adapter-side vectors follow — these are
     // persisted (the snapshot's plugin partition) and compared by the equivalence gate.
     round.diagnostics.sort_unstable();
     round
@@ -2732,7 +2729,7 @@ impl PluginTargetTables<'_> {
         )
     }
 
-    /// The file whose change invalidates this contribution under the patch (RFC 0013 §2's
+    /// The file whose change invalidates this contribution under the patch (the
     /// `Edge.owner` discipline): the target's own file.
     fn owner_of(&self, node: NodeRef) -> FileId {
         match node {
@@ -2814,7 +2811,7 @@ fn collect_plugin_edges(
                 to,
                 kind: contributed.kind,
             },
-            // A `to` naming a whole file (no `symbol` set) is RFC 0017 §5.4's file-liveness
+            // A `to` naming a whole file (no `symbol` set) is the file-liveness
             // edge — the template/asset shape. The contributed `RefKind` doesn't apply to a
             // file target and is dropped; liveness is the whole semantics.
             Some(NodeRef::File(to)) => EdgeKind::ReferencesFile { from, to },
@@ -2833,11 +2830,11 @@ fn collect_plugin_edges(
     }
 }
 
-/// RFC 0018 §2.4's noise ceiling: findings per rule per run. Truncation is loud (a
+/// The noise ceiling: maximum findings per rule per run. Truncation is loud (a
 /// diagnostic), never silent.
 const FINDINGS_PER_RULE_CAP: usize = 500;
 
-/// The finding round (RFC 0018 §4): every plugin with declared rules gets
+/// The finding round: every plugin with declared rules gets
 /// `contribute_findings` over the same R1-scoped view the mutation hooks see. Runs AFTER
 /// assembly on every path — cold build, incremental patch, and warm snapshot hit alike —
 /// because findings are *output*, not graph state: nothing here is persisted, so nothing can
@@ -2862,7 +2859,7 @@ pub(crate) fn run_finding_round(
 
     // The same bare/qualified resolution environment the mutation round uses, rebuilt from
     // the graph (the patch path's own rebuild shape) so this works identically on paths
-    // where assembly's live tables no longer exist (warm snapshot hits).
+    // where assembly's live tables don't exist (warm snapshot hits).
     let (by_name, by_qualified) = finding_name_tables(graph);
     let view = crate::plugin::GraphView::new(
         &graph.files,
@@ -2876,7 +2873,7 @@ pub(crate) fn run_finding_round(
     let mut diagnostics = Vec::new();
     for (plugin, mut rules) in with_rules {
         let descriptor = plugin.descriptor();
-        // RFC 0018 §2.1's charset, enforced at the declaration: an invalidly named rule is
+        // The rule-name charset is enforced at the declaration: an invalidly named rule is
         // excluded whole (its emissions then fall out as undeclared) — never silently.
         rules.retain(|r| {
             let valid = crate::plugin::is_valid_rule_name(&r.name);
@@ -2912,7 +2909,7 @@ pub(crate) fn run_finding_round(
             diagnostics.push(diagnostic);
         }
     }
-    // Canonical order (RFC 0013 §3a's rule applied to output): identical runs produce
+    // Canonical order (the rule applied to output): identical runs produce
     // identical vectors regardless of plugin registration order.
     findings.sort_by(|a, b| {
         (&a.category, &a.path.0, &a.symbol, &a.message).cmp(&(
@@ -2934,7 +2931,7 @@ struct FindingTables<'a> {
 }
 
 /// Bare + qualified symbol tables from the graph alone — the subset of the patch path's
-/// rebuild the finding round needs (aliases included, RFC 0013 §4's `patch_meta`).
+/// rebuild the finding round needs (aliases included, from `patch_meta`).
 #[allow(clippy::type_complexity)]
 fn finding_name_tables(
     graph: &ProjectGraph,
@@ -2973,8 +2970,8 @@ fn index_symbol_name(
     }
 }
 
-/// One plugin's sink → resolved, namespaced [`ProtoFinding`]s. Host-enforced namespace
-/// (RFC 0018 §2.1): the category is assembled from the plugin's *registered* id here — a
+/// One plugin's sink → resolved, namespaced [`ProtoFinding`]s. Host-enforced
+/// namespacing: the category is assembled from the plugin's *registered* id here — a
 /// guest never supplies a category. An emitted rule that wasn't declared is dropped with a
 /// diagnostic (declaration is the contract); an unresolvable target is dropped silently
 /// (the uniform sink miss behavior).
@@ -3006,7 +3003,7 @@ fn collect_plugin_findings(
 }
 
 /// The loud halves of the declaration contract and the noise ceiling — nothing here is
-/// silent (RFC 0018 §2.4).
+/// silent.
 fn report_finding_drops(
     plugin_id: &SmolStr,
     unknown_rules: std::collections::BTreeSet<SmolStr>,
@@ -3016,14 +3013,14 @@ fn report_finding_drops(
     for rule in unknown_rules {
         diagnostics.push(finding_round_diagnostic(format!(
             "plugin '{plugin_id}' emitted findings under undeclared rule '{rule}' — dropped \
-             (rules must be declared via Plugin::rules, RFC 0018 §4)"
+             (rules must be declared via Plugin::rules)"
         )));
     }
     for (rule, count) in per_rule {
         if count > FINDINGS_PER_RULE_CAP {
             diagnostics.push(finding_round_diagnostic(format!(
                 "plugin '{plugin_id}' rule '{rule}' emitted {count} findings — capped at \
-                 {FINDINGS_PER_RULE_CAP}, {} dropped (RFC 0018 §2.4's noise ceiling)",
+                 {FINDINGS_PER_RULE_CAP}, {} dropped (the noise ceiling)",
                 count - FINDINGS_PER_RULE_CAP
             )));
         }
@@ -3110,7 +3107,7 @@ fn collect_plugin_annotations(
 }
 
 /// [`assemble_with_cache`] over any [`discovery::TreeSource`] — a directory, or a git tree-ish
-/// read in memory (diff modes, RFC 0004 §6). Everything past discovery is source-blind:
+/// read in memory (diff modes). Everything past discovery is source-blind:
 /// identical content produces identical facts, hashes, ids, and findings whether the bytes came
 /// from disk or the object database.
 pub fn assemble_from_source(
@@ -3123,8 +3120,8 @@ pub fn assemble_from_source(
     // both in the hook call sites below AND in the cache/patch bypass decision. Filtering here,
     // at the single entry point, is what makes the declaration self-enforcing: a plugin
     // claiming `false` never has its hooks called, so it can't be the reason a cached graph
-    // is stale. Deterministic call order (RFC 0003 §5) — interim rule pending a real
-    // ordering-constraints field on `PluginDescriptor` (docs/rfcs/0003-plugin-system.md §5):
+    // is stale. Deterministic call order — no ordering-constraints field exists on
+    // `PluginDescriptor`, so id order is the rule:
     // sort by id once, reused by every hook site below instead of re-sorting per phase.
     let mut sorted_plugins: Vec<&dyn crate::plugin::Plugin> = plugins
         .iter()
@@ -3145,7 +3142,7 @@ pub fn assemble_from_source(
     tick("sidecar-load", &mut phase_start);
     let mut discovered =
         discovery::discover_source(source, &known_blob_hashes, stat_index.as_ref())?;
-    // RFC 0013 §3c: discovery diagnostics are always the fresh walk's — they never enter the
+    // Discovery diagnostics are always the fresh walk's — they never enter the
     // snapshot, whose stored diagnostics are extraction + manifest only (the producers warm
     // paths skip). One composition rule for hit, patch, and full alike.
     let mut discovery_diagnostics = std::mem::take(&mut discovered.diagnostics);
@@ -3154,7 +3151,7 @@ pub fn assemble_from_source(
         // Persist fresh (git blob → blake3) pairs immediately — the graph-snapshot hit below
         // returns early, and the sidecar must grow even on runs that never reach extraction.
         cache.save_blob_hashes(&discovered.new_blob_hashes);
-        // Same for the stat sidecar (RFC 0004 §4 step 2), rewritten wholesale (the current
+        // Same for the stat sidecar, rewritten wholesale (the current
         // file set IS the index) — but only when something actually changed: on a no-op run
         // every entry matched, and rewriting a 50k-entry sidecar costs more than the stat
         // fast path saves.
@@ -3167,17 +3164,16 @@ pub fn assemble_from_source(
     }
     let mut diagnostics: Vec<Diagnostic> = Vec::new();
 
-    // The graph-snapshot fast path (RFC 0004 §2, §4 step 1): if every input the key folds in —
+    // The graph-snapshot fast path: if every input the key folds in —
     // the whole discovered file set, each registered adapter's identity/version, each
-    // graph-mutating plugin's identity (RFC 0016 §6), and the graph schema itself — matches the
+    // graph-mutating plugin's identity, and the graph schema itself — matches the
     // last snapshot exactly, skip claim/extract/resolve/link entirely and hand back the
     // persisted graph. Any mismatch (a single changed byte anywhere is enough) is a plain miss;
     // there's no partial reuse yet, only all-or-nothing.
     let graph_key = compute_graph_key(&discovered.files, adapters, sorted_plugins);
     let current_plugin_digest = plugin_set_digest(sorted_plugins);
     tick("discovery", &mut phase_start);
-    // Neither fast path bypasses on plugins anymore (RFC 0016 §6 landed the snapshot half,
-    // RFC 0017 §3 the patch half):
+    // Neither fast path bypasses on plugins:
     //
     // - **Snapshot reuse**: plugin identity (id, declared version, and — WASM only —
     //   component content hash) folds into `graph_key` above. Any input a plugin's hooks
@@ -3200,7 +3196,7 @@ pub fn assemble_from_source(
     if let Some(cache) = cache {
         if let Some((graph, graph_diagnostics)) = cache.get_graph(&graph_key) {
             tick("snapshot-load", &mut phase_start);
-            // The finding round runs on the WARM path too (RFC 0018 §2.4): findings are
+            // The finding round runs on the WARM path too: findings are
             // output, not graph state — nothing persisted, nothing to go stale.
             let (plugin_findings, finding_diagnostics) =
                 run_finding_round(&graph, &discovered, plugins);
@@ -3216,7 +3212,7 @@ pub fn assemble_from_source(
             });
         }
         tick("snapshot-probe", &mut phase_start);
-        // RFC 0013 §5: on a key miss, try the incremental patch off the previous snapshot —
+        // On a key miss, try the incremental patch off the previous snapshot —
         // any guard failure falls through to the full rebuild below, the one fallback.
         if let Some((graph, extraction_diagnostics, plugin_diagnostics)) = try_patch(
             &discovered,
@@ -3249,7 +3245,7 @@ pub fn assemble_from_source(
     // Phase 1 — claim + extract, in parallel. rayon's collect preserves input order (the
     // path-sorted order discovery already established), so the FileId assignment in phase 2
     // stays deterministic regardless of which file's extraction happens to finish first
-    // (RFC 0008 §4: parallel compute, deterministic reduce). A facts-cache hit/miss changes
+    // (parallel compute, deterministic reduce). A facts-cache hit/miss changes
     // only *how* `facts` is obtained, never the order or shape of this collection — cached and
     // freshly-extracted facts are indistinguishable to every phase downstream.
     let outcomes: Vec<Result<Option<Claimed>, Diagnostic>> = discovered
@@ -3270,9 +3266,9 @@ pub fn assemble_from_source(
     }
 
     // Phase 1b — claim + extract manifests, in parallel, mirroring phase 1. A manifest never
-    // gets a `FileClaim`/language of its own (docs/adapters/js-ts.md §1: "manifests are not
-    // claimed") — it contributes `ManifestFacts` through this wholly separate path. Entry-point
-    // resolution only needs the known-files index, not declared dependencies (RFC 0011 §5
+    // gets a `FileClaim`/language of its own (manifests are never claimed as
+    // source) — it contributes `ManifestFacts` through this wholly separate path. Entry-point
+    // resolution only needs the known-files index, not declared dependencies (manifest
     // roots are always filesystem-relative, never a bare-package lookup), so a plain `ctx`
     // suffices here — the dependency-augmented one phase 3 needs is built after this collects.
     let manifest_ctx = ResolveCtx::new(&known_files);
@@ -3282,8 +3278,8 @@ pub fn assemble_from_source(
         .map(|df| {
             // Every claiming adapter extracts (a `build.gradle` is Java's AND Kotlin's — the
             // module's `.kt` files under Gradle's shared source sets are the second claimer's
-            // to promote; first-claimer-only silently dropped Kotlin's library surface, M6 FP
-            // hunt, moshi corpus). The FIRST claimer owns package identity/topology; later
+            // to promote; first-claimer-only would silently drop Kotlin's library
+            // surface). The FIRST claimer owns package identity/topology; later
             // claimers contribute only their `roots`, deduplicated.
             let claimers: Vec<usize> = adapters
                 .iter()
@@ -3335,7 +3331,7 @@ pub fn assemble_from_source(
 
     tick("extract", &mut phase_start);
 
-    // Manifest unit overrides (RFC 0012 §8): per-target unit assignment the path convention
+    // Manifest unit overrides: per-target unit assignment the path convention
     // can't derive — SwiftPM's `.target(name:, path:)`. Longest matching prefix wins;
     // applied only where extraction left `unit` unset (the convention, where it fired,
     // already told the truth).
@@ -3364,7 +3360,7 @@ pub fn assemble_from_source(
         file_index.insert(df.path.clone(), file_id);
         let (language, class, unit) = match &claimed_per_file[i] {
             Some(c) => {
-                // Content-derived origin override (RFC 0012 §7): extraction saw the bytes,
+                // Content-derived origin override: extraction saw the bytes,
                 // claim only saw the path — the content wins on the origin axis. Applied here,
                 // before role-derived roots (phase 2.6) and every analysis, so all origin
                 // exemptions see the corrected value. Role is never content-corrected.
@@ -3372,10 +3368,10 @@ pub fn assemble_from_source(
                 if let Some(origin) = c.facts.detected_origin {
                     class.origin = origin;
                 }
-                // Plugin classify_file (RFC 0003 §2): ecosystem convention beats the language
-                // default (`*.stories.tsx` -> tooling). Sorted-by-id plugin order (interim
-                // determinism rule — RFC 0003 §5's full topological-ordering-constraints field
-                // doesn't exist yet, docs/rfcs/0003-plugin-system.md); each plugin sees the
+                // Plugin classify_file: ecosystem convention beats the language
+                // default (`*.stories.tsx` -> tooling). Sorted-by-id plugin order (the
+                // determinism rule — no topological-ordering-constraints field
+                // exists); each plugin sees the
                 // prior one's answer, so a later plugin can refine an earlier one's override.
                 for plugin in sorted_plugins {
                     if let Some(overridden) = plugin.classify_file(&df.path, class) {
@@ -3396,7 +3392,7 @@ pub fn assemble_from_source(
         let test_spans = match &claimed_per_file[i] {
             Some(c) => {
                 let mut spans = c.facts.test_spans.clone();
-                spans.sort_unstable(); // canonical order invariant (RFC 0013 §3)
+                spans.sort_unstable(); // canonical order invariant
                 spans
             }
             None => Vec::new(),
@@ -3404,7 +3400,7 @@ pub fn assemble_from_source(
         let string_call_sites = match &claimed_per_file[i] {
             Some(c) => {
                 let mut sites = c.facts.string_call_args.clone();
-                sites.sort_unstable(); // canonical order invariant (RFC 0013 §3)
+                sites.sort_unstable(); // canonical order invariant
                 sites
             }
             None => Vec::new(),
@@ -3421,7 +3417,7 @@ pub fn assemble_from_source(
         });
     }
 
-    // Phase 2a — packages and ownership (RFC 0011 §3): one implicit `Package` covering
+    // Phase 2a — packages and ownership: one implicit `Package` covering
     // whatever no real manifest's subtree claims (index 0 — "a repo with no manifest at all
     // is one implicit Package" generalizes to "the part of any repo no manifest governs"),
     // plus one `Package` per manifest found. Ownership is nearest-manifest-ancestor, resolved
@@ -3441,7 +3437,7 @@ pub fn assemble_from_source(
     for (i, slot) in manifests_per_file.iter().enumerate() {
         if let Some((adapter_index, facts)) = slot {
             let package_id = PackageId(packages.len() as u32);
-            // The declared surface as FileIds (RFC 0011 §4): entries naming files outside the
+            // The declared surface as FileIds: entries naming files outside the
             // discovered tree (published build artifacts in a source checkout) drop out here —
             // an absent surface file can never be imported in-repo, so nothing is lost.
             let surface = facts
@@ -3484,15 +3480,14 @@ pub fn assemble_from_source(
 
     // Phase 2.5 — manifest roots and declared dependencies, sequentially in file-discovery
     // order for determinism (same reasoning as phase 3 below). Declared dependencies feed the
-    // stdlib-shadowing precedence rule (RFC 0002 §6) that phase 3's resolver calls already
-    // implement but, until now, were never handed anything to check against.
+    // stdlib-shadowing precedence rule that phase 3's resolver calls check against.
     let mut edges = Vec::new();
     let mut declared_dependency_names: HashSet<SmolStr> = HashSet::default();
     let mut declared_dependencies: Vec<DeclaredDependency> = Vec::new();
     let mut script_invoked_dependencies: HashSet<(PackageId, SmolStr)> = HashSet::default();
     // Every file a manifest names as a production root, at that root's own confidence — used
-    // after phase 3a to promote the file's *exported* symbols to production roots too (RFC
-    // 0011 §5: "Published/library: its public API is a production root — external consumers
+    // after phase 3a to promote the file's *exported* symbols to production roots too
+    // ("Published/library: its public API is a production root — external consumers
     // exist by definition"). Keyed by file, keeping the strongest confidence when more than
     // one manifest field roots the same file (e.g. both `main` and an `exports` leaf).
     let mut library_root_files: HashMap<FileId, Confidence> = HashMap::default();
@@ -3603,14 +3598,14 @@ pub fn assemble_from_source(
         }
     }
 
-    // Phase 2.6 — role-derived roots (RFC 0005 §2, literally): "Test roots — test
+    // Phase 2.6 — role-derived roots (literally): "Test roots — test
     // functions/files (language role detection…)"; "Tooling roots — build/config scripts
     // (webpack.config…)". The adapter's role classification *is* the seed for these two root
     // kinds — the runner/tool that consumes the file lives outside the graph, so the file's
     // existence under the convention is the whole evidence. `Probable`, not certain: a
     // convention names the file, nothing declares it (same reasoning as `exports`-map leaves).
     // Production roots stay manifest/API-driven (phase 2.5) — never role-derived. Reads the
-    // *node's* class, not the raw claim — phase 2.55's demotion and RFC 0012 §7's origin
+    // *node's* class, not the raw claim — phase 2.55's demotion and the origin
     // override are already applied there.
     let mut role_root_files: HashMap<FileId, crate::vocab::RootKind> = HashMap::default();
     for (i, slot) in claimed_per_file.iter().enumerate() {
@@ -3637,7 +3632,7 @@ pub fn assemble_from_source(
         role_root_files.insert(file_id, kind);
     }
 
-    // Each claimed language's visibility ladder (RFC 0012 §6), off its claiming adapter's
+    // Each claimed language's visibility ladder, off its claiming adapter's
     // descriptor — keyed by claim language (what `FileNode::language` stores), BTreeMap for
     // deterministic order. Only languages with at least one claimed file appear: an unused
     // adapter's ladder is dead data. Built before phase 3 because the member fallback (3b)
@@ -3673,20 +3668,19 @@ pub fn assemble_from_source(
     let mut patch_meta: Vec<FilePatchMeta> = vec![FilePatchMeta::default(); claimed_per_file.len()];
     let mut symbol_by_name_per_unit: HashMap<SmolStr, HashMap<SmolStr, SymbolId>> =
         HashMap::default();
-    // Member declarations (`member_of: Some(..)`, RFC 0012 §3) resolve on a separate track:
+    // Member declarations (`member_of: Some(..)`) resolve on a separate track:
     // an unqualified reference must never `certain`-resolve to a member (bare member names
     // collide across owners by construction — `T.get` and `U.get` are both just `get`), so
     // members stay OUT of the exact-name tables above and live here, name → every same-named
     // member project-wide; phase 3b's duck-typed fallback narrows the set per site by each
-    // candidate's declared visibility scope (RFC 0012 §6 — replacing the interim same-file/
-    // same-unit tiers). Qualified lookup (for `RawRoot` targets naming `Owner.name`) gets its
-    // own exact table.
+    // candidate's declared visibility scope. Qualified lookup (for `RawRoot` targets naming
+    // `Owner.name`) gets its own exact table.
     let mut member_by_name: HashMap<SmolStr, Vec<SymbolId>> = HashMap::default();
     let mut symbol_by_qualified_per_file: Vec<HashMap<String, SymbolId>> =
         vec![HashMap::default(); claimed_per_file.len()];
     let mut qualified_twins_per_file: Vec<HashMap<String, Vec<SymbolId>>> =
         vec![HashMap::default(); claimed_per_file.len()];
-    // Workspace-member index (RFC 0011 §4): every *named* manifest in the graph, keyed by
+    // Workspace-member index: every *named* manifest in the graph, keyed by
     // package name, with its directory and adapter-resolved primary entry — what lets a bare
     // specifier (`@org/ui`) resolve to the sibling's internal files instead of an external
     // dependency. Built from manifest facts, consumed by import resolution — strictly after
@@ -3709,7 +3703,7 @@ pub fn assemble_from_source(
             });
     }
 
-    // Unit reverse-index (Java, docs/adapters/java.md §3) — see try_patch's identical
+    // Unit reverse-index (Java) — see try_patch's identical
     // construction for why this mirrors the patch path byte-for-byte.
     let mut unit_index: HashMap<SmolStr, Vec<ProjectPath>> = HashMap::default();
     for f in &files {
@@ -3728,14 +3722,14 @@ pub fn assemble_from_source(
         .with_workspace_members(&workspace_member_index)
         .with_units(&unit_index);
 
-    // Phase 2.7 — library-surface expansion (completing RFC 0011 §5's library mode): a
+    // Phase 2.7 — library-surface expansion (completing the library mode): a
     // package-surface file's *whole-surface* re-exports — `pub mod x;` in Rust, `export *
     // from './x'` in a published JS package: `reexported` with no named bindings — extend the
     // surface into the target file, transitively to a fixpoint. Each expansion emits a
     // production Root edge for the target file, owned by the re-exporting file: reachability
     // consumes it directly, pass B's export promotion picks the target up from
     // `library_root_files` exactly like a manifest-named root, and the incremental patch
-    // (RFC 0013) re-derives membership from the kept edges. Without this, any library whose
+    // re-derives membership from the kept edges. Without this, any library whose
     // API lives behind a public module tree — every real Rust crate — reads as dead.
     {
         let mut work: Vec<FileId> = {
@@ -3795,7 +3789,7 @@ pub fn assemble_from_source(
     // Pass A — tables + symbol nodes, sequentially in FileId order (SymbolId assignment is
     // order itself). Emissions (Declares edges, promotions, in-source roots, metrics) moved
     // to pass B below so the *same* emitter serves the full build and the incremental patch
-    // (RFC 0013 §5 — one source of truth, no drift between paths).
+    // (one source of truth, no drift between paths).
     let mut symbol_range_per_file: Vec<(u32, u32)> = vec![(0, 0); claimed_per_file.len()];
     for (i, slot) in claimed_per_file.iter().enumerate() {
         let Some(claimed) = slot else { continue };
@@ -3885,19 +3879,18 @@ pub fn assemble_from_source(
 
     // Phase 3a-bis — re-export aliasing (`export {a} from './b'`, `export type {a} from
     // './b'`): a barrel's re-exported bindings become resolvable as *its own* exports too, not
-    // merely usable inside it (js-ts.md §5: "Barrel files… resolved through, transparently").
+    // merely usable inside it ("Barrel files… resolved through, transparently").
     // Must run for every file before phase 3b resolves any file's import bindings — the same
     // forward-reference reasoning as the 3a/3b split, one level deeper.
     //
-    // Resolved to a **fixpoint** (RFC 0013 §3b): rounds over every unresolved re-export
+    // Resolved to a **fixpoint**: rounds over every unresolved re-export
     // binding in (file, import, binding) order until a round makes no progress. The result is
     // the least fixpoint — order-independent, so barrels chaining through other barrels
-    // resolve regardless of discovery order (the multi-hop increment js-ts.md promised), and
+    // resolve regardless of discovery order, and
     // a re-export cycle simply never resolves (no progress ⇒ termination). Collision rule,
     // deliberate: a name already present in a file's table — its own declaration, or an
-    // earlier-in-order alias — wins over a later alias (`or_insert` semantics; the previous
-    // single-pass code let a re-export stomp a same-named own declaration, which was an
-    // artifact, not a design).
+    // earlier-in-order alias — wins over a later alias (`or_insert` semantics — a re-export
+    // must never stomp a same-named own declaration).
     struct PendingReexport {
         source_file: usize,
         target: FileId,
@@ -3976,7 +3969,7 @@ pub fn assemble_from_source(
                     symbol: original_symbol,
                 });
                 // The barrel itself is a manifest-declared production root, so everything it
-                // re-exports is part of the package's public API too (RFC 0011 §5) — same
+                // re-exports is part of the package's public API too — same
                 // promotion phase 3a already applies to the barrel's *own* declarations,
                 // extended through re-export indirection.
                 if let Some(&confidence) = library_root_files.get(&FileId(i as u32)) {
@@ -3999,7 +3992,7 @@ pub fn assemble_from_source(
         // or_insert collision rule — first alias of a name wins, later alternates (two
         // `#[path]`-alternated mods glob-re-exported through one barrel) stay reachable
         // through the glob's own Wildcard edge instead. Re-enumerated every round so a
-        // chained barrel's freshly-landed aliases propagate (same least-fixpoint reasoning
+        // chained barrel's freshly-resolved aliases propagate (same least-fixpoint reasoning
         // as the binding loop above).
         for &(source, target, span, adapter_index) in &glob_reexports {
             let target_exports: Vec<(SmolStr, SymbolId)> = symbol_by_name_per_file
@@ -4040,9 +4033,9 @@ pub fn assemble_from_source(
         }
     }
 
-    // Every file's declared unit name (RFC 0012 §9 qualifier defaults) as a plain slice —
+    // Every file's declared unit name (the qualifier default) as a plain slice —
     // resolve_file consumes this instead of reaching into other files' facts, which is what
-    // lets the incremental patch feed it from the snapshot (RFC 0013 §4).
+    // lets the incremental patch feed it from the snapshot.
     let unit_name_by_file: Vec<Option<SmolStr>> = claimed_per_file
         .iter()
         .map(|s| s.as_ref().and_then(|c| c.facts.unit_name.clone()))
@@ -4051,16 +4044,16 @@ pub fn assemble_from_source(
     // Phase 3b — imports, import-bindings, references, and diagnostics. Every file's symbol
     // table is complete now (phase 3a), so cross-file lookups are safe regardless of
     // discovery order — which is also what makes this phase embarrassingly parallel
-    // (RFC 0008 §2: "per-import resolution ... resolved concurrently"): every table it reads
+    // ("per-import resolution... resolved concurrently"): every table it reads
     // is immutable by now, and each file's contributions collect into a private
-    // `ResolvedFile` merged below in FileId order (§4: parallel compute, deterministic
+    // `ResolvedFile` merged below in FileId order (parallel compute, deterministic
     // reduce). `DependencyId` assignment stays in the sequential merge — ids are
     // first-appearance-in-file-order, exactly as the sequential loop assigned them.
     let mut dependencies = Vec::new();
     let mut dep_index: HashMap<SmolStr, DependencyId> = HashMap::default();
     let mut suppressions: Vec<(FileId, crate::adapter::RawSuppression)> = Vec::new();
 
-    // Member-type facts (RFC 0012 §3-bis), indexed per file for chained-pointer resolution.
+    // Member-type facts, indexed per file for chained-pointer resolution.
     let member_types_per_file: Vec<MemberTypeIndex> = claimed_per_file
         .iter()
         .map(|slot| {
@@ -4121,9 +4114,9 @@ pub fn assemble_from_source(
         suppressions.extend(resolved.suppressions);
     }
 
-    // Plugin graph-mutation hooks (RFC 0003 §2), factored into `run_plugin_round` so the
-    // incremental patch re-derives contributions through the identical code path (RFC 0017
-    // §3). Runs right here — Pass A's symbol tables and every file's references (phase 3b,
+    // Plugin graph-mutation hooks, factored into `run_plugin_round` so the
+    // incremental patch re-derives contributions through the identical code
+    // path. Runs right here — Pass A's symbol tables and every file's references (phase 3b,
     // just merged above) are both stable, and nothing downstream (the canonical sort,
     // `ProjectGraph` construction) has run yet, so a plugin's target-by-name lookups see the
     // real, final graph and its contributions fold into the one sort below rather than
@@ -4143,25 +4136,25 @@ pub fn assemble_from_source(
     let externally_consumed = plugin_round.externally_consumed;
     let plugin_implicitly_invoked = plugin_round.implicitly_invoked;
     let plugin_diagnostics = plugin_round.diagnostics;
-    // RFC 0017 §7: the round just ran, so its counts are the current audit record — written
+    // The round just ran, so its counts are the current audit record — written
     // even when empty (no plugins → an empty record replaces any stale one).
     if let Some(cache) = cache {
         cache.record_plugin_contributions(&plugin_round.contributions);
     }
 
-    // Canonical order (RFC 0013 §3a): edge and diagnostic order is *data*, not construction
+    // Canonical order: edge and diagnostic order is *data*, not construction
     // history. Two semantically identical graphs must be identical vectors — the property the
     // patched ≡ full-rebuild gate compares, and the property that keeps tie-breaks (e.g.
     // cyclic's strongest-edge-per-pair evidence pick) independent of which assembly path or
     // parallel schedule produced the graph. One total comparator, derived field order.
     edges.sort_unstable();
     diagnostics.sort_unstable();
-    // Same canonical-order rule for the remaining order-bearing vectors (RFC 0013 §3a):
+    // Same canonical-order rule for the remaining order-bearing vectors:
     // stable sorts, so same-key entries keep facts order — identical on both build paths.
     function_metrics.sort_by_key(|(id, _)| *id);
     suppressions.sort_by_key(|(f, _)| *f);
 
-    // RFC 0013 §4: per-file patch metadata — surface signatures and unit names from phase
+    // Per-file patch metadata — surface signatures and unit names from phase
     // 1's facts; the re-export aliases were recorded by the 3a-bis fixpoint above.
     for (i, slot) in claimed_per_file.iter().enumerate() {
         if let Some(claimed) = slot {
@@ -4188,15 +4181,15 @@ pub fn assemble_from_source(
         plugin_implicitly_invoked,
         file_index,
     };
-    // The snapshot is NOT written here (RFC 0008 §2: cache persist happens off the critical
+    // The snapshot is NOT written here (cache persist happens off the critical
     // path) — the freshly assembled graph hands back the key, and the engine defers the
     // serialize + write to a background thread that overlaps with analysis and rendering.
-    // Written even with graph-mutating plugins registered (RFC 0016 §6): `graph_key` now folds
+    // Written even with graph-mutating plugins registered: `graph_key` folds
     // in every such plugin's identity (see the read-side comment above), so a snapshot written
     // here can only ever be served back to a run with the identical plugin set over the
-    // identical inputs — the "a later plugin-less run silently inherits contributions" hazard
-    // this used to guard against is exactly what the key change closes. Persisting unconditionally
-    // is also what makes the read-side snapshot fast path (line ~1898) actually fire on a
+    // identical inputs — a later plugin-less run can never silently inherit contributions.
+    // Persisting unconditionally
+    // is also what makes the read-side snapshot fast path actually fire on a
     // plugin-bearing project's *second* run, not just prove itself safe in the abstract.
     let pending_snapshot = cache.and_then(|c| c.graph_writer(graph_key, current_plugin_digest));
     tick("resolve+link", &mut phase_start);
@@ -4218,19 +4211,19 @@ pub fn assemble_from_source(
 /// the deferred writer the engine schedules off the critical path.
 pub struct AssembledGraph {
     pub graph: ProjectGraph,
-    /// Always the fresh walk's (RFC 0013 §3c) — never stored, never replayed.
+    /// Always the fresh walk's — never stored, never replayed.
     pub discovery_diagnostics: Vec<Diagnostic>,
     /// Extraction + manifest diagnostics — what the snapshot stores and warm paths replay
     /// (their producers were skipped). Canonically sorted, like the edges.
     pub extraction_diagnostics: Vec<Diagnostic>,
     /// The plugin round's diagnostics (content-budget cutoffs), stored in the snapshot's own
-    /// partition (RFC 0017 §3: the patch discards and re-derives them, so they can't share a
+    /// partition (the patch discards and re-derives them, so they can't share a
     /// vector with extraction diagnostics that persist). Empty on the snapshot fast path —
     /// there `extraction_diagnostics` already carries the merged replay.
     pub plugin_diagnostics: Vec<Diagnostic>,
-    /// RFC 0018: the finding round's output — namespaced third-party verdicts, computed fresh
+    /// The finding round's output — namespaced third-party verdicts, computed fresh
     /// on EVERY path (cold, patch, warm hit; findings are output, never persisted). The engine
-    /// maps these to `Finding`s under the advisory-channel rules (§2.2).
+    /// maps these to `Finding`s under the advisory-channel rules.
     pub plugin_findings: Vec<crate::plugin::ProtoFinding>,
     /// The finding round's own diagnostics (undeclared rules, noise-cap truncation) — like
     /// `discovery_diagnostics`, always the fresh run's, never stored or replayed.
@@ -4331,7 +4324,7 @@ mod tests {
     }
 
     /// A minimal in-memory adapter for graph tests. kndo-core must never depend on a real
-    /// language adapter (that would invert the ignorance rule, RFC 0001 §2) — even in tests.
+    /// language adapter (that would invert the ignorance rule) — even in tests.
     struct MockAdapter;
 
     impl LanguageAdapter for MockAdapter {
@@ -4406,14 +4399,14 @@ mod tests {
             //   dynamic-narrowed <dir>      -> a DynamicUse narrowed to that project dir
             //   suppress <category>         -> a Declaration-scope RawSuppression
             //   unit <key>                  -> FileFacts::unit (package-scoped resolution)
-            //   detected-generated          -> FileFacts::detected_origin = Generated (§7)
+            // detected-generated -> FileFacts::detected_origin = Generated
             let text = std::str::from_utf8(file.content).unwrap_or("");
             let mut facts = FileFacts::default();
             for line in text.lines() {
                 if let Some(key) = line.strip_prefix("unit ") {
                     facts.unit = Some(SmolStr::new(key));
                 } else if line == "detected-generated" {
-                    // Content-derived origin override (RFC 0012 §7).
+                    // Content-derived origin override.
                     facts.detected_origin = Some(FileOrigin::Generated);
                 } else if let Some(name) = line.strip_prefix("decl ") {
                     facts.declarations.push(Declaration {
@@ -4442,9 +4435,9 @@ mod tests {
                     .or_else(|| line.strip_prefix("member-decl-exported "))
                 {
                     // `member-decl <owner> <name>` — an unexported member declaration
-                    // (RFC 0012 §3): bare name, structured owner. The `-exported` variant
+                    //: bare name, structured owner. The `-exported` variant
                     // declares at ladder level 1 (`Public` on the mock ladder) for the
-                    // fallback's visibility-scoped candidacy (RFC 0012 §6).
+                    // fallback's visibility-scoped candidacy.
                     let exported = line.starts_with("member-decl-exported ");
                     let mut parts = rest.splitn(2, ' ');
                     let owner = parts.next().unwrap_or("");
@@ -4461,7 +4454,7 @@ mod tests {
                     });
                 } else if let Some(rest) = line.strip_prefix("member-implicit ") {
                     // `member-implicit <owner> <name>` — a machinery-dispatched member
-                    // (RFC 0005 §1's machinery-dispatch rule): invoked through its owner,
+                    // (the machinery-dispatch rule): invoked through its owner,
                     // never by name at the call site.
                     let mut parts = rest.splitn(2, ' ');
                     let owner = parts.next().unwrap_or("");
@@ -4524,7 +4517,7 @@ mod tests {
                     });
                 } else if let Some(rest) = line.strip_prefix("import-as ") {
                     // `import-as <alias> <specifier>` — an explicitly-aliased namespace
-                    // import (RFC 0012 §9's `local_alias`).
+                    // import (the `local_alias`).
                     let mut parts = rest.splitn(2, ' ');
                     let alias = parts.next().unwrap_or("");
                     let spec = parts.next().unwrap_or("");
@@ -4542,7 +4535,7 @@ mod tests {
                         local_alias: Some(SmolStr::new(alias)),
                     });
                 } else if let Some(rest) = line.strip_prefix("member-type ") {
-                    // `member-type <owner> <member> <yields> [p0,p1,…]` — RFC 0012 §3-bis
+                    // `member-type <owner> <member> <yields> [p0,p1,…]` — a member-type
                     // fact; the optional 4th token lists the type parameters in order.
                     let mut parts = rest.splitn(4, ' ');
                     facts.member_types.push(crate::adapter::RawMemberType {
@@ -4556,14 +4549,14 @@ mod tests {
                     });
                 } else if let Some(name) = line.strip_prefix("invokes-executable ") {
                     // A declared subprocess invocation of a workspace executable target
-                    // (RFC 0005 §1's invoked-program rule).
+                    // (the invoked-program rule).
                     facts.invoked_executables.push(SmolStr::new(name));
                 } else if let Some(name) = line.strip_prefix("unit-name ") {
-                    // The name importers bind this unit by (RFC 0012 §9).
+                    // The name importers bind this unit by.
                     facts.unit_name = Some(SmolStr::new(name));
                 } else if let Some(rest) = line.strip_prefix("qref ") {
                     // `qref <qualifier> <name>` — a qualified reference
-                    // (RFC 0012 §9's `scope_context`).
+                    // (the `scope_context`).
                     let mut parts = rest.splitn(2, ' ');
                     let qualifier = parts.next().unwrap_or("");
                     let name = parts.next().unwrap_or("");
@@ -4576,7 +4569,7 @@ mod tests {
                     });
                 } else if let Some(rest) = line.strip_prefix("ref-in ") {
                     // `ref-in <within> <name>` — a reference executing inside the named
-                    // declaration (RFC 0012 §4 attribution).
+                    // declaration (symbol attribution).
                     let mut parts = rest.splitn(2, ' ');
                     let within = parts.next().unwrap_or("");
                     let name = parts.next().unwrap_or("");
@@ -4711,7 +4704,7 @@ mod tests {
             //   dep <name>        -> a prod-scope declared dependency
             //   root <path>       -> a Production root targeting that known file, if it exists
             //   cli-invoke <name> -> a script-invoked dependency name
-            //   declares-surface  -> ManifestFacts::declares_surface = true (RFC 0011 §4)
+            // declares-surface -> ManifestFacts::declares_surface = true
             //   private           -> ManifestFacts::private = true (app mode)
             //   name <pkg>        -> the package's declared name
             //   entry <path>      -> a resolved entry (what a sibling's bare-name import lands on)
@@ -4736,7 +4729,7 @@ mod tests {
                 } else if let Some(name) = line.strip_prefix("cli-invoke ") {
                     facts.script_invoked_names.push(SmolStr::new(name));
                 } else if let Some(rest) = line.strip_prefix("executable ") {
-                    // `executable <name> <path>` — a named executable target (RFC 0005 §1's
+                    // `executable <name> <path>` — a named executable target (the
                     // invoked-program rule), resolved to its entry if the file exists.
                     let mut parts = rest.splitn(2, ' ');
                     let name = parts.next().unwrap_or("");
@@ -4756,7 +4749,7 @@ mod tests {
                     }
                 } else if line == "declares-surface" {
                     // Explicit entry-point surface (`exports` map equivalent) — the
-                    // deep-import contract gate (RFC 0011 §4).
+                    // deep-import contract gate.
                     facts.declares_surface = true;
                 } else if line == "private" {
                     facts.private = true;
@@ -4883,7 +4876,7 @@ mod tests {
 
     #[test]
     fn same_unit_files_resolve_each_other_s_symbols_without_any_import() {
-        // Go's ordinary case (RFC 0002 §2, FileFacts::unit): two files sharing a package
+        // Go's ordinary case (FileFacts::unit): two files sharing a package
         // directory call each other's declarations with no import statement at all.
         let dir = project(
             "same-unit",
@@ -4926,7 +4919,7 @@ mod tests {
         ));
     }
 
-    // -------------------------------------------------- member-call fallback (RFC 0012 §3)
+    // -------------------------------------------------- member-call fallback
 
     fn reference_edges_to<'g>(graph: &'g ProjectGraph, name: &str) -> Vec<&'g Edge> {
         let target = SymbolId(
@@ -4947,7 +4940,7 @@ mod tests {
     fn member_call_resolves_via_fallback_at_probable_with_one_candidate() {
         // The Go bug this exists for: `t.helper()` is a bare `helper` reference; the
         // declaration is a member of T. Exact resolution must miss (members never enter the
-        // bare-name table), the duck-typed fallback must hit at Probable (RFC 0002 §5).
+        // bare-name table), the duck-typed fallback must hit at Probable.
         let dir = project(
             "member-fallback-one",
             &[(
@@ -5052,7 +5045,7 @@ mod tests {
 
     #[test]
     fn unexported_member_is_not_a_candidate_outside_its_unit() {
-        // RFC 0012 §6's visibility-scoped candidacy: a Unit-scoped member (mock ladder level
+        // the visibility-scoped candidacy: a Unit-scoped member (mock ladder level
         // 0) in another unit can't plausibly be the callee — Go's own rule (an unexported
         // method is only legally callable in-package).
         let dir = project(
@@ -5089,7 +5082,7 @@ mod tests {
         assert_eq!(edges[0].confidence, Confidence::Probable);
     }
 
-    // -------------------------------------------------- qualified references (RFC 0012 §9)
+    // -------------------------------------------------- qualified references
 
     #[test]
     fn aliased_import_qualifier_resolves_inside_the_target() {
@@ -5108,7 +5101,7 @@ mod tests {
 
     #[test]
     fn unaliased_import_qualifier_comes_from_the_targets_unit_name() {
-        // The dir≠package fix (RFC 0012 §9): the import specifier's last segment is
+        // The dir≠package fix: the import specifier's last segment is
         // "b.mock", but the target declares itself `yaml` — the qualifier the importer
         // actually writes. Resolution must use the target's declared name, not a specifier
         // guess.
@@ -5198,7 +5191,7 @@ mod tests {
 
     #[test]
     fn a_dotted_pointer_chains_through_member_type_facts() {
-        // RFC 0012 §3-bis's cross-file tier: `low.context_separator.into_bytes()` in a.mock
+        // the cross-file tier: `low.context_separator.into_bytes()` in a.mock
         // where `low: LowArgs` — the adapter emitted the pointer `LowArgs.context_separator`;
         // LowArgs and its field's type live in b.mock. Every hop is a declared fact:
         // LowArgs in scope (binding) → its home's member-type fact yields ContextSeparator
@@ -5303,7 +5296,7 @@ mod tests {
     #[test]
     fn a_declared_executable_invocation_emits_an_invokes_file_edge() {
         // `invokes-executable app` resolves through the manifest's named executable
-        // targets to the bin's entry file (RFC 0005 §1's invoked-program rule); a name no
+        // targets to the bin's entry file (the invoked-program rule); a name no
         // manifest declares emits nothing — silence, never a guess.
         let dir = project(
             "invoked-program",
@@ -5346,7 +5339,7 @@ mod tests {
 
     #[test]
     fn a_dotted_pointer_with_no_fact_falls_to_the_duck_fallback() {
-        // The chain misses (no member-type fact): the member name still reaches the §3
+        // The chain misses (no member-type fact): the member name still reaches the
         // duck fallback — a pointer never settles.
         let dir = project(
             "qref-chained-miss",
@@ -5372,7 +5365,7 @@ mod tests {
     fn a_qualified_member_hit_lands_on_every_twin_declaration() {
         // cfg-alternated impls declare `Data.from_path` twice; the qualified reference
         // targets whichever is compiled, so BOTH must receive the edge — the single-slot
-        // table's winner alone left the displaced twin reading as dead.
+        // table's winner alone would leave the displaced twin reading as dead.
         let dir = project(
             "qref-twin-members",
             &[(
@@ -5417,8 +5410,8 @@ mod tests {
 
     #[test]
     fn a_barrel_routed_type_qualifier_reaches_the_originals_members() {
-        // The importer binds the type through a BARREL (`use crate::flags::{SearchMode}` →
-        // flags/mod.rs re-exports it from lowargs.rs): the alias lands on the barrel file,
+        // The importer binds the type through a BARREL (`use crate::opts::{SearchMode}` →
+        // the barrel re-exports it from a leaf file): the alias lands on the barrel file,
         // whose bare table holds the fixpoint's alias to the original symbol — the member
         // lookup must follow that symbol home, not stop at the barrel's own member table.
         let dir = project(
@@ -5494,7 +5487,7 @@ mod tests {
     fn receiver_qualifier_skips_free_names_and_duck_types_to_members() {
         // `t.helper()`: `t` matches no import, so the name is a member access by
         // construction — the same-file free `helper` is not a candidate; the member is,
-        // via the §3 fallback.
+        // via the duck fallback.
         let dir = project(
             "qref-receiver",
             &[(
@@ -5529,7 +5522,7 @@ mod tests {
         assert_eq!(member_edge.confidence, Confidence::Probable);
     }
 
-    // -------------------------------------------------- detected_origin (RFC 0012 §7)
+    // -------------------------------------------------- detected_origin
 
     #[test]
     fn detected_origin_overrides_the_claim_time_origin_on_the_file_node() {
@@ -5618,7 +5611,7 @@ mod tests {
 
     #[test]
     fn declarations_inside_test_regions_get_derived_test_roots() {
-        // The single-producer contract (contracts §2): adapters declare only the spans;
+        // The single-producer contract: adapters declare only the spans;
         // assembly derives the in-source Test roots by containment. A declaration outside
         // every region gets none.
         let dir = project(
@@ -5705,7 +5698,7 @@ mod tests {
         );
     }
 
-    // -------------------------------------------------- within attribution (RFC 0012 §4)
+    // -------------------------------------------------- within attribution
 
     #[test]
     fn within_attributes_the_reference_edge_to_the_enclosing_symbol() {
@@ -5737,7 +5730,7 @@ mod tests {
 
     #[test]
     fn unresolvable_within_falls_back_to_file_attribution() {
-        // The design's load-bearing safety property (RFC 0012 §4): a `within` naming nothing
+        // The design's load-bearing safety property: a `within` naming nothing
         // this file declares degrades to today's file attribution — keep-alive, never a new
         // way to lose an edge.
         let dir = project(
@@ -5761,8 +5754,8 @@ mod tests {
     }
 
     #[test]
-    fn transitively_dead_code_is_now_visible() {
-        // The precision RFC 0012 §4 exists for: `main → a` (both alive); dead `z → b` — b must
+    fn transitively_dead_code_is_visible() {
+        // The precision symbol attribution exists for: `main → a` (both alive); dead `z → b` — b must
         // die with z instead of surviving through the live file's blanket attribution.
         let dir = project(
             "transitive-dead",
@@ -5791,7 +5784,7 @@ mod tests {
     #[test]
     fn module_level_references_still_fire_when_the_file_loads() {
         // `within: None` = load-time code: importing the file keeps its module-level
-        // references alive exactly as before (RFC 0005 §1's module-load rule).
+        // references alive (the module-load rule).
         let dir = project(
             "module-level-refs",
             &[
@@ -5811,7 +5804,7 @@ mod tests {
 
     #[test]
     fn files_with_no_unit_are_unaffected_same_name_in_another_unit_does_not_leak_in() {
-        // A file that never sets `unit` (every adapter before Go) must behave exactly as before
+        // A file that never sets `unit` (a file-scoped language) must be unaffected
         // — no accidental cross-file resolution just because some *other*, unrelated file
         // happens to declare a `unit`.
         let dir = project(
@@ -5862,7 +5855,7 @@ mod tests {
             .all(|e| !matches!(e.kind, EdgeKind::ImportsFile { .. })));
         assert!(
             diags.is_empty(),
-            "unresolved is not yet a diagnostic (future `unresolved` analysis)"
+            "unresolved imports are intentionally silent — no `unresolved` analysis exists"
         );
     }
 
@@ -5873,7 +5866,7 @@ mod tests {
         assert_eq!(graph.files.len(), 1);
         assert!(
             graph.files[0].language.is_none(),
-            "spec: manifests are not claimed as source (docs/adapters/js-ts.md §1)"
+            "manifests are not claimed as source"
         );
     }
 
@@ -5962,10 +5955,9 @@ mod tests {
 
     #[test]
     fn library_root_files_promote_their_exported_symbols_to_production_roots() {
-        // RFC 0011 §5: "Published/library: its public API is a production root — external
-        // consumers exist by definition." Discovered via M1 conformance-testing against real
-        // npm packages (sindresorhus/p-limit): a library's second named export, never called
-        // by the package's own code, was false-positive `unused` before this fix.
+        // "Published/library: its public API is a production root — external
+        // consumers exist by definition." A library's second named export, never called
+        // by the package's own code, must not read as `unused`.
         let dir = project(
             "library-root-promotion",
             &[
@@ -5993,11 +5985,10 @@ mod tests {
 
     #[test]
     fn barrel_reexport_resolves_transparently_to_the_original_symbol() {
-        // js-ts.md §5: "Barrel files… resolved through, transparently." consumer.mock imports
+        // "Barrel files… resolved through, transparently." consumer.mock imports
         // `a` from barrel.mock, which never declares `a` itself — only re-exports it from
-        // source.mock. Discovered dogfooding kndo against real npm packages (sindresorhus/
-        // type-fest): a pure barrel entry point re-exporting hundreds of individual types is a
-        // very common real-world shape.
+        // source.mock. A pure barrel entry point re-exporting hundreds of individual types
+        // is a very common real-world shape.
         let dir = project(
             "barrel-reexport",
             &[
@@ -6034,7 +6025,7 @@ mod tests {
             }));
     }
 
-    /// RFC 0013 §6's equivalence obligation, at the unit level: assemble cold with a cache,
+    /// the equivalence obligation, at the unit level: assemble cold with a cache,
     /// mutate, assemble again (the patch path), and compare against a scratch full rebuild
     /// of the same tree — the graphs must be EQUAL, not merely finding-equivalent. The
     /// project needs ≥ 4 files so one changed file stays under the 30% dirty threshold.
@@ -6045,7 +6036,7 @@ mod tests {
         expect_patch: bool,
     ) {
         // Pad with filler files so one changed file sits under the measured 5% work
-        // threshold (RFC 0013 §5) — the scenarios stay about the guard logic, not the
+        // threshold — the scenarios stay about the guard logic, not the
         // threshold arithmetic.
         let filler: Vec<(String, String)> = (0..20)
             .map(|i| (format!("filler{i}.mock"), format!("decl filler{i}")))
@@ -6215,8 +6206,8 @@ mod tests {
         );
     }
 
-    /// A test plugin exercising every contribution kind the patch must re-derive (RFC 0017
-    /// §3): a root gated on a content-channel file's *content* (so a stale round is
+    /// A test plugin exercising every contribution kind the patch must
+    /// re-derive: a root gated on a content-channel file's *content* (so a stale round is
     /// observable), plus an unconditional `annotate_symbols` mark (so the snapshot's
     /// `externally_consumed` round-trip is observable too).
     struct MarkerGatedPlugin {
@@ -6350,7 +6341,7 @@ mod tests {
         })
     }
 
-    /// The fixture behind the three RFC 0017 §3 tests below: `root_me` exists from the start
+    /// The fixture behind the three patch/plugin-round tests below: `root_me` exists from the start
     /// (so the marker flip is the ONLY change), 20 filler files keep one changed file under
     /// the patch's 5% work threshold, and `marker.txt` is unclaimed — its content change is
     /// invisible to every adapter guard and only a re-run plugin round can react to it.
@@ -6369,7 +6360,7 @@ mod tests {
 
     #[test]
     fn the_patch_re_derives_plugin_contributions_instead_of_bypassing() {
-        // RFC 0017 §3: the patch strips every plugin contribution and re-runs the round
+        // The patch strips every plugin contribution and re-runs the round
         // against the patched graph — proven by flipping a content-channel file the plugin's
         // own gate reads. The flip is invisible to every adapter-side guard (the file is
         // unclaimed), so ONLY a genuinely re-run round can produce the new root.
@@ -6404,7 +6395,7 @@ mod tests {
             "the re-run round must see the new marker content — a stale ride-along would not"
         );
 
-        // RFC 0013 §6's equivalence obligation now extends to plugin-bearing runs: the
+        // The equivalence obligation covers plugin-bearing runs: the
         // patched graph — plugin round included — is byte-identical to a scratch rebuild.
         let (scratch, scratch_diags) = assemble(&dir, &mock_adapters(), &plugins).unwrap();
         assert_eq!(
@@ -6416,7 +6407,7 @@ mod tests {
 
     #[test]
     fn a_changed_plugin_set_refuses_the_patch_and_rebuilds() {
-        // RFC 0017 §3's one new guard: `classify_file` overrides are baked into
+        // The plugin-set guard: `classify_file` overrides are baked into
         // `FileNode.class` untagged, so the snapshot's stored plugin-set digest must match —
         // a version bump alone (same id, same hooks) is a different set and full-rebuilds.
         let name = "patch-plugin-set-changed";
@@ -6445,8 +6436,8 @@ mod tests {
     }
 
     #[test]
-    fn the_contribution_record_tracks_what_the_round_actually_landed() {
-        // RFC 0017 §7's audit record: the cache's last-run sidecar reflects what each plugin
+    fn the_contribution_record_tracks_what_the_round_actually_resolved() {
+        // The audit record: the cache's last-run sidecar reflects what each plugin
         // resolved into the graph, and a patch (which re-runs the round) refreshes it — the
         // marker flip changes the recorded root count from 0 to 1.
         let name = "contribution-record";
@@ -6470,7 +6461,7 @@ mod tests {
                 annotations: 1,
                 dropped: vec!["root target `a.mock#ghost_symbol` did not resolve".to_string()],
             }],
-            "marker off: only the unconditional annotation landed, and the unresolvable \
+            "marker off: only the unconditional annotation resolved, and the unresolvable \
              ghost target is recorded as dropped, not silently lost"
         );
 
@@ -6488,10 +6479,9 @@ mod tests {
 
     #[test]
     fn externally_consumed_round_trips_through_the_snapshot() {
-        // Regression (introduced by RFC 0016 §6, fixed with RFC 0017 §3's snapshot format):
-        // snapshot writes became unconditional with plugins registered, but the snapshot
-        // didn't persist `externally_consumed` — every warm hit silently dropped
-        // `annotate_symbols` output, losing RFC 0005 §7 exemptions. `ProjectGraph`'s derived
+        // Snapshot writes are unconditional even with plugins registered, so the snapshot
+        // must persist `externally_consumed` — otherwise every warm hit would silently drop
+        // `annotate_symbols` output, losing the exemptions. `ProjectGraph`'s derived
         // `PartialEq` covers the field, so plain equality is the whole assertion.
         let name = "externally-consumed-roundtrip";
         let dir = marker_project(name);
@@ -6518,7 +6508,7 @@ mod tests {
 
     #[test]
     fn compute_graph_key_distinguishes_wasm_plugin_content_from_its_own_id_and_version() {
-        // RFC 0016 §6: a WASM plugin's declared id+version alone isn't enough — a swapped
+        // A WASM plugin's declared id+version alone isn't enough — a swapped
         // `.wasm` file with no version bump must still produce a different key. Same
         // descriptor, different `content_hash()`, must fold to different keys.
         struct FakeWasmPlugin(u8);
@@ -6575,7 +6565,7 @@ mod tests {
 
     #[test]
     fn surface_signature_ignores_spans_but_sees_surface_changes() {
-        // RFC 0013 §4: bodies and positions move freely under the patch guard; any change to
+        // Bodies and positions move freely under the patch guard; any change to
         // what other files can resolve against must move the signature.
         let base = project("sig-base", &[("a.mock", "decl x\nref y")]);
         let moved = project("sig-moved", &[("a.mock", "\n\ndecl x\nref y")]);
@@ -6622,10 +6612,10 @@ mod tests {
 
     #[test]
     fn barrel_chains_resolve_regardless_of_discovery_order() {
-        // RFC 0013 §3b's fixpoint: `outer` re-exports from `zeta`, which re-exports from the
+        // The fixpoint: `outer` re-exports from `zeta`, which re-exports from the
         // real source — and `outer.mock` sorts BEFORE `zeta.mock`, exactly the discovery
-        // order the old single-pass one-hop resolution could not handle (outer's lookup ran
-        // before zeta's alias existed). The consumer must still reach the one real symbol.
+        // order a single-pass one-hop resolution could not handle (outer's lookup would run
+        // before zeta's alias exists). The consumer must still reach the one real symbol.
         let dir = project(
             "barrel-chain-order",
             &[
@@ -6667,7 +6657,7 @@ mod tests {
 
     #[test]
     fn reexport_cycles_terminate_and_resolve_to_nothing() {
-        // RFC 0013 §3b: a cycle of re-exports makes no progress and must simply terminate —
+        // A cycle of re-exports makes no progress and must simply terminate —
         // no alias ever materializes, nothing hangs, nothing panics.
         let dir = project(
             "barrel-cycle",
@@ -6683,7 +6673,7 @@ mod tests {
 
     #[test]
     fn assembled_edge_and_diagnostic_order_is_canonical() {
-        // RFC 0013 §3a: order is data. Assembling the same tree twice — or any two
+        // Order is data. Assembling the same tree twice — or any two
         // construction paths over identical inputs — must yield identical vectors, which is
         // what the sort guarantees; spot-check that the vector is actually sorted.
         let dir = project(
@@ -6766,7 +6756,7 @@ mod tests {
 
     #[test]
     fn workspace_name_import_produces_both_file_and_dependency_edges() {
-        // RFC 0011 §4: resolution yields the concrete internal file (real reachability) AND
+        // A workspace-member import: resolution yields the concrete internal file (real reachability) AND
         // the declaration contract stays checkable (an ImportsDependency edge by name).
         let dir = project(
             "ws-both-edges",
@@ -6812,7 +6802,7 @@ mod tests {
 
     #[test]
     fn phantom_internal_dependency_is_undeclared() {
-        // packages/a imports pkg-b by name WITHOUT declaring it — RFC 0011 §4's table:
+        // packages/a imports pkg-b by name WITHOUT declaring it — the table:
         // "import resolves into a sibling package not declared in the importer's manifest →
         // undeclared (phantom internal dependency)".
         let dir = project(
@@ -6837,7 +6827,7 @@ mod tests {
 
     #[test]
     fn declared_but_unimported_workspace_dep_is_unused() {
-        // The other direction of RFC 0011 §4's table: "internal dep declared, no import
+        // The other direction of the table: "internal dep declared, no import
         // resolves into that package → unused (subject dependency)".
         let dir = project(
             "ws-unused-dep",
@@ -6893,7 +6883,7 @@ mod tests {
     #[test]
     fn import_binding_resolves_through_the_target_s_unit_not_just_its_own_file() {
         // Go's shape: `import "pkg"` resolves to *one* representative file in the target
-        // directory (contracts §2 has no multi-file resolution target), but the actually-used
+        // directory (resolution has no multi-file target), but the actually-used
         // symbol may be declared in a *different* file that merely shares the same package
         // (`unit`) — e.g. `resolve()` picks `pkg/x.mock` as the nominal target, but `target` is
         // declared in its sibling `pkg/y.mock`.
@@ -6966,7 +6956,7 @@ mod tests {
 
     #[test]
     fn test_role_files_are_test_roots_not_unused() {
-        // RFC 0005 §2: "Test roots — test functions/files (language role detection…)". A test
+        // "Test roots — test functions/files (language role detection…)". A test
         // file nothing imports is TestOnly, not Unreachable — while a production orphan next
         // to it is still caught.
         let dir = project(
@@ -7026,7 +7016,7 @@ mod tests {
     #[test]
     fn opaque_namespace_import_wildcards_over_the_target() {
         // `import * as ns; f(ns)` / `ns[key]` — the namespace escaped static tracking, so
-        // every symbol in the target is plausibly used (RFC 0005 §1). End-to-end: the
+        // every symbol in the target is plausibly used. End-to-end: the
         // target's never-referenced-by-name symbol must stay out of `unused`.
         let dir = project(
             "opaque-namespace",
@@ -7113,7 +7103,7 @@ mod tests {
 
     #[test]
     fn narrowed_dynamic_keeps_target_symbols_possible_alive_end_to_end() {
-        // The §6 corpus promise ("wildcard narrows, nothing false-positive"), at the graph +
+        // The narrowing promise ("wildcard narrows, nothing false-positive"), at the graph +
         // analysis level: a root file dynamically loading `handlers/` keeps the handler's
         // exported symbol out of `unused`, while a file outside the narrowed scope is still
         // caught.
@@ -7254,10 +7244,9 @@ mod tests {
         );
     }
 
-    // RFC 0004 §4's correctness gate: `--no-cache` must produce byte-identical findings to a
-    // cached run. This slice only caches `FileFacts` (no graph/findings snapshot yet), so the
-    // gate is checked at the graph level — a warm assemble must yield the exact same edges and
-    // symbols as a cold one on identical input.
+    // The correctness gate: `--no-cache` must produce byte-identical findings to a
+    // cached run. Checked at the graph level — a warm assemble must yield the exact same
+    // edges and symbols as a cold one on identical input.
     #[test]
     fn warm_assemble_matches_a_cold_assemble_byte_for_byte() {
         let dir = project(

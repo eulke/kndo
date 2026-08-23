@@ -1,12 +1,12 @@
-//! Query envelopes (contracts/output-schema.md §8, RFC 0007 §4.7) — request/response shapes for
+//! Query envelopes — request/response shapes for
 //! `Engine::query`, batching, and rendering. The verb algorithms themselves live in
 //! [`crate::query`]; this module is the request-dispatch and JSON-shape layer around them,
 //! mirroring how `engine.rs` is the envelope layer around `analysis::run_all`.
 //!
-//! Every navigation verb is batched by construction (RFC 0007 §4.7 tenet 1): `selectors` always
+//! Every navigation verb is batched by construction: `selectors` always
 //! carries one-or-more entries and `results` aligns 1:1 with it in argument order, except
-//! `trace`'s pair-batched form (`flags.pairs`), which aligns with `pairs` instead — the one case
-//! output-schema §8 itself calls out as different.
+//! `trace`'s pair-batched form (`flags.pairs`), which aligns with `pairs` instead — the one
+//! deliberately different case.
 
 use crate::adapter::{Diagnostic, DiagnosticLevel};
 use crate::analysis::reachability::{self, ReachabilityMap};
@@ -55,7 +55,7 @@ impl Verb {
     }
 }
 
-/// Every verb-specific `--flag` in one place (RFC 0007 §4) — irrelevant flags for a given verb
+/// Every verb-specific `--flag` in one place — irrelevant flags for a given verb
 /// are simply ignored rather than rejected, so a `kndo query` request can carry a superset
 /// without per-verb validation ceremony.
 #[derive(Debug, Clone, Default)]
@@ -69,16 +69,16 @@ pub struct QueryFlags {
     pub all: bool,
     pub max_paths: Option<usize>,
     pub roots: Option<String>,
-    /// `trace`'s batched form (RFC 0007 §4.7's own example): independent directed traces, one
+    /// `trace`'s batched form (the own example): independent directed traces, one
     /// per pair, `results` aligning with this list instead of `selectors` when non-empty.
     pub pairs: Vec<(String, String)>,
     pub limit: Option<usize>,
-    /// `impact --if-deleted` (RFC 0007 §4.6): simulate removal, report the finding flips.
+    /// `impact --if-deleted`: simulate removal, report the finding flips.
     pub if_deleted: bool,
 }
 
 pub struct QueryRequest {
-    /// Query-mode echo (RFC 0007 §4.7) — `None` outside `kndo query`.
+    /// Query-mode echo — `None` outside `kndo query`.
     pub id: Option<String>,
     pub verb: Verb,
     /// Patterns (`find`) or selectors (every other verb) — see module docs for `trace`'s
@@ -108,7 +108,7 @@ impl Status {
 }
 
 /// One `results[]` entry — either a verb-specific success shape or an inline per-selector
-/// failure (output-schema §8: "a failed selector yields an inline `{status, …}` entry without
+/// failure ("a failed selector yields an inline `{status, …}` entry without
 /// failing its siblings").
 #[derive(Debug, Clone, serde::Serialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
@@ -127,7 +127,7 @@ pub enum ResultEntry {
 }
 
 impl ResultEntry {
-    /// RFC 0007 §6: "1 | selector/path not found (`find` with zero hits, `trace` with no
+    /// "1 | selector/path not found (`find` with zero hits, `trace` with no
     /// path)" — only these two verbs turn an empty-but-successful computation into `not-found`;
     /// `describe`/`uses`/`used-by` resolving to zero neighbors is a legitimate `ok` answer (e.g.
     /// `used-by` on a genuinely-unused symbol correctly returns nothing — that IS the answer,
@@ -143,7 +143,7 @@ impl ResultEntry {
     }
 }
 
-/// The typed form of the query envelope (output-schema §8) — [`Self::to_json_line`] nests it
+/// The typed form of the query envelope — [`Self::to_json_line`] nests it
 /// into the schema's actual shape, the same split `RunResult`/`Envelope` use.
 pub struct QueryResult {
     pub verb: Verb,
@@ -156,7 +156,7 @@ pub struct QueryResult {
 }
 
 impl QueryResult {
-    /// Worst status across every result entry (RFC 0007 §6: "the process exit code is the worst
+    /// Worst status across every result entry ("the process exit code is the worst
     /// individual status … so single-question scripting semantics survive batching unchanged").
     pub fn status(&self) -> &'static str {
         self.results
@@ -184,9 +184,9 @@ struct RunEcho {
     duration_ms: u64,
 }
 
-/// The full `--format json` query envelope (output-schema §8) — also `cargo xtask gen-schema`'s
+/// The full `--format json` query envelope — also `cargo xtask gen-schema`'s
 /// second root type. `run` is `Option` only so [`QueryResult::to_json_line`] can omit it on
-/// every `kndo query` line after the first (§4.7: "run appearing only on the first line").
+/// every `kndo query` line after the first ("run appearing only on the first line").
 #[derive(serde::Serialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct QueryJsonEnvelope {
@@ -226,7 +226,7 @@ impl QueryResult {
             .unwrap_or_else(|e| format!("{{\"error\": \"failed to serialize output: {e}\"}}"))
     }
 
-    /// One `kndo query` JSONL line (RFC 0007 §4.7): compact (no pretty-printing — JSONL is
+    /// One `kndo query` JSONL line: compact (no pretty-printing — JSONL is
     /// one-object-per-line by construction), `run` included only when `include_run` is set
     /// (the caller passes `true` for exactly the first line of a batch).
     pub fn to_json_line(&self, include_run: bool) -> String {
@@ -247,7 +247,7 @@ pub fn json_schema() -> schemars::Schema {
 /// Resolves and dispatches one [`QueryRequest`] against an already-assembled graph — the shared
 /// entry point `Engine::query` (single request) and `Engine::query_batch` (`kndo query`'s JSONL
 /// loop, one shared graph load) both call, so cache revalidation happens exactly once per
-/// process regardless of how many requests are answered (RFC 0007 §4.7 tenet 1).
+/// process regardless of how many requests are answered (the batching tenet).
 pub(crate) fn run(
     graph: &ProjectGraph,
     reach: &ReachabilityMap,
@@ -308,8 +308,8 @@ fn find_entries(
         .collect()
 }
 
-/// A small, `Copy`-cheap error carrying exactly what an inline `results[]` failure needs
-/// (output-schema §8) — kept separate from [`ResultEntry`] itself so `resolve_selector`'s `Err`
+/// A small, `Copy`-cheap error carrying exactly what an inline `results[]` failure
+/// needs — kept separate from [`ResultEntry`] itself so `resolve_selector`'s `Err`
 /// stays small (clippy's `result_large_err`: `ResultEntry`'s successful variants, especially
 /// `Trace`, are hundreds of bytes).
 struct QueryFailure {

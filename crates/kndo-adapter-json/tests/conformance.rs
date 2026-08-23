@@ -1,9 +1,9 @@
 //! Runs every fixture under `tests/fixtures/` through the shared conformance harness
-//! (`kndo_core::conformance`, RFC 0002 §8) with the real `JsonAdapter` alongside the real
+//! (`kndo_core::conformance`) with the real `JsonAdapter` alongside the real
 //! `JsTsAdapter` — no mock, real discovery, real extraction, real resolution, the real
-//! `Engine`. Both adapters are registered because JSON's entire value is cross-language
-//! (docs/adapters/json.md §0/§1): a fixture with JSON alone could never demonstrate what an
-//! importer sees, nor the "manifests are not claimed" guarantee for `package.json`.
+//! `Engine`. Both adapters are registered because JSON's entire value is cross-language:
+//! a fixture with JSON alone could never demonstrate what an importer sees, nor the
+//! "manifests are not claimed" guarantee for `package.json`.
 
 use std::path::Path;
 

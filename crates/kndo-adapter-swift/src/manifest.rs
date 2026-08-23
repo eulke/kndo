@@ -1,4 +1,4 @@
-//! `Package.swift` extraction (docs/adapters/swift.md §4): parsed as real Swift source (the
+//! `Package.swift` extraction: parsed as real Swift source (the
 //! same grammar `extraction` uses), not a data format — the `Package(…)` initializer call's
 //! labeled arguments are read as data, the SwiftPM analogue of Rust's structured `Cargo.toml`
 //! parse rather than Gradle's line-scan (every argument SwiftPM itself requires is labeled, so
@@ -13,7 +13,7 @@ use smol_str::SmolStr;
 use tree_sitter::Node;
 
 /// The path segment immediately following `Sources/` or `Tests/` — SwiftPM's Standard
-/// Directory Layout target name (docs/adapters/swift.md §0). `None` for a file outside both
+/// Directory Layout target name. `None` for a file outside both
 /// conventions.
 pub(crate) fn unit_for_path(path: &str) -> Option<String> {
     let segments: Vec<&str> = path.split('/').collect();
@@ -49,8 +49,8 @@ pub(crate) fn extract(path: &str, content: &[u8], ctx: &ResolveCtx<'_>) -> Manif
     let dir = kndo_adapter_toolkit::paths::dirname(path);
     let custom_paths = collect_target_paths(targets, content);
     for name in exported_target_names(products, content) {
-        // A target's sources live under its `path:` argument when declared (Alamofire's
-        // `.target(name: "Alamofire", path: "Source")` — M6 FP hunt), under the SwiftPM
+        // A target's sources live under its `path:` argument when declared (e.g.
+        // `.target(name: "MyLib", path: "Source")`), under the SwiftPM
         // Standard Directory Layout `Sources/<name>` otherwise.
         let source_root = custom_paths
             .get(&name)
@@ -175,7 +175,7 @@ fn collect_package_dependencies(deps: Option<Node>, src: &[u8]) -> Vec<ManifestD
 }
 
 /// `.package(url: "...", from/exact/branch/revision: "...")` — `name` is a best-effort identity
-/// derived from the URL's last path segment (spec §0/§4: the repository name and the module(s)
+/// derived from the URL's last path segment (the repository name and the module(s)
 /// it exports aren't guaranteed identical, a documented approximation).
 fn package_dependency(call: Node, src: &[u8]) -> Option<ManifestDependency> {
     if call_callee_name(call, src) != Some("package") {
@@ -241,7 +241,7 @@ fn collect_target_paths(
 
 /// One `ManifestRoot{Production, Certain}` per non-test `.swift` file under a publicly-
 /// exported target's source tree (its `path:` override or `Sources/<target>`) — the same
-/// per-file promotion mechanism Java/Kotlin use (docs/adapters/java.md §4), parameterized
+/// per-file promotion mechanism Java/Kotlin use, parameterized
 /// per-target instead of per-manifest.
 fn promote_target_roots(
     dir: &str,
@@ -256,7 +256,7 @@ fn promote_target_roots(
         .filter(|p| !is_vendored(p.0.as_str()))
         .cloned()
         .collect();
-    files.sort(); // deterministic (RFC 0008 §4)
+    files.sort(); // deterministic output ordering
     for target_file in files {
         out.roots.push(ManifestRoot {
             kind: RootKind::Production,

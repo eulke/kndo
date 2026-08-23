@@ -1,4 +1,4 @@
-//! Import resolution (docs/adapters/swift.md §3): pure lookups against `ResolveCtx`'s known-
+//! Import resolution: pure lookups against `ResolveCtx`'s known-
 //! files/units index — same algorithm as Java/Kotlin's, since Swift's `unit` (an SPM target
 //! name, `manifest.rs::unit_for_path`) plays exactly the role a declared package name does
 //! there. The one real difference: a Swift `import` names a module directly (no static-import
@@ -7,8 +7,8 @@
 use kndo_core::adapter::{ImportSpec, Resolution, ResolveCtx};
 
 /// Ships with the Swift toolchain/Apple SDK, never a package dependency — inherently non-
-/// exhaustive against the full SDK surface (docs/adapters/swift.md §7), widened only if real
-/// dogfooding surfaces a false `undeclared`.
+/// exhaustive against the full SDK surface; widen whenever a real project surfaces a false
+/// `undeclared`.
 const STDLIB_MODULES: &[&str] = &[
     "Swift",
     "Foundation",
@@ -66,7 +66,7 @@ mod tests {
     fn unresolved_external_module_never_becomes_a_dependency_edge() {
         let known: FxHashSet<ProjectPath> = FxHashSet::default();
         let ctx = ResolveCtx::new(&known);
-        assert_eq!(resolve(&spec("Alamofire"), &ctx), Resolution::Unresolved);
+        assert_eq!(resolve(&spec("SomeExternalKit"), &ctx), Resolution::Unresolved);
     }
 
     #[test]

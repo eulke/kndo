@@ -1,11 +1,11 @@
-//! Ingested coverage (ADR 0005: "coverage is ingested, never measured"): per-file,
+//! Ingested coverage ("coverage is ingested, never measured"): per-file,
 //! line-granular hit counts as coverage producers report them, plus the machinery `crap`
-//! (RFC 0005 §10) needs to turn them into a per-function `cov(m)` fraction.
+//! needs to turn them into a per-function `cov(m)` fraction.
 //!
 //! Coverage deliberately does NOT live on the [`crate::graph::ProjectGraph`] or in its
 //! snapshot: a report's freshness varies independently of source content hashes, and caching
 //! it into the graph would serve stale coverage on every warm run — the exact "stale
-//! certainty" ADR 0005's freshness policy exists to prevent. The engine re-reads reports each
+//! certainty" the freshness policy exists to prevent. The engine re-reads reports each
 //! run (they're small) and hands the map to `analysis::run_all` as a separate input.
 //!
 //! Parsing lives in plugins ([`crate::plugin::Plugin::ingest_coverage`], with the lcov
@@ -29,7 +29,7 @@ pub struct CoverageMap {
     /// Human-readable provenance per ingested report ("coverage-lcov coverage/lcov.info
     /// (2d old)"), recorded by the *host* after each successful ingest — it located the
     /// report and checked its freshness, so it owns saying what was used. Surfaced by
-    /// health's crap category so consumers can judge the source (ADR 0005).
+    /// health's crap category so consumers can judge the source.
     pub sources: Vec<String>,
 }
 
@@ -38,12 +38,12 @@ impl CoverageMap {
         self.files.is_empty()
     }
 
-    /// RFC 0005 §10's `cov(m)`, approximated at line granularity (ADR 0005: "line-level lcov
+    /// The `cov(m)`, approximated at line granularity ("line-level lcov
     /// ⇒ statement-level approximation"): the fraction of *instrumented* lines inside the
     /// function's span that executed. `None` when the file appears in no report, or the span
     /// contains no instrumented lines (a function the instrumenter skipped entirely) — both
     /// are "coverage unknown", not "coverage zero", and the caller decides what unknown means
-    /// (`crap` applies the RFC's cov = 0 + "coverage: none" flag).
+    /// (`crap` applies cov = 0 plus a "coverage: none" flag).
     pub fn function_coverage(&self, path: &ProjectPath, span: Span) -> Option<f64> {
         let file = self.files.get(path)?;
         let mut instrumented = 0usize;
@@ -64,7 +64,7 @@ impl CoverageMap {
 }
 
 /// The typed sink [`crate::plugin::Plugin::ingest_coverage`] writes through — the core owns
-/// the map; plugins only ever add validated facts to it (RFC 0003's sink discipline).
+/// the map; plugins only ever add validated facts to it (the sink discipline).
 #[derive(Debug, Default)]
 pub struct CoverageSink {
     map: CoverageMap,

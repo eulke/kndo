@@ -1,9 +1,9 @@
-//! The ABI compatibility matrix (RFC 0017 §7, docs/contracts/wasm-abi.md §8): the two
+//! The ABI compatibility matrix: the two
 //! reference components, **pre-built and committed** under `tests/compat/`, run against the
-//! HEAD host on every push. wasm-abi §8 promises a v1 component keeps working against every
+//! HEAD host on every push. The ABI promises a v1 component keeps working against every
 //! v1-compatible host indefinitely — this test is that promise as a build-breaking fact
-//! instead of a sentence. (Pre-1.0 the WIT may still evolve in place, authoring.md §7's
-//! honesty note; when it does, the pinned binaries are rebuilt *in the same commit* that
+//! instead of a sentence. (Pre-1.0 the WIT may still evolve in place;
+//! when it does, the pinned binaries are rebuilt *in the same commit* that
 //! changes the WIT — that rebuild is the explicit, reviewable record of a compatibility
 //! break, which is exactly what an unreviewable silent breakage isn't.)
 //!

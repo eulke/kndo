@@ -1,14 +1,14 @@
-//! End-to-end graph-assembly regressions for the two real bugs multi-file Go dogfooding found
-//! (docs/adapters/go.md, RFC 0011 §4, RFC 0005 §1) — both fixed at the core level, exercised
-//! here through the real adapter rather than a synthetic mock, since the bugs only manifest
-//! through the specific edge shapes Go's resolver and root promotion actually produce.
+//! End-to-end graph-assembly regression guards for core-level invariants, exercised
+//! here through the real adapter rather than a synthetic mock, since the failure modes only
+//! manifest through the specific edge shapes Go's resolver and root promotion actually
+//! produce.
 
 use kndo_adapter_go::GoAdapter;
 use kndo_core::{analysis, graph};
 use std::fs;
 
 /// Each caller passes a distinct name: tests run in parallel, and a shared directory races
-/// one test's `remove_dir_all` against another's assemble (observed as a real flake).
+/// one test's `remove_dir_all` against another's assemble.
 fn multi_file_module(name: &str) -> std::path::PathBuf {
     let dir = std::env::temp_dir().join(format!("kndo-go-assembly-{name}"));
     let _ = fs::remove_dir_all(&dir);
@@ -41,13 +41,12 @@ fn multi_file_module(name: &str) -> std::path::PathBuf {
 
 #[test]
 fn a_root_that_is_only_a_symbol_does_not_strand_its_file_or_its_callees() {
-    // Regression: `func main()` in `main.go` is a root (a *symbol*-targeted one — Go has no
-    // manifest-level "entry file" the way JS does, docs/adapters/go.md §2). Before the
-    // reachability.rs fix, reaching only the `main` symbol never visited `main.go` as a file
-    // node, so `main.go`'s own (file-attributed) reference to `sub.Greeting` never propagated —
-    // and by the same mechanism, `Greeting`'s file-attributed call to the same-package sibling
-    // `format` never propagated either. Both `main.go` and `sub/format.go` read as fully
-    // unreachable despite genuinely being used.
+    // `func main()` in `main.go` is a root (a *symbol*-targeted one — Go has no
+    // manifest-level "entry file" the way JS does). Reaching the `main` symbol must also
+    // visit `main.go` as a file node, so `main.go`'s own (file-attributed) reference to
+    // `sub.Greeting` propagates — and by the same mechanism, `Greeting`'s file-attributed
+    // call to the same-package sibling `format` propagates too. Without that, both `main.go`
+    // and `sub/format.go` would read as fully unreachable despite genuinely being used.
     let dir = multi_file_module("symbol-root");
     let (g, diagnostics) = graph::assemble(&dir, &[Box::new(GoAdapter)], &[]).unwrap();
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
@@ -78,12 +77,13 @@ fn a_root_that_is_only_a_symbol_does_not_strand_its_file_or_its_callees() {
 
 #[test]
 fn importing_the_module_s_own_subpackage_is_never_a_phantom_dependency() {
-    // Regression: resolving a same-module subpackage import as `Resolution::WorkspaceMember`
-    // (JS's shape for a workspace sibling) also creates an `ImportsDependency` edge toward a
-    // dependency named after the *module itself* — which `go.mod` never declares (a module
-    // cannot `require` itself), so it read as `undeclared` ("phantom dependency"). Go has no
-    // per-sibling declaration concept at all for its own subpackages; fixed by resolving to a
-    // plain `Resolution::File` instead (docs/adapters/go.md, resolution.rs's `resolve_into_package`).
+    // Resolving a same-module subpackage import as `Resolution::WorkspaceMember`
+    // (JS's shape for a workspace sibling) would also create an `ImportsDependency` edge
+    // toward a dependency named after the *module itself* — which `go.mod` never declares (a
+    // module cannot `require` itself), so it would read as `undeclared` ("phantom
+    // dependency"). Go has no per-sibling declaration concept at all for its own subpackages;
+    // the import resolves to a plain `Resolution::File` instead (resolution.rs's
+    // `resolve_into_package`).
     let dir = multi_file_module("own-subpackage");
     let (g, diagnostics) = graph::assemble(&dir, &[Box::new(GoAdapter)], &[]).unwrap();
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
@@ -102,10 +102,10 @@ fn importing_the_module_s_own_subpackage_is_never_a_phantom_dependency() {
 
 #[test]
 fn unexported_method_called_through_a_variable_is_not_falsely_unused() {
-    // The RFC 0012 §3 bug: methods declare as members (`helper` member_of `T`), but a call
+    // Methods declare as members (`helper` member_of `T`), but a call
     // `t.helper()` is a bare `helper` reference — name-exact resolution can never connect
     // them (no receiver types in extraction). The duck-typed fallback must keep the method
-    // alive at Probable; before it, this exact shape false-positived as unused:method — the
+    // alive at Probable; without it, this exact shape false-positives as unused:method — the
     // one failure mode kndo promises not to have.
     let dir = std::env::temp_dir().join("kndo-go-assembly-method-call");
     let _ = fs::remove_dir_all(&dir);
@@ -139,8 +139,8 @@ fn unexported_method_called_through_a_variable_is_not_falsely_unused() {
 
 #[test]
 fn a_dead_function_s_callees_die_with_it() {
-    // RFC 0012 §4's whole point, end to end in real Go: references are attributed to the
-    // symbol they execute inside, so dead `z`'s call no longer keeps `b` alive through the
+    // Attribution's whole point, end to end in real Go: references are attributed to the
+    // symbol they execute inside, so dead `z`'s call must not keep `b` alive through the
     // (live) file's blanket attribution — transitive death is visible.
     let dir = std::env::temp_dir().join("kndo-go-assembly-transitive-dead");
     let _ = fs::remove_dir_all(&dir);

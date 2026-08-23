@@ -1,6 +1,6 @@
 [package]
 name = "kndo-plugin-hooks-demo"
-description = "Reference external Plugin for kndo-plugin-api's kndo:plugin v1 ABI (docs/contracts/wasm-abi.md §5) — a convention-based demo exercising all four graph-mutation hooks, including the bidirectional list-files/symbols-in host-import queries. Not shipped with kndo (deliberately excluded from the workspace, same as examples/kndo-plugin-demo) — built and loaded as an external component by kndo-plugin-api's own compliance suite."
+description = "Reference external Plugin for kndo-plugin-api's kndo:plugin v1 ABI — a convention-based demo exercising all four graph-mutation hooks, including the bidirectional list-files/symbols-in host-import queries. Not shipped with kndo (deliberately excluded from the workspace, same as examples/kndo-plugin-demo) — built and loaded as an external component by kndo-plugin-api's own compliance suite."
 version = "0.1.0"
 edition = "2021"
 publish = false

@@ -1,6 +1,6 @@
 [package]
 name = "kndo-adapter-kotlin"
-description = "Kotlin language adapter for kndo (docs/adapters/kotlin.md)"
+description = "Kotlin language adapter for kndo"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

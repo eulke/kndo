@@ -1,4 +1,4 @@
-//! Compliance suite for the `kndo:plugin` v1 ABI (docs/contracts/wasm-abi.md §5): proves the
+//! Compliance suite for the `kndo:plugin` v1 ABI: proves the
 //! bidirectional bridge — the guest calling back into `list-files`/`symbols-in`, not just
 //! reporting facts about one file the way the adapter ABI does — through a real
 //! `kndo_core::engine::Engine`, same discipline as `compliance.rs`'s adapter test. The demo
@@ -128,19 +128,19 @@ fn external_wasm_plugin_hooks_affect_a_real_check() {
     let plugin = WasmPlugin::load(&component_path).expect("loading the demo WASM plugin");
     let descriptor = plugin.descriptor();
     assert_eq!(descriptor.id.as_str(), "hooks-demo");
-    // RFC 0015 §3 wire round-trip: the guest declares its activation rule and (empty)
+    // Wire round-trip: the guest declares its activation rule and (empty)
     // dependency list; both must survive the WIT boundary — the composition layer's fixpoint
     // (kndo's own unit tests) is only as real as this transport.
     assert_eq!(descriptor.activation.len(), 1);
     assert!(descriptor.dependencies.is_empty());
-    // RFC 0016 §6: WasmPlugin::content_hash() must be the real component bytes' own hash, not
+    // WasmPlugin::content_hash() must be the real component bytes' own hash, not
     // a placeholder — this is the graph cache key's proof that a swapped .wasm file (even with
     // an unchanged declared version) invalidates a stale snapshot.
     assert_eq!(
         Plugin::content_hash(&plugin),
         Some(*blake3::hash(&component_bytes).as_bytes())
     );
-    // RFC 0018 §4: the declared rule arrives through `rules()`, probed once at load and
+    // The declared rule arrives through `rules()`, probed once at load and
     // cached — the finding round's cheap gate.
     let rules = Plugin::rules(&plugin);
     assert_eq!(rules.len(), 1, "{rules:?}");
@@ -178,7 +178,7 @@ fn external_wasm_plugin_hooks_affect_a_real_check() {
         "decl bannerDecl\n",
     )
     .unwrap();
-    // RFC 0016 §5: content contribute_roots reads through read-file to decide whether to root
+    // contribute_roots reads through read-file to decide whether to root
     // content_target — proves the WIT host import reaches a real guest computation.
     std::fs::write(project_dir.path().join("content.demo"), "promote").unwrap();
 
@@ -310,9 +310,9 @@ fn external_wasm_plugin_hooks_affect_a_real_check() {
         "annotate_symbols should have exempted this: {internal_only_symbols:?}"
     );
 
-    // RFC 0017 §4's round lifecycle, both halves. The guest wires `staged_target` in
-    // contribute_edges ONLY when contribute_roots already ran on the same instance — under
-    // the old instance-per-hook model this rescue is observably impossible.
+    // The round lifecycle, both halves. The guest wires `staged_target` in
+    // contribute_edges ONLY when contribute_roots ran on the same instance — under
+    // an instance-per-hook model this rescue is observably impossible.
     assert!(
         !unused_symbols.contains(&"staged_target"),
         "guest state must persist from contribute_roots to contribute_edges within one \
@@ -322,7 +322,7 @@ fn external_wasm_plugin_hooks_affect_a_real_check() {
         !unused_symbols.contains(&"fresh_target"),
         "the round's first contribute_roots call must root fresh_ symbols: {unused_symbols:?}"
     );
-    // RFC 0017 §5's read surface, end to end: importers-of and call-sites-in must reach real
+    // The read surface, end to end: importers-of and call-sites-in must reach real
     // guest computations, not just type-check.
     assert!(
         !unused_symbols.contains(&"linked_target"),
@@ -332,7 +332,7 @@ fn external_wasm_plugin_hooks_affect_a_real_check() {
         !unused_symbols.contains(&"sited_target"),
         "call-sites-in must surface the use.site(\"promote\") fact to the guest: {unused_symbols:?}"
     );
-    // RFC 0018 end to end over the WASM boundary: `contribute-findings` ran on the
+    // Findings end to end over the WASM boundary: `contribute-findings` ran on the
     // post-assembly finding round, and the result is namespaced, `convention`-grouped, and
     // advisory (no [plugins.gate] in this fixture).
     let finding = result

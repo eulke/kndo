@@ -1,7 +1,7 @@
-//! JSON extraction (docs/adapters/json.md §2): a non-source language — no declarations, no
-//! imports, no references, no roots, nothing to measure. `FileFacts::default()` plus, at most,
-//! one parse-failure diagnostic when the content isn't valid JSON (RFC 0002 §2's "surviving
-//! broken code, but saying so" still applies even to a format with nothing else to extract).
+//! JSON extraction: a non-source language — no declarations, no imports, no references, no
+//! roots, nothing to measure. `FileFacts::default()` plus, at most, one parse-failure
+//! diagnostic when the content isn't valid JSON ("surviving broken code, but saying so"
+//! applies even to a format with nothing else to extract).
 
 use kndo_core::adapter::{Diagnostic, DiagnosticLevel, FileFacts};
 
@@ -53,7 +53,7 @@ mod tests {
 
     #[test]
     fn json_with_comments_is_rejected_as_malformed_not_tolerated_as_jsonc() {
-        // docs/adapters/json.md §5: JSONC/JSON5 are a documented non-goal for v1.
+        // JSONC/JSON5 are a deliberate non-goal — comments make the content malformed JSON.
         let f = extract(b"{\n  // a comment\n  \"a\": 1\n}\n");
         assert_eq!(f.diagnostics.len(), 1);
     }

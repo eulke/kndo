@@ -1,7 +1,7 @@
-//! Language-neutral graph vocabulary (contracts/core-traits.md §1).
+//! Language-neutral graph vocabulary.
 //!
 //! If implementing a feature seems to require `if language == X` anywhere in the core, this
-//! vocabulary is missing a concept — extend it here instead (RFC 0001 §2).
+//! vocabulary is missing a concept — extend it here instead.
 
 use smol_str::SmolStr;
 
@@ -10,7 +10,7 @@ use crate::adapter::Span;
 // ---------------------------------------------------------------- interned ids
 
 /// Interned; stable within a snapshot. Assigned by a deterministic post-collection sort,
-/// never by completion order (RFC 0008 §4).
+/// never by completion order.
 #[derive(
     Debug,
     Clone,
@@ -42,7 +42,7 @@ pub struct FileId(pub u32);
 pub struct SymbolId(pub u32);
 
 /// A package consumed as a dependency — external, or an in-repo workspace member imported by
-/// name (RFC 0011 §4; same declaration contract either way).
+/// name (same declaration contract either way).
 #[derive(
     Debug,
     Clone,
@@ -58,7 +58,7 @@ pub struct SymbolId(pub u32);
 )]
 pub struct DependencyId(pub u32);
 
-/// A workspace unit: one manifest + the files it governs (RFC 0011).
+/// A workspace unit: one manifest + the files it governs.
 #[derive(
     Debug,
     Clone,
@@ -147,7 +147,7 @@ impl Default for FileClass {
 
 /// Kebab-case names double as `subject_kind` facet values (alongside `file | directory |
 /// package | dependency | import | suppression`) in output and `category:subject` targeting
-/// (RFC 0005 taxonomy rule 2).
+/// (the taxonomy rule).
 #[derive(
     Debug,
     Clone,
@@ -165,13 +165,13 @@ pub enum SymbolKind {
     Method,
     /// A type's constructor (Java/Kotlin `<init>`, Swift `init`): instantiation references
     /// the *type*, never the constructor symbol, so a constructor's liveness follows its
-    /// class — `unused` exempts the kind outright (M6 FP hunt).
+    /// class — `unused` exempts the kind outright.
     Constructor,
     /// An expansion symbol (Rust `macro_rules!`, a C preprocessor macro): invoked
     /// *textually*, outside the language's module-visibility model, and its body executes
     /// at the expansion sites, not where the template is written. Visibility-scope analyses
     /// therefore cannot trust observed use sites for this kind — neither for the macro
-    /// itself nor as the *origin* of references attributed to it (M6 FP hunt).
+    /// itself nor as the *origin* of references attributed to it.
     Macro,
     Class,
     Interface,
@@ -236,8 +236,8 @@ pub enum RootKind {
     Tooling,
 }
 
-/// Analysis semantics per scope: RFC 0005 §5 (peer exempt from `unused`; optional demotes
-/// findings to `possible`).
+/// Analysis semantics per scope: peer is exempt from `unused`; optional demotes
+/// findings to `possible`.
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, Hash, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize,
 )]
@@ -251,10 +251,10 @@ pub enum DependencyScope {
 
 // ---------------------------------------------------------------- edges
 
-/// Reference subtype. `Implement`/`Override` drive dispatch-aware member liveness
-/// (RFC 0005 §2); `Extend`/`TypeUse` distinguish type-level from value-level consumption.
-/// Adapter-supplied per reference since RFC 0012 §5 (`RawReference::kind` — serde derives are
-/// for the facts cache); untagged references are `Read`, exactly the pre-§5 behavior.
+/// Reference subtype. `Implement`/`Override` drive dispatch-aware member liveness;
+/// `Extend`/`TypeUse` distinguish type-level from value-level consumption.
+/// Adapter-supplied per reference (`RawReference::kind` — serde derives are
+/// for the facts cache); untagged references are `Read`, the undifferentiated default.
 #[derive(
     Debug,
     Clone,
@@ -281,7 +281,7 @@ pub enum RefKind {
 }
 
 /// Per-edge strength. Ordered by strength: `Possible < Probable < Certain`, so `max()` yields
-/// the strongest evidence and "edges at least as strong as τ" is a simple `>=` (RFC 0005 §1).
+/// the strongest evidence and "edges at least as strong as τ" is a simple `>=`.
 #[derive(
     Debug,
     Clone,
@@ -324,8 +324,8 @@ pub enum NodeRef {
 }
 
 /// How per-edge confidence combines into a node's `(color, confidence)` — including
-/// `Wildcard`'s plausible-target-set expansion — is the tiered algorithm normatively defined
-/// in RFC 0005 §1, not left to each analysis to reinvent.
+/// `Wildcard`'s plausible-target-set expansion — is the one normatively defined tiered
+/// algorithm (`reachability`), not left to each analysis to reinvent.
 #[derive(
     Debug,
     Clone,
@@ -339,7 +339,7 @@ pub enum NodeRef {
     rkyv::Deserialize,
 )]
 pub enum EdgeKind {
-    /// May cross `Package` boundaries (RFC 0011 §4).
+    /// May cross `Package` boundaries.
     ImportsFile {
         from: FileId,
         to: FileId,
@@ -371,12 +371,12 @@ pub enum EdgeKind {
     Wildcard {
         from: FileId,
     },
-    /// A **liveness** edge to a whole file (RFC 0017 §5.4): "if `from` is alive, `to` is in
+    /// A **liveness** edge to a whole file: "if `from` is alive, `to` is in
     /// use" — the shape a template/asset relationship has (`res.render("index")` →
     /// `views/index.ejs`, a CSS class used from an HTML template) when the target file has no
     /// symbols to reference. Today produced only by plugin file-target contributions (the
     /// plugin edge sink; adapters keep emitting `ImportsFile` for real imports). Contract
-    /// (RFC 0005): liveness evidence, never architecture evidence — reachability consumes it
+    ///: liveness evidence, never architecture evidence — reachability consumes it
     /// exactly like `ImportsFile`, while `cyclic` and every analysis that would *create* a
     /// finding from an edge's existence ignore it. A false edge can therefore only ever
     /// suppress findings, preserving the zero-false-positive bar by construction.
@@ -384,7 +384,7 @@ pub enum EdgeKind {
         from: NodeRef,
         to: FileId,
     },
-    /// A **process-boundary invocation** (RFC 0005 §1's invoked-program rule): `from`
+    /// A **process-boundary invocation** (the invoked-program rule): `from`
     /// executes the file `to` as a program — a test running its own workspace binary
     /// (`env!("CARGO_BIN_EXE_…")`), resolved through the manifest's named executable
     /// targets. Unlike `ImportsFile` (importing runs only load-time code), *executing* a
@@ -417,7 +417,7 @@ pub enum EdgeKind {
 pub enum Provenance {
     Adapter(#[rkyv(with = crate::rkyv_support::SmolStrAsString)] SmolStr),
     Plugin(#[rkyv(with = crate::rkyv_support::SmolStrAsString)] SmolStr),
-    /// The core's surface-closure phase (RFC 0011 §5, RFC 0012 §6): Root edges derived from
+    /// The core's surface-closure phase: Root edges derived from
     /// named re-exports out of surface files and from surface-transitive members of surface
     /// types. A distinct provenance so the incremental patch can strip and recompute the
     /// whole closure exactly (it is cross-file by nature — no single owner file's change
@@ -443,12 +443,12 @@ pub struct Edge {
     pub source: Provenance,
     /// The extraction-time span this edge's evidence came from — the import statement, the
     /// reference site, the declaration itself for `Declares` — when the fact that produced this
-    /// edge carried one (contracts/output-schema.md §8's `EdgeRef.site`, RFC 0007 design tenet
-    /// 4: "an agent can jump straight to the proving line"). `None` for edges with no distinct
+    /// edge carried one (the `EdgeRef.site` — "an agent can jump straight to the
+    /// proving line"). `None` for edges with no distinct
     /// evidence site of their own — role-derived and manifest-declared roots are markers, not
     /// spanned facts.
     pub span: Option<Span>,
-    /// The file whose facts produced this edge (RFC 0013 §2: ownership is explicit, never
+    /// The file whose facts produced this edge (ownership is explicit, never
     /// inferred from edge shape — shapes provably lie: a narrowed-dynamic or opaque-namespace
     /// `Wildcard` points *from the target* but is produced by the importer, and a barrel's
     /// re-export `Root` promotion targets a symbol in another file; manifest-derived edges
@@ -466,7 +466,7 @@ mod tests {
     fn confidence_orders_by_strength() {
         assert!(Confidence::Certain > Confidence::Probable);
         assert!(Confidence::Probable > Confidence::Possible);
-        // "at least as strong as τ" is >= (RFC 0005 §1 tiered reachability)
+        // "at least as strong as τ" is >= (tiered reachability)
         assert!(Confidence::Certain >= Confidence::Possible);
     }
 

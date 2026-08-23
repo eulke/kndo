@@ -1,4 +1,4 @@
-//! Swift extraction (docs/adapters/swift.md §2), written against tree-sitter-swift 0.7.3 node
+//! Swift extraction, written against tree-sitter-swift 0.7.3 node
 //! shapes verified by `parsing`'s `#[ignore]`d ground-truth dumps.
 //!
 //! Declaration/member dispatch is TABLE-driven, following the same pattern
@@ -27,7 +27,7 @@ const GENERATED_MARKERS: kndo_adapter_toolkit::classify::ContentMarkers =
         comment_openers: &["//", "/*", "*"],
     };
 
-/// docs/adapters/swift.md §2: `switch_entry` counts once per arm (matching every other
+/// `switch_entry` counts once per arm (matching every other
 /// adapter's n-way-match rule); `guard_statement` is an implicit early-return conditional,
 /// counted same as `if`; `catch_block` (not `do_statement`) counts per catch clause, matching
 /// Java's try/catch convention exactly. Nil-coalescing (`??`) and force-unwrap (`!`) are
@@ -61,8 +61,8 @@ const METRICS_SYNTAX: MetricsSyntax = MetricsSyntax {
 const MIN_CLONE_TOKENS: usize = 50;
 
 /// Item-walk context: the member owner (a struct/class/enum/protocol/extension's bare name),
-/// for `member_of` attribution (RFC 0012 §3) — an `extension`'s members carry the EXTENDED
-/// type's name here (spec §0), not any name of the extension block itself (which has none).
+/// for `member_of` attribution — an `extension`'s members carry the EXTENDED
+/// type's name here, not any name of the extension block itself (which has none).
 struct Ctx<'a> {
     owner: Option<&'a str>,
     /// The owner type (or extension) declares at least one inheritance/conformance entry:
@@ -70,12 +70,11 @@ struct Ctx<'a> {
     /// the repo (a custom `KeyedEncodingContainerProtocol` implementation is called by the
     /// stdlib's Codable synthesis — no source call site can exist). Requirements of external
     /// protocols aren't enumerable statically, so such methods root at `Possible` — the
-    /// dynamic-dispatch tier, degrading toward silence (RFC 0012 §2; M6 FP hunt, Alamofire
-    /// corpus).
+    /// dynamic-dispatch tier, degrading toward silence.
     owner_conforms: bool,
-    /// RFC 0012 §4: a top-level (`owner: None`) `let`/`var` is a lazily-initialized global in
+    /// A top-level (`owner: None`) `let`/`var` is a lazily-initialized global in
     /// an ordinary file — its initializer only runs on first access, so `within` names the
-    /// global itself, not `None` (spec §2). `main.swift`'s top-level code is the one exception:
+    /// global itself, not `None`. `main.swift`'s top-level code is the one exception:
     /// it's a script, executing procedurally at load like any other module-load statement.
     /// Irrelevant once `owner` is `Some` (member initializers already have their own `within`).
     top_level_lazy: bool,
@@ -87,7 +86,7 @@ const DECL_HANDLERS: &[(&str, DeclHandler)] = &[
     ("class_declaration", handle_type),
     ("protocol_declaration", handle_protocol),
     ("function_declaration", handle_function),
-    // A protocol's method requirement — no body, just a signature (spec §2).
+    // A protocol's method requirement — no body, just a signature.
     ("protocol_function_declaration", handle_function),
     ("init_declaration", handle_init),
     ("deinit_declaration", handle_deinit),
@@ -132,7 +131,7 @@ pub(crate) fn extract(path: &str, content: &[u8]) -> FileFacts {
     out.unit_name = out.unit.clone();
 
     walk_top_level(root, content, !is_main_swift(path), &mut out);
-    // `main.swift` (spec §0): the whole file's top-level code runs unconditionally at process
+    // `main.swift`: the whole file's top-level code runs unconditionally at process
     // start — a filename convention SwiftPM itself enforces, not a heuristic.
     if is_main_swift(path) {
         out.roots.push(RawRoot {
@@ -149,7 +148,7 @@ fn is_main_swift(path: &str) -> bool {
     path.rsplit('/').next() == Some("main.swift")
 }
 
-/// `source_file`'s children (spec §0/§4): declarations dispatch as usual (each handler already
+/// `source_file`'s children: declarations dispatch as usual (each handler already
 /// walks its own body/value for references), but a `.swift` file — `main.swift` above all —
 /// can *also* carry bare top-level executable statements (SwiftPM's "top-level code" file), the
 /// same shape as a function body. Anything `DECL_HANDLERS` doesn't recognize is walked as body
@@ -193,15 +192,15 @@ fn handle_import(item: Node, src: &[u8], out: &mut FileFacts) {
         }],
         reexported: false,
         opaque_namespace_use: false,
-        // `import Alamofire` puts every top-level name of the module in bare scope — no
+        // `import SomeKit` puts every top-level name of the module in bare scope — no
         // per-name binding syntax exists. The core's bare-name fallback consults the
-        // resolved target's whole unit for imports carrying this (spec §3).
+        // resolved target's whole unit for imports carrying this.
         module_names_visible: true,
         local_alias: None,
     });
 }
 
-// ---------------------------------------------------------------- visibility (spec §0)
+// ---------------------------------------------------------------- visibility
 
 const VISIBILITY_LEVELS: &[(&str, u8)] = &[
     ("private", 0),
@@ -211,8 +210,8 @@ const VISIBILITY_LEVELS: &[(&str, u8)] = &[
     ("open", 4),
 ];
 
-/// `[File "private", File "fileprivate", Package "internal", Public "public", Public "open"]`
-/// (spec §0). No modifier at all defaults to `internal` (2) — Swift's own default, applying
+/// `[File "private", File "fileprivate", Package "internal", Public "public", Public "open"]`.
+/// No modifier at all defaults to `internal` (2) — Swift's own default, applying
 /// uniformly at top-level and member position alike (no restricted subset the way Java/
 /// Kotlin's ladders have).
 fn visibility(item: Node) -> (u8, bool) {
@@ -237,7 +236,7 @@ fn modifiers_node(item: Node) -> Option<Node> {
         .find(|n| n.kind() == "modifiers")
 }
 
-/// `@main` (spec §0): an independent, `Certain`-confidence root trigger alongside `main.swift`'s
+/// `@main`: an independent, `Certain`-confidence root trigger alongside `main.swift`'s
 /// whole-file promotion — SwiftPM itself resolves the attributed type's `static func main()` as
 /// the executable entry point, not a heuristic.
 fn has_main_attribute(item: Node, src: &[u8]) -> bool {
@@ -296,7 +295,7 @@ fn handle_type(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
     }
 }
 
-/// `@main` (spec §0) roots the attributed type's `static func main()` at `Certain`.
+/// `@main` roots the attributed type's `static func main()` at `Certain`.
 fn emit_main_root_if_attributed(item: Node, src: &[u8], name: &str, out: &mut FileFacts) {
     if !has_main_attribute(item, src) {
         return;
@@ -308,7 +307,7 @@ fn emit_main_root_if_attributed(item: Node, src: &[u8], name: &str, out: &mut Fi
     });
 }
 
-/// Superclass/protocol conformance (spec §2): both the single `inherits_from`-fielded specifier
+/// Superclass/protocol conformance: both the single `inherits_from`-fielded specifier
 /// most declarations carry and any additional ones in a multi-conformance list.
 fn has_conformances(item: Node) -> bool {
     item.child_by_field_name("inherits_from").is_some()
@@ -329,7 +328,7 @@ fn emit_type_inheritance_refs(item: Node, src: &[u8], name: &str, out: &mut File
 }
 
 /// `class_declaration`'s own name (a plain `type_identifier`) vs `extension`'s (a `user_type`,
-/// possibly qualified — the last identifier segment is the extended type's bare name, spec §0).
+/// possibly qualified — the last identifier segment is the extended type's bare name).
 fn type_declaration_name<'a>(item: Node, src: &'a [u8]) -> Option<&'a str> {
     let name_node = item.child_by_field_name("name")?;
     if name_node.kind() == "user_type" {
@@ -408,7 +407,7 @@ fn qualify(owner: Option<&str>, name: &str) -> (SymbolKind, String) {
     (SymbolKind::Method, format!("{owner}.{name}"))
 }
 
-/// `override` dispatch rooting (spec §0) — the `member_modifier` keyword, structurally
+/// `override` dispatch rooting — the `member_modifier` keyword, structurally
 /// identical to Kotlin's `override`.
 fn root_if_dispatch_target(item: Node, qualified: &str, out: &mut FileFacts) {
     if !has_modifier_wrapper(item, "member_modifier", "override") {
@@ -419,7 +418,7 @@ fn root_if_dispatch_target(item: Node, qualified: &str, out: &mut FileFacts) {
         target: RawRootTarget::Declaration(SmolStr::new(qualified)),
         confidence: Confidence::Probable,
     });
-    // Machinery dispatch (RFC 0005 §1): an explicit `override` is invoked through the
+    // Machinery dispatch: an explicit `override` is invoked through the
     // superclass — a tested owner plausibly has its overrides executed. Protocol witnesses
     // deliberately stay out (no keyword marks them; blanket-marking every method of a
     // conforming type would erase real untested signal — degrade toward silence only on
@@ -437,8 +436,8 @@ fn root_if_dispatch_target(item: Node, qualified: &str, out: &mut FileFacts) {
 /// default parameter values. A default expression is a SIBLING of its `parameter` (after a
 /// bare `=` token, tree-sitter-swift 0.7): calling the function with the argument omitted
 /// executes the default, so its references belong `within` the function like body code
-/// (M6 corpus: Alamofire's `boolEncoding: BoolEncoding = .numeric` — tests construct the
-/// encoder bare and still exercise `.numeric`'s arm). Dot-shorthand defaults qualify by the
+/// (e.g. `mode: Mode = .standard` — callers construct the value bare and still
+/// exercise `.standard`'s arm). Dot-shorthand defaults qualify by the
 /// parameter's own declared type — the one place the type is textually certain.
 /// `function_body`'s kind never matches any arm below, so it's naturally skipped.
 fn walk_function_signature(item: Node, src: &[u8], within: Option<&str>, out: &mut FileFacts) {
@@ -519,8 +518,8 @@ fn walk_default_value(
 
 /// `deinit { … }` — the runtime invokes it when an instance dies, so like `init` it gets the
 /// Constructor treatment: liveness follows the type (the core's container→constructor edge),
-/// and its body's references (a stored closure fired on teardown — M6 FP hunt, Alamofire's
-/// `Token.onDeinit`) stay visible instead of silently unwalked.
+/// and its body's references (a stored closure fired on teardown)
+/// stay visible instead of silently unwalked.
 fn handle_deinit(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
     let Some(owner) = ctx.owner else {
         return;
@@ -561,7 +560,7 @@ fn handle_init(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
         vis,
     );
     // Same signature walk as functions — inits are where default parameter values matter
-    // most (Alamofire's `Session.init` carries 13 of them).
+    // most (a configuration-heavy `init` can carry a dozen of them).
     walk_function_signature(item, src, Some(&qualified), out);
     if let Some(body) = body {
         walk_body(body, src, Some(&qualified), out);
@@ -614,10 +613,10 @@ fn property_symbol_kind(ctx: &Ctx<'_>) -> SymbolKind {
     }
 }
 
-/// RFC 0012 §4: a top-level global's initializer/getter/observer only runs on first access or
+/// A top-level global's initializer/getter/observer only runs on first access or
 /// on each read/write (Swift globals are always lazily-initialized) — `within` names the
 /// global itself, unless this is `main.swift`'s procedurally-executed top-level code
-/// (`top_level_lazy: false`, spec §2).
+/// (`top_level_lazy: false`).
 fn property_value_within<'a>(ctx: &Ctx<'a>, name: &'a str) -> Option<&'a str> {
     match ctx.owner {
         Some(owner) => Some(owner),
@@ -627,7 +626,7 @@ fn property_value_within<'a>(ctx: &Ctx<'a>, name: &'a str) -> Option<&'a str> {
 }
 
 /// Computed-property/observer bodies (get/set/willSet/didSet) are the property's OWN liveness
-/// unit, walked but not independently declared (spec §2).
+/// unit, walked but not independently declared.
 fn walk_property_bodies(item: Node, src: &[u8], within: Option<&str>, out: &mut FileFacts) {
     if let Some(value) = item.child_by_field_name("value") {
         walk_body(value, src, within, out);
@@ -699,7 +698,7 @@ fn push_declaration(
 
 // ---------------------------------------------------------------- type refs & inheritance
 
-/// `user_type`/`optional_type` positions → `TypeUse` (spec §2); recurses into `type_arguments`
+/// `user_type`/`optional_type` positions → `TypeUse`; recurses into `type_arguments`
 /// for generics but not into the base path's own segments (already captured by
 /// `last_identifier_text`).
 fn walk_type_refs(node: Node, src: &[u8], within: Option<&str>, out: &mut FileFacts) {
@@ -851,7 +850,7 @@ fn handle_navigation(node: Node, src: &[u8], within: Option<&str>, out: &mut Fil
 }
 
 /// `a.b`/`a.b.c()` — the terminal segment becomes the reference, `scope_context` is set when
-/// the target is a plain identifier/`self` (spec §2); a complex target (a nested navigation/
+/// the target is a plain identifier/`self`; a complex target (a nested navigation/
 /// call) is walked for its own references instead.
 fn emit_navigation_ref(
     node: Node,
@@ -1164,7 +1163,7 @@ mod tests {
     fn a_top_level_global_s_initializer_is_within_itself_except_in_main_swift() {
         // Swift globals are always lazily-initialized — `makeHelper()` only actually runs
         // when `shared` is first accessed, so the reference belongs to `shared`, not to
-        // "module load" (RFC 0012 §4).
+        // "module load".
         let ordinary = extract("Sources/MyLib/Widget.swift", b"let shared = makeHelper()\n");
         let r = ordinary
             .references

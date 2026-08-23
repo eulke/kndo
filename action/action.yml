@@ -2,7 +2,7 @@ name: kndo
 description: >-
   Run kndo on a pull request and report where reviewers look — a sticky PR
   comment, file annotations, and the job summary — gating the merge on the same
-  rules as the local pre-commit (RFC 0010).
+  rules as the local pre-commit.
 author: kndo
 branding:
   icon: check-circle
@@ -22,7 +22,7 @@ inputs:
     description: >-
       kndo version to install: a release tag like v0.1.0, "latest" for the
       newest release, or "source" to build kndo-cli from the checked-out
-      repository (dogfood / pre-release use).
+      repository (pre-release use).
     default: latest
   working-directory:
     description: Project root to analyze (where kndo runs).
@@ -85,7 +85,7 @@ runs:
         path: ${{ inputs.working-directory }}/.kndo/cache
         key: kndo-cache-${{ runner.os }}-${{ steps.key.outputs.kndo }}-${{ github.sha }}
         # Content-addressed entries make stale restores safe — worst case is a
-        # colder run, never a wrong one (RFC 0004 §3).
+        # colder run, never a wrong one.
         restore-keys: |
           kndo-cache-${{ runner.os }}-${{ steps.key.outputs.kndo }}-
     - name: Run kndo
@@ -101,7 +101,7 @@ runs:
         code=0
         if [ -n "${BASE_REF:-}" ]; then
           # The PR's merge-base against the base branch — identical semantics to
-          # local --diff (RFC 0004 §6). Needs the base locally resolvable.
+          # local --diff. Needs the base locally resolvable.
           git fetch --no-tags --quiet origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}" || true
           kndo check --diff "origin/${BASE_REF}" --fail-on "$FAIL_ON" --format json > "$report" || code=$?
         else
@@ -148,7 +148,7 @@ runs:
         case "$KNDO_EXIT" in
           0) ;;
           2)
-            # kndo failed to run — infrastructure, never "code has findings" (RFC 0010 §3).
+            # kndo failed to run — infrastructure, never "code has findings".
             echo "::error title=kndo failed to run::kndo exited 2 (infrastructure/config error, not code findings) — see the job log"
             exit 2 ;;
           *)

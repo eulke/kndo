@@ -3,19 +3,19 @@
 //! # gen-stdlib
 //!
 //! `cargo xtask gen-stdlib <language>|--all` regenerates an adapter's `kndo-stdlib v1`
-//! dataset from its authoritative source (RFC 0002 §6). The pipeline is language-agnostic:
+//! dataset from its authoritative source. The pipeline is language-agnostic:
 //! run the source command → filter/sort/dedup → emit v1 format → **validate with the same
 //! `StdlibIndex` loader that consumes it at build time** → write. Adding a language is one
 //! `SOURCES` table entry, never a new script.
 //!
 //! Runs at kndo development time only — the analyzed machine's toolchains are never queried
-//! at analysis time (determinism, RFC 0008 §4).
+//! at analysis time (determinism).
 //!
 //! # gen-schema
 //!
 //! `cargo xtask gen-schema` regenerates `schemas/kndo-output.schema.json` from
-//! `kndo_core::engine::Envelope` via `schemars` (contracts/output-schema.md's normative
-//! promise: "generated from the Rust types," never a second hand-written document).
+//! `kndo_core::engine::Envelope` via `schemars` — the schema is generated from the Rust
+//! types, never a second hand-written document.
 
 use std::process::{Command, ExitCode};
 
@@ -51,7 +51,7 @@ const SOURCES: &[StdlibSource] = &[
         version_command: &["go", "version"],
         // `internal/...` stdlib packages (~a quarter of `go list std`'s output) are real
         // entries but uncompilable outside the standard library itself — Go's `internal/`
-        // boundary (docs/adapters/go.md §0) is a structural, compiler-enforced signal, not
+        // boundary is a structural, compiler-enforced signal, not
         // something the stdlib-classification list needs to carry.
         exclude_prefixes: &["internal/"],
     },
@@ -93,10 +93,10 @@ fn main() -> ExitCode {
     }
 }
 
-/// Wraps a `wasm32-unknown-unknown` core module into a WASM component (ADR 0003) — the same
+/// Wraps a `wasm32-unknown-unknown` core module into a WASM component — the same
 /// `wit_component::ComponentEncoder` call `crates/kndo/tests/external_adapter.rs` and
 /// kndo-plugin-api's compliance suites already make in-process. Exposed as its own `xtask`
-/// step so CI's shell-build smoke check (RFC 0016 §7) doesn't need a separate `wasm-tools`
+/// step so CI's shell-build smoke check doesn't need a separate `wasm-tools`
 /// binary install for a one-line operation this workspace already depends on doing correctly.
 fn componentize(core_path: Option<&str>, out_path: Option<&str>) -> ExitCode {
     let (Some(core_path), Some(out_path)) = (core_path, out_path) else {

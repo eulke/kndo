@@ -1,7 +1,7 @@
-//! Textual detection of serde trait impl headers (docs/plugins/serde.md §2). Deterministic,
-//! single-line scan — every observed corpus shape writes the header on one line
+//! Textual detection of serde trait impl headers. Deterministic,
+//! single-line scan — idiomatic code writes the header on one line
 //! (`impl<'a> serde::Serialize for Message<'a> {`); a hand-wrapped header simply contributes
-//! nothing (degrade toward silence, RFC 0002 §5).
+//! nothing (degrade toward silence).
 
 /// Which serde trait an impl header names — decides WHICH members the machinery invokes.
 /// Module-private: the lib boundary trades in plain `(owner, member)` pairs.
@@ -13,9 +13,9 @@ enum SerdeTrait {
 }
 
 /// Every `(trait, owner base name)` pair the source's serde impl headers declare:
-/// `impl Serialize for Glob` → `(Serialize, "Glob")`, `impl<'a> serde::Serialize for
-/// Message<'a>` → `(Serialize, "Message")`, `impl<'de> Visitor<'de> for GlobVisitor` →
-/// `(Visitor, "GlobVisitor")`. The trait matches by its path's LAST segment, so both bare
+/// `impl Serialize for Config` → `(Serialize, "Config")`, `impl<'a> serde::Serialize for
+/// Message<'a>` → `(Serialize, "Message")`, `impl<'de> Visitor<'de> for ConfigVisitor` →
+/// `(Visitor, "ConfigVisitor")`. The trait matches by its path's LAST segment, so both bare
 /// and `serde::`/`serde::de::`-qualified forms land; a same-named local trait would
 /// over-mark at `Probable` — silence-direction only, and gated anyway on the manifest
 /// actually depending on serde.
@@ -59,8 +59,8 @@ pub(crate) fn machinery_marks<'a>(
         .collect()
 }
 
-/// The members a serde trait's machinery invokes on an implementor — curated per trait
-/// (spec §2): never called by name from user code, always through serde's dispatch.
+/// The members a serde trait's machinery invokes on an implementor — curated per trait:
+/// never called by name from user code, always through serde's dispatch.
 fn machinery_members(kind: SerdeTrait, member: &str) -> bool {
     match kind {
         SerdeTrait::Serialize => member == "serialize",
@@ -133,11 +133,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_corpus_header_shapes_all_parse() {
-        let src = "impl Serialize for Glob {\n\
+    fn all_supported_impl_header_shapes_parse() {
+        let src = "impl Serialize for Config {\n\
                    impl<'a> serde::Serialize for Message<'a> {\n\
-                   impl<'de> Deserialize<'de> for GlobSet {\n\
-                   impl<'de> Visitor<'de> for GlobVisitor {\n\
+                   impl<'de> Deserialize<'de> for ConfigSet {\n\
+                   impl<'de> Visitor<'de> for ConfigVisitor {\n\
                    impl<'de, T: Clone> serde::de::Visitor<'de> for Wrap<T> {\n\
                    impl Display for NotSerde {\n\
                    impl Widget {\n";
@@ -145,10 +145,10 @@ mod tests {
         assert_eq!(
             owners,
             vec![
-                (SerdeTrait::Serialize, "Glob".to_string()),
+                (SerdeTrait::Serialize, "Config".to_string()),
                 (SerdeTrait::Serialize, "Message".to_string()),
-                (SerdeTrait::Deserialize, "GlobSet".to_string()),
-                (SerdeTrait::Visitor, "GlobVisitor".to_string()),
+                (SerdeTrait::Deserialize, "ConfigSet".to_string()),
+                (SerdeTrait::Visitor, "ConfigVisitor".to_string()),
                 (SerdeTrait::Visitor, "Wrap".to_string()),
             ]
         );

@@ -1,7 +1,5 @@
-//! JavaScript/TypeScript adapter — normative spec: docs/adapters/js-ts.md.
-//!
-//! Implements §1 (claiming & classification), §2 first slice (extraction) and §3 first slice
-//! (resolution). Manifests land next, against the conformance harness.
+//! JavaScript/TypeScript adapter: claiming & classification, declaration/import extraction,
+//! import resolution, and `package.json` manifest facts.
 
 use kndo_core::adapter::{
     AdapterDescriptor, CyclePolicy, CycleTolerance, FileClaim, FileFacts, ImportSpec,
@@ -18,16 +16,15 @@ pub struct JsTsAdapter;
 
 pub(crate) const EXTENSIONS: &[&str] = &["ts", "tsx", "js", "jsx", "mjs", "cjs", "mts", "cts"];
 
-/// This adapter's classification conventions (spec §1) as data; the matcher and the
+/// This adapter's classification conventions as data; the matcher and the
 /// universal vendored-tree conventions live in the toolkit (one implementation for all
 /// adapters). Generated-origin content markers (@generated banners) are an extract-time
 /// concern, not a path concern.
 const PATH_PATTERNS: kndo_adapter_toolkit::classify::PathPatterns =
     kndo_adapter_toolkit::classify::PathPatterns {
         test_name_markers: &[".test.", ".spec."],
-        // `test`/`tests` are mocha's and node:test's default lookup directories — express-style
-        // repos keep plain-named specs there (`test/res.cookie.js`), with no name marker to
-        // catch them (M6 FP hunt).
+        // `test`/`tests` are mocha's and node:test's default lookup directories — many repos
+        // keep plain-named specs there (`test/response.js`), with no name marker to catch them.
         test_dirs: &["__tests__", "__mocks__", "test", "tests"],
         tooling_name_markers: &[".config."],
         tooling_dirs: &[".storybook"],
@@ -39,7 +36,7 @@ impl LanguageAdapter for JsTsAdapter {
             activation: Vec::new(),
             dependencies: Vec::new(),
             id: SmolStr::new("js-ts"),
-            facts_schema_version: 9, // 9: string_call_args (RFC 0017 §5.4); 8: FunctionMetrics.token_count (RFC 0005 §11); 7: FunctionMetrics emission (RFC 0005 §6); 6: local_alias in the serialized shape (RFC 0012 §9); 5: detected_origin (§7); 4: RefKind + signature_span (§5); 3: within (§4)
+            facts_schema_version: 10, // bump whenever the serialized facts shape or the emission semantics change
             file_globs: EXTENSIONS
                 .iter()
                 .map(|e| SmolStr::new(format!("**/*.{e}")))
@@ -49,10 +46,9 @@ impl LanguageAdapter for JsTsAdapter {
                 SmolStr::new("**/pnpm-workspace.yaml"),
             ],
             grammar_version: SmolStr::new("tree-sitter-typescript 0.23"),
-            // RFC 0012 §6's JS/TS ladder. Extraction emits 0/1 today (js-ts.md §4); rung 2
-            // ("package surface": reachable through the package's `exports` map) is an
-            // assembly-time promotion that lands with surface-awareness — declared now so the
-            // ladder is complete the day a symbol carries level 2.
+            // The JS/TS ladder. Extraction emits 0/1; rung 2 ("package surface": reachable
+            // through the package's `exports` map) is an assembly-time promotion — declared
+            // here so the ladder is complete whenever a symbol carries level 2.
             visibility_ladder: vec![
                 VisibilityRung {
                     scope: VisibilityScope::File,
@@ -70,7 +66,7 @@ impl LanguageAdapter for JsTsAdapter {
                     surface_transitive: true,
                 },
             ],
-            // RFC 0005 §8: JS/TS treats cycles as hazards at both levels — file cycles are
+            // JS/TS treats cycles as hazards at both levels — file cycles are
             // init-order bugs (TDZ crashes, partially-initialized modules), and workspace
             // package cycles break publish ordering and standalone installs.
             cycle_policy: CyclePolicy {
@@ -98,7 +94,7 @@ impl LanguageAdapter for JsTsAdapter {
     }
 
     fn claim_manifest(&self, path: &ProjectPath) -> bool {
-        // pnpm-workspace.yaml topology parsing is deferred (spec §4) — package.json only.
+        // pnpm-workspace.yaml topology is not parsed — package.json only.
         path.0.rsplit('/').next() == Some("package.json")
     }
 
@@ -151,8 +147,8 @@ mod tests {
         let c = claim("webpack.config.js").unwrap().class;
         assert_eq!(c.role, FileRole::Tooling);
 
-        // Orthogonality: a vendored test file expresses both axes (the FileFlavor bug we
-        // designed away — vocab.rs).
+        // Orthogonality: a vendored test file expresses both axes (role and origin are
+        // independent facts — vocab.rs).
         let c = claim("vendor/lib/util.test.js").unwrap().class;
         assert_eq!((c.role, c.origin), (FileRole::Test, FileOrigin::Vendored));
     }

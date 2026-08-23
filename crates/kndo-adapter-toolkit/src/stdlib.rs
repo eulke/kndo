@@ -1,4 +1,4 @@
-//! Shared stdlib/builtins mechanism — one implementation for every adapter (RFC 0002 §6).
+//! Shared stdlib/builtins mechanism — one implementation for every adapter.
 //!
 //! Every language has runtime-provided module namespaces whose set tracks the runtime's
 //! release cadence (Node builtins, Go std packages, Java modules). The *classification logic*

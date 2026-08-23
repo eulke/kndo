@@ -1,6 +1,6 @@
 [package]
 name = "kndo-plugin-demo"
-description = "Reference external adapter for kndo-plugin-api v1 — a toy language, hand-scanned (no tree-sitter: ADR 0002's grammar isn't a dependency this crate can carry across the wasm32-unknown-unknown boundary), proving the WASM component-model ABI end to end. Not shipped with kndo (deliberately excluded from the workspace, docs/contracts/wasm-abi.md §4) — built and loaded as an external component by kndo-plugin-api's own compliance suite."
+description = "Reference external adapter for kndo-plugin-api v1 — a toy language, hand-scanned (no tree-sitter grammar crosses the wasm32-unknown-unknown boundary), proving the WASM component-model ABI end to end. Not shipped with kndo (deliberately excluded from the workspace) — built and loaded as an external component by kndo-plugin-api's own compliance suite."
 version = "0.1.0"
 edition = "2021"
 publish = false

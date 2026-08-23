@@ -1,6 +1,6 @@
 [package]
 name = "kndo-adapter-rust"
-description = "Rust language adapter for kndo (docs/adapters/rust.md)"
+description = "Rust language adapter for kndo"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -15,7 +15,6 @@ tree-sitter = { workspace = true }
 tree-sitter-rust = { workspace = true }
 toml = { workspace = true }
 
-# kndo's own dogfood flagged this `test-only` the day sub-file test regions landed: every
-# rustc_hash use sits inside a #[cfg(test)] module.
+# Dev-only on purpose: every rustc_hash use sits inside a #[cfg(test)] module.
 [dev-dependencies]
 rustc-hash = { workspace = true }

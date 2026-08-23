@@ -1,13 +1,13 @@
-# The user docs site (site/ — mdBook): built on every PR touching it so it can never rot, and
+# The user docs site (docs/ — mdBook): built on every PR touching it so it can never rot, and
 # deployed to GitHub Pages on pushes to main. If Pages isn't enabled for the repository, the
 # deploy job fails visibly on main only — the build check still protects PRs.
 name: Docs
 on:
   push:
     branches: [main]
-    paths: ['site/**', '.github/workflows/docs.yml']
+    paths: ['docs/**', '.github/workflows/docs.yml']
   pull_request:
-    paths: ['site/**', '.github/workflows/docs.yml']
+    paths: ['docs/**', '.github/workflows/docs.yml']
 
 jobs:
   build:
@@ -21,11 +21,11 @@ jobs:
             | tar -xz -C "$HOME/.local/bin"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - name: Build
-        run: mdbook build site
+        run: mdbook build docs
       - uses: actions/upload-pages-artifact@v3
         if: github.event_name == 'push'
         with:
-          path: site/book
+          path: docs/book
 
   deploy:
     if: github.event_name == 'push'

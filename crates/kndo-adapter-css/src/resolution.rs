@@ -1,4 +1,4 @@
-//! Import resolution (docs/adapters/css.md §3): one candidate-list algorithm handles plain
+//! Import resolution: one candidate-list algorithm handles plain
 //! CSS's `@import` (a literal relative path, extension always present in valid CSS) and SCSS's
 //! `@use`/`@forward` (a module specifier, no required leading `./`, Sass's own "partial file"
 //! `_name.scss` convention) uniformly — extraction never tags which at-rule produced a given
@@ -10,7 +10,7 @@ use smol_str::SmolStr;
 
 pub(crate) fn resolve(spec: &ImportSpec, ctx: &ResolveCtx<'_>) -> Resolution {
     let specifier = spec.specifier.as_str();
-    // `@use "sass:math"` etc. — a built-in Sass module, never a file (spec §3).
+    // `@use "sass:math"` etc. — a built-in Sass module, never a file.
     if specifier.starts_with("sass:") {
         return Resolution::Unresolved;
     }
@@ -27,11 +27,11 @@ pub(crate) fn resolve(spec: &ImportSpec, ctx: &ResolveCtx<'_>) -> Resolution {
     Resolution::Unresolved
 }
 
-/// Candidate paths in resolution order (spec §3): the literal path as given (covers plain
+/// Candidate paths in resolution order: the literal path as given (covers plain
 /// CSS's always-explicit `@import "./x.css"`), then with `.css`/`.scss` appended, then Sass's
 /// partial-file form (`_name.scss` in the same directory), then a directory-as-module form
 /// (`{path}/_index.scss`) — a best-effort, syntactic approximation of Sass's real module
-/// resolution (ADR 0002), not a byte-exact reimplementation of the compiler's probing order.
+/// resolution, not a byte-exact reimplementation of the compiler's probing order.
 fn candidates(base: &str) -> Vec<String> {
     let mut out = vec![
         base.to_string(),

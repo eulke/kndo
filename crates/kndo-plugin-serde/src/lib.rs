@@ -1,14 +1,13 @@
-//! `kndo:serde` — the built-in serde conventions plugin. Normative spec:
-//! docs/plugins/serde.md.
+//! `kndo:serde` — the built-in serde conventions plugin.
 //!
 //! serde's traits are third-party, so the Rust adapter's machinery-trait list deliberately
-//! excludes them (docs/adapters/rust.md §2) and the core's implement-dispatch fan-out never
+//! excludes them and the core's implement-dispatch fan-out never
 //! fires (the `Implement` reference to an out-of-repo trait resolves to nothing). Yet a
 //! hand-written `impl Serialize for T` is invoked exactly like a language hook: serde's
 //! machinery calls `serialize` whenever `T` is serialized — never by name from user code.
 //! This plugin closes that gap with the framework counterpart of the contract's
-//! `implicitly_invoked` flag: `mark_implicitly_invoked`, RFC 0005 §1's machinery-dispatch
-//! rule, so a `Serialize` impl on a test-covered type stops reading as a test blind spot.
+//! `implicitly_invoked` flag — `mark_implicitly_invoked`, the machinery-dispatch
+//! rule — so a `Serialize` impl on a test-covered type doesn't read as a test blind spot.
 
 use kndo_core::plugin::{
     ActivationRule, AnnotationSink, ContentView, GraphView, Plugin, PluginDescriptor,
@@ -28,7 +27,7 @@ impl Plugin for SerdePlugin {
             detection: vec![SmolStr::new(
                 "a Cargo.toml under the project root depends on serde",
             )],
-            // Spec §2: only files that already declare serde-shaped members are ever read —
+            // Only files that already declare serde-shaped members are ever read —
             // the glob grants access, the symbol table narrows the actual reads.
             requested_file_access: vec![SmolStr::new("**/*.rs")],
             activation: vec![ActivationRule::ManifestDependency(SmolStr::new("serde"))],
@@ -58,7 +57,7 @@ impl Plugin for SerdePlugin {
 }
 
 /// One file's marks: the graph's `(owner, member)` pairs filtered through the source's
-/// serde impl headers (spec §2), emitted as qualified member selectors.
+/// serde impl headers, emitted as qualified member selectors.
 fn mark_file(
     graph: &GraphView<'_>,
     file: &kndo_core::graph::FileNode,
@@ -74,7 +73,7 @@ fn mark_file(
     }
 }
 
-/// The cheap pre-gate (spec §2): a file is only ever READ when its symbol table already
+/// The cheap pre-gate: a file is only ever READ when its symbol table already
 /// declares a member serde's machinery could invoke — `serialize`, `deserialize`,
 /// `expecting`, `visit_*`. Everything else never touches the content channel.
 fn has_serde_shaped_members(graph: &GraphView<'_>, file: &kndo_core::graph::FileNode) -> bool {

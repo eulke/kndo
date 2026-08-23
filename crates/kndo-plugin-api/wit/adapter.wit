@@ -1,12 +1,11 @@
-// kndo-plugin-api v1 — the external-adapter WASM ABI (ADR 0003, RFC 0002/0003, contracts
-// core-traits.md §2). Normative spec: docs/contracts/wasm-abi.md — that document is the
-// source of truth for what's in v1 scope vs deferred; this file is its concrete shape.
+// kndo-plugin-api v1 — the external-adapter WASM ABI; this file is the concrete shape of
+// the v1 scope.
 //
 // v1 covers ONLY the read side of `LanguageAdapter`: descriptor, claim, extract. A component
 // implementing this world has no way to declare a manifest format or participate in import
 // resolution — `claim-manifest` always answers false and `resolve` always answers `unresolved`
-// on the host bridge, without ever calling into the guest. That is a deliberate, documented
-// scope cut (docs/contracts/wasm-abi.md §2), not an oversight: it keeps v1 one-directional
+// on the host bridge, without ever calling into the guest. That is a deliberate
+// scope cut, not an oversight: it keeps v1 one-directional
 // (guest exports only, no host-import callbacks for `ResolveCtx`), which is what makes a
 // pure `wasm32-unknown-unknown` guest — no WASI, no ambient fs/net by construction — sufficient
 // for the whole surface. A second version can add `resolve`'s `ResolveCtx` queries as host
@@ -43,7 +42,7 @@ interface types {
     }
 
     record declaration {
-        /// Bare name — for a member, the unqualified member name (RFC 0012 §3); ownership is
+        /// Bare name — for a member, the unqualified member name; ownership is
         /// `member-of`, never string-encoded.
         name: string,
         kind: symbol-kind,
@@ -69,14 +68,13 @@ interface types {
 
     record raw-reference {
         name: string,
-        /// The qualifier text of a qualified access (RFC 0012 §9) — `none` for an unqualified
+        /// The qualifier text of a qualified access — `none` for an unqualified
         /// name. v1 does not resolve cross-file qualifiers for a WASM adapter (no `unit-name`
-        /// concept yet); a non-`none` value only ever matches this same file's own imports,
-        /// which v1 doesn't extract either, so in practice this is always `none` until v2.
+        /// concept); a non-`none` value only ever matches this same file's own imports,
+        /// which v1 doesn't extract either, so in practice this is always `none`.
         scope-context: option<string>,
         span: span,
-        /// The declared symbol this reference executes inside (RFC 0012 §4). `none` = module
-        /// load — reproduces every adapter's pre-RFC-0012-§4 behavior exactly.
+        /// The declared symbol this reference executes inside. `none` = module load.
         within: option<string>,
         kind: ref-kind,
     }
@@ -110,11 +108,11 @@ interface types {
 
     /// v1 subset of `kndo_core::adapter::FileFacts`: declarations, references, roots,
     /// diagnostics. `imports`, `functions`, `dynamics`, `suppressions`, `unit`/`unit-name`,
-    /// `detected-origin` and `test-spans` are all deferred (docs/contracts/wasm-abi.md §2) —
+    /// `detected-origin` and `test-spans` are all out of v1 scope —
     /// a v1 external adapter can make `unused`/`test-only`/`untested` real for its language
     /// (declarations + references + roots is exactly what reachability needs) but not
     /// cross-file import graphs, duplication/CRAP metrics, or the visibility/origin/test-span
-    /// refinements the newer contract stages added.
+    /// refinements.
     record file-facts {
         declarations: list<declaration>,
         references: list<raw-reference>,
@@ -143,12 +141,12 @@ interface types {
         class: file-class,
     }
 
-    /// Duplicated from `kndo:plugin`'s own `activation-rule` (RFC 0016 §4 — same reasoning
-    /// `plugin.wit`'s module doc already gives for not sharing types across packages: each ABI
-    /// evolves independently). Machine-checkable counterpart to `detection`'s prose; gates
-    /// whether a *globally installed* adapter joins composition at all (RFC 0003 §4's
-    /// mechanism, extended from `Plugin` to `LanguageAdapter` here). A project-local
-    /// `.kndo/plugins/*.wasm` adapter is unconditional either way — presence there is already
+    /// Duplicated from `kndo:plugin`'s own `activation-rule` — same reasoning
+    /// `plugin.wit`'s module doc gives for not sharing types across packages: each ABI
+    /// evolves independently. Machine-checkable counterpart to `detection`'s prose; gates
+    /// whether a *globally installed* adapter joins composition at all, the same
+    /// mechanism plugins use. A project-local
+    /// `.kndo/plugins/*.wasm` adapter is unconditional either way — presence there is itself
     /// the opt-in.
     variant activation-rule {
         file-exists(string),
@@ -159,9 +157,9 @@ interface types {
     /// `cycle-policy` aren't exposed — the host bridge fills in the same safe defaults CSS/JSON
     /// use (empty ladder, `Idiomatic` cycle tolerance both levels), and
     /// `resolves-dependency-usage` is fixed `false` (v1 never emits an `ImportsDependency`
-    /// edge, having no import extraction at all). `activation` is landed and read (RFC 0016
-    /// §4); `dependencies` rides the wire but is not evaluated yet — the native
-    /// `AdapterDescriptor` carries it as the same dormant reservation (RFC 0016 §8 phase 0),
+    /// edge, having no import extraction at all). `activation` is read and
+    /// enforced; `dependencies` rides the wire unevaluated — the native
+    /// `AdapterDescriptor` carries it as the same dormant reservation,
     /// and this field exists only to keep the two tiers' wire shapes symmetric.
     record adapter-descriptor {
         id: string,
@@ -183,10 +181,10 @@ world adapter {
     /// trait's own "fast, name-based" contract).
     export claim: func(path: string) -> option<file-claim>;
 
-    /// Parse one file's content (UTF-8 text; v1 does not carry raw bytes — see
-    /// docs/contracts/wasm-abi.md §2) and extract facts. Must not trap on malformed input:
+    /// Parse one file's content (UTF-8 text; v1 does not carry raw bytes) and extract
+    /// facts. Must not trap on malformed input:
     /// return partial facts + a diagnostic. A guest that traps anyway is caught by the host's
-    /// fuel/time budget (RFC 0003 §3) and the file's facts come back empty, with a
+    /// fuel/time budget and the file's facts come back empty, with a
     /// host-attributed diagnostic — never a crashed run.
     export extract: func(path: string, content: string) -> file-facts;
 }

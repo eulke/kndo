@@ -1,30 +1,30 @@
-//! Human rendering (RFC 0009) — everything a human sees in the terminal. Binds only this
-//! frontend (contracts §5): the core returns data (`RunResult`), this renders it; the CLI is
+//! Human rendering — everything a human sees in the terminal. Binds only this
+//! frontend: the core returns data (`RunResult`), this renders it; the CLI is
 //! pure presentation.
 //!
 //! Implemented: group sections in fixed order (defect, waste, risk, hygiene, then any
-//! additive/future group RFC 0005 doesn't know about yet), one line per finding
+//! additive group the taxonomy doesn't name), one line per finding
 //! (`<glyph> <category>[:<subject>] <path:line> <message> [(confidence)] [id]`), the
 //! quiet-success line, semantic per-group color.
 //!
-//! Diff modes (`--staged`/`--diff`) render a NEW/FIXED split instead (RFC 0006 §3): NEW splits
+//! Diff modes (`--staged`/`--diff`) render a NEW/FIXED split instead: NEW splits
 //! further by `delta_origin` (introduced vs derived), FIXED is flat, and the header states the
 //! net.
 //!
-//! Suppressed findings (inline `kndo:allow` pragmas, contracts §2.1) are never listed — matched
+//! Suppressed findings (inline `kndo:allow` pragmas) are never listed — matched
 //! findings are marked, not deleted, so they're already absent from `RunResult.findings` by the
 //! time this module sees it; only the count surfaces, in the header suffix and (full mode,
 //! non-quiet) a `suppressed: N inline, M config` line, and only when non-zero.
 //!
 //! Deliberately not implemented, simplified rather than silently wrong:
-//! - RFC 0009 §4's three-tier capability ladder (rich TTY / basic TTY / no TTY / `TERM=dumb`)
+//! - The three-tier terminal capability ladder (rich TTY / basic TTY / no TTY / `TERM=dumb`)
 //!   collapses to one on/off switch (`RenderOptions::color`) driving *both* color and glyph
 //!   richness — real terminals vary more than that, but this never renders something
 //!   unreadable, only less decorated than the richest tier could be.
-//! - Width-based column truncation and the below-60-columns two-line fallback (§4) — lines
+//! - Width-based column truncation and the below-60-columns two-line fallback — lines
 //!   are never truncated here.
-//! - The budget block (§5) — budgets need the config file ([delta] rules), which doesn't
-//!   exist yet; the health half of §5 IS rendered: a score/grade line plus per-category
+//! - The budget block — budgets need the config file's [delta] rules, which aren't
+//!   wired here; the health half IS rendered: a score/grade line plus per-category
 //!   penalty bars (non-zero categories only in `check` output; `kndo health` renders the full
 //!   table), and diff mode's header carries the before ──▶ after health line with the
 //!   grade-boundary distance on drops.
@@ -40,9 +40,9 @@ use kndo::vocab::Confidence;
 pub struct RenderOptions {
     pub color: bool,
     pub quiet: bool,
-    /// RFC 0009 §6: adds the per-phase timing block and cache state to check output. (The
-    /// RFC's third `--verbose` effect — revealing `possible`-confidence findings — is inert
-    /// today: no renderer hides findings by confidence yet, so there is nothing to reveal.)
+    /// Adds the per-phase timing block and cache state to check output. (The
+    /// third `--verbose` effect — revealing `possible`-confidence findings — is inert:
+    /// no renderer hides findings by confidence, so there is nothing to reveal.)
     pub verbose: bool,
 }
 
@@ -123,8 +123,8 @@ pub fn render(result: &RunResult, opts: &RenderOptions) -> String {
         .collect::<std::collections::BTreeSet<_>>()
         .into_iter()
         .collect();
-    // Fixed triage order first (RFC 0005 rule 4), then any group the taxonomy doesn't name yet
-    // — additive, so it must still render, just after the known ones (output-schema §6).
+    // Fixed triage order first, then any group the taxonomy doesn't name
+    // — additive, so it must still render, just after the known ones.
     groups.sort_by_key(|g| {
         GROUP_ORDER
             .iter()
@@ -148,7 +148,7 @@ pub fn render(result: &RunResult, opts: &RenderOptions) -> String {
     out
 }
 
-/// RFC 0009 §6's `--verbose` block: one line per engine phase (`(phase, µs)` from
+/// The `--verbose` block: one line per engine phase (`(phase, µs)` from
 /// `RunResult::timings`), worst-first would hide the pipeline shape, so execution order is
 /// kept; sub-0.1ms phases still print — "0.0ms" is honest and keeps the block's shape stable
 /// across runs. Closes with the cache state (`enabled`/`disabled` + hits — the raw inputs
@@ -178,7 +178,7 @@ fn render_phases(out: &mut String, result: &RunResult, opts: &RenderOptions) {
     ));
 }
 
-/// The §5 health block: the score/grade (+trend) line, then one bar line per category —
+/// The health block: the score/grade (+trend) line, then one bar line per category —
 /// every category when `full_table` (`kndo health`), only penalized ones inside `check`
 /// output (a zero-penalty row is reassurance, not triage).
 pub fn render_health(health: &Health, opts: &RenderOptions, full_table: bool) -> String {
@@ -237,7 +237,7 @@ fn health_score_line(health: &Health) -> String {
     format!("health   {:.1}  {}{trend}\n", health.score, health.grade)
 }
 
-/// RFC 0009 §5's bar: a shape, not a chart — `▁▂▃▄▅▆▇` scaled against the heaviest weight
+/// The penalty bar: a shape, not a chart — `▁▂▃▄▅▆▇` scaled against the heaviest weight
 /// (25), or `#` repetition when decoration is off.
 fn penalty_bar(penalty: f64, opts: &RenderOptions) -> String {
     let level = ((penalty / 25.0) * 7.0).ceil().clamp(0.0, 7.0) as usize;
@@ -249,7 +249,7 @@ fn penalty_bar(penalty: f64, opts: &RenderOptions) -> String {
     }
 }
 
-/// Diff mode's §5 health line: before ──▶ after with the signed delta, and on a drop the
+/// Diff mode's health line: before ──▶ after with the signed delta, and on a drop the
 /// distance to the next grade boundary ("how close is this to becoming a C").
 fn health_diff_line(health: &Health) -> String {
     let Some(prev) = &health.previous else {
@@ -284,9 +284,9 @@ fn grade_boundary_suffix(score: f64, grade: &str) -> String {
     format!("  ({:.1} from {next})", score - threshold)
 }
 
-/// Diff modes' rendering (RFC 0006 §3): a one-line header (`N new · M fixed · net ±K`), then
+/// Diff modes' rendering: a one-line header (`N new · M fixed · net ±K`), then
 /// `NEW (introduced by this change)`, `NEW (derived, in untouched code)`, and `FIXED` sections
-/// — each present only when non-empty, in that fixed order, mirroring the RFC's own example.
+/// — each present only when non-empty, in that fixed order.
 fn render_diff(result: &RunResult, opts: &RenderOptions) -> String {
     let net = result.findings.len() as i64 - result.fixed.len() as i64;
     let baseline_suffix = baseline_suffix(result);
@@ -354,7 +354,7 @@ fn render_flat(out: &mut String, findings: &[&Finding], opts: &RenderOptions) {
     out.push('\n');
 }
 
-/// The `related` evidence chain, indented under its finding (output-schema §2) — one `└` line
+/// The `related` evidence chain, indented under its finding — one `└` line
 /// per entry: location, then the note that explains the hop.
 fn render_related(out: &mut String, f: &Finding) {
     for r in &f.related {
@@ -463,7 +463,7 @@ fn confidence_str(c: Confidence) -> &'static str {
     }
 }
 
-/// Navigation verbs (RFC 0007): a one-line header (`verb · status · Nms`), then one block per
+/// Navigation verbs: a one-line header (`verb · status · Nms`), then one block per
 /// `results[]` entry — numbered only when the request batched more than one selector, matching
 /// the agent renderer's discipline (`agent_format::render_query`) but with color and glyphs.
 pub fn render_query(result: &QueryResult, opts: &RenderOptions) -> String {

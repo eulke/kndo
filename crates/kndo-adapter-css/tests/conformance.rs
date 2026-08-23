@@ -1,8 +1,8 @@
 //! Runs every fixture under `tests/fixtures/` through the shared conformance harness
-//! (`kndo_core::conformance`, RFC 0002 §8) with the real `CssAdapter` alongside the real
+//! (`kndo_core::conformance`) with the real `CssAdapter` alongside the real
 //! `JsTsAdapter` — no mock, real discovery, real extraction, real resolution, the real
-//! `Engine`. Both adapters are registered because CSS has no root of its own (docs/adapters/
-//! css.md §2) — every fixture needs a JS-TS entry point to root the graph at all.
+//! `Engine`. Both adapters are registered because CSS has no root of its own —
+//! every fixture needs a JS-TS entry point to root the graph at all.
 
 use std::path::Path;
 

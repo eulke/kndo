@@ -1,9 +1,9 @@
-//! Cargo.toml extraction (docs/adapters/rust.md §4). Parsed with the `toml` crate — the
+//! Cargo.toml extraction. Parsed with the `toml` crate — the
 //! format is full TOML, not a hand-parseable line format like go.mod.
 //!
 //! Root rules of record: bins (`src/main.rs`, autobins in `src/bin/`, `[[bin]] path`) are
 //! production roots unconditionally — an entry point is an entry point; the lib entry is a
-//! production root **only when the package is publishable** (library mode, RFC 0011 §5 —
+//! production root **only when the package is publishable** (library mode —
 //! an unpublished crate's `pub` API must earn its keep through actual imports); `build.rs`
 //! is a tooling root. `declares_surface` stays `false` by design: Cargo has no exports map,
 //! a crate's surface IS its `pub` items, and `deep-import`'s gate is closed deliberately.
@@ -52,8 +52,7 @@ pub(crate) fn extract(path: &str, content: &[u8], ctx: &ResolveCtx<'_>) -> Manif
         .is_some_and(|publish| !publish);
 
     // Workspace topology (globs; exclude is honored by NOT expanding here — the core expands
-    // members, and cargo's exclude only prunes glob expansion, a refinement recorded in the
-    // spec's open questions).
+    // members, and cargo's exclude only prunes glob expansion).
     if let Some(members) = value
         .get("workspace")
         .and_then(|w| w.get("members"))
@@ -66,7 +65,7 @@ pub(crate) fn extract(path: &str, content: &[u8], ctx: &ResolveCtx<'_>) -> Manif
             .collect();
     }
 
-    // Dependencies, three scopes + target-conditional tables flattened (spec §4).
+    // Dependencies, three scopes + target-conditional tables flattened.
     collect_deps(value.get("dependencies"), DependencyScope::Prod, &mut out);
     collect_deps(
         value.get("dev-dependencies"),
@@ -96,7 +95,7 @@ pub(crate) fn extract(path: &str, content: &[u8], ctx: &ResolveCtx<'_>) -> Manif
     }
 
     // --- bins: production roots unconditionally, each under its cargo-assigned name —
-    // the identity `env!("CARGO_BIN_EXE_<name>")` invokes it by (RFC 0005 §1's
+    // the identity `env!("CARGO_BIN_EXE_<name>")` invokes it by (the
     // invoked-program rule) ---
     let mut bins: Vec<(Option<SmolStr>, ProjectPath)> = Vec::new();
     let main_rs = join("src/main.rs");
@@ -105,7 +104,7 @@ pub(crate) fn extract(path: &str, content: &[u8], ctx: &ResolveCtx<'_>) -> Manif
         bins.push((out.package_name.clone(), main_rs));
     }
     // Autobins: every .rs directly under src/bin/, named by file stem (sorted —
-    // deterministic, RFC 0008 §4).
+    // deterministic).
     let bin_dir = if dir.is_empty() {
         "src/bin".to_string()
     } else {

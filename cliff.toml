@@ -1,8 +1,7 @@
-# git-cliff config (RFC 0014 §3.1) — categorizes commits by the type prefix CONTRIBUTING.md's
-# Commits section already mandates (feat/fix/docs/refactor/perf/test/build/ci/chore/revert).
-# Only ~45% of this repo's history actually carries that prefix (checked when RFC 0014 landed) —
-# the catch-all "Other" group at the bottom of `commit_parsers` is not decorative, it's load-
-# bearing: every un-prefixed commit subject lands there instead of vanishing from the changelog.
+# git-cliff config — categorizes commits by the type prefix CONTRIBUTING.md's Commits section
+# mandates (feat/fix/docs/refactor/perf/test/build/ci/chore/revert). The catch-all "Other"
+# group at the bottom of `commit_parsers` is load-bearing: an un-prefixed commit subject
+# lands there instead of vanishing from the changelog.
 
 [changelog]
 header = """
@@ -42,9 +41,8 @@ commit_parsers = [
     { message = "^chore\\(release\\)", skip = true },
     { message = "^chore", group = "Miscellaneous" },
     { message = "^revert", group = "Reverts" },
-    # Catch-all: every commit subject that doesn't match a type prefix above (RFC 0014 §3.1's
-    # flagged gap — the ~55% of this repo's history with a plain descriptive subject instead of
-    # a conventional-commit prefix) lands here rather than being silently dropped.
+    # Catch-all: every commit subject that doesn't match a type prefix above lands here
+    # rather than being silently dropped.
     { message = ".*", group = "Other" },
 ]
 protect_breaking_commits = false

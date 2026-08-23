@@ -1,12 +1,12 @@
-//! Java extraction (docs/adapters/java.md §2), written against tree-sitter-java 0.23.5 node
+//! Java extraction, written against tree-sitter-java 0.23.5 node
 //! shapes verified by `parsing`'s `#[ignore]`d ground-truth dumps.
 //!
 //! Shapes that matter here and nowhere else:
-//! - A top-level/nested type's members share one visibility ladder with the type itself
-//!   (spec §0): `[File "private", Package "package-private", Public "protected", Public
+//! - A top-level/nested type's members share one visibility ladder with the type itself:
+//!   `[File "private", Package "package-private", Public "protected", Public
 //!   "public"]` — `protected` widens to `Public` because cross-package subclass access can't
 //!   be ruled out without a typechecker.
-//! - `@Override` methods root `Production`/`Probable` unconditionally (spec §0's dispatch
+//! - `@Override` methods root `Production`/`Probable` unconditionally (the dispatch
 //!   rule — JDK-invoked contract methods like `equals`/`hashCode`/`toString` are never called
 //!   by a named site in user source).
 //! - A wildcard type import (`import p.*;`) and a wildcard static import
@@ -14,7 +14,7 @@
 //!   "Wildcard over the resolved target's symbols" mechanism, exact here (not approximate)
 //!   because a Java package's declared types are fully enumerable.
 //! - Records extract as a type declaration; their compiler-synthesized accessor methods are
-//!   not modeled (spec §2/§5) — a documented recall gap, same class as JS's property-
+//!   not modeled — a documented recall gap, same class as JS's property-
 //!   assignment-callable limitation.
 
 use kndo_adapter_toolkit::metrics::{function_shape, MetricsSyntax};
@@ -37,7 +37,7 @@ const GENERATED_MARKERS: kndo_adapter_toolkit::classify::ContentMarkers =
         comment_openers: &["//", "/*", "*"],
     };
 
-/// docs/adapters/java.md §2: ternary and `&&`/`||` count as branches same as every other
+/// Ternary and `&&`/`||` count as branches same as every other
 /// adapter; each `switch_block_statement_group` is one arm past the base (matching JS's
 /// n-way-match rule).
 pub const METRICS_SYNTAX: MetricsSyntax = MetricsSyntax {
@@ -73,12 +73,12 @@ pub const METRICS_SYNTAX: MetricsSyntax = MetricsSyntax {
 const MIN_CLONE_TOKENS: usize = 50;
 
 /// Item-walk context: the member owner (a class/interface/enum/record's bare name), for
-/// `member_of` attribution (RFC 0012 §3).
+/// `member_of` attribution.
 struct Ctx<'a> {
     owner: Option<&'a str>,
     /// Inside an `interface_body`/`annotation_type_body`: members with no modifier are
-    /// implicitly `public` (JLS §9.4) — the package-private default would misread every
-    /// modifier-less interface method as unexported (M6 FP hunt, junit4 corpus).
+    /// implicitly `public` (JLS 9.4) — the package-private default would misread every
+    /// modifier-less interface method as unexported.
     implicit_public: bool,
 }
 
@@ -116,8 +116,8 @@ pub(crate) fn extract(_path: &str, content: &[u8]) -> FileFacts {
 }
 
 /// `program`'s direct children: `package_declaration` (→ `FileFacts::unit`/`unit_name`),
-/// `import_declaration`, and the top-level type declarations. `module_declaration` (JPMS,
-/// spec §0) and `package_info` markers fall through unmatched — zero declarations, harmless.
+/// `import_declaration`, and the top-level type declarations. `module_declaration` (JPMS)
+/// and `package_info` markers fall through unmatched — zero declarations, harmless.
 fn handle_top_level(item: Node, src: &[u8], out: &mut FileFacts) {
     match item.kind() {
         "package_declaration" => {
@@ -205,14 +205,14 @@ fn handle_import(item: Node, src: &[u8], out: &mut FileFacts) {
     }
 
     if is_wildcard {
-        // `import com.foo.*;` — package-level wildcard, exactly enumerable (spec §3).
+        // `import com.foo.*;` — package-level wildcard, exactly enumerable.
         out.imports
             .push(make_import(&full, sp, false, Vec::new(), true));
         return;
     }
 
-    // `import com.foo.Bar;` — specifier is the PACKAGE half, binding is the type name
-    // (spec §3): the grammar's own `scoped_identifier` nesting already gives the split for
+    // `import com.foo.Bar;` — specifier is the PACKAGE half, binding is the type name:
+    // the grammar's own `scoped_identifier` nesting already gives the split for
     // free, no two-step tail-rule guessing needed.
     let Some((pkg, ty)) = full.rsplit_once('.') else {
         return;
@@ -251,12 +251,12 @@ fn make_import(
     }
 }
 
-/// `[File "private", Package "package-private", Public "protected", Public "public"]` (spec
-/// §0). Reads the `modifiers` node's direct child tokens; a top-level type never carries
+/// `[File "private", Package "package-private", Public "protected", Public "public"]`.
+/// Reads the `modifiers` node's direct child tokens; a top-level type never carries
 /// `private`/`protected` (illegal Java), so this naturally yields only levels 1/3 for them.
 fn visibility(node: Node, ctx: &Ctx<'_>) -> (u8, bool) {
     let default = if ctx.implicit_public {
-        (3, true) // interface members: implicitly public (JLS §9.4)
+        (3, true) // interface members: implicitly public (JLS 9.4)
     } else {
         (1, false) // package-private default
     };
@@ -279,8 +279,8 @@ fn visibility(node: Node, ctx: &Ctx<'_>) -> (u8, bool) {
         (3, true)
     } else if protected {
         // Exported: `protected` is subclass-consumable API — an external subclass of a
-        // published library overrides these (junit4's BlockJUnit4ClassRunner.methodBlock),
-        // matching its Public-scope, surface-transitive rung (lib.rs).
+        // published library overrides these, matching its Public-scope, surface-transitive
+        // rung (lib.rs).
         (2, true)
     } else if private {
         (0, false)
@@ -306,10 +306,10 @@ fn has_modifier(item: Node, keyword: &str) -> bool {
     found
 }
 
-/// Class literals inside annotation arguments (`@RunWith(Categories.class)`): the named
-/// type IS instantiated by the annotation's machinery — JUnit's `AnnotatedBuilder` calls
-/// `runnerClass.getConstructor(..).newInstance(..)` on exactly the class the literal names
-/// (junit4 audit). One Call reference per literal, attributed to the annotated declaration;
+/// Class literals inside annotation arguments (`@Handler(Widget.class)`): the named type
+/// IS instantiated by the annotation's machinery — the framework processing the annotation
+/// calls `getConstructor(..).newInstance(..)` on exactly the class the literal names.
+/// One Call reference per literal, attributed to the annotated declaration;
 /// the constructor follows through the core's container→constructor edge.
 fn walk_annotation_class_literals(
     node: Node,
@@ -355,7 +355,7 @@ fn has_annotation(node: Node, src: &[u8], name: &str) -> bool {
     found
 }
 
-/// Dispatches a top-level or nested type declaration to its body handler (spec §2). Shared by
+/// Dispatches a top-level or nested type declaration to its body handler. Shared by
 /// `handle_top_level` and nested-type recursion inside `handle_type_body`.
 fn handle_type(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
     let kind = item.kind();
@@ -395,7 +395,7 @@ fn handle_type(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
                 handle_body(child, src, name, out)
             }
             "formal_parameters" => {
-                // Record components (spec §2): TypeUse refs for their types, no declarations.
+                // Record components: TypeUse refs for their types, no declarations.
                 walk_type_refs(child, src, Some(name), out);
             }
             "type_parameters" => walk_type_refs(child, src, Some(name), out),
@@ -438,7 +438,7 @@ fn last_type_name<'a>(node: Node, src: &'a [u8]) -> Option<&'a str> {
     text(node, src).rsplit('.').next()
 }
 
-/// Walks a type/interface/enum/annotation body, dispatching each member (spec §2). One
+/// Walks a type/interface/enum/annotation body, dispatching each member. One
 /// function for all four body kinds — their member shapes overlap enough (fields, methods,
 /// constructors, nested types) that a single dispatch is honest, not a lossy generalization.
 fn handle_body(body: Node, src: &[u8], owner: &str, out: &mut FileFacts) {
@@ -449,8 +449,8 @@ fn handle_body(body: Node, src: &[u8], owner: &str, out: &mut FileFacts) {
     let mut cursor = body.walk();
     for member in body.children(&mut cursor) {
         match member.kind() {
-            // `constant_declaration` is the interface-body spelling of a field (JLS §9.3,
-            // implicitly public static final) — same declarator shape (M6 FP hunt).
+            // `constant_declaration` is the interface-body spelling of a field (JLS 9.3,
+            // implicitly public static final) — same declarator shape.
             "field_declaration" | "constant_declaration" => handle_field(member, src, &ctx, out),
             "method_declaration" => handle_method(member, src, &ctx, out),
             "constructor_declaration" => handle_constructor(member, src, &ctx, out),
@@ -468,7 +468,7 @@ fn handle_body(body: Node, src: &[u8], owner: &str, out: &mut FileFacts) {
                         member,
                         None,
                         Some(owner),
-                        (3, true), // enum constants share the enum's own visibility (§2)
+                        (3, true), // enum constants share the enum's own visibility
                     );
                 }
                 // A constant's own class-body override (`RED { void tag() {} }`) is rare and
@@ -524,7 +524,7 @@ fn handle_field(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
         };
         // The serialization-contract marker (`private static final long serialVersionUID`)
         // is read reflectively by the JVM, never by code — declaring it would guarantee an
-        // `unused` accusation on every Serializable class (M6 FP hunt, docs/adapters/java.md).
+        // `unused` accusation on every Serializable class.
         if text(name_node, src) == "serialVersionUID" {
             continue;
         }
@@ -540,12 +540,12 @@ fn handle_field(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
         );
         walk_type_refs(ty, src, ctx.owner, out);
         if let Some(value) = declarator.child_by_field_name("value") {
-            // `<clinit>`/`<init>` semantics via attribution (RFC 0012 §4): a field's
-            // initializer expression runs when the FIELD is used — `public static final
-            // RuleMemberValidator CLASS_RULE_VALIDATOR = classRuleValidatorBuilder()…` is
-            // reached by a test's static import of the constant, and the whole builder
-            // chain must follow (junit4 audit: crediting the read but not the initializer
-            // left 17 members falsely untested).
+            // `<clinit>`/`<init>` semantics via attribution: a field's initializer
+            // expression runs when the FIELD is used — `public static final
+            // Validator DEFAULT_VALIDATOR = validatorBuilder()…` is reached by a
+            // test's static import of the constant, and the whole builder chain must
+            // follow: crediting the read but not the initializer leaves the builder
+            // helpers falsely untested.
             let field_within = ctx
                 .owner
                 .map(|o| format!("{o}.{name}"))
@@ -572,7 +572,7 @@ fn handle_method(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
     };
     push_declaration(out, name, kind, item, signature_span, ctx.owner, vis);
 
-    // `public static void main(String[] args)` — the JVM entry point, any class (spec §2).
+    // `public static void main(String[] args)` — the JVM entry point, any class.
     if ctx.owner.is_some() && name == "main" && vis.1 && has_modifier(item, "static") {
         out.roots.push(RawRoot {
             kind: RootKind::Production,
@@ -580,11 +580,10 @@ fn handle_method(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
             confidence: Confidence::Probable,
         });
     }
-    // `@Override` dispatch rooting (spec §0) — the JDK/collections call site never names the
+    // `@Override` dispatch rooting — the JDK/collections call site never names the
     // override, so the duck-typed fallback can't be trusted to see it. The Serializable
-    // contract's hook methods get the same treatment (M6 FP hunt, junit4's
-    // `Result.readObject`): the JVM invokes them reflectively during (de)serialization —
-    // no source call site can exist, by specification.
+    // contract's hook methods get the same treatment: the JVM invokes them reflectively
+    // during (de)serialization — no source call site can exist, by specification.
     const SERIALIZATION_HOOKS: [&str; 5] = [
         "readObject",
         "writeObject",
@@ -598,7 +597,7 @@ fn handle_method(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
             target: RawRootTarget::Declaration(SmolStr::new(&qualified)),
             confidence: Confidence::Probable,
         });
-        // Machinery dispatch (RFC 0005 §1): the same no-source-call-site fact that roots
+        // Machinery dispatch: the same no-source-call-site fact that roots
         // these for liveness lets test reach inherit from the owner — a tested owner
         // plausibly has its overrides and serialization hooks executed.
         if let Some(d) = out.declarations.last_mut().filter(|d| d.name == name) {
@@ -692,7 +691,7 @@ fn push_declaration(
     });
 }
 
-/// Type-position walk (field/param/return/throws/generic-bound types) → `TypeUse` (spec §2).
+/// Type-position walk (field/param/return/throws/generic-bound types) → `TypeUse`.
 fn walk_type_refs(node: Node, src: &[u8], within: Option<&str>, out: &mut FileFacts) {
     match node.kind() {
         "line_comment" | "block_comment" => {}
@@ -724,7 +723,7 @@ fn walk_type_refs(node: Node, src: &[u8], within: Option<&str>, out: &mut FileFa
 }
 
 /// Expression/statement bodies: calls, field access, identifier reads, method references,
-/// lambdas, anonymous classes (spec §2/§5).
+/// lambdas, anonymous classes.
 fn walk_body(node: Node, src: &[u8], within: Option<&str>, out: &mut FileFacts) {
     match node.kind() {
         "line_comment" | "block_comment" => return,
@@ -810,7 +809,7 @@ fn walk_body(node: Node, src: &[u8], within: Option<&str>, out: &mut FileFacts) 
             return;
         }
         "method_reference" => {
-            // `Type::method` / `this::method` / `Type::new` (spec §2, §5).
+            // `Type::method` / `this::method` / `Type::new`.
             let mut c = node.walk();
             let children: Vec<Node> = node.children(&mut c).collect();
             if let (Some(qualifier), Some(last)) = (children.first(), children.last()) {
@@ -868,7 +867,7 @@ fn walk_body(node: Node, src: &[u8], within: Option<&str>, out: &mut FileFacts) 
             if let Some(args) = node.child_by_field_name("arguments") {
                 walk_body(args, src, within, out);
             }
-            // Anonymous class body (spec §5): walked for references, no declaration emitted.
+            // Anonymous class body: walked for references, no declaration emitted.
             // The anonymous class_body, when present, is an UNLABELED trailing child (no
             // "body" field on this node — unlike method_declaration's) — found by kind.
             let mut oc = node.walk();
@@ -1027,7 +1026,7 @@ mod tests {
         );
         assert!(
             decl(&f, "c").exported,
-            "protected is subclass-consumable API — exported (M6, junit4 corpus)"
+            "protected is subclass-consumable API — exported"
         );
 
         assert_eq!(decl(&f, "d").visibility.0, 3);
@@ -1035,7 +1034,7 @@ mod tests {
         // Top-level type itself: public/package-private only.
         assert_eq!(decl(&f, "C").visibility.0, 1);
 
-        // Interface members with no modifier are implicitly public (JLS §9.4).
+        // Interface members with no modifier are implicitly public (JLS 9.4).
         let i = facts(
             "package p;\n\
              public interface I {\n\

@@ -1,4 +1,4 @@
-//! `duplicate` — RFC 0005 §6, both halves. **Exact file duplicates**: byte-identical files
+//! `duplicate` — both halves. **Exact file duplicates**: byte-identical files
 //! (subject `file`, below). **Structural clones** (`find_duplicate_functions`): Type-1/Type-2
 //! callable-body clones over the adapters' winnowing fingerprints
 //! (`ProjectGraph::function_metrics` — normalized token streams, so reformatting, comments,
@@ -10,14 +10,14 @@
 //!
 //! Exact half: byte-identical files already share the
 //! blake3 content hash discovery computes for the cache, so this is free: no extraction, no
-//! adapter needed at all. That last point matters — this is the one M1 analysis that runs over
+//! adapter needed at all. That last point matters — this is the one analysis that runs over
 //! *unclaimed* files too (images, binaries, configs no adapter recognizes), because those are
-//! exactly what token-based clone detection can never see and what §6 names as the target
+//! exactly what token-based clone detection can never see and the exact half's stated target
 //! ("copy-pasted configs, images, and any other asset"). One finding groups every copy of one
 //! content, not one finding per pair.
 //!
-//! Deliberately no Generated/Vendored exemption here, unlike `unused`/`test-only` (RFC 0005
-//! §4): §6 states the byte-identical rule with no such carve-out, and origin isn't even known
+//! Deliberately no Generated/Vendored exemption here, unlike
+//! `unused`/`test-only`: the byte-identical rule has no such carve-out, and origin isn't even known
 //! for the unclaimed files this analysis exists to cover (`FileClass` requires a claim). The
 //! one floor applied — empty files — isn't a policy carve-out either: "duplicate content" is
 //! vacuous when there's no content, and virtually every real repo has many genuinely-empty
@@ -53,8 +53,8 @@ pub fn find_duplicate_files(graph: &ProjectGraph) -> Vec<Finding> {
         paths.sort_unstable();
         // The content hash — not any one member's path — is this finding's true, stable
         // identity: renaming one copy while the rest of the group survives unchanged is still
-        // "the same duplicate-content situation," not a new finding (unlike every other M1
-        // finding so far, which anchors to one file's own path).
+        // "the same duplicate-content situation," not a new finding (unlike most other
+        // findings, which anchor to one file's own path).
         let discriminator = blake3::Hash::from(hash).to_hex().to_string();
         findings.push(Finding {
             advisory: false,
@@ -62,7 +62,7 @@ pub fn find_duplicate_files(graph: &ProjectGraph) -> Vec<Finding> {
             category: "duplicate".to_string(),
             group: "waste".to_string(),
             subject_kind: "file".to_string(),
-            severity: Severity::Info, // RFC 0005 §6: info by default — duplication is sometimes deliberate
+            severity: Severity::Info, // info by default — duplication is sometimes deliberate
             confidence: Confidence::Certain,
             message: format!(
                 "{} identical files share the same content: {}",
@@ -94,7 +94,7 @@ fn summarize(paths: &[&str]) -> String {
     }
 }
 
-// ---------------------------------------------------------------- structural clones (§6)
+// ---------------------------------------------------------------- structural clones
 
 /// Two callables are clones when their winnowing fingerprint sets overlap this much
 /// (Jaccard). 0.8 catches Type-1/Type-2 clones with light drift while a genuinely different
@@ -106,13 +106,13 @@ const CLONE_JACCARD: f64 = 0.8;
 /// candidates, keeping the candidate set near-linear instead of quadratic on common shapes.
 const MAX_POSTING: usize = 20;
 
-/// Structural Type-1/Type-2 clones over `ProjectGraph::function_metrics` (RFC 0005 §6):
+/// Structural Type-1/Type-2 clones over `ProjectGraph::function_metrics`:
 /// candidates pair through a shared-fingerprint index (same language only), confirm by
 /// Jaccard similarity, and group transitively — one `info` finding per clone group, every
 /// instance in `related`.
 /// Findings plus the redundant clone instances — every group member beyond its
 /// lexicographically-first canonical one, with its normalized token count. `health`'s
-/// "duplicated tokens" numerator (RFC 0005 §11): the canonical copy is the one you'd keep, so
+/// "duplicated tokens" numerator: the canonical copy is the one you'd keep, so
 /// only the copies beyond it count as duplicated.
 pub fn find_duplicate_functions(graph: &ProjectGraph) -> (Vec<Finding>, Vec<(SymbolId, u32)>) {
     use crate::vocab::FileOrigin;
@@ -238,7 +238,7 @@ pub fn find_duplicate_functions(graph: &ProjectGraph) -> (Vec<Finding>, Vec<(Sym
             category: "duplicate".to_string(),
             group: "waste".to_string(),
             subject_kind: facet.clone(),
-            severity: Severity::Info, // §6: info by default — duplication is sometimes deliberate
+            severity: Severity::Info, // info by default — duplication is sometimes deliberate
             confidence: Confidence::Certain,
             message: format!(
                 "{} structurally identical {facet}s (identifiers/literals aside): {} — extract the shared implementation",
@@ -364,7 +364,7 @@ mod tests {
         );
     }
 
-    // ------------------------------------------------- structural clones (§6)
+    // ------------------------------------------------- structural clones
 
     use crate::adapter::VisibilityLevel;
     use crate::graph::{SymbolMetrics, SymbolNode};

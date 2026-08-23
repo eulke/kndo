@@ -1,12 +1,10 @@
-//! The RFC 0007 §5 agent workflow, end to end — M3's exit criterion, run against the real
-//! engine with the real adapters on a real (temp) project: `find` → `used-by` → `impact
-//! --if-deleted` → *edit* → `check`. Four bounded calls replace reading five files into
-//! context, and the final `check` is the machine-verifiable proof the cleanup is complete —
-//! "the anti-slop loop closed end to end", asserted here rather than promised.
+//! The agent workflow, end to end, run against the real engine with the real adapters on a
+//! real (temp) project: `find` → `used-by` → `impact --if-deleted` → *edit* → `check`. Four
+//! bounded calls replace reading five files into context, and the final `check` is the
+//! machine-verifiable proof the cleanup is complete.
 //!
-//! The fixture is the RFC's own worked example reshaped to today's edge granularity: a legacy
-//! tax path (`calcLegacyTax` + its `TaxTable`, in their own file, importing `decimal.js`)
-//! consumed only by tests, next to the live path the app actually uses.
+//! The fixture: a legacy tax path (`calcLegacyTax` + its `TaxTable`, in their own file,
+//! importing `decimal.js`) consumed only by tests, next to the live path the app actually uses.
 
 use std::fs;
 use std::path::Path;

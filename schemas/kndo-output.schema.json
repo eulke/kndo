@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Envelope",
-  "description": "The full `--format json` envelope shape (contracts/output-schema.md §1) — also the schema\ngenerator's root type (`cargo xtask gen-schema`, gated behind the `schema` feature): the\nJSON Schema is derived from this struct, not maintained as a second hand-written document.\nBorrows the run's collections instead of cloning them: `to_json` on a 75k-finding result\nwas paying a full deep clone (every String in every Finding) purely to serialize — the\nborrow makes serialization allocation-free on the input side. Schema output is unaffected\n(schemars sees through references and slices to the same shapes).",
+  "description": "The full `--format json` envelope shape — also the schema\ngenerator's root type (`cargo xtask gen-schema`, gated behind the `schema` feature): the\nJSON Schema is derived from this struct, not maintained as a second hand-written document.\nBorrows the run's collections instead of cloning them: `to_json` on a 75k-finding result\nwas paying a full deep clone (every String in every Finding) purely to serialize — the\nborrow makes serialization allocation-free on the input side. Schema output is unaffected\n(schemars sees through references and slices to the same shapes).",
   "type": "object",
   "properties": {
     "baseline": {
@@ -65,7 +65,7 @@
   ],
   "$defs": {
     "AdapterRunInfo": {
-      "description": "One registered adapter's contribution (`run.adapters[]`, output-schema §1).",
+      "description": "One registered adapter's contribution (`run.adapters[]`).",
       "type": "object",
       "properties": {
         "files": {
@@ -83,7 +83,7 @@
       ]
     },
     "BaselineSummary": {
-      "description": "`baseline` summary (contracts/output-schema.md §1's `baseline` envelope field, RFC 0006 §6):\n`acknowledged` counts baseline entries that still match a current finding (excluded from\n`findings` and from `--fail-on`); `stale` counts entries that match nothing anymore — the\nunderlying issue was fixed, and `kndo baseline --update` would drop them.",
+      "description": "`baseline` summary (the `baseline` envelope field):\n`acknowledged` counts baseline entries that still match a current finding (excluded from\n`findings` and from `--fail-on`); `stale` counts entries that match nothing anymore — the\nunderlying issue was fixed, and `kndo baseline --update` would drop them.",
       "type": "object",
       "properties": {
         "acknowledged": {
@@ -103,7 +103,7 @@
       ]
     },
     "Confidence": {
-      "description": "Per-edge strength. Ordered by strength: `Possible < Probable < Certain`, so `max()` yields\nthe strongest evidence and \"edges at least as strong as τ\" is a simple `>=` (RFC 0005 §1).",
+      "description": "Per-edge strength. Ordered by strength: `Possible < Probable < Certain`, so `max()` yields\nthe strongest evidence and \"edges at least as strong as τ\" is a simple `>=`.",
       "type": "string",
       "enum": [
         "possible",
@@ -112,7 +112,7 @@
       ]
     },
     "Delta": {
-      "description": "A finding's place in a diff-mode delta (contracts/output-schema.md §2, RFC 0004 §6). `None`\nin full mode — there is no \"before\" to compare against, so the concept doesn't apply, and\nthe field is omitted rather than forced to some default.",
+      "description": "A finding's place in a diff-mode delta. `None`\nin full mode — there is no \"before\" to compare against, so the concept doesn't apply, and\nthe field is omitted rather than forced to some default.",
       "type": "string",
       "enum": [
         "new",
@@ -120,7 +120,7 @@
       ]
     },
     "DeltaOrigin": {
-      "description": "Only set on `Delta::New` findings: does this finding sit *inside* the change set itself\n(`Introduced` — dead on arrival, an agent or author can self-correct before committing) or\ndoes it live in untouched code that flipped because of the change at a distance (`Derived`)?\nRFC 0004 §6.",
+      "description": "Only set on `Delta::New` findings: does this finding sit *inside* the change set itself\n(`Introduced` — dead on arrival, an agent or author can self-correct before committing) or\ndoes it live in untouched code that flipped because of the change at a distance (`Derived`)?",
       "type": "string",
       "enum": [
         "introduced",
@@ -173,18 +173,18 @@
           ]
         },
         {
-          "description": "The run could not do what was asked (RFC 0006 §5's exit-2 tier): a requested mode is\nimpossible (`--diff` base that doesn't resolve), not merely degraded. Frontends exit 2\nwhen any error-level diagnostic is present — reporting zero findings because the\nanalysis never ran must never read as a clean pass (M6 error polish: the old Warn here\nmade a typo'd base ref fail open in CI).",
+          "description": "The run could not do what was asked (the exit-2 tier): a requested mode is\nimpossible (`--diff` base that doesn't resolve), not merely degraded. Frontends exit 2\nwhen any error-level diagnostic is present — reporting zero findings because the\nanalysis never ran must never read as a clean pass (a Warn here\nwould let a typo'd base ref fail open in CI).",
           "type": "string",
           "const": "error"
         }
       ]
     },
     "Finding": {
-      "description": "Typed form of the output-schema finding (grows field-by-field with the analyses in M1;\nevery field lands in the JSON schema first — that document is normative). Not yet present:\n`evidence` (category-specific block), `sources`, `remediation`, `rolled_up` — each needs\ninfrastructure this milestone doesn't have (computed remediation text) and is omitted\nrather than fabricated with a placeholder.",
+      "description": "Typed form of the output-schema finding (every field lands in the JSON schema\nfirst — that document is normative). Not yet present:\n`evidence` (category-specific block), `sources`, `remediation`, `rolled_up` — each needs\ninfrastructure that doesn't exist yet (computed remediation text) and is omitted\nrather than fabricated with a placeholder.",
       "type": "object",
       "properties": {
         "advisory": {
-          "description": "RFC 0018 §2.2's severity channel: `true` = this finding never influences exit codes or\nbudgets, whatever its `severity` says — the state of every plugin-contributed finding\n(`plugin:` categories) without an explicit `[plugins.gate]` opt-in. Always `false` for\ncore findings; serialized only when true (additive, output-schema §2).",
+          "description": "The severity channel: `true` = this finding never influences exit codes or\nbudgets, whatever its `severity` says — the state of every plugin-contributed finding\n(`plugin:` categories) without an explicit `[plugins.gate]` opt-in. Always `false` for\ncore findings; serialized only when true (additive).",
           "type": "boolean"
         },
         "category": {
@@ -226,7 +226,7 @@
           "type": "string"
         },
         "related": {
-          "description": "Evidence chain (output-schema §2) — empty for analyses that haven't adopted it yet.\n`default` isn't for deserialization (Finding is serialize-only) — it tells the schema\ngenerator the field is optional, matching the skip-when-empty serialization.",
+          "description": "Evidence chain — empty for analyses that haven't adopted it yet.\n`default` isn't for deserialization (Finding is serialize-only) — it tells the schema\ngenerator the field is optional, matching the skip-when-empty serialization.",
           "type": "array",
           "items": {
             "$ref": "#/$defs/RelatedLocation"
@@ -251,7 +251,7 @@
       ]
     },
     "Health": {
-      "description": "The §4 health block. `previous` is filled by the engine (before-side in diff modes, the\nstored snapshot in full mode) — computation here is always \"this graph, now\".",
+      "description": "The health block. `previous` is filled by the engine (before-side in diff modes, the\nstored snapshot in full mode) — computation here is always \"this graph, now\".",
       "type": "object",
       "properties": {
         "categories": {
@@ -264,7 +264,7 @@
           "type": "string"
         },
         "packages": {
-          "description": "Per-package breakdown (RFC 0011 §6) — present when more than one package owns claimed\nfiles; the single-package (and no-manifest) common case omits it.",
+          "description": "Per-package breakdown — present when more than one package owns claimed\nfiles; the single-package (and no-manifest) common case omits it.",
           "type": "array",
           "items": {
             "$ref": "#/$defs/PackageHealth"
@@ -363,7 +363,7 @@
       ]
     },
     "Location": {
-      "description": "Where a finding landed (contracts/output-schema.md §2). Every field is optional because not\nevery subject has all of them: `version-skew`/`duplicate` findings span multiple manifests\nor files, so no single `path` is *the* location — expressing that properly is the `related`\nevidence chain, not yet implemented (deferred, not faked with an arbitrary first path).",
+      "description": "Where a finding points. Every field is optional because not\nevery subject has all of them: `version-skew`/`duplicate` findings span multiple manifests\nor files, so no single `path` is *the* location — expressing that properly is the `related`\nevidence chain, not yet implemented (deferred, not faked with an arbitrary first path).",
       "type": "object",
       "properties": {
         "package": {
@@ -426,7 +426,7 @@
       "type": "string"
     },
     "RelatedLocation": {
-      "description": "One entry of a finding's evidence chain (output-schema §2's `related` — what `kndo\nexplain` renders): a concrete location plus its role in the story. First populated by\n`cyclic` (RFC 0005 §8: \"a shortest cycle path in `related` as the evidence chain\"); other\nanalyses adopt it as their evidence models land — never fabricated as a placeholder.",
+      "description": "One entry of a finding's evidence chain (the schema's `related` — what `kndo\nexplain` renders): a concrete location plus its role in the story. Populated by\n`cyclic` (\"a shortest cycle path in `related` as the evidence chain\"); other\nanalyses adopt it as they gain evidence models — never fabricated as a placeholder.",
       "type": "object",
       "properties": {
         "note": {
@@ -502,7 +502,7 @@
       ]
     },
     "Severity": {
-      "description": "A finding's severity (contracts/output-schema.md §2) — RFC 0005 assigns one per category as\na fixed default; `--strict` promotion isn't implemented yet, so this is always the default.\nDeclaration order doubles as sort/triage order: worst first (RFC 0009 §5).",
+      "description": "A finding's severity — each category carries one as\na fixed default; `--strict` promotion isn't implemented yet, so this is always the default.\nDeclaration order doubles as sort/triage order: worst first.",
       "type": "string",
       "enum": [
         "error",
@@ -511,7 +511,7 @@
       ]
     },
     "Span": {
-      "description": "1-indexed line/column span, `start` inclusive, `end` exclusive. Serializes as the\n`[line, col]` pair shape the output schema uses (contracts/output-schema.md §2), not an\nobject — tuples serialize as JSON arrays by default.",
+      "description": "1-indexed line/column span, `start` inclusive, `end` exclusive. Serializes as the\n`[line, col]` pair shape the output schema uses, not an\nobject — tuples serialize as JSON arrays by default.",
       "type": "object",
       "properties": {
         "end": {
@@ -555,7 +555,7 @@
       ]
     },
     "SuppressedSummary": {
-      "description": "`suppressed.inline`/`suppressed.config` (output-schema §1, contracts §2.1) — always present\n(unlike `baseline`, which is `None` when the feature isn't adopted at all): inline pragma\nmatching runs on every check, so `{ inline: 0, config: 0 }` is a meaningful \"nothing\nsuppressed,\" not an absent subsystem. `config` stays honestly `0` — no `kndo.toml`\nsuppression parser exists yet (RFC 0005 §12's config mechanism).",
+      "description": "`suppressed.inline`/`suppressed.config` — always present\n(unlike `baseline`, which is `None` when the feature isn't adopted at all): inline pragma\nmatching runs on every check, so `{ inline: 0, config: 0 }` is a meaningful \"nothing\nsuppressed,\" not an absent subsystem. `config` stays honestly `0` — no `kndo.toml`\nsuppression parser exists yet (the config mechanism).",
       "type": "object",
       "properties": {
         "config": {

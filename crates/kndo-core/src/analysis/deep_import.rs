@@ -1,6 +1,6 @@
-//! `deep-import` — contract-gated boundary erosion (RFC 0011 §4, group `risk`): an import
+//! `deep-import` — contract-gated boundary erosion (group `risk`): an import
 //! that bypasses a provider package's *declared* entry-point surface depends on internal file
-//! layout someone explicitly drew a boundary around. Three design rules, straight from the RFC:
+//! layout someone explicitly drew a boundary around. Three design rules:
 //!
 //! 1. **Contract-gated, zero-config, self-opting**: fires only when the provider
 //!    `declares_surface` (an `exports` map or equivalent — `PackageNode::declares_surface`).
@@ -23,10 +23,10 @@
 //!
 //! **External providers** (a dependency's `dist/internal/x`): same definition, but the gate
 //! needs the *provider's own manifest*, which lives outside the discovered tree
-//! (`node_modules/` is not walked — RFC 0008's discovery bounds), so `declares_surface` is
+//! (`node_modules/` is not walked — a discovery bound), so `declares_surface` is
 //! simply unknowable and the gate stays closed — the design's own safe direction, not a
-//! special case. Evaluating it needs a provider-manifest peek at resolution time; recorded in
-//! ROADMAP as the remaining half of RFC 0011 §4, not silently half-done here.
+//! special case. Evaluating it would need a provider-manifest peek at resolution time;
+//! honestly absent, not silently half-done here.
 //!
 //! Severity: warning — the gate means the provider explicitly declared the contract being
 //! bypassed. Confidence: the strongest underlying edge's (a pair backed by one `Certain` deep
@@ -237,8 +237,8 @@ fn all_reachable(deep_targets: &HashSet<FileId>, reachable: &HashSet<FileId>) ->
     deep_targets.iter().all(|t| reachable.contains(t))
 }
 
-/// `consumer.ts → provider/internal.ts` pairs, capped at 3 with an elided count (RFC 0011 §4:
-/// "sites and symbols in the evidence (capped, elided counted)").
+/// `consumer.ts → provider/internal.ts` pairs, capped at 3 with an elided count
+/// ("sites and symbols in the evidence (capped, elided counted)").
 fn site_summary(graph: &ProjectGraph, sites: &[(FileId, FileId)]) -> String {
     let rendered: Vec<String> = sites
         .iter()

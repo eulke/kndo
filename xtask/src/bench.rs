@@ -1,4 +1,4 @@
-//! `cargo xtask bench` — RFC 0008 §7's benchmark suite: fixture repos at 1k / 5k / 50k files,
+//! `cargo xtask bench` — the benchmark suite: fixture repos at 1k / 5k / 50k files,
 //! the five scenarios (cold full, warm no-op, warm 1-file change, warm 100-file change,
 //! `--staged`), a recorded baseline, and the >10% regression gate.
 //!
@@ -17,11 +17,11 @@
 //! a shared machine only ever adds time; the minimum is the closest observable to the true
 //! cost), cold takes the min of 2.
 //!
-//! The baseline (`docs/perf-baseline.json`) is machine-specific by nature — it records where
+//! The baseline (`internal/perf-baseline.json`) is machine-specific by nature — it records where
 //! it was measured and is re-recorded with `--update-baseline` when hardware changes. A
 //! scenario counts as regressed when it is BOTH >10% and >10 ms over baseline (the absolute
 //! floor keeps micro-scenario jitter from tripping the relative gate). `--gate` turns
-//! regressions into a failing exit — the CI-blocking mode RFC 0008 §3 demands; without it
+//! regressions into a failing exit — the CI-blocking mode; without it
 //! the suite reports and exits clean (exploration mode).
 
 use std::fmt::Write as _;
@@ -33,8 +33,8 @@ use std::time::Instant;
 const GENERATOR_VERSION: u32 = 1;
 const WARM_REPS: usize = 5;
 const COLD_REPS: usize = 2;
-/// Regression gate: both thresholds must trip (RFC 0008 §7's 10%, plus an absolute floor so
-/// a 3 ms scenario can't fail the build over 0.4 ms of jitter).
+/// Regression gate: both thresholds must trip (the 10% relative bound, plus an absolute floor
+/// so a 3 ms scenario can't fail the build over 0.4 ms of jitter).
 const GATE_RELATIVE: f64 = 0.10;
 const GATE_ABSOLUTE_MS: f64 = 10.0;
 
@@ -106,7 +106,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
         reset_fixture(&dir);
     }
 
-    let baseline_path = root.join("docs/perf-baseline.json");
+    let baseline_path = root.join("internal/perf-baseline.json");
     let baseline = load_baseline(&baseline_path);
     let mut report = String::new();
     let _ = writeln!(
@@ -169,7 +169,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
         }
         if gate {
             return Err(format!(
-                "{} scenario(s) regressed past the RFC 0008 §7 gate",
+                "{} scenario(s) regressed past the benchmark gate",
                 regressions.len()
             ));
         }
@@ -374,7 +374,7 @@ fn write_baseline(path: &Path, results: &[(String, f64)]) -> Result<(), String> 
         })
         .collect();
     let doc = serde_json::json!({
-        "comment": "RFC 0008 §7 benchmark baseline — end-to-end wall ms, min-of-N, release build. Machine-specific: re-record with `cargo xtask bench --update-baseline` when the measuring machine changes; the gate compares same-machine runs only.",
+        "comment": "Benchmark baseline — end-to-end wall ms, min-of-N, release build. Machine-specific: re-record with `cargo xtask bench --update-baseline` when the measuring machine changes; the gate compares same-machine runs only.",
         "generator_version": GENERATOR_VERSION,
         "scenarios": scenarios,
     });

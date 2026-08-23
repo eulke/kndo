@@ -1,12 +1,11 @@
-//! `kndo:express` — the built-in Express conventions plugin. Normative spec:
-//! docs/plugins/express.md (RFC 0015 §6 phase 4).
+//! `kndo:express` — the built-in Express conventions plugin.
 //!
 //! Express is imperative — routes are registered by ordinary code the language adapter
 //! already follows — so this plugin covers exactly the one convention that hides real code
 //! from import analysis: the entry file is *launched by a script* (`node ./bin/www`,
 //! `node server.js`), never imported. `bin/www` itself is extension-less and unclaimed, so
 //! the expressible fix is rooting the conventional claimed entries it (or `node` directly)
-//! launches. `views/**` templates are unclaimed too and stay out of scope (spec §1).
+//! launches. `views/**` templates are unclaimed too and stay out of scope.
 
 use kndo_core::adapter::ProjectPath;
 use kndo_core::plugin::{
@@ -28,14 +27,14 @@ impl Plugin for ExpressPlugin {
             detection: vec![SmolStr::new(
                 "a package.json under the project root depends on express",
             )],
-            // RFC 0016 §5: every app root's own package.json, read through the content
-            // channel to derive the true entry from "main"/"scripts" (§3's documented gap) —
+            // Every app root's own package.json, read through the content
+            // channel to derive the true entry from "main"/"scripts" —
             // in-memory glob against already-discovered, gitignore-filtered paths, not a disk
             // walk, so (unlike a raw ActivationRule::FileExists glob) this never touches
             // node_modules regardless of recursion.
             requested_file_access: vec![SmolStr::new("**/package.json")],
-            // Single rule (spec §2): express is always a declared runtime dependency, never
-            // an implicit peer; wrapper frameworks reach this plugin through RFC 0015 §3
+            // Single rule: express is always a declared runtime dependency, never
+            // an implicit peer; wrapper frameworks reach this plugin through the
             // `dependencies` implication.
             activation: vec![ActivationRule::ManifestDependency(SmolStr::new("express"))],
             dependencies: vec![],
@@ -49,10 +48,10 @@ impl Plugin for ExpressPlugin {
         out: &mut RootSink,
     ) {
         for file in entry_files(graph, content) {
-            // Probable, not Certain (spec §3): a file named `app.ts` in an Express-using
+            // Probable, not Certain: a file named `app.ts` in an Express-using
             // project is *probably* its entry — a convention, unlike `pages/**` which is
             // definitionally routed. Probable still suppresses `unused` at every tier
-            // (RFC 0005 §1 rule 4) while keeping the evidence honestly labeled. The
+            // while keeping the evidence honestly labeled. The
             // manifest-derived candidates get the same tier: `main`/`scripts.start` are a
             // stronger *signal* than the name heuristic, but still describe a convention, not
             // something the language itself guarantees is invoked.
@@ -78,7 +77,7 @@ impl Plugin for ExpressPlugin {
         out: &mut AnnotationSink,
     ) {
         // The generator layout's `app.js` exports the app object solely for the unclaimed
-        // `bin/www` to require — an external consumer the graph cannot see (spec §3).
+        // `bin/www` to require — an external consumer the graph cannot see.
         for file in entry_files(graph, content) {
             for symbol in exported_top_level(graph, file) {
                 out.mark_externally_consumed(file.path.clone(), symbol.name.clone());
@@ -87,16 +86,16 @@ impl Plugin for ExpressPlugin {
     }
 }
 
-/// Every claimed production `js-ts` file that is a conventional entry — by name (§3's original
-/// heuristic) or by its app root's own `package.json` `"main"`/`"scripts"` (RFC 0016 §5's
-/// content-channel upgrade) — deduplicated, in `graph.files()` order.
+/// Every claimed production `js-ts` file that is a conventional entry — by name (the
+/// name heuristic) or by its app root's own `package.json` `"main"`/`"scripts"` (the
+/// content-channel derivation) — deduplicated, in `graph.files()` order.
 fn entry_files<'a>(
     graph: &'a GraphView<'_>,
     content: &ContentView<'_>,
 ) -> Vec<&'a kndo_core::graph::FileNode> {
-    // App roots ARE the graph's package roots (RFC 0017 §5.2): every directory holding a
-    // manifest is a `PackageNode`, so the topology query replaces this plugin's former
-    // path-basename scan over the whole file list — same set, owned by the core.
+    // App roots ARE the graph's package roots: every directory holding a
+    // manifest is a `PackageNode`, so the topology query — same set, owned by the core —
+    // makes a path-basename scan over the whole file list unnecessary.
     let app_roots = conventions::app_roots(
         graph
             .packages()
@@ -144,7 +143,7 @@ fn is_production_js(file: &kndo_core::graph::FileNode) -> bool {
 }
 
 /// Members (`member_of` set) are never rooted or annotated — the entry convention is
-/// module-level (spec §3).
+/// module-level.
 fn exported_top_level<'a>(
     graph: &'a GraphView<'_>,
     file: &kndo_core::graph::FileNode,

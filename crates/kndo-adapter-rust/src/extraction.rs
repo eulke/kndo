@@ -1,16 +1,16 @@
-//! Rust extraction (docs/adapters/rust.md §2), written against tree-sitter-rust node shapes
-//! verified by `parsing::introspect` — never assumed.
+//! Rust extraction, written against tree-sitter-rust node shapes verified by
+//! `parsing::introspect` — never assumed.
 //!
 //! Shapes that matter here and nowhere else:
 //! - `mod foo;` is an **import** (`self::foo`, side-effect-only) — the file-linking edge the
-//!   whole adapter is built on (spec §0). `#[path = "…"]` overrides the location (`file:`
+//!   whole adapter is built on. `#[path = "…"]` overrides the location (`file:`
 //!   specifier form).
 //! - A body path rooted at `crate`/`self`/`super` emits a synthetic import (specifier =
 //!   path-minus-tail, binding = tail): a fully-qualified use-site IS an import, and emitting
 //!   it as one gets certain file edges + binding resolution for free. Bare-rooted body paths
 //!   (`helpers::run()`) emit a qualified reference instead (`scope_context`), resolved
 //!   through import aliases core-side — a bare root naming an inline module degrades to the
-//!   member fallback, silence over accusation (spec §6).
+//!   member fallback, silence over accusation.
 //! - Inline `mod x { … }` flattens: file ≈ module is the standing approximation.
 //! - Attributes travel as pending state to the next item: `#[test]`/`#[bench]` → test root,
 //!   `#[no_mangle]`/`#[export_name]` → FFI production root, `#[derive(X)]` → `TypeUse`
@@ -36,7 +36,7 @@ const GENERATED_MARKERS: kndo_adapter_toolkit::classify::ContentMarkers =
         comment_openers: &["//", "/*", "*"],
     };
 
-/// docs/adapters/rust.md §2: `?` (try) is an early-return branch; `match_arm` counts each arm.
+/// `?` (try) is an early-return branch; `match_arm` counts each arm.
 pub const METRICS_SYNTAX: MetricsSyntax = MetricsSyntax {
     branch_kinds: &[
         "if_expression",
@@ -133,7 +133,7 @@ pub(crate) fn extract(_path: &str, content: &[u8]) -> FileFacts {
 
     let local_qualifiers = collect_local_qualifiers(root, content);
     let inline_mod_names = collect_inline_mod_names(root, content);
-    // Field facts pre-pass (RFC 0012 §3-bis): the single source for struct/union field
+    // Field facts pre-pass: the single source for struct/union field
     // types — the contract's member_types AND the TypeEnv's `self.field` resolution.
     let field_facts = collect_field_facts(root, content);
     let field_types = field_type_map(&field_facts);
@@ -219,9 +219,9 @@ fn path_attr_literal(item: Node, src: &[u8]) -> Option<String> {
 /// Post-walk rewrite: a specifier that is exactly `self::<mod>` where `<mod>` is a
 /// `#[path]`-remapped file mod re-derives the child's location by convention and misses —
 /// the mod declaration IS the location of record. Each such import expands to one
-/// `file:`-anchored clone per declared alternate (ripgrep's `pub(crate) use self::imp::*`
-/// over cfg-alternated `#[path]` mods — without this the glob resolved to nothing and the
-/// alternates' whole surface read as dead).
+/// `file:`-anchored clone per declared alternate (a `pub(crate) use self::imp::*` over
+/// cfg-alternated `#[path]` mods: without the expansion the glob resolves to nothing and
+/// the alternates' whole surface reads as dead).
 fn expand_pathed_mod_specifiers(
     pathed: &std::collections::HashMap<String, Vec<String>>,
     out: &mut FileFacts,
@@ -278,8 +278,8 @@ fn collect_local_qualifiers(root: Node, src: &[u8]) -> std::collections::HashSet
                 }
             }
             // The bound tail of a full-path use OR of a scoped item inside a use list
-            // (`use a::{doc::version}` binds `version`) — the latter shape fabricated
-            // phantom `version::…` package references before (M6 FP hunt, ripgrep corpus).
+            // (`use a::{doc::version}` binds `version`) — without registering the latter
+            // shape, a later `version::…` path fabricates a phantom package reference.
             "scoped_identifier" | "identifier"
                 if node
                     .parent()
@@ -314,18 +314,16 @@ fn collect_local_qualifiers(root: Node, src: &[u8]) -> std::collections::HashSet
     out
 }
 
-/// Names of *inline* `mod name { .. }` blocks in this file — as opposed to file-linking
-/// `mod name;` — collected so `handle_use` can recognize a `use` path rooted at one: spec §2's
-/// flatten model already merged that module's contents into this same file's declarations, so
-/// the path names nothing outside it. Left unresolved, such a root looks exactly like an
-/// unknown external crate to `resolve_bare` (no `name.rs`/`name/mod.rs` file exists to find),
+/// The name environment body-path emission resolves against — `locals` (use tails/aliases
+/// and mod names: names that already have an import or declaration, so no root import should
+/// be fabricated for them) and, separately, the file's *inline* `mod` names (as opposed to
+/// file-linking `mod name;`): the flatten model merges an inline module's contents into this
+/// same file's declarations, so a path rooted at one names nothing outside the file. A
+/// qualified `convert::usize(..)` through an inline mod is really a same-file bare
+/// reference — resolving it as a member/package path loses the binding and false-positives
+/// the target as `unused`, and left unresolved such a root looks exactly like an unknown
+/// external crate to `resolve_bare` (no `name.rs`/`name/mod.rs` file exists to find),
 /// fabricating an `undeclared`-dependency finding for what is really a same-file reference.
-/// The name environment body-path emission resolves against — `locals` (use tails/aliases and
-/// mod names: names that already have an import or declaration, so no root import should be
-/// fabricated for them) and, separately, the file's *inline* `mod` names: extraction flattens
-/// inline-mod bodies into the file (spec §2), so a qualified `convert::usize(..)` is really a
-/// same-file bare reference — resolving it as a member/package path lost the binding and
-/// false-positived the target as `unused` (M6 residuals, ripgrep corpus).
 #[derive(Clone, Copy)]
 struct PathEnv<'a> {
     locals: &'a std::collections::HashSet<String>,
@@ -335,7 +333,7 @@ struct PathEnv<'a> {
     types: &'a TypeEnv<'a>,
 }
 
-/// Local receiver types, from language FACTS visible in this file (RFC 0012 §3-bis): the
+/// Local receiver types, from language FACTS visible in this file: the
 /// `impl` owner (`self`/`Self`), typed parameters (fn and closure), annotated `let`s, and
 /// initializer shapes that name their type (`T { .. }` struct literals, `T::assoc(…)`
 /// calls). A name bound to CONFLICTING types anywhere in the function is dropped outright —
@@ -627,7 +625,7 @@ fn scoped_callee_text<'a>(function: Node, src: &'a [u8]) -> Option<&'a str> {
     }
 }
 
-/// The qualifier for a member access on `value` (RFC 0012 §3-bis), fact-first:
+/// The qualifier for a member access on `value`, fact-first:
 /// a one-hop dotted POINTER (`LowArgs.context_separator`, `Builder.new`) that the core
 /// resolves through declared member-type facts, else the receiver's directly-pinned TYPE,
 /// else nothing (the caller keeps the opaque receiver → duck fallback).
@@ -705,7 +703,7 @@ fn scoped_pointer(function: Node, types: &TypeEnv, src: &[u8]) -> Option<String>
 
 /// The receiver expression's type, when the file's facts pin one ([`TypeEnv`] doc):
 /// a typed identifier, `self` (→ owner), or a call chain rooted at a type
-/// (`SearchWorkerBuilder::new().opt(x).build()` — every link's receiver types as the root;
+/// (`Builder::new().opt(x).build()` — every link's receiver types as the root;
 /// a link returning something else can only miss into the duck fallback or hit a member
 /// the root genuinely declares, both silence-direction).
 fn receiver_type(value: Node, types: &TypeEnv, src: &[u8]) -> Option<String> {
@@ -796,7 +794,7 @@ fn collect_inline_mod_names(root: Node, src: &[u8]) -> std::collections::HashSet
 }
 
 /// Item-walk context: the member owner, whether we're under a `#[cfg(test)]` module (its
-/// declarations become test roots — inline test infrastructure, spec §1), and the file's
+/// declarations become test roots — inline test infrastructure), and the file's
 /// local qualifier names.
 struct Ctx<'a> {
     owner: Option<&'a str>,
@@ -826,7 +824,7 @@ fn text<'a>(node: Node, src: &'a [u8]) -> &'a str {
 }
 
 /// `(level, exported)` per the ladder [File "private", Package "pub(crate)", Public "pub"].
-/// Rungs are relative to the FILE's module (inline mods are flattened, spec §2):
+/// Rungs are relative to the FILE's module (inline mods are flattened):
 /// `pub(crate)`/`pub(in …)` map to the crate rung; `pub(self)` is private; `pub(super)`
 /// reaches the file's parent module — the crate rung — unless the item sits inside an
 /// inline mod, where `super` is a module within this same file and the item is file-scoped.
@@ -875,7 +873,7 @@ fn inside_inline_mod(node: Node) -> bool {
     false
 }
 
-/// Item-list walker (source_file, inline-mod bodies — flattened, spec §2). Attributes are
+/// Item-list walker (source_file, inline-mod bodies — flattened). Attributes are
 /// pending state applied to the next item.
 fn walk_items(list: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
     let mut pending = PendingAttrs::default();
@@ -951,7 +949,7 @@ fn collect_attr(item: Node, src: &[u8], pending: &mut PendingAttrs, out: &mut Fi
             }
         }
         "cfg" | "cfg_attr" => {
-            // Both branches kept, always (spec §2) — but `#[cfg(test)]` marks the next item
+            // Both branches kept, always — but `#[cfg(test)]` marks the next item
             // (typically `mod tests`) as inline test infrastructure.
             if text(attr, src).contains("test") {
                 pending.cfg_test = true;
@@ -960,7 +958,7 @@ fn collect_attr(item: Node, src: &[u8], pending: &mut PendingAttrs, out: &mut Fi
         _ => {
             // Unknown attributes (`#[rkyv(with = SmolStrAsString)]`, `#[serde(…)]`) may name
             // real items in their arguments — scan for identifier tokens as TypeUse refs so
-            // attr-only consumers stay alive (the M5 dogfood's SmolStrAsString case).
+            // a consumer referenced only from an attribute stays alive.
             scan_unknown_attr(attr, name, src, out);
         }
     }
@@ -1103,8 +1101,8 @@ fn handle_item(item: Node, src: &[u8], ctx: &Ctx<'_>, pending: PendingAttrs, out
                     // the common case is crate-visible — Package level, exported.
                     (1, true),
                 );
-                // The expansion templates reference real code (ripgrep's err_message! calls
-                // `crate::messages::set_errored()` — M6 FP hunt): scan each rule's right-hand
+                // The expansion templates reference real code (an `err_message!` whose body
+                // calls `crate::messages::set_errored()`): scan each rule's right-hand
                 // token tree with the same reconstruction macro *invocations* get, attributed
                 // within the macro so a dead macro keeps nothing alive.
                 let mut mc = item.walk();
@@ -1131,9 +1129,9 @@ fn handle_item(item: Node, src: &[u8], ctx: &Ctx<'_>, pending: PendingAttrs, out
         // `export!(Guest);`) — the same construct `walk_body` already handles inside function
         // bodies via `handle_macro`, just at item position instead of expression position.
         // Without this arm the macro name and every identifier in its token tree (`Guest` in
-        // `export!(Guest)`) were silently invisible: no reference to the macro's own crate, no
-        // reference to whatever the macro's arguments name — real gaps a WASM-guest adapter
-        // hit immediately (top-level `generate!`/`export!` is exactly how wit-bindgen is used).
+        // `export!(Guest)`) are silently invisible: no reference to the macro's own crate, no
+        // reference to whatever the macro's arguments name — real gaps for WASM-guest code
+        // (top-level `generate!`/`export!` is exactly how wit-bindgen is used).
         "macro_invocation" => {
             handle_macro(
                 item,
@@ -1190,11 +1188,11 @@ fn handle_item(item: Node, src: &[u8], ctx: &Ctx<'_>, pending: PendingAttrs, out
 
     // Inside a `#[cfg(test)]` module, every declaration is test infrastructure — a test
     // root, so reachability colors it (and everything only it reaches) test-side, and the
-    // core's root-exemption keeps it out of `test-only`/`untested` findings (spec §1: the
-    // inline analogue of Go's `_test.go` role).
+    // core's root-exemption keeps it out of `test-only`/`untested` findings (the inline
+    // analogue of Go's `_test.go` role).
     // No per-declaration Test rooting here: `test_spans` (recorded by `walk_items`) is the
     // single producer-side declaration of test regions, and assembly derives the in-source
-    // Test roots for span-contained declarations (contracts §2) — one fact, one emitter.
+    // Test roots for span-contained declarations — one fact, one emitter.
     let _ = decls_before;
 }
 
@@ -1238,7 +1236,7 @@ fn handle_function(
     // caller reads the item's own modifier.
     let vis = vis_override.unwrap_or_else(|| visibility(item));
     let body = item.child_by_field_name("body");
-    // Signature = the item minus its body: what a caller sees (RFC 0012 §5).
+    // Signature = the item minus its body: what a caller sees.
     let signature_span = body.map(|b| Span {
         start: span(item).start,
         end: span(b).start,
@@ -1261,7 +1259,7 @@ fn handle_function(
             confidence: Confidence::Probable,
         });
     }
-    // FFI export: an attribute says so, or a `pub extern "C" fn` shape does (spec §2).
+    // FFI export: an attribute says so, or a `pub extern "C" fn` shape does.
     let is_extern_fn = {
         let mut c = item.walk();
         let found = item
@@ -1277,7 +1275,7 @@ fn handle_function(
         });
     }
 
-    // Signature types are used-when-the-fn-is-used: within = the fn (RFC 0012 §4).
+    // Signature types are used-when-the-fn-is-used: within = the fn.
     let mut c = item.walk();
     for child in item.children(&mut c) {
         if child.by_ref_is_body(body) {
@@ -1296,7 +1294,7 @@ fn handle_function(
         );
     }
     if let Some(body) = body {
-        // Receiver-type environment (RFC 0012 §3-bis): owner + typed bindings, so member
+        // Receiver-type environment: owner + typed bindings, so member
         // accesses on known receivers emit their TYPE as the qualifier.
         let types = TypeEnv::for_function(item, src, owner, ctx.field_types);
         walk_body(
@@ -1355,7 +1353,7 @@ fn handle_type_decl(item: Node, src: &[u8], ctx: &Ctx<'_>, kind: SymbolKind, out
     }
 }
 
-/// Member-type facts from a struct/union body (RFC 0012 §3-bis): named fields keyed by
+/// Member-type facts from a struct/union body: named fields keyed by
 /// name, tuple fields by position (`"0"`, `"1"` — `x.0.method()` chains too). Only fields
 /// whose annotation reduces to a base type contribute; the rest simply have no fact.
 fn collect_field_member_types(
@@ -1596,7 +1594,7 @@ fn handle_trait(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
 /// error-chain reporting, and `Default`'s derive/`unwrap_or_default` machinery. Name-called
 /// trait methods (`.clone()`, `.into()`, `.as_ref()`) are deliberately absent — the duck
 /// fallback already reaches those from their call sites. Third-party traits (serde et al.)
-/// stay unmodeled: a curated fact table beyond the stdlib is the recorded future source.
+/// stay unmodeled: the curated fact set covers the stdlib only.
 fn is_machinery_trait(name: &str) -> bool {
     matches!(
         name,
@@ -1686,8 +1684,7 @@ fn handle_impl(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
     // receiver ever unifies with), and the impl executes precisely when the trait is used
     // through that wrapper. Model it as machinery OF THE TRAIT: members attribute to the
     // trait's name and mark implicitly_invoked, so reaching the trait plausibly reaches the
-    // forwarding shims (RFC 0005 §1, degrade toward silence — ripgrep audit, ~40 members
-    // across matcher/sink).
+    // forwarding shims (degrade toward silence).
     let forwards_to_trait = trait_name.as_deref().is_some_and(|_| {
         is_impl_type_parameter(item, src, &self_type) && is_wrapped_self(type_node)
     });
@@ -1697,8 +1694,8 @@ fn handle_impl(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
         (self_type, false)
     };
 
-    // `impl Trait for T` — the Implement reference that keeps dispatch-aware liveness honest
-    // (RFC 0012 §3): using the trait keeps its implementations alive. A forwarding impl
+    // `impl Trait for T` — the Implement reference that keeps dispatch-aware liveness
+    // honest: using the trait keeps its implementations alive. A forwarding impl
     // skips it (the trait implementing itself is a no-op loop).
     if !is_forwarding {
         if let (Some(trait_node), Some(trait_name)) =
@@ -1715,7 +1712,7 @@ fn handle_impl(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
     }
 
     let is_trait_impl = item.child_by_field_name("trait").is_some();
-    // Machinery traits (RFC 0005 §1's machinery-dispatch rule): the call site never writes
+    // Machinery traits (the machinery-dispatch rule): the call site never writes
     // the method's name — an operator, a `{}` hook, a scope end, a `for` loop — so members
     // of these impls are marked `implicitly_invoked` and inherit their owner's colors.
     let is_machinery = is_forwarding
@@ -1732,7 +1729,7 @@ fn handle_impl(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
                 "function_item" => {
                     let p = std::mem::take(&mut pending);
                     handle_function(member, src, ctx, Some(&self_type), &p, None, out);
-                    // Member-type fact (RFC 0012 §3-bis): what calling this method yields —
+                    // Member-type fact: what calling this method yields —
                     // its declared return, dispatch-reduced, `Self` resolved to the owner.
                     if let Some(ret) = member.child_by_field_name("return_type") {
                         push_owner_member_type(out, &self_type, member, ret, src);
@@ -1740,8 +1737,8 @@ fn handle_impl(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
                     // Trait-impl methods are called through the trait's dispatch (dyn, generic
                     // bounds, operator/format machinery — `Display::fmt` is never `x.fmt()` in
                     // source), so the name-based member fallback cannot see their call sites:
-                    // root them at Probable (the RFC 0012 §3 dispatch rule, made concrete —
-                    // over-liveness in the safe direction, spec §6).
+                    // root them at Probable (the dispatch rule, made concrete —
+                    // over-liveness in the safe direction).
                     if is_trait_impl {
                         if let Some(mname) = member.child_by_field_name("name") {
                             out.roots.push(RawRoot {
@@ -1838,7 +1835,7 @@ fn handle_simple_decl(
             confidence: Confidence::Probable,
         });
     }
-    // Initializer expressions run at load: within = None (RFC 0012 §4's load-time rule).
+    // Initializer expressions run at load: within = None (the load-time rule).
     if let Some(value) = item.child_by_field_name("value") {
         walk_body(
             value,
@@ -1872,7 +1869,7 @@ fn handle_mod(item: Node, src: &[u8], ctx: &Ctx<'_>, pending: &PendingAttrs, out
         return;
     };
     match item.child_by_field_name("body") {
-        // Inline module: flatten (spec §2 — file ≈ module, stated once, leaned on everywhere).
+        // Inline module: flatten (file ≈ module — stated once, leaned on everywhere).
         Some(body) => walk_items(
             body,
             src,
@@ -1885,9 +1882,9 @@ fn handle_mod(item: Node, src: &[u8], ctx: &Ctx<'_>, pending: &PendingAttrs, out
             },
             out,
         ),
-        // `mod foo;` — THE file-linking import (spec §0). #[path] overrides the location.
+        // `mod foo;` — THE file-linking import. #[path] overrides the location.
         // `pub mod foo;` additionally re-exports the child's whole surface (reexported, no
-        // bindings — the shape phase 2.7's library-surface fixpoint expands): a published
+        // bindings — the shape the library-surface fixpoint expands): a published
         // crate's API lives behind exactly these chains.
         None => {
             let specifier = match &pending.mod_path {
@@ -1907,7 +1904,7 @@ fn handle_mod(item: Node, src: &[u8], ctx: &Ctx<'_>, pending: &PendingAttrs, out
                 // The child module's items are addressable through `name::…` qualifiers.
                 // `#[macro_use] mod x;` additionally globs the child's macro namespace into
                 // crate scope — invocations anywhere reach its `macro_rules!` without an
-                // import, which no binding can express (RFC 0005 §1's wildcard rule).
+                // import, which no binding can express (the wildcard rule).
                 opaque_namespace_use: pending.macro_use,
                 module_names_visible: false,
                 local_alias: Some(SmolStr::new(text(name, src))),
@@ -1946,7 +1943,7 @@ fn import_kind(path: &str) -> ImportKind {
     }
 }
 
-/// The entry-liveness companion (spec §3): a deep path into a crate traverses its module
+/// The entry-liveness companion: a deep path into a crate traverses its module
 /// tree from the entry, so `use crate_name::deep::Item` also imports `crate_name` alone.
 fn push_entry_import(specifier: &str, at: Span, out: &mut FileFacts) {
     if import_kind(specifier) != ImportKind::Package {
@@ -2007,7 +2004,7 @@ fn collect_use(
     };
     match node.kind() {
         // Full path, no list: `use a::b::X;` — specifier keeps the full path; the resolver's
-        // two-step tail rule (spec §3) decides module-vs-item, extraction never guesses.
+        // two-step tail rule decides module-vs-item, extraction never guesses.
         "scoped_identifier" | "identifier" | "crate" | "self" | "super" => {
             let full = join(text(node, src));
             let last = full.rsplit("::").next().unwrap_or(&full).to_string();
@@ -2156,12 +2153,12 @@ fn walk_type_refs(
 
 /// Expression bodies: calls, qualified paths, member accesses, macro invocations, plain
 /// identifier reads (locals shadowing a top-level name over-approximate ALIVE — the safe
-/// direction, spec §2).
+/// direction).
 fn walk_body(node: Node, src: &[u8], within: Option<&str>, env: PathEnv<'_>, out: &mut FileFacts) {
     match node.kind() {
         "line_comment" | "block_comment" => return,
-        // The RUNTIME spelling of Cargo's bin handshake — `env::var_os("CARGO_BIN_EXE_rg")`
-        // (ripgrep's own harness) — carries the same documented literal as the `env!` macro
+        // The RUNTIME spelling of Cargo's bin handshake — `env::var_os("CARGO_BIN_EXE_app")`
+        // — carries the same documented literal as the `env!` macro
         // form below in `handle_macro`. Only the documented prefix, only a literal; the name
         // still resolves against the manifest's declared executables or drops.
         "string_literal" | "raw_string_literal" => {
@@ -2181,10 +2178,9 @@ fn walk_body(node: Node, src: &[u8], within: Option<&str>, env: PathEnv<'_>, out
         }
         "use_declaration" => {
             // A body-scoped `use` is an import, not an expression: route it through the same
-            // extraction item-level uses get. Walking it generically fabricated phantom
+            // extraction item-level uses get. Walking it generically fabricates phantom
             // package references from its intermediate path segments (`use std::{fs::File,
-            // os::{fd::AsFd, unix::fs::FileTypeExt}}` → "fs"/"os"/"fd"/"unix" as packages —
-            // M6 FP hunt, ripgrep corpus).
+            // os::{fd::AsFd, unix::fs::FileTypeExt}}` → "fs"/"os"/"fd"/"unix" as packages).
             if let Some(argument) = node.child_by_field_name("argument") {
                 collect_use(argument, src, "", false, span(node), out);
             }
@@ -2217,10 +2213,10 @@ fn walk_body(node: Node, src: &[u8], within: Option<&str>, env: PathEnv<'_>, out
         }
         "field_expression" => {
             // `x.method()` / `x.field` — a member access by construction. With the
-            // receiver's TYPE known ([`TypeEnv`], RFC 0012 §3-bis) the qualifier is the
+            // receiver's TYPE known ([`TypeEnv`]) the qualifier is the
             // type name — the core resolves the member in the type's home file at Certain,
             // exactly like the qualified `Type::member` path. Unknown receivers keep the
-            // opaque qualifier and land in the duck-typed fallback (RFC 0012 §3).
+            // opaque qualifier and land in the duck-typed fallback.
             let (Some(value), Some(field)) = (
                 node.child_by_field_name("value"),
                 node.child_by_field_name("field"),
@@ -2335,8 +2331,8 @@ fn handle_scoped_path(
         .filter(|s| !s.is_empty() && !s.starts_with('<'))
         .collect();
     // `Self::assoc()` inside an impl IS `Owner::assoc()` — the language fact the enclosing
-    // impl states (RFC 0012 §3-bis); without the substitution the member table has no
-    // `Self.assoc` to hit and the reference fell to the duck fallback.
+    // impl states; without the substitution the member table has no
+    // `Self.assoc` to hit and the reference falls to the duck fallback.
     if segments.first() == Some(&"Self") {
         if let Some(owner) = &env.types.owner {
             segments[0] = owner.as_str();
@@ -2368,8 +2364,7 @@ fn emit_path(
         // prefix is `crate::logger`, `Logger` is a symbol inside that file, and `init` is
         // that type's associated item. Splitting there lets the type bind through the
         // import and the item reach the member table — an unsplit `crate::logger::Logger`
-        // specifier resolved to no file and the whole chain read as dead (M6 residuals,
-        // ripgrep's logger).
+        // specifier resolves to no file and the whole chain reads as dead.
         let type_pos = rest[1..]
             .iter()
             .position(|s| s.chars().next().is_some_and(char::is_uppercase))
@@ -2415,10 +2410,10 @@ fn emit_path(
         });
     } else if rest.len() == 1 && env.inline_mods.contains(root) {
         // A path through a same-file *inline* mod (`convert::usize(..)` with `mod convert
-        // { .. }` right here): extraction flattens inline-mod bodies into the file (spec §2),
+        // { .. }` right here): extraction flattens inline-mod bodies into the file,
         // so the target is a same-file bare symbol — emit the reference bare. Routing it
-        // through qualifier resolution had no alias/member to bind to and false-positived
-        // the target as `unused` (M6 residuals, ripgrep's `convert::usize`).
+        // through qualifier resolution has no alias/member to bind to and false-positives
+        // the target as `unused`.
         out.references.push(RawReference {
             name: SmolStr::new(*last),
             scope_context: None,
@@ -2428,8 +2423,8 @@ fn emit_path(
         });
     } else {
         // Bare root: `helpers::run`, `serde_json::to_string`, `Vec::new`. The immediate
-        // qualifier goes to scope_context — the core matches it against import aliases
-        // (RFC 0012 §9); an uppercase qualifier is a type's associated item, which lands in
+        // qualifier goes to scope_context — the core matches it against import aliases;
+        // an uppercase qualifier is a type's associated item, which lands in
         // the member fallback via the qualified table.
         let qualifier = rest.last().copied().unwrap_or(root);
         out.references.push(RawReference {
@@ -2440,8 +2435,8 @@ fn emit_path(
             kind,
         });
         // An uppercase qualifier NAMES a type: `logger::Logger::init()` is a use of `Logger`
-        // itself, not only of `init` — without this the type read as file-local to its
-        // declaration and `internal-only` advised narrowing it (M6 residuals). The extra
+        // itself, not only of `init` — without this the type reads as file-local to its
+        // declaration and `internal-only` advises narrowing it. The extra
         // reference resolves through the segment before it (or bare at path root); an
         // unresolvable one (`Vec` of `Vec::new`) binds nothing and is dropped silently.
         if qualifier.chars().next().is_some_and(char::is_uppercase) {
@@ -2457,7 +2452,7 @@ fn emit_path(
         // Multi-segment bare paths (`cycles::mod::item`, `serde_json::x::y`): the parent
         // path imports with the tail as its binding (so the item resolves in the deep
         // target), and the bare root imports alone as well — a deep path traverses the
-        // crate's module tree from its entry, so the entry stays alive (spec §3). For an
+        // crate's module tree from its entry, so the entry stays alive. For an
         // external crate the extra root import just duplicates the dependency edge.
         let import_worthy = !PRIMITIVES.contains(&root) && !env.locals.contains(root);
         if import_worthy && rest.len() == 1 && !root.chars().next().is_some_and(char::is_uppercase)
@@ -2484,9 +2479,9 @@ fn emit_path(
         // exists to stop fabricated ROOT/dependency imports for names a `use` already
         // covers, but a deep path (`kndo_core::discovery::find_files_named`) through a
         // use-covered root still needs ITS OWN module import to resolve — `use
-        // kndo_core::{discovery}` binds `discovery`, not this path (kondo dogfood: a
-        // sibling `use aa::{x}` silently killed every `aa::y::f()` inline path in the
-        // file). The duplicate dependency edge the root would add is exactly what the
+        // kndo_core::{discovery}` binds `discovery`, not this path (a sibling
+        // `use aa::{x}` would otherwise silently kill every `aa::y::f()` inline path in
+        // the file). The duplicate dependency edge the root would add is exactly what the
         // guard still prevents below.
         let module_worthy = !PRIMITIVES.contains(&root);
         if module_worthy && rest.len() > 1 && !root.chars().next().is_some_and(char::is_uppercase) {
@@ -2498,9 +2493,8 @@ fn emit_path(
                 type_only: kind == RefKind::TypeUse,
                 // A locals-covered root (`io::x::y` after `use std::io`) reconstructs at
                 // Possible: the import exists for resolution keep-alive; it is NOT evidence
-                // of a crate named `io` (`undeclared` ignores the Possible tier — the old
-                // guard suppressed these entirely and killed real cross-crate paths, kondo
-                // dogfood).
+                // of a crate named `io` (`undeclared` ignores the Possible tier —
+                // suppressing these entirely would kill real cross-crate paths).
                 confidence: if import_worthy {
                     Confidence::Probable
                 } else {
@@ -2563,7 +2557,7 @@ fn handle_macro(
 
     // env!("CARGO_BIN_EXE_<name>"): Cargo's own handshake for "this test executes the
     // workspace binary <name>" — the declared subprocess invocation the core resolves
-    // through the manifest's named bins (RFC 0005 §1's invoked-program rule). Only the
+    // through the manifest's named bins (the invoked-program rule). Only the
     // documented prefix, only a literal: never inferred from arbitrary strings.
     if matches!(name, "env" | "option_env") {
         if let Some(exe) = first_string_literal(node, src)
@@ -2575,7 +2569,7 @@ fn handle_macro(
         // Fall through: the token tree may still name identifiers worth scanning.
     }
 
-    // include!/include_str!/include_bytes! with a literal: a probable file edge (spec §2).
+    // include!/include_str!/include_bytes! with a literal: a probable file edge.
     if matches!(name, "include" | "include_str" | "include_bytes") {
         if let Some(lit) = first_string_literal(node, src) {
             out.imports.push(RawImport {
@@ -2596,7 +2590,7 @@ fn handle_macro(
     }
 
     // Identifier tokens inside the macro's token tree: plain reads (`format!("{}", user)`
-    // keeps `user`'s referents alive). No wildcard per macro — spec §2's bounded stance.
+    // keeps `user`'s referents alive). No wildcard per macro — the bounded stance.
     scan_token_tree(node, src, within, env, out);
 }
 
@@ -2648,10 +2642,10 @@ fn scan_token_tree(
     while i < children.len() {
         let tok = children[i];
         if tok.kind() == "use" {
-            // A `use` statement inside a macro body (`rgtest!(…, { use std::{thread::sleep,
+            // A `use` statement inside a macro body (`harness!(…, { use std::{thread::sleep,
             // time::Duration}; … })`): its inner segments are import structure, not
-            // expression paths — reconstructing them as paths fabricated `thread`/`time`
-            // phantom packages (M6 FP hunt, ripgrep corpus). Keep the root as a side-effect
+            // expression paths — reconstructing them as paths fabricates `thread`/`time`
+            // phantom packages. Keep the root as a side-effect
             // import (the real dependency edge; stdlib resolves harmlessly) and skip the
             // statement's remaining tokens through its `;`.
             if let Some(root) = children.get(i + 1).filter(|n| n.kind() == "identifier") {
@@ -2743,7 +2737,8 @@ fn collect_path_segments<'a>(children: &[Node], i: usize, src: &'a [u8]) -> (Vec
     (segments, j)
 }
 
-/// A member chain inside a macro token tree — `write!(w, "{}", flag.doc_short())` arrives
+/// A member chain inside a macro token tree — `write!(w, "{}", flag.doc_short())` (a call
+/// on a typed receiver) arrives
 /// as loose `identifier . identifier token_tree` tokens, the token soup's counterpart of
 /// the body's receiver typing. The receiver types through the same [`TypeEnv`] the body
 /// uses (`flag: &dyn Flag` → qualifier `Flag`; untyped falls back to the raw receiver name,
@@ -2930,9 +2925,9 @@ mod tests {
 
     #[test]
     fn body_scoped_use_is_an_import_never_phantom_package_references() {
-        // ripgrep's is_readable_stdin shape (M6 FP hunt): a `use` inside a function body with
+        // A `use` inside a function body with
         // nested groups must extract as imports rooted at `std`, never as `fs`/`os`/`fd`/
-        // `unix` package references (which became phantom `undeclared` findings).
+        // `unix` package references (which would become phantom `undeclared` findings).
         let f = facts(
             "pub fn imp() -> bool {\n\
              \x20   use std::{fs::File, os::{fd::AsFd, unix::fs::FileTypeExt}};\n\
@@ -2961,9 +2956,9 @@ mod tests {
 
     #[test]
     fn scoped_use_list_items_register_their_tails_as_local_qualifiers() {
-        // ripgrep's help.rs shape (M6 FP hunt): `use crate::flags::{doc::version}` binds
+        // `use crate::flags::{doc::version}` binds
         // `version`, so a later `version::generate()` is that import's alias — emitting a
-        // root package import for it fabricated a phantom `version` dependency.
+        // root package import for it would fabricate a phantom `version` dependency.
         let f = facts(
             "use crate::flags::{Category, doc::version};\n\
              pub fn render() { version::generate(); }\n",
@@ -2980,7 +2975,7 @@ mod tests {
 
     #[test]
     fn use_inside_a_macro_body_never_fabricates_phantom_packages() {
-        // ripgrep's rgtest! shape (M6 FP hunt): a `use` inside a macro token tree must not
+        // A `use` inside a macro token tree must not
         // reconstruct its inner segments as expression paths.
         let f = facts(
             "rgtest!(sorts, |dir: Dir| {\n\
@@ -3002,7 +2997,7 @@ mod tests {
 
     #[test]
     fn field_attribute_paths_import_and_reference_their_targets() {
-        // The M5 dogfood's SmolStrAsString case: a struct alive only through a field-level
+        // A struct alive only through a field-level
         // `#[rkyv(with = …)]` attribute must stay alive — extraction emits the synthetic
         // import (path minus tail) plus a TypeUse reference for the tail.
         let f = facts(
@@ -3121,7 +3116,7 @@ mod tests {
     fn assoc_constructor_chains_type_every_link() {
         // `let b = Builder::new()` binds `b` to the POINTER `Builder.new` (the declared
         // return is the fact, not the constructor-name convention); chain links emit
-        // pointers likewise — the ripgrep shape `SearchWorkerBuilder::new().opt(x).build()`.
+        // pointers likewise — the `Builder::new().opt(x).build()` chain shape.
         let f = facts(
             "fn f() {\n\
              \x20   let b = Builder::new();\n\
@@ -3188,7 +3183,7 @@ mod tests {
 
     #[test]
     fn member_calls_inside_macro_token_trees_get_receiver_typing() {
-        // The ripgrep help.rs shape: `write!(col2, "{}", flag.doc_short())` — the call
+        // `write!(col, "{}", flag.doc_short())` — the call
         // lives in token soup, but the receiver's type is a declared fact (`&dyn Flag`),
         // so the reference carries the same qualifier it would outside the macro.
         let f = facts(
@@ -3275,7 +3270,7 @@ mod tests {
 
     #[test]
     fn try_initializers_bind_unwrap_marked_pointers() {
-        // The ripgrep shape end-to-end on the adapter side: `self.config` types through
+        // The whole chain end-to-end on the adapter side: `self.config` types through
         // the file's own field facts, the call forms the pointer, `?` marks the unwrap —
         // `chir`'s uses carry `Config.build_many?` for the core to resolve to the payload.
         let f = facts(
@@ -3344,7 +3339,7 @@ mod tests {
 
     #[test]
     fn a_use_through_a_pathed_mod_expands_to_every_declared_alternate() {
-        // ripgrep's index/mod.rs shape: `use self::imp::*` where `imp` is declared twice
+        // `use self::imp::*` where `imp` is declared twice
         // with cfg-alternated `#[path]`s. The mod declarations are the location of record —
         // the use expands to one `file:` import per alternate (union over configurations).
         let f = facts(
@@ -3368,7 +3363,7 @@ mod tests {
     #[test]
     fn global_allocator_roots_the_static() {
         // The runtime consumes the item directly — no in-graph reference will ever exist
-        // (`#[cfg]`-gated in real code, like ripgrep's musl jemalloc ALLOC).
+        // (typically `#[cfg]`-gated in real code, e.g. a platform-specific allocator).
         let f = facts(
             "#[global_allocator]\n\
              static ALLOC: MyAlloc = MyAlloc;\n\
@@ -3458,8 +3453,7 @@ mod tests {
     #[test]
     fn struct_literal_initializers_read_their_values() {
         // `field: CONST` and shorthand `Foo { x }` both READ — the field name is a
-        // `field_identifier` node and never collides with the value identifier (the M5
-        // dogfood's BASELINE_FILE_VERSION case).
+        // `field_identifier` node and never collides with the value identifier.
         let f = facts(
             "const V: u32 = 1;\n\
              fn build() -> S { let x = 2; S { version: V, x } }\n",
@@ -3518,8 +3512,8 @@ mod tests {
     fn trait_methods_inherit_the_trait_visibility() {
         // Trait items carry no `pub`; their visibility IS the trait's (like enum variants).
         // Without this, a `pub trait`'s methods sit on the private rung and the duck-typed
-        // member fallback filters their cross-file call sites out — the M5 dogfood flagged
-        // every `LanguageAdapter` method unused while the engine calls them all.
+        // member fallback filters their cross-file call sites out — every method of a
+        // widely-implemented trait would read unused while its engine calls them all.
         let f = facts(
             "pub trait Adapter { fn claim(&self); }\n\
              pub(crate) trait Internal { fn helper(&self); }\n\

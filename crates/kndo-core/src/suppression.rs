@@ -1,33 +1,32 @@
-//! Suppression binding & marking (contracts/core-traits.md §2.1, RFC 0005 §12). Comment syntax
+//! Suppression binding & marking. Comment syntax
 //! is language-defined, so adapters only *extract* `kndo:allow`/`kndo:allow-file` pragmas
 //! (`FileFacts::suppressions`, carried onto `ProjectGraph::suppressions` by assembly); binding,
 //! validation and marking are core logic here, identical across languages.
 //!
 //! **No-flicker guarantee:** [`apply`] runs strictly after `analysis::run_all` has already
-//! computed the complete finding set as if no pragmas existed (contracts §2.1) — it only *marks*
+//! computed the complete finding set as if no pragmas existed — it only *marks*
 //! matched findings (filtered from the report and `--fail-on`, still counted in
 //! [`SuppressedSummary::inline`]), never influences what analyses themselves see.
 //!
-//! **The `stale` rule (RFC 0005 §12/§13, M6).** A pragma that isn't doing its job becomes an
+//! **The `stale` rule.** A pragma that isn't doing its job becomes an
 //! `info` finding in group `hygiene`, subject `suppression`, at the pragma's own span — one per
 //! pragma, carrying the most specific of three verdicts:
-//! 1. its category isn't in the 1.0 registry (output-schema §6) — it can never match;
-//! 2. a declaration-scoped pragma attaches to no declaration (contracts §2.1's placement rule);
+//! 1. its category isn't in the 1.0 registry — it can never match;
+//! 2. a declaration-scoped pragma attaches to no declaration (the placement rule);
 //! 3. it bound correctly but matched zero findings this run — the issue it acknowledged is gone.
 //!
 //! Because staleness is judged against the *complete* pre-suppression finding set, an
 //! actively-suppressing pragma can never be `stale`, and deleting a stale pragma can never
-//! resurrect a finding (no allow/stale flicker, contracts §2.1). `stale` findings are appended
+//! resurrect a finding (no allow/stale flicker). `stale` findings are appended
 //! *after* pragma matching, so they are structurally not inline-suppressible ("`stale` itself is
-//! not inline-suppressible", RFC 0005 §12) — and a `kndo:allow stale` pragma is rejected up
+//! not inline-suppressible") — and a `kndo:allow stale` pragma is rejected up
 //! front as meta-suppression, itself stale. `plugin:`-prefixed categories are validated against
 //! the rules the active plugins actually declare; a `plugin:` pragma whose category is *not* declared this run
 //! is skipped entirely (neither suppressing nor stale) — the plugin may simply be deactivated in
 //! this configuration, and flagging it would flicker with activation state.
 //!
-//! Deliberately not implemented yet, honestly absent rather than faked:
-//! - Config-based suppression (`kndo.toml` glob/category disables) — no config parser exists
-//!   yet (RFC 0005 §12's second mechanism); [`SuppressedSummary::config`] stays honestly `0`.
+//! Config-based suppression (`kndo.toml` glob/category disables) has no reader yet;
+//! [`SuppressedSummary::config`] stays honestly `0` rather than faked.
 
 use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 
@@ -36,7 +35,7 @@ use crate::engine::{Finding, Location, SuppressedSummary};
 use crate::graph::ProjectGraph;
 use crate::vocab::{Confidence, FileId};
 
-/// The 1.0 category registry (contracts/output-schema.md §6) — the closed set of core verdicts
+/// The 1.0 category registry — the closed set of core verdicts
 /// a suppression may name. `plugin:`-namespaced categories are validated dynamically against
 /// declared rules instead.
 const CATEGORY_REGISTRY: [&str; 13] = [
@@ -57,8 +56,8 @@ const CATEGORY_REGISTRY: [&str; 13] = [
 
 enum Scope {
     File,
-    /// Line-inclusive range of the bound declaration ("the symbol and everything it declares,"
-    /// contracts §2.1) — any finding whose location falls inside covers both the anchor symbol
+    /// Line-inclusive range of the bound declaration ("the symbol and everything it
+    /// declares") — any finding whose location falls inside covers both the anchor symbol
     /// itself and anything nested in it (e.g. a class's members), without needing to walk a
     /// symbol hierarchy: nested declarations are separate `SymbolNode`s with narrower spans.
     Declaration {
@@ -73,7 +72,7 @@ struct Binding<'a> {
     subject: Option<&'a str>,
     scope: Scope,
     /// The bound declaration's name (`Declaration` scope only) — the stale finding's symbol
-    /// anchor, so its id survives reformatting but changes on rename (output-schema §5).
+    /// anchor, so its id survives reformatting but changes on rename.
     anchor: Option<&'a str>,
     raw: &'a RawSuppression,
     matched: bool,
@@ -81,7 +80,7 @@ struct Binding<'a> {
 
 enum StaleKind {
     UnknownCategory,
-    /// `kndo:allow stale` — rejected as meta-suppression (contracts §2.1: `stale` findings are
+    /// `kndo:allow stale` — rejected as meta-suppression (`stale` findings are
     /// not inline-suppressible), before it could ever participate in matching.
     Meta,
     Unbound,
@@ -179,7 +178,7 @@ fn validate_category(
         .then_some(Classified::Stale(StaleKind::UnknownCategory))
 }
 
-/// The marking pass (contracts §2.1): filters findings any binding covers out of the set —
+/// The marking pass: filters findings any binding covers out of the set —
 /// counting them in `inline` — while recording on each binding whether it suppressed anything.
 fn mark_and_filter(
     graph: &ProjectGraph,
@@ -255,7 +254,7 @@ fn pragma_target(raw: &RawSuppression) -> String {
 /// One `stale` finding for one dead pragma (module docs): `info` / `hygiene` / subject
 /// `suppression`, located at the pragma's own span. The id hashes the pragma's target and its
 /// per-(file, target) ordinal — never line numbers — so reformatting keeps it stable while a
-/// retargeted pragma is a new finding (output-schema §5).
+/// retargeted pragma is a new finding.
 fn stale_finding(
     graph: &ProjectGraph,
     file: FileId,
@@ -327,13 +326,13 @@ fn stale_message(
             typo_hint(&raw.category)
         ),
         StaleKind::Meta => format!(
-            "{path} suppression targets 'stale' — stale findings are not inline-suppressible (contracts §2.1); acknowledge them via baseline instead"
+            "{path} suppression targets 'stale' — stale findings are not inline-suppressible; acknowledge them via baseline instead"
         ),
         StaleKind::Unbound => format!(
             "{path} suppression '{target}' attaches to no declaration — none starts on the pragma's line or the line after; move it directly above the declaration or use kndo:allow-file"
         ),
         StaleKind::MatchedNothing => format!(
-            "{path}{} suppression '{target}' no longer matches any finding — the issue it acknowledged is gone; delete the pragma",
+            "{path}{} suppression '{target}' matches no finding — the issue it acknowledged is gone; delete the pragma",
             anchor.map(|a| format!("#{a}")).unwrap_or_default()
         ),
     }
@@ -371,7 +370,7 @@ fn edit_distance(a: &str, b: &str) -> usize {
 }
 
 /// A `Declaration`-scope pragma "attaches to the declaration it precedes or shares a line with"
-/// (contracts §2.1): the pragma's own line matches the declaration's start line (a trailing
+///: the pragma's own line matches the declaration's start line (a trailing
 /// same-line comment), or the declaration starts on the line right after the pragma ends (a
 /// comment directly above it). `None` when nothing in the file qualifies — the pragma binds to
 /// nothing, an `Unbound` stale finding (module docs).
@@ -662,7 +661,7 @@ mod tests {
         let stale = stale_of(&kept);
         assert_eq!(stale.len(), 1);
         assert!(stale[0].message.contains("a.ts#foo"));
-        assert!(stale[0].message.contains("no longer matches any finding"));
+        assert!(stale[0].message.contains("matches no finding"));
         assert_eq!(stale[0].location.symbol.as_deref(), Some("foo"));
     }
 
@@ -741,7 +740,7 @@ mod tests {
 
     #[test]
     fn stale_findings_are_not_inline_suppressible() {
-        // RFC 0005 §12: `stale` itself is not inline-suppressible — an allow-file pragma for
+        // `stale` itself is not inline-suppressible — an allow-file pragma for
         // it neither hides the other pragma's staleness nor escapes staleness itself.
         let graph = graph_with(
             vec![],

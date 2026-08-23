@@ -1,8 +1,8 @@
-//! The author kit's whole promised loop (RFC 0017 §7, second pass), end to end and held to
-//! the workspace's own bar: `kndo::author::scaffold` must produce a crate that COMPILES
-//! against the vendored WIT, `kndo::author::build` must turn it into a loadable component
-//! with one call, and `kndo::verify` must accept the result — for both kinds. A template
-//! that drifts from the ABI breaks this test, not a third-party author's afternoon.
+//! The author kit's whole loop, end to end: `kndo::author::scaffold` must produce a crate
+//! that COMPILES against the vendored WIT, `kndo::author::build` must turn it into a
+//! loadable component with one call, and `kndo::verify` must accept the result — for both
+//! kinds. A template that drifts from the ABI breaks this test, not a third-party author's
+//! afternoon.
 
 use std::path::Path;
 

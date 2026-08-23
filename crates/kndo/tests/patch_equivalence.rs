@@ -1,8 +1,7 @@
-//! RFC 0013 §6's equivalence suite, over the real adapters and the real conformance corpora:
-//! for every fixture project, apply a mutation, run the cached path (patch when its guards
+//! For every fixture project, apply a mutation, run the cached path (patch when its guards
 //! hold, full rebuild otherwise), and compare the resulting graph against a scratch rebuild
 //! of the same tree — they must be EQUAL, whole-graph, not merely finding-equivalent. The
-//! canonical-order invariant (RFC 0013 §3a) is what makes this comparison meaningful.
+//! canonical-order invariant across both paths is what makes this comparison meaningful.
 //!
 //! Mutations per fixture: (1) a trailing comment on one claimed file — surface-preserving,
 //! the patch's home turf; (2) a leading blank line — every span shifts; (3) a new exported
@@ -94,9 +93,9 @@ fn run_mutation(label: &str, mutate: impl Fn(&Path, &str) -> String) -> usize {
         let work = std::env::temp_dir().join(format!("kndo-patch-eq-{name}"));
         let _ = fs::remove_dir_all(&work);
         copy_tree(&fixture, &work);
-        // Pad the tree with inert filler so one mutated file sits under the measured 5%
-        // work threshold (RFC 0013 §5) — the conformance fixtures are deliberately tiny,
-        // and this suite is about equivalence under mutation, not about fixture findings.
+        // Pad the tree with inert filler so one mutated file sits under the patch-vs-rebuild
+        // work threshold — the conformance fixtures are deliberately tiny, and this suite
+        // is about equivalence under mutation, not about fixture findings.
         for i in 0..40 {
             fs::write(
                 work.join(format!("kndo_filler_{i}.ts")),
@@ -131,7 +130,7 @@ fn run_mutation(label: &str, mutate: impl Fn(&Path, &str) -> String) -> usize {
             .unwrap_or_else(|e| panic!("scratch assemble failed for {name}: {e:?}"));
         assert_eq!(
             cached_graph, scratch_graph,
-            "graph divergence on {name} — the RFC 0013 §6 gate"
+            "graph divergence on {name}"
         );
         assert_eq!(
             cached_diags, scratch_diags,

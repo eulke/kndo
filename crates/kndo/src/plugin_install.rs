@@ -1,12 +1,12 @@
-//! `kndo plugin install/list/remove` — RFC 0015 §4: registry semantics without a registry
+//! `kndo plugin install/list/remove` — registry semantics without a registry
 //! service. A coordinate (`github.com/<owner>/<repo>[@vX.Y.Z]`) resolves to a GitHub release
 //! of that repo carrying a componentized `.wasm` plus a `checksums.txt` (the same artifact
-//! convention kndo itself releases under, RFC 0014 §3 / docs/plugins/authoring.md §9);
+//! convention kndo itself releases under);
 //! everything verified lands in the global plugin directory beside a `plugins.lock` that makes
 //! the installed set reproducible and auditable.
 //!
 //! Verification before any write: checksum (SHA-256 against the release's own manifest) and
-//! identity binding (RFC 0015 §2 — the fetched component's descriptor must declare exactly the
+//! identity binding (the fetched component's descriptor must declare exactly the
 //! coordinate it was fetched *by*, so nothing can impersonate an id it wasn't fetched from).
 //! Dependencies recurse (`kndo:*` resolve as no-ops against this build's built-ins); a whole
 //! transaction stages first and commits last, so a failure anywhere leaves the directory and
@@ -22,8 +22,8 @@ use std::path::{Path, PathBuf};
 
 // ---------------------------------------------------------------- coordinates
 
-/// A parsed install coordinate (RFC 0015 §2): `github.com/<owner>/<repo>`, optionally
-/// `@<tag>`-qualified. The host part is fixed to GitHub in v1 (the RFC leaves the grammar
+/// A parsed install coordinate: `github.com/<owner>/<repo>`, optionally
+/// `@<tag>`-qualified. The host part is fixed to GitHub (the grammar stays
 /// extensible; nothing here assumes otherwise).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Coordinate {
@@ -42,7 +42,7 @@ impl Coordinate {
         Ok(Coordinate { owner, repo, tag })
     }
 
-    /// The identity half — what the fetched descriptor must declare as its `id` (RFC 0015 §2),
+    /// The identity half — what the fetched descriptor must declare as its `id`,
     /// and the lockfile key. Never carries the tag.
     pub fn id(&self) -> String {
         format!("github.com/{}/{}", self.owner, self.repo)
@@ -83,7 +83,7 @@ pub enum InstallError {
     BuiltinCoordinate(String),
     NoGlobalDir,
     /// Two different explicit tags were required for the same coordinate in one transaction —
-    /// RFC 0015 §4: fail with both requirers named, never guess.
+    /// fail with both requirers named, never guess.
     VersionConflict {
         id: String,
         first: (String, String),
@@ -107,7 +107,7 @@ pub enum InstallError {
         expected: String,
         actual: String,
     },
-    /// Identity binding (RFC 0015 §2): the component's descriptor id is not the coordinate it
+    /// Identity binding: the component's descriptor id is not the coordinate it
     /// was fetched by.
     IdentityMismatch {
         coordinate: String,
@@ -120,8 +120,8 @@ pub enum InstallError {
 
 impl fmt::Display for InstallError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // Grouped by concern so each helper stays a small match (the dogfooded CRAP
-        // discipline); exactly one group owns each variant.
+        // Grouped by concern so each helper stays a small match (keeps every helper's
+        // complexity low); exactly one group owns each variant.
         let message = self
             .usage_message()
             .or_else(|| self.policy_message())
@@ -137,7 +137,7 @@ impl InstallError {
         match self {
             InstallError::BadCoordinate(s) => Some(format!(
                 "`{s}` is not an install coordinate — expected github.com/<owner>/<repo> \
-                 optionally followed by @<tag> (RFC 0015 §2)"
+                 optionally followed by @<tag>"
             )),
             InstallError::BuiltinCoordinate(s) => Some(format!(
                 "`{s}` names a built-in plugin: it is compiled into this kndo and never \
@@ -152,12 +152,12 @@ impl InstallError {
         }
     }
 
-    /// RFC 0015 §4's never-guess policies: version disagreements and unmanaged removals.
+    /// The never-guess policies: version disagreements and unmanaged removals.
     fn policy_message(&self) -> Option<String> {
         match self {
             InstallError::VersionConflict { id, first, second } => Some(format!(
                 "version conflict for {id}: {} requires {} but {} requires {} — kndo does not \
-                 guess between explicit tags (RFC 0015 §4); align the requirers and retry",
+                 guess between explicit tags; align the requirers and retry",
                 first.1, first.0, second.1, second.0
             )),
             InstallError::InstalledVersionMismatch {
@@ -194,7 +194,7 @@ impl InstallError {
             } => Some(format!(
                 "identity mismatch: the component fetched by {coordinate} declares id \
                  `{declared}` — a plugin must declare exactly the coordinate it is fetched \
-                 from (RFC 0015 §2); nothing was installed"
+                 from; nothing was installed"
             )),
             InstallError::Probe(s) => Some(format!("component rejected: {s}")),
             _ => None,
@@ -207,7 +207,7 @@ impl InstallError {
             InstallError::Fetch(s) => format!("fetch failed: {s}"),
             InstallError::ReleaseShape { id, problem } => format!(
                 "release of {id} is not installer-ready: {problem} (expected one .wasm asset \
-                 plus checksums.txt — docs/plugins/authoring.md §9)"
+                 plus checksums.txt)"
             ),
             InstallError::Io(s) => s.clone(),
             _ => unreachable!("every other variant is owned by an earlier message group"),
@@ -251,7 +251,7 @@ pub struct ProbedDescriptor {
 
 // ---------------------------------------------------------------- lockfile
 
-/// `plugins.lock`, beside the installed `.wasm` files (RFC 0015 §4): coordinate → version →
+/// `plugins.lock`, beside the installed `.wasm` files: coordinate → version →
 /// sha256 → file. TOML, written sorted (BTreeMap) so the file is diff-stable.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LockEntry {
@@ -317,7 +317,7 @@ pub struct InstallReport {
     pub already_present: Vec<String>,
     /// `kndo:*` dependencies that resolved against this build's built-ins (no-ops).
     pub builtin_deps: Vec<String>,
-    /// `kndo:*` dependencies this build does *not* compile in — never fatal (RFC 0015 §3),
+    /// `kndo:*` dependencies this build does *not* compile in — never fatal,
     /// but worth a line: those conventions won't be analyzed.
     pub unknown_builtins: Vec<String>,
 }
@@ -375,7 +375,7 @@ pub fn install_with(
 type Staged = (Coordinate, String, Vec<u8>, String);
 
 /// One install transaction's working state — the worklist recursion over `dependencies`
-/// (RFC 0015 §4 step 3) with the §4 conflict ledger (`requested`).
+/// with the conflict ledger (`requested`).
 struct Transaction<'a> {
     source: &'a dyn ReleaseSource,
     probe: &'a dyn Fn(&[u8]) -> Result<ProbedDescriptor, String>,
@@ -474,7 +474,7 @@ fn record_request(
     }
 }
 
-/// `Ok(true)` = already installed at a compatible version (no-op, RFC 0015 §4 step 3).
+/// `Ok(true)` = already installed at a compatible version (no-op).
 fn satisfied_by_lock(
     coord: &Coordinate,
     requirer: &str,
@@ -537,7 +537,7 @@ fn download_verified(
     Ok((bytes, actual))
 }
 
-/// The authoring.md §9 shape: exactly one `.wasm` asset, plus `checksums.txt`.
+/// The installer-ready release shape: exactly one `.wasm` asset, plus `checksums.txt`.
 fn installer_assets<'r>(
     coord: &Coordinate,
     release: &'r ReleaseInfo,
@@ -670,7 +670,7 @@ fn unmanaged_wasm_files(dir: &Path, lock: &Lock) -> Vec<String> {
 }
 
 /// Remove one managed plugin: its `.wasm` and its lock entry. Dependents are deliberately not
-/// blocked on (RFC 0015 §3: a missing dependency is never fatal — `kndo doctor` reports the
+/// blocked on (a missing dependency is never fatal — `kndo doctor` reports the
 /// gap afterwards, which is the designed degradation).
 pub fn remove(spec: &str) -> Result<String, InstallError> {
     let dir = global_dir()?;
@@ -715,10 +715,10 @@ fn sha256_hex(bytes: &[u8]) -> String {
 
 /// The real probe: land the verified bytes in a temp file (the WASM host loads from a path)
 /// and let `kndo-plugin-api`'s own loaders — reserved-namespace rejection included on both —
-/// vet them. RFC 0016 §4: a component can be either a `kndo:plugin` or a `kndo:adapter`; this
-/// tries both, exactly the way `kndo::open`'s own project-local discovery already tries both
-/// loaders per file and lets wasmtime's component type-checking sort out which one accepts it
-/// (docs/contracts/wasm-abi.md §4). Public so the integration suite can run [`install_with`]
+/// vet them. A component can be either a `kndo:plugin` or a `kndo:adapter`; this
+/// tries both, exactly the way `kndo::open`'s own project-local discovery tries both
+/// loaders per file and lets wasmtime's component type-checking sort out which one accepts it.
+/// Public so the integration suite can run [`install_with`]
 /// against genuine components.
 pub fn wasm_probe(bytes: &[u8]) -> Result<ProbedDescriptor, String> {
     let dir = tempfile_dir().map_err(|e| e.to_string())?;
@@ -785,7 +785,7 @@ fn tempfile_dir() -> std::io::Result<PathBuf> {
 }
 
 /// GitHub's release API, honoring the ambient environment: `GITHUB_TOKEN`/`GH_TOKEN` for
-/// private repos (RFC 0015 §4: "the fetch uses the user's existing credentials"), the
+/// private repos (the fetch uses the user's existing credentials), the
 /// platform trust store for TLS, and `HTTPS_PROXY`-style variables for proxies.
 pub struct GitHubReleaseSource {
     agent: ureq::Agent,
@@ -826,7 +826,7 @@ impl GitHubReleaseSource {
         let body = response
             .body_mut()
             .with_config()
-            // Components are small by design (authoring.md §2 budgets); 64 MiB is a
+            // Components are small by design; 64 MiB is a
             // generous ceiling that still stops a runaway body.
             .limit(64 * 1024 * 1024)
             .read_to_vec()
@@ -1075,7 +1075,7 @@ mod tests {
 
     #[test]
     fn dependencies_close_transitively_and_builtins_are_noops() {
-        // The RFC 0015 §1 chain: the company plugin depends on another repo's plugin, a
+        // The wrapper chain: the company plugin depends on another repo's plugin, a
         // built-in this build has, and a built-in it doesn't.
         let dir = tempfile::tempdir().unwrap();
         let mut source = FakeSource::new();
@@ -1147,7 +1147,7 @@ mod tests {
 
     #[test]
     fn identity_binding_rejects_an_impersonating_component() {
-        // RFC 0015 §2: fetched by one coordinate, declaring another — rejected, nothing
+        // Fetched by one coordinate, declaring another — rejected, nothing
         // written, even though the checksum was genuine.
         let dir = tempfile::tempdir().unwrap();
         let mut source = FakeSource::new();
@@ -1216,7 +1216,7 @@ mod tests {
             }
             other => panic!("expected VersionConflict, got {other}"),
         }
-        // The whole transaction failed — nothing landed, not even the unconflicted root.
+        // The whole transaction failed — nothing was written, not even the unconflicted root.
         assert!(std::fs::read_dir(dir.path()).unwrap().next().is_none());
     }
 

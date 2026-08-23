@@ -1,4 +1,4 @@
-//! The author kit's scaffold and build halves (RFC 0017 §7, second pass): `kndo plugin new`
+//! The author kit's scaffold and build halves: `kndo plugin new`
 //! writes a compilable component crate with the ABI already vendored, `kndo plugin build`
 //! turns it into a componentized `.wasm` with no wasm tooling knowledge required, and
 //! `kndo plugin wit` prints the WIT world this binary was built against. Together with
@@ -71,8 +71,7 @@ fn ensure_fresh_dir(dir: &Path) -> Result<(), String> {
 }
 
 /// Every file the scaffold writes, as `(relative path, content)`. The WIT is vendored from
-/// this binary — not copied by hand from a possibly mismatched git checkout (authoring.md
-/// §3's instruction, now automated).
+/// this binary — never copied by hand from a possibly mismatched git checkout.
 fn scaffold_files(kind: ComponentKind, name: &str) -> Vec<(String, String)> {
     let wit_rel = format!("wit/{}", kind.wit_file());
     vec![
@@ -98,7 +97,7 @@ fn scaffold_files(kind: ComponentKind, name: &str) -> Vec<(String, String)> {
 /// Build the component crate at `crate_dir` and componentize the result: one cargo
 /// invocation (`--release --target wasm32-unknown-unknown`) plus the same
 /// `wit_component::ComponentEncoder` call kndo's own compliance suites make. Writes
-/// `<crate-name>.wasm` (the release-asset shape authoring.md §9 distributes) into
+/// `<crate-name>.wasm` (the release-asset shape the installer expects) into
 /// `crate_dir` and returns its path.
 pub fn build(crate_dir: &Path) -> Result<PathBuf, String> {
     let name = package_name(crate_dir)?;
@@ -204,7 +203,8 @@ lto = true
 
 const PLUGIN_LIB_TEMPLATE: &str = r#"//! __NAME__ — a kndo plugin (kndo:plugin ABI).
 //!
-//! Authoring guide: https://github.com/eulke/kndo — docs/plugins/authoring.md.
+//! Authoring guide: the plugin authoring docs in the kndo repository
+//! (https://github.com/eulke/kndo).
 //! Inner loop: `kndo plugin build` then `kndo plugin verify __NAME__.wasm`.
 
 // Marks the dependency used — the macro below is a fully-qualified path with no `use`.
@@ -214,7 +214,7 @@ wit_bindgen::generate!({
     // The ABI contract, vendored by `kndo plugin new` from the kndo you ran. To retarget a
     // newer kndo: `kndo plugin wit plugin > wit/plugin.wit` and rebuild. Do not edit it.
     path: "wit/__WIT_FILE__",
-    // The findings-capable world (RFC 0018) — the full surface. Target `plugin` instead if
+    // The findings-capable world — the full surface. Target `plugin` instead if
     // you only mutate the graph and want the smallest possible export set.
     world: "plugin-findings",
 });
@@ -226,7 +226,7 @@ struct Component;
 impl Guest for Component {
     fn descriptor() -> PluginDescriptor {
         PluginDescriptor {
-            // Your id IS your coordinate (authoring guide §4): the GitHub repo this plugin
+            // Your id IS your coordinate: the GitHub repo this plugin
             // can be fetched from. A plain name works for hand-dropped .kndo/plugins/ files
             // but can never be installed or depended on.
             id: "github.com/you/__NAME__".to_string(),
@@ -235,7 +235,7 @@ impl Guest for Component {
             // Files outside the language graph you need to read (configs, templates) —
             // globs, served through the host's content channel. Empty = no reads.
             requested_file_access: Vec::new(),
-            // When a globally installed copy of this plugin turns on (guide §5). An empty
+            // When a globally installed copy of this plugin turns on. An empty
             // list NEVER self-activates globally — declare a real rule.
             activation: vec![ActivationRule::ManifestDependency(
                 "TODO-your-framework-package".to_string(),
@@ -283,7 +283,7 @@ impl Guest for Component {
         Vec::new()
     }
 
-    /// Rules you may emit findings under (RFC 0018) — declare them here or they are dropped.
+    /// Rules you may emit findings under — declare them here or they are dropped.
     /// A finding's severity IS its rule's declared severity; without a user's explicit
     /// [plugins.gate] opt-in your findings are advisory (shown, never gating).
     fn rules() -> Vec<RuleDescriptor> {
@@ -308,8 +308,8 @@ export!(Component);
 
 const ADAPTER_LIB_TEMPLATE: &str = r#"//! __NAME__ — a kndo language adapter (kndo:adapter ABI).
 //!
-//! Authoring guide: https://github.com/eulke/kndo — docs/plugins/authoring.md (§1 explains
-//! when to write an adapter vs a plugin).
+//! Authoring guide: the plugin authoring docs in the kndo repository
+//! (https://github.com/eulke/kndo) — they explain when to write an adapter vs a plugin.
 //! Inner loop: `kndo plugin build` then `kndo plugin verify __NAME__.wasm`.
 
 // Marks the dependency used — the macro below is a fully-qualified path with no `use`.
@@ -338,7 +338,7 @@ impl Guest for Component {
             // When a globally installed copy activates. Empty NEVER self-activates globally.
             activation: vec![ActivationRule::FileExists("*.TODO-marker".to_string())],
             // Adapters this one builds on (a wrapper/superset language naming its base) —
-            // activating this adapter co-activates them (RFC 0017 §6).
+            // activating this adapter co-activates them.
             dependencies: Vec::new(),
         }
     }
@@ -390,7 +390,7 @@ directory (project-local components always run) and check `kndo doctor` there.
 
 Publish a GitHub release tagged `vX.Y.Z` carrying `__NAME__.wasm` plus a `checksums.txt`
 (`sha256sum` format) on the repository your descriptor `id` names — users then install it
-with `kndo plugin install <your-coordinate>`. Full guide: docs/plugins/authoring.md in the
+with `kndo plugin install <your-coordinate>`. Full guide: the plugin authoring docs in the
 kndo repository.
 "#;
 

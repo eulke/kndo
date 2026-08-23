@@ -1,10 +1,10 @@
-//! `kndo plugin verify <component.wasm>` (RFC 0017 §7) — the public half of the compliance
+//! `kndo plugin verify <component.wasm>` — the public half of the compliance
 //! suite, packaged for an author's inner loop. Loads the component through the exact loaders
 //! `kndo::open` discovery uses, reports what its descriptor declares (plus lint-grade warnings
 //! for the mistakes the docs warn about), then drives every hook for real: the component is
 //! dropped project-local into a synthesized fixture project and a genuine `kndo::open` + full
 //! check runs over it — the same code path a user's project would exercise, not a mock. What
-//! the component contributed comes back from the RFC 0017 §7 audit record the run leaves in
+//! the component contributed comes back from the audit record the run leaves in
 //! the fixture's cache.
 //!
 //! Deliberately *not* a conformance judgment: `verify` cannot know what a component is
@@ -16,7 +16,7 @@ use std::path::Path;
 
 use kndo_core::engine::{CheckRequest, ConfigOverrides, RunMode};
 
-/// Which world (docs/contracts/wasm-abi.md §4/§5) accepted the component.
+/// Which ABI world accepted the component.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VerifiedKind {
     Adapter,
@@ -56,7 +56,7 @@ pub fn verify(component: &Path) -> Result<VerifyReport, String> {
 /// Verify against the author's own fixture project instead of the synthesized one: `project`
 /// is copied whole into a temp root (never mutated — `.git`/`.kndo`/`target`/`node_modules`
 /// excluded), the component staged project-local there, and the same full check runs. This is
-/// the assertion half of authoring.md §8's baseline-then-plugin loop as one command.
+/// the assertion half of the baseline-then-plugin authoring loop as one command.
 pub fn verify_in_project(component: &Path, project: &Path) -> Result<VerifyReport, String> {
     if !project.is_dir() {
         return Err(format!(
@@ -98,7 +98,7 @@ fn verify_plugin(
     push_list(&mut descriptor, "dependencies", &d.dependencies);
     push_list(&mut descriptor, "file access", &d.requested_file_access);
     descriptor.push(format!("mutates graph: {}", plugin.mutates_graph()));
-    // RFC 0018 §4: declared rules — what this component MAY assert as findings.
+    // Declared rules — what this component MAY assert as findings.
     for rule in plugin.rules() {
         descriptor.push(format!("rule: {} — {}", rule.name, rule.description));
     }
@@ -180,7 +180,7 @@ fn verify_adapter(
 }
 
 /// The hook drive: a temp fixture project with the component dropped project-local
-/// (unconditional activation, RFC 0003 §3), one real full check, then the audit record read
+/// (unconditional activation), one real full check, then the audit record read
 /// back. The fixture is either synthesized (a generic manifest plus `sample_files` derived
 /// from the adapter's own globs) or, with `project` set, a copy of the author's own.
 fn drive_fixture(

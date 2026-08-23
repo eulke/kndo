@@ -1,5 +1,5 @@
-//! Maven/Gradle manifest fidelity shared by every JVM-family adapter (Java, Kotlin — ROADMAP
-//! "Java → Kotlin share infra"). The two ecosystems' manifest shapes have zero language
+//! Maven/Gradle manifest fidelity shared by every JVM-family adapter (Java, Kotlin —
+//! the two share infra). The two ecosystems' manifest shapes have zero language
 //! dependency: `pom.xml`/`build.gradle` describe dependency coordinates and module topology
 //! the same way whether the module's source is `.java` or `.kt`. What DOES differ per
 //! language is the source-root convention (`src/main/java` vs `src/main/kotlin`) and which
@@ -24,7 +24,7 @@ use smol_str::SmolStr;
 pub struct JvmSourceLayout {
     /// Source roots relative to the manifest's directory, in promotion order. More than one
     /// when Gradle registers several for a language: Kotlin's `main` source set includes
-    /// both `src/main/kotlin` and `src/main/java`, and real projects (moshi — M6 FP hunt)
+    /// both `src/main/kotlin` and `src/main/java`, and real projects
     /// keep `.kt` files under the latter. The `source_ext` filter keeps each language's
     /// promotion to its own files even in a shared directory.
     pub source_roots: &'static [&'static str],
@@ -125,7 +125,7 @@ fn maven_is_private(project: roxmltree::Node<'_, '_>) -> bool {
     matches!(xml_child_text(project, "packaging"), Some("pom" | "war"))
 }
 
-/// `<modules><module>sub-a</module></modules>` — RFC 0011 §3 workspace topology.
+/// `<modules><module>sub-a</module></modules>` — workspace topology.
 fn maven_workspace_members(project: roxmltree::Node<'_, '_>) -> Vec<SmolStr> {
     let Some(modules) = xml_child(project, "modules") else {
         return Vec::new();
@@ -400,7 +400,7 @@ fn promote_source_roots(
         .filter(|p| !is_vendored(p.0.as_str()))
         .cloned()
         .collect();
-    files.sort(); // deterministic (RFC 0008 §4)
+    files.sort(); // deterministic
     for target in files {
         out.roots.push(ManifestRoot {
             kind: RootKind::Production,

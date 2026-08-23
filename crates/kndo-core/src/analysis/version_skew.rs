@@ -1,9 +1,9 @@
 //! `version-skew` — the same external dependency declared with diverging version requirements
-//! across manifests (RFC 0005 §5): three packages pinning three `lodash` versions is an
+//! across manifests: three packages pinning three `lodash` versions is an
 //! inconsistency someone will debug eventually. Manifest-only, zero-config, and unaffected by
 //! the monorepo-attribution gap `undeclared` carries: this is a pure manifest-to-manifest
 //! comparison over `graph.declared_dependencies`, needs no import edge and no notion of which
-//! package owns which file, so it doesn't need RFC 0011's `Package` node/ownership to be
+//! package owns which file, so it doesn't need the `Package` node/ownership to be
 //! correct — only to know *which* declaring manifests exist, which extraction already gives.
 
 use std::collections::{BTreeMap, BTreeSet};

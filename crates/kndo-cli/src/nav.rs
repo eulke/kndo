@@ -1,6 +1,6 @@
-//! Navigation-verb subcommands (RFC 0007) — `kndo find`/`describe`/`uses`/`used-by`/`trace`, and
+//! Navigation-verb subcommands — `kndo find`/`describe`/`uses`/`used-by`/`trace`, and
 //! the batched `kndo query` JSONL interface. Pure argument parsing + dispatch + exit codes, like
-//! every other command in this crate (contracts §5): all graph work happens behind
+//! every other command in this crate: all graph work happens behind
 //! `Engine::query`/`query_batch`.
 
 use std::io::{BufRead, IsTerminal, Write};
@@ -10,7 +10,7 @@ use kndo::query_envelope::{QueryFlags, QueryRequest, QueryResult, Verb};
 
 use crate::render;
 
-/// A query run is capped at 1000 requests (RFC 0007 §4.7) — a runaway-generation guard, not a
+/// A query run is capped at 1000 requests — a runaway-generation guard, not a
 /// normal-use limit; `kndo query` reports how many lines it stopped short by rather than
 /// silently dropping them.
 const MAX_QUERY_BATCH: usize = 1000;
@@ -21,9 +21,9 @@ struct NavArgs {
     format: Option<String>,
 }
 
-/// Nav verbs use `--color` for RFC 0007 §4.1's reachability-color filter (`find --color
+/// Nav verbs use `--color` for the reachability-color filter (`find --color
 /// unreachable|test-only|…`), not for terminal-color control like `check`'s `--color
-/// always|never` (RFC 0009) — the RFC names it that way for `find` specifically and no nav verb
+/// always|never` — the flag name belongs to `find`'s filter, and no nav verb
 /// needs a terminal-color override of its own; TTY/`NO_COLOR` auto-detection alone decides that.
 fn parse_nav_args(args: &[String]) -> Result<NavArgs, String> {
     let mut selectors = Vec::new();
@@ -45,7 +45,7 @@ fn parse_nav_args(args: &[String]) -> Result<NavArgs, String> {
             }
             "--transitive" => flags.transitive = true,
             "--edges" => flags.edges = Some(next_value(&mut it, "--edges")?),
-            "--split-by-color" => {} // by_color is always computed; flag accepted for RFC parity
+            "--split-by-color" => {} // by_color is always computed; flag accepted for parity
             "--if-deleted" => flags.if_deleted = true,
             "--all" => flags.all = true,
             "--max-paths" => {
@@ -95,7 +95,7 @@ fn next_value(it: &mut std::slice::Iter<'_, String>, flag: &str) -> Result<Strin
 }
 
 /// Shared setup for every single-shot nav command: open the engine, run one `QueryRequest`,
-/// render, and translate the result's status into RFC 0007 §6's exit code.
+/// render, and translate the result's status into the exit code.
 fn run_one(verb: Verb, args: &[String]) -> ExitCode {
     let parsed = match parse_nav_args(args) {
         Ok(p) => p,
@@ -237,16 +237,16 @@ impl From<QueryLineFlags> for QueryFlags {
     }
 }
 
-/// `kndo query` (RFC 0007 §4.7): reads JSON Lines from stdin, revalidates the cache once for the
+/// `kndo query`: reads JSON Lines from stdin, revalidates the cache once for the
 /// whole batch, answers in input order as JSON Lines on stdout — `run` on the first line only.
 /// JSON-only by design (no human format — this is the machine/agent transport).
 pub fn query_cmd() -> ExitCode {
     let stdin = std::io::stdin();
     // A human typing `kndo query` at a terminal would just see it hang waiting for stdin
-    // (M6 error polish) — say what the command wants instead.
+    // — say what the command wants instead.
     if std::io::IsTerminal::is_terminal(&stdin) {
         eprintln!(
-            "kndo: query reads JSON request lines from stdin (RFC 0007 §5) — pipe them in,              e.g. `echo '{{\"verb\":\"find\",\"selectors\":[\"foo*\"]}}' | kndo query`"
+            "kndo: query reads JSON request lines from stdin — pipe them in,              e.g. `echo '{{\"verb\":\"find\",\"selectors\":[\"foo*\"]}}' | kndo query`"
         );
         return ExitCode::from(2);
     }
@@ -301,7 +301,7 @@ pub fn query_cmd() -> ExitCode {
 
     let stdout = std::io::stdout();
     let mut out = stdout.lock();
-    let mut worst_rank = 0u8; // 0 = ok, 1 = not-found, 2 = error — RFC 0007 §6's ordering
+    let mut worst_rank = 0u8; // 0 = ok, 1 = not-found, 2 = error — the status ordering
     for (i, result) in results.iter().enumerate() {
         let _ = writeln!(out, "{}", result.to_json_line(i == 0));
         worst_rank = worst_rank.max(status_rank(result.status()));
@@ -319,7 +319,7 @@ pub fn query_cmd() -> ExitCode {
     let _ = ids; // ids travel inside each QueryRequest/QueryResult already; kept for clarity at the call site
 
     if std::io::stdout().is_terminal() && results.is_empty() && parse_errors.is_empty() {
-        eprintln!("kndo: query reads JSON Lines requests from stdin — see RFC 0007 §4.7");
+        eprintln!("kndo: query reads JSON Lines requests from stdin — one JSON request per line");
     }
 
     ExitCode::from(worst_rank)

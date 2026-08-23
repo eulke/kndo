@@ -1,14 +1,14 @@
 //! `undeclared` — an import resolves to a dependency the *importing file's own package*
-//! doesn't declare (RFC 0005 §5, RFC 0011 §4's "phantom internal dependency" pattern
+//! doesn't declare (the "phantom internal dependency" pattern
 //! generalized to external deps too): a name that only resolves today because hoisting or
 //! transitive resolution happens to make it reachable — the kind of thing that breaks on a
 //! clean install elsewhere.
 //!
-//! Scoped per owning package via `ProjectGraph`'s ownership (RFC 0011 §3, nearest-manifest-
-//! ancestor): a name declared by sibling package B no longer suppresses a real finding for
+//! Scoped per owning package via `ProjectGraph`'s ownership (nearest-manifest-
+//! ancestor): a name declared by sibling package B never suppresses a real finding for
 //! package A merely because both live in the same repo. In the common single-manifest case
-//! every file owns the same package, so this collapses to the simpler global check it used to
-//! be — no regression there, just correctness added for the monorepo case.
+//! every file owns the same package, so this collapses to a simple global
+//! check — the per-package scoping only matters for the monorepo case.
 
 use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 
@@ -62,7 +62,7 @@ pub fn find_undeclared_dependencies(graph: &ProjectGraph) -> Vec<Finding> {
             category: "undeclared".to_string(),
             group: "defect".to_string(),
             subject_kind: "dependency".to_string(),
-            severity: Severity::Warning, // error under --strict (RFC 0005 §5) — not implemented yet
+            severity: Severity::Warning, // error under --strict — not implemented yet
             confidence: Confidence::Certain,
             message: format!(
                 "{name} is imported but not declared in {}'s manifest (phantom dependency — likely resolving via hoisting/transitivity){}",
@@ -173,7 +173,7 @@ mod tests {
 
     #[test]
     fn sibling_packages_own_declaration_does_not_shadow_the_other() {
-        // Package 1 declares `chalk`; package 2 doesn't but imports it — RFC 0011 §3 ownership
+        // Package 1 declares `chalk`; package 2 doesn't but imports it — package ownership
         // must not let package 1's declaration paper over package 2's real phantom dependency.
         let files = vec![
             file("packages/a/index.ts", PackageId(1)),

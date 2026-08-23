@@ -100,7 +100,8 @@ impl LanguageAdapter for MiniAdapter {
                     kind: RefKind::Read,
                 });
             } else if let Some(rest) = line.strip_prefix("callsite ") {
-                // `callsite <callee> <literal>` — the RFC 0017 §5.4 fact, mini-syntax form.
+                // `callsite <callee> <literal>` — the string-literal call-site fact,
+                // mini-syntax form.
                 if let Some((callee, literal)) = rest.split_once(' ') {
                     facts
                         .string_call_args

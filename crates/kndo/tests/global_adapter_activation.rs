@@ -1,6 +1,6 @@
-//! Proves RFC 0016 §4's global-install activation path for `LanguageAdapter`s — the same
-//! mechanism `crates/kndo/tests/global_plugin_activation.rs` already proves for `Plugin`s,
-//! extended to adapters. A `LanguageAdapter` dropped into `KNDO_PLUGIN_DIR` only joins
+//! Proves the global-install activation path for `LanguageAdapter`s — the same mechanism
+//! `crates/kndo/tests/global_plugin_activation.rs` proves for `Plugin`s, extended to
+//! adapters. A `LanguageAdapter` dropped into `KNDO_PLUGIN_DIR` only joins
 //! composition for a project whose files actually satisfy one of its
 //! `AdapterDescriptor.activation` rules; a project-local `.kndo/plugins/` copy stays
 //! unconditional either way (`external_adapter.rs` proves that half). Also proves
@@ -137,12 +137,11 @@ fn a_globally_installed_adapter_only_activates_when_its_rule_matches() {
         Some(kndo::ActivationReason::RuleMatched)
     );
 
-    // RFC 0016 §4's claim-priority rule: project-local > global > compiled-in. Drop a second
-    // copy of the same component project-local, in the same project the global one is already
-    // active for, and check the composed order directly — `adapter_resolution` lists exactly
-    // what `open`'s adapters `Vec` contains, in the order claim resolution scans it
-    // (`graph.rs`'s `find_map`, unchanged and untested here — this test is only about whether
-    // composition puts project-local ahead of global ahead of builtin).
+    // Claim priority: project-local > global > compiled-in. Drop a second copy of the same
+    // component project-local, in the same project the global one is already active for,
+    // and check the composed order directly — `adapter_resolution` lists exactly what
+    // `open`'s adapters `Vec` contains, in the order claim resolution scans it. This test is
+    // only about whether composition puts project-local ahead of global ahead of builtin.
     let plugins_dir = project_with.path().join(".kndo").join("plugins");
     std::fs::create_dir_all(&plugins_dir).unwrap();
     std::fs::write(plugins_dir.join("kdemo.wasm"), &adapter_bytes).unwrap();

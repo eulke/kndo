@@ -1,4 +1,4 @@
-//! `.kndo/baseline.json` — acknowledged findings (RFC 0006 §6, ADR 0004). Deliberately not part
+//! `.kndo/baseline.json` — acknowledged findings. Deliberately not part
 //! of `cache.rs`: everything under `.kndo/cache/` is disposable and gitignored, but this one
 //! file is *committed* — a human reviews its diff in a PR, which is the whole adoption-path
 //! point (acknowledge a legacy repo's existing debt on day one, then ratchet it down over time,
@@ -19,7 +19,7 @@ pub fn exists(root: &Path) -> bool {
 }
 
 /// One acknowledged finding. Matching against current findings is by `id` alone (stable,
-/// content-anchored — contracts/output-schema.md §5); the rest of the fields exist only so a
+/// content-anchored); the rest of the fields exist only so a
 /// human reading `git diff .kndo/baseline.json` can tell *what* changed without cross-
 /// referencing ids against a report.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]

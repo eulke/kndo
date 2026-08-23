@@ -1,13 +1,13 @@
-//! `test-only` — non-productive code (RFC 0005 §3, §4): "you built it, tests enshrined it,
+//! `test-only` — non-productive code: "you built it, tests enshrined it,
 //! production never came." Fires on nodes colored [`Reachability::TestOnly`] — reachable, just
 //! never from a production or tooling root — **excluding test-role files themselves**: a test
 //! being test-only is trivially true (that's what a test is), not a finding. "Declared test
-//! utilities (`testkit`/`fixtures` conventions, configurable)" is RFC 0005 §3's other stated
+//! utilities (`testkit`/`fixtures` conventions, configurable)" is the other stated
 //! exemption; there's no config system yet to make it configurable, so it's not attempted here
 //! rather than hand-picking a convention no config can override.
 //!
 //! Unlike `unused` ("dead is always certain"), `test-only` findings inherit whatever confidence
-//! their evidence carries (RFC 0005 §1: a node reachable only through a `probable` edge from a
+//! their evidence carries (a node reachable only through a `probable` edge from a
 //! test root is test-only-*probable*) — the symbol/file loops below report the reachability
 //! map's own confidence verbatim, and directory rollup takes the *weakest* confidence among a
 //! group's files (a group's claim can never be stronger than its least-certain member).
@@ -36,7 +36,7 @@ pub fn find_test_only_files(graph: &ProjectGraph, reach: &ReachabilityMap) -> Ve
             continue;
         }
         if class.role == FileRole::Test {
-            continue; // the exemption RFC 0005 §3 states explicitly
+            continue; // the explicitly stated exemption
         }
 
         let file_id = FileId(index as u32);
@@ -71,7 +71,7 @@ pub fn find_test_only_files(graph: &ProjectGraph, reach: &ReachabilityMap) -> Ve
             category: "test-only".to_string(),
             group: "waste".to_string(),
             subject_kind: "file".to_string(),
-            severity: Severity::Info, // RFC 0005 §3: info by default
+            severity: Severity::Info, // info by default
             confidence,
             message: format!("{path} is reachable only from tests: production never calls it"),
             location: Location {
@@ -439,7 +439,7 @@ mod tests {
     #[test]
     fn symbol_reached_only_from_a_test_is_test_only() {
         // main.mock is production-reachable overall, but `helper` is called only from the
-        // test — the RFC 0005 §3 "enshrined by tests" case at symbol granularity.
+        // test — the "enshrined by tests" case at symbol granularity.
         let files = vec![
             file("tests/spec.test.mock", FileRole::Test),
             file("src/main.mock", FileRole::Production),

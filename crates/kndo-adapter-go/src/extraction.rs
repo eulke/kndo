@@ -1,7 +1,6 @@
-//! Go extraction — declarations, references, imports, roots (docs/adapters/go.md §2). A manual
+//! Go extraction — declarations, references, imports, roots. A manual
 //! tree-sitter-go walk in the same style as `kndo-adapter-js`'s extraction (node/field names
-//! verified via `parsing::introspect`, never guessed — RFC 0002 §8's spirit applied before any
-//! extraction code was written, not after a bug report).
+//! verified via `parsing::introspect`, never guessed).
 //!
 //! Shape, contrasted with JS: Go's grammar needs no "which of several export forms is this"
 //! disambiguation (there is exactly one: capitalize the identifier) and no relative-import
@@ -20,7 +19,7 @@ use tree_sitter::Node;
 
 /// Go's single authoritative generated-file convention (`go help generate`):
 /// `^// Code generated .* DO NOT EDIT\.$`, before the first non-comment text — expressed as a
-/// column-anchored prefix/suffix pair (RFC 0012 §7; the toolkit scanner's doc explains why
+/// column-anchored prefix/suffix pair (the toolkit scanner's doc explains why
 /// anchoring also keeps a generator's own source from matching its emitted marker string).
 const GENERATED_MARKERS: kndo_adapter_toolkit::classify::ContentMarkers =
     kndo_adapter_toolkit::classify::ContentMarkers {
@@ -62,10 +61,10 @@ pub fn extract(path: &str, content: &[u8]) -> FileFacts {
     }
 
     let declared_package = package_name(root, content);
-    // Unit key = `dir#declared-package-name` (RFC 0012 §8): Go's *real* resolution unit is the
+    // Unit key = `dir#declared-package-name`: Go's *real* resolution unit is the
     // package, and one directory can legally hold two — `package foo` plus the external test
     // package `package foo_test`. Folding the declared name into the (opaque-to-the-core) key
-    // splits them with zero core changes: a `foo_test` file no longer resolves `foo`'s
+    // splits them with zero core changes: a `foo_test` file cannot resolve `foo`'s
     // unexported symbols by proximity, exactly Go's own rule (it must import `foo` like any
     // other consumer). A file with no parseable package clause keys on the directory alone.
     out.unit = Some(match &declared_package {
@@ -75,14 +74,14 @@ pub fn extract(path: &str, content: &[u8]) -> FileFacts {
         )),
         None => SmolStr::new(kndo_adapter_toolkit::paths::dirname(path)),
     });
-    // The name importers bind this package by (RFC 0012 §9): the declared package name —
+    // The name importers bind this package by: the declared package name —
     // assembly resolves unaliased qualified references against the *target's* value of this,
     // the correct-by-construction answer to the dir≠package problem (`gopkg.in/yaml.v3`
     // imports as `yaml`) that no per-file specifier guess could give.
     out.unit_name = declared_package.as_deref().map(SmolStr::new);
 
     let is_main_package = declared_package.as_deref() == Some("main");
-    // Root-worthiness by path, computed once (docs/adapters/go.md §0, §4): `internal/` is
+    // Root-worthiness by path, computed once: `internal/` is
     // compiler-enforced, not externally consumed by definition, so its exports aren't
     // auto-promoted; a test file's declarations are never library-mode public API either.
     let is_internal = path.split('/').any(|seg| seg == "internal");
@@ -127,7 +126,7 @@ pub fn extract(path: &str, content: &[u8]) -> FileFacts {
     collect_references(
         root,
         content,
-        None, // top level: within is established by the walk itself (RFC 0012 §4)
+        None, // top level: within is established by the walk itself
         &mut out.references,
     );
     collect_suppressions(root, content, &mut out.suppressions);
@@ -150,13 +149,13 @@ fn text<'a>(node: Node, src: &'a [u8]) -> &'a str {
     std::str::from_utf8(&src[node.byte_range()]).unwrap_or("")
 }
 
-/// Exported iff the first rune is uppercase — Go's entire visibility rule, no keyword involved
-/// (docs/adapters/go.md §1).
+/// Exported iff the first rune is uppercase — Go's entire visibility rule, no keyword
+/// involved.
 fn is_exported(name: &str) -> bool {
     name.chars().next().is_some_and(char::is_uppercase)
 }
 
-/// Per-file extraction facts derived from the path once (docs/adapters/go.md §0, §4).
+/// Per-file extraction facts derived from the path once.
 #[derive(Clone, Copy)]
 struct Flags {
     /// Library-mode root promotion for exported declarations — off under `internal/` and in
@@ -168,7 +167,7 @@ struct Flags {
 }
 
 /// Rungs of the three-step ladder (lib.rs): unexported → 0; exported under `internal/` → 1
-/// (Package scope — compiler-walled from external modules, RFC 0012 §6's capped rung);
+/// (Package scope — compiler-walled from external modules, the capped rung);
 /// exported elsewhere → 2 (Public).
 fn visibility(exported: bool, internal: bool) -> VisibilityLevel {
     VisibilityLevel(match (exported, internal) {
@@ -223,7 +222,7 @@ fn push_declaration(
 
 // ---------------------------------------------------------------- declarations
 
-/// Everything before the body block (RFC 0012 §5): parameters and result types — the
+/// Everything before the body block: parameters and result types — the
 /// declaration's *promise*, distinct from its implementation. `None` when the grammar has no
 /// body (declarations inside `interface` blocks are handled elsewhere).
 fn signature_span_of(node: Node) -> Option<Span> {
@@ -236,7 +235,7 @@ fn signature_span_of(node: Node) -> Option<Span> {
     })
 }
 
-/// Go's metric-relevant node kinds (RFC 0005 §6; the machinery is
+/// Go's metric-relevant node kinds (the machinery is
 /// `kndo_adapter_toolkit::metrics`). Branch kinds: every `case` clause counts once (a switch
 /// with n cases is n branches, matching McCabe), plus the short-circuit operator leaves.
 const METRICS_SYNTAX: kndo_adapter_toolkit::metrics::MetricsSyntax =
@@ -267,12 +266,12 @@ const METRICS_SYNTAX: kndo_adapter_toolkit::metrics::MetricsSyntax =
         skip_kinds: &["comment"],
     };
 
-/// RFC 0005 §6's default granularity gate: bodies under 50 normalized tokens don't
-/// fingerprint (their metrics still land, for `crap`).
+/// Default granularity gate: bodies under 50 normalized tokens don't
+/// fingerprint (their metrics are still emitted, for `crap`).
 const MIN_CLONE_TOKENS: usize = 50;
 
-/// One callable's [`FunctionMetrics`], computed over its *body* (the RFC's granularity —
-/// signatures are promises, bodies are the thing that gets copy-pasted). `symbol` uses the
+/// One callable's [`FunctionMetrics`], computed over its *body* (signatures are promises,
+/// bodies are the thing that gets copy-pasted). `symbol` uses the
 /// same naming convention as roots/`within`: bare for free functions, qualified `T.Method`
 /// for members, so assembly's lookup lands in the right table.
 fn push_function_metrics(out: &mut FileFacts, symbol: &str, node: Node) {
@@ -290,7 +289,7 @@ fn push_function_metrics(out: &mut FileFacts, symbol: &str, node: Node) {
     });
 }
 
-/// `func Name(...) ...` or `func init() {}` / `func main() {}` (roots, docs/adapters/go.md §2 —
+/// `func Name(...) ...` or `func init() {}` / `func main() {}` (roots —
 /// unconditional regardless of the capitalization rule).
 fn handle_function(
     node: Node,
@@ -321,11 +320,11 @@ fn handle_function(
     }
 }
 
-/// `func (t T) Name(...)` / `func (t *T) Name(...)` — a *member* declaration (RFC 0012 §3):
+/// `func (t T) Name(...)` / `func (t *T) Name(...)` — a *member* declaration:
 /// bare name `Name` with `member_of: Some("Type")`, never a `"Type.Name"` string. Ownership as
 /// a structured fact is what lets the core resolve a bare method-call reference through the
-/// duck-typed fallback instead of missing entirely — before this, an unexported method used
-/// only in-package false-positived as `unused:method`.
+/// duck-typed fallback instead of missing entirely — without it, an unexported method used
+/// only in-package false-positives as `unused:method`.
 fn handle_method(node: Node, src: &[u8], flags: Flags, out: &mut FileFacts) {
     let (Some(receiver), Some(name_node)) = (
         node.child_by_field_name("receiver"),
@@ -349,11 +348,11 @@ fn handle_method(node: Node, src: &[u8], flags: Flags, out: &mut FileFacts) {
         visibility: visibility(exported, flags.is_internal),
         member_of: Some(SmolStr::new(&receiver_type)),
         signature_span: signature_span_of(node),
-        // Stdlib-interface machinery (RFC 0005 §1): `encoding/json` calls `MarshalJSON`
+        // Stdlib-interface machinery: `encoding/json` calls `MarshalJSON`
         // reflectively, `fmt` calls `String`/`Error`/`GoString`, the encoding packages
-        // call the Text/Binary pairs — no source call site ever writes these names (gin
-        // audit: `Error.MarshalJSON` exercised by every `json.Marshal(err)` in tests,
-        // reachable by no reference).
+        // call the Text/Binary pairs — no source call site ever writes these names (a
+        // type's `MarshalJSON` is exercised by every `json.Marshal` of a value of that
+        // type, yet is reachable by no reference).
         implicitly_invoked: matches!(
             method_name,
             "MarshalJSON"
@@ -371,7 +370,7 @@ fn handle_method(node: Node, src: &[u8], flags: Flags, out: &mut FileFacts) {
     if exported && flags.promote_exports {
         out.roots.push(RawRoot {
             kind: RootKind::Production,
-            // Member root targets use the qualified form (contracts §2, RFC 0012 §3) — the
+            // Member root targets use the qualified form — the
             // core's bare-name table deliberately never contains members.
             target: RawRootTarget::Declaration(SmolStr::new(format!(
                 "{receiver_type}.{method_name}"
@@ -457,7 +456,7 @@ fn handle_value_declaration(
 /// An interface-typed var initialized with a composite literal — `var API Core = jsonApi{}`
 /// — is Go's explicit dispatch witness: the declaration itself asserts `jsonApi` satisfies
 /// `Core`, so calling through `Core` plausibly executes `jsonApi`'s methods (the one place
-/// structural satisfaction is nameable without a typechecker — gin audit, `json.API`).
+/// structural satisfaction is nameable without a typechecker).
 /// Emits an Implement reference from the literal's type to the declared type; either name
 /// failing to resolve drops the edge silently.
 fn emit_explicit_witness(spec: Node, src: &[u8], out: &mut FileFacts) {
@@ -524,10 +523,10 @@ fn handle_import_spec(node: Node, src: &[u8], out: &mut FileFacts) {
         return;
     }
 
-    // Only the *explicit* alias is a per-file fact (RFC 0012 §9); an unaliased import binds
+    // Only the *explicit* alias is a per-file fact; an unaliased import binds
     // by the target package's declared name, which lives in the target — assembly derives it
     // from the resolved target's `unit_name` instead of this file guessing from the
-    // specifier's last segment (the guess that broke on `gopkg.in/yaml.v3` → `yaml`).
+    // specifier's last segment (a guess that fails on `gopkg.in/yaml.v3` → `yaml`).
     let name_node = node.child_by_field_name("name");
     let (side_effect_only, opaque_namespace_use, local_alias) = match name_node.map(|n| n.kind()) {
         Some("blank_identifier") => (true, false, None),
@@ -538,12 +537,12 @@ fn handle_import_spec(node: Node, src: &[u8], out: &mut FileFacts) {
 
     out.imports.push(RawImport {
         specifier: SmolStr::new(&specifier),
-        kind: ImportKind::Package, // Go has no relative imports (docs/adapters/go.md §0)
+        kind: ImportKind::Package, // Go has no relative imports
         span: span(node),
         side_effect_only,
         type_only: false,
         confidence: Confidence::Certain, // no dynamic import surface in Go
-        bindings: Vec::new(),            // Go imports bind a namespace, not names (RFC 0012 §9)
+        bindings: Vec::new(),            // Go imports bind a namespace, not names
         reexported: false,
         opaque_namespace_use,
         module_names_visible: false,
@@ -568,7 +567,7 @@ fn skip_field_for(kind: &str) -> Option<&'static str> {
     }
 }
 
-/// RFC 0012 §4's attribution taxonomy, applied to Go's grammar: the symbol whose *use*
+/// The attribution taxonomy, applied to Go's grammar: the symbol whose *use*
 /// triggers this node's subtree, or `None` when the enclosing code runs at package load
 /// (top-level `var`/`const` initializers — Go's package-init semantics). Functions and
 /// methods cover their whole subtree, signature included: a dead function's parameter and
@@ -584,7 +583,7 @@ fn within_for(node: Node, src: &[u8]) -> Option<SmolStr> {
             let receiver = node.child_by_field_name("receiver")?;
             let receiver_type = receiver_type_name(receiver, src)?;
             let name = node.child_by_field_name("name")?;
-            // Qualified `Owner.name` — the member convention (contracts §2), so assembly's
+            // Qualified `Owner.name` — the member convention, so assembly's
             // within-resolution lands in the same qualified table member roots use.
             Some(SmolStr::new(format!("{receiver_type}.{}", text(name, src))))
         }
@@ -616,12 +615,12 @@ fn collect_references(
     };
     let within = own_within.as_ref().or(within);
 
-    // Qualified access `q.Name` (RFC 0012 §9): emitted as a structured
+    // Qualified access `q.Name`: emitted as a structured
     // `{ name, scope_context: Some(q) }` fact — whether `q` is an import qualifier or a
     // receiver variable is *assembly's* call (it alone knows every import's alias and every
-    // resolved target's declared package name), not a per-file guess. This replaced the
-    // dotted-binding synthesis (`json.Marshal` string keys), whose default-alias
-    // approximation broke on dir≠package specifiers (`gopkg.in/yaml.v3` binds as `yaml`).
+    // resolved target's declared package name), not a per-file guess. Synthesizing dotted
+    // bindings here (`json.Marshal` string keys) would need a default-alias
+    // approximation that fails on dir≠package specifiers (`gopkg.in/yaml.v3` binds as `yaml`).
     // The operand still gets its own plain reference — a receiver variable or package-level
     // var is genuinely used here; if it's an import qualifier instead, the bare name resolves
     // to nothing and drops, silently and safely.
@@ -652,7 +651,7 @@ fn collect_references(
 
     // The type-position mirror of the selector case: `pkg.Type` in a type position parses as
     // `qualified_type` (package/name fields), not `selector_expression` — same structured
-    // fact, tagged TypeUse (§5).
+    // fact, tagged TypeUse.
     if node.kind() == "qualified_type" {
         if let (Some(package), Some(name)) = (
             node.child_by_field_name("package"),
@@ -691,7 +690,7 @@ fn collect_references(
         node.kind(),
         "identifier" | "type_identifier" | "field_identifier"
     ) {
-        // RFC 0012 §5: in tree-sitter-go, `type_identifier` *is* the type-position signal —
+        // In tree-sitter-go, `type_identifier` *is* the type-position signal —
         // TypeUse falls out of the grammar. An embedded field (a `field_declaration` with no
         // `name`) is Go's inheritance-adjacent construct → Extend.
         let ref_kind = if node.kind() == "type_identifier" {
@@ -776,8 +775,8 @@ mod tests {
 
     #[test]
     fn external_test_package_gets_its_own_unit() {
-        // RFC 0012 §8, closing docs/adapters/go.md §1.1's documented imprecision: one
-        // directory, two Go packages — `foo` and its external test package `foo_test` — must
+        // One directory, two Go packages —
+        // `foo` and its external test package `foo_test` — must
         // be two units, so the test package can't resolve foo's unexported symbols by
         // proximity (Go's own rule: it imports foo like any other consumer).
         let internal = extract("pkg/a.go", b"package foo\n");
@@ -802,7 +801,7 @@ mod tests {
     fn exported_function_under_internal_is_module_capped() {
         // Go's internal-package rule: exported, but the compiler walls it off from external
         // modules — the middle rung (Package scope), so the library-surface exemptions never
-        // treat it as consumable API (M6 FP hunt).
+        // treat it as consumable API.
         let facts = extract(
             "internal/util/a.go",
             b"package util\n\nfunc Helper() int { return 1 }\n",
@@ -817,7 +816,7 @@ mod tests {
         // Go's internal-package rule is compiler-enforced: exported, but never consumable
         // from outside the module — rung 1 (Package scope, surface_transitive: false), so
         // the core's library-surface machinery structurally cannot treat it as API while
-        // `internal-only` can still advise narrowing it (M6, RFC 0012 §6).
+        // `internal-only` can still advise narrowing it.
         let facts = extract(
             "internal/util/a.go",
             b"package util
@@ -864,7 +863,7 @@ func TestHelper() {}
 
     #[test]
     fn methods_are_members_of_their_receiver_type() {
-        // Bare name + member_of (RFC 0012 §3) — never a dotted string. Value- and
+        // Bare name + member_of — never a dotted string. Value- and
         // pointer-receiver methods share the owner exactly as Go's method-set rules do.
         let src =
             b"package p\n\ntype T struct{}\nfunc (t T) Value() {}\nfunc (t *T) Pointer() {}\n";
@@ -881,8 +880,8 @@ func TestHelper() {}
             .find(|d| d.name.as_str() == "Pointer")
             .unwrap();
         assert_eq!(pointer.member_of.as_deref(), Some("T"));
-        // Exported methods root themselves by the qualified form (member root targets,
-        // contracts §2) — the core's bare-name table deliberately never holds members.
+        // Exported methods root themselves by the qualified form (member root targets)
+        // — the core's bare-name table deliberately never holds members.
         assert!(facts.roots.iter().any(|r| matches!(
             &r.target, RawRootTarget::Declaration(n) if n.as_str() == "T.Value"
         )));
@@ -981,7 +980,7 @@ type D int
 
     #[test]
     fn plain_import_has_no_alias_and_qualified_access_is_a_structured_reference() {
-        // RFC 0012 §9 replaced the dotted-binding synthesis: the unaliased import carries NO
+        // No dotted-binding synthesis: the unaliased import carries NO
         // local_alias (assembly derives the qualifier from the target's declared package
         // name), and `json.Marshal` is a structured `{ name, scope_context }` fact.
         let src = b"package p\n\nimport \"encoding/json\"\n\nfunc F() { json.Marshal(nil) }\n";
@@ -1021,7 +1020,7 @@ type D int
     #[test]
     fn qualified_type_positions_are_structured_type_use_references() {
         // `pkg.Type` in a type position parses as `qualified_type`, not selector_expression —
-        // must yield the same structured fact, tagged TypeUse (§5).
+        // must yield the same structured fact, tagged TypeUse.
         let src = b"package p\n\nimport \"time\"\n\nfunc F(t time.Time) {}\n";
         let facts = extract("a.go", src);
         let qref = facts
@@ -1066,7 +1065,7 @@ type D int
         assert_eq!(specs, vec!["fmt", "encoding/json"]);
     }
 
-    // -------------------------------------------------- within attribution (RFC 0012 §4)
+    // -------------------------------------------------- within attribution
 
     fn find_ref<'a>(facts: &'a FileFacts, name: &str) -> &'a RawReference {
         facts
@@ -1093,7 +1092,7 @@ type D int
 
     #[test]
     fn function_signature_types_attribute_to_the_function() {
-        // A dead function's parameter/result types die with it (RFC 0012 §§4–5 synergy).
+        // A dead function's parameter/result types die with it.
         let facts = extract(
             "a.go",
             b"package p\n\ntype Arg struct{}\nfunc F(x Arg) {}\n",
@@ -1112,8 +1111,8 @@ type D int
 
     #[test]
     fn package_level_initializers_are_load_time_no_within() {
-        // Go's package-init semantics: `var x = f()` runs when the package loads (RFC 0012
-        // §4's per-language table) — attribution None ⇒ the file, exactly as before.
+        // Go's package-init semantics: `var x = f()` runs when the package loads —
+        // attribution None ⇒ the file.
         let facts = extract(
             "a.go",
             b"package p\n\nfunc f() int { return 1 }\n\nvar x = f()\n",
@@ -1177,7 +1176,7 @@ type D int
         assert!(!facts.diagnostics.is_empty());
     }
 
-    // ------------------------------------------------- RFC 0012 §5: RefKind + signature_span
+    // ------------------------------------------------- RefKind + signature_span
 
     #[test]
     fn function_signature_span_covers_params_and_result_but_not_the_body() {
@@ -1230,7 +1229,7 @@ type D int
         assert_eq!(by_name("s").kind, RefKind::Read);
     }
 
-    // ------------------------------------------------- function metrics (RFC 0005 §6)
+    // ------------------------------------------------- function metrics
 
     #[test]
     fn function_bodies_emit_metrics_with_fingerprints_when_big_enough() {
@@ -1295,7 +1294,7 @@ type D int
         assert_eq!(fa, fb);
     }
 
-    // ------------------------------------------------- detected_origin (RFC 0012 §7)
+    // ------------------------------------------------- detected_origin
 
     #[test]
     fn the_go_generated_banner_sets_detected_origin() {

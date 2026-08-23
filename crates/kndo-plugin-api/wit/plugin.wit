@@ -1,10 +1,10 @@
-// kndo-plugin-api v1 — the external-PLUGIN WASM ABI (ADR 0003, RFC 0003 §2/§3). Bridges the
+// kndo-plugin-api v1 — the external-PLUGIN WASM ABI. Bridges the
 // four graph-mutation `Plugin` hooks (`classify_file`, `contribute_roots`, `contribute_edges`,
 // `annotate_symbols`) — `ingest_coverage`/`suppress` are out of v1 scope, same posture as
-// `adapter.wit` cutting `resolve()`/manifests: not demanded yet, don't build it speculatively.
+// `adapter.wit` cutting `resolve()`/manifests: not demanded, don't build it speculatively.
 //
-// Versioned independently from `kndo:adapter` (contracts/core-traits.md §6: "WASM ABI versioned
-// independently") — the small vocabulary overlap (file-class, root-kind, ref-kind, confidence)
+// Versioned independently from `kndo:adapter` —
+// the small vocabulary overlap (file-class, root-kind, ref-kind, confidence)
 // is deliberately duplicated here rather than shared across packages, so upgrading one ABI can
 // never force a lockstep bump of the other.
 //
@@ -13,7 +13,7 @@
 // serializing the whole graph into every call (expensive, and most plugins only care about a
 // handful of paths), the host exposes two narrow query functions the guest calls as needed —
 // `list-files` and `symbols-in` — mirroring `kndo_core::plugin::GraphView`'s own two methods
-// exactly. `read-file` (RFC 0016 §5) is the same idea applied to content outside the graph —
+// exactly. `read-file` is the same idea applied to content outside the graph —
 // configs, manifests, templates — scoped to the component's own declared globs. The guest
 // still can't touch anything else: no fs, no net, no other host state.
 package kndo:plugin@0.1.0;
@@ -99,19 +99,19 @@ interface types {
 
     /// Machine-evaluable counterpart to `plugin-descriptor.detection`'s prose — evaluated
     /// host-side against the project root, cheaply and without running any guest code, before a
-    /// *globally* installed plugin is even instantiated (RFC 0003 §4). A project-local
+    /// *globally* installed plugin is even instantiated. A project-local
     /// `.kndo/plugins/*.wasm` file stays unconditional; this only gates the XDG-wide install
     /// path.
     variant activation-rule {
         /// At least one file under the project root matches this glob.
         file-exists(string),
-        /// A root manifest (`package.json`, `Cargo.toml` today) declares a dependency by this
+        /// A root manifest (`package.json`, `Cargo.toml`) declares a dependency by this
         /// name, in any dependency section.
         manifest-dependency(string),
     }
 
     record plugin-descriptor {
-        /// Identity = provenance (RFC 0015 §2): a source coordinate
+        /// Identity = provenance: a source coordinate
         /// (`github.com/<owner>/<repo>`) for external plugins. The `kndo:` namespace is
         /// reserved for built-ins — the host rejects any component claiming it.
         id: string,
@@ -119,14 +119,14 @@ interface types {
         detection: list<string>,
         requested-file-access: list<string>,
         activation: list<activation-rule>,
-        /// Coordinates of plugins whose conventions are part of this one's (RFC 0015 §3):
+        /// Coordinates of plugins whose conventions are part of this one's:
         /// install-time closure + activation implication, nothing else — no versions, no
         /// ordering, no inter-plugin data flow.
         dependencies: list<string>,
     }
 
     /// One `GraphView::files()` entry. v1 exposes path/role/origin only — `language`/`unit`/
-    /// `test-spans` aren't surfaced yet, the same "conservative v1, grow on real demand" cut
+    /// `test-spans` aren't surfaced, the same "conservative v1, grow on real demand" cut
     /// `adapter.wit`'s own descriptor makes.
     record wasm-file-info {
         path: string,
@@ -142,10 +142,10 @@ interface types {
         member-of: option<string>,
     }
 
-    /// RFC 0017 §5's read-surface records. `wasm-file-info`/`wasm-symbol-info` above are
+    /// The read-surface records. `wasm-file-info`/`wasm-symbol-info` above are
     /// FROZEN (growing a record is a breaking change in the component model); everything the
-    /// graph additionally holds arrives through these new records on new imports instead —
-    /// the same additive evolution `read-file` established.
+    /// graph additionally holds arrives through additive records on additive imports
+    /// instead — the same evolution pattern `read-file` follows.
     record wasm-span {
         start-line: u32,
         start-col: u32,
@@ -153,7 +153,7 @@ interface types {
         end-col: u32,
     }
 
-    /// One package (RFC 0011 §3 topology): `root` is the manifest's own directory (`""` for
+    /// One package: `root` is the manifest's own directory (`""` for
     /// the implicit package owning whatever no manifest governs).
     record wasm-package-info {
         manifest: option<string>,
@@ -169,7 +169,7 @@ interface types {
     }
 
     /// The rest of what `SymbolNode` commits to beyond `wasm-symbol-info`'s frozen four.
-    /// `visibility` is the rung index into the language's declared ladder (RFC 0012 §6) —
+    /// `visibility` is the rung index into the language's declared ladder —
     /// 0 is always the most private rung.
     record wasm-symbol-details {
         visibility: u32,
@@ -184,7 +184,7 @@ interface types {
         confidence: confidence,
     }
 
-    /// One string-literal call site (RFC 0017 §5.4) — the generic, adapter-extracted fact
+    /// One string-literal call site — the generic, adapter-extracted fact
     /// framework plugins interpret.
     record wasm-call-site {
         callee: string,
@@ -192,8 +192,8 @@ interface types {
         span: wasm-span,
     }
 
-    /// RFC 0018: a rule's declared severity — its own enum, never the host's finding
-    /// severity: the host maps it under the advisory-channel rules (§2.2), so a guest can
+    /// A rule's declared severity — its own enum, never the host's finding
+    /// severity: the host maps it under the advisory-channel rules, so a guest can
     /// never construct a gate-eligible severity directly.
     enum finding-severity {
         error,
@@ -201,7 +201,7 @@ interface types {
         info,
     }
 
-    /// One rule a plugin may emit findings under (RFC 0018 §4), declared up front. `name` is
+    /// One rule a plugin may emit findings under, declared up front. `name` is
     /// lower-kebab and becomes the suffix of the host-assembled category
     /// `plugin:<coordinate>/<rule>`; findings emitted under an undeclared rule are dropped
     /// with a diagnostic.
@@ -211,7 +211,7 @@ interface types {
         severity: finding-severity,
     }
 
-    /// One emitted finding (RFC 0018): a verdict about a graph node. No severity field — a
+    /// One emitted finding: a verdict about a graph node. No severity field — a
     /// finding's severity IS its rule's declared severity; no category field — the namespace
     /// is host-assembled from the plugin's registered id, never guest-supplied.
     record contributed-finding {
@@ -235,16 +235,16 @@ world plugin {
     import list-files: func() -> list<wasm-file-info>;
     import symbols-in: func(path: string) -> list<wasm-symbol-info>;
 
-    /// RFC 0016 §5's content channel: read one file's bytes, scoped to this component's own
+    /// The content channel: read one file's bytes, scoped to this component's own
     /// declared `requested-file-access` globs and metered by the host's per-run budget —
     /// `none` covers every miss uniformly (no glob match, unreadable path, budget cutoff), the
-    /// same host-mediated, sandboxed shape `list-files`/`symbols-in` already establish (no
+    /// same host-mediated, sandboxed shape `list-files`/`symbols-in` establish (no
     /// ambient fs; every byte the guest sees was matched and fetched host-side). The host
     /// answers from an owned snapshot prefetched before instantiation (every declared-glob
     /// match, budget-limited) — this call never itself touches disk mid-round.
     import read-file: func(path: string) -> option<list<u8>>;
 
-    /// RFC 0017 §5's complete read surface — additive imports answering from the same
+    /// The complete read surface — additive imports answering from the same
     /// pre-instantiation snapshot as `list-files`/`symbols-in` (no filesystem, no budget:
     /// these read memory the host already holds). Results are deterministic and sorted;
     /// every query answers from ADAPTER-derived data only (rule R1) — no plugin ever sees
@@ -275,10 +275,10 @@ world plugin {
     export annotate-symbols: func() -> list<plugin-target>;
 }
 
-/// RFC 0018: the findings-capable plugin world — everything `world plugin` has, plus rule
-/// declaration and finding emission. Its own WORLD rather than new exports on `plugin`
+/// The findings-capable plugin world — everything `world plugin` has, plus rule
+/// declaration and finding emission. Its own WORLD rather than extra exports on `plugin`
 /// because a world's exports are mandatory: adding them to `plugin` would break every
-/// already-built v1 component (exactly what the compat matrix guards). The host tries this
+/// v1-only component (exactly what the compat matrix guards). The host tries this
 /// world first and falls back to `plugin` — a v1 component keeps working unchanged, with no
 /// findings; a component targeting this world gets the full surface. Same package, same
 /// types, same imports: only the two exports at the bottom are new.
@@ -309,7 +309,7 @@ world plugin-findings {
     export annotate-symbols: func() -> list<plugin-target>;
 
     /// The rules this component may emit findings under — called once at load, cached, shown
-    /// by doctor/verify before any hook runs (RFC 0018 §4).
+    /// by doctor/verify before any hook runs.
     export rules: func() -> list<rule-descriptor>;
 
     /// Emit findings for this run — called by the post-assembly finding round, over the same

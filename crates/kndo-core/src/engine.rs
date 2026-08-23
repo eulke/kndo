@@ -1,4 +1,4 @@
-//! The `Engine` facade — the only surface frontends may touch (contracts §5).
+//! The `Engine` facade — the only surface frontends may touch.
 //!
 //! Separation rules, enforced by dependency direction: the core contains no terminal concerns
 //! (no ANSI, no TTY detection, no exit codes, no stdout) — it returns data and never prints;
@@ -7,7 +7,7 @@
 //! [`RunResult`], never a core import.
 //!
 //! Adapter *registration* is the **distribution layer's** concern (the `kndo` crate): the
-//! core never knows which languages exist (RFC 0001 §2, the ignorance rule), and frontends
+//! core never knows which languages exist (the ignorance rule), and frontends
 //! never compose the product — they call `kndo::open`, which passes the registry in here.
 
 use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
@@ -24,7 +24,7 @@ use crate::query_envelope::{self, QueryRequest, QueryResult};
 use crate::vocab::Confidence;
 
 /// The set of paths that differ (added, removed, or content-changed) between two graphs' file
-/// sets — "the change set," in RFC 0004 §6's terms, at file granularity. Feeds diff mode's
+/// sets — "the change set," in the terms, at file granularity. Feeds diff mode's
 /// `delta_origin`: a new finding whose path is in this set is `Introduced` (inside the change
 /// itself); otherwise it's `Derived` (flipped at a distance by untouched code).
 fn touched_paths(before: &graph::ProjectGraph, after: &graph::ProjectGraph) -> HashSet<String> {
@@ -53,13 +53,13 @@ fn touched_paths(before: &graph::ProjectGraph, after: &graph::ProjectGraph) -> H
     touched
 }
 
-/// ADR 0005's freshness gate: a coverage report modified longer ago than this is ignored with
+/// The coverage freshness gate: a coverage report modified longer ago than this is ignored with
 /// a diagnostic — stale certainty is worse than absence. Configurable later with the config
 /// file (`coverage.max_age`); the default is the contract.
 const MAX_COVERAGE_AGE_DAYS: u64 = 7;
 
 impl Drop for Engine {
-    /// The RFC 0008 §2 sequencing: frontends drop the engine after printing, so the deferred
+    /// The persist sequencing: frontends drop the engine after printing, so the deferred
     /// snapshot write completes "after results are printed, before exit".
     fn drop(&mut self) {
         self.join_persist();
@@ -67,7 +67,7 @@ impl Drop for Engine {
 }
 
 /// Where full-mode runs remember their last health score (`.kndo/health.json`) so the next
-/// run can report the trend (output-schema §4's `previous`). Diff modes never touch it — their
+/// run can report the trend (the output schema's `previous`). Diff modes never touch it — their
 /// `previous` is the computed "before" side.
 fn health_snapshot_path(root: &Path) -> PathBuf {
     root.join(".kndo").join("health.json")
@@ -101,13 +101,13 @@ pub const KNDO_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[derive(Debug, Clone)]
 pub struct ConfigOverrides {
-    /// `--no-cache` (RFC 0004 §4): disables the facts cache entirely for this run. Defaults to
+    /// `--no-cache`: disables the facts cache entirely for this run. Defaults to
     /// `true` — the correctness gate is that this must never change *findings*, only whether
     /// the run was warm.
     pub use_cache: bool,
-    /// `--threads N` > `KNDO_THREADS` env > default (RFC 0008 §5) — resolved to a concrete
+    /// `--threads N` > `KNDO_THREADS` env > default — resolved to a concrete
     /// value *before* reaching here (frontend concern, like the precedence chain itself);
-    /// `None` means "physical cores," the RFC's stated default, not "unspecified." `Some(1)` is
+    /// `None` means "physical cores," the stated default, not "unspecified." `Some(1)` is
     /// a first-class supported mode (determinism checks, debugging, noisy-neighbor CI runners).
     pub threads: Option<usize>,
 }
@@ -171,7 +171,7 @@ pub struct CheckRequest {
     pub mode: RunMode,
 }
 
-/// `kndo baseline`'s two modes (RFC 0006 §6, contracts §5's `Engine::baseline`): `Create`
+/// `kndo baseline`'s two modes (see [`Engine::baseline`]): `Create`
 /// refuses if `.kndo/baseline.json` already exists (a bare re-run can't tell intended growth
 /// from intended shrinkage without a human reviewing the diff first); `Update` always
 /// (re)writes a full snapshot from the current finding set — auto-dropping entries that no
@@ -192,7 +192,7 @@ pub enum BaselineResult {
     WriteFailed(String),
 }
 
-/// One registered adapter, as `kndo doctor` reports it (RFC 0006 §2's "what was detected:
+/// One registered adapter, as `kndo doctor` reports it (the "what was detected:
 /// adapters…") — static descriptor info, not tied to any particular run.
 #[derive(Debug, Clone)]
 pub struct DoctorAdapterInfo {
@@ -200,12 +200,12 @@ pub struct DoctorAdapterInfo {
     pub grammar_version: String,
     pub file_globs: Vec<String>,
     pub manifest_globs: Vec<String>,
-    /// RFC 0016 §4 — shown for the same reason `DoctorPluginInfo.activation` is: visible even
+    /// Shown for the same reason `DoctorPluginInfo.activation` is: visible even
     /// though it's dormant for every compiled-in adapter today (empty = always-on), it's what
     /// gates a *globally installed* adapter (`kndo::global_adapter_candidates`, a separate
     /// call this report has no visibility into, same split `DoctorPluginInfo`'s own doc notes).
     pub activation: Vec<String>,
-    /// RFC 0017 §6 coordinates — same contract as [`DoctorPluginInfo::dependencies`]: rendered
+    /// Dependency coordinates — same contract as [`DoctorPluginInfo::dependencies`]: rendered
     /// so an activation chain is inspectable; whether each one was satisfied is the composition
     /// layer's report (`kndo::adapter_resolution`), not this struct's.
     pub dependencies: Vec<String>,
@@ -227,12 +227,12 @@ pub struct DoctorCacheInfo {
 /// One registered plugin, as `kndo doctor` reports it — static descriptor info, matching
 /// [`DoctorAdapterInfo`]'s shape. `detection`/`activation`/`requested_file_access` are shown so
 /// it's visible *why* a plugin would activate. Every plugin reaching this struct is already
-/// part of the composed set `Engine` was built with — `PluginDescriptor.activation` (RFC 0003
-/// §4) is evaluated earlier, only for globally installed plugins, by `kndo`'s composition layer
+/// part of the composed set `Engine` was built with — `PluginDescriptor.activation`
+/// is evaluated earlier, only for globally installed plugins, by `kndo`'s composition layer
 /// (`crates/kndo/src/lib.rs`'s `activation` module), before `Engine::open_with_plugins` is even
 /// called; this report has no visibility into global candidates that were discovered and
 /// *skipped* (`kndo::global_plugin_candidates` covers that, a separate call the CLI's `doctor`
-/// command makes directly — RFC 0003 §4, docs/contracts/wasm-abi.md §5.5), only the final set
+/// command makes directly), only the final set
 /// that actually made it into composition.
 #[derive(Debug, Clone)]
 pub struct DoctorPluginInfo {
@@ -240,18 +240,18 @@ pub struct DoctorPluginInfo {
     pub version: String,
     pub detection: Vec<String>,
     pub activation: Vec<String>,
-    /// RFC 0015 §3 coordinates — rendered so an activation chain is inspectable; whether each
+    /// Dependency coordinates — rendered so an activation chain is inspectable; whether each
     /// one was satisfied is the composition layer's report (`kndo::plugin_resolution`), not
     /// this struct's.
     pub dependencies: Vec<String>,
     pub requested_file_access: Vec<String>,
-    /// RFC 0018 §4: the rules this plugin may emit findings under, pre-rendered
+    /// The rules this plugin may emit findings under, pre-rendered
     /// (`"<name> (<severity>): <description>"`) — what a component MAY assert, visible
     /// before it ever runs.
     pub rules: Vec<String>,
 }
 
-/// `kndo doctor` (RFC 0006 §2, contracts §5's `Engine::doctor`): everything detected about this
+/// `kndo doctor`'s report: everything detected about this
 /// project, without running a check — read-only and instant, so it stays useful for debugging a
 /// setup that itself might be slow or broken.
 #[derive(Debug, Clone)]
@@ -261,7 +261,7 @@ pub struct DoctorReport {
     pub plugins: Vec<DoctorPluginInfo>,
     pub cache_enabled: bool,
     pub cache: Option<DoctorCacheInfo>,
-    /// The last recorded plugin round's per-plugin contribution counts (RFC 0017 §7's audit
+    /// The last recorded plugin round's per-plugin contribution counts (the audit
     /// record, read from the cache's sidecar) — empty when no round has been recorded (no
     /// cache, no plugins, or no run yet). The one field here that reflects a *past run*
     /// rather than static configuration; still a plain file read, keeping doctor instant.
@@ -270,9 +270,9 @@ pub struct DoctorReport {
     pub baseline_entries: usize,
 }
 
-/// A finding's severity (contracts/output-schema.md §2) — RFC 0005 assigns one per category as
+/// A finding's severity — each category carries one as
 /// a fixed default; `--strict` promotion isn't implemented yet, so this is always the default.
-/// Declaration order doubles as sort/triage order: worst first (RFC 0009 §5).
+/// Declaration order doubles as sort/triage order: worst first.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "lowercase")]
@@ -282,7 +282,7 @@ pub enum Severity {
     Info,
 }
 
-/// Where a finding landed (contracts/output-schema.md §2). Every field is optional because not
+/// Where a finding points. Every field is optional because not
 /// every subject has all of them: `version-skew`/`duplicate` findings span multiple manifests
 /// or files, so no single `path` is *the* location — expressing that properly is the `related`
 /// evidence chain, not yet implemented (deferred, not faked with an arbitrary first path).
@@ -302,7 +302,7 @@ pub struct Location {
     pub package: Option<String>,
 }
 
-/// A finding's place in a diff-mode delta (contracts/output-schema.md §2, RFC 0004 §6). `None`
+/// A finding's place in a diff-mode delta. `None`
 /// in full mode — there is no "before" to compare against, so the concept doesn't apply, and
 /// the field is omitted rather than forced to some default.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
@@ -316,7 +316,6 @@ pub enum Delta {
 /// Only set on `Delta::New` findings: does this finding sit *inside* the change set itself
 /// (`Introduced` — dead on arrival, an agent or author can self-correct before committing) or
 /// does it live in untouched code that flipped because of the change at a distance (`Derived`)?
-/// RFC 0004 §6.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "lowercase")]
@@ -325,10 +324,10 @@ pub enum DeltaOrigin {
     Derived,
 }
 
-/// One entry of a finding's evidence chain (output-schema §2's `related` — what `kndo
-/// explain` renders): a concrete location plus its role in the story. First populated by
-/// `cyclic` (RFC 0005 §8: "a shortest cycle path in `related` as the evidence chain"); other
-/// analyses adopt it as their evidence models land — never fabricated as a placeholder.
+/// One entry of a finding's evidence chain (the schema's `related` — what `kndo
+/// explain` renders): a concrete location plus its role in the story. Populated by
+/// `cyclic` ("a shortest cycle path in `related` as the evidence chain"); other
+/// analyses adopt it as they gain evidence models — never fabricated as a placeholder.
 #[derive(Debug, Clone, serde::Serialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct RelatedLocation {
@@ -341,10 +340,10 @@ pub struct RelatedLocation {
     pub note: Option<String>,
 }
 
-/// Typed form of the output-schema finding (grows field-by-field with the analyses in M1;
-/// every field lands in the JSON schema first — that document is normative). Not yet present:
+/// Typed form of the output-schema finding (every field lands in the JSON schema
+/// first — that document is normative). Not yet present:
 /// `evidence` (category-specific block), `sources`, `remediation`, `rolled_up` — each needs
-/// infrastructure this milestone doesn't have (computed remediation text) and is omitted
+/// infrastructure that doesn't exist yet (computed remediation text) and is omitted
 /// rather than fabricated with a placeholder.
 #[derive(Debug, Clone, serde::Serialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
@@ -357,7 +356,7 @@ pub struct Finding {
     pub confidence: Confidence,
     pub message: String,
     pub location: Location,
-    /// Evidence chain (output-schema §2) — empty for analyses that haven't adopted it yet.
+    /// Evidence chain — empty for analyses that haven't adopted it yet.
     /// `default` isn't for deserialization (Finding is serialize-only) — it tells the schema
     /// generator the field is optional, matching the skip-when-empty serialization.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -366,15 +365,15 @@ pub struct Finding {
     pub delta: Option<Delta>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub delta_origin: Option<DeltaOrigin>,
-    /// RFC 0018 §2.2's severity channel: `true` = this finding never influences exit codes or
+    /// The severity channel: `true` = this finding never influences exit codes or
     /// budgets, whatever its `severity` says — the state of every plugin-contributed finding
     /// (`plugin:` categories) without an explicit `[plugins.gate]` opt-in. Always `false` for
-    /// core findings; serialized only when true (additive, output-schema §2).
+    /// core findings; serialized only when true (additive).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub advisory: bool,
 }
 
-/// One registered adapter's contribution (`run.adapters[]`, output-schema §1).
+/// One registered adapter's contribution (`run.adapters[]`).
 #[derive(Debug, Clone, serde::Serialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct AdapterRunInfo {
@@ -382,7 +381,7 @@ pub struct AdapterRunInfo {
     pub files: usize,
 }
 
-/// `baseline` summary (contracts/output-schema.md §1's `baseline` envelope field, RFC 0006 §6):
+/// `baseline` summary (the `baseline` envelope field):
 /// `acknowledged` counts baseline entries that still match a current finding (excluded from
 /// `findings` and from `--fail-on`); `stale` counts entries that match nothing anymore — the
 /// underlying issue was fixed, and `kndo baseline --update` would drop them.
@@ -393,11 +392,11 @@ pub struct BaselineSummary {
     pub stale: usize,
 }
 
-/// `suppressed.inline`/`suppressed.config` (output-schema §1, contracts §2.1) — always present
+/// `suppressed.inline`/`suppressed.config` — always present
 /// (unlike `baseline`, which is `None` when the feature isn't adopted at all): inline pragma
 /// matching runs on every check, so `{ inline: 0, config: 0 }` is a meaningful "nothing
 /// suppressed," not an absent subsystem. `config` stays honestly `0` — no `kndo.toml`
-/// suppression parser exists yet (RFC 0005 §12's config mechanism).
+/// suppression parser exists yet (the config mechanism).
 #[derive(Debug, Clone, Copy, Default, serde::Serialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct SuppressedSummary {
@@ -406,18 +405,18 @@ pub struct SuppressedSummary {
 }
 
 /// Typed form of the output-schema envelope. JSON/SARIF/agent serializers live core-side so
-/// every frontend emits byte-identical machine output; *human* rendering is frontend-owned
-/// (RFC 0009). Flat here for ergonomic Rust consumption; [`RunResult::to_json`] nests it into
-/// the schema's actual shape. Not yet present: `health`, `budget` — neither subsystem exists
-/// yet (health/CRAP scoring and delta-budget gates are M4), so those fields are omitted rather
-/// than emitted empty/null. Adding them later is additive (minor schema bump, RFC 0006 §4), not
+/// every frontend emits byte-identical machine output; *human* rendering is frontend-owned.
+/// Flat here for ergonomic Rust consumption; [`RunResult::to_json`] nests it into
+/// the schema's actual shape. Not yet present: `budget` — the delta-budget gate subsystem
+/// doesn't exist yet, so the field is omitted rather
+/// than emitted empty/null. Adding it later is additive (minor schema bump), not
 /// a breaking change.
 #[derive(Debug, Default)]
 pub struct RunResult {
-    /// Full mode: every finding. Diff modes: only *new* findings (contracts/output-schema.md
-    /// §1) — findings that disappeared belong in `fixed` below, not here.
+    /// Full mode: every finding. Diff modes: only *new*
+    /// findings — findings that disappeared belong in `fixed` below, not here.
     pub findings: Vec<Finding>,
-    /// Diff modes only (RFC 0004 §6, output-schema §3): findings present in the "before" tree
+    /// Diff modes only: findings present in the "before" tree
     /// but absent from "after," each carrying `delta: Fixed` and the *previous* location.
     /// Always empty in full mode.
     pub fixed: Vec<Finding>,
@@ -441,31 +440,31 @@ pub struct RunResult {
     /// actually served this run — facts entries plus, when the whole graph matched, one graph
     /// snapshot (`ProjectCache::hits() + ProjectCache::graph_hits()`) — the only honest way to
     /// know whether a run was warm: a freshly-`kndo init`ed project has the cache *enabled* on
-    /// its very first run and is still, correctly, cold (RFC 0004 §2).
+    /// its very first run and is still, correctly, cold.
     pub cache_enabled: bool,
     pub cache_hits: u64,
-    /// `None` when `.kndo/baseline.json` doesn't exist (RFC 0006 §6) — distinct from `Some`
+    /// `None` when `.kndo/baseline.json` doesn't exist — distinct from `Some`
     /// with zero counts, which means a baseline exists and is fully clean/reproducing.
     pub baseline: Option<BaselineSummary>,
-    /// Inline `kndo:allow` pragmas matched against this run's findings (contracts §2.1) — always
+    /// Inline `kndo:allow` pragmas matched against this run's findings — always
     /// present, unlike `baseline`. In diff modes this reflects the "after" side only, mirroring
     /// how `baseline` is applied symmetrically but reported from "after" (see `run_diff`).
     pub suppressed: SuppressedSummary,
-    /// Per-phase wall times, `(phase, µs)` in execution order (RFC 0009 §6's `--verbose`
+    /// Per-phase wall times, `(phase, µs)` in execution order (the `--verbose`
     /// block). Diff modes carry the "after" side's phases prefixed `after:` plus one
     /// `before-side` rollup. Deliberately NOT serialized into the JSON envelope: wall times
     /// are run metadata, and the determinism matrix compares envelopes byte-for-byte.
     pub timings: Vec<(String, u64)>,
-    /// The health score (RFC 0005 §11, output-schema §4). Full mode: the current tree, with
+    /// The health score. Full mode: the current tree, with
     /// `previous` from the last stored snapshot when the cache holds one. Diff modes: the
-    /// "after" side, with `previous` computed from "before" — the M4 exit criterion's delta.
+    /// "after" side, with `previous` computed from "before".
     /// `None` only when assembly itself failed.
     pub health: Option<crate::analysis::health::Health>,
 }
 
 /// `"warm"` only when the cache was on *and* actually served something this run — an
-/// enabled-but-empty cache (first run ever, or every file changed) is honestly `"cold"`
-/// (RFC 0004 §2). Shared by every renderer (`RunResult`'s `to_json`/`to_agent_format` and
+/// enabled-but-empty cache (first run ever, or every file changed) is honestly `"cold"`.
+/// Shared by every renderer (`RunResult`'s `to_json`/`to_agent_format` and
 /// `Engine::query`'s envelope alike) so "what counts as warm" is defined exactly once.
 fn cache_status_str(enabled: bool, hits: u64) -> &'static str {
     if enabled && hits > 0 {
@@ -497,7 +496,7 @@ struct RunInfo<'a> {
     adapters: &'a [AdapterRunInfo],
 }
 
-/// The full `--format json` envelope shape (contracts/output-schema.md §1) — also the schema
+/// The full `--format json` envelope shape — also the schema
 /// generator's root type (`cargo xtask gen-schema`, gated behind the `schema` feature): the
 /// JSON Schema is derived from this struct, not maintained as a second hand-written document.
 /// Borrows the run's collections instead of cloning them: `to_json` on a 75k-finding result
@@ -544,20 +543,20 @@ impl RunResult {
         }
     }
 
-    /// The `--format json` rendering (contracts/output-schema.md §1) — serialized core-side so
-    /// every frontend emits byte-identical machine output (RFC 0001 §2, contracts §5).
+    /// The `--format json` rendering — serialized core-side so
+    /// every frontend emits byte-identical machine output.
     pub fn to_json(&self) -> String {
         serde_json::to_string_pretty(&self.to_envelope())
             .unwrap_or_else(|e| format!("{{\"error\": \"failed to serialize output: {e}\"}}"))
     }
 
-    /// The `--format agent` rendering (contracts/output-schema.md §9) — like JSON, serialized
+    /// The `--format agent` rendering — like JSON, serialized
     /// core-side so every frontend emits byte-identical agent text.
     pub fn to_agent_format(&self) -> String {
         crate::agent_format::render(self)
     }
 
-    /// The `--format sarif` rendering (contracts/output-schema.md §7) — SARIF 2.1.0,
+    /// The `--format sarif` rendering — SARIF 2.1.0,
     /// serialized core-side like every machine format.
     pub fn to_sarif(&self) -> String {
         crate::sarif::render(self)
@@ -565,20 +564,20 @@ impl RunResult {
 }
 
 /// The `--format json` envelope's JSON Schema, derived from [`Envelope`] itself — never a
-/// second hand-written document (contracts/output-schema.md's normative promise). Dev-time
+/// second hand-written document (the derived schema is normative). Dev-time
 /// only: regenerate the committed copy with `cargo xtask gen-schema`.
 #[cfg(feature = "schema")]
 pub fn json_schema() -> schemars::Schema {
     schemars::schema_for!(Envelope)
 }
 
-/// One global rayon pool per process (RFC 0008 §5) — `--threads N` > `KNDO_THREADS` env >
+/// One global rayon pool per process — `--threads N` > `KNDO_THREADS` env >
 /// physical cores, already resolved into `threads` by the frontend before it ever reaches here.
 /// rayon's global pool can only be *built* once per process; a second `Engine::open` call
 /// (embedders opening more than one engine, or many tests sharing one test binary) hits
 /// `build_global`'s "already initialized" error, silently ignored — whichever call came first
-/// wins the thread count for the rest of the process. This can never threaten determinism (RFC
-/// 0008 §4): thread count only ever changes *scheduling*, never which bytes come out.
+/// wins the thread count for the rest of the process. This can never threaten
+/// determinism: thread count only ever changes *scheduling*, never which bytes come out.
 fn ensure_thread_pool(threads: Option<usize>) {
     let n = threads.unwrap_or_else(|| num_cpus::get_physical().max(1));
     let _ = rayon::ThreadPoolBuilder::new()
@@ -607,8 +606,8 @@ fn describe_rule(rule: &crate::plugin::RuleDescriptor) -> String {
     format!("{} ({severity}): {}", rule.name, rule.description)
 }
 
-/// One RFC 0018 proto finding → an output [`Finding`] under the severity-channel rules
-/// (§2.2): no `[plugins.gate]` entry (or `"off"`) → advisory at the declared severity;
+/// One plugin proto finding → an output [`Finding`] under the severity-channel
+/// rules: no `[plugins.gate]` entry (or `"off"`) → advisory at the declared severity;
 /// a gate entry → gate-eligible at `min(declared, configured)` — config can lower a rule's
 /// declared severity, never raise it. The `plugin:`-namespaced category and `convention`
 /// group are already assembled host-side (graph.rs's finding round); nothing here is
@@ -645,7 +644,7 @@ fn plugin_finding(
     }
 }
 
-/// §2.2's mapping: `(severity, advisory)` for one proto finding under the gate config.
+/// The mapping: `(severity, advisory)` for one proto finding under the gate config.
 fn severity_channel(
     proto: &crate::plugin::ProtoFinding,
     gate: &crate::plugin_gate::PluginsGate,
@@ -667,7 +666,7 @@ fn declared_severity(severity: crate::plugin::PluginSeverity) -> Severity {
     }
 }
 
-/// Synchronous and single-instance-per-project (the cache lock, RFC 0004 §7); a serving
+/// Synchronous and single-instance-per-project (the cache lock); a serving
 /// frontend wraps it in its own concurrency model.
 pub struct Engine {
     root: PathBuf,
@@ -675,14 +674,14 @@ pub struct Engine {
     plugins: Vec<Box<dyn crate::plugin::Plugin>>,
     cache: Option<crate::cache::ProjectCache>,
     cache_enabled: bool,
-    /// The in-flight background snapshot write (RFC 0008 §2: persist off the critical path)
+    /// The in-flight background snapshot write (persist off the critical path)
     /// — spawned right after assembly so serialization overlaps with analysis and rendering,
     /// joined before the next assembly and on drop (frontends drop the engine after
-    /// printing, which is exactly the RFC's "written after results are printed, before
+    /// printing, which is exactly "written after results are printed, before
     /// exit"). Crash-safety is the writer's temp-file + rename; a killed process loses only
     /// cache warmth.
     pending_persist: Option<std::thread::JoinHandle<()>>,
-    /// RFC 0018 §2.2's opt-in table (`kndo.toml [plugins.gate]`), read once at open.
+    /// The opt-in table (`kndo.toml [plugins.gate]`), read once at open.
     plugins_gate: crate::plugin_gate::PluginsGate,
     /// Problems reading that table — surfaced as run diagnostics, never a failed open.
     gate_problems: Vec<String>,
@@ -691,17 +690,16 @@ pub struct Engine {
 impl Engine {
     /// `adapters` is the registered language set, composed by the distribution layer (the
     /// `kndo` crate) — compiled-in first-party adapters today, WASM-bridged third-party
-    /// adapters later (ADR 0003). The core never selects or knows about them beyond the
+    /// adapters later. The core never selects or knows about them beyond the
     /// trait; embedders and tests may pass a custom set directly.
     pub fn open(
         root: &Path,
         overrides: ConfigOverrides,
         adapters: Vec<Box<dyn LanguageAdapter>>,
     ) -> Result<Engine, EngineError> {
-        // The built-in coverage ingester (ADR 0005) is the one plugin every `Engine` carries by
-        // default, same as it was when this list lived in a private `coverage_plugins()`
-        // function called only from `ingest_coverage` — unifying it into `self.plugins` (RFC
-        // 0003 §2's other three hooks needed one real registry, not two) must not silently drop
+        // The built-in coverage ingester is the one plugin every `Engine` carries by
+        // default — the unified `self.plugins` registry (one real registry for every hook,
+        // not two) must not silently drop
         // it for the common `open()` caller who never heard of `open_with_plugins`.
         Engine::open_with_plugins(
             root,
@@ -711,10 +709,10 @@ impl Engine {
         )
     }
 
-    /// Same as [`Self::open`], additionally taking the registered plugin set (RFC 0003) —
+    /// Same as [`Self::open`], additionally taking the registered plugin set —
     /// compiled-in first-party plugins today, WASM-bridged third-party plugins later (that
-    /// bridge doesn't exist yet for `Plugin`'s graph-mutation hooks, only for `LanguageAdapter` —
-    /// docs/contracts/wasm-abi.md §4). Embedders/tests wanting *no* plugins, not even the
+    /// bridge doesn't exist yet for `Plugin`'s graph-mutation hooks, only for
+    /// `LanguageAdapter`). Embedders/tests wanting *no* plugins, not even the
     /// default lcov ingester, pass `vec![]` here directly instead of using [`Self::open`].
     pub fn open_with_plugins(
         root: &Path,
@@ -746,7 +744,7 @@ impl Engine {
         &self.root
     }
 
-    /// `kndo doctor` (RFC 0006 §2, contracts §5). Deliberately does not assemble or analyze
+    /// `kndo doctor`. Deliberately does not assemble or analyze
     /// anything — every field comes from static descriptors, a cache-directory stat walk, and a
     /// baseline-file read, so this stays fast and side-effect-free even when the project itself
     /// would be slow or broken to check.
@@ -816,8 +814,8 @@ impl Engine {
         }
     }
 
-    /// Full mode reports every current finding; `--staged`/`--diff <ref>` report the RFC 0004
-    /// §6 derived-effects delta instead — see [`Self::run_diff`].
+    /// Full mode reports every current finding; `--staged`/`--diff <ref>` report the
+    /// derived-effects delta instead — see [`Self::run_diff`].
     pub fn check(&mut self, req: CheckRequest) -> RunResult {
         let start = Instant::now();
         let started_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
@@ -829,7 +827,7 @@ impl Engine {
             RunMode::Full => {
                 let root = self.root.clone();
                 let mut raw = self.run_analysis_at(&root);
-                // Trend (RFC 0006 §2's "trend vs previous snapshots"): the last full run's
+                // Trend (the "trend vs previous snapshots"): the last full run's
                 // score, stored beside the baseline in `.kndo/` — best-effort on read-only
                 // checkouts, and deliberately not in the prunable cache directory.
                 if let Some(health) = &mut raw.health {
@@ -866,15 +864,15 @@ impl Engine {
         }
     }
 
-    /// RFC 0004 §6's derived-effects delta: assemble the graph at two tree states and report
+    /// The derived-effects delta: assemble the graph at two tree states and report
     /// `(findings_after − findings_before) ∪ (findings_before − findings_after)`, each finding
     /// tagged `delta: New|Fixed` (and, for `New`, `delta_origin: Introduced|Derived` — whether
-    /// it sits inside a *touched* file or was flipped at a distance in untouched code, per the
-    /// RFC's own example). Both sides run through baseline filtering symmetrically before the
+    /// it sits inside a *touched* file or was flipped at a distance in untouched
+    /// code). Both sides run through baseline filtering symmetrically before the
     /// diff, so an acknowledged issue never surfaces as new or fixed on either side.
     ///
-    /// Tree states, since the RFC's prose doesn't spell out exact git semantics and this is a
-    /// deliberate reading of it: `--staged`'s "after" is the **index**, not the raw working
+    /// Tree states, a deliberate choice of git
+    /// semantics: `--staged`'s "after" is the **index**, not the raw working
     /// tree — exactly what would be committed, excluding further unstaged edits on top (the
     /// pre-commit use case `kndo init --hook` installs wants precisely this). `--staged`'s
     /// "before" is `HEAD`. `--diff <ref>`'s "before" is `merge-base(<ref>, HEAD)`; "after" is
@@ -1075,10 +1073,10 @@ impl Engine {
         }
     }
 
-    /// A diff-mode git failure is an **error**, not a degradation (RFC 0006 §5, RFC 0009 §6):
+    /// A diff-mode git failure is an **error**, not a degradation:
     /// the user explicitly asked for `--staged`/`--diff`, the analysis never ran, and an empty
-    /// result at exit 0 would fail open in CI (a typo'd base ref silently passing the gate —
-    /// M6 error polish). Problem + probable cause + next command, per RFC 0009.
+    /// result at exit 0 would fail open in CI (a typo'd base ref silently passing the
+    /// gate). Problem + probable cause + next command.
     fn git_failure(context: &str, e: gitutil::GitError) -> RunResult {
         RunResult {
             diagnostics: vec![Diagnostic {
@@ -1091,7 +1089,7 @@ impl Engine {
         }
     }
 
-    /// `kndo baseline [--update]` (RFC 0006 §6, contracts §5). Snapshots the complete, current
+    /// `kndo baseline [--update]`. Snapshots the complete, current
     /// finding set — bypassing whatever baseline already exists, since the whole point is
     /// capturing what "acknowledged" means right now, not what's left after an old baseline
     /// already filtered it down.
@@ -1112,7 +1110,7 @@ impl Engine {
         }
     }
 
-    /// One navigation query (RFC 0007, contracts §5's `Engine::query`): assembles/warms the
+    /// One navigation query: assembles/warms the
     /// graph exactly like full-mode `check`, then dispatches to the requested verb. Read-only —
     /// never touches findings, the baseline, or anything beyond what assembly's own cache
     /// read/write already does.
@@ -1123,8 +1121,8 @@ impl Engine {
             .expect("query_batch returns exactly one result per request")
     }
 
-    /// `kndo query`'s batching entry point (RFC 0007 §4.7): assembles/warms the graph exactly
-    /// **once** for the whole batch — the amortization the RFC's batching tenet exists for —
+    /// `kndo query`'s batching entry point: assembles/warms the graph exactly
+    /// **once** for the whole batch — the amortization batching exists for —
     /// then answers every request against that one shared snapshot. One request failing (bad
     /// selector, no path) never drops the others; every request sees the same graph, so answers
     /// stay mutually consistent (no torn reads across a batch).
@@ -1218,7 +1216,7 @@ impl Engine {
                 let g = std::sync::Arc::new(g);
                 if let Some(writer) = pending_snapshot {
                     // Extraction + manifest diagnostics and the plugin round's own, in the
-                    // snapshot's two partitions (RFC 0013 §3c, RFC 0017 §3) — exactly what a
+                    // snapshot's two partitions — exactly what a
                     // warm path replays; discovery diagnostics stay fresh per walk.
                     let graph_for_writer = std::sync::Arc::clone(&g);
                     let diagnostics_for_writer = extraction_diagnostics.clone();
@@ -1257,8 +1255,8 @@ impl Engine {
                         .map(|(phase, us)| (phase.to_string(), us)),
                 );
                 diagnostics.extend(analysis_diagnostics);
-                // RFC 0018: plugin findings join AFTER run_all (health is computed inside it,
-                // so the score structurally cannot see them — §2.2) and BEFORE suppression,
+                // Plugin findings join AFTER run_all (health is computed inside it,
+                // so the score structurally cannot see them) and BEFORE suppression,
                 // so inline `kndo:allow plugin:...` pragmas apply uniformly. Baseline is
                 // applied later by check(), uniformly too. Re-sorted by id — the same
                 // deterministic order run_all itself guarantees.
@@ -1304,7 +1302,7 @@ impl Engine {
         }
     }
 
-    /// Locate and ingest coverage reports (ADR 0005: "ingested, never measured") through the
+    /// Locate and ingest coverage reports ("ingested, never measured") through the
     /// built-in coverage plugins' `requested_file_access` well-known paths, freshness-checked
     /// against [`MAX_COVERAGE_AGE_DAYS`] — a stale report gets one diagnostic and is ignored,
     /// per the ADR's "stale certainty is worse than absence". Re-read every run, never cached:
@@ -1349,7 +1347,7 @@ impl Engine {
                         plugin.ingest_coverage(&project_path, &content, &mut sink);
                         // Provenance is host-side: the host located the report and checked
                         // its freshness, so it records what was ingested and how old it was
-                        // (surfaced by health's crap category, per ADR 0005).
+                        // (surfaced by health's crap category).
                         sink.add_source(format!(
                             "{} {} ({}d old)",
                             plugin.descriptor().id,
@@ -1420,7 +1418,7 @@ impl Engine {
         }
     }
 
-    /// Partitions `findings` against `.kndo/baseline.json` (RFC 0006 §6): a matched entry is
+    /// Partitions `findings` against `.kndo/baseline.json`: a matched entry is
     /// excluded from the returned findings (and so from `--fail-on`, which only ever sees what
     /// `check()` returns) and counted in the summary instead. `None` when no baseline file
     /// exists — distinct from `Some` with `acknowledged: 0`, a baseline that exists but matches
@@ -1457,8 +1455,8 @@ mod tests {
     use crate::vocab::RefKind;
     use smol_str::SmolStr;
 
-    /// True for the diagnostic `untested` emits when a project has no test roots at all (RFC
-    /// 0005 §9) — expected noise in every diff-mode fixture below, since none of this module's
+    /// True for the diagnostic `untested` emits when a project has no test roots at
+    /// all — expected noise in every diff-mode fixture below, since none of this module's
     /// mock adapters declare test roots. Filtering it out keeps `diagnostics.is_empty()`-style
     /// assertions meaningful for genuine regressions instead of forcing every diff test to know
     /// about a finding category it isn't testing.
@@ -1663,7 +1661,7 @@ mod tests {
         }
     }
 
-    // ------------------------------------------ Plugin graph-mutation hooks (RFC 0003 §2)
+    // ------------------------------------------ Plugin graph-mutation hooks
 
     /// Exercises all four graph-affecting hooks in one real `Engine::check` — proof the wiring
     /// (not just each analysis's own isolated exemption unit test) actually connects: a
@@ -1679,7 +1677,7 @@ mod tests {
                 id: SmolStr::new("demo"),
                 version: SmolStr::new("1"),
                 detection: vec![],
-                // RFC 0016 §5: declares access to a companion config-like file outside the
+                // Declares access to a companion config-like file outside the
                 // language graph — `contribute_roots` below reads it to gate a fifth root.
                 requested_file_access: vec![SmolStr::new("content.marker")],
                 activation: vec![],
@@ -1714,7 +1712,7 @@ mod tests {
                 crate::vocab::RootKind::Production,
                 Confidence::Probable,
             );
-            // RFC 0016 §5: a real content-channel read gates a real root — proves the host
+            // A real content-channel read gates a real root — proves the host
             // plumbing (glob scoping, budget-tracked read) actually reaches a graph-mutation
             // hook, not just that the type-checker accepts the new parameter.
             if content
@@ -1789,7 +1787,7 @@ mod tests {
         )
         .unwrap();
         std::fs::write(dir.join("noise.banner.dmock"), "decl bannerDecl\n").unwrap();
-        // RFC 0016 §5: content the plugin's contribute_roots reads through the host-mediated
+        // Content the plugin's contribute_roots reads through the host-mediated
         // channel to decide whether to root `contentGatedRoot` — not itself part of the
         // language graph (the mock adapter never claims `.marker` files).
         std::fs::write(dir.join("content.marker"), "promote").unwrap();
@@ -1914,8 +1912,7 @@ mod tests {
         assert_eq!(report.plugins[0].version, "1");
         assert!(report.plugins[0].activation.is_empty());
 
-        // The zero-plugin case must be zero, not the old implicit lcov default — callers who
-        // ask for no plugins get no plugins.
+        // The zero-plugin case is zero — callers who ask for no plugins get no plugins.
         let bare =
             Engine::open_with_plugins(&dir, ConfigOverrides::default(), vec![], vec![]).unwrap();
         assert!(bare.doctor().plugins.is_empty());
@@ -2107,7 +2104,7 @@ mod tests {
         assert!(value["run"]["duration_ms"].is_u64());
         assert!(value["findings"].is_array());
         assert!(value["diagnostics"].is_array());
-        // Health is real since M4: present in full mode, with the §4 shape.
+        // Health is present in full mode, with the documented shape.
         assert!(value["health"]["score"].is_number());
         assert!(value["health"]["grade"].is_string());
         assert!(value["health"]["categories"].is_array());
@@ -2290,16 +2287,16 @@ mod tests {
         assert_eq!(err.level, crate::adapter::DiagnosticLevel::Error);
         assert!(
             err.message.contains("need a git repository"),
-            "problem + next step (M6 error polish): {}",
+            "problem + next step: {}",
             err.message
         );
     }
 
     /// Running diff mode from a subdirectory of the repo scopes both sides to that
-    /// subdirectory with matching project-relative paths — previously the "before" side was
-    /// the whole materialized repo (repo-relative paths) while `--diff`'s "after" was the
-    /// subdirectory (subdir-relative paths), so paths never aligned and everything outside the
-    /// subdir appeared removed.
+    /// subdirectory with matching project-relative paths — if the "before" side covered
+    /// the whole repo (repo-relative paths) while `--diff`'s "after" covered the
+    /// subdirectory (subdir-relative paths), paths would never align and everything outside
+    /// the subdir would appear removed.
     #[test]
     fn diff_mode_from_a_subdirectory_scopes_both_sides_to_it() {
         let dir = git_repo("subdir-scope");
@@ -2420,7 +2417,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         // A root file (never `unused`) acknowledging a category it will never produce: the
-        // pragma suppresses nothing, so the M6 `stale` rule flags the pragma itself.
+        // pragma suppresses nothing, so the `stale` rule flags the pragma itself.
         std::fs::write(
             dir.join("root.dmock"),
             "root-file\nsuppress-file version-skew\n",
@@ -2453,8 +2450,8 @@ mod tests {
 
     #[test]
     fn a_bad_diff_base_is_an_error_level_diagnostic_never_a_clean_empty_pass() {
-        // M6 error polish: the old Warn + empty result failed open — a typo'd base ref in CI
-        // read as zero findings at exit 0. RFC 0006 §5: this is the exit-2 tier, signaled
+        // A Warn + empty result would fail open — a typo'd base ref in CI
+        // would read as zero findings at exit 0. This is the exit-2 tier, signaled
         // through the one channel every format carries (an error-level diagnostic).
         let dir = git_repo("bad-diff-base");
         std::fs::write(
@@ -2486,7 +2483,7 @@ mod tests {
         assert!(err.message.contains("no-such-ref"), "{}", err.message);
         assert!(
             err.message.contains("check the ref name"),
-            "problem + next step, RFC 0009 §6: {}",
+            "problem + next step: {}",
             err.message
         );
     }

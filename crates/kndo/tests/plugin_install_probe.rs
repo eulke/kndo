@@ -1,11 +1,11 @@
-//! The install transaction against a *genuine* WASM component (RFC 0015 §4): the unit tests in
+//! The install transaction against a *genuine* WASM component: the unit tests in
 //! `plugin_install.rs` fake the probe to exercise every policy; this suite keeps the one edge
 //! they can't — `kndo::plugin_install::wasm_probe`, i.e. the real `kndo-plugin-api` loader —
 //! honest. The hooks-demo component declares `id: "hooks-demo"`, so fetching it *by* any
-//! coordinate must trip identity binding (RFC 0015 §2) and leave the directory untouched: a
-//! plain-named component is installable by hand-drop only, never by coordinate — which is
-//! exactly §2's "depending on something requires it to be addressable" rule enforced at the
-//! only gate a fetch passes through.
+//! coordinate must trip identity binding and leave the directory untouched: a plain-named
+//! component is installable by hand-drop only, never by coordinate — a component depended
+//! on by coordinate must be addressable by that same coordinate, enforced at the only gate a
+//! fetch passes through.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -69,9 +69,9 @@ fn sha256_hex(bytes: &[u8]) -> String {
         .collect()
 }
 
-/// One canned release: the component under `plugin.wasm` plus a correct `checksums.txt` — the
-/// installer-ready shape of docs/plugins/authoring.md §9, so the *only* thing that can fail
-/// downstream is what this suite is about: the real probe and identity binding.
+/// One canned release: the component under `plugin.wasm` plus a correct `checksums.txt` — an
+/// installer-ready shape, so the *only* thing that can fail downstream is what this suite is
+/// about: the real probe and identity binding.
 struct OneRelease {
     wasm: Vec<u8>,
 }
@@ -135,7 +135,7 @@ fn a_real_component_with_a_plain_id_fails_identity_binding() {
     );
 }
 
-/// RFC 0016 §4: `wasm_probe` must try the adapter loader too, not just the plugin one —
+/// `wasm_probe` must try the adapter loader too, not just the plugin one —
 /// `examples/kndo-plugin-demo` is a `kndo:adapter` component, not `kndo:plugin`. Proven the
 /// same way the plugin case is: if the probe's adapter fallback didn't work, this would fail
 /// with the "not a valid kndo:plugin or kndo:adapter component" catch-all instead of

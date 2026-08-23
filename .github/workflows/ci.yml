@@ -4,7 +4,7 @@ on:
   push:
     branches: [main, develop]
   pull_request:
-  # Lets release.yml's own `test` gate call this workflow directly (RFC 0014 §3.1) instead of
+  # Lets release.yml's own `test` gate call this workflow directly instead of
   # duplicating the job — one definition of "what green means," not two that can drift apart.
   workflow_call:
 
@@ -21,12 +21,12 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: write # kndo-action's sticky PR comment (RFC 0010 §5)
+      pull-requests: write # kndo-action's sticky PR comment
     steps:
       - uses: actions/checkout@v4
         with:
-          # kndo's own dogfood step below needs `origin/<base>` locally resolvable for
-          # `kndo check --diff` (RFC 0004 §6's merge-base semantics) — a shallow checkout
+          # kndo's self-check step below needs `origin/<base>` locally resolvable for
+          # `kndo check --diff` uses merge-base semantics — a shallow checkout
           # wouldn't have it.
           fetch-depth: 0
 
@@ -45,25 +45,25 @@ jobs:
         run: cargo clippy --workspace --all-targets --all-features -- -D warnings
 
       # wasm32-unknown-unknown is needed here, not for the workspace build itself (the guest
-      # crates under examples/ are excluded from the workspace, docs/contracts/wasm-abi.md §6) —
+      # crates under examples/ are excluded from the workspace, the WASM ABI contract) —
       # the WASM-bridge integration tests invoke `cargo build --target wasm32-unknown-unknown`
       # against those guest crates as a subprocess and componentize the result in-process.
       - name: cargo test --workspace
         run: cargo test --workspace --all-features
 
-      # kndo's own real-CLI dogfood, now through the GA Action (RFC 0010): the same check the
+      # kndo checking itself through the GitHub Action: the same check the
       # local pre-commit hook runs, over the diff this PR/push actually introduces — plus the
       # Action's publishing surfaces (sticky PR comment, annotations, job summary) exercised on
       # kndo's own PRs. `version: source` builds kndo-cli from this checkout, so the Action and
       # the code under review are the same commit.
-      - name: kndo (dogfood via kndo-action)
+      - name: kndo (self-check via kndo-action)
         uses: ./action
         with:
           version: source
           fail-on: warning
 
-  # RFC 0017 §7's compatibility matrix: the two reference components, PRE-BUILT and committed
-  # under crates/kndo-plugin-api/tests/compat/, run against the HEAD host. wasm-abi §8's
+  # The ABI compatibility matrix: the two reference components, PRE-BUILT and committed
+  # under crates/kndo-plugin-api/tests/compat/, run against the HEAD host. the ABI's
   # "a v1 component keeps working against every v1-compatible host" promise as a job that
   # fails the build instead of the ecosystem. Runs inside `test` too (it's an ordinary cargo
   # test) — this standalone job exists so a compat break fails on its own named line, and to
@@ -84,9 +84,9 @@ jobs:
       - name: run the pinned components against the HEAD host
         run: cargo test -p kndo-plugin-api --test compat_matrix
 
-  # RFC 0016 §7's "shell" configuration, CI-proven rather than only documented: a `kndo` build
+  # the design contract's "shell" configuration, CI-proven rather than only documented: a `kndo` build
   # with every first-party language grammar off and just enough to load third-party WASM
-  # adapters (ADR 0006's "an embedder can drop every language" promise, taken literally). Builds
+  # adapters (an embedder can drop every language grammar and keep the host). Builds
   # standalone from `test` (a different feature set, not a dependency of it) so a shell-only
   # regression fails on its own line instead of hiding inside the full-features job.
   shell-build:
@@ -110,7 +110,7 @@ jobs:
       - name: cargo clippy (shell configuration)
         run: cargo clippy -p kndo-cli --no-default-features --features external-adapters,plugin-install -- -D warnings
 
-      # examples/kndo-plugin-demo is the same reference external adapter M5's own exit bar used
+      # examples/kndo-plugin-demo is the reference external adapter
       # (crates/kndo/tests/external_adapter.rs) — componentized here via `cargo xtask
       # componentize` (the same `wit_component::ComponentEncoder` call that test makes
       # in-process) so this job needs no extra tool install for a one-line operation the
@@ -126,7 +126,7 @@ jobs:
 
       # The smoke check itself: a fixture project with NO first-party adapter able to claim
       # anything, and one third-party adapter dropped only into `.kndo/plugins/` — the shell
-      # binary must auto-discover and run it purely from that directory, exactly RFC 0016 §7's
+      # binary must auto-discover and run it purely from that directory, exactly the design contract's
       # claimed configuration, not the full product with languages incidentally unused.
       - name: smoke check — shell binary auto-discovers a plugin-dir-only adapter
         run: |

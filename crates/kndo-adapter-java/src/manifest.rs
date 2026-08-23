@@ -1,6 +1,6 @@
-//! Manifest extraction (docs/adapters/java.md §4): a thin Java-specific layout over
+//! Manifest extraction: a thin Java-specific layout over
 //! `kndo_adapter_toolkit::jvm_manifest`, which owns every Maven/Gradle fidelity detail —
-//! shared verbatim with the Kotlin adapter (ROADMAP "Java → Kotlin share infra"), since a
+//! shared verbatim with the Kotlin adapter, since a
 //! `pom.xml`/`build.gradle`'s shape has zero dependency on which JVM language its module
 //! compiles. Java contributes only its source-root convention and the two marker files
 //! (`module-info.java`, `package-info.java`) that declare nothing promotable.

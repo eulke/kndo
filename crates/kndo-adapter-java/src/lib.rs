@@ -1,9 +1,8 @@
-//! Java language adapter (docs/adapters/java.md). The fourth `LanguageAdapter`, and the first
-//! with no dogfood corpus of its own (kndo is written in Rust) — precision here rests entirely
-//! on the conformance fixtures. The one Java-shaped idea the adapter is built on: package
-//! identity is declared (`package` statement) *and* the compiler-checked file/directory
-//! convention makes it directory-shaped too — a hybrid of Rust's declared-tree model and Go's
-//! directory-is-the-unit model (spec §0).
+//! Java language adapter. Precision here rests entirely on the conformance fixtures.
+//! The one Java-shaped idea the adapter is built on: package identity is declared
+//! (`package` statement) *and* the compiler-checked file/directory convention makes it
+//! directory-shaped too — a hybrid of Rust's declared-tree model and Go's
+//! directory-is-the-unit model.
 
 mod extraction;
 mod manifest;
@@ -19,7 +18,7 @@ use smol_str::SmolStr;
 
 pub struct JavaAdapter;
 
-/// docs/adapters/java.md §1: `src/test/java/**` (Maven/Gradle Standard Directory Layout) is
+/// `src/test/java/**` (Maven/Gradle Standard Directory Layout) is
 /// the authoritative test-role signal; Surefire's own default filename patterns are a
 /// belt-and-suspenders fallback for non-standard layouts. No tooling-role convention exists
 /// (same stance as Go) — `pom.xml`/`build.gradle` are manifests, never role-classified source.
@@ -28,7 +27,7 @@ const PATH_PATTERNS: kndo_adapter_toolkit::classify::PathPatterns =
         test_name_markers: &["Test.java", "Tests.java", "TestCase.java"],
         test_dirs: &["src/test/java"],
         // `package-info.java`/`module-info.java` are descriptors consumed by javac/javadoc,
-        // not by code — Tooling role, so their reachability is healthy (M6 FP hunt).
+        // not by code — Tooling role, so their reachability is healthy.
         tooling_name_markers: &["package-info.java", "module-info.java"],
         tooling_dirs: &[],
     };
@@ -39,7 +38,7 @@ impl LanguageAdapter for JavaAdapter {
             activation: Vec::new(),
             dependencies: Vec::new(),
             id: SmolStr::new("java"),
-            facts_schema_version: 3, // 3: field-initializer refs within the field + annotation class literals; 2: implicitly_invoked on @Override/serialization hooks (RFC 0005 §1 machinery dispatch)
+            facts_schema_version: 3, // bump whenever the serialized facts shape or the emission semantics change
             file_globs: vec![SmolStr::new("**/*.java")],
             manifest_globs: vec![
                 SmolStr::new("**/pom.xml"),
@@ -49,10 +48,10 @@ impl LanguageAdapter for JavaAdapter {
                 SmolStr::new("**/settings.gradle.kts"),
             ],
             grammar_version: SmolStr::new("tree-sitter-java 0.23.5"),
-            // docs/adapters/java.md §0: only two rungs apply to a TOP-LEVEL type (public /
+            // Only two rungs apply to a TOP-LEVEL type (public /
             // package-private — private/protected are illegal there, Go's own shape); the
             // full four apply to members. Package-private maps to `Unit`, NOT kndo's `Package`
-            // scope: `Package` means "same manifest/workspace-member" (RFC 0011's PackageId —
+            // scope: `Package` means "same manifest/workspace-member" (PackageId —
             // JS's granularity, one npm package), a DIFFERENT thing from a Java `package`
             // (a `com.foo` namespace, potentially one of many sharing a single Maven module).
             // `FileFacts::unit` already carries the declared Java package name — checked
@@ -60,7 +59,7 @@ impl LanguageAdapter for JavaAdapter {
             // exact rung, mirroring Go's own choice for its package-scoped visibility.
             // `protected` widens to `Public` — cross-package subclass access can't be ruled
             // out without a typechecker, so `Unit`/`Package` would under-report. Two rungs
-            // sharing a scope is legal (RFC 0012 §6's `pub(super)` precedent); VisibilityLevel
+            // sharing a scope is legal (Rust's `pub(super)` precedent); VisibilityLevel
             // still distinguishes them for the label text.
             visibility_ladder: vec![
                 VisibilityRung {
@@ -91,7 +90,7 @@ impl LanguageAdapter for JavaAdapter {
                 file_cycles: CycleTolerance::Hazard,
                 package_cycles: CycleTolerance::Hazard,
             },
-            // docs/adapters/java.md §0/§3: no reliable package→Maven/Gradle-coordinate
+            // No reliable package→Maven/Gradle-coordinate
             // mapping exists without resolving the classpath — resolve() never emits
             // Resolution::Dependency for a third-party import, so dependency_hygiene's
             // unused/test-only verdicts would be a false-positive flood if attempted here.

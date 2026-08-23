@@ -1,6 +1,6 @@
-//! `--format sarif` — SARIF 2.1.0 rendering of a [`RunResult`] (contracts/output-schema.md
-//! §7, RFC 0006 §4), for GitHub code scanning and every other SARIF consumer. Renders
-//! **core-side** like JSON and the agent format (contracts §5): every frontend emits
+//! `--format sarif` — SARIF 2.1.0 rendering of a
+//! [`RunResult`], for GitHub code scanning and every other SARIF consumer. Renders
+//! **core-side** like JSON and the agent format: every frontend emits
 //! byte-identical SARIF.
 //!
 //! The mapping, per the contract: `category` → `rule.id`; `severity` → SARIF `level`
@@ -8,7 +8,7 @@
 //! `relatedLocations`; `confidence` → `properties.confidence`. One `run` object per kndo run.
 //! The stable finding id travels as `partialFingerprints.kndoFindingId` — exactly what SARIF
 //! fingerprints exist for (result matching across runs), and kndo's ids are already
-//! line-number-free by design (output-schema §5). Paths are project-relative with `/`
+//! line-number-free by design. Paths are project-relative with `/`
 //! separators — SARIF's preferred artifact form, and what code-scanning UIs resolve against
 //! the repository root.
 //!
@@ -131,7 +131,7 @@ struct Region {
     start_line: u32,
     start_column: u32,
     end_line: u32,
-    /// kndo spans are end-exclusive (contracts §2's Span) and so is SARIF's `endColumn`
+    /// kndo spans are end-exclusive (contracts the Span) and so is SARIF's `endColumn`
     /// ("the column number of the character following the end of the region") — a direct map.
     end_column: u32,
 }
@@ -296,7 +296,7 @@ mod tests {
             edges: 0,
             mode: "full".to_string(),
             base_ref: None,
-            started_at: "2026-01-01T00:00:00Z".to_string(),
+            started_at: "1970-01-01T00:00:00Z".to_string(),
             duration_ms: 1,
             project_root: "/tmp/x".to_string(),
             adapters: Vec::new(),

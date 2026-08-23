@@ -1,13 +1,13 @@
-//! The `Plugin` contract (contracts/core-traits.md §3, RFC 0003).
+//! The `Plugin` contract.
 //!
 //! Adapters describe what code *is*; plugins describe what an ecosystem *means* by it.
 //! All hooks are optional; the same trait serves built-ins (statically linked) and external
-//! WASM components (bridged via `kndo-plugin-api`, ADR 0003 — `kndo:plugin@0.1.0` for the four
-//! graph-mutation hooks below, `kndo:adapter@0.1.0` for `LanguageAdapter`; see
-//! docs/contracts/wasm-abi.md §5). `ingest_coverage`/`suppress` aren't bridged either way yet.
+//! WASM components (bridged via `kndo-plugin-api` — `kndo:plugin@0.1.0` for the four
+//! graph-mutation hooks below, `kndo:adapter@0.1.0` for
+//! `LanguageAdapter`). `ingest_coverage`/`suppress` aren't bridged either way yet.
 //! `GraphView` is read-only; mutation happens only through typed sinks the core validates and
 //! attributes (`Provenance::Plugin`). `contribute_roots`/`contribute_edges`/`annotate_symbols`
-//! additionally get [`ContentView`], RFC 0016 §5's host-mediated content channel for files
+//! additionally get [`ContentView`], the host-mediated content channel for files
 //! *outside* the language graph (configs, manifests, templates) — scoped to the descriptor's
 //! own `requested_file_access` globs and budgeted; `classify_file` does not (it runs once per
 //! file across every component, not once per component per round — see `ContentView`'s own
@@ -15,7 +15,7 @@
 //!
 //! **Targets are named, never addressed by internal id** (`ProjectPath` + an optional bare or
 //! `Owner.name` symbol name) — the same contract shape `RawRoot`/`RawReference` already use for
-//! adapters (contracts/core-traits.md §2). A plugin naming a target that doesn't resolve is a
+//! adapters. A plugin naming a target that doesn't resolve is a
 //! silent no-op, exactly like an adapter's own miss — no new failure mode, and it keeps
 //! `FileId`/`SymbolId` (internal, renumbered every run) off the `Plugin` trait's stable-from-1.0
 //! surface entirely.
@@ -31,7 +31,7 @@ use crate::vocab::{Confidence, FileClass, FileId, RefKind, RootKind};
 
 #[derive(Debug, Clone)]
 pub struct PluginDescriptor {
-    /// The plugin's identity, which is also its provenance (RFC 0015 §2): built-ins use the
+    /// The plugin's identity, which is also its provenance: built-ins use the
     /// reserved `kndo:` namespace (`kndo:coverage-lcov`, `kndo:nextjs`) that no external
     /// component may claim; external plugins use the source coordinate they can be fetched
     /// from (`github.com/<owner>/<repo>`), so identity is never a name lookup and two
@@ -45,19 +45,19 @@ pub struct PluginDescriptor {
     /// `kndo doctor`, never evaluated. [`activation`](Self::activation) is the machine-checkable
     /// counterpart these describe.
     pub detection: Vec<SmolStr>,
-    /// Globs whose content the host will provide; no ambient fs/net (RFC 0003 §5).
+    /// Globs whose content the host will provide; no ambient fs/net.
     pub requested_file_access: Vec<SmolStr>,
     /// Structured, machine-evaluable version of [`detection`](Self::detection) — what actually
-    /// decides whether a *globally* installed plugin (RFC 0003 §4) turns on for a given project.
+    /// decides whether a *globally* installed plugin turns on for a given project.
     /// A project-local `.kndo/plugins/*.wasm` file is unconditional (its presence there already
     /// is the opt-in); this only gates the XDG-wide install path, and only when non-empty — an
     /// empty list means "no known structural signal," so a globally installed plugin with none
     /// never self-activates rather than guessing.
     pub activation: Vec<ActivationRule>,
     /// Plugins whose conventions are part of this plugin's own — the wrapper relationship
-    /// (RFC 0015 §3). Each entry is an [`id`](Self::id)-style coordinate (`kndo:nextjs`,
+    ///. Each entry is an [`id`](Self::id)-style coordinate (`kndo:nextjs`,
     /// `github.com/owner/repo`). Exactly two coupled effects, and nothing else: installing this
-    /// plugin installs its dependencies transitively (RFC 0015 §4), and this plugin being
+    /// plugin installs its dependencies transitively, and this plugin being
     /// *active* activates every dependency that is present — computed as a fixpoint, so wrapper
     /// chains (`company-framework → nextjs → …`) compose to any depth from one manifest match.
     /// No version constraints and no ordering implications: plugins structurally cannot consume
@@ -66,14 +66,14 @@ pub struct PluginDescriptor {
     pub dependencies: Vec<SmolStr>,
 }
 
-/// Whether `id` claims the reserved built-in namespace (RFC 0015 §2) — external components
+/// Whether `id` claims the reserved built-in namespace — external components
 /// carrying such an id are rejected at load: the namespace is not claimable, which is what
 /// makes `dependencies: ["kndo:nextjs"]` unambiguous from any source.
 pub fn is_reserved_id(id: &str) -> bool {
     id.starts_with("kndo:")
 }
 
-/// One machine-checkable activation predicate (RFC 0003 §4). Evaluated against the project
+/// One machine-checkable activation predicate. Evaluated against the project
 /// root before a globally installed plugin is even instantiated — cheap, filesystem-only checks,
 /// no code execution.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -81,7 +81,7 @@ pub enum ActivationRule {
     /// At least one file under the project root matches this glob (e.g. `"next.config.*"`).
     FileExists(SmolStr),
     /// Any `package.json`/`Cargo.toml` anywhere under the project root (not just the root's
-    /// own — RFC 0003 §4) declares a dependency with this name, in any dependency section.
+    /// own) declares a dependency with this name, in any dependency section.
     ManifestDependency(SmolStr),
 }
 
@@ -113,13 +113,13 @@ pub struct GraphView<'a> {
     file_index: &'a HashMap<ProjectPath, FileId>,
     packages: &'a [crate::graph::PackageNode],
     /// The adapter-derived edge list as of this round. Queries answer from
-    /// `Provenance::Adapter` edges only (RFC 0017 §2's rule R1): a plugin never sees another
+    /// `Provenance::Adapter` edges only (the rule R1): a plugin never sees another
     /// plugin's contributions — without that, results would depend on registration order and
     /// determinism across compositions would silently break.
     edges: &'a [crate::vocab::Edge],
     symbols_by_file: HashMap<FileId, Vec<u32>>,
-    /// Reverse/forward `ImportsFile` index, built lazily on the first edge query (RFC 0017
-    /// §2's rule R2): a plugin that never asks pays nothing. `RefCell`, not a lock — a view
+    /// Reverse/forward `ImportsFile` index, built lazily on the first edge query
+    /// (the rule R2): a plugin that never asks pays nothing. `RefCell`, not a lock — a view
     /// lives inside one single-threaded plugin round, same pattern as `ContentView`'s budget.
     import_index: RefCell<Option<ImportIndex>>,
 }
@@ -131,8 +131,8 @@ struct ImportIndex {
     importers_of: HashMap<FileId, Vec<FileId>>,
 }
 
-/// One [`GraphView::packages`] entry — RFC 0011 §3's package topology, plugin-visible
-/// (RFC 0017 §5.2). `root_dir` is the manifest's own directory (`""` for the implicit
+/// One [`GraphView::packages`] entry — the package topology, plugin-visible
+///. `root_dir` is the manifest's own directory (`""` for the implicit
 /// package that owns whatever no manifest governs).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PackageView<'a> {
@@ -192,13 +192,13 @@ impl<'a> GraphView<'a> {
         indices.iter().map(|&i| &self.symbols[i as usize])
     }
 
-    /// Package topology (RFC 0011 §3, plugin-visible per RFC 0017 §5.2), in `PackageId`
+    /// Package topology (plugin-visible), in `PackageId`
     /// order: the implicit package first, then one entry per manifest.
     pub fn packages(&self) -> impl Iterator<Item = PackageView<'a>> + '_ {
         self.packages.iter().map(package_view)
     }
 
-    /// The package owning `path` (ownership is total — RFC 0011 §3's
+    /// The package owning `path` (ownership is total — the
     /// nearest-manifest-ancestor rule); `None` only for a path not in this run's file set.
     pub fn package_of(&self, path: &ProjectPath) -> Option<PackageView<'a>> {
         let file = *self.file_index.get(path)?;
@@ -294,8 +294,8 @@ impl<'a> GraphView<'a> {
         sites
     }
 
-    /// `path`'s string-literal call sites ([`crate::adapter::FileFacts::string_call_args`],
-    /// RFC 0017 §5.4), canonically sorted; empty for an unknown path or an adapter that
+    /// `path`'s string-literal call sites ([`crate::adapter::FileFacts::string_call_args`]),
+    /// canonically sorted; empty for an unknown path or an adapter that
     /// doesn't extract them.
     pub fn string_call_sites_in(&self, path: &ProjectPath) -> &'a [crate::adapter::StringCallArg] {
         self.file_index
@@ -306,7 +306,7 @@ impl<'a> GraphView<'a> {
 
     /// Every adapter-derived `ImportsFile` edge, fully named, in edge-list order — the bulk
     /// form host bridges use to snapshot the graph before instantiating a guest (wasm-abi
-    /// §5.3's borrow constraint); per-path queries stay on [`Self::imports_of`]. Rule R1
+    /// the borrow constraint); per-path queries stay on [`Self::imports_of`]. Rule R1
     /// applies here too.
     pub fn all_import_edges(
         &self,
@@ -426,7 +426,7 @@ fn package_view(p: &crate::graph::PackageNode) -> PackageView<'_> {
 // ---------------------------------------------------------------- read side: ContentView
 
 /// Per-run cap on distinct paths a single component may read through the content channel
-/// (RFC 0016 §5) — generous for the channel's stated scope (configs, manifests, templates,
+/// — generous for the channel's stated scope (configs, manifests, templates,
 /// never source: reading language-graph files through this side door is a review-level
 /// boundary the channel doesn't mechanically enforce, but no shipped consumer does it), tight
 /// enough that a component can't use it to walk the whole project file by file.
@@ -441,7 +441,7 @@ struct ContentBudget {
     // Keyed by path, not a call counter: a component's read scope shouldn't depend on how
     // many hooks look at the same file — charging by first-seen path makes the budget mean
     // what its doc comment says, distinct paths. (Historically this also compensated the
-    // WASM bridge's instance-per-hook triple-fetch; RFC 0017 §4's one-instance-per-round
+    // WASM bridge's instance-per-hook triple-fetch; the one-instance-per-round
     // lifecycle removed that motivation, and the keying stays on its own merits.)
     seen: rustc_hash::FxHashSet<ProjectPath>,
     bytes_read: usize,
@@ -449,17 +449,17 @@ struct ContentBudget {
 }
 
 /// Host-mediated, read-only access to file content *outside* the language graph — configs,
-/// manifests, templates (RFC 0016 §5's content channel). Scoped to the calling component's own
+/// manifests, templates (the content channel). Scoped to the calling component's own
 /// `PluginDescriptor::requested_file_access` globs: a path outside the declared set is treated
 /// exactly like one that doesn't exist, the same "declare then get" contract the WASM fuel
 /// budget and `ingest_coverage`'s well-known-path scoping already use elsewhere in this trait.
 /// Metered by [`CONTENT_MAX_FILES`]/[`CONTENT_MAX_BYTES`]: once exceeded, every further read
 /// this run returns `None` and one diagnostic records why — "degrade to silence, never crash
-/// the run," the same posture the WASM per-call fuel budget already established (RFC 0003 §3).
+/// the run," the same posture the WASM per-call fuel budget already established.
 ///
 /// Source-blind by construction (borrows [`crate::discovery::DiscoveredTree`], the same reader
 /// extraction itself uses): identical behavior whether this run's source is a real directory or
-/// an in-memory git tree (RFC 0004 §6's diff modes), with no second disk walk of its own — glob
+/// an in-memory git tree (the diff modes), with no second disk walk of its own — glob
 /// matching runs in memory against paths this run already discovered.
 pub struct ContentView<'a> {
     tree: &'a crate::discovery::DiscoveredTree,
@@ -501,7 +501,7 @@ impl<'a> ContentView<'a> {
             return None;
         }
         if self.already_seen(path) {
-            // A previously charged path is served again for free (no rebudgeting on repeat
+            // An already-charged path is served again for free (no rebudgeting on repeat
             // access) even after a cutoff — the cutoff is about *new* reads, not about
             // punishing a caller for asking twice.
             return self.tree.read(path).ok();
@@ -605,7 +605,7 @@ pub(crate) struct ContributedRoot {
     pub confidence: Confidence,
 }
 
-/// Framework entry points (RFC 0003 §2): routes, DI-registered beans, handlers — anything a
+/// Framework entry points: routes, DI-registered beans, handlers — anything a
 /// plugin knows is invoked by the ecosystem even though nothing in-repo calls it. Same
 /// `EdgeKind::Root` mechanism adapter-emitted `RawRoot`s use, attributed `Provenance::Plugin`.
 #[derive(Debug, Default)]
@@ -631,15 +631,15 @@ pub(crate) struct ContributedEdge {
     pub confidence: Confidence,
 }
 
-/// Edges invisible to the language (RFC 0003 §2): DI wiring, route-string → handler, template →
+/// Edges invisible to the language: DI wiring, route-string → handler, template →
 /// class, CSS class names used from HTML templates. A symbol-target `to` becomes a
-/// `References` edge; a file-target `to` (no `symbol` set) becomes RFC 0017 §5.4's
+/// `References` edge; a file-target `to` (no `symbol` set) becomes the
 /// file-liveness edge (`EdgeKind::ReferencesFile` — "if `from` is alive, that file is in
 /// use", the template/asset shape; the `kind` argument doesn't apply there and is ignored).
-/// Either way plugins can't mint new edge kinds (RFC 0003 §2: "cannot define new node/edge
+/// Either way plugins can't mint new edge kinds ("cannot define new node/edge
 /// kinds") — the two mappings above are the whole vocabulary, and plugin edges are liveness
 /// evidence only: `cyclic` and every analysis that would *create* a finding from an edge's
-/// existence ignore them (RFC 0005).
+/// existence ignore them.
 #[derive(Debug, Default)]
 pub struct EdgeSink {
     pub(crate) items: Vec<ContributedEdge>,
@@ -662,9 +662,9 @@ impl EdgeSink {
     }
 }
 
-/// Marks a symbol externally consumed (RFC 0003 §2: public SDK surface, FFI, serialization
-/// targets) — the exemption `internal-only`/`private-type-leak` already document as available
-/// "via `annotate_symbols`" (RFC 0005 §7) but had nothing to read until this landed.
+/// Marks a symbol externally consumed (public SDK surface, FFI, serialization
+/// targets) — the exemption `internal-only`/`private-type-leak` document as available
+/// "via `annotate_symbols`"; this sink is what feeds it.
 #[derive(Debug, Default)]
 pub struct AnnotationSink {
     pub(crate) externally_consumed: Vec<PluginTarget>,
@@ -678,20 +678,20 @@ impl AnnotationSink {
     }
 
     /// Marks a member as invoked by a FRAMEWORK's machinery through its owner — the plugin
-    /// counterpart of the contract's `Declaration::implicitly_invoked` (RFC 0005 §1's
+    /// counterpart of the contract's `Declaration::implicitly_invoked` (the
     /// machinery-dispatch rule): serde calling `serialize`, an ORM calling lifecycle hooks —
     /// dispatch the language adapter cannot know because the trait belongs to a third-party
     /// crate. `symbol` uses the qualified `Owner.name` member selector (the same form
     /// `RawRoot` member targets use); reachability then lets the member inherit its owner's
-    /// colors at `Probable`. Native plugins only for now (the WIT ABI v1 surface does not
-    /// carry it — an ABI v2 candidate, recorded in docs/plugins/serde.md).
+    /// colors at `Probable`. Native plugins only for now (the WIT ABI surface does not
+    /// carry it).
     pub fn mark_implicitly_invoked(&mut self, path: ProjectPath, symbol: impl Into<SmolStr>) {
         self.implicitly_invoked
             .push(PluginTarget::symbol(path, symbol));
     }
 }
 
-/// What one plugin actually landed in the graph during a round (RFC 0017 §7's auditability
+/// What one plugin actually asserted into the graph during a round (the auditability
 /// requirement): counts of resolved contributions — sink items whose targets missed resolution
 /// are not counted, because they changed nothing. Recorded per round by
 /// `graph::run_plugin_round`, persisted as the cache's last-run record, rendered by
@@ -712,10 +712,10 @@ pub struct PluginContribution {
     pub dropped: Vec<String>,
 }
 
-// ---------------------------------------------------------------- findings (RFC 0018)
+// ---------------------------------------------------------------- findings
 
-/// A plugin rule's declared severity (RFC 0018 §2.3) — deliberately its own enum, not
-/// `engine::Severity`: the engine maps it, applying the advisory-channel rules (§2.2), and
+/// A plugin rule's declared severity — deliberately its own enum, not
+/// `engine::Severity`: the engine maps it, applying the advisory-channel rules, and
 /// keeping the vocabularies separate means a plugin can never *construct* a gate-eligible
 /// severity directly.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -725,7 +725,7 @@ pub enum PluginSeverity {
     Info,
 }
 
-/// One rule a plugin may emit findings under, declared up front (RFC 0018 §4) so `kndo
+/// One rule a plugin may emit findings under, declared up front so `kndo
 /// doctor`/`kndo plugin verify` can show what a component *may* assert before it runs, and so
 /// the gate config can be validated against real names. A finding emitted under an undeclared
 /// rule is dropped with a diagnostic — declaration is the contract, not decoration.
@@ -736,11 +736,11 @@ pub struct RuleDescriptor {
     pub name: SmolStr,
     pub description: SmolStr,
     /// The severity every finding under this rule carries — one severity per rule, declared
-    /// once, never chosen per finding (RFC 0018 §2.3). Config can cap it lower, never raise.
+    /// once, never chosen per finding. Config can cap it lower, never raise.
     pub severity: PluginSeverity,
 }
 
-/// Sink for [`Plugin::contribute_findings`] (RFC 0018 §4): third-party verdicts, targeted at
+/// Sink for [`Plugin::contribute_findings`]: third-party verdicts, targeted at
 /// graph nodes. Severity is NOT a parameter — it comes from the rule's declaration.
 #[derive(Debug, Default)]
 pub struct FindingSink {
@@ -774,11 +774,11 @@ impl FindingSink {
 
 /// One resolved, namespaced plugin finding as the finding round (graph.rs) hands it to the
 /// engine — everything needed to build an `engine::Finding` except the advisory/gate mapping,
-/// which is config-dependent and therefore the engine's job (RFC 0018 §2.2).
+/// which is config-dependent and therefore the engine's job.
 #[derive(Debug, Clone)]
 pub struct ProtoFinding {
     /// The full namespaced category: `plugin:<coordinate>/<rule>` — assembled host-side from
-    /// the plugin's registered id, never guest-supplied (RFC 0018 §2.1).
+    /// the plugin's registered id, never guest-supplied.
     pub category: String,
     pub plugin_id: SmolStr,
     pub rule: SmolStr,
@@ -792,7 +792,7 @@ pub struct ProtoFinding {
     pub package: Option<String>,
 }
 
-/// A valid rule name: lower-kebab, non-empty (RFC 0018 §2.1's charset).
+/// A valid rule name: lower-kebab, non-empty (the charset).
 pub fn is_valid_rule_name(name: &str) -> bool {
     !name.is_empty()
         && name
@@ -809,12 +809,12 @@ pub trait Plugin: Send + Sync {
     /// four graph-mutation hooks (`classify_file`/`contribute_roots`/`contribute_edges`/
     /// `annotate_symbols`). Load-bearing for performance, not a hint: any registered
     /// graph-mutating plugin forces `graph::assemble_from_source` to bypass the incremental
-    /// patch (RFC 0013's patch never re-invokes plugin hooks, so it can't safely reuse a graph
-    /// one influenced — RFC 0016 §6 landed the snapshot half of this differently: plugin
-    /// identity now folds into the graph cache key, §6's own reasoning, so the snapshot fast
+    /// patch (the patch never re-invokes plugin hooks, so it can't safely reuse a graph
+    /// one influenced — the snapshot half works differently: plugin
+    /// identity folds into the graph cache key, so the snapshot fast
     /// path stays available — any input a plugin's hooks could react to, including everything
-    /// its content channel might read, was already part of the key before this trait method
-    /// existed). A plugin that only implements `ingest_coverage`/`suppress` (like
+    /// its content channel might read, is already part of the
+    /// key). A plugin that only implements `ingest_coverage`/`suppress` (like
     /// [`LcovPlugin`]) must still return `false` here, or its mere registration keeps the
     /// incremental patch off for the whole product even though it never touches the graph.
     /// The declaration is self-enforcing rather than trusted: assembly only *calls* the four
@@ -826,7 +826,7 @@ pub trait Plugin: Send + Sync {
         true
     }
 
-    /// Content identity for the graph cache key (RFC 0016 §6). `None` for compiled-in
+    /// Content identity for the graph cache key. `None` for compiled-in
     /// plugins — `PluginDescriptor.version` is already the trust boundary there, the same
     /// discipline `AdapterDescriptor.facts_schema_version` established: the author bumps it
     /// when behavior changes, and a new kndo binary release is what ships that change anyway.
@@ -839,19 +839,19 @@ pub trait Plugin: Send + Sync {
     }
 
     /// Adjust a file's role/origin beyond language defaults (e.g. `*.stories.tsx` → tooling).
-    /// Runs once per claimed file, right after RFC 0012 §7's content-derived origin correction
+    /// Runs once per claimed file, right after the content-derived origin correction
     /// and before role-derived roots (phase 2.6) — so a plugin's answer is what every downstream
     /// consumer (root promotion, `unused`/`test-only`'s per-file exemptions) sees.
     fn classify_file(&self, _path: &ProjectPath, _current: FileClass) -> Option<FileClass> {
         None
     }
 
-    /// Framework entry points: routes, DI-registered beans, handlers… `content` is the RFC
-    /// 0016 §5 host-mediated channel, scoped to this plugin's own declared
+    /// Framework entry points: routes, DI-registered beans, handlers… `content` is the
+    /// host-mediated channel, scoped to this plugin's own declared
     /// `requested_file_access` globs — configs, manifests, templates the language graph itself
     /// never sees (`package.json` scripts, `next.config.*`, `views/**`); reading source files
     /// the graph already covers through this side door is out of contract even though nothing
-    /// here stops it mechanically (spec'd per plugin, e.g. docs/plugins/*.md).
+    /// here stops it mechanically.
     fn contribute_roots(
         &self,
         _graph: &GraphView<'_>,
@@ -880,7 +880,7 @@ pub trait Plugin: Send + Sync {
     ) {
     }
 
-    /// The rules this plugin may emit findings under (RFC 0018 §4) — declared up front, once,
+    /// The rules this plugin may emit findings under — declared up front, once,
     /// so tooling can show them before any hook runs and so an emitted rule name can be
     /// validated. Default empty: a plugin with no rules never has `contribute_findings`
     /// called, and costs the finding round nothing.
@@ -888,11 +888,11 @@ pub trait Plugin: Send + Sync {
         Vec::new()
     }
 
-    /// Emit third-party findings (RFC 0018) — verdicts, not graph facts. NOT a graph-mutation
+    /// Emit third-party findings — verdicts, not graph facts. NOT a graph-mutation
     /// hook: it runs *after* assembly on every path (cold, patch, warm snapshot hit), reads
     /// the same R1-scoped `GraphView`/`ContentView` the mutation hooks see, and its output
     /// lands in the run's findings under the namespaced category
-    /// `plugin:<coordinate>/<rule>` on the advisory severity channel (§2.2) — it can never
+    /// `plugin:<coordinate>/<rule>` on the advisory severity channel — it can never
     /// touch the graph, core findings, or (without explicit user opt-in) the exit code.
     fn contribute_findings(
         &self,
@@ -902,7 +902,7 @@ pub trait Plugin: Send + Sync {
     ) {
     }
 
-    /// Parse one coverage report into per-file line coverage (ADR 0005, RFC 0003 §2's
+    /// Parse one coverage report into per-file line coverage (the
     /// `ingest_coverage` hook). Content arrives via the host — the report was matched by this
     /// plugin's `descriptor().requested_file_access` globs and freshness-checked before this
     /// is called; no ambient fs. Paths inside the report must be normalized to
@@ -916,20 +916,19 @@ pub trait Plugin: Send + Sync {
     }
 }
 
-/// The built-in lcov ingester (ADR 0005's first launch format — the lingua franca:
+/// The built-in lcov ingester (lcov is the coverage lingua franca:
 /// jest/vitest/nyc, llvm-cov, gcov, Go via converters). Statically linked, same trait external
-/// WASM plugins implement (RFC 0003: "the same trait serves built-ins").
+/// WASM plugins implement ("the same trait serves built-ins").
 pub struct LcovPlugin;
 
 impl Plugin for LcovPlugin {
     fn descriptor(&self) -> PluginDescriptor {
         PluginDescriptor {
-            // RFC 0015 §2: built-ins live in the reserved namespace (migrated from the plain
-            // "coverage-lcov" this plugin carried pre-RFC-0015).
+            // Built-ins live in the reserved `kndo:` namespace.
             id: SmolStr::new("kndo:coverage-lcov"),
             version: SmolStr::new("1"),
             detection: vec![SmolStr::new("an lcov.info file at a well-known path")],
-            // Well-known locations (ADR 0005: "located by config or well-known paths");
+            // Well-known locations ("located by config or well-known paths");
             // config-based locations land with the config parser.
             requested_file_access: vec![
                 SmolStr::new("coverage/lcov.info"),
@@ -945,9 +944,8 @@ impl Plugin for LcovPlugin {
 
     /// Coverage ingestion only — no graph-mutation hooks. Without this override, this plugin's
     /// unconditional registration in `default_plugins()` would force every real `kndo` run to
-    /// bypass the graph-snapshot cache and the incremental patch (see the trait method's doc) —
-    /// which is exactly the bug this override fixed: both fast paths were silently dead in the
-    /// shipped product from the day the graph hooks were wired until this landed.
+    /// bypass the graph-snapshot cache and the incremental patch (see the trait method's
+    /// doc) — both fast paths would be silently dead in the shipped product.
     fn mutates_graph(&self) -> bool {
         false
     }
@@ -1079,7 +1077,7 @@ mod tests {
         assert_eq!(paths, vec!["a.mock", "b.mock"]);
     }
 
-    // -------------------------------------------------- GraphView v2 (RFC 0017 §5)
+    // -------------------------------------------------- GraphView v2
 
     fn edge(kind: crate::vocab::EdgeKind, source: crate::vocab::Provenance) -> crate::vocab::Edge {
         crate::vocab::Edge {
@@ -1249,7 +1247,7 @@ mod tests {
             .is_empty());
     }
 
-    // ------------------------------------------------------------ ContentView (RFC 0016 §5)
+    // ------------------------------------------------------------ ContentView
 
     fn content_tree_fixture(
         name: &str,

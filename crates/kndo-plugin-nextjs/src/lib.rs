@@ -1,12 +1,11 @@
-//! `kndo:nextjs` — the built-in Next.js conventions plugin. Normative spec:
-//! docs/plugins/nextjs.md (RFC 0015 §6 phase 4).
+//! `kndo:nextjs` — the built-in Next.js conventions plugin.
 //!
 //! Next.js is a file-system router: `pages/**`/`app/**` files are loaded by path convention
 //! and well-known exports are called by name, none of which appears as an import. Rooting the
-//! file alone is not enough — reachability has no file→contained-symbols edge (spec §1) — so
+//! file alone is not enough — reachability has no file→contained-symbols edge — so
 //! every convention file contributes a file root *and* roots for its framework-consumed
 //! exports, plus externally-consumed annotations for the `internal-only`/`private-type-leak`
-//! exemption (RFC 0005 §7).
+//! exemption.
 
 use std::collections::BTreeMap;
 
@@ -29,13 +28,13 @@ impl Plugin for NextjsPlugin {
             detection: vec![SmolStr::new(
                 "a package.json under the project root depends on next",
             )],
-            // RFC 0016 §5: every app root's own next.config.* through the content channel, to
-            // statically read `pageExtensions` (§4's known gap). This is a distinct mechanism
+            // Every app root's own next.config.* is read through the content channel, to
+            // statically read `pageExtensions`. This is a distinct mechanism
             // from `activation` below — content-channel globs match only already-discovered,
             // gitignore-filtered paths (no disk walk of their own), so unlike an
             // ActivationRule::FileExists glob, recursion here never touches node_modules.
             requested_file_access: vec![SmolStr::new("**/next.config.*")],
-            // One rule, deliberately (spec §2): every real Next project declares `next`
+            // One rule, deliberately: every real Next project declares `next`
             // somewhere, and the manifest scan is gitignore-aware and monorepo-wide. A
             // recursive FileExists("**/next.config.*") would raw-glob through node_modules on
             // every run — cost and hazard for a signal the manifest rule already carries.
@@ -52,7 +51,7 @@ impl Plugin for NextjsPlugin {
     ) {
         for (file, tier) in convention_files(graph, content) {
             // Being routed/loaded by the framework is definitional once the directory is a
-            // convention directory — Certain, not a heuristic (spec §4).
+            // convention directory — Certain, not a heuristic.
             out.add(
                 PluginTarget::file(file.path.clone()),
                 RootKind::Production,
@@ -64,7 +63,7 @@ impl Plugin for NextjsPlugin {
                 } else {
                     // The page component is a *default* export whose local name is arbitrary
                     // and `SymbolNode` carries no is-default flag — rooting every export is
-                    // the only way to guarantee it's covered (spec §4.1's documented
+                    // the only way to guarantee it's covered (a deliberate
                     // over-approximation, false-negative direction only).
                     Confidence::Probable
                 };
@@ -83,7 +82,7 @@ impl Plugin for NextjsPlugin {
         content: &ContentView<'_>,
         out: &mut AnnotationSink,
     ) {
-        // The framework is the external consumer of every rooted export (spec §4.4) — a
+        // The framework is the external consumer of every rooted export — a
         // page's exported props type must never be told to narrow its visibility.
         for (file, _tier) in convention_files(graph, content) {
             for symbol in framework_visible_exports(graph, file) {
@@ -93,7 +92,7 @@ impl Plugin for NextjsPlugin {
     }
 }
 
-/// Every claimed production `js-ts` file that lands in a convention tier (spec §3/§4) — the
+/// Every claimed production `js-ts` file that lands in a convention tier — the
 /// shared iteration both hooks classify against.
 fn convention_files<'a>(
     graph: &'a GraphView<'_>,
@@ -111,10 +110,9 @@ fn convention_files<'a>(
 }
 
 /// Each app root's own `next.config.*`, read through the content channel and statically
-/// scanned for a `pageExtensions` array (RFC 0016 §5's upgrade over the spec's original "no
-/// content access" cut, §4). A root with no config file, an unparsable one, or a dynamic
-/// `pageExtensions` value simply gets no entry — `conventions::classify` treats a missing
-/// entry as this product's original unfiltered behavior for that root, never a guess.
+/// scanned for a `pageExtensions` array. A root with no config file, an unparsable one, or a
+/// dynamic `pageExtensions` value simply gets no entry — `conventions::classify` treats a
+/// missing entry as "accept the default extensions, unfiltered" for that root, never a guess.
 fn page_extensions_by_root(
     app_roots: &[String],
     content: &ContentView<'_>,
@@ -144,7 +142,7 @@ fn config_root(path: &str, app_roots: &[String]) -> Option<String> {
     app_roots.iter().find(|root| root.as_str() == dir).cloned()
 }
 
-/// Production role only (spec §4): rooting a stray `pages/index.test.tsx` as production would
+/// Production role only: rooting a stray `pages/index.test.tsx` as production would
 /// let production-reachability mask `test-only` findings — the role machinery already covers
 /// test files. Unclaimed files (`.mdx` pages, images) have no language and are skipped.
 fn is_production_js(file: &kndo_core::graph::FileNode) -> bool {
@@ -156,7 +154,7 @@ fn is_production_js(file: &kndo_core::graph::FileNode) -> bool {
 }
 
 /// Exported top-level symbols — members (`member_of` set) are never rooted or annotated:
-/// Next's conventions are module-level (spec §4.4).
+/// Next's conventions are module-level.
 fn framework_visible_exports<'a>(
     graph: &'a GraphView<'_>,
     file: &kndo_core::graph::FileNode,

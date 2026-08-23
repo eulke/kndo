@@ -1,6 +1,6 @@
-//! Proves RFC 0017 §6's adapter co-activation fixpoint with real WASM components — the
-//! adapter-tier mirror of what `global_plugin_activation.rs` proves for RFC 0015 §3 plugin
-//! implication. Two components sit in the global directory: the kdemo demo adapter (activation
+//! Proves the adapter co-activation fixpoint with real WASM components — the adapter-tier
+//! mirror of what `global_plugin_activation.rs` proves for plugin implication. Two
+//! components sit in the global directory: the kdemo demo adapter (activation
 //! `FileExists("*.kdemo-enable")`) and the kwrap wrapper adapter (activation
 //! `FileExists("*.kwrap-enable")`, `dependencies: ["kdemo"]`). The project carries only the
 //! *wrapper's* marker — kdemo's own rule never fires — yet kdemo must join composition as

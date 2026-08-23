@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "QueryJsonEnvelope",
-  "description": "The full `--format json` query envelope (output-schema §8) — also `cargo xtask gen-schema`'s\nsecond root type. `run` is `Option` only so [`QueryResult::to_json_line`] can omit it on\nevery `kndo query` line after the first (§4.7: \"run appearing only on the first line\").",
+  "description": "The full `--format json` query envelope — also `cargo xtask gen-schema`'s\nsecond root type. `run` is `Option` only so [`QueryResult::to_json_line`] can omit it on\nevery `kndo query` line after the first (\"run appearing only on the first line\").",
   "type": "object",
   "properties": {
     "diagnostics": {
@@ -96,7 +96,7 @@
       ]
     },
     "Confidence": {
-      "description": "Per-edge strength. Ordered by strength: `Possible < Probable < Certain`, so `max()` yields\nthe strongest evidence and \"edges at least as strong as τ\" is a simple `>=` (RFC 0005 §1).",
+      "description": "Per-edge strength. Ordered by strength: `Possible < Probable < Certain`, so `max()` yields\nthe strongest evidence and \"edges at least as strong as τ\" is a simple `>=`.",
       "type": "string",
       "enum": [
         "possible",
@@ -316,7 +316,7 @@
           ]
         },
         {
-          "description": "The run could not do what was asked (RFC 0006 §5's exit-2 tier): a requested mode is\nimpossible (`--diff` base that doesn't resolve), not merely degraded. Frontends exit 2\nwhen any error-level diagnostic is present — reporting zero findings because the\nanalysis never ran must never read as a clean pass (M6 error polish: the old Warn here\nmade a typo'd base ref fail open in CI).",
+          "description": "The run could not do what was asked (the exit-2 tier): a requested mode is\nimpossible (`--diff` base that doesn't resolve), not merely degraded. Frontends exit 2\nwhen any error-level diagnostic is present — reporting zero findings because the\nanalysis never ran must never read as a clean pass (a Warn here\nwould let a typo'd base ref fail open in CI).",
           "type": "string",
           "const": "error"
         }
@@ -373,7 +373,7 @@
       ]
     },
     "IfDeleted": {
-      "description": "`--if-deleted`'s simulation result (RFC 0007 §4.6): the finding flips removal would cause,\ncomputed on a patched copy of the graph — nothing is written.",
+      "description": "`--if-deleted`'s simulation result: the finding flips removal would cause,\ncomputed on a patched copy of the graph — nothing is written.",
       "type": "object",
       "properties": {
         "freed_dependencies": {
@@ -518,7 +518,7 @@
       ]
     },
     "NodeSpan": {
-      "description": "`{path, start, end}` — the query envelope's `NodeRef.span`/`EdgeRef.site` building block\n(output-schema §8), distinct from [`crate::engine::Location`]'s split `path`/`range` because\nthe query schema bundles them into one object.",
+      "description": "`{path, start, end}` — the query envelope's `NodeRef.span`/`EdgeRef.site` building\nblock, distinct from [`crate::engine::Location`]'s split `path`/`range` because\nthe query schema bundles them into one object.",
       "type": "object",
       "properties": {
         "end": {
@@ -611,7 +611,7 @@
       "type": "string"
     },
     "QEdgeRef": {
-      "description": "The query envelope's `EdgeRef` building block (output-schema §8).",
+      "description": "The query envelope's `EdgeRef` building block.",
       "type": "object",
       "properties": {
         "confidence": {
@@ -637,7 +637,7 @@
       ]
     },
     "QNodeRef": {
-      "description": "The query envelope's `NodeRef` building block (output-schema §8).",
+      "description": "The query envelope's `NodeRef` building block.",
       "type": "object",
       "properties": {
         "color": {
@@ -693,7 +693,7 @@
       ]
     },
     "ResultEntry": {
-      "description": "One `results[]` entry — either a verb-specific success shape or an inline per-selector\nfailure (output-schema §8: \"a failed selector yields an inline `{status, …}` entry without\nfailing its siblings\").",
+      "description": "One `results[]` entry — either a verb-specific success shape or an inline per-selector\nfailure (\"a failed selector yields an inline `{status, …}` entry without\nfailing its siblings\").",
       "anyOf": [
         {
           "$ref": "#/$defs/FindResult"
@@ -749,7 +749,7 @@
       ]
     },
     "Span": {
-      "description": "1-indexed line/column span, `start` inclusive, `end` exclusive. Serializes as the\n`[line, col]` pair shape the output schema uses (contracts/output-schema.md §2), not an\nobject — tuples serialize as JSON arrays by default.",
+      "description": "1-indexed line/column span, `start` inclusive, `end` exclusive. Serializes as the\n`[line, col]` pair shape the output schema uses, not an\nobject — tuples serialize as JSON arrays by default.",
       "type": "object",
       "properties": {
         "end": {

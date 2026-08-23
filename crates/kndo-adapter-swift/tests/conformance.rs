@@ -1,8 +1,8 @@
 //! Runs every fixture under `tests/fixtures/` through the shared conformance harness
-//! (`kndo_core::conformance`, RFC 0002 §8) with the real `SwiftAdapter` — no mock, real
+//! (`kndo_core::conformance`) with the real `SwiftAdapter` — no mock, real
 //! discovery, real extraction, real resolution, the real `Engine`. Mirrors `kndo-adapter-java`/
 //! `kndo-adapter-kotlin`'s conformance test exactly — the harness itself is fully
-//! adapter-agnostic (docs/adapters/swift.md).
+//! adapter-agnostic.
 
 use std::path::Path;
 

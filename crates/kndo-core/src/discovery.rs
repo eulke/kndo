@@ -1,23 +1,22 @@
-//! Discovery — enumerate candidate files and their content hashes (RFC 0001 §4 step 1).
+//! Discovery — enumerate candidate files and their content hashes, the pipeline's first step.
 //!
 //! Adapter-agnostic: this phase does not know which languages exist, only which files are
 //! candidates. Two sources produce the same result shape (see [`TreeSource`]):
 //!
-//! - **A directory** — walked respecting `.gitignore`/`.ignore` (the `ignore` crate — the same
-//!   engine ripgrep uses), every file's content hashed with blake3 (the fast path validated in
-//!   spike 0001: 6 ms for a 37.7 MB repo).
+//! - **A directory** — walked respecting `.gitignore`/`.ignore` (the `ignore` crate), every
+//!   file's content hashed with blake3 (measured fast: ~6 ms for a 37.7 MB repo).
 //! - **A git tree-ish** — enumerated with `ls-tree` and read via one `cat-file --batch` pipe,
-//!   never written to disk (diff modes' "before"/"staged" sides, RFC 0004 §6). The same
-//!   exclusion rules the walk applies are reproduced against the tree's own content: hidden
-//!   (dot-prefixed) entries skipped, `.kndo/` skipped, and `.gitignore`/`.ignore` files *from
-//!   the tree* honored — a tracked-but-ignored file (like kndo's own conformance fixtures) is
-//!   excluded from analysis on both sources identically. One known, deliberate divergence: git
-//!   refuses to re-include a file whose parent *directory* is excluded (`dir/` + `!dir/f`);
-//!   the tree matcher honors the re-include — erring toward analyzing more, never less.
+//!   never written to disk (diff modes' "before"/"staged" sides). The same exclusion rules
+//!   the walk applies are reproduced against the tree's own content: hidden (dot-prefixed)
+//!   entries skipped, `.kndo/` skipped, and `.gitignore`/`.ignore` files *from the tree*
+//!   honored — a tracked-but-ignored file (like kndo's own conformance fixtures) is excluded
+//!   from analysis on both sources identically. One known, deliberate divergence: git refuses
+//!   to re-include a file whose parent *directory* is excluded (`dir/` + `!dir/f`); the tree
+//!   matcher honors the re-include — erring toward analyzing more, never less.
 //!
-//! Parallel by default (RFC 0008 §2); output order is deterministic regardless of
-//! walk/hash/thread-scheduling order (RFC 0008 §4) — results are sorted by path before
-//! returning, so ids assigned from this list later are never scheduling-dependent.
+//! Parallel by default; output order is deterministic regardless of walk/hash/thread-
+//! scheduling order — results are sorted by path before returning, so ids assigned from this
+//! list later are never scheduling-dependent.
 
 use rustc_hash::FxHashMap as HashMap;
 use std::path::{Path, PathBuf};
@@ -44,7 +43,7 @@ pub enum DiscoveryError {
 
 /// Discovery result: the files plus everything that could NOT be read — a file silently
 /// disappearing from analysis is the worst failure mode a static analyzer has, so every
-/// skipped path becomes a diagnostic instead of vanishing (RFC 0001 §6).
+/// skipped path becomes a diagnostic instead of vanishing.
 #[derive(Debug)]
 pub struct Discovered {
     pub files: Vec<DiscoveredFile>,
@@ -55,7 +54,7 @@ pub struct Discovered {
     pub stat_written_at_ns: u128,
 }
 
-/// Where a tree's content comes from — assembly is source-blind (RFC 0004 §6: diff modes
+/// Where a tree's content comes from — assembly is source-blind (diff modes
 /// assemble "the graph at two tree states"; *which bytes* back those states is this type's
 /// whole job, and nothing downstream of discovery can tell the difference).
 #[derive(Debug, Clone, Copy)]
@@ -147,8 +146,8 @@ impl DiscoveredTree {
 /// same ordering) — the property the parity test in this module pins down.
 /// `known_blob_hashes` is the cache's git-blob → blake3 sidecar (empty when no cache): a
 /// git-tree blob whose id is in it needs no content fetch at all, which is what makes a warm
-/// diff run's cost proportional to what *changed* rather than to repo size (RFC 0004 §4's
-/// spirit, at the discovery layer). Directory sources ignore it.
+/// diff run's cost proportional to what *changed* rather than to repo
+/// size. Directory sources ignore it.
 pub fn discover_source(
     source: &TreeSource<'_>,
     known_blob_hashes: &HashMap<String, [u8; 32]>,
@@ -174,7 +173,7 @@ pub fn discover_source(
     }
 }
 
-/// One file's recorded `(mtime, size) → blake3` observation — RFC 0004 §4 step 2's
+/// One file's recorded `(mtime, size) → blake3` observation —
 /// "stat-scan ... re-hash suspects", the same trust model git's index uses: a file whose
 /// stat signature is unchanged since the index was written keeps its recorded hash without
 /// being read at all. The racy-write guard is git's too: an entry whose file mtime is at or
@@ -189,7 +188,7 @@ pub struct StatEntry {
 
 /// The persisted stat sidecar (`ProjectCache::load_stat_index`) — correctness never depends
 /// on it: a missing/stale/garbage index only means files get re-hashed, and `--no-cache`
-/// (no index at all) must stay byte-identical, the RFC 0004 §4 gate.
+/// (no index at all) must stay byte-identical — a correctness gate.
 #[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize)]
 pub struct StatIndex {
     pub entries: std::collections::HashMap<ProjectPath, StatEntry>,
@@ -223,7 +222,7 @@ pub fn discover(root: &Path) -> Result<Discovered, DiscoveryError> {
 /// [`discover`]'s walk (same `.gitignore`/`.ignore`/`.kndo` exclusion), but for callers that
 /// only need to locate a handful of well-known files by name — no content read, no hashing, no
 /// `Discovered`/`StatEntry` bookkeeping. One caller: plugin activation's manifest-dependency
-/// check (RFC 0003 §4) needs every `package.json`/`Cargo.toml` in a monorepo, not just the
+/// check needs every `package.json`/`Cargo.toml` in a monorepo, not just the
 /// root's — a hand-rolled second walker for that would risk drifting from this one's exclusion
 /// rules (skip `node_modules` because it's gitignored, skip `.kndo/`, etc.).
 pub fn find_files_named(root: &Path, names: &[&str]) -> Vec<PathBuf> {
@@ -261,7 +260,7 @@ pub fn discover_with_stat(
         // Honor .gitignore by content, not by the presence of an actual .git directory —
         // kndo analyzes the tree it's given, git repo or not.
         .require_git(false)
-        // `.kndo/` is kndo's own cache (ADR 0004), never project content — excluded
+        // `.kndo/` is kndo's own cache, never project content — excluded
         // unconditionally rather than relying on the project's own `.gitignore` (which a
         // fresh clone may not have updated yet, and which `kndo init` — not this — owns).
         .filter_entry(|e| e.file_name() != std::ffi::OsStr::new(".kndo"))
@@ -287,7 +286,7 @@ pub fn discover_with_stat(
                 .strip_prefix(root)
                 .map_err(|_| skip_raw("outside project root"))?;
             // Normalize to `/` — the only path form that crosses the adapter boundary
-            // (contracts §2, ProjectPath).
+            // (ProjectPath).
             let rel_str = rel
                 .to_str()
                 .ok_or_else(|| skip_raw("path is not valid UTF-8"))?
@@ -644,7 +643,7 @@ mod tests {
 
     /// The parity contract, pinned: a committed tree discovered via git must yield the exact
     /// same file set and hashes as walking the identical working tree — including the cases
-    /// that make it hard: tracked-but-ignored files (kndo's own fixture corpus shape), nested
+    /// that make it hard: tracked-but-ignored files (kndo's own fixture-tree shape), nested
     /// `.gitignore`s, whitelists, hidden entries, and `.kndo/`.
     #[test]
     fn git_tree_discovery_matches_directory_discovery() {
@@ -691,7 +690,7 @@ mod tests {
             .collect()
     }
 
-    /// The stat-index contract (RFC 0004 §4 step 2): a matching, pre-horizon `(mtime, size)`
+    /// The stat-index contract: a matching, pre-horizon `(mtime, size)`
     /// signature reuses the recorded hash without reading the file — proven with a poisoned
     /// hash that could only come from the index.
     #[test]

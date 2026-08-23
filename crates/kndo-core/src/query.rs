@@ -1,20 +1,19 @@
-//! Graph navigation (RFC 0007, contracts/output-schema.md §8) — read-only queries over the same
+//! Graph navigation — read-only queries over the same
 //! warm [`crate::graph::ProjectGraph`] `check` already builds. Never mutates findings, the
 //! baseline, or the cache; every verb is a pure function of `(&ProjectGraph, &ReachabilityMap)`.
 //!
 //! Implemented verbs: `find`, `describe`, `uses`/`used-by` (one shared implementation —
 //! direction is just "forward" vs "reverse" adjacency), `trace` (both the two-argument directed
-//! form and the single-argument liveness form). `impact` (RFC 0007 §4.6) isn't implemented —
-//! ROADMAP's M2 navigation-verb list names find/describe/uses/used-by/trace + `kndo query` only,
-//! not `impact`.
+//! form and the single-argument liveness form). `impact` isn't implemented —
+//! the navigation-verb set is find/describe/uses/used-by/trace + `kndo query` only.
 //!
 //! Deliberately absent from `describe`, honestly rather than fabricated: `metrics` (cyclomatic/
-//! CRAP/coverage — no such data exists anywhere in the graph yet, M4/M5 work) and duplication
-//! group membership (M5). `findings` (open findings attached to a node) IS implemented — it
+//! CRAP/coverage — no such data exists anywhere in the graph) and duplication
+//! group membership. `findings` (open findings attached to a node) IS implemented — it
 //! reruns the same suppression-aware finding computation `check` uses and filters by node.
 //!
-//! `trace --all`'s path-enumeration policy is RFC 0007 §8's open question 3, not yet resolved
-//! upstream — this implementation takes a direct, bounded reading: BFS for the shortest path,
+//! `trace --all`'s path-enumeration policy is an open design question —
+//! this implementation takes a direct, bounded reading: BFS for the shortest path,
 //! then a depth- and expansion-capped DFS for alternatives when `--all` is set, honestly
 //! reporting `paths_elided` when the cap is hit rather than silently truncating.
 
@@ -30,7 +29,7 @@ use crate::vocab::{Confidence, DependencyId, FileId, NodeRef, PackageId, RootKin
 
 // ---------------------------------------------------------------- selectors
 
-/// A parsed but unresolved node address (contracts/output-schema.md §8, RFC 0007 §3).
+/// A parsed but unresolved node address.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Selector {
     File(ProjectPath),
@@ -42,7 +41,7 @@ pub enum Selector {
     Dependency(SmolStr),
     Package(SmolStr),
     /// `roots:production|test|tooling` — a virtual multi-source pseudo-node, valid only as a
-    /// `trace` endpoint (RFC 0007 §6's `kndo trace roots:production X` example). Not a valid
+    /// `trace` endpoint (the `kndo trace roots:production X` example). Not a valid
     /// target for `find`/`describe`/`uses`/`used-by`.
     RootSet(RootKind),
 }
@@ -115,7 +114,7 @@ pub enum Resolved {
 #[derive(Debug)]
 pub enum ResolveError {
     NotFound,
-    /// Rendered selector strings for every concrete candidate (RFC 0007 §3: "an error listing
+    /// Rendered selector strings for every concrete candidate ("an error listing
     /// the concrete candidates — never a guess").
     Ambiguous(Vec<String>),
 }
@@ -128,8 +127,8 @@ pub fn resolve(graph: &ProjectGraph, selector: &Selector) -> Result<Resolved, Re
             .ok_or(ResolveError::NotFound),
         Selector::Symbol(path, name) => {
             let file = graph.file_id(path).ok_or(ResolveError::NotFound)?;
-            // A member resolves by its qualified `Owner.name` form or its bare name (RFC 0012
-            // §3) — a bare name shared by several owners' members surfaces as Ambiguous below,
+            // A member resolves by its qualified `Owner.name` form or its bare
+            // name — a bare name shared by several owners' members surfaces as Ambiguous below,
             // listing the qualified selectors to retry with.
             let matches: Vec<SymbolId> = graph
                 .symbols
@@ -208,8 +207,8 @@ fn reachability_str(color: Reachability) -> &'static str {
 }
 
 /// The canonical selector string a resolved node round-trips to — what `find`/`describe`/…
-/// print back, and what a caller can feed into the next query verbatim (RFC 0007 design
-/// tenet 3).
+/// print back, and what a caller can feed into the next query verbatim (selectors
+/// round-trip).
 pub fn selector_string(graph: &ProjectGraph, node: &Resolved) -> String {
     match node {
         Resolved::Node(ResolvedNode::File(f)) => graph.files[f.0 as usize].path.0.to_string(),
@@ -239,8 +238,8 @@ fn kind_string(graph: &ProjectGraph, node: &Resolved) -> String {
     }
 }
 
-/// `{path, start, end}` — the query envelope's `NodeRef.span`/`EdgeRef.site` building block
-/// (output-schema §8), distinct from [`crate::engine::Location`]'s split `path`/`range` because
+/// `{path, start, end}` — the query envelope's `NodeRef.span`/`EdgeRef.site` building
+/// block, distinct from [`crate::engine::Location`]'s split `path`/`range` because
 /// the query schema bundles them into one object.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
@@ -275,7 +274,7 @@ fn node_color(graph: &ProjectGraph, reach: &ReachabilityMap, node: &Resolved) ->
     Some(reachability_str(reach.get(nref).0).to_string())
 }
 
-/// The query envelope's `NodeRef` building block (output-schema §8).
+/// The query envelope's `NodeRef` building block.
 #[derive(Debug, Clone, serde::Serialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct QNodeRef {
@@ -296,7 +295,7 @@ pub fn qnode_ref(graph: &ProjectGraph, reach: &ReachabilityMap, node: &Resolved)
     }
 }
 
-/// The query envelope's `EdgeRef` building block (output-schema §8).
+/// The query envelope's `EdgeRef` building block.
 #[derive(Debug, Clone, serde::Serialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct QEdgeRef {
@@ -334,10 +333,10 @@ enum EdgeLabel {
     ImportsDependency,
     References,
     Wildcard,
-    /// RFC 0017 §5.4's plugin-contributed file-liveness edge — navigable so `uses`/`used-by`
+    /// the plugin-contributed file-liveness edge — navigable so `uses`/`used-by`
     /// explain why a template/asset counts as in use, labeled distinctly from a real import.
     ReferencesFile,
-    /// RFC 0005 §1's invoked-program edge — a test executing its workspace binary as a
+    /// the invoked-program edge — a test executing its workspace binary as a
     /// subprocess. Navigable for the same reason as `ReferencesFile`.
     InvokesFile,
 }
@@ -354,7 +353,7 @@ impl EdgeLabel {
 }
 
 /// Display names of the file-liveness pair — the edges that carry "this file is in use"
-/// without being imports (RFC 0017 §5.4's plugin edge, RFC 0005 §1's invoked-program edge).
+/// without being imports (the plugin edge, the invoked-program edge).
 fn file_liveness_label(label: EdgeLabel) -> &'static str {
     if matches!(label, EdgeLabel::InvokesFile) {
         "invokes-file"
@@ -364,8 +363,8 @@ fn file_liveness_label(label: EdgeLabel) -> &'static str {
 }
 
 /// Which edge kinds `uses`/`used-by`/directed `trace` traverse — `--edges imports|references|
-/// all` (RFC 0007 §4.3–4.4), default `all`. `Wildcard` never participates here: it's the
-/// reachability algorithm's own dynamic-construct mechanism (RFC 0005 §1), not a navigable
+/// all`, default `all`. `Wildcard` never participates here: it's the
+/// reachability algorithm's own dynamic-construct mechanism, not a navigable
 /// "X uses Y" fact — the liveness trace form uses it instead, via [`EdgeFilter::liveness`].
 #[derive(Debug, Clone, Copy)]
 pub struct EdgeFilter {
@@ -602,7 +601,7 @@ pub struct FindFilters<'a> {
     pub lang: Option<&'a str>,
 }
 
-/// Search files and symbols by name (RFC 0007 §4.1): ranked exact > prefix > substring, over
+/// Search files and symbols by name: ranked exact > prefix > substring, over
 /// each file's basename and every symbol's own name. Case-sensitive — kndo's vocabulary (symbol
 /// names, paths) is itself case-sensitive source text.
 pub fn find(
@@ -651,7 +650,7 @@ pub fn find(
     }
     for (i, sym) in graph.symbols.iter().enumerate() {
         // Members match on either form — a search for `Method` and one for `T.Method` both
-        // land (RFC 0012 §3); the better of the two ranks wins.
+        // land; the better of the two ranks wins.
         let bare = rank(sym.name.as_str(), pattern);
         let qualified = sym
             .member_of
@@ -1154,7 +1153,7 @@ pub enum Direction {
 }
 
 /// [`neighbors`]'s flags, bundled into one struct purely to stay under clippy's argument-count
-/// lint — each field is exactly one `--flag` from RFC 0007 §4.3–4.4.
+/// lint — each field is exactly one CLI `--flag`.
 #[derive(Debug, Clone, Copy)]
 pub struct NeighborsOpts {
     pub direction: Direction,
@@ -1164,7 +1163,7 @@ pub struct NeighborsOpts {
     pub limit: usize,
 }
 
-/// Shared implementation of `uses`/`used-by` (RFC 0007 §4.3–4.4): direction just picks forward
+/// Shared implementation of `uses`/`used-by`: direction just picks forward
 /// vs. reverse adjacency. `--depth N` (default 1) or `--transitive` (fixpoint, deduplicated,
 /// depth-annotated — the *first*, shallowest depth at which a node is reached wins).
 pub fn neighbors(
@@ -1304,12 +1303,12 @@ pub struct TraceResult {
     pub paths_elided: usize,
 }
 
-/// Safety valve for `--all`'s bounded DFS enumeration (module docs: RFC 0007 §8 open question 3
-/// isn't resolved upstream, so this is a direct, explicitly-bounded reading of it) — caps total
+/// Safety valve for `--all`'s bounded DFS enumeration (module docs: path-enumeration policy
+/// is an open design question, so this is a direct, explicitly-bounded reading) — caps total
 /// node expansions, not just result count, so a highly-connected graph can't hang the query.
 const TRACE_EXPANSION_BUDGET: usize = 20_000;
 
-/// Directed `trace <from> <to>` (RFC 0007 §4.5, two-argument form): path(s) over the same
+/// Directed `trace <from> <to>` (two-argument form): path(s) over the same
 /// navigable edges `uses`/`used-by` traverse. `--all --max-paths K` enumerates simple-path
 /// alternatives near the shortest length; without `--all`, one shortest path only.
 pub fn trace_between(
@@ -1363,9 +1362,9 @@ pub fn trace_between(
     }
 }
 
-/// Liveness `trace <selector>` (RFC 0007 §4.5, single-argument form): shortest path from the
+/// Liveness `trace <selector>` (single-argument form): shortest path from the
 /// nearest root of `roots_kind` to `target`, falling back from production to test when
-/// production reaches nothing (per the RFC's own fallback note) unless a kind was explicit.
+/// production reaches nothing (the documented fallback) unless a kind was explicit.
 pub fn trace_liveness(
     graph: &ProjectGraph,
     reach: &ReachabilityMap,
@@ -1608,7 +1607,7 @@ fn render_path(
     }
 }
 
-// ---------------------------------------------------------------- impact (RFC 0007 §4.6)
+// ---------------------------------------------------------------- impact
 
 /// [`impact`]'s flags. Unlike `uses`/`used-by`, the *default* is the full transitive reverse
 /// closure — blast radius is a closure by definition; `--depth N` bounds it when given.
@@ -1628,7 +1627,7 @@ pub struct AffectedRoot {
     pub node: QNodeRef,
 }
 
-/// `--if-deleted`'s simulation result (RFC 0007 §4.6): the finding flips removal would cause,
+/// `--if-deleted`'s simulation result: the finding flips removal would cause,
 /// computed on a patched copy of the graph — nothing is written.
 #[derive(Debug, Clone, serde::Serialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
@@ -1659,7 +1658,7 @@ pub struct ImpactResult {
     pub if_deleted: Option<IfDeleted>,
 }
 
-/// `kndo impact <selector> [--if-deleted]` (RFC 0007 §4.6): forward-looking blast radius on
+/// `kndo impact <selector> [--if-deleted]`: forward-looking blast radius on
 /// the same adjacency `uses`/`used-by` navigate, plus — with `--if-deleted` — a removal
 /// simulation on a patched graph copy, reusing the reachability engine itself (the diff-mode
 /// derived-effects machinery's core: same graph shape, recomputed colors, reported flips).
@@ -2750,7 +2749,7 @@ mod tests {
         assert_eq!(result.paths.len(), 1);
     }
 
-    // ---------------------------------------------------------------- impact (RFC 0007 §4.6)
+    // ---------------------------------------------------------------- impact
 
     fn impact_opts(if_deleted: bool) -> ImpactOpts {
         ImpactOpts {

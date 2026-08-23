@@ -1,7 +1,7 @@
-//! Regression: the binary must die silently (default SIGPIPE disposition, signal 13) when its
-//! stdout reader goes away mid-stream — never panic with a broken-pipe backtrace. Found by RFC
-//! 0016 §7's shell-build smoke check, whose `kndo doctor | grep -q` closed the pipe after the
-//! first match; `main` now restores `SIG_DFL` at startup (Unix), making kndo behave like every
+//! Regression guard: the binary must die silently (default SIGPIPE disposition, signal 13) when
+//! its stdout reader goes away mid-stream — never panic with a broken-pipe backtrace. A
+//! `kndo doctor | grep -q` pipeline closes the pipe after the
+//! first match; `main` restores `SIG_DFL` at startup (Unix), making kndo behave like every
 //! other Unix filter under `| head`/`| jq -e`/`| grep -q`.
 #![cfg(unix)]
 

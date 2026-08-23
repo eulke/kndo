@@ -1,5 +1,5 @@
-//! RFC 0018 §2.2's gate opt-in: `[plugins.gate]` in `kndo.toml`, the ONLY part of that file
-//! the core reads today (the config subsystem RFC 0006 §7 documents remains unimplemented —
+//! The gate opt-in: `[plugins.gate]` in `kndo.toml`, the ONLY part of that file
+//! the core reads today (the wider config subsystem is unimplemented —
 //! this table is deliberately safe to read in isolation because it affects only how plugin
 //! findings map onto the severity channel, never the graph, core findings, or any cached
 //! artifact).
@@ -10,7 +10,7 @@
 //! "github.com/acme/kndo-deprecations/v1-api" = "off"     # per-rule override wins
 //! ```
 //!
-//! Semantics (RFC 0018 §2.2/§3): no entry → the finding is advisory (visible, attributed,
+//! Semantics: no entry → the finding is advisory (visible, attributed,
 //! inert to exit codes). An entry gates the findings it covers at `min(declared severity,
 //! configured level)` — config can lower a rule's declared severity, never raise it. `"off"`
 //! pins advisory explicitly (useful under a broader plugin-level opt-in). Reading is

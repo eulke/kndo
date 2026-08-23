@@ -1,6 +1,6 @@
 [package]
 name = "kndo-adapter-js"
-description = "JavaScript/TypeScript language adapter (docs/adapters/js-ts.md)."
+description = "JavaScript/TypeScript language adapter for kndo."
 version.workspace = true
 edition.workspace = true
 license.workspace = true

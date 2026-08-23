@@ -1,8 +1,7 @@
 //! Runs every fixture under `tests/fixtures/` through the shared conformance harness
-//! (`kndo_core::conformance`, RFC 0002 §8) with the real `KotlinAdapter` — no mock, real
+//! (`kndo_core::conformance`) with the real `KotlinAdapter` — no mock, real
 //! discovery, real extraction, real resolution, the real `Engine`. Mirrors `kndo-adapter-java`'s
-//! conformance test exactly — the harness itself is fully adapter-agnostic
-//! (docs/adapters/kotlin.md).
+//! conformance test exactly — the harness itself is fully adapter-agnostic.
 
 use std::path::Path;
 

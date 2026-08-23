@@ -1,4 +1,4 @@
-//! Shared tree-sitter setup (ADR 0002 — the paved road for first-party adapters).
+//! Shared tree-sitter setup — the paved road for first-party adapters.
 
 use tree_sitter::{Language, Parser, Tree};
 
@@ -11,7 +11,7 @@ pub fn tsx_language() -> Language {
 }
 
 /// Parse source with the TSX grammar (JSX-aware) when `tsx` is true, else plain TypeScript —
-/// which also parses ordinary JS/CJS (one grammar, two module systems; spec §1).
+/// which also parses ordinary JS/CJS (one grammar, two module systems).
 pub fn parse(source: &[u8], tsx: bool) -> Option<Tree> {
     let mut parser = Parser::new();
     let lang = if tsx {
@@ -25,8 +25,8 @@ pub fn parse(source: &[u8], tsx: bool) -> Option<Tree> {
 
 #[cfg(test)]
 mod introspect {
-    //! Not adapter tests — a ground-truth probe of the grammar's real field names, run once
-    //! to write the extraction code in kndo-adapter-js against verified facts instead of
+    //! Not adapter tests — a ground-truth probe of the grammar's real field names: the
+    //! extraction code in kndo-adapter-js is written against verified facts instead of
     //! assumptions. `cargo test -p kndo-adapter-toolkit introspect -- --nocapture --ignored`.
 
     use super::*;

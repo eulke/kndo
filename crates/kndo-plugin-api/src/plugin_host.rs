@@ -1,4 +1,4 @@
-//! The wasmtime host bridge for the `kndo:plugin` WASM ABI (`docs/contracts/wasm-abi.md` §5) —
+//! The wasmtime host bridge for the `kndo:plugin` WASM ABI —
 //! bridges the four `kndo_core::plugin::Plugin` graph-mutation hooks. Unlike the adapter bridge
 //! (`host.rs`), this world is bidirectional: the guest calls back into two host-provided query
 //! functions (`list-files`, `symbols-in`) while computing its contributions.
@@ -15,7 +15,7 @@ use kndo_core::plugin::{
 use kndo_core::vocab::{FileClass, FileOrigin, FileRole, RefKind, RootKind, SymbolKind};
 use smol_str::SmolStr;
 
-/// RFC 0018's findings-capable world (a superset of `plugin` — same imports, same v1
+/// The findings-capable world (a superset of `plugin` — same imports, same v1
 /// exports, plus `rules`/`contribute-findings`). Generated FIRST because its world reaches
 /// every type in the `types` interface, making this module the canonical home the v1 world's
 /// bindings then share via `with` — one set of Rust types, one conversion layer, not two.
@@ -38,7 +38,7 @@ use bindings::Plugin as WitPluginBindings;
 use findings_bindings::kndo::plugin::types as w;
 use findings_bindings::PluginFindings as WitFindingsBindings;
 
-/// Same discipline as the adapter bridge (RFC 0003 §3): a trapped/exhausted hook degrades to
+/// Same discipline as the adapter bridge: a trapped/exhausted hook degrades to
 /// "contributed nothing" rather than aborting the run.
 use crate::engine::FUEL_PER_CALL;
 
@@ -65,19 +65,19 @@ impl std::error::Error for LoadError {}
 /// borrowed graph. `wasmtime::Store`'s state must be `'static`; a live `&GraphView<'_>`
 /// (borrowed for one `assemble_from_source` call) can't be, so this trades a bounded clone
 /// for that requirement rather than reaching for unsafe raw-pointer plumbing — a WASM plugin
-/// already forces a full graph rebuild every run (docs/contracts/wasm-abi.md §5), so one more
+/// already forces a full graph rebuild every run, so one more
 /// `O(files + symbols)` clone alongside that is proportionally small.
 #[derive(Default)]
 struct HostViewData {
     files: Vec<w::WasmFileInfo>,
     symbols_by_file: rustc_hash::FxHashMap<smol_str::SmolStr, Vec<w::WasmSymbolInfo>>,
-    // RFC 0016 §5: every path this component's declared globs matched, fetched and budget-
+    // Every path this component's declared globs matched, fetched and budget-
     // charged against the caller's `ContentView` *before* instantiation — the guest can't make
     // a host round-trip of its own choosing mid-call the way a native plugin calls
     // `ContentView::read` directly, so `read-file` just serves a lookup into this snapshot.
     content_by_path: rustc_hash::FxHashMap<String, Vec<u8>>,
-    // RFC 0017 §5's read surface, snapshotted for the same borrow reason as everything above
-    // (wasm-abi §5.3): the store's state must be 'static, so what a query might answer is
+    // The plugin read surface, snapshotted for the same borrow reason as everything
+    // above: the store's state must be 'static, so what a query might answer is
     // cloned per round — bounded O(files + symbols + edges + content bytes), the documented
     // acceptance. Every projection is adapter-derived only (rule R1) and pre-sorted.
     packages: Vec<w::WasmPackageInfo>,
@@ -130,7 +130,7 @@ impl HostViewData {
     }
 }
 
-/// File-level projections (RFC 0017 §5.1–§5.4): details, both import directions, call sites.
+/// File-level projections: details, both import directions, call sites.
 /// Answers exist for unclaimed files too — a template can be asked about even though it has
 /// no symbols.
 fn collect_file_projections(
@@ -180,7 +180,7 @@ fn collect_file_projections(
     }
 }
 
-/// The frozen v1 file/symbol records plus §5.1's per-symbol details — claimed files only
+/// The frozen v1 file/symbol records plus per-symbol details — claimed files only
 /// (an unclaimed file structurally has no symbols).
 fn collect_symbol_projections(
     graph: &GraphView<'_>,
@@ -216,7 +216,7 @@ fn collect_symbol_projections(
     data.symbol_details.insert(file.path.0.to_string(), details);
 }
 
-/// §5.3's `references-to` projection, keyed by (target path, target bare name), sites sorted.
+/// The `references-to` projection, keyed by (target path, target bare name), sites sorted.
 fn collect_ref_sites(graph: &GraphView<'_>, data: &mut HostViewData) {
     for (target_path, target_name, site) in graph.all_reference_sites() {
         data.ref_sites
@@ -253,7 +253,7 @@ impl bindings::PluginImports for HostViewData {
     }
 
     fn package_of(&mut self, path: String) -> Option<w::WasmPackageInfo> {
-        // Ownership is total for known paths (RFC 0011 §3); an unknown path is a plain miss.
+        // Ownership is total for known paths; an unknown path is a plain miss.
         let details = self.file_details.get(path.as_str())?;
         let root = details.package_root.clone();
         self.packages.iter().find(|p| p.root == root).cloned()
@@ -342,9 +342,9 @@ impl findings_bindings::PluginFindingsImports for HostViewData {
     }
 }
 
-/// RFC 0018's world detection: `plugin-findings` first (a v2 component also satisfies the v1
+/// World detection: `plugin-findings` first (a v2 component also satisfies the v1
 /// world, so probing v1 first would silently strip its findings), plain `plugin` as the
-/// fallback — how every already-built v1 component keeps working unchanged (the compat
+/// fallback — how a v1-only component keeps working unchanged (the compat
 /// matrix's pinned components exercise exactly this path).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum WorldFlavor {
@@ -432,17 +432,17 @@ struct GuestState {
 }
 
 /// A `kndo:plugin` WASM component, bridged to the native [`Plugin`] trait — indistinguishable
-/// from a built-in plugin (e.g. `LcovPlugin`) from `Engine`'s perspective, same ADR 0003
-/// "generated bridge" posture the adapter bridge already established.
+/// from a built-in plugin (e.g. `LcovPlugin`) from `Engine`'s perspective, the same
+/// generated-bridge posture as the adapter bridge.
 pub struct WasmPlugin {
     engine: wasmtime::Engine,
     component: wasmtime::component::Component,
     descriptor: PluginDescriptor,
-    // RFC 0016 §6: computed once at load, over the raw component bytes — the graph cache key's
+    // Computed once at load, over the raw component bytes — the graph cache key's
     // proof that *this exact* `.wasm` file, not just its self-declared id/version, produced
     // whatever the last snapshot recorded.
     content_hash: [u8; 32],
-    // One instance per graph-mutation ROUND (RFC 0017 §4), not per hook: `contribute_roots` —
+    // One instance per graph-mutation ROUND, not per hook: `contribute_roots` —
     // the round's first hook in declaration order — (re)instantiates against that round's
     // fresh `HostViewData` snapshot; `contribute_edges`/`annotate_symbols` reuse it, and the
     // instance is dropped when `annotate_symbols` returns. Guest state deliberately persists
@@ -452,7 +452,7 @@ pub struct WasmPlugin {
     /// Which world accepted the component at load — every later instantiation uses the same
     /// one (a component's exports don't change under us; the file is read once).
     flavor: WorldFlavor,
-    /// RFC 0018 §4: `rules()` probed once at load and cached — `Plugin::rules` must be cheap
+    /// `rules()` is probed once at load and cached — `Plugin::rules` must be cheap
     /// (the finding round calls it to decide whether to build a view at all).
     cached_rules: Vec<kndo_core::plugin::RuleDescriptor>,
 }
@@ -477,7 +477,7 @@ impl WasmPlugin {
     }
 
     /// (Re)instantiate the component against a fresh snapshot of `graph`/`content`, replacing
-    /// whatever instance is currently live — how every round begins (RFC 0017 §4).
+    /// whatever instance is currently live — how every round begins.
     fn refresh_instance(&self, graph: &GraphView<'_>, content: &ContentView<'_>) -> Option<()> {
         let (store, bindings) = instantiate_with(
             &self.engine,
@@ -656,7 +656,7 @@ fn probe_flavor(
     }
 }
 
-/// RFC 0015 §2: the `kndo:` namespace is reserved for built-ins — an external component
+/// The `kndo:` namespace is reserved for built-ins — an external component
 /// claiming it fails to load, exactly like an instantiation error (skipped by discovery,
 /// never trusted). This is what keeps `dependencies: ["kndo:nextjs"]` unambiguous from any
 /// source: nothing external can ever *be* `kndo:nextjs`.
@@ -664,7 +664,7 @@ fn ensure_unreserved(id: &str) -> Result<(), LoadError> {
     if kndo_core::plugin::is_reserved_id(id) {
         return Err(LoadError::Instantiate(format!(
             "descriptor claims reserved built-in id '{id}' (the kndo: namespace is not \
-             claimable by external plugins — RFC 0015 §2)"
+             claimable by external plugins)"
         )));
     }
     Ok(())
@@ -720,7 +720,7 @@ impl Plugin for WasmPlugin {
     fn classify_file(&self, path: &ProjectPath, current: FileClass) -> Option<FileClass> {
         // classify_file runs before contribute_roots/contribute_edges/annotate_symbols in the
         // assembly pipeline (phase 2 vs. after phase 3b) and needs no graph queries of its own
-        // (RFC 0003 §2's own hook contract — it only ever sees the one file it's asked about),
+        // (the hook contract: it only ever sees the one file it's asked about),
         // so it gets a lightweight, view-less instance rather than forcing a premature
         // `refresh_instance` — the graph isn't even fully built yet at this point.
         let (mut store, bindings) = instantiate_with(
@@ -747,11 +747,11 @@ impl Plugin for WasmPlugin {
         })
     }
 
-    // The round lifecycle (RFC 0017 §4): `contribute_roots` opens the round with a fresh
+    // The round lifecycle: `contribute_roots` opens the round with a fresh
     // instance, `contribute_edges` reuses it, `annotate_symbols` reuses it and closes the
     // round by dropping it. Fuel is re-armed to `FUEL_PER_CALL` before every hook call, so
-    // the per-call budget semantics are identical to the old instance-per-hook model — a
-    // heavy `contribute_roots` can't starve `annotate_symbols`.
+    // each hook gets the full per-call budget — a heavy `contribute_roots` can't starve
+    // `annotate_symbols`.
     fn contribute_roots(
         &self,
         graph: &GraphView<'_>,
@@ -851,7 +851,7 @@ impl Plugin for WasmPlugin {
         self.cached_rules.clone()
     }
 
-    /// RFC 0018: its own single-call round on an EPHEMERAL instance over a fresh view of the
+    /// The finding round: its own single-call round on an EPHEMERAL instance over a fresh view of the
     /// finished graph — never the mutation round's instance (that round has already closed by
     /// the time the finding round runs, and its view predates the plugin contributions the
     /// final graph carries; the fresh view is still R1-scoped, so nothing plugin-derived is
@@ -921,7 +921,7 @@ fn from_wit_origin(origin: w::FileOrigin) -> FileOrigin {
     }
 }
 
-// Table-driven rather than a match-per-variant, same shape `host.rs` settled on for its own
+// Table-driven rather than a match-per-variant, same shape `host.rs` uses for its own
 // conversion tables: a flat match this wide reads as more cyclomatic risk than a straight 1:1
 // enum mirror actually carries, and `crap` has no way to tell the difference without a
 // coverage report. Keyed by the WIT (Copy) side so the table itself is a plain `const` slice —

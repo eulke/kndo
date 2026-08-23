@@ -18,7 +18,7 @@ mod tests {
         parse(src).unwrap().root_node().to_sexp()
     }
 
-    /// Ground-truth node shapes (docs/adapters/swift.md §2): declarations (class/struct/enum
+    /// Ground-truth node shapes: declarations (class/struct/enum
     /// share `class_declaration`, distinguished by `declaration_kind`; `protocol_declaration`
     /// is separate), visibility modifiers (`private`/`fileprivate`/`internal`/`public`/`open`
     /// — each a `visibility_modifier` leaf inside `modifiers`, absent `modifiers` = the
@@ -63,8 +63,8 @@ mod tests {
         );
     }
 
-    /// Control-flow/expression shapes feeding cyclomatic complexity (docs/adapters/swift.md
-    /// §2): `if_statement`, `guard_statement`, `switch_entry`, `for_statement`,
+    /// Control-flow/expression shapes feeding cyclomatic complexity:
+    /// `if_statement`, `guard_statement`, `switch_entry`, `for_statement`,
     /// `while_statement`, `catch_block` (not `do_statement` itself), `&&`/`||` leaves — nil-
     /// coalescing (`??`) and force-unwrap (`!`) deliberately NOT branches.
     #[test]
@@ -96,7 +96,7 @@ mod tests {
         );
     }
 
-    /// Reference/navigation shapes (docs/adapters/swift.md §2): bare calls, qualified calls
+    /// Reference/navigation shapes: bare calls, qualified calls
     /// (`Obj.member()`), chained navigation, `self`, closures, `@main`/`main.swift`-shaped
     /// top-level code.
     #[test]

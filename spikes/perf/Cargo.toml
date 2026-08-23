@@ -4,8 +4,8 @@ version = "0.0.0"
 edition = "2021"
 publish = false
 
-# Disposable spike: validates the RFC 0001 §5 warm-run budget before M1.
-# Results recorded in docs/spikes/0001-performance.md — this code is not the product.
+# Disposable spike: validates the warm-run performance budget.
+# Results recorded in internal/spikes/0001-performance.md — this code is not the product.
 
 [dependencies]
 blake3 = { version = "1", features = ["rayon"] }

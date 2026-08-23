@@ -18,7 +18,7 @@ mod tests {
         parse(src).unwrap().root_node().to_sexp()
     }
 
-    /// Ground-truth node shapes (docs/adapters/kotlin.md §2): package/import, visibility
+    /// Ground-truth node shapes: package/import, visibility
     /// modifiers (private/internal/protected/public — each a `visibility_modifier` leaf inside
     /// `modifiers`, default = no `modifiers` node at all), class/interface/enum/data/sealed/
     /// inner, primary+secondary constructors, companion objects, `override`/`open`/`abstract`.
@@ -57,10 +57,10 @@ mod tests {
         );
     }
 
-    /// Control flow / expression shapes that feed cyclomatic complexity (docs/adapters/
-    /// kotlin.md §2): `if_expression`, `when_entry`, `for_statement`, `while_statement`,
+    /// Control flow / expression shapes that feed cyclomatic complexity:
+    /// `if_expression`, `when_entry`, `for_statement`, `while_statement`,
     /// `try_expression`, `&&`/`||` leaves, elvis (`?:`) and not-null (`!!`) — deliberately NOT
-    /// branch kinds (§2's last metrics bullet).
+    /// branch kinds.
     #[test]
     #[ignore]
     fn probe_control_flow_and_metrics_shapes() {
@@ -85,7 +85,7 @@ mod tests {
         );
     }
 
-    /// Reference/navigation shapes (docs/adapters/kotlin.md §2): bare calls, qualified calls
+    /// Reference/navigation shapes: bare calls, qualified calls
     /// (`Obj.member()`), chained navigation (`A.B.c()`), lambdas, string-template
     /// interpolation, extension-function declarations, `is`/`as` type checks.
     #[test]
@@ -111,12 +111,12 @@ mod tests {
         );
     }
 
-    /// A verified upstream tree-sitter-kotlin-ng 1.1.0 grammar bug (docs/adapters/kotlin.md
-    /// §0's last bullet): a meta-annotated, parameterless `annotation class` mis-parses as a
+    /// A verified upstream tree-sitter-kotlin-ng 1.1.0 grammar bug:
+    /// a meta-annotated, parameterless `annotation class` mis-parses as a
     /// bogus `infix_expression` chaining "annotation"/"class"/the name as three identifiers —
     /// the SAME source with a primary constructor, or without the leading annotation, parses
     /// correctly. Kept `#[ignore]`d and re-checked (not asserted against, since asserting on a
-    /// known-broken shape would just pin the bug) on every grammar upgrade — if a future
+    /// known-broken shape would just pin the bug) on every grammar upgrade — once a
     /// version fixes it, this probe's printed output changes and extraction can stop treating
     /// it as a gap.
     #[test]
@@ -132,8 +132,8 @@ mod tests {
         );
     }
 
-    /// A second, independently-verified upstream grammar edge case (docs/adapters/kotlin.md
-    /// §0): a `class`/`interface`/`object` body written entirely on ONE line with real content
+    /// A second, independently-verified upstream grammar edge case:
+    /// a `class`/`interface`/`object` body written entirely on ONE line with real content
     /// (`class Inner { fun m() {} }`) mis-parses — the same source reformatted across multiple
     /// lines parses cleanly. Real-world Kotlin overwhelmingly uses multi-line bodies for
     /// anything but an empty declaration, so this is a narrow formatting artifact, not a

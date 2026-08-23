@@ -1,4 +1,4 @@
-//! `cyclic` — dependency cycles (RFC 0005 §8, group `risk`): strongly connected components of
+//! `cyclic` — dependency cycles (group `risk`): strongly connected components of
 //! size ≥ 2 in the file-import graph, and in the package graph where manifests define units.
 //! **One finding per cycle**, not per participant (rollup spirit), anchored at the cycle's
 //! most-referenced node, with a shortest cycle path in `related` as the evidence chain — the
@@ -27,8 +27,8 @@
 //! one of whose participants is generated/vendored is skipped (nobody authored it); one with
 //! any authored participant fires — the authored code is in the loop too.
 //!
-//! Incremental recomputation within the dirty region's weakly connected component (the RFC's
-//! note) is an optimization for the incremental-analysis mode kndo doesn't have yet — every
+//! Incremental recomputation within the dirty region's weakly connected component
+//! is an optimization for the incremental-analysis mode kndo doesn't have — every
 //! analysis today recomputes fully per run, and Tarjan is O(V+E), noise next to assembly.
 
 use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
@@ -40,7 +40,7 @@ use crate::graph::ProjectGraph;
 use crate::vocab::{Confidence, EdgeKind, FileId, FileOrigin, PackageId};
 
 /// Findings plus the set of files participating in any tolerance-reported cycle — `health`'s
-/// "files participating in cycles" numerator (RFC 0005 §11). The set includes files whose
+/// "files participating in cycles" numerator. The set includes files whose
 /// file-level cycle rolled up into a package-level finding (they still sit in a real cycle);
 /// it excludes cycles every participant language declares `Impossible` or that are entirely
 /// generated/vendored, exactly like the findings themselves.

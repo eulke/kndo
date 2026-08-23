@@ -1,6 +1,6 @@
 name: Release
 
-# The only human gesture is pushing a tag `vX.Y.Z` (RFC 0014 §3). The GitHub Release this
+# The only human gesture is pushing a tag `vX.Y.Z`. The GitHub Release this
 # workflow creates is the source of truth for every secondary channel — none of them compile
 # anything, they all consume this run's own artifacts. If a secondary job fails, the release
 # still shipped; only that one channel needs a retry.
@@ -14,7 +14,7 @@ env:
 
 jobs:
   # Same gate every push/PR already passes (dtolnay/rust-toolchain, clippy, fmt, the full test
-  # suite, kndo's own dogfood check) — called, not duplicated, so there is exactly one
+  # suite, kndo's own self-check) — called, not duplicated, so there is exactly one
   # definition of "green."
   test:
     uses: ./.github/workflows/ci.yml
@@ -57,7 +57,7 @@ jobs:
       # musl (Linux) needs `cross` — it produces a real static binary independent of the host's
       # glibc, and `cross` runs the build in a container with the musl toolchain preinstalled.
       # macOS and Windows build natively on their own runners: cross-compiling to them from
-      # Linux costs more than it saves (RFC 0014 §3.1). Both macOS targets build on the same
+      # Linux costs more than it saves. Both macOS targets build on the same
       # (Apple Silicon) runner — Xcode's linker targets either arch without a second runner.
       - name: Install cross
         if: matrix.cross
@@ -152,16 +152,15 @@ jobs:
       # index-availability polling here: cargo (1.70+) already blocks `cargo publish` until the
       # crate is live in the index before returning — a hand-rolled wait loop would just
       # duplicate that, and would have leaned on `cargo search`, whose backing API crates.io
-      # has since deprecated.
+      # deprecates.
       #
-      # NOT YET RUNNABLE: the workspace still has two real blockers, both pre-existing and
-      # unrelated to this workflow. (1) `publish = false` at the workspace level (Cargo.toml,
-      # ADR 0007: "reserve names early... until 1.0") — deliberate, not a bug, but it means
-      # every one of these calls fails today by design. (2) every internal dependency is
+      # NOT RUNNABLE AS-IS: the workspace has two real blockers, both
+      # unrelated to this workflow. (1) `publish = false` at the workspace level (Cargo.toml) —
+      # names are reserved ahead of publish; deliberate, not a bug, but it means
+      # every one of these calls fails by design. (2) every internal dependency is
       # `{ path = "../foo" }` with no `version =` field — crates.io requires one on every
       # dependency of a published crate, path or not. Both need fixing together, when the
-      # workspace is actually ready to publish (RFC 0014 tracks this as a stated follow-up, not
-      # assumed done by this job existing).
+      # workspace is actually ready to publish.
       - name: Publish crates in dependency order
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
@@ -219,8 +218,7 @@ jobs:
             ../packaging/homebrew/kndo.rb.tmpl > kndo.rb
 
       # Needs the tap repo (e.g. eulke/homebrew-tap) to already exist and a token with push
-      # access to it (secrets.HOMEBREW_TAP_TOKEN) — neither is assumed to exist yet (RFC 0014
-      # §2 item 4: "a personal tap first, homebrew-core only with real traction").
+      # access to it (secrets.HOMEBREW_TAP_TOKEN) — neither is assumed to exist yet.
       - name: Push formula to tap
         env:
           TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}

@@ -1,5 +1,5 @@
-//! `kndo:allow` pragma text parsing (contracts §2.1, RFC 0005 §12) — comment *syntax* (`//`,
-//! `/* */`) is shared by every C-family-descended language kndo has adapters for so far (JS/TS,
+//! `kndo:allow` pragma text parsing — comment *syntax* (`//`,
+//! `/* */`) is shared by every C-family-descended language kndo has adapters for (JS/TS,
 //! Go), so the pragma grammar itself lives here once rather than once per adapter. What differs
 //! per language is only *which tree-sitter node kind is a comment* and how its span maps back to
 //! a declaration — both stay adapter-side.
@@ -15,7 +15,7 @@ pub struct ParsedPragma {
 }
 
 /// `kndo:allow <category>[:<subject>] [reason…]` (scope `Declaration`) or
-/// `kndo:allow-file <category>[:<subject>] [reason…]` (scope `File`) — contracts §2.1's grammar,
+/// `kndo:allow-file <category>[:<subject>] [reason…]` (scope `File`) — the pragma grammar,
 /// found inside any comment style. Block comments (including `/** … */`) are checked line by
 /// line (stripping a leading `*` per line, the common doc-comment convention) since the pragma
 /// need not be the comment's first line; `//` comments are always exactly one line. Returns

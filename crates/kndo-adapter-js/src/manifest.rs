@@ -1,13 +1,13 @@
-//! `package.json` manifest extraction — spec docs/adapters/js-ts.md §4.
+//! `package.json` manifest extraction.
 //!
-//! Scope for this increment: identity (`name`, `private`), scoped dependencies, `exports`
+//! Scope: identity (`name`, `private`), scoped dependencies, `exports`
 //! surface detection, and roots. Root detection covers `bin` (unconditional — an executable
 //! entry point is a root regardless of publish status), `main`/`module`/`exports` gated on
-//! `!private` (RFC 0011 §5: an unpublished app's exports are not roots on their own; something
+//! `!private` (an unpublished app's exports are not roots on their own; something
 //! must actually import them), and `scripts` → tooling roots (path-looking tokens resolving
-//! to known files — spec §7 open question 2's drafted rule). `types`/`typings` are resolution
-//! inputs only — `.d.ts` carries no runtime edge (spec §1). `pnpm-workspace.yaml` topology
-//! stays deferred (needs a YAML parser this crate doesn't otherwise need).
+//! to known files). `types`/`typings` are resolution
+//! inputs only — `.d.ts` carries no runtime edge. `pnpm-workspace.yaml` topology
+//! is not parsed (needs a YAML parser this crate doesn't otherwise need).
 
 use kndo_core::adapter::{
     Diagnostic, DiagnosticLevel, ManifestDependency, ManifestFacts, ManifestRoot, ProjectPath,
@@ -60,7 +60,7 @@ pub fn extract(path: &str, content: &[u8], ctx: &ResolveCtx<'_>) -> ManifestFact
     }
 
     // An import entry must be a *source* file this adapter could claim — real manifests
-    // (found dogfooding against colinhacks/zod) have `exports` leaves like "./package.json"
+    // have `exports` leaves like "./package.json"
     // (self-reference) and type declarations; resolving a sibling's bare-name import to a
     // .json would be a junk edge, so non-claimable targets never become entries. (They can
     // still be roots when the root logic wants them — this filter is entries-only.)
@@ -74,7 +74,7 @@ pub fn extract(path: &str, content: &[u8], ctx: &ResolveCtx<'_>) -> ManifestFact
 
     // `main`/`module`: unambiguous single-field entry points, roots only in library mode —
     // but always `resolved_entries` (a sibling importing this package by name resolves
-    // through its entry regardless of `private`; RFC 0011 §4).
+    // through its entry regardless of `private`).
     let mut resolved_entries = Vec::new();
     for key in ["main", "module"] {
         if let Some(v) = obj.get(key).and_then(|v| v.as_str()) {
@@ -96,7 +96,7 @@ pub fn extract(path: &str, content: &[u8], ctx: &ResolveCtx<'_>) -> ManifestFact
 
     // `exports`: every string leaf, condition precedence unresolved (not needed to know
     // *something* is reachable — only to know *which* condition wins, a resolve()-time
-    // concern deferred with the rest of exports-map resolution). `probable`: multiple leaves
+    // concern that belongs to exports-map resolution). `probable`: multiple leaves
     // may be alternate builds of the same target, not all simultaneously "the" entry.
     if let Some(exports) = obj.get("exports") {
         for spec in string_leaves(exports) {
@@ -129,8 +129,7 @@ pub fn extract(path: &str, content: &[u8], ctx: &ResolveCtx<'_>) -> ManifestFact
     // command (whitespace tokens for roots, shell-clause leading tokens for invoked names —
     // no shell parsing, just enough tokenizing to tell the two apart):
     //
-    // 1. Tooling roots (spec §4; the §7 open-question-2 drafted rule, implemented as
-    //    drafted): any path-looking whitespace token that resolves to a known file is a
+    // 1. Tooling roots: any path-looking whitespace token that resolves to a known file is a
     //    tooling root. "Path-looking" (contains `/` or `.`) filters out bare tool names: `ava`
     //    must never root a coincidental ./ava.js, because npm runs the node_modules binary,
     //    not that file. `--flag=./x.js` tokens contribute their value side. `probable`, not
@@ -140,7 +139,7 @@ pub fn extract(path: &str, content: &[u8], ctx: &ResolveCtx<'_>) -> ManifestFact
     //    clause's *first* token only; later tokens are that binary's own arguments, e.g.
     //    `start` and `--single-run` in `"karma start --single-run"` are NOT candidate names).
     //    A CLI-only devDependency never gets an `ImportsDependency` edge, so this is what lets
-    //    dependency hygiene (RFC 0005 §5, dependency_hygiene.rs) see it as used at all —
+    //    dependency hygiene (dependency_hygiene.rs) see it as used at all —
     //    cross-referenced there against real declared dependency names, so an unrelated word
     //    happening to be a script's first token (`node`, `tsc`) simply matches nothing.
     let mut script_invoked_names = Vec::new();
@@ -188,8 +187,8 @@ pub fn extract(path: &str, content: &[u8], ctx: &ResolveCtx<'_>) -> ManifestFact
         roots,
         resolved_entries,
         declares_surface,
-        // `bin` names are the natural analog (docs/adapters/js-ts.md); adoption tracks a
-        // real test-runner-invokes-own-bin corpus case, same posture as other opt-in facts.
+        // `bin` names are the natural analog; left unpopulated, same posture as other
+        // opt-in facts.
         executables: Vec::new(),
         diagnostics: Vec::new(),
     }
@@ -378,7 +377,7 @@ mod tests {
         );
         assert!(
             app.roots.is_empty(),
-            "RFC 0011 §5: a private app's entry point is not a root on its own"
+            "a private app's entry point is not a root on its own"
         );
     }
 
@@ -502,7 +501,7 @@ mod tests {
     #[test]
     fn resolved_entries_are_populated_even_for_private_packages() {
         // Roots are private-gated; resolved entries are not — a sibling importing a private
-        // member by name still resolves through its entry (RFC 0011 §4).
+        // member by name still resolves through its entry.
         let known = ctx_with(&["package.json", "src/index.ts"]);
         let facts = extract_at(
             "package.json",

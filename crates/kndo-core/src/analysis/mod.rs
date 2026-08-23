@@ -1,4 +1,4 @@
-//! Analyses: pure functions over the [`crate::graph::ProjectGraph`] (RFC 0005). Each analysis
+//! Analyses: pure functions over the [`crate::graph::ProjectGraph`]. Each analysis
 //! consumes the graph plus whatever shared engines it needs (reachability, dup-detection, …)
 //! and produces [`crate::engine::Finding`]s — never source text, never I/O.
 
@@ -23,7 +23,7 @@ use crate::engine::Finding;
 use crate::graph::{PackageNode, ProjectGraph};
 use crate::vocab::PackageId;
 
-/// The stable finding id (contracts/output-schema.md §5): `"kndo-" + blake3(category,
+/// The stable finding id: `"kndo-" + blake3(category,
 /// subject_kind, path, symbol path, discriminator)[..12 hex]`. Line/column never participate,
 /// so reformatting never changes an id; a rename or move does, because it changes `path`/
 /// `symbol_path`.
@@ -90,7 +90,7 @@ pub(crate) fn package_label(graph: &ProjectGraph, package: PackageId) -> String 
 }
 
 /// Runs every analysis and returns their findings, sorted by id for deterministic output.
-/// `coverage` is the run's ingested coverage (ADR 0005) — a separate input rather than part of
+/// `coverage` is the run's ingested coverage — a separate input rather than part of
 /// the graph, because report freshness varies independently of source content hashes and must
 /// never be cached into a snapshot.
 pub fn run_all(
@@ -101,8 +101,8 @@ pub fn run_all(
     let reach = timings.time("reachability", || reachability::compute(graph));
     let reach = &reach;
 
-    // Independent analyses run concurrently (RFC 0008 §2's inter-analysis parallelism) via an
-    // explicit join tree — parallel compute, deterministic reduce (§4): every result lands in
+    // Independent analyses run concurrently (the inter-analysis parallelism) via an
+    // explicit join tree — parallel compute, deterministic reduce: every result lands in
     // a named slot, findings are extended in the same fixed order as ever (and id-sorted
     // below regardless), and per-phase timings are pushed in that fixed order after the join.
     // The timing values themselves are each phase's own elapsed time — under parallelism they
@@ -262,15 +262,15 @@ pub fn run_all(
 }
 
 /// Everything one analysis pass produces: findings (id-sorted), analysis-side diagnostics,
-/// the health score computed from the same primitives (RFC 0005 §11), and per-phase wall
-/// times (RFC 0009 §6's `--verbose` timings; RFC 0008 §7's profiling discipline needs the
+/// the health score computed from the same primitives, and per-phase wall
+/// times (the `--verbose` timings; the profiling discipline needs the
 /// numbers to be one flag away, not a rebuild away).
 pub struct AnalysisOutcome {
     pub findings: Vec<Finding>,
     pub diagnostics: Vec<Diagnostic>,
     pub health: health::Health,
     /// `(phase, duration in µs)` in execution order. Never serialized into the JSON envelope —
-    /// wall times are run metadata, not analysis output, and the §4 determinism matrix compares
+    /// wall times are run metadata, not analysis output, and the determinism matrix compares
     /// envelopes byte-for-byte.
     pub timings: Vec<(&'static str, u64)>,
 }

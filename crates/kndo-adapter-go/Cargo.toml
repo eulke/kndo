@@ -1,6 +1,6 @@
 [package]
 name = "kndo-adapter-go"
-description = "Go language adapter (docs/adapters/go.md)."
+description = "Go language adapter for kndo."
 version.workspace = true
 edition.workspace = true
 license.workspace = true

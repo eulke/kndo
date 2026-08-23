@@ -1,4 +1,4 @@
-//! Import resolution (docs/adapters/json.md §3): structurally unreachable in normal operation.
+//! Import resolution: structurally unreachable in normal operation.
 //! `extraction::extract` never populates `FileFacts::imports` (JSON has no import syntax of its
 //! own), and `kndo-core/src/graph.rs`'s `resolve_file` only ever calls an adapter's `resolve()`
 //! once per entry in *that adapter's own claimed file's* `facts.imports` — never as a fan-out

@@ -1,6 +1,6 @@
-//! `health` — the 0–100 composite project score (RFC 0005 §11, output-schema §4):
+//! `health` — the 0–100 composite project score:
 //! `health = 100 − Σ weight × saturating_ratio(category)`, deterministic and documented so
-//! trends are meaningful. The weights and saturation constants below are the RFC's contract;
+//! trends are meaningful. The weights and saturation constants below are the contract;
 //! `saturating_ratio(r) = min(r / saturation, 1)` — linear near zero (small improvements
 //! always move the score) and capped at the category's full weight (a single bad file can't
 //! zero the score).
@@ -9,13 +9,13 @@
 //! coverage, and the findings where the analysis itself owns the verdict), **before** baseline
 //! and suppression are applied: the score measures the codebase's state, not how much of it
 //! has been acknowledged away. Two gates mirror their analyses: the test-blind-spot category
-//! is skipped entirely when the project has no test roots (§9's "a repo without tests gets one
+//! is skipped entirely when the project has no test roots (the "a repo without tests gets one
 //! diagnostic, not a thousand findings" — the same honesty applies to a penalty that would
 //! otherwise saturate by definition), and cycle participation counts only tolerance-reported
-//! cycles (§8 — a cycle the language declares impossible or idiomatic isn't a penalty).
+//! cycles (a cycle the language declares impossible or idiomatic isn't a penalty).
 //!
-//! Grades: A ≥ 90, B ≥ 80, C ≥ 65, D ≥ 50, F below (§11). The per-package breakdown (RFC 0011
-//! §6) is the same penalties grouped by owning package — never a different metric — and is
+//! Grades: A ≥ 90, B ≥ 80, C ≥ 65, D ≥ 50, F below. The per-package
+//! breakdown is the same penalties grouped by owning package — never a different metric — and is
 //! included whenever the project has more than one package owning claimed files.
 
 use rustc_hash::FxHashSet as HashSet;
@@ -29,7 +29,7 @@ use crate::vocab::{
     EdgeKind, FileId, FileOrigin, FileRole, NodeRef, PackageId, RootKind, SymbolId,
 };
 
-/// One category's weight and the ratio at which its full weight saturates (RFC 0005 §11's
+/// One category's weight and the ratio at which its full weight saturates (the
 /// "per-category curve", as documented constants).
 struct CategorySpec {
     name: &'static str,
@@ -83,7 +83,7 @@ const UNTESTED: CategorySpec = CategorySpec {
     saturation: 0.5,
 };
 
-/// The §4 health block. `previous` is filled by the engine (before-side in diff modes, the
+/// The health block. `previous` is filled by the engine (before-side in diff modes, the
 /// stored snapshot in full mode) — computation here is always "this graph, now".
 #[derive(Debug, Clone, serde::Serialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
@@ -94,7 +94,7 @@ pub struct Health {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub previous: Option<HealthSummary>,
     pub categories: Vec<HealthCategory>,
-    /// Per-package breakdown (RFC 0011 §6) — present when more than one package owns claimed
+    /// Per-package breakdown — present when more than one package owns claimed
     /// files; the single-package (and no-manifest) common case omits it.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub packages: Vec<PackageHealth>,
@@ -306,7 +306,7 @@ fn tally(
         })
         .count();
 
-    // Duplication axis (tokens, RFC 0005 §11): redundant copies over the total normalized
+    // Duplication axis (tokens): redundant copies over the total normalized
     // stream, same generated/vendored exemption as the duplicate analysis itself.
     let mut total_tokens = 0u64;
     for (symbol_id, metrics) in &graph.function_metrics {

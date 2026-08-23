@@ -1,7 +1,7 @@
 //! Runs every fixture under `tests/fixtures/` through the shared conformance harness
-//! (`kndo_core::conformance`, RFC 0002 §8) with the real `RustAdapter` — no mock, real discovery,
+//! (`kndo_core::conformance`) with the real `RustAdapter` — no mock, real discovery,
 //! real extraction, real resolution, the real `Engine`. Mirrors `kndo-adapter-js`'s conformance
-//! test exactly — the harness itself is fully adapter-agnostic (docs/adapters/rust.md).
+//! test exactly — the harness itself is fully adapter-agnostic.
 
 use std::path::Path;
 

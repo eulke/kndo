@@ -1,7 +1,7 @@
-//! kndo CLI — a frontend over the `kndo` distribution crate, nothing more (contracts §5).
+//! kndo CLI — a frontend over the `kndo` distribution crate, nothing more.
 //!
-//! Pure presentation: argument parsing, exit codes, human rendering (RFC 0009). Which
-//! languages exist is the distribution crate's knowledge (RFC 0001 §2) — this binary never
+//! Pure presentation: argument parsing, exit codes, human rendering. Which
+//! languages exist is the distribution crate's knowledge — this binary never
 //! names one. If code here needs a graph fact, that is a core PR adding it to `RunResult`,
 //! never a deeper import.
 
@@ -44,7 +44,7 @@ fn main() -> ExitCode {
     // The Rust runtime starts every process with SIGPIPE ignored, so a write to a pipe whose
     // reader already exited surfaces as an EPIPE error — which `println!` turns into a panic
     // with a backtrace on stderr. kndo's output is *designed* to be piped (`kndo check | jq`,
-    // `kndo doctor | grep`, RFC 0006's json-when-piped default), so the conventional Unix
+    // `kndo doctor | grep`, the json-when-piped default), so the conventional Unix
     // filter behavior is the correct one: restore the default disposition and let the process
     // die silently with signal 13 (exit 141 in a shell) the way grep, cat, and git do.
     // Windows has no SIGPIPE; writes there keep their normal error path.
@@ -55,7 +55,7 @@ fn main() -> ExitCode {
     }
 
     let args: Vec<String> = std::env::args().skip(1).collect();
-    // `--help` anywhere wins over everything else (RFC 0009: asking for help must never
+    // `--help` anywhere wins over everything else (asking for help must never
     // trigger an analysis run, whatever else is on the line).
     if args.iter().any(|a| a == "--help" || a == "-h")
         || args.first().map(String::as_str) == Some("help")
@@ -86,7 +86,7 @@ fn main() -> ExitCode {
         Some("impact") => nav::impact_cmd(&args[1..]),
         Some("query") => nav::query_cmd(),
         // Bare flags with no subcommand (`kndo --format json`) are an implicit `check`, same
-        // as no arguments at all — `kndo` = `kndo check` (RFC 0006 §2).
+        // as no arguments at all — `kndo` = `kndo check`.
         Some(s) if s.starts_with('-') => check(&args),
         None => check(&args),
         Some(other) => {
@@ -99,7 +99,7 @@ fn main() -> ExitCode {
 }
 
 const KNDO_TOML_TEMPLATE: &str = r#"# kndo.toml — everything here is optional; every setting already has the default shown.
-# Written by `kndo init`. Full reference: RFC 0006 §7.
+# Written by `kndo init`. Full reference: docs/ in the repository.
 
 # [project]
 # roots = ["src", "packages/*"]          # default: auto (git ls-files minus ignores)
@@ -118,7 +118,7 @@ const KNDO_TOML_TEMPLATE: &str = r#"# kndo.toml — everything here is optional;
 # [performance]
 # threads = 0                            # 0 = physical cores; --threads flag wins
 
-# [delta]                                # diff-mode gate budgets, see RFC 0006 §5
+# [delta]                                # diff-mode gate budgets
 # max-health-drop = 0.0
 # max-net-findings = 0
 
@@ -126,15 +126,15 @@ const KNDO_TOML_TEMPLATE: &str = r#"# kndo.toml — everything here is optional;
 # paths = ["examples/**"]
 # skip = ["unused"]
 
-# [plugins.gate]                         # RFC 0018: opt plugin findings into the exit-code gate
+# [plugins.gate]                         # opt plugin findings into the exit-code gate
 # "github.com/acme/some-plugin" = "warning"        # gate this plugin's rules, capped at warning
 # "github.com/acme/some-plugin/noisy-rule" = "off" # per-rule override wins
 "#;
 
 const PRE_COMMIT_HOOK: &str = "#!/bin/sh\nexec kndo check --staged --fail-on warning\n";
 
-/// `kndo init` (RFC 0006 §2): "write minimal kndo.toml, .gitignore entry, offer pre-commit
-/// hook." Deliberately not an `Engine` method — contracts §5's `Engine` trait doesn't list
+/// `kndo init`: write a minimal kndo.toml and a .gitignore entry, and offer the pre-commit
+/// hook. Deliberately not an `Engine` method — the `Engine` trait doesn't list
 /// `init` alongside `check`/`baseline`/`doctor`, and this command does no analysis at all, just
 /// project scaffolding, so there's nothing for the analysis facade to own.
 ///
@@ -238,8 +238,8 @@ fn ensure_gitignore_entry(root: &std::path::Path) -> std::io::Result<GitignoreOu
     Ok(GitignoreOutcome::Appended)
 }
 
-/// `kndo doctor` (RFC 0006 §2): plain-text only for now — output-schema.md doesn't specify a
-/// JSON shape for this command yet, so `--format` isn't wired here (a deliberate scoping choice,
+/// `kndo doctor`: plain-text only — the output schema specifies no
+/// JSON shape for this command, so `--format` isn't wired here (a deliberate scoping choice,
 /// not an oversight; `check`/`explain`/navigation verbs are where the JSON contract matters).
 fn doctor_cmd() -> ExitCode {
     let cwd = match std::env::current_dir() {
@@ -275,15 +275,15 @@ fn doctor_cmd() -> ExitCode {
             println!("    dependencies: {}", a.dependencies.join(", "));
         }
     }
-    // RFC 0016 §4's global adapter tier — every `.wasm` candidate the global directory holds,
+    // The global adapter tier — every `.wasm` candidate the global directory holds,
     // activated or not, same split `plugin_resolution`'s own section below has (`Engine` never
-    // sees a candidate that didn't activate). Reason-aware since RFC 0017 §6: a global adapter
+    // sees a candidate that didn't activate). Reason-aware: a global adapter
     // can activate as another component's dependency, not just by its own rules.
     let adapter_resolution = kndo::adapter_resolution(&cwd);
     let global_adapters = kndo::global_adapter_candidates(&cwd);
     if !global_adapters.is_empty() {
         println!();
-        println!("global adapter candidates (RFC 0016 §4, not necessarily active above):");
+        println!("global adapter candidates (not necessarily active above):");
         for c in &global_adapters {
             println!("  {} — {}", c.id, activation_status(&c.active));
             if !c.activation.is_empty() {
@@ -296,7 +296,7 @@ fn doctor_cmd() -> ExitCode {
     if !adapter_resolution.missing_dependencies.is_empty() {
         println!();
         println!(
-            "missing adapter dependencies (RFC 0017 §6 — declared by an active adapter, not present):"
+            "missing adapter dependencies (declared by an active adapter, not present):"
         );
         for m in &adapter_resolution.missing_dependencies {
             println!("  {} — required by {}", m.coordinate, m.required_by);
@@ -321,12 +321,12 @@ fn doctor_cmd() -> ExitCode {
         if !p.requested_file_access.is_empty() {
             println!("    file access:  {}", p.requested_file_access.join(", "));
         }
-        // RFC 0018 §4: what this plugin MAY assert as findings, before it ever runs.
+        // What this plugin MAY assert as findings, before it ever runs.
         for rule in &p.rules {
             println!("    rule: {rule}");
         }
     }
-    // The composition layer's own view (RFC 0015): every candidate considered — including
+    // The composition layer's own view: every candidate considered — including
     // global ones that did NOT activate, which `Engine` structurally never sees — plus any
     // dependency coordinate an active plugin names that nothing present satisfies.
     let resolution = kndo::plugin_resolution(&cwd);
@@ -337,7 +337,7 @@ fn doctor_cmd() -> ExitCode {
         .collect();
     if !global_candidates.is_empty() {
         println!();
-        println!("global plugin candidates (RFC 0003 §4, not necessarily active above):");
+        println!("global plugin candidates (not necessarily active above):");
         for c in &global_candidates {
             println!(
                 "  {} v{} — {}",
@@ -354,12 +354,12 @@ fn doctor_cmd() -> ExitCode {
     }
     if !resolution.missing_dependencies.is_empty() {
         println!();
-        println!("missing plugin dependencies (RFC 0015 §3 — declared by an active plugin, not present):");
+        println!("missing plugin dependencies (declared by an active plugin, not present):");
         for m in &resolution.missing_dependencies {
             println!("  {} — required by {}", m.coordinate, m.required_by);
         }
     }
-    // RFC 0017 §7's audit record: what each plugin actually asserted into the graph on the
+    // The audit record: what each plugin actually asserted into the graph on the
     // last run that ran the plugin round — the observable half of the threat model.
     if !report.plugin_contributions.is_empty() {
         println!();
@@ -412,8 +412,8 @@ fn doctor_cmd() -> ExitCode {
     ExitCode::SUCCESS
 }
 
-/// One line of doctor status for a global candidate (adapter or plugin — RFC 0017 §6 made the
-/// vocabulary shared): why it's running, or the plain fact that it isn't.
+/// One line of doctor status for a global candidate (adapter or plugin — the
+/// vocabulary is shared): why it's running, or the plain fact that it isn't.
 fn activation_status(active: &Option<kndo::ActivationReason>) -> String {
     match active {
         Some(kndo::ActivationReason::RuleMatched) => "active (rule matched)".to_string(),
@@ -423,7 +423,7 @@ fn activation_status(active: &Option<kndo::ActivationReason>) -> String {
     }
 }
 
-/// `kndo plugin install <coordinate>[@tag] | list | remove <coordinate>` (RFC 0015 §4) —
+/// `kndo plugin install <coordinate>[@tag] | list | remove <coordinate>` —
 /// pure presentation over `kndo::plugin_install`; every policy (checksum, identity binding,
 /// dependency closure, conflicts, lockfile) lives there.
 fn plugin_cmd(args: &[String]) -> ExitCode {
@@ -445,7 +445,7 @@ fn plugin_registry_cmd(sub: &str, rest: &[String]) -> ExitCode {
     }
 }
 
-/// The author-kit half of `kndo plugin` (RFC 0017 §7): `new`/`build` scaffold and produce a
+/// The author-kit half of `kndo plugin`: `new`/`build` scaffold and produce a
 /// component, `wit`/`verify` inspect the contract and the result.
 fn plugin_author_cmd(sub: &str, rest: &[String]) -> ExitCode {
     match sub {
@@ -529,7 +529,7 @@ fn plugin_wit(rest: &[String]) -> ExitCode {
     ExitCode::SUCCESS
 }
 
-/// `kndo plugin verify <component.wasm> [--project <dir>]` (RFC 0017 §7): pure presentation
+/// `kndo plugin verify <component.wasm> [--project <dir>]`: pure presentation
 /// over `kndo::verify` — load, descriptor report, warnings, and a real fixture drive
 /// (synthesized, or the author's own fixture with `--project`).
 fn plugin_verify(rest: &[String]) -> ExitCode {
@@ -647,7 +647,7 @@ fn plugin_remove(spec: &str) -> ExitCode {
             println!("removed {spec} (was {version})");
             println!(
                 "note: anything still depending on it will show as a missing dependency in \
-                 kndo doctor — never an error (RFC 0015 §3)"
+                 kndo doctor — never an error"
             );
             ExitCode::SUCCESS
         }
@@ -658,14 +658,13 @@ fn plugin_remove(spec: &str) -> ExitCode {
     }
 }
 
-/// `kndo baseline [--update]` (RFC 0006 §6, contracts §5's `Engine::baseline`): snapshot the
+/// `kndo baseline [--update]` (`Engine::baseline`): snapshot the
 /// complete current finding set into `.kndo/baseline.json` (committed — a human reviews the
-/// diff). Without `--update`, refuses to overwrite an existing baseline — the RFC's "growth
-/// requires an explicit `kndo baseline --update` in a reviewed commit" reads as *every* baseline
-/// write after the first needing that explicit flag, not just growth specifically, since a bare
+/// diff). Without `--update`, refuses to overwrite an existing baseline: *every* baseline
+/// write after the first needs that explicit flag, not just growth specifically, since a bare
 /// re-run can't tell growth from shrinkage without diffing first; `--update` covers both cases
-/// identically (a full snapshot replace), matching the RFC's "auto-dropped on `--update`"
-/// language for fixed entries. All the actual file I/O lives behind `Engine::baseline` — this is
+/// identically (a full snapshot replace), and fixed entries are auto-dropped by it.
+/// All the actual file I/O lives behind `Engine::baseline` — this is
 /// purely argument parsing and rendering the outcome, like every other command here.
 fn baseline_cmd(args: &[String]) -> ExitCode {
     let op = if args.iter().any(|a| a == "--update") {
@@ -736,8 +735,8 @@ fn parse_flags(args: &[String]) -> Result<Flags, String> {
         threads: None,
         by_package: false,
     };
-    // A valued flag with no value, and any token kndo doesn't know, are hard errors (M6
-    // error polish, RFC 0009 §6): a typo'd `--fail-onn warning` silently un-gating CI is
+    // A valued flag with no value, and any token kndo doesn't know, are hard errors:
+    // a typo'd `--fail-onn warning` silently un-gating CI is
     // worse than any friction rejecting it costs.
     let value = |it: &mut std::slice::Iter<'_, String>, flag: &str| {
         it.next()
@@ -778,7 +777,7 @@ fn parse_flags(args: &[String]) -> Result<Flags, String> {
     Ok(flags)
 }
 
-/// `--threads N` > `KNDO_THREADS` env > default physical cores (RFC 0008 §5) — resolved to a
+/// `--threads N` > `KNDO_THREADS` env > default physical cores — resolved to a
 /// concrete `Option<usize>` here (frontend argument-parsing concern) before it ever reaches
 /// `ConfigOverrides`; `None` means "use the default," never "unspecified but pending." `0`
 /// (either source) means the same thing explicitly: physical cores.
@@ -796,7 +795,7 @@ fn resolve_threads(explicit: Option<&str>, env: Option<&str>) -> Result<Option<u
 }
 
 /// The `ConfigOverrides` every subcommand *without its own* `--threads` flag should open an
-/// `Engine` with — still respects `KNDO_THREADS` (RFC 0008 §5's env-level override applies
+/// `Engine` with — still respects `KNDO_THREADS` (the env-level override applies
 /// everywhere, not just `check`), just without a per-command CLI flag to parse. `check` builds
 /// its own via `resolve_threads` instead, since it alone also accepts `--threads` explicitly.
 /// A malformed `KNDO_THREADS` degrades to the default (physical cores) rather than failing the
@@ -811,13 +810,13 @@ pub(crate) fn base_config_overrides() -> ConfigOverrides {
     }
 }
 
-/// `--staged` and `--diff <ref>` select `RunMode` (RFC 0006 §2); mutually exclusive, checked
+/// `--staged` and `--diff <ref>` select `RunMode`; mutually exclusive, checked
 /// here rather than left for the engine since "which mode" is entirely a frontend argument-
-/// parsing concern. **Known gap, already true before this flag existed and unchanged by it:**
-/// neither mode actually scopes the report to the change's effects yet (RFC 0004 §6's
-/// derived-effects diffing isn't implemented) — every mode still walks and reports the full
+/// parsing concern. **Known gap:**
+/// neither mode scopes the report to the change's effects (derived-effects
+/// diffing is not implemented) — every mode walks and reports the full
 /// tree; only `run.mode`/`run.base_ref` and the `--fail-on` default (below) react to the
-/// selected mode today.
+/// selected mode.
 fn resolve_mode(flags: &Flags) -> Result<RunMode, String> {
     match (flags.staged, &flags.diff) {
         (true, Some(_)) => Err("--staged and --diff are mutually exclusive".to_string()),
@@ -827,10 +826,10 @@ fn resolve_mode(flags: &Flags) -> Result<RunMode, String> {
     }
 }
 
-/// `--fail-on <severity>` (RFC 0006 §5): explicit flag wins; otherwise the default depends on
+/// `--fail-on <severity>`: explicit flag wins; otherwise the default depends on
 /// mode — `warning` in diff modes (a pre-commit gate should actually gate), `none` in full mode
 /// (exploratory by default — a legacy repo's pre-existing findings shouldn't fail a plain
-/// `kndo check`, RFC 0006 §6's day-one-adoption philosophy). `None` return means "never fail on
+/// `kndo check`; day-one adoption must be safe). `None` return means "never fail on
 /// findings"; `Some(sev)` means "fail if any finding is at least as severe as `sev`".
 fn resolve_fail_on(explicit: Option<&str>, mode: &RunMode) -> Result<Option<Severity>, String> {
     let raw = explicit.unwrap_or(match mode {
@@ -861,14 +860,14 @@ fn severity_rank(s: Severity) -> u8 {
     }
 }
 
-/// Exit-code decision from RFC 0006 §5's table, the findings half of it: delta budgets (the
-/// other half, "or a delta budget exceeded") depend on health scoring, which doesn't exist yet
-/// (M4) — not fabricated here, so today `--fail-on` is the whole gate.
+/// The findings half of the exit-code decision: delta budgets (the
+/// other half, "or a delta budget exceeded") are not wired here — `--fail-on` is the whole
+/// gate.
 fn exit_code_for_findings(findings: &[Finding], fail_on: Option<Severity>) -> ExitCode {
     let Some(threshold) = fail_on else {
         return ExitCode::SUCCESS;
     };
-    // RFC 0018 §2.2: an advisory finding (a plugin finding without a [plugins.gate] opt-in)
+    // An advisory finding (a plugin finding without a [plugins.gate] opt-in)
     // never moves the exit code, whatever its displayed severity and whatever the threshold —
     // installing a finding-emitting plugin must be safe by default.
     if findings
@@ -882,8 +881,7 @@ fn exit_code_for_findings(findings: &[Finding], fail_on: Option<Severity>) -> Ex
     }
 }
 
-/// `--format` flag > `KNDO_FORMAT` env > TTY auto-detect (human on TTY, json when piped) —
-/// RFC 0006 §2.
+/// `--format` flag > `KNDO_FORMAT` env > TTY auto-detect (human on TTY, json when piped).
 pub(crate) fn resolve_format(explicit: Option<&str>) -> String {
     if let Some(f) = explicit {
         return f.to_string();
@@ -900,8 +898,7 @@ pub(crate) fn resolve_format(explicit: Option<&str>) -> String {
     }
 }
 
-/// `NO_COLOR` always wins over `auto`; `--color always|never` overrides the TTY auto-detect
-/// (RFC 0009 §4).
+/// `NO_COLOR` always wins over `auto`; `--color always|never` overrides the TTY auto-detect.
 pub(crate) fn resolve_color(explicit: Option<&str>) -> bool {
     if std::env::var_os("NO_COLOR").is_some() {
         return false;
@@ -913,11 +910,11 @@ pub(crate) fn resolve_color(explicit: Option<&str>) -> bool {
     }
 }
 
-/// `kndo health` (RFC 0006 §2): the health score, per-category breakdown, and trend vs the
+/// `kndo health`: the health score, per-category breakdown, and trend vs the
 /// previous snapshot — a full-mode analysis presented health-first. `--by-package` adds the
-/// RFC 0011 §6 breakdown (same penalties grouped by package, never a different metric).
-/// Never a gate: always exits 0 — budgets (RFC 0006 §5) are the gating mechanism, and they
-/// arrive with the config file.
+/// per-package breakdown (same penalties grouped by package, never a different metric).
+/// Never a gate: always exits 0 — budgets are the gating mechanism, configured through the
+/// config file.
 fn health_cmd(args: &[String]) -> ExitCode {
     let flags = match parse_flags(args) {
         Ok(f) => f,
@@ -974,7 +971,7 @@ fn health_cmd(args: &[String]) -> ExitCode {
         return ExitCode::from(2);
     };
     match format.as_str() {
-        // The §4 health object is the whole payload here — `kndo check --format json` carries
+        // The health object is the whole payload here — `kndo check --format json` carries
         // the full envelope; this command answers exactly one question.
         "json" => match serde_json::to_string_pretty(health) {
             Ok(json) => println!("{json}"),
@@ -1055,9 +1052,9 @@ fn check(args: &[String]) -> ExitCode {
     };
     let result = engine.check(CheckRequest { mode });
 
-    // Diagnostics degrade the run, they don't kill it (RFC 0001 §6): report on stderr and
+    // Diagnostics degrade the run, they don't kill it: report on stderr and
     // continue — findings and diagnostics are not the same thing. stderr carries diagnostics
-    // in every format; stdout stays the pure report (RFC 0009 §6), JSON included.
+    // in every format; stdout stays the pure report, JSON included.
     for d in &result.diagnostics {
         let level = match d.level {
             kndo::adapter::DiagnosticLevel::Error => "error",
@@ -1093,7 +1090,7 @@ fn check(args: &[String]) -> ExitCode {
         .iter()
         .any(|d| d.level == kndo::adapter::DiagnosticLevel::Error)
     {
-        // The run could not do what was asked (an error-level diagnostic): RFC 0006 §5's
+        // The run could not do what was asked (an error-level diagnostic): the
         // exit-2 tier — never let an analysis that didn't run read as a clean pass.
         return ExitCode::from(2);
     }
@@ -1190,7 +1187,7 @@ mod tests {
 
     #[test]
     fn unknown_arguments_and_missing_values_are_rejected() {
-        // M6 error polish: a typo'd flag silently un-gating CI is worse than any friction.
+        // A typo'd flag silently un-gating CI is worse than any friction.
         let args: Vec<String> = vec!["--fail-onn".into(), "warning".into()];
         assert!(parse_flags(&args).unwrap_err().contains("--fail-onn"));
         let args: Vec<String> = vec!["--diff".into()];

@@ -1,7 +1,6 @@
 //! Runs every fixture under `tests/fixtures/` through the shared conformance harness
-//! (`kndo_core::conformance`, RFC 0002 §8) with the real `JsTsAdapter` — no `MockAdapter`, real
-//! discovery, real extraction, real resolution, the real `Engine`. This is the js-ts half of
-//! the ROADMAP M1 exit criterion ("correct findings on fixture corpus").
+//! (`kndo_core::conformance`) with the real `JsTsAdapter` — no `MockAdapter`, real
+//! discovery, real extraction, real resolution, the real `Engine`.
 
 use std::path::Path;
 

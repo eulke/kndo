@@ -1,12 +1,12 @@
 //! Compliance suite: proves the `kndo-plugin-api` v1 ABI end to end against a real, external,
 //! out-of-tree WASM component — `examples/kndo-plugin-demo` — driven through the real
-//! `kndo_core::engine::Engine`, the same facade the shipped `kndo` binary uses (ADR 0003's exit
-//! bar: "a third-party demo adapter runs against the released binary", ROADMAP M5).
+//! `kndo_core::engine::Engine`, the same facade the shipped `kndo` binary uses (the exit
+//! bar: a third-party demo adapter runs against the released binary).
 //!
 //! This test builds the demo guest itself (via `cargo build --target wasm32-unknown-unknown`)
 //! and componentizes the resulting core module with the `wit-component` library — the same
 //! library-only, no-external-CLI path a third-party author can use instead of installing
-//! `cargo-component` (docs/contracts/wasm-abi.md §3). Nothing is checked in pre-built: the
+//! `cargo-component`. Nothing is checked in pre-built: the
 //! component is always freshly built from the demo's current source, so this test can never
 //! pass against a stale artifact.
 

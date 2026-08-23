@@ -1,17 +1,17 @@
-//! Pure path classification for Next.js's file-system conventions (docs/plugins/nextjs.md
-//! §3/§4) — string in, tier out, no graph types, so every rule is unit-testable in isolation.
+//! Pure path classification for Next.js's file-system conventions —
+//! string in, tier out, no graph types, so every rule is unit-testable in isolation.
 
 /// Which convention surface a file belongs to — each tier carries its own set of
-/// framework-consumed export names (spec §4).
+/// framework-consumed export names.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Tier {
-    /// Any file under a pages directory — being routed is definitional (spec §4.1).
+    /// Any file under a pages directory — being routed is definitional.
     Pages,
-    /// A reserved basename under an app directory (spec §4.2).
+    /// A reserved basename under an app directory.
     AppSpecial,
-    /// `middleware.*` directly at an app root (spec §4.3).
+    /// `middleware.*` directly at an app root.
     Middleware,
-    /// `instrumentation.*` directly at an app root (spec §4.3).
+    /// `instrumentation.*` directly at an app root.
     Instrumentation,
 }
 
@@ -76,7 +76,7 @@ const INSTRUMENTATION_EXPORTS: &[&str] = &["register", "onRequestError"];
 impl Tier {
     /// Exports the framework calls by name for this tier — rooted at `Certain`; every other
     /// exported top-level symbol is rooted at `Probable` (the default-export component's local
-    /// name is arbitrary — spec §4.1's documented over-approximation).
+    /// name is arbitrary — a deliberate over-approximation).
     pub(crate) fn certain_exports(self) -> &'static [&'static str] {
         match self {
             Tier::Pages => PAGES_EXPORTS,
@@ -87,7 +87,7 @@ impl Tier {
     }
 }
 
-/// Directories that anchor Next's conventions (spec §3): any directory directly containing a
+/// Directories that anchor Next's conventions: any directory directly containing a
 /// `package.json` or a `next.config.*`. `""` is the project root. Sorted + deduped so
 /// classification order (and with it contribution order) is deterministic.
 pub(crate) fn app_roots<'a>(paths: impl IntoIterator<Item = &'a str>) -> Vec<String> {
@@ -109,9 +109,9 @@ fn is_anchor(base: &str) -> bool {
 }
 
 /// Which convention tier `path` belongs to, if any, relative to the nearest matching app root.
-/// `page_extensions` is RFC 0016 §5's upgrade: a per-root override of which extensions count as
+/// `page_extensions` is a per-root override of which extensions count as
 /// a page/app-router file (empty/missing entry for a root = the framework's own unfiltered
-/// default, this function's pre-existing behavior). Only `pages`/`app` tiers are ever
+/// default). Only `pages`/`app` tiers are ever
 /// extension-restricted — `middleware`/`instrumentation` aren't governed by `pageExtensions` in
 /// real Next.js, so `support_tier` never consults it.
 pub(crate) fn classify(
@@ -134,7 +134,7 @@ fn relative_to<'a>(path: &'a str, root: &str) -> Option<&'a str> {
 }
 
 fn classify_rel(rel: &str, extensions: Option<&[String]>) -> Option<Tier> {
-    // `src/` is an equivalent prefix for every tier (spec §3's table) — one strip covers all.
+    // `src/` is an equivalent prefix for every tier — one strip covers all.
     let rel = rel.strip_prefix("src/").unwrap_or(rel);
     pages_tier(rel, extensions)
         .or_else(|| app_tier(rel, extensions))
@@ -168,8 +168,8 @@ fn extension_allowed(basename: &str, extensions: Option<&[String]>) -> bool {
 }
 
 /// Statically-extractable `pageExtensions` array from a `next.config.*` file's raw source — no
-/// JS evaluation (spec's stated limit; RFC 0016 §5's amendment: "only statically readable
-/// values would upgrade"). Finds a `pageExtensions` key followed only by whitespace/`:`/`=`
+/// JS evaluation, ever: only statically readable
+/// values count. Finds a `pageExtensions` key followed only by whitespace/`:`/`=`
 /// and then a `[...]` literal of plain quoted strings; anything else — a variable, a spread, a
 /// function call, the key missing entirely — yields `None`, and the caller keeps this root's
 /// classification unfiltered rather than guessing at a dynamic value.
@@ -282,7 +282,7 @@ mod tests {
 
     #[test]
     fn a_components_directory_named_pages_is_not_a_pages_root() {
-        // The spec's motivating counter-example (§3): `src/components/pages/` is a component
+        // The motivating counter-example: `src/components/pages/` is a component
         // category, not a router — it must never be swallowed by segment matching.
         let r = roots(&["package.json"]);
         assert_eq!(
@@ -365,7 +365,7 @@ mod tests {
         assert!(!Tier::Pages.certain_exports().contains(&"GET"));
     }
 
-    // ------------------------------------------------------ pageExtensions (RFC 0016 §5)
+    // ------------------------------------------------------ pageExtensions overrides
 
     #[test]
     fn static_page_extensions_reads_a_plain_array_literal() {
@@ -389,7 +389,7 @@ mod tests {
     #[test]
     fn static_page_extensions_is_none_for_a_dynamic_value() {
         // Not a literal array — evaluating `DEFAULT_EXTENSIONS` would require running the JS,
-        // which is explicitly out of scope (spec's "content access *and* JS evaluation" note).
+        // which is explicitly out of scope.
         assert_eq!(
             static_page_extensions("pageExtensions: DEFAULT_EXTENSIONS"),
             None
@@ -411,7 +411,7 @@ mod tests {
             classify("pages/index.page.tsx", &r, &overrides),
             Some(Tier::Pages)
         );
-        // A plain .tsx under pages/ no longer qualifies once pageExtensions is customized —
+        // With pageExtensions customized, a plain .tsx under pages/ does not qualify —
         // real Next.js would not route this file either.
         assert_eq!(classify("pages/index.tsx", &r, &overrides), None);
     }
@@ -421,7 +421,7 @@ mod tests {
         let r = roots(&["package.json", "apps/web/package.json"]);
         let mut overrides = no_overrides();
         overrides.insert("apps/web".to_string(), vec!["page.tsx".to_string()]);
-        // The root app has no override — unfiltered, as before.
+        // The root app has no override — unfiltered.
         assert_eq!(
             classify("pages/index.tsx", &r, &overrides),
             Some(Tier::Pages)

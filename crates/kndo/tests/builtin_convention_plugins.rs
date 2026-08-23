@@ -1,5 +1,5 @@
-//! End-to-end proof of RFC 0015 §6 phase 4's built-in convention plugins, in the
-//! baseline-then-plugin shape docs/plugins/authoring.md §8 prescribes: each scenario runs the
+//! End-to-end proof of the built-in convention plugins, in a baseline-then-plugin shape:
+//! each scenario runs the
 //! same code twice through `kndo::open`, once *without* the activating manifest dependency
 //! (plugin inactive — the findings the plugin exists to suppress must be present) and once
 //! *with* it (plugin active — those findings, and only those, disappear). That proves the
@@ -97,8 +97,8 @@ fn nextjs_pages_router_roots_are_gated_by_the_manifest() {
 fn nextjs_app_router_matches_reserved_basenames_per_monorepo_package() {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path();
-    // The `next` dependency lives in a nested package, not the root manifest (RFC 0003 §4's
-    // monorepo-wide manifest scan), and the app root is derived from that package.json — so
+    // The `next` dependency lives in a nested package, not the root manifest (a monorepo-
+    // wide manifest scan finds it), and the app root is derived from that package.json — so
     // `apps/web/app/page.tsx` classifies while a colocated non-reserved module does not.
     write(root, "package.json", r#"{"dependencies": {}}"#);
     write(
@@ -133,7 +133,7 @@ fn nextjs_app_router_matches_reserved_basenames_per_monorepo_package() {
 
 #[test]
 fn nextjs_custom_page_extensions_narrow_the_pages_tier() {
-    // RFC 0016 §5: next.config.js customizes pageExtensions to only the `.page.tsx` suffix —
+    // next.config.js customizes pageExtensions to only the `.page.tsx` suffix —
     // read through the content channel, this must stop treating a plain `.tsx` under pages/
     // as routed (real Next.js wouldn't route it either), while the `.page.tsx` sibling still
     // gets rooted.
@@ -211,8 +211,8 @@ fn express_conventional_entry_is_gated_by_the_manifest() {
 
 #[test]
 fn express_manifest_derived_entry_rescues_a_non_conventionally_named_file() {
-    // RFC 0016 §5: `main-entry.js` matches none of §3's name conventions (app/server, at the
-    // root or under src/) — only reading package.json's `"scripts"."start"` (the content
+    // `main-entry.js` matches none of the default name conventions (app/server, at the root
+    // or under src/) — only reading package.json's `"scripts"."start"` (the content
     // channel's own upgrade) can identify it as the real entry.
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path();

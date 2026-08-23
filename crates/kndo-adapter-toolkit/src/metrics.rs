@@ -1,5 +1,5 @@
-//! Function-shape metrics (RFC 0005 §6, feeding `duplicate` now and `crap` in M4's later
-//! stages): a single walk over a callable's tree-sitter subtree yields cyclomatic complexity,
+//! Function-shape metrics (feeding the `duplicate` and `crap` analyses): a single walk
+//! over a callable's tree-sitter subtree yields cyclomatic complexity,
 //! LOC, and winnowing fingerprints over the *normalized* token stream — identifiers and
 //! literals canonicalized, comments skipped — so Type-1 clones (reformatting, comments) and
 //! Type-2 clones (renamed identifiers/literals) fingerprint identically, while any structural

@@ -1,4 +1,4 @@
-//! Import resolution (docs/adapters/kotlin.md §3): pure lookups against `ResolveCtx`'s known-
+//! Import resolution: pure lookups against `ResolveCtx`'s known-
 //! files/units index — same algorithm as the Java adapter's (crates/kndo-adapter-java/src/
 //! resolution.rs), extended with a `kotlin.`/`kotlin/` stdlib-prefix check alongside `java.`/
 //! `javax.` (every Kotlin/JVM project transitively depends on the full Java standard library

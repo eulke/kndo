@@ -11,4 +11,4 @@ target/
 # cleanly"). The `ignore` crate reads this file for its glob rules regardless of git-tracked
 # status, so this line doesn't affect version control at all.
 **/tests/fixtures/
-site/book/
+docs/book/

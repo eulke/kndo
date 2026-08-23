@@ -1,4 +1,4 @@
-//! Kotlin extraction (docs/adapters/kotlin.md §2), written against tree-sitter-kotlin-ng 1.1.0
+//! Kotlin extraction, written against tree-sitter-kotlin-ng 1.1.0
 //! node shapes verified by `parsing`'s `#[ignore]`d ground-truth dumps.
 //!
 //! Declaration/member dispatch is TABLE-driven (`DECL_HANDLERS`), not a `match` with one arm
@@ -29,7 +29,7 @@ const GENERATED_MARKERS: kndo_adapter_toolkit::classify::ContentMarkers =
         comment_openers: &["//", "/*", "*"],
     };
 
-/// docs/adapters/kotlin.md §2: `when_entry` counts once per arm (matching Java/JS's n-way-
+/// `when_entry` counts once per arm (matching Java/JS's n-way-
 /// match rule); elvis (`?:`) and not-null (`!!`) are deliberately NOT branches — value-
 /// producing fallback/assertion operators, not control-flow forks.
 const METRICS_SYNTAX: MetricsSyntax = MetricsSyntax {
@@ -60,8 +60,8 @@ const METRICS_SYNTAX: MetricsSyntax = MetricsSyntax {
 const MIN_CLONE_TOKENS: usize = 50;
 
 /// Item-walk context: the member owner (a class/object/companion's bare name), for `member_of`
-/// attribution (RFC 0012 §3). Companion-object members carry the ENCLOSING class's name here,
-/// not the companion's own (docs/adapters/kotlin.md §0's pragmatic call).
+/// attribution. Companion-object members carry the ENCLOSING class's name here,
+/// not the companion's own (a pragmatic call).
 struct Ctx<'a> {
     owner: Option<&'a str>,
 }
@@ -144,7 +144,7 @@ fn handle_package(item: Node, src: &[u8], out: &mut FileFacts) {
     out.unit_name = Some(SmolStr::new(name));
 }
 
-/// `import com.foo.Bar` / `import com.foo.Bar as Alias` / `import com.foo.*` (spec §3). Kotlin
+/// `import com.foo.Bar` / `import com.foo.Bar as Alias` / `import com.foo.*`. Kotlin
 /// has no `import static` sentinel shape (a top-level `const val`/function imports the same
 /// way a class does).
 fn handle_import(item: Node, src: &[u8], out: &mut FileFacts) {
@@ -213,7 +213,7 @@ fn make_import(
     }
 }
 
-// ---------------------------------------------------------------- visibility (spec §0)
+// ---------------------------------------------------------------- visibility
 
 const VISIBILITY_LEVELS: &[(&str, u8)] = &[
     ("private", 0),
@@ -222,9 +222,9 @@ const VISIBILITY_LEVELS: &[(&str, u8)] = &[
     ("public", 3),
 ];
 
-/// `[File "private", Package "internal", Public "protected", Public "public"]` (spec §0). No
+/// `[File "private", Package "internal", Public "protected", Public "public"]`. No
 /// modifier at all defaults to `public` (3) — the OPPOSITE default from Java's package-private,
-/// the load-bearing difference §0 documents at length.
+/// a load-bearing difference.
 fn visibility(item: Node) -> (u8, bool) {
     let level = visibility_keyword(item)
         .and_then(|kw| VISIBILITY_LEVELS.iter().find(|(k, _)| *k == kw))
@@ -302,7 +302,7 @@ fn handle_type(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
 }
 
 /// `class C(private val x: Int, var y: String, z: Boolean)` — a `class_parameter` carrying
-/// `val`/`var` is a real constructor-promoted property (spec §2); a bare one is just a
+/// `val`/`var` is a real constructor-promoted property; a bare one is just a
 /// constructor argument, its type still a `TypeUse` under the class's own liveness.
 fn handle_primary_constructor(primary: Node, src: &[u8], owner: &str, out: &mut FileFacts) {
     let Some(params) = find_child(primary, "class_parameters") else {
@@ -361,7 +361,7 @@ fn handle_object(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
     }
 }
 
-/// `companion object Named { … }` — members attribute to the ENCLOSING class (spec §0), not to
+/// `companion object Named { … }` — members attribute to the ENCLOSING class, not to
 /// the companion itself: `Widget.factory()` is overwhelmingly how real code addresses them.
 fn handle_companion(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
     let Some(owner) = ctx.owner else {
@@ -413,9 +413,9 @@ fn qualify(owner: Option<&str>, name: &str) -> (SymbolKind, String) {
     (SymbolKind::Method, format!("{owner}.{name}"))
 }
 
-/// Top-level `fun main()` — the canonical Kotlin JVM entry point (spec §2; the `@JvmStatic fun
-/// main()`-inside-`object` variant is a documented non-goal, spec §7) — or `override` dispatch
-/// rooting (spec §0, the modifier keyword rather than an annotation).
+/// Top-level `fun main()` — the canonical Kotlin JVM entry point (the `@JvmStatic fun
+/// main()`-inside-`object` variant is a documented non-goal) — or `override` dispatch
+/// rooting (the modifier keyword rather than an annotation).
 fn root_function_if_entry_point(
     item: Node,
     owner: Option<&str>,
@@ -434,7 +434,7 @@ fn root_function_if_entry_point(
     }
     // An `override` member is invoked through a supertype the call site never names — when
     // the supertype is external (KSP's SymbolProcessor, a framework listener) no reference
-    // graph can reach it by name. Machinery dispatch (RFC 0005 §1): reaching the owner
+    // graph can reach it by name. Machinery dispatch: reaching the owner
     // plausibly reaches its overrides.
     if is_override {
         if let Some(decl) = out.declarations.last_mut().filter(|d| d.name == name) {
@@ -516,7 +516,7 @@ fn push_function_metrics(out: &mut FileFacts, qualified: &str, body: Node) {
 // ---------------------------------------------------------------- properties, type aliases, init
 
 /// Flip `implicitly_invoked` on the just-pushed declaration when the item carries the
-/// `override` modifier — dispatch machinery, RFC 0005 §1.
+/// `override` modifier — dispatch machinery.
 fn mark_override_implicit(item: Node, name: &str, out: &mut FileFacts) {
     if !has_modifier_wrapper(item, "member_modifier", "override") {
         return;
@@ -638,7 +638,7 @@ fn push_declaration(
 
 // ---------------------------------------------------------------- type refs & extends
 
-/// `user_type` positions → `TypeUse` (spec §2); recurses into `type_arguments` for generics
+/// `user_type` positions → `TypeUse`; recurses into `type_arguments` for generics
 /// (`List<Foo>` → `Foo` too) but not into the base path's own segments (already captured by
 /// `last_identifier_text`).
 fn walk_type_refs(node: Node, src: &[u8], within: Option<&str>, out: &mut FileFacts) {
@@ -775,7 +775,7 @@ fn handle_navigation(node: Node, src: &[u8], within: Option<&str>, out: &mut Fil
 }
 
 /// `a.b`/`a.b.c()` — the terminal segment becomes the reference, `scope_context` is set when
-/// the immediately-preceding segment is a plain identifier/`this` (spec §2); a complex receiver
+/// the immediately-preceding segment is a plain identifier/`this`; a complex receiver
 /// (a nested navigation/call) is walked for its own references instead.
 fn emit_navigation_ref(
     node: Node,
@@ -1165,10 +1165,9 @@ mod tests {
 
     #[test]
     fn a_non_comment_line_never_triggers_generated_detection() {
-        // Same self-reference shape that motivated the toolkit-level fix (docs/adapters/
-        // kotlin.md §0 is not the source of this one, but this adapter defines its own
-        // GENERATED_MARKERS the same way Java's does — this guards against regressing to the
-        // unguarded `Contains` behavior for Kotlin specifically): the marker text appears as
+        // Same self-reference shape the toolkit guards against: this adapter defines its own
+        // GENERATED_MARKERS the same way Java's does — this guards against the
+        // unguarded `Contains` behavior for Kotlin specifically. The marker text appears as
         // plain code (a string literal value), not inside an actual comment banner.
         let f = facts("package p\nval x = \"@generated\"\nclass C\n");
         assert_eq!(f.detected_origin, None);

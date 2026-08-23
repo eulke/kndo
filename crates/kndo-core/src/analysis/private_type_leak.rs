@@ -1,29 +1,29 @@
-//! `private-type-leak` — declared visibility *below* what usage requires (RFC 0005 §7, group
+//! `private-type-leak` — declared visibility *below* what usage requires (group
 //! `defect`): the second half of the visibility-mismatch pair (`internal-only` is the other
 //! direction). "A public/exported symbol whose signature references a type of *lower*
 //! visibility — the API promises a type its consumers cannot name."
 //!
-//! Built exactly on RFC 0012 §5's two facts and nothing else: a `TypeUse`-kinded `References`
-//! edge attributed (`within`, §4) to the exported declaration, whose site span lies inside
+//! Built exactly on the two facts and nothing else: a `TypeUse`-kinded `References`
+//! edge attributed (`within`) to the exported declaration, whose site span lies inside
 //! that declaration's `signature_span`. Body-internal type uses are not leaks (a private type
 //! used *inside* a public function is ordinary encapsulation); only the signature is a
 //! promise. v1 is deliberately callables-only — `signature_span` is `None` on type
 //! declarations until fields exist as member declarations with their own visibility, because
 //! firing on a whole struct body would falsely accuse exported-struct/unexported-field shapes
-//! (RFC 0012 §2: degrade toward silence, never toward accusation).
+//! (degrade toward silence, never toward accusation).
 //!
-//! Severity per RFC 0005 §7: warning in library-mode packages (a lying public API), info in
-//! app packages — the package's publish signal (`PackageNode::private`, RFC 0011 §5) is the
-//! mode. Only **certain**-confidence evidence edges accuse (M6 FP hunt: fallback bindings
+//! Severity: warning in library-mode packages (a lying public API), info in
+//! app packages — the package's publish signal (`PackageNode::private`) is the
+//! mode. Only **certain**-confidence evidence edges accuse (fallback bindings
 //! routinely pick the wrong same-name type), the declaration's *effective* surface is computed
 //! through its `member_of` chain (an exported-looking member of an unexported container is not
 //! public API), and test-role code is exempt. Cross-language pairs are skipped —
-//! visibility levels only mean anything *within one language's ladder* (RFC 0012 §6) and
+//! visibility levels only mean anything *within one language's ladder* and
 //! comparing them across languages would be numerology. "Lower visibility" is compared as
 //! ladder rung *scopes* when the language declared a ladder (so same-scope rungs like Java
 //! `protected`/`public` never accuse each other), raw indices otherwise.
 //!
-//! Exemption (RFC 0005 §7, shared with `internal-only`): a leaked type a plugin's
+//! Exemption (shared with `internal-only`): a leaked type a plugin's
 //! `annotate_symbols` marked externally consumed (`ProjectGraph::is_externally_consumed`) isn't
 //! actually unnameable to consumers — FFI, serialization, a public SDK surface the graph itself
 //! has no edge for — so the "lying public API" verdict doesn't hold.
@@ -40,12 +40,12 @@ fn contains(outer: &Span, inner: &Span) -> bool {
     outer.start <= inner.start && inner.end <= outer.end
 }
 
-/// The declaration's *effective* surface through its `member_of` chain (M6 FP hunt): a
+/// The declaration's *effective* surface through its `member_of` chain: a
 /// capitalized Go method on an unexported receiver, or a public method of a private nested
 /// Java class, is not public API — a member is only as visible as every container above it.
 /// `exported` is the conjunction along the chain; `visibility` the lowest rung. `None` when a
 /// container name doesn't resolve to a same-file declaration (a generic impl target like
-/// `impl<M> Trait for &M` — no surface we can vouch for; degrade toward silence, RFC 0012 §2).
+/// `impl<M> Trait for &M` — no surface we can vouch for; degrade toward silence).
 struct EffectiveSurface {
     exported: bool,
     visibility: crate::adapter::VisibilityLevel,
@@ -107,8 +107,8 @@ pub fn find_private_type_leaks(graph: &ProjectGraph) -> Vec<Finding> {
         };
         // A defect-group accusation needs certain evidence: a duck-typed or qualified-table
         // fallback binding (Probable/Possible) routinely picks the wrong same-name type
-        // across files — the M6 FP hunt's Alamofire corpus bound stdlib `Error` mentions to
-        // arbitrary nested `Error` enums. Degrade toward silence (RFC 0012 §2).
+        // across files — e.g. binding stdlib `Error` mentions to
+        // arbitrary nested `Error` enums. Degrade toward silence.
         if edge.confidence != Confidence::Certain {
             continue;
         }
@@ -131,8 +131,8 @@ pub fn find_private_type_leaks(graph: &ProjectGraph) -> Vec<Finding> {
         }
 
         if graph.is_externally_consumed(type_id) {
-            continue; // a plugin marked the leaked type externally consumed (RFC 0003 §2
-                      // annotate_symbols, RFC 0005 §7 exemption) — its consumers really can
+            continue; // a plugin marked the leaked type externally consumed (the
+                      // annotate_symbols exemption) — its consumers really can
                       // name it, just not through an edge the graph itself models (FFI,
                       // serialization, a public SDK surface the plugin knows about)
         }
@@ -150,12 +150,12 @@ pub fn find_private_type_leaks(graph: &ProjectGraph) -> Vec<Finding> {
         if class.role == FileRole::Test
             || crate::graph::span_in_test_region(&decl_file.test_spans, decl.span)
         {
-            continue; // a test file's exports are not an API promise (M6 FP hunt)
+            continue; // a test file's exports are not an API promise
         }
         if decl_file.language != leaked_file.language {
             continue; // visibility levels only compare within one language (module doc)
         }
-        // "Lower visibility" via the language's ladder when it's declared (RFC 0012 §6):
+        // "Lower visibility" via the language's ladder when it's declared:
         // comparing *scopes* — not raw indices — means two rungs sharing a scope (Java
         // `protected`/`public`, both `Public` by the conservative-mapping rule) never accuse
         // each other. Fall back to index comparison when no ladder covers the levels — the
@@ -184,7 +184,7 @@ pub fn find_private_type_leaks(graph: &ProjectGraph) -> Vec<Finding> {
         let facet = decl.kind.facet();
         let qualified = decl.qualified_name();
         let leaked_name = leaked.qualified_name();
-        // Library vs app mode (RFC 0011 §5): the publish signal of the *declaring* package.
+        // Library vs app mode: the publish signal of the *declaring* package.
         let is_library = graph
             .packages
             .get(decl_file.package.0 as usize)
@@ -321,9 +321,9 @@ mod tests {
     #[test]
     fn plugin_annotated_externally_consumed_type_is_exempt() {
         // Same leak shape as above (which fires without the annotation) — a plugin's
-        // `annotate_symbols` (RFC 0003 §2) marking the *leaked type* externally consumed means
+        // `annotate_symbols` marking the *leaked type* externally consumed means
         // its consumers really can name it (FFI, serialization, a public SDK surface the graph
-        // has no edge for), so the "lying public API" verdict no longer holds.
+        // has no edge for), so the "lying public API" verdict doesn't hold.
         let symbols = vec![
             callable(FileId(0), "F", 1, span(1, 1, 1, 40)),
             ty(FileId(0), "secret", 0),
@@ -451,7 +451,7 @@ mod tests {
     #[test]
     fn same_scope_rungs_do_not_leak_even_with_different_indices() {
         // Java-shaped tail: `protected` (rung 2) in a `public` (rung 3) signature — both map
-        // to `Public` scope by RFC 0012 §6's conservative rule, so index inequality alone
+        // to `Public` scope by the conservative rule, so index inequality alone
         // must not accuse.
         use crate::adapter::{VisibilityRung, VisibilityScope};
         let rung = |scope, label: &str| VisibilityRung {
@@ -483,9 +483,9 @@ mod tests {
 
     #[test]
     fn a_non_certain_evidence_edge_never_accuses() {
-        // M6 FP hunt: duck-typed/qualified-table fallback bindings (Probable/Possible)
+        // Duck-typed/qualified-table fallback bindings (Probable/Possible)
         // routinely pick the wrong same-name type — a defect-group accusation needs certain
-        // evidence (RFC 0012 §2: degrade toward silence).
+        // evidence (degrade toward silence).
         let symbols = vec![
             callable(FileId(0), "F", 1, span(1, 1, 1, 40)),
             ty(FileId(0), "secret", 0),
@@ -502,7 +502,7 @@ mod tests {
 
     #[test]
     fn a_member_of_an_unexported_container_is_not_public_surface() {
-        // gin's `timeCodec.Decode` shape (M6 FP hunt): an exported-looking method on an
+        // gin's `timeCodec.Decode` shape: an exported-looking method on an
         // unexported receiver is not public API — no leak to accuse.
         let mut method = callable(FileId(0), "Decode", 1, span(3, 1, 3, 40));
         method.member_of = Some(smol_str::SmolStr::new("timeCodec"));
@@ -522,7 +522,7 @@ mod tests {
 
     #[test]
     fn an_unresolvable_container_name_vouches_for_nothing() {
-        // ripgrep's `impl<M> Matcher for &M` shape: member_of names a generic parameter that
+        // The `impl<M> Matcher for &M` shape: member_of names a generic parameter that
         // is no declaration — skip rather than accuse.
         let mut method = callable(FileId(0), "captures", 1, span(3, 1, 3, 40));
         method.member_of = Some(smol_str::SmolStr::new("M"));

@@ -1,11 +1,11 @@
-//! `crap` — Change Risk Anti-Patterns (RFC 0005 §10): per callable,
+//! `crap` — Change Risk Anti-Patterns: per callable,
 //! `CRAP(m) = comp(m)² × (1 − cov(m))³ + comp(m)`, with `comp` the adapter-extracted
 //! cyclomatic complexity ([`crate::graph::SymbolMetrics`]) and `cov` the covered fraction of
-//! the function's instrumented lines from ingested reports ([`crate::coverage::CoverageMap`],
-//! ADR 0005 — coverage is a separate `run_all` input precisely because its freshness varies
+//! the function's instrumented lines from ingested reports ([`crate::coverage::CoverageMap`]
+//! — coverage is a separate `run_all` input precisely because its freshness varies
 //! independently of the graph's content hashes).
 //!
-//! No coverage data for a function ⇒ the RFC's "CRAPload with cov=0, flagged
+//! No coverage data for a function ⇒ "CRAPload with cov=0, flagged
 //! `coverage: none`" — the score is computed pessimistically and the message says why, rather
 //! than silently skipping the exact functions most likely to be the problem. Test code is
 //! exempt (a test's own coverage is meaningless), as are generated/vendored files (not yours
@@ -17,8 +17,8 @@ use crate::engine::{Finding, Location, Severity};
 use crate::graph::ProjectGraph;
 use crate::vocab::{Confidence, FileOrigin, FileRole};
 
-/// RFC 0005 §10's standard threshold ("findings for CRAP > 30"); configurability lands with
-/// the config file.
+/// The standard threshold ("findings for CRAP > 30"); not configurable while no
+/// config file exists.
 pub(crate) const CRAP_THRESHOLD: f64 = 30.0;
 
 pub fn crap_score(cyclomatic: u32, coverage: f64) -> f64 {
@@ -241,7 +241,7 @@ mod tests {
 
     #[test]
     fn simple_functions_never_fire_even_uncovered() {
-        // comp 5 uncovered: 25 + 5 = 30 — exactly at the threshold, and the RFC says "> 30".
+        // comp 5 uncovered: 25 + 5 = 30 — exactly at the threshold, and the rule is "> 30".
         let graph = graph_with(
             vec![file(
                 "src/a.mock",

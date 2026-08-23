@@ -1,5 +1,5 @@
-// kndo performance spike — validates the RFC 0001 §5 warm-run budget.
-// Disposable by design; findings live in docs/spikes/0001-performance.md.
+// kndo performance spike — validates the warm-run performance budget.
+// Disposable by design; findings live in internal/spikes/0001-performance.md.
 //
 // Usage:
 //   kndo-perf-spike gen <dir> <n-files>     generate a synthetic TS repo
@@ -171,7 +171,7 @@ fn run(root: &Path) {
     }
     let build_ms = t.elapsed().as_secs_f64() * 1e3;
 
-    // persist as flat little-endian u32 arrays (the rkyv/CSR model of ADR 0004)
+    // persist as flat little-endian u32 arrays (the rkyv/CSR persistence model)
     let cache = root.join(".spike-cache.bin");
     let t = Instant::now();
     let mut blob = Vec::with_capacity((offsets.len() + targets.len()) * 4 + 16);

@@ -1,6 +1,6 @@
 [package]
 name = "kndo-adapter-java"
-description = "Java language adapter for kndo (docs/adapters/java.md)"
+description = "Java language adapter for kndo"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

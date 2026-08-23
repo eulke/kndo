@@ -1,10 +1,9 @@
-//! Proves the M5 exit bar literally: a third-party demo adapter, built out-of-tree, runs
-//! against `kndo::open` — the exact entry point the shipped `kndo-cli` binary calls at every
-//! command (ROADMAP M5: "a third-party demo adapter (not in-tree) runs against the released
-//! binary"). Unlike `kndo-plugin-api`'s own compliance test (which drives a `WasmAdapter`
-//! directly through a hand-built `Engine`), this test goes through the full product
-//! composition — `.kndo/plugins/*.wasm` auto-discovery included — so it also pins that the
-//! discovery wiring itself works, not just the ABI bridge underneath it.
+//! A third-party demo adapter, built out-of-tree, runs against `kndo::open` — the exact
+//! entry point the shipped `kndo-cli` binary calls at every command. Unlike
+//! `kndo-plugin-api`'s own compliance test (which drives a `WasmAdapter` directly through a
+//! hand-built `Engine`), this test goes through the full product composition —
+//! `.kndo/plugins/*.wasm` auto-discovery included — so it also pins that the discovery
+//! wiring itself works, not just the ABI bridge underneath it.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;

@@ -1,4 +1,4 @@
-//! Import resolution (docs/adapters/rust.md §3): pure path arithmetic over `ResolveCtx`'s
+//! Import resolution: pure path arithmetic over `ResolveCtx`'s
 //! known file set, mirroring the module-tree rules the compiler applies — never querying it.
 //!
 //! Anchors: `crate::` → the owning package's crate root (`src/lib.rs`, else `src/main.rs` —
@@ -7,7 +7,7 @@
 //! (`mod.rs`, `lib.rs`, `main.rs`) owns its directory; a named file `a.rs` owns child
 //! directory `a/`.
 //!
-//! Tail rule (spec §3, two-step): try the full path as a module file; on a miss, drop the
+//! Tail rule (two-step): try the full path as a module file; on a miss, drop the
 //! last segment and resolve the rest — the tail was an item, and the import's binding
 //! resolves it inside the target file. One rule, no name-shape heuristics.
 //!
@@ -22,7 +22,7 @@ use kndo_core::vocab::Confidence;
 use smol_str::SmolStr;
 
 /// The extern-prelude sysroot crates — a language-stability guarantee, hand-maintained by
-/// design (spec §3), not generated toolchain data.
+/// design, not generated toolchain data.
 const STDLIB: [&str; 5] = ["std", "core", "alloc", "proc_macro", "test"];
 
 pub(crate) fn resolve(spec: &ImportSpec, ctx: &ResolveCtx<'_>) -> Resolution {
@@ -154,7 +154,7 @@ fn resolve_bare(root: &str, rest: &[&str], from: &str, ctx: &ResolveCtx<'_>) -> 
     }
 
     // Workspace member, `_` ↔ `-` normalized; the DECLARED spelling is returned so
-    // dependency hygiene cross-references correctly (spec §3).
+    // dependency hygiene cross-references correctly.
     let hyphenated = root.replace('_', "-");
     let member = ctx
         .workspace_member(root)
@@ -227,7 +227,7 @@ fn resolve_bare(root: &str, rest: &[&str], from: &str, ctx: &ResolveCtx<'_>) -> 
 }
 
 /// `use member_name::a::b` — the sibling's entry for the bare name, or a module walk into
-/// its `src/` for subpaths (deep imports recorded, RFC 0011 §4).
+/// its `src/` for subpaths (deep imports recorded).
 fn resolve_into_member(
     declared: &str,
     member: &WorkspaceMember,
@@ -292,7 +292,7 @@ fn is_dir_owner(path: &str) -> bool {
     matches!(basename(path), "mod.rs" | "lib.rs" | "main.rs")
 }
 
-/// The directory this file's child modules live in (spec §3): owners own their directory;
+/// The directory this file's child modules live in: owners own their directory;
 /// `a.rs` owns `a/`.
 fn own_module_dir(path: &str) -> String {
     let dir = dirname(path);
@@ -331,7 +331,7 @@ fn module_file_for_dir(dir: &str, ctx: &ResolveCtx<'_>) -> Option<String> {
 }
 
 /// The owning package's module-tree anchor: its source directory and crate-root file
-/// (`lib.rs` preferred over `main.rs`, spec §3). Nearest ancestor with a Cargo.toml; when
+/// (`lib.rs` preferred over `main.rs`). Nearest ancestor with a Cargo.toml; when
 /// that package doesn't follow the `src/` convention, the manifest's own declared targets
 /// decide — a `[[bin]] path = "crates/core/main.rs"` roots a whole module tree there, and
 /// every `crate::` path inside it anchors on the target file's directory.
@@ -577,9 +577,9 @@ mod tests {
 
     #[test]
     fn declared_targets_anchor_a_module_tree_outside_src() {
-        // ripgrep's shape: the root manifest declares `[[bin]] path = "crates/core/main.rs"`
+        // The root manifest declares `[[bin]] path = "crates/core/main.rs"`
         // and there is no `src/` at all — the bin target's directory owns the module tree,
-        // so `crate::` paths from anywhere inside it anchor there (spec §3).
+        // so `crate::` paths from anywhere inside it anchor there.
         let files = known(&[
             "Cargo.toml",
             "crates/core/main.rs",
@@ -589,7 +589,7 @@ mod tests {
         ]);
         let mut members: FxHashMap<SmolStr, WorkspaceMember> = FxHashMap::default();
         members.insert(
-            SmolStr::new("ripgrep"),
+            SmolStr::new("grepper"),
             WorkspaceMember {
                 dir: SmolStr::new(""),
                 entry: None,

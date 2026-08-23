@@ -1,4 +1,4 @@
-// kndo-action's publishing half (RFC 0010 §4): reads the JSON report — the only contract this
+// kndo-action's publishing half: reads the JSON report — the only contract this
 // frontend consumes — and publishes it to the three surfaces: the sticky PR comment (upserted
 // in place, marked by a hidden HTML comment), file annotations for new findings ≥ warning
 // (capped at GitHub's per-step limit), and the job summary (always, even where comments are
@@ -13,13 +13,13 @@
 import { readFileSync, appendFileSync } from "node:fs";
 
 const MARKER = "<!-- kndo-report -->";
-const ANNOTATION_CAP = 10; // GitHub renders ~10 annotations per step; honored explicitly (§4).
+const ANNOTATION_CAP = 10; // GitHub renders ~10 annotations per step; honored explicitly.
 const SECTION_CAP = 30; // hard cap per comment section, with a link to the run for the rest.
 
 const report = JSON.parse(readFileSync(process.env.KNDO_REPORT, "utf8"));
 const exitCode = Number(process.env.KNDO_EXIT ?? "0");
 
-// RFC 0009 §3's glyph vocabulary, emoji-safe (render.rs `glyph`); groups drive section order.
+// The CLI glyph vocabulary, emoji-safe (mirrors render.rs `glyph`); groups drive section order.
 const GROUP_ORDER = ["defect", "waste", "risk", "hygiene", "convention"];
 const GLYPH = { defect: "✗", waste: "◦", risk: "▲", hygiene: "·", convention: "•" };
 
@@ -92,7 +92,7 @@ function buildMarkdown() {
 
   if (fixed.length > 0) {
     const shown = fixed.slice(0, SECTION_CAP);
-    // Fixed findings always render — the reward loop applies to reviewers too (§4).
+    // Fixed findings always render — the reward loop applies to reviewers too.
     parts.push(
       "**Fixed** " +
         shown
@@ -156,7 +156,7 @@ async function upsertComment(body) {
     /* no event payload — not a workflow context that can comment */
   }
   const pr = event.pull_request?.number;
-  if (!pr) return; // not a PR run — annotations + summary already cover it (§4).
+  if (!pr) return; // not a PR run — annotations + summary already cover it.
 
   const api = process.env.GITHUB_API_URL ?? "https://api.github.com";
   const repo = process.env.GITHUB_REPOSITORY;
@@ -188,7 +188,7 @@ async function upsertComment(body) {
         });
     if (!res.ok) throw new Error(`write comment: HTTP ${res.status}`);
   } catch (e) {
-    // Fork PRs: the default token cannot write comments — degrade, never fail (§5).
+    // Fork PRs: the default token cannot write comments — degrade, never fail.
     const notice = `kndo: could not publish the PR comment (${e.message}) — likely a fork PR without a write token; the report is in this job summary instead.`;
     console.log(`::notice title=kndo::${notice}`);
     appendFileSync(process.env.GITHUB_STEP_SUMMARY, `\n> ${notice}\n`);

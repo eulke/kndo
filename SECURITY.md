@@ -20,7 +20,7 @@ If GitHub's private reporting isn't available to you for some reason, contact
 ## Scope
 
 kndo is a static analyzer: it reads source files and never executes the code it analyzes. The
-security surface that matters most is the WASM plugin/adapter sandbox (RFC 0003, ADR 0003) — a
+security surface that matters most is the WASM plugin/adapter sandbox — a
 third-party `.wasm` component escaping its sandbox, exhausting resources beyond its fuel budget,
 or reading files outside what it declares (`requested_file_access`) are all in scope and taken
 seriously. Parser crashes or panics on malformed/adversarial input (tree-sitter grammars, JSON/
@@ -30,5 +30,5 @@ untrusted input is still a real availability issue for anyone running kndo in CI
 ## Supported Versions
 
 Pre-1.0: only the latest released version is supported. Once 1.0 ships, this section will state
-a real support window per the semver commitments RFC 0014 §4 describes for kndo's contract
+a real support window per the semver commitments kndo makes for its contract
 surfaces (JSON output schema, WASM ABI, CLI surface).

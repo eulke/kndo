@@ -1,9 +1,9 @@
-//! Pure path classification for Express's entry-file conventions (docs/plugins/express.md §3)
-//! — string in, bool out, no graph types.
+//! Pure path classification for Express's entry-file conventions —
+//! string in, bool out, no graph types.
 
 /// Directories that anchor the entry convention: any directory directly containing a
-/// `package.json` (`""` is the project root). Same derivation as nextjs.md §3 minus the
-/// `next.config.*` anchor — Express has no config-file convention to anchor on.
+/// `package.json` (`""` is the project root). Same derivation as the nextjs plugin's minus
+/// the `next.config.*` anchor — Express has no config-file convention to anchor on.
 pub(crate) fn app_roots<'a>(paths: impl IntoIterator<Item = &'a str>) -> Vec<String> {
     let mut roots: Vec<String> = paths
         .into_iter()
@@ -18,7 +18,7 @@ pub(crate) fn app_roots<'a>(paths: impl IntoIterator<Item = &'a str>) -> Vec<Str
 /// Whether `path` is a conventional entry candidate at some app root:
 /// `R/app.<ext>`, `R/server.<ext>`, `R/src/app.<ext>`, `R/src/server.<ext>`.
 ///
-/// `index.<ext>` is deliberately excluded (spec §3): root-level `index` files are the JS
+/// `index.<ext>` is deliberately excluded: root-level `index` files are the JS
 /// ecosystem's package-main convention, not an Express signal — including them would
 /// blanket-exempt library surfaces in every monorepo that uses Express somewhere.
 pub(crate) fn is_entry(path: &str, app_roots: &[String]) -> bool {
@@ -41,13 +41,13 @@ fn entry_rel(rel: &str) -> bool {
 }
 
 /// Candidate entry paths derived from one app root's `package.json` content — the `"main"`
-/// field and any `node`/`nodemon` invocation inside `"scripts"` values (docs/plugins/
-/// express.md §3's "right long-term fix": deriving the true entry from `scripts.start` instead
-/// of guessing by name alone). Pure parsing over already-fetched bytes; the caller resolves
-/// each candidate against the real claimed file set — this function only proposes, same
-/// "propose, host validates" split every other plugin-contributed target already has
-/// (`PluginTarget` resolution, RFC 0003 §2). Malformed JSON yields no candidates, not an error
-/// — a plugin degrading to its existing name heuristic on a manifest it can't parse is the same
+/// field and any `node`/`nodemon` invocation inside `"scripts"` values: deriving the true
+/// entry from `scripts.start` instead of guessing by name alone. Pure parsing over
+/// already-fetched bytes; the caller resolves
+/// each candidate against the real claimed file set — this function only proposes, the same
+/// "propose, host validates" split every plugin-contributed target has
+/// (`PluginTarget` resolution). Malformed JSON yields no candidates, not an error
+/// — a plugin degrading to its name heuristic on a manifest it can't parse is the same
 /// silence-over-guessing posture as every other miss in this product.
 pub(crate) fn manifest_entry_candidates(root: &str, package_json: &[u8]) -> Vec<String> {
     let Ok(value) = serde_json::from_slice::<serde_json::Value>(package_json) else {

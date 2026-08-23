@@ -1,7 +1,7 @@
 //! kndo-plugin-hooks-demo — the reference external `Plugin` for kndo-plugin-api's `kndo:plugin`
-//! v1 ABI (docs/contracts/wasm-abi.md §5). Convention-based rather than framework-specific (a
-//! real React/Next.js-style plugin is its own, separate design — RFC 0003 §3's "carried out of
-//! M5" item), but it exercises every hook for real, including the bidirectional `list-files`/
+//! v1 ABI. Convention-based rather than framework-specific (a
+//! real React/Next.js-style plugin is its own, separate
+//! design), but it exercises every hook for real, including the bidirectional `list-files`/
 //! `symbols-in` host-import queries the other three hooks depend on:
 //!
 //! - `classify_file`: any path containing `banner` gets reclassified `Generated` origin.
@@ -12,15 +12,15 @@
 //!   proving the query/contribute round trip works, not modeling one specific framework).
 //! - `annotate_symbols`: any symbol whose name starts with `consumed_` is marked externally
 //!   consumed.
-//! - `contribute_roots` also exercises RFC 0016 §5's content channel: any symbol whose name
+//! - `contribute_roots` also exercises the content channel: any symbol whose name
 //!   starts with `content_` is rooted only if `read-file("content.demo")` returns exactly
 //!   `b"promote"` — proving the host-mediated read reaches a real guest computation, not just
 //!   that the WIT world type-checks.
-//! - RFC 0017 §5's read surface, exercised for real: `linked_` symbols are rooted only when
+//! - The read surface, exercised for real: `linked_` symbols are rooted only when
 //!   `importers-of` reports their file has at least one importer, and `sited_` symbols only
 //!   when `call-sites-in` shows a `use.site("promote")` call site in their file — proving the
 //!   edge and call-site queries reach real guest computations.
-//! - RFC 0017 §4's round lifecycle, made observable through two statics: `staged_` symbols
+//! - The round lifecycle, made observable through two statics: `staged_` symbols
 //!   are wired by `contribute_edges` only when `contribute_roots` already ran in this same
 //!   instance (state persists across one round's hooks), and `fresh_` symbols are rooted only
 //!   on the instance's FIRST `contribute_roots` call (so a leaked instance from a previous
@@ -31,7 +31,7 @@
 // expander) has no way to trace back to the `wit-bindgen` crate on its own.
 use wit_bindgen as _;
 
-// RFC 0018: targets the findings-capable world — the superset of `plugin` (the pinned compat
+// Targets the findings-capable world — the superset of `plugin` (the pinned compat
 // components stay on `plugin`, proving the host's fallback).
 wit_bindgen::generate!({
     path: "../../crates/kndo-plugin-api/wit/plugin.wit",
@@ -41,7 +41,7 @@ wit_bindgen::generate!({
 use crate::kndo::plugin::types::*;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
-/// RFC 0017 §4's observable round state (a WASM guest is single-threaded; atomics are just
+/// Observable round state (a WASM guest is single-threaded; atomics are just
 /// the no-`unsafe` way to hold mutable statics). Both reset with the instance — which is
 /// exactly what the compliance suite asserts.
 static ROOTS_RAN_THIS_INSTANCE: AtomicBool = AtomicBool::new(false);
@@ -55,14 +55,14 @@ impl Guest for DemoPlugin {
             id: "hooks-demo".to_string(),
             version: "1".to_string(),
             detection: vec!["a *.trigger file anywhere in the project".to_string()],
-            // RFC 0016 §5: declares access to a companion file outside the language graph —
+            // Declares access to a companion file outside the language graph —
             // contribute_roots below reads it through the host-mediated channel.
             requested_file_access: vec!["content.demo".to_string()],
-            // Exercises RFC 0003 §4's global-install activation path: a project only picks
+            // Exercises the global-install activation path: a project only picks
             // this plugin up from a global directory if it actually contains a `*.trigger`
             // file — proven by kndo/tests/global_plugin_activation.rs.
             activation: vec![ActivationRule::FileExists("*.trigger".to_string())],
-            // Deliberately empty (RFC 0015 §3): declaring one here would make every e2e run
+            // Deliberately empty: declaring one here would make every e2e run
             // report a missing coordinate — dependency semantics are covered by the native
             // fixpoint tests plus the WIT round-trip assertion in plugin_compliance.rs.
             dependencies: Vec::new(),
@@ -114,7 +114,7 @@ impl Guest for DemoPlugin {
 
     fn contribute_edges() -> Vec<ContributedEdge> {
         // `staged_` wiring depends on state `contribute_roots` set in THIS instance — under
-        // the old instance-per-hook model this is observably false here (RFC 0017 §4).
+        // an instance-per-hook model this would be observably false here.
         let roots_already_ran = ROOTS_RAN_THIS_INSTANCE.load(Ordering::Relaxed);
         let mut edges = Vec::new();
         for file in list_files() {
@@ -155,7 +155,7 @@ impl Guest for DemoPlugin {
         targets
     }
 
-    /// RFC 0018 §4: one declared rule, exercised end to end by the compliance suite.
+    /// One declared rule, exercised end to end by the compliance suite.
     fn rules() -> Vec<RuleDescriptor> {
         vec![RuleDescriptor {
             name: "flag-marked".to_string(),

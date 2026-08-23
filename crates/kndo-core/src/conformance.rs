@@ -1,5 +1,5 @@
-//! Shared conformance harness (RFC 0002 §8, ROADMAP M1 exit criterion): every adapter's
-//! fixture corpus runs through this one runner, so "the adapter passes conformance" means the
+//! Shared conformance harness: every adapter's
+//! fixture suite runs through this one runner, so "the adapter passes conformance" means the
 //! same thing everywhere — first-party today, third-party later. A fixture is a directory:
 //! `project/` (a miniature real codebase, extracted and resolved by real adapters — not
 //! `MockAdapter`) plus `expected.json` (the findings it must produce).

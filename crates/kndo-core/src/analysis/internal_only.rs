@@ -1,26 +1,26 @@
-//! `internal-only` — declared visibility wider than any real usage requires (RFC 0005 §7, group
+//! `internal-only` — declared visibility wider than any real usage requires (group
 //! `waste`): the "declared > required" half of the visibility-mismatch pair (`private-type-leak`
 //! is the other direction). "The analysis computes the **tightest sufficient visibility** — the
 //! lowest ladder level that still covers the origin of every incoming reference. Declared above
 //! it ⇒ finding."
 //!
-//! Generalized over the adapter-declared visibility ladder (RFC 0012 §6): each incoming
+//! Generalized over the adapter-declared visibility ladder: each incoming
 //! reference's origin is classified into the narrowest [`VisibilityScope`] relating it to the
 //! declaring file (same file → `File`, same `FileNode::unit` → `Unit`, same package →
 //! `Package`, else `Public`); the **required** scope is the widest of those over the strong
 //! (≥ `Probable`) references. The tightest sufficient rung is then the lowest ladder index
 //! whose scope covers it — if that rung's scope is strictly narrower than the declared rung's,
 //! the finding fires and the remediation names the lower rung's *label* (the language's own
-//! word — RFC 0005 §7). Two rungs sharing a scope never accuse each other (Java
+//! word). Two rungs sharing a scope never accuse each other (Java
 //! `protected`/`public` both map to `Public` by the conservative-mapping rule — no evidence
 //! could distinguish them). A language with no ladder, an empty ladder (CSS/JSON), or a
 //! declared level the ladder doesn't cover is skipped outright — degrade toward silence.
 //!
 //! Exemptions: a symbol that is itself a root target (library-mode public API, a test
-//! file's exported fixtures, a tooling config's exports — RFC 0011 §5's promotion, already
+//! file's exported fixtures, a tooling config's exports — the promotion, already
 //! wired in `graph::assemble`'s phase 3a) is externally consumed by definition, regardless of
 //! whether any in-graph reference reaches it — never a candidate. Same for a symbol a plugin's
-//! `annotate_symbols` marked externally consumed (RFC 0003 §2, `ProjectGraph::
+//! `annotate_symbols` marked externally consumed (`ProjectGraph::
 //! is_externally_consumed`) — FFI, serialization, a public SDK surface the graph itself has no
 //! edge for. A symbol with *zero* incoming
 //! references at all, or one that's [`Reachability::Unreachable`] outright (dead code can have a
@@ -30,7 +30,7 @@
 //! `unused.rs` itself documents for skipping symbols in an already-unreachable file).
 //!
 //! Confidence: `Certain` when the strong references alone define the verdict; if a
-//! `Possible`-confidence reference (RFC 0005 §1's wildcard/dynamic tier — unreliable either
+//! `Possible`-confidence reference (the wildcard/dynamic tier — unreliable either
 //! way) originates *wider* than the strong-evidence requirement, the verdict still fires but
 //! demoted to `Possible`, mirroring "confidence demotes through wildcard edges like every
 //! reachability verdict."
@@ -85,7 +85,7 @@ pub fn find_internal_only(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<
     // not where the template is written — origins the graph cannot enumerate (a
     // `macro_rules!` body calling a `pub(crate)` fn expands wherever the macro is invoked).
     // Such a use requires the widest scope: degrade toward silence, never toward accusation
-    // (RFC 0012 §2).
+    //.
     let from_macro = |from: NodeRef| match from {
         NodeRef::Symbol(s) => graph.symbols[s.0 as usize].kind == crate::vocab::SymbolKind::Macro,
         NodeRef::File(_) => false,
@@ -127,7 +127,7 @@ pub fn find_internal_only(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<
 
         if symbol.kind == crate::vocab::SymbolKind::Constructor {
             continue; // a constructor's only in-graph reference is the synthetic
-                      // container→constructor liveness edge (graph.rs, M6) — same-file by
+                      // container→constructor liveness edge (graph.rs) — same-file by
                       // construction, so any verdict here would accuse kndo's own modeling,
                       // not the code; real call sites reference the type, which is measured
         }
@@ -135,16 +135,16 @@ pub fn find_internal_only(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<
             continue; // an expansion symbol's invocations resolve textually (SymbolKind::Macro
                       // contract), not through the module ladder the graph measures — the
                       // observed use scope is structurally underestimated, so any narrowing
-                      // advice would be a guess (M6 residuals, ripgrep's messages.rs)
+                      // advice would be a guess
         }
 
         let symbol_id = SymbolId(index as u32);
         if root_targets.contains(&NodeRef::Symbol(symbol_id)) {
-            continue; // roots are externally consumed by definition (RFC 0005 §7 exemption)
+            continue; // roots are externally consumed by definition (the exemption)
         }
         if graph.is_externally_consumed(symbol_id) {
-            continue; // a plugin marked it externally consumed (RFC 0003 §2 annotate_symbols,
-                      // RFC 0005 §7 exemption) — a narrower visibility is real advice for the
+            continue; // a plugin marked it externally consumed (the annotate_symbols
+                      // exemption) — a narrower visibility is real advice for the
                       // language, but not for whatever the plugin says reaches this from outside
                       // the graph (serialization, FFI, a public SDK surface)
         }
@@ -208,7 +208,7 @@ pub fn find_internal_only(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<
             category: "internal-only".to_string(),
             group: "waste".to_string(),
             subject_kind: facet.to_string(),
-            severity: Severity::Info, // RFC 0005 §7: info
+            severity: Severity::Info, // info by default
             confidence,
             message: format!(
                 "{path}#{qualified} is declared {} but only used within {usage} — {} would suffice for this {facet}",
@@ -331,7 +331,7 @@ mod tests {
         // No root anywhere — the whole graph is unreachable. `helper` still has an incoming
         // same-file reference (e.g. `console.log(helper())` in a file nothing imports), which
         // without the reachability gate would read as internal-only — redundant with `unused`
-        // already covering the same dead code (found via real-CLI dogfooding).
+        // already covering the same dead code.
         let files = vec![file("src/a.ts")];
         let symbols = vec![symbol(FileId(0), "helper", 1)];
         let edges = vec![edge(
@@ -449,7 +449,7 @@ mod tests {
     fn plugin_annotated_externally_consumed_symbol_is_exempt() {
         // The file (not the symbol itself) is the root, and the only reference is a same-file,
         // Certain-confidence call — real enough evidence to fire "should be private" on its own
-        // (asserted first, below). A plugin's `annotate_symbols` (RFC 0003 §2) marking the
+        // (asserted first, below). A plugin's `annotate_symbols` marking the
         // symbol externally consumed must suppress it exactly like a root target would.
         let files = vec![file("src/a.ts")];
         let symbols = vec![symbol(FileId(0), "helper", 1)];
@@ -559,7 +559,7 @@ mod tests {
         assert_eq!(a[0].id, b[0].id);
     }
 
-    // ------------------------------------------ ladder generalization (RFC 0012 §6)
+    // ------------------------------------------ ladder generalization
 
     fn file_in_unit(path: &str, unit: &str) -> FileNode {
         let mut f = file(path);
@@ -589,7 +589,7 @@ mod tests {
 
     #[test]
     fn exported_symbol_used_only_by_same_unit_siblings_is_internal_only() {
-        // The documented Go under-reporting this stage fixes: cross-file evidence used to
+        // The Go under-reporting the ladder prevents: without it, cross-file evidence would
         // justify any exported level; with the ladder, a same-unit-only use narrows to the
         // Unit rung ("could be unexported").
         let files = vec![
@@ -731,7 +731,7 @@ mod tests {
     fn a_use_from_inside_a_macro_counts_as_expansion_site_wide() {
         // `helper` is exported and its only strong reference comes from a same-file macro's
         // template — but that template executes wherever the macro expands, so the use does
-        // not justify narrowing (ripgrep's `err_message! → set_errored` shape). The identical
+        // not justify narrowing (a `log_error! → set_errored` shape). The identical
         // graph with a function as the referrer must still accuse (asserted second).
         let files = vec![file("src/a.ts")];
         let referrer_kinds = [SymbolKind::Macro, SymbolKind::Function];

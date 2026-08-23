@@ -18,7 +18,7 @@ mod tests {
         parse(src).unwrap().root_node().to_sexp()
     }
 
-    /// Ground-truth node shapes (docs/adapters/java.md §2): declarations, imports, members,
+    /// Ground-truth node shapes: declarations, imports, members,
     /// generics, references. Kept `#[ignore]`d — run with `--ignored --nocapture` to
     /// re-verify against a tree-sitter-java upgrade.
     #[test]

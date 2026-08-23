@@ -1,25 +1,25 @@
 //! `--format agent` — a token-frugal, line-oriented plain-text rendering of [`RunResult`],
-//! optimized for LLM context windows (contracts/output-schema.md §9). Renders core-side, like
-//! JSON (RFC 0001 §2, contracts §5): every frontend — CLI today, `kndo serve`/MCP tomorrow —
+//! optimized for LLM context windows. Renders core-side, like
+//! JSON: every frontend — CLI today, `kndo serve`/MCP tomorrow —
 //! emits byte-identical agent text, never reconstructed per-frontend.
 //!
-//! Diff modes render `new:`/`fixed:` blocks instead of `findings:` (output-schema §9's own
+//! Diff modes render `new:`/`fixed:` blocks instead of `findings:` (the schema's own
 //! example), with one numbering sequence running across both. No `budget:` line: delta budgets
-//! depend on health scoring, which doesn't exist yet (M4). Findings carrying a `related`
-//! evidence chain (first populated by `cyclic`) render it as indented `evidence:` lines — the
-//! format "can never carry information absent from the JSON" (output-schema §9), and `related`
-//! now IS in the JSON. `remediation` still isn't — no `fix:` lines. Diff mode's NEW findings
-//! aren't visually split by `delta_origin` here; output-schema §9's own example shows one flat
+//! depend on health scoring, which doesn't exist yet. Findings carrying a `related`
+//! evidence chain (populated by `cyclic`) render it as indented `evidence:` lines — the
+//! format "can never carry information absent from the JSON", and `related`
+//! IS in the JSON. `remediation` isn't — no `fix:` lines. Diff mode's NEW findings
+//! aren't visually split by `delta_origin` here; the schema's own example shows one flat
 //! `new:` block, `delta_origin` traveling on each line's JSON-equivalent data only.
-//! `next:` names only commands that work today (`--format json`). `kndo explain` still doesn't
-//! exist (deferred — see `engine::Finding`'s doc on `related`/`remediation`), so it's not offered
-//! as if it did; the navigation verbs (`kndo used-by`, …) now do, via [`render_query`].
+//! `next:` names only commands that work today (`--format json`). `kndo explain` doesn't
+//! exist (see `engine::Finding`'s doc on `related`/`remediation`), so it's not offered
+//! as if it did; the navigation verbs (`kndo used-by`, …) do, via [`render_query`].
 //!
 //! Suppressed findings are never listed here either — matching, marked findings are already
 //! absent from `RunResult.findings`/`fixed` by the time this module sees them — only appended to
 //! the result line as `| suppressed N inline, M config`, and only when non-zero.
 //!
-//! [`render_query`] renders the navigation-verb envelope (output-schema §9: "numbered entries of
+//! [`render_query`] renders the navigation-verb envelope ("numbered entries of
 //! `[selector] kind path:line` plus the verb's specifics … same `more:`/`next:` discipline").
 
 use crate::engine::{Finding, RunResult, KNDO_VERSION};
@@ -60,7 +60,7 @@ pub fn render(result: &RunResult) -> String {
         }
     }
 
-    // Elision is always explicit (RFC 0009 §5, extended here by the same principle): this
+    // Elision is always explicit (extended here by the same principle): this
     // renderer never caps or paginates, so it is always "none" — but the line is never
     // skipped, so a reader never has to guess whether truncation happened silently.
     out.push_str("more: none\n");
@@ -68,7 +68,7 @@ pub fn render(result: &RunResult) -> String {
     out
 }
 
-/// Diff modes' rendering — output-schema §9's own example: `new:`/`fixed:` blocks sharing one
+/// Diff modes' rendering — the schema's own example: `new:`/`fixed:` blocks sharing one
 /// running number sequence (new findings numbered first, fixed continuing after), instead of
 /// `findings:`.
 fn render_diff(result: &RunResult) -> String {
@@ -116,7 +116,7 @@ fn render_diff(result: &RunResult) -> String {
     out
 }
 
-/// Output-schema §9's result-line health segment: `health 82.4 -> 84.1 (B)` when a previous
+/// Output-schema the result-line health segment: `health 82.4 -> 84.1 (B)` when a previous
 /// score exists (stored snapshot in full mode, the computed "before" side in diff modes),
 /// `health 84.1 (B)` otherwise.
 fn append_health(line: String, result: &RunResult) -> String {
@@ -221,8 +221,8 @@ fn span_key(f: &Finding) -> (u32, u32) {
     f.location.range.map(|r| r.start).unwrap_or((0, 0))
 }
 
-/// `N. [id] <category> <subject_kind> <path:line> <name> [(confidence)]` — output-schema §9's
-/// literal grammar (space-separated, not `category:subject`; that colon form is RFC 0009's
+/// `N. [id] <category> <subject_kind> <path:line> <name> [(confidence)]` — the agent format's
+/// literal grammar (space-separated, not `category:subject`; that colon form is the
 /// human-rendering convention, a different renderer with different column economics).
 fn finding_line(n: usize, f: &Finding) -> String {
     let path = match (&f.location.path, f.location.range) {
@@ -243,7 +243,7 @@ fn finding_line(n: usize, f: &Finding) -> String {
 }
 
 /// `related` evidence, one indented line per entry — same information as the JSON's
-/// `related[]`, nothing more (output-schema §9's carry rule).
+/// `related[]`, nothing more (output-schema the carry rule).
 fn push_evidence(out: &mut String, f: &Finding) {
     for r in &f.related {
         let location = match r.range {
@@ -265,7 +265,7 @@ fn confidence_str(c: Confidence) -> &'static str {
     }
 }
 
-/// Navigation verbs (RFC 0007), same grammar family: a header/status pair first, one block per
+/// Navigation verbs, same grammar family: a header/status pair first, one block per
 /// `results[]` entry (numbered only when the request batched more than one selector), the same
 /// `more:`/`next:` discipline closing every response.
 pub fn render_query(result: &QueryResult) -> String {

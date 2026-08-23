@@ -1,13 +1,13 @@
 //! Proves the WASM adapter bridge's performance-parity contract: `claim`/`extract` run
 //! concurrently on a pool of guest instances — the property that lets graph assembly's rayon
 //! extraction phase parallelize a WASM adapter's files exactly like a compiled-in adapter's.
-//! Before the pool, one `Mutex<GuestState>` serialized every call; this test would still have
-//! *passed* for correctness under that model, so it also asserts the pool observably grew
+//! A serializing bridge (one `Mutex<GuestState>` around every call) would still *pass*
+//! the correctness half of this test, so it also asserts the pool observably grew
 //! (`instances_created() > 1`), which a serializing bridge cannot produce.
 //!
 //! Uses the pinned compat component (`tests/compat/adapter-v1.wasm`) — no guest build, and it
 //! doubles as proof that a v1 component runs unmodified under the pooled execution model
-//! (wasm-abi §3: per-call purity was always the contract; the facts cache already relied on it).
+//! (per-call purity is the contract; the facts cache relies on it).
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Barrier};
@@ -96,7 +96,7 @@ fn concurrent_extraction_uses_a_grown_pool_and_stays_deterministic() {
     assert!(
         adapter.instances_created() > 1,
         "8 barrier-synchronized concurrent calls must force pool growth; a serializing \
-         bridge (the old single-Mutex model) would report exactly 1"
+         bridge would report exactly 1"
     );
     assert!(
         adapter.instances_created() <= threads + 1,

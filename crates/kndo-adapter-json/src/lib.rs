@@ -1,7 +1,7 @@
-//! JSON adapter (docs/adapters/json.md) — RFC 0002 §3's "non-source language": claims files,
-//! extracts no symbols. Its entire value is giving a `.json` file a `FileClass` so `unused` and
-//! every other analysis can see it at all — resolution to it already works today via any other
-//! adapter's own resolver checking `ResolveCtx`'s discovered-files index (§0's core argument).
+//! JSON adapter — a non-source language: claims files, extracts no symbols. Its entire value
+//! is giving a `.json` file a `FileClass` so `unused` and every other analysis can see it at
+//! all — resolution to a JSON file happens through any other adapter's own resolver checking
+//! `ResolveCtx`'s discovered-files index.
 
 mod extraction;
 mod resolution;
@@ -15,9 +15,8 @@ use smol_str::SmolStr;
 
 pub struct JsonAdapter;
 
-/// docs/adapters/json.md §1: the one piece of real cross-adapter awareness this adapter
-/// carries — `package.json` (JS-TS's real manifest today) and `tsconfig.json` (named by RFC
-/// 0002 §3 as JS-TS's eventual one, not yet implemented there) both end in `.json` and would
+/// The one piece of real cross-adapter awareness this adapter carries — `package.json` and
+/// `tsconfig.json` are JS-TS's manifest/configuration files, end in `.json`, and would
 /// otherwise be double-claimed as plain data, violating "manifests are not claimed."
 const OWNED_ELSEWHERE: &[&str] = &["package.json", "tsconfig.json"];
 
@@ -29,23 +28,23 @@ impl LanguageAdapter for JsonAdapter {
             id: SmolStr::new("json"),
             facts_schema_version: 1,
             file_globs: vec![SmolStr::new("**/*.json")],
-            // No manifest format of its own (§0/§4) — every JSON-shaped manifest belongs to
+            // No manifest format of its own — every JSON-shaped manifest belongs to
             // the adapter for the language it configures, never to "JSON" as a bare format.
             manifest_globs: vec![],
-            // ADR 0002's explicit escape hatch: nothing here needs a tree-sitter grammar (no
-            // complexity metric, no token stream, no query layer earns its keep over a flat
-            // value tree) — `serde_json` parses-and-validates in one call (§0/§2).
-            grammar_version: SmolStr::new("serde_json 1 (no tree-sitter grammar — ADR 0002)"),
-            // RFC 0012 §6: empty ladder — JSON has no visibility semantics, so visibility
-            // analyses skip its files entirely.
+            // Nothing here needs a tree-sitter grammar (no complexity metric, no token
+            // stream, no query layer earns its keep over a flat value tree) — `serde_json`
+            // parses-and-validates in one call.
+            grammar_version: SmolStr::new("serde_json 1"),
+            // Empty ladder — JSON has no visibility semantics, so visibility analyses skip
+            // its files entirely.
             visibility_ladder: vec![],
             // Moot either way: a JSON file never has an outgoing edge (it never imports
-            // anything, §3), so it can never be a member of a cycle regardless of policy.
+            // anything), so it can never be a member of a cycle regardless of policy.
             cycle_policy: CyclePolicy {
                 file_cycles: CycleTolerance::Idiomatic,
                 package_cycles: CycleTolerance::Idiomatic,
             },
-            // Moot: this adapter never contributes a manifest/PackageNode (§4), so
+            // Moot: this adapter never contributes a manifest/PackageNode, so
             // `dependency_hygiene` never consults this flag for it.
             resolves_dependency_usage: false,
         }
@@ -62,7 +61,7 @@ impl LanguageAdapter for JsonAdapter {
         }
         Some(FileClaim {
             language: SmolStr::new("json"),
-            // No path-pattern-driven role/origin split (§0/§1): every claimed JSON file is
+            // No path-pattern-driven role/origin split: every claimed JSON file is
             // production, authored — a documented non-goal to revisit only with real signal.
             class: FileClass {
                 role: FileRole::Production,
@@ -80,7 +79,7 @@ impl LanguageAdapter for JsonAdapter {
     }
 
     fn extract_manifest(&self, _file: &SourceFile<'_>, _ctx: &ResolveCtx<'_>) -> ManifestFacts {
-        // Never called — `claim_manifest` always returns `false` (§4).
+        // Never called — `claim_manifest` always returns `false`.
         ManifestFacts::default()
     }
 

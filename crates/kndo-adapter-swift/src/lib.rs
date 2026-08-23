@@ -1,8 +1,7 @@
-//! Swift language adapter (docs/adapters/swift.md). The sixth `LanguageAdapter`, and the first
+//! Swift language adapter. The one `LanguageAdapter`
 //! whose manifest (`Package.swift`) is Swift source code rather than a data format —
-//! `manifest.rs` reuses the same tree-sitter-swift parse `extraction` does. Like Java/Kotlin,
-//! no dogfood corpus of its own (kndo is written in Rust); precision rests on the conformance
-//! fixtures.
+//! `manifest.rs` reuses the same tree-sitter-swift parse `extraction` does. Like Java/Kotlin's,
+//! precision rests on the conformance fixtures.
 
 mod extraction;
 mod manifest;
@@ -18,7 +17,7 @@ use smol_str::SmolStr;
 
 pub struct SwiftAdapter;
 
-/// docs/adapters/swift.md §1: `Tests/**` (SwiftPM Standard Directory Layout) is the
+/// `Tests/**` (SwiftPM Standard Directory Layout) is the
 /// authoritative test-role signal; XCTest's own `*Tests.swift` naming convention is a
 /// belt-and-suspenders fallback for non-standard layouts. No tooling-role convention exists
 /// (same stance as every prior adapter).
@@ -36,11 +35,11 @@ impl LanguageAdapter for SwiftAdapter {
             activation: Vec::new(),
             dependencies: Vec::new(),
             id: SmolStr::new("swift"),
-            facts_schema_version: 3, // 3: default-parameter-value refs (dot-shorthand typed by the param); 2: implicitly_invoked on `override` members (RFC 0005 §1 machinery dispatch)
+            facts_schema_version: 3, // bump whenever the serialized facts shape or the emission semantics change
             file_globs: vec![SmolStr::new("**/*.swift")],
             manifest_globs: vec![SmolStr::new("**/Package.swift")],
             grammar_version: SmolStr::new("tree-sitter-swift 0.7.3"),
-            // docs/adapters/swift.md §0: every level applies at both top-level and member
+            // Every level applies at both top-level and member
             // position (no restricted subset the way Java/Kotlin's ladders have). `internal`
             // — the default when no modifier is written at all — maps to `Package` (kndo's
             // "same manifest" granularity, here an SPM target), a real structural difference
@@ -87,7 +86,7 @@ impl LanguageAdapter for SwiftAdapter {
                 file_cycles: CycleTolerance::Idiomatic,
                 package_cycles: CycleTolerance::Impossible,
             },
-            // docs/adapters/swift.md §0/§3: `Package.swift` states a dependency's repository
+            // `Package.swift` states a dependency's repository
             // URL, never the module/product name(s) it exports — those live in that
             // repository's own manifest, which kndo structurally never reads. Local target-to-
             // target imports resolve precisely via the ordinary same-unit fallback instead.
@@ -97,9 +96,9 @@ impl LanguageAdapter for SwiftAdapter {
 
     fn claim(&self, path: &ProjectPath) -> Option<FileClaim> {
         let p = path.0.as_str();
-        // `Package.swift` is real Swift source too (§0/§4) — the one adapter in this codebase
+        // `Package.swift` is real Swift source too — the one adapter in this codebase
         // where a manifest file also matches the source glob. "Manifests are not claimed"
-        // (js-ts.md §1) is a load-bearing principle elsewhere in the engine (a manifest never
+        // is a load-bearing principle elsewhere in the engine (a manifest never
         // gets a `FileClaim` alongside its `ManifestFacts`), so it's excluded here explicitly
         // rather than accidentally satisfied the way every non-Swift manifest format is.
         if !p.ends_with(".swift") || self.claim_manifest(path) {

@@ -5,7 +5,7 @@ package main
 type wireFormat struct{}
 
 // deadHelper is unreachable AND its type never used — in an authored file this whole file
-// would be flagged; the content-derived Generated origin (RFC 0012 §7) exempts it.
+// would be flagged; the content-derived Generated origin exempts it.
 func deadHelper(w wireFormat) wireFormat {
 	return w
 }
