@@ -522,6 +522,56 @@ fn initializer_type_name(value: Node, src: &[u8]) -> Option<String> {
     }
 }
 
+/// The qualifier for a member access on `value` (RFC 0012 §3-bis), fact-first:
+/// a one-hop dotted POINTER (`LowArgs.context_separator`, `Builder.new`) that the core
+/// resolves through declared member-type facts, else the receiver's directly-pinned TYPE,
+/// else nothing (the caller keeps the opaque receiver → duck fallback).
+fn receiver_qualifier(value: Node, types: &TypeEnv, src: &[u8]) -> Option<String> {
+    receiver_pointer(value, types, src).or_else(|| receiver_type(value, types, src))
+}
+
+/// The one-hop pointer for a member/call receiver whose BASE is typed: `x.field` → `T.field`
+/// (the field's declared type is the owner file's fact), `x.m(…)` → `T.m` and `T::assoc(…)`
+/// → `T.assoc` (the return type is the fact). One hop only — a deeper chain's base falls
+/// back to [`receiver_type`]'s convention flow.
+fn receiver_pointer(value: Node, types: &TypeEnv, src: &[u8]) -> Option<String> {
+    match value.kind() {
+        "field_expression" => member_pointer(value, types, src),
+        "call_expression" => value
+            .child_by_field_name("function")
+            .and_then(|f| callee_pointer(f, types, src)),
+        _ => None,
+    }
+}
+
+/// The pointer for a call's callee: `x.m` (member call) or `T::assoc` (scoped call).
+fn callee_pointer(function: Node, types: &TypeEnv, src: &[u8]) -> Option<String> {
+    match function.kind() {
+        "field_expression" => member_pointer(function, types, src),
+        "scoped_identifier" | "generic_function" => scoped_pointer(function, types, src),
+        _ => None,
+    }
+}
+
+/// `base.member` where `base`'s type is pinned → pointer `"Type.member"`.
+fn member_pointer(field_expr: Node, types: &TypeEnv, src: &[u8]) -> Option<String> {
+    let base = field_expr.child_by_field_name("value")?;
+    let field = field_expr.child_by_field_name("field")?;
+    let base_type = receiver_type(base, types, src)?;
+    Some(format!("{base_type}.{}", text(field, src)))
+}
+
+/// `T::assoc` / `Self::assoc` as a callee → pointer `"T.assoc"` (owner-resolved).
+fn scoped_pointer(function: Node, types: &TypeEnv, src: &[u8]) -> Option<String> {
+    let root = scoped_call_type_root(function, src).and_then(|r| resolve_self_type(r, types))?;
+    let path = match function.kind() {
+        "generic_function" => text(function.child_by_field_name("function")?, src),
+        _ => text(function, src),
+    };
+    let assoc = path.rsplit("::").next().unwrap_or(path);
+    Some(format!("{root}.{assoc}"))
+}
+
 /// The receiver expression's type, when the file's facts pin one ([`TypeEnv`] doc):
 /// a typed identifier, `self` (→ owner), or a call chain rooted at a type
 /// (`SearchWorkerBuilder::new().opt(x).build()` — every link's receiver types as the root;
@@ -1142,6 +1192,7 @@ fn handle_type_decl(item: Node, src: &[u8], ctx: &Ctx<'_>, kind: SymbolKind, out
     push_declaration(out, text(name, src), kind, item, None, None, vis);
     // Field/alias types are load-bearing for the type: TypeUse refs, within = the type.
     let type_name = text(name, src).to_string();
+    collect_field_member_types(item, src, &type_name, out);
     let mut c = item.walk();
     for child in item.children(&mut c) {
         walk_type_refs(
@@ -1155,6 +1206,65 @@ fn handle_type_decl(item: Node, src: &[u8], ctx: &Ctx<'_>, kind: SymbolKind, out
             },
             out,
         );
+    }
+}
+
+/// Member-type facts from a struct/union body (RFC 0012 §3-bis): named fields keyed by
+/// name, tuple fields by position (`"0"`, `"1"` — `x.0.method()` chains too). Only fields
+/// whose annotation reduces to a base type contribute; the rest simply have no fact.
+fn collect_field_member_types(item: Node, src: &[u8], owner: &str, out: &mut FileFacts) {
+    let Some(body) = item.child_by_field_name("body") else {
+        return;
+    };
+    if body.kind() == "ordered_field_declaration_list" {
+        collect_tuple_member_types(body, src, owner, out);
+        return;
+    }
+    let mut cursor = body.walk();
+    for field in body.children(&mut cursor) {
+        if field.kind() != "field_declaration" {
+            continue;
+        }
+        if let (Some(n), Some(t)) = (
+            field.child_by_field_name("name"),
+            field.child_by_field_name("type"),
+        ) {
+            push_member_type(out, owner, text(n, src), t, src);
+        }
+    }
+}
+
+/// Tuple-struct fields, keyed by position.
+fn collect_tuple_member_types(list: Node, src: &[u8], owner: &str, out: &mut FileFacts) {
+    let mut cursor = list.walk();
+    for (position, ty) in list
+        .children(&mut cursor)
+        .filter(|n| {
+            n.is_named() && n.kind() != "visibility_modifier" && n.kind() != "attribute_item"
+        })
+        .enumerate()
+    {
+        push_member_type(out, owner, &position.to_string(), ty, src);
+    }
+}
+
+/// One member-type fact, when the annotation reduces to a base type. `Self` resolves to
+/// the owner — the annotation was written inside the owner's own impl/body.
+fn push_member_type(out: &mut FileFacts, owner: &str, member: &str, ty: Node, src: &[u8]) {
+    if let Some(yields) = base_type_name(ty, src) {
+        let yields = if yields == "Self" { owner } else { &yields };
+        out.member_types.push(kndo_core::adapter::RawMemberType {
+            owner: SmolStr::new(owner),
+            member: SmolStr::new(member),
+            yields: SmolStr::new(yields),
+        });
+    }
+}
+
+/// A member-type fact for an impl item that carries a name field (fn return, const type).
+fn push_owner_member_type(out: &mut FileFacts, owner: &str, item: Node, ty: Node, src: &[u8]) {
+    if let Some(name) = item.child_by_field_name("name") {
+        push_member_type(out, owner, text(name, src), ty, src);
     }
 }
 
@@ -1269,6 +1379,11 @@ fn handle_impl(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
                 "function_item" => {
                     let p = std::mem::take(&mut pending);
                     handle_function(member, src, ctx, Some(&self_type), &p, None, out);
+                    // Member-type fact (RFC 0012 §3-bis): what calling this method yields —
+                    // its declared return, dispatch-reduced, `Self` resolved to the owner.
+                    if let Some(ret) = member.child_by_field_name("return_type") {
+                        push_owner_member_type(out, &self_type, member, ret, src);
+                    }
                     // Trait-impl methods are called through the trait's dispatch (dyn, generic
                     // bounds, operator/format machinery — `Display::fmt` is never `x.fmt()` in
                     // source), so the name-based member fallback cannot see their call sites:
@@ -1289,6 +1404,11 @@ fn handle_impl(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
                 }
                 "const_item" | "type_item" | "associated_type" => {
                     let _ = std::mem::take(&mut pending);
+                    if member.kind() == "const_item" {
+                        if let Some(ty) = member.child_by_field_name("type") {
+                            push_owner_member_type(out, &self_type, member, ty, src);
+                        }
+                    }
                     if let Some(mname) = member.child_by_field_name("name") {
                         push_declaration(
                             out,
@@ -1733,7 +1853,7 @@ fn walk_body(node: Node, src: &[u8], within: Option<&str>, env: PathEnv<'_>, out
             } else {
                 RefKind::Read
             };
-            let typed = receiver_type(value, env.types, src);
+            let typed = receiver_qualifier(value, env.types, src);
             let qualifier = typed.as_deref().unwrap_or(match value.kind() {
                 "identifier" | "self" => text(value, src),
                 _ => "<expr>",
@@ -2445,8 +2565,10 @@ mod tests {
 
     #[test]
     fn assoc_constructor_chains_type_every_link() {
-        // `Builder::new()` names its type by convention; the chain links keep it — the
-        // ripgrep shape `SearchWorkerBuilder::new().opt(x).build()`.
+        // `let b = Builder::new()` types `b` by the constructor convention; chain links
+        // emit fact-first POINTERS (`Builder.new`, `Builder.opt`) that the core resolves
+        // through declared return types — the ripgrep shape
+        // `SearchWorkerBuilder::new().opt(x).build()`.
         let f = facts(
             "fn f() {\n\
              \x20   let b = Builder::new();\n\
@@ -2455,8 +2577,58 @@ mod tests {
              }\n",
         );
         assert_eq!(scope_of(&f, "step"), Some("Builder"));
-        assert_eq!(scope_of(&f, "opt"), Some("Builder"));
-        assert_eq!(scope_of(&f, "build"), Some("Builder"));
+        assert_eq!(scope_of(&f, "opt"), Some("Builder.new"));
+        assert_eq!(scope_of(&f, "build"), Some("Builder.opt"));
+    }
+
+    #[test]
+    fn member_type_facts_extract_from_fields_returns_and_consts() {
+        let f = facts(
+            "pub(crate) struct LowArgs {\n\
+             \x20   pub(crate) context_separator: ContextSeparator,\n\
+             }\n\
+             pub(crate) struct Pair(u8, Widget);\n\
+             impl LowArgs {\n\
+             \x20   pub(crate) const LIMIT: Cap = Cap;\n\
+             \x20   pub(crate) fn build(&self) -> Self {\n\
+             \x20       LowArgs { context_separator: ContextSeparator }\n\
+             \x20   }\n\
+             }\n",
+        );
+        let fact = |owner: &str, member: &str| {
+            f.member_types
+                .iter()
+                .find(|m| m.owner == owner && m.member == member)
+                .map(|m| m.yields.as_str())
+        };
+        assert_eq!(
+            fact("LowArgs", "context_separator"),
+            Some("ContextSeparator")
+        );
+        assert_eq!(fact("Pair", "1"), Some("Widget"));
+        assert_eq!(fact("LowArgs", "LIMIT"), Some("Cap"));
+        assert_eq!(
+            fact("LowArgs", "build"),
+            Some("LowArgs"),
+            "Self resolves to owner"
+        );
+    }
+
+    #[test]
+    fn field_access_on_a_typed_receiver_emits_a_dotted_pointer() {
+        // The cross-file shape: `low.context_separator.into_bytes()` — the field's type
+        // lives in ANOTHER file, so the adapter emits the one-hop pointer for core.
+        let f = facts(
+            "fn f(low: &LowArgs) {\n\
+             \x20   low.context_separator.into_bytes();\n\
+             \x20   low.paths().sort();\n\
+             }\n",
+        );
+        assert_eq!(
+            scope_of(&f, "into_bytes"),
+            Some("LowArgs.context_separator")
+        );
+        assert_eq!(scope_of(&f, "sort"), Some("LowArgs.paths"));
     }
 
     #[test]

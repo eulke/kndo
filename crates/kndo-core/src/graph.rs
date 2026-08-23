@@ -124,6 +124,10 @@ pub struct FilePatchMeta {
     /// resolution table not derivable from `symbols`. Order-independent state after RFC 0013
     /// §3b's fixpoint, hence safe to persist and reuse.
     pub reexport_aliases: Vec<AliasEntry>,
+    /// The file's declared member-type facts (`FileFacts::member_types`, RFC 0012 §3-bis),
+    /// persisted verbatim: the patch resolves CHANGED files' chained qualifiers against
+    /// UNCHANGED files' member types without re-fetching their facts.
+    pub member_types: Vec<crate::adapter::RawMemberType>,
 }
 
 /// One resolved re-export alias: importing `name` from the owning file resolves to `symbol`.
@@ -845,6 +849,14 @@ fn try_patch(
         .iter()
         .map(|m| m.unit_name.clone())
         .collect();
+    // Member-type facts (RFC 0012 §3-bis) from the persisted patch metadata — valid under
+    // the surface-signature guard for changed files too (an annotation change declines the
+    // patch), same reasoning as `unit_name`.
+    let member_types_per_file: Vec<HashMap<(SmolStr, SmolStr), SmolStr>> = graph
+        .patch_meta
+        .iter()
+        .map(|m| index_member_types(&m.member_types))
+        .collect();
     let ladders: std::collections::BTreeMap<SmolStr, Vec<crate::adapter::VisibilityRung>> =
         graph.visibility_ladders.iter().cloned().collect();
 
@@ -892,6 +904,7 @@ fn try_patch(
             symbol_by_name_per_file: &symbol_by_name_per_file,
             symbol_by_qualified_per_file: &symbol_by_qualified_per_file,
             qualified_twins_per_file: &qualified_twins_per_file,
+            member_types_per_file: &member_types_per_file,
             symbol_by_name_per_unit: &symbol_by_name_per_unit,
             member_by_name: &member_by_name,
             file_unit: &file_unit,
@@ -1121,6 +1134,9 @@ struct ResolveTables<'a> {
     /// Extra declarations sharing a qualified selector already in the single-slot table
     /// (cfg-alternated twin impls: two `Data.from_path`) — populated only on collision.
     qualified_twins_per_file: &'a [HashMap<String, Vec<SymbolId>>],
+    /// Per-file member-type facts (RFC 0012 §3-bis): (owner, member) → the base type the
+    /// access yields — what a dotted qualifier pointer resolves its hops through.
+    member_types_per_file: &'a [HashMap<(SmolStr, SmolStr), SmolStr>],
     symbol_by_name_per_unit: &'a HashMap<SmolStr, HashMap<SmolStr, SymbolId>>,
     member_by_name: &'a HashMap<SmolStr, Vec<SymbolId>>,
     file_unit: &'a [Option<SmolStr>],
@@ -1144,6 +1160,7 @@ fn resolve_file(
         symbol_by_name_per_file,
         symbol_by_qualified_per_file,
         qualified_twins_per_file,
+        member_types_per_file: _,
         symbol_by_name_per_unit,
         member_by_name,
         file_unit,
@@ -1360,40 +1377,60 @@ fn resolve_file(
                     // that symbol itself: an imported binding (`SearchMode::Standard`
                     // after `use …::{…, SearchMode, …}`) or a same-file declaration (an
                     // adapter that typed a receiver rewrites `args.matcher()` to qualifier
-                    // `HiArgs`, which may be declared right here). Its members live in the
-                    // symbol's home file, keyed by the symbol's ORIGINAL name (an
-                    // `as`-renamed binding still owns `Original.member`). A hit is
+                    // `HiArgs`, which may be declared right here). A DOTTED qualifier is a
+                    // chained pointer (`LowArgs.context_separator` — RFC 0012 §3-bis): the
+                    // receiver is the value that member YIELDS, resolved hop by hop
+                    // through the member-type facts. Either way the members live in the
+                    // resolved symbol's home file, keyed by its ORIGINAL name. A hit is
                     // Certain; a miss does NOT settle — a name in scope is a value/type,
                     // not a closed namespace, so an unknown member is a dynamic-looking
                     // access and falls through to the duck-typed fallback exactly like a
                     // receiver expression.
-                    let in_scope = bound_symbols
-                        .get(q.as_str())
-                        .or_else(|| symbol_by_name_per_file[i].get(q.as_str()));
-                    if let Some(&bound) = in_scope {
-                        let owner = &symbols[bound.0 as usize];
-                        let home = owner.file.0 as usize;
-                        let targets = qualified_member_targets(
-                            &symbol_by_qualified_per_file[home],
-                            &qualified_twins_per_file[home],
-                            format!("{}.{}", owner.name, reference.name).as_str(),
-                        );
-                        if !targets.is_empty() {
-                            for to in targets {
+                    let targets = match q.split_once('.') {
+                        Some((base, member)) => {
+                            let (targets, yielded_type) = chained_member_targets(
+                                base,
+                                member,
+                                &reference.name,
+                                &bound_symbols,
+                                i,
+                                t,
+                            );
+                            // Reaching a value THROUGH the member uses its type from this
+                            // file — without this edge a type consumed only via fields read
+                            // as file-local and `internal-only` advised narrowing it.
+                            if let Some(ty) = yielded_type {
                                 out.edges.push(Edge {
                                     owner: file_id,
                                     kind: EdgeKind::References {
                                         from,
-                                        to,
-                                        kind: reference.kind,
+                                        to: ty,
+                                        kind: crate::vocab::RefKind::Read,
                                     },
                                     confidence: Confidence::Certain,
                                     source: provenance(),
                                     span: Some(reference.span),
                                 });
                             }
-                            continue;
+                            targets
                         }
+                        None => in_scope_member_targets(q, &reference.name, &bound_symbols, i, t),
+                    };
+                    if !targets.is_empty() {
+                        for to in targets {
+                            out.edges.push(Edge {
+                                owner: file_id,
+                                kind: EdgeKind::References {
+                                    from,
+                                    to,
+                                    kind: reference.kind,
+                                },
+                                confidence: Confidence::Certain,
+                                source: provenance(),
+                                span: Some(reference.span),
+                            });
+                        }
+                        continue;
                     }
                     is_receiver_access = true;
                 }
@@ -1903,6 +1940,90 @@ fn insert_qualified(
     }
 }
 
+/// A plain in-scope qualifier (`SearchMode::Standard`, or a receiver typed `HiArgs`): the
+/// symbol the name resolves to — an import binding or a same-file declaration — owns the
+/// member in its home file (RFC 0012 §9 as landed, M6).
+fn in_scope_member_targets(
+    q: &str,
+    name: &str,
+    bound_symbols: &HashMap<SmolStr, SymbolId>,
+    i: usize,
+    t: &ResolveTables<'_>,
+) -> Vec<SymbolId> {
+    let in_scope = bound_symbols
+        .get(q)
+        .or_else(|| t.symbol_by_name_per_file[i].get(q));
+    match in_scope {
+        Some(&bound) => {
+            let owner = &t.symbols[bound.0 as usize];
+            let home = owner.file.0 as usize;
+            qualified_member_targets(
+                &t.symbol_by_qualified_per_file[home],
+                &t.qualified_twins_per_file[home],
+                format!("{}.{}", owner.name, name).as_str(),
+            )
+        }
+        None => Vec::new(),
+    }
+}
+
+/// A dotted qualifier pointer `Base.member` (RFC 0012 §3-bis, the cross-file tier): the
+/// reference's receiver is the value that member YIELDS. Every hop is a declared-annotation
+/// fact — the base name in the reference's scope, `yields` from the OWNER's home file's
+/// member-type facts, the yielded type name resolved in that same home (annotations mean
+/// what they mean where they were written), and the final member in the yielded type's
+/// home, twins included. Any miss yields no targets — duck fallback, never a settle.
+fn chained_member_targets(
+    base: &str,
+    member: &str,
+    name: &str,
+    bound_symbols: &HashMap<SmolStr, SymbolId>,
+    i: usize,
+    t: &ResolveTables<'_>,
+) -> (Vec<SymbolId>, Option<SymbolId>) {
+    let base_symbol = bound_symbols
+        .get(base)
+        .or_else(|| t.symbol_by_name_per_file[i].get(base));
+    let Some(&base_symbol) = base_symbol else {
+        return (Vec::new(), None);
+    };
+    let owner = &t.symbols[base_symbol.0 as usize];
+    let home = owner.file.0 as usize;
+    // The yielded type name resolves where the annotation was WRITTEN (the owner's home:
+    // its declarations and re-export aliases), then in the reference site's own scope —
+    // the home's import bindings are resolve-time-local and invisible here, but the common
+    // shape (`self.context_separator.into_bytes()` inside the very file that imported the
+    // field's type) makes the site's bindings the right stand-in. Both missing → no fact.
+    let yielded = t.member_types_per_file[home]
+        .get(&(owner.name.clone(), SmolStr::new(member)))
+        .and_then(|yields| {
+            t.symbol_by_name_per_file[home]
+                .get(yields.as_str())
+                .or_else(|| bound_symbols.get(yields.as_str()))
+                .or_else(|| t.symbol_by_name_per_file[i].get(yields.as_str()))
+        });
+    let Some(&yielded_type) = yielded else {
+        return (Vec::new(), None);
+    };
+    let yielded_home = t.symbols[yielded_type.0 as usize].file.0 as usize;
+    let members = qualified_member_targets(
+        &t.symbol_by_qualified_per_file[yielded_home],
+        &t.qualified_twins_per_file[yielded_home],
+        format!("{}.{}", t.symbols[yielded_type.0 as usize].name, name).as_str(),
+    );
+    (members, Some(yielded_type))
+}
+
+/// One file's member-type facts as a lookup: (owner, member) → yields.
+fn index_member_types(
+    entries: &[crate::adapter::RawMemberType],
+) -> HashMap<(SmolStr, SmolStr), SmolStr> {
+    entries
+        .iter()
+        .map(|m| ((m.owner.clone(), m.member.clone()), m.yields.clone()))
+        .collect()
+}
+
 /// Every declaration a qualified selector names in `home` — the table's winner plus any
 /// displaced twins. Empty when the selector names nothing there.
 fn qualified_member_targets(
@@ -1984,6 +2105,9 @@ fn surface_signature(
             Confidence,
         )>,
         dynamics: Vec<(&'a str, Option<&'a str>)>,
+        /// Member-type facts are cross-file resolution inputs (RFC 0012 §3-bis): a changed
+        /// field/return annotation changes what other files' chained qualifiers resolve to.
+        member_types: Vec<(&'a str, &'a str, &'a str)>,
     }
     let view = View {
         adapter_id,
@@ -2041,6 +2165,11 @@ fn surface_signature(
             .iter()
             .map(|d| (d.reason.as_str(), d.narrowed_to.as_deref()))
             .collect(),
+        member_types: facts
+            .member_types
+            .iter()
+            .map(|m| (m.owner.as_str(), m.member.as_str(), m.yields.as_str()))
+            .collect(),
     };
     let bytes = bincode::serialize(&view).unwrap_or_default();
     *blake3::hash(&bytes).as_bytes()
@@ -2095,7 +2224,7 @@ pub(crate) fn package_owns(manifest_dir: &str, file_dir: &str) -> bool {
 /// an assembly-algorithm change that could produce a different graph from the same facts. Feeds
 /// [`compute_graph_key`] (RFC 0004 §3's "core graph-schema version"); a bump here invalidates
 /// every project's cached `graph.bin` on the next run, same as any other key-input change.
-pub const GRAPH_SCHEMA_VERSION: u32 = 19; // 19: receiver-typed qualifiers (in-scope declarations resolve members; qualified twins each get the edge — same inputs assemble different edges); 18: qualified refs reach the target's member table + glob re-exports alias the target's exported surface (same inputs now assemble more edges — prior snapshots are semantically stale); 17: SymbolKind::Macro (expansion symbols — first-class kind with visibility-scope exemption semantics); 16: VisibilityRung.surface_transitive + surface closure (Provenance::Surface Root edges; RFC 0012 §6, M6); 15: FileNode.string_call_sites + EdgeKind::ReferencesFile (RFC 0017 §5.4); 14: in-source Test roots derived from test_spans containment (adapters no longer emit them); 13: FileNode.test_spans + phase 2.55 test-gated module demotion (sub-file test regions); 12: library-surface fixpoint (phase 2.7 — same inputs now assemble surface Root edges, prior snapshots are semantically stale); 11: PackageNode.workspace_entry (RFC 0013 §4); 10: patch layer (RFC 0013 §4 — Edge.owner, FilePatchMeta, extraction-only stored diagnostics); 9: SymbolMetrics.token_count (RFC 0005 §11); 8: function_metrics (RFC 0005 §6); 7: cycle policies (§8); 6: PackageNode surface (RFC 0011 §4); 5: ladders + FileNode.unit (RFC 0012 §6); 4: RefKind + signature_span (§5); 3: within (§4)
+pub const GRAPH_SCHEMA_VERSION: u32 = 20; // 20: member-type facts (FilePatchMeta.member_types + chained-pointer resolution — RFC 0012 §3-bis cross-file tier); 19: receiver-typed qualifiers (in-scope declarations resolve members; qualified twins each get the edge — same inputs assemble different edges); 18: qualified refs reach the target's member table + glob re-exports alias the target's exported surface (same inputs now assemble more edges — prior snapshots are semantically stale); 17: SymbolKind::Macro (expansion symbols — first-class kind with visibility-scope exemption semantics); 16: VisibilityRung.surface_transitive + surface closure (Provenance::Surface Root edges; RFC 0012 §6, M6); 15: FileNode.string_call_sites + EdgeKind::ReferencesFile (RFC 0017 §5.4); 14: in-source Test roots derived from test_spans containment (adapters no longer emit them); 13: FileNode.test_spans + phase 2.55 test-gated module demotion (sub-file test regions); 12: library-surface fixpoint (phase 2.7 — same inputs now assemble surface Root edges, prior snapshots are semantically stale); 11: PackageNode.workspace_entry (RFC 0013 §4); 10: patch layer (RFC 0013 §4 — Edge.owner, FilePatchMeta, extraction-only stored diagnostics); 9: SymbolMetrics.token_count (RFC 0005 §11); 8: function_metrics (RFC 0005 §6); 7: cycle policies (§8); 6: PackageNode surface (RFC 0011 §4); 5: ladders + FileNode.unit (RFC 0012 §6); 4: RefKind + signature_span (§5); 3: within (§4)
 
 /// The graph snapshot's cache key (RFC 0004 §3, `cache.rs`'s `graph.bin`): a single digest
 /// folding in the *whole* discovered file set (every path + content hash — this already
@@ -3688,6 +3817,16 @@ pub fn assemble_from_source(
     let mut dep_index: HashMap<SmolStr, DependencyId> = HashMap::default();
     let mut suppressions: Vec<(FileId, crate::adapter::RawSuppression)> = Vec::new();
 
+    // Member-type facts (RFC 0012 §3-bis), indexed per file for chained-pointer resolution.
+    let member_types_per_file: Vec<HashMap<(SmolStr, SmolStr), SmolStr>> = claimed_per_file
+        .iter()
+        .map(|slot| {
+            slot.as_ref()
+                .map(|c| index_member_types(&c.facts.member_types))
+                .unwrap_or_default()
+        })
+        .collect();
+
     let tables = ResolveTables {
         files: &files,
         file_index: &file_index,
@@ -3695,6 +3834,7 @@ pub fn assemble_from_source(
         symbol_by_name_per_file: &symbol_by_name_per_file,
         symbol_by_qualified_per_file: &symbol_by_qualified_per_file,
         qualified_twins_per_file: &qualified_twins_per_file,
+        member_types_per_file: &member_types_per_file,
         symbol_by_name_per_unit: &symbol_by_name_per_unit,
         member_by_name: &member_by_name,
         file_unit: &file_unit,
@@ -3781,6 +3921,7 @@ pub fn assemble_from_source(
         if let Some(claimed) = slot {
             patch_meta[i].surface_sig = Some(claimed.surface_sig);
             patch_meta[i].unit_name = claimed.facts.unit_name.clone();
+            patch_meta[i].member_types = claimed.facts.member_types.clone();
         }
     }
 
@@ -4129,6 +4270,14 @@ mod tests {
                         reexported: false,
                         opaque_namespace_use: false,
                         local_alias: Some(SmolStr::new(alias)),
+                    });
+                } else if let Some(rest) = line.strip_prefix("member-type ") {
+                    // `member-type <owner> <member> <yields>` — RFC 0012 §3-bis fact.
+                    let mut parts = rest.splitn(3, ' ');
+                    facts.member_types.push(crate::adapter::RawMemberType {
+                        owner: SmolStr::new(parts.next().unwrap_or("")),
+                        member: SmolStr::new(parts.next().unwrap_or("")),
+                        yields: SmolStr::new(parts.next().unwrap_or("")),
                     });
                 } else if let Some(name) = line.strip_prefix("unit-name ") {
                     // The name importers bind this unit by (RFC 0012 §9).
@@ -4751,6 +4900,58 @@ mod tests {
         let stray = reference_edges_to(&graph, "stray");
         assert_eq!(stray.len(), 1);
         assert_eq!(stray[0].confidence, Confidence::Probable);
+    }
+
+    #[test]
+    fn a_dotted_pointer_chains_through_member_type_facts() {
+        // RFC 0012 §3-bis's cross-file tier: `low.context_separator.into_bytes()` in a.mock
+        // where `low: LowArgs` — the adapter emitted the pointer `LowArgs.context_separator`;
+        // LowArgs and its field's type live in b.mock. Every hop is a declared fact:
+        // LowArgs in scope (binding) → its home's member-type fact yields ContextSeparator
+        // → resolved in that same home → `into_bytes` in its member table, at Certain.
+        let dir = project(
+            "qref-chained-pointer",
+            &[
+                (
+                    "a.mock",
+                    "import ./b.mock LowArgs\nqref LowArgs.context_separator into_bytes\nroot-file",
+                ),
+                (
+                    "b.mock",
+                    "decl LowArgs\ndecl ContextSeparator\n\
+                     member-type LowArgs context_separator ContextSeparator\n\
+                     member-decl-exported ContextSeparator into_bytes",
+                ),
+            ],
+        );
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
+        let edges = reference_edges_to(&graph, "into_bytes");
+        assert_eq!(edges.len(), 1);
+        assert_eq!(edges[0].confidence, Confidence::Certain);
+    }
+
+    #[test]
+    fn a_dotted_pointer_with_no_fact_falls_to_the_duck_fallback() {
+        // The chain misses (no member-type fact): the member name still reaches the §3
+        // duck fallback — a pointer never settles.
+        let dir = project(
+            "qref-chained-miss",
+            &[
+                (
+                    "a.mock",
+                    "import ./b.mock LowArgs\nqref LowArgs.mystery into_bytes\nroot-file",
+                ),
+                (
+                    "b.mock",
+                    "decl LowArgs\ndecl ContextSeparator\n\
+                     member-decl-exported ContextSeparator into_bytes",
+                ),
+            ],
+        );
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
+        let edges = reference_edges_to(&graph, "into_bytes");
+        assert_eq!(edges.len(), 1, "duck fallback still reaches the member");
+        assert_eq!(edges[0].confidence, Confidence::Probable);
     }
 
     #[test]

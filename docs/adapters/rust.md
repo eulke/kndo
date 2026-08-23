@@ -225,10 +225,20 @@ exactly like the explicit `HiArgs::matcher` path. The sources, in order of certa
 Reliability bound, stated once: a wrong inference can only MISS (→ duck fallback, exactly
 today's behavior — the core never settles on a receiver-typed qualifier) or hit a member
 the named type genuinely declares — both degrade toward silence, never toward accusation.
-Untracked (deliberately, each a future fact-source, not a patch): field types
-(`low.context_separator.into_bytes()` — needs cross-file field-type facts, a contract
-addition), `match`/`if let` bindings (the scrutinee's payload type is not local), untyped
-closure params, and multi-bound generics.
+**Member-type facts (the cross-file tier, `FileFacts::member_types`)** — every struct
+field (named and tuple-positional), impl method return type, and associated const emits an
+`(owner, member, yields)` fact, dispatch-reduced, `Self` resolved to the owner. Member
+accesses whose base is typed but whose own type is not locally knowable emit a one-hop
+dotted POINTER qualifier — `low.context_separator.into_bytes()` → `LowArgs.context_separator`,
+`Builder::new().opt(x)` → `Builder.new` — which the core resolves hop by hop through the
+facts (and also credits the *yielded type* with a Read from the site: consuming a value
+through a field IS a use of its type). Fact-first ordering: pointer, then the TypeEnv's
+direct type, then the opaque receiver (duck fallback).
+
+Untracked (deliberately, each a future fact-source, not a patch): `expr?`/generic
+unwrapping (a `-> Result<ConfiguredHIR>` return reduces to `Result` — parameterized
+`yields` is the next contract step), `match`/`if let` bindings (the scrutinee's payload
+type is not local), untyped closure params, and multi-bound generics.
 
 ## 3. Resolution
 

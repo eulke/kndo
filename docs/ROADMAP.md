@@ -1043,6 +1043,29 @@ params, multi-bound generics, and Go/JS receiver typing (Go's method receivers a
 same one-map fact; JS is structurally untypable statically). The residual `internal-only`
 class after this stage is dominated by exactly the field-type shape.
 
+### M6 progress — member-type facts, the cross-file tier ✅ (landed 2026-08-23)
+
+The next tier made current (task #85). Contract: `FileFacts.member_types` —
+`(owner, member, yields)`, what accessing a member evaluates to as declared (struct field
+types, impl method returns, associated consts; `Self` owner-resolved, dispatch-reduced).
+The Rust adapter emits the facts and one-hop dotted POINTER qualifiers
+(`low.context_separator.into_bytes()` → `LowArgs.context_separator`;
+`Builder::new().opt(x)` → `Builder.new`), fact-first over the TypeEnv convention. Core
+resolves the chain language-blind: base in the reference's scope, `yields` from the owner's
+home facts, the yielded type name where the annotation was written then in the site's own
+scope, the final member in the yielded type's home (twins included) — every hop a declared
+fact, Certain on hit, duck fallback on any miss, never a settle. The resolved chain also
+credits the yielded TYPE with a Read from the site (consuming a value through a field IS a
+use of its type — the fixture caught exactly that as a would-be `internal-only`). Facts
+join the RFC 0013 §4 surface signature and persist in `FilePatchMeta` (schema v20, rust
+facts v5).
+
+ripgrep: `internal-only` 144 → 129 (the `search.rs`/`hiargs.rs`/`lowargs.rs` receiver
+clusters resolved); `unused` stable at 19; one new `Possible`-confidence finding traded in
+(`ConfiguredHIR.line_terminator` — its chain passes through a `-> Result<…>` return, which
+reduces to `Result` and drops the payload; parameterized `yields` for `?`-unwrapping is the
+recorded next contract step). Scan time unchanged.
+
 ## Post-1.0 parking lot
 **RFC 0016 — uniform component model** (the accepted plan, phased in its §8, **all four phases
 landed**: 0 freeze reservations, 1 host-mediated content channel for plugin graph hooks

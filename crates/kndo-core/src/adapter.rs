@@ -579,6 +579,43 @@ pub struct FileFacts {
     /// convention-bearing position in every motivating pattern — and only for direct
     /// literals, never computed strings (determinism over coverage, the RFC 0002 §5 rule).
     pub string_call_args: Vec<StringCallArg>,
+    /// Member type facts (RFC 0012 §3-bis, the cross-file tier): what accessing a member of
+    /// a type YIELDS, as declared in this file — a struct field's annotated type, a
+    /// method's return type, an associated const's type. Pure resolution metadata (no
+    /// symbol semantics, fields stay non-declarations in v1): assembly indexes these per
+    /// file, and a dotted qualifier pointer (`scope_context = "LowArgs.context_separator"`)
+    /// resolves hop by hop — base name in the reference's scope, `yields` looked up in the
+    /// OWNER's home file, the yielded type name resolved in that same home (annotations
+    /// mean what they mean where they were written), and the final member in the yielded
+    /// type's home. Every hop is a declared-annotation fact → Certain; any miss falls to
+    /// the duck fallback. Default empty; Rust implements it first.
+    pub member_types: Vec<RawMemberType>,
+}
+
+/// One [`FileFacts::member_types`] entry: accessing `owner.member` yields a value of the
+/// (base) type named `yields`. Carries rkyv derives because the incremental patch persists
+/// these per file (`FilePatchMeta`) — resolution of changed files needs unchanged files'
+/// member types.
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    serde::Serialize,
+    serde::Deserialize,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+)]
+pub struct RawMemberType {
+    #[rkyv(with = crate::rkyv_support::SmolStrAsString)]
+    pub owner: SmolStr,
+    #[rkyv(with = crate::rkyv_support::SmolStrAsString)]
+    pub member: SmolStr,
+    /// The BASE type name the access evaluates to, dispatch-reduced by the adapter
+    /// (references stripped, auto-deref wrappers unwrapped, `Self` already resolved).
+    #[rkyv(with = crate::rkyv_support::SmolStrAsString)]
+    pub yields: SmolStr,
 }
 
 /// One [`FileFacts::string_call_args`] entry. Carries rkyv derives because assembly persists

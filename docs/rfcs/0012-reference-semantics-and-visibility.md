@@ -324,6 +324,18 @@ twins are tracked and each gets the edge). The reliability invariant, both sides
 receiver type can only miss into the fallback or hit a member the named type genuinely
 declares — silence-direction errors only.
 
+**§3-bis cross-file tier (M6): member-type facts.** `FileFacts.member_types` carries
+`(owner, member, yields)` — what accessing a member evaluates to, as declared (field types,
+method returns, associated consts). A DOTTED qualifier is a chained pointer
+(`LowArgs.context_separator`): the base resolves in the reference's scope, `yields` comes
+from the owner's home-file facts, the yielded type name resolves first where the annotation
+was written (the home's declarations + re-export aliases) then in the reference site's own
+scope, and the final member resolves in the yielded type's home — twins included, every hop
+a declared fact, Certain on hit, duck fallback on any miss (never a settle). The resolved
+chain also credits the yielded TYPE with a Read from the site. Facts are part of the
+RFC 0013 §4 surface signature (an annotation change re-resolves dependents) and persist in
+`FilePatchMeta` for the patch path.
+
 ## 10. Multi-module topology (`go.work` et al) — adapter work, one recorded divergence
 
 `go.work` becomes a second claimed manifest contributing `workspace_members` (the field
