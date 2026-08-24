@@ -1,0 +1,15 @@
+{
+  "findings": [
+    {
+      "category": "internal-only",
+      "subject_kind": "function",
+      "path": "src/lib.rs",
+      "symbol": "top_api"
+    },
+    {
+      "category": "untested",
+      "subject_kind": "file",
+      "path": "src/main.rs"
+    }
+  ]
+}

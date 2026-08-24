@@ -165,27 +165,19 @@ fn resolve_bare(root: &str, rest: &[&str], from: &str, ctx: &ResolveCtx<'_>) -> 
         });
     if let Some((declared, member)) = member {
         // A package's own bins and tests import its lib BY NAME (`use cycles::…` from
-        // src/main.rs or tests/) — that is the self-crate, not a dependency: resolve to
-        // plain files so no ImportsDependency edge (and no phantom `undeclared`) appears.
+        // src/main.rs or tests/) — that is the self-crate, not a dependency: the typed
+        // `same_package` flag tells assembly to derive the file edge and bindings but no
+        // ImportsDependency (and so no phantom `undeclared`).
         let self_crate = if member.dir.is_empty() {
-            !from.contains('/') || !from.starts_with("crates/") || {
-                // root-package member: every project file belongs to it unless a nested
-                // member owns it — the nested member would have matched by name instead.
-                true
-            }
+            // Root-package member: every project file belongs to it except those a nested
+            // member's directory owns (the nested member wouldn't have matched by NAME —
+            // the specifier names the root crate — so dir ownership is the only test).
+            !ctx.workspace_members_iter()
+                .any(|m| !m.dir.is_empty() && from.starts_with(&format!("{}/", m.dir)))
         } else {
             from.starts_with(&format!("{}/", member.dir))
         };
-        let resolution = resolve_into_member(&declared, member, rest, ctx);
-        if self_crate {
-            return match resolution {
-                Resolution::WorkspaceMember {
-                    target, confidence, ..
-                } => Resolution::File(target, confidence),
-                other => other,
-            };
-        }
-        return resolution;
+        return resolve_into_member(&declared, member, rest, self_crate, ctx);
     }
 
     let dep = if ctx.is_declared_dependency(&SmolStr::new(root)) {
@@ -232,6 +224,7 @@ fn resolve_into_member(
     declared: &str,
     member: &WorkspaceMember,
     rest: &[&str],
+    same_package: bool,
     ctx: &ResolveCtx<'_>,
 ) -> Resolution {
     let entry = member.entry.as_ref();
@@ -241,6 +234,7 @@ fn resolve_into_member(
                 name: SmolStr::new(declared),
                 target: path.clone(),
                 confidence: *confidence,
+                same_package,
             },
             None => Resolution::Dependency(SmolStr::new(declared), Confidence::Certain),
         };
@@ -255,6 +249,7 @@ fn resolve_into_member(
             name: SmolStr::new(declared),
             target: path,
             confidence: Confidence::Certain,
+            same_package,
         };
     }
     if rest.len() > 1 {
@@ -264,6 +259,7 @@ fn resolve_into_member(
                 name: SmolStr::new(declared),
                 target: path,
                 confidence: Confidence::Certain,
+                same_package,
             };
         }
     }
@@ -273,6 +269,7 @@ fn resolve_into_member(
             name: SmolStr::new(declared),
             target: path.clone(),
             confidence: *confidence,
+            same_package,
         },
         None => Resolution::Dependency(SmolStr::new(declared), Confidence::Certain),
     }
@@ -638,6 +635,83 @@ mod tests {
             Resolution::WorkspaceMember { target, .. } => {
                 assert_eq!(target.0.as_str(), "crates/sib/src/internal.rs")
             }
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn self_crate_imports_carry_same_package_and_sibling_imports_do_not() {
+        let files = known(&[
+            "crates/selfy/src/lib.rs",
+            "crates/selfy/tests/it.rs",
+            "crates/other/src/lib.rs",
+        ]);
+        let mut members: FxHashMap<SmolStr, WorkspaceMember> = FxHashMap::default();
+        members.insert(
+            SmolStr::new("selfy"),
+            WorkspaceMember {
+                dir: SmolStr::new("crates/selfy"),
+                entry: Some((
+                    ProjectPath(SmolStr::new("crates/selfy/src/lib.rs")),
+                    Confidence::Certain,
+                )),
+                targets: Vec::new(),
+            },
+        );
+        let ctx = ResolveCtx::new(&files).with_workspace_members(&members);
+        // The package's own integration test names it by package name: real target,
+        // no self-dependency contract.
+        match resolve(&spec("selfy", "crates/selfy/tests/it.rs"), &ctx) {
+            Resolution::WorkspaceMember {
+                target,
+                same_package,
+                ..
+            } => {
+                assert_eq!(target.0.as_str(), "crates/selfy/src/lib.rs");
+                assert!(same_package);
+            }
+            other => panic!("{other:?}"),
+        }
+        // A sibling crate importing it: the declaration contract holds.
+        match resolve(&spec("selfy", "crates/other/src/lib.rs"), &ctx) {
+            Resolution::WorkspaceMember { same_package, .. } => assert!(!same_package),
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn root_package_self_crate_stops_at_nested_member_boundaries() {
+        // Root package (dir "") owns every file EXCEPT those inside a nested member's
+        // directory — a nested crate importing the root crate by name is a genuine
+        // cross-package dependency, not the self-crate.
+        let files = known(&["src/lib.rs", "tests/it.rs", "crates/nested/src/lib.rs"]);
+        let mut members: FxHashMap<SmolStr, WorkspaceMember> = FxHashMap::default();
+        members.insert(
+            SmolStr::new("rooty"),
+            WorkspaceMember {
+                dir: SmolStr::new(""),
+                entry: Some((ProjectPath(SmolStr::new("src/lib.rs")), Confidence::Certain)),
+                targets: Vec::new(),
+            },
+        );
+        members.insert(
+            SmolStr::new("nested"),
+            WorkspaceMember {
+                dir: SmolStr::new("crates/nested"),
+                entry: Some((
+                    ProjectPath(SmolStr::new("crates/nested/src/lib.rs")),
+                    Confidence::Certain,
+                )),
+                targets: Vec::new(),
+            },
+        );
+        let ctx = ResolveCtx::new(&files).with_workspace_members(&members);
+        match resolve(&spec("rooty", "tests/it.rs"), &ctx) {
+            Resolution::WorkspaceMember { same_package, .. } => assert!(same_package),
+            other => panic!("{other:?}"),
+        }
+        match resolve(&spec("rooty", "crates/nested/src/lib.rs"), &ctx) {
+            Resolution::WorkspaceMember { same_package, .. } => assert!(!same_package),
             other => panic!("{other:?}"),
         }
     }

@@ -966,6 +966,15 @@ pub enum Resolution {
         name: SmolStr,
         target: ProjectPath,
         confidence: Confidence,
+        /// The import resolves *within the importing file's own package* (a package's tests
+        /// or binaries naming its library by package name). The file edge and symbol
+        /// bindings are as real as any sibling import — but no declaration contract exists
+        /// for a package depending on itself (no ecosystem lets a manifest require its own
+        /// package), so assembly derives `ImportsFile` and skips `ImportsDependency`:
+        /// neither an `undeclared` accusation ("phantom dependency on itself") nor a
+        /// dependency-usage credit can be right. `false` for genuine siblings, where the
+        /// declaration contract holds both ways.
+        same_package: bool,
     },
     Stdlib,
     Unresolved,

@@ -102,6 +102,10 @@ fn resolve_into_package(
             name: SmolStr::new(matched_module_path),
             target,
             confidence: Confidence::Certain,
+            // Sibling go.work members: go.mod must still `require` them, so the
+            // declaration contract holds (the own-module case above resolves to
+            // plain File — see the function doc).
+            same_package: false,
         })
     }
 }
@@ -236,10 +240,12 @@ mod tests {
                 name,
                 target,
                 confidence,
+                same_package,
             } => {
                 assert_eq!(name.as_str(), "example.com/b");
                 assert_eq!(target.0.as_str(), "modb/lib.go");
                 assert_eq!(confidence, Confidence::Certain);
+                assert!(!same_package, "a go.work sibling is a genuine dependency");
             }
             other => panic!("expected WorkspaceMember, got {other:?}"),
         }

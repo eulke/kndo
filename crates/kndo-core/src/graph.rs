@@ -1270,7 +1270,9 @@ fn resolve_file(
         // A workspace-member resolution is BOTH targets at once: the
         // concrete internal file (reachability is real, cross-package) and the named
         // dependency (the declaration contract is real too — undeclared siblings are
-        // phantom internal dependencies, declared-but-unimported ones are unused).
+        // phantom internal dependencies, declared-but-unimported ones are unused) —
+        // EXCEPT within the importing file's own package (`same_package`), where no
+        // self-declaration contract exists to validate: file edge and bindings only.
         // Stdlib: not a graph node — there is nothing to point an edge at. Unresolved:
         // resolution is intentionally incomplete right now (self-reference imports,
         // exports maps); turning it into a finding is the future `unresolved`
@@ -1282,7 +1284,11 @@ fn resolve_file(
                 name,
                 target,
                 confidence,
-            } => (Some((target, confidence)), Some((name, confidence))),
+                same_package,
+            } => (
+                Some((target, confidence)),
+                (!same_package).then_some((name, confidence)),
+            ),
             Resolution::Stdlib | Resolution::Unresolved => (None, None),
         };
 
@@ -1334,18 +1340,20 @@ fn resolve_file(
                     .clone()
                     .or_else(|| unit_name_by_file[to.0 as usize].clone())
                     .map(|q| (q, true))
-                    // A `::`-path specifier (Rust inline module paths, Java static-import
+                    // A path specifier (Rust inline module paths, Java static-import
                     // classes) puts its LAST segment in scope as the qualifier at the use
                     // site: `kndo_core::discovery::find_files_named(..)` reaches
-                    // `discovery`'s file under the qualifier `discovery` — without this the
-                    // reference's scope_context matched nothing and the whole path fell to
-                    // the duck fallback (a cross-crate inline path would resolve zero
-                    // references). Non-settling (see qualifier_targets).
+                    // `discovery`'s file under the qualifier `discovery`, and a
+                    // single-segment specifier (`selfy` from a path call `selfy::api()` —
+                    // a package's own tests naming it by package name) is its own last
+                    // segment — without this the reference's scope_context matched nothing
+                    // and the whole path fell to the duck fallback (a path call into the
+                    // resolved file would bind zero references and its target would read
+                    // as dead). Non-settling (see qualifier_targets).
                     .or_else(|| {
                         imp.specifier
                             .rsplit("::")
                             .next()
-                            .filter(|_| imp.specifier.contains("::"))
                             .map(|q| (SmolStr::new(q), false))
                     });
                 if let Some((q, settles)) = qualifier {
@@ -4911,6 +4919,10 @@ mod tests {
                         name: spec.specifier.clone(),
                         target: target.clone(),
                         confidence: *confidence,
+                        // The same dir-ownership rule real adapters apply, so the
+                        // same-package edge derivation is exercisable from graph tests.
+                        same_package: !member.dir.is_empty()
+                            && spec.from.0.starts_with(&format!("{}/", member.dir)),
                     },
                     None => Resolution::Unresolved,
                 };
@@ -7061,6 +7073,49 @@ mod tests {
             crate::analysis::run_all(&graph, &crate::coverage::CoverageMap::default()).findings;
         assert!(!findings.iter().any(|f| f.subject_kind == "file"
             && f.location.path.as_ref().map(|p| p.0.as_str()) == Some("packages/b/lib.mock")));
+    }
+
+    #[test]
+    fn same_package_import_gets_the_file_edge_but_no_dependency_contract() {
+        // A package's own file naming the package (a test or binary importing its
+        // library by package name): `same_package` keeps reachability — the ImportsFile
+        // edge — while deriving no ImportsDependency, so neither a phantom `undeclared`
+        // ("the package doesn't declare itself") nor dependency-usage credit can appear.
+        let dir = project(
+            "ws-same-package",
+            &[
+                (
+                    "packages/a/manifest.json",
+                    "name pkg-a\nentry packages/a/lib.mock",
+                ),
+                ("packages/a/lib.mock", "decl util"),
+                ("packages/a/consumer.mock", "import pkg-a\nroot-file"),
+            ],
+        );
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
+        let consumer = graph
+            .file_id(&ProjectPath(SmolStr::new("packages/a/consumer.mock")))
+            .unwrap();
+        let lib = graph
+            .file_id(&ProjectPath(SmolStr::new("packages/a/lib.mock")))
+            .unwrap();
+        assert!(graph.edges.iter().any(|e| e.kind
+            == EdgeKind::ImportsFile {
+                from: consumer,
+                to: lib,
+            }));
+        assert!(
+            !graph.edges.iter().any(
+                |e| matches!(e.kind, EdgeKind::ImportsDependency { from, .. } if from == consumer)
+            ),
+            "no declaration contract exists for a package depending on itself"
+        );
+        let findings =
+            crate::analysis::run_all(&graph, &crate::coverage::CoverageMap::default()).findings;
+        assert!(
+            !findings.iter().any(|f| f.category == "undeclared"),
+            "{findings:?}"
+        );
     }
 
     #[test]

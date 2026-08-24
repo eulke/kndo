@@ -94,6 +94,7 @@ fn resolve_workspace(
                 name: SmolStr::new(package_name),
                 target: target.clone(),
                 confidence: *confidence,
+                same_package: false,
             });
     }
     let base = kndo_adapter_toolkit::paths::join(member.dir.as_str(), subpath);
@@ -104,6 +105,7 @@ fn resolve_workspace(
                 name: SmolStr::new(package_name),
                 target: path,
                 confidence: Confidence::Certain,
+                same_package: false,
             });
         }
     }
@@ -341,6 +343,7 @@ mod tests {
                 name: SmolStr::new("@org/ui"),
                 target: ProjectPath(SmolStr::new("packages/ui/src/index.ts")),
                 confidence: Confidence::Certain,
+                same_package: false,
             }
         );
     }
@@ -359,6 +362,7 @@ mod tests {
                 name: SmolStr::new("@org/ui"),
                 target: ProjectPath(SmolStr::new("packages/ui/button.ts")),
                 confidence: Confidence::Certain,
+                same_package: false,
             }
         );
     }

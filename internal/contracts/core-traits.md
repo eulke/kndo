@@ -149,7 +149,12 @@ pub trait LanguageAdapter: Send + Sync {
     /// (workspace:*, path deps, alias paths) resolve as WorkspaceMember — the concrete
     /// sibling file plus the package name, from which assembly derives BOTH edge kinds
     /// (ImportsFile for reachability, ImportsDependency for the declaration contract —
-    /// RFC 0011 §4 validates it both ways). ResolveCtx carries the workspace-member index
+    /// RFC 0011 §4 validates it both ways) — unless same_package is set: the specifier
+    /// resolved within the importing file's OWN package (a package's tests or binaries
+    /// naming its library by package name), where the file edge and bindings are real but
+    /// no self-declaration contract exists to validate, so assembly derives ImportsFile
+    /// only (no phantom `undeclared`, no dependency-usage credit).
+    /// ResolveCtx carries the workspace-member index
     /// (name → { dir, resolved entry }) the core builds from every named manifest's facts.
     /// When no concrete in-repo file matches (a source checkout whose published entries are
     /// build artifacts), the specifier falls through to the external ladder as a plain
@@ -157,7 +162,7 @@ pub trait LanguageAdapter: Send + Sync {
     /// un-count a genuinely used dependency; only the file edge is unknowable.
     fn resolve(&self, spec: &ImportSpec, ctx: &ResolveCtx) -> Resolution;
     // Resolution = File(ProjectPath, Confidence) | Dependency(DependencyName, Confidence)
-    //            | WorkspaceMember { name, target: ProjectPath, confidence }
+    //            | WorkspaceMember { name, target: ProjectPath, confidence, same_package }
     //            | Stdlib | Unresolved
 }
 ```
