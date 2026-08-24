@@ -1,0 +1,36 @@
+[package]
+name = "kndo-core"
+description = "The system: graph model, analysis engine, cache, orchestration, plugin host. Language-blind by contract."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+smol_str = { workspace = true }
+blake3 = { workspace = true }
+ignore = { workspace = true }
+# Content-channel glob matching: a component's `requested_file_access` entries
+# are glob patterns matched in-memory against discovered paths — no disk walk, source-blind
+# (works identically for a directory or a git-tree source).
+glob = "0.3"
+rayon = { workspace = true }
+rustc-hash = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+toml = { workspace = true }
+bincode = { workspace = true }
+rkyv = { workspace = true }
+memmap2 = { workspace = true }
+chrono = { workspace = true }
+num_cpus = { workspace = true }
+schemars = { version = "1", features = ["smol_str03"], optional = true }
+
+[features]
+# Dev-time only (`cargo xtask gen-schema`, schema-validation tests) — never needed at analysis
+# time, so it's not in any shipped binary's default feature set.
+schema = ["dep:schemars"]
+
+[dev-dependencies]
+tempfile = "3"

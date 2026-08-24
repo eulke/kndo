@@ -1,0 +1,5 @@
+{
+  "name": "library-public-api",
+  "private": false,
+  "main": "src/index.ts"
+}

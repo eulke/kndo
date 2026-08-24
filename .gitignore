@@ -1,0 +1,19 @@
+target/
+# The whole directory, not just cache/ — this is for git-status hygiene only (kndo's own
+# `.kndo/.gitignore`, written by `cache::FactsCache::open`, is what actually keeps `cache/`
+# out of `git add -A`; discovery.rs excludes `.kndo/` from analysis unconditionally,
+# independent of this file, since a project's first-ever run predates any gitignore entry).
+.kndo/
+
+# Conformance fixture corpora (RFC 0002 §8) are deliberately-flawed test data — checked into
+# git, exercised via the conformance harness's own `cargo test` run, but excluded from kndo's
+# self-check of its own repo (ROADMAP M1 exit: "kndo check on kndo's own JS-free repo returns
+# cleanly"). The `ignore` crate reads this file for its glob rules regardless of git-tracked
+# status, so this line doesn't affect version control at all.
+**/tests/fixtures/
+docs/book/
+
+# Local coverage output (CONTRIBUTING.md "Coverage") — kndo ingests lcov.info from the
+# repo root or coverage/ at check time; the report itself is a build artifact.
+lcov.info
+coverage/

@@ -1,0 +1,6 @@
+{
+  "findings": [
+    { "category": "internal-only", "subject_kind": "method", "path": "Sources/App/Base.swift", "symbol": "Base.go" },
+    { "category": "internal-only", "subject_kind": "method", "path": "Sources/App/BaseExtensions.swift", "symbol": "Base.extra" }
+  ]
+}

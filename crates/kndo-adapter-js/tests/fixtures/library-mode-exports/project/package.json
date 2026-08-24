@@ -1,0 +1,8 @@
+{
+  "name": "library-mode-exports",
+  "private": false,
+  "exports": {
+    ".": "./src/index.ts",
+    "./extra": "./src/extra.ts"
+  }
+}

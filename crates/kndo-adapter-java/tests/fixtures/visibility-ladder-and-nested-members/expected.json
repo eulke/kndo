@@ -1,0 +1,40 @@
+{
+  "findings": [
+    {
+      "category": "internal-only",
+      "subject_kind": "class",
+      "path": "src/main/java/com/foo/Widget.java",
+      "symbol": "Widget"
+    },
+    {
+      "category": "internal-only",
+      "subject_kind": "class",
+      "path": "src/main/java/com/foo/Widget.java",
+      "symbol": "Widget.Inner"
+    },
+    {
+      "category": "internal-only",
+      "subject_kind": "method",
+      "path": "src/main/java/com/foo/Widget.java",
+      "symbol": "Widget.c"
+    },
+    {
+      "category": "internal-only",
+      "subject_kind": "method",
+      "path": "src/main/java/com/foo/Widget.java",
+      "symbol": "Widget.d"
+    },
+    {
+      "category": "internal-only",
+      "subject_kind": "method",
+      "path": "src/main/java/com/foo/Widget.java",
+      "symbol": "Inner.go"
+    },
+    {
+      "category": "internal-only",
+      "subject_kind": "method",
+      "path": "src/main/java/com/foo/Widget.java",
+      "symbol": "Inner.helper"
+    }
+  ]
+}

@@ -1,0 +1,52 @@
+# git-cliff config — categorizes commits by the type prefix CONTRIBUTING.md's Commits section
+# mandates (feat/fix/docs/refactor/perf/test/build/ci/chore/revert). The catch-all "Other"
+# group at the bottom of `commit_parsers` is load-bearing: an un-prefixed commit subject
+# lands there instead of vanishing from the changelog.
+
+[changelog]
+header = """
+# Changelog\n
+All notable changes to kndo are documented in this file.\n
+"""
+body = """
+{% if version %}\
+    ## [{{ version | trim_start_matches(pat="v") }}] - {{ timestamp | date(format="%Y-%m-%d") }}
+{% else %}\
+    ## [Unreleased]
+{% endif %}\
+{% for group, commits in commits | group_by(attribute="group") %}
+    ### {{ group | striptags | trim | upper_first }}
+    {% for commit in commits %}
+        - {{ commit.message | upper_first }}\
+            {% if commit.remote.pr_number %} (#{{ commit.remote.pr_number }}){% endif %}
+    {% endfor %}
+{% endfor %}\n
+"""
+trim = true
+
+[git]
+conventional_commits = true
+filter_unconventional = false
+split_commits = false
+commit_preprocessors = []
+commit_parsers = [
+    { message = "^feat", group = "Features" },
+    { message = "^fix", group = "Bug Fixes" },
+    { message = "^perf", group = "Performance" },
+    { message = "^docs", group = "Documentation" },
+    { message = "^refactor", group = "Refactor" },
+    { message = "^test", group = "Testing" },
+    { message = "^build", group = "Build" },
+    { message = "^ci", group = "CI" },
+    { message = "^chore\\(release\\)", skip = true },
+    { message = "^chore", group = "Miscellaneous" },
+    { message = "^revert", group = "Reverts" },
+    # Catch-all: every commit subject that doesn't match a type prefix above lands here
+    # rather than being silently dropped.
+    { message = ".*", group = "Other" },
+]
+protect_breaking_commits = false
+filter_commits = false
+tag_pattern = "v[0-9]*"
+topo_order = false
+sort_commits = "oldest"

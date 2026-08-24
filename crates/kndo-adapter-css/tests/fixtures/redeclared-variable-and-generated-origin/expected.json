@@ -1,0 +1,5 @@
+{
+  "findings": [
+    { "category": "unused", "subject_kind": "css-variable", "path": "theme.css", "symbol": "--truly-dead" }
+  ]
+}

@@ -1,0 +1,157 @@
+name: kndo
+description: >-
+  Run kndo on a pull request and report where reviewers look — a sticky PR
+  comment, file annotations, and the job summary — gating the merge on the same
+  rules as the local pre-commit.
+author: kndo
+branding:
+  icon: check-circle
+  color: purple
+
+inputs:
+  fail-on:
+    description: 'Fail the check on findings at or above this severity: error | warning | info | none (report-only).'
+    default: warning
+  comment:
+    description: Maintain the sticky PR comment (one living report per PR, upserted in place).
+    default: 'true'
+  sarif:
+    description: Also upload a SARIF rendering to GitHub code scanning.
+    default: 'false'
+  version:
+    description: >-
+      kndo version to install: a release tag like v0.1.0, "latest" for the
+      newest release, or "source" to build kndo-cli from the checked-out
+      repository (pre-release use).
+    default: latest
+  working-directory:
+    description: Project root to analyze (where kndo runs).
+    default: .
+  github-token:
+    description: Token used for the sticky comment. Defaults to the workflow token.
+    default: ${{ github.token }}
+
+outputs:
+  exit-code:
+    description: "kndo's own exit code: 0 clean, 1 findings at/above fail-on, 2 kndo failed to run."
+    value: ${{ steps.run.outputs.exit_code }}
+  report:
+    description: Path to the JSON report.
+    value: ${{ steps.run.outputs.report }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install kndo
+      id: install
+      shell: bash
+      env:
+        KNDO_VERSION: ${{ inputs.version }}
+        REPO: ${{ github.action_repository || 'eulke/kondo' }}
+      run: |
+        set -euo pipefail
+        if [ "$KNDO_VERSION" = "source" ]; then
+          # Dogfood / pre-release: build kndo-cli from the checked-out repository.
+          cargo install --path "$GITHUB_ACTION_PATH/../crates/kndo-cli" --locked --force --quiet
+        else
+          if [ "$KNDO_VERSION" = "latest" ]; then
+            KNDO_VERSION="$(curl -fsSL -H "Accept: application/vnd.github+json" \
+              "${GITHUB_API_URL}/repos/${REPO}/releases/latest" | \
+              node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>console.log(JSON.parse(d).tag_name))')"
+          fi
+          case "$(uname -sm)" in
+            "Linux x86_64")   target="x86_64-unknown-linux-gnu" ;;
+            "Linux aarch64")  target="aarch64-unknown-linux-gnu" ;;
+            "Darwin x86_64")  target="x86_64-apple-darwin" ;;
+            "Darwin arm64")   target="aarch64-apple-darwin" ;;
+            *) echo "::error::kndo-action: unsupported runner platform $(uname -sm)"; exit 2 ;;
+          esac
+          version_no_v="${KNDO_VERSION#v}"
+          asset="kndo-${version_no_v}-${target}.tar.gz"
+          url="https://github.com/${REPO}/releases/download/${KNDO_VERSION}/${asset}"
+          dir="${RUNNER_TEMP}/kndo-bin"
+          mkdir -p "$dir"
+          echo "downloading $url"
+          curl -fsSL "$url" | tar -xz -C "$dir" --strip-components=1
+          echo "$dir" >> "$GITHUB_PATH"
+        fi
+    - name: Resolve cache key
+      id: key
+      shell: bash
+      run: echo "kndo=$(kndo --version 2>/dev/null || echo unknown)" >> "$GITHUB_OUTPUT"
+    - name: Restore analysis cache
+      uses: actions/cache@v4
+      with:
+        path: ${{ inputs.working-directory }}/.kndo/cache
+        key: kndo-cache-${{ runner.os }}-${{ steps.key.outputs.kndo }}-${{ github.sha }}
+        # Content-addressed entries make stale restores safe — worst case is a
+        # colder run, never a wrong one.
+        restore-keys: |
+          kndo-cache-${{ runner.os }}-${{ steps.key.outputs.kndo }}-
+    - name: Run kndo
+      id: run
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        FAIL_ON: ${{ inputs.fail-on }}
+        BASE_REF: ${{ github.event.pull_request.base.ref }}
+      run: |
+        set -uo pipefail
+        report="${RUNNER_TEMP}/kndo-report.json"
+        code=0
+        if [ -n "${BASE_REF:-}" ]; then
+          # The PR's merge-base against the base branch — identical semantics to
+          # local --diff. Needs the base locally resolvable.
+          git fetch --no-tags --quiet origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}" || true
+          kndo check --diff "origin/${BASE_REF}" --fail-on "$FAIL_ON" --format json > "$report" || code=$?
+        else
+          kndo check --fail-on "$FAIL_ON" --format json > "$report" || code=$?
+        fi
+        echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+        echo "report=$report" >> "$GITHUB_OUTPUT"
+        # Publishing happens next regardless; the final step re-raises this code.
+        exit 0
+    - name: Publish report
+      shell: bash
+      env:
+        KNDO_REPORT: ${{ steps.run.outputs.report }}
+        KNDO_EXIT: ${{ steps.run.outputs.exit_code }}
+        KNDO_FAIL_ON: ${{ inputs.fail-on }}
+        KNDO_COMMENT: ${{ inputs.comment }}
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+      run: node "$GITHUB_ACTION_PATH/render.mjs"
+    - name: Render SARIF
+      if: inputs.sarif == 'true' && steps.run.outputs.exit_code != '2'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        BASE_REF: ${{ github.event.pull_request.base.ref }}
+      run: |
+        set -euo pipefail
+        # Second render over a warm cache — same analysis, SARIF envelope.
+        if [ -n "${BASE_REF:-}" ]; then
+          kndo check --diff "origin/${BASE_REF}" --fail-on none --format sarif > "${RUNNER_TEMP}/kndo.sarif"
+        else
+          kndo check --fail-on none --format sarif > "${RUNNER_TEMP}/kndo.sarif"
+        fi
+    - name: Upload SARIF
+      if: inputs.sarif == 'true' && steps.run.outputs.exit_code != '2'
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: ${{ runner.temp }}/kndo.sarif
+        category: kndo
+    - name: Gate
+      shell: bash
+      env:
+        KNDO_EXIT: ${{ steps.run.outputs.exit_code }}
+      run: |
+        case "$KNDO_EXIT" in
+          0) ;;
+          2)
+            # kndo failed to run — infrastructure, never "code has findings".
+            echo "::error title=kndo failed to run::kndo exited 2 (infrastructure/config error, not code findings) — see the job log"
+            exit 2 ;;
+          *)
+            echo "::error title=kndo findings::findings at or above the fail-on threshold — see the PR comment / job summary"
+            exit "$KNDO_EXIT" ;;
+        esac

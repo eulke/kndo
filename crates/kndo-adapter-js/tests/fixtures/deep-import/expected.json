@@ -1,0 +1,5 @@
+{
+  "findings": [
+    { "category": "deep-import", "subject_kind": "package", "path": "package.json", "symbol": "@org/ui" }
+  ]
+}

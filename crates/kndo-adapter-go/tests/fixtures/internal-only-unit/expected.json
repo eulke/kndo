@@ -1,0 +1,10 @@
+{
+  "findings": [
+    {
+      "category": "internal-only",
+      "subject_kind": "function",
+      "path": "internal/util/helper.go",
+      "symbol": "Helper"
+    }
+  ]
+}

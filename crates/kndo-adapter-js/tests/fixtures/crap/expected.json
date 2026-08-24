@@ -1,0 +1,5 @@
+{
+  "findings": [
+    { "category": "crap", "subject_kind": "function", "path": "risky.ts", "symbol": "classifyInput" }
+  ]
+}

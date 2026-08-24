@@ -1,0 +1,18 @@
+[package]
+name = "kndo-adapter-swift"
+description = "Swift language adapter for kndo"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+kndo-core = { path = "../kndo-core" }
+kndo-adapter-toolkit = { path = "../kndo-adapter-toolkit" }
+smol_str = { workspace = true }
+tree-sitter = { workspace = true }
+tree-sitter-swift = { workspace = true }
+
+[dev-dependencies]
+rustc-hash = { workspace = true }

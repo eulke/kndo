@@ -1,0 +1,40 @@
+{
+  "findings": [
+    {
+      "category": "internal-only",
+      "subject_kind": "class",
+      "path": "src/main/kotlin/com/foo/Widget.kt",
+      "symbol": "Widget"
+    },
+    {
+      "category": "internal-only",
+      "subject_kind": "class",
+      "path": "src/main/kotlin/com/foo/Widget.kt",
+      "symbol": "Widget.Inner"
+    },
+    {
+      "category": "internal-only",
+      "subject_kind": "method",
+      "path": "src/main/kotlin/com/foo/Widget.kt",
+      "symbol": "Inner.go"
+    },
+    {
+      "category": "internal-only",
+      "subject_kind": "method",
+      "path": "src/main/kotlin/com/foo/Widget.kt",
+      "symbol": "Widget.c"
+    },
+    {
+      "category": "internal-only",
+      "subject_kind": "method",
+      "path": "src/main/kotlin/com/foo/Widget.kt",
+      "symbol": "Widget.d"
+    },
+    {
+      "category": "internal-only",
+      "subject_kind": "method",
+      "path": "src/main/kotlin/com/foo/Widget.kt",
+      "symbol": "Widget.useOwn"
+    }
+  ]
+}

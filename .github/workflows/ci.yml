@@ -1,0 +1,183 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+  # Lets release.yml's own `test` gate call this workflow directly instead of
+  # duplicating the job — one definition of "what green means," not two that can drift apart.
+  workflow_call:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write # kndo-action's sticky PR comment
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # kndo's self-check step below needs `origin/<base>` locally resolvable for
+          # `kndo check --diff` uses merge-base semantics — a shallow checkout
+          # wouldn't have it.
+          fetch-depth: 0
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      - name: cargo fmt --check
+        run: cargo fmt --all -- --check
+
+      - name: cargo clippy
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
+
+      # wasm32-unknown-unknown is needed here, not for the workspace build itself (the guest
+      # crates under examples/ are excluded from the workspace, the WASM ABI contract) —
+      # the WASM-bridge integration tests invoke `cargo build --target wasm32-unknown-unknown`
+      # against those guest crates as a subprocess and componentize the result in-process
+      # (each such spawn strips the instrumentation env vars, so the guest builds stay clean
+      # under llvm-cov). The suite runs ONCE, instrumented: the lcov report it leaves at the
+      # repo root is real coverage from the same run that gates the build, and the self-check
+      # below ingests it (kndo's well-known coverage path), turning the crap analysis into
+      # measured signal instead of a category-wide guess. cargo-llvm-cov keeps its objects in
+      # target/llvm-cov-target, so the regular cache is not evicted; the first instrumented
+      # build is a full rebuild, cached thereafter.
+      - name: cargo test --workspace (instrumented, emits lcov.info)
+        run: cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info
+
+      # kndo checking itself through the GitHub Action: the same check the
+      # local pre-commit hook runs, over the diff this PR/push actually introduces — plus the
+      # Action's publishing surfaces (sticky PR comment, annotations, job summary) exercised on
+      # kndo's own PRs. `version: source` builds kndo-cli from this checkout, so the Action and
+      # the code under review are the same commit.
+      - name: kndo (self-check via kndo-action)
+        uses: ./action
+        with:
+          version: source
+          fail-on: warning
+
+  # The ABI compatibility matrix: the two reference components, PRE-BUILT and committed
+  # under crates/kndo-plugin-api/tests/compat/, run against the HEAD host. the ABI's
+  # "a v1 component keeps working against every v1-compatible host" promise as a job that
+  # fails the build instead of the ecosystem. Runs inside `test` too (it's an ordinary cargo
+  # test) — this standalone job exists so a compat break fails on its own named line, and to
+  # prove the run needs no wasm toolchain at all (no wasm32 target installed here).
+  compat-matrix:
+    name: ABI compat matrix (pinned v1 components vs HEAD host)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: compat-matrix
+          cache-on-failure: true
+
+      - name: run the pinned components against the HEAD host
+        run: cargo test -p kndo-plugin-api --test compat_matrix
+
+  # the design contract's "shell" configuration, CI-proven rather than only documented: a `kndo` build
+  # with every first-party language grammar off and just enough to load third-party WASM
+  # adapters (an embedder can drop every language grammar and keep the host). Builds
+  # standalone from `test` (a different feature set, not a dependency of it) so a shell-only
+  # regression fails on its own line instead of hiding inside the full-features job.
+  shell-build:
+    name: shell build (external-adapters + plugin-install only)
+    runs-on: ubuntu-latest
+    # This job's release builds (the shell-configuration smoke binary, and the demo WASM
+    # plugin componentized below) are never distributed — only release.yml's own 5-target
+    # matrix produces real release artifacts, in a separate workflow/job that doesn't inherit
+    # this env, so its LTO/codegen-units=1 settings (root Cargo.toml's [profile.release],
+    # left untouched) are unaffected. Dropping LTO here only cuts this one job's build time.
+    env:
+      CARGO_PROFILE_RELEASE_LTO: "false"
+      CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: shell-build
+          cache-on-failure: true
+
+      - name: cargo build (shell configuration)
+        run: cargo build --release -p kndo-cli --no-default-features --features external-adapters,plugin-install
+
+      - name: cargo clippy (shell configuration)
+        run: cargo clippy -p kndo-cli --no-default-features --features external-adapters,plugin-install -- -D warnings
+
+      # examples/kndo-plugin-demo is the reference external adapter
+      # (crates/kndo/tests/external_adapter.rs) — componentized here via `cargo xtask
+      # componentize` (the same `wit_component::ComponentEncoder` call that test makes
+      # in-process) so this job needs no extra tool install for a one-line operation the
+      # workspace already depends on doing correctly.
+      - name: build + componentize the reference external adapter
+        run: |
+          cd examples/kndo-plugin-demo
+          cargo build --release --target wasm32-unknown-unknown
+          cd ../..
+          cargo run -p xtask -- componentize \
+            examples/kndo-plugin-demo/target/wasm32-unknown-unknown/release/kndo_plugin_demo.wasm \
+            /tmp/kdemo-component.wasm
+
+      # The smoke check itself: a fixture project with NO first-party adapter able to claim
+      # anything, and one third-party adapter dropped only into `.kndo/plugins/` — the shell
+      # binary must auto-discover and run it purely from that directory, exactly the design contract's
+      # claimed configuration, not the full product with languages incidentally unused.
+      - name: smoke check — shell binary auto-discovers a plugin-dir-only adapter
+        run: |
+          set -eu
+          KNDO_BIN="$(pwd)/target/release/kndo"
+          fixture=$(mktemp -d)
+          mkdir -p "$fixture/.kndo/plugins"
+          cp /tmp/kdemo-component.wasm "$fixture/.kndo/plugins/kdemo.wasm"
+          printf 'pub fn main() {\n    helper();\n}\n\nfn helper() {\n}\n\nfn dead() {\n}\n' > "$fixture/program.kdemo"
+          cd "$fixture"
+
+          # Captured to a file so the full doctor output lands in the job log before the
+          # assertion. (Piping straight into `grep -q` also works now — main restores the
+          # default SIGPIPE disposition, proven by crates/kndo-cli/tests/sigpipe.rs — this is
+          # purely for log readability.)
+          "$KNDO_BIN" doctor > doctor-output.txt
+          cat doctor-output.txt
+          grep -q '^  kdemo  (grammar' doctor-output.txt \
+            || { echo "shell binary did not auto-discover the plugin-dir adapter"; exit 1; }
+
+          "$KNDO_BIN" check > check-output.json
+          python3 -c "
+          import json
+          with open('check-output.json') as f:
+              d = json.load(f)
+          adapters = {a['id']: a['files'] for a in d['run']['adapters']}
+          assert adapters.get('kdemo') == 1, f'expected kdemo to claim exactly 1 file, got {adapters}'
+          unused = [f['location']['symbol'] for f in d['findings'] if f.get('category') == 'unused']
+          assert unused == ['dead'], f'expected only dead to be unused, got {unused}'
+          print('shell build smoke check passed')
+          "

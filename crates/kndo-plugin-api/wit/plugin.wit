@@ -1,0 +1,363 @@
+// kndo-plugin-api v1 — the external-PLUGIN WASM ABI. Bridges the
+// four graph-mutation `Plugin` hooks (`classify_file`, `contribute_roots`, `contribute_edges`,
+// `annotate_symbols`) in `world plugin`, findings in `world plugin-findings`, and coverage
+// ingestion in `world coverage-ingester` — `suppress` stays out of scope, same posture as
+// `adapter.wit` cutting `resolve()`/manifests: not demanded, don't build it speculatively.
+//
+// Versioned independently from `kndo:adapter` —
+// the small vocabulary overlap (file-class, root-kind, ref-kind, confidence)
+// is deliberately duplicated here rather than shared across packages, so upgrading one ABI can
+// never force a lockstep bump of the other.
+//
+// Unlike `adapter.wit`, this world is BIDIRECTIONAL: `contribute_roots`/`contribute_edges`/
+// `annotate_symbols` need to *read* the graph, not just report facts about one file. Rather than
+// serializing the whole graph into every call (expensive, and most plugins only care about a
+// handful of paths), the host exposes two narrow query functions the guest calls as needed —
+// `list-files` and `symbols-in` — mirroring `kndo_core::plugin::GraphView`'s own two methods
+// exactly. `read-file` is the same idea applied to content outside the graph —
+// configs, manifests, templates — scoped to the component's own declared globs. The guest
+// still can't touch anything else: no fs, no net, no other host state.
+package kndo:plugin@0.1.0;
+
+interface types {
+    enum file-role {
+        production,
+        test,
+        tooling,
+    }
+
+    enum file-origin {
+        authored,
+        generated,
+        vendored,
+    }
+
+    record file-class {
+        role: file-role,
+        origin: file-origin,
+    }
+
+    /// v1 subset of `kndo_core::vocab::SymbolKind` — same cut `adapter.wit` makes, for the same
+    /// reason (an adapter-specific `Other(name)` facet isn't representable in v1).
+    enum symbol-kind {
+        function,
+        method,
+        class,
+        %interface,
+        %struct,
+        %enum,
+        enum-member,
+        type-alias,
+        %const,
+        %static,
+        variable,
+        field,
+        module,
+    }
+
+    enum root-kind {
+        production,
+        test,
+        tooling,
+    }
+
+    enum ref-kind {
+        call,
+        read,
+        write,
+        extend,
+        implement,
+        override,
+        type-use,
+    }
+
+    enum confidence {
+        certain,
+        probable,
+        possible,
+    }
+
+    /// A named target — mirrors `kndo_core::plugin::PluginTarget` exactly: a path, plus an
+    /// optional bare-or-`Owner.name` symbol name. Resolved host-side; an unresolvable target is
+    /// dropped silently, same as the native ABI.
+    record plugin-target {
+        path: string,
+        symbol: option<string>,
+    }
+
+    record contributed-root {
+        target: plugin-target,
+        kind: root-kind,
+        confidence: confidence,
+    }
+
+    record contributed-edge {
+        %from: plugin-target,
+        %to: plugin-target,
+        kind: ref-kind,
+        confidence: confidence,
+    }
+
+    /// Machine-evaluable counterpart to `plugin-descriptor.detection`'s prose — evaluated
+    /// host-side against the project root, cheaply and without running any guest code, before a
+    /// *globally* installed plugin is even instantiated. A project-local
+    /// `.kndo/plugins/*.wasm` file stays unconditional; this only gates the XDG-wide install
+    /// path.
+    variant activation-rule {
+        /// At least one file under the project root matches this glob.
+        file-exists(string),
+        /// A root manifest (`package.json`, `Cargo.toml`) declares a dependency by this
+        /// name, in any dependency section.
+        manifest-dependency(string),
+    }
+
+    record plugin-descriptor {
+        /// Identity = provenance: a source coordinate
+        /// (`github.com/<owner>/<repo>`) for external plugins. The `kndo:` namespace is
+        /// reserved for built-ins — the host rejects any component claiming it.
+        id: string,
+        version: string,
+        detection: list<string>,
+        requested-file-access: list<string>,
+        activation: list<activation-rule>,
+        /// Coordinates of plugins whose conventions are part of this one's:
+        /// install-time closure + activation implication, nothing else — no versions, no
+        /// ordering, no inter-plugin data flow.
+        dependencies: list<string>,
+    }
+
+    /// One `GraphView::files()` entry. v1 exposes path/role/origin only — `language`/`unit`/
+    /// `test-spans` aren't surfaced, the same "conservative v1, grow on real demand" cut
+    /// `adapter.wit`'s own descriptor makes.
+    record wasm-file-info {
+        path: string,
+        role: file-role,
+        origin: file-origin,
+    }
+
+    /// One `GraphView::symbols_in(path)` entry.
+    record wasm-symbol-info {
+        name: string,
+        kind: symbol-kind,
+        exported: bool,
+        member-of: option<string>,
+    }
+
+    /// The read-surface records. `wasm-file-info`/`wasm-symbol-info` above are
+    /// FROZEN (growing a record is a breaking change in the component model); everything the
+    /// graph additionally holds arrives through additive records on additive imports
+    /// instead — the same evolution pattern `read-file` follows.
+    record wasm-span {
+        start-line: u32,
+        start-col: u32,
+        end-line: u32,
+        end-col: u32,
+    }
+
+    /// One package: `root` is the manifest's own directory (`""` for
+    /// the implicit package owning whatever no manifest governs).
+    record wasm-package-info {
+        manifest: option<string>,
+        name: option<string>,
+        root: string,
+    }
+
+    /// The rest of what `FileNode` commits to beyond `wasm-file-info`'s frozen trio.
+    record wasm-file-details {
+        language: option<string>,
+        unit: option<string>,
+        package-root: string,
+    }
+
+    /// The rest of what `SymbolNode` commits to beyond `wasm-symbol-info`'s frozen four.
+    /// `visibility` is the rung index into the language's declared ladder —
+    /// 0 is always the most private rung.
+    record wasm-symbol-details {
+        visibility: u32,
+        span: wasm-span,
+    }
+
+    /// One adapter-derived reference site targeting a queried symbol.
+    record wasm-ref-site {
+        from-path: string,
+        from-symbol: option<string>,
+        kind: ref-kind,
+        confidence: confidence,
+    }
+
+    /// One string-literal call site — the generic, adapter-extracted fact
+    /// framework plugins interpret.
+    record wasm-call-site {
+        callee: string,
+        literal: string,
+        span: wasm-span,
+    }
+
+    /// A rule's declared severity — its own enum, never the host's finding
+    /// severity: the host maps it under the advisory-channel rules, so a guest can
+    /// never construct a gate-eligible severity directly.
+    enum finding-severity {
+        error,
+        warning,
+        info,
+    }
+
+    /// One rule a plugin may emit findings under, declared up front. `name` is
+    /// lower-kebab and becomes the suffix of the host-assembled category
+    /// `plugin:<coordinate>/<rule>`; findings emitted under an undeclared rule are dropped
+    /// with a diagnostic.
+    /// One instrumented line as the report states it — the WASM analogue of one
+    /// `CoverageSink::add_line` call. Paths are the report's own, normalized as far as the
+    /// guest can know (separators, `./`); the host applies root and package rebasing
+    /// afterwards, uniformly for every ingester.
+    record coverage-line {
+        path: string,
+        line: u32,
+        hits: u64,
+    }
+
+    /// Everything one `ingest-coverage` call contributes: the sink surface collapsed into
+    /// one boundary crossing (same shape as `contribute-roots` vs `RootSink`). `sources`
+    /// is optional extra provenance detail — the host records its own
+    /// "<id> <path> (<age>d old)" line either way.
+    record ingested-coverage {
+        lines: list<coverage-line>,
+        sources: list<string>,
+    }
+
+    record rule-descriptor {
+        name: string,
+        description: string,
+        severity: finding-severity,
+    }
+
+    /// One emitted finding: a verdict about a graph node. No severity field — a
+    /// finding's severity IS its rule's declared severity; no category field — the namespace
+    /// is host-assembled from the plugin's registered id, never guest-supplied.
+    record contributed-finding {
+        rule: string,
+        target: plugin-target,
+        confidence: confidence,
+        message: string,
+    }
+}
+
+world plugin {
+    use types.{
+        plugin-descriptor, file-class, plugin-target, contributed-root, contributed-edge,
+        wasm-file-info, wasm-symbol-info, activation-rule, wasm-package-info,
+        wasm-file-details, wasm-symbol-details, wasm-ref-site, wasm-call-site,
+    };
+
+    /// Host-provided graph queries — the guest calls these from inside `contribute-roots`/
+    /// `contribute-edges`/`annotate-symbols` as needed; they answer from the same data
+    /// `GraphView` already holds, never touch the filesystem.
+    import list-files: func() -> list<wasm-file-info>;
+    import symbols-in: func(path: string) -> list<wasm-symbol-info>;
+
+    /// The content channel: read one file's bytes, scoped to this component's own
+    /// declared `requested-file-access` globs and metered by the host's per-run budget —
+    /// `none` covers every miss uniformly (no glob match, unreadable path, budget cutoff), the
+    /// same host-mediated, sandboxed shape `list-files`/`symbols-in` establish (no
+    /// ambient fs; every byte the guest sees was matched and fetched host-side). The host
+    /// answers from an owned snapshot prefetched before instantiation (every declared-glob
+    /// match, budget-limited) — this call never itself touches disk mid-round.
+    import read-file: func(path: string) -> option<list<u8>>;
+
+    /// The complete read surface — additive imports answering from the same
+    /// pre-instantiation snapshot as `list-files`/`symbols-in` (no filesystem, no budget:
+    /// these read memory the host already holds). Results are deterministic and sorted;
+    /// every query answers from ADAPTER-derived data only (rule R1) — no plugin ever sees
+    /// another plugin's contributions.
+    import packages: func() -> list<wasm-package-info>;
+    import package-of: func(path: string) -> option<wasm-package-info>;
+    import file-details: func(path: string) -> option<wasm-file-details>;
+    import symbol-details: func(path: string, symbol: string) -> option<wasm-symbol-details>;
+    import imports-of: func(path: string) -> list<string>;
+    import importers-of: func(path: string) -> list<string>;
+    import references-to: func(path: string, symbol: string) -> list<wasm-ref-site>;
+    import call-sites-in: func(path: string) -> list<wasm-call-site>;
+
+    /// Called once at load time; the host caches the result.
+    export descriptor: func() -> plugin-descriptor;
+
+    /// See `kndo_core::plugin::Plugin::classify_file`.
+    export classify-file: func(path: string, current: file-class) -> option<file-class>;
+
+    /// Returns every root the plugin contributes this run (empty = none) — the WASM analogue of
+    /// filling `RootSink` via repeated `add()` calls, collapsed into one call-boundary crossing.
+    export contribute-roots: func() -> list<contributed-root>;
+
+    /// See above; the WASM analogue of `EdgeSink`.
+    export contribute-edges: func() -> list<contributed-edge>;
+
+    /// Returns every symbol the plugin marks externally consumed this run.
+    export annotate-symbols: func() -> list<plugin-target>;
+}
+
+/// The findings-capable plugin world — everything `world plugin` has, plus rule
+/// declaration and finding emission. Its own WORLD rather than extra exports on `plugin`
+/// because a world's exports are mandatory: adding them to `plugin` would break every
+/// v1-only component (exactly what the compat matrix guards). The host tries this
+/// world first and falls back to `plugin` — a v1 component keeps working unchanged, with no
+/// findings; a component targeting this world gets the full surface. Same package, same
+/// types, same imports: only the two exports at the bottom are new.
+world plugin-findings {
+    use types.{
+        plugin-descriptor, file-class, plugin-target, contributed-root, contributed-edge,
+        wasm-file-info, wasm-symbol-info, activation-rule, wasm-package-info,
+        wasm-file-details, wasm-symbol-details, wasm-ref-site, wasm-call-site,
+        rule-descriptor, contributed-finding,
+    };
+
+    import list-files: func() -> list<wasm-file-info>;
+    import symbols-in: func(path: string) -> list<wasm-symbol-info>;
+    import read-file: func(path: string) -> option<list<u8>>;
+    import packages: func() -> list<wasm-package-info>;
+    import package-of: func(path: string) -> option<wasm-package-info>;
+    import file-details: func(path: string) -> option<wasm-file-details>;
+    import symbol-details: func(path: string, symbol: string) -> option<wasm-symbol-details>;
+    import imports-of: func(path: string) -> list<string>;
+    import importers-of: func(path: string) -> list<string>;
+    import references-to: func(path: string, symbol: string) -> list<wasm-ref-site>;
+    import call-sites-in: func(path: string) -> list<wasm-call-site>;
+
+    export descriptor: func() -> plugin-descriptor;
+    export classify-file: func(path: string, current: file-class) -> option<file-class>;
+    export contribute-roots: func() -> list<contributed-root>;
+    export contribute-edges: func() -> list<contributed-edge>;
+    export annotate-symbols: func() -> list<plugin-target>;
+
+    /// The rules this component may emit findings under — called once at load, cached, shown
+    /// by doctor/verify before any hook runs.
+    export rules: func() -> list<rule-descriptor>;
+
+    /// Emit findings for this run — called by the post-assembly finding round, over the same
+    /// host-import read surface as the mutation hooks (rule R1 applies identically).
+    export contribute-findings: func() -> list<contributed-finding>;
+}
+
+/// The coverage-ingester world — a third sibling world (same reasoning as
+/// `plugin-findings`: a world's exports are mandatory, so growing `plugin` would break
+/// every pinned v1 component; the compat matrix guards exactly that). Deliberately
+/// UNIDIRECTIONAL — no imports: the host locates the report by the descriptor's
+/// `requested-file-access` globs (or `[plugins.<id>] report` config), freshness-checks it,
+/// and pushes the bytes in; the guest returns facts and the host alone writes the sink,
+/// records provenance, and rebases paths. A component targets exactly one world, so a
+/// coverage ingester carries no graph hooks — mirroring the native built-ins
+/// (`kndo-plugin-coverage`), whose `mutates_graph() == false` posture the host applies to
+/// this world structurally, keeping both graph fast paths alive. (`kndo plugin new`
+/// scaffolds the two graph worlds only for now — authoring a coverage ingester starts from
+/// `examples/kndo-coverage-demo`; a scaffold variant is deliberate follow-up, not scope
+/// creep here.)
+world coverage-ingester {
+    use types.{plugin-descriptor, activation-rule, coverage-line, ingested-coverage};
+
+    /// Called once at load time; the host caches the result.
+    export descriptor: func() -> plugin-descriptor;
+
+    /// See `kndo_core::plugin::Plugin::ingest_coverage`. `path` is the project-relative
+    /// report location (context for formats whose keys depend on where the report lives —
+    /// JaCoCo's module derivation); `content` is the raw report bytes.
+    export ingest-coverage: func(path: string, content: list<u8>) -> ingested-coverage;
+}

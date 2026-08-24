@@ -1,0 +1,28 @@
+{
+  "findings": [
+    {
+      "category": "unused",
+      "subject_kind": "method",
+      "path": "src/main/kotlin/com/foo/Greeter.kt",
+      "symbol": "Greeter.go"
+    },
+    {
+      "category": "internal-only",
+      "subject_kind": "class",
+      "path": "src/main/kotlin/com/foo/Impl.kt",
+      "symbol": "Impl"
+    },
+    {
+      "category": "internal-only",
+      "subject_kind": "interface",
+      "path": "src/main/kotlin/com/foo/Greeter.kt",
+      "symbol": "Greeter"
+    },
+    {
+      "category": "internal-only",
+      "subject_kind": "method",
+      "path": "src/main/kotlin/com/util/Helper.kt",
+      "symbol": "Helper.assist"
+    }
+  ]
+}

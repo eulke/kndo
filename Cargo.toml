@@ -1,0 +1,81 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/kndo",
+    "crates/kndo-core",
+    "crates/kndo-cli",
+    "crates/kndo-adapter-toolkit",
+    "crates/kndo-adapter-js",
+    "crates/kndo-adapter-go",
+    "crates/kndo-adapter-rust",
+    "crates/kndo-adapter-java",
+    "crates/kndo-adapter-kotlin",
+    "crates/kndo-adapter-swift",
+    "crates/kndo-adapter-json",
+    "crates/kndo-adapter-css",
+    "crates/kndo-plugin-api",
+    "crates/kndo-plugin-nextjs",
+    "crates/kndo-plugin-express",
+    "crates/kndo-plugin-serde",
+    "crates/kndo-plugin-coverage",
+    "xtask",
+]
+exclude = [
+    "spikes/perf",
+    "examples/kndo-plugin-demo",
+    "examples/kndo-plugin-hooks-demo",
+    "examples/kndo-coverage-demo",
+    "examples/kndo-adapter-wrapper-demo",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+repository = "https://github.com/eulke/kndo"
+publish = false # pre-1.0: nothing is published; crate names are reserved regardless
+
+[workspace.dependencies]
+smol_str = { version = "0.3", features = ["serde"] }
+blake3 = { version = "1", features = ["rayon"] }
+ignore = "0.4"
+rayon = "1"
+tree-sitter = "0.25"
+tree-sitter-typescript = "0.23"
+tree-sitter-go = "0.25"
+tree-sitter-rust = "0.24"
+tree-sitter-java = "0.23"
+tree-sitter-kotlin-ng = "1.1"
+tree-sitter-swift = "0.7"
+tree-sitter-css = "0.25"
+tree-sitter-scss = "1.0"
+toml = "0.8"
+roxmltree = "0.20"
+serde_json = "1"
+serde = { version = "1", features = ["derive"] }
+bincode = "1"
+rkyv = "0.8"
+memmap2 = "0.9"
+chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
+num_cpus = "1"
+rustc-hash = "2"
+
+[profile.dev]
+# Full DWARF isn't needed for the edit-compile-run loop this profile serves —
+# line-tables-only keeps panic locations/backtraces usable while cutting the debug-info
+# volume the linker processes on every incremental rebuild. wasmtime is a linked dependency
+# of everything depending on kndo-plugin-api, and its debug info is the biggest single
+# contributor to link time in this workspace.
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+# Standard Cargo-book pattern (cargo book, "Profiles" > "Overrides"): this only ever applies
+# to dependencies, never to workspace members, so your own crates stay at opt-level 0 for
+# fast incremental compiles while wasmtime/cranelift, the eight tree-sitter grammars, rkyv,
+# and regex — all doing real parsing/codegen work `cargo test` exercises at runtime — run
+# fast enough that the test suite itself isn't painfully slow.
+opt-level = 2
+
+[profile.release]
+lto = true
+codegen-units = 1

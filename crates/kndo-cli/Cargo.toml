@@ -1,0 +1,67 @@
+[package]
+name = "kndo-cli"
+description = "The kndo command-line frontend: terminal UI, exit codes, human rendering. Zero analysis logic."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "kndo"
+path = "src/main.rs"
+
+[dependencies]
+kndo = { path = "../kndo", default-features = false }
+serde = { workspace = true }
+serde_json = { workspace = true }
+# Restoring SIGPIPE's default disposition at startup (see main.rs) — Unix only; Windows has
+# no SIGPIPE and the cfg gate keeps this dependency off that target entirely.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[dev-dependencies]
+smol_str = { workspace = true }
+tempfile = "3"
+
+[target.'cfg(unix)'.dev-dependencies]
+libc = "0.2"
+
+[features]
+# Mirrors `kndo`'s own default set exactly (`default-features = false` above means this crate,
+# not the workspace default, now decides what ships) — plain `cargo build -p kndo-cli` is
+# unchanged. Named per-feature passthrough (rather than one opaque "full" flag) is what lets CI
+# build the "shell" configuration — `--no-default-features --features
+# external-adapters,plugin-install` — without touching this file again: a lean host binary that
+# knows how to load WASM components but ships with zero first-party language grammars compiled
+# in, real and CI-proven rather than only documented.
+default = [
+    "js",
+    "go",
+    "rust",
+    "java",
+    "kotlin",
+    "swift",
+    "json",
+    "css",
+    "external-adapters",
+    "plugin-nextjs",
+    "plugin-express",
+    "plugin-serde",
+    "plugin-coverage",
+    "plugin-install",
+]
+js = ["kndo/js"]
+go = ["kndo/go"]
+rust = ["kndo/rust"]
+java = ["kndo/java"]
+kotlin = ["kndo/kotlin"]
+swift = ["kndo/swift"]
+json = ["kndo/json"]
+css = ["kndo/css"]
+external-adapters = ["kndo/external-adapters"]
+plugin-nextjs = ["kndo/plugin-nextjs"]
+plugin-express = ["kndo/plugin-express"]
+plugin-serde = ["kndo/plugin-serde"]
+plugin-coverage = ["kndo/plugin-coverage"]
+plugin-install = ["kndo/plugin-install"]

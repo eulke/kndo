@@ -1,0 +1,58 @@
+# Installation
+
+kndo is a single static binary with no runtime dependencies.
+
+## Prebuilt binaries
+
+Each release publishes prebuilt archives per platform
+(`kndo-<version>-<target>.tar.gz` for Linux x86_64/aarch64 and macOS x86_64/arm64) on the
+project's GitHub releases page. Download, extract, and put `kndo` on your `PATH`:
+
+```console
+$ curl -fsSL https://github.com/eulke/kondo/releases/latest/download/kndo-0.1.0-aarch64-apple-darwin.tar.gz \
+    | tar -xz
+$ ./kndo --version
+kndo 0.1.0 (schema 1.0.0)
+```
+
+In GitHub Actions you do not need to install anything by hand — the
+[first-party Action](ci.md) downloads the release matching your platform (or builds from
+source with `version: source`).
+
+## From source
+
+kndo builds with stable Rust:
+
+```console
+$ git clone https://github.com/eulke/kondo && cd kondo
+$ cargo install --path crates/kndo-cli --locked
+$ kndo --version
+```
+
+Embedders who want a smaller binary can build the distribution crate with a subset of
+languages (`--no-default-features --features js,go,…`); the CLI's default build includes every
+language and the WebAssembly plugin runtime.
+
+## Requirements
+
+- Diff modes (`--staged`, `--diff <ref>`) need `git` on `PATH` and a git repository. Full
+  scans work anywhere, git or not.
+- Nothing else. kndo never executes your project, never downloads its dependencies, and never
+  phones home — it reads source files and manifests, and writes only under `.kndo/` in the
+  project (plus its per-machine plugin directory if you install plugins).
+
+## What kndo writes
+
+| Path | What | Commit it? |
+|---|---|---|
+| `kndo.toml` | configuration, written by `kndo init` | yes |
+| `.kndo/baseline.json` | acknowledged findings, written by `kndo baseline` | yes |
+| `.kndo/cache/` | content-addressed analysis cache | no (`kndo init` adds `.kndo/` to `.gitignore`) |
+| `.kndo/health.json` | last full-run health score, for trend display | no |
+| `.kndo/plugins/` | project-local plugin/adapter components you drop in | your call |
+
+Note: `kndo init` gitignores the whole `.kndo/` directory; if you adopt a baseline, force-add
+it (`git add -f .kndo/baseline.json`) or keep an explicit `!.kndo/baseline.json` rule — the
+baseline is meant to be reviewed and committed.
+
+Next: [Getting started](getting-started.md).

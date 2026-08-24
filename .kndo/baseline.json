@@ -1,0 +1,250 @@
+{
+  "schema_version": 1,
+  "entries": [
+    {
+      "id": "kndo-024d5622d084",
+      "category": "crap",
+      "subject_kind": "function",
+      "path": "crates/kndo-cli/src/render.rs",
+      "symbol": "render_query_entry"
+    },
+    {
+      "id": "kndo-14126d3bff61",
+      "category": "crap",
+      "subject_kind": "function",
+      "path": "crates/kndo-adapter-js/src/manifest.rs",
+      "symbol": "extract"
+    },
+    {
+      "id": "kndo-1fac8f88c5ff",
+      "category": "crap",
+      "subject_kind": "function",
+      "path": "crates/kndo-core/src/query.rs",
+      "symbol": "impact"
+    },
+    {
+      "id": "kndo-24dbe1a5da9a",
+      "category": "crap",
+      "subject_kind": "function",
+      "path": "xtask/src/main.rs",
+      "symbol": "generate"
+    },
+    {
+      "id": "kndo-2ade1c472851",
+      "category": "crap",
+      "subject_kind": "method",
+      "path": "crates/kndo-core/src/query.rs",
+      "symbol": "PathSearch.dfs"
+    },
+    {
+      "id": "kndo-2be4a978f26b",
+      "category": "crap",
+      "subject_kind": "function",
+      "path": "xtask/src/main.rs",
+      "symbol": "write_schema"
+    },
+    {
+      "id": "kndo-2c12105fe397",
+      "category": "crap",
+      "subject_kind": "function",
+      "path": "crates/kndo-core/src/discovery.rs",
+      "symbol": "discover_git_tree"
+    },
+    {
+      "id": "kndo-31ccd37f4e36",
+      "category": "crap",
+      "subject_kind": "function",
+      "path": "xtask/src/main.rs",
+      "symbol": "gen_stdlib"
+    },
+    {
+      "id": "kndo-36f5cc337299",
+      "category": "crap",
+      "subject_kind": "function",
+      "path": "crates/kndo-cli/src/render.rs",
+      "symbol": "grade_boundary_suffix"
+    },
+    {
+      "id": "kndo-3774c43fe4f5",
+      "category": "crap",
+      "subject_kind": "function",
+      "path": "crates/kndo-adapter-java/src/extraction.rs",
+      "symbol": "walk_body"
+    },
+    {
+      "id": "kndo-4c13440c0da9",
+      "category": "crap",
+      "subject_kind": "function",
+      "path": "crates/kndo-cli/src/main.rs",
+      "symbol": "init_cmd"
+    },
+    {
+      "id": "kndo-5544f5bf6804",
+      "category": "crap",
+      "subject_kind": "function",
+      "path": "crates/kndo-cli/src/main.rs",
+      "symbol": "health_cmd"
+    },
+    {
+      "id": "kndo-5acded6bbd78",
+      "category": "crap",
+      "subject_kind": "function",
+      "path": "crates/kndo-core/src/graph.rs",
+      "symbol": "assemble_from_source"
+    },
+    {
+      "id": "kndo-5b07c8734799",
+      "category": "crap",
+      "subject_kind": "function",
+      "path": "crates/kndo-cli/src/main.rs",
+      "symbol": "doctor_cmd"
+    },
+    {
+      "id": "kndo-5d59839ce3b6",
+      "category": "crap",
+      "subject_kind": "method",
+      "path": "crates/kndo-core/src/conformance.rs",
+      "symbol": "ConformanceMismatch.fmt"
+    },
+    {
+      "id": "kndo-6eeed43bcdb7",
+      "category": "crap",
+      "subject_kind": "function",
+      "path": "crates/kndo-cli/src/main.rs",
+      "symbol": "baseline_cmd"
+    },
+    {
+      "id": "kndo-7514aa4715f0",
+      "category": "crap",
+      "subject_kind": "function",
+      "path": "crates/kndo-core/src/analysis/health.rs",
+      "symbol": "tally"
+    },
+    {
+      "id": "kndo-79cf9f825228",
+      "category": "crap",
+      "subject_kind": "function",
+      "path": "xtask/src/bench.rs",
+      "symbol": "run"
+    },
+    {
+      "id": "kndo-88fac7052b2a",
+      "category": "crap",
+      "subject_kind": "function",
+      "path": "crates/kndo-cli/src/main.rs",
+      "symbol": "check"
+    },
+    {
+      "id": "kndo-89f702e1529f",
+      "category": "crap",
+      "subject_kind": "function",
+      "path": "xtask/src/bench.rs",
+      "symbol": "ensure_fixture"
+    },
+    {
+      "id": "kndo-8a38ae76e836",
+      "category": "crap",
+      "subject_kind": "function",
+      "path": "crates/kndo-cli/src/nav.rs",
+      "symbol": "parse_nav_args"
+    },
+    {
+      "id": "kndo-b1db1f7da67e",
+      "category": "crap",
+      "subject_kind": "function",
+      "path": "crates/kndo-adapter-rust/src/extraction.rs",
+      "symbol": "handle_item"
+    },
+    {
+      "id": "kndo-bb45f0ebe3e4",
+      "category": "crap",
+      "subject_kind": "function",
+      "path": "crates/kndo-core/src/agent_format.rs",
+      "symbol": "render_query_entry"
+    },
+    {
+      "id": "kndo-c0659b11882d",
+      "category": "crap",
+      "subject_kind": "function",
+      "path": "xtask/src/main.rs",
+      "symbol": "main"
+    },
+    {
+      "id": "kndo-cfdc41719558",
+      "category": "crap",
+      "subject_kind": "function",
+      "path": "crates/kndo-cli/src/render.rs",
+      "symbol": "color_code"
+    },
+    {
+      "id": "kndo-d619b5ff12f4",
+      "category": "crap",
+      "subject_kind": "function",
+      "path": "crates/kndo-core/src/graph.rs",
+      "symbol": "resolve_file"
+    },
+    {
+      "id": "kndo-d6b663638e62",
+      "category": "crap",
+      "subject_kind": "function",
+      "path": "crates/kndo-core/src/query.rs",
+      "symbol": "build_nav_graph"
+    },
+    {
+      "id": "kndo-dbdbd5377fb0",
+      "category": "crap",
+      "subject_kind": "function",
+      "path": "crates/kndo-core/src/graph.rs",
+      "symbol": "try_patch"
+    },
+    {
+      "id": "kndo-dff73d260e0f",
+      "category": "crap",
+      "subject_kind": "function",
+      "path": "crates/kndo-cli/src/render.rs",
+      "symbol": "render_health"
+    },
+    {
+      "id": "kndo-e26e13ca2f69",
+      "category": "crap",
+      "subject_kind": "function",
+      "path": "crates/kndo-cli/src/nav.rs",
+      "symbol": "query_cmd"
+    },
+    {
+      "id": "kndo-e9fc093f4f50",
+      "category": "crap",
+      "subject_kind": "function",
+      "path": "crates/kndo-core/src/query_envelope.rs",
+      "symbol": "trace_entries"
+    },
+    {
+      "id": "kndo-edfa1475e1ad",
+      "category": "crap",
+      "subject_kind": "method",
+      "path": "crates/kndo-core/src/vocab.rs",
+      "symbol": "SymbolKind.facet"
+    },
+    {
+      "id": "kndo-f321f6749139",
+      "category": "crap",
+      "subject_kind": "function",
+      "path": "crates/kndo-cli/src/nav.rs",
+      "symbol": "run_one"
+    },
+    {
+      "id": "kndo-f471d29d2f0c",
+      "category": "crap",
+      "subject_kind": "function",
+      "path": "crates/kndo-cli/src/main.rs",
+      "symbol": "main"
+    },
+    {
+      "id": "kndo-ff55a777dd7f",
+      "category": "crap",
+      "subject_kind": "function",
+      "path": "crates/kndo-core/src/analysis/reachability.rs",
+      "symbol": "compute"
+    }
+  ]
+}

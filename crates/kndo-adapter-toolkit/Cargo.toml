@@ -1,0 +1,17 @@
+[package]
+name = "kndo-adapter-toolkit"
+description = "Shared adapter machinery: tree-sitter query helpers, token normalization, complexity walker — the paved road for first-party adapters."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+rustc-hash = { workspace = true }
+blake3 = { workspace = true }
+kndo-core = { path = "../kndo-core" }
+smol_str = { workspace = true }
+tree-sitter = { workspace = true }
+tree-sitter-typescript = { workspace = true }
+roxmltree = { workspace = true }

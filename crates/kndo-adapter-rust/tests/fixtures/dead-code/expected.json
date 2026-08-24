@@ -1,0 +1,21 @@
+{
+  "findings": [
+    {
+      "category": "unused",
+      "subject_kind": "function",
+      "path": "src/util.rs",
+      "symbol": "abandoned"
+    },
+    {
+      "category": "unused",
+      "subject_kind": "file",
+      "path": "src/orphan.rs"
+    },
+    {
+      "category": "internal-only",
+      "subject_kind": "function",
+      "path": "src/util.rs",
+      "symbol": "used"
+    }
+  ]
+}

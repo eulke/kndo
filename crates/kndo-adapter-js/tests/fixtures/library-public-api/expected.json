@@ -1,0 +1,5 @@
+{
+  "findings": [
+    { "category": "unused", "subject_kind": "function", "path": "src/index.ts", "symbol": "unusedHelper" }
+  ]
+}

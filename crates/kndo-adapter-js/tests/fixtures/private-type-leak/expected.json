@@ -1,0 +1,5 @@
+{
+  "findings": [
+    { "category": "private-type-leak", "subject_kind": "function", "path": "index.ts", "symbol": "make" }
+  ]
+}

@@ -1,0 +1,5 @@
+{
+  "findings": [
+    { "category": "cyclic", "subject_kind": "file", "path": "a.ts", "symbol": null }
+  ]
+}
