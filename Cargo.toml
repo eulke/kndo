@@ -58,6 +58,22 @@ chrono = { version = "0.4", default-features = false, features = ["std", "clock"
 num_cpus = "1"
 rustc-hash = "2"
 
+[profile.dev]
+# Full DWARF isn't needed for the edit-compile-run loop this profile serves —
+# line-tables-only keeps panic locations/backtraces usable while cutting the debug-info
+# volume the linker processes on every incremental rebuild. wasmtime is a linked dependency
+# of everything depending on kndo-plugin-api, and its debug info is the biggest single
+# contributor to link time in this workspace.
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+# Standard Cargo-book pattern (cargo book, "Profiles" > "Overrides"): this only ever applies
+# to dependencies, never to workspace members, so your own crates stay at opt-level 0 for
+# fast incremental compiles while wasmtime/cranelift, the eight tree-sitter grammars, rkyv,
+# and regex — all doing real parsing/codegen work `cargo test` exercises at runtime — run
+# fast enough that the test suite itself isn't painfully slow.
+opt-level = 2
+
 [profile.release]
 lto = true
 codegen-units = 1

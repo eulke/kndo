@@ -1,0 +1,6 @@
+{
+  "findings": [
+    { "category": "unused", "subject_kind": "method", "path": "Sources/App/Helper.swift", "symbol": "Helper.dead" },
+    { "category": "internal-only", "subject_kind": "variable", "path": "Sources/App/main.swift", "symbol": "helper" }
+  ]
+}

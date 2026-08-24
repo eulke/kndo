@@ -1,0 +1,5 @@
+{
+  "name": "import-graph-and-unused-variable",
+  "private": false,
+  "main": "main.ts"
+}

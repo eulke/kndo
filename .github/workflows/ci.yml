@@ -37,6 +37,8 @@ jobs:
           targets: wasm32-unknown-unknown
 
       - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
 
       - name: cargo fmt --check
         run: cargo fmt --all -- --check
@@ -80,6 +82,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: compat-matrix
+          cache-on-failure: true
 
       - name: run the pinned components against the HEAD host
         run: cargo test -p kndo-plugin-api --test compat_matrix
@@ -92,6 +95,14 @@ jobs:
   shell-build:
     name: shell build (external-adapters + plugin-install only)
     runs-on: ubuntu-latest
+    # This job's release builds (the shell-configuration smoke binary, and the demo WASM
+    # plugin componentized below) are never distributed — only release.yml's own 5-target
+    # matrix produces real release artifacts, in a separate workflow/job that doesn't inherit
+    # this env, so its LTO/codegen-units=1 settings (root Cargo.toml's [profile.release],
+    # left untouched) are unaffected. Dropping LTO here only cuts this one job's build time.
+    env:
+      CARGO_PROFILE_RELEASE_LTO: "false"
+      CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
     steps:
       - uses: actions/checkout@v4
 
@@ -103,6 +114,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: shell-build
+          cache-on-failure: true
 
       - name: cargo build (shell configuration)
         run: cargo build --release -p kndo-cli --no-default-features --features external-adapters,plugin-install

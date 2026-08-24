@@ -1,0 +1,8 @@
+{
+  "findings": [
+    { "category": "internal-only", "subject_kind": "class", "path": "Sources/App/Widget.swift", "symbol": "Widget" },
+    { "category": "internal-only", "subject_kind": "method", "path": "Sources/App/Widget.swift", "symbol": "Widget.d" },
+    { "category": "internal-only", "subject_kind": "method", "path": "Sources/App/Widget.swift", "symbol": "Widget.e" },
+    { "category": "internal-only", "subject_kind": "variable", "path": "Sources/App/main.swift", "symbol": "widget" }
+  ]
+}

@@ -1,0 +1,15 @@
+:root {
+  --accent: blue;
+}
+
+.dark {
+  --accent: purple;
+}
+
+.badge {
+  color: var(--accent);
+}
+
+.orphan-decl {
+  --truly-dead: red;
+}
