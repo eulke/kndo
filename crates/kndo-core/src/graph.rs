@@ -81,6 +81,12 @@ pub struct SymbolNode {
     /// Mirrors [`crate::adapter::Declaration::implicitly_invoked`] (the
     /// machinery-dispatch rule) — reachability derives the implicit owner → member edge.
     pub implicitly_invoked: bool,
+    /// Mirrors [`crate::adapter::Declaration::nested_scope`] — `internal-only` never
+    /// recommends the file-scope rung for a declaration nested inside its file.
+    pub nested_scope: bool,
+    /// Mirrors [`crate::adapter::Declaration::visibility_inherited`] — visibility analyses
+    /// skip a symbol whose level belongs to its container.
+    pub visibility_inherited: bool,
 }
 
 impl SymbolNode {
@@ -718,6 +724,8 @@ fn try_patch(
                 || sym.exported != decl.exported
                 || sym.visibility != decl.visibility
                 || sym.member_of != decl.member_of
+                || sym.nested_scope != decl.nested_scope
+                || sym.visibility_inherited != decl.visibility_inherited
             {
                 return None;
             }
@@ -2267,6 +2275,19 @@ fn surface_signature(
         bool,
     );
 
+    /// One declaration's surface tuple: name, kind, exported, visibility, member_of,
+    /// nested_scope, visibility_inherited (the scope-shape facts feed visibility verdicts
+    /// the way the level itself does — see the View site).
+    type DeclarationView<'a> = (
+        &'a str,
+        &'a crate::vocab::SymbolKind,
+        bool,
+        crate::adapter::VisibilityLevel,
+        Option<&'a str>,
+        bool,
+        bool,
+    );
+
     #[derive(serde::Serialize)]
     struct View<'a> {
         adapter_id: &'a str,
@@ -2276,13 +2297,7 @@ fn surface_signature(
         detected_origin: Option<crate::vocab::FileOrigin>,
         unit: Option<&'a str>,
         unit_name: Option<&'a str>,
-        declarations: Vec<(
-            &'a str,
-            &'a crate::vocab::SymbolKind,
-            bool,
-            crate::adapter::VisibilityLevel,
-            Option<&'a str>,
-        )>,
+        declarations: Vec<DeclarationView<'a>>,
         imports: Vec<ImportView<'a>>,
         roots: Vec<(
             crate::vocab::RootKind,
@@ -2312,6 +2327,11 @@ fn surface_signature(
                     d.exported,
                     d.visibility,
                     d.member_of.as_deref(),
+                    // Scope-shape facts feed visibility verdicts the way the level itself
+                    // does — a declaration moving in or out of a nested scope (or its
+                    // container) must decline the patch.
+                    d.nested_scope,
+                    d.visibility_inherited,
                 )
             })
             .collect(),
@@ -2468,7 +2488,7 @@ fn promote_package_relative_test_roles<'a>(
 /// an assembly-algorithm change that could produce a different graph from the same facts. Feeds
 /// [`compute_graph_key`] (the "core graph-schema version"); a bump here invalidates
 /// every project's cached `graph.bin` on the next run, same as any other key-input change.
-pub const GRAPH_SCHEMA_VERSION: u32 = 26; // bump whenever the persisted snapshot shape (rkyv layouts included) or the assembly semantics that derive a graph from the same facts change
+pub const GRAPH_SCHEMA_VERSION: u32 = 27; // bump whenever the persisted snapshot shape (rkyv layouts included) or the assembly semantics that derive a graph from the same facts change
 
 /// The graph snapshot's cache key (`cache.rs`'s `graph.bin`): a single digest
 /// folding in the *whole* discovered file set (every path + content hash — this already
@@ -3936,6 +3956,8 @@ pub fn assemble_from_source(
                 member_of: decl.member_of.clone(),
                 signature_span: decl.signature_span,
                 implicitly_invoked: decl.implicitly_invoked,
+                nested_scope: decl.nested_scope,
+                visibility_inherited: decl.visibility_inherited,
             });
         }
         // CJS default alias (FileFacts::default_export_alias): `module.exports = local` —
@@ -4377,6 +4399,8 @@ mod tests {
             member_of: member_of.map(SmolStr::new),
             signature_span: None,
             implicitly_invoked: false,
+            nested_scope: false,
+            visibility_inherited: false,
         };
         let symbols = vec![
             sym("Widget", 1, None, 1, 20),            // surface seed (rooted below)
@@ -4521,6 +4545,8 @@ mod tests {
                         member_of: None,
                         signature_span: None,
                         implicitly_invoked: false,
+                        nested_scope: false,
+                        visibility_inherited: false,
                     });
                 } else if let Some(name) = line.strip_prefix("private-decl ") {
                     facts.declarations.push(Declaration {
@@ -4532,6 +4558,8 @@ mod tests {
                         member_of: None,
                         signature_span: None,
                         implicitly_invoked: false,
+                        nested_scope: false,
+                        visibility_inherited: false,
                     });
                 } else if let Some(rest) = line
                     .strip_prefix("member-decl ")
@@ -4554,6 +4582,8 @@ mod tests {
                         member_of: Some(SmolStr::new(owner)),
                         signature_span: None,
                         implicitly_invoked: false,
+                        nested_scope: false,
+                        visibility_inherited: false,
                     });
                 } else if let Some(rest) = line.strip_prefix("member-implicit ") {
                     // `member-implicit <owner> <name>` — a machinery-dispatched member
@@ -4571,6 +4601,8 @@ mod tests {
                         member_of: Some(SmolStr::new(owner)),
                         signature_span: None,
                         implicitly_invoked: true,
+                        nested_scope: false,
+                        visibility_inherited: false,
                     });
                 } else if let Some(rest) = line
                     .strip_prefix("import ")
@@ -4774,6 +4806,8 @@ mod tests {
                         member_of: None,
                         signature_span: None,
                         implicitly_invoked: false,
+                        nested_scope: false,
+                        visibility_inherited: false,
                     });
                 } else if let Some(rest) = line.strip_prefix("import-at ") {
                     // `import-at <line> <specifier>` — a plain import sited at a line (for

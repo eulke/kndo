@@ -91,6 +91,8 @@ impl LanguageAdapter for MiniAdapter {
                     member_of: None,
                     signature_span: None,
                     implicitly_invoked: false,
+                    nested_scope: false,
+                    visibility_inherited: false,
                 });
             } else if let Some(name) = line.strip_prefix("ref ") {
                 facts.references.push(RawReference {

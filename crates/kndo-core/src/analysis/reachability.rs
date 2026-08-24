@@ -494,6 +494,8 @@ mod tests {
             member_of: None,
             signature_span: None,
             implicitly_invoked: false,
+            nested_scope: false,
+            visibility_inherited: false,
         }
     }
 
@@ -861,12 +863,16 @@ mod tests {
             SymbolNode {
                 member_of: Some(SmolStr::new("Token")),
                 implicitly_invoked: true,
+                nested_scope: false,
+                visibility_inherited: false,
                 ..symbol(FileId(0), "fmt")
             },
             symbol(FileId(0), "Orphan"),
             SymbolNode {
                 member_of: Some(SmolStr::new("Orphan")),
                 implicitly_invoked: true,
+                nested_scope: false,
+                visibility_inherited: false,
                 ..symbol(FileId(0), "drop")
             },
         ];

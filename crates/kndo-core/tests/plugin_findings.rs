@@ -71,6 +71,8 @@ impl LanguageAdapter for MiniAdapter {
                     member_of: None,
                     signature_span: None,
                     implicitly_invoked: false,
+                    nested_scope: false,
+                    visibility_inherited: false,
                 });
             } else if let Some(category) = line.strip_prefix("allow ") {
                 facts.suppressions.push(RawSuppression {

@@ -389,6 +389,8 @@ fn from_wit_facts(facts: w::FileFacts) -> FileFacts {
             member_of: d.member_of.map(|s| SmolStr::new(&s)),
             signature_span: None,
             implicitly_invoked: false,
+            nested_scope: false,
+            visibility_inherited: false,
         })
         .collect();
 

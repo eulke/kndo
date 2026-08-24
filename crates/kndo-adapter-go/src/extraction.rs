@@ -206,6 +206,8 @@ fn push_declaration(
         visibility: visibility(exported, flags.is_internal),
         member_of: None,
         implicitly_invoked: false,
+        nested_scope: false,
+        visibility_inherited: false,
         signature_span,
     });
     if exported && flags.promote_exports {
@@ -362,6 +364,8 @@ fn handle_method(node: Node, src: &[u8], flags: Flags, out: &mut FileFacts) {
                 | "Error"
                 | "GoString"
         ),
+        nested_scope: false,
+        visibility_inherited: false,
     });
     push_function_metrics(out, &format!("{receiver_type}.{method_name}"), node);
     if exported && flags.promote_exports {

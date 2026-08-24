@@ -185,7 +185,18 @@ pub struct FileFacts {
                                              //   never by name at the call site (`{}` → fmt,
                                              //   `==` → eq); reachability derives the implicit
                                              //   owner → member edge (RFC 0005 §1's
-                                             //   machinery-dispatch rule) }
+                                             //   machinery-dispatch rule),
+                                             //   nested_scope: bool — declared inside a scope
+                                             //   unit nested within the file (an inline module):
+                                             //   the tightest declarable level there means "this
+                                             //   scope", strictly narrower than the ladder's
+                                             //   file rung, so file-local evidence can't certify
+                                             //   that rung and internal-only advances past it,
+                                             //   visibility_inherited: bool — no declarable
+                                             //   visibility of its own (enum variants, trait
+                                             //   items): the level belongs to the container,
+                                             //   which is measured separately; visibility
+                                             //   analyses skip the member }
                                              // signature_span (RFC 0012 §5): the declaration's
                                              // *promise* — everything before the body block
                                              // (name, parameters, return/result types).

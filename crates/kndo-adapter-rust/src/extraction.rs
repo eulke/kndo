@@ -1229,6 +1229,8 @@ fn push_declaration(
         visibility: kndo_core::adapter::VisibilityLevel(level),
         member_of: member_of.map(SmolStr::new),
         implicitly_invoked: false,
+        nested_scope: false,
+        visibility_inherited: false,
         signature_span,
     });
 }
@@ -1261,6 +1263,13 @@ fn handle_function(
         None => (SymbolKind::Function, name.to_string()),
     };
     push_declaration(out, name, kind, item, signature_span, owner, vis);
+    if vis_override.is_some() {
+        // The override IS the inheritance: a trait item carries no `pub` of its own, so
+        // no narrowing advice can name a keyword this declaration could take.
+        if let Some(d) = out.declarations.last_mut() {
+            d.visibility_inherited = true;
+        }
+    }
 
     // `#[test]`/`#[bench]` fns emit no root here: their extent is already a recorded test
     // region (`walk_items`), and assembly derives the Test root from span containment.
@@ -1544,6 +1553,11 @@ fn handle_enum(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
                         Some(name),
                         vis, // variants share the enum's visibility (Rust rule)
                     );
+                    if let Some(d) = out.declarations.last_mut() {
+                        // …and that shared level is inherited, not declarable: no
+                        // visibility keyword can ever sit on a variant.
+                        d.visibility_inherited = true;
+                    }
                 }
                 walk_type_refs(
                     variant,
@@ -1596,6 +1610,11 @@ fn handle_trait(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
                             Some(name),
                             vis,
                         );
+                        if let Some(d) = out.declarations.last_mut() {
+                            // Trait items inherit the trait's visibility — same
+                            // no-keyword-of-its-own rule as the method arm above.
+                            d.visibility_inherited = true;
+                        }
                     }
                 }
                 _ => {}
@@ -1889,18 +1908,28 @@ fn handle_mod(item: Node, src: &[u8], ctx: &Ctx<'_>, pending: &PendingAttrs, out
     };
     match item.child_by_field_name("body") {
         // Inline module: flatten (file ≈ module — stated once, leaned on everywhere).
-        Some(body) => walk_items(
-            body,
-            src,
-            &Ctx {
-                owner: None,
-                in_cfg_test: ctx.in_cfg_test || pending.cfg_test,
-                local_qualifiers: ctx.local_qualifiers,
-                inline_mod_names: ctx.inline_mod_names,
-                field_types: ctx.field_types,
-            },
-            out,
-        ),
+        Some(body) => {
+            let first_inner = out.declarations.len();
+            walk_items(
+                body,
+                src,
+                &Ctx {
+                    owner: None,
+                    in_cfg_test: ctx.in_cfg_test || pending.cfg_test,
+                    local_qualifiers: ctx.local_qualifiers,
+                    inline_mod_names: ctx.inline_mod_names,
+                    field_types: ctx.field_types,
+                },
+                out,
+            );
+            // Everything the body walk declared lives in a nested scope unit: its
+            // tightest declarable visibility means "this module", strictly narrower
+            // than the ladder's file rung — `Declaration::nested_scope`'s contract.
+            // Marking the whole range keeps the fact out of every push site's signature.
+            for decl in &mut out.declarations[first_inner..] {
+                decl.nested_scope = true;
+            }
+        }
         // `mod foo;` — THE file-linking import. #[path] overrides the location.
         // `pub mod foo;` additionally re-exports the child's whole surface (reexported, no
         // bindings — the shape the library-surface fixpoint expands): a published
@@ -3392,6 +3421,49 @@ mod tests {
         assert!(!by_name("mod_private").exported);
         assert_eq!(by_name("reaches_crate").visibility.0, 1);
         assert!(by_name("reaches_crate").exported);
+    }
+
+    #[test]
+    fn inline_mod_items_carry_nested_scope_and_top_level_items_do_not() {
+        // An inline-mod item's tightest visibility means "this module", not "this file" —
+        // the fact internal-only needs to avoid recommending `private` for an item the
+        // rest of the file uses. Nesting deepens without unmarking.
+        let f = facts(
+            "pub fn top() {}\n\
+             mod inner {\n\
+             \x20   pub fn nested() {}\n\
+             \x20   mod deeper { pub fn deepest() {} }\n\
+             }\n",
+        );
+        let by_name = |n: &str| f.declarations.iter().find(|d| d.name == n).unwrap();
+        assert!(!by_name("top").nested_scope);
+        assert!(by_name("nested").nested_scope);
+        assert!(by_name("deepest").nested_scope);
+    }
+
+    #[test]
+    fn enum_variants_and_trait_items_inherit_visibility_but_containers_do_not() {
+        // Variants and trait items carry no visibility keyword of their own — the level is
+        // the container's (which is measured separately); `visibility_inherited` is what
+        // exempts them from narrowing advice. Impl members declare their own.
+        let f = facts(
+            "pub enum E { A }\n\
+             pub trait T {\n\
+             \x20   fn m(&self);\n\
+             \x20   const C: u32;\n\
+             }\n\
+             struct S;\n\
+             impl S {\n\
+             \x20   pub fn own_vis(&self) {}\n\
+             }\n",
+        );
+        let by_name = |n: &str| f.declarations.iter().find(|d| d.name == n).unwrap();
+        assert!(!by_name("E").visibility_inherited);
+        assert!(by_name("A").visibility_inherited);
+        assert!(!by_name("T").visibility_inherited);
+        assert!(by_name("m").visibility_inherited);
+        assert!(by_name("C").visibility_inherited);
+        assert!(!by_name("own_vis").visibility_inherited);
     }
 
     #[test]

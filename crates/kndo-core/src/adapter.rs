@@ -348,6 +348,19 @@ pub struct Declaration {
     /// trait methods (`.clone()`, `.into()`) stay out — the duck fallback already reaches
     /// those. Default `false`.
     pub implicitly_invoked: bool,
+    /// The declaration lives in a scope unit nested *inside* its file (an inline
+    /// module, a local namespace) rather than at the file's top level. The ladder's
+    /// file-scope rung means "visible to this file"; for a nested declaration the language's
+    /// tightest level means "visible to the enclosing scope" — strictly narrower — so
+    /// file-local usage evidence alone cannot justify recommending that rung
+    /// (`internal-only` advances past it). Default `false`.
+    pub nested_scope: bool,
+    /// The declaration has no declarable visibility of its own — the recorded level is
+    /// inherited from its container (an enum's variants in Rust; any member the language
+    /// scopes strictly through its owner). Narrowing advice cannot apply to the member
+    /// itself — it belongs to the container, whose own declaration is measured separately —
+    /// so visibility analyses skip it. Default `false`.
+    pub visibility_inherited: bool,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

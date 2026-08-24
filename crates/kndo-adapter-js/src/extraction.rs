@@ -256,6 +256,8 @@ fn handle_named(node: Node, src: &[u8], exported: bool, out: &mut FileFacts, kin
         visibility: visibility(exported),
         member_of: None,
         implicitly_invoked: false,
+        nested_scope: false,
+        visibility_inherited: false,
         signature_span,
     });
 }
@@ -282,6 +284,8 @@ fn handle_export_statement(node: Node, src: &[u8], out: &mut FileFacts) {
             member_of: None,
             signature_span: None,
             implicitly_invoked: false,
+            nested_scope: false,
+            visibility_inherited: false,
         });
         return;
     }
@@ -393,6 +397,8 @@ fn handle_enum(node: Node, src: &[u8], exported: bool, out: &mut FileFacts) {
         member_of: None,
         signature_span: None,
         implicitly_invoked: false,
+        nested_scope: false,
+        visibility_inherited: false,
     });
 
     let Some(body) = node.child_by_field_name("body") else {
@@ -417,6 +423,8 @@ fn handle_enum(node: Node, src: &[u8], exported: bool, out: &mut FileFacts) {
                 member_of: None,
                 signature_span: None,
                 implicitly_invoked: false,
+                nested_scope: false,
+                visibility_inherited: false,
             });
         }
     }
@@ -472,6 +480,8 @@ fn handle_lexical(node: Node, src: &[u8], exported: bool, out: &mut FileFacts) {
             member_of: None,
             signature_span: None,
             implicitly_invoked: false,
+            nested_scope: false,
+            visibility_inherited: false,
         });
     }
 }
@@ -1132,6 +1142,8 @@ fn handle_cjs_module_exports(
         member_of: None,
         signature_span: None,
         implicitly_invoked: false,
+        nested_scope: false,
+        visibility_inherited: false,
     });
 }
 
@@ -1179,6 +1191,8 @@ fn handle_cjs_named_export(
         member_of: None,
         signature_span: None,
         implicitly_invoked: false,
+        nested_scope: false,
+        visibility_inherited: false,
     });
 }
 

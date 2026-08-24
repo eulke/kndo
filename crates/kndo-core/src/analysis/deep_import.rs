@@ -432,6 +432,8 @@ mod tests {
             member_of: None,
             signature_span: None,
             implicitly_invoked: false,
+            nested_scope: false,
+            visibility_inherited: false,
         }];
         let mut edges = vec![imports(0, 2)];
         edges.push(Edge {

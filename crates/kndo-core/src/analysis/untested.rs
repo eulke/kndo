@@ -252,6 +252,8 @@ mod tests {
             member_of: None,
             signature_span: None,
             implicitly_invoked: false,
+            nested_scope: false,
+            visibility_inherited: false,
         }
     }
 
@@ -648,6 +650,8 @@ mod tests {
             SymbolNode {
                 member_of: Some(SmolStr::new("LoadError")),
                 implicitly_invoked: true,
+                nested_scope: false,
+                visibility_inherited: false,
                 ..symbol(FileId(1), "fmt")
             },
         ];

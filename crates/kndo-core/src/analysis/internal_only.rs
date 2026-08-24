@@ -137,6 +137,11 @@ pub fn find_internal_only(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<
                       // observed use scope is structurally underestimated, so any narrowing
                       // advice would be a guess
         }
+        if symbol.visibility_inherited {
+            continue; // no visibility of its own (an enum's variants) — the level belongs to
+                      // the container, which is measured separately; advice here would name a
+                      // keyword the language cannot even put on this declaration
+        }
 
         let symbol_id = SymbolId(index as u32);
         if root_targets.contains(&NodeRef::Symbol(symbol_id)) {
@@ -176,11 +181,29 @@ pub fn find_internal_only(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<
             .filter(|&&(_, c, _)| c < Confidence::Probable)
             .any(|&(f, _, m)| origin_scope(f, m) > required);
 
+        // A nested-scope declaration's tightest level means "visible to the enclosing
+        // scope", strictly narrower than the file-scope rung's "visible to this file" —
+        // file-local evidence cannot certify it, so the floor moves one scope wider
+        // (an inline-mod item used same-file can narrow to the crate rung, never to
+        // private). Scopes, not indices: whatever the ladder's rung layout, the rule is
+        // "strictly wider than File".
+        let floor = if symbol.nested_scope && required <= VisibilityScope::File {
+            let Some(wider) = ladder
+                .iter()
+                .map(|rung| rung.scope)
+                .find(|&s| s > VisibilityScope::File)
+            else {
+                continue; // single-scope ladder — nothing certifiable to suggest
+            };
+            wider
+        } else {
+            required
+        };
         // The tightest sufficient rung: lowest index whose scope covers every strong origin.
         let Some((tightest_index, tightest)) = ladder
             .iter()
             .enumerate()
-            .find(|(_, rung)| rung.scope >= required)
+            .find(|(_, rung)| rung.scope >= floor)
         else {
             continue; // no rung covers the usage — nothing narrower to suggest
         };
@@ -265,6 +288,8 @@ mod tests {
             member_of: None,
             signature_span: None,
             implicitly_invoked: false,
+            nested_scope: false,
+            visibility_inherited: false,
         }
     }
 
@@ -771,6 +796,81 @@ mod tests {
             })
             .to_vec();
         assert_eq!(verdicts, vec![0, 1]);
+    }
+
+    #[test]
+    fn an_inherited_visibility_symbol_is_never_accused_but_its_plain_twin_is() {
+        // An enum's variant (visibility_inherited): the level belongs to the container, no
+        // keyword can sit on the variant itself. The identical graph with the flag off must
+        // still accuse — the flag, not the shape, is what exempts.
+        let verdicts: Vec<usize> = [true, false]
+            .map(|inherited| {
+                let files = vec![file("src/a.ts")];
+                let mut s = symbol(FileId(0), "Variant", 1);
+                s.visibility_inherited = inherited;
+                let edges = root_and_ref(FileId(0), FileId(0), SymbolId(0));
+                let graph = ProjectGraph::for_test(files, vec![s], vec![], edges);
+                let reach = crate::analysis::reachability::compute(&graph);
+                find_internal_only(&graph, &reach).len()
+            })
+            .to_vec();
+        assert_eq!(verdicts, vec![0, 1]);
+    }
+
+    #[test]
+    fn a_nested_scope_symbol_narrows_to_the_first_rung_wider_than_file() {
+        // Rust-shaped ladder [File, Package, Public], declared at the top, used same-file.
+        // Top-level: the file rung suffices. Nested (an inline-mod item): the language's
+        // tightest level there means "this module", narrower than "this file" — the floor
+        // moves to the Package rung, never to the file rung the evidence can't certify.
+        use crate::adapter::VisibilityScope::*;
+        let ladder = vec![
+            rung(File, "private"),
+            rung(Package, "pub(crate)"),
+            rung(Public, "pub"),
+        ];
+        let suggestion = |nested: bool| {
+            let files = vec![file("src/a.ts")];
+            let mut s = symbol(FileId(0), "helper", 2);
+            s.nested_scope = nested;
+            let edges = root_and_ref(FileId(0), FileId(0), SymbolId(0));
+            let graph = ProjectGraph::for_test(files, vec![s], vec![], edges)
+                .with_visibility_ladders(vec![(SmolStr::new("mock"), ladder.clone())]);
+            let reach = crate::analysis::reachability::compute(&graph);
+            let findings = find_internal_only(&graph, &reach);
+            assert_eq!(findings.len(), 1);
+            findings[0].message.clone()
+        };
+        assert!(
+            suggestion(false).contains("private would suffice"),
+            "top-level: the file rung is certifiable"
+        );
+        assert!(
+            suggestion(true).contains("pub(crate) would suffice"),
+            "nested: the floor moves past the file rung"
+        );
+    }
+
+    #[test]
+    fn a_nested_scope_symbol_already_at_the_floor_is_not_accused() {
+        // Declared pub(crate) (the first rung wider than File), used same-file, nested:
+        // the raised floor IS the declared scope — nothing certifiable to suggest.
+        use crate::adapter::VisibilityScope::*;
+        let files = vec![file("src/a.ts")];
+        let mut s = symbol(FileId(0), "helper", 1);
+        s.nested_scope = true;
+        let edges = root_and_ref(FileId(0), FileId(0), SymbolId(0));
+        let graph =
+            ProjectGraph::for_test(files, vec![s], vec![], edges).with_visibility_ladders(vec![(
+                SmolStr::new("mock"),
+                vec![
+                    rung(File, "private"),
+                    rung(Package, "pub(crate)"),
+                    rung(Public, "pub"),
+                ],
+            )]);
+        let reach = crate::analysis::reachability::compute(&graph);
+        assert!(find_internal_only(&graph, &reach).is_empty());
     }
 
     #[test]

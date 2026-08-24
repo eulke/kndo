@@ -330,6 +330,8 @@ fn push_declaration(out: &mut FileFacts, name: &str, kind: SymbolKind, item: Nod
         member_of: None,
         signature_span: None,
         implicitly_invoked: false,
+        nested_scope: false,
+        visibility_inherited: false,
     });
 }
 
