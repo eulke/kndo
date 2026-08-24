@@ -25,10 +25,11 @@ pub struct ParsedPragma {
 pub fn parse_suppression_pragma(comment_text: &str) -> Option<ParsedPragma> {
     let lines: Vec<&str> = if let Some(inner) = comment_text.strip_prefix("//") {
         vec![inner]
-    } else if let Some(inner) = comment_text
-        .strip_prefix("/*")
-        .and_then(|s| s.strip_suffix("*/"))
-    {
+    } else {
+        // not a recognized comment delimiter shape — never expected in practice
+        let inner = comment_text
+            .strip_prefix("/*")
+            .and_then(|s| s.strip_suffix("*/"))?;
         inner
             .lines()
             .map(|line| {
@@ -36,8 +37,6 @@ pub fn parse_suppression_pragma(comment_text: &str) -> Option<ParsedPragma> {
                 trimmed.strip_prefix('*').unwrap_or(trimmed)
             })
             .collect()
-    } else {
-        return None; // not a recognized comment delimiter shape — never expected in practice
     };
     lines.into_iter().find_map(parse_pragma_line)
 }
@@ -46,10 +45,9 @@ fn parse_pragma_line(line: &str) -> Option<ParsedPragma> {
     let line = line.trim();
     let (scope, rest) = if let Some(rest) = line.strip_prefix("kndo:allow-file") {
         (SuppressionScope::File, rest)
-    } else if let Some(rest) = line.strip_prefix("kndo:allow") {
-        (SuppressionScope::Declaration, rest)
     } else {
-        return None;
+        let rest = line.strip_prefix("kndo:allow")?;
+        (SuppressionScope::Declaration, rest)
     };
     if !rest.is_empty() && !rest.starts_with(char::is_whitespace) {
         return None; // e.g. "kndo:allowlist" — the keyword must stand alone

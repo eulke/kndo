@@ -353,10 +353,7 @@ fn gradle_scope(configuration: &str) -> Option<DependencyScope> {
 fn string_literals(s: &str) -> Vec<String> {
     let mut out = Vec::new();
     let mut rest = s;
-    loop {
-        let Some((lit, tail)) = next_quoted(rest) else {
-            break;
-        };
+    while let Some((lit, tail)) = next_quoted(rest) {
         out.push(lit);
         rest = tail;
     }
