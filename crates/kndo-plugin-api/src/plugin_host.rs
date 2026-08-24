@@ -436,7 +436,7 @@ struct GuestState {
 }
 
 /// A `kndo:plugin` WASM component, bridged to the native [`Plugin`] trait — indistinguishable
-/// from a built-in plugin (e.g. `LcovPlugin`) from `Engine`'s perspective, the same
+/// from a built-in plugin (e.g. the lcov ingester) from `Engine`'s perspective, the same
 /// generated-bridge posture as the adapter bridge.
 pub struct WasmPlugin {
     engine: wasmtime::Engine,
@@ -518,7 +518,7 @@ impl WasmPlugin {
 /// Reads, engine-configures, links, instantiates — split for the same reason as the adapter
 /// bridge's own `instantiate` pipeline in `host.rs`: one fallible step per function keeps each
 /// step's own complexity low instead of one long wall of `?`s.
-fn read_component_bytes(path: &Path) -> Result<Vec<u8>, LoadError> {
+pub(crate) fn read_component_bytes(path: &Path) -> Result<Vec<u8>, LoadError> {
     std::fs::read(path).map_err(LoadError::Io)
 }
 
@@ -664,7 +664,7 @@ fn probe_flavor(
 /// claiming it fails to load, exactly like an instantiation error (skipped by discovery,
 /// never trusted). This is what keeps `dependencies: ["kndo:nextjs"]` unambiguous from any
 /// source: nothing external can ever *be* `kndo:nextjs`.
-fn ensure_unreserved(id: &str) -> Result<(), LoadError> {
+pub(crate) fn ensure_unreserved(id: &str) -> Result<(), LoadError> {
     if kndo_core::plugin::is_reserved_id(id) {
         return Err(LoadError::Instantiate(format!(
             "descriptor claims reserved built-in id '{id}' (the kndo: namespace is not \

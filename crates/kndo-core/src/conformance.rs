@@ -94,6 +94,18 @@ pub fn run_fixture(
     fixture_dir: &Path,
     adapters: Vec<Box<dyn LanguageAdapter>>,
 ) -> Result<Result<(), ConformanceMismatch>, ConformanceError> {
+    run_fixture_with(fixture_dir, adapters, vec![])
+}
+
+/// [`run_fixture`] plus a plugin set — for fixtures whose expectations need one (the crap
+/// fixtures ship an lcov report, and the coverage ingesters are composition, not core:
+/// `Engine::open` registers no plugins, so the adapter's test crate passes the ingester in,
+/// exactly the way the product's own composition layer does).
+pub fn run_fixture_with(
+    fixture_dir: &Path,
+    adapters: Vec<Box<dyn LanguageAdapter>>,
+    plugins: Vec<Box<dyn crate::plugin::Plugin>>,
+) -> Result<Result<(), ConformanceMismatch>, ConformanceError> {
     let expected_path = fixture_dir.join("expected.json");
     let expected_text = fs::read_to_string(&expected_path)
         .map_err(|e| ConformanceError(format!("reading {}: {e}", expected_path.display())))?;
@@ -109,7 +121,7 @@ pub fn run_fixture(
         threads: None,
         min_confidence: None,
     };
-    let mut engine = Engine::open(&project_dir, overrides, adapters)
+    let mut engine = Engine::open_with_plugins(&project_dir, overrides, adapters, plugins)
         .map_err(|e| ConformanceError(format!("opening {}: {e}", project_dir.display())))?;
     let result = engine.check(CheckRequest {
         mode: RunMode::Full,

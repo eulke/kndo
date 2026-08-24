@@ -4,7 +4,8 @@
 //! All hooks are optional; the same trait serves built-ins (statically linked) and external
 //! WASM components (bridged via `kndo-plugin-api` — `kndo:plugin@0.1.0` for the four
 //! graph-mutation hooks below, `kndo:adapter@0.1.0` for
-//! `LanguageAdapter`). `ingest_coverage`/`suppress` aren't bridged either way yet.
+//! `LanguageAdapter`, and the `coverage-ingester` world bridges `ingest_coverage`).
+//! `suppress` isn't bridged either way yet.
 //! `GraphView` is read-only; mutation happens only through typed sinks the core validates and
 //! attributes (`Provenance::Plugin`). `contribute_roots`/`contribute_edges`/`annotate_symbols`
 //! additionally get [`ContentView`], the host-mediated content channel for files
@@ -799,7 +800,7 @@ pub trait Plugin: Send + Sync {
     /// path stays available — any input a plugin's hooks could react to, including everything
     /// its content channel might read, is already part of the
     /// key). A plugin that only implements `ingest_coverage`/`suppress` (like
-    /// [`LcovPlugin`]) must still return `false` here, or its mere registration keeps the
+    /// the `kndo-plugin-coverage` ingesters) must still return `false` here, or its mere registration keeps the
     /// incremental patch off for the whole product even though it never touches the graph.
     /// The declaration is self-enforcing rather than trusted: assembly only *calls* the four
     /// hooks on plugins that return `true`, so returning `false` while implementing a hook
@@ -897,77 +898,6 @@ pub trait Plugin: Send + Sync {
         _content: &[u8],
         _out: &mut crate::coverage::CoverageSink,
     ) {
-    }
-}
-
-/// The built-in lcov ingester (lcov is the coverage lingua franca:
-/// jest/vitest/nyc, llvm-cov, gcov, Go via converters). Statically linked, same trait external
-/// WASM plugins implement ("the same trait serves built-ins").
-pub struct LcovPlugin;
-
-impl Plugin for LcovPlugin {
-    fn descriptor(&self) -> PluginDescriptor {
-        PluginDescriptor {
-            // Built-ins live in the reserved `kndo:` namespace.
-            id: SmolStr::new("kndo:coverage-lcov"),
-            version: SmolStr::new("1"),
-            detection: vec![SmolStr::new("an lcov.info file at a well-known path")],
-            // Well-known locations ("located by config or well-known paths");
-            // config-based locations land with the config parser.
-            requested_file_access: vec![
-                SmolStr::new("coverage/lcov.info"),
-                SmolStr::new("lcov.info"),
-            ],
-            activation: vec![
-                ActivationRule::FileExists(SmolStr::new("coverage/lcov.info")),
-                ActivationRule::FileExists(SmolStr::new("lcov.info")),
-            ],
-            dependencies: vec![],
-        }
-    }
-
-    /// Coverage ingestion only — no graph-mutation hooks. Without this override, this plugin's
-    /// unconditional registration in `default_plugins()` would force every real `kndo` run to
-    /// bypass the graph-snapshot cache and the incremental patch (see the trait method's
-    /// doc) — both fast paths would be silently dead in the shipped product.
-    fn mutates_graph(&self) -> bool {
-        false
-    }
-
-    /// The lcov subset that matters: `SF:<path>` opens a file section, `DA:<line>,<hits>`
-    /// records one instrumented line, `end_of_record` closes it — everything else (function/
-    /// branch records, checksums) is ignored, since kndo maps lines to functions itself via
-    /// symbol spans. `SF:` paths are kept as reported (`./` and backslash normalization
-    /// only) — the plugin doesn't know the project root; the host rebases absolute keys
-    /// onto it afterwards (`CoverageMap::rebase`), for every ingesting plugin uniformly.
-    fn ingest_coverage(
-        &self,
-        _path: &ProjectPath,
-        content: &[u8],
-        out: &mut crate::coverage::CoverageSink,
-    ) {
-        let Ok(text) = std::str::from_utf8(content) else {
-            return;
-        };
-        let mut current: Option<ProjectPath> = None;
-        for line in text.lines() {
-            let line = line.trim_end();
-            if let Some(sf) = line.strip_prefix("SF:") {
-                let normalized = sf.trim().trim_start_matches("./").replace('\\', "/");
-                current = Some(ProjectPath(SmolStr::new(normalized)));
-            } else if let Some(da) = line.strip_prefix("DA:") {
-                if let Some(file) = &current {
-                    let mut parts = da.splitn(3, ',');
-                    let line_no = parts.next().and_then(|s| s.trim().parse::<u32>().ok());
-                    let hits = parts.next().and_then(|s| s.trim().parse::<u64>().ok());
-                    if let (Some(line_no), Some(hits)) = (line_no, hits) {
-                        out.add_line(file.clone(), line_no, hits);
-                    }
-                }
-            } else if line == "end_of_record" {
-                current = None;
-            }
-        }
     }
 }
 

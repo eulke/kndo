@@ -21,6 +21,7 @@ use kndo_core::engine::{CheckRequest, ConfigOverrides, RunMode};
 pub enum VerifiedKind {
     Adapter,
     Plugin,
+    CoverageIngester,
 }
 
 impl VerifiedKind {
@@ -28,6 +29,7 @@ impl VerifiedKind {
         match self {
             VerifiedKind::Adapter => "kndo:adapter",
             VerifiedKind::Plugin => "kndo:plugin",
+            VerifiedKind::CoverageIngester => "coverage-ingester",
         }
     }
 }
@@ -70,13 +72,59 @@ pub fn verify_in_project(component: &Path, project: &Path) -> Result<VerifyRepor
 fn verify_impl(component: &Path, project: Option<&Path>) -> Result<VerifyReport, String> {
     match kndo_plugin_api::WasmPlugin::load(component) {
         Ok(plugin) => Ok(verify_plugin(component, &plugin, project)),
-        Err(plugin_err) => match kndo_plugin_api::WasmAdapter::load(component) {
-            Ok(adapter) => Ok(verify_adapter(component, &adapter, project)),
-            Err(adapter_err) => Err(format!(
-                "not a valid kndo:plugin ({plugin_err}) or kndo:adapter ({adapter_err}) \
-                 component"
-            )),
+        Err(plugin_err) => match kndo_plugin_api::WasmCoverageIngester::load(component) {
+            Ok(ingester) => Ok(verify_coverage_ingester(&ingester)),
+            Err(coverage_err) => match kndo_plugin_api::WasmAdapter::load(component) {
+                Ok(adapter) => Ok(verify_adapter(component, &adapter, project)),
+                Err(adapter_err) => Err(format!(
+                    "not a valid kndo:plugin ({plugin_err}), coverage-ingester \
+                     ({coverage_err}), or kndo:adapter ({adapter_err}) component"
+                )),
+            },
         },
+    }
+}
+
+/// The coverage world has no graph hooks and no fixture to drive — verification is
+/// descriptor sanity plus one smoke call: `ingest_coverage` over empty bytes must return
+/// (not trap), the cheapest proof the export is callable at all.
+fn verify_coverage_ingester(ingester: &kndo_plugin_api::WasmCoverageIngester) -> VerifyReport {
+    use kndo_core::plugin::Plugin as _;
+    let d = ingester.descriptor();
+
+    let mut descriptor = vec![format!("id: {}", d.id), format!("version: {}", d.version)];
+    push_list(&mut descriptor, "detection", &d.detection);
+    push_list(&mut descriptor, "report paths", &d.requested_file_access);
+    push_rules(
+        &mut descriptor,
+        "activation",
+        &describe_rules(&d.activation),
+    );
+    push_list(&mut descriptor, "dependencies", &d.dependencies);
+
+    let mut warnings = Vec::new();
+    if d.requested_file_access.is_empty() {
+        warnings.push(
+            "empty `requested-file-access`: the host will never hand this ingester a \
+             report unless kndo.toml points `[plugins.<id>] report` at one"
+                .to_string(),
+        );
+    }
+    let mut fixture = Vec::new();
+    let mut sink = kndo_core::coverage::CoverageSink::default();
+    ingester.ingest_coverage(
+        &kndo_core::adapter::ProjectPath("verify.smoke".into()),
+        &[],
+        &mut sink,
+    );
+    fixture.push("ingest-coverage(empty) returned without trapping".to_string());
+
+    VerifyReport {
+        kind: VerifiedKind::CoverageIngester,
+        id: d.id.to_string(),
+        descriptor,
+        warnings,
+        fixture,
     }
 }
 

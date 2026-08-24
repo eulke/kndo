@@ -1222,6 +1222,7 @@ dependencies = [
  "kndo-adapter-swift",
  "kndo-core",
  "kndo-plugin-api",
+ "kndo-plugin-coverage",
  "kndo-plugin-express",
  "kndo-plugin-nextjs",
  "kndo-plugin-serde",
@@ -1278,6 +1279,7 @@ version = "0.1.0"
 dependencies = [
  "kndo-adapter-toolkit",
  "kndo-core",
+ "kndo-plugin-coverage",
  "rustc-hash",
  "serde_json",
  "smol_str",
@@ -1390,6 +1392,15 @@ dependencies = [
  "tempfile",
  "wasmtime",
  "wit-component",
+]
+
+[[package]]
+name = "kndo-plugin-coverage"
+version = "0.1.0"
+dependencies = [
+ "kndo-core",
+ "roxmltree",
+ "smol_str",
 ]
 
 [[package]]

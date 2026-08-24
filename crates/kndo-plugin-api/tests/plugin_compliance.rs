@@ -98,6 +98,17 @@ fn each_abi_rejects_a_component_built_for_the_other() {
         kndo_plugin_api::WasmAdapter::load(&plugin_path).is_err(),
         "a plugin component has none of the adapter world's exports — must fail to instantiate"
     );
+    // Third world, same mechanism: neither the adapter nor the graph-hooks plugin
+    // satisfies the coverage-ingester world's export set (the reverse direction is in
+    // coverage_compliance.rs).
+    assert!(
+        kndo_plugin_api::WasmCoverageIngester::load(&adapter_path).is_err(),
+        "an adapter component must be rejected by the coverage-ingester loader"
+    );
+    assert!(
+        kndo_plugin_api::WasmCoverageIngester::load(&plugin_path).is_err(),
+        "a graph-hooks plugin component must be rejected by the coverage-ingester loader"
+    );
 }
 
 fn build_hooks_demo_component() -> Vec<u8> {

@@ -72,7 +72,9 @@ cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info
 ```
 
 That runs the full test suite instrumented and leaves `lcov.info` at the repo root — one of
-kndo's well-known coverage paths (`coverage/lcov.info` is the other), picked up on the next
+kndo's well-known coverage paths (`coverage/lcov.info` is the other; Cobertura XML, JaCoCo
+XML and Go coverprofile reports are ingested the same way in projects that produce those,
+and `[plugins.<id>] report` in kndo.toml points at custom locations), picked up on the next
 `kndo check`. Reports older than 7 days are ignored with a diagnostic (stale certainty is
 worse than absence) — just regenerate. `lcov.info` and `coverage/` are gitignored; CI
 generates its own report in the test job, so the self-check there always runs

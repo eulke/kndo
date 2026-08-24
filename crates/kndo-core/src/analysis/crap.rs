@@ -44,8 +44,9 @@ pub fn find_crap(
                 path: None,
                 message: "crap: no coverage ingested — skipped (the score is complexity × \
                           untestedness; without a report the coverage factor would be a guess, \
-                          not a measurement — drop an lcov report at coverage/lcov.info or \
-                          lcov.info to enable it)"
+                          not a measurement — drop a report at a well-known path (lcov.info, \
+                          coverage.xml, jacoco.xml, coverage.out, …) or point \
+                          [plugins.<id>] report at one to enable it)"
                     .to_string(),
                 span: None,
             }),

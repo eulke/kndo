@@ -8,9 +8,9 @@
 //! certainty" the freshness policy exists to prevent. The engine re-reads reports each
 //! run (they're small) and hands the map to `analysis::run_all` as a separate input.
 //!
-//! Parsing lives in plugins ([`crate::plugin::Plugin::ingest_coverage`], with the lcov
-//! built-in in `plugin.rs`); this module owns only the format-neutral model and the
-//! span→fraction math.
+//! Parsing lives in plugins ([`crate::plugin::Plugin::ingest_coverage`], with the built-in
+//! ingesters in the `kndo-plugin-coverage` crate); this module owns only the format-neutral
+//! model and the span→fraction math.
 
 use rustc_hash::FxHashMap as HashMap;
 
@@ -47,7 +47,7 @@ impl CoverageMap {
     /// stay as they are and simply match nothing — degrade to silence, never to a wrong
     /// file.
     pub fn rebase(&mut self, root: &std::path::Path) {
-        let mut prefixes: Vec<String> = Vec::new();
+        let mut prefixes: Vec<(String, String)> = Vec::new();
         for candidate in [Some(root.to_path_buf()), root.canonicalize().ok()]
             .into_iter()
             .flatten()
@@ -56,26 +56,42 @@ impl CoverageMap {
             if !p.ends_with('/') {
                 p.push('/');
             }
-            if !prefixes.contains(&p) {
-                prefixes.push(p);
+            if !prefixes.iter().any(|(prefix, _)| *prefix == p) {
+                prefixes.push((p, String::new()));
             }
+        }
+        self.rebase_prefixes(&prefixes);
+    }
+
+    /// The substitution core `rebase` is a wrapper over: every key starting with a
+    /// listed prefix is rewritten with that prefix replaced (first match wins; callers
+    /// order longest-first when prefixes can nest). Beyond stripping the absolute root,
+    /// the host uses this to land report keys that are qualified by a *name* rather than
+    /// a location — Go coverprofiles record module-qualified paths
+    /// (`github.com/x/y/pkg/file.go`), and only the host can map a module name to its
+    /// directory. A rewrite that collides with an existing key keeps the union — the same
+    /// accumulation rule as repeated DA records for one line.
+    pub fn rebase_prefixes(&mut self, prefixes: &[(String, String)]) {
+        if prefixes.is_empty() {
+            return;
         }
         let rebased: Vec<(ProjectPath, ProjectPath)> = self
             .files
             .keys()
             .filter_map(|path| {
-                prefixes.iter().find_map(|prefix| {
-                    path.0
-                        .strip_prefix(prefix.as_str())
-                        .map(|rel| (path.clone(), ProjectPath(smol_str::SmolStr::new(rel))))
+                prefixes.iter().find_map(|(prefix, replacement)| {
+                    path.0.strip_prefix(prefix.as_str()).map(|rel| {
+                        (
+                            path.clone(),
+                            ProjectPath(smol_str::SmolStr::new(format!("{replacement}{rel}"))),
+                        )
+                    })
                 })
             })
             .collect();
-        for (absolute, relative) in rebased {
-            if let Some(coverage) = self.files.remove(&absolute) {
-                // A relative twin already present keeps the union — same accumulation
-                // rule as repeated DA records for one line.
-                let entry = self.files.entry(relative).or_default();
+        for (from, to) in rebased {
+            if let Some(coverage) = self.files.remove(&from) {
+                let entry = self.files.entry(to).or_default();
                 for (line, hits) in coverage.lines {
                     *entry.lines.entry(line).or_insert(0) += hits;
                 }
@@ -213,6 +229,35 @@ mod tests {
             .function_coverage(&ProjectPath(SmolStr::new("src/a.ts")), span(1, 10))
             .unwrap();
         assert!((cov - 0.5).abs() < 1e-9, "both records survive the merge");
+    }
+
+    #[test]
+    fn rebase_prefixes_substitutes_module_prefixes_for_directories() {
+        let mut sink = CoverageSink::default();
+        sink.add_line(ProjectPath(SmolStr::new("github.com/x/y/pkg/a.go")), 2, 1);
+        sink.add_line(ProjectPath(SmolStr::new("github.com/x/z/pkg/b.go")), 3, 1); // foreign module
+        let mut map = sink.into_map();
+        map.rebase_prefixes(&[("github.com/x/y/".into(), "".into())]);
+        assert!(map
+            .function_coverage(&ProjectPath(SmolStr::new("pkg/a.go")), span(1, 5))
+            .is_some());
+        assert!(
+            map.function_coverage(
+                &ProjectPath(SmolStr::new("github.com/x/z/pkg/b.go")),
+                span(1, 5)
+            )
+            .is_some(),
+            "a key under no listed prefix stays verbatim"
+        );
+        let mut sink = CoverageSink::default();
+        sink.add_line(ProjectPath(SmolStr::new("github.com/x/y/pkg/a.go")), 2, 1);
+        let mut map = sink.into_map();
+        map.rebase_prefixes(&[("github.com/x/y/".into(), "svc/".into())]);
+        assert!(
+            map.function_coverage(&ProjectPath(SmolStr::new("svc/pkg/a.go")), span(1, 5))
+                .is_some(),
+            "a nested module dir replaces, not just strips"
+        );
     }
 
     #[test]

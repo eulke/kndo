@@ -130,6 +130,10 @@ const KNDO_TOML_TEMPLATE: &str = r#"# kndo.toml — everything here is optional;
 # [plugins.gate]                         # opt plugin findings into the exit-code gate
 # "github.com/acme/some-plugin" = "warning"        # gate this plugin's rules, capped at warning
 # "github.com/acme/some-plugin/noisy-rule" = "off" # per-rule override wins
+
+# [plugins.coverage-lcov]                # per-plugin options (coverage ingesters)
+# report = "coverage/lcov.info"          # replaces the well-known paths; globs allowed
+# max-age = "7d"                         # freshness override ("12h" and bare days work too)
 "#;
 
 const PRE_COMMIT_HOOK: &str = "#!/bin/sh\nexec kndo check --staged --fail-on warning\n";

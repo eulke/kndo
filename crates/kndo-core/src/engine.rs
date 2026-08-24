@@ -54,9 +54,101 @@ fn touched_paths(before: &graph::ProjectGraph, after: &graph::ProjectGraph) -> H
 }
 
 /// The coverage freshness gate: a coverage report modified longer ago than this is ignored with
-/// a diagnostic — stale certainty is worse than absence. Configurable later with the config
-/// file (`coverage.max_age`); the default is the contract.
+/// a diagnostic — stale certainty is worse than absence. The default; `[plugins.<id>] max-age`
+/// in `kndo.toml` overrides it per plugin.
 const MAX_COVERAGE_AGE_DAYS: u64 = 7;
+
+/// Expand one report pattern to `(absolute path, project-relative display path)` matches.
+/// A pattern with no glob metacharacters is stat'd literally (the common well-known-path
+/// case, zero-cost); a glob walks only the directories its literal components pin down —
+/// the same `glob::glob` mechanism activation's `FileExists` rules use, so activation and
+/// ingestion see the same files by the same rules. Matches come back sorted (deterministic
+/// provenance order).
+fn expand_report_pattern(root: &Path, pattern: &str) -> Vec<(std::path::PathBuf, String)> {
+    let relify = |abs: &Path| {
+        abs.strip_prefix(root)
+            .unwrap_or(abs)
+            .to_string_lossy()
+            .replace('\\', "/")
+    };
+    if !pattern.contains(['*', '?', '[']) {
+        let path = root.join(pattern);
+        return if path.is_file() {
+            vec![(path, pattern.to_string())]
+        } else {
+            Vec::new()
+        };
+    }
+    let full = root.join(pattern);
+    let Ok(paths) = glob::glob(&full.to_string_lossy()) else {
+        return Vec::new(); // validated at config-parse time; a bad descriptor glob is inert
+    };
+    let mut matches: Vec<(std::path::PathBuf, String)> = paths
+        .flatten()
+        .filter(|p| p.is_file())
+        .map(|p| {
+            let rel = relify(&p);
+            (p, rel)
+        })
+        .collect();
+    matches.sort_by(|a, b| a.1.cmp(&b.1));
+    matches
+}
+
+/// The second, graph-guided rebase pass: land report keys qualified by a *package name*
+/// rather than a location — Go coverprofiles record module-qualified paths
+/// (`github.com/x/y/pkg/file.go`), and the mapping from module name to directory lives in
+/// the graph's package table (neutral vocabulary the manifest adapters fill; no ecosystem
+/// knowledge here). Guarded so it can never mis-attribute: only keys matching *no* graph
+/// file are candidates, and a candidate moves only when exactly one `name/ → dir/` mapping
+/// produces a path that *does* match a graph file — anything else stays verbatim and
+/// matches nothing (degrade to silence, never to a wrong file).
+fn rebase_by_packages(map: &mut crate::coverage::CoverageMap, graph: &crate::graph::ProjectGraph) {
+    if map.is_empty() {
+        return;
+    }
+    let mappings: Vec<(String, String)> = graph
+        .packages
+        .iter()
+        .filter_map(|package| {
+            let name = package.name.as_ref()?;
+            let manifest = package.manifest.as_ref()?;
+            let dir = match manifest.0.rfind('/') {
+                Some(idx) => format!("{}/", &manifest.0[..idx]),
+                None => String::new(),
+            };
+            Some((format!("{name}/"), dir))
+        })
+        .collect();
+    if mappings.is_empty() {
+        return;
+    }
+    let graph_files: rustc_hash::FxHashSet<&str> =
+        graph.files.iter().map(|f| f.path.0.as_str()).collect();
+    let moves: Vec<(String, String)> = map
+        .files
+        .keys()
+        .filter(|key| !graph_files.contains(key.0.as_str()))
+        .filter_map(|key| {
+            let mut resolved: Option<String> = None;
+            for (prefix, dir) in &mappings {
+                if let Some(rest) = key.0.strip_prefix(prefix.as_str()) {
+                    let candidate = format!("{dir}{rest}");
+                    if graph_files.contains(candidate.as_str()) {
+                        if resolved.is_some() {
+                            return None; // ambiguous — leave the key alone
+                        }
+                        resolved = Some(candidate);
+                    }
+                }
+            }
+            resolved.map(|to| (key.0.to_string(), to))
+        })
+        .collect();
+    // Whole keys as "prefixes": strip leaves the empty remainder, so each pair is an
+    // exact one-key move through the same merge-on-collision core.
+    map.rebase_prefixes(&moves);
+}
 
 impl Drop for Engine {
     /// The persist sequencing: frontends drop the engine after printing, so the deferred
@@ -739,23 +831,18 @@ impl Engine {
         overrides: ConfigOverrides,
         adapters: Vec<Box<dyn LanguageAdapter>>,
     ) -> Result<Engine, EngineError> {
-        // The built-in coverage ingester is the one plugin every `Engine` carries by
-        // default — the unified `self.plugins` registry (one real registry for every hook,
-        // not two) must not silently drop
-        // it for the common `open()` caller who never heard of `open_with_plugins`.
-        Engine::open_with_plugins(
-            root,
-            overrides,
-            adapters,
-            vec![Box::new(crate::plugin::LcovPlugin)],
-        )
+        // No plugins — not even coverage ingesters: core registers nothing it doesn't
+        // define (the ignorance rule covers report formats too). The product's built-in
+        // set, coverage ingesters included, is composed by the `kndo` crate's
+        // `default_plugins()` and arrives through `open_with_plugins`, exactly like
+        // adapters do.
+        Engine::open_with_plugins(root, overrides, adapters, vec![])
     }
 
     /// Same as [`Self::open`], additionally taking the registered plugin set —
-    /// compiled-in first-party plugins today, WASM-bridged third-party plugins later (that
-    /// bridge doesn't exist yet for `Plugin`'s graph-mutation hooks, only for
-    /// `LanguageAdapter`). Embedders/tests wanting *no* plugins, not even the
-    /// default lcov ingester, pass `vec![]` here directly instead of using [`Self::open`].
+    /// compiled-in first-party plugins (the `kndo` crate's `default_plugins()`, coverage
+    /// ingesters included) and WASM-bridged third-party plugins alike. [`Self::open`] itself
+    /// registers none: plugins are composition, not core.
     pub fn open_with_plugins(
         root: &Path,
         overrides: ConfigOverrides,
@@ -1288,7 +1375,7 @@ impl Engine {
                     span: None,
                 }));
                 let coverage_start = Instant::now();
-                let coverage = self.ingest_coverage(&mut diagnostics);
+                let coverage = self.ingest_coverage(&g, &mut diagnostics);
                 timings.push((
                     "coverage-ingest".to_string(),
                     coverage_start.elapsed().as_micros() as u64,
@@ -1368,65 +1455,96 @@ impl Engine {
         }
     }
 
-    /// Locate and ingest coverage reports ("ingested, never measured") through the
-    /// built-in coverage plugins' `requested_file_access` well-known paths, freshness-checked
-    /// against [`MAX_COVERAGE_AGE_DAYS`] — a stale report gets one diagnostic and is ignored,
-    /// per the ADR's "stale certainty is worse than absence". Re-read every run, never cached:
-    /// a report's freshness varies independently of source content hashes.
+    /// Locate and ingest coverage reports ("ingested, never measured") through each
+    /// coverage plugin's report patterns — a `[plugins.<id>] report` entry in `kndo.toml`
+    /// when present (explicit config *replaces* the built-in list, like every other knob),
+    /// the descriptor's `requested_file_access` well-known paths otherwise; both accept
+    /// globs (`packages/*/coverage/lcov.info`). Every match is freshness-checked against
+    /// the plugin's effective max-age ([`MAX_COVERAGE_AGE_DAYS`], or `[plugins.<id>]
+    /// max-age`) — a stale report gets one diagnostic and is ignored, per the ADR's "stale
+    /// certainty is worse than absence". Re-read every run, never cached: a report's
+    /// freshness varies independently of source content hashes.
     ///
     /// Reports are always read from the *real* project root, including for diff modes'
     /// git-tree sides — coverage describes the working tree's test run, and applying the same
     /// current report to both sides keeps a diff's `crap` delta about the *code* change, not
     /// about report drift (a deliberate approximation; the report predates the diff either
     /// way).
-    fn ingest_coverage(&self, diagnostics: &mut Vec<Diagnostic>) -> crate::coverage::CoverageMap {
+    fn ingest_coverage(
+        &self,
+        graph: &crate::graph::ProjectGraph,
+        diagnostics: &mut Vec<Diagnostic>,
+    ) -> crate::coverage::CoverageMap {
         let mut sink = crate::coverage::CoverageSink::default();
         for plugin in &self.plugins {
-            for rel in plugin.descriptor().requested_file_access {
-                let path = self.root.join(rel.as_str());
-                let Ok(meta) = std::fs::metadata(&path) else {
-                    continue; // no report at this well-known path — silence, not a diagnostic
-                };
-                let age_days = meta
-                    .modified()
-                    .ok()
-                    .and_then(|m| m.elapsed().ok())
-                    .map(|e| e.as_secs() / 86_400);
-                if let Some(days) = age_days {
-                    if days > MAX_COVERAGE_AGE_DAYS {
-                        diagnostics.push(Diagnostic {
+            let descriptor = plugin.descriptor();
+            let options = self.config.plugin_options_for(&descriptor.id);
+            let configured = options.map(|o| o.report.as_slice()).unwrap_or(&[]);
+            let patterns: Vec<String> = if configured.is_empty() {
+                descriptor
+                    .requested_file_access
+                    .iter()
+                    .map(|p| p.to_string())
+                    .collect()
+            } else {
+                configured.to_vec()
+            };
+            let max_age_secs = options
+                .and_then(|o| o.max_age)
+                .map(|d| d.as_secs())
+                .unwrap_or(MAX_COVERAGE_AGE_DAYS * 86_400);
+            let mut seen = rustc_hash::FxHashSet::default();
+            for pattern in &patterns {
+                for (path, rel) in expand_report_pattern(&self.root, pattern) {
+                    if !seen.insert(rel.clone()) {
+                        continue; // one report matched by two patterns ingests once
+                    }
+                    let Ok(meta) = std::fs::metadata(&path) else {
+                        continue; // no report at this path — silence, not a diagnostic
+                    };
+                    let age_secs = meta
+                        .modified()
+                        .ok()
+                        .and_then(|m| m.elapsed().ok())
+                        .map(|e| e.as_secs());
+                    if let Some(secs) = age_secs {
+                        if secs > max_age_secs {
+                            let days = secs / 86_400;
+                            let max_days = max_age_secs as f64 / 86_400.0;
+                            diagnostics.push(Diagnostic {
+                                level: DiagnosticLevel::Warn,
+                                path: Some(ProjectPath(smol_str::SmolStr::new(&rel))),
+                                message: format!(
+                                    "coverage report {rel} ignored: {days} days old (max age \
+                                     {max_days:.1} days) — regenerate it to restore \
+                                     coverage-aware analysis"
+                                ),
+                                span: None,
+                            });
+                            continue;
+                        }
+                    }
+                    match std::fs::read(&path) {
+                        Ok(content) => {
+                            let project_path = ProjectPath(smol_str::SmolStr::new(&rel));
+                            plugin.ingest_coverage(&project_path, &content, &mut sink);
+                            // Provenance is host-side: the host located the report and
+                            // checked its freshness, so it records what was ingested and how
+                            // old it was (surfaced by health's crap category).
+                            sink.add_source(format!(
+                                "{} {} ({}d old)",
+                                descriptor.id,
+                                rel,
+                                age_secs.map(|s| s / 86_400).unwrap_or(0)
+                            ));
+                        }
+                        Err(e) => diagnostics.push(Diagnostic {
                             level: DiagnosticLevel::Warn,
-                            path: Some(ProjectPath(smol_str::SmolStr::new(rel.as_str()))),
-                            message: format!(
-                                "coverage report {rel} ignored: {days} days old (max age \
-                                 {MAX_COVERAGE_AGE_DAYS} days) — regenerate it to restore \
-                                 coverage-aware analysis"
-                            ),
+                            path: Some(ProjectPath(smol_str::SmolStr::new(&rel))),
+                            message: format!("coverage report {rel} could not be read: {e}"),
                             span: None,
-                        });
-                        continue;
+                        }),
                     }
-                }
-                match std::fs::read(&path) {
-                    Ok(content) => {
-                        let project_path = ProjectPath(smol_str::SmolStr::new(rel.as_str()));
-                        plugin.ingest_coverage(&project_path, &content, &mut sink);
-                        // Provenance is host-side: the host located the report and checked
-                        // its freshness, so it records what was ingested and how old it was
-                        // (surfaced by health's crap category).
-                        sink.add_source(format!(
-                            "{} {} ({}d old)",
-                            plugin.descriptor().id,
-                            rel,
-                            age_days.unwrap_or(0)
-                        ));
-                    }
-                    Err(e) => diagnostics.push(Diagnostic {
-                        level: DiagnosticLevel::Warn,
-                        path: Some(ProjectPath(smol_str::SmolStr::new(rel.as_str()))),
-                        message: format!("coverage report {rel} could not be read: {e}"),
-                        span: None,
-                    }),
                 }
             }
         }
@@ -1435,6 +1553,7 @@ impl Engine {
         // Rebasing is host-side — the one layer that knows the root — so every format
         // plugin's output lands comparable (CoverageMap::rebase).
         map.rebase(&self.root);
+        rebase_by_packages(&mut map, graph);
         map
     }
 
@@ -2930,5 +3049,234 @@ mod tests {
             panic!("expected Find");
         };
         assert_eq!(f2.matches[0].selector, "root.dmock#bar");
+    }
+
+    /// Minimal coverage ingester for host-side tests — core ships no format parsers
+    /// (they live in `kndo-plugin-coverage`), so ingestion tests bring their own.
+    /// Format: one `path line hits` triple per line.
+    struct MockCoverageIngester;
+    impl crate::plugin::Plugin for MockCoverageIngester {
+        fn descriptor(&self) -> crate::plugin::PluginDescriptor {
+            crate::plugin::PluginDescriptor {
+                id: SmolStr::new("kndo:coverage-mock"),
+                version: SmolStr::new("1"),
+                detection: vec![],
+                requested_file_access: vec![SmolStr::new("lcov.info")],
+                activation: vec![],
+                dependencies: vec![],
+            }
+        }
+        fn mutates_graph(&self) -> bool {
+            false
+        }
+        fn ingest_coverage(
+            &self,
+            _path: &crate::adapter::ProjectPath,
+            content: &[u8],
+            out: &mut crate::coverage::CoverageSink,
+        ) {
+            for line in String::from_utf8_lossy(content).lines() {
+                let mut parts = line.split_whitespace();
+                if let (Some(path), Some(l), Some(h)) = (parts.next(), parts.next(), parts.next()) {
+                    if let (Ok(l), Ok(h)) = (l.parse(), h.parse()) {
+                        out.add_line(crate::adapter::ProjectPath(SmolStr::new(path)), l, h);
+                    }
+                }
+            }
+        }
+    }
+
+    fn backdate(path: &Path, days: u64) {
+        let file = std::fs::File::options().write(true).open(path).unwrap();
+        file.set_modified(
+            std::time::SystemTime::now() - std::time::Duration::from_secs(days * 86_400),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn expand_report_pattern_stats_literals_and_walks_globs_sorted() {
+        let dir = std::env::temp_dir().join("kndo-engine-test-expand-report");
+        let _ = std::fs::remove_dir_all(&dir);
+        for package in ["b", "a"] {
+            let cov = dir.join("packages").join(package).join("coverage");
+            std::fs::create_dir_all(&cov).unwrap();
+            std::fs::write(cov.join("lcov.info"), "x").unwrap();
+        }
+        assert!(expand_report_pattern(&dir, "lcov.info").is_empty());
+        let matches = expand_report_pattern(&dir, "packages/*/coverage/lcov.info");
+        let rels: Vec<&str> = matches.iter().map(|(_, rel)| rel.as_str()).collect();
+        assert_eq!(
+            rels,
+            vec![
+                "packages/a/coverage/lcov.info",
+                "packages/b/coverage/lcov.info"
+            ]
+        );
+        let literal = expand_report_pattern(&dir, "packages/a/coverage/lcov.info");
+        assert_eq!(literal.len(), 1);
+    }
+
+    #[test]
+    fn rebase_by_packages_moves_only_unmatched_keys_with_a_unique_target() {
+        use crate::coverage::CoverageSink;
+        let mut graph = crate::graph::ProjectGraph::default();
+        graph.packages.push(crate::graph::PackageNode {
+            manifest: Some(crate::adapter::ProjectPath(SmolStr::new("go.mod"))),
+            name: Some(SmolStr::new("github.com/x/y")),
+            private: false,
+            declares_surface: false,
+            surface: vec![],
+            workspace_entry: None,
+            targets: vec![],
+            executables: vec![],
+            resolves_dependency_usage: false,
+        });
+        let file = |path: &str| crate::graph::FileNode {
+            path: crate::adapter::ProjectPath(SmolStr::new(path)),
+            content_hash: [0; 32],
+            language: None,
+            class: None,
+            package: crate::vocab::PackageId(0),
+            unit: None,
+            test_spans: vec![],
+            string_call_sites: vec![],
+        };
+        graph.files.push(file("pkg/a.go"));
+        graph.files.push(file("github.com/x/y/pkg/b.go")); // pathological: matches as-is
+        let mut sink = CoverageSink::default();
+        for key in [
+            "github.com/x/y/pkg/a.go",     // unmatched, unique target -> moves
+            "github.com/x/y/pkg/b.go",     // matches the graph verbatim -> stays
+            "github.com/other/z/pkg/c.go", // no mapping applies -> stays
+        ] {
+            sink.add_line(crate::adapter::ProjectPath(SmolStr::new(key)), 1, 1);
+        }
+        let mut map = sink.into_map();
+        rebase_by_packages(&mut map, &graph);
+        let has = |path: &str| {
+            map.function_coverage(
+                &crate::adapter::ProjectPath(SmolStr::new(path)),
+                crate::adapter::Span {
+                    start: (1, 1),
+                    end: (5, 1),
+                },
+            )
+            .is_some()
+        };
+        assert!(
+            has("pkg/a.go"),
+            "module-qualified key lands on the graph file"
+        );
+        assert!(
+            has("github.com/x/y/pkg/b.go"),
+            "a key already matching a graph file is never rewritten"
+        );
+        assert!(
+            has("github.com/other/z/pkg/c.go"),
+            "unmapped keys stay verbatim"
+        );
+    }
+
+    #[test]
+    fn configured_report_glob_replaces_well_known_paths_and_finds_monorepo_reports() {
+        let dir = std::env::temp_dir().join("kndo-engine-test-cov-glob");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("a.mock"), "decl covered\n").unwrap();
+        // Reports are normally gitignored — glob expansion must not depend on discovery.
+        std::fs::write(dir.join(".gitignore"), "coverage/\n").unwrap();
+        for package in ["a", "b"] {
+            let cov = dir.join("packages").join(package).join("coverage");
+            std::fs::create_dir_all(&cov).unwrap();
+            std::fs::write(cov.join("lcov.info"), "a.mock 1 1\n").unwrap();
+        }
+        // A stale report at the well-known path: replace semantics means it is never
+        // visited — no freshness warning about it may appear.
+        std::fs::write(dir.join("lcov.info"), "a.mock 1 1\n").unwrap();
+        backdate(&dir.join("lcov.info"), 30);
+        std::fs::write(
+            dir.join("kndo.toml"),
+            "[plugins.coverage-mock]\nreport = \"packages/*/coverage/lcov.info\"\n",
+        )
+        .unwrap();
+        let mut engine = Engine::open_with_plugins(
+            &dir,
+            ConfigOverrides::default(),
+            vec![Box::new(CacheMockAdapter)],
+            vec![Box::new(MockCoverageIngester)],
+        )
+        .unwrap();
+        let result = engine.check(CheckRequest {
+            mode: RunMode::Full,
+        });
+        assert!(
+            !result
+                .diagnostics
+                .iter()
+                .any(|d| d.message.starts_with("crap: no coverage ingested")),
+            "the glob-configured monorepo reports must be ingested: {:?}",
+            result.diagnostics
+        );
+        assert!(
+            !result
+                .diagnostics
+                .iter()
+                .any(|d| d.message.contains("ignored")),
+            "the stale well-known report is replaced, not visited: {:?}",
+            result.diagnostics
+        );
+    }
+
+    #[test]
+    fn max_age_gates_by_default_and_is_overridable_per_plugin() {
+        let stale_days = 10;
+        let fixture = |name: &str, config: &str| {
+            let dir = std::env::temp_dir().join(format!("kndo-engine-test-maxage-{name}"));
+            let _ = std::fs::remove_dir_all(&dir);
+            std::fs::create_dir_all(&dir).unwrap();
+            std::fs::write(dir.join("a.mock"), "decl covered\n").unwrap();
+            std::fs::write(dir.join("lcov.info"), "a.mock 1 1\n").unwrap();
+            backdate(&dir.join("lcov.info"), stale_days);
+            if !config.is_empty() {
+                std::fs::write(dir.join("kndo.toml"), config).unwrap();
+            }
+            let mut engine = Engine::open_with_plugins(
+                &dir,
+                ConfigOverrides::default(),
+                vec![Box::new(CacheMockAdapter)],
+                vec![Box::new(MockCoverageIngester)],
+            )
+            .unwrap();
+            engine.check(CheckRequest {
+                mode: RunMode::Full,
+            })
+        };
+        let default = fixture("default", "");
+        assert!(
+            default
+                .diagnostics
+                .iter()
+                .any(|d| d.message.contains("ignored: 10 days old")),
+            "{:?}",
+            default.diagnostics
+        );
+        let widened = fixture("widened", "[plugins.coverage-mock]\nmax-age = \"30d\"\n");
+        assert!(
+            !widened
+                .diagnostics
+                .iter()
+                .any(|d| d.message.contains("ignored")),
+            "{:?}",
+            widened.diagnostics
+        );
+        assert!(
+            !widened
+                .diagnostics
+                .iter()
+                .any(|d| d.message.starts_with("crap: no coverage ingested")),
+            "a widened max-age ingests the stale-by-default report: {:?}",
+            widened.diagnostics
+        );
     }
 }

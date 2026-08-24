@@ -7,8 +7,9 @@
 //!
 //! What is live: `[analysis]` (`skip`, `min-confidence`), `[analysis.crap]` (`threshold`),
 //! `[analysis.duplicate]` (`min-tokens`), `[performance]` (`threads`), `[[rule]]`
-//! (path-scoped `skip`), and `[plugins.gate]` (parsed by `plugin_gate`, carried here so the
-//! file is read exactly once).
+//! (path-scoped `skip`), `[plugins.gate]` (parsed by `plugin_gate`, carried here so the
+//! file is read exactly once), and `[plugins.<id>]` (`report`, `max-age` — per-plugin
+//! coverage-report location and freshness, RFC 0003's "Explicit config").
 //!
 //! Config suppression runs *after* inline pragmas ([`crate::suppression::apply`]) — pragma
 //! staleness is judged against the complete pre-suppression finding set, so a pragma
@@ -51,6 +52,20 @@ pub struct PathRule {
     pub skip: Vec<SkipSpec>,
 }
 
+/// One `[plugins.<id>]` options table (RFC 0003 §"Explicit config"). Today's live keys are
+/// the coverage-ingestion pair; other plugins' options (`[plugins.nextjs] app-dir`) keep
+/// parsing as unknown keys until their subsystems exist — same posture as the module doc.
+#[derive(Debug, Default, Clone)]
+pub struct PluginOptions {
+    /// `report` — glob pattern(s) naming the plugin's report file(s). REPLACES the
+    /// descriptor's well-known list (explicit config wins, like every other knob); a user
+    /// who wants both simply lists both. String or array of strings.
+    pub report: Vec<String>,
+    /// `max-age` — per-plugin freshness override for the report ("7d", "24h", or a bare
+    /// integer meaning days). `None` means the engine's built-in default.
+    pub max_age: Option<std::time::Duration>,
+}
+
 #[derive(Debug, Default)]
 pub struct KndoConfig {
     /// `[performance] threads` — `None` when unset or `0` (both mean "physical cores").
@@ -73,6 +88,9 @@ pub struct KndoConfig {
     /// `[plugins.gate]` — owned by [`crate::plugin_gate`]; carried here so `kndo.toml` is
     /// parsed exactly once.
     pub(crate) plugins_gate: crate::plugin_gate::PluginsGate,
+    /// `[plugins.<id>]` — per-plugin option tables, keyed by the raw TOML key; resolved
+    /// against descriptor ids by [`KndoConfig::plugin_options_for`].
+    pub plugin_options: Vec<(String, PluginOptions)>,
 }
 
 /// The extraction-side fingerprint floor (every adapter's `MIN_CLONE_TOKENS`): functions
@@ -217,7 +235,45 @@ impl KndoConfig {
         config.plugins_gate = gate;
         problems.extend(gate_problems);
 
+        if let Some(plugins) = table.get("plugins").and_then(|p| p.as_table()) {
+            for (key, value) in plugins {
+                // `gate` is the tier policy, owned by `plugin_gate` above — everything
+                // else under `[plugins]` is a per-plugin options table.
+                if key == "gate" {
+                    continue;
+                }
+                let Some(options) = value.as_table() else {
+                    problems.push(format!(
+                        "kndo.toml [plugins.{key}]: expected a table — ignored"
+                    ));
+                    continue;
+                };
+                let mut parsed = PluginOptions::default();
+                if let Some(report) = options.get("report") {
+                    parsed.report = parse_report_list(report, key, &mut problems);
+                }
+                if let Some(raw) = options.get("max-age") {
+                    parsed.max_age = parse_max_age(raw, key, &mut problems);
+                }
+                // Unknown keys inside the table stay silent (forward compatibility —
+                // `[plugins.nextjs] app-dir` must keep parsing as inert), and a table
+                // with no live keys is simply carried empty.
+                config.plugin_options.push((key.clone(), parsed));
+            }
+        }
+
         (config, problems)
+    }
+
+    /// The `[plugins.<id>]` table for a descriptor id, if any. A bare key names a built-in
+    /// without its reserved namespace (RFC 0003's promised spelling: `[plugins.coverage-lcov]`
+    /// for `kndo:coverage-lcov`); a quoted key matches an id verbatim (external coordinates
+    /// contain `/` and need quoting anyway).
+    pub fn plugin_options_for(&self, id: &str) -> Option<&PluginOptions> {
+        self.plugin_options
+            .iter()
+            .find(|(key, _)| *key == id || id.strip_prefix("kndo:") == Some(key.as_str()))
+            .map(|(_, options)| options)
     }
 
     /// Applies `[analysis].skip` and every matching `[[rule]]` to the post-pragma finding
@@ -253,6 +309,66 @@ impl KndoConfig {
             .collect();
         (kept, config_suppressed)
     }
+}
+
+/// `report`: a glob string or array of glob strings, validated at parse time (mirrors
+/// `[[rule]] paths`): invalid entries are problems and dropped; an empty result means
+/// "unset" (the descriptor's well-known list applies).
+fn parse_report_list(value: &toml::Value, key: &str, problems: &mut Vec<String>) -> Vec<String> {
+    let raws: Vec<&toml::Value> = match value {
+        toml::Value::Array(items) => items.iter().collect(),
+        single => vec![single],
+    };
+    let mut patterns = Vec::new();
+    for raw in raws {
+        match raw.as_str() {
+            Some(text) => match glob::Pattern::new(text) {
+                Ok(_) => patterns.push(text.to_string()),
+                Err(e) => problems.push(format!(
+                    "kndo.toml [plugins.{key}] report entry {raw}: invalid glob ({e}) — \
+                     entry ignored"
+                )),
+            },
+            None => problems.push(format!(
+                "kndo.toml [plugins.{key}] report entry {raw}: expected a string — \
+                 entry ignored"
+            )),
+        }
+    }
+    patterns
+}
+
+/// `max-age`: `"<N>d"`, `"<N>h"`, or a bare integer meaning days. Zero or unparseable →
+/// problem + `None` (the built-in default applies) — problems, never failures.
+fn parse_max_age(
+    value: &toml::Value,
+    key: &str,
+    problems: &mut Vec<String>,
+) -> Option<std::time::Duration> {
+    let seconds = match value {
+        toml::Value::Integer(days) if *days > 0 => Some(*days as u64 * 86_400),
+        toml::Value::String(text) => {
+            let (number, unit_seconds) = match text.strip_suffix('d') {
+                Some(n) => (n, 86_400),
+                None => match text.strip_suffix('h') {
+                    Some(n) => (n, 3_600),
+                    None => (text.as_str(), 0),
+                },
+            };
+            match number.trim().parse::<u64>() {
+                Ok(n) if n > 0 && unit_seconds > 0 => Some(n * unit_seconds),
+                _ => None,
+            }
+        }
+        _ => None,
+    };
+    if seconds.is_none() {
+        problems.push(format!(
+            "kndo.toml [plugins.{key}] max-age = {value}: expected \"<N>d\", \"<N>h\" or a \
+             positive integer (days) — ignored"
+        ));
+    }
+    seconds.map(std::time::Duration::from_secs)
 }
 
 fn parse_skip_list(
@@ -451,6 +567,55 @@ mod tests {
         let (config, problems) = parsed("[plugins.gate]\n\"github.com/a/p\" = \"warning\"\n");
         assert!(problems.is_empty());
         assert!(config.plugins_gate.resolve("github.com/a/p", "r").is_some());
+    }
+
+    #[test]
+    fn plugin_options_parse_the_rfc_0003_example_verbatim() {
+        let (config, problems) =
+            parsed("[plugins.coverage-lcov]\nreport = \"coverage/lcov.info\"\nmax-age = \"7d\"\n");
+        assert!(problems.is_empty(), "{problems:?}");
+        let opts = config.plugin_options_for("kndo:coverage-lcov").unwrap();
+        assert_eq!(opts.report, vec!["coverage/lcov.info".to_string()]);
+        assert_eq!(
+            opts.max_age,
+            Some(std::time::Duration::from_secs(7 * 86_400))
+        );
+        // The bare key names the built-in; a quoted full id also matches verbatim.
+        let (config, _) = parsed("[plugins.\"kndo:coverage-lcov\"]\nmax-age = 3\n");
+        assert!(config.plugin_options_for("kndo:coverage-lcov").is_some());
+    }
+
+    #[test]
+    fn plugin_options_report_accepts_an_array_and_max_age_hours_and_days() {
+        let (config, problems) = parsed(
+            "[plugins.coverage-lcov]\nreport = [\"packages/*/coverage/lcov.info\", \"lcov.info\"]\n\
+             [plugins.coverage-go]\nmax-age = \"36h\"\n",
+        );
+        assert!(problems.is_empty(), "{problems:?}");
+        let lcov = config.plugin_options_for("kndo:coverage-lcov").unwrap();
+        assert_eq!(lcov.report.len(), 2);
+        let go = config.plugin_options_for("kndo:coverage-go").unwrap();
+        assert_eq!(go.max_age, Some(std::time::Duration::from_secs(36 * 3_600)));
+    }
+
+    #[test]
+    fn plugin_options_problems_never_failures() {
+        let (config, problems) =
+            parsed("[plugins.coverage-lcov]\nreport = [\"src/[\", 5]\nmax-age = \"soon\"\n");
+        // Both report entries dropped, max-age ignored — three problems, nothing fatal.
+        assert_eq!(problems.len(), 3, "{problems:?}");
+        let opts = config.plugin_options_for("kndo:coverage-lcov").unwrap();
+        assert!(opts.report.is_empty());
+        assert!(opts.max_age.is_none());
+    }
+
+    #[test]
+    fn other_plugins_option_tables_stay_inert_and_unmatched_ids_are_none() {
+        let (config, problems) = parsed("[plugins.nextjs]\napp-dir = \"app\"\n");
+        assert!(problems.is_empty(), "{problems:?}");
+        let opts = config.plugin_options_for("kndo:nextjs").unwrap();
+        assert!(opts.report.is_empty() && opts.max_age.is_none());
+        assert!(config.plugin_options_for("kndo:coverage-lcov").is_none());
     }
 
     #[test]

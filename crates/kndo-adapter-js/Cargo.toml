@@ -14,3 +14,7 @@ kndo-adapter-toolkit = { path = "../kndo-adapter-toolkit" }
 smol_str = { workspace = true }
 tree-sitter = { workspace = true }
 serde_json = { workspace = true }
+
+[dev-dependencies]
+# The conformance crap fixture ships an lcov report; the ingester is composition, not core.
+kndo-plugin-coverage = { path = "../kndo-plugin-coverage" }

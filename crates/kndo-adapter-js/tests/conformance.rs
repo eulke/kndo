@@ -6,7 +6,8 @@ use std::path::Path;
 
 use kndo_adapter_js::JsTsAdapter;
 use kndo_core::adapter::LanguageAdapter;
-use kndo_core::conformance::{discover_fixtures, run_fixture};
+use kndo_core::conformance::{discover_fixtures, run_fixture_with};
+use kndo_core::plugin::Plugin;
 
 #[test]
 fn js_ts_conformance_fixtures() {
@@ -21,8 +22,11 @@ fn js_ts_conformance_fixtures() {
     let mut failures = Vec::new();
     for fixture in &fixtures {
         let adapters: Vec<Box<dyn LanguageAdapter>> = vec![Box::new(JsTsAdapter)];
+        // The lcov ingester rides along the way the product composes it — the crap
+        // fixture ships a coverage/lcov.info its expectations depend on.
+        let plugins: Vec<Box<dyn Plugin>> = vec![Box::new(kndo_plugin_coverage::LcovPlugin)];
         let name = fixture.file_name().unwrap().to_string_lossy().to_string();
-        match run_fixture(fixture, adapters) {
+        match run_fixture_with(fixture, adapters, plugins) {
             Ok(Ok(())) => {}
             Ok(Err(mismatch)) => failures.push(format!("{name}:\n{mismatch}")),
             Err(err) => failures.push(format!("{name}: {err}")),

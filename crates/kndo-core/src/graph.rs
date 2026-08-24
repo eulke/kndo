@@ -3274,7 +3274,7 @@ pub fn assemble_from_source(
     //   identical set its decisions are identical too.
     //
     // `sorted_plugins` is already filtered to `mutates_graph()` plugins, not the raw registry —
-    // a coverage-only plugin like `LcovPlugin` costs neither fast path anything.
+    // a coverage-only plugin (the lcov ingester, say) costs neither fast path anything.
     if let Some(cache) = cache {
         if let Some((graph, graph_diagnostics)) = cache.get_graph(&graph_key) {
             tick("snapshot-load", &mut phase_start);
@@ -6449,17 +6449,34 @@ mod tests {
     #[test]
     fn a_coverage_only_plugin_keeps_the_snapshot_fast_path() {
         // Regression guard for a real shipped bug: the cache/patch bypass was keyed on
-        // `plugins.is_empty()`, and `LcovPlugin` is registered unconditionally by
+        // `plugins.is_empty()`, and the lcov ingester is registered unconditionally by
         // `default_plugins()` — so the graph-snapshot cache and the incremental patch were
         // silently dead on every real `kndo` run from the day the graph hooks were wired.
         // A plugin with `mutates_graph() == false` must be invisible to both fast paths.
+        // (A local double stands in for the coverage ingesters, which live in their own
+        // plugin crate now — core depends on none of them.)
+        struct CoverageOnlyPlugin;
+        impl crate::plugin::Plugin for CoverageOnlyPlugin {
+            fn descriptor(&self) -> crate::plugin::PluginDescriptor {
+                crate::plugin::PluginDescriptor {
+                    id: smol_str::SmolStr::new("kndo:coverage-test"),
+                    version: smol_str::SmolStr::new("1"),
+                    detection: vec![],
+                    requested_file_access: vec![],
+                    activation: vec![],
+                    dependencies: vec![],
+                }
+            }
+            fn mutates_graph(&self) -> bool {
+                false
+            }
+        }
         let name = "coverage-plugin-keeps-cache";
         let dir = project(name, &[("a.mock", "decl x\nref y"), ("b.mock", "decl y")]);
         let cache_dir = std::env::temp_dir().join(format!("kndo-graph-test-{name}-cache"));
         let _ = fs::remove_dir_all(&cache_dir);
         let cache = crate::cache::ProjectCache::open(&cache_dir);
-        let plugins: Vec<Box<dyn crate::plugin::Plugin>> =
-            vec![Box::new(crate::plugin::LcovPlugin)];
+        let plugins: Vec<Box<dyn crate::plugin::Plugin>> = vec![Box::new(CoverageOnlyPlugin)];
         assemble_with_cache(&dir, &mock_adapters(), &plugins, Some(&cache)).unwrap();
         let (warm, _) =
             assemble_with_cache(&dir, &mock_adapters(), &plugins, Some(&cache)).unwrap();

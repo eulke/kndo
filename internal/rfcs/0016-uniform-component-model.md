@@ -14,7 +14,8 @@ With RFC 0015 fully landed, the extension story has two visible seams:
    content*: express's `package.json` `main`/`scripts` parsing (its spec names host-mediated
    content access as "the right long-term fix"), nextjs's `pageExtensions`, route-string →
    page edges, `res.render` → template edges. The capability exists in the descriptor
-   (`requested_file_access`, RFC 0003 §2) but is plumbed for `ingest_coverage` only.
+   (`requested_file_access`, RFC 0003 §2) but is plumbed for `ingest_coverage` (native and,
+   via the `coverage-ingester` world, WASM) only.
 2. **Asymmetry gap.** Plugins now have coordinate identity, activation rules, dependencies, a
    global tier, and an installer. `LanguageAdapter`s have none of those — a stated gap in RFC
    0003 §4. An external adapter works only hand-dropped per-project; it cannot be installed,

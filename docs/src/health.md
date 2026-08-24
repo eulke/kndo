@@ -82,25 +82,44 @@ so the two views always agree. It appears when more than one package owns claime
 ## Coverage ingestion
 
 Coverage is **ingested, never measured**: kndo never runs your tests, it reads the reports
-your test runner already produces. The built-in lcov plugin (`kndo:coverage-lcov`) activates
-when a report exists at a well-known path:
+your test runner already produces. Four report formats ship built-in (the
+`kndo-plugin-coverage` ingesters), each reading a report found at its format's well-known
+paths:
 
-```text
-coverage/lcov.info
-lcov.info
+| plugin | well-known paths | emitted by |
+|---|---|---|
+| `kndo:coverage-lcov` | `coverage/lcov.info`, `lcov.info` | jest/vitest/nyc, `cargo llvm-cov --lcov`, gcov |
+| `kndo:coverage-cobertura` | `coverage.xml`, `cobertura.xml`, `coverage/cobertura-coverage.xml` | coverage.py, .NET tools, nyc's cobertura reporter |
+| `kndo:coverage-jacoco` | `build/reports/jacoco/test/jacocoTestReport.xml`, `target/site/jacoco/jacoco.xml`, `jacoco.xml` | Gradle/Maven JaCoCo |
+| `kndo:coverage-go` | `coverage.out`, `cover.out` | `go test -coverprofile` |
+
+A report somewhere else — a custom output dir, or one report per package in a monorepo —
+is a config line away (globs allowed, and explicit `report` *replaces* the well-known list):
+
+```toml
+[plugins.coverage-lcov]
+report = "packages/*/coverage/lcov.info"
 ```
 
-and feeds per-file, line-granular hit counts into the analysis. Rules:
+Formats kndo doesn't ship can be ingested by an external WASM plugin (the
+`coverage-ingester` world — see [plugin authoring](plugin-authoring.md)). Every ingester
+feeds per-file, line-granular hit counts into the same analysis. Rules:
 
-- **Freshness**: a report modified more than **7 days** ago is ignored, with a diagnostic
-  telling you to regenerate it — stale certainty is worse than honest absence. The report's
-  provenance and age are echoed in the health output
+- **Freshness**: a report modified more than **7 days** ago (override per plugin:
+  `[plugins.coverage-lcov] max-age = "30d"`, `"12h"` works too) is ignored, with a
+  diagnostic telling you to regenerate it — stale certainty is worse than honest absence.
+  The report's provenance and age are echoed in the health output
   (`coverage coverage-lcov coverage/lcov.info (2d old)`).
 - **Accumulation**: multiple records for one line (across test suites) accumulate — a line
   any suite ran is covered.
-- Only the essential lcov records are read (`SF:` file sections and `DA:` line hits);
+- Only each format's essential records are read (lcov's `SF:`/`DA:`, Cobertura's
+  `class`/`line`, JaCoCo's `package`/`sourcefile`/`line`, coverprofile's block lines);
   function/branch records are ignored because kndo maps lines to functions itself, via each
   function's own span.
+- **Path honesty**: report paths that don't name a file kndo's graph knows simply match
+  nothing — never a guessed attribution. Absolute paths are rebased onto the project root,
+  and module-qualified paths (Go's `github.com/x/y/pkg/file.go`) are rebased through the
+  graph's package table, only when exactly one package mapping produces a real file.
 
 ## From lines to functions: cov(m)
 
@@ -125,7 +144,8 @@ carries the **crapload**: the sum of scores above the threshold, a magnitude ("h
 risky, untested complexity is there") that the per-function count alone doesn't convey.
 
 The practical playbook for a low score dominated by `crap`: wire your test runner to emit
-lcov (`--coverage --coverageReporters=lcov`, `cargo llvm-cov --lcov`,
-`go test -coverprofile` converted to lcov, …), drop the file at `coverage/lcov.info`, and
-re-run — functions your tests already execute stop counting against you, and what remains is
-the real risk list.
+any of the ingested formats (`--coverage --coverageReporters=lcov`,
+`cargo llvm-cov --lcov`, `coverage xml`, `go test -coverprofile=coverage.out`,
+`gradle jacocoTestReport`, …), leave the report at its tool's default path (or point
+`[plugins.<id>] report` at it), and re-run — functions your tests already execute stop
+counting against you, and what remains is the real risk list.

@@ -79,7 +79,13 @@ pub fn default_plugins() -> Vec<Box<dyn Plugin>> {
     #[allow(clippy::vec_init_then_push)]
     {
         let mut plugins: Vec<Box<dyn Plugin>> = Vec::new();
-        plugins.push(Box::new(kndo_core::plugin::LcovPlugin));
+        #[cfg(feature = "plugin-coverage")]
+        {
+            plugins.push(Box::new(kndo_plugin_coverage::LcovPlugin));
+            plugins.push(Box::new(kndo_plugin_coverage::CoberturaPlugin));
+            plugins.push(Box::new(kndo_plugin_coverage::JacocoPlugin));
+            plugins.push(Box::new(kndo_plugin_coverage::GoCoverPlugin));
+        }
         #[cfg(feature = "plugin-nextjs")]
         plugins.push(Box::new(kndo_plugin_nextjs::NextjsPlugin));
         #[cfg(feature = "plugin-express")]
@@ -195,8 +201,8 @@ fn compose_plugins(root: &Path) -> (Vec<Box<dyn Plugin>>, PluginResolution) {
         // Minimal embedder build: no rule evaluation (the activation module's glob/manifest
         // machinery is feature-gated with it) — built-ins are unconditional. Safe only
         // because every gated built-in's feature (`plugin-nextjs`/`plugin-express`) implies
-        // `plugin-activation`, so the sole built-in that can appear here is the lcov
-        // ingester (always-on by contract, and it declares `mutates_graph() == false`).
+        // `plugin-activation`, so the only built-ins that can appear here are the coverage
+        // ingesters (always-on by contract, and they declare `mutates_graph() == false`).
         let plugins = default_plugins();
         let resolution = PluginResolution {
             plugins: plugins
@@ -257,10 +263,21 @@ fn collect_candidates(root: &Path) -> Vec<(Box<dyn Plugin>, PluginSource)> {
 
 #[cfg(feature = "external-adapters")]
 fn load_wasm_plugins(dir: &Path, source: PluginSource) -> Vec<(Box<dyn Plugin>, PluginSource)> {
+    // Two plugin-shaped worlds share the directory (graph-hook plugins and coverage
+    // ingesters); wasmtime's component type-checking sorts a mixed dir — each loader only
+    // accepts its own world's export set, so order matters only for error reporting.
     wasm_components(dir)
         .into_iter()
-        .filter_map(|path| kndo_plugin_api::WasmPlugin::load(&path).ok())
-        .map(|plugin| (Box::new(plugin) as Box<dyn Plugin>, source))
+        .filter_map(|path| {
+            kndo_plugin_api::WasmPlugin::load(&path)
+                .map(|plugin| Box::new(plugin) as Box<dyn Plugin>)
+                .or_else(|_| {
+                    kndo_plugin_api::WasmCoverageIngester::load(&path)
+                        .map(|ingester| Box::new(ingester) as Box<dyn Plugin>)
+                })
+                .ok()
+        })
+        .map(|plugin| (plugin, source))
         .collect()
 }
 
@@ -1018,6 +1035,64 @@ mod tests {
     #[test]
     fn default_build_registers_at_least_one_language() {
         assert!(!default_adapters().is_empty());
+    }
+
+    #[test]
+    fn coverage_ingesters_compose_always_on_even_without_reports() {
+        // A report-less project: FileExists gates would deactivate the ingesters here,
+        // which is exactly wrong once kndo.toml can point `report` anywhere — always-on
+        // (empty activation) is the contract.
+        let dir = std::env::temp_dir().join("kndo-dist-test-cov-alwayson");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let (_plugins, resolution) = compose_plugins(&dir);
+        let ingesters: Vec<_> = resolution
+            .plugins
+            .iter()
+            .filter(|p| p.id.starts_with("kndo:coverage-"))
+            .collect();
+        assert_eq!(ingesters.len(), 4, "{:?}", resolution.plugins);
+        for ingester in ingesters {
+            assert_eq!(
+                ingester.active,
+                Some(ActivationReason::BuiltinAlwaysOn),
+                "{} must be always-on",
+                ingester.id
+            );
+            assert!(ingester.activation.is_empty());
+        }
+    }
+
+    #[test]
+    fn go_coverprofile_ingests_end_to_end_with_module_qualified_paths() {
+        let dir = std::env::temp_dir().join("kndo-dist-test-go-cov");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("go.mod"), "module github.com/x/y\n\ngo 1.22\n").unwrap();
+        std::fs::write(
+            dir.join("main.go"),
+            "package main\n\nfunc main() {\n\tprintln(1)\n}\n",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("coverage.out"),
+            "mode: set\ngithub.com/x/y/main.go:3.1,5.2 2 1\n",
+        )
+        .unwrap();
+        let mut engine = open(&dir, ConfigOverrides::default()).unwrap();
+        let result = engine.check(CheckRequest {
+            mode: RunMode::Full,
+        });
+        // The built-in Go ingester found the well-known coverage.out and the package-guided
+        // rebase landed its module-qualified keys — crap runs instead of skipping.
+        assert!(
+            !result
+                .diagnostics
+                .iter()
+                .any(|d| d.message.starts_with("crap: no coverage ingested")),
+            "{:?}",
+            result.diagnostics
+        );
     }
 
     #[test]

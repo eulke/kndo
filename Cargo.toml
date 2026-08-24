@@ -17,12 +17,14 @@ members = [
     "crates/kndo-plugin-nextjs",
     "crates/kndo-plugin-express",
     "crates/kndo-plugin-serde",
+    "crates/kndo-plugin-coverage",
     "xtask",
 ]
 exclude = [
     "spikes/perf",
     "examples/kndo-plugin-demo",
     "examples/kndo-plugin-hooks-demo",
+    "examples/kndo-coverage-demo",
     "examples/kndo-adapter-wrapper-demo",
 ]
 

@@ -151,6 +151,22 @@ so `internal-only`/`private-type-leak` skip its files (skipped, never guessed); 
 arrives as UTF-8 text. A wrapper adapter (a superset language like a single-file-component
 format) can declare its base language's adapter in `dependencies` to co-activate it.
 
+## Writing a coverage ingester
+
+Coverage-report formats kndo doesn't ship built-in load through a third world,
+`coverage-ingester` (print it with `kndo plugin wit`): `descriptor()` plus one export,
+`ingest-coverage(path, content) -> ingested-coverage`. The world is deliberately
+unidirectional — no imports at all: the **host** locates the report (the descriptor's
+`requested-file-access` globs, or the user's `[plugins.<id>] report`), freshness-checks it,
+and pushes the raw bytes in; the guest parses and returns line facts (`path`, `line`,
+`hits`), and the host alone writes its sink, records provenance, and rebases paths (project
+root and package-table rebasing apply to every ingester uniformly). Record paths as the
+report states them — normalization beyond separators/`./` is the host's job. A coverage
+component carries no graph hooks (`mutates_graph` is structurally `false`, so the graph
+cache and incremental patch stay fully live) and cannot also be a graph-hooks plugin.
+There's no scaffold variant yet — start from `examples/kndo-coverage-demo`, the reference
+ingester the compliance suite builds and runs.
+
 ## Verify
 
 ```console

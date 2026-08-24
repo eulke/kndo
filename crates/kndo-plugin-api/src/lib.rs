@@ -7,10 +7,12 @@
 //! in adapter — the distribution layer (`kndo` crate) can push a `WasmAdapter` onto the same
 //! `Vec<Box<dyn LanguageAdapter>>` `default_adapters()` returns.
 
+mod coverage_host;
 mod engine;
 mod host;
 mod plugin_host;
 
+pub use coverage_host::WasmCoverageIngester;
 pub use host::{LoadError, WasmAdapter};
 pub use plugin_host::LoadError as WasmPluginLoadError;
 pub use plugin_host::WasmPlugin;

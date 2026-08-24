@@ -45,7 +45,8 @@ configuration.
 
 > **What the engine reads today:** **`[analysis]`** (`skip`, `min-confidence`),
 > **`[analysis.duplicate]`** (`min-tokens`), **`[analysis.crap]`** (`threshold`),
-> **`[performance]`** (`threads`), **`[[rule]]`**, and **`[plugins.gate]`** are all live.
+> **`[performance]`** (`threads`), **`[[rule]]`**, **`[plugins.gate]`**, and
+> **`[plugins.<id>]`** (`report`, `max-age`) are all live.
 > Still documented-but-unwired: **`[project]`** (discovery is gitignore-aware
 > automatically; scoping it from config doesn't exist yet) and the **`[delta]`** budget
 > gate — kndo prefers an honestly inert commented section over half-applied
@@ -124,6 +125,26 @@ build. `[plugins.gate]` is the opt-in:
   severity, never raise it.
 - A malformed `kndo.toml`, or a malformed gate value, is reported as a diagnostic and the
   gate entry is ignored — never a crashed run.
+
+### `[plugins.<id>]`
+
+Per-plugin options. Live today for the coverage ingesters (a bare key names a built-in
+without its `kndo:` prefix; quoted full ids also work):
+
+```toml
+[plugins.coverage-lcov]
+report = "packages/*/coverage/lcov.info"  # string or array; globs allowed
+max-age = "30d"                           # or "12h", or a bare integer (days)
+```
+
+- **`report`** — where this plugin's report(s) live. **Replaces** the descriptor's
+  well-known paths (explicit config wins; list the well-known one too if you want both).
+  Globs cover monorepos with one report per package. Invalid globs are diagnostics, not
+  crashes.
+- **`max-age`** — per-plugin freshness override for the 7-day default; an older report is
+  ignored with a diagnostic.
+- Other plugins' option tables (`[plugins.nextjs] app-dir = …`) parse as inert until their
+  subsystems exist — same posture as every documented-but-unwired section.
 
 ## What is *not* configuration
 

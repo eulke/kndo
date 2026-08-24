@@ -141,6 +141,13 @@ report = "coverage/lcov.info"
 max-age = "7d"            # stale reports are ignored (with a diagnostic), not trusted
 ```
 
+The coverage pair above is live: `report` (string or array, globs allowed) *replaces* the
+descriptor's well-known list, and `max-age` (`"7d"`/`"24h"`/integer days) overrides the
+freshness default per plugin — bare keys name built-ins without the `kndo:` prefix, quoted
+keys match full ids. `enabled`/plugin-specific options (`app-dir`) remain future work and
+parse as inert. `ingest_coverage` is also WASM-bridged now, via the `coverage-ingester`
+world (a third sibling world; see `plugin.wit`).
+
 ## 5. Determinism & trust
 
 - Plugin execution order is deterministic (topological by declared ordering constraints, then

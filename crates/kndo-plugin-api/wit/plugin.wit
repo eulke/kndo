@@ -1,6 +1,7 @@
 // kndo-plugin-api v1 — the external-PLUGIN WASM ABI. Bridges the
 // four graph-mutation `Plugin` hooks (`classify_file`, `contribute_roots`, `contribute_edges`,
-// `annotate_symbols`) — `ingest_coverage`/`suppress` are out of v1 scope, same posture as
+// `annotate_symbols`) in `world plugin`, findings in `world plugin-findings`, and coverage
+// ingestion in `world coverage-ingester` — `suppress` stays out of scope, same posture as
 // `adapter.wit` cutting `resolve()`/manifests: not demanded, don't build it speculatively.
 //
 // Versioned independently from `kndo:adapter` —
@@ -205,6 +206,25 @@ interface types {
     /// lower-kebab and becomes the suffix of the host-assembled category
     /// `plugin:<coordinate>/<rule>`; findings emitted under an undeclared rule are dropped
     /// with a diagnostic.
+    /// One instrumented line as the report states it — the WASM analogue of one
+    /// `CoverageSink::add_line` call. Paths are the report's own, normalized as far as the
+    /// guest can know (separators, `./`); the host applies root and package rebasing
+    /// afterwards, uniformly for every ingester.
+    record coverage-line {
+        path: string,
+        line: u32,
+        hits: u64,
+    }
+
+    /// Everything one `ingest-coverage` call contributes: the sink surface collapsed into
+    /// one boundary crossing (same shape as `contribute-roots` vs `RootSink`). `sources`
+    /// is optional extra provenance detail — the host records its own
+    /// "<id> <path> (<age>d old)" line either way.
+    record ingested-coverage {
+        lines: list<coverage-line>,
+        sources: list<string>,
+    }
+
     record rule-descriptor {
         name: string,
         description: string,
@@ -315,4 +335,29 @@ world plugin-findings {
     /// Emit findings for this run — called by the post-assembly finding round, over the same
     /// host-import read surface as the mutation hooks (rule R1 applies identically).
     export contribute-findings: func() -> list<contributed-finding>;
+}
+
+/// The coverage-ingester world — a third sibling world (same reasoning as
+/// `plugin-findings`: a world's exports are mandatory, so growing `plugin` would break
+/// every pinned v1 component; the compat matrix guards exactly that). Deliberately
+/// UNIDIRECTIONAL — no imports: the host locates the report by the descriptor's
+/// `requested-file-access` globs (or `[plugins.<id>] report` config), freshness-checks it,
+/// and pushes the bytes in; the guest returns facts and the host alone writes the sink,
+/// records provenance, and rebases paths. A component targets exactly one world, so a
+/// coverage ingester carries no graph hooks — mirroring the native built-ins
+/// (`kndo-plugin-coverage`), whose `mutates_graph() == false` posture the host applies to
+/// this world structurally, keeping both graph fast paths alive. (`kndo plugin new`
+/// scaffolds the two graph worlds only for now — authoring a coverage ingester starts from
+/// `examples/kndo-coverage-demo`; a scaffold variant is deliberate follow-up, not scope
+/// creep here.)
+world coverage-ingester {
+    use types.{plugin-descriptor, activation-rule, coverage-line, ingested-coverage};
+
+    /// Called once at load time; the host caches the result.
+    export descriptor: func() -> plugin-descriptor;
+
+    /// See `kndo_core::plugin::Plugin::ingest_coverage`. `path` is the project-relative
+    /// report location (context for formats whose keys depend on where the report lives —
+    /// JaCoCo's module derivation); `content` is the raw report bytes.
+    export ingest-coverage: func(path: string, content: list<u8>) -> ingested-coverage;
 }

@@ -20,6 +20,7 @@ kndo-adapter-css = { path = "../kndo-adapter-css", optional = true }
 kndo-plugin-api = { path = "../kndo-plugin-api", optional = true }
 kndo-plugin-nextjs = { path = "../kndo-plugin-nextjs", optional = true }
 kndo-plugin-express = { path = "../kndo-plugin-express", optional = true }
+kndo-plugin-coverage = { path = "../kndo-plugin-coverage", optional = true }
 kndo-plugin-serde = { path = "../kndo-plugin-serde", optional = true }
 # Plugin activation-rule evaluation: manifest-dependency and file-glob checks
 # against the project root. Behind `plugin-activation` — needed by the WASM tier's global
@@ -64,6 +65,7 @@ default = [
     "plugin-nextjs",
     "plugin-express",
     "plugin-serde",
+    "plugin-coverage",
     "plugin-install",
 ]
 js = ["dep:kndo-adapter-js"]
@@ -86,6 +88,11 @@ external-adapters = ["dep:kndo-plugin-api", "dep:dirs", "dep:wit-component", "pl
 plugin-nextjs = ["dep:kndo-plugin-nextjs", "plugin-activation"]
 plugin-express = ["dep:kndo-plugin-express", "plugin-activation"]
 plugin-serde = ["dep:kndo-plugin-serde", "plugin-activation"]
+# Coverage ingesters are the one built-in family that does NOT imply `plugin-activation`:
+# they are always-on by contract (empty activation — a FileExists gate would deactivate
+# them exactly when kndo.toml points `report` at a non-well-known path), and they declare
+# `mutates_graph() == false`, so always-on costs no fast path.
+plugin-coverage = ["dep:kndo-plugin-coverage"]
 # `kndo plugin install/list/remove`: fetch a coordinate's GitHub release, verify
 # checksum + identity binding, close over dependencies, write the global directory +
 # plugins.lock. Implies `external-adapters` — installing targets the WASM tier's global

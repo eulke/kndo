@@ -725,11 +725,13 @@ pub fn wasm_probe(bytes: &[u8]) -> Result<ProbedDescriptor, String> {
     let path = dir.join("probe.wasm");
     std::fs::write(&path, bytes).map_err(|e| e.to_string())?;
     let result = probe_as_plugin(&path).or_else(|plugin_err| {
-        probe_as_adapter(&path).map_err(|adapter_err| {
-            format!(
-                "not a valid kndo:plugin ({plugin_err}) or kndo:adapter ({adapter_err}) \
-                 component"
-            )
+        probe_as_coverage_ingester(&path).or_else(|coverage_err| {
+            probe_as_adapter(&path).map_err(|adapter_err| {
+                format!(
+                    "not a valid kndo:plugin ({plugin_err}), coverage-ingester \
+                     ({coverage_err}), or kndo:adapter ({adapter_err}) component"
+                )
+            })
         })
     });
     let _ = std::fs::remove_dir_all(&dir);
@@ -740,6 +742,19 @@ fn probe_as_plugin(path: &Path) -> Result<ProbedDescriptor, String> {
     kndo_plugin_api::WasmPlugin::load(path)
         .map(|plugin| {
             let d = kndo_core::plugin::Plugin::descriptor(&plugin);
+            ProbedDescriptor {
+                id: d.id.to_string(),
+                version: d.version.to_string(),
+                dependencies: d.dependencies.iter().map(|s| s.to_string()).collect(),
+            }
+        })
+        .map_err(|e| e.to_string())
+}
+
+fn probe_as_coverage_ingester(path: &Path) -> Result<ProbedDescriptor, String> {
+    kndo_plugin_api::WasmCoverageIngester::load(path)
+        .map(|ingester| {
+            let d = kndo_core::plugin::Plugin::descriptor(&ingester);
             ProbedDescriptor {
                 id: d.id.to_string(),
                 version: d.version.to_string(),

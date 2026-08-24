@@ -17,7 +17,10 @@ the reserved `kndo:` namespace and are gated by the same activation rules.
 
 | Plugin | Activates when | What it does |
 |---|---|---|
-| `kndo:coverage-lcov` | `coverage/lcov.info` or `lcov.info` exists | ingests lcov line coverage for [`crap`](rules.md#crap) and [health](health.md#coverage-ingestion) |
+| `kndo:coverage-lcov` | always on (reads `coverage/lcov.info` / `lcov.info`, or `[plugins.<id>] report`) | ingests lcov line coverage for [`crap`](rules.md#crap) and [health](health.md#coverage-ingestion) |
+| `kndo:coverage-cobertura` | always on (reads `coverage.xml` / `cobertura.xml` / `coverage/cobertura-coverage.xml`) | ingests Cobertura XML line coverage |
+| `kndo:coverage-jacoco` | always on (reads the Gradle/Maven JaCoCo XML report paths) | ingests JaCoCo XML line coverage |
+| `kndo:coverage-go` | always on (reads `coverage.out` / `cover.out`) | ingests Go coverprofile line coverage |
 | `kndo:nextjs` | any manifest in the project declares `next` | roots `pages/**`/`app/**` convention files and their framework-consumed exports; reads `next.config.*` for custom page extensions; marks framework-visible exports externally consumed |
 | `kndo:express` | any manifest declares `express` | roots the conventional server entry files (from `main`/`scripts` and entry-name conventions) that are *launched*, never imported |
 | `kndo:serde` | any `Cargo.toml` declares `serde` | marks hand-written `Serialize`/`Deserialize` impls as implicitly invoked, so a serialized type's impl doesn't read as a test blind spot |
