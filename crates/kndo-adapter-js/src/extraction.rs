@@ -610,17 +610,16 @@ fn collect_requires(node: Node, path: &str, src: &[u8], out: &mut FileFacts) {
     match node.kind() {
         "call_expression" => handle_call_expression(node, path, src, out),
         // `new Function("…")` — dynamic construct: wildcard, file-wide.
-        "new_expression" => {
+        "new_expression"
             if node
                 .child_by_field_name("constructor")
-                .is_some_and(|c| c.kind() == "identifier" && text(c, src) == "Function")
-            {
-                out.dynamics.push(DynamicUse {
-                    span: span(node),
-                    reason: SmolStr::new("new Function"),
-                    narrowed_to: None,
-                });
-            }
+                .is_some_and(|c| c.kind() == "identifier" && text(c, src) == "Function") =>
+        {
+            out.dynamics.push(DynamicUse {
+                span: span(node),
+                reason: SmolStr::new("new Function"),
+                narrowed_to: None,
+            });
         }
         _ => {}
     }

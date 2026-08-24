@@ -136,10 +136,8 @@ fn longest_declared_prefix(s: &str, ctx: &ResolveCtx<'_>) -> Option<String> {
         if ctx.is_declared_dependency(&SmolStr::new(candidate)) {
             return Some(candidate.to_string());
         }
-        match candidate.rfind('/') {
-            Some(i) => candidate = &candidate[..i],
-            None => return None,
-        }
+        let i = candidate.rfind('/')?;
+        candidate = &candidate[..i]
     }
 }
 
