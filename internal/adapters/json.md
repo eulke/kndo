@@ -126,7 +126,7 @@ recording here that it isn't wired to a parser yet (confirmed directly against
 `kndo-core/src/engine.rs`'s own `SuppressedSummary` doc comment: "`config` stays honestly `0`
 — no `kndo.toml` suppression parser exists yet") — a real, immediate consequence of this
 adapter existing: any `.json` file reachable only through a Rust `PathBuf::join("...")`-style
-runtime read (this repo's own `docs/perf-baseline.json`, `schemas/*.json`) now reads `unused`
+runtime read (this repo's own `internal/perf-baseline.json`, `schemas/*.json`) now reads `unused`
 with no way to silence it path-by-path yet. Not this adapter's gap to close, but worth a reader
 knowing it's open rather than assuming §2's parse-diagnostic path is the only rough edge.
 

@@ -2424,7 +2424,7 @@ pub const GRAPH_SCHEMA_VERSION: u32 = 25; // bump whenever the persisted snapsho
 /// so the scheme is unambiguous by construction, not merely collision-resistant by luck of the
 /// input distribution — two different file sets can never fold to the same byte stream before
 /// hashing.
-pub(crate) fn compute_graph_key(
+fn compute_graph_key(
     discovered_files: &[discovery::DiscoveredFile],
     adapters: &[Box<dyn LanguageAdapter>],
     graph_mutating_plugins: &[&dyn crate::plugin::Plugin],
@@ -2839,7 +2839,7 @@ const FINDINGS_PER_RULE_CAP: usize = 500;
 /// assembly on every path — cold build, incremental patch, and warm snapshot hit alike —
 /// because findings are *output*, not graph state: nothing here is persisted, so nothing can
 /// go stale. Zero rule-declaring plugins costs exactly one `rules()` sweep and nothing else.
-pub(crate) fn run_finding_round(
+fn run_finding_round(
     graph: &ProjectGraph,
     discovered: &discovery::DiscoveredTree,
     plugins: &[Box<dyn crate::plugin::Plugin>],

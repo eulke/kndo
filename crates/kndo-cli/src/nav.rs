@@ -138,27 +138,27 @@ fn run_one(verb: Verb, args: &[String]) -> ExitCode {
     exit_code_for_status(result.status())
 }
 
-pub fn find_cmd(args: &[String]) -> ExitCode {
+pub(crate) fn find_cmd(args: &[String]) -> ExitCode {
     run_one(Verb::Find, args)
 }
 
-pub fn describe_cmd(args: &[String]) -> ExitCode {
+pub(crate) fn describe_cmd(args: &[String]) -> ExitCode {
     run_one(Verb::Describe, args)
 }
 
-pub fn uses_cmd(args: &[String]) -> ExitCode {
+pub(crate) fn uses_cmd(args: &[String]) -> ExitCode {
     run_one(Verb::Uses, args)
 }
 
-pub fn used_by_cmd(args: &[String]) -> ExitCode {
+pub(crate) fn used_by_cmd(args: &[String]) -> ExitCode {
     run_one(Verb::UsedBy, args)
 }
 
-pub fn impact_cmd(args: &[String]) -> ExitCode {
+pub(crate) fn impact_cmd(args: &[String]) -> ExitCode {
     run_one(Verb::Impact, args)
 }
 
-pub fn trace_cmd(args: &[String]) -> ExitCode {
+pub(crate) fn trace_cmd(args: &[String]) -> ExitCode {
     run_one(Verb::Trace, args)
 }
 
@@ -240,7 +240,7 @@ impl From<QueryLineFlags> for QueryFlags {
 /// `kndo query`: reads JSON Lines from stdin, revalidates the cache once for the
 /// whole batch, answers in input order as JSON Lines on stdout — `run` on the first line only.
 /// JSON-only by design (no human format — this is the machine/agent transport).
-pub fn query_cmd() -> ExitCode {
+pub(crate) fn query_cmd() -> ExitCode {
     let stdin = std::io::stdin();
     // A human typing `kndo query` at a terminal would just see it hang waiting for stdin
     // — say what the command wants instead.

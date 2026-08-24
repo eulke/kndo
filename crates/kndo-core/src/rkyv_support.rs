@@ -13,7 +13,7 @@ use rkyv::with::{ArchiveWith, DeserializeWith, SerializeWith};
 use rkyv::Place;
 use smol_str::SmolStr;
 
-pub struct SmolStrAsString;
+pub(crate) struct SmolStrAsString;
 
 impl ArchiveWith<SmolStr> for SmolStrAsString {
     type Archived = ArchivedString;

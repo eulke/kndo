@@ -16,7 +16,7 @@ use kndo_core::adapter::{
 use kndo_core::vocab::DependencyScope;
 use smol_str::SmolStr;
 
-pub fn extract(path: &str, content: &[u8], _ctx: &ResolveCtx<'_>) -> ManifestFacts {
+pub(crate) fn extract(path: &str, content: &[u8], _ctx: &ResolveCtx<'_>) -> ManifestFacts {
     let mut out = ManifestFacts::default();
     let Ok(text) = std::str::from_utf8(content) else {
         out.diagnostics.push(Diagnostic {

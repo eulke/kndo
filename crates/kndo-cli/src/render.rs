@@ -37,13 +37,13 @@ use kndo::query::{NeighborEntry, QNodeRef};
 use kndo::query_envelope::{QueryResult, ResultEntry};
 use kndo::vocab::Confidence;
 
-pub struct RenderOptions {
-    pub color: bool,
-    pub quiet: bool,
+pub(crate) struct RenderOptions {
+    pub(crate) color: bool,
+    pub(crate) quiet: bool,
     /// Adds the per-phase timing block and cache state to check output. (The
     /// third `--verbose` effect — revealing `possible`-confidence findings — is inert:
     /// no renderer hides findings by confidence, so there is nothing to reveal.)
-    pub verbose: bool,
+    pub(crate) verbose: bool,
 }
 
 const GROUP_ORDER: [&str; 4] = ["defect", "waste", "risk", "hygiene"];
@@ -72,7 +72,7 @@ const MAGENTA: &str = "\x1b[35m";
 const BLUE: &str = "\x1b[34m";
 const RESET: &str = "\x1b[0m";
 
-pub fn render(result: &RunResult, opts: &RenderOptions) -> String {
+pub(crate) fn render(result: &RunResult, opts: &RenderOptions) -> String {
     if result.mode == "staged" || result.mode == "diff" {
         return render_diff(result, opts);
     }
@@ -181,7 +181,7 @@ fn render_phases(out: &mut String, result: &RunResult, opts: &RenderOptions) {
 /// The health block: the score/grade (+trend) line, then one bar line per category —
 /// every category when `full_table` (`kndo health`), only penalized ones inside `check`
 /// output (a zero-penalty row is reassurance, not triage).
-pub fn render_health(health: &Health, opts: &RenderOptions, full_table: bool) -> String {
+pub(crate) fn render_health(health: &Health, opts: &RenderOptions, full_table: bool) -> String {
     let mut out = health_score_line(health);
     for c in &health.categories {
         if !full_table && c.penalty == 0.0 {
@@ -466,7 +466,7 @@ fn confidence_str(c: Confidence) -> &'static str {
 /// Navigation verbs: a one-line header (`verb · status · Nms`), then one block per
 /// `results[]` entry — numbered only when the request batched more than one selector, matching
 /// the agent renderer's discipline (`agent_format::render_query`) but with color and glyphs.
-pub fn render_query(result: &QueryResult, opts: &RenderOptions) -> String {
+pub(crate) fn render_query(result: &QueryResult, opts: &RenderOptions) -> String {
     let status = result.status();
     let status_color = match status {
         "ok" => "",

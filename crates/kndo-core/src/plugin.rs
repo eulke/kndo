@@ -304,28 +304,10 @@ impl<'a> GraphView<'a> {
             .unwrap_or(&[])
     }
 
-    /// Every adapter-derived `ImportsFile` edge, fully named, in edge-list order — the bulk
-    /// form host bridges use to snapshot the graph before instantiating a guest (wasm-abi
-    /// the borrow constraint); per-path queries stay on [`Self::imports_of`]. Rule R1
-    /// applies here too.
-    pub fn all_import_edges(
-        &self,
-    ) -> impl Iterator<Item = (&'a ProjectPath, &'a ProjectPath)> + '_ {
-        self.edges
-            .iter()
-            .filter(|e| matches!(e.source, crate::vocab::Provenance::Adapter(_)))
-            .filter_map(|e| match e.kind {
-                crate::vocab::EdgeKind::ImportsFile { from, to } => Some((
-                    &self.files[from.0 as usize].path,
-                    &self.files[to.0 as usize].path,
-                )),
-                _ => None,
-            })
-    }
-
     /// Every adapter-derived reference edge as `(target path, target bare name, site)` — the
-    /// bulk counterpart of [`Self::references_to`], same bridge rationale as
-    /// [`Self::all_import_edges`].
+    /// bulk counterpart of [`Self::references_to`]: host bridges snapshot reference sites in
+    /// one pass before instantiating a guest (the wasm-abi borrow constraint), while import
+    /// topology stays on the per-path [`Self::imports_of`]/[`Self::importers_of`] queries.
     pub fn all_reference_sites(
         &self,
     ) -> impl Iterator<Item = (&'a ProjectPath, &'a str, RefSiteView<'a>)> + '_ {

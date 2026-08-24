@@ -37,7 +37,7 @@ const GENERATED_MARKERS: kndo_adapter_toolkit::classify::ContentMarkers =
     };
 
 /// `?` (try) is an early-return branch; `match_arm` counts each arm.
-pub const METRICS_SYNTAX: MetricsSyntax = MetricsSyntax {
+const METRICS_SYNTAX: MetricsSyntax = MetricsSyntax {
     branch_kinds: &[
         "if_expression",
         "match_arm",

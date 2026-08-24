@@ -25,7 +25,7 @@ static STDLIB: std::sync::LazyLock<kndo_adapter_toolkit::stdlib::StdlibIndex<'st
             .expect("shipped stdlib.txt is malformed — regenerate: cargo xtask gen-stdlib js-ts")
     });
 
-pub fn resolve(spec: &ImportSpec, ctx: &ResolveCtx<'_>) -> Resolution {
+pub(crate) fn resolve(spec: &ImportSpec, ctx: &ResolveCtx<'_>) -> Resolution {
     let s = spec.specifier.as_str();
 
     if s.starts_with('#') {

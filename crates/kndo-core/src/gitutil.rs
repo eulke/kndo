@@ -24,7 +24,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 #[derive(Debug)]
-pub struct GitError(pub String);
+pub(crate) struct GitError(pub(crate) String);
 
 impl std::fmt::Display for GitError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -57,18 +57,18 @@ fn run(args: &[&str], envs: &[(&str, &Path)]) -> Result<String, GitError> {
 /// The repository root containing `start` (`git rev-parse --show-toplevel`) — every other call
 /// here takes this as its working directory, not the arbitrary path `Engine` was opened with:
 /// diff modes must work the same way from any subdirectory, exactly like plain git does.
-pub fn repo_root(start: &Path) -> Result<PathBuf, GitError> {
+pub(crate) fn repo_root(start: &Path) -> Result<PathBuf, GitError> {
     let start_str = start.to_string_lossy();
     let out = run(&["-C", &start_str, "rev-parse", "--show-toplevel"], &[])?;
     Ok(PathBuf::from(out))
 }
 
-pub fn rev_parse(repo_root: &Path, refname: &str) -> Result<String, GitError> {
+pub(crate) fn rev_parse(repo_root: &Path, refname: &str) -> Result<String, GitError> {
     let root_str = repo_root.to_string_lossy();
     run(&["-C", &root_str, "rev-parse", refname], &[])
 }
 
-pub fn merge_base(repo_root: &Path, a: &str, b: &str) -> Result<String, GitError> {
+pub(crate) fn merge_base(repo_root: &Path, a: &str, b: &str) -> Result<String, GitError> {
     let root_str = repo_root.to_string_lossy();
     run(&["-C", &root_str, "merge-base", a, b], &[])
 }
@@ -76,7 +76,7 @@ pub fn merge_base(repo_root: &Path, a: &str, b: &str) -> Result<String, GitError
 /// A tree object for the index exactly as it stands right now — "what would be committed if
 /// you ran `git commit`" — computed without touching the real index (`git write-tree` only
 /// ever reads it).
-pub fn write_tree(repo_root: &Path) -> Result<String, GitError> {
+pub(crate) fn write_tree(repo_root: &Path) -> Result<String, GitError> {
     let root_str = repo_root.to_string_lossy();
     run(&["-C", &root_str, "write-tree"], &[])
 }
@@ -85,16 +85,16 @@ pub fn write_tree(repo_root: &Path) -> Result<String, GitError> {
 /// guaranteed UTF-8; the caller decides how to degrade), blob id, and file mode (`100644`
 /// regular, `100755` executable, `120000` symlink, `160000` submodule).
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TreeEntry {
-    pub path: Vec<u8>,
-    pub sha: String,
-    pub mode: u32,
+pub(crate) struct TreeEntry {
+    pub(crate) path: Vec<u8>,
+    pub(crate) sha: String,
+    pub(crate) mode: u32,
 }
 
 /// `git ls-tree -r -z <treeish>` — every blob in the tree, recursively, without touching the
 /// filesystem. `-z` (NUL-delimited records, no path quoting) so unusual filenames survive
 /// byte-exact.
-pub fn ls_tree(repo_root: &Path, treeish: &str) -> Result<Vec<TreeEntry>, GitError> {
+pub(crate) fn ls_tree(repo_root: &Path, treeish: &str) -> Result<Vec<TreeEntry>, GitError> {
     let output = Command::new("git")
         .arg("-C")
         .arg(repo_root)
@@ -151,7 +151,10 @@ pub fn ls_tree(repo_root: &Path, treeish: &str) -> Result<Vec<TreeEntry>, GitErr
 /// same contract as an unreadable file in a directory walk). One subprocess for the whole
 /// batch: per-blob `git show` spawns would cost a process each, and the batch pipe is what
 /// makes tree reading ~5× cheaper than materializing the tree to disk ever was.
-pub fn cat_blobs(repo_root: &Path, shas: &[String]) -> Result<Vec<Option<Vec<u8>>>, GitError> {
+pub(crate) fn cat_blobs(
+    repo_root: &Path,
+    shas: &[String],
+) -> Result<Vec<Option<Vec<u8>>>, GitError> {
     if shas.is_empty() {
         return Ok(Vec::new());
     }
@@ -216,14 +219,14 @@ pub fn cat_blobs(repo_root: &Path, shas: &[String]) -> Result<Vec<Option<Vec<u8>
 /// flight at a time; the caller serializes access (a `Mutex` in the reader). Worst case —
 /// every file missing facts — degrades to one pipe round-trip per file (~100 µs each), never
 /// one process spawn per file.
-pub struct BlobFetcher {
+pub(crate) struct BlobFetcher {
     child: std::process::Child,
     stdin: std::process::ChildStdin,
     stdout: BufReader<std::process::ChildStdout>,
 }
 
 impl BlobFetcher {
-    pub fn spawn(repo_root: &Path) -> Result<BlobFetcher, GitError> {
+    pub(crate) fn spawn(repo_root: &Path) -> Result<BlobFetcher, GitError> {
         let mut child = Command::new("git")
             .arg("-C")
             .arg(repo_root)
@@ -244,7 +247,7 @@ impl BlobFetcher {
 
     /// `Ok(None)` for an id git reports missing; `Err` only for a broken pipe/protocol (the
     /// caller degrades either to its own not-found error).
-    pub fn fetch(&mut self, sha: &str) -> std::io::Result<Option<Vec<u8>>> {
+    pub(crate) fn fetch(&mut self, sha: &str) -> std::io::Result<Option<Vec<u8>>> {
         self.stdin.write_all(sha.as_bytes())?;
         self.stdin.write_all(b"\n")?;
         self.stdin.flush()?;

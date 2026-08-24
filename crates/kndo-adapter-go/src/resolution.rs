@@ -9,7 +9,7 @@ use kndo_core::adapter::{ImportSpec, ProjectPath, Resolution, ResolveCtx};
 use kndo_core::vocab::Confidence;
 use smol_str::SmolStr;
 
-pub fn resolve(spec: &ImportSpec, ctx: &ResolveCtx<'_>) -> Resolution {
+pub(crate) fn resolve(spec: &ImportSpec, ctx: &ResolveCtx<'_>) -> Resolution {
     let s = spec.specifier.as_str();
 
     // 1. Same-module (or sibling-module, via go.work) internal package: every named

@@ -4,11 +4,11 @@
 
 use tree_sitter::{Language, Parser, Tree};
 
-pub fn go_language() -> Language {
+fn go_language() -> Language {
     tree_sitter_go::LANGUAGE.into()
 }
 
-pub fn parse(source: &[u8]) -> Option<Tree> {
+pub(crate) fn parse(source: &[u8]) -> Option<Tree> {
     let mut parser = Parser::new();
     parser.set_language(&go_language()).ok()?;
     parser.parse(source, None)

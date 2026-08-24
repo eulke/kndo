@@ -40,7 +40,7 @@ const GENERATED_MARKERS: kndo_adapter_toolkit::classify::ContentMarkers =
 /// Ternary and `&&`/`||` count as branches same as every other
 /// adapter; each `switch_block_statement_group` is one arm past the base (matching JS's
 /// n-way-match rule).
-pub const METRICS_SYNTAX: MetricsSyntax = MetricsSyntax {
+const METRICS_SYNTAX: MetricsSyntax = MetricsSyntax {
     branch_kinds: &[
         "if_statement",
         "for_statement",

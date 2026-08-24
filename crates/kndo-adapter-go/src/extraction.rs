@@ -32,7 +32,7 @@ const GENERATED_MARKERS: kndo_adapter_toolkit::classify::ContentMarkers =
         comment_openers: &[],
     };
 
-pub fn extract(path: &str, content: &[u8]) -> FileFacts {
+pub(crate) fn extract(path: &str, content: &[u8]) -> FileFacts {
     let mut out = FileFacts::default();
     if GENERATED_MARKERS.detect_generated(content) {
         out.detected_origin = Some(kndo_core::vocab::FileOrigin::Generated);

@@ -16,7 +16,7 @@ use kndo_core::adapter::{
 use kndo_core::vocab::{Confidence, DependencyScope, RootKind};
 use smol_str::SmolStr;
 
-pub fn extract(path: &str, content: &[u8], ctx: &ResolveCtx<'_>) -> ManifestFacts {
+pub(crate) fn extract(path: &str, content: &[u8], ctx: &ResolveCtx<'_>) -> ManifestFacts {
     let text = match std::str::from_utf8(content) {
         Ok(t) => t,
         Err(_) => return invalid("package.json is not valid UTF-8".to_string()),

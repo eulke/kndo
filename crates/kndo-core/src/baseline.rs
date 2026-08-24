@@ -10,11 +10,11 @@ use std::path::{Path, PathBuf};
 
 use crate::engine::Finding;
 
-pub fn path(root: &Path) -> PathBuf {
+fn path(root: &Path) -> PathBuf {
     root.join(".kndo").join("baseline.json")
 }
 
-pub fn exists(root: &Path) -> bool {
+pub(crate) fn exists(root: &Path) -> bool {
     path(root).is_file()
 }
 
@@ -23,14 +23,14 @@ pub fn exists(root: &Path) -> bool {
 /// human reading `git diff .kndo/baseline.json` can tell *what* changed without cross-
 /// referencing ids against a report.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct BaselineEntry {
-    pub id: String,
-    pub category: String,
-    pub subject_kind: String,
+pub(crate) struct BaselineEntry {
+    pub(crate) id: String,
+    pub(crate) category: String,
+    pub(crate) subject_kind: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub path: Option<String>,
+    pub(crate) path: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub symbol: Option<String>,
+    pub(crate) symbol: Option<String>,
 }
 
 impl From<&Finding> for BaselineEntry {
@@ -59,13 +59,13 @@ struct BaselineFile {
 /// `None` when no baseline exists yet, or the file is unreadable/malformed — both are "there is
 /// no baseline to apply," never a hard error: a corrupt `baseline.json` degrading to "nothing is
 /// acknowledged" (every finding reported) is the fail-safe direction, never the reverse.
-pub fn load(root: &Path) -> Option<Vec<BaselineEntry>> {
+pub(crate) fn load(root: &Path) -> Option<Vec<BaselineEntry>> {
     let text = fs::read_to_string(path(root)).ok()?;
     let file: BaselineFile = serde_json::from_str(&text).ok()?;
     Some(file.entries)
 }
 
-pub fn save(root: &Path, entries: &[BaselineEntry]) -> std::io::Result<()> {
+pub(crate) fn save(root: &Path, entries: &[BaselineEntry]) -> std::io::Result<()> {
     let file = BaselineFile {
         schema_version: BASELINE_FILE_VERSION,
         entries: entries.to_vec(),
