@@ -342,8 +342,10 @@ Two halves:
 list.
 
 Details: generated/vendored files are exempt from the structural half (a generator copying
-itself is its own business) but **not** from the exact half — a byte-identical vendored blob
-duplicated five times is still five copies of the same bytes.
+itself is its own business), and so is test code — test files and `#[cfg(test)]`-style
+regions inside production files; parallel arrange-act-assert bodies across a fixture matrix
+are the point of table-shaped tests, not waste. Neither exemption touches the exact half — a
+byte-identical vendored blob duplicated five times is still five copies of the same bytes.
 
 ## crap
 

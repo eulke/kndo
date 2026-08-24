@@ -5,8 +5,10 @@
 //! and renamed identifiers/literals don't hide a copy), grouped transitively by Jaccard
 //! similarity through a shared-fingerprint index, same-language only, one `info` finding per
 //! group with every instance in `related`. Generated/vendored files are exempt from the
-//! structural half (a generator copying itself is its own business) but NOT from the exact
-//! half — see below for why.
+//! structural half (a generator copying itself is its own business), and so are test-role
+//! files and sub-file test regions (structural clones target production code — test-shape
+//! symmetry is expected, the same exemption `crap`/`untested` apply); neither carve-out
+//! touches the exact half — see below for why.
 //!
 //! Exact half: byte-identical files already share the
 //! blake3 content hash discovery computes for the cache, so this is free: no extraction, no
@@ -135,6 +137,18 @@ pub fn find_duplicate_functions(graph: &ProjectGraph) -> (Vec<Finding>, Vec<(Sym
         let file = &graph.files[symbol.file.0 as usize];
         let Some(class) = file.class else { continue };
         if matches!(class.origin, FileOrigin::Generated | FileOrigin::Vendored) {
+            continue;
+        }
+        // Structural clones target production code: test files — and sub-file test regions
+        // inside production files — are exempt, the same two-level exemption `crap` and
+        // `untested` apply. Parallel arrange-act-assert bodies across a fixture matrix are
+        // the *point* of table-shaped tests, not waste; filtering here (the fingerprinting
+        // stage) also keeps test tokens out of the postings index and out of health's
+        // duplicated-tokens numerator.
+        if class.role == crate::vocab::FileRole::Test {
+            continue;
+        }
+        if crate::graph::span_in_test_region(&file.test_spans, symbol.span) {
             continue;
         }
         let Some(language) = file.language.as_deref() else {
@@ -432,6 +446,65 @@ mod tests {
         assert_eq!(findings[0].related.len(), 2, "every instance in related");
         assert!(findings[0].message.contains("a.ts#one"));
         assert!(findings[0].message.contains("b.ts#two"));
+    }
+
+    #[test]
+    fn test_role_files_are_exempt_from_structural_clones() {
+        // The same fingerprint set, one instance in a test-role file: no group forms, and the
+        // production instance alone contributes nothing to the duplicated-token list.
+        let mut test_file = claimed_file("tests/a.ts");
+        test_file.class = Some(FileClass {
+            role: FileRole::Test,
+            origin: FileOrigin::Authored,
+        });
+        let graph = ProjectGraph::for_test(
+            vec![test_file, claimed_file("b.ts")],
+            vec![callable(0, "one"), callable(1, "two")],
+            vec![],
+            vec![],
+        )
+        .with_function_metrics(vec![
+            (SymbolId(0), metrics(vec![1, 2, 3, 4, 5])),
+            (SymbolId(1), metrics(vec![1, 2, 3, 4, 5])),
+        ]);
+        let (findings, duplicated) = find_duplicate_functions(&graph);
+        assert!(findings.is_empty());
+        assert!(duplicated.is_empty());
+    }
+
+    #[test]
+    fn test_regions_inside_production_files_are_exempt_from_structural_clones() {
+        // A `#[cfg(test)]`-style region (FileFacts::test_spans) exempts the callable inside
+        // it — same rule as crap/untested, at span granularity; the same pair with both
+        // instances in production code still groups (the guard).
+        let mut prod_with_region = claimed_file("a.ts");
+        prod_with_region.test_spans = vec![crate::adapter::Span {
+            start: (1, 1),
+            end: (10, 999),
+        }];
+        let graph = ProjectGraph::for_test(
+            vec![prod_with_region, claimed_file("b.ts")],
+            vec![callable(0, "one"), callable(1, "two")],
+            vec![],
+            vec![],
+        )
+        .with_function_metrics(vec![
+            (SymbolId(0), metrics(vec![1, 2, 3, 4, 5])),
+            (SymbolId(1), metrics(vec![1, 2, 3, 4, 5])),
+        ]);
+        assert!(find_duplicate_functions(&graph).0.is_empty());
+
+        let graph = ProjectGraph::for_test(
+            vec![claimed_file("a.ts"), claimed_file("b.ts")],
+            vec![callable(0, "one"), callable(1, "two")],
+            vec![],
+            vec![],
+        )
+        .with_function_metrics(vec![
+            (SymbolId(0), metrics(vec![1, 2, 3, 4, 5])),
+            (SymbolId(1), metrics(vec![1, 2, 3, 4, 5])),
+        ]);
+        assert_eq!(find_duplicate_functions(&graph).0.len(), 1);
     }
 
     #[test]

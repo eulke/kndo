@@ -266,6 +266,11 @@ canonicalized ⇒ catches Type-1 and Type-2 clones; Type-3/semantic clones are o
 - Granularity: function/method bodies and top-level blocks ≥ `min-tokens` (default 50).
 - Winnowing fingerprints into a global index; matches only within the same language.
 - Finding groups all instances, largest group first; evidence shows the shared shape.
+- **Structural clones target production code**: test-role files and sub-file test regions
+  (`FileFacts::test_spans`) are exempt, unconditionally — the same two-level exemption `crap`
+  and `untested` apply. Parallel arrange-act-assert bodies across a fixture matrix are the
+  *point* of table-shaped tests, not waste. The exact-file-duplicate half keeps its
+  no-carve-out rule.
 
 Severity: info by default (duplication is sometimes deliberate); the *metric* (duplication %)
 always feeds health regardless of severity.
