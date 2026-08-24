@@ -581,6 +581,7 @@ impl PluginTarget {
 }
 
 #[derive(Debug, Clone)]
+// kndo:allow internal-only read through inferred-typed sink items in graph.rs, field accesses the graph cannot attribute (internal/detection-gaps.md §3)
 pub(crate) struct ContributedRoot {
     pub target: PluginTarget,
     pub kind: RootKind,
@@ -606,6 +607,7 @@ impl RootSink {
 }
 
 #[derive(Debug, Clone)]
+// kndo:allow internal-only read through inferred-typed sink items in graph.rs, field accesses the graph cannot attribute (internal/detection-gaps.md §3)
 pub(crate) struct ContributedEdge {
     pub from: PluginTarget,
     pub to: PluginTarget,
@@ -935,9 +937,9 @@ impl Plugin for LcovPlugin {
     /// The lcov subset that matters: `SF:<path>` opens a file section, `DA:<line>,<hits>`
     /// records one instrumented line, `end_of_record` closes it — everything else (function/
     /// branch records, checksums) is ignored, since kndo maps lines to functions itself via
-    /// symbol spans. Absolute `SF:` paths are relativized when they contain the project's
-    /// layout; ones that can't be are kept verbatim and simply match nothing — degrade to
-    /// silence, never to a wrong file.
+    /// symbol spans. `SF:` paths are kept as reported (`./` and backslash normalization
+    /// only) — the plugin doesn't know the project root; the host rebases absolute keys
+    /// onto it afterwards (`CoverageMap::rebase`), for every ingesting plugin uniformly.
     fn ingest_coverage(
         &self,
         _path: &ProjectPath,

@@ -1430,7 +1430,12 @@ impl Engine {
                 }
             }
         }
-        sink.into_map()
+        let mut map = sink.into_map();
+        // Coverage tools commonly record absolute paths; graph paths are project-relative.
+        // Rebasing is host-side — the one layer that knows the root — so every format
+        // plugin's output lands comparable (CoverageMap::rebase).
+        map.rebase(&self.root);
+        map
     }
 
     /// Full-mode `RunResult` construction — assemble + analyze at `root`, plus the run counters

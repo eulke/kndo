@@ -38,6 +38,51 @@ impl CoverageMap {
         self.files.is_empty()
     }
 
+    /// Rebase report-absolute file keys onto the project root. Coverage tools commonly
+    /// record absolute paths (llvm-cov's lcov output does), while the graph keys files
+    /// project-relative — an absolute key can never match a graph path. Format plugins
+    /// parse paths verbatim (they don't know the root); the host does, so it rebases the
+    /// finished map once, for every ingesting plugin uniformly. Both the root as given and
+    /// its canonicalized form are tried (reports may record either); keys under neither
+    /// stay as they are and simply match nothing — degrade to silence, never to a wrong
+    /// file.
+    pub fn rebase(&mut self, root: &std::path::Path) {
+        let mut prefixes: Vec<String> = Vec::new();
+        for candidate in [Some(root.to_path_buf()), root.canonicalize().ok()]
+            .into_iter()
+            .flatten()
+        {
+            let mut p = candidate.to_string_lossy().replace('\\', "/");
+            if !p.ends_with('/') {
+                p.push('/');
+            }
+            if !prefixes.contains(&p) {
+                prefixes.push(p);
+            }
+        }
+        let rebased: Vec<(ProjectPath, ProjectPath)> = self
+            .files
+            .keys()
+            .filter_map(|path| {
+                prefixes.iter().find_map(|prefix| {
+                    path.0
+                        .strip_prefix(prefix.as_str())
+                        .map(|rel| (path.clone(), ProjectPath(smol_str::SmolStr::new(rel))))
+                })
+            })
+            .collect();
+        for (absolute, relative) in rebased {
+            if let Some(coverage) = self.files.remove(&absolute) {
+                // A relative twin already present keeps the union — same accumulation
+                // rule as repeated DA records for one line.
+                let entry = self.files.entry(relative).or_default();
+                for (line, hits) in coverage.lines {
+                    *entry.lines.entry(line).or_insert(0) += hits;
+                }
+            }
+        }
+    }
+
     /// The `cov(m)`, approximated at line granularity ("line-level lcov
     /// ⇒ statement-level approximation"): the fraction of *instrumented* lines inside the
     /// function's span that executed. `None` when the file appears in no report, or the span
@@ -128,6 +173,46 @@ mod tests {
             .function_coverage(&ProjectPath(SmolStr::new("other.ts")), span(1, 10))
             .is_none());
         assert!(map.function_coverage(&p, span(1, 10)).is_none());
+    }
+
+    #[test]
+    fn rebase_strips_the_project_root_from_absolute_keys_only() {
+        let root = std::env::temp_dir().join("kndo-coverage-rebase-test");
+        let _ = std::fs::create_dir_all(&root);
+        let abs = format!("{}/src/a.ts", root.to_string_lossy().replace('\\', "/"));
+        let mut sink = CoverageSink::default();
+        sink.add_line(ProjectPath(SmolStr::new(&abs)), 2, 1);
+        sink.add_line(ProjectPath(SmolStr::new("src/b.ts")), 3, 1); // already relative
+        sink.add_line(ProjectPath(SmolStr::new("/elsewhere/c.ts")), 4, 1); // foreign root
+        let mut map = sink.into_map();
+        map.rebase(&root);
+        assert!(map
+            .function_coverage(&ProjectPath(SmolStr::new("src/a.ts")), span(1, 10))
+            .is_some());
+        assert!(map
+            .function_coverage(&ProjectPath(SmolStr::new("src/b.ts")), span(1, 10))
+            .is_some());
+        assert!(
+            map.function_coverage(&ProjectPath(SmolStr::new("/elsewhere/c.ts")), span(1, 10))
+                .is_some(),
+            "a key under a foreign root stays verbatim — silence, never a wrong file"
+        );
+    }
+
+    #[test]
+    fn rebase_merges_an_absolute_key_into_its_relative_twin() {
+        let root = std::env::temp_dir().join("kndo-coverage-rebase-merge-test");
+        let _ = std::fs::create_dir_all(&root);
+        let abs = format!("{}/src/a.ts", root.to_string_lossy().replace('\\', "/"));
+        let mut sink = CoverageSink::default();
+        sink.add_line(ProjectPath(SmolStr::new(&abs)), 2, 1);
+        sink.add_line(ProjectPath(SmolStr::new("src/a.ts")), 3, 0);
+        let mut map = sink.into_map();
+        map.rebase(&root);
+        let cov = map
+            .function_coverage(&ProjectPath(SmolStr::new("src/a.ts")), span(1, 10))
+            .unwrap();
+        assert!((cov - 0.5).abs() < 1e-9, "both records survive the merge");
     }
 
     #[test]
