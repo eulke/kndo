@@ -17,9 +17,10 @@
 //!   references (a derive-only dependency stays honestly used), `#[path]` → mod location.
 
 use kndo_adapter_toolkit::metrics::{function_shape, MetricsSyntax};
+use kndo_adapter_toolkit::parsing::span;
 use kndo_core::adapter::{
     Diagnostic, DiagnosticLevel, FileFacts, FunctionMetrics, ImportBinding, ImportKind, RawImport,
-    RawReference, RawRoot, RawRootTarget, RawSuppression, Span,
+    RawReference, RawRoot, RawRootTarget, Span,
 };
 use kndo_core::vocab::{Confidence, RefKind, RootKind, SymbolKind};
 use smol_str::SmolStr;
@@ -151,7 +152,12 @@ pub(crate) fn extract(_path: &str, content: &[u8]) -> FileFacts {
         &mut out,
     );
     expand_pathed_mod_specifiers(&collect_pathed_mod_paths(root, content), &mut out);
-    collect_suppressions(root, content, &mut out);
+    kndo_adapter_toolkit::suppression::collect_suppressions(
+        root,
+        content,
+        &["line_comment", "block_comment"],
+        &mut out.suppressions,
+    );
     out
 }
 
@@ -804,19 +810,6 @@ struct Ctx<'a> {
     /// The file's declared field types (pre-pass) — [`TypeEnv`]s resolve `self.field`
     /// through these.
     field_types: &'a FieldTypes,
-}
-
-fn span(node: Node) -> Span {
-    Span {
-        start: (
-            node.start_position().row as u32 + 1,
-            node.start_position().column as u32 + 1,
-        ),
-        end: (
-            node.end_position().row as u32 + 1,
-            node.end_position().column as u32 + 1,
-        ),
-    }
 }
 
 fn text<'a>(node: Node, src: &'a [u8]) -> &'a str {
@@ -2887,26 +2880,6 @@ fn format_captures(s: &str) -> Vec<&str> {
 }
 
 // ---------------------------------------------------------------- suppressions
-
-fn collect_suppressions(node: Node, src: &[u8], out: &mut FileFacts) {
-    if matches!(node.kind(), "line_comment" | "block_comment") {
-        if let Some(pragma) =
-            kndo_adapter_toolkit::suppression::parse_suppression_pragma(text(node, src))
-        {
-            out.suppressions.push(RawSuppression {
-                span: span(node),
-                category: pragma.category,
-                subject: pragma.subject,
-                reason: pragma.reason,
-                scope: pragma.scope,
-            });
-        }
-    }
-    let mut cursor = node.walk();
-    for child in node.children(&mut cursor) {
-        collect_suppressions(child, src, out);
-    }
-}
 
 #[cfg(test)]
 mod tests {

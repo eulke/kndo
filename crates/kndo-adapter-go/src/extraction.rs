@@ -9,9 +9,10 @@
 
 use rustc_hash::FxHashSet as HashSet;
 
+use kndo_adapter_toolkit::parsing::span;
 use kndo_core::adapter::{
     Declaration, Diagnostic, DiagnosticLevel, FileFacts, ImportKind, RawImport, RawReference,
-    RawRoot, RawRootTarget, RawSuppression, Span, VisibilityLevel,
+    RawRoot, RawRootTarget, Span, VisibilityLevel,
 };
 use kndo_core::vocab::{Confidence, RefKind, RootKind, SymbolKind};
 use smol_str::SmolStr;
@@ -129,21 +130,17 @@ pub(crate) fn extract(path: &str, content: &[u8]) -> FileFacts {
         None, // top level: within is established by the walk itself
         &mut out.references,
     );
-    collect_suppressions(root, content, &mut out.suppressions);
+    kndo_adapter_toolkit::suppression::collect_suppressions(
+        root,
+        content,
+        &["comment"],
+        &mut out.suppressions,
+    );
 
     out
 }
 
 // ---------------------------------------------------------------- shared helpers
-
-fn span(node: Node) -> Span {
-    let start = node.start_position();
-    let end = node.end_position();
-    Span {
-        start: (start.row as u32 + 1, start.column as u32 + 1),
-        end: (end.row as u32 + 1, end.column as u32 + 1),
-    }
-}
 
 fn text<'a>(node: Node, src: &'a [u8]) -> &'a str {
     std::str::from_utf8(&src[node.byte_range()]).unwrap_or("")
@@ -732,26 +729,6 @@ fn collect_references(
 }
 
 // ---------------------------------------------------------------- suppressions
-
-fn collect_suppressions(node: Node, src: &[u8], out: &mut Vec<RawSuppression>) {
-    if node.kind() == "comment" {
-        if let Some(pragma) =
-            kndo_adapter_toolkit::suppression::parse_suppression_pragma(text(node, src))
-        {
-            out.push(RawSuppression {
-                span: span(node),
-                category: pragma.category,
-                subject: pragma.subject,
-                reason: pragma.reason,
-                scope: pragma.scope,
-            });
-        }
-    }
-    let mut cursor = node.walk();
-    for child in node.children(&mut cursor) {
-        collect_suppressions(child, src, out);
-    }
-}
 
 #[cfg(test)]
 mod tests {

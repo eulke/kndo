@@ -20,9 +20,10 @@
 //! the escape wildcard, only precision is lost), cyclomatic complexity, fingerprints,
 //! `export { a as b }` with no `from` clause (a local re-export, not a barrel pass-through).
 
+use kndo_adapter_toolkit::parsing::span;
 use kndo_core::adapter::{
     Declaration, Diagnostic, DiagnosticLevel, DynamicUse, FileFacts, ImportBinding, ImportKind,
-    RawImport, RawReference, RawSuppression, Span, StringCallArg, VisibilityLevel,
+    RawImport, RawReference, Span, StringCallArg, VisibilityLevel,
 };
 use kndo_core::vocab::{Confidence, RefKind, SymbolKind};
 use smol_str::SmolStr;
@@ -120,17 +121,13 @@ pub fn extract(path: &str, content: &[u8]) -> FileFacts {
     // physically sit — a same-line trailing comment after a declaration lands *inside* that
     // declaration's own subtree (verified via the toolkit's introspect probe), not as a
     // sibling after it — so only a full-tree walk finds every comment reliably.
-    collect_suppressions(root, content, &mut out.suppressions);
+    kndo_adapter_toolkit::suppression::collect_suppressions(
+        root,
+        content,
+        &["comment"],
+        &mut out.suppressions,
+    );
     out
-}
-
-fn span(node: Node) -> Span {
-    let s = node.start_position();
-    let e = node.end_position();
-    Span {
-        start: (s.row as u32 + 1, s.column as u32 + 1),
-        end: (e.row as u32 + 1, e.column as u32 + 1),
-    }
 }
 
 fn text<'a>(node: Node, src: &'a [u8]) -> &'a str {
@@ -1466,50 +1463,6 @@ fn handle_namespace_occurrence(
     }
 }
 
-/// Every identifier/type-identifier usage in the tree, recursively — the shapes below are
-/// verified against the real grammar (`kndo_adapter_toolkit::parsing::introspect`, the
-/// `dump_reference_shapes`/`dump_binding_shapes`/`dump_import_clause_shapes` probes), not
-/// assumed. Two things a naive "collect every identifier" walk gets wrong, handled explicitly:
-///
-/// 1. **Property/member names are never references** — `property_identifier` (object literal
-///    keys, `.member` access, class member names) names a *position*, not a scope lookup, so
-///    it's simply never in the collectible-kinds list below (no per-site check needed —
-///    excluded by construction).
-/// 2. **Binding positions introduce a name rather than look one up** — a declaration's own
-///    name, a parameter/catch/for-loop binding, or a destructuring pattern (which can nest
-///    arbitrarily) — so those are skipped as *whole subtrees*, not just their own node, keyed
-///    by (parent kind, field). A destructuring pattern's *value* side (`= obj` in
-///    `const { a } = obj`) is a real reference and is walked normally; only the *pattern* side
-///    is skipped.
-///
-/// Where in doubt, this errs toward collecting (a reference to a name nothing declares simply
-/// fails to resolve later and is dropped, silently and safely) rather than excluding (which
-/// would risk marking genuinely-used code `unused` — the direction that actually matters).
-/// Every `comment` node in the tree (verified via the toolkit's introspect probe: `//` and
-/// `/* */`/`/** */` both parse to the same `comment` kind, and comments can appear as a sibling
-/// anywhere *or* nested inside a preceding node's subtree — hence the unconditional recursion
-/// into every node, comments included, rather than stopping early). Extraction only; binding a
-/// pragma to the declaration it covers is core logic, not this adapter's job.
-fn collect_suppressions(node: Node, src: &[u8], out: &mut Vec<RawSuppression>) {
-    if node.kind() == "comment" {
-        if let Some(pragma) =
-            kndo_adapter_toolkit::suppression::parse_suppression_pragma(text(node, src))
-        {
-            out.push(RawSuppression {
-                span: span(node),
-                category: pragma.category,
-                subject: pragma.subject,
-                reason: pragma.reason,
-                scope: pragma.scope,
-            });
-        }
-    }
-    let mut cursor = node.walk();
-    for child in node.children(&mut cursor) {
-        collect_suppressions(child, src, out);
-    }
-}
-
 /// The attribution taxonomy for JS/TS: the declared symbol whose *use* triggers this
 /// node's subtree, or `None` when the code runs at module load. Named callables cover their
 /// whole subtree, signatures included (a dead function's TS parameter/return types die with
@@ -1561,6 +1514,25 @@ fn runs_at_class_evaluation(node: Node) -> bool {
     false
 }
 
+/// Every identifier/type-identifier usage in the tree, recursively — the shapes below are
+/// verified against the real grammar (`kndo_adapter_toolkit::parsing::introspect`, the
+/// `dump_reference_shapes`/`dump_binding_shapes`/`dump_import_clause_shapes` probes), not
+/// assumed. Two things a naive "collect every identifier" walk gets wrong, handled explicitly:
+///
+/// 1. **Property/member names are never references** — `property_identifier` (object literal
+///    keys, `.member` access, class member names) names a *position*, not a scope lookup, so
+///    it's simply never in the collectible-kinds list below (no per-site check needed —
+///    excluded by construction).
+/// 2. **Binding positions introduce a name rather than look one up** — a declaration's own
+///    name, a parameter/catch/for-loop binding, or a destructuring pattern (which can nest
+///    arbitrarily) — so those are skipped as *whole subtrees*, not just their own node, keyed
+///    by (parent kind, field). A destructuring pattern's *value* side (`= obj` in
+///    `const { a } = obj`) is a real reference and is walked normally; only the *pattern* side
+///    is skipped.
+///
+/// Where in doubt, this errs toward collecting (a reference to a name nothing declares simply
+/// fails to resolve later and is dropped, silently and safely) rather than excluding (which
+/// would risk marking genuinely-used code `unused` — the direction that actually matters).
 fn collect_references(
     node: Node,
     src: &[u8],
@@ -2729,7 +2701,7 @@ deep.a.b.c("nested");
         assert!(facts.dynamics.is_empty());
     }
 
-    fn suppressions(src: &str) -> Vec<RawSuppression> {
+    fn suppressions(src: &str) -> Vec<kndo_core::adapter::RawSuppression> {
         extract("f.ts", src.as_bytes()).suppressions
     }
 

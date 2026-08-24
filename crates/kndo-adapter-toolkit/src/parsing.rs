@@ -1,6 +1,23 @@
-//! Shared tree-sitter setup — the paved road for first-party adapters.
+//! Shared tree-sitter machinery — the paved road for first-party adapters: parser setup for
+//! the JS/TS grammar, and the node-to-span mapping every adapter shares.
 
-use tree_sitter::{Language, Parser, Tree};
+use kndo_core::adapter::Span;
+use tree_sitter::{Language, Node, Parser, Tree};
+
+/// A tree-sitter node's extent as kndo's 1-based (line, column) `Span` — the one mapping
+/// every adapter shares, written once.
+pub fn span(node: Node) -> Span {
+    Span {
+        start: (
+            node.start_position().row as u32 + 1,
+            node.start_position().column as u32 + 1,
+        ),
+        end: (
+            node.end_position().row as u32 + 1,
+            node.end_position().column as u32 + 1,
+        ),
+    }
+}
 
 pub fn typescript_language() -> Language {
     tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into()

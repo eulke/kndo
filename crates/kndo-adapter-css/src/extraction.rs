@@ -6,9 +6,10 @@
 //! custom properties / SCSS variables, mixins, and functions are.
 
 use kndo_adapter_toolkit::classify::{ContentMarkers, LineMarker};
+use kndo_adapter_toolkit::parsing::span;
 use kndo_core::adapter::{
-    Declaration, Diagnostic, DiagnosticLevel, FileFacts, ImportKind, RawImport, RawReference,
-    RawSuppression, Span, VisibilityLevel,
+    Declaration, Diagnostic, DiagnosticLevel, FileFacts, ImportKind, RawImport, RawReference, Span,
+    VisibilityLevel,
 };
 use kndo_core::vocab::{Confidence, FileOrigin, RefKind, SymbolKind};
 use rustc_hash::FxHashSet;
@@ -72,7 +73,12 @@ pub(crate) fn extract(path: &str, content: &[u8]) -> FileFacts {
     let mut seen: FxHashSet<SmolStr> = FxHashSet::default();
     let top = Ctx { within: None };
     walk(root, content, &top, &mut seen, &mut out);
-    collect_suppressions(root, content, &mut out);
+    kndo_adapter_toolkit::suppression::collect_suppressions(
+        root,
+        content,
+        &["comment", "js_comment"],
+        &mut out.suppressions,
+    );
     out
 }
 
@@ -333,38 +339,6 @@ fn find_child<'a>(node: Node<'a>, kind: &str) -> Option<Node<'a>> {
 
 fn text<'a>(node: Node, src: &'a [u8]) -> &'a str {
     std::str::from_utf8(&src[node.byte_range()]).unwrap_or("")
-}
-
-fn span(node: Node) -> Span {
-    Span {
-        start: (
-            node.start_position().row as u32 + 1,
-            node.start_position().column as u32 + 1,
-        ),
-        end: (
-            node.end_position().row as u32 + 1,
-            node.end_position().column as u32 + 1,
-        ),
-    }
-}
-
-fn collect_suppressions(node: Node, src: &[u8], out: &mut FileFacts) {
-    if matches!(node.kind(), "comment" | "js_comment") {
-        if let Some(pragma) =
-            kndo_adapter_toolkit::suppression::parse_suppression_pragma(text(node, src))
-        {
-            out.suppressions.push(RawSuppression {
-                span: span(node),
-                category: pragma.category,
-                subject: pragma.subject,
-                reason: pragma.reason,
-                scope: pragma.scope,
-            });
-        }
-    }
-    for child in node.children(&mut node.walk()) {
-        collect_suppressions(child, src, out);
-    }
 }
 
 #[cfg(test)]

@@ -8,9 +8,10 @@
 //! in one dispatcher).
 
 use kndo_adapter_toolkit::metrics::{function_shape, MetricsSyntax};
+use kndo_adapter_toolkit::parsing::span;
 use kndo_core::adapter::{
     Diagnostic, DiagnosticLevel, FileFacts, FunctionMetrics, ImportBinding, ImportKind, RawImport,
-    RawReference, RawRoot, RawRootTarget, RawSuppression, Span,
+    RawReference, RawRoot, RawRootTarget, Span,
 };
 use kndo_core::vocab::{Confidence, RefKind, RootKind, SymbolKind};
 use smol_str::SmolStr;
@@ -140,7 +141,12 @@ pub(crate) fn extract(path: &str, content: &[u8]) -> FileFacts {
             confidence: Confidence::Certain,
         });
     }
-    collect_suppressions(root, content, &mut out);
+    kndo_adapter_toolkit::suppression::collect_suppressions(
+        root,
+        content,
+        &["comment", "multiline_comment"],
+        &mut out.suppressions,
+    );
     out
 }
 
@@ -918,40 +924,8 @@ fn find_any_child<'a>(node: Node<'a>, kinds: &[&str]) -> Option<Node<'a>> {
         .find(|n| kinds.contains(&n.kind()))
 }
 
-fn span(node: Node) -> Span {
-    Span {
-        start: (
-            node.start_position().row as u32 + 1,
-            node.start_position().column as u32 + 1,
-        ),
-        end: (
-            node.end_position().row as u32 + 1,
-            node.end_position().column as u32 + 1,
-        ),
-    }
-}
-
 fn text<'a>(node: Node, src: &'a [u8]) -> &'a str {
     std::str::from_utf8(&src[node.byte_range()]).unwrap_or("")
-}
-
-fn collect_suppressions(node: Node, src: &[u8], out: &mut FileFacts) {
-    if matches!(node.kind(), "comment" | "multiline_comment") {
-        if let Some(pragma) =
-            kndo_adapter_toolkit::suppression::parse_suppression_pragma(text(node, src))
-        {
-            out.suppressions.push(RawSuppression {
-                span: span(node),
-                category: pragma.category,
-                subject: pragma.subject,
-                reason: pragma.reason,
-                scope: pragma.scope,
-            });
-        }
-    }
-    for child in node.children(&mut node.walk()) {
-        collect_suppressions(child, src, out);
-    }
 }
 
 #[cfg(test)]

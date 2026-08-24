@@ -1,11 +1,41 @@
 //! `kndo:allow` pragma text parsing — comment *syntax* (`//`,
 //! `/* */`) is shared by every C-family-descended language kndo has adapters for (JS/TS,
 //! Go), so the pragma grammar itself lives here once rather than once per adapter. What differs
-//! per language is only *which tree-sitter node kind is a comment* and how its span maps back to
-//! a declaration — both stay adapter-side.
+//! per language is only *which tree-sitter node kinds are comments* — adapter-declared data
+//! that [`collect_suppressions`] takes as a parameter.
 
-use kndo_core::adapter::SuppressionScope;
+use kndo_core::adapter::{RawSuppression, SuppressionScope};
 use smol_str::SmolStr;
+use tree_sitter::Node;
+
+/// Recursive comment walk shared by every tree-sitter adapter: visits each node whose kind is
+/// in `comment_kinds`, parses it with [`parse_suppression_pragma`], and pushes a
+/// [`RawSuppression`] at the comment's own span. Which node kinds are comments stays
+/// adapter-declared data; the walk and the pragma grammar live here once. Extraction only —
+/// binding a pragma to the declaration it covers is core logic, not an adapter's job.
+pub fn collect_suppressions(
+    node: Node,
+    src: &[u8],
+    comment_kinds: &[&str],
+    out: &mut Vec<RawSuppression>,
+) {
+    if comment_kinds.contains(&node.kind()) {
+        let text = std::str::from_utf8(&src[node.byte_range()]).unwrap_or("");
+        if let Some(pragma) = parse_suppression_pragma(text) {
+            out.push(RawSuppression {
+                span: crate::parsing::span(node),
+                category: pragma.category,
+                subject: pragma.subject,
+                reason: pragma.reason,
+                scope: pragma.scope,
+            });
+        }
+    }
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        collect_suppressions(child, src, comment_kinds, out);
+    }
+}
 
 pub struct ParsedPragma {
     pub scope: SuppressionScope,

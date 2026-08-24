@@ -373,6 +373,24 @@ pub struct Finding {
     pub advisory: bool,
 }
 
+/// The shared triage presentation order — severity (worst first), then path, then span start.
+/// Every renderer that lists findings sorts with this, so human, agent, and any future
+/// frontend agree on order.
+pub fn sort_findings_for_display(findings: &mut [&Finding]) {
+    fn path_key(f: &Finding) -> &str {
+        f.location.path.as_ref().map(|p| p.0.as_str()).unwrap_or("")
+    }
+    fn span_key(f: &Finding) -> (u32, u32) {
+        f.location.range.map(|r| r.start).unwrap_or((0, 0))
+    }
+    findings.sort_by(|a, b| {
+        a.severity
+            .cmp(&b.severity)
+            .then_with(|| path_key(a).cmp(path_key(b)))
+            .then_with(|| span_key(a).cmp(&span_key(b)))
+    });
+}
+
 /// One registered adapter's contribution (`run.adapters[]`).
 #[derive(Debug, Clone, serde::Serialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
@@ -1462,6 +1480,62 @@ mod tests {
     /// about a finding category it isn't testing.
     fn is_no_test_roots_diagnostic(d: &Diagnostic) -> bool {
         d.message.starts_with("untested: no test roots detected")
+    }
+
+    #[test]
+    fn display_sort_orders_by_severity_then_path_then_span() {
+        fn f(severity: Severity, path: Option<&str>, line: u32) -> Finding {
+            Finding {
+                advisory: false,
+                id: String::new(),
+                category: "unused".into(),
+                group: "waste".into(),
+                subject_kind: "function".into(),
+                severity,
+                confidence: crate::vocab::Confidence::Certain,
+                message: String::new(),
+                location: Location {
+                    path: path.map(|p| crate::adapter::ProjectPath(SmolStr::new(p))),
+                    range: (line > 0).then_some(crate::adapter::Span {
+                        start: (line, 1),
+                        end: (line, 2),
+                    }),
+                    ..Location::default()
+                },
+                related: Vec::new(),
+                delta: None,
+                delta_origin: None,
+            }
+        }
+        let findings = [
+            f(Severity::Info, Some("a.rs"), 5),
+            f(Severity::Warning, Some("z.rs"), 1),
+            f(Severity::Warning, Some("a.rs"), 9),
+            f(Severity::Warning, Some("a.rs"), 2),
+            f(Severity::Warning, None, 0), // pathless sorts as "" — first among warnings
+        ];
+        let mut refs: Vec<&Finding> = findings.iter().collect();
+        sort_findings_for_display(&mut refs);
+        let order: Vec<(Severity, &str, u32)> = refs
+            .iter()
+            .map(|f| {
+                (
+                    f.severity,
+                    f.location.path.as_ref().map(|p| p.0.as_str()).unwrap_or(""),
+                    f.location.range.map(|r| r.start.0).unwrap_or(0),
+                )
+            })
+            .collect();
+        assert_eq!(
+            order,
+            vec![
+                (Severity::Warning, "", 0),
+                (Severity::Warning, "a.rs", 2),
+                (Severity::Warning, "a.rs", 9),
+                (Severity::Warning, "z.rs", 1),
+                (Severity::Info, "a.rs", 5),
+            ]
+        );
     }
 
     /// Bare-minimum adapter claiming `.mock` files — engine.rs can't depend on a real adapter

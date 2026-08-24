@@ -50,7 +50,7 @@ pub fn render(result: &RunResult) -> String {
                 .iter()
                 .filter(|f| f.group == group)
                 .collect();
-            sort_findings(&mut in_group);
+            crate::engine::sort_findings_for_display(&mut in_group);
             for f in in_group {
                 n += 1;
                 out.push_str(&finding_line(n, f));
@@ -87,7 +87,7 @@ fn render_diff(result: &RunResult) -> String {
                 .iter()
                 .filter(|f| f.group == group)
                 .collect();
-            sort_findings(&mut in_group);
+            crate::engine::sort_findings_for_display(&mut in_group);
             for f in in_group {
                 n += 1;
                 out.push_str(&finding_line(n, f));
@@ -101,7 +101,7 @@ fn render_diff(result: &RunResult) -> String {
         for group in ordered_groups(&result.fixed) {
             let mut in_group: Vec<&Finding> =
                 result.fixed.iter().filter(|f| f.group == group).collect();
-            sort_findings(&mut in_group);
+            crate::engine::sort_findings_for_display(&mut in_group);
             for f in in_group {
                 n += 1;
                 out.push_str(&finding_line(n, f));
@@ -202,23 +202,6 @@ fn ordered_groups(findings: &[Finding]) -> Vec<&str> {
             .unwrap_or(GROUP_ORDER.len())
     });
     groups
-}
-
-fn sort_findings(findings: &mut [&Finding]) {
-    findings.sort_by(|a, b| {
-        a.severity
-            .cmp(&b.severity)
-            .then_with(|| path_key(a).cmp(path_key(b)))
-            .then_with(|| span_key(a).cmp(&span_key(b)))
-    });
-}
-
-fn path_key(f: &Finding) -> &str {
-    f.location.path.as_ref().map(|p| p.0.as_str()).unwrap_or("")
-}
-
-fn span_key(f: &Finding) -> (u32, u32) {
-    f.location.range.map(|r| r.start).unwrap_or((0, 0))
 }
 
 /// `N. [id] <category> <subject_kind> <path:line> <name> [(confidence)]` — the agent format's

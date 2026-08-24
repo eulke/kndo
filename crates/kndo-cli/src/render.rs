@@ -138,7 +138,7 @@ pub(crate) fn render(result: &RunResult, opts: &RenderOptions) -> String {
             .iter()
             .filter(|f| f.group == group)
             .collect();
-        sort_findings(&mut in_group);
+        kndo::engine::sort_findings_for_display(&mut in_group);
         render_section(&mut out, group, &in_group, opts);
     }
     if let Some(health) = &result.health {
@@ -344,7 +344,7 @@ fn render_diff(result: &RunResult, opts: &RenderOptions) -> String {
 /// `NEW`/`FIXED`, not the taxonomy groups.
 fn render_flat(out: &mut String, findings: &[&Finding], opts: &RenderOptions) {
     let mut sorted = findings.to_vec();
-    sort_findings(&mut sorted);
+    kndo::engine::sort_findings_for_display(&mut sorted);
     for f in sorted {
         out.push_str("  ");
         out.push_str(&render_finding_line(f, opts));
@@ -367,23 +367,6 @@ fn render_related(out: &mut String, f: &Finding) {
             None => out.push_str(&format!("      └ {location}\n")),
         }
     }
-}
-
-fn sort_findings(findings: &mut [&Finding]) {
-    findings.sort_by(|a, b| {
-        a.severity
-            .cmp(&b.severity)
-            .then_with(|| path_key(a).cmp(path_key(b)))
-            .then_with(|| span_key(a).cmp(&span_key(b)))
-    });
-}
-
-fn path_key(f: &Finding) -> &str {
-    f.location.path.as_ref().map(|p| p.0.as_str()).unwrap_or("")
-}
-
-fn span_key(f: &Finding) -> (u32, u32) {
-    f.location.range.map(|r| r.start).unwrap_or((0, 0))
 }
 
 fn render_section(out: &mut String, group: &str, findings: &[&Finding], opts: &RenderOptions) {
