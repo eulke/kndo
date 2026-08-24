@@ -5,20 +5,23 @@
 //! — coverage is a separate `run_all` input precisely because its freshness varies
 //! independently of the graph's content hashes).
 //!
-//! No coverage data for a function ⇒ "CRAPload with cov=0, flagged
-//! `coverage: none`" — the score is computed pessimistically and the message says why, rather
-//! than silently skipping the exact functions most likely to be the problem. Test code is
-//! exempt (a test's own coverage is meaningless), as are generated/vendored files (not yours
-//! to refactor).
+//! With **no report ingested at all**, the analysis is skipped with one diagnostic: the
+//! score's coverage factor would be a guess for every function at once, not a measurement,
+//! and a category-wide guess is noise, not risk (the same posture `untested` takes for a
+//! project with no test roots). With a report present, a function the report simply doesn't
+//! instrument ⇒ "CRAPload with cov=0, flagged `coverage: none`" — pessimistic, and the
+//! message says why, rather than silently skipping the exact functions most likely to be the
+//! problem. Test code is exempt (a test's own coverage is meaningless), as are
+//! generated/vendored files (not yours to refactor).
 
+use crate::adapter::{Diagnostic, DiagnosticLevel};
 use crate::analysis::finding_id;
 use crate::coverage::CoverageMap;
 use crate::engine::{Finding, Location, Severity};
 use crate::graph::ProjectGraph;
 use crate::vocab::{Confidence, FileOrigin, FileRole};
 
-/// The standard threshold ("findings for CRAP > 30"); not configurable while no
-/// config file exists.
+/// The standard threshold ("findings for CRAP > 30").
 pub(crate) const CRAP_THRESHOLD: f64 = 30.0;
 
 pub fn crap_score(cyclomatic: u32, coverage: f64) -> f64 {
@@ -26,7 +29,26 @@ pub fn crap_score(cyclomatic: u32, coverage: f64) -> f64 {
     comp * comp * (1.0 - coverage).powi(3) + comp
 }
 
-pub fn find_crap(graph: &ProjectGraph, coverage: &CoverageMap) -> Vec<Finding> {
+pub fn find_crap(
+    graph: &ProjectGraph,
+    coverage: &CoverageMap,
+) -> (Vec<Finding>, Option<Diagnostic>) {
+    if coverage.is_empty() {
+        return (
+            Vec::new(),
+            Some(Diagnostic {
+                level: DiagnosticLevel::Info,
+                path: None,
+                message: "crap: no coverage ingested — skipped (the score is complexity × \
+                          untestedness; without a report the coverage factor would be a guess, \
+                          not a measurement — drop an lcov report at coverage/lcov.info or \
+                          lcov.info to enable it)"
+                    .to_string(),
+                span: None,
+            }),
+        );
+    }
+
     let mut findings = Vec::new();
     for (symbol_id, metrics) in &graph.function_metrics {
         let symbol = &graph.symbols[symbol_id.0 as usize];
@@ -83,7 +105,7 @@ pub fn find_crap(graph: &ProjectGraph, coverage: &CoverageMap) -> Vec<Finding> {
             delta_origin: None,
         });
     }
-    findings
+    (findings, None)
 }
 
 #[cfg(test)]
@@ -143,6 +165,15 @@ mod tests {
             .with_function_metrics(function_metrics)
     }
 
+    /// A non-empty map that instruments a file none of the fixtures use: the analysis runs
+    /// (a report exists) while every fixture function stays report-unknown — the pessimistic
+    /// cov=0 path, distinct from the no-report skip.
+    fn unrelated_coverage() -> CoverageMap {
+        let mut sink = CoverageSink::default();
+        sink.add_line(ProjectPath(SmolStr::new("elsewhere.mock")), 1, 1);
+        sink.into_map()
+    }
+
     #[test]
     fn formula_matches_the_rfc() {
         // comp 6, cov 0: 36 × 1 + 6 = 42. comp 6, cov 1: 0 + 6 = 6.
@@ -169,7 +200,7 @@ mod tests {
             ],
             vec![(SymbolId(0), metrics(6)), (SymbolId(1), metrics(6))],
         );
-        let findings = find_crap(&graph, &CoverageMap::default());
+        let findings = find_crap(&graph, &unrelated_coverage()).0;
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("gnarly_prod"));
     }
@@ -185,7 +216,7 @@ mod tests {
             vec![symbol(FileId(0), "gnarly", 1, 30)],
             vec![(SymbolId(0), metrics(6))],
         );
-        let findings = find_crap(&graph, &CoverageMap::default());
+        let findings = find_crap(&graph, &unrelated_coverage()).0;
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].category, "crap");
         assert_eq!(findings[0].group, "risk");
@@ -209,7 +240,7 @@ mod tests {
         for line in 1..=30 {
             sink.add_line(ProjectPath(SmolStr::new("src/a.mock")), line, 1);
         }
-        let findings = find_crap(&graph, &sink.into_map());
+        let findings = find_crap(&graph, &sink.into_map()).0;
         assert!(findings.is_empty(), "fully covered: CRAP = comp = 6");
     }
 
@@ -226,7 +257,7 @@ mod tests {
             vec![symbol(FileId(0), "halfway", 1, 20)],
             vec![(SymbolId(0), metrics(8))],
         );
-        assert_eq!(find_crap(&graph, &CoverageMap::default()).len(), 1);
+        assert_eq!(find_crap(&graph, &unrelated_coverage()).0.len(), 1);
         let mut sink = CoverageSink::default();
         for line in 1..=20 {
             sink.add_line(
@@ -235,7 +266,7 @@ mod tests {
                 u64::from(line <= 10),
             );
         }
-        let findings = find_crap(&graph, &sink.into_map());
+        let findings = find_crap(&graph, &sink.into_map()).0;
         assert!(findings.is_empty());
     }
 
@@ -251,7 +282,7 @@ mod tests {
             vec![symbol(FileId(0), "plain", 1, 10)],
             vec![(SymbolId(0), metrics(5))],
         );
-        assert!(find_crap(&graph, &CoverageMap::default()).is_empty());
+        assert!(find_crap(&graph, &unrelated_coverage()).0.is_empty());
     }
 
     #[test]
@@ -267,7 +298,7 @@ mod tests {
             ],
             vec![(SymbolId(0), metrics(9)), (SymbolId(1), metrics(9))],
         );
-        assert!(find_crap(&graph, &CoverageMap::default()).is_empty());
+        assert!(find_crap(&graph, &unrelated_coverage()).0.is_empty());
     }
 
     #[test]
@@ -283,11 +314,35 @@ mod tests {
                 vec![(SymbolId(0), metrics(6))],
             )
         };
-        let a = find_crap(&make(1), &CoverageMap::default());
-        let b = find_crap(&make(50), &CoverageMap::default());
+        let a = find_crap(&make(1), &unrelated_coverage()).0;
+        let b = find_crap(&make(50), &unrelated_coverage()).0;
         assert_eq!(
             a[0].id, b[0].id,
             "moving the function must not change the id"
+        );
+    }
+
+    #[test]
+    fn no_ingested_coverage_skips_with_one_diagnostic() {
+        let graph = graph_with(
+            vec![file(
+                "src/a.mock",
+                FileRole::Production,
+                FileOrigin::Authored,
+            )],
+            vec![symbol(FileId(0), "gnarly", 1, 30)],
+            vec![(SymbolId(0), metrics(20))],
+        );
+        let (findings, diagnostic) = find_crap(&graph, &CoverageMap::default());
+        assert!(
+            findings.is_empty(),
+            "no report ⇒ no findings, however complex the code"
+        );
+        let d = diagnostic.expect("the skip must say so");
+        assert!(
+            d.message.starts_with("crap: no coverage ingested"),
+            "{}",
+            d.message
         );
     }
 }

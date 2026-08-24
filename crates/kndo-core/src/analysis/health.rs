@@ -333,26 +333,32 @@ fn tally(
         .sum();
 
     // CRAP axis: excess over the threshold, normalized by threshold-units per function.
+    // With no coverage ingested the crap analysis is skipped (its diagnostic says so), and
+    // the score must not silently punish what the check deliberately didn't measure — the
+    // axis contributes zero penalty and the category row reports the absence explicitly.
+    let crap_measured = !inputs.coverage.is_empty();
     let mut crap_functions = 0usize;
     let mut crapload = 0.0f64;
     let mut crap_excess = 0.0f64;
     let mut crap_over = 0usize;
-    for (symbol_id, metrics) in &graph.function_metrics {
-        let symbol = &graph.symbols[symbol_id.0 as usize];
-        if !eligible_file(graph, symbol.file, scope) {
-            continue;
-        }
-        crap_functions += 1;
-        let file = &graph.files[symbol.file.0 as usize];
-        let cov = inputs
-            .coverage
-            .function_coverage(&file.path, symbol.span)
-            .unwrap_or(0.0);
-        let score = crap_score(metrics.cyclomatic, cov);
-        if score > CRAP_THRESHOLD {
-            crap_over += 1;
-            crapload += score;
-            crap_excess += score - CRAP_THRESHOLD;
+    if crap_measured {
+        for (symbol_id, metrics) in &graph.function_metrics {
+            let symbol = &graph.symbols[symbol_id.0 as usize];
+            if !eligible_file(graph, symbol.file, scope) {
+                continue;
+            }
+            crap_functions += 1;
+            let file = &graph.files[symbol.file.0 as usize];
+            let cov = inputs
+                .coverage
+                .function_coverage(&file.path, symbol.span)
+                .unwrap_or(0.0);
+            let score = crap_score(metrics.cyclomatic, cov);
+            if score > CRAP_THRESHOLD {
+                crap_over += 1;
+                crapload += score;
+                crap_excess += score - CRAP_THRESHOLD;
+            }
         }
     }
 
@@ -414,8 +420,8 @@ fn tally(
         &CRAP,
         ratio(crap_excess, CRAP_THRESHOLD * crap_functions as f64),
         Extra {
-            count: Some(crap_over),
-            crapload: Some(round1(crapload)),
+            count: crap_measured.then_some(crap_over),
+            crapload: crap_measured.then(|| round1(crapload)),
             coverage: Some(coverage_desc),
             ..Extra::default()
         },
@@ -683,8 +689,46 @@ mod tests {
 
     #[test]
     fn crap_category_reports_crapload_and_coverage_provenance() {
-        // comp 8 uncovered → CRAP 72, excess 42 over one function → raw ratio 42/30 = 1.4,
-        // saturated → full 20 points.
+        // comp 8, report present but its lines unhit → cov 0 → CRAP 72, excess 42 over one
+        // function → raw ratio 42/30 = 1.4, saturated → full 20 points.
+        let graph = crate::graph::ProjectGraph::for_test(
+            vec![file("src/a.mock", 0)],
+            vec![symbol(0, "gnarly")],
+            vec![],
+            vec![prod_root(0)],
+        )
+        .with_function_metrics(vec![(
+            SymbolId(0),
+            SymbolMetrics {
+                cyclomatic: 8,
+                loc: 5,
+                token_count: 80,
+                fingerprints: vec![],
+            },
+        )]);
+        let reach = reachability::compute(&graph);
+        let mut sink = crate::coverage::CoverageSink::default();
+        for line in 1..=5 {
+            sink.add_line(
+                crate::adapter::ProjectPath(SmolStr::new("src/a.mock")),
+                line,
+                0,
+            );
+        }
+        let cov = sink.into_map();
+        let (cyc, dup) = (HashSet::default(), vec![]);
+        let h = compute(&graph, &reach, &[], &inputs(&cov, &cyc, &dup));
+        let c = h.categories.iter().find(|c| c.category == "crap").unwrap();
+        assert_eq!(c.count, Some(1));
+        assert_eq!(c.crapload, Some(72.0));
+        assert_eq!(c.penalty, 20.0);
+    }
+
+    #[test]
+    fn no_ingested_coverage_leaves_the_crap_axis_unmeasured() {
+        // Same gnarly function, but no report at all: the crap analysis is skipped, and the
+        // score must not punish what wasn't measured — zero penalty, the row visible with the
+        // absence explicit.
         let graph = crate::graph::ProjectGraph::for_test(
             vec![file("src/a.mock", 0)],
             vec![symbol(0, "gnarly")],
@@ -704,10 +748,10 @@ mod tests {
         let (cov, cyc, dup) = (CoverageMap::default(), HashSet::default(), vec![]);
         let h = compute(&graph, &reach, &[], &inputs(&cov, &cyc, &dup));
         let c = h.categories.iter().find(|c| c.category == "crap").unwrap();
-        assert_eq!(c.count, Some(1));
-        assert_eq!(c.crapload, Some(72.0));
+        assert_eq!(c.count, None);
+        assert_eq!(c.crapload, None);
         assert_eq!(c.coverage.as_deref(), Some("none"));
-        assert_eq!(c.penalty, 20.0);
+        assert_eq!(c.penalty, 0.0);
     }
 
     #[test]

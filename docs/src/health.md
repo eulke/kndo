@@ -112,7 +112,10 @@ Two situations are "coverage unknown", never "coverage zero":
 
 What "unknown" means is each consumer's call — [`crap`](rules.md#crap) applies the
 pessimistic reading (`cov = 0`, flagged `coverage: none` in the message), because an
-unmeasured complex function is exactly the one you want surfaced.
+unmeasured complex function is exactly the one you want surfaced. That reading is
+per-function only: with **no report ingested at all**, `crap` skips entirely (one diagnostic
+says so) and its health axis contributes no penalty — a category-wide guess would be noise,
+not risk.
 
 ## CRAP and the crapload
 

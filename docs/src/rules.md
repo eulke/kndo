@@ -373,9 +373,12 @@ Details and limits:
   at a well-known path and it's picked up automatically — see
   [Health & coverage](health.md#coverage-ingestion) for paths, freshness rules, and how
   line-level data maps onto functions.
-- No coverage data for a function ⇒ the score is computed pessimistically with `cov = 0` and
-  the message says `coverage: none` — the functions most likely to be the problem are never
-  silently skipped.
+- No coverage report ingested at all ⇒ the whole analysis is skipped, with one diagnostic
+  saying so — without a report the coverage factor would be a guess for every function at
+  once, not a measurement.
+- A report that doesn't instrument a particular function ⇒ that function's score is computed
+  pessimistically with `cov = 0` and the message says `coverage: none` — the functions most
+  likely to be the problem are never silently skipped.
 - Test code is exempt (a test's own coverage is meaningless), as are generated/vendored
   files (not yours to refactor).
 

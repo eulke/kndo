@@ -184,7 +184,11 @@ pub fn run_all(
                                 },
                                 || {
                                     rayon::join(
-                                        || timed(&|| crap::find_crap(graph, coverage)),
+                                        || {
+                                            let start = std::time::Instant::now();
+                                            let out = crap::find_crap(graph, coverage);
+                                            (out, start.elapsed().as_micros() as u64)
+                                        },
                                         || {
                                             let start = std::time::Instant::now();
                                             let out = untested::find_untested(graph, reach);
@@ -202,6 +206,7 @@ pub fn run_all(
 
     let (duplicate_findings, duplicated) = duplicate_fn_r;
     let (cycle_findings, cycle_files) = cyclic_r;
+    let ((crap_findings, crap_diagnostic), crap_us) = crap_r;
     let ((untested_findings, untested_diagnostic), untested_us) = untested_r;
     let ((dependency_findings, hygiene_diagnostic), dependencies_us) = dependencies_r;
 
@@ -227,8 +232,8 @@ pub fn run_all(
     timings.entries.push(("deep-import", deep_import_r.1));
     findings.extend(cycle_findings);
     timings.entries.push(("cyclic", cyclic_us));
-    findings.extend(crap_r.0);
-    timings.entries.push(("crap", crap_r.1));
+    findings.extend(crap_findings);
+    timings.entries.push(("crap", crap_us));
     findings.extend(untested_findings);
     timings.entries.push(("untested", untested_us));
     timings.time("sort-findings", || {
@@ -252,8 +257,9 @@ pub fn run_all(
 
     AnalysisOutcome {
         findings,
-        diagnostics: untested_diagnostic
+        diagnostics: crap_diagnostic
             .into_iter()
+            .chain(untested_diagnostic)
             .chain(hygiene_diagnostic)
             .collect(),
         health,

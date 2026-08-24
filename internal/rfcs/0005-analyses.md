@@ -341,8 +341,13 @@ of the function's statements covered:
 CRAP(m) = comp(m)² × (1 − cov(m))³ + comp(m)
 ```
 
-- Coverage comes from ingested reports (plugins, ADR 0005). No report ⇒ `cov` unknown ⇒ kndo
-  reports **CRAPload with cov=0** but flags results "coverage: none" (configurable to skip).
+- Coverage comes from ingested reports (plugins, ADR 0005). No report at all ⇒ the analysis
+  is **skipped with one diagnostic** — the coverage factor would be a guess for every function
+  at once, not a measurement, and a category-wide guess is noise, not risk (the same posture
+  `untested` takes for a project with no test roots); the health score's crap axis contributes
+  zero penalty with the absence reported explicitly. A report that doesn't instrument a
+  particular function ⇒ **cov = 0**, flagged "coverage: none" — pessimistic per function, and
+  the message says why.
 - Threshold: findings for `CRAP > 30` (standard), configurable. Test code is exempt.
 - Output ranks the CRAP hotspot list — the refactor-next queue.
 

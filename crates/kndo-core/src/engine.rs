@@ -1473,13 +1473,15 @@ mod tests {
     use crate::vocab::RefKind;
     use smol_str::SmolStr;
 
-    /// True for the diagnostic `untested` emits when a project has no test roots at
-    /// all — expected noise in every diff-mode fixture below, since none of this module's
-    /// mock adapters declare test roots. Filtering it out keeps `diagnostics.is_empty()`-style
-    /// assertions meaningful for genuine regressions instead of forcing every diff test to know
-    /// about a finding category it isn't testing.
+    /// True for the category-level skip diagnostics (`untested` with no test roots, `crap`
+    /// with no ingested coverage) — expected noise in every diff-mode fixture below, since
+    /// none of this module's mock projects declare test roots or ship a coverage report.
+    /// Filtering them out keeps `diagnostics`-shape assertions meaningful for genuine
+    /// regressions instead of forcing every diff test to know about finding categories it
+    /// isn't testing.
     fn is_no_test_roots_diagnostic(d: &Diagnostic) -> bool {
         d.message.starts_with("untested: no test roots detected")
+            || d.message.starts_with("crap: no coverage ingested")
     }
 
     #[test]
