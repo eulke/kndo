@@ -6,7 +6,7 @@
 //! may touch ([`engine::Engine`]). The core never prints; frontends never
 //! compute.
 //!
-//! Normative source of truth: `docs/contracts/core-traits.md`. Code must match it; changing
+//! Normative source of truth: `internal/contracts/core-traits.md`. Code must match it; changing
 //! either requires updating both in the same PR.
 
 pub mod adapter;

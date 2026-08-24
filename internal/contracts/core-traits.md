@@ -488,7 +488,7 @@ Compliance: every adapter must pass the shared conformance harness with its fixt
 All hooks optional; a plugin implements what it needs (RFC 0003 §2). Same trait for built-ins
 (statically linked) and external WASM components — both the four graph-mutation hooks
 (`kndo:plugin@0.1.0`) and `LanguageAdapter` (`kndo:adapter@0.1.0`) are bridged
-(`kndo-plugin-api`, docs/contracts/wasm-abi.md §5). `ingest_coverage`/`suppress` aren't bridged
+(`kndo-plugin-api`, [wasm-abi.md](wasm-abi.md) §5). `ingest_coverage`/`suppress` aren't bridged
 either way yet.
 
 ```rust
@@ -584,22 +584,23 @@ pub struct Engine { /* opaque: graph, cache, adapters, plugins */ }
 impl Engine {
     /// `adapters` is composed by the DISTRIBUTION layer (the `kndo` crate, RFC 0001 §2) —
     /// frontends call `kndo::open(root, overrides)` and never touch this parameter; only
-    /// embedders and tests pass a custom set. Plugins default to just the built-in lcov
-    /// ingester (RFC 0003) — see `open_with_plugins` for a custom plugin set.
+    /// embedders and tests pass a custom set. `open` registers NO plugins — not even the
+    /// coverage ingesters: plugins are composition, not core (the ignorance rule covers
+    /// report formats too). The product's built-in set arrives through `open_with_plugins`
+    /// from the `kndo` crate's `default_plugins()`, exactly like adapters do.
     pub fn open(root: &Path, overrides: ConfigOverrides,
                 adapters: Vec<Box<dyn LanguageAdapter>>) -> Result<Engine, EngineError>;
-    /// Same as `open`, additionally taking the registered `Plugin` set explicitly (landed M5) —
-    /// `open` is a thin wrapper defaulting it to `vec![Box::new(LcovPlugin)]`, the same plugin
-    /// that list held implicitly before this existed.
+    /// Same as `open`, additionally taking the registered `Plugin` set explicitly (landed M5).
     pub fn open_with_plugins(root: &Path, overrides: ConfigOverrides,
                 adapters: Vec<Box<dyn LanguageAdapter>>,
                 plugins: Vec<Box<dyn Plugin>>) -> Result<Engine, EngineError>;
     pub fn check(&mut self, req: CheckRequest) -> RunResult;    // full | staged | diff
     pub fn query(&mut self, req: QueryRequest) -> QueryResult;  // RFC 0007 verbs, incl. batches
-    pub fn explain(&self, id: FindingId) -> Option<Explanation>;
     pub fn baseline(&mut self, op: BaselineOp) -> BaselineResult;
     pub fn doctor(&self) -> DoctorReport;
 }
+// Planned, not landed: `explain(id) -> Explanation` (per-finding remediation prose). Purely
+// additive when it comes; the contract lists only what exists.
 
 // Distribution layer (crate `kndo`) — what frontends actually call:
 // pub fn kndo::open(root: &Path, overrides: ConfigOverrides) -> Result<Engine, EngineError>
@@ -631,11 +632,14 @@ impl Engine {
   one file or the whole graph; an enabled-but-empty cache (first run, or a change big enough that
   nothing hit) is honestly `"cold"`. Correctness never depends on this: `--no-cache` must produce
   byte-identical findings (verified on the fixture matrix and the 5k-file benchmark; not yet
-  wired into a CI workflow — RFC 0004 §4). The findings snapshot, the warm-run *patch* algorithm
-  (reusing part of a stale graph), and dirty-region incrementality (RFC 0004 §2, §4–6) aren't
-  implemented yet — a changed file forces a full rebuild, not a targeted patch; measured
-  sufficient for the M2 budget at benchmark scale (ROADMAP M2 close-out note), revisit if a
-  larger real repo's rebuild cost grows past budget.
+  wired into a CI workflow — RFC 0004 §4). On a graph-snapshot key miss, the warm-run *patch*
+  algorithm (`graph.rs`'s `try_patch`) reuses the previous snapshot when its guards all hold —
+  same graph-schema version and plugin digest, identical file set (any add/remove/rename bails),
+  no changed manifest, at most ~5% of files changed, unchanged surface signatures — otherwise it
+  falls through to full assembly (itself facts-cache-warm for unchanged files). Patched ≡
+  fully-rebuilt output is test-enforced (`patch_equivalence`). Still unimplemented from RFC 0004:
+  the findings snapshot and dirty-region *analysis* incrementality (§5) — analyses always re-run
+  over the (possibly patched) graph.
 
 ## 6. Stability tiers
 

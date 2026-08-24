@@ -245,7 +245,7 @@ fn ensure_gitignore_entry(root: &std::path::Path) -> std::io::Result<GitignoreOu
 
 /// `kndo doctor`: plain-text only — the output schema specifies no
 /// JSON shape for this command, so `--format` isn't wired here (a deliberate scoping choice,
-/// not an oversight; `check`/`explain`/navigation verbs are where the JSON contract matters).
+/// not an oversight; `check`/navigation verbs are where the JSON contract matters).
 fn doctor_cmd() -> ExitCode {
     let cwd = match std::env::current_dir() {
         Ok(d) => d,

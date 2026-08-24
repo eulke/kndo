@@ -594,7 +594,7 @@ just asserted in prose.
 
 ### M5 progress — WASM plugin/adapter ABI ✅ (landed 2026-08-21)
 
-`kndo-plugin-api` per `docs/contracts/wasm-abi.md`: the WASM component-model tier ADR 0003
+`kndo-plugin-api` per `internal/contracts/wasm-abi.md`: the WASM component-model tier ADR 0003
 promised, shipped for `LanguageAdapter` — a deliberately scoped-down **v1** (adapter-only, no
 `Plugin` hooks; no manifest/resolve, `ResolveCtx` host-imports, visibility ladder, or byte
 content — the full list, and why each is a real cut rather than an oversight, is
