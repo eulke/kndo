@@ -15,6 +15,7 @@ use crate::render;
 /// silently dropping them.
 const MAX_QUERY_BATCH: usize = 1000;
 
+#[cfg_attr(test, derive(Debug))]
 struct NavArgs {
     selectors: Vec<String>,
     flags: QueryFlags,
@@ -237,6 +238,41 @@ impl From<QueryLineFlags> for QueryFlags {
     }
 }
 
+/// The pure half of `kndo query`: each non-blank input line becomes either a `QueryRequest`
+/// or a `(line index, message)` parse error, stopping (with the truncation flag set) once the
+/// batch cap is reached. Separated from the stdin/engine/stdout plumbing so the line grammar
+/// is testable as data-in/data-out.
+fn parse_query_lines(
+    lines: impl Iterator<Item = String>,
+) -> (Vec<QueryRequest>, Vec<(usize, String)>, bool) {
+    let mut requests = Vec::new();
+    let mut parse_errors: Vec<(usize, String)> = Vec::new();
+    let mut truncated = false;
+
+    for (n, line) in lines.enumerate() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        if requests.len() + parse_errors.len() >= MAX_QUERY_BATCH {
+            truncated = true;
+            break;
+        }
+        match serde_json::from_str::<QueryLine>(&line) {
+            Ok(parsed) => match Verb::parse(&parsed.verb) {
+                Some(verb) => requests.push(QueryRequest {
+                    id: parsed.id,
+                    verb,
+                    selectors: parsed.selectors,
+                    flags: parsed.flags.into(),
+                }),
+                None => parse_errors.push((n, format!("unknown verb `{}`", parsed.verb))),
+            },
+            Err(e) => parse_errors.push((n, format!("malformed request: {e}"))),
+        }
+    }
+    (requests, parse_errors, truncated)
+}
+
 /// `kndo query`: reads JSON Lines from stdin, revalidates the cache once for the
 /// whole batch, answers in input order as JSON Lines on stdout — `run` on the first line only.
 /// JSON-only by design (no human format — this is the machine/agent transport).
@@ -250,35 +286,8 @@ pub(crate) fn query_cmd() -> ExitCode {
         );
         return ExitCode::from(2);
     }
-    let mut requests = Vec::new();
-    let mut parse_errors: Vec<(usize, String)> = Vec::new();
-    let mut truncated = false;
-
-    for (n, line) in stdin.lock().lines().enumerate() {
-        let Ok(line) = line else { break };
-        if line.trim().is_empty() {
-            continue;
-        }
-        if requests.len() + parse_errors.len() >= MAX_QUERY_BATCH {
-            truncated = true;
-            break;
-        }
-        match serde_json::from_str::<QueryLine>(&line) {
-            Ok(parsed) => match Verb::parse(&parsed.verb) {
-                Some(verb) => requests.push((
-                    parsed.id.clone(),
-                    QueryRequest {
-                        id: parsed.id,
-                        verb,
-                        selectors: parsed.selectors,
-                        flags: parsed.flags.into(),
-                    },
-                )),
-                None => parse_errors.push((n, format!("unknown verb `{}`", parsed.verb))),
-            },
-            Err(e) => parse_errors.push((n, format!("malformed request: {e}"))),
-        }
-    }
+    let (batch_requests, parse_errors, truncated) =
+        parse_query_lines(stdin.lock().lines().map_while(Result::ok));
 
     let cwd = match std::env::current_dir() {
         Ok(d) => d,
@@ -295,8 +304,6 @@ pub(crate) fn query_cmd() -> ExitCode {
         }
     };
 
-    let ids: Vec<Option<String>> = requests.iter().map(|(id, _)| id.clone()).collect();
-    let batch_requests: Vec<QueryRequest> = requests.into_iter().map(|(_, r)| r).collect();
     let results = engine.query_batch(batch_requests);
 
     let stdout = std::io::stdout();
@@ -316,7 +323,6 @@ pub(crate) fn query_cmd() -> ExitCode {
         );
         worst_rank = worst_rank.max(2);
     }
-    let _ = ids; // ids travel inside each QueryRequest/QueryResult already; kept for clarity at the call site
 
     if std::io::stdout().is_terminal() && results.is_empty() && parse_errors.is_empty() {
         eprintln!("kndo: query reads JSON Lines requests from stdin — one JSON request per line");
@@ -330,5 +336,216 @@ fn status_rank(status: &str) -> u8 {
         "ok" => 0,
         "not-found" => 1,
         _ => 2,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn args(list: &[&str]) -> Vec<String> {
+        list.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn positionals_become_selectors_in_order() {
+        let parsed = parse_nav_args(&args(&["foo*", "src/lib.rs", "Bar.baz"])).unwrap();
+        assert_eq!(parsed.selectors, vec!["foo*", "src/lib.rs", "Bar.baz"]);
+        assert!(parsed.format.is_none());
+        let empty = parse_nav_args(&[]).unwrap();
+        assert!(empty.selectors.is_empty());
+    }
+
+    #[test]
+    fn valued_flags_space_form() {
+        let parsed = parse_nav_args(&args(&[
+            "--kind",
+            "function",
+            "--color",
+            "unreachable",
+            "--lang",
+            "rust",
+            "--edges",
+            "imports",
+            "--roots",
+            "production",
+            "--format",
+            "json",
+        ]))
+        .unwrap();
+        assert_eq!(parsed.flags.kind.as_deref(), Some("function"));
+        assert_eq!(parsed.flags.color.as_deref(), Some("unreachable"));
+        assert_eq!(parsed.flags.lang.as_deref(), Some("rust"));
+        assert_eq!(parsed.flags.edges.as_deref(), Some("imports"));
+        assert_eq!(parsed.flags.roots.as_deref(), Some("production"));
+        assert_eq!(parsed.format.as_deref(), Some("json"));
+    }
+
+    #[test]
+    fn valued_flags_equals_form() {
+        let parsed = parse_nav_args(&args(&[
+            "--kind=method",
+            "--color=test-only",
+            "--lang=go",
+            "--edges=references",
+            "--roots=test",
+            "--format=agent",
+        ]))
+        .unwrap();
+        assert_eq!(parsed.flags.kind.as_deref(), Some("method"));
+        assert_eq!(parsed.flags.color.as_deref(), Some("test-only"));
+        assert_eq!(parsed.flags.lang.as_deref(), Some("go"));
+        assert_eq!(parsed.flags.edges.as_deref(), Some("references"));
+        assert_eq!(parsed.flags.roots.as_deref(), Some("test"));
+        assert_eq!(parsed.format.as_deref(), Some("agent"));
+    }
+
+    #[test]
+    fn numeric_flags_parse_and_reject_non_numbers() {
+        let parsed =
+            parse_nav_args(&args(&["--depth", "3", "--max-paths", "2", "--limit", "5"])).unwrap();
+        assert_eq!(parsed.flags.depth, Some(3));
+        assert_eq!(parsed.flags.max_paths, Some(2));
+        assert_eq!(parsed.flags.limit, Some(5));
+        for flag in ["--depth", "--max-paths", "--limit"] {
+            let err = parse_nav_args(&args(&[flag, "abc"])).unwrap_err();
+            assert!(err.contains(flag), "{err}");
+            assert!(err.contains("not a number"), "{err}");
+        }
+    }
+
+    #[test]
+    fn pair_flag_splits_on_comma_and_accumulates() {
+        let parsed =
+            parse_nav_args(&args(&["--pair", "a.rs,b.rs", "--pair", "c.rs,d.rs"])).unwrap();
+        assert_eq!(
+            parsed.flags.pairs,
+            vec![
+                ("a.rs".to_string(), "b.rs".to_string()),
+                ("c.rs".to_string(), "d.rs".to_string()),
+            ]
+        );
+        let err = parse_nav_args(&args(&["--pair", "no-comma"])).unwrap_err();
+        assert!(err.contains("must be `A,B`"), "{err}");
+    }
+
+    #[test]
+    fn boolean_flags_flip_and_split_by_color_is_accepted_inert() {
+        let parsed = parse_nav_args(&args(&[
+            "--transitive",
+            "--if-deleted",
+            "--all",
+            "--split-by-color",
+        ]))
+        .unwrap();
+        assert!(parsed.flags.transitive);
+        assert!(parsed.flags.if_deleted);
+        assert!(parsed.flags.all);
+    }
+
+    #[test]
+    fn unknown_flag_and_missing_value_are_errors() {
+        let err = parse_nav_args(&args(&["--nope"])).unwrap_err();
+        assert!(err.contains("unknown flag `--nope`"), "{err}");
+        let err = parse_nav_args(&args(&["--kind"])).unwrap_err();
+        assert!(err.contains("--kind needs a value"), "{err}");
+    }
+
+    #[test]
+    fn flags_and_selectors_interleave() {
+        let parsed = parse_nav_args(&args(&["foo", "--kind", "class", "bar", "--all"])).unwrap();
+        assert_eq!(parsed.selectors, vec!["foo", "bar"]);
+        assert_eq!(parsed.flags.kind.as_deref(), Some("class"));
+        assert!(parsed.flags.all);
+    }
+
+    // ------------------------------------------------------------ parse_query_lines
+
+    fn lines(list: &[&str]) -> impl Iterator<Item = String> + use<> {
+        list.iter()
+            .map(|s| s.to_string())
+            .collect::<Vec<_>>()
+            .into_iter()
+    }
+
+    #[test]
+    fn a_valid_line_maps_every_flag_field() {
+        let (requests, errors, truncated) = parse_query_lines(lines(&[r#"{
+            "id": "q1", "verb": "find", "selectors": ["foo*"],
+            "flags": {"kind": "function", "color": "unreachable", "lang": "rust",
+                      "depth": 2, "transitive": true, "edges": "imports", "all": true,
+                      "max_paths": 3, "roots": "production",
+                      "pairs": [["a.rs", "b.rs"]], "limit": 7, "if_deleted": true}
+        }"#]));
+        assert!(errors.is_empty());
+        assert!(!truncated);
+        assert_eq!(requests.len(), 1);
+        let r = &requests[0];
+        assert_eq!(r.id.as_deref(), Some("q1"));
+        assert_eq!(r.selectors, vec!["foo*"]);
+        let f = &r.flags;
+        assert_eq!(f.kind.as_deref(), Some("function"));
+        assert_eq!(f.color.as_deref(), Some("unreachable"));
+        assert_eq!(f.lang.as_deref(), Some("rust"));
+        assert_eq!(f.depth, Some(2));
+        assert!(f.transitive);
+        assert_eq!(f.edges.as_deref(), Some("imports"));
+        assert!(f.all);
+        assert_eq!(f.max_paths, Some(3));
+        assert_eq!(f.roots.as_deref(), Some("production"));
+        assert_eq!(f.pairs, vec![("a.rs".to_string(), "b.rs".to_string())]);
+        assert_eq!(f.limit, Some(7));
+        assert!(f.if_deleted);
+    }
+
+    #[test]
+    fn unknown_verb_is_a_line_error_and_other_lines_still_parse() {
+        let (requests, errors, _) = parse_query_lines(lines(&[
+            r#"{"verb": "levitate", "selectors": ["x"]}"#,
+            r#"{"verb": "find", "selectors": ["y"]}"#,
+        ]));
+        assert_eq!(requests.len(), 1);
+        assert_eq!(errors.len(), 1);
+        assert_eq!(errors[0].0, 0);
+        assert!(errors[0].1.contains("unknown verb `levitate`"));
+    }
+
+    #[test]
+    fn malformed_json_reports_the_line_index() {
+        let (requests, errors, _) = parse_query_lines(lines(&["not json", r#"{"verb": "find"}"#]));
+        assert_eq!(requests.len(), 1);
+        assert_eq!(errors.len(), 1);
+        assert_eq!(errors[0].0, 0);
+        assert!(errors[0].1.contains("malformed request"));
+    }
+
+    #[test]
+    fn blank_lines_are_skipped_without_consuming_the_batch_budget() {
+        let (requests, errors, truncated) = parse_query_lines(lines(&[
+            "",
+            "   ",
+            r#"{"verb": "find", "selectors": ["a"]}"#,
+        ]));
+        assert_eq!(requests.len(), 1);
+        assert!(errors.is_empty());
+        assert!(!truncated);
+    }
+
+    #[test]
+    fn the_batch_cap_truncates_and_reports_it() {
+        let line = r#"{"verb": "find", "selectors": ["a"]}"#;
+        let many: Vec<&str> = std::iter::repeat_n(line, MAX_QUERY_BATCH + 1).collect();
+        let (requests, errors, truncated) = parse_query_lines(lines(&many));
+        assert_eq!(requests.len(), MAX_QUERY_BATCH);
+        assert!(errors.is_empty());
+        assert!(truncated);
+    }
+
+    #[test]
+    fn status_rank_orders_ok_not_found_error() {
+        assert_eq!(status_rank("ok"), 0);
+        assert_eq!(status_rank("not-found"), 1);
+        assert_eq!(status_rank("error"), 2);
+        assert_eq!(status_rank("anything-else"), 2);
     }
 }

@@ -938,4 +938,188 @@ mod tests {
         assert!(out.contains("18.7ms"));
         assert!(out.contains("cache: disabled, 0 hits"));
     }
+    // ------------------------------------------------------------ render_query_entry variants
+
+    fn spanned_qnode(selector: &str, kind: &str) -> kndo::query::QNodeRef {
+        kndo::query::QNodeRef {
+            selector: selector.to_string(),
+            kind: kind.to_string(),
+            color: None,
+            span: Some(kndo::query::NodeSpan {
+                path: "src/lib.rs".to_string(),
+                start: (10, 1),
+                end: (12, 2),
+            }),
+        }
+    }
+
+    fn qedge(edge: &str) -> kndo::query::QEdgeRef {
+        kndo::query::QEdgeRef {
+            edge: edge.to_string(),
+            confidence: Confidence::Certain,
+            site: None,
+        }
+    }
+
+    fn no_color() -> RenderOptions {
+        RenderOptions {
+            color: false,
+            quiet: false,
+            verbose: false,
+        }
+    }
+
+    #[test]
+    fn failed_entry_shows_status_selector_and_message() {
+        let out = render_query(
+            &query_result(ResultEntry::Failed {
+                status: "not-found",
+                selector: "sym:ghost".to_string(),
+                message: "no symbol matches".to_string(),
+            }),
+            &no_color(),
+        );
+        assert!(
+            out.contains("not-found: sym:ghost — no symbol matches"),
+            "{out}"
+        );
+    }
+
+    #[test]
+    fn find_entry_numbers_matches_and_reports_elided() {
+        let out = render_query(
+            &query_result(ResultEntry::Find(kndo::query::FindResult {
+                matches: vec![
+                    spanned_qnode("sym:alpha", "function"),
+                    spanned_qnode("sym:beta", "class"),
+                ],
+                elided: 3,
+            })),
+            &no_color(),
+        );
+        assert!(
+            out.contains("1. [sym:alpha] function src/lib.rs:10"),
+            "{out}"
+        );
+        assert!(out.contains("2. [sym:beta] class src/lib.rs:10"), "{out}");
+        assert!(out.contains("… 3 more (--limit)"), "{out}");
+    }
+
+    #[test]
+    fn neighbors_entry_shows_node_edges_and_elided() {
+        let out = render_query(
+            &query_result(ResultEntry::Neighbors(kndo::query::NeighborsResult {
+                node: spanned_qnode("file:src/lib.rs", "file"),
+                entries: vec![kndo::query::NeighborEntry {
+                    node: spanned_qnode("sym:helper", "function"),
+                    via: qedge("references"),
+                    depth: 2,
+                }],
+                by_color: kndo::query::ByColor {
+                    production: 1,
+                    test_only: 0,
+                    tooling_only: 0,
+                    unreachable: 0,
+                },
+                elided: 1,
+            })),
+            &no_color(),
+        );
+        assert!(out.contains("[file:src/lib.rs] file"), "{out}");
+        assert!(
+            out.contains("[sym:helper] function src/lib.rs:10 via references (depth 2)"),
+            "{out}"
+        );
+        assert!(out.contains("… 1 more (--limit)"), "{out}");
+    }
+
+    #[test]
+    fn impact_entry_shows_counts_roots_and_if_deleted_blocks() {
+        let out = render_query(
+            &query_result(ResultEntry::Impact(Box::new(kndo::query::ImpactResult {
+                node: spanned_qnode("sym:core", "function"),
+                affected: vec![kndo::query::NeighborEntry {
+                    node: spanned_qnode("sym:caller", "function"),
+                    via: qedge("references"),
+                    depth: 1,
+                }],
+                by_color: kndo::query::ByColor {
+                    production: 2,
+                    test_only: 1,
+                    tooling_only: 0,
+                    unreachable: 0,
+                },
+                elided: 2,
+                affected_roots: vec![kndo::query::AffectedRoot {
+                    kind: "production".to_string(),
+                    node: spanned_qnode("file:src/main.rs", "file"),
+                }],
+                affected_roots_elided: 1,
+                if_deleted: Some(kndo::query::IfDeleted {
+                    newly_unreachable: vec![spanned_qnode("sym:orphan", "function")],
+                    newly_unreachable_elided: 0,
+                    newly_test_only: vec![],
+                    newly_test_only_elided: 2,
+                    freed_dependencies: vec!["left-pad".to_string()],
+                }),
+            }))),
+            &no_color(),
+        );
+        assert!(
+            out.contains("affected: 3 (production=2 test-only=1 tooling-only=0 unreachable=0)"),
+            "{out}"
+        );
+        assert!(out.contains("… 2 more (--limit)"), "{out}");
+        assert!(out.contains("affected roots:"), "{out}");
+        assert!(
+            out.contains("[production] [file:src/main.rs] file"),
+            "{out}"
+        );
+        assert!(out.contains("… 1 more"), "{out}");
+        assert!(out.contains("if deleted:"), "{out}");
+        assert!(out.contains("newly unreachable: 1"), "{out}");
+        assert!(out.contains("[sym:orphan] function"), "{out}");
+        assert!(out.contains("newly test-only: 2"), "{out}");
+        assert!(out.contains("freed dependencies: left-pad"), "{out}");
+    }
+
+    #[test]
+    fn trace_entry_renders_paths_no_path_and_elision() {
+        let with_path = render_query(
+            &query_result(ResultEntry::Trace(kndo::query::TraceResult {
+                from: spanned_qnode("file:src/a.rs", "file"),
+                to: spanned_qnode("file:src/b.rs", "file"),
+                paths: vec![kndo::query::Path {
+                    hops: vec![kndo::query::Hop {
+                        node: spanned_qnode("file:src/b.rs", "file"),
+                        via: qedge("imports"),
+                    }],
+                    weakest_confidence: Confidence::Certain,
+                }],
+                paths_elided: 4,
+            })),
+            &no_color(),
+        );
+        assert!(
+            with_path
+                .contains("[file:src/a.rs] file src/lib.rs:10 → [imports] [file:src/b.rs] file"),
+            "{with_path}"
+        );
+        assert!(
+            with_path.contains("… 4 more paths (--max-paths)"),
+            "{with_path}"
+        );
+
+        let no_path = render_query(
+            &query_result(ResultEntry::Trace(kndo::query::TraceResult {
+                from: spanned_qnode("file:src/a.rs", "file"),
+                to: spanned_qnode("file:src/b.rs", "file"),
+                paths: vec![],
+                paths_elided: 0,
+            })),
+            &no_color(),
+        );
+        assert!(no_path.contains("-/->"), "{no_path}");
+        assert!(no_path.contains("(no path)"), "{no_path}");
+    }
 }
