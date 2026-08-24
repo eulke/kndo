@@ -190,6 +190,18 @@ Project scaffolding; performs no analysis.
   `.git/hooks/pre-commit` running `kndo check --staged --fail-on warning` — but only when no
   pre-commit hook exists; if one does, kndo refuses (exit `2`) and prints the line for you to
   add yourself.
+- Prints an advisory pointing at `kndo agents install` when the agent skill (below) isn't
+  installed yet.
+
+## kndo agents
+
+Agent-integration scaffolding — one action today:
+
+- `kndo agents install` — writes the embedded [agent skill](agents.md#the-kndo-skill) to
+  `.agents/skills/kndo/` and links `.claude/skills/kndo` to it. Idempotent: re-running after
+  a binary upgrade is the update flow (the installed files are kndo-owned and overwritten on
+  drift, unlike `init`'s pre-commit hook). Refuses — exit `2` — rather than overwrite an
+  unexpected `.claude/skills/kndo` that isn't already the expected symlink.
 
 ## kndo plugin
 

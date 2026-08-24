@@ -15,6 +15,7 @@ use kndo::engine::{
 
 mod nav;
 mod render;
+mod skill;
 
 const USAGE: &str = "kndo — find what your codebase no longer needs
 
@@ -27,6 +28,7 @@ commands
   doctor           what kndo sees: adapters, cache, plugins, config
   plugin           install | list | remove | new | build | wit | verify
   init             write kndo.toml (--hook also installs the pre-commit hook)
+  agents           install the agent skill (.agents/skills/kndo + .claude symlink)
   find|describe|uses|used-by|trace|impact   graph navigation verbs (JSON envelopes)
   query            batched navigation requests from stdin (one JSON per line)
 
@@ -78,6 +80,7 @@ fn main() -> ExitCode {
         Some("plugin") => plugin_cmd(&args[1..]),
         Some("health") => health_cmd(&args[1..]),
         Some("init") => init_cmd(&args[1..]),
+        Some("agents") => agents_cmd(&args[1..]),
         Some("find") => nav::find_cmd(&args[1..]),
         Some("describe") => nav::describe_cmd(&args[1..]),
         Some("uses") => nav::uses_cmd(&args[1..]),
@@ -91,7 +94,7 @@ fn main() -> ExitCode {
         None => check(&args),
         Some(other) => {
             eprintln!(
-                "kndo: unknown command `{other}` (check, health, baseline, doctor, plugin, init, find, describe, uses, used-by, trace, impact, query, help, --version)"
+                "kndo: unknown command `{other}` (check, health, baseline, doctor, plugin, init, agents, find, describe, uses, used-by, trace, impact, query, help, --version)"
             );
             ExitCode::from(2)
         }
@@ -218,7 +221,47 @@ fn init_cmd(args: &[String]) -> ExitCode {
         println!("pre-commit hook: installed at .git/hooks/pre-commit");
     }
 
+    if cwd.join(skill::AGENTS_SKILL_DIR).join("SKILL.md").is_file() {
+        println!("agent skill: installed ({})", skill::AGENTS_SKILL_DIR);
+    } else {
+        println!("agent skill: not installed (install with `kndo agents install`)");
+    }
+
     ExitCode::SUCCESS
+}
+
+/// `kndo agents`: agent-integration scaffolding. The one action today is `install`, which
+/// writes the embedded skill package — see the [`skill`] module for the layout and
+/// ownership contract. Idempotent by design: re-running after a binary upgrade is the
+/// documented way to refresh the installed skill.
+fn agents_cmd(args: &[String]) -> ExitCode {
+    match args.first().map(String::as_str) {
+        Some("install") if args.len() == 1 => {
+            let cwd = match std::env::current_dir() {
+                Ok(d) => d,
+                Err(e) => {
+                    eprintln!("kndo: cannot determine working directory: {e}");
+                    return ExitCode::from(2);
+                }
+            };
+            match skill::install_skill(&cwd) {
+                Ok(lines) => {
+                    for line in lines {
+                        println!("{line}");
+                    }
+                    ExitCode::SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("kndo: {e}");
+                    ExitCode::from(2)
+                }
+            }
+        }
+        _ => {
+            eprintln!("kndo: usage: kndo agents install");
+            ExitCode::from(2)
+        }
+    }
 }
 
 enum GitignoreOutcome {
