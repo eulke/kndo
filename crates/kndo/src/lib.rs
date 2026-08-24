@@ -75,8 +75,10 @@ pub fn default_adapters() -> Vec<Box<dyn LanguageAdapter>> {
 /// plugin never runs — or costs the graph-cache bypass — on a project it doesn't match.
 /// Only what is listed here ships built-in; the function's name implies nothing more.
 pub fn default_plugins() -> Vec<Box<dyn Plugin>> {
-    // Same cfg-gated-push shape as `default_adapters`, same clippy reasoning.
-    #[allow(clippy::vec_init_then_push)]
+    // Same cfg-gated-push shape as `default_adapters`, same clippy reasoning — including
+    // `unused_mut`: in the shell configuration every plugin feature is off, no push
+    // compiles in, and nothing here needs `mut` in that build alone.
+    #[allow(clippy::vec_init_then_push, unused_mut)]
     {
         let mut plugins: Vec<Box<dyn Plugin>> = Vec::new();
         #[cfg(feature = "plugin-coverage")]
