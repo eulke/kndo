@@ -117,9 +117,11 @@ pub(crate) fn extract(path: &str, content: &[u8], ctx: &ResolveCtx<'_>) -> Manif
         return out;
     }
 
-    // --- bins: production roots unconditionally, each under its cargo-assigned name —
-    // the identity `env!("CARGO_BIN_EXE_<name>")` invokes it by (the
-    // invoked-program rule) ---
+    // --- bins: production roots unconditionally *as a claim* — "this is an entry point"
+    // is the language fact this adapter states; assembly caps the root's KIND by the
+    // file's role (a bin under a tooling dir like xtask/ becomes a Tooling root,
+    // graph phase 2.58). Each lands under its cargo-assigned name — the identity
+    // `env!("CARGO_BIN_EXE_<name>")` invokes it by (the invoked-program rule) ---
     let mut bins: Vec<(Option<SmolStr>, ProjectPath)> = Vec::new();
     let main_rs = join("src/main.rs");
     if ctx.contains(&main_rs) {

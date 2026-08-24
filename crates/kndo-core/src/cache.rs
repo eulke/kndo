@@ -75,7 +75,7 @@ pub struct CacheStats {
 /// handful of byte comparisons, never a full `rkyv` validation of a payload about to be thrown
 /// away.
 const GRAPH_MAGIC: [u8; 4] = *b"KNG1";
-const GRAPH_FORMAT_VERSION: u32 = 2; // bump whenever the snapshot envelope's serialized shape changes
+const GRAPH_FORMAT_VERSION: u32 = 3; // bump whenever the snapshot envelope's serialized shape changes
 const GRAPH_KEY_LEN: usize = 32;
 const GRAPH_HEADER_LEN: usize = GRAPH_MAGIC.len() + 4 + GRAPH_KEY_LEN;
 
@@ -162,6 +162,13 @@ struct GraphSnapshot {
     /// are provenance-tagged and re-derivable, but `classify_file` overrides are baked into
     /// `FileNode.class` with no tag — safe to reuse only when the plugin set is unchanged.
     plugin_set_digest: [u8; 32],
+    /// The [`crate::graph::GRAPH_SCHEMA_VERSION`] that assembled this snapshot. The keyed
+    /// warm path already folds the schema version into the cache key, but the incremental
+    /// patch loads through the keyless latest-pointer — the pointer supplies the very key
+    /// the header is checked against, so without self-carried provenance a new binary
+    /// would happily patch a snapshot assembled under old semantics, keeping stale
+    /// unchanged-file edges verbatim. The patch refuses on mismatch instead.
+    graph_schema_version: u32,
 }
 
 /// A fully deserialized snapshot with its parts kept apart — what [`ProjectCache::latest_graph`]
@@ -172,6 +179,8 @@ pub struct LoadedSnapshot {
     pub extraction_diagnostics: Vec<Diagnostic>,
     pub plugin_diagnostics: Vec<Diagnostic>,
     pub plugin_set_digest: [u8; 32],
+    /// See `GraphSnapshot::graph_schema_version` — the patch's semantics guard.
+    pub graph_schema_version: u32,
 }
 
 struct LockFile(PathBuf);
@@ -647,6 +656,7 @@ impl ProjectCache {
             extraction_diagnostics: snapshot.diagnostics,
             plugin_diagnostics: snapshot.plugin_diagnostics,
             plugin_set_digest: snapshot.plugin_set_digest,
+            graph_schema_version: snapshot.graph_schema_version,
         })
     }
 
@@ -789,6 +799,7 @@ impl GraphSnapshotWriter {
             plugin_implicitly_invoked: graph.plugin_implicitly_invoked.clone(),
             plugin_diagnostics: plugin_diagnostics.to_vec(),
             plugin_set_digest: self.plugin_set_digest,
+            graph_schema_version: crate::graph::GRAPH_SCHEMA_VERSION,
         };
         let Ok(bytes) = rkyv::to_bytes::<rkyv::rancor::Error>(&snapshot) else {
             return;
@@ -1200,6 +1211,11 @@ mod tests {
         // future miss. `put_graph` writes the empty-set plugin digest, and the
         // parts come back apart.
         let latest = cache.latest_graph().expect("latest pointer resolves");
+        assert_eq!(
+            latest.graph_schema_version,
+            crate::graph::GRAPH_SCHEMA_VERSION,
+            "the snapshot carries its assembling schema version — the patch's semantics guard"
+        );
         assert_eq!(latest.graph.files.len(), restored.files.len());
         assert_eq!(
             latest.plugin_set_digest,

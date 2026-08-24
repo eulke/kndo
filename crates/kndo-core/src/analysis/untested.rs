@@ -286,6 +286,43 @@ mod tests {
     }
 
     #[test]
+    fn tooling_only_files_are_not_untested() {
+        // The root-kind cap (graph phase 2.58) turns a tooling bin's Production roots into
+        // Tooling ones — this analysis fires only on production-reachable nodes, so a
+        // tooling-role entry point (xtask) never draws "production-reachable but no test
+        // reaches it": the statement would be false. A Test root elsewhere keeps the
+        // no-test-roots honesty gate from trivially skipping the whole analysis.
+        let files = vec![
+            file("tests/spec.test.mock", FileRole::Test),
+            file("xtask/main.mock", FileRole::Tooling),
+        ];
+        let edges = vec![
+            edge(
+                EdgeKind::Root {
+                    kind: RootKind::Test,
+                    target: NodeRef::File(FileId(0)),
+                },
+                Confidence::Certain,
+            ),
+            edge(
+                EdgeKind::Root {
+                    kind: RootKind::Tooling,
+                    target: NodeRef::File(FileId(1)),
+                },
+                Confidence::Certain,
+            ),
+        ];
+        let graph = ProjectGraph::for_test(files, vec![], vec![], edges);
+        let reach = reachability::compute(&graph);
+        let (findings, diagnostic) = find_untested(&graph, &reach);
+        assert!(diagnostic.is_none());
+        assert!(
+            findings.is_empty(),
+            "a ToolingOnly file is not a test blind spot: {findings:?}"
+        );
+    }
+
+    #[test]
     fn production_file_reached_by_no_test_is_untested() {
         let files = vec![
             file("tests/spec.test.mock", FileRole::Test),

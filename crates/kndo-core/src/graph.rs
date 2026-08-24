@@ -612,9 +612,17 @@ fn try_patch(
         mut extraction_diagnostics,
         plugin_diagnostics: _, // stale — the plugin round below re-derives its diagnostics whole
         plugin_set_digest: snapshot_plugin_digest,
+        graph_schema_version: snapshot_schema_version,
     } = cache.latest_graph()?;
 
     // ---- guards, in cheapest-first order ----
+    // A snapshot assembled under different semantics cannot be patched: unchanged files'
+    // edges ride the patch verbatim, so old-semantics edges would survive into a graph the
+    // new binary claims as its own. The keyed warm path folds the schema version into the
+    // key; this latest-pointer path is keyless, so the snapshot carries its own provenance.
+    if snapshot_schema_version != GRAPH_SCHEMA_VERSION {
+        return None;
+    }
     // A changed plugin set means the snapshot's `FileNode.class` values may
     // carry another set's `classify_file` overrides — untagged and unstrippable, unlike the
     // provenance-tagged edges below. Full rebuild once; the snapshot key would miss anyway.
@@ -2015,16 +2023,23 @@ fn emit_file_declarations(
     // The index is built lazily, once, only when a Declaration-targeted root exists.
     let mut root_name_index: Option<HashMap<String, Vec<u32>>> = None;
     for root in &facts.roots {
+        // Root-kind cap, the in-source half of phase 2.58: the adapter's "fn main is an
+        // entry point" is a language fact; WHO invokes it is the file's role, and
+        // `role_root_files` maps exactly the Test/Tooling files (Production files are
+        // absent). Because this emitter is shared, the incremental patch inherits the
+        // identical behavior for free.
+        let kind = if root.kind == crate::vocab::RootKind::Production {
+            role_root_files.get(&file_id).copied().unwrap_or(root.kind)
+        } else {
+            root.kind
+        };
         let mut emit_root = |target: NodeRef| {
             let span = match target {
                 NodeRef::Symbol(s) => Some(symbols[s.0 as usize].span),
                 NodeRef::File(_) => None,
             };
             edges.push(Edge {
-                kind: EdgeKind::Root {
-                    kind: root.kind,
-                    target,
-                },
+                kind: EdgeKind::Root { kind, target },
                 confidence: root.confidence,
                 source: provenance(),
                 span,
@@ -2488,7 +2503,7 @@ fn promote_package_relative_test_roles<'a>(
 /// an assembly-algorithm change that could produce a different graph from the same facts. Feeds
 /// [`compute_graph_key`] (the "core graph-schema version"); a bump here invalidates
 /// every project's cached `graph.bin` on the next run, same as any other key-input change.
-pub const GRAPH_SCHEMA_VERSION: u32 = 27; // bump whenever the persisted snapshot shape (rkyv layouts included) or the assembly semantics that derive a graph from the same facts change
+pub const GRAPH_SCHEMA_VERSION: u32 = 28; // bump whenever the persisted snapshot shape (rkyv layouts included) or the assembly semantics that derive a graph from the same facts change
 
 /// The graph snapshot's cache key (`cache.rs`'s `graph.bin`): a single digest
 /// folding in the *whole* discovered file set (every path + content hash — this already
@@ -3720,6 +3735,39 @@ pub fn assemble_from_source(
                 }
             }
         }
+    }
+
+    // Phase 2.58 — root-kind cap: a manifest-declared Production root whose target file the
+    // adapter classified Test/Tooling takes the role's kind. The manifest says "this is an
+    // entry point" — a language fact, kept; the role says WHO consumes it — the project
+    // fact that decides the KIND. A tooling bin (xtask) is a tooling entry point, not
+    // production surface; reporting its internals as "production-reachable but untested"
+    // would be a false statement. Runs after 2.55 so a content-demoted Test role is
+    // honored, and before 2.6/3a so every downstream consumer — reachability, library-root
+    // promotion, untested — sees the capped kind. Deliberately exempt, by evidence
+    // hierarchy: plugin-contributed roots (targeted consumer knowledge, materialized after
+    // both cap sites) and surface promotions ("production API re-exports this"); instead
+    // the cap removes the demoted file from `library_root_files`, so no promotion chain
+    // ever *starts* from a tooling/test bin — one reached by a genuine production
+    // re-export chain legitimately re-enters later.
+    for edge in &mut edges {
+        let EdgeKind::Root {
+            kind,
+            target: NodeRef::File(f),
+        } = &mut edge.kind
+        else {
+            continue;
+        };
+        if *kind != crate::vocab::RootKind::Production {
+            continue; // non-Production kinds are never touched (a Test root is real)
+        }
+        let capped = match files[f.0 as usize].class.map(|c| c.role) {
+            Some(crate::vocab::FileRole::Test) => crate::vocab::RootKind::Test,
+            Some(crate::vocab::FileRole::Tooling) => crate::vocab::RootKind::Tooling,
+            _ => continue,
+        };
+        *kind = capped;
+        library_root_files.remove(f);
     }
 
     // Phase 2.6 — role-derived roots (literally): "Test roots — test
@@ -4989,6 +5037,88 @@ mod tests {
             fs::write(full, content).unwrap();
         }
         dir
+    }
+
+    /// One assertion shape for both cap tests: every Root edge that targets `path`'s file
+    /// or its symbols carries `expected`, and the file colors `expected_reach`.
+    fn assert_roots_capped(
+        tree: &[(&str, &str)],
+        name: &str,
+        path: &str,
+        expected: crate::vocab::RootKind,
+        expected_reach: crate::analysis::reachability::Reachability,
+    ) {
+        let dir = project(name, tree);
+        let adapters: Vec<Box<dyn LanguageAdapter>> = vec![Box::new(MockAdapter)];
+        let (graph, _) = assemble(&dir, &adapters, &[]).unwrap();
+        let file_id = graph
+            .files
+            .iter()
+            .position(|f| f.path.0 == path)
+            .map(|i| FileId(i as u32))
+            .expect("target file in graph");
+        let symbol_ids: Vec<SymbolId> = graph
+            .symbols
+            .iter()
+            .enumerate()
+            .filter(|(_, s)| s.file == file_id)
+            .map(|(i, _)| SymbolId(i as u32))
+            .collect();
+        let mut root_kinds = Vec::new();
+        for edge in &graph.edges {
+            if let EdgeKind::Root { kind, target } = edge.kind {
+                let hits = match target {
+                    NodeRef::File(f) => f == file_id,
+                    NodeRef::Symbol(sym) => symbol_ids.contains(&sym),
+                };
+                if hits {
+                    root_kinds.push(kind);
+                }
+            }
+        }
+        assert!(!root_kinds.is_empty(), "the entry-point roots must exist");
+        assert!(
+            root_kinds.iter().all(|k| *k == expected),
+            "every root on {path} must be capped to {expected:?}, got {root_kinds:?}"
+        );
+        let reach = crate::analysis::reachability::compute(&graph);
+        assert_eq!(
+            reach.get(crate::vocab::NodeRef::File(file_id)).0,
+            expected_reach,
+            "the capped kind must decide the file's color"
+        );
+    }
+
+    #[test]
+    fn production_roots_are_capped_to_tooling_by_file_role() {
+        // A manifest bin root (Certain) AND an in-source root both point at a tooling-role
+        // file — both cap sites must fire, or the stronger of the two would keep the file
+        // production-reachable (the xtask case: "production-reachable but untested" was a
+        // false statement).
+        assert_roots_capped(
+            &[
+                ("manifest.mock", "name p\nroot tool.config.mock\n"),
+                ("tool.config.mock", "decl main\nroot-decl main\n"),
+            ],
+            "root-cap-tooling",
+            "tool.config.mock",
+            crate::vocab::RootKind::Tooling,
+            crate::analysis::reachability::Reachability::ToolingOnly,
+        );
+    }
+
+    #[test]
+    fn production_roots_are_capped_to_test_by_file_role() {
+        assert_roots_capped(
+            &[
+                ("manifest.mock", "name p\nroot helper.test.mock\n"),
+                ("helper.test.mock", "decl main\nroot-decl main\n"),
+            ],
+            "root-cap-test",
+            "helper.test.mock",
+            crate::vocab::RootKind::Test,
+            crate::analysis::reachability::Reachability::TestOnly,
+        );
     }
 
     fn mock_adapters() -> Vec<Box<dyn LanguageAdapter>> {

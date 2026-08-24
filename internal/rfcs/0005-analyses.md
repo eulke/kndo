@@ -54,6 +54,13 @@ Most detections derive from one computation. Roots are partitioned by `RootKind`
 - **Tooling roots** — build/config scripts (webpack.config, build.gradle, migrations…): they keep
   their imports alive but are not production code themselves.
 
+A declared root's *kind* is capped by its file's role: a `main`/manifest-bin entry point in a
+Tooling-role file (an `xtask/` binary) is a Tooling root, in a Test-role file a Test root —
+the adapter states the language fact ("this is an entry point"), the role decides who
+consumes it. Plugin-contributed roots are exempt (targeted consumer knowledge outranks a
+directory convention), and so are library-surface promotions ("the production API re-exports
+this") — though no promotion chain ever *starts* from a capped file.
+
 **Plugin-contributed edges are liveness evidence, never architecture evidence (RFC 0017
 §5.4).** A plugin's `References`/`ReferencesFile` contributions feed reachability — where a
 false positive can only *suppress* findings, the safe direction — and are ignored by `cyclic`

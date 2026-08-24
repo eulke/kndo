@@ -35,6 +35,9 @@ pub enum SymbolKind {
 //   Macro as originating from its (unknowable) expansion sites, i.e. requiring the widest scope.
 
 pub enum RootKind { Production, Test, Tooling }
+// A declared Production root's kind is capped by its file's role at assembly (RFC 0005 §2):
+// an entry point in a Tooling/Test-role file becomes a Tooling/Test root. Plugin-contributed
+// roots and library-surface promotions are exempt (their evidence outranks the convention).
 
 pub enum DependencyScope { Prod, Dev, Build, Peer, Optional }
 // analysis semantics per scope: RFC 0005 §5
