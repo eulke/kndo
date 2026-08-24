@@ -523,10 +523,10 @@ to `unused` — `internal/perf-baseline.json` and `schemas/*.json`, both reached
 `PathBuf::join("...")` call at runtime (`xtask`/`kndo`'s own test suite), invisible to static
 analysis by construction (RFC 0002 §5). Real pre-existing debt, now visible, same as the
 Kotlin session's own `comment_openers` self-reference fix — not something this adapter set out
-to remediate, and (confirmed while investigating) not something `kndo.toml`'s documented
-`[[rule]]` path-override mechanism can silence yet either, since no parser for it exists
-(docs/adapters/json.md §2). Left as-is rather than papering over with a change that does
-nothing.
+to remediate. (At the time no `[[rule]]` parser existed to silence it; the config subsystem
+has since landed and the repo's `kndo.toml` now acknowledges these two runtime-consumed
+paths explicitly.) The catalogue of self-check detection gaps of this kind lives in
+`internal/detection-gaps.md`.
 
 ### M5 progress — CSS adapter ✅ (landed 2026-08-21)
 

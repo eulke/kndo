@@ -120,15 +120,12 @@ are both constants.
   `detected_origin`, `suppressions`) stays at its `Default` value.
 
 **Suppressions**: not applicable — `// kndo:allow …` needs a comment syntax JSON doesn't have
-(§0). `kndo.toml`'s `[[rule]]` path-based mechanism (RFC 0006 §7) is the *documented*
-language-neutral alternative for a file with no inline-suppression syntax, but it's worth
-recording here that it isn't wired to a parser yet (confirmed directly against
-`kndo-core/src/engine.rs`'s own `SuppressedSummary` doc comment: "`config` stays honestly `0`
-— no `kndo.toml` suppression parser exists yet") — a real, immediate consequence of this
-adapter existing: any `.json` file reachable only through a Rust `PathBuf::join("...")`-style
-runtime read (this repo's own `internal/perf-baseline.json`, `schemas/*.json`) now reads `unused`
-with no way to silence it path-by-path yet. Not this adapter's gap to close, but worth a reader
-knowing it's open rather than assuming §2's parse-diagnostic path is the only rough edge.
+(§0). `kndo.toml`'s `[[rule]]` path-based mechanism (RFC 0006 §7) is the
+language-neutral alternative for a file with no inline-suppression syntax — wired since the
+config subsystem landed (`kndo-core/src/config.rs`), and exactly what this repo's own
+`kndo.toml` uses for the `.json` files reachable only through a Rust
+`PathBuf::join("...")`-style runtime read (`internal/perf-baseline.json`, `schemas/*.json`),
+which static analysis cannot see by construction (`internal/detection-gaps.md`).
 
 **Metrics**: not applicable — no functions exist to measure (§0).
 
