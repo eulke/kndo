@@ -6,6 +6,10 @@
 //! `rkyv::string::ArchivedString` — nothing about the *live* types' in-memory representation
 //! changes, and nothing outside this module needs to know `SmolStr` isn't natively archivable.
 
+// kndo:allow-file untested these impls are invoked from rkyv-derive-generated code (the
+// #[rkyv(with = …)] expansions); dispatch through generated code is invisible to source
+// extraction, while every snapshot round-trip test exercises them — internal/detection-gaps.md §2.
+
 use rkyv::rancor::{Fallible, Source};
 use rkyv::ser::{Allocator, Writer};
 use rkyv::string::{ArchivedString, StringResolver};

@@ -32,5 +32,5 @@
 # (internal/detection-gaps.md). The schema files are additionally read by every consumer
 # of the published output schema, outside this repo entirely.
 [[rule]]
-paths = ["schemas/**", "internal/perf-baseline.json"]
+paths = ["schemas", "schemas/**", "internal/perf-baseline.json"]
 skip = ["unused"]

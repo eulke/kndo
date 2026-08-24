@@ -26,6 +26,13 @@
 //!   on the instance's FIRST `contribute_roots` call (so a leaked instance from a previous
 //!   round observably stops rooting them — every fresh round must root them again).
 
+// kndo:allow-file untested this guest crate is exercised end-to-end by the WASM-bridge
+// integration tests, which build it as a subprocess and run the component in-process —
+// reachability the host repo's graph cannot see (internal/detection-gaps.md §1).
+// kndo:allow-file crap the crate compiles to wasm32, which the coverage instrumentation
+// cannot link — coverage is structurally unmeasurable here, not merely absent
+// (internal/detection-gaps.md §1).
+
 // Marks the dependency used explicitly — the macro invocation below is a fully-qualified
 // path with no `use`, which kndo's own Rust adapter (a static extractor, not a macro
 // expander) has no way to trace back to the `wit-bindgen` crate on its own.

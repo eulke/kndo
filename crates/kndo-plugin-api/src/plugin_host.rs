@@ -3,6 +3,10 @@
 //! (`host.rs`), this world is bidirectional: the guest calls back into two host-provided query
 //! functions (`list-files`, `symbols-in`) while computing its contributions.
 
+// kndo:allow-file untested every host function here is exercised through the WASM boundary
+// (plugin_compliance.rs builds and runs a real guest against this bridge); the caller is
+// generated wasmtime code no reference edge can see — internal/detection-gaps.md §1.
+
 use std::fmt;
 use std::path::Path;
 use std::sync::Mutex;

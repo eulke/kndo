@@ -11,6 +11,7 @@ use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 use crate::graph::{self, ProjectGraph};
 use crate::vocab::{FileId, PackageId};
 
+// kndo:allow internal-only read through inferred-typed locals at the call sites, field accesses the graph cannot attribute (internal/detection-gaps.md §3)
 pub(crate) struct DirRollup<'a> {
     /// The widest directories where every file underneath is eligible, deepest-independent
     /// (never both a directory and one of its own ancestors).
