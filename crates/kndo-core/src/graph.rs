@@ -3340,7 +3340,7 @@ pub fn assemble_from_source(
         .flatten()
         .flat_map(|(_, m)| m.unit_overrides.iter().cloned())
         .collect();
-    unit_overrides.sort_by(|a, b| b.0 .0.len().cmp(&a.0 .0.len()));
+    unit_overrides.sort_by_key(|a| std::cmp::Reverse(a.0 .0.len()));
     let override_unit = |path: &str| -> Option<SmolStr> {
         unit_overrides
             .iter()

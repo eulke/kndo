@@ -128,10 +128,7 @@ fn run_mutation(label: &str, mutate: impl Fn(&Path, &str) -> String) -> usize {
 
         let (scratch_graph, scratch_diags) = assemble(&work, &adapters(), &[])
             .unwrap_or_else(|e| panic!("scratch assemble failed for {name}: {e:?}"));
-        assert_eq!(
-            cached_graph, scratch_graph,
-            "graph divergence on {name}"
-        );
+        assert_eq!(cached_graph, scratch_graph, "graph divergence on {name}");
         assert_eq!(
             cached_diags, scratch_diags,
             "diagnostics divergence on {name}"

@@ -66,7 +66,10 @@ mod tests {
     fn unresolved_external_module_never_becomes_a_dependency_edge() {
         let known: FxHashSet<ProjectPath> = FxHashSet::default();
         let ctx = ResolveCtx::new(&known);
-        assert_eq!(resolve(&spec("SomeExternalKit"), &ctx), Resolution::Unresolved);
+        assert_eq!(
+            resolve(&spec("SomeExternalKit"), &ctx),
+            Resolution::Unresolved
+        );
     }
 
     #[test]

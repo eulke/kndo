@@ -295,9 +295,7 @@ fn doctor_cmd() -> ExitCode {
     }
     if !adapter_resolution.missing_dependencies.is_empty() {
         println!();
-        println!(
-            "missing adapter dependencies (declared by an active adapter, not present):"
-        );
+        println!("missing adapter dependencies (declared by an active adapter, not present):");
         for m in &adapter_resolution.missing_dependencies {
             println!("  {} — required by {}", m.coordinate, m.required_by);
         }
