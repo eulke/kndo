@@ -318,8 +318,8 @@ nothing here precludes it.
    adapter dependencies, missing adapter dependencies, and reason-aware candidate status
    ("active (dependency of X)") through one status helper shared with the plugin sections.
    Co-installation needed zero code: the install worklist always recursed over
-   `ProbedDescriptor.dependencies`, which `probe_as_adapter` fills identically to
-   `probe_as_plugin`. Proven against real components by
+   `ProbedDescriptor.dependencies`, which `wasm_probe`'s adapter arm fills identically to
+   its plugin arm. Proven against real components by
    `examples/kndo-adapter-wrapper-demo` (`id: "kwrap"`, `dependencies: ["kdemo"]`) in
    `crates/kndo/tests/adapter_dependency_implication.rs`: with only the wrapper's marker
    present, kdemo joins composition as `ImpliedBy("kwrap")` and its analysis genuinely fires.

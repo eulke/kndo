@@ -714,72 +714,68 @@ fn sha256_hex(bytes: &[u8]) -> String {
 }
 
 /// The real probe: land the verified bytes in a temp file (the WASM host loads from a path)
-/// and let `kndo-plugin-api`'s own loaders — reserved-namespace rejection included on both —
-/// vet them. A component can be either a `kndo:plugin` or a `kndo:adapter`; this
-/// tries both, exactly the way `kndo::open`'s own project-local discovery tries both
+/// and let `kndo-plugin-api`'s own loaders — reserved-namespace rejection included on all —
+/// vet them. A component can be a `kndo:plugin`, a coverage ingester, or a `kndo:adapter`;
+/// this tries each, exactly the way `kndo::open`'s own project-local discovery tries the
 /// loaders per file and lets wasmtime's component type-checking sort out which one accepts it.
 /// Public so the integration suite can run [`install_with`]
 /// against genuine components.
+///
+/// On `ProbedDescriptor.version`: it is unused by the install pipeline either way —
+/// `LockEntry.version` is always the release *tag* (`fetch_verified`'s own return, never this
+/// field; true for every arm below). `AdapterDescriptor` has no analogous field at all;
+/// `facts_schema_version` is the closest existing adapter concept, populated in the adapter
+/// arm only because `ProbedDescriptor` needs *something* in that slot.
 pub fn wasm_probe(bytes: &[u8]) -> Result<ProbedDescriptor, String> {
     let dir = tempfile_dir().map_err(|e| e.to_string())?;
     let path = dir.join("probe.wasm");
     std::fs::write(&path, bytes).map_err(|e| e.to_string())?;
-    let result = probe_as_plugin(&path).or_else(|plugin_err| {
-        probe_as_coverage_ingester(&path).or_else(|coverage_err| {
-            probe_as_adapter(&path).map_err(|adapter_err| {
-                format!(
-                    "not a valid kndo:plugin ({plugin_err}), coverage-ingester \
-                     ({coverage_err}), or kndo:adapter ({adapter_err}) component"
-                )
+    let result =
+        probed(kndo_plugin_api::WasmPlugin::load(&path), plugin_probe).or_else(|plugin_err| {
+            probed(
+                kndo_plugin_api::WasmCoverageIngester::load(&path),
+                plugin_probe,
+            )
+            .or_else(|coverage_err| {
+                probed(kndo_plugin_api::WasmAdapter::load(&path), |adapter| {
+                    let d = kndo_core::adapter::LanguageAdapter::descriptor(adapter);
+                    ProbedDescriptor {
+                        id: d.id.to_string(),
+                        version: d.facts_schema_version.to_string(),
+                        dependencies: d.dependencies.iter().map(|s| s.to_string()).collect(),
+                    }
+                })
+                .map_err(|adapter_err| {
+                    format!(
+                        "not a valid kndo:plugin ({plugin_err}), coverage-ingester \
+                             ({coverage_err}), or kndo:adapter ({adapter_err}) component"
+                    )
+                })
             })
-        })
-    });
+        });
     let _ = std::fs::remove_dir_all(&dir);
     result
 }
 
-fn probe_as_plugin(path: &Path) -> Result<ProbedDescriptor, String> {
-    kndo_plugin_api::WasmPlugin::load(path)
-        .map(|plugin| {
-            let d = kndo_core::plugin::Plugin::descriptor(&plugin);
-            ProbedDescriptor {
-                id: d.id.to_string(),
-                version: d.version.to_string(),
-                dependencies: d.dependencies.iter().map(|s| s.to_string()).collect(),
-            }
-        })
-        .map_err(|e| e.to_string())
+/// One probe arm = one loader + one descriptor mapping. The loaders' own reserved-namespace
+/// rejection and wasmtime's component type-checking decide which loader accepts the bytes;
+/// this only folds the accepted component into a [`ProbedDescriptor`].
+fn probed<T, E: std::fmt::Display>(
+    loaded: Result<T, E>,
+    describe: impl FnOnce(&T) -> ProbedDescriptor,
+) -> Result<ProbedDescriptor, String> {
+    loaded.map(|t| describe(&t)).map_err(|e| e.to_string())
 }
 
-fn probe_as_coverage_ingester(path: &Path) -> Result<ProbedDescriptor, String> {
-    kndo_plugin_api::WasmCoverageIngester::load(path)
-        .map(|ingester| {
-            let d = kndo_core::plugin::Plugin::descriptor(&ingester);
-            ProbedDescriptor {
-                id: d.id.to_string(),
-                version: d.version.to_string(),
-                dependencies: d.dependencies.iter().map(|s| s.to_string()).collect(),
-            }
-        })
-        .map_err(|e| e.to_string())
-}
-
-/// `ProbedDescriptor.version` is unused by the install pipeline either way — `LockEntry.version`
-/// is always the release *tag* (`fetch_verified`'s own return, never this field; true for
-/// plugins too, `probe_as_plugin` above). `AdapterDescriptor` has no analogous field at all;
-/// `facts_schema_version` is the closest existing adapter concept, populated here only because
-/// `ProbedDescriptor` needs *something* in that slot.
-fn probe_as_adapter(path: &Path) -> Result<ProbedDescriptor, String> {
-    kndo_plugin_api::WasmAdapter::load(path)
-        .map(|adapter| {
-            let d = kndo_core::adapter::LanguageAdapter::descriptor(&adapter);
-            ProbedDescriptor {
-                id: d.id.to_string(),
-                version: d.facts_schema_version.to_string(),
-                dependencies: d.dependencies.iter().map(|s| s.to_string()).collect(),
-            }
-        })
-        .map_err(|e| e.to_string())
+/// The shared mapping for anything that is a [`kndo_core::plugin::Plugin`] — graph-hook
+/// plugins and coverage ingesters describe themselves identically.
+fn plugin_probe<P: kndo_core::plugin::Plugin>(plugin: &P) -> ProbedDescriptor {
+    let d = plugin.descriptor();
+    ProbedDescriptor {
+        id: d.id.to_string(),
+        version: d.version.to_string(),
+        dependencies: d.dependencies.iter().map(|s| s.to_string()).collect(),
+    }
 }
 
 /// Per-*call* unique, not just per-process: `wasm_probe` is a plain function a caller can (and
