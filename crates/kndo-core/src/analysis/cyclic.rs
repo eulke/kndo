@@ -6,13 +6,14 @@
 //!
 //! Cycle tolerance is a **language fact**, declared by each adapter as data
 //! ([`CyclePolicy`], carried onto `ProjectGraph::cycle_policies` like the visibility
-//! ladders): `Hazard → warning` (JS/TS — init-order bugs), `Idiomatic → info` (Rust modules
-//! within a crate, when that adapter lands), `Impossible → skip` (Go — the compiler forbids
-//! import cycles, so one in kndo's graph could only be a resolution artifact; degrade to
-//! silence, never to accusation). A mixed-language cycle takes the *most severe* tolerance
-//! among its participants' languages — the hazard is real for the language that treats it as
-//! one; participants whose language declares no policy (unclaimed files, CSS/JSON one day)
-//! contribute none.
+//! ladders): `Hazard → warning` (JS/TS — init-order bugs); `Idiomatic` and `Impossible`
+//! alike emit **nothing**. An idiomatic cycle (Rust modules within a crate) is true
+//! information about legal, routine structure — kndo does not dress information up as a
+//! defect; an impossible one (Go — the compiler forbids import cycles) could only be a
+//! resolution artifact. Both degrade to silence, never to accusation. A mixed-language
+//! cycle is reported iff *any* participant's language calls it a hazard — the hazard is
+//! real for that language; participants whose language declares no policy (unclaimed
+//! files) contribute none, and a cycle with no hazard participant emits nothing.
 //!
 //! Level interplay: a file cycle whose participants all live in one package is a file-level
 //! finding. A file cycle *spanning* real packages is reported at package level only — the
@@ -39,11 +40,12 @@ use crate::engine::{Finding, Location, RelatedLocation, Severity};
 use crate::graph::ProjectGraph;
 use crate::vocab::{Confidence, EdgeKind, FileId, FileOrigin, PackageId};
 
-/// Findings plus the set of files participating in any tolerance-reported cycle — `health`'s
-/// "files participating in cycles" numerator. The set includes files whose
+/// Findings plus the set of files participating in any *reported* (hazard) cycle —
+/// `health`'s "files participating in cycles" numerator. The set includes files whose
 /// file-level cycle rolled up into a package-level finding (they still sit in a real cycle);
-/// it excludes cycles every participant language declares `Impossible` or that are entirely
-/// generated/vendored, exactly like the findings themselves.
+/// it excludes cycles with no hazard participant — idiomatic and impossible alike — and
+/// all-generated/vendored ones, exactly like the findings themselves, keeping health's
+/// promise that a tolerated cycle is never a penalty.
 pub fn find_cycles(graph: &ProjectGraph) -> (Vec<Finding>, HashSet<FileId>) {
     let mut findings = Vec::new();
     let mut participants: HashSet<FileId> = HashSet::default();
@@ -85,8 +87,11 @@ pub fn find_cycles(graph: &ProjectGraph) -> (Vec<Finding>, HashSet<FileId>) {
         }
 
         // Participation is judged before the package rollup below: a file in a cross-package
-        // cycle is still in a cycle, even though its finding reports at package level.
-        if cycle_severity(graph, &files, |p| p.file_cycles).is_some() {
+        // cycle is still in a cycle, even though its finding reports at package level. Only
+        // *reported* (hazard) cycles count — health's cycles axis promises "a cycle the
+        // language declares impossible or idiomatic isn't a penalty", and this is where
+        // that promise is kept.
+        if cycle_reported(graph, &files, |p| p.file_cycles) {
             participants.extend(files.iter().copied());
         }
 
@@ -105,9 +110,9 @@ pub fn find_cycles(graph: &ProjectGraph) -> (Vec<Finding>, HashSet<FileId>) {
             continue;
         }
 
-        let Some(severity) = cycle_severity(graph, &files, |p| p.file_cycles) else {
-            continue; // no participant language tolerates-and-reports cycles at this level
-        };
+        if !cycle_reported(graph, &files, |p| p.file_cycles) {
+            continue; // no participant's language calls this level a hazard — silence
+        }
 
         // Anchor: most referenced within the cycle (in-degree from cycle members), ties to
         // the lexicographically-first path so ids and output stay deterministic. In-degree is
@@ -161,16 +166,13 @@ pub fn find_cycles(graph: &ProjectGraph) -> (Vec<Finding>, HashSet<FileId>) {
             category: "cyclic".to_string(),
             group: "risk".to_string(),
             subject_kind: "file".to_string(),
-            severity,
+            severity: Severity::Warning,
             confidence,
             message: format!(
-                "{} files form an import cycle ({}) — {}",
+                "{} files form an import cycle ({}) — break it by extracting the shared \
+                 piece into its own module or inverting one of the imports",
                 files.len(),
                 rendered.join(" → "),
-                cycle_advice(
-                    severity,
-                    "break it by extracting the shared piece into its own module or inverting one of the imports",
-                ),
             ),
             location: Location {
                 path: Some(anchor_file.path.clone()),
@@ -219,9 +221,9 @@ pub fn find_cycles(graph: &ProjectGraph) -> (Vec<Finding>, HashSet<FileId>) {
             .filter(|((p, q), _)| scc.contains(p) && scc.contains(q))
             .map(|(_, &(_, from, _))| from)
             .collect();
-        let Some(severity) = cycle_severity(graph, &participant_files, |p| p.package_cycles) else {
+        if !cycle_reported(graph, &participant_files, |p| p.package_cycles) {
             continue;
-        };
+        }
 
         let in_cycle: HashSet<u32> = scc.iter().copied().collect();
         let anchor = *packages
@@ -275,26 +277,17 @@ pub fn find_cycles(graph: &ProjectGraph) -> (Vec<Finding>, HashSet<FileId>) {
         };
         findings.push(Finding {
             advisory: false,
-            id: finding_id(
-                "cyclic",
-                "package",
-                &discriminator.join("\u{1}"),
-                "",
-                "",
-            ),
+            id: finding_id("cyclic", "package", &discriminator.join("\u{1}"), "", ""),
             category: "cyclic".to_string(),
             group: "risk".to_string(),
             subject_kind: "package".to_string(),
-            severity,
+            severity: Severity::Warning,
             confidence,
             message: format!(
-                "{} packages form a dependency cycle ({}) — {}",
+                "{} packages form a dependency cycle ({}) — cycles between workspace \
+                 packages break publish ordering and standalone installs",
                 packages.len(),
                 rendered.join(" → "),
-                cycle_advice(
-                    severity,
-                    "cycles between workspace packages break publish ordering and standalone installs",
-                ),
             ),
             location: Location {
                 path: anchor_pkg.manifest.clone(),
@@ -312,48 +305,25 @@ pub fn find_cycles(graph: &ProjectGraph) -> (Vec<Finding>, HashSet<FileId>) {
     (findings, participants)
 }
 
-/// The message tail after the rendered cycle path, keyed by the severity the
-/// adapter-declared tolerances produced ([`cycle_severity`]) — never by language name.
-/// Warning means some participant's language calls this level a hazard: the prescriptive
-/// advice stands. Info means the most severe applicable tolerance is `Idiomatic`: telling
-/// someone to break a cycle their language considers routine would dress information up
-/// as a defect, so the prose describes instead of prescribes.
-fn cycle_advice(severity: Severity, prescriptive: &'static str) -> &'static str {
-    match severity {
-        Severity::Info => {
-            "idiomatic for the participating language; reported for visibility, not as a defect"
-        }
-        _ => prescriptive,
-    }
-}
-
-/// The most severe applicable tolerance among the participants' languages, mapped to a
-/// severity — `None` when nothing applicable reports at this level (every participant's
-/// language is `Impossible` or undeclared).
-fn cycle_severity(
+/// Whether any participant's language declares this level a `Hazard` — the only stance
+/// that reports (always `Severity::Warning`, with the prescriptive advice: the hazard is
+/// real for that language). `Idiomatic` and `Impossible` participants alike contribute
+/// nothing, and so do participants whose language declares no policy. A boolean rather
+/// than a severity fold on purpose: an earlier fold over `Severity::max` silently picked
+/// the *least* severe stance in mixed cycles (`Severity`'s derived `Ord` is worst-first),
+/// and a predicate cannot express "which severity won" — the bug is unrepresentable.
+fn cycle_reported(
     graph: &ProjectGraph,
     participants: &[FileId],
     level: impl Fn(&CyclePolicy) -> CycleTolerance,
-) -> Option<Severity> {
-    let mut best: Option<Severity> = None;
-    for f in participants {
-        let Some(lang) = graph.files[f.0 as usize].language.as_deref() else {
-            continue;
-        };
-        let Some(policy) = graph.cycle_policy_for(lang) else {
-            continue;
-        };
-        let candidate = match level(&policy) {
-            CycleTolerance::Hazard => Severity::Warning,
-            CycleTolerance::Idiomatic => Severity::Info,
-            CycleTolerance::Impossible => continue,
-        };
-        best = Some(match best {
-            Some(b) => b.max(candidate),
-            None => candidate,
-        });
-    }
-    best
+) -> bool {
+    participants.iter().any(|f| {
+        graph.files[f.0 as usize]
+            .language
+            .as_deref()
+            .and_then(|lang| graph.cycle_policy_for(lang))
+            .is_some_and(|policy| level(&policy) == CycleTolerance::Hazard)
+    })
 }
 
 /// The cycle's stable identity: its sorted participant paths — line-position-free, so
@@ -490,10 +460,14 @@ mod tests {
     use smol_str::SmolStr;
 
     fn file(path: &str, package: u32) -> FileNode {
+        file_lang(path, package, "mock")
+    }
+
+    fn file_lang(path: &str, package: u32, lang: &str) -> FileNode {
         FileNode {
             path: ProjectPath(SmolStr::new(path)),
             content_hash: [0; 32],
-            language: Some(SmolStr::new("mock")),
+            language: Some(SmolStr::new(lang)),
             class: Some(FileClass {
                 role: FileRole::Production,
                 origin: FileOrigin::Authored,
@@ -531,8 +505,13 @@ mod tests {
             vec![file("a.ts", 0), file("b.ts", 0)],
             vec![imports(0, 1), imports(1, 0)],
         );
-        let findings = find_cycles(&graph).0;
+        let (findings, participants) = find_cycles(&graph);
         assert_eq!(findings.len(), 1, "one finding per cycle, not per member");
+        assert_eq!(
+            participants.len(),
+            2,
+            "both files feed health's cycles axis"
+        );
         let f = &findings[0];
         assert_eq!(f.category, "cyclic");
         assert_eq!(f.group, "risk");
@@ -589,7 +568,7 @@ mod tests {
     }
 
     #[test]
-    fn idiomatic_tolerance_demotes_to_info() {
+    fn idiomatic_tolerance_skips_the_level_entirely() {
         let graph = one_package_graph(
             vec![file("a.rs", 0), file("b.rs", 0)],
             vec![imports(0, 1), imports(1, 0)],
@@ -601,19 +580,81 @@ mod tests {
                 package_cycles: CycleTolerance::Idiomatic,
             },
         )]);
-        let findings = find_cycles(&graph).0;
-        assert_eq!(findings.len(), 1);
-        assert_eq!(findings[0].severity, Severity::Info);
+        let (findings, participants) = find_cycles(&graph);
         assert!(
-            findings[0].message.contains("reported for visibility"),
-            "an Idiomatic cycle's prose describes, never prescribes: {}",
-            findings[0].message
+            findings.is_empty(),
+            "an idiomatic cycle is legal structure, not a finding: {findings:?}"
         );
         assert!(
-            !findings[0].message.contains("break it"),
+            participants.is_empty(),
+            "a tolerated cycle is never a health penalty either"
+        );
+    }
+
+    #[test]
+    fn a_mixed_hazard_and_idiomatic_cycle_is_a_warning() {
+        // The case the old Severity::max fold got wrong (derived Ord is worst-first, so the
+        // least severe stance won): one hazard participant must keep the cycle reported.
+        let graph = one_package_graph(
+            vec![file_lang("a.ts", 0, "haz"), file_lang("b.rs", 0, "idio")],
+            vec![imports(0, 1), imports(1, 0)],
+        )
+        .with_cycle_policies(vec![
+            (
+                SmolStr::new("haz"),
+                CyclePolicy {
+                    file_cycles: CycleTolerance::Hazard,
+                    package_cycles: CycleTolerance::Hazard,
+                },
+            ),
+            (
+                SmolStr::new("idio"),
+                CyclePolicy {
+                    file_cycles: CycleTolerance::Idiomatic,
+                    package_cycles: CycleTolerance::Idiomatic,
+                },
+            ),
+        ]);
+        let (findings, participants) = find_cycles(&graph);
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].severity, Severity::Warning);
+        assert!(
+            findings[0].message.contains("break it by extracting"),
             "{}",
             findings[0].message
         );
+        assert_eq!(
+            participants.len(),
+            2,
+            "the idiomatic-language file still sits in a reported cycle"
+        );
+    }
+
+    #[test]
+    fn a_mixed_idiomatic_and_impossible_cycle_emits_nothing() {
+        let graph = one_package_graph(
+            vec![file_lang("a.rs", 0, "idio"), file_lang("b.go", 0, "imp")],
+            vec![imports(0, 1), imports(1, 0)],
+        )
+        .with_cycle_policies(vec![
+            (
+                SmolStr::new("idio"),
+                CyclePolicy {
+                    file_cycles: CycleTolerance::Idiomatic,
+                    package_cycles: CycleTolerance::Idiomatic,
+                },
+            ),
+            (
+                SmolStr::new("imp"),
+                CyclePolicy {
+                    file_cycles: CycleTolerance::Impossible,
+                    package_cycles: CycleTolerance::Impossible,
+                },
+            ),
+        ]);
+        let (findings, participants) = find_cycles(&graph);
+        assert!(findings.is_empty());
+        assert!(participants.is_empty());
     }
 
     #[test]

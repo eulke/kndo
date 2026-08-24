@@ -68,14 +68,15 @@ carry the impl block's span or a disambiguating qualifier when `qualified_name` 
 within one file. Cosmetic; recorded so the "same label twice" report isn't mistaken for a
 detector bug.
 
-## 6. The kndo-core module cycle (true positive, by design)
+## 6. The kndo-core module cycle (legal structure, silent by policy)
 
-The self-check reports one large file-level import cycle inside `kndo-core` — dozens of
-files, Info severity under Rust's `Idiomatic` cycle tolerance. This is a *true* statement
-about the crate's module graph (engine ↔ graph ↔ analysis ↔ suppression all reference each
-other's types) and idiomatic Rust, reported for visibility per the tolerance prose. Listed
-here so nobody triages it as detector noise: it is expected output, not a gap — the gap
-would be suppressing it.
+`kndo-core`'s module graph contains one large file-level import cycle — dozens of files
+(engine ↔ graph ↔ analysis ↔ suppression all reference each other's types). Under Rust's
+`Idiomatic` cycle tolerance this emits **nothing**: an idiomatic cycle is true information
+about legal structure, and kndo does not dress information up as a defect (tolerated
+cycles don't feed health's cycles axis either). Listed here so the *absence* of a cyclic
+finding on this repo isn't triaged as a detector gap — the structure is real and remains
+visible through the graph itself (`kndo query`/doctor), just never as a finding.
 
 ## 7. False negative: path references in prose
 

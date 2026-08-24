@@ -97,11 +97,11 @@ pub trait LanguageAdapter: Send + Sync {
     // functions and never touch adapters. Consumers: internal-only's tightest-sufficient
     // rung, private-type-leak's scope comparison, the member fallback's candidate scoping.
     // cycle_policy (RFC 0005 §8): { file_cycles, package_cycles }, each a CycleTolerance —
-    // Hazard (cycles are ecosystem hazards → warning), Idiomatic (routine → info), or
-    // Impossible (the compiler forbids them → the level is skipped outright). Same
+    // Hazard (cycles are ecosystem hazards → warning); Idiomatic (routine, legal structure)
+    // and Impossible (the compiler forbids them) both emit nothing. Same
     // data-on-the-descriptor pattern as the ladder, carried onto
-    // ProjectGraph::cycle_policies; a mixed-language cycle takes the most severe tolerance
-    // among its participants' languages.
+    // ProjectGraph::cycle_policies; a mixed-language cycle is reported iff any
+    // participant's language declares Hazard.
     // resolves_dependency_usage (added M5, Java): whether this adapter's resolve() can ever
     // produce an ImportsDependency edge for a manifest-declared dependency of this language —
     // true for every language whose import specifier structurally identifies the declared

@@ -319,8 +319,10 @@ the dirty region's weakly connected component.
 
 Cycle tolerance is a language fact, so adapters declare it per graph level and defaults stay
 honest: severity `warning` where the ecosystem treats cycles as hazards (JS/TS file cycles —
-init-order bugs), `info` where they are idiomatic (Rust modules within a crate), and impossible
-levels are skipped outright (Go package cycles — the compiler already forbids them).
+init-order bugs); idiomatic levels (Rust modules within a crate) and impossible levels (Go
+package cycles — the compiler already forbids them) alike emit nothing — an idiomatic cycle
+is true information about legal structure, and information is never dressed up as a defect.
+A mixed-language cycle reports iff any participant's language calls it a hazard.
 
 ## 9. `untested` — static test-blind spots
 

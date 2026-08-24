@@ -1,11 +1,6 @@
 {
   "findings": [
     {
-      "category": "cyclic",
-      "subject_kind": "file",
-      "path": "src/ping.rs"
-    },
-    {
       "category": "internal-only",
       "subject_kind": "function",
       "path": "src/fixture_helper.rs",

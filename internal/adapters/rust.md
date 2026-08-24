@@ -335,8 +335,8 @@ it is a one-line, reviewed change.
 ## 5. Cycle policy — where Rust genuinely differs from Go
 
 ```
-file_cycles:    Idiomatic   (info)
-package_cycles: Idiomatic   (info)
+file_cycles:    Idiomatic   (emits nothing)
+package_cycles: Idiomatic   (emits nothing)
 ```
 
 Module-level cycles inside a crate (`a` uses `b`, `b` uses `a`) are legal, common, and
@@ -344,8 +344,9 @@ compile fine — RFC 0005 §8's own example of Idiomatic. Package cycles are **n
 `Impossible`**, and this is deliberate: cargo forbids cyclic `[dependencies]`, but
 `[dev-dependencies]` cycles are legal and idiomatic (a crate dev-depending on a sibling
 that depends on it, for integration tests), and kndo's package edges are derived from file
-imports — which include test files. Declaring `Impossible` would suppress a real, visible,
-legal structure; `Idiomatic` reports it at `info`, which is what it deserves.
+imports — which include test files. `Impossible` would misstate the language (the cycle
+is real and legal, not an artifact); `Idiomatic` states the honest stance — and per RFC
+0005 §8, a tolerated cycle emits nothing: it is information, not a defect.
 
 ## 6. Known hard cases & stances
 

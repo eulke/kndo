@@ -307,10 +307,12 @@ Cycle tolerance is a **language fact**, not a global opinion:
 | Language stance | Severity |
 |---|---|
 | hazardous (JavaScript/TypeScript — module-initialization-order bugs are real) | warning |
-| idiomatic (mutual imports within one compilation unit, where the language tolerates them) | info |
+| idiomatic (mutual imports within one compilation unit, where the language tolerates them) | skipped: legal, routine structure — reporting it would dress information up as a defect |
 | impossible (Go — the compiler rejects import cycles) | skipped: a "cycle" there could only be a resolution artifact |
 
-A mixed-language cycle takes the most severe stance among its participants. A file cycle
+A mixed-language cycle is reported (warning) iff any participant's language calls it
+hazardous — the hazard is real for that language; with no hazard participant it emits
+nothing. A file cycle
 that spans real packages is reported once at package level (the file finding would be
 redundant); one confined to a single package stays file-level. A cycle whose every
 participant is generated/vendored is skipped — nobody authored it.

@@ -138,7 +138,7 @@ pub struct AdapterDescriptor {
     pub visibility_ladder: Vec<VisibilityRung>,
     /// Cycle tolerance per graph level — same data-on-the-descriptor pattern as
     /// the ladder: assembly carries it onto the graph keyed by claim language, and `cyclic`
-    /// maps `Hazard → warning`, `Idiomatic → info`, `Impossible → skip the level`.
+    /// maps `Hazard → warning`; `Idiomatic` and `Impossible` → the level emits nothing.
     pub cycle_policy: CyclePolicy,
     /// Whether this adapter's `resolve()` can ever produce an `ImportsDependency` edge for a
     /// manifest-declared dependency of this language. `true` for every language
@@ -285,7 +285,11 @@ pub enum CycleTolerance {
     /// The ecosystem treats cycles as hazards (JS/TS file cycles — init-order bugs) →
     /// severity `warning`.
     Hazard,
-    /// Idiomatic and routinely tolerated (Rust modules within a crate) → severity `info`.
+    /// Idiomatic and routinely tolerated (Rust modules within a crate) — the level emits
+    /// nothing: a cycle here is true information about legal structure, and information is
+    /// never dressed up as a defect. Kept distinct from [`CycleTolerance::Impossible`]
+    /// because it documents the language's stance (the cycle is real and legal, not an
+    /// artifact), which descriptors and doctor still surface.
     Idiomatic,
     /// The compiler/toolchain forbids it outright (Go package imports) — a cycle at this
     /// level cannot exist in building code, so the analysis skips the level entirely rather
