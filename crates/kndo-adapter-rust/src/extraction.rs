@@ -812,6 +812,20 @@ struct Ctx<'a> {
     field_types: &'a FieldTypes,
 }
 
+impl<'a> Ctx<'a> {
+    /// The context for walking a container's members, with the container's own
+    /// `#[cfg(test)]` state folded in.
+    fn for_members(&self, container_cfg_test: bool) -> Ctx<'a> {
+        Ctx {
+            owner: self.owner,
+            in_cfg_test: self.in_cfg_test || container_cfg_test,
+            local_qualifiers: self.local_qualifiers,
+            inline_mod_names: self.inline_mod_names,
+            field_types: self.field_types,
+        }
+    }
+}
+
 fn text<'a>(node: Node, src: &'a [u8]) -> &'a str {
     std::str::from_utf8(&src[node.byte_range()]).unwrap_or("")
 }
@@ -877,20 +891,25 @@ fn walk_items(list: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
             "line_comment" | "block_comment" => {} // attributes survive doc comments
             _ => {
                 let pending = std::mem::take(&mut pending);
-                // Test-region extents (FileFacts::test_spans): a `#[cfg(test)]` item —
-                // inline `mod tests {}` body included — or a `#[test]`/`#[bench]` fn is a
-                // test region, attributes included. Outermost extent only: inside a
-                // `#[cfg(test)]` module the enclosing region already covers every item.
-                if !ctx.in_cfg_test && (pending.cfg_test || pending.test || pending.bench) {
-                    let item_span = span(item);
-                    out.test_spans.push(Span {
-                        start: pending.attr_start.unwrap_or(item_span.start),
-                        end: item_span.end,
-                    });
-                }
+                record_test_region(&pending, item, ctx, out);
                 handle_item(item, src, ctx, pending, out);
             }
         }
+    }
+}
+
+/// Test-region extents (FileFacts::test_spans): a `#[cfg(test)]` item — inline
+/// `mod tests {}` body included — or a `#[test]`/`#[bench]` fn is a test region, attributes
+/// included. Applies wherever pending attributes gate an item as test code: top-level items,
+/// inline-mod items, and `impl`/`trait` members alike. Outermost extent only: inside a
+/// `#[cfg(test)]` container the enclosing region already covers every item.
+fn record_test_region(pending: &PendingAttrs, item: Node, ctx: &Ctx<'_>, out: &mut FileFacts) {
+    if !ctx.in_cfg_test && (pending.cfg_test || pending.test || pending.bench) {
+        let item_span = span(item);
+        out.test_spans.push(Span {
+            start: pending.attr_start.unwrap_or(item_span.start),
+            end: item_span.end,
+        });
     }
 }
 
@@ -1073,8 +1092,11 @@ fn handle_item(item: Node, src: &[u8], ctx: &Ctx<'_>, pending: PendingAttrs, out
             handle_type_decl(item, src, ctx, SymbolKind::Struct, out);
         }
         "enum_item" => handle_enum(item, src, ctx, out),
-        "trait_item" => handle_trait(item, src, ctx, out),
-        "impl_item" => handle_impl(item, src, ctx, out),
+        // The container's own #[cfg(test)] folds into the member-walk context so member-level
+        // regions stay outermost-only (the container's region, recorded by the item walk,
+        // already covers every member).
+        "trait_item" => handle_trait(item, src, &ctx.for_members(pending.cfg_test), out),
+        "impl_item" => handle_impl(item, src, &ctx.for_members(pending.cfg_test), out),
         "const_item" => handle_simple_decl(item, src, ctx, SymbolKind::Const, owner, &pending, out),
         "static_item" => {
             handle_simple_decl(item, src, ctx, SymbolKind::Static, owner, &pending, out)
@@ -1554,10 +1576,12 @@ fn handle_trait(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
                 "attribute_item" => collect_attr(member, src, &mut pending, out),
                 "function_item" | "function_signature_item" => {
                     let p = std::mem::take(&mut pending);
+                    record_test_region(&p, member, ctx, out);
                     handle_function(member, src, ctx, Some(name), &p, Some(vis), out);
                 }
                 "associated_type" | "const_item" => {
-                    let _ = std::mem::take(&mut pending);
+                    let p = std::mem::take(&mut pending);
+                    record_test_region(&p, member, ctx, out);
                     if let Some(mname) = member.child_by_field_name("name") {
                         push_declaration(
                             out,
@@ -1721,6 +1745,7 @@ fn handle_impl(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
                 "attribute_item" => collect_attr(member, src, &mut pending, out),
                 "function_item" => {
                     let p = std::mem::take(&mut pending);
+                    record_test_region(&p, member, ctx, out);
                     handle_function(member, src, ctx, Some(&self_type), &p, None, out);
                     // Member-type fact: what calling this method yields —
                     // its declared return, dispatch-reduced, `Self` resolved to the owner.
@@ -1749,7 +1774,8 @@ fn handle_impl(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
                     }
                 }
                 "const_item" | "type_item" | "associated_type" => {
-                    let _ = std::mem::take(&mut pending);
+                    let p = std::mem::take(&mut pending);
+                    record_test_region(&p, member, ctx, out);
                     if member.kind() == "const_item" {
                         if let Some(ty) = member.child_by_field_name("type") {
                             push_owner_member_type(out, &self_type, member, ty, src);
@@ -3401,6 +3427,69 @@ mod tests {
             "the #[cfg(test)] attribute line is inside its region"
         );
         assert!(covers(8), "the mod body's closing line is inside");
+    }
+
+    #[test]
+    fn cfg_test_impl_member_records_a_test_region_attribute_included() {
+        // Lines 1-2: struct + impl open. Lines 3-4: #[cfg(test)] fn — a test-only associated
+        // helper gets its own region, attribute line included. Line 5: production method.
+        let f = facts(
+            "struct S;\n\
+             impl S {\n\
+             \x20   #[cfg(test)]\n\
+             \x20   fn stub() -> S { S }\n\
+             \x20   fn real(&self) {}\n\
+             }\n",
+        );
+        assert_eq!(f.test_spans.len(), 1, "{:?}", f.test_spans);
+        let covers = |line: u32| {
+            f.test_spans
+                .iter()
+                .any(|s| s.start.0 <= line && line <= s.end.0)
+        };
+        assert!(covers(3), "the #[cfg(test)] attribute line is inside");
+        assert!(covers(4), "the gated method body is inside");
+        assert!(!covers(5), "the production method stays out");
+    }
+
+    #[test]
+    fn cfg_test_trait_default_method_records_a_test_region() {
+        // A #[cfg(test)]-gated default method in a trait body is test code like any
+        // other gated member; the trait itself stays production.
+        let f = facts(
+            "trait T {\n\
+             \x20   #[cfg(test)]\n\
+             \x20   fn fake() {}\n\
+             \x20   fn real();\n\
+             }\n",
+        );
+        assert_eq!(f.test_spans.len(), 1, "{:?}", f.test_spans);
+        assert!(f.test_spans[0].start.0 <= 2 && 3 <= f.test_spans[0].end.0);
+        assert!(f.test_spans[0].end.0 < 4, "the required method stays out");
+    }
+
+    #[test]
+    fn impl_members_inside_a_cfg_test_mod_add_no_nested_regions() {
+        // Outermost extent only: the mod's region already covers its impl members, so the
+        // member-level recorder must stay quiet under an enclosing #[cfg(test)].
+        let f = facts(
+            "#[cfg(test)]\n\
+             mod tests {\n\
+             \x20   struct H;\n\
+             \x20   impl H {\n\
+             \x20       #[cfg(test)]\n\
+             \x20       fn inner() {}\n\
+             \x20   }\n\
+             }\n",
+        );
+        assert_eq!(
+            f.test_spans.len(),
+            1,
+            "one outermost region only: {:?}",
+            f.test_spans
+        );
+        assert_eq!(f.test_spans[0].start.0, 1);
+        assert_eq!(f.test_spans[0].end.0, 8);
     }
 
     #[test]

@@ -1,0 +1,27 @@
+{
+  "findings": [
+    {
+      "category": "internal-only",
+      "subject_kind": "method",
+      "path": "src/lib.rs",
+      "symbol": "Widget.new"
+    },
+    {
+      "category": "internal-only",
+      "subject_kind": "method",
+      "path": "src/lib.rs",
+      "symbol": "Widget.size"
+    },
+    {
+      "category": "internal-only",
+      "subject_kind": "struct",
+      "path": "src/lib.rs",
+      "symbol": "Widget"
+    },
+    {
+      "category": "untested",
+      "subject_kind": "file",
+      "path": "src/main.rs"
+    }
+  ]
+}
