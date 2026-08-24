@@ -114,6 +114,15 @@ pub trait LanguageAdapter: Send + Sync {
     // "zero usage evidence" isn't a meaningful unused claim when usage evidence can never
     // exist). version-skew is unaffected — it compares declared versions across manifests
     // directly, no usage edge needed.
+    // package_test_dirs: directory names that mark files test-role only when the directory
+    // is an immediate child of the owning package's manifest directory (Cargo's tests/,
+    // benches/, examples/ — conventions bound to the manifest beside them, unlike
+    // anywhere-in-the-path markers such as __tests__/, which stay in claim-time patterns).
+    // The names are adapter data; the matching runs in core assembly (phase 2b), the only
+    // layer that knows which manifest owns which file. Files in the implicit no-manifest
+    // package anchor at the project root. Promotion only — a file already test- or
+    // tooling-role is never demoted, so a nested package whose sources live under an
+    // ancestor's tests/ tree keeps its own classification.
 
     /// Claim & classify a path (fast; name-based, content peeking only when unavoidable).
     fn claim(&self, path: &ProjectPath) -> Option<FileClaim>;   // { language, class: FileClass }

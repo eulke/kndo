@@ -31,7 +31,7 @@ declares them — `src/lib.rs` says `mod a;`, `a.rs` says `mod b;`, and only the
 |-------|-------|
 | Language `rust` | `**/*.rs` |
 | Manifests | `Cargo.toml` (workspace and package alike). `Cargo.lock` is **not** claimed |
-| Role `test` | `tests/**` (integration tests), `benches/**`, `examples/**` |
+| Role `test` | `tests/**` (integration tests), `benches/**`, `examples/**` — **package-relative**: declared as `package_test_dirs` on the descriptor and matched by core assembly against the dir of the owning `Cargo.toml`, not path-globally |
 | Role `tooling` | `build.rs`, `.cargo/**`, `xtask/**` (the de-facto task-runner convention) |
 | Origin `generated` | first-64-lines markers via the toolkit's `ContentMarkers` (`@generated`, `Code generated`, `Automatically generated`) — covers bindgen/prost/tonic banners. Build-script output lives in `OUT_DIR`, outside the tree — no stance needed |
 | Origin `vendored` | `vendor/**`, `third_party/**` (toolkit universal list) |
@@ -39,6 +39,12 @@ declares them — `src/lib.rs` says `mod a;`, `a.rs` says `mod b;`, and only the
 `examples/**` is `test` deliberately: an example consumes the public API from outside like a
 test does, and a symbol alive *only* through its own demo is exactly the `test-only` verdict
 — dead API kept warm by its own showcase.
+
+Package-relative matters because these are Cargo *target* conventions: they bind to the
+manifest beside them. A workspace-excluded crate whose sources happen to live under some
+ancestor's `examples/` or `tests/` tree is owned by its **own** `Cargo.toml`, and its
+`src/` is ordinary production code — matching the segment anywhere in the path misroled
+every such nested crate wholesale.
 
 **Sub-file test regions.** Rust tests are whole files (the table above) *or* blocks inside
 production files — so role-by-path alone cannot separate production from test code, and the

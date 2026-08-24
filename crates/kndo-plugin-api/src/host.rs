@@ -175,6 +175,10 @@ fn native_descriptor(raw: w::AdapterDescriptor) -> AdapterDescriptor {
             package_cycles: CycleTolerance::Idiomatic,
         },
         resolves_dependency_usage: false,
+        // Not on the wire: the WIT descriptor record predates the field, and a WASM
+        // adapter without it just forgoes package-relative test-dir promotion. Additive
+        // whenever the ABI next revs.
+        package_test_dirs: Vec::new(),
     }
 }
 

@@ -76,6 +76,7 @@ impl LanguageAdapter for JsTsAdapter {
             // npm's flat package name IS the import specifier's root segment — resolve()
             // structurally identifies the declared dependency every time.
             resolves_dependency_usage: true,
+            package_test_dirs: Vec::new(),
         }
     }
 

@@ -164,6 +164,17 @@ pub struct AdapterDescriptor {
     /// with co-install/co-activate semantics once componentization exists. Unread
     /// today, same reservation rationale as [`activation`](Self::activation).
     pub dependencies: Vec<SmolStr>,
+    /// Directory names that mark files as test-role only when the directory is an
+    /// *immediate child of the owning package's manifest directory* — conventions that are
+    /// package-relative, not path-global (a build-tool convention like Cargo's `tests/` binds
+    /// to the manifest beside it; a nested package whose sources happen to live under some
+    /// ancestor's `tests/` tree is NOT test code). Names are adapter data; the matching runs
+    /// in assembly — the only layer that knows which manifest owns which file. Files in the
+    /// implicit no-manifest package match against the project root. Promotion only: a file
+    /// already test-role by any other signal is never demoted. Contrast with
+    /// the toolkit's `PathPatterns::test_dirs`, which matches the segment anywhere in the
+    /// path — right for conventions like `__tests__/` that hold at any depth.
+    pub package_test_dirs: Vec<SmolStr>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -2403,12 +2403,64 @@ pub(crate) fn package_owns(manifest_dir: &str, file_dir: &str) -> bool {
             .is_some_and(|rest| rest.starts_with('/'))
 }
 
+/// Phase 2b's worker: re-roles a production file as test when its path, relative to the
+/// directory of its owning package's manifest, starts with one of the claiming adapter's
+/// `package_test_dirs` — the package-relative half of test-dir classification (the anywhere-
+/// in-the-path half stays in claim-time patterns). The implicit no-manifest package anchors
+/// at the project root, so a manifest-less tree keeps its root `tests/` convention.
+/// Promotion only — any file already test- or tooling-role keeps that verdict, so a nested
+/// package's sources sitting under an ancestor's `tests/` tree (already Production by
+/// ownership) is the case this exists to protect, and a demotion could never be right.
+fn promote_package_relative_test_roles<'a>(
+    files: &mut [FileNode],
+    packages: &[PackageNode],
+    package_test_dirs_of: impl Fn(usize) -> Option<&'a [SmolStr]>,
+) {
+    for (i, file) in files.iter_mut().enumerate() {
+        let Some(dirs) = package_test_dirs_of(i).filter(|d| !d.is_empty()) else {
+            continue;
+        };
+        let Some(class) = &mut file.class else {
+            continue;
+        };
+        if class.role != crate::vocab::FileRole::Production {
+            continue;
+        }
+        let manifest_dir = packages[file.package.0 as usize]
+            .manifest
+            .as_ref()
+            .map(|m| core_dirname(m.0.as_str()))
+            .unwrap_or("");
+        let path = file.path.0.as_str();
+        let relative = if manifest_dir.is_empty() {
+            path
+        } else {
+            // Ownership (phase 2a) guarantees the prefix; a mismatch means a caller bug,
+            // and skipping is the conservative answer.
+            match path
+                .strip_prefix(manifest_dir)
+                .and_then(|rest| rest.strip_prefix('/'))
+            {
+                Some(rest) => rest,
+                None => continue,
+            }
+        };
+        // First *directory* segment only: a file literally named like a test dir
+        // (`tests` with no extension, say) has no trailing `/` and never matches.
+        if let Some((first_dir, _)) = relative.split_once('/') {
+            if dirs.iter().any(|d| d == first_dir) {
+                class.role = crate::vocab::FileRole::Test;
+            }
+        }
+    }
+}
+
 /// Bumped whenever the *persisted* shape of a graph snapshot changes in a way that isn't
 /// already covered by an adapter's own `facts_schema_version` — e.g. a new node/edge kind, or
 /// an assembly-algorithm change that could produce a different graph from the same facts. Feeds
 /// [`compute_graph_key`] (the "core graph-schema version"); a bump here invalidates
 /// every project's cached `graph.bin` on the next run, same as any other key-input change.
-pub const GRAPH_SCHEMA_VERSION: u32 = 25; // bump whenever the persisted snapshot shape (rkyv layouts included) or the assembly semantics that derive a graph from the same facts change
+pub const GRAPH_SCHEMA_VERSION: u32 = 26; // bump whenever the persisted snapshot shape (rkyv layouts included) or the assembly semantics that derive a graph from the same facts change
 
 /// The graph snapshot's cache key (`cache.rs`'s `graph.bin`): a single digest
 /// folding in the *whole* discovered file set (every path + content hash — this already
@@ -3478,6 +3530,22 @@ pub fn assemble_from_source(
             .unwrap_or(PackageId(0));
     }
 
+    // Phase 2b — package-relative test-dir promotion (`AdapterDescriptor::package_test_dirs`):
+    // runs right after ownership because the manifest that owns the file is the anchor the
+    // convention binds to, and before phases 2.5/2.55/2.6 so every role consumer sees the
+    // corrected value. Full-build only, like phase 2.55's demotion: the patch path preserves
+    // `FileNode::class` and declines whenever any promotion input could move (file set,
+    // manifests, claims are all patch guards).
+    let adapter_package_test_dirs: Vec<Vec<SmolStr>> = adapters
+        .iter()
+        .map(|a| a.descriptor().package_test_dirs)
+        .collect();
+    promote_package_relative_test_roles(&mut files, &packages, |i| {
+        claimed_per_file[i]
+            .as_ref()
+            .map(|c| adapter_package_test_dirs[c.adapter_index].as_slice())
+    });
+
     // Phase 2.5 — manifest roots and declared dependencies, sequentially in file-discovery
     // order for determinism (same reasoning as phase 3 below). Declared dependencies feed the
     // stdlib-shadowing precedence rule that phase 3's resolver calls check against.
@@ -4380,6 +4448,7 @@ mod tests {
                     package_cycles: crate::adapter::CycleTolerance::Hazard,
                 },
                 resolves_dependency_usage: true,
+                package_test_dirs: Vec::new(),
             }
         }
 
@@ -4876,6 +4945,90 @@ mod tests {
 
     fn mock_adapters() -> Vec<Box<dyn LanguageAdapter>> {
         vec![Box::new(MockAdapter)]
+    }
+
+    /// [`MockAdapter`] declaring `package_test_dirs: ["tests"]` — everything else delegates,
+    /// so phase 2b's promotion is the only behavioral difference under test.
+    struct PackageTestDirsAdapter;
+
+    impl LanguageAdapter for PackageTestDirsAdapter {
+        fn descriptor(&self) -> AdapterDescriptor {
+            let mut d = MockAdapter.descriptor();
+            d.package_test_dirs = vec![SmolStr::new("tests")];
+            d
+        }
+        fn claim(&self, path: &ProjectPath) -> Option<FileClaim> {
+            MockAdapter.claim(path)
+        }
+        fn claim_manifest(&self, path: &ProjectPath) -> bool {
+            MockAdapter.claim_manifest(path)
+        }
+        fn extract(&self, file: &SourceFile<'_>) -> FileFacts {
+            MockAdapter.extract(file)
+        }
+        fn extract_manifest(&self, file: &SourceFile<'_>, ctx: &ResolveCtx<'_>) -> ManifestFacts {
+            MockAdapter.extract_manifest(file, ctx)
+        }
+        fn resolve(&self, spec: &crate::adapter::ImportSpec, ctx: &ResolveCtx<'_>) -> Resolution {
+            MockAdapter.resolve(spec, ctx)
+        }
+    }
+
+    #[test]
+    fn package_test_dirs_promote_relative_to_the_owning_manifest() {
+        let dir = project(
+            "pkg-test-dirs",
+            &[
+                ("manifest.json", ""),
+                ("src/a.mock", "decl prod"),
+                ("tests/t.mock", "decl t"),
+                // A nested package whose sources live under the root package's `tests/`
+                // tree: ownership moves to the nested manifest, so nothing in it is
+                // test-role by the ROOT's convention — the false positive this exists for.
+                ("tests/guest/manifest.json", ""),
+                ("tests/guest/src/l.mock", "decl lib"),
+                // Deeper files under a test dir still promote (relative path
+                // `tests/deep/d.mock` starts with the declared segment).
+                ("tests/deep/d.mock", "decl deep"),
+            ],
+        );
+        let adapters: Vec<Box<dyn LanguageAdapter>> = vec![Box::new(PackageTestDirsAdapter)];
+        let (graph, _) = assemble(&dir, &adapters, &[]).unwrap();
+        let role = |p: &str| {
+            graph.files[graph.file_id(&ProjectPath(SmolStr::new(p))).unwrap().0 as usize]
+                .class
+                .unwrap()
+                .role
+        };
+        assert_eq!(role("src/a.mock"), FileRole::Production);
+        assert_eq!(role("tests/t.mock"), FileRole::Test);
+        assert_eq!(role("tests/deep/d.mock"), FileRole::Test);
+        assert_eq!(
+            role("tests/guest/src/l.mock"),
+            FileRole::Production,
+            "the nested package's own manifest is the anchor, not the ancestor's tests/"
+        );
+    }
+
+    #[test]
+    fn package_test_dirs_anchor_at_the_root_for_the_implicit_package() {
+        // No manifest anywhere: the implicit package's anchor is the project root, so only
+        // a top-level `tests/` matches — a deeper `tests/` belongs to no known package
+        // convention and stays production.
+        let dir = project(
+            "pkg-test-dirs-implicit",
+            &[("tests/t.mock", "decl t"), ("deep/tests/d.mock", "decl d")],
+        );
+        let adapters: Vec<Box<dyn LanguageAdapter>> = vec![Box::new(PackageTestDirsAdapter)];
+        let (graph, _) = assemble(&dir, &adapters, &[]).unwrap();
+        let role = |p: &str| {
+            graph.files[graph.file_id(&ProjectPath(SmolStr::new(p))).unwrap().0 as usize]
+                .class
+                .unwrap()
+                .role
+        };
+        assert_eq!(role("tests/t.mock"), FileRole::Test);
+        assert_eq!(role("deep/tests/d.mock"), FileRole::Production);
     }
 
     #[test]

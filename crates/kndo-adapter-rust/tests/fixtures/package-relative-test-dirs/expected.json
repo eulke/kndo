@@ -1,0 +1,14 @@
+{
+  "findings": [
+    {
+      "category": "untested",
+      "subject_kind": "directory",
+      "path": "src"
+    },
+    {
+      "category": "unused",
+      "subject_kind": "file",
+      "path": "examples/guest/src/lib.rs"
+    }
+  ]
+}

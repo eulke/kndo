@@ -17,14 +17,17 @@ use smol_str::SmolStr;
 
 pub struct RustAdapter;
 
-/// Integration tests, benches, and examples are test-role
-/// (an example consumes the API from outside exactly like a test — a symbol alive only
-/// through its own demo is the `test-only` verdict); `build.rs`, `.cargo/`, and the
-/// de-facto `xtask/` task-runner convention are tooling.
+/// `build.rs`, `.cargo/`, and the de-facto `xtask/` task-runner convention are tooling.
+/// Test-role dirs are deliberately absent here: Cargo's `tests`/`benches`/`examples` are
+/// *package-relative* conventions (they bind to the `Cargo.toml` beside them, not to the
+/// segment wherever it appears — a workspace-excluded crate living under some ancestor's
+/// `examples/` is ordinary production source), so they're declared as
+/// `package_test_dirs` on the descriptor and matched by core assembly, which knows which
+/// manifest owns which file.
 const PATH_PATTERNS: kndo_adapter_toolkit::classify::PathPatterns =
     kndo_adapter_toolkit::classify::PathPatterns {
         test_name_markers: &[],
-        test_dirs: &["tests", "benches", "examples"],
+        test_dirs: &[],
         tooling_name_markers: &["build.rs"],
         tooling_dirs: &[".cargo", "xtask"],
     };
@@ -71,6 +74,14 @@ impl LanguageAdapter for RustAdapter {
             // The crate name IS the `use` specifier's root segment — resolve() structurally
             // identifies the declared dependency every time.
             resolves_dependency_usage: true,
+            // Cargo's target-dir conventions, anchored at the owning Cargo.toml (see
+            // PATH_PATTERNS above). An example consumes the API from outside exactly like a
+            // test — a symbol alive only through its own demo is the `test-only` verdict.
+            package_test_dirs: vec![
+                SmolStr::new("tests"),
+                SmolStr::new("benches"),
+                SmolStr::new("examples"),
+            ],
         }
     }
 
@@ -122,18 +133,20 @@ mod tests {
     #[test]
     fn roles_follow_the_cargo_directory_conventions() {
         let a = RustAdapter;
+        // Test dirs are NOT path-claimed: `tests`/`benches`/`examples` bind to the owning
+        // Cargo.toml, so the claim stays Production and the descriptor's
+        // `package_test_dirs` lets assembly promote package-relatively.
         assert_eq!(
             a.claim(&path("tests/integration.rs")).unwrap().class.role,
-            FileRole::Test
+            FileRole::Production
         );
-        assert_eq!(
-            a.claim(&path("benches/lookup.rs")).unwrap().class.role,
-            FileRole::Test
-        );
-        assert_eq!(
-            a.claim(&path("examples/demo.rs")).unwrap().class.role,
-            FileRole::Test
-        );
+        let d = a.descriptor();
+        for dir in ["tests", "benches", "examples"] {
+            assert!(
+                d.package_test_dirs.iter().any(|s| s == dir),
+                "{dir} must be declared package-relative"
+            );
+        }
         assert_eq!(
             a.claim(&path("build.rs")).unwrap().class.role,
             FileRole::Tooling

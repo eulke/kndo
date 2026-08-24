@@ -91,6 +91,7 @@ impl LanguageAdapter for SwiftAdapter {
             // repository's own manifest, which kndo structurally never reads. Local target-to-
             // target imports resolve precisely via the ordinary same-unit fallback instead.
             resolves_dependency_usage: false,
+            package_test_dirs: Vec::new(),
         }
     }
 

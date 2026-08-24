@@ -75,6 +75,7 @@ impl LanguageAdapter for GoAdapter {
             // The module path IS the import specifier's prefix — resolve() structurally
             // identifies the declared dependency every time.
             resolves_dependency_usage: true,
+            package_test_dirs: Vec::new(),
         }
     }
 

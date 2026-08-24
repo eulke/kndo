@@ -95,6 +95,7 @@ impl LanguageAdapter for JavaAdapter {
             // Resolution::Dependency for a third-party import, so dependency_hygiene's
             // unused/test-only verdicts would be a false-positive flood if attempted here.
             resolves_dependency_usage: false,
+            package_test_dirs: Vec::new(),
         }
     }
 

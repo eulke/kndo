@@ -82,6 +82,7 @@ impl LanguageAdapter for KotlinAdapter {
             // Identical root cause to Java's — Kotlin rides
             // Maven/Gradle coordinates with no structural import→coordinate mapping.
             resolves_dependency_usage: false,
+            package_test_dirs: Vec::new(),
         }
     }
 

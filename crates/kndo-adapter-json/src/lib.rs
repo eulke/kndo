@@ -47,6 +47,7 @@ impl LanguageAdapter for JsonAdapter {
             // Moot: this adapter never contributes a manifest/PackageNode, so
             // `dependency_hygiene` never consults this flag for it.
             resolves_dependency_usage: false,
+            package_test_dirs: Vec::new(),
         }
     }
 
