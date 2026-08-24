@@ -7,7 +7,8 @@
 
 # [analysis]
 # skip = []                              # categories or category:subject, e.g. ["unused:enum-member"]
-# min-confidence = "probable"            # report floor; "possible" only with --verbose
+# min-confidence = "possible"            # report floor; raise to "probable" to hide the
+#                                        # speculative tier (--verbose always shows everything)
 
 # [analysis.duplicate]
 # min-tokens = 50

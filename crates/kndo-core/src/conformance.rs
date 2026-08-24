@@ -107,6 +107,7 @@ pub fn run_fixture(
     let overrides = ConfigOverrides {
         use_cache: false,
         threads: None,
+        min_confidence: None,
     };
     let mut engine = Engine::open(&project_dir, overrides, adapters)
         .map_err(|e| ConformanceError(format!("opening {}: {e}", project_dir.display())))?;

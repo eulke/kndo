@@ -10,7 +10,7 @@ is applied.
 |---|---|
 | Adopting kndo on a legacy codebase | [baseline](#the-baseline) |
 | One intentional exception, with a reason a reviewer should see | inline [`kndo:allow`](#inline-suppressions) |
-| Opting a plugin's findings into the CI gate | [`[plugins.gate]`](configuration.md#pluginsgate--live-today) |
+| Opting a plugin's findings into the CI gate | [`[plugins.gate]`](configuration.md#pluginsgate) |
 
 ## Inline suppressions
 

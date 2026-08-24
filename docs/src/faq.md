@@ -54,7 +54,7 @@ surface the other.
 
 Plugin findings are advisory by default — installing a plugin must never break a build. Opt
 the ones you trust into the gate with
-[`[plugins.gate]`](configuration.md#pluginsgate--live-today).
+[`[plugins.gate]`](configuration.md#pluginsgate).
 
 ## Is my code sent anywhere?
 

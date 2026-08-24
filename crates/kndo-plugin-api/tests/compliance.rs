@@ -85,6 +85,7 @@ fn external_wasm_adapter_runs_a_real_engine_check_end_to_end() {
         ConfigOverrides {
             use_cache: false,
             threads: Some(1),
+            min_confidence: None,
         },
         vec![Box::new(adapter)],
     )

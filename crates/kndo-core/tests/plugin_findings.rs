@@ -204,6 +204,7 @@ fn open(dir: &tempfile::TempDir, plugin: RulePlugin, use_cache: bool) -> Engine 
         ConfigOverrides {
             use_cache,
             threads: Some(1),
+            min_confidence: None,
         },
         vec![Box::new(MiniAdapter)],
         vec![Box::new(plugin)],

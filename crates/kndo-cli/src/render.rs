@@ -40,9 +40,10 @@ use kndo::vocab::Confidence;
 pub(crate) struct RenderOptions {
     pub(crate) color: bool,
     pub(crate) quiet: bool,
-    /// Adds the per-phase timing block and cache state to check output. (The
-    /// third `--verbose` effect — revealing `possible`-confidence findings — is inert:
-    /// no renderer hides findings by confidence, so there is nothing to reveal.)
+    /// Adds the per-phase timing block and cache state to check output. The third
+    /// `--verbose` effect — revealing `possible`-confidence findings — is engine-side:
+    /// `check` passes a `Possible` report floor override, so verbose shows every tier
+    /// even when the project's `min-confidence` config raises the floor.
     pub(crate) verbose: bool,
 }
 

@@ -90,7 +90,7 @@ Plugins can emit findings under declared rules. They are namespaced and fenced:
   (`kndo:allow plugin:<coordinate>/<rule>`), but *never* moving the exit code — installing a
   plugin is safe by default, whatever severities it declares.
 - **Opt into the gate** per plugin or per rule with
-  [`[plugins.gate]`](configuration.md#pluginsgate--live-today); the configured level caps
+  [`[plugins.gate]`](configuration.md#pluginsgate); the configured level caps
   severity (lower than declared, never higher).
 - **Capped**: at most 500 findings per rule per run, with loud truncation — a noisy plugin is
   a bounded annoyance.

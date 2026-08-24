@@ -50,7 +50,12 @@ fn a_root_that_is_only_a_symbol_does_not_strand_its_file_or_its_callees() {
     let dir = multi_file_module("symbol-root");
     let (g, diagnostics) = graph::assemble(&dir, &[Box::new(GoAdapter)], &[]).unwrap();
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
-    let findings = analysis::run_all(&g, &kndo_core::coverage::CoverageMap::default()).findings;
+    let findings = analysis::run_all(
+        &g,
+        &kndo_core::coverage::CoverageMap::default(),
+        &kndo_core::analysis::AnalysisTuning::default(),
+    )
+    .findings;
 
     let unused_paths: Vec<&str> = findings
         .iter()
@@ -87,7 +92,12 @@ fn importing_the_module_s_own_subpackage_is_never_a_phantom_dependency() {
     let dir = multi_file_module("own-subpackage");
     let (g, diagnostics) = graph::assemble(&dir, &[Box::new(GoAdapter)], &[]).unwrap();
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
-    let findings = analysis::run_all(&g, &kndo_core::coverage::CoverageMap::default()).findings;
+    let findings = analysis::run_all(
+        &g,
+        &kndo_core::coverage::CoverageMap::default(),
+        &kndo_core::analysis::AnalysisTuning::default(),
+    )
+    .findings;
 
     assert!(
         !findings.iter().any(|f| f.category == "undeclared"),
@@ -119,7 +129,12 @@ fn unexported_method_called_through_a_variable_is_not_falsely_unused() {
 
     let (g, diagnostics) = graph::assemble(&dir, &[Box::new(GoAdapter)], &[]).unwrap();
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
-    let findings = analysis::run_all(&g, &kndo_core::coverage::CoverageMap::default()).findings;
+    let findings = analysis::run_all(
+        &g,
+        &kndo_core::coverage::CoverageMap::default(),
+        &kndo_core::analysis::AnalysisTuning::default(),
+    )
+    .findings;
 
     let unused_symbols: Vec<&str> = findings
         .iter()
@@ -154,7 +169,12 @@ fn a_dead_function_s_callees_die_with_it() {
 
     let (g, diagnostics) = graph::assemble(&dir, &[Box::new(GoAdapter)], &[]).unwrap();
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
-    let findings = analysis::run_all(&g, &kndo_core::coverage::CoverageMap::default()).findings;
+    let findings = analysis::run_all(
+        &g,
+        &kndo_core::coverage::CoverageMap::default(),
+        &kndo_core::analysis::AnalysisTuning::default(),
+    )
+    .findings;
     let unused: Vec<&str> = findings
         .iter()
         .filter(|f| f.category == "unused")

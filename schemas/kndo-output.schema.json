@@ -555,7 +555,7 @@
       ]
     },
     "SuppressedSummary": {
-      "description": "`suppressed.inline`/`suppressed.config` — always present\n(unlike `baseline`, which is `None` when the feature isn't adopted at all): inline pragma\nmatching runs on every check, so `{ inline: 0, config: 0 }` is a meaningful \"nothing\nsuppressed,\" not an absent subsystem. `config` stays honestly `0` — no `kndo.toml`\nsuppression parser exists yet (the config mechanism).",
+      "description": "`suppressed.inline`/`suppressed.config` — always present\n(unlike `baseline`, which is `None` when the feature isn't adopted at all): both\nmechanisms run on every check, so `{ inline: 0, config: 0 }` is a meaningful \"nothing\nsuppressed,\" not an absent subsystem. `inline` counts pragma-matched findings;\n`config` counts findings filtered by `kndo.toml`'s `[analysis].skip` and `[[rule]]`\nentries (a finding covered by both counts as `inline` — pragmas run first).",
       "type": "object",
       "properties": {
         "config": {

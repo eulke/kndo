@@ -20,7 +20,7 @@
 
 use rustc_hash::FxHashSet as HashSet;
 
-use crate::analysis::crap::{crap_score, CRAP_THRESHOLD};
+use crate::analysis::crap::crap_score;
 use crate::analysis::reachability::{Reachability, ReachabilityMap};
 use crate::coverage::CoverageMap;
 use crate::engine::Finding;
@@ -157,6 +157,9 @@ pub struct HealthInputs<'a> {
     pub cycle_files: &'a HashSet<FileId>,
     /// Redundant clone instances with token counts (from `duplicate`).
     pub duplicated: &'a [(SymbolId, u32)],
+    /// The effective CRAP threshold (`AnalysisTuning::crap_threshold`) — the same value the
+    /// `crap` analysis judged with, so the axis and the findings can never disagree.
+    pub crap_threshold: f64,
 }
 
 pub fn compute(
@@ -354,10 +357,10 @@ fn tally(
                 .function_coverage(&file.path, symbol.span)
                 .unwrap_or(0.0);
             let score = crap_score(metrics.cyclomatic, cov);
-            if score > CRAP_THRESHOLD {
+            if score > inputs.crap_threshold {
                 crap_over += 1;
                 crapload += score;
-                crap_excess += score - CRAP_THRESHOLD;
+                crap_excess += score - inputs.crap_threshold;
             }
         }
     }
@@ -418,7 +421,7 @@ fn tally(
     );
     push(
         &CRAP,
-        ratio(crap_excess, CRAP_THRESHOLD * crap_functions as f64),
+        ratio(crap_excess, inputs.crap_threshold * crap_functions as f64),
         Extra {
             count: crap_measured.then_some(crap_over),
             crapload: crap_measured.then(|| round1(crapload)),
@@ -531,6 +534,7 @@ mod tests {
             coverage,
             cycle_files: cycles,
             duplicated,
+            crap_threshold: crate::analysis::crap::CRAP_THRESHOLD,
         }
     }
 

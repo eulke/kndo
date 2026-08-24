@@ -89,6 +89,28 @@ pub(crate) fn package_label(graph: &ProjectGraph, package: PackageId) -> String 
     }
 }
 
+/// Analysis-level tuning, resolved by the engine from `kndo.toml` (built-in defaults
+/// otherwise). A separate input for the same reason `coverage` is: every knob acts strictly
+/// post-assembly, so none of this belongs in the graph or its cache key.
+#[derive(Debug, Clone)]
+pub struct AnalysisTuning {
+    /// `[analysis.crap] threshold` — scores above it are findings; also health's axis unit.
+    pub crap_threshold: f64,
+    /// `[analysis.duplicate] min-tokens` — smaller functions are not clone-matched. Never
+    /// below the extraction floor ([`crate::config::DUPLICATE_MIN_TOKENS_FLOOR`]): under it
+    /// the facts carry no fingerprints to match.
+    pub duplicate_min_tokens: u32,
+}
+
+impl Default for AnalysisTuning {
+    fn default() -> Self {
+        AnalysisTuning {
+            crap_threshold: crap::CRAP_THRESHOLD,
+            duplicate_min_tokens: crate::config::DUPLICATE_MIN_TOKENS_FLOOR,
+        }
+    }
+}
+
 /// Runs every analysis and returns their findings, sorted by id for deterministic output.
 /// `coverage` is the run's ingested coverage — a separate input rather than part of
 /// the graph, because report freshness varies independently of source content hashes and must
@@ -96,6 +118,7 @@ pub(crate) fn package_label(graph: &ProjectGraph, package: PackageId) -> String 
 pub fn run_all(
     graph: &crate::graph::ProjectGraph,
     coverage: &crate::coverage::CoverageMap,
+    tuning: &AnalysisTuning,
 ) -> AnalysisOutcome {
     let mut timings = Timings::new();
     let reach = timings.time("reachability", || reachability::compute(graph));
@@ -161,7 +184,10 @@ pub fn run_all(
                     rayon::join(
                         || {
                             let start = std::time::Instant::now();
-                            let out = duplicate::find_duplicate_functions(graph);
+                            let out = duplicate::find_duplicate_functions(
+                                graph,
+                                tuning.duplicate_min_tokens,
+                            );
                             (out, start.elapsed().as_micros() as u64)
                         },
                         || timed(&|| internal_only::find_internal_only(graph, reach)),
@@ -186,7 +212,11 @@ pub fn run_all(
                                     rayon::join(
                                         || {
                                             let start = std::time::Instant::now();
-                                            let out = crap::find_crap(graph, coverage);
+                                            let out = crap::find_crap(
+                                                graph,
+                                                coverage,
+                                                tuning.crap_threshold,
+                                            );
                                             (out, start.elapsed().as_micros() as u64)
                                         },
                                         || {
@@ -251,6 +281,7 @@ pub fn run_all(
                 coverage,
                 cycle_files: &cycle_files,
                 duplicated: &duplicated,
+                crap_threshold: tuning.crap_threshold,
             },
         )
     });

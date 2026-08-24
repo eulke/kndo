@@ -21,7 +21,9 @@ use crate::engine::{Finding, Location, Severity};
 use crate::graph::ProjectGraph;
 use crate::vocab::{Confidence, FileOrigin, FileRole};
 
-/// The standard threshold ("findings for CRAP > 30").
+/// The standard threshold ("findings for CRAP > 30") — the built-in default;
+/// `[analysis.crap] threshold` in `kndo.toml` overrides it per project
+/// (`AnalysisTuning::crap_threshold`).
 pub(crate) const CRAP_THRESHOLD: f64 = 30.0;
 
 pub fn crap_score(cyclomatic: u32, coverage: f64) -> f64 {
@@ -32,6 +34,7 @@ pub fn crap_score(cyclomatic: u32, coverage: f64) -> f64 {
 pub fn find_crap(
     graph: &ProjectGraph,
     coverage: &CoverageMap,
+    threshold: f64,
 ) -> (Vec<Finding>, Option<Diagnostic>) {
     if coverage.is_empty() {
         return (
@@ -70,7 +73,7 @@ pub fn find_crap(
 
         let cov = coverage.function_coverage(&file.path, symbol.span);
         let score = crap_score(metrics.cyclomatic, cov.unwrap_or(0.0));
-        if score <= CRAP_THRESHOLD {
+        if score <= threshold {
             continue;
         }
 
@@ -91,7 +94,7 @@ pub fn find_crap(
             confidence: Confidence::Certain,
             message: format!(
                 "{path}#{qualified} has CRAP {score:.0} (complexity {comp}, {coverage_text}) — \
-                 above the threshold of {CRAP_THRESHOLD:.0}",
+                 above the threshold of {threshold:.0}",
                 comp = metrics.cyclomatic,
             ),
             location: Location {
@@ -202,7 +205,7 @@ mod tests {
             ],
             vec![(SymbolId(0), metrics(6)), (SymbolId(1), metrics(6))],
         );
-        let findings = find_crap(&graph, &unrelated_coverage()).0;
+        let findings = find_crap(&graph, &unrelated_coverage(), CRAP_THRESHOLD).0;
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("gnarly_prod"));
     }
@@ -218,7 +221,7 @@ mod tests {
             vec![symbol(FileId(0), "gnarly", 1, 30)],
             vec![(SymbolId(0), metrics(6))],
         );
-        let findings = find_crap(&graph, &unrelated_coverage()).0;
+        let findings = find_crap(&graph, &unrelated_coverage(), CRAP_THRESHOLD).0;
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].category, "crap");
         assert_eq!(findings[0].group, "risk");
@@ -242,8 +245,22 @@ mod tests {
         for line in 1..=30 {
             sink.add_line(ProjectPath(SmolStr::new("src/a.mock")), line, 1);
         }
-        let findings = find_crap(&graph, &sink.into_map()).0;
+        let findings = find_crap(&graph, &sink.into_map(), CRAP_THRESHOLD).0;
         assert!(findings.is_empty(), "fully covered: CRAP = comp = 6");
+        // The threshold is a knob, not a constant: the same fully-covered function
+        // (CRAP = 6) is a finding under a stricter configured threshold, and the
+        // message names the effective value.
+        let mut sink = CoverageSink::default();
+        for line in 1..=30 {
+            sink.add_line(ProjectPath(SmolStr::new("src/a.mock")), line, 1);
+        }
+        let strict = find_crap(&graph, &sink.into_map(), 5.0).0;
+        assert_eq!(strict.len(), 1);
+        assert!(
+            strict[0].message.contains("threshold of 5"),
+            "{}",
+            strict[0].message
+        );
     }
 
     #[test]
@@ -259,7 +276,12 @@ mod tests {
             vec![symbol(FileId(0), "halfway", 1, 20)],
             vec![(SymbolId(0), metrics(8))],
         );
-        assert_eq!(find_crap(&graph, &unrelated_coverage()).0.len(), 1);
+        assert_eq!(
+            find_crap(&graph, &unrelated_coverage(), CRAP_THRESHOLD)
+                .0
+                .len(),
+            1
+        );
         let mut sink = CoverageSink::default();
         for line in 1..=20 {
             sink.add_line(
@@ -268,7 +290,7 @@ mod tests {
                 u64::from(line <= 10),
             );
         }
-        let findings = find_crap(&graph, &sink.into_map()).0;
+        let findings = find_crap(&graph, &sink.into_map(), CRAP_THRESHOLD).0;
         assert!(findings.is_empty());
     }
 
@@ -284,7 +306,9 @@ mod tests {
             vec![symbol(FileId(0), "plain", 1, 10)],
             vec![(SymbolId(0), metrics(5))],
         );
-        assert!(find_crap(&graph, &unrelated_coverage()).0.is_empty());
+        assert!(find_crap(&graph, &unrelated_coverage(), CRAP_THRESHOLD)
+            .0
+            .is_empty());
     }
 
     #[test]
@@ -300,7 +324,9 @@ mod tests {
             ],
             vec![(SymbolId(0), metrics(9)), (SymbolId(1), metrics(9))],
         );
-        assert!(find_crap(&graph, &unrelated_coverage()).0.is_empty());
+        assert!(find_crap(&graph, &unrelated_coverage(), CRAP_THRESHOLD)
+            .0
+            .is_empty());
     }
 
     #[test]
@@ -316,8 +342,8 @@ mod tests {
                 vec![(SymbolId(0), metrics(6))],
             )
         };
-        let a = find_crap(&make(1), &unrelated_coverage()).0;
-        let b = find_crap(&make(50), &unrelated_coverage()).0;
+        let a = find_crap(&make(1), &unrelated_coverage(), CRAP_THRESHOLD).0;
+        let b = find_crap(&make(50), &unrelated_coverage(), CRAP_THRESHOLD).0;
         assert_eq!(
             a[0].id, b[0].id,
             "moving the function must not change the id"
@@ -335,7 +361,7 @@ mod tests {
             vec![symbol(FileId(0), "gnarly", 1, 30)],
             vec![(SymbolId(0), metrics(20))],
         );
-        let (findings, diagnostic) = find_crap(&graph, &CoverageMap::default());
+        let (findings, diagnostic) = find_crap(&graph, &CoverageMap::default(), CRAP_THRESHOLD);
         assert!(
             findings.is_empty(),
             "no report ⇒ no findings, however complex the code"

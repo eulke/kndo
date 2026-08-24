@@ -25,8 +25,11 @@
 //! is skipped entirely (neither suppressing nor stale) — the plugin may simply be deactivated in
 //! this configuration, and flagging it would flicker with activation state.
 //!
-//! Config-based suppression (`kndo.toml` glob/category disables) has no reader yet;
-//! [`SuppressedSummary::config`] stays honestly `0` rather than faked.
+//! Config-based suppression (`kndo.toml`'s `[analysis].skip` and `[[rule]]`) runs in the
+//! engine strictly *after* this pass ([`crate::config::KndoConfig::filter_findings`]) and
+//! fills [`SuppressedSummary::config`]: staleness here is judged against the complete
+//! finding set, so a pragma covering a config-skipped finding stays honestly non-stale,
+//! and a finding covered by both counts as `inline`.
 
 use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 

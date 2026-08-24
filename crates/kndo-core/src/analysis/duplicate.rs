@@ -116,7 +116,10 @@ const MAX_POSTING: usize = 20;
 /// lexicographically-first canonical one, with its normalized token count. `health`'s
 /// "duplicated tokens" numerator: the canonical copy is the one you'd keep, so
 /// only the copies beyond it count as duplicated.
-pub fn find_duplicate_functions(graph: &ProjectGraph) -> (Vec<Finding>, Vec<(SymbolId, u32)>) {
+pub fn find_duplicate_functions(
+    graph: &ProjectGraph,
+    min_tokens: u32,
+) -> (Vec<Finding>, Vec<(SymbolId, u32)>) {
     use crate::vocab::FileOrigin;
     use rustc_hash::FxHashSet as HashSet;
 
@@ -131,7 +134,11 @@ pub fn find_duplicate_functions(graph: &ProjectGraph) -> (Vec<Finding>, Vec<(Sym
     let mut instances: Vec<Instance> = Vec::new();
     for (symbol_id, metrics) in &graph.function_metrics {
         if metrics.fingerprints.is_empty() {
-            continue; // under the min-tokens gate — too small to meaningfully clone-match
+            continue; // under the extraction floor — too small to meaningfully clone-match
+        }
+        if metrics.token_count < min_tokens {
+            continue; // under the configured min-tokens gate (only ever at or above the
+                      // extraction floor — smaller functions carry no fingerprints at all)
         }
         let symbol = &graph.symbols[symbol_id.0 as usize];
         let file = &graph.files[symbol.file.0 as usize];
@@ -440,7 +447,7 @@ mod tests {
             (SymbolId(0), metrics(vec![1, 2, 3, 4, 5])),
             (SymbolId(1), metrics(vec![1, 2, 3, 4, 5])),
         ]);
-        let findings = find_duplicate_functions(&graph).0;
+        let findings = find_duplicate_functions(&graph, 50).0;
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].category, "duplicate");
         assert_eq!(findings[0].subject_kind, "function");
@@ -448,6 +455,26 @@ mod tests {
         assert_eq!(findings[0].related.len(), 2, "every instance in related");
         assert!(findings[0].message.contains("a.ts#one"));
         assert!(findings[0].message.contains("b.ts#two"));
+    }
+
+    #[test]
+    fn a_raised_min_tokens_gate_excludes_smaller_functions() {
+        // The same clone pair (token_count 60): matched under the default floor, out of
+        // scope when the configured gate rises above their size.
+        let graph = ProjectGraph::for_test(
+            vec![claimed_file("a.ts"), claimed_file("b.ts")],
+            vec![callable(0, "one"), callable(1, "two")],
+            vec![],
+            vec![],
+        )
+        .with_function_metrics(vec![
+            (SymbolId(0), metrics(vec![1, 2, 3, 4, 5])),
+            (SymbolId(1), metrics(vec![1, 2, 3, 4, 5])),
+        ]);
+        assert_eq!(find_duplicate_functions(&graph, 50).0.len(), 1);
+        let (findings, duplicated) = find_duplicate_functions(&graph, 100);
+        assert!(findings.is_empty());
+        assert!(duplicated.is_empty());
     }
 
     #[test]
@@ -469,7 +496,7 @@ mod tests {
             (SymbolId(0), metrics(vec![1, 2, 3, 4, 5])),
             (SymbolId(1), metrics(vec![1, 2, 3, 4, 5])),
         ]);
-        let (findings, duplicated) = find_duplicate_functions(&graph);
+        let (findings, duplicated) = find_duplicate_functions(&graph, 50);
         assert!(findings.is_empty());
         assert!(duplicated.is_empty());
     }
@@ -494,7 +521,7 @@ mod tests {
             (SymbolId(0), metrics(vec![1, 2, 3, 4, 5])),
             (SymbolId(1), metrics(vec![1, 2, 3, 4, 5])),
         ]);
-        assert!(find_duplicate_functions(&graph).0.is_empty());
+        assert!(find_duplicate_functions(&graph, 50).0.is_empty());
 
         let graph = ProjectGraph::for_test(
             vec![claimed_file("a.ts"), claimed_file("b.ts")],
@@ -506,7 +533,7 @@ mod tests {
             (SymbolId(0), metrics(vec![1, 2, 3, 4, 5])),
             (SymbolId(1), metrics(vec![1, 2, 3, 4, 5])),
         ]);
-        assert_eq!(find_duplicate_functions(&graph).0.len(), 1);
+        assert_eq!(find_duplicate_functions(&graph, 50).0.len(), 1);
     }
 
     #[test]
@@ -522,7 +549,7 @@ mod tests {
             (SymbolId(0), metrics(vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10])),
             (SymbolId(1), metrics(vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 11])),
         ]);
-        assert_eq!(find_duplicate_functions(&graph).0.len(), 1);
+        assert_eq!(find_duplicate_functions(&graph, 50).0.len(), 1);
     }
 
     #[test]
@@ -537,7 +564,7 @@ mod tests {
             (SymbolId(0), metrics(vec![1, 2, 3, 4, 5])),
             (SymbolId(1), metrics(vec![1, 6, 7, 8, 9])),
         ]);
-        assert!(find_duplicate_functions(&graph).0.is_empty());
+        assert!(find_duplicate_functions(&graph, 50).0.is_empty());
     }
 
     #[test]
@@ -557,7 +584,7 @@ mod tests {
             (SymbolId(0), metrics(vec![1, 2, 3, 4, 5])),
             (SymbolId(1), metrics(vec![1, 2, 3, 4, 5])),
         ]);
-        assert!(find_duplicate_functions(&graph).0.is_empty());
+        assert!(find_duplicate_functions(&graph, 50).0.is_empty());
     }
 
     #[test]
@@ -574,7 +601,7 @@ mod tests {
             (SymbolId(0), metrics(vec![])),
             (SymbolId(1), metrics(vec![])),
         ]);
-        assert!(find_duplicate_functions(&graph).0.is_empty());
+        assert!(find_duplicate_functions(&graph, 50).0.is_empty());
     }
 
     #[test]
@@ -595,7 +622,7 @@ mod tests {
             (SymbolId(1), metrics(vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10])),
             (SymbolId(2), metrics(vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 11])),
         ]);
-        let findings = find_duplicate_functions(&graph).0;
+        let findings = find_duplicate_functions(&graph, 50).0;
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].related.len(), 3);
     }

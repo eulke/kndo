@@ -1,8 +1,7 @@
-//! The gate opt-in: `[plugins.gate]` in `kndo.toml`, the ONLY part of that file
-//! the core reads today (the wider config subsystem is unimplemented —
-//! this table is deliberately safe to read in isolation because it affects only how plugin
-//! findings map onto the severity channel, never the graph, core findings, or any cached
-//! artifact).
+//! The gate opt-in: `[plugins.gate]` in `kndo.toml`. The file itself is parsed once by
+//! [`crate::config`]; this module owns the gate table's vocabulary and semantics, which
+//! affect only how plugin findings map onto the severity channel — never the graph, core
+//! findings, or any cached artifact.
 //!
 //! ```toml
 //! [plugins.gate]
@@ -18,7 +17,6 @@
 //! reported as a problem string (surfaced as a run diagnostic) and otherwise ignored.
 
 use std::collections::BTreeMap;
-use std::path::Path;
 
 use crate::engine::Severity;
 
@@ -34,32 +32,15 @@ pub(crate) struct PluginsGate {
 }
 
 impl PluginsGate {
-    /// Read `<root>/kndo.toml`'s `[plugins.gate]` table. Returns the gate plus any problems
-    /// worth telling the user about (malformed file, unknown level) — never fails the open.
-    pub(crate) fn load(root: &Path) -> (PluginsGate, Vec<String>) {
-        let path = root.join("kndo.toml");
-        let Ok(content) = std::fs::read_to_string(&path) else {
-            return (PluginsGate::default(), Vec::new());
-        };
-        let table: toml::Table = match content.parse() {
-            Ok(t) => t,
-            Err(e) => {
-                return (
-                    PluginsGate::default(),
-                    vec![format!(
-                        "kndo.toml is not valid TOML — [plugins.gate] ignored: {e}"
-                    )],
-                )
-            }
-        };
-        let Some(entries) = table
-            .get("plugins")
-            .and_then(|p| p.get("gate"))
-            .and_then(|g| g.as_table())
-        else {
-            return (PluginsGate::default(), Vec::new());
-        };
-        parse_entries(entries)
+    /// Parse the `[plugins.gate]` value out of an already-parsed `kndo.toml`
+    /// ([`crate::config::KndoConfig`] owns the single file read). `None` (table absent) is
+    /// empty config; problems (unknown level, wrong value type) come back as strings —
+    /// never a failure.
+    pub(crate) fn from_table(gate: Option<&toml::Value>) -> (PluginsGate, Vec<String>) {
+        match gate.and_then(|g| g.as_table()) {
+            Some(entries) => parse_entries(entries),
+            None => (PluginsGate::default(), Vec::new()),
+        }
     }
 
     /// The effective gate for one finding: the per-rule key (`<coordinate>/<rule>`) wins over
@@ -109,21 +90,13 @@ mod tests {
     use super::*;
 
     fn gate_from(toml_body: &str) -> (PluginsGate, Vec<String>) {
-        let dir = std::env::temp_dir().join(format!(
-            "kndo-gate-test-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
-        ));
-        let _ = std::fs::create_dir_all(&dir);
-        std::fs::write(dir.join("kndo.toml"), toml_body).unwrap();
-        let out = PluginsGate::load(&dir);
-        let _ = std::fs::remove_dir_all(&dir);
-        out
+        let table: toml::Table = toml_body.parse().unwrap();
+        PluginsGate::from_table(table.get("plugins").and_then(|p| p.get("gate")))
     }
 
     #[test]
-    fn absent_file_and_absent_table_are_empty_config() {
-        let (gate, problems) = PluginsGate::load(Path::new("/nonexistent-kndo-gate-test-dir"));
+    fn absent_table_is_empty_config() {
+        let (gate, problems) = PluginsGate::from_table(None);
         assert!(gate.resolve("x", "y").is_none() && problems.is_empty());
         let (gate, problems) = gate_from("[analysis]\n");
         assert!(gate.resolve("x", "y").is_none() && problems.is_empty());
@@ -150,10 +123,10 @@ mod tests {
 
     #[test]
     fn malformed_values_are_reported_not_fatal() {
+        // A malformed FILE is config.rs's problem now (single parse); malformed values
+        // within the table stay this module's.
         let (gate, problems) = gate_from("[plugins.gate]\n\"a\" = \"loud\"\n\"b\" = 3\n");
         assert_eq!(problems.len(), 2, "{problems:?}");
         assert!(gate.resolve("a", "r").is_none());
-        let (_, problems) = gate_from("not toml [ at all");
-        assert_eq!(problems.len(), 1);
     }
 }

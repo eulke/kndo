@@ -18,6 +18,7 @@ fn check(root: &Path) -> kndo_core::engine::RunResult {
     let overrides = kndo_core::engine::ConfigOverrides {
         use_cache: false,
         threads: Some(1),
+        min_confidence: None,
     };
     let mut engine = kndo::open(root, overrides).expect("kndo::open");
     engine.check(kndo_core::engine::CheckRequest {

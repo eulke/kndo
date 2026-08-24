@@ -14,6 +14,7 @@ pub mod agent_format;
 pub mod analysis;
 mod baseline;
 pub mod cache;
+pub mod config;
 pub mod conformance;
 pub mod coverage;
 pub mod discovery;

@@ -213,6 +213,7 @@ fn drive_fixture_in(
         ConfigOverrides {
             use_cache: true,
             threads: Some(1),
+            min_confidence: None,
         },
     ) {
         Ok(e) => e,

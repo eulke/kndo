@@ -108,6 +108,7 @@ fn wire_target() {
     let overrides = kndo_core::engine::ConfigOverrides {
         use_cache: false,
         threads: Some(1),
+        min_confidence: None,
     };
 
     // Scenario 1: no `*.trigger` file anywhere — the global plugin's own activation rule

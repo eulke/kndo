@@ -18,7 +18,8 @@ configuration.
 
 # [analysis]
 # skip = []                              # categories or category:subject, e.g. ["unused:enum-member"]
-# min-confidence = "probable"            # report floor; "possible" only with --verbose
+# min-confidence = "possible"            # report floor; raise to "probable" to hide the
+#                                        # speculative tier (--verbose always shows everything)
 
 # [analysis.duplicate]
 # min-tokens = 50
@@ -42,13 +43,12 @@ configuration.
 # "github.com/acme/some-plugin/noisy-rule" = "off" # per-rule override wins
 ```
 
-> **What the engine reads today:** the one section currently consumed is
-> **`[plugins.gate]`**. The other sections document kndo's configuration surface — the keys,
-> shapes, and defaults are fixed, and the built-in behavior already matches every default
-> shown (discovery is gitignore-aware, the duplicate token floor is 50, the CRAP threshold is
-> 30, threads default to physical cores with the `--threads` flag and `KNDO_THREADS` taking
-> precedence). Overriding those defaults from the file, and the `[delta]` budget gate, are
-> not wired yet: kndo prefers an honestly inert commented template over half-applied
+> **What the engine reads today:** **`[analysis]`** (`skip`, `min-confidence`),
+> **`[analysis.duplicate]`** (`min-tokens`), **`[analysis.crap]`** (`threshold`),
+> **`[performance]`** (`threads`), **`[[rule]]`**, and **`[plugins.gate]`** are all live.
+> Still documented-but-unwired: **`[project]`** (discovery is gitignore-aware
+> automatically; scoping it from config doesn't exist yet) and the **`[delta]`** budget
+> gate — kndo prefers an honestly inert commented section over half-applied
 > configuration. This page will always state exactly which keys are live.
 
 ## Key by key
@@ -65,13 +65,17 @@ configuration.
 - **`skip`** — verdicts to disable outright, as categories (`"duplicate"`) or
   category-subject pairs (`"unused:enum-member"`) using the same vocabulary as
   [suppressions](suppressions.md).
-- **`min-confidence`** — the report floor. Default `"probable"`: `possible`-tier findings are
-  reserved for `--verbose`.
+- **`min-confidence`** — the report floor. Default `"possible"`: every tier is reported.
+  Raise it to `"probable"` (or `"certain"`) to hide speculative findings by default;
+  `--verbose` always shows every tier regardless of the floor, and `stale` findings (the
+  suppression audit) are never floored. The floor drops findings from the report — it is a
+  display posture, not an acknowledgment, so nothing is counted as suppressed.
 
 ### `[analysis.duplicate]`
 
 - **`min-tokens`** — the structural-clone floor: callables with fewer normalized tokens don't
-  participate in clone detection. Default `50`.
+  participate in clone detection. Default `50`, which is also the hard minimum — extraction
+  fingerprints nothing smaller, so lower values clamp to `50` (with a diagnostic).
 
 ### `[analysis.crap]`
 
@@ -94,9 +98,13 @@ Budgets for diff modes (`--staged`, `--diff`), judging the *change*:
 ### `[[rule]]`
 
 Per-path overrides: each entry names `paths` globs and the `skip` list applying under them —
-the way to, say, exempt `examples/**` from `unused` without a pragma in every file.
+the way to, say, exempt `examples/**` from `unused` without a pragma in every file. Skipped
+findings are counted in the report's `suppressed.config`; a finding also covered by an
+inline pragma counts as `inline` instead (pragmas match first, so config can never make a
+working pragma look stale). `stale` itself can't be skipped — the audit of your
+suppressions stays visible by design.
 
-### `[plugins.gate]` — live today
+### `[plugins.gate]`
 
 By default, findings emitted by plugins are **advisory**: rendered, baselineable,
 suppressible, but never able to move the exit code — installing a plugin can't break your

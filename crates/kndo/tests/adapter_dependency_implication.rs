@@ -111,6 +111,7 @@ fn an_active_adapters_dependencies_imply_a_globally_installed_adapter() {
     let overrides = kndo_core::engine::ConfigOverrides {
         use_cache: false,
         threads: Some(1),
+        min_confidence: None,
     };
     let mut engine = kndo::open(project.path(), overrides).expect("kndo::open");
     let result = engine.check(kndo_core::engine::CheckRequest {

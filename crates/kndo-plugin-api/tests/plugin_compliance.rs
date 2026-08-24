@@ -189,6 +189,7 @@ fn external_wasm_plugin_hooks_affect_a_real_check() {
         ConfigOverrides {
             use_cache: false,
             threads: Some(1),
+            min_confidence: None,
         },
         vec![Box::new(MiniAdapter)],
     )
@@ -254,6 +255,7 @@ fn external_wasm_plugin_hooks_affect_a_real_check() {
         ConfigOverrides {
             use_cache: false,
             threads: Some(1),
+            min_confidence: None,
         },
         vec![Box::new(MiniAdapter)],
         vec![Box::new(plugin)],

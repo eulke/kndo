@@ -130,7 +130,7 @@ fn contribute_findings() -> Vec<ContributedFinding> {
 ```
 
 A finding's severity is its rule's declared severity — but without the user's explicit
-[`[plugins.gate]`](configuration.md#pluginsgate--live-today) opt-in it is **advisory**:
+[`[plugins.gate]`](configuration.md#pluginsgate) opt-in it is **advisory**:
 shown, never gating. Gated severities are capped at the configured level. Emissions are
 capped at 500 findings per rule per run, truncated loudly. Users can suppress your findings
 inline (`kndo:allow plugin:<coordinate>/<rule>`) and baseline them like any other.

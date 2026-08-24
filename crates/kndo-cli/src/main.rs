@@ -107,7 +107,8 @@ const KNDO_TOML_TEMPLATE: &str = r#"# kndo.toml — everything here is optional;
 
 # [analysis]
 # skip = []                              # categories or category:subject, e.g. ["unused:enum-member"]
-# min-confidence = "probable"            # report floor; "possible" only with --verbose
+# min-confidence = "possible"            # report floor; raise to "probable" to hide the
+#                                        # speculative tier (--verbose always shows everything)
 
 # [analysis.duplicate]
 # min-tokens = 50
@@ -940,6 +941,7 @@ fn health_cmd(args: &[String]) -> ExitCode {
     let overrides = ConfigOverrides {
         use_cache: !flags.no_cache,
         threads,
+        min_confidence: None,
     };
     let mut engine = match kndo::open(&cwd, overrides) {
         Ok(e) => e,
@@ -1040,6 +1042,10 @@ fn check(args: &[String]) -> ExitCode {
     let overrides = ConfigOverrides {
         use_cache: !flags.no_cache,
         threads,
+        // `--verbose` reveals every tier even when the project config raises the
+        // `min-confidence` floor; otherwise the file (or the report-everything default)
+        // decides.
+        min_confidence: flags.verbose.then_some(kndo::vocab::Confidence::Possible),
     };
     let mut engine = match kndo::open(&cwd, overrides) {
         Ok(e) => e,

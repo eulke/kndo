@@ -110,6 +110,13 @@ pub struct ConfigOverrides {
     /// `None` means "physical cores," the stated default, not "unspecified." `Some(1)` is
     /// a first-class supported mode (determinism checks, debugging, noisy-neighbor CI runners).
     pub threads: Option<usize>,
+    /// The report floor override: findings below this confidence tier are dropped from the
+    /// report (never counted as suppressed — a floor is a display posture, not an
+    /// acknowledgment). `None` defers to `kndo.toml [analysis] min-confidence`, and with
+    /// neither set the floor is `Possible` — every tier reported, the historical behavior.
+    /// The CLI passes `Some(Possible)` under `--verbose` so verbose always shows
+    /// everything even when the project config raises the floor.
+    pub min_confidence: Option<crate::vocab::Confidence>,
 }
 
 impl Default for ConfigOverrides {
@@ -117,6 +124,7 @@ impl Default for ConfigOverrides {
         ConfigOverrides {
             use_cache: true,
             threads: None,
+            min_confidence: None,
         }
     }
 }
@@ -411,10 +419,11 @@ pub struct BaselineSummary {
 }
 
 /// `suppressed.inline`/`suppressed.config` — always present
-/// (unlike `baseline`, which is `None` when the feature isn't adopted at all): inline pragma
-/// matching runs on every check, so `{ inline: 0, config: 0 }` is a meaningful "nothing
-/// suppressed," not an absent subsystem. `config` stays honestly `0` — no `kndo.toml`
-/// suppression parser exists yet (the config mechanism).
+/// (unlike `baseline`, which is `None` when the feature isn't adopted at all): both
+/// mechanisms run on every check, so `{ inline: 0, config: 0 }` is a meaningful "nothing
+/// suppressed," not an absent subsystem. `inline` counts pragma-matched findings;
+/// `config` counts findings filtered by `kndo.toml`'s `[analysis].skip` and `[[rule]]`
+/// entries (a finding covered by both counts as `inline` — pragmas run first).
 #[derive(Debug, Clone, Copy, Default, serde::Serialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct SuppressedSummary {
@@ -596,6 +605,19 @@ pub fn json_schema() -> schemars::Schema {
 /// `build_global`'s "already initialized" error, silently ignored — whichever call came first
 /// wins the thread count for the rest of the process. This can never threaten
 /// determinism: thread count only ever changes *scheduling*, never which bytes come out.
+/// The `min-confidence` report floor. `stale` is exempt — the "your suppressions are
+/// dead" audit must not disappear behind a floor the audited pragmas cannot influence —
+/// and a `Possible` floor is the identity (nothing sits below the lowest tier).
+fn apply_confidence_floor(findings: Vec<Finding>, floor: crate::vocab::Confidence) -> Vec<Finding> {
+    if floor == crate::vocab::Confidence::Possible {
+        return findings;
+    }
+    findings
+        .into_iter()
+        .filter(|f| f.category == "stale" || f.confidence >= floor)
+        .collect()
+}
+
 fn ensure_thread_pool(threads: Option<usize>) {
     let n = threads.unwrap_or_else(|| num_cpus::get_physical().max(1));
     let _ = rayon::ThreadPoolBuilder::new()
@@ -699,10 +721,12 @@ pub struct Engine {
     /// exit"). Crash-safety is the writer's temp-file + rename; a killed process loses only
     /// cache warmth.
     pending_persist: Option<std::thread::JoinHandle<()>>,
-    /// The opt-in table (`kndo.toml [plugins.gate]`), read once at open.
-    plugins_gate: crate::plugin_gate::PluginsGate,
-    /// Problems reading that table — surfaced as run diagnostics, never a failed open.
-    gate_problems: Vec<String>,
+    /// `kndo.toml`, read and parsed once at open (`[plugins.gate]` included).
+    config: crate::config::KndoConfig,
+    /// Problems reading it — surfaced as run diagnostics, never a failed open.
+    config_problems: Vec<String>,
+    /// The effective report floor: flag > file > `Possible` (report everything).
+    min_confidence_floor: crate::vocab::Confidence,
 }
 
 impl Engine {
@@ -741,11 +765,16 @@ impl Engine {
         if !root.is_dir() {
             return Err(EngineError::ProjectRootNotFound(root.to_path_buf()));
         }
-        ensure_thread_pool(overrides.threads);
+        let (config, config_problems) = crate::config::KndoConfig::load(root);
+        // Precedence: explicit override (flag/env, resolved by the frontend) > file > cores.
+        ensure_thread_pool(overrides.threads.or(config.threads));
+        let min_confidence_floor = overrides
+            .min_confidence
+            .or(config.min_confidence)
+            .unwrap_or(crate::vocab::Confidence::Possible);
         let cache = overrides
             .use_cache
             .then(|| crate::cache::ProjectCache::open(root));
-        let (plugins_gate, gate_problems) = crate::plugin_gate::PluginsGate::load(root);
         Ok(Engine {
             root: root.to_path_buf(),
             adapters,
@@ -753,8 +782,9 @@ impl Engine {
             cache,
             cache_enabled: overrides.use_cache,
             pending_persist: None,
-            plugins_gate,
-            gate_problems,
+            config,
+            config_problems,
+            min_confidence_floor,
         })
     }
 
@@ -1251,7 +1281,7 @@ impl Engine {
                 diagnostics.extend(extraction_diagnostics);
                 diagnostics.extend(plugin_diagnostics);
                 diagnostics.extend(finding_diagnostics);
-                diagnostics.extend(self.gate_problems.iter().map(|p| Diagnostic {
+                diagnostics.extend(self.config_problems.iter().map(|p| Diagnostic {
                     level: DiagnosticLevel::Warn,
                     path: None,
                     message: p.clone(),
@@ -1263,7 +1293,17 @@ impl Engine {
                     "coverage-ingest".to_string(),
                     coverage_start.elapsed().as_micros() as u64,
                 ));
-                let outcome = analysis::run_all(&g, &coverage);
+                let tuning = analysis::AnalysisTuning {
+                    crap_threshold: self
+                        .config
+                        .crap_threshold
+                        .unwrap_or(analysis::AnalysisTuning::default().crap_threshold),
+                    duplicate_min_tokens: self
+                        .config
+                        .duplicate_min_tokens
+                        .unwrap_or(analysis::AnalysisTuning::default().duplicate_min_tokens),
+                };
+                let outcome = analysis::run_all(&g, &coverage, &tuning);
                 let (mut findings, analysis_diagnostics, health) =
                     (outcome.findings, outcome.diagnostics, outcome.health);
                 timings.extend(
@@ -1281,7 +1321,7 @@ impl Engine {
                 findings.extend(
                     plugin_findings
                         .into_iter()
-                        .map(|p| plugin_finding(p, &self.plugins_gate)),
+                        .map(|p| plugin_finding(p, &self.config.plugins_gate)),
                 );
                 findings.sort_unstable_by(|a, b| a.id.cmp(&b.id));
                 // The dynamic half of suppression category validation (module docs of
@@ -1298,8 +1338,16 @@ impl Engine {
                             .map(move |r| format!("plugin:{id}/{}", r.name))
                     })
                     .collect();
-                let (findings, suppressed) =
+                let (findings, mut suppressed) =
                     crate::suppression::apply(&g, findings, &plugin_categories);
+                // Config suppression runs strictly AFTER pragmas: staleness was judged
+                // against the complete finding set, so a pragma covering a config-skipped
+                // finding stays honestly non-stale, and a finding covered by both counts
+                // as inline (config never saw it). Then the min-confidence floor — a
+                // display posture, not an acknowledgment, so it is dropped, not counted.
+                let (findings, config_suppressed) = self.config.filter_findings(findings);
+                suppressed.config = config_suppressed;
+                let findings = apply_confidence_floor(findings, self.min_confidence_floor);
                 Ok(AnalyzedTree {
                     graph: g,
                     findings,
@@ -2092,6 +2140,7 @@ mod tests {
             ConfigOverrides {
                 use_cache: false,
                 threads: None,
+                min_confidence: None,
             },
             vec![Box::new(CacheMockAdapter)],
         )
@@ -2489,6 +2538,140 @@ mod tests {
         );
         assert_eq!(result.suppressed.inline, 1);
         assert_eq!(result.suppressed.config, 0);
+    }
+
+    #[test]
+    fn config_skip_hides_a_finding_and_counts_it_as_config_suppressed() {
+        let dir = std::env::temp_dir().join("kndo-engine-test-config-skip");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("orphan.dmock"), "").unwrap();
+        std::fs::write(dir.join("kndo.toml"), "[analysis]\nskip = [\"unused\"]\n").unwrap();
+
+        let mut engine = Engine::open(
+            &dir,
+            ConfigOverrides::default(),
+            vec![Box::new(DiffMockAdapter)],
+        )
+        .unwrap();
+        let result = engine.check(CheckRequest {
+            mode: RunMode::Full,
+        });
+
+        assert!(
+            !result.findings.iter().any(|f| f.category == "unused"),
+            "{:?}",
+            result.findings
+        );
+        assert_eq!(result.suppressed.config, 1);
+        assert_eq!(result.suppressed.inline, 0);
+    }
+
+    #[test]
+    fn a_pragma_under_a_config_skip_counts_inline_and_never_goes_stale() {
+        // The ordering guarantee: pragmas run first, so a finding covered by BOTH
+        // mechanisms counts as inline (config never sees it) and the pragma stays
+        // honestly non-stale — deleting the config entry could never flicker it.
+        let dir = std::env::temp_dir().join("kndo-engine-test-config-plus-pragma");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("orphan.dmock"), "suppress-file unused\n").unwrap();
+        std::fs::write(dir.join("kndo.toml"), "[analysis]\nskip = [\"unused\"]\n").unwrap();
+
+        let mut engine = Engine::open(
+            &dir,
+            ConfigOverrides::default(),
+            vec![Box::new(DiffMockAdapter)],
+        )
+        .unwrap();
+        let result = engine.check(CheckRequest {
+            mode: RunMode::Full,
+        });
+
+        assert!(
+            !result.findings.iter().any(|f| f.category == "stale"),
+            "the pragma is doing its job — config must not steal the match: {:?}",
+            result.findings
+        );
+        assert_eq!(result.suppressed.inline, 1);
+        assert_eq!(result.suppressed.config, 0);
+    }
+
+    #[test]
+    fn a_path_rule_scopes_its_skip_to_matching_paths() {
+        let dir = std::env::temp_dir().join("kndo-engine-test-config-rule");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("gen")).unwrap();
+        std::fs::write(dir.join("orphan.dmock"), "").unwrap();
+        std::fs::write(dir.join("gen/tool.dmock"), "").unwrap();
+        std::fs::write(
+            dir.join("kndo.toml"),
+            "[[rule]]\npaths = [\"gen/**\"]\nskip = [\"unused\"]\n",
+        )
+        .unwrap();
+
+        let mut engine = Engine::open(
+            &dir,
+            ConfigOverrides::default(),
+            vec![Box::new(DiffMockAdapter)],
+        )
+        .unwrap();
+        let result = engine.check(CheckRequest {
+            mode: RunMode::Full,
+        });
+
+        assert!(
+            result
+                .findings
+                .iter()
+                .any(|f| finding_path(f) == "orphan.dmock"),
+            "outside the rule's paths the finding stands: {:?}",
+            result.findings
+        );
+        assert!(!result
+            .findings
+            .iter()
+            .any(|f| finding_path(f) == "gen/tool.dmock"));
+        assert_eq!(result.suppressed.config, 1);
+    }
+
+    #[test]
+    fn the_confidence_floor_drops_lower_tiers_but_never_stale() {
+        let mk = |category: &str, confidence: Confidence| Finding {
+            advisory: false,
+            id: format!("{category}-{confidence:?}"),
+            category: category.to_string(),
+            group: "waste".to_string(),
+            subject_kind: "function".to_string(),
+            severity: Severity::Info,
+            confidence,
+            message: String::new(),
+            location: Location {
+                path: None,
+                range: None,
+                symbol: None,
+                package: None,
+            },
+            related: Vec::new(),
+            delta: None,
+            delta_origin: None,
+        };
+        let findings = vec![
+            mk("unused", Confidence::Possible),
+            mk("unused", Confidence::Probable),
+            mk("stale", Confidence::Possible),
+        ];
+        // Possible is the identity floor — the report-everything default.
+        assert_eq!(
+            apply_confidence_floor(findings.clone(), Confidence::Possible).len(),
+            3
+        );
+        let kept = apply_confidence_floor(findings, Confidence::Probable);
+        assert_eq!(kept.len(), 2);
+        assert!(kept.iter().any(|f| f.category == "stale"));
+        assert!(kept
+            .iter()
+            .any(|f| f.category == "unused" && f.confidence == Confidence::Probable));
     }
 
     #[test]

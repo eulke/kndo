@@ -76,6 +76,7 @@ fn kndo_open_auto_discovers_a_kndo_plugins_wasm_adapter() {
         kndo_core::engine::ConfigOverrides {
             use_cache: false,
             threads: Some(1),
+            min_confidence: None,
         },
     )
     .expect("kndo::open must succeed with a plugin present");
