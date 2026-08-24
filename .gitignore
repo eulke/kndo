@@ -12,3 +12,8 @@ target/
 # status, so this line doesn't affect version control at all.
 **/tests/fixtures/
 docs/book/
+
+# Local coverage output (CONTRIBUTING.md "Coverage") — kndo ingests lcov.info from the
+# repo root or coverage/ at check time; the report itself is a build artifact.
+lcov.info
+coverage/

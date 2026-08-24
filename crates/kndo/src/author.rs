@@ -161,6 +161,12 @@ fn package_name(crate_dir: &Path) -> Result<String, String> {
 fn run_cargo_build(crate_dir: &Path) -> Result<(), String> {
     let status = Command::new("cargo")
         .args(["build", "--release", "--target", "wasm32-unknown-unknown"])
+        // Cross-target guest build: instrumentation flags from the host environment
+        // (cargo-llvm-cov's `-C instrument-coverage` in RUSTFLAGS) must not leak into a
+        // target that cannot link the profiling runtime.
+        .env_remove("RUSTFLAGS")
+        .env_remove("CARGO_ENCODED_RUSTFLAGS")
+        .env_remove("LLVM_PROFILE_FILE")
         .current_dir(crate_dir)
         .status()
         .map_err(|e| format!("invoking cargo: {e}"))?;

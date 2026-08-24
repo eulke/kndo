@@ -46,12 +46,23 @@ jobs:
       - name: cargo clippy
         run: cargo clippy --workspace --all-targets --all-features -- -D warnings
 
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
+
       # wasm32-unknown-unknown is needed here, not for the workspace build itself (the guest
       # crates under examples/ are excluded from the workspace, the WASM ABI contract) —
       # the WASM-bridge integration tests invoke `cargo build --target wasm32-unknown-unknown`
-      # against those guest crates as a subprocess and componentize the result in-process.
-      - name: cargo test --workspace
-        run: cargo test --workspace --all-features
+      # against those guest crates as a subprocess and componentize the result in-process
+      # (each such spawn strips the instrumentation env vars, so the guest builds stay clean
+      # under llvm-cov). The suite runs ONCE, instrumented: the lcov report it leaves at the
+      # repo root is real coverage from the same run that gates the build, and the self-check
+      # below ingests it (kndo's well-known coverage path), turning the crap analysis into
+      # measured signal instead of a category-wide guess. cargo-llvm-cov keeps its objects in
+      # target/llvm-cov-target, so the regular cache is not evicted; the first instrumented
+      # build is a full rebuild, cached thereafter.
+      - name: cargo test --workspace (instrumented, emits lcov.info)
+        run: cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info
 
       # kndo checking itself through the GitHub Action: the same check the
       # local pre-commit hook runs, over the diff this PR/push actually introduces — plus the

@@ -60,6 +60,25 @@ Install `mold` (Linux, via your package manager) or make sure `lld` is on `PATH`
 before adding this — an unresolvable `-fuse-ld` flag breaks every build on that machine. This
 is a per-contributor convenience, never a repo default.
 
+## Coverage
+
+kndo's own `crap` analysis (complexity × untestedness) runs only when a coverage report is
+present — with none ingested it skips with a diagnostic instead of guessing. To give it (and
+yourself) real data locally:
+
+```sh
+cargo install cargo-llvm-cov          # once
+cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info
+```
+
+That runs the full test suite instrumented and leaves `lcov.info` at the repo root — one of
+kndo's well-known coverage paths (`coverage/lcov.info` is the other), picked up on the next
+`kndo check`. Reports older than 7 days are ignored with a diagnostic (stale certainty is
+worse than absence) — just regenerate. `lcov.info` and `coverage/` are gitignored; CI
+generates its own report in the test job, so the self-check there always runs
+coverage-aware. The WASM guest builds some integration tests spawn strip
+`RUSTFLAGS`/`CARGO_ENCODED_RUSTFLAGS` themselves, so the instrumented run works end to end.
+
 ## Branching — Gitflow
 
 - `main` — always releasable; only tagged versions land here; merges only from `release/*` or

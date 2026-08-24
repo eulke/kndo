@@ -39,6 +39,12 @@ fn build_adapter_demo_component() -> Vec<u8> {
     let target_dir = isolated_target_dir();
     let status = Command::new("cargo")
         .args(["build", "--release", "--target", "wasm32-unknown-unknown"])
+        // Cross-target guest build: instrumentation flags from the host environment
+        // (cargo-llvm-cov's `-C instrument-coverage` in RUSTFLAGS) must not leak into a
+        // target that cannot link the profiling runtime.
+        .env_remove("RUSTFLAGS")
+        .env_remove("CARGO_ENCODED_RUSTFLAGS")
+        .env_remove("LLVM_PROFILE_FILE")
         .env("CARGO_TARGET_DIR", &target_dir)
         .current_dir(&demo_dir)
         .status()
