@@ -236,30 +236,7 @@ impl KndoConfig {
         problems.extend(gate_problems);
 
         if let Some(plugins) = table.get("plugins").and_then(|p| p.as_table()) {
-            for (key, value) in plugins {
-                // `gate` is the tier policy, owned by `plugin_gate` above — everything
-                // else under `[plugins]` is a per-plugin options table.
-                if key == "gate" {
-                    continue;
-                }
-                let Some(options) = value.as_table() else {
-                    problems.push(format!(
-                        "kndo.toml [plugins.{key}]: expected a table — ignored"
-                    ));
-                    continue;
-                };
-                let mut parsed = PluginOptions::default();
-                if let Some(report) = options.get("report") {
-                    parsed.report = parse_report_list(report, key, &mut problems);
-                }
-                if let Some(raw) = options.get("max-age") {
-                    parsed.max_age = parse_max_age(raw, key, &mut problems);
-                }
-                // Unknown keys inside the table stay silent (forward compatibility —
-                // `[plugins.nextjs] app-dir` must keep parsing as inert), and a table
-                // with no live keys is simply carried empty.
-                config.plugin_options.push((key.clone(), parsed));
-            }
+            parse_plugin_options(plugins, &mut config, &mut problems);
         }
 
         (config, problems)
@@ -308,6 +285,36 @@ impl KndoConfig {
             })
             .collect();
         (kept, config_suppressed)
+    }
+}
+
+/// Every `[plugins.<id>]` options table under `[plugins]`. `gate` is the tier policy,
+/// owned by `plugin_gate` — everything else is a per-plugin table. Unknown keys inside a
+/// table stay silent (forward compatibility — `[plugins.nextjs] app-dir` must keep parsing
+/// as inert), and a table with no live keys is simply carried empty.
+fn parse_plugin_options(
+    plugins: &toml::map::Map<String, toml::Value>,
+    config: &mut KndoConfig,
+    problems: &mut Vec<String>,
+) {
+    for (key, value) in plugins {
+        if key == "gate" {
+            continue;
+        }
+        let Some(options) = value.as_table() else {
+            problems.push(format!(
+                "kndo.toml [plugins.{key}]: expected a table — ignored"
+            ));
+            continue;
+        };
+        let mut parsed = PluginOptions::default();
+        if let Some(report) = options.get("report") {
+            parsed.report = parse_report_list(report, key, problems);
+        }
+        if let Some(raw) = options.get("max-age") {
+            parsed.max_age = parse_max_age(raw, key, problems);
+        }
+        config.plugin_options.push((key.clone(), parsed));
     }
 }
 

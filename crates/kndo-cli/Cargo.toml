@@ -48,6 +48,7 @@ default = [
     "plugin-nextjs",
     "plugin-express",
     "plugin-serde",
+    "plugin-coverage",
     "plugin-install",
 ]
 js = ["kndo/js"]
@@ -62,4 +63,5 @@ external-adapters = ["kndo/external-adapters"]
 plugin-nextjs = ["kndo/plugin-nextjs"]
 plugin-express = ["kndo/plugin-express"]
 plugin-serde = ["kndo/plugin-serde"]
+plugin-coverage = ["kndo/plugin-coverage"]
 plugin-install = ["kndo/plugin-install"]
