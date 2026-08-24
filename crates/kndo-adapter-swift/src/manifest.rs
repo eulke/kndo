@@ -187,6 +187,7 @@ fn package_dependency(call: Node, src: &[u8]) -> Option<ManifestDependency> {
         name: SmolStr::new(dependency_name_from_url(&url)),
         version_req: SmolStr::new(dependency_version_req(call, src)),
         scope: DependencyScope::Prod,
+        inherited: false,
     })
 }
 

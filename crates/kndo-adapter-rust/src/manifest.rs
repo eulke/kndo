@@ -65,6 +65,29 @@ pub(crate) fn extract(path: &str, content: &[u8], ctx: &ResolveCtx<'_>) -> Manif
             .collect();
     }
 
+    // `[workspace.dependencies]` — the shared version pool `{ workspace = true }` deps in
+    // member manifests point at. Captured here (root/virtual-workspace manifest only, in
+    // practice) so graph assembly can resolve `inherited` deps against a real version before
+    // any analysis (version-skew, in particular) ever sees them.
+    if let Some(table) = value
+        .get("workspace")
+        .and_then(|w| w.get("dependencies"))
+        .and_then(|d| d.as_table())
+    {
+        out.workspace_dependencies = table
+            .iter()
+            .map(|(key, spec)| {
+                let (version_req, _) = version_req_of(spec);
+                ManifestDependency {
+                    name: SmolStr::new(key.as_str()),
+                    version_req,
+                    scope: DependencyScope::Prod, // unused for resolution; the table has no scope concept
+                    inherited: false,             // this entry IS the pool, not a heir of it
+                }
+            })
+            .collect();
+    }
+
     // Dependencies, three scopes + target-conditional tables flattened.
     collect_deps(value.get("dependencies"), DependencyScope::Prod, &mut out);
     collect_deps(
@@ -190,28 +213,37 @@ fn collect_deps(table: Option<&toml::Value>, scope: DependencyScope, out: &mut M
     for (key, spec) in table {
         // `foo = { package = "real-name" }` renames: the KEY is what source code writes
         // (`use foo::…`), so the key is the declared identity kndo matches against.
-        let version_req = match spec {
-            toml::Value::String(v) => SmolStr::new(v.as_str()),
-            toml::Value::Table(t) => {
-                if t.get("workspace").and_then(|w| w.as_bool()) == Some(true) {
-                    // Workspace-inherited: one shared req by construction — a distinct
-                    // sentinel, so heirs never version-skew against real pins as "*" would.
-                    SmolStr::new("workspace")
-                } else {
-                    t.get("version")
-                        .and_then(|v| v.as_str())
-                        .map(SmolStr::new)
-                        // Path/git deps without a version: any.
-                        .unwrap_or_else(|| SmolStr::new("*"))
-                }
-            }
-            _ => SmolStr::new("*"),
-        };
+        let (version_req, inherited) = version_req_of(spec);
         out.dependencies.push(ManifestDependency {
             name: SmolStr::new(key.as_str()),
             version_req,
             scope,
+            inherited,
         });
+    }
+}
+
+/// A single `toml::Value` dependency spec's version requirement, and whether it's inherited
+/// from `[workspace.dependencies]` rather than a literal of its own.
+fn version_req_of(spec: &toml::Value) -> (SmolStr, bool) {
+    match spec {
+        toml::Value::String(v) => (SmolStr::new(v.as_str()), false),
+        toml::Value::Table(t) => {
+            if t.get("workspace").and_then(|w| w.as_bool()) == Some(true) {
+                // Workspace-inherited: a readable placeholder, not a real value to compare —
+                // graph assembly resolves it against ManifestFacts::workspace_dependencies.
+                (SmolStr::new("workspace"), true)
+            } else {
+                let version_req = t
+                    .get("version")
+                    .and_then(|v| v.as_str())
+                    .map(SmolStr::new)
+                    // Path/git deps without a version: any.
+                    .unwrap_or_else(|| SmolStr::new("*"));
+                (version_req, false)
+            }
+        }
+        _ => (SmolStr::new("*"), false),
     }
 }
 
@@ -385,5 +417,38 @@ cc = "1"
             .dependencies
             .iter()
             .any(|d| d.name == "libc" && d.scope == DependencyScope::Prod));
+    }
+
+    #[test]
+    fn workspace_dependencies_are_captured_and_inherited_deps_are_flagged() {
+        let f = facts(
+            "Cargo.toml",
+            r#"
+[workspace]
+members = ["crates/*"]
+
+[workspace.dependencies]
+foo = "1.2"
+bar = { version = "3", features = ["derive"] }
+"#,
+            &[],
+        );
+        let pooled = |n: &str| f.workspace_dependencies.iter().find(|d| d.name == n);
+        assert_eq!(pooled("foo").unwrap().version_req.as_str(), "1.2");
+        assert!(!pooled("foo").unwrap().inherited);
+        assert_eq!(pooled("bar").unwrap().version_req.as_str(), "3");
+
+        let member = facts(
+            "crates/x/Cargo.toml",
+            "[package]\nname = \"x\"\n[dependencies]\nfoo = { workspace = true }\n",
+            &[],
+        );
+        let dep = member
+            .dependencies
+            .iter()
+            .find(|d| d.name == "foo")
+            .unwrap();
+        assert!(dep.inherited);
+        assert_eq!(dep.version_req.as_str(), "workspace"); // placeholder, resolved during assembly
     }
 }

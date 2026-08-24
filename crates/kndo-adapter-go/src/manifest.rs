@@ -137,6 +137,7 @@ fn parse_require_entry(entry: &str) -> Option<ManifestDependency> {
         name: SmolStr::new(name),
         version_req: SmolStr::new(version),
         scope: DependencyScope::Prod,
+        inherited: false,
     })
 }
 

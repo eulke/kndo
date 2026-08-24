@@ -698,6 +698,13 @@ pub struct ManifestDependency {
     pub name: SmolStr,
     pub version_req: SmolStr,
     pub scope: DependencyScope,
+    /// True when `version_req` is a placeholder — the real requirement lives in a
+    /// project-wide shared version pool instead of this manifest (Cargo's
+    /// `{ workspace = true }` today; the mechanism generalizes to any adapter with an
+    /// equivalent concept — pnpm/Gradle version catalogs, etc.). Resolved against
+    /// [`ManifestFacts::workspace_dependencies`] during graph assembly, before any analysis
+    /// ever sees the value — `version_req` here is not meaningful to compare directly.
+    pub inherited: bool,
 }
 
 /// A manifest-declared root, already resolved to a concrete file (unlike [`RawRoot`], which
@@ -719,6 +726,11 @@ pub struct ManifestFacts {
     pub private: bool,
     /// Workspace membership declarations (globs).
     pub workspace_members: Vec<SmolStr>,
+    /// The shared version pool that other manifests' `inherited` dependencies resolve
+    /// against (Cargo: `[workspace.dependencies]`). Only populated by an adapter that has
+    /// the concept — empty otherwise, and assembly never assumes exactly one manifest
+    /// declares it.
+    pub workspace_dependencies: Vec<ManifestDependency>,
     pub dependencies: Vec<ManifestDependency>,
     /// Entry-point specifiers (main/module/exports/bin/types), raw and unresolved —
     /// resolution input for self-referencing imports (a package importing its own name),

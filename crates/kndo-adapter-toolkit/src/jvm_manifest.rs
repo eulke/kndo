@@ -173,6 +173,7 @@ fn maven_dependency(dep: roxmltree::Node<'_, '_>) -> Option<ManifestDependency> 
         name: SmolStr::new(name),
         version_req: SmolStr::new(xml_child_text(dep, "version").unwrap_or("*")),
         scope: maven_dependency_scope(xml_child_text(dep, "scope")),
+        inherited: false,
     })
 }
 
@@ -314,6 +315,7 @@ fn gradle_dependency_line(trimmed: &str) -> Vec<ManifestDependency> {
                 name: SmolStr::new(name),
                 version_req: SmolStr::new(lit.rsplit_once(':').map(|(_, v)| v).unwrap_or("*")),
                 scope,
+                inherited: false,
             }
         })
         .collect()

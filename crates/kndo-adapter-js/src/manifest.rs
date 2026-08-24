@@ -180,6 +180,7 @@ pub fn extract(path: &str, content: &[u8], ctx: &ResolveCtx<'_>) -> ManifestFact
         package_name,
         private,
         workspace_members,
+        workspace_dependencies: Vec::new(),
         dependencies,
         entry_points,
         script_invoked_names,
@@ -243,6 +244,7 @@ fn collect_dependencies(
                     name: SmolStr::new(name),
                     version_req: SmolStr::new(version.as_str().unwrap_or("")),
                     scope,
+                    inherited: false,
                 });
             }
         }

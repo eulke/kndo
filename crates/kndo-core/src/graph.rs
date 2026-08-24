@@ -3491,6 +3491,19 @@ pub fn assemble_from_source(
     // exist by definition"). Keyed by file, keeping the strongest confidence when more than
     // one manifest field roots the same file (e.g. both `main` and an `exports` leaf).
     let mut library_root_files: HashMap<FileId, Confidence> = HashMap::default();
+    // The shared version pool `inherited` dependencies resolve against (Cargo:
+    // `[workspace.dependencies]`) — gathered across every manifest up front, since a member
+    // manifest's inherited dep can be discovered before the manifest that declares the pool
+    // (file-discovery order isn't "root first"). Adapter-agnostic on purpose: this loop only
+    // ever asks "does some manifest's `workspace_dependencies` know this name," never
+    // anything about Cargo specifically.
+    let mut workspace_dependency_versions: HashMap<&SmolStr, &SmolStr> = HashMap::default();
+    for slot in manifests_per_file.iter() {
+        let Some((_, facts)) = slot else { continue };
+        for dep in &facts.workspace_dependencies {
+            workspace_dependency_versions.insert(&dep.name, &dep.version_req);
+        }
+    }
     for (i, slot) in manifests_per_file.iter().enumerate() {
         let Some((adapter_index, facts)) = slot else {
             continue;
@@ -3500,11 +3513,24 @@ pub fn assemble_from_source(
         let package = manifest_package[i].unwrap_or(PackageId(0));
         for dep in &facts.dependencies {
             declared_dependency_names.insert(dep.name.clone());
+            // `inherited` deps carry a placeholder `version_req` (the real value lives in
+            // whichever manifest declared the shared pool) — resolve it now, before
+            // version-skew or any other consumer ever sees it. If no pool entry exists
+            // (defensive: no manifest declared one, or the name isn't in it), fall back to
+            // the placeholder as-is — no worse than today's unresolved behavior.
+            let version_req = if dep.inherited {
+                workspace_dependency_versions
+                    .get(&dep.name)
+                    .map(|v| (*v).clone())
+                    .unwrap_or_else(|| dep.version_req.clone())
+            } else {
+                dep.version_req.clone()
+            };
             declared_dependencies.push(DeclaredDependency {
                 package,
                 manifest: files[i].path.clone(),
                 name: dep.name.clone(),
-                version_req: dep.version_req.clone(),
+                version_req,
                 scope: dep.scope,
             });
         }
@@ -4701,7 +4727,12 @@ mod tests {
 
         fn extract_manifest(&self, file: &SourceFile<'_>, ctx: &ResolveCtx<'_>) -> ManifestFacts {
             // Content format for the mock manifest: one directive per line.
-            //   dep <name>        -> a prod-scope declared dependency
+            //   dep <name>                  -> a prod-scope declared dependency
+            //   dep-version <name> <ver>    -> a prod-scope declared dependency with a
+            //                                  literal version
+            //   dep-inherited <name>        -> a prod-scope dependency whose version comes
+            //                                  from the shared pool (`ManifestDependency::inherited`)
+            //   workspace-dep <name> <ver>  -> an entry in ManifestFacts::workspace_dependencies
             //   root <path>       -> a Production root targeting that known file, if it exists
             //   cli-invoke <name> -> a script-invoked dependency name
             // declares-surface -> ManifestFacts::declares_surface = true
@@ -4716,6 +4747,34 @@ mod tests {
                         name: SmolStr::new(name),
                         version_req: SmolStr::new("*"),
                         scope: DependencyScope::Prod,
+                        inherited: false,
+                    });
+                } else if let Some(name) = line.strip_prefix("dep-inherited ") {
+                    facts.dependencies.push(ManifestDependency {
+                        name: SmolStr::new(name),
+                        version_req: SmolStr::new("workspace"),
+                        scope: DependencyScope::Prod,
+                        inherited: true,
+                    });
+                } else if let Some(rest) = line.strip_prefix("dep-version ") {
+                    let mut parts = rest.splitn(2, ' ');
+                    let name = parts.next().unwrap_or("");
+                    let version_req = parts.next().unwrap_or("*");
+                    facts.dependencies.push(ManifestDependency {
+                        name: SmolStr::new(name),
+                        version_req: SmolStr::new(version_req),
+                        scope: DependencyScope::Prod,
+                        inherited: false,
+                    });
+                } else if let Some(rest) = line.strip_prefix("workspace-dep ") {
+                    let mut parts = rest.splitn(2, ' ');
+                    let name = parts.next().unwrap_or("");
+                    let version_req = parts.next().unwrap_or("*");
+                    facts.workspace_dependencies.push(ManifestDependency {
+                        name: SmolStr::new(name),
+                        version_req: SmolStr::new(version_req),
+                        scope: DependencyScope::Prod,
+                        inherited: false,
                     });
                 } else if let Some(p) = line.strip_prefix("root ") {
                     let target = ProjectPath(SmolStr::new(p));
@@ -6750,6 +6809,57 @@ mod tests {
             .find(|e| matches!(e.kind, EdgeKind::ImportsDependency { .. }))
             .unwrap();
         assert_eq!(edge.confidence, Confidence::Certain);
+    }
+
+    #[test]
+    fn inherited_dependencies_resolve_against_the_shared_pool_before_reaching_declared_dependencies(
+    ) {
+        // Root declares the shared pool; a member manifest's `foo` is `inherited` (an
+        // unresolved placeholder at extraction time); an unrelated manifest pins the SAME
+        // version directly — the two only agree once the placeholder actually resolves.
+        let dir = project(
+            "workspace-inherited-dep",
+            &[
+                ("manifest.json", "workspace-dep foo 1.2"),
+                ("member/manifest.json", "dep-inherited foo"),
+                ("external/manifest.json", "dep-version foo 1.2"),
+            ],
+        );
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
+        let versions: std::collections::BTreeSet<&str> = graph
+            .declared_dependencies
+            .iter()
+            .filter(|d| d.name.as_str() == "foo")
+            .map(|d| d.version_req.as_str())
+            .collect();
+        assert_eq!(
+            versions,
+            std::collections::BTreeSet::from(["1.2"]),
+            "the inherited dep must resolve to the pool's real version, not the \"workspace\" placeholder"
+        );
+
+        // A genuinely differing pin must still show up as a real divergence — resolution
+        // only removes the false positive, it never masks a real one.
+        let dir = project(
+            "workspace-inherited-dep-real-divergence",
+            &[
+                ("manifest.json", "workspace-dep foo 1.2"),
+                ("member/manifest.json", "dep-inherited foo"),
+                ("external/manifest.json", "dep-version foo 1.3"),
+            ],
+        );
+        let (graph, _) = assemble(&dir, &mock_adapters(), &[]).unwrap();
+        let versions: std::collections::BTreeSet<&str> = graph
+            .declared_dependencies
+            .iter()
+            .filter(|d| d.name.as_str() == "foo")
+            .map(|d| d.version_req.as_str())
+            .collect();
+        assert_eq!(
+            versions.len(),
+            2,
+            "a real version divergence must still be visible after resolution"
+        );
     }
 
     // ---------------------------------------------------------------- workspace members
