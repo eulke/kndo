@@ -164,9 +164,13 @@ pub fn find_cycles(graph: &ProjectGraph) -> (Vec<Finding>, HashSet<FileId>) {
             severity,
             confidence,
             message: format!(
-                "{} files form an import cycle ({}) — break it by extracting the shared piece into its own module or inverting one of the imports",
+                "{} files form an import cycle ({}) — {}",
                 files.len(),
                 rendered.join(" → "),
+                cycle_advice(
+                    severity,
+                    "break it by extracting the shared piece into its own module or inverting one of the imports",
+                ),
             ),
             location: Location {
                 path: Some(anchor_file.path.clone()),
@@ -284,9 +288,13 @@ pub fn find_cycles(graph: &ProjectGraph) -> (Vec<Finding>, HashSet<FileId>) {
             severity,
             confidence,
             message: format!(
-                "{} packages form a dependency cycle ({}) — cycles between workspace packages break publish ordering and standalone installs",
+                "{} packages form a dependency cycle ({}) — {}",
                 packages.len(),
                 rendered.join(" → "),
+                cycle_advice(
+                    severity,
+                    "cycles between workspace packages break publish ordering and standalone installs",
+                ),
             ),
             location: Location {
                 path: anchor_pkg.manifest.clone(),
@@ -302,6 +310,21 @@ pub fn find_cycles(graph: &ProjectGraph) -> (Vec<Finding>, HashSet<FileId>) {
 
     findings.sort_by(|a, b| a.id.cmp(&b.id));
     (findings, participants)
+}
+
+/// The message tail after the rendered cycle path, keyed by the severity the
+/// adapter-declared tolerances produced ([`cycle_severity`]) — never by language name.
+/// Warning means some participant's language calls this level a hazard: the prescriptive
+/// advice stands. Info means the most severe applicable tolerance is `Idiomatic`: telling
+/// someone to break a cycle their language considers routine would dress information up
+/// as a defect, so the prose describes instead of prescribes.
+fn cycle_advice(severity: Severity, prescriptive: &'static str) -> &'static str {
+    match severity {
+        Severity::Info => {
+            "idiomatic for the participating language; reported for visibility, not as a defect"
+        }
+        _ => prescriptive,
+    }
 }
 
 /// The most severe applicable tolerance among the participants' languages, mapped to a
@@ -581,6 +604,32 @@ mod tests {
         let findings = find_cycles(&graph).0;
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].severity, Severity::Info);
+        assert!(
+            findings[0].message.contains("reported for visibility"),
+            "an Idiomatic cycle's prose describes, never prescribes: {}",
+            findings[0].message
+        );
+        assert!(
+            !findings[0].message.contains("break it"),
+            "{}",
+            findings[0].message
+        );
+    }
+
+    #[test]
+    fn hazard_tolerance_keeps_the_prescriptive_advice() {
+        let graph = one_package_graph(
+            vec![file("a.ts", 0), file("b.ts", 0)],
+            vec![imports(0, 1), imports(1, 0)],
+        );
+        let findings = find_cycles(&graph).0;
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].severity, Severity::Warning);
+        assert!(
+            findings[0].message.contains("break it by extracting"),
+            "{}",
+            findings[0].message
+        );
     }
 
     #[test]
