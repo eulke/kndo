@@ -118,6 +118,40 @@ pub(crate) fn extract(path: &str, content: &[u8], ctx: &ResolveCtx<'_>) -> Manif
         }
     }
 
+    // Node's implicit entry point. A package that declares neither `main` nor `exports`
+    // resolves to `index.js` in its own directory — the oldest convention in the ecosystem and
+    // still the common case for a CommonJS package (express declares neither). Without it,
+    // `resolved_entries` and `roots` both stay empty: the package has no production root, so
+    // its entry file and everything only it reaches read `unused`/`test-only` — in express
+    // that is `index.js` plus the whole of `lib/`, reachable in reality from every consumer.
+    //
+    // Only as a FALLBACK, never alongside a declared entry: an explicit `main` or `exports`
+    // means the package has stated its surface, and a stray `index.js` beside it is not
+    // silently part of that promise. The candidate ladder already expands a directory base to
+    // `index.{ext}`, so the implicit entry is the manifest's own directory run through it.
+    if resolved_entries.is_empty() && roots.is_empty() {
+        // `resolve_entry` joins the manifest's dir with the spec and runs the extension ladder,
+        // so `"index"` becomes `<dir>/index.{js,ts,…}` — the name Node itself looks for. The
+        // ladder also offers `index.d.ts`, which must NOT answer: a declaration file carries no
+        // runtime edge and Node never resolves an entry to one. `is_source_entry` does not catch
+        // it (its final extension is `ts`), so the exclusion is explicit — the
+        // `types_field_never_becomes_a_root` test is what caught this.
+        if let Some((target, confidence)) = resolve_entry(path, "index", ctx, Confidence::Certain)
+            .filter(|(t, _)| !t.0.ends_with(".d.ts"))
+        {
+            if is_source_entry(&target) {
+                resolved_entries.push((target.clone(), confidence));
+            }
+            if !private {
+                roots.push(ManifestRoot {
+                    kind: RootKind::Production,
+                    target,
+                    confidence,
+                });
+            }
+        }
+    }
+
     // `types`/`typings`: resolution inputs only, never roots.
     for key in ["types", "typings"] {
         if let Some(v) = obj.get(key).and_then(|v| v.as_str()) {
@@ -305,6 +339,63 @@ mod tests {
 
     fn extract_at(path: &str, json: &str, known: &HashSet<ProjectPath>) -> ManifestFacts {
         extract(path, json.as_bytes(), &ResolveCtx::new(known))
+    }
+
+    #[test]
+    fn a_package_with_no_declared_entry_falls_back_to_node_s_implicit_index() {
+        use rustc_hash::FxHashSet;
+        let known: FxHashSet<ProjectPath> = ["package.json", "index.js", "lib/express.js"]
+            .into_iter()
+            .map(|p| ProjectPath(SmolStr::new(p)))
+            .collect();
+        let ctx = ResolveCtx::new(&known);
+
+        // Neither `main` nor `exports` — Node resolves `index.js`, and express really ships
+        // this way. Without the fallback the package has no production root at all, so its
+        // entry file and everything only it reaches read unused/test-only.
+        let m = extract("package.json", br#"{"name":"express"}"#, &ctx);
+        assert_eq!(
+            m.roots
+                .iter()
+                .map(|r| r.target.0.as_str())
+                .collect::<Vec<_>>(),
+            vec!["index.js"]
+        );
+        assert_eq!(
+            m.resolved_entries
+                .iter()
+                .map(|(p, _)| p.0.as_str())
+                .collect::<Vec<_>>(),
+            vec!["index.js"]
+        );
+
+        // A declaration file is never Node's runtime entry, and the candidate ladder offers
+        // `index.d.ts` — so a types-only package must still get no root from the fallback.
+        let typed = ctx_with(&["package.json", "index.d.ts"]);
+        let m = extract(
+            "package.json",
+            br#"{"name":"typings-only"}"#,
+            &ResolveCtx::new(&typed),
+        );
+        assert!(
+            m.roots.is_empty(),
+            "index.d.ts carries no runtime edge and must not root"
+        );
+
+        // A declared entry means the package has stated its surface: a stray index.js beside
+        // it is not silently part of that promise, so the fallback must not fire.
+        let m = extract(
+            "package.json",
+            br#"{"name":"express","main":"lib/express.js"}"#,
+            &ctx,
+        );
+        assert_eq!(
+            m.roots
+                .iter()
+                .map(|r| r.target.0.as_str())
+                .collect::<Vec<_>>(),
+            vec!["lib/express.js"]
+        );
     }
 
     #[test]
