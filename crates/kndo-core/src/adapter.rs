@@ -10,111 +10,17 @@ use smol_str::SmolStr;
 use crate::vocab::{Confidence, DependencyScope, FileClass, RootKind, SymbolKind};
 
 // ---------------------------------------------------------------- shared primitives
-
-/// Project-relative path with `/` separators, the only path form that crosses the adapter
-/// boundary (case handling and symlink resolution are the core's discovery concern).
-#[derive(
-    Debug,
-    Clone,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    Hash,
-    serde::Serialize,
-    serde::Deserialize,
-    rkyv::Archive,
-    rkyv::Serialize,
-    rkyv::Deserialize,
-)]
-#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
-#[serde(transparent)]
-pub struct ProjectPath(#[rkyv(with = crate::rkyv_support::SmolStrAsString)] pub SmolStr);
-
-/// 1-indexed line/column span, `start` inclusive, `end` exclusive. Serializes as the
-/// `[line, col]` pair shape the output schema uses, not an
-/// object — tuples serialize as JSON arrays by default.
-#[derive(
-    Debug,
-    Clone,
-    Copy,
-    PartialEq,
-    PartialOrd,
-    Ord,
-    Eq,
-    Hash,
-    Default,
-    serde::Serialize,
-    serde::Deserialize,
-    rkyv::Archive,
-    rkyv::Serialize,
-    rkyv::Deserialize,
-)]
-#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
-pub struct Span {
-    pub start: (u32, u32),
-    pub end: (u32, u32),
-}
+//
+// `ProjectPath`/`Span`/`Diagnostic`/`DiagnosticLevel` live in `vocab.rs` now (they're not
+// adapter-specific — query/engine/plugin carry them too); re-exported here so existing
+// adapter code keeps compiling against `crate::adapter::{ProjectPath, Span, ...}` unchanged.
+pub use crate::vocab::{Diagnostic, DiagnosticLevel, ProjectPath, Span};
 
 /// A file's content as handed to an adapter by the core. Adapters never read the fs.
 #[derive(Debug)]
 pub struct SourceFile<'a> {
     pub path: &'a ProjectPath,
     pub content: &'a [u8],
-}
-
-#[derive(
-    Debug,
-    Clone,
-    Copy,
-    PartialEq,
-    PartialOrd,
-    Ord,
-    Eq,
-    serde::Serialize,
-    serde::Deserialize,
-    rkyv::Archive,
-    rkyv::Serialize,
-    rkyv::Deserialize,
-)]
-#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
-#[serde(rename_all = "lowercase")]
-pub enum DiagnosticLevel {
-    /// The run could not do what was asked (the exit-2 tier): a requested mode is
-    /// impossible (`--diff` base that doesn't resolve), not merely degraded. Frontends exit 2
-    /// when any error-level diagnostic is present — reporting zero findings because the
-    /// analysis never ran must never read as a clean pass (a Warn here
-    /// would let a typo'd base ref fail open in CI).
-    Error,
-    Warn,
-    Info,
-}
-
-#[derive(
-    Debug,
-    Clone,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    serde::Serialize,
-    serde::Deserialize,
-    rkyv::Archive,
-    rkyv::Serialize,
-    rkyv::Deserialize,
-)]
-#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
-pub struct Diagnostic {
-    pub level: DiagnosticLevel,
-    /// The file this diagnostic is about, when there is one — `None` for project-level
-    /// diagnostics (e.g. "cannot walk the project root"). A diagnostic merged from many
-    /// files without this field would be unattributable; adapters emit diagnostics scoped
-    /// to the file they're extracting, the core fills this in.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub path: Option<ProjectPath>,
-    pub message: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub span: Option<Span>,
 }
 
 // ---------------------------------------------------------------- descriptor & claiming

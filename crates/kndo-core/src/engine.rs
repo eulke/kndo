@@ -841,8 +841,10 @@ pub struct Engine {
     /// joined before the next assembly and on drop (frontends drop the engine after
     /// printing, which is exactly "written after results are printed, before
     /// exit"). Crash-safety is the writer's temp-file + rename; a killed process loses only
-    /// cache warmth.
-    pending_persist: Option<std::thread::JoinHandle<()>>,
+    /// cache warmth. A `Mutex` rather than a plain `Option` so `assemble_and_analyze` — and
+    /// through it, `query`/`query_batch` — can take `&self`: queries are read-only and must
+    /// not require exclusive access just to join a prior background write.
+    pending_persist: std::sync::Mutex<Option<std::thread::JoinHandle<()>>>,
     /// `kndo.toml`, read and parsed once at open (`[plugins.gate]` included).
     config: crate::config::KndoConfig,
     /// Problems reading it — surfaced as run diagnostics, never a failed open.
@@ -896,7 +898,7 @@ impl Engine {
             plugins,
             cache,
             cache_enabled: overrides.use_cache,
-            pending_persist: None,
+            pending_persist: std::sync::Mutex::new(None),
             config,
             config_problems,
             effective,
@@ -1090,7 +1092,7 @@ impl Engine {
         // `--staged`'s "after" is the index as a tree object (`write-tree` — the one
         // object-database write diff mode performs; it never touches the real index or working
         // tree). `--diff`'s "after" is the working tree itself. Owned locals (not borrows of
-        // `self`) because `assemble_and_analyze` needs `&mut self` right after.
+        // `self`) to keep this readable independent of `assemble_and_analyze`'s own borrow.
         let after_treeish: Option<String> =
             match mode {
                 RunMode::Staged => match gitutil::write_tree(&git_root) {
@@ -1285,8 +1287,10 @@ impl Engine {
     /// One navigation query: assembles/warms the
     /// graph exactly like full-mode `check`, then dispatches to the requested verb. Read-only —
     /// never touches findings, the baseline, or anything beyond what assembly's own cache
-    /// read/write already does.
-    pub fn query(&mut self, req: QueryRequest) -> QueryResult {
+    /// read/write already does; takes `&self` so an embedder can run queries concurrently
+    /// against one shared `Engine` (`check`/`baseline` stay `&mut self` — they touch the
+    /// baseline file and the health-trend snapshot, state a query must never perturb).
+    pub fn query(&self, req: QueryRequest) -> QueryResult {
         self.query_batch(vec![req])
             .into_iter()
             .next()
@@ -1297,8 +1301,8 @@ impl Engine {
     /// **once** for the whole batch — the amortization batching exists for —
     /// then answers every request against that one shared snapshot. One request failing (bad
     /// selector, no path) never drops the others; every request sees the same graph, so answers
-    /// stay mutually consistent (no torn reads across a batch).
-    pub fn query_batch(&mut self, requests: Vec<QueryRequest>) -> Vec<QueryResult> {
+    /// stay mutually consistent (no torn reads across a batch). `&self`, same as [`Self::query`].
+    pub fn query_batch(&self, requests: Vec<QueryRequest>) -> Vec<QueryResult> {
         let start = Instant::now();
         let root = self.root.clone();
         let source = discovery::TreeSource::Directory(&root);
@@ -1333,8 +1337,13 @@ impl Engine {
             .collect()
     }
 
-    fn join_persist(&mut self) {
-        if let Some(handle) = self.pending_persist.take() {
+    fn join_persist(&self) {
+        let handle = self
+            .pending_persist
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .take();
+        if let Some(handle) = handle {
             let _ = handle.join();
         }
     }
@@ -1347,7 +1356,7 @@ impl Engine {
     /// whole file set, so a differing tree just misses cleanly rather than colliding with the
     /// real project's own cached graph.
     fn assemble_and_analyze(
-        &mut self,
+        &self,
         source: &discovery::TreeSource<'_>,
     ) -> Result<AnalyzedTree, Diagnostic> {
         self.join_persist(); // at most one background writer in flight
@@ -1399,20 +1408,24 @@ impl Engine {
                     closure_start.elapsed().as_micros() as u64,
                 ));
                 let g = std::sync::Arc::new(g);
-                if let Some(writer) = pending_snapshot {
+                if let Some(pending) = pending_snapshot {
                     // Extraction + manifest diagnostics and the plugin round's own, in the
                     // snapshot's two partitions — exactly what a
                     // warm path replays; discovery diagnostics stay fresh per walk.
                     let graph_for_writer = std::sync::Arc::clone(&g);
                     let diagnostics_for_writer = extraction_diagnostics.clone();
                     let plugin_diagnostics_for_writer = plugin_diagnostics.clone();
-                    self.pending_persist = Some(std::thread::spawn(move || {
-                        writer.write(
+                    let handle = std::thread::spawn(move || {
+                        pending.persist_now(
                             &graph_for_writer,
                             &diagnostics_for_writer,
                             &plugin_diagnostics_for_writer,
                         );
-                    }));
+                    });
+                    *self
+                        .pending_persist
+                        .lock()
+                        .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(handle);
                 }
                 let mut diagnostics = discovery_diagnostics;
                 diagnostics.extend(extraction_diagnostics);
@@ -2048,6 +2061,10 @@ mod tests {
                 activation: vec![],
                 dependencies: vec![],
             }
+        }
+
+        fn mutates_graph(&self) -> bool {
+            true
         }
 
         fn classify_file(
@@ -3000,7 +3017,7 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("root.dmock"), "root-file\ndecl handler\n").unwrap();
 
-        let mut engine = query_engine(&dir);
+        let engine = query_engine(&dir);
         let result = engine.query(crate::query_envelope::QueryRequest {
             id: None,
             verb: crate::query_envelope::Verb::Find,
@@ -3021,7 +3038,7 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("root.dmock"), "root-file\n").unwrap();
 
-        let mut engine = query_engine(&dir);
+        let engine = query_engine(&dir);
         let result = engine.query(crate::query_envelope::QueryRequest {
             id: Some("q1".to_string()),
             verb: crate::query_envelope::Verb::Describe,
@@ -3046,7 +3063,7 @@ mod tests {
         std::fs::write(dir.join("root.dmock"), "root-file\nimport ./lib.dmock\n").unwrap();
         std::fs::write(dir.join("lib.dmock"), "").unwrap();
 
-        let mut engine = query_engine(&dir);
+        let engine = query_engine(&dir);
         let result = engine.query(crate::query_envelope::QueryRequest {
             id: None,
             verb: crate::query_envelope::Verb::UsedBy,
@@ -3071,7 +3088,7 @@ mod tests {
         // resolve on its own).
         std::fs::write(dir.join("root.dmock"), "root-file\ndecl bar\nref bar\n").unwrap();
 
-        let mut engine = query_engine(&dir);
+        let engine = query_engine(&dir);
         let result = engine.query(crate::query_envelope::QueryRequest {
             id: None,
             verb: crate::query_envelope::Verb::Trace,
@@ -3092,7 +3109,7 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("root.dmock"), "root-file\ndecl foo\ndecl bar\n").unwrap();
 
-        let mut engine = query_engine(&dir);
+        let engine = query_engine(&dir);
         let results = engine.query_batch(vec![
             crate::query_envelope::QueryRequest {
                 id: Some("q1".to_string()),
@@ -3118,6 +3135,44 @@ mod tests {
             panic!("expected Find");
         };
         assert_eq!(f2.matches[0].selector, "root.dmock#bar");
+    }
+
+    /// `query`/`query_batch` take `&self` precisely so an embedder can run many queries
+    /// concurrently against one shared `Engine` — this exercises that directly rather than
+    /// just type-checking it: real threads, real overlapping `assemble_and_analyze` calls,
+    /// each landing its own answer.
+    #[test]
+    fn concurrent_queries_on_a_shared_engine_each_get_the_right_answer() {
+        let dir = std::env::temp_dir().join("kndo-engine-query-concurrent");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("root.dmock"), "root-file\ndecl foo\ndecl bar\n").unwrap();
+
+        let engine = query_engine(&dir);
+        let find_req = |selector: &str| crate::query_envelope::QueryRequest {
+            id: None,
+            verb: crate::query_envelope::Verb::Find,
+            selectors: vec![selector.to_string()],
+            flags: crate::query_envelope::QueryFlags::default(),
+        };
+        std::thread::scope(|scope| {
+            let handles: Vec<_> = ["foo", "bar", "foo", "bar", "foo", "bar", "foo", "bar"]
+                .iter()
+                .map(|selector| {
+                    scope.spawn(|| {
+                        let result = engine.query(find_req(selector));
+                        let crate::query_envelope::ResultEntry::Find(f) = &result.results[0] else {
+                            panic!("expected Find");
+                        };
+                        (*selector, f.matches[0].selector.clone())
+                    })
+                })
+                .collect();
+            for handle in handles {
+                let (selector, matched) = handle.join().unwrap();
+                assert_eq!(matched, format!("root.dmock#{selector}"));
+            }
+        });
     }
 
     /// Minimal coverage ingester for host-side tests — core ships no format parsers

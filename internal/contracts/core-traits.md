@@ -504,6 +504,7 @@ pub trait Plugin: Send + Sync {
     // No ordering-constraints field yet (RFC 0003 §5's open item) — plugins run sorted by `id`,
     // a real but interim determinism rule.
 
+    fn mutates_graph(&self) -> bool; // REQUIRED, no default — see the bullet below
     fn classify_file(&self, path: &ProjectPath, current: FileClass) -> Option<FileClass> { None }
     fn contribute_roots(&self, graph: &GraphView<'_>, out: &mut RootSink) {}
     fn contribute_edges(&self, graph: &GraphView<'_>, out: &mut EdgeSink) {}
@@ -530,17 +531,19 @@ pub trait Plugin: Send + Sync {
   by `internal-only`/`private-type-leak` (RFC 0005 §7's exemption). `classify_file` runs earlier,
   inline in phase 2's file-node build, right after RFC 0012 §7's content-derived origin
   correction — its answer is what every downstream role/origin exemption sees.
-- Any registered plugin whose `mutates_graph()` returns `true` (the trait default) makes
-  `assemble_from_source` skip both the graph-snapshot cache hit and the incremental patch,
-  full-rebuilding every run: neither reuse path re-invokes plugin hooks, and RFC 0003 §5's
-  plugin-identity-in-the-cache-key mechanism isn't built yet. A plugin that only implements
-  `ingest_coverage`/`suppress` (like `LcovPlugin`) declares `mutates_graph() == false` and is
-  invisible to both fast paths — and the declaration is self-enforcing, not trusted: assembly
-  only ever *calls* the four graph-mutation hooks on plugins that claim `true`, so a false
-  claim means the hooks never run (identically cold or cached), never a stale cached graph.
-  (History note: this predicate originally checked raw-registry emptiness, which — with
-  `LcovPlugin` unconditionally registered — silently disabled both fast paths on every real
-  run; `mutates_graph` is the fix.)
+- Any registered plugin whose `mutates_graph()` returns `true` makes `assemble_from_source`
+  skip both the graph-snapshot cache hit and the incremental patch, full-rebuilding every run:
+  neither reuse path re-invokes plugin hooks, and RFC 0003 §5's plugin-identity-in-the-cache-key
+  mechanism isn't built yet. A plugin that only implements `ingest_coverage`/`suppress` (like
+  `LcovPlugin`) declares `mutates_graph() == false` and is invisible to both fast paths — and
+  the declaration is self-enforcing, not trusted: assembly only ever *calls* the four
+  graph-mutation hooks on plugins that claim `true`, so a false claim means the hooks never run
+  (identically cold or cached), never a stale cached graph. `mutates_graph` has **no default** —
+  every implementor states it explicitly; forgetting it is a compile error, not a silently
+  disabled incremental patch. (History note: the method used to default to `true`, and before
+  that this predicate checked raw-registry emptiness, which — with `LcovPlugin` unconditionally
+  registered — silently disabled both fast paths on every real run; the required method with no
+  default is the fix that can't regress the same way again.)
 - Host-mediated file access: content for `requested_file_access` globs is provided by the core;
   no ambient fs/net (enforced natively by convention, in WASM by the sandbox).
 - `ingest_coverage` (ADR 0005: coverage is *ingested, never measured*) follows the same sink
@@ -618,7 +621,8 @@ impl Engine {
                 adapters: Vec<Box<dyn LanguageAdapter>>,
                 plugins: Vec<Box<dyn Plugin>>) -> Result<Engine, EngineError>;
     pub fn check(&mut self, mode: RunMode) -> RunResult;    // full | staged | diff
-    pub fn query(&mut self, req: QueryRequest) -> QueryResult;  // RFC 0007 verbs, incl. batches
+    pub fn query(&self, req: QueryRequest) -> QueryResult;  // RFC 0007 verbs, incl. batches
+    pub fn query_batch(&self, requests: Vec<QueryRequest>) -> Vec<QueryResult>;  // one shared graph load
     pub fn baseline(&mut self, op: BaselineOp) -> BaselineResult;
     pub fn doctor(&self) -> DoctorReport;
 }
@@ -651,7 +655,26 @@ impl Engine {
   except through `Engine`. A frontend that needs a new fact is a core PR adding it to
   `RunResult`, never a core import.
 - `Engine` is synchronous and single-instance-per-project (the cache lock, RFC 0004 §7); a
-  serving frontend wraps it in its own concurrency model.
+  serving frontend wraps it in its own concurrency model. `query`/`query_batch` take `&self`
+  specifically so that model can run many read-only queries concurrently against one shared
+  `Engine` without external synchronization — `check`/`baseline` stay `&mut self` (they touch
+  the baseline file and the health-trend snapshot, state a concurrent query must never
+  perturb). The graph-snapshot write after assembly runs on a background thread so
+  serialization overlaps with analysis and rendering; the in-flight handle is joined before the
+  next assembly and on `Drop` (a frontend drops `Engine` after printing, which is exactly
+  "written after results are printed, before exit" — a killed process loses only cache warmth,
+  never correctness). That handle now lives behind a `Mutex` rather than a plain field
+  precisely so joining it — from `query`/`query_batch`'s next call, or from `Drop` — never
+  needs `&mut Engine`.
+- **Facade re-exports.** `kndo-core`'s crate root re-exports the frontend-facing surface
+  directly (`kndo_core::Engine`, `RunResult`, `Finding`, `Severity`, `Confidence`, `Group`,
+  `Category`, `Diagnostic`, `QueryRequest`, `QueryResult`, `sort_findings_for_display`, …) so
+  a frontend never needs to know which internal module (`engine`, `vocab`, `query_envelope`)
+  actually defines a type; the `kndo` distribution crate re-exports the same names at its own
+  root in turn (`kndo::Engine`, not `kndo::engine::Engine`). Adapter/plugin authoring types
+  (`LanguageAdapter`, `Plugin`, `GraphView`, …) are a different surface — component authors,
+  not frontends — and stay reached through their own modules (`kndo_core::adapter`,
+  `kndo_core::plugin`, …), unchanged.
 - `ConfigOverrides.use_cache` (default `true`) is the `--no-cache` switch (RFC 0004 §4), gating
   two cache layers (`cache.rs`, ADR 0004): the facts layer (`.kndo/cache/facts/`) skips
   re-parsing any file whose content hash already has a current entry; the graph layer

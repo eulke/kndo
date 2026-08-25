@@ -10,6 +10,10 @@
 //! either requires updating both in the same PR.
 
 pub mod adapter;
+/// Plumbing behind `RunResult::to_agent_format`/`QueryResult::to_agent_format` — reached
+/// through those methods, never named directly by a frontend, so it carries no
+/// public-facing API of its own worth advertising in rustdoc.
+#[doc(hidden)]
 pub mod agent_format;
 pub mod analysis;
 mod baseline;
@@ -31,3 +35,23 @@ mod suppression;
 #[cfg(any(test, feature = "testkit"))]
 pub mod testkit;
 pub mod vocab;
+
+// ---------------------------------------------------------------- frontend facade
+//
+// The surface a frontend (CLI, `kndo serve`/MCP, LSP, GUI) actually needs to drive an
+// `Engine` end to end, re-exported at the crate root so "import from a module path" is never
+// the answer to "I need a new piece of data" (`internal/contracts/core-traits.md` §1: only
+// `Engine` — and what it returns — is contract). A frontend needing something not listed here
+// is a core PR that adds it to `RunResult`/exports the helper, not a deeper import of
+// `engine`/`vocab`/`query_envelope` internals. Adapter/plugin authoring types
+// (`adapter::LanguageAdapter`, `plugin::Plugin`, `graph::GraphView`, …) are a different
+// surface — component authors, not frontends — and stay reached through their own modules.
+pub use engine::{
+    sort_findings_for_display, BaselineOp, BaselineResult, ConfigOverrides, Delta, DeltaOrigin,
+    DoctorReport, Engine, EngineError, Finding, Location, RunMode, RunResult, Severity,
+    SuppressedSummary, KNDO_VERSION, SCHEMA_VERSION,
+};
+pub use query_envelope::{QueryFlags, QueryRequest, QueryResult, ResultEntry, Verb};
+pub use vocab::{
+    Category, Confidence, Diagnostic, DiagnosticLevel, Group, ProjectPath, SubjectKind,
+};

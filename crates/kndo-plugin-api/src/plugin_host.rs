@@ -721,6 +721,15 @@ impl Plugin for WasmPlugin {
         Some(self.content_hash)
     }
 
+    /// The general WASM plugin bridge exposes the full graph-mutation hook surface
+    /// (`classify_file`/`contribute_roots`/`contribute_edges`/`annotate_symbols`) to every
+    /// component it hosts — unlike [`crate::coverage_host::WasmCoverageIngester`], which is a
+    /// separate, narrower host for the coverage-only WIT world. Always `true`, matching the
+    /// conservative posture the old trait default used to encode.
+    fn mutates_graph(&self) -> bool {
+        true
+    }
+
     fn classify_file(&self, path: &ProjectPath, current: FileClass) -> Option<FileClass> {
         // classify_file runs before contribute_roots/contribute_edges/annotate_symbols in the
         // assembly pipeline (phase 2 vs. after phase 3b) and needs no graph queries of its own

@@ -13,7 +13,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use kndo::graph::{assemble, assemble_with_cache};
+use kndo_core::graph::{assemble, assemble_with_cache};
 
 fn copy_tree(from: &Path, to: &Path) {
     fs::create_dir_all(to).unwrap();
@@ -112,7 +112,7 @@ fn run_mutation(label: &str, mutate: impl Fn(&Path, &str) -> String) -> usize {
 
         let cache_dir = std::env::temp_dir().join(format!("kndo-patch-eq-{name}-cache"));
         let _ = fs::remove_dir_all(&cache_dir);
-        let cache = kndo::cache::ProjectCache::open(&cache_dir);
+        let cache = kndo_core::cache::ProjectCache::open(&cache_dir);
         assemble_with_cache(&work, &adapters(), &[], Some(&cache))
             .unwrap_or_else(|e| panic!("cold assemble failed for {name}: {e:?}"));
 

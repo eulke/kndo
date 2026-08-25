@@ -35,6 +35,10 @@ impl Plugin for SerdePlugin {
         }
     }
 
+    fn mutates_graph(&self) -> bool {
+        true
+    }
+
     fn annotate_symbols(
         &self,
         graph: &GraphView<'_>,

@@ -1711,6 +1711,10 @@ impl crate::plugin::Plugin for MarkerGatedPlugin {
         }
     }
 
+    fn mutates_graph(&self) -> bool {
+        true
+    }
+
     fn contribute_roots(
         &self,
         graph: &crate::plugin::GraphView<'_>,
@@ -1780,6 +1784,9 @@ fn a_plugin_marked_member_inherits_its_owners_colors() {
                 activation: vec![],
                 dependencies: vec![],
             }
+        }
+        fn mutates_graph(&self) -> bool {
+            true
         }
         fn annotate_symbols(
             &self,
@@ -2010,6 +2017,9 @@ fn compute_graph_key_distinguishes_wasm_plugin_content_from_its_own_id_and_versi
                 dependencies: vec![],
             }
         }
+        fn mutates_graph(&self) -> bool {
+            true
+        }
         fn content_hash(&self) -> Option<[u8; 32]> {
             Some([self.0; 32])
         }
@@ -2039,6 +2049,9 @@ fn compute_graph_key_distinguishes_wasm_plugin_content_from_its_own_id_and_versi
                 activation: vec![],
                 dependencies: vec![],
             }
+        }
+        fn mutates_graph(&self) -> bool {
+            true
         }
     }
     let c = FakeBuiltinPlugin;

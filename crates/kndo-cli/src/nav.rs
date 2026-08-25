@@ -120,7 +120,7 @@ fn run_one(verb: Verb, args: &[String]) -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    let mut engine = match kndo::open(&cwd, crate::base_config_overrides()) {
+    let engine = match kndo::open(&cwd, crate::base_config_overrides()) {
         Ok(e) => e,
         Err(e) => {
             eprintln!("kndo: {e}");
@@ -296,7 +296,7 @@ pub(crate) fn query_cmd() -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    let mut engine = match kndo::open(&cwd, crate::base_config_overrides()) {
+    let engine = match kndo::open(&cwd, crate::base_config_overrides()) {
         Ok(e) => e,
         Err(e) => {
             eprintln!("kndo: {e}");

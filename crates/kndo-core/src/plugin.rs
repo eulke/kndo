@@ -805,11 +805,10 @@ pub trait Plugin: Send + Sync {
     /// The declaration is self-enforcing rather than trusted: assembly only *calls* the four
     /// hooks on plugins that return `true`, so returning `false` while implementing a hook
     /// means the hook never runs (identically on cold and cached runs) — never that a cached
-    /// graph silently misses its contributions. Default `true`: the conservative direction for
-    /// the common case of a plugin that exists precisely to contribute graph facts.
-    fn mutates_graph(&self) -> bool {
-        true
-    }
+    /// graph silently misses its contributions. No default: forgetting this on a
+    /// graph-mutating plugin used to silently disable incremental patching product-wide;
+    /// forgetting it now is a compile error instead.
+    fn mutates_graph(&self) -> bool;
 
     /// Content identity for the graph cache key. `None` for compiled-in
     /// plugins — `PluginDescriptor.version` is already the trust boundary there, the same

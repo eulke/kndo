@@ -1501,8 +1501,8 @@ pub fn assemble_with_cache(
     )?;
     // This convenience entry point persists inline — only the engine's own path defers the
     // write to a background thread (it owns a place to join it; callers here don't).
-    if let Some(writer) = &assembled.pending_snapshot {
-        writer.write(
+    if let Some(pending) = &assembled.pending_snapshot {
+        pending.persist_now(
             &assembled.graph,
             &assembled.extraction_diagnostics,
             &assembled.plugin_diagnostics,
@@ -1633,7 +1633,9 @@ pub fn assemble_from_source(
             )
         {
             tick("patch", &mut phase_start);
-            let pending_snapshot = cache.graph_writer(graph_key, current_plugin_digest);
+            let pending_snapshot = cache
+                .graph_writer(graph_key, current_plugin_digest)
+                .map(PendingSnapshot);
             let (plugin_findings, finding_diagnostics) =
                 run_finding_round(&graph, &discovered, plugins);
             return Ok(AssembledGraph {
@@ -2681,7 +2683,9 @@ pub fn assemble_from_source(
     // Persisting unconditionally
     // is also what makes the read-side snapshot fast path actually fire on a
     // plugin-bearing project's *second* run, not just prove itself safe in the abstract.
-    let pending_snapshot = cache.and_then(|c| c.graph_writer(graph_key, current_plugin_digest));
+    let pending_snapshot = cache
+        .and_then(|c| c.graph_writer(graph_key, current_plugin_digest))
+        .map(PendingSnapshot);
     tick("resolve+link", &mut phase_start);
     let (plugin_findings, finding_diagnostics) = run_finding_round(&graph, &discovered, plugins);
     Ok(AssembledGraph {
@@ -2695,6 +2699,24 @@ pub fn assemble_from_source(
         timings,
         plugin_contributions: Some(plugin_contributions),
     })
+}
+
+/// A deferred graph-cache write, detached from [`crate::cache::GraphSnapshotWriter`]'s own
+/// type so `AssembledGraph`'s public field doesn't leak a `cache`-module implementation type
+/// across the `graph`/`cache` module boundary. Every caller persists through the same
+/// `persist_now` — [`assemble_with_cache`]'s inline write and `Engine`'s backgrounded one
+/// alike — so there is exactly one code path that turns a pending snapshot into bytes on disk.
+pub struct PendingSnapshot(crate::cache::GraphSnapshotWriter);
+
+impl PendingSnapshot {
+    pub fn persist_now(
+        &self,
+        graph: &ProjectGraph,
+        diagnostics: &[Diagnostic],
+        plugin_diagnostics: &[Diagnostic],
+    ) {
+        self.0.write(graph, diagnostics, plugin_diagnostics);
+    }
 }
 
 /// [`assemble_from_source`]'s result: the graph, assembly-time diagnostics (exactly what a
@@ -2719,7 +2741,7 @@ pub struct AssembledGraph {
     /// The finding round's own diagnostics (undeclared rules, noise-cap truncation) — like
     /// `discovery_diagnostics`, always the fresh run's, never stored or replayed.
     pub finding_diagnostics: Vec<Diagnostic>,
-    pub pending_snapshot: Option<crate::cache::GraphSnapshotWriter>,
+    pub pending_snapshot: Option<PendingSnapshot>,
     /// Assembly sub-phase wall times `(phase, µs)` — merged into `RunResult::timings` so
     /// `--verbose` shows where assembly goes (discovery+hash, snapshot load, extract incl.
     /// facts-cache fetches, resolve+link). Empty on the snapshot fast path except its two

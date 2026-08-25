@@ -41,6 +41,10 @@ impl Plugin for ExpressPlugin {
         }
     }
 
+    fn mutates_graph(&self) -> bool {
+        true
+    }
+
     fn contribute_roots(
         &self,
         graph: &GraphView<'_>,

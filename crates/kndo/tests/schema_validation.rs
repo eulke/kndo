@@ -134,7 +134,7 @@ fn real_query_output_validates_against_the_committed_schema() {
     )
     .unwrap();
 
-    let mut engine = Engine::open(&dir, ConfigOverrides::default(), kndo::default_adapters())
+    let engine = Engine::open(&dir, ConfigOverrides::default(), kndo::default_adapters())
         .expect("engine opens on a real temp project");
 
     let validator = jsonschema::validator_for(&query_schema_value())

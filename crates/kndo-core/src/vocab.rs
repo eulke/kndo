@@ -5,7 +5,121 @@
 
 use smol_str::SmolStr;
 
-use crate::adapter::Span;
+// ---------------------------------------------------------------- shared primitives
+//
+// `ProjectPath`/`Span`/`Diagnostic`/`DiagnosticLevel` live here rather than in `adapter.rs`
+// because they're not adapter-specific — the query/engine/plugin layers carry them too, and
+// vocab.rs is the crate's one shared-vocabulary module. `adapter.rs` re-exports all four so
+// existing adapter code (`crate::adapter::ProjectPath`, ...) keeps compiling unchanged.
+
+/// Project-relative path with `/` separators, the only path form that crosses the adapter
+/// boundary (case handling and symlink resolution are the core's discovery concern).
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    serde::Serialize,
+    serde::Deserialize,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(transparent)]
+pub struct ProjectPath(#[rkyv(with = crate::rkyv_support::SmolStrAsString)] pub SmolStr);
+
+/// 1-indexed line/column span, `start` inclusive, `end` exclusive. Serializes as the
+/// `[line, col]` pair shape the output schema uses, not an
+/// object — tuples serialize as JSON arrays by default.
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    PartialOrd,
+    Ord,
+    Eq,
+    Hash,
+    Default,
+    serde::Serialize,
+    serde::Deserialize,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct Span {
+    pub start: (u32, u32),
+    pub end: (u32, u32),
+}
+
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    PartialOrd,
+    Ord,
+    Eq,
+    serde::Serialize,
+    serde::Deserialize,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "lowercase")]
+pub enum DiagnosticLevel {
+    /// The run could not do what was asked (the exit-2 tier): a requested mode is
+    /// impossible (`--diff` base that doesn't resolve), not merely degraded. Frontends exit 2
+    /// when any error-level diagnostic is present — reporting zero findings because the
+    /// analysis never ran must never read as a clean pass (a Warn here
+    /// would let a typo'd base ref fail open in CI).
+    Error,
+    Warn,
+    Info,
+}
+
+impl std::fmt::Display for DiagnosticLevel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            DiagnosticLevel::Error => "error",
+            DiagnosticLevel::Warn => "warning",
+            DiagnosticLevel::Info => "info",
+        })
+    }
+}
+
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    serde::Serialize,
+    serde::Deserialize,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct Diagnostic {
+    pub level: DiagnosticLevel,
+    /// The file this diagnostic is about, when there is one — `None` for project-level
+    /// diagnostics (e.g. "cannot walk the project root"). A diagnostic merged from many
+    /// files without this field would be unattributable; adapters emit diagnostics scoped
+    /// to the file they're extracting, the core fills this in.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub path: Option<ProjectPath>,
+    pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub span: Option<Span>,
+}
 
 // ---------------------------------------------------------------- interned ids
 

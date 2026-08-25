@@ -13,12 +13,22 @@
 //! (feature-gated builds).
 
 pub use kndo_core::{
-    adapter, analysis, cache, coverage, discovery, engine, graph, plugin, query, query_envelope,
-    vocab,
+    adapter, analysis, config, coverage, engine, plugin, query, query_envelope, vocab,
+};
+
+// The frontend facade, re-exported at this crate's root exactly as `kndo-core` exports it at
+// its own — `kndo::Engine`, not `kndo::engine::Engine`. `graph`/`cache`/`discovery` are
+// deliberately not re-exported here: nothing outside a handful of `kndo-core`-internal tests
+// and this crate's own patch-equivalence test needs them, and that test now depends on
+// `kndo-core` directly instead of routing through this crate's surface.
+pub use kndo_core::{
+    sort_findings_for_display, BaselineOp, BaselineResult, Category, Confidence, ConfigOverrides,
+    Delta, DeltaOrigin, Diagnostic, DiagnosticLevel, DoctorReport, Engine, EngineError, Finding,
+    Group, Location, ProjectPath, QueryFlags, QueryRequest, QueryResult, ResultEntry, RunMode,
+    RunResult, Severity, SubjectKind, SuppressedSummary, Verb, KNDO_VERSION, SCHEMA_VERSION,
 };
 
 use kndo_core::adapter::LanguageAdapter;
-use kndo_core::engine::{ConfigOverrides, Engine, EngineError};
 use kndo_core::plugin::Plugin;
 use std::path::Path;
 

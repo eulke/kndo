@@ -43,6 +43,10 @@ impl Plugin for NextjsPlugin {
         }
     }
 
+    fn mutates_graph(&self) -> bool {
+        true
+    }
+
     fn contribute_roots(
         &self,
         graph: &GraphView<'_>,
