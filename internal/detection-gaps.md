@@ -102,7 +102,36 @@ adapters emitting `pub(super)`/`pub(in path)` as that rung instead of collapsing
 `scope_contains_site` gains one arm; the containment comparison this analysis already performs
 then decides the case exactly, with no gate needed.
 
-## 8. False negative: path references in prose
+## 8. A brace-imported submodule is not a usable qualifier
+
+`use crate::internals::{attr, check, Ctxt, Derive};` followed by `check::check(cx, …)` binds
+nothing: `check` reads as dead, and so does everything only it reaches. In serde this killed
+`internals::check` and the whole family of `check_*` helpers it calls.
+
+Extraction is correct and was verified — the Rust adapter emits the import with
+`specifier: "crate::internals"` and bindings `[attr, check, Ctxt, Derive]`, plus the reference
+`check` with `scope_context: Some("check")`. The gap is in resolution: assembly registers a
+qualifier for the specifier's own last segment (`internals` → `internals/mod.rs`) but not for
+each brace member, so the qualifier `check` matches nothing and the qualified reference falls
+to the duck fallback, which finds no member of that name. The one-hop that would close it is
+real and available in the data: `internals/mod.rs` itself imports `check.rs` under the name
+`check` (its `mod check;`), so the chain is *binding on the target's own import table*.
+
+Direction, and the reason it is not simply done: the obvious shortcut — extend the specifier
+with the binding name and re-resolve `crate::internals::check` — requires the core to know
+that `::` joins path segments, which is exactly the language knowledge the ignorance rule
+forbids it. (One such separator is already hardcoded in `assemble.rs`'s qualifier fallback;
+that is a wart to remove, not a precedent to widen.) The language-blind version needs no
+separator at all: resolve every file's imports into a `file → (binding name → target file)`
+map first, then let a qualifier that binds to file F and names one of F's own import bindings
+follow it one hop. That splits phase 3b's single per-file pass into an import pass and a
+reference pass — a restructure, not a patch, which is why it is recorded here rather than
+attempted in passing.
+
+Worth weighing before scheduling: `use path::{submodule, Type}` is a very common Rust shape,
+so this likely suppresses real recall across every Rust codebase, including kndo's own.
+
+## 9. False negative: path references in prose
 
 When `internal/perf-baseline.json` replaced `docs/perf-baseline.json`, four Markdown
 documents kept pointing at the dead path and nothing flagged them: kndo extracts no
