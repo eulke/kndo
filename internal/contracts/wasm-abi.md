@@ -54,19 +54,32 @@ that's fully correct, rather than a bigger thing with a hidden gap.
   roots is exactly what reachability consumes), but `cyclic`, `deep-import`, and dependency
   hygiene see nothing.
 - **No `ResolveCtx` host-import callbacks.** `resolve()`'s real job needs `ResolveCtx`'s
-  querying API (`contains`, `workspace_member`, `unit_files`, `files_in_dir`, `files_under` —
-  contracts/core-traits.md §2), which only makes sense as **host-import** functions a
-  component calls back into — the opposite data-flow direction from everything else in v1.
-  Adding it is what a v2 needs to make `resolve()` real; deliberately deferred until an
-  external adapter actually wants cross-file resolution (the same "don't build the
+  querying API (`contains`, `workspace_member`, `unit_files_from`, `files_in_dir`,
+  `files_under` — contracts/core-traits.md §2), which only makes sense as **host-import**
+  functions a component calls back into — the opposite data-flow direction from everything
+  else in v1. Adding it is what a v2 needs to make `resolve()` real; deliberately deferred
+  until an external adapter actually wants cross-file resolution (the same "don't build the
   mechanism before the demand" call RFC 0003 §6 makes for custom analyses).
+
+  When that v2 lands, the unit query it exposes must be `unit_files_from(unit, from)` — the
+  importer-relative one — and **not** the repo-global `unit_files`. A unit key is unique only
+  within a package, so the global form hands a resolver candidates from unrelated modules that
+  merely share a package or target name; picking among them by path order invents cross-module
+  edges that `cyclic` reports as package cycles no source supports. Every compiled-in adapter
+  that resolves by unit hit this (see RFC 0012 §8). Exposing the global form across the ABI
+  would rebuild that footgun at the boundary where it is most expensive to change later.
 - **No visibility ladder, no cycle policy, no `resolves_dependency_usage`.** The host fills
   in the same safe defaults CSS/JSON already use for a language with no such semantics: an
   empty visibility ladder (every declaration reports the widest level — the ladder's own
   conservative-mapping rule, contracts/core-traits.md §2), `Idiomatic` cycle tolerance at
   both levels, `resolves_dependency_usage: false`. A v1 external adapter is exempt from
-  `internal-only`/`private-type-leak` (empty ladder ⇒ those analyses skip its files
-  entirely, same rule as CSS/JSON) rather than risk a wrong ladder guess.
+  `internal-only`/`private-type-leak` rather than risk a wrong ladder guess. The mechanism is
+  worth stating precisely, since it is uniformity rather than an explicit skip: the bridge
+  assigns every declaration `VisibilityLevel(0)`, so the "is the referenced type narrower than
+  the declaration?" comparison is always `0 < 0` and never fires. `private-type-leak`'s
+  `surface_transitive` gate reaches the same answer independently — an empty ladder has no rung
+  at any level, and the check treats a missing rung as surface-transitive (degrade toward
+  keep-alive), so the gate passes and the comparison below it stays the deciding step.
 - **UTF-8 text content, not raw bytes.** `extract`'s `content` parameter is a WIT `string`
   (valid UTF-8 by construction), not `list<u8>` — simpler for v1, at the cost of an adapter
   for a language with non-UTF-8-safe source files not being expressible yet. Every launch
