@@ -1,0 +1,16 @@
+{
+  "findings": [
+    {
+      "category": "internal-only",
+      "subject_kind": "class",
+      "path": "src/main/kotlin/demo/Demo.kt",
+      "symbol": "MyMeta"
+    },
+    {
+      "category": "internal-only",
+      "subject_kind": "object",
+      "path": "src/main/kotlin/demo/Demo.kt",
+      "symbol": "MyProvider"
+    }
+  ]
+}

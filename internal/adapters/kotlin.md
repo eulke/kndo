@@ -172,7 +172,17 @@ receiver chain is walked recursively for its own references — this is what mak
 type's bare `identifier` (or the last segment when the reference names a qualified type).
 `delegation_specifier` entries (`class C : Base(), Interface1` — both the superclass
 constructor-invocation shape and a bare interface name) → `Extend`, matching Java's
-superclass+implements handling. Lambda bodies (`lambda_literal`) and `when_expression`/
+superclass+implements handling. The superclass invocation's **argument list** is walked as an
+ordinary expression on top of that `Extend`: `class MyMeta : Base(MyProvider)` references
+`MyProvider`, and dropping it left Exposed's `PostgreSQLTypeProvider` — passed to its
+superclass on the very next declaration in the same file — with no incoming reference at all.
+A primary constructor parameter's **default value** is walked for the same reason
+(`class Hasher(val cost: Int = DEFAULT_COST)` references `DEFAULT_COST`); only the parameter's
+type used to be. Both attribute `within` to the owning class, per RFC 0012 §4's rule that code
+running on instantiation belongs to the type. Pinned by the `ctor-arg-and-default-value`
+fixture, whose declarations are deliberately `internal`/`private` — public ones are library
+roots and stay alive without any reference, so a public version of the fixture passes even
+with the extraction gap reintroduced. Lambda bodies (`lambda_literal`) and `when_expression`/
 `when_entry` bodies are walked like any other expression — same safe-direction over-
 approximation as every other adapter's closure handling.
 

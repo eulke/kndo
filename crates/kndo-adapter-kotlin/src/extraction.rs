@@ -340,6 +340,18 @@ fn handle_class_parameter(param: Node, src: &[u8], owner: &str, out: &mut FileFa
     if let Some(ty) = ty {
         walk_type_refs(ty, src, Some(owner), out);
     }
+    // `class Hasher(val cost: Int = DEFAULT_COST)` — the default value is an expression that
+    // runs when the constructor runs, and its references are real. Only the parameter's TYPE
+    // was walked, so a companion const used exactly this way (Exposed's
+    // `SCryptHasher.DEFAULT_CPU_COST`) had no incoming reference at all. Everything after the
+    // `=` is the initializer; the type and the name are separate children.
+    if let Some(default) = param
+        .children(&mut param.walk())
+        .skip_while(|c| c.kind() != "=")
+        .nth(1)
+    {
+        walk_body(default, src, Some(owner), out);
+    }
 }
 
 fn handle_object(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
@@ -686,7 +698,16 @@ fn last_identifier_text<'a>(node: Node, src: &'a [u8]) -> Option<&'a str> {
 fn walk_extend_refs(node: Node, src: &[u8], owner: &str, out: &mut FileFacts) {
     match node.kind() {
         "constructor_invocation" => {
-            emit_extend_ref(find_child(node, "user_type"), node, src, owner, out)
+            emit_extend_ref(find_child(node, "user_type"), node, src, owner, out);
+            // `class MyMeta : Base(MyProvider)` — the supertype is an Extend, but the ARGUMENTS
+            // are ordinary expression references and were dropped on the floor. Whatever they
+            // name reads as dead unless something else happens to use it, which is how
+            // Exposed's `PostgreSQLTypeProvider` — passed to its superclass on the very next
+            // declaration in the same file — went unreferenced. RFC 0012 §4 puts code that runs
+            // on instantiation under the type itself, so `within` stays the owner.
+            if let Some(args) = find_child(node, "value_arguments") {
+                walk_body(args, src, Some(owner), out);
+            }
         }
         "user_type" => emit_extend_ref(Some(node), node, src, owner, out),
         _ => {
@@ -864,6 +885,42 @@ mod tests {
 
     fn decl<'a>(f: &'a FileFacts, name: &str) -> &'a kndo_core::adapter::Declaration {
         f.declarations.iter().find(|d| d.name == name).unwrap()
+    }
+
+    #[test]
+    fn a_superclass_constructor_argument_is_a_reference() {
+        // `class MyMeta : Base(MyProvider)` — the supertype is an Extend, but the ARGUMENTS are
+        // ordinary expression references and were dropped. Whatever they name read as dead
+        // unless something else happened to use it: Exposed's `PostgreSQLTypeProvider`, passed
+        // to its superclass on the very next declaration in the same file, had no reference at
+        // all.
+        let f = extract(
+            "a.kt",
+            b"package p\nopen class Base(val q: Q)\ninterface Q\ninternal object MyProvider : Q\ninternal class MyMeta : Base(MyProvider)\n",
+        );
+        let r = f
+            .references
+            .iter()
+            .find(|r| r.name == "MyProvider" && r.within.as_deref() == Some("MyMeta"))
+            .expect("the superclass argument must be referenced, attributed to the subclass");
+        assert_ne!(r.kind, RefKind::Extend, "the argument is not the supertype");
+    }
+
+    #[test]
+    fn a_default_parameter_value_is_a_reference() {
+        // `class Hasher(val cost: Int = DEFAULT_COST)` — only the parameter's TYPE was walked,
+        // so a companion const used exactly this way (Exposed's `SCryptHasher.DEFAULT_CPU_COST`)
+        // had no incoming reference.
+        let f = extract(
+            "a.kt",
+            b"package p\nclass Hasher(val cost: Int = DEFAULT_COST) {\n  private companion object { private const val DEFAULT_COST = 42 }\n}\n",
+        );
+        assert!(
+            f.references
+                .iter()
+                .any(|r| r.name == "DEFAULT_COST" && r.within.as_deref() == Some("Hasher")),
+            "the default value's references belong to the class that runs them"
+        );
     }
 
     #[test]
