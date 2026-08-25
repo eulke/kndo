@@ -13,5 +13,16 @@ blake3 = { workspace = true }
 kndo-core = { path = "../kndo-core" }
 smol_str = { workspace = true }
 tree-sitter = { workspace = true }
+# JVM manifest parsing (Maven `pom.xml`) — only Java/Kotlin need it; every other adapter that
+# depends on this crate skips compiling `roxmltree` entirely.
+roxmltree = { workspace = true, optional = true }
+
+[dev-dependencies]
+# Test-only: `metrics.rs`'s own tests use the TS grammar as a convenient concrete tree to
+# exercise the (language-agnostic) complexity walker against — never a production dependency
+# of this crate, so it costs nothing for a consumer that isn't kndo-adapter-js (which owns its
+# own TS/TSX parser setup directly, not through this crate).
 tree-sitter-typescript = { workspace = true }
-roxmltree = { workspace = true }
+
+[features]
+jvm-xml = ["dep:roxmltree"]

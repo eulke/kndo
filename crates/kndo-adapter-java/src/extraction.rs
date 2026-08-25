@@ -17,11 +17,11 @@
 //!   not modeled — a documented recall gap, same class as JS's property-
 //!   assignment-callable limitation.
 
-use kndo_adapter_toolkit::metrics::{function_shape, MetricsSyntax};
-use kndo_adapter_toolkit::parsing::span;
+use kndo_adapter_toolkit::metrics::{function_shape, MetricsSyntax, MIN_CLONE_TOKENS};
+use kndo_adapter_toolkit::parsing::{span, text};
 use kndo_core::adapter::{
-    Diagnostic, DiagnosticLevel, FileFacts, FunctionMetrics, ImportBinding, ImportKind, RawImport,
-    RawReference, RawRoot, RawRootTarget, Span,
+    AdapterDiagnostic, DiagnosticLevel, FileFacts, FunctionMetrics, ImportBinding, ImportKind,
+    RawImport, RawReference, RawRoot, RawRootTarget, Span,
 };
 use kndo_core::vocab::{Confidence, RefKind, RootKind, SymbolKind};
 use smol_str::SmolStr;
@@ -71,8 +71,6 @@ const METRICS_SYNTAX: MetricsSyntax = MetricsSyntax {
     skip_kinds: &["line_comment", "block_comment"],
 };
 
-const MIN_CLONE_TOKENS: usize = 50;
-
 /// Item-walk context: the member owner (a class/interface/enum/record's bare name), for
 /// `member_of` attribution.
 struct Ctx<'a> {
@@ -90,9 +88,8 @@ pub(crate) fn extract(_path: &str, content: &[u8]) -> FileFacts {
     }
 
     let Some(tree) = crate::parsing::parse(content) else {
-        out.diagnostics.push(Diagnostic {
+        out.diagnostics.push(AdapterDiagnostic {
             level: DiagnosticLevel::Warn,
-            path: None,
             message: "failed to initialize the Java parser".to_string(),
             span: None,
         });
@@ -100,9 +97,8 @@ pub(crate) fn extract(_path: &str, content: &[u8]) -> FileFacts {
     };
     let root = tree.root_node();
     if root.has_error() {
-        out.diagnostics.push(Diagnostic {
+        out.diagnostics.push(AdapterDiagnostic {
             level: DiagnosticLevel::Warn,
-            path: None,
             message: "parse errors — extraction is partial for this file".to_string(),
             span: None,
         });
@@ -921,10 +917,6 @@ fn is_reference_position(node: Node) -> bool {
             .is_none_or(|n| n.id() != node.id()),
         _ => true,
     }
-}
-
-fn text<'a>(node: Node, src: &'a [u8]) -> &'a str {
-    std::str::from_utf8(&src[node.byte_range()]).unwrap_or("")
 }
 
 #[cfg(test)]

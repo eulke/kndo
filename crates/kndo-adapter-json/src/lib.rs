@@ -8,7 +8,7 @@ mod resolution;
 
 use kndo_core::adapter::{
     AdapterDescriptor, CyclePolicy, CycleTolerance, FileClaim, FileFacts, ImportSpec,
-    LanguageAdapter, ManifestFacts, ProjectPath, Resolution, ResolveCtx, SourceFile,
+    LanguageAdapter, ProjectPath, Resolution, ResolveCtx, SourceFile,
 };
 use kndo_core::vocab::{FileClass, FileOrigin, FileRole};
 use smol_str::SmolStr;
@@ -71,17 +71,8 @@ impl LanguageAdapter for JsonAdapter {
         })
     }
 
-    fn claim_manifest(&self, _path: &ProjectPath) -> bool {
-        false
-    }
-
     fn extract(&self, file: &SourceFile<'_>) -> FileFacts {
         extraction::extract(file.content)
-    }
-
-    fn extract_manifest(&self, _file: &SourceFile<'_>, _ctx: &ResolveCtx<'_>) -> ManifestFacts {
-        // Never called — `claim_manifest` always returns `false`.
-        ManifestFacts::default()
     }
 
     fn resolve(&self, spec: &ImportSpec, ctx: &ResolveCtx<'_>) -> Resolution {

@@ -459,6 +459,19 @@ pub struct RawSuppression {
     pub scope: SuppressionScope,
 }
 
+/// An adapter-reported problem, minus [`Diagnostic::path`] — an adapter is always reporting
+/// about the one file or manifest it was just handed, so its own path is never adapter
+/// information; every ingestion site (`graph::assemble`'s phase 1 file merge, the manifest
+/// merge) fills it in from the file it was extracting, unconditionally. Adapters that used to
+/// write `path: None` at every call site (verified: never anything else) now simply don't
+/// have the field to set.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct AdapterDiagnostic {
+    pub level: DiagnosticLevel,
+    pub message: String,
+    pub span: Option<Span>,
+}
+
 /// Everything an adapter owes the core for one file. Must be deterministic for identical
 /// content (conformance harness). Round-trips through the facts cache
 /// (`cache.rs`) — `Deserialize` exists for that alone, never for adapters to read.
@@ -471,7 +484,7 @@ pub struct FileFacts {
     pub functions: Vec<FunctionMetrics>,
     pub dynamics: Vec<DynamicUse>,
     pub suppressions: Vec<RawSuppression>,
-    pub diagnostics: Vec<Diagnostic>,
+    pub diagnostics: Vec<AdapterDiagnostic>,
     /// Reference-resolution scope, when the language's isn't file-scoped (contract
     /// extension surfaced by the Go adapter): files sharing the same non-`None` key resolve
     /// each other's declarations for an unqualified [`RawReference`] with no import binding, in
@@ -710,7 +723,7 @@ pub struct ManifestFacts {
     /// unit to files under the prefix whose extraction left `unit` unset — the convention,
     /// where it fired, already told the truth. Longest prefix wins.
     pub unit_overrides: Vec<(ProjectPath, SmolStr)>,
-    pub diagnostics: Vec<Diagnostic>,
+    pub diagnostics: Vec<AdapterDiagnostic>,
 }
 
 /// One named executable target: invoking `name` as a subprocess executes `entry`. Carries
@@ -915,8 +928,13 @@ pub trait LanguageAdapter: Send + Sync {
 
     /// Is this path one of this adapter's manifest files (`package.json`, …)? Manifests are
     /// claimed separately from source (`claim`) — they never get a [`FileClaim`]/language of
-    /// their own ("manifests are not claimed"), only manifest facts.
-    fn claim_manifest(&self, path: &ProjectPath) -> bool;
+    /// their own ("manifests are not claimed"), only manifest facts. Defaults to `false` —
+    /// mirrors the WASM v1 ABI's own scope cut (no manifest extraction over that boundary
+    /// yet): a language with no manifest concept of its own (CSS, JSON) needs no override at
+    /// all, rather than a stub that only exists to satisfy the trait.
+    fn claim_manifest(&self, _path: &ProjectPath) -> bool {
+        false
+    }
 
     /// Parse one file and extract every language-defined fact. Must not fail on broken code:
     /// return partial facts + diagnostics.
@@ -925,8 +943,13 @@ pub trait LanguageAdapter: Send + Sync {
     /// Parse a manifest into declared dependencies, package identity/topology, and roots.
     /// `ctx` lets the adapter resolve entry-point specifiers (main/module/exports/bin) against
     /// the known-files index itself — the same Node-resolution knowledge `resolve()` already
-    /// owns, not something the core can generically guess at.
-    fn extract_manifest(&self, file: &SourceFile<'_>, ctx: &ResolveCtx<'_>) -> ManifestFacts;
+    /// owns, not something the core can generically guess at. Defaults to
+    /// `ManifestFacts::default()` (empty) — unreachable in practice whenever
+    /// [`claim_manifest`](Self::claim_manifest) keeps its own `false` default, kept only for
+    /// trait completeness (same posture the WASM bridge documents at its own call site).
+    fn extract_manifest(&self, _file: &SourceFile<'_>, _ctx: &ResolveCtx<'_>) -> ManifestFacts {
+        ManifestFacts::default()
+    }
 
     /// Resolve an import specifier to a concrete target. Called by the core's resolution
     /// driver — including for specifiers emitted by *other* adapters.

@@ -1,7 +1,7 @@
 //! Declaration & import extraction.
 //!
 //! Field names below are verified against the real tree-sitter-typescript grammar (not
-//! assumed) — see `kndo_adapter_toolkit::parsing::introspect` for the verifying probe.
+//! assumed) — see `crate::parsing::introspect` for the verifying probe.
 //! Scope: top-level declarations (functions, classes, interfaces,
 //! type aliases, enums + members, const/let), ESM static imports, `export ... from`
 //! re-exports (barrels — `handle_reexport_statement`), and CJS (`require("literal")` at any
@@ -20,10 +20,10 @@
 //! the escape wildcard, only precision is lost), cyclomatic complexity, fingerprints,
 //! `export { a as b }` with no `from` clause (a local re-export, not a barrel pass-through).
 
-use kndo_adapter_toolkit::parsing::span;
+use kndo_adapter_toolkit::parsing::{span, text};
 use kndo_core::adapter::{
-    Declaration, Diagnostic, DiagnosticLevel, DynamicUse, FileFacts, ImportBinding, ImportKind,
-    RawImport, RawReference, Span, StringCallArg, VisibilityLevel,
+    AdapterDiagnostic, Declaration, DiagnosticLevel, DynamicUse, FileFacts, ImportBinding,
+    ImportKind, RawImport, RawReference, Span, StringCallArg, VisibilityLevel,
 };
 use kndo_core::vocab::{Confidence, RefKind, SymbolKind};
 use smol_str::SmolStr;
@@ -53,10 +53,9 @@ pub fn extract(path: &str, content: &[u8]) -> FileFacts {
         out.detected_origin = Some(kndo_core::vocab::FileOrigin::Generated);
     }
 
-    let Some(tree) = kndo_adapter_toolkit::parsing::parse(content, tsx) else {
-        out.diagnostics.push(Diagnostic {
+    let Some(tree) = crate::parsing::parse(content, tsx) else {
+        out.diagnostics.push(AdapterDiagnostic {
             level: DiagnosticLevel::Warn,
-            path: None, // filled in by the core when merging FileFacts into RunResult
             message: "failed to initialize the tree-sitter parser".into(),
             span: None,
         });
@@ -67,9 +66,8 @@ pub fn extract(path: &str, content: &[u8]) -> FileFacts {
     if root.has_error() {
         // Contract: adapters must not fail on broken code — tree-sitter still
         // produces a usable partial tree, so we keep walking and just flag it.
-        out.diagnostics.push(Diagnostic {
+        out.diagnostics.push(AdapterDiagnostic {
             level: DiagnosticLevel::Warn,
-            path: None,
             message: "syntax errors in file — extraction is best-effort".into(),
             span: None,
         });
@@ -128,10 +126,6 @@ pub fn extract(path: &str, content: &[u8]) -> FileFacts {
         &mut out.suppressions,
     );
     out
-}
-
-fn text<'a>(node: Node, src: &'a [u8]) -> &'a str {
-    std::str::from_utf8(&src[node.byte_range()]).unwrap_or("")
 }
 
 fn visibility(exported: bool) -> VisibilityLevel {
@@ -213,22 +207,17 @@ const METRICS_SYNTAX: kndo_adapter_toolkit::metrics::MetricsSyntax =
         skip_kinds: &["comment"],
     };
 
-/// Default granularity gate for clone fingerprints (mirrors the Go adapter's constant).
-const MIN_CLONE_TOKENS: usize = 50;
-
-/// One callable's [`kndo_core::adapter::FunctionMetrics`], over its *body* — the part that
+/// One callable's `FunctionMetrics`, over its *body* — the part that
 /// gets copy-pasted. Used for named function declarations and for callables bound to a
 /// `const`/`let` (`const f = (x) => …`), JS's other ordinary function-definition shape.
 fn push_function_metrics(out: &mut FileFacts, symbol: &str, body: Node) {
-    let shape =
-        kndo_adapter_toolkit::metrics::function_shape(body, &METRICS_SYNTAX, MIN_CLONE_TOKENS);
-    out.functions.push(kndo_core::adapter::FunctionMetrics {
-        symbol: SmolStr::new(symbol),
-        cyclomatic: shape.cyclomatic,
-        loc: shape.loc,
-        token_count: shape.token_count as u32,
-        fingerprints: shape.fingerprints,
-    });
+    kndo_adapter_toolkit::metrics::push_function_metrics(
+        out,
+        symbol,
+        body,
+        &METRICS_SYNTAX,
+        kndo_adapter_toolkit::metrics::MIN_CLONE_TOKENS,
+    );
 }
 
 /// Handles a declaration whose only shape variance is its `name` field falling back to
@@ -307,7 +296,7 @@ fn handle_export_statement(node: Node, src: &[u8], out: &mut FileFacts) {
 /// access isn't reference-resolved here) — the import edge itself is still emitted, which
 /// is what establishes those targets' file-level reachability.
 ///
-/// Verified against the real grammar (`kndo_adapter_toolkit::parsing::introspect::
+/// Verified against the real grammar (`crate::parsing::introspect::
 /// dump_reexport_shapes`): `export type { a } from` (the named-clause form) parses cleanly, but
 /// `export type * from` is a grammar ERROR in tree-sitter-typescript 0.23.2 specifically around
 /// the `type` token in the bare-star form — the `source` field survives regardless, so the
@@ -1529,7 +1518,7 @@ fn runs_at_class_evaluation(node: Node) -> bool {
 }
 
 /// Every identifier/type-identifier usage in the tree, recursively — the shapes below are
-/// verified against the real grammar (`kndo_adapter_toolkit::parsing::introspect`, the
+/// verified against the real grammar (`crate::parsing::introspect`, the
 /// `dump_reference_shapes`/`dump_binding_shapes`/`dump_import_clause_shapes` probes), not
 /// assumed. Two things a naive "collect every identifier" walk gets wrong, handled explicitly:
 ///
@@ -2059,7 +2048,7 @@ mod tests {
     fn typed_star_reexport_still_recovers_the_specifier_despite_the_grammar_gap() {
         // `export type *` is a tree-sitter-typescript 0.23.2 grammar ERROR around the `type`
         // token specifically for the bare-star form (verified via
-        // kndo_adapter_toolkit::parsing::introspect::dump_reexport_shapes) — the `source`
+        // crate::parsing::introspect::dump_reexport_shapes) — the `source`
         // field survives regardless, so extraction still recovers the specifier and still
         // flags `type_only`, just alongside the (accurate) syntax-error diagnostic.
         let facts = extract("f.ts", b"export type * from './all-types';");

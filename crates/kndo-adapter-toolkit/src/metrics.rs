@@ -16,6 +16,8 @@
 //! shared fingerprint — long enough runs can't hide, short accidental overlaps mostly don't
 //! fire.
 
+use kndo_core::adapter::{FileFacts, FunctionMetrics};
+use smol_str::SmolStr;
 use tree_sitter::Node;
 
 /// K: tokens per gram. Small enough that a meaningful statement sequence forms a gram, large
@@ -24,6 +26,11 @@ const GRAM: usize = 10;
 /// W: grams per winnowing window — with K, sets the guarantee threshold at K + W − 1 = 17
 /// shared tokens.
 const WINDOW: usize = 8;
+
+/// Default granularity gate: bodies under 50 normalized tokens don't fingerprint (their
+/// metrics are still emitted, for `crap`) — the same default every adapter used to redeclare
+/// as its own local constant.
+pub const MIN_CLONE_TOKENS: usize = 50;
 
 /// An adapter's metric-relevant node kinds, as data.
 #[derive(Debug)]
@@ -53,6 +60,29 @@ pub struct FunctionShape {
     /// Winnowing fingerprints — empty when `token_count < min_tokens` (too small to
     /// meaningfully clone-match; the metric fields above are still real).
     pub fingerprints: Vec<u64>,
+}
+
+/// Computes [`function_shape`] and appends the resulting [`FunctionMetrics`] to `out` — the
+/// same five-field mapping duplicated identically across four adapters before this moved here.
+/// `syntax`/`min_clone_tokens` stay parameters (per-language data, not duplication) — most
+/// adapters wrap this in a one-line local `push_function_metrics(out, symbol, body)` that
+/// partially applies its own [`MetricsSyntax`] and [`MIN_CLONE_TOKENS`], so their own call
+/// sites stay unchanged.
+pub fn push_function_metrics(
+    out: &mut FileFacts,
+    symbol: &str,
+    body: Node,
+    syntax: &MetricsSyntax,
+    min_clone_tokens: usize,
+) {
+    let shape = function_shape(body, syntax, min_clone_tokens);
+    out.functions.push(FunctionMetrics {
+        symbol: SmolStr::new(symbol),
+        cyclomatic: shape.cyclomatic,
+        loc: shape.loc,
+        token_count: shape.token_count as u32,
+        fingerprints: shape.fingerprints,
+    });
 }
 
 pub fn function_shape(node: Node, syntax: &MetricsSyntax, min_tokens: usize) -> FunctionShape {

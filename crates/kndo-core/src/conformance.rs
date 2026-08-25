@@ -93,6 +93,45 @@ pub fn discover_fixtures(root: &Path) -> Vec<PathBuf> {
     out
 }
 
+/// The discover → run-each → collect → format shape every adapter's own conformance test
+/// repeats verbatim — the only thing that varies between adapters is which adapters/plugins
+/// `run` constructs per fixture. `run` typically closes over one `run_fixture(fixture, vec![Box::new(MyAdapter)])`
+/// call (or `run_fixture_with` when the fixture needs a plugin too). Returns `Err(message)`
+/// ready to hand to `panic!` at the call site, rather than panicking here, so a failure's
+/// backtrace still points at the adapter's own `#[test]` fn.
+pub fn run_fixture_dir(
+    root: &Path,
+    mut run: impl FnMut(&Path) -> Result<ConformanceVerdict, ConformanceError>,
+) -> Result<(), String> {
+    let fixtures = discover_fixtures(root);
+    if fixtures.is_empty() {
+        return Err(format!(
+            "no conformance fixtures found under {}",
+            root.display()
+        ));
+    }
+
+    let mut failures = Vec::new();
+    for fixture in &fixtures {
+        let name = fixture.file_name().unwrap().to_string_lossy().to_string();
+        match run(fixture) {
+            Ok(ConformanceVerdict::Pass) => {}
+            Ok(ConformanceVerdict::Mismatch(mismatch)) => {
+                failures.push(format!("{name}:\n{mismatch}"))
+            }
+            Err(err) => failures.push(format!("{name}: {err}")),
+        }
+    }
+    if failures.is_empty() {
+        Ok(())
+    } else {
+        Err(format!(
+            "conformance fixture failures:\n\n{}",
+            failures.join("\n")
+        ))
+    }
+}
+
 /// Runs one fixture end to end — real discovery, real adapters, the real `Engine` — and diffs
 /// the projected actual findings against `expected.json`.
 pub fn run_fixture(
@@ -123,8 +162,7 @@ pub fn run_fixture_with(
     let project_dir = fixture_dir.join("project");
     let overrides = ConfigOverrides {
         use_cache: false,
-        threads: None,
-        min_confidence: None,
+        ..ConfigOverrides::default()
     };
     let mut engine = Engine::open_with_plugins(&project_dir, overrides, adapters, plugins)
         .map_err(|e| ConformanceError(format!("opening {}: {e}", project_dir.display())))?;

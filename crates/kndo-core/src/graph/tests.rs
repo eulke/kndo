@@ -198,9 +198,10 @@ struct PackageTestDirsAdapter;
 
 impl LanguageAdapter for PackageTestDirsAdapter {
     fn descriptor(&self) -> AdapterDescriptor {
-        let mut d = MockAdapter.descriptor();
-        d.package_test_dirs = vec![SmolStr::new("tests")];
-        d
+        AdapterDescriptor {
+            package_test_dirs: vec![SmolStr::new("tests")],
+            ..MockAdapter.descriptor()
+        }
     }
     fn claim(&self, path: &ProjectPath) -> Option<FileClaim> {
         MockAdapter.claim(path)

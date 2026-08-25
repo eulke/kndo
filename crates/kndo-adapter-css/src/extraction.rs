@@ -6,10 +6,10 @@
 //! custom properties / SCSS variables, mixins, and functions are.
 
 use kndo_adapter_toolkit::classify::{ContentMarkers, LineMarker};
-use kndo_adapter_toolkit::parsing::span;
+use kndo_adapter_toolkit::parsing::{find_child, span, text};
 use kndo_core::adapter::{
-    Declaration, Diagnostic, DiagnosticLevel, FileFacts, ImportKind, RawImport, RawReference, Span,
-    VisibilityLevel,
+    AdapterDiagnostic, Declaration, DiagnosticLevel, FileFacts, ImportKind, RawImport,
+    RawReference, Span, VisibilityLevel,
 };
 use kndo_core::vocab::{Confidence, FileOrigin, RefKind, SymbolKind};
 use rustc_hash::FxHashSet;
@@ -53,9 +53,8 @@ pub(crate) fn extract(path: &str, content: &[u8]) -> FileFacts {
         out.detected_origin = Some(FileOrigin::Generated);
     }
     let Some(tree) = crate::parsing::parse(path, content) else {
-        out.diagnostics.push(Diagnostic {
+        out.diagnostics.push(AdapterDiagnostic {
             level: DiagnosticLevel::Warn,
-            path: None,
             message: "failed to initialize the CSS/SCSS parser".to_string(),
             span: None,
         });
@@ -63,9 +62,8 @@ pub(crate) fn extract(path: &str, content: &[u8]) -> FileFacts {
     };
     let root = tree.root_node();
     if root.has_error() {
-        out.diagnostics.push(Diagnostic {
+        out.diagnostics.push(AdapterDiagnostic {
             level: DiagnosticLevel::Warn,
-            path: None,
             message: "parse errors — extraction is partial for this file".to_string(),
             span: None,
         });
@@ -333,14 +331,6 @@ fn push_declaration(out: &mut FileFacts, name: &str, kind: SymbolKind, item: Nod
         nested_scope: false,
         visibility_inherited: false,
     });
-}
-
-fn find_child<'a>(node: Node<'a>, kind: &str) -> Option<Node<'a>> {
-    node.children(&mut node.walk()).find(|n| n.kind() == kind)
-}
-
-fn text<'a>(node: Node, src: &'a [u8]) -> &'a str {
-    std::str::from_utf8(&src[node.byte_range()]).unwrap_or("")
 }
 
 #[cfg(test)]

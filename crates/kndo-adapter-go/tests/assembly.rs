@@ -7,19 +7,16 @@ use kndo_adapter_go::GoAdapter;
 use kndo_core::{analysis, graph};
 use std::fs;
 
-/// Each caller passes a distinct name: tests run in parallel, and a shared directory races
-/// one test's `remove_dir_all` against another's assemble.
-fn multi_file_module(name: &str) -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join(format!("kndo-go-assembly-{name}"));
-    let _ = fs::remove_dir_all(&dir);
-    fs::create_dir_all(dir.join("sub")).unwrap();
+fn multi_file_module() -> tempfile::TempDir {
+    let dir = tempfile::tempdir().unwrap();
+    fs::create_dir_all(dir.path().join("sub")).unwrap();
     fs::write(
-        dir.join("go.mod"),
+        dir.path().join("go.mod"),
         "module example.com/demo\n\ngo 1.22\n\nrequire golang.org/x/text v0.14.0\n",
     )
     .unwrap();
     fs::write(
-        dir.join("main.go"),
+        dir.path().join("main.go"),
         "package main\n\nimport (\n\t\"fmt\"\n\n\t\"example.com/demo/sub\"\n)\n\nfunc main() {\n\tfmt.Println(sub.Greeting())\n}\n",
     )
     .unwrap();
@@ -27,12 +24,12 @@ fn multi_file_module(name: &str) -> std::path::PathBuf {
     // no import — ordinary same-package, cross-file Go, the `FileFacts::unit` mechanism's own
     // reason for existing.
     fs::write(
-        dir.join("sub/greet.go"),
+        dir.path().join("sub/greet.go"),
         "package sub\n\nfunc Greeting() string {\n\treturn format(\"hello\")\n}\n",
     )
     .unwrap();
     fs::write(
-        dir.join("sub/format.go"),
+        dir.path().join("sub/format.go"),
         "package sub\n\nfunc format(s string) string {\n\treturn s + \"!\"\n}\n\nfunc unusedHelper() string {\n\treturn \"dead\"\n}\n",
     )
     .unwrap();
@@ -47,8 +44,8 @@ fn a_root_that_is_only_a_symbol_does_not_strand_its_file_or_its_callees() {
     // `sub.Greeting` propagates — and by the same mechanism, `Greeting`'s file-attributed
     // call to the same-package sibling `format` propagates too. Without that, both `main.go`
     // and `sub/format.go` would read as fully unreachable despite genuinely being used.
-    let dir = multi_file_module("symbol-root");
-    let (g, diagnostics) = graph::assemble(&dir, &[Box::new(GoAdapter)], &[]).unwrap();
+    let dir = multi_file_module();
+    let (g, diagnostics) = graph::assemble(dir.path(), &[Box::new(GoAdapter)], &[]).unwrap();
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
     let findings = analysis::run_all(
         &g,
@@ -89,8 +86,8 @@ fn importing_the_module_s_own_subpackage_is_never_a_phantom_dependency() {
     // dependency"). Go has no per-sibling declaration concept at all for its own subpackages;
     // the import resolves to a plain `Resolution::File` instead (resolution.rs's
     // `resolve_into_package`).
-    let dir = multi_file_module("own-subpackage");
-    let (g, diagnostics) = graph::assemble(&dir, &[Box::new(GoAdapter)], &[]).unwrap();
+    let dir = multi_file_module();
+    let (g, diagnostics) = graph::assemble(dir.path(), &[Box::new(GoAdapter)], &[]).unwrap();
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
     let findings = analysis::run_all(
         &g,
@@ -117,17 +114,19 @@ fn unexported_method_called_through_a_variable_is_not_falsely_unused() {
     // them (no receiver types in extraction). The duck-typed fallback must keep the method
     // alive at Probable; without it, this exact shape false-positives as unused:method — the
     // one failure mode kndo promises not to have.
-    let dir = std::env::temp_dir().join("kndo-go-assembly-method-call");
-    let _ = fs::remove_dir_all(&dir);
-    fs::create_dir_all(&dir).unwrap();
-    fs::write(dir.join("go.mod"), "module example.com/m\n\ngo 1.22\n").unwrap();
+    let dir = tempfile::tempdir().unwrap();
     fs::write(
-        dir.join("main.go"),
+        dir.path().join("go.mod"),
+        "module example.com/m\n\ngo 1.22\n",
+    )
+    .unwrap();
+    fs::write(
+        dir.path().join("main.go"),
         "package main\n\ntype T struct{}\n\nfunc (t T) helper() int { return 1 }\n\nfunc (t T) orphan() int { return 2 }\n\nfunc main() {\n\tt := T{}\n\t_ = t.helper()\n}\n",
     )
     .unwrap();
 
-    let (g, diagnostics) = graph::assemble(&dir, &[Box::new(GoAdapter)], &[]).unwrap();
+    let (g, diagnostics) = graph::assemble(dir.path(), &[Box::new(GoAdapter)], &[]).unwrap();
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
     let findings = analysis::run_all(
         &g,
@@ -157,17 +156,19 @@ fn a_dead_function_s_callees_die_with_it() {
     // Attribution's whole point, end to end in real Go: references are attributed to the
     // symbol they execute inside, so dead `z`'s call must not keep `b` alive through the
     // (live) file's blanket attribution — transitive death is visible.
-    let dir = std::env::temp_dir().join("kndo-go-assembly-transitive-dead");
-    let _ = fs::remove_dir_all(&dir);
-    fs::create_dir_all(&dir).unwrap();
-    fs::write(dir.join("go.mod"), "module example.com/m\n\ngo 1.22\n").unwrap();
+    let dir = tempfile::tempdir().unwrap();
     fs::write(
-        dir.join("main.go"),
+        dir.path().join("go.mod"),
+        "module example.com/m\n\ngo 1.22\n",
+    )
+    .unwrap();
+    fs::write(
+        dir.path().join("main.go"),
         "package main\n\nfunc a() int { return 1 }\n\nfunc b() int { return 2 }\n\nfunc z() int { return b() }\n\nfunc main() {\n\t_ = a()\n}\n",
     )
     .unwrap();
 
-    let (g, diagnostics) = graph::assemble(&dir, &[Box::new(GoAdapter)], &[]).unwrap();
+    let (g, diagnostics) = graph::assemble(dir.path(), &[Box::new(GoAdapter)], &[]).unwrap();
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
     let findings = analysis::run_all(
         &g,

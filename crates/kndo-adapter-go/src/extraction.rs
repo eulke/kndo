@@ -9,10 +9,10 @@
 
 use rustc_hash::FxHashSet as HashSet;
 
-use kndo_adapter_toolkit::parsing::span;
+use kndo_adapter_toolkit::parsing::{span, text};
 use kndo_core::adapter::{
-    Declaration, Diagnostic, DiagnosticLevel, FileFacts, ImportKind, RawImport, RawReference,
-    RawRoot, RawRootTarget, Span, VisibilityLevel,
+    AdapterDiagnostic, Declaration, DiagnosticLevel, FileFacts, ImportKind, RawImport,
+    RawReference, RawRoot, RawRootTarget, Span, VisibilityLevel,
 };
 use kndo_core::vocab::{Confidence, RefKind, RootKind, SymbolKind};
 use smol_str::SmolStr;
@@ -43,9 +43,8 @@ pub(crate) fn extract(path: &str, content: &[u8]) -> FileFacts {
         // No tree means no `package` clause either — a bare-directory unit key is the honest
         // degenerate (still groups with nothing wrongly: real Go files always carry a clause).
         out.unit = Some(SmolStr::new(kndo_adapter_toolkit::paths::dirname(path)));
-        out.diagnostics.push(Diagnostic {
+        out.diagnostics.push(AdapterDiagnostic {
             level: DiagnosticLevel::Warn,
-            path: None,
             message: "failed to initialize the Go parser".to_string(),
             span: None,
         });
@@ -53,9 +52,8 @@ pub(crate) fn extract(path: &str, content: &[u8]) -> FileFacts {
     };
     let root = tree.root_node();
     if root.has_error() {
-        out.diagnostics.push(Diagnostic {
+        out.diagnostics.push(AdapterDiagnostic {
             level: DiagnosticLevel::Warn,
-            path: None,
             message: "syntax errors in this file — extraction is best-effort".to_string(),
             span: None,
         });
@@ -141,10 +139,6 @@ pub(crate) fn extract(path: &str, content: &[u8]) -> FileFacts {
 }
 
 // ---------------------------------------------------------------- shared helpers
-
-fn text<'a>(node: Node, src: &'a [u8]) -> &'a str {
-    std::str::from_utf8(&src[node.byte_range()]).unwrap_or("")
-}
 
 /// Exported iff the first rune is uppercase — Go's entire visibility rule, no keyword
 /// involved.
@@ -265,11 +259,7 @@ const METRICS_SYNTAX: kndo_adapter_toolkit::metrics::MetricsSyntax =
         skip_kinds: &["comment"],
     };
 
-/// Default granularity gate: bodies under 50 normalized tokens don't
-/// fingerprint (their metrics are still emitted, for `crap`).
-const MIN_CLONE_TOKENS: usize = 50;
-
-/// One callable's [`FunctionMetrics`], computed over its *body* (signatures are promises,
+/// One callable's `FunctionMetrics`, computed over its *body* (signatures are promises,
 /// bodies are the thing that gets copy-pasted). `symbol` uses the
 /// same naming convention as roots/`within`: bare for free functions, qualified `T.Method`
 /// for members, so assembly's lookup lands in the right table.
@@ -277,15 +267,13 @@ fn push_function_metrics(out: &mut FileFacts, symbol: &str, node: Node) {
     let Some(body) = node.child_by_field_name("body") else {
         return;
     };
-    let shape =
-        kndo_adapter_toolkit::metrics::function_shape(body, &METRICS_SYNTAX, MIN_CLONE_TOKENS);
-    out.functions.push(kndo_core::adapter::FunctionMetrics {
-        symbol: SmolStr::new(symbol),
-        cyclomatic: shape.cyclomatic,
-        loc: shape.loc,
-        token_count: shape.token_count as u32,
-        fingerprints: shape.fingerprints,
-    });
+    kndo_adapter_toolkit::metrics::push_function_metrics(
+        out,
+        symbol,
+        body,
+        &METRICS_SYNTAX,
+        kndo_adapter_toolkit::metrics::MIN_CLONE_TOKENS,
+    );
 }
 
 /// `func Name(...) ...` or `func init() {}` / `func main() {}` (roots —

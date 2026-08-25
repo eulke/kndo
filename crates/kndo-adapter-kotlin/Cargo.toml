@@ -9,7 +9,7 @@ publish.workspace = true
 
 [dependencies]
 kndo-core = { path = "../kndo-core" }
-kndo-adapter-toolkit = { path = "../kndo-adapter-toolkit" }
+kndo-adapter-toolkit = { path = "../kndo-adapter-toolkit", features = ["jvm-xml"] }
 smol_str = { workspace = true }
 tree-sitter = { workspace = true }
 tree-sitter-kotlin-ng = { workspace = true }

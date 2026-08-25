@@ -1257,6 +1257,7 @@ dependencies = [
  "kndo-core",
  "rustc-hash",
  "smol_str",
+ "tempfile",
  "tree-sitter",
  "tree-sitter-go",
 ]
@@ -1284,6 +1285,7 @@ dependencies = [
  "serde_json",
  "smol_str",
  "tree-sitter",
+ "tree-sitter-typescript",
 ]
 
 [[package]]

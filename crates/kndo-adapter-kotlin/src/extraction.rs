@@ -9,10 +9,12 @@
 //! keeps the dispatcher itself at effectively zero branches regardless of how many shapes it
 //! covers — the same pattern `kndo_adapter_toolkit::jvm_manifest::gradle_scope` already uses.
 
-use kndo_adapter_toolkit::metrics::{function_shape, MetricsSyntax};
-use kndo_adapter_toolkit::parsing::span;
+use kndo_adapter_toolkit::metrics::{
+    push_function_metrics as toolkit_push_function_metrics, MetricsSyntax, MIN_CLONE_TOKENS,
+};
+use kndo_adapter_toolkit::parsing::{find_child, span, text};
 use kndo_core::adapter::{
-    Diagnostic, DiagnosticLevel, FileFacts, FunctionMetrics, ImportBinding, ImportKind, RawImport,
+    AdapterDiagnostic, DiagnosticLevel, FileFacts, ImportBinding, ImportKind, RawImport,
     RawReference, RawRoot, RawRootTarget, Span,
 };
 use kndo_core::vocab::{Confidence, RefKind, RootKind, SymbolKind};
@@ -58,8 +60,6 @@ const METRICS_SYNTAX: MetricsSyntax = MetricsSyntax {
     skip_kinds: &["line_comment", "multiline_comment"],
 };
 
-const MIN_CLONE_TOKENS: usize = 50;
-
 /// Item-walk context: the member owner (a class/object/companion's bare name), for `member_of`
 /// attribution. Companion-object members carry the ENCLOSING class's name here,
 /// not the companion's own (a pragmatic call).
@@ -95,9 +95,8 @@ pub(crate) fn extract(_path: &str, content: &[u8]) -> FileFacts {
     }
 
     let Some(tree) = crate::parsing::parse(content) else {
-        out.diagnostics.push(Diagnostic {
+        out.diagnostics.push(AdapterDiagnostic {
             level: DiagnosticLevel::Warn,
-            path: None,
             message: "failed to initialize the Kotlin parser".to_string(),
             span: None,
         });
@@ -105,9 +104,8 @@ pub(crate) fn extract(_path: &str, content: &[u8]) -> FileFacts {
     };
     let root = tree.root_node();
     if root.has_error() {
-        out.diagnostics.push(Diagnostic {
+        out.diagnostics.push(AdapterDiagnostic {
             level: DiagnosticLevel::Warn,
-            path: None,
             message: "parse errors — extraction is partial for this file".to_string(),
             span: None,
         });
@@ -509,14 +507,7 @@ fn handle_secondary_constructor(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut
 }
 
 fn push_function_metrics(out: &mut FileFacts, qualified: &str, body: Node) {
-    let shape = function_shape(body, &METRICS_SYNTAX, MIN_CLONE_TOKENS);
-    out.functions.push(FunctionMetrics {
-        symbol: SmolStr::new(qualified),
-        cyclomatic: shape.cyclomatic,
-        loc: shape.loc,
-        token_count: shape.token_count as u32,
-        fingerprints: shape.fingerprints,
-    });
+    toolkit_push_function_metrics(out, qualified, body, &METRICS_SYNTAX, MIN_CLONE_TOKENS);
 }
 
 // ---------------------------------------------------------------- properties, type aliases, init
@@ -851,17 +842,9 @@ fn is_reference_position(node: Node) -> bool {
 
 // ---------------------------------------------------------------- small tree helpers
 
-fn find_child<'a>(node: Node<'a>, kind: &str) -> Option<Node<'a>> {
-    node.children(&mut node.walk()).find(|n| n.kind() == kind)
-}
-
 fn find_any_child<'a>(node: Node<'a>, kinds: &[&str]) -> Option<Node<'a>> {
     node.children(&mut node.walk())
         .find(|n| kinds.contains(&n.kind()))
-}
-
-fn text<'a>(node: Node, src: &'a [u8]) -> &'a str {
-    std::str::from_utf8(&src[node.byte_range()]).unwrap_or("")
 }
 
 #[cfg(test)]

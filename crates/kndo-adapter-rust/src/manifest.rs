@@ -9,8 +9,8 @@
 //! a crate's surface IS its `pub` items, and `deep-import`'s gate is closed deliberately.
 
 use kndo_core::adapter::{
-    Diagnostic, DiagnosticLevel, ExecutableTarget, ManifestDependency, ManifestFacts, ManifestRoot,
-    ProjectPath, ResolveCtx,
+    AdapterDiagnostic, DiagnosticLevel, ExecutableTarget, ManifestDependency, ManifestFacts,
+    ManifestRoot, ProjectPath, ResolveCtx,
 };
 use kndo_core::vocab::{Confidence, DependencyScope, RootKind};
 use smol_str::SmolStr;
@@ -258,10 +258,9 @@ fn bin_stem(path: &ProjectPath) -> Option<SmolStr> {
         .map(SmolStr::new)
 }
 
-fn diag(message: &str) -> Diagnostic {
-    Diagnostic {
+fn diag(message: &str) -> AdapterDiagnostic {
+    AdapterDiagnostic {
         level: DiagnosticLevel::Warn,
-        path: None,
         message: message.to_string(),
         span: None,
     }

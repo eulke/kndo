@@ -13,8 +13,8 @@
 //! computed is silently invisible, never misparsed.
 
 use kndo_core::adapter::{
-    Diagnostic, DiagnosticLevel, ManifestDependency, ManifestFacts, ManifestRoot, ProjectPath,
-    ResolveCtx,
+    AdapterDiagnostic, DiagnosticLevel, ManifestDependency, ManifestFacts, ManifestRoot,
+    ProjectPath, ResolveCtx,
 };
 use kndo_core::vocab::{Confidence, DependencyScope, RootKind};
 use smol_str::SmolStr;
@@ -415,10 +415,9 @@ fn is_vendored(path: &str) -> bool {
         .any(|d| path.split('/').any(|seg| seg == *d))
 }
 
-fn diag(message: &str) -> Diagnostic {
-    Diagnostic {
+fn diag(message: &str) -> AdapterDiagnostic {
+    AdapterDiagnostic {
         level: DiagnosticLevel::Warn,
-        path: None,
         message: message.to_string(),
         span: None,
     }

@@ -10,6 +10,7 @@ use smol_str::SmolStr;
 
 mod extraction;
 mod manifest;
+mod parsing;
 mod resolution;
 
 pub struct JsTsAdapter;

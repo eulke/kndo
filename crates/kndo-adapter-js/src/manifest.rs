@@ -10,8 +10,8 @@
 //! is not parsed (needs a YAML parser this crate doesn't otherwise need).
 
 use kndo_core::adapter::{
-    Diagnostic, DiagnosticLevel, ManifestDependency, ManifestFacts, ManifestRoot, ProjectPath,
-    ResolveCtx,
+    AdapterDiagnostic, DiagnosticLevel, ManifestDependency, ManifestFacts, ManifestRoot,
+    ProjectPath, ResolveCtx,
 };
 use kndo_core::vocab::{Confidence, DependencyScope, RootKind};
 use smol_str::SmolStr;
@@ -197,9 +197,8 @@ pub(crate) fn extract(path: &str, content: &[u8], ctx: &ResolveCtx<'_>) -> Manif
 
 fn invalid(message: String) -> ManifestFacts {
     ManifestFacts {
-        diagnostics: vec![Diagnostic {
+        diagnostics: vec![AdapterDiagnostic {
             level: DiagnosticLevel::Warn,
-            path: None, // the core fills this in when merging, same as FileFacts diagnostics
             message,
             span: None,
         }],

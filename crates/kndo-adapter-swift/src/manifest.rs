@@ -4,9 +4,10 @@
 //! parse rather than Gradle's line-scan (every argument SwiftPM itself requires is labeled, so
 //! matching by label is exact, not a heuristic).
 
+use kndo_adapter_toolkit::parsing::{find_child, text};
 use kndo_core::adapter::{
-    Diagnostic, DiagnosticLevel, ManifestDependency, ManifestFacts, ManifestRoot, ProjectPath,
-    ResolveCtx,
+    AdapterDiagnostic, DiagnosticLevel, ManifestDependency, ManifestFacts, ManifestRoot,
+    ProjectPath, ResolveCtx,
 };
 use kndo_core::vocab::{Confidence, DependencyScope, RootKind};
 use smol_str::SmolStr;
@@ -283,18 +284,9 @@ fn is_vendored(path: &str) -> bool {
 
 // ---------------------------------------------------------------- small tree helpers
 
-fn find_child<'a>(node: Node<'a>, kind: &str) -> Option<Node<'a>> {
-    node.children(&mut node.walk()).find(|n| n.kind() == kind)
-}
-
-fn text<'a>(node: Node, src: &'a [u8]) -> &'a str {
-    std::str::from_utf8(&src[node.byte_range()]).unwrap_or("")
-}
-
-fn diag(message: &str) -> Diagnostic {
-    Diagnostic {
+fn diag(message: &str) -> AdapterDiagnostic {
+    AdapterDiagnostic {
         level: DiagnosticLevel::Warn,
-        path: None,
         message: message.to_string(),
         span: None,
     }

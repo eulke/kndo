@@ -11,7 +11,7 @@
 //! declaration) are source-file facts, extracted in `extraction.rs`, not manifest ones.
 
 use kndo_core::adapter::{
-    Diagnostic, DiagnosticLevel, ManifestDependency, ManifestFacts, ResolveCtx,
+    AdapterDiagnostic, DiagnosticLevel, ManifestDependency, ManifestFacts, ResolveCtx,
 };
 use kndo_core::vocab::DependencyScope;
 use smol_str::SmolStr;
@@ -19,9 +19,8 @@ use smol_str::SmolStr;
 pub(crate) fn extract(path: &str, content: &[u8], _ctx: &ResolveCtx<'_>) -> ManifestFacts {
     let mut out = ManifestFacts::default();
     let Ok(text) = std::str::from_utf8(content) else {
-        out.diagnostics.push(Diagnostic {
+        out.diagnostics.push(AdapterDiagnostic {
             level: DiagnosticLevel::Warn,
-            path: None,
             message: "go manifest is not valid UTF-8".to_string(),
             span: None,
         });
