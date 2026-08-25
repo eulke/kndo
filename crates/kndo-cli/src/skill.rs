@@ -21,7 +21,7 @@ const FINDINGS_PLAYBOOK_MD: &str = include_str!("../skill/references/findings-pl
 const OUTPUT_FORMAT_MD: &str = include_str!("../skill/references/output-format.md");
 const SUPPRESSIONS_MD: &str = include_str!("../skill/references/suppressions-and-baseline.md");
 
-pub(crate) const FILES: &[(&str, &str)] = &[
+const FILES: &[(&str, &str)] = &[
     ("SKILL.md", SKILL_MD),
     ("references/navigation.md", NAVIGATION_MD),
     ("references/findings-playbook.md", FINDINGS_PLAYBOOK_MD),
@@ -137,14 +137,21 @@ fn link_skill(root: &Path) -> Result<String, String> {
     }
 }
 
-#[cfg(unix)]
+// A single function body with internal cfg blocks, not two same-named top-level `fn`s gated
+// by sibling `#[cfg(unix)]`/`#[cfg(windows)]` attributes: kndo's own self-check flagged the
+// duplicate-name form as `unused` — its Rust adapter resolves the one call site to only one
+// of the two homonymous declarations, leaving the other looking uncalled. One function, one
+// symbol, no ambiguity either way. kndo-cli only ships for unix and Windows targets
+// (release.yml's matrix), so no other-platform fallback is needed.
 fn symlink_dir(target: &str, link: &Path) -> io::Result<()> {
-    std::os::unix::fs::symlink(target, link)
-}
-
-#[cfg(windows)]
-fn symlink_dir(target: &str, link: &Path) -> io::Result<()> {
-    std::os::windows::fs::symlink_dir(target, link)
+    #[cfg(unix)]
+    {
+        std::os::unix::fs::symlink(target, link)
+    }
+    #[cfg(windows)]
+    {
+        std::os::windows::fs::symlink_dir(target, link)
+    }
 }
 
 #[cfg(test)]
