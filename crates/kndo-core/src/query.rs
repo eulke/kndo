@@ -462,7 +462,7 @@ struct NavEdge {
     site_file: FileId,
 }
 
-struct NavGraph {
+pub(crate) struct GraphIndex {
     forward: HashMap<NavNode, Vec<NavEdge>>,
     reverse: HashMap<NavNode, Vec<NavEdge>>,
     roots: HashMap<RootKind, Vec<(NavNode, Confidence)>>,
@@ -481,7 +481,7 @@ fn nav_node_owning_file(graph: &ProjectGraph, node: NavNode) -> FileId {
     }
 }
 
-fn build_nav_graph(graph: &ProjectGraph) -> NavGraph {
+pub(crate) fn build_graph_index(graph: &ProjectGraph) -> GraphIndex {
     let mut declared_in: HashMap<FileId, Vec<SymbolId>> = HashMap::default();
     for edge in &graph.edges {
         if let crate::vocab::EdgeKind::Declares { file, symbol } = edge.kind {
@@ -604,7 +604,7 @@ fn build_nav_graph(graph: &ProjectGraph) -> NavGraph {
         }
     }
 
-    NavGraph {
+    GraphIndex {
         forward,
         reverse,
         roots,
@@ -809,14 +809,14 @@ pub struct DescribeResult {
 const DECLARE_SYMBOLS_CAP: usize = 50;
 const REACHED_BY_ROOTS_CAP: usize = 10;
 
-pub fn describe(
+pub(crate) fn describe(
     graph: &ProjectGraph,
     reach: &ReachabilityMap,
     resolved: &Resolved,
     finding_locations: &[FindingLocation<'_>],
+    nav: &GraphIndex,
 ) -> DescribeResult {
     let node_ref = qnode_ref(graph, reach, resolved);
-    let nav = build_nav_graph(graph);
 
     let (declaration, file, dependency, package, declared_symbols) = match resolved {
         Resolved::Node(ResolvedNode::Symbol(s)) => {
@@ -938,8 +938,8 @@ pub fn describe(
         Resolved::Node(ResolvedNode::RootSet(_)) => (None, None, None, None, Vec::new()),
     };
 
-    let degree = describe_degree(&nav, resolved);
-    let mut reached_by_roots = reached_by_roots(&nav, resolved);
+    let degree = describe_degree(nav, resolved);
+    let mut reached_by_roots = reached_by_roots(nav, resolved);
     let roots_elided = reached_by_roots.len().saturating_sub(REACHED_BY_ROOTS_CAP);
     reached_by_roots.truncate(REACHED_BY_ROOTS_CAP);
     let reached_by_roots = reached_by_roots
@@ -1013,7 +1013,7 @@ fn nav_node_of(resolved: &Resolved) -> Option<NavNode> {
     }
 }
 
-fn describe_degree(nav: &NavGraph, resolved: &Resolved) -> Degree {
+fn describe_degree(nav: &GraphIndex, resolved: &Resolved) -> Degree {
     let Some(node) = nav_node_of(resolved) else {
         return Degree::default();
     };
@@ -1036,7 +1036,7 @@ fn describe_degree(nav: &NavGraph, resolved: &Resolved) -> Degree {
 /// Every root (of any kind) that reaches this node, nearest (fewest hops) first — a reverse BFS
 /// from the node over the same non-wildcard-excluded traversal `uses`/`used-by` use, seeded by
 /// nothing and instead stopped at any node that is itself a literal root target.
-fn reached_by_roots(nav: &NavGraph, resolved: &Resolved) -> Vec<NavNode> {
+fn reached_by_roots(nav: &GraphIndex, resolved: &Resolved) -> Vec<NavNode> {
     let Some(start) = nav_node_of(resolved) else {
         return Vec::new();
     };
@@ -1191,11 +1191,12 @@ pub struct NeighborsOpts {
 /// Shared implementation of `uses`/`used-by`: direction just picks forward
 /// vs. reverse adjacency. `--depth N` (default 1) or `--transitive` (fixpoint, deduplicated,
 /// depth-annotated — the *first*, shallowest depth at which a node is reached wins).
-pub fn neighbors(
+pub(crate) fn neighbors(
     graph: &ProjectGraph,
     reach: &ReachabilityMap,
     resolved: &Resolved,
     opts: NeighborsOpts,
+    nav: &GraphIndex,
 ) -> NeighborsResult {
     let NeighborsOpts {
         direction,
@@ -1215,7 +1216,6 @@ pub fn neighbors(
         };
     };
 
-    let nav = build_nav_graph(graph);
     let adjacency = match direction {
         Direction::Uses => &nav.forward,
         Direction::UsedBy => &nav.reverse,
@@ -1333,19 +1333,31 @@ pub struct TraceResult {
 /// node expansions, not just result count, so a highly-connected graph can't hang the query.
 const TRACE_EXPANSION_BUDGET: usize = 20_000;
 
+/// `trace_between`'s options — mirrors [`NeighborsOpts`]'s shape instead of two adjacent,
+/// trivially-transposable positional params (a bare `bool` next to a `usize`).
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct TraceOpts {
+    pub(crate) edges: EdgeFilter,
+    pub(crate) all: bool,
+    pub(crate) max_paths: usize,
+}
+
 /// Directed `trace <from> <to>` (two-argument form): path(s) over the same
 /// navigable edges `uses`/`used-by` traverse. `--all --max-paths K` enumerates simple-path
 /// alternatives near the shortest length; without `--all`, one shortest path only.
-pub fn trace_between(
+pub(crate) fn trace_between(
     graph: &ProjectGraph,
     reach: &ReachabilityMap,
     from: &Resolved,
     to: &Resolved,
-    edges: EdgeFilter,
-    all: bool,
-    max_paths: usize,
+    opts: TraceOpts,
+    nav: &GraphIndex,
 ) -> TraceResult {
-    let nav = build_nav_graph(graph);
+    let TraceOpts {
+        edges,
+        all,
+        max_paths,
+    } = opts;
     let from_ref = qnode_ref(graph, reach, from);
     let to_ref = qnode_ref(graph, reach, to);
 
@@ -1376,7 +1388,7 @@ pub fn trace_between(
     let paths_elided = 0; // enumerate_paths reports its own cap via the returned count vs. what exists — see its doc
     let rendered = paths
         .into_iter()
-        .map(|hops| render_path(graph, reach, &nav, hops))
+        .map(|hops| render_path(graph, reach, nav, hops))
         .collect();
 
     TraceResult {
@@ -1390,13 +1402,13 @@ pub fn trace_between(
 /// Liveness `trace <selector>` (single-argument form): shortest path from the
 /// nearest root of `roots_kind` to `target`, falling back from production to test when
 /// production reaches nothing (the documented fallback) unless a kind was explicit.
-pub fn trace_liveness(
+pub(crate) fn trace_liveness(
     graph: &ProjectGraph,
     reach: &ReachabilityMap,
     target: &Resolved,
     roots_kind: Option<RootKind>,
+    nav: &GraphIndex,
 ) -> TraceResult {
-    let nav = build_nav_graph(graph);
     let to_ref = qnode_ref(graph, reach, target);
     let Some(goal) = nav_node_of(target) else {
         return TraceResult {
@@ -1462,7 +1474,7 @@ pub fn trace_liveness(
                 span: None,
             },
             to: to_ref,
-            paths: vec![render_path(graph, reach, &nav, hops)],
+            paths: vec![render_path(graph, reach, nav, hops)],
             paths_elided: 0,
         },
     }
@@ -1593,7 +1605,7 @@ fn enumerate_paths(
 fn render_path(
     graph: &ProjectGraph,
     reach: &ReachabilityMap,
-    nav: &NavGraph,
+    nav: &GraphIndex,
     nodes: Vec<NavNode>,
 ) -> Path {
     let mut hops = Vec::new();
@@ -1693,11 +1705,12 @@ pub struct ImpactResult {
 /// importers — deleting a declared dependency breaks builds rather than flipping
 /// reachability, so `--if-deleted` is rejected with an explanation instead of an answer that
 /// would mean nothing).
-pub fn impact(
+pub(crate) fn impact(
     graph: &ProjectGraph,
     reach: &ReachabilityMap,
     resolved: &Resolved,
     opts: ImpactOpts,
+    nav: &GraphIndex,
 ) -> Result<ImpactResult, QueryError> {
     let node_ref = qnode_ref(graph, reach, resolved);
 
@@ -1767,7 +1780,6 @@ pub fn impact(
         Resolved::Node(ResolvedNode::Package(p)) => Some(*p),
         _ => None,
     };
-    let nav = build_nav_graph(graph);
     let max_depth = opts.depth.unwrap_or(u32::MAX);
     let mut best: HashMap<NavNode, (u32, EdgeLabel, Confidence, Option<Span>, FileId)> =
         HashMap::default();
@@ -2358,12 +2370,13 @@ mod tests {
     fn describe_symbol_reports_declaration_and_degree() {
         let graph = linear_graph();
         let reach = reachability::compute(&graph);
+        let nav = build_graph_index(&graph);
         let resolved = resolve(
             &graph,
             &Selector::Symbol(ProjectPath("b.ts".into()), "bar".to_string()),
         )
         .unwrap();
-        let result = describe(&graph, &reach, &resolved, &[]);
+        let result = describe(&graph, &reach, &resolved, &[], &nav);
         let decl = result
             .declaration
             .expect("symbol should carry a declaration");
@@ -2376,8 +2389,9 @@ mod tests {
     fn describe_file_reports_role_origin_and_declared_symbols() {
         let graph = linear_graph();
         let reach = reachability::compute(&graph);
+        let nav = build_graph_index(&graph);
         let resolved = resolve(&graph, &Selector::File(ProjectPath("a.ts".into()))).unwrap();
-        let result = describe(&graph, &reach, &resolved, &[]);
+        let result = describe(&graph, &reach, &resolved, &[], &nav);
         let file_info = result.file.expect("file node should carry file info");
         assert_eq!(file_info.role, "production");
         assert_eq!(file_info.origin, "authored");
@@ -2389,8 +2403,9 @@ mod tests {
     fn describe_dependency_reports_scope_and_usage() {
         let graph = linear_graph();
         let reach = reachability::compute(&graph);
+        let nav = build_graph_index(&graph);
         let resolved = resolve(&graph, &Selector::Dependency("lodash".into())).unwrap();
-        let result = describe(&graph, &reach, &resolved, &[]);
+        let result = describe(&graph, &reach, &resolved, &[], &nav);
         let dep = result
             .dependency
             .expect("dep: selector should carry dependency info");
@@ -2403,6 +2418,7 @@ mod tests {
     fn describe_reports_findings_attached_to_a_symbol() {
         let graph = linear_graph();
         let reach = reachability::compute(&graph);
+        let nav = build_graph_index(&graph);
         let resolved = resolve(
             &graph,
             &Selector::Symbol(ProjectPath("b.ts".into()), "bar".to_string()),
@@ -2413,7 +2429,7 @@ mod tests {
             path: Some("b.ts"),
             symbol: Some("bar"),
         }];
-        let result = describe(&graph, &reach, &resolved, &locations);
+        let result = describe(&graph, &reach, &resolved, &locations, &nav);
         assert_eq!(result.findings, vec!["kndo-abc123".to_string()]);
     }
 
@@ -2421,12 +2437,13 @@ mod tests {
     fn describe_reached_by_roots_finds_the_production_root() {
         let graph = linear_graph();
         let reach = reachability::compute(&graph);
+        let nav = build_graph_index(&graph);
         let resolved = resolve(
             &graph,
             &Selector::Symbol(ProjectPath("b.ts".into()), "bar".to_string()),
         )
         .unwrap();
-        let result = describe(&graph, &reach, &resolved, &[]);
+        let result = describe(&graph, &reach, &resolved, &[], &nav);
         assert_eq!(result.reached_by_roots.len(), 1);
         assert_eq!(result.reached_by_roots[0].selector, "a.ts");
     }
@@ -2437,6 +2454,7 @@ mod tests {
     fn uses_from_a_file_includes_imports_and_references() {
         let graph = linear_graph();
         let reach = reachability::compute(&graph);
+        let nav = build_graph_index(&graph);
         let resolved = resolve(&graph, &Selector::File(ProjectPath("a.ts".into()))).unwrap();
         let result = neighbors(
             &graph,
@@ -2449,6 +2467,7 @@ mod tests {
                 transitive: false,
                 limit: 50,
             },
+            &nav,
         );
         let selectors: Vec<&str> = result
             .entries
@@ -2469,6 +2488,7 @@ mod tests {
     fn uses_site_is_attributed_to_the_importing_file_not_the_imported_one() {
         let graph = linear_graph();
         let reach = reachability::compute(&graph);
+        let nav = build_graph_index(&graph);
         let resolved = resolve(&graph, &Selector::File(ProjectPath("a.ts".into()))).unwrap();
         let result = neighbors(
             &graph,
@@ -2481,6 +2501,7 @@ mod tests {
                 transitive: false,
                 limit: 50,
             },
+            &nav,
         );
         let to_b = result
             .entries
@@ -2503,6 +2524,7 @@ mod tests {
     fn used_by_site_is_attributed_to_the_referencing_file() {
         let graph = linear_graph();
         let reach = reachability::compute(&graph);
+        let nav = build_graph_index(&graph);
         let resolved = resolve(&graph, &Selector::File(ProjectPath("b.ts".into()))).unwrap();
         let result = neighbors(
             &graph,
@@ -2515,6 +2537,7 @@ mod tests {
                 transitive: false,
                 limit: 50,
             },
+            &nav,
         );
         let from_a = &result.entries[0];
         assert_eq!(from_a.node.selector, "a.ts");
@@ -2533,6 +2556,7 @@ mod tests {
     fn trace_between_site_is_attributed_to_the_source_of_each_hop() {
         let graph = linear_graph();
         let reach = reachability::compute(&graph);
+        let nav = build_graph_index(&graph);
         let from = resolve(&graph, &Selector::File(ProjectPath("a.ts".into()))).unwrap();
         let to = resolve(
             &graph,
@@ -2544,9 +2568,12 @@ mod tests {
             &reach,
             &from,
             &to,
-            EdgeFilter::parse(None).unwrap(),
-            false,
-            5,
+            TraceOpts {
+                edges: EdgeFilter::parse(None).unwrap(),
+                all: false,
+                max_paths: 5,
+            },
+            &nav,
         );
         let hop = &result.paths[0].hops[0];
         let site = hop
@@ -2564,6 +2591,7 @@ mod tests {
     fn used_by_a_file_is_the_reverse_of_uses() {
         let graph = linear_graph();
         let reach = reachability::compute(&graph);
+        let nav = build_graph_index(&graph);
         let resolved = resolve(&graph, &Selector::File(ProjectPath("b.ts".into()))).unwrap();
         let result = neighbors(
             &graph,
@@ -2576,6 +2604,7 @@ mod tests {
                 transitive: false,
                 limit: 50,
             },
+            &nav,
         );
         assert_eq!(result.entries.len(), 1);
         assert_eq!(result.entries[0].node.selector, "a.ts");
@@ -2586,6 +2615,7 @@ mod tests {
     fn edges_filter_restricts_to_references_only() {
         let graph = linear_graph();
         let reach = reachability::compute(&graph);
+        let nav = build_graph_index(&graph);
         let resolved = resolve(&graph, &Selector::File(ProjectPath("a.ts".into()))).unwrap();
         let result = neighbors(
             &graph,
@@ -2598,6 +2628,7 @@ mod tests {
                 transitive: false,
                 limit: 50,
             },
+            &nav,
         );
         let selectors: Vec<&str> = result
             .entries
@@ -2611,6 +2642,7 @@ mod tests {
     fn depth_one_stops_before_transitive_neighbors() {
         let graph = linear_graph();
         let reach = reachability::compute(&graph);
+        let nav = build_graph_index(&graph);
         let resolved = resolve(&graph, &Selector::File(ProjectPath("a.ts".into()))).unwrap();
         let shallow = neighbors(
             &graph,
@@ -2623,6 +2655,7 @@ mod tests {
                 transitive: false,
                 limit: 50,
             },
+            &nav,
         );
         // b.ts imports nothing further in this fixture, so depth 1 vs transitive coincide —
         // the real assertion is that dependency-only reach at depth 1 is exactly {b.ts, dep:lodash}.
@@ -2641,6 +2674,7 @@ mod tests {
     fn dependency_selector_has_no_uses_but_can_be_used_by() {
         let graph = linear_graph();
         let reach = reachability::compute(&graph);
+        let nav = build_graph_index(&graph);
         let resolved = resolve(&graph, &Selector::Dependency("lodash".into())).unwrap();
         let result = neighbors(
             &graph,
@@ -2653,6 +2687,7 @@ mod tests {
                 transitive: false,
                 limit: 50,
             },
+            &nav,
         );
         assert!(result.entries.is_empty());
     }
@@ -2663,6 +2698,7 @@ mod tests {
     fn trace_between_finds_the_shortest_path() {
         let graph = linear_graph();
         let reach = reachability::compute(&graph);
+        let nav = build_graph_index(&graph);
         let from = resolve(&graph, &Selector::File(ProjectPath("a.ts".into()))).unwrap();
         let to = resolve(
             &graph,
@@ -2674,9 +2710,12 @@ mod tests {
             &reach,
             &from,
             &to,
-            EdgeFilter::parse(None).unwrap(),
-            false,
-            5,
+            TraceOpts {
+                edges: EdgeFilter::parse(None).unwrap(),
+                all: false,
+                max_paths: 5,
+            },
+            &nav,
         );
         assert_eq!(result.paths.len(), 1);
         assert_eq!(result.paths[0].hops.len(), 1);
@@ -2688,6 +2727,7 @@ mod tests {
     fn trace_between_reports_no_path_to_a_disconnected_file() {
         let graph = linear_graph();
         let reach = reachability::compute(&graph);
+        let nav = build_graph_index(&graph);
         let from = resolve(&graph, &Selector::File(ProjectPath("a.ts".into()))).unwrap();
         let to = resolve(&graph, &Selector::File(ProjectPath("c.ts".into()))).unwrap();
         let result = trace_between(
@@ -2695,9 +2735,12 @@ mod tests {
             &reach,
             &from,
             &to,
-            EdgeFilter::parse(None).unwrap(),
-            false,
-            5,
+            TraceOpts {
+                edges: EdgeFilter::parse(None).unwrap(),
+                all: false,
+                max_paths: 5,
+            },
+            &nav,
         );
         assert!(result.paths.is_empty());
     }
@@ -2706,12 +2749,13 @@ mod tests {
     fn liveness_trace_finds_the_path_from_the_production_root() {
         let graph = linear_graph();
         let reach = reachability::compute(&graph);
+        let nav = build_graph_index(&graph);
         let target = resolve(
             &graph,
             &Selector::Symbol(ProjectPath("b.ts".into()), "bar".to_string()),
         )
         .unwrap();
-        let result = trace_liveness(&graph, &reach, &target, None);
+        let result = trace_liveness(&graph, &reach, &target, None, &nav);
         assert_eq!(result.from.selector, "roots:production");
         assert_eq!(result.paths.len(), 1);
         // The root itself (a.ts) is `from`, not a hop — one hop reaches bar directly.
@@ -2723,8 +2767,9 @@ mod tests {
     fn liveness_trace_finds_nothing_for_a_disconnected_file() {
         let graph = linear_graph();
         let reach = reachability::compute(&graph);
+        let nav = build_graph_index(&graph);
         let target = resolve(&graph, &Selector::File(ProjectPath("c.ts".into()))).unwrap();
-        let result = trace_liveness(&graph, &reach, &target, None);
+        let result = trace_liveness(&graph, &reach, &target, None, &nav);
         assert!(result.paths.is_empty());
     }
 
@@ -2761,12 +2806,13 @@ mod tests {
         ];
         let graph = ProjectGraph::for_test(files, symbols, vec![], edges);
         let reach = reachability::compute(&graph);
+        let nav = build_graph_index(&graph);
         let target = resolve(
             &graph,
             &Selector::Symbol(ProjectPath("helper.ts".into()), "helper".to_string()),
         )
         .unwrap();
-        let result = trace_liveness(&graph, &reach, &target, None);
+        let result = trace_liveness(&graph, &reach, &target, None, &nav);
         assert_eq!(result.from.selector, "roots:test");
         assert_eq!(result.paths.len(), 1);
     }
@@ -2786,8 +2832,9 @@ mod tests {
     fn impact_default_is_the_reverse_closure_with_affected_roots() {
         let graph = linear_graph();
         let reach = reachability::compute(&graph);
+        let nav = build_graph_index(&graph);
         let target = resolve(&graph, &Selector::File(ProjectPath("b.ts".into()))).unwrap();
-        let result = impact(&graph, &reach, &target, impact_opts(false)).unwrap();
+        let result = impact(&graph, &reach, &target, impact_opts(false), &nav).unwrap();
         // a.ts imports b.ts — it's affected at depth 1, and it's the production root.
         assert!(result
             .affected
@@ -2855,8 +2902,9 @@ mod tests {
     fn if_deleted_reports_orphaned_files_and_freed_dependencies() {
         let graph = chain_graph();
         let reach = reachability::compute(&graph);
+        let nav = build_graph_index(&graph);
         let target = resolve(&graph, &Selector::File(ProjectPath("b.ts".into()))).unwrap();
-        let result = impact(&graph, &reach, &target, impact_opts(true)).unwrap();
+        let result = impact(&graph, &reach, &target, impact_opts(true), &nav).unwrap();
         let sim = result.if_deleted.expect("--if-deleted requested");
         // d.ts was only reachable through b.ts — deleting b orphans it.
         assert!(sim.newly_unreachable.iter().any(|q| q.selector == "d.ts"));
@@ -2932,12 +2980,13 @@ mod tests {
         ];
         let graph = ProjectGraph::for_test(files, symbols, vec![], edges);
         let reach = reachability::compute(&graph);
+        let nav = build_graph_index(&graph);
         let target = resolve(
             &graph,
             &Selector::Symbol(ProjectPath("b.ts".into()), "bar".to_string()),
         )
         .unwrap();
-        let result = impact(&graph, &reach, &target, impact_opts(true)).unwrap();
+        let result = impact(&graph, &reach, &target, impact_opts(true), &nav).unwrap();
         // Default direction: foo (the caller) is the blast radius, transitively to depth 2.
         assert!(result
             .affected
@@ -2998,8 +3047,9 @@ mod tests {
         ];
         let graph = ProjectGraph::for_test(files, vec![], vec![], edges);
         let reach = reachability::compute(&graph);
+        let nav = build_graph_index(&graph);
         let target = resolve(&graph, &Selector::File(ProjectPath("a.ts".into()))).unwrap();
-        let result = impact(&graph, &reach, &target, impact_opts(true)).unwrap();
+        let result = impact(&graph, &reach, &target, impact_opts(true), &nav).unwrap();
         let sim = result.if_deleted.unwrap();
         assert!(
             sim.newly_test_only.iter().any(|q| q.selector == "x.ts"),
@@ -3013,11 +3063,12 @@ mod tests {
     fn if_deleted_rejects_dependency_selectors_with_an_explanation() {
         let graph = linear_graph();
         let reach = reachability::compute(&graph);
+        let nav = build_graph_index(&graph);
         let target = resolve(&graph, &Selector::Dependency(SmolStr::new("lodash"))).unwrap();
-        let err = impact(&graph, &reach, &target, impact_opts(true)).unwrap_err();
+        let err = impact(&graph, &reach, &target, impact_opts(true), &nav).unwrap_err();
         assert!(matches!(err, QueryError::IfDeletedOnDependency(_)), "{err}");
         // The default mode still answers: importers are the blast radius.
-        let ok = impact(&graph, &reach, &target, impact_opts(false)).unwrap();
+        let ok = impact(&graph, &reach, &target, impact_opts(false), &nav).unwrap();
         assert!(ok.affected.iter().any(|e| e.node.selector == "a.ts"));
     }
 }

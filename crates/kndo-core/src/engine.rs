@@ -19,6 +19,7 @@ use crate::analysis;
 use crate::discovery;
 use crate::gitutil;
 use crate::graph;
+use crate::query;
 use crate::query_envelope::{self, QueryRequest, QueryResult};
 use crate::vocab::Confidence;
 
@@ -1312,6 +1313,7 @@ impl Engine {
         };
         let (graph, findings) = (analyzed.graph, analyzed.findings);
         let reach = query_envelope::compute_reachability(&graph);
+        let nav = query::build_graph_index(&graph);
         let findings_owned = findings; // keep the Vec<Finding> alive across the borrow below
         let locations = query_envelope::finding_locations(&findings_owned);
         let cache = cache_status_str(
@@ -1325,7 +1327,9 @@ impl Engine {
 
         requests
             .into_iter()
-            .map(|req| query_envelope::run(&graph, &reach, &locations, req, cache, duration_ms))
+            .map(|req| {
+                query_envelope::run(&graph, &reach, &nav, &locations, req, cache, duration_ms)
+            })
             .collect()
     }
 

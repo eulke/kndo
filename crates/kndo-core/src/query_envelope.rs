@@ -251,6 +251,7 @@ pub fn json_schema() -> schemars::Schema {
 pub(crate) fn run(
     graph: &ProjectGraph,
     reach: &ReachabilityMap,
+    nav: &query::GraphIndex,
     finding_locations: &[FindingLocation<'_>],
     req: QueryRequest,
     cache: &'static str,
@@ -259,10 +260,11 @@ pub(crate) fn run(
     let limit = req.flags.limit.unwrap_or(DEFAULT_LIMIT);
     let results = match req.verb {
         Verb::Find => find_entries(graph, reach, &req.selectors, &req.flags, limit),
-        Verb::Describe => describe_entries(graph, reach, finding_locations, &req.selectors),
+        Verb::Describe => describe_entries(graph, reach, nav, finding_locations, &req.selectors),
         Verb::Uses => neighbor_entries(
             graph,
             reach,
+            nav,
             &req.selectors,
             &req.flags,
             Direction::Uses,
@@ -271,13 +273,14 @@ pub(crate) fn run(
         Verb::UsedBy => neighbor_entries(
             graph,
             reach,
+            nav,
             &req.selectors,
             &req.flags,
             Direction::UsedBy,
             limit,
         ),
-        Verb::Trace => trace_entries(graph, reach, &req.selectors, &req.flags),
-        Verb::Impact => impact_entries(graph, reach, &req.selectors, &req.flags, limit),
+        Verb::Trace => trace_entries(graph, reach, nav, &req.selectors, &req.flags),
+        Verb::Impact => impact_entries(graph, reach, nav, &req.selectors, &req.flags, limit),
     };
     QueryResult {
         verb: req.verb,
@@ -358,6 +361,7 @@ fn parse_selector_entry(raw: &str) -> Result<Selector, QueryFailure> {
 fn describe_entries(
     graph: &ProjectGraph,
     reach: &ReachabilityMap,
+    nav: &query::GraphIndex,
     finding_locations: &[FindingLocation<'_>],
     selectors: &[String],
 ) -> Vec<ResultEntry> {
@@ -369,6 +373,7 @@ fn describe_entries(
                 reach,
                 &resolved,
                 finding_locations,
+                nav,
             ))),
             Err(failed) => failed.into(),
         })
@@ -378,6 +383,7 @@ fn describe_entries(
 fn neighbor_entries(
     graph: &ProjectGraph,
     reach: &ReachabilityMap,
+    nav: &query::GraphIndex,
     selectors: &[String],
     flags: &QueryFlags,
     direction: Direction,
@@ -411,6 +417,7 @@ fn neighbor_entries(
                     transitive: flags.transitive,
                     limit,
                 },
+                nav,
             )),
             Err(failed) => failed.into(),
         })
@@ -420,6 +427,7 @@ fn neighbor_entries(
 fn impact_entries(
     graph: &ProjectGraph,
     reach: &ReachabilityMap,
+    nav: &query::GraphIndex,
     selectors: &[String],
     flags: &QueryFlags,
     limit: usize,
@@ -451,6 +459,7 @@ fn impact_entries(
                     limit,
                     if_deleted: flags.if_deleted,
                 },
+                nav,
             ) {
                 Ok(result) => ResultEntry::Impact(Box::new(result)),
                 Err(err) => ResultEntry::Failed {
@@ -467,6 +476,7 @@ fn impact_entries(
 fn trace_entries(
     graph: &ProjectGraph,
     reach: &ReachabilityMap,
+    nav: &query::GraphIndex,
     selectors: &[String],
     flags: &QueryFlags,
 ) -> Vec<ResultEntry> {
@@ -475,12 +485,17 @@ fn trace_entries(
         Err(_) => unreachable!("EdgeFilter::parse(None) always succeeds"),
     };
     let max_paths = flags.max_paths.unwrap_or(DEFAULT_MAX_PATHS);
+    let opts = query::TraceOpts {
+        edges,
+        all: flags.all,
+        max_paths,
+    };
 
     if !flags.pairs.is_empty() {
         return flags
             .pairs
             .iter()
-            .map(|(a, b)| trace_pair(graph, reach, a, b, edges, flags.all, max_paths))
+            .map(|(a, b)| trace_pair(graph, reach, nav, a, b, opts))
             .collect();
     }
 
@@ -500,7 +515,7 @@ fn trace_entries(
             };
             match resolve_selector(graph, &selectors[0]) {
                 Ok(target) => vec![ResultEntry::Trace(query::trace_liveness(
-                    graph, reach, &target, roots_kind,
+                    graph, reach, &target, roots_kind, nav,
                 ))],
                 Err(failed) => vec![failed.into()],
             }
@@ -508,11 +523,10 @@ fn trace_entries(
         2 => vec![trace_pair(
             graph,
             reach,
+            nav,
             &selectors[0],
             &selectors[1],
-            edges,
-            flags.all,
-            max_paths,
+            opts,
         )],
         n => vec![ResultEntry::Failed {
             status: "error",
@@ -525,11 +539,10 @@ fn trace_entries(
 fn trace_pair(
     graph: &ProjectGraph,
     reach: &ReachabilityMap,
+    nav: &query::GraphIndex,
     from_raw: &str,
     to_raw: &str,
-    edges: EdgeFilter,
-    all: bool,
-    max_paths: usize,
+    opts: query::TraceOpts,
 ) -> ResultEntry {
     let from = match resolve_selector(graph, from_raw) {
         Ok(r) => r,
@@ -539,9 +552,7 @@ fn trace_pair(
         Ok(r) => r,
         Err(failed) => return failed.into(),
     };
-    ResultEntry::Trace(query::trace_between(
-        graph, reach, &from, &to, edges, all, max_paths,
-    ))
+    ResultEntry::Trace(query::trace_between(graph, reach, &from, &to, opts, nav))
 }
 
 /// Builds the `describe`-time finding-attachment view from a plain finding list — always the
