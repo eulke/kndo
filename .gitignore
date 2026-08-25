@@ -5,17 +5,10 @@ target/
 # independent of this file, since a project's first-ever run predates any gitignore entry).
 .kndo/
 
-# Conformance fixture corpora (RFC 0002 §8) are deliberately-flawed test data — checked into
-# git, exercised via the conformance harness's own `cargo test` run, but excluded from kndo's
-# self-check of its own repo (ROADMAP M1 exit: "kndo check on kndo's own JS-free repo returns
-# cleanly"). The `ignore` crate reads this file for its glob rules regardless of git-tracked
-# status, which is the point of the entry.
-#
-# It DOES affect version control for files git isn't already tracking: the fixtures here
-# predate this line and stay tracked, but **a new fixture needs `git add -f`** or it is
-# silently skipped — committed green locally, absent from CI. Say so here rather than let the
-# next person rediscover it.
-**/tests/fixtures/
+# Conformance fixture corpora are NOT excluded here — they are checked into git, and this file
+# governs `git add` for untracked files, so an entry here silently skips a newly added fixture
+# (green locally, absent from CI). The exclusion they do need is from kndo's own analysis, and
+# that lives in `.ignore`, which the `ignore` crate reads and git does not.
 docs/book/
 
 # Local coverage output (CONTRIBUTING.md "Coverage") — kndo ingests lcov.info from the

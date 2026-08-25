@@ -65,6 +65,24 @@ Install `mold` (Linux, via your package manager) or make sure `lld` is on `PATH`
 before adding this — an unresolvable `-fuse-ld` flag breaks every build on that machine. This
 is a per-contributor convenience, never a repo default.
 
+## Conformance fixtures
+
+Each adapter's `tests/fixtures/<name>/` holds a `project/` tree and an `expected.json`; the
+harness runs the real engine over the project and asserts the findings match exactly. They are
+deliberately-flawed corpora — dead code, phantom dependencies, cycles — so they must be
+excluded from kndo's analysis of its own repo, but they are ordinary tracked files as far as
+git is concerned.
+
+That exclusion lives in **`.ignore`**, not `.gitignore`. The `ignore` crate (and ripgrep, and
+fd) read `.ignore`; git does not. Putting it in `.gitignore` also governs `git add` for
+untracked files, which silently skips a newly added fixture — it passes locally and is simply
+absent from CI. If you add a fixture and `git status` doesn't show it, that is the bug to look
+for.
+
+A fixture change is never a way to make a failing test pass. `expected.json` is a contract:
+a diff there is either a bug in your change or a deliberate, documented contract change
+explained in the commit message.
+
 ## Coverage
 
 kndo's own `crap` analysis (complexity × untestedness) runs only when a coverage report is
