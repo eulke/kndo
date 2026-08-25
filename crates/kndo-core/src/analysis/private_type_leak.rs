@@ -31,10 +31,13 @@
 use rustc_hash::FxHashMap as HashMap;
 
 use crate::adapter::Span;
-use crate::analysis::finding_id;
+use crate::analysis::{finding_id, FindingIdParts};
 use crate::engine::{Finding, Location, Severity};
 use crate::graph::ProjectGraph;
-use crate::vocab::{Confidence, EdgeKind, FileOrigin, FileRole, NodeRef, RefKind, SymbolId};
+use crate::vocab::{
+    Category, Confidence, EdgeKind, FileOrigin, FileRole, Group, NodeRef, RefKind, SubjectKind,
+    SymbolId,
+};
 
 fn contains(outer: &Span, inner: &Span) -> bool {
     outer.start <= inner.start && inner.end <= outer.end
@@ -192,10 +195,16 @@ pub fn find_private_type_leaks(graph: &ProjectGraph) -> Vec<Finding> {
             .unwrap_or(false);
         findings.push(Finding {
             advisory: false,
-            id: finding_id("private-type-leak", facet, path, &qualified, &leaked_name),
-            category: "private-type-leak".to_string(),
-            group: "defect".to_string(),
-            subject_kind: facet.to_string(),
+            id: finding_id(FindingIdParts {
+                category: &Category::PRIVATE_TYPE_LEAK,
+                subject_kind: &SubjectKind::new(facet),
+                path,
+                symbol_path: &qualified,
+                discriminator: &leaked_name,
+            }),
+            category: Category::PRIVATE_TYPE_LEAK,
+            group: Group::Defect,
+            subject_kind: SubjectKind::new(facet),
             severity: if is_library {
                 Severity::Warning
             } else {
@@ -318,7 +327,7 @@ mod tests {
         let findings = find_private_type_leaks(&graph_with(symbols, edges));
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].category, "private-type-leak");
-        assert_eq!(findings[0].group, "defect");
+        assert_eq!(findings[0].group, crate::vocab::Group::Defect);
         assert!(findings[0].message.contains("secret"));
     }
 

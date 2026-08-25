@@ -1279,9 +1279,9 @@ mod tests {
         Finding {
             advisory: false,
             id: "kndo-000000000000".to_string(),
-            category: "unused".to_string(),
-            group: "waste".to_string(),
-            subject_kind: "symbol".to_string(),
+            category: "unused".into(),
+            group: kndo::vocab::Group::Waste,
+            subject_kind: "symbol".into(),
             severity,
             confidence: kndo::vocab::Confidence::Certain,
             message: "example".to_string(),

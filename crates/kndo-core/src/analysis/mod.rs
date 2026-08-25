@@ -30,19 +30,31 @@ use crate::engine::Finding;
 use crate::graph::{PackageNode, ProjectGraph};
 use crate::vocab::{FileId, PackageId, SymbolId};
 
+/// The five hash inputs of [`finding_id`], named so they can't be silently transposed at a
+/// call site the way five adjacent `&str` positional parameters could — finding identity
+/// (baseline matching, suppression stability) depends on getting this exactly right.
+pub struct FindingIdParts<'a> {
+    pub category: &'a crate::vocab::Category,
+    pub subject_kind: &'a crate::vocab::SubjectKind,
+    pub path: &'a str,
+    pub symbol_path: &'a str,
+    pub discriminator: &'a str,
+}
+
 /// The stable finding id: `"kndo-" + blake3(category,
 /// subject_kind, path, symbol path, discriminator)[..12 hex]`. Line/column never participate,
 /// so reformatting never changes an id; a rename or move does, because it changes `path`/
-/// `symbol_path`.
-pub fn finding_id(
-    category: &str,
-    subject_kind: &str,
-    path: &str,
-    symbol_path: &str,
-    discriminator: &str,
-) -> String {
+/// `symbol_path`. Hash input bytes are unchanged from before `FindingIdParts` existed —
+/// `Category`/`SubjectKind`'s `Display` is exactly the string each used to be.
+pub fn finding_id(parts: FindingIdParts<'_>) -> String {
     let mut hasher = blake3::Hasher::new();
-    for part in [category, subject_kind, path, symbol_path, discriminator] {
+    for part in [
+        parts.category.as_str(),
+        parts.subject_kind.as_str(),
+        parts.path,
+        parts.symbol_path,
+        parts.discriminator,
+    ] {
         hasher.update(part.as_bytes());
         hasher.update(b"\0");
     }

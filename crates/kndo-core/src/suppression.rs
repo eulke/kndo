@@ -270,16 +270,16 @@ fn stale_finding(
     let file_node = &graph.files[file.0 as usize];
     let path = file_node.path.clone();
     Finding {
-        id: crate::analysis::finding_id(
-            "stale",
-            "suppression",
-            path.0.as_str(),
-            anchor.unwrap_or(""),
-            &format!("{target}#{}#{ordinal}", kind.tag()),
-        ),
-        category: "stale".to_string(),
-        group: "hygiene".to_string(),
-        subject_kind: "suppression".to_string(),
+        id: crate::analysis::finding_id(crate::analysis::FindingIdParts {
+            category: &crate::vocab::Category::STALE,
+            subject_kind: &crate::vocab::SubjectKind::SUPPRESSION,
+            path: path.0.as_str(),
+            symbol_path: anchor.unwrap_or(""),
+            discriminator: &format!("{target}#{}#{ordinal}", kind.tag()),
+        }),
+        category: crate::vocab::Category::STALE,
+        group: crate::vocab::Group::Hygiene,
+        subject_kind: crate::vocab::SubjectKind::SUPPRESSION,
         severity: crate::engine::Severity::Info,
         confidence: Confidence::Certain,
         message: stale_message(kind, &path.0, raw, anchor, target),
@@ -410,11 +410,11 @@ fn bind_one<'a>(
 }
 
 fn matches(binding: &Binding, file: FileId, finding: &Finding) -> bool {
-    if binding.file != file || binding.category != finding.category {
+    if binding.file != file || finding.category != binding.category {
         return false;
     }
     if let Some(subject) = binding.subject {
-        if subject != finding.subject_kind {
+        if finding.subject_kind != subject {
             return false;
         }
     }
@@ -503,9 +503,9 @@ mod tests {
         Finding {
             advisory: false,
             id: format!("kndo-{category}-{line}"),
-            category: category.to_string(),
-            group: "waste".to_string(),
-            subject_kind: subject_kind.to_string(),
+            category: crate::vocab::Category::new(category),
+            group: crate::vocab::Group::Waste,
+            subject_kind: crate::vocab::SubjectKind::new(subject_kind),
             severity: Severity::Warning,
             confidence: Confidence::Certain,
             message: "example".to_string(),
@@ -641,7 +641,7 @@ mod tests {
         let stale = stale_of(&kept);
         assert_eq!(stale.len(), 1);
         assert!(stale[0].message.contains("attaches to no declaration"));
-        assert_eq!(stale[0].group, "hygiene");
+        assert_eq!(stale[0].group, crate::vocab::Group::Hygiene);
         assert_eq!(stale[0].subject_kind, "suppression");
         assert_eq!(stale[0].severity, Severity::Info);
         assert_eq!(

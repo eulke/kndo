@@ -23,14 +23,14 @@
 use std::path::Path;
 
 use crate::engine::Finding;
-use crate::vocab::Confidence;
+use crate::vocab::{Category, Confidence, SubjectKind};
 
 /// One `skip` entry: a category, optionally narrowed to a subject facet
 /// (`"unused:enum-member"` skips only `unused` findings whose subject is an enum member).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SkipSpec {
-    pub category: String,
-    pub subject: Option<String>,
+    pub category: Category,
+    pub subject: Option<SubjectKind>,
 }
 
 impl SkipSpec {
@@ -437,7 +437,7 @@ fn parse_skip_list(
             continue;
         };
         let (category, subject) = match raw.split_once(':') {
-            Some((c, s)) => (c, Some(s.to_string())),
+            Some((c, s)) => (c, Some(SubjectKind::new(s))),
             None => (raw, None),
         };
         if category == "stale" {
@@ -454,7 +454,7 @@ fn parse_skip_list(
             continue;
         }
         specs.push(SkipSpec {
-            category: category.to_string(),
+            category: Category::new(category),
             subject,
         });
     }
@@ -489,9 +489,9 @@ mod tests {
         Finding {
             advisory: false,
             id: format!("{category}:{subject}:{}", path.unwrap_or("")),
-            category: category.to_string(),
-            group: "waste".to_string(),
-            subject_kind: subject.to_string(),
+            category: Category::new(category),
+            group: crate::vocab::Group::Waste,
+            subject_kind: SubjectKind::new(subject),
             severity: Severity::Info,
             confidence: Confidence::Certain,
             message: String::new(),

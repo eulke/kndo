@@ -18,12 +18,15 @@
 
 use rustc_hash::FxHashMap as HashMap;
 
-use crate::analysis::finding_id;
 use crate::analysis::reachability::{Reachability, ReachabilityMap};
 use crate::analysis::rollup::{self, DirGroup};
+use crate::analysis::{finding_id, FindingIdParts};
 use crate::engine::{Finding, Location, Severity};
 use crate::graph::ProjectGraph;
-use crate::vocab::{Confidence, FileId, FileOrigin, FileRole, NodeRef, PackageId, SymbolId};
+use crate::vocab::{
+    Category, Confidence, FileId, FileOrigin, FileRole, Group, NodeRef, PackageId, SubjectKind,
+    SymbolId,
+};
 
 pub fn find_test_only_files(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<Finding> {
     let mut findings = Vec::new();
@@ -67,10 +70,16 @@ pub fn find_test_only_files(graph: &ProjectGraph, reach: &ReachabilityMap) -> Ve
         }
         findings.push(Finding {
             advisory: false,
-            id: finding_id("test-only", "file", path, "", ""),
-            category: "test-only".to_string(),
-            group: "waste".to_string(),
-            subject_kind: "file".to_string(),
+            id: finding_id(FindingIdParts {
+                category: &Category::TEST_ONLY,
+                subject_kind: &SubjectKind::FILE,
+                path,
+                symbol_path: "",
+                discriminator: "",
+            }),
+            category: Category::TEST_ONLY,
+            group: Group::Waste,
+            subject_kind: SubjectKind::FILE,
             severity: Severity::Info, // info by default
             confidence,
             message: format!("{path} is reachable only from tests: production never calls it"),
@@ -92,10 +101,16 @@ fn directory_finding(graph: &ProjectGraph, dir: &DirGroup<'_>, confidence: Confi
     let display = if dir.path.is_empty() { "." } else { dir.path };
     Finding {
         advisory: false,
-        id: finding_id("test-only", "directory", dir.path, "", ""),
-        category: "test-only".to_string(),
-        group: "waste".to_string(),
-        subject_kind: "directory".to_string(),
+        id: finding_id(FindingIdParts {
+            category: &Category::TEST_ONLY,
+            subject_kind: &SubjectKind::DIRECTORY,
+            path: dir.path,
+            symbol_path: "",
+            discriminator: "",
+        }),
+        category: Category::TEST_ONLY,
+        group: Group::Waste,
+        subject_kind: SubjectKind::DIRECTORY,
         severity: Severity::Info,
         confidence,
         message: format!(
@@ -146,10 +161,16 @@ pub fn find_test_only_symbols(graph: &ProjectGraph, reach: &ReachabilityMap) -> 
         let qualified = symbol.qualified_name();
         findings.push(Finding {
             advisory: false,
-            id: finding_id("test-only", facet, path, &qualified, ""),
-            category: "test-only".to_string(),
-            group: "waste".to_string(),
-            subject_kind: facet.to_string(),
+            id: finding_id(FindingIdParts {
+                category: &Category::TEST_ONLY,
+                subject_kind: &SubjectKind::new(facet),
+                path,
+                symbol_path: &qualified,
+                discriminator: "",
+            }),
+            category: Category::TEST_ONLY,
+            group: Group::Waste,
+            subject_kind: SubjectKind::new(facet),
             severity: Severity::Info,
             confidence,
             message: format!(
@@ -247,7 +268,7 @@ mod tests {
         let findings = find_test_only_files(&graph, &reach);
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].category, "test-only");
-        assert_eq!(findings[0].group, "waste");
+        assert_eq!(findings[0].group, crate::vocab::Group::Waste);
         assert_eq!(findings[0].severity, Severity::Info);
         assert_eq!(findings[0].subject_kind, "file");
         assert!(findings[0].message.contains("src/helper.mock"));

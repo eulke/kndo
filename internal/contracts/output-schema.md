@@ -48,7 +48,9 @@ pass. Consumers must treat unknown levels as at least `warn`.
 {
   "id": "kndo-a3f81c92e5d4",            // stable content-anchored id, §5
   "category": "unused",                 // verdict; registry in §6
-  "group": "waste",                     // the verdict's nature: defect | waste | risk | hygiene (fixed mapping, §6)
+  "group": "waste",                     // the verdict's nature: defect | waste | risk | hygiene | convention
+                                         // (fixed mapping, §6) — convention is reserved for plugin-contributed
+                                         // findings (RFC 0018 §2.1); a core analysis never emits it
   "subject_kind": "function",           // what the verdict landed on: symbol kind | file | directory | dependency | import | suppression
   "severity": "warning",                // "error" | "warning" | "info"
   "confidence": "certain",              // "certain" | "probable" | "possible"

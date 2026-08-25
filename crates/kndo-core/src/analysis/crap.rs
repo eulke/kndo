@@ -15,11 +15,11 @@
 //! generated/vendored files (not yours to refactor).
 
 use crate::adapter::{Diagnostic, DiagnosticLevel};
-use crate::analysis::finding_id;
+use crate::analysis::{finding_id, FindingIdParts};
 use crate::coverage::CoverageMap;
 use crate::engine::{Finding, Location, Severity};
 use crate::graph::ProjectGraph;
-use crate::vocab::{Confidence, FileOrigin, FileRole};
+use crate::vocab::{Category, Confidence, FileOrigin, FileRole, Group, SubjectKind};
 
 /// The standard threshold ("findings for CRAP > 30") — the built-in default;
 /// `[analysis.crap] threshold` in `kndo.toml` overrides it per project
@@ -87,10 +87,16 @@ pub fn find_crap(
         };
         findings.push(Finding {
             advisory: false,
-            id: finding_id("crap", facet, path, &qualified, ""),
-            category: "crap".to_string(),
-            group: "risk".to_string(),
-            subject_kind: facet.to_string(),
+            id: finding_id(FindingIdParts {
+                category: &Category::CRAP,
+                subject_kind: &SubjectKind::new(facet),
+                path,
+                symbol_path: &qualified,
+                discriminator: "",
+            }),
+            category: Category::CRAP,
+            group: Group::Risk,
+            subject_kind: SubjectKind::new(facet),
             severity: Severity::Warning,
             confidence: Confidence::Certain,
             message: format!(
@@ -225,7 +231,7 @@ mod tests {
         let findings = find_crap(&graph, &unrelated_coverage(), CRAP_THRESHOLD).0;
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].category, "crap");
-        assert_eq!(findings[0].group, "risk");
+        assert_eq!(findings[0].group, crate::vocab::Group::Risk);
         assert_eq!(findings[0].severity, Severity::Warning);
         assert!(findings[0].message.contains("CRAP 42"));
         assert!(findings[0].message.contains("coverage: none"));

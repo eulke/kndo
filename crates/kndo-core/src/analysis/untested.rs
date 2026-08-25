@@ -18,13 +18,14 @@
 use rustc_hash::FxHashMap as HashMap;
 
 use crate::adapter::{Diagnostic, DiagnosticLevel};
-use crate::analysis::finding_id;
 use crate::analysis::reachability::{Reachability, ReachabilityMap};
 use crate::analysis::rollup::{self, DirGroup};
+use crate::analysis::{finding_id, FindingIdParts};
 use crate::engine::{Finding, Location, Severity};
 use crate::graph::ProjectGraph;
 use crate::vocab::{
-    Confidence, EdgeKind, FileId, FileOrigin, FileRole, NodeRef, PackageId, RootKind, SymbolId,
+    Category, Confidence, EdgeKind, FileId, FileOrigin, FileRole, Group, NodeRef, PackageId,
+    RootKind, SubjectKind, SymbolId,
 };
 
 /// Findings plus, when the project has no test roots at all, one diagnostic
@@ -110,10 +111,16 @@ fn find_untested_files(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<Fin
         }
         findings.push(Finding {
             advisory: false,
-            id: finding_id("untested", "file", path, "", ""),
-            category: "untested".to_string(),
-            group: "risk".to_string(),
-            subject_kind: "file".to_string(),
+            id: finding_id(FindingIdParts {
+                category: &Category::UNTESTED,
+                subject_kind: &SubjectKind::FILE,
+                path,
+                symbol_path: "",
+                discriminator: "",
+            }),
+            category: Category::UNTESTED,
+            group: Group::Risk,
+            subject_kind: SubjectKind::FILE,
             severity: Severity::Info, // info by default
             confidence,
             message: format!("{path} is production-reachable but no test reaches it"),
@@ -135,10 +142,16 @@ fn directory_finding(graph: &ProjectGraph, dir: &DirGroup<'_>, confidence: Confi
     let display = if dir.path.is_empty() { "." } else { dir.path };
     Finding {
         advisory: false,
-        id: finding_id("untested", "directory", dir.path, "", ""),
-        category: "untested".to_string(),
-        group: "risk".to_string(),
-        subject_kind: "directory".to_string(),
+        id: finding_id(FindingIdParts {
+            category: &Category::UNTESTED,
+            subject_kind: &SubjectKind::DIRECTORY,
+            path: dir.path,
+            symbol_path: "",
+            discriminator: "",
+        }),
+        category: Category::UNTESTED,
+        group: Group::Risk,
+        subject_kind: SubjectKind::DIRECTORY,
         severity: Severity::Info,
         confidence,
         message: format!(
@@ -193,10 +206,16 @@ fn find_untested_symbols(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<F
         let confidence = reach.get(NodeRef::Symbol(symbol_id)).1;
         findings.push(Finding {
             advisory: false,
-            id: finding_id("untested", facet, path, &qualified, ""),
-            category: "untested".to_string(),
-            group: "risk".to_string(),
-            subject_kind: facet.to_string(),
+            id: finding_id(FindingIdParts {
+                category: &Category::UNTESTED,
+                subject_kind: &SubjectKind::new(facet),
+                path,
+                symbol_path: &qualified,
+                discriminator: "",
+            }),
+            category: Category::UNTESTED,
+            group: Group::Risk,
+            subject_kind: SubjectKind::new(facet),
             severity: Severity::Info,
             confidence,
             message: format!(
@@ -365,7 +384,7 @@ mod tests {
         assert!(diagnostic.is_none());
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].category, "untested");
-        assert_eq!(findings[0].group, "risk");
+        assert_eq!(findings[0].group, crate::vocab::Group::Risk);
         assert!(findings[0].message.contains("src/blind.mock"));
     }
 

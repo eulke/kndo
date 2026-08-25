@@ -458,6 +458,203 @@ pub struct Edge {
     pub owner: FileId,
 }
 
+// ---------------------------------------------------------------- finding taxonomy
+
+/// A finding's section — the taxonomy RFC 0018 §"reserved" closes: exactly these five, plus
+/// `Convention` reserved for plugin-contributed findings (`category` stays an open
+/// `plugin:<coordinate>/<rule>` namespace — RFC 0018 §2.1 — but no finding may claim a group
+/// outside this set). [`Group::DISPLAY_ORDER`] is the single source of section ordering —
+/// every renderer reads it instead of keeping its own copy (a duplicated 4-entry copy of this
+/// list, missing `Convention`, is exactly how `agent_format.rs` and the CLI's `render.rs`
+/// used to missort every plugin finding under an unnamed fallback section).
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "kebab-case")]
+pub enum Group {
+    Defect,
+    Waste,
+    Risk,
+    Hygiene,
+    /// Reserved for plugin-contributed findings — a core analysis never emits it.
+    Convention,
+}
+
+impl Group {
+    pub const DISPLAY_ORDER: [Group; 5] = [
+        Group::Defect,
+        Group::Waste,
+        Group::Risk,
+        Group::Hygiene,
+        Group::Convention,
+    ];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Group::Defect => "defect",
+            Group::Waste => "waste",
+            Group::Risk => "risk",
+            Group::Hygiene => "hygiene",
+            Group::Convention => "convention",
+        }
+    }
+}
+
+impl std::fmt::Display for Group {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+/// A finding's category — an open namespace (RFC 0018 §2.1: a plugin's own category is
+/// `plugin:<coordinate>/<rule>`, never a bare or off-namespace name), so unlike [`Group`] this
+/// is a validated string newtype rather than a closed enum. The core categories are
+/// associated consts; [`Category::plugin`] builds the namespaced form; [`Category::is_plugin`]
+/// tells the two apart without a string-prefix check at every call site.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(transparent)]
+pub struct Category(SmolStr);
+
+impl Category {
+    pub const CRAP: Category = Category(SmolStr::new_static("crap"));
+    pub const CYCLIC: Category = Category(SmolStr::new_static("cyclic"));
+    pub const DEEP_IMPORT: Category = Category(SmolStr::new_static("deep-import"));
+    pub const DUPLICATE: Category = Category(SmolStr::new_static("duplicate"));
+    pub const INTERNAL_ONLY: Category = Category(SmolStr::new_static("internal-only"));
+    pub const PRIVATE_TYPE_LEAK: Category = Category(SmolStr::new_static("private-type-leak"));
+    pub const STALE: Category = Category(SmolStr::new_static("stale"));
+    pub const TEST_ONLY: Category = Category(SmolStr::new_static("test-only"));
+    pub const UNDECLARED: Category = Category(SmolStr::new_static("undeclared"));
+    pub const UNTESTED: Category = Category(SmolStr::new_static("untested"));
+    pub const UNUSED: Category = Category(SmolStr::new_static("unused"));
+    pub const VERSION_SKEW: Category = Category(SmolStr::new_static("version-skew"));
+
+    pub fn new(raw: impl Into<SmolStr>) -> Category {
+        Category(raw.into())
+    }
+
+    /// RFC 0018 §2.1's namespaced form for a plugin-contributed finding.
+    pub fn plugin(coordinate: &str, rule: &str) -> Category {
+        Category(SmolStr::new(format!("plugin:{coordinate}/{rule}")))
+    }
+
+    /// Whether this category is in the reserved `plugin:` namespace — the one axis
+    /// [`Category`] doesn't close: everything *else* is core, by construction (adapters and
+    /// analyses never emit a `plugin:`-prefixed category; the host enforces the prefix on the
+    /// plugin side, RFC 0018 §2.1).
+    pub fn is_plugin(&self) -> bool {
+        self.0.starts_with("plugin:")
+    }
+
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
+impl std::fmt::Display for Category {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+/// Every `&str` method (`.starts_with()`, `.contains()`, …) works directly on a `Category` —
+/// it's a validated string, not an opaque token.
+impl std::ops::Deref for Category {
+    type Target = str;
+    fn deref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl PartialEq<str> for Category {
+    fn eq(&self, other: &str) -> bool {
+        self.0 == other
+    }
+}
+
+impl PartialEq<&str> for Category {
+    fn eq(&self, other: &&str) -> bool {
+        self.0 == *other
+    }
+}
+
+impl From<&str> for Category {
+    fn from(raw: &str) -> Category {
+        Category::new(raw)
+    }
+}
+
+impl From<String> for Category {
+    fn from(raw: String) -> Category {
+        Category::new(raw)
+    }
+}
+
+/// A finding's subject facet (`category:subject` targeting, RFC 0005) — open like
+/// [`Category`]: most values are the fixed `file | directory | dependency | package |
+/// suppression` set, but a symbol-subject finding's facet is [`SymbolKind::facet`], which
+/// itself carries an open [`SymbolKind::Other`] tail for languages the closed variants don't
+/// cover — so this can never be a closed enum either.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(transparent)]
+pub struct SubjectKind(SmolStr);
+
+impl SubjectKind {
+    pub const DEPENDENCY: SubjectKind = SubjectKind(SmolStr::new_static("dependency"));
+    pub const DIRECTORY: SubjectKind = SubjectKind(SmolStr::new_static("directory"));
+    pub const FILE: SubjectKind = SubjectKind(SmolStr::new_static("file"));
+    pub const PACKAGE: SubjectKind = SubjectKind(SmolStr::new_static("package"));
+    pub const SUPPRESSION: SubjectKind = SubjectKind(SmolStr::new_static("suppression"));
+
+    pub fn new(raw: impl Into<SmolStr>) -> SubjectKind {
+        SubjectKind(raw.into())
+    }
+
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
+impl std::fmt::Display for SubjectKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl std::ops::Deref for SubjectKind {
+    type Target = str;
+    fn deref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl PartialEq<str> for SubjectKind {
+    fn eq(&self, other: &str) -> bool {
+        self.0 == other
+    }
+}
+
+impl PartialEq<&str> for SubjectKind {
+    fn eq(&self, other: &&str) -> bool {
+        self.0 == *other
+    }
+}
+
+impl From<&str> for SubjectKind {
+    fn from(raw: &str) -> SubjectKind {
+        SubjectKind::new(raw)
+    }
+}
+
+impl From<String> for SubjectKind {
+    fn from(raw: String) -> SubjectKind {
+        SubjectKind::new(raw)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -136,8 +136,8 @@ pub fn run_fixture_with(
         .findings
         .iter()
         .map(|f| FixtureFinding {
-            category: f.category.clone(),
-            subject_kind: f.subject_kind.clone(),
+            category: f.category.to_string(),
+            subject_kind: f.subject_kind.to_string(),
             path: f.location.path.as_ref().map(|p| p.0.to_string()),
             symbol: f.location.symbol.clone(),
         })

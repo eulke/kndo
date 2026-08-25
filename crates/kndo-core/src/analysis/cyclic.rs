@@ -35,10 +35,12 @@
 use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 
 use crate::adapter::{CyclePolicy, CycleTolerance, Span};
-use crate::analysis::{finding_id, package_discriminator, package_label};
+use crate::analysis::{finding_id, package_discriminator, package_label, FindingIdParts};
 use crate::engine::{Finding, Location, RelatedLocation, Severity};
 use crate::graph::ProjectGraph;
-use crate::vocab::{Confidence, EdgeKind, FileId, FileOrigin, PackageId};
+use crate::vocab::{
+    Category, Confidence, EdgeKind, FileId, FileOrigin, Group, PackageId, SubjectKind,
+};
 
 /// Findings plus the set of files participating in any *reported* (hazard) cycle —
 /// `health`'s "files participating in cycles" numerator. The set includes files whose
@@ -162,10 +164,16 @@ pub fn find_cycles(graph: &ProjectGraph) -> (Vec<Finding>, HashSet<FileId>) {
 
         findings.push(Finding {
             advisory: false,
-            id: finding_id("cyclic", "file", &cycle_key(graph, &files), "", ""),
-            category: "cyclic".to_string(),
-            group: "risk".to_string(),
-            subject_kind: "file".to_string(),
+            id: finding_id(FindingIdParts {
+                category: &Category::CYCLIC,
+                subject_kind: &SubjectKind::FILE,
+                path: &cycle_key(graph, &files),
+                symbol_path: "",
+                discriminator: "",
+            }),
+            category: Category::CYCLIC,
+            group: Group::Risk,
+            subject_kind: SubjectKind::FILE,
             severity: Severity::Warning,
             confidence,
             message: format!(
@@ -277,10 +285,16 @@ pub fn find_cycles(graph: &ProjectGraph) -> (Vec<Finding>, HashSet<FileId>) {
         };
         findings.push(Finding {
             advisory: false,
-            id: finding_id("cyclic", "package", &discriminator.join("\u{1}"), "", ""),
-            category: "cyclic".to_string(),
-            group: "risk".to_string(),
-            subject_kind: "package".to_string(),
+            id: finding_id(FindingIdParts {
+                category: &Category::CYCLIC,
+                subject_kind: &SubjectKind::PACKAGE,
+                path: &discriminator.join("\u{1}"),
+                symbol_path: "",
+                discriminator: "",
+            }),
+            category: Category::CYCLIC,
+            group: Group::Risk,
+            subject_kind: SubjectKind::PACKAGE,
             severity: Severity::Warning,
             confidence,
             message: format!(
@@ -514,7 +528,7 @@ mod tests {
         );
         let f = &findings[0];
         assert_eq!(f.category, "cyclic");
-        assert_eq!(f.group, "risk");
+        assert_eq!(f.group, crate::vocab::Group::Risk);
         assert_eq!(f.subject_kind, "file");
         assert_eq!(f.severity, Severity::Warning); // mock policy: Hazard
         assert!(f.message.contains("2 files"));

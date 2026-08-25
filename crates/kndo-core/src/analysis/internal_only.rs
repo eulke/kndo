@@ -38,11 +38,13 @@
 use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 
 use crate::adapter::VisibilityScope;
-use crate::analysis::finding_id;
 use crate::analysis::reachability::{Reachability, ReachabilityMap};
+use crate::analysis::{finding_id, FindingIdParts};
 use crate::engine::{Finding, Location, Severity};
 use crate::graph::ProjectGraph;
-use crate::vocab::{Confidence, EdgeKind, FileId, FileOrigin, NodeRef, SymbolId};
+use crate::vocab::{
+    Category, Confidence, EdgeKind, FileId, FileOrigin, Group, NodeRef, SubjectKind, SymbolId,
+};
 
 fn origin_file(graph: &ProjectGraph, node: NodeRef) -> FileId {
     match node {
@@ -227,10 +229,16 @@ pub fn find_internal_only(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<
         let qualified = symbol.qualified_name();
         findings.push(Finding {
             advisory: false,
-            id: finding_id("internal-only", facet, path, &qualified, ""),
-            category: "internal-only".to_string(),
-            group: "waste".to_string(),
-            subject_kind: facet.to_string(),
+            id: finding_id(FindingIdParts {
+                category: &Category::INTERNAL_ONLY,
+                subject_kind: &SubjectKind::new(facet),
+                path,
+                symbol_path: &qualified,
+                discriminator: "",
+            }),
+            category: Category::INTERNAL_ONLY,
+            group: Group::Waste,
+            subject_kind: SubjectKind::new(facet),
             severity: Severity::Info, // info by default
             confidence,
             message: format!(
@@ -329,7 +337,7 @@ mod tests {
         let findings = find_internal_only(&graph, &reach);
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].category, "internal-only");
-        assert_eq!(findings[0].group, "waste");
+        assert_eq!(findings[0].group, crate::vocab::Group::Waste);
         assert_eq!(findings[0].confidence, Confidence::Certain);
         assert!(findings[0].message.contains("src/a.ts#helper"));
     }

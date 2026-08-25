@@ -224,7 +224,7 @@ fn a_declared_rule_emits_namespaced_advisory_findings() {
         .find(|f| f.category.starts_with("plugin:"))
         .expect("the plugin finding must be in the output");
     assert_eq!(f.category, "plugin:test-plugin/no-flag-symbols");
-    assert_eq!(f.group, "convention");
+    assert_eq!(f.group, kndo_core::vocab::Group::Convention);
     assert_eq!(
         f.severity,
         Severity::Warning,

@@ -12,10 +12,10 @@
 
 use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 
-use crate::analysis::{finding_id, package_discriminator, package_label};
+use crate::analysis::{finding_id, package_discriminator, package_label, FindingIdParts};
 use crate::engine::{Finding, Location, Severity};
 use crate::graph::ProjectGraph;
-use crate::vocab::{Confidence, DependencyId, EdgeKind, PackageId};
+use crate::vocab::{Category, Confidence, DependencyId, EdgeKind, Group, PackageId, SubjectKind};
 
 pub fn find_undeclared_dependencies(graph: &ProjectGraph) -> Vec<Finding> {
     let mut declared_by_package: HashMap<PackageId, HashSet<&str>> = HashMap::default();
@@ -58,10 +58,16 @@ pub fn find_undeclared_dependencies(graph: &ProjectGraph) -> Vec<Finding> {
         let discriminator = package_discriminator(graph, package);
         findings.push(Finding {
             advisory: false,
-            id: finding_id("undeclared", "dependency", name, "", &discriminator),
-            category: "undeclared".to_string(),
-            group: "defect".to_string(),
-            subject_kind: "dependency".to_string(),
+            id: finding_id(FindingIdParts {
+                category: &Category::UNDECLARED,
+                subject_kind: &SubjectKind::DEPENDENCY,
+                path: name,
+                symbol_path: "",
+                discriminator: &discriminator,
+            }),
+            category: Category::UNDECLARED,
+            group: Group::Defect,
+            subject_kind: SubjectKind::DEPENDENCY,
             severity: Severity::Warning, // error under --strict — not implemented yet
             confidence: Confidence::Certain,
             message: format!(
@@ -147,7 +153,7 @@ mod tests {
         let findings = find_undeclared_dependencies(&graph);
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].category, "undeclared");
-        assert_eq!(findings[0].group, "defect");
+        assert_eq!(findings[0].group, crate::vocab::Group::Defect);
         assert_eq!(findings[0].subject_kind, "dependency");
         assert!(findings[0].message.contains("left-pad"));
         assert!(findings[0].message.contains("a.ts"));

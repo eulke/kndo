@@ -47,10 +47,13 @@
 use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 
 use crate::adapter::{Diagnostic, DiagnosticLevel};
-use crate::analysis::{finding_id, package_discriminator, package_label};
+use crate::analysis::{finding_id, package_discriminator, package_label, FindingIdParts};
 use crate::engine::{Finding, Location, Severity};
 use crate::graph::{DeclaredDependency, ProjectGraph};
-use crate::vocab::{Confidence, DependencyId, DependencyScope, EdgeKind, FileRole, PackageId};
+use crate::vocab::{
+    Category, Confidence, DependencyId, DependencyScope, EdgeKind, FileRole, Group, PackageId,
+    SubjectKind,
+};
 
 /// Findings plus, when at least one declared dependency belongs to a package whose language
 /// can't produce usage edges, the one diagnostic naming how many were skipped instead of a
@@ -155,16 +158,16 @@ fn unused_finding(
     let name = dep.name.as_str();
     Finding {
         advisory: false,
-        id: finding_id(
-            "unused",
-            "dependency",
-            name,
-            "",
-            &package_discriminator(graph, dep.package),
-        ),
-        category: "unused".to_string(),
-        group: "waste".to_string(),
-        subject_kind: "dependency".to_string(),
+        id: finding_id(FindingIdParts {
+            category: &Category::UNUSED,
+            subject_kind: &SubjectKind::DEPENDENCY,
+            path: name,
+            symbol_path: "",
+            discriminator: &package_discriminator(graph, dep.package),
+        }),
+        category: Category::UNUSED,
+        group: Group::Waste,
+        subject_kind: SubjectKind::DEPENDENCY,
         severity: Severity::Warning,
         confidence,
         message: format!(
@@ -186,16 +189,16 @@ fn test_only_finding(
     let name = dep.name.as_str();
     Finding {
         advisory: false,
-        id: finding_id(
-            "test-only",
-            "dependency",
-            name,
-            "",
-            &package_discriminator(graph, dep.package),
-        ),
-        category: "test-only".to_string(),
-        group: "waste".to_string(),
-        subject_kind: "dependency".to_string(),
+        id: finding_id(FindingIdParts {
+            category: &Category::TEST_ONLY,
+            subject_kind: &SubjectKind::DEPENDENCY,
+            path: name,
+            symbol_path: "",
+            discriminator: &package_discriminator(graph, dep.package),
+        }),
+        category: Category::TEST_ONLY,
+        group: Group::Waste,
+        subject_kind: SubjectKind::DEPENDENCY,
         severity: Severity::Info, // info by default
         confidence,
         message: format!(
@@ -368,7 +371,7 @@ mod tests {
         let findings = find_dependency_hygiene(&graph).0;
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].category, "unused");
-        assert_eq!(findings[0].group, "waste");
+        assert_eq!(findings[0].group, crate::vocab::Group::Waste);
         assert_eq!(findings[0].subject_kind, "dependency");
         assert_eq!(findings[0].confidence, Confidence::Certain);
         assert!(findings[0].message.contains("lodash"));
@@ -406,7 +409,7 @@ mod tests {
         let findings = find_dependency_hygiene(&graph).0;
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].category, "test-only");
-        assert_eq!(findings[0].group, "waste");
+        assert_eq!(findings[0].group, crate::vocab::Group::Waste);
         assert_eq!(findings[0].severity, Severity::Info);
     }
 

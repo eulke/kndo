@@ -102,6 +102,10 @@
         "stale"
       ]
     },
+    "Category": {
+      "description": "A finding's category — an open namespace (RFC 0018 §2.1: a plugin's own category is\n`plugin:<coordinate>/<rule>`, never a bare or off-namespace name), so unlike [`Group`] this\nis a validated string newtype rather than a closed enum. The core categories are\nassociated consts; [`Category::plugin`] builds the namespaced form; [`Category::is_plugin`]\ntells the two apart without a string-prefix check at every call site.",
+      "type": "string"
+    },
     "Confidence": {
       "description": "Per-edge strength. Ordered by strength: `Possible < Probable < Certain`, so `max()` yields\nthe strongest evidence and \"edges at least as strong as τ\" is a simple `>=`.",
       "type": "string",
@@ -188,7 +192,7 @@
           "type": "boolean"
         },
         "category": {
-          "type": "string"
+          "$ref": "#/$defs/Category"
         },
         "confidence": {
           "$ref": "#/$defs/Confidence"
@@ -214,7 +218,7 @@
           ]
         },
         "group": {
-          "type": "string"
+          "$ref": "#/$defs/Group"
         },
         "id": {
           "type": "string"
@@ -236,7 +240,7 @@
           "$ref": "#/$defs/Severity"
         },
         "subject_kind": {
-          "type": "string"
+          "$ref": "#/$defs/SubjectKind"
         }
       },
       "required": [
@@ -248,6 +252,25 @@
         "confidence",
         "message",
         "location"
+      ]
+    },
+    "Group": {
+      "description": "A finding's section — the taxonomy RFC 0018 §\"reserved\" closes: exactly these five, plus\n`Convention` reserved for plugin-contributed findings (`category` stays an open\n`plugin:<coordinate>/<rule>` namespace — RFC 0018 §2.1 — but no finding may claim a group\noutside this set). [`Group::DISPLAY_ORDER`] is the single source of section ordering —\nevery renderer reads it instead of keeping its own copy (a duplicated 4-entry copy of this\nlist, missing `Convention`, is exactly how `agent_format.rs` and the CLI's `render.rs`\nused to missort every plugin finding under an unnamed fallback section).",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "defect",
+            "waste",
+            "risk",
+            "hygiene"
+          ]
+        },
+        {
+          "description": "Reserved for plugin-contributed findings — a core analysis never emits it.",
+          "type": "string",
+          "const": "convention"
+        }
       ]
     },
     "Health": {
@@ -553,6 +576,10 @@
         "start",
         "end"
       ]
+    },
+    "SubjectKind": {
+      "description": "A finding's subject facet (`category:subject` targeting, RFC 0005) — open like\n[`Category`]: most values are the fixed `file | directory | dependency | package |\nsuppression` set, but a symbol-subject finding's facet is [`SymbolKind::facet`], which\nitself carries an open [`SymbolKind::Other`] tail for languages the closed variants don't\ncover — so this can never be a closed enum either.",
+      "type": "string"
     },
     "SuppressedSummary": {
       "description": "`suppressed.inline`/`suppressed.config` — always present\n(unlike `baseline`, which is `None` when the feature isn't adopted at all): both\nmechanisms run on every check, so `{ inline: 0, config: 0 }` is a meaningful \"nothing\nsuppressed,\" not an absent subsystem. `inline` counts pragma-matched findings;\n`config` counts findings filtered by `kndo.toml`'s `[analysis].skip` and `[[rule]]`\nentries (a finding covered by both counts as `inline` — pragmas run first).",

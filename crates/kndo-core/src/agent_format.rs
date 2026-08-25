@@ -27,7 +27,6 @@ use crate::query::{NeighborEntry, QNodeRef};
 use crate::query_envelope::{QueryResult, ResultEntry};
 use crate::vocab::Confidence;
 
-const GROUP_ORDER: [&str; 4] = ["defect", "waste", "risk", "hygiene"];
 const AGENT_FORMAT_VERSION: u32 = 1;
 
 pub fn render(result: &RunResult) -> String {
@@ -188,20 +187,13 @@ fn append_suppressed(line: String, result: &RunResult) -> String {
     }
 }
 
-fn ordered_groups(findings: &[Finding]) -> Vec<&str> {
-    let mut groups: Vec<&str> = findings
-        .iter()
-        .map(|f| f.group.as_str())
-        .collect::<std::collections::BTreeSet<_>>()
+fn ordered_groups(findings: &[Finding]) -> Vec<crate::vocab::Group> {
+    let present: std::collections::BTreeSet<crate::vocab::Group> =
+        findings.iter().map(|f| f.group).collect();
+    crate::vocab::Group::DISPLAY_ORDER
         .into_iter()
-        .collect();
-    groups.sort_by_key(|g| {
-        GROUP_ORDER
-            .iter()
-            .position(|k| k == g)
-            .unwrap_or(GROUP_ORDER.len())
-    });
-    groups
+        .filter(|g| present.contains(g))
+        .collect()
 }
 
 /// `N. [id] <category> <subject_kind> <path:line> <name> [(confidence)]` — the agent format's
@@ -468,13 +460,24 @@ mod tests {
     use crate::engine::{DeltaOrigin, Location, Severity};
     use smol_str::SmolStr;
 
+    fn parse_group(g: &str) -> crate::vocab::Group {
+        match g {
+            "defect" => crate::vocab::Group::Defect,
+            "waste" => crate::vocab::Group::Waste,
+            "risk" => crate::vocab::Group::Risk,
+            "hygiene" => crate::vocab::Group::Hygiene,
+            "convention" => crate::vocab::Group::Convention,
+            other => panic!("unknown test group {other}"),
+        }
+    }
+
     fn finding(category: &str, group: &str, subject_kind: &str, severity: Severity) -> Finding {
         Finding {
             advisory: false,
             id: format!("kndo-{category}"),
-            category: category.to_string(),
-            group: group.to_string(),
-            subject_kind: subject_kind.to_string(),
+            category: crate::vocab::Category::new(category),
+            group: parse_group(group),
+            subject_kind: crate::vocab::SubjectKind::new(subject_kind),
             severity,
             confidence: Confidence::Certain,
             message: "example".to_string(),

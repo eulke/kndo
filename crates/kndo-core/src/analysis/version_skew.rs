@@ -8,10 +8,10 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::analysis::finding_id;
+use crate::analysis::{finding_id, FindingIdParts};
 use crate::engine::{Finding, Location, Severity};
 use crate::graph::ProjectGraph;
-use crate::vocab::Confidence;
+use crate::vocab::{Category, Confidence, Group, SubjectKind};
 
 pub fn find_version_skew(graph: &ProjectGraph) -> Vec<Finding> {
     let mut by_name: BTreeMap<&str, Vec<(&str, &str)>> = BTreeMap::new();
@@ -37,10 +37,16 @@ pub fn find_version_skew(graph: &ProjectGraph) -> Vec<Finding> {
             .join(", ");
         findings.push(Finding {
             advisory: false,
-            id: finding_id("version-skew", "dependency", name, "", ""),
-            category: "version-skew".to_string(),
-            group: "defect".to_string(),
-            subject_kind: "dependency".to_string(),
+            id: finding_id(FindingIdParts {
+                category: &Category::VERSION_SKEW,
+                subject_kind: &SubjectKind::DEPENDENCY,
+                path: name,
+                symbol_path: "",
+                discriminator: "",
+            }),
+            category: Category::VERSION_SKEW,
+            group: Group::Defect,
+            subject_kind: SubjectKind::DEPENDENCY,
             severity: Severity::Warning,
             confidence: Confidence::Certain,
             message: format!("{name} is declared with diverging version requirements: {evidence}"),
@@ -104,7 +110,7 @@ mod tests {
         let findings = find_version_skew(&graph);
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].category, "version-skew");
-        assert_eq!(findings[0].group, "defect");
+        assert_eq!(findings[0].group, crate::vocab::Group::Defect);
         assert_eq!(findings[0].subject_kind, "dependency");
         assert!(findings[0]
             .message

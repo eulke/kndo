@@ -35,7 +35,7 @@ use kndo::analysis::health::Health;
 use kndo::engine::{DeltaOrigin, Finding, RunResult};
 use kndo::query::{NeighborEntry, QNodeRef};
 use kndo::query_envelope::{QueryResult, ResultEntry};
-use kndo::vocab::Confidence;
+use kndo::vocab::{Confidence, Group};
 
 pub(crate) struct RenderOptions {
     pub(crate) color: bool,
@@ -46,8 +46,6 @@ pub(crate) struct RenderOptions {
     /// even when the project's `min-confidence` config raises the floor.
     pub(crate) verbose: bool,
 }
-
-const GROUP_ORDER: [&str; 4] = ["defect", "waste", "risk", "hygiene"];
 
 fn baseline_suffix(result: &RunResult) -> String {
     match &result.baseline {
@@ -71,6 +69,7 @@ const RED: &str = "\x1b[31m";
 const YELLOW: &str = "\x1b[33m";
 const MAGENTA: &str = "\x1b[35m";
 const BLUE: &str = "\x1b[34m";
+const CYAN: &str = "\x1b[36m";
 const RESET: &str = "\x1b[0m";
 
 pub(crate) fn render(result: &RunResult, opts: &RenderOptions) -> String {
@@ -117,21 +116,11 @@ pub(crate) fn render(result: &RunResult, opts: &RenderOptions) -> String {
             result.suppressed.inline, result.suppressed.config
         ));
     }
-    let mut groups: Vec<&str> = result
-        .findings
-        .iter()
-        .map(|f| f.group.as_str())
-        .collect::<std::collections::BTreeSet<_>>()
+    let present: std::collections::BTreeSet<Group> =
+        result.findings.iter().map(|f| f.group).collect();
+    let groups = Group::DISPLAY_ORDER
         .into_iter()
-        .collect();
-    // Fixed triage order first, then any group the taxonomy doesn't name
-    // — additive, so it must still render, just after the known ones.
-    groups.sort_by_key(|g| {
-        GROUP_ORDER
-            .iter()
-            .position(|k| k == g)
-            .unwrap_or(GROUP_ORDER.len())
-    });
+        .filter(|g| present.contains(g));
 
     for group in groups {
         let mut in_group: Vec<&Finding> = result
@@ -370,8 +359,12 @@ fn render_related(out: &mut String, f: &Finding) {
     }
 }
 
-fn render_section(out: &mut String, group: &str, findings: &[&Finding], opts: &RenderOptions) {
-    out.push_str(&format!("{} ({})\n", group.to_uppercase(), findings.len()));
+fn render_section(out: &mut String, group: Group, findings: &[&Finding], opts: &RenderOptions) {
+    out.push_str(&format!(
+        "{} ({})\n",
+        group.as_str().to_uppercase(),
+        findings.len()
+    ));
     for f in findings {
         out.push_str("  ");
         out.push_str(&render_finding_line(f, opts));
@@ -383,7 +376,7 @@ fn render_section(out: &mut String, group: &str, findings: &[&Finding], opts: &R
 
 fn render_finding_line(f: &Finding, opts: &RenderOptions) -> String {
     let category = if f.subject_kind == "file" {
-        f.category.clone()
+        f.category.to_string()
     } else {
         format!("{}:{}", f.category, f.subject_kind)
     };
@@ -398,11 +391,11 @@ fn render_finding_line(f: &Finding, opts: &RenderOptions) -> String {
         format!(" ({})", confidence_str(f.confidence))
     };
 
-    let glyph = glyph(&f.group, opts.color);
+    let glyph = glyph(f.group, opts.color);
     if opts.color {
         format!(
             "{}{glyph}{RESET} {category} {location}  {}{confidence} [{}]",
-            color_code(&f.group),
+            color_code(f.group),
             f.message,
             f.id
         )
@@ -414,28 +407,29 @@ fn render_finding_line(f: &Finding, opts: &RenderOptions) -> String {
     }
 }
 
-fn glyph(group: &str, rich: bool) -> &'static str {
+fn glyph(group: Group, rich: bool) -> &'static str {
     match (group, rich) {
-        ("defect", true) => "✗",
-        ("defect", false) => "x",
-        ("waste", true) => "◦",
-        ("waste", false) => "o",
-        ("risk", true) => "▲",
-        ("risk", false) => "^",
-        ("hygiene", true) => "·",
-        ("hygiene", false) => ".",
-        (_, true) => "•",
-        (_, false) => "?",
+        (Group::Defect, true) => "✗",
+        (Group::Defect, false) => "x",
+        (Group::Waste, true) => "◦",
+        (Group::Waste, false) => "o",
+        (Group::Risk, true) => "▲",
+        (Group::Risk, false) => "^",
+        (Group::Hygiene, true) => "·",
+        (Group::Hygiene, false) => ".",
+        // Mirrors action/render.mjs's GLYPH table (the copy that was already correct).
+        (Group::Convention, true) => "•",
+        (Group::Convention, false) => "?",
     }
 }
 
-fn color_code(group: &str) -> &'static str {
+fn color_code(group: Group) -> &'static str {
     match group {
-        "defect" => RED,
-        "waste" => YELLOW,
-        "risk" => MAGENTA,
-        "hygiene" => BLUE,
-        _ => "",
+        Group::Defect => RED,
+        Group::Waste => YELLOW,
+        Group::Risk => MAGENTA,
+        Group::Hygiene => BLUE,
+        Group::Convention => CYAN,
     }
 }
 
@@ -678,13 +672,24 @@ mod tests {
     use kndo::engine::{Delta, DeltaOrigin, Location, Severity};
     use smol_str::SmolStr;
 
+    fn parse_group(g: &str) -> Group {
+        match g {
+            "defect" => Group::Defect,
+            "waste" => Group::Waste,
+            "risk" => Group::Risk,
+            "hygiene" => Group::Hygiene,
+            "convention" => Group::Convention,
+            other => panic!("unknown test group {other}"),
+        }
+    }
+
     fn finding(category: &str, group: &str) -> Finding {
         Finding {
             advisory: false,
             id: format!("kndo-{category}"),
-            category: category.to_string(),
-            group: group.to_string(),
-            subject_kind: "function".to_string(),
+            category: category.into(),
+            group: parse_group(group),
+            subject_kind: "function".into(),
             severity: Severity::Warning,
             confidence: Confidence::Certain,
             message: "example".to_string(),

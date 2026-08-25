@@ -23,12 +23,14 @@
 
 use rustc_hash::FxHashMap as HashMap;
 
-use crate::analysis::finding_id;
 use crate::analysis::reachability::{Reachability, ReachabilityMap};
 use crate::analysis::rollup::{self, DirGroup};
+use crate::analysis::{finding_id, FindingIdParts};
 use crate::engine::{Finding, Location, Severity};
 use crate::graph::ProjectGraph;
-use crate::vocab::{Confidence, FileId, FileOrigin, NodeRef, PackageId, SymbolId};
+use crate::vocab::{
+    Category, Confidence, FileId, FileOrigin, Group, NodeRef, PackageId, SubjectKind, SymbolId,
+};
 
 pub fn find_unused_files(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<Finding> {
     let mut findings = Vec::new();
@@ -65,10 +67,16 @@ pub fn find_unused_files(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<F
         }
         findings.push(Finding {
             advisory: false,
-            id: finding_id("unused", "file", path, "", ""),
-            category: "unused".to_string(),
-            group: "waste".to_string(),
-            subject_kind: "file".to_string(),
+            id: finding_id(FindingIdParts {
+                category: &Category::UNUSED,
+                subject_kind: &SubjectKind::FILE,
+                path,
+                symbol_path: "",
+                discriminator: "",
+            }),
+            category: Category::UNUSED,
+            group: Group::Waste,
+            subject_kind: SubjectKind::FILE,
             severity: Severity::Warning,
             confidence: Confidence::Certain,
             message: format!("{path} is unreachable: no root or import reaches it"),
@@ -90,10 +98,16 @@ fn directory_finding(graph: &ProjectGraph, dir: &DirGroup<'_>) -> Finding {
     let display = if dir.path.is_empty() { "." } else { dir.path };
     Finding {
         advisory: false,
-        id: finding_id("unused", "directory", dir.path, "", ""),
-        category: "unused".to_string(),
-        group: "waste".to_string(),
-        subject_kind: "directory".to_string(),
+        id: finding_id(FindingIdParts {
+                category: &Category::UNUSED,
+                subject_kind: &SubjectKind::DIRECTORY,
+                path: dir.path,
+                symbol_path: "",
+                discriminator: "",
+            }),
+        category: Category::UNUSED,
+        group: Group::Waste,
+        subject_kind: SubjectKind::DIRECTORY,
         severity: Severity::Warning,
         confidence: Confidence::Certain,
         message: format!(
@@ -151,10 +165,16 @@ pub fn find_unused_symbols(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec
         let qualified = symbol.qualified_name();
         findings.push(Finding {
             advisory: false,
-            id: finding_id("unused", facet, path, &qualified, ""),
-            category: "unused".to_string(),
-            group: "waste".to_string(),
-            subject_kind: facet.to_string(),
+            id: finding_id(FindingIdParts {
+                category: &Category::UNUSED,
+                subject_kind: &SubjectKind::new(facet),
+                path,
+                symbol_path: &qualified,
+                discriminator: "",
+            }),
+            category: Category::UNUSED,
+            group: Group::Waste,
+            subject_kind: SubjectKind::new(facet),
             severity: Severity::Warning,
             confidence: Confidence::Certain,
             message: format!("{path}#{qualified} is unreachable: nothing references this {facet}"),
@@ -213,7 +233,7 @@ mod tests {
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].category, "unused");
         assert_eq!(findings[0].subject_kind, "file");
-        assert_eq!(findings[0].group, "waste");
+        assert_eq!(findings[0].group, crate::vocab::Group::Waste);
         assert!(findings[0].message.contains("orphan.ts"));
     }
 

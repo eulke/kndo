@@ -35,10 +35,12 @@
 use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 use std::collections::{BTreeMap, VecDeque};
 
-use crate::analysis::{finding_id, package_discriminator, package_label};
+use crate::analysis::{finding_id, package_discriminator, package_label, FindingIdParts};
 use crate::engine::{Finding, Location, Severity};
 use crate::graph::ProjectGraph;
-use crate::vocab::{Confidence, EdgeKind, FileId, FileOrigin, NodeRef, PackageId};
+use crate::vocab::{
+    Category, Confidence, EdgeKind, FileId, FileOrigin, Group, NodeRef, PackageId, SubjectKind,
+};
 
 struct PairEvidence {
     /// Deep sites, as (consumer file, provider target file) — deduped, sorted for output.
@@ -134,16 +136,16 @@ pub fn find_deep_imports(graph: &ProjectGraph) -> Vec<Finding> {
         let provider_disc = package_discriminator(graph, provider);
         findings.push(Finding {
             advisory: false,
-            id: finding_id(
-                "deep-import",
-                "package",
-                &consumer_disc,
-                &provider_disc,
-                "",
-            ),
-            category: "deep-import".to_string(),
-            group: "risk".to_string(),
-            subject_kind: "package".to_string(),
+            id: finding_id(FindingIdParts {
+                category: &Category::DEEP_IMPORT,
+                subject_kind: &SubjectKind::PACKAGE,
+                path: &consumer_disc,
+                symbol_path: &provider_disc,
+                discriminator: "",
+            }),
+            category: Category::DEEP_IMPORT,
+            group: Group::Risk,
+            subject_kind: SubjectKind::PACKAGE,
             severity: Severity::Warning,
             confidence: evidence.confidence,
             message: format!(
@@ -347,7 +349,7 @@ mod tests {
         let findings = find_deep_imports(&graph);
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].category, "deep-import");
-        assert_eq!(findings[0].group, "risk");
+        assert_eq!(findings[0].group, crate::vocab::Group::Risk);
         assert_eq!(findings[0].subject_kind, "package");
         assert_eq!(findings[0].severity, Severity::Warning);
         assert!(findings[0].message.contains("app deep-imports ui"));

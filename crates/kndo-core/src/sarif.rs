@@ -173,12 +173,12 @@ pub fn render(result: &RunResult) -> String {
         if !rule_index_of.contains_key(f.category.as_str()) {
             rule_index_of.insert(f.category.as_str(), rules.len());
             rules.push(Rule {
-                id: f.category.clone(),
+                id: f.category.to_string(),
                 short_description: Message {
                     text: format!("kndo {} finding", f.category),
                 },
                 properties: RuleProperties {
-                    group: f.group.clone(),
+                    group: f.group.to_string(),
                 },
             });
         }
@@ -188,7 +188,7 @@ pub fn render(result: &RunResult) -> String {
         .findings
         .iter()
         .map(|f| SarifResult {
-            rule_id: f.category.clone(),
+            rule_id: f.category.to_string(),
             rule_index: rule_index_of[f.category.as_str()],
             level: level(f.severity),
             message: Message {
@@ -220,7 +220,7 @@ pub fn render(result: &RunResult) -> String {
             },
             properties: ResultProperties {
                 confidence: f.confidence,
-                subject_kind: f.subject_kind.clone(),
+                subject_kind: f.subject_kind.to_string(),
                 symbol: f.location.symbol.clone(),
                 package: f.location.package.clone(),
             },
@@ -258,9 +258,9 @@ mod tests {
         Finding {
             advisory: false,
             id: format!("kndo-{category}-x"),
-            category: category.to_string(),
-            group: "waste".to_string(),
-            subject_kind: "function".to_string(),
+            category: crate::vocab::Category::new(category),
+            group: crate::vocab::Group::Waste,
+            subject_kind: crate::vocab::SubjectKind::new("function"),
             severity,
             confidence: Confidence::Certain,
             message: format!("a {category} finding"),

@@ -433,9 +433,9 @@ pub struct RelatedLocation {
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Finding {
     pub id: String,
-    pub category: String,
-    pub group: String,
-    pub subject_kind: String,
+    pub category: crate::vocab::Category,
+    pub group: crate::vocab::Group,
+    pub subject_kind: crate::vocab::SubjectKind,
     pub severity: Severity,
     pub confidence: Confidence,
     pub message: String,
@@ -733,17 +733,19 @@ fn plugin_finding(
     gate: &crate::plugin_gate::PluginsGate,
 ) -> Finding {
     let (severity, advisory) = severity_channel(&proto, gate);
+    let category = crate::vocab::Category::new(proto.category);
+    let subject_kind = crate::vocab::SubjectKind::new(proto.subject_kind);
     Finding {
-        id: crate::analysis::finding_id(
-            &proto.category,
-            &proto.subject_kind,
-            proto.path.0.as_str(),
-            proto.symbol.as_deref().unwrap_or(""),
-            "",
-        ),
-        category: proto.category,
-        group: "convention".to_string(),
-        subject_kind: proto.subject_kind,
+        id: crate::analysis::finding_id(crate::analysis::FindingIdParts {
+            category: &category,
+            subject_kind: &subject_kind,
+            path: proto.path.0.as_str(),
+            symbol_path: proto.symbol.as_deref().unwrap_or(""),
+            discriminator: "",
+        }),
+        category,
+        group: crate::vocab::Group::Convention,
+        subject_kind,
         severity,
         confidence: proto.confidence,
         message: proto.message,
@@ -1636,7 +1638,7 @@ mod tests {
                 advisory: false,
                 id: String::new(),
                 category: "unused".into(),
-                group: "waste".into(),
+                group: crate::vocab::Group::Waste,
                 subject_kind: "function".into(),
                 severity,
                 confidence: crate::vocab::Confidence::Certain,
@@ -2355,9 +2357,9 @@ mod tests {
         let finding = Finding {
             advisory: false,
             id: "kndo-000000000000".to_string(),
-            category: "version-skew".to_string(),
-            group: "defect".to_string(),
-            subject_kind: "dependency".to_string(),
+            category: crate::vocab::Category::VERSION_SKEW,
+            group: crate::vocab::Group::Defect,
+            subject_kind: crate::vocab::SubjectKind::DEPENDENCY,
             severity: Severity::Warning,
             confidence: Confidence::Certain,
             message: "example".to_string(),
@@ -2737,9 +2739,9 @@ mod tests {
         let mk = |category: &str, confidence: Confidence| Finding {
             advisory: false,
             id: format!("{category}-{confidence:?}"),
-            category: category.to_string(),
-            group: "waste".to_string(),
-            subject_kind: "function".to_string(),
+            category: crate::vocab::Category::new(category),
+            group: crate::vocab::Group::Waste,
+            subject_kind: crate::vocab::SubjectKind::new("function"),
             severity: Severity::Info,
             confidence,
             message: String::new(),
@@ -2800,7 +2802,7 @@ mod tests {
             .filter(|f| f.category == "stale")
             .collect();
         assert_eq!(stale.len(), 1, "{:?}", result.findings);
-        assert_eq!(stale[0].group, "hygiene");
+        assert_eq!(stale[0].group, crate::vocab::Group::Hygiene);
         assert_eq!(stale[0].subject_kind, "suppression");
         assert_eq!(stale[0].severity, Severity::Info);
         assert_eq!(finding_path(stale[0]), "root.dmock");

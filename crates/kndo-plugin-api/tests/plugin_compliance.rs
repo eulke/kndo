@@ -364,7 +364,7 @@ fn external_wasm_plugin_hooks_affect_a_real_check() {
         .find(|f| f.category.starts_with("plugin:"))
         .expect("the demo rule's finding must be in the output");
     assert_eq!(finding.category, "plugin:hooks-demo/flag-marked");
-    assert_eq!(finding.group, "convention");
+    assert_eq!(finding.group, kndo_core::vocab::Group::Convention);
     assert!(finding.advisory);
     assert_eq!(finding.location.symbol.as_deref(), Some("finding_probe"));
 

@@ -28,10 +28,10 @@
 
 use rustc_hash::FxHashMap as HashMap;
 
-use crate::analysis::finding_id;
+use crate::analysis::{finding_id, FindingIdParts};
 use crate::engine::{Finding, Location, Severity};
 use crate::graph::ProjectGraph;
-use crate::vocab::{Confidence, SymbolId};
+use crate::vocab::{Category, Confidence, Group, SubjectKind, SymbolId};
 
 pub fn find_duplicate_files(graph: &ProjectGraph) -> Vec<Finding> {
     let empty_hash: [u8; 32] = blake3::hash(b"").into();
@@ -60,10 +60,16 @@ pub fn find_duplicate_files(graph: &ProjectGraph) -> Vec<Finding> {
         let discriminator = blake3::Hash::from(hash).to_hex().to_string();
         findings.push(Finding {
             advisory: false,
-            id: finding_id("duplicate", "file", "", "", &discriminator),
-            category: "duplicate".to_string(),
-            group: "waste".to_string(),
-            subject_kind: "file".to_string(),
+            id: finding_id(FindingIdParts {
+                category: &Category::DUPLICATE,
+                subject_kind: &SubjectKind::FILE,
+                path: "",
+                symbol_path: "",
+                discriminator: &discriminator,
+            }),
+            category: Category::DUPLICATE,
+            group: Group::Waste,
+            subject_kind: SubjectKind::FILE,
             severity: Severity::Info, // info by default — duplication is sometimes deliberate
             confidence: Confidence::Certain,
             message: format!(
@@ -120,7 +126,7 @@ pub fn find_duplicate_functions(
     graph: &ProjectGraph,
     min_tokens: u32,
 ) -> (Vec<Finding>, Vec<(SymbolId, u32)>) {
-    use crate::vocab::FileOrigin;
+    use crate::vocab::{Category, FileOrigin, Group, SubjectKind};
     use rustc_hash::FxHashSet as HashSet;
 
     // Eligible instances: fingerprinted callables in authored, claimed files.
@@ -255,10 +261,16 @@ pub fn find_duplicate_functions(
         let shown: Vec<&str> = selectors.iter().map(String::as_str).collect();
         findings.push(Finding {
             advisory: false,
-            id: finding_id("duplicate", &facet, "", "", &selectors.join("\u{1}")),
-            category: "duplicate".to_string(),
-            group: "waste".to_string(),
-            subject_kind: facet.clone(),
+            id: finding_id(FindingIdParts {
+                category: &Category::DUPLICATE,
+                subject_kind: &SubjectKind::new(facet.as_str()),
+                path: "",
+                symbol_path: "",
+                discriminator: &selectors.join("\u{1}"),
+            }),
+            category: Category::DUPLICATE,
+            group: Group::Waste,
+            subject_kind: SubjectKind::new(facet.as_str()),
             severity: Severity::Info, // info by default — duplication is sometimes deliberate
             confidence: Confidence::Certain,
             message: format!(
@@ -313,7 +325,7 @@ mod tests {
         let findings = find_duplicate_files(&graph);
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].category, "duplicate");
-        assert_eq!(findings[0].group, "waste");
+        assert_eq!(findings[0].group, crate::vocab::Group::Waste);
         assert_eq!(findings[0].subject_kind, "file");
         assert!(findings[0].message.contains("a.png"));
         assert!(findings[0].message.contains("b.png"));
