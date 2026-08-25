@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use kndo_core::adapter::LanguageAdapter;
-use kndo_core::engine::{CheckRequest, ConfigOverrides, Engine, RunMode};
+use kndo_core::engine::{ConfigOverrides, Engine, RunMode};
 use kndo_plugin_api::WasmAdapter;
 
 fn workspace_root() -> PathBuf {
@@ -97,9 +97,7 @@ fn external_wasm_adapter_runs_a_real_engine_check_end_to_end() {
     )
     .expect("opening the engine over the fixture project");
 
-    let result = engine.check(CheckRequest {
-        mode: RunMode::Full,
-    });
+    let result = engine.check(RunMode::Full);
 
     assert_eq!(result.files_claimed, 1, "the .kdemo file must be claimed");
     assert_eq!(

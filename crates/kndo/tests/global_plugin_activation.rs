@@ -130,9 +130,7 @@ fn wire_target() {
     .unwrap();
     let mut engine_without = kndo::open(project_without_trigger.path(), overrides.clone())
         .expect("kndo::open (no trigger file)");
-    let result_without = engine_without.check(kndo_core::engine::CheckRequest {
-        mode: kndo_core::engine::RunMode::Full,
-    });
+    let result_without = engine_without.check(kndo_core::engine::RunMode::Full);
     let unused_without = unused_symbols(&result_without);
     assert!(
         unused_without.contains(&"root_target") && unused_without.contains(&"wire_target"),
@@ -159,9 +157,7 @@ fn wire_target() {
     std::fs::write(project_with_trigger.path().join("ecosystem.trigger"), "").unwrap();
     let mut engine_with =
         kndo::open(project_with_trigger.path(), overrides).expect("kndo::open (with trigger file)");
-    let result_with = engine_with.check(kndo_core::engine::CheckRequest {
-        mode: kndo_core::engine::RunMode::Full,
-    });
+    let result_with = engine_with.check(kndo_core::engine::RunMode::Full);
     let unused_with = unused_symbols(&result_with);
     assert!(
         !unused_with.contains(&"root_target"),

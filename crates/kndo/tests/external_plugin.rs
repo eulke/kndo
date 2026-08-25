@@ -112,9 +112,7 @@ fn trulyDead() {
     std::fs::remove_file(plugins_dir.join("hooks-demo.wasm")).unwrap();
     let mut baseline =
         kndo::open(project_dir.path(), overrides.clone()).expect("kndo::open (baseline)");
-    let baseline_result = baseline.check(kndo_core::engine::CheckRequest {
-        mode: kndo_core::engine::RunMode::Full,
-    });
+    let baseline_result = baseline.check(kndo_core::engine::RunMode::Full);
     let baseline_unused: Vec<&str> = baseline_result
         .findings
         .iter()
@@ -143,9 +141,7 @@ fn trulyDead() {
     let mut engine = kndo::open(project_dir.path(), overrides)
         .expect("kndo::open must succeed with a mixed adapter+plugin directory");
 
-    let result = engine.check(kndo_core::engine::CheckRequest {
-        mode: kndo_core::engine::RunMode::Full,
-    });
+    let result = engine.check(kndo_core::engine::RunMode::Full);
 
     assert_eq!(
         result.files_claimed, 2,

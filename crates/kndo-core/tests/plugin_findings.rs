@@ -10,7 +10,7 @@ use kndo_core::adapter::{
     AdapterDescriptor, Declaration, FileClaim, FileFacts, LanguageAdapter, ManifestFacts,
     RawSuppression, ResolveCtx, SourceFile, Span, SuppressionScope,
 };
-use kndo_core::engine::{BaselineOp, CheckRequest, ConfigOverrides, Engine, RunMode, Severity};
+use kndo_core::engine::{BaselineOp, ConfigOverrides, Engine, RunMode, Severity};
 use kndo_core::plugin::{
     ContentView, FindingSink, GraphView, Plugin, PluginDescriptor, PluginSeverity, PluginTarget,
     RuleDescriptor,
@@ -193,9 +193,7 @@ fn project(files: &[(&str, &str)]) -> tempfile::TempDir {
 }
 
 fn check(engine: &mut Engine) -> kndo_core::engine::RunResult {
-    engine.check(CheckRequest {
-        mode: RunMode::Full,
-    })
+    engine.check(RunMode::Full)
 }
 
 fn open(dir: &tempfile::TempDir, plugin: RulePlugin, use_cache: bool) -> Engine {

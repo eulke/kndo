@@ -306,6 +306,7 @@ mod tests {
             suppressed: SuppressedSummary::default(),
             health: None,
             timings: Vec::new(),
+            plugin_contributions: Vec::new(),
         }
     }
 

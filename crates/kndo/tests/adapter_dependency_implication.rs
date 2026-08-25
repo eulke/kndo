@@ -120,9 +120,7 @@ fn an_active_adapters_dependencies_imply_a_globally_installed_adapter() {
         min_confidence: None,
     };
     let mut engine = kndo::open(project.path(), overrides).expect("kndo::open");
-    let result = engine.check(kndo_core::engine::CheckRequest {
-        mode: kndo_core::engine::RunMode::Full,
-    });
+    let result = engine.check(kndo_core::engine::RunMode::Full);
     let unused_symbols: Vec<&str> = result
         .findings
         .iter()

@@ -97,9 +97,7 @@ fn a_globally_installed_adapter_only_activates_when_its_rule_matches() {
     );
     let mut engine_without =
         kndo::open(project_without.path(), overrides.clone()).expect("kndo::open (inactive)");
-    let result_without = engine_without.check(kndo_core::engine::CheckRequest {
-        mode: kndo_core::engine::RunMode::Full,
-    });
+    let result_without = engine_without.check(kndo_core::engine::RunMode::Full);
     assert!(
         result_without.findings.is_empty(),
         "an unclaimed .kdemo file must produce no findings at all: {:?}",
@@ -124,9 +122,7 @@ fn a_globally_installed_adapter_only_activates_when_its_rule_matches() {
         "with the marker file present the globally installed adapter must activate"
     );
     let mut engine_with = kndo::open(project_with.path(), overrides).expect("kndo::open (active)");
-    let result_with = engine_with.check(kndo_core::engine::CheckRequest {
-        mode: kndo_core::engine::RunMode::Full,
-    });
+    let result_with = engine_with.check(kndo_core::engine::RunMode::Full);
     let unused_symbols: Vec<&str> = result_with
         .findings
         .iter()

@@ -14,7 +14,7 @@
 
 use std::path::{Path, PathBuf};
 
-use kndo_core::engine::{CheckRequest, ConfigOverrides, Engine, RunMode};
+use kndo_core::engine::{ConfigOverrides, Engine, RunMode};
 
 use kndo_core::testkit::MockAdapter;
 
@@ -57,9 +57,7 @@ fn the_pinned_v1_adapter_component_still_works_against_the_head_host() {
         vec![Box::new(adapter)],
     )
     .expect("opening an engine over the pinned adapter");
-    let result = engine.check(CheckRequest {
-        mode: RunMode::Full,
-    });
+    let result = engine.check(RunMode::Full);
     let unused = unused_symbols(&result);
     assert!(
         unused.contains(&"dead") && !unused.contains(&"helper"),
@@ -119,9 +117,7 @@ fn the_pinned_v1_plugin_component_still_works_against_the_head_host() {
         vec![Box::new(plugin)],
     )
     .expect("opening an engine over the pinned plugin");
-    let result = engine.check(CheckRequest {
-        mode: RunMode::Full,
-    });
+    let result = engine.check(RunMode::Full);
 
     let unused = unused_symbols(&result);
     for rescued in [

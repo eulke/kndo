@@ -9,7 +9,7 @@ use std::process::Command;
 
 use kndo_core::adapter::ProjectPath;
 use kndo_core::coverage::CoverageSink;
-use kndo_core::engine::{CheckRequest, ConfigOverrides, Engine, RunMode};
+use kndo_core::engine::{ConfigOverrides, Engine, RunMode};
 use kndo_core::plugin::Plugin;
 use kndo_plugin_api::{WasmCoverageIngester, WasmPlugin};
 
@@ -130,9 +130,7 @@ fn coverage_ingester_world_end_to_end() {
         vec![Box::new(ingester)],
     )
     .expect("engine over the mini adapter and the WASM ingester");
-    let result = engine.check(CheckRequest {
-        mode: RunMode::Full,
-    });
+    let result = engine.check(RunMode::Full);
     assert!(
         !result
             .diagnostics

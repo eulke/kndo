@@ -10,7 +10,7 @@
 use std::fs;
 use std::path::PathBuf;
 
-use kndo_core::engine::{CheckRequest, ConfigOverrides, Engine, RunMode};
+use kndo_core::engine::{ConfigOverrides, Engine, RunMode};
 use kndo_core::query_envelope::{QueryFlags, QueryRequest, Verb};
 
 fn workspace_root() -> PathBuf {
@@ -67,9 +67,7 @@ fn real_json_output_validates_against_the_committed_schema() {
 
     let mut engine = Engine::open(&dir, ConfigOverrides::default(), kndo::default_adapters())
         .expect("engine opens on a real temp project");
-    let result = engine.check(CheckRequest {
-        mode: RunMode::Full,
-    });
+    let result = engine.check(RunMode::Full);
     // A non-empty findings array exercises more of the schema than a clean run would.
     assert!(!result.findings.is_empty());
 

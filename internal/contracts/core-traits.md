@@ -617,18 +617,29 @@ impl Engine {
     pub fn open_with_plugins(root: &Path, overrides: ConfigOverrides,
                 adapters: Vec<Box<dyn LanguageAdapter>>,
                 plugins: Vec<Box<dyn Plugin>>) -> Result<Engine, EngineError>;
-    pub fn check(&mut self, req: CheckRequest) -> RunResult;    // full | staged | diff
+    pub fn check(&mut self, mode: RunMode) -> RunResult;    // full | staged | diff
     pub fn query(&mut self, req: QueryRequest) -> QueryResult;  // RFC 0007 verbs, incl. batches
     pub fn baseline(&mut self, op: BaselineOp) -> BaselineResult;
     pub fn doctor(&self) -> DoctorReport;
 }
 // Planned, not landed: `explain(id) -> Explanation` (per-finding remediation prose). Purely
 // additive when it comes; the contract lists only what exists.
+//
+// Gate policy lives here too, as data rather than an exit code (the core-never-prints rule
+// covers exit codes as much as ANSI): `RunMode::default_fail_on() -> Option<Severity>` (full
+// mode: None; a diff mode: Some(Warning)) and `RunResult::fails_at(threshold:
+// Option<Severity>) -> bool` (severity ranking + the advisory-finding exemption). A frontend's
+// own job shrinks to parsing `--fail-on` and mapping the bool to its own exit-code convention.
+// `RunResult::plugin_contributions: Vec<PluginContribution>` carries this run's own
+// graph-mutation audit record — `Some` whenever `run_plugin_round` actually ran this call
+// (full build, patch), falling back to the cache's sidecar record only on a pure
+// snapshot-hit, where nothing ran this call but the graph (and so the record) is unchanged.
 
 // Distribution layer (crate `kndo`) — what frontends actually call:
 // pub fn kndo::open(root: &Path, overrides: ConfigOverrides) -> Result<Engine, EngineError>
 // pub fn kndo::default_adapters() -> Vec<Box<dyn LanguageAdapter>>
-// pub fn kndo::default_plugins() -> Vec<Box<dyn Plugin>>  // just LcovPlugin today (RFC 0003 §3)
+// pub fn kndo::default_plugins() -> Vec<Box<dyn Plugin>>  // the built-in coverage ingesters
+//     (lcov, Cobertura, JaCoCo, go cover — RFC 0003 §3), plus any activated convention plugin
 ```
 
 - `RunResult`/`QueryResult` are the **typed forms of the output schema**

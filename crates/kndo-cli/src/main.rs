@@ -9,8 +9,7 @@ use std::io::IsTerminal;
 use std::process::ExitCode;
 
 use kndo::engine::{
-    BaselineOp, BaselineResult, CheckRequest, ConfigOverrides, Finding, RunMode, Severity,
-    SCHEMA_VERSION,
+    BaselineOp, BaselineResult, ConfigOverrides, RunMode, Severity, SCHEMA_VERSION,
 };
 
 mod nav;
@@ -835,10 +834,9 @@ fn resolve_mode(flags: &Flags) -> Result<RunMode, String> {
 /// `kndo check`; day-one adoption must be safe). `None` return means "never fail on
 /// findings"; `Some(sev)` means "fail if any finding is at least as severe as `sev`".
 fn resolve_fail_on(explicit: Option<&str>, mode: &RunMode) -> Result<Option<Severity>, String> {
-    let raw = explicit.unwrap_or(match mode {
-        RunMode::Full => "none",
-        RunMode::Staged | RunMode::Diff { .. } => "warning",
-    });
+    let Some(raw) = explicit else {
+        return Ok(mode.default_fail_on());
+    };
     match raw.to_ascii_lowercase().as_str() {
         "none" => Ok(None),
         "error" => Ok(Some(Severity::Error)),
@@ -847,40 +845,6 @@ fn resolve_fail_on(explicit: Option<&str>, mode: &RunMode) -> Result<Option<Seve
         other => Err(format!(
             "unknown --fail-on `{other}` (none, info, warning, error)"
         )),
-    }
-}
-
-/// Severity's declared enum order is worst-first for *display* sorting (engine.rs's own doc:
-/// "declaration order doubles as sort/triage order"), which is the opposite direction from what
-/// an "at least as severe as" threshold check wants — spelling out the rank explicitly here
-/// avoids relying on readers (or future editors) inferring the right comparison direction from
-/// derived `Ord`.
-fn severity_rank(s: Severity) -> u8 {
-    match s {
-        Severity::Error => 3,
-        Severity::Warning => 2,
-        Severity::Info => 1,
-    }
-}
-
-/// The findings half of the exit-code decision: delta budgets (the
-/// other half, "or a delta budget exceeded") are not wired here — `--fail-on` is the whole
-/// gate.
-fn exit_code_for_findings(findings: &[Finding], fail_on: Option<Severity>) -> ExitCode {
-    let Some(threshold) = fail_on else {
-        return ExitCode::SUCCESS;
-    };
-    // An advisory finding (a plugin finding without a [plugins.gate] opt-in)
-    // never moves the exit code, whatever its displayed severity and whatever the threshold —
-    // installing a finding-emitting plugin must be safe by default.
-    if findings
-        .iter()
-        .filter(|f| !f.advisory)
-        .any(|f| severity_rank(f.severity) >= severity_rank(threshold))
-    {
-        ExitCode::from(1)
-    } else {
-        ExitCode::SUCCESS
     }
 }
 
@@ -954,9 +918,7 @@ fn health_cmd(args: &[String]) -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    let result = engine.check(CheckRequest {
-        mode: kndo::engine::RunMode::Full,
-    });
+    let result = engine.check(kndo::engine::RunMode::Full);
     for d in &result.diagnostics {
         let level = match d.level {
             kndo::adapter::DiagnosticLevel::Error => "error",
@@ -1058,7 +1020,7 @@ fn check(args: &[String]) -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    let result = engine.check(CheckRequest { mode });
+    let result = engine.check(mode);
 
     // Diagnostics degrade the run, they don't kill it: report on stderr and
     // continue — findings and diagnostics are not the same thing. stderr carries diagnostics
@@ -1102,12 +1064,17 @@ fn check(args: &[String]) -> ExitCode {
         // exit-2 tier — never let an analysis that didn't run read as a clean pass.
         return ExitCode::from(2);
     }
-    exit_code_for_findings(&result.findings, fail_on)
+    if result.fails_at(fail_on) {
+        ExitCode::from(1)
+    } else {
+        ExitCode::SUCCESS
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use kndo::engine::Finding;
 
     fn tmp_dir(name: &str) -> std::path::PathBuf {
         let dir = std::env::temp_dir().join(format!("kndo-cli-test-{name}"));
@@ -1292,38 +1259,21 @@ mod tests {
         }
     }
 
-    #[test]
-    fn fail_on_none_never_fails_regardless_of_findings() {
-        let findings = vec![finding(Severity::Error)];
-        assert_eq!(exit_code_for_findings(&findings, None), ExitCode::SUCCESS);
+    fn result_with(findings: Vec<Finding>) -> kndo::engine::RunResult {
+        kndo::engine::RunResult {
+            findings,
+            ..Default::default()
+        }
     }
 
+    /// The gate's actual threshold logic (severity ranking, the advisory exemption) lives —
+    /// and is unit-tested — core-side on `RunResult::fails_at`; this is the CLI's own half of
+    /// the gate: turning that bool into the process exit code.
     #[test]
-    fn threshold_trips_on_at_least_as_severe_findings_only() {
-        let findings = vec![finding(Severity::Info)];
-        assert_eq!(
-            exit_code_for_findings(&findings, Some(Severity::Warning)),
-            ExitCode::SUCCESS
-        );
-
-        let findings = vec![finding(Severity::Warning)];
-        assert_eq!(
-            exit_code_for_findings(&findings, Some(Severity::Warning)),
-            ExitCode::from(1)
-        );
-
-        let findings = vec![finding(Severity::Error)];
-        assert_eq!(
-            exit_code_for_findings(&findings, Some(Severity::Warning)),
-            ExitCode::from(1)
-        );
-    }
-
-    #[test]
-    fn empty_findings_never_trip_any_threshold() {
-        assert_eq!(
-            exit_code_for_findings(&[], Some(Severity::Info)),
-            ExitCode::SUCCESS
-        );
+    fn fails_at_maps_to_the_exit_code() {
+        let result = result_with(vec![finding(Severity::Warning)]);
+        assert!(!result.fails_at(None));
+        assert!(result.fails_at(Some(Severity::Warning)));
+        assert!(!result_with(vec![]).fails_at(Some(Severity::Info)));
     }
 }

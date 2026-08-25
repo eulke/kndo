@@ -21,9 +21,7 @@ fn check(root: &Path) -> kndo_core::engine::RunResult {
         min_confidence: None,
     };
     let mut engine = kndo::open(root, overrides).expect("kndo::open");
-    engine.check(kndo_core::engine::CheckRequest {
-        mode: kndo_core::engine::RunMode::Full,
-    })
+    engine.check(kndo_core::engine::RunMode::Full)
 }
 
 /// Paths of every `unused` finding (file- and symbol-kind alike) — the surface both plugins

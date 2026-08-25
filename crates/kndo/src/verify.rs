@@ -14,7 +14,7 @@
 
 use std::path::Path;
 
-use kndo_core::engine::{CheckRequest, ConfigOverrides, RunMode};
+use kndo_core::engine::{ConfigOverrides, RunMode};
 
 /// Which ABI world accepted the component.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -256,10 +256,13 @@ fn drive_fixture_in(
     if let Err(e) = prepare_fixture(root, component, sample_files, project) {
         return vec![format!("fixture drive skipped: {e}")];
     }
+    // The fixture directory is a fresh throwaway temp dir per drive — nothing here ever
+    // benefits from a warm cache; `plugin_contributions` reads straight off this run's own
+    // `RunResult` now, so a cache isn't even needed for that anymore either.
     let mut engine = match crate::open(
         root,
         ConfigOverrides {
-            use_cache: true,
+            use_cache: false,
             threads: Some(1),
             min_confidence: None,
         },
@@ -267,12 +270,10 @@ fn drive_fixture_in(
         Ok(e) => e,
         Err(e) => return vec![format!("fixture drive failed: kndo::open ({e})")],
     };
-    let result = engine.check(CheckRequest {
-        mode: RunMode::Full,
-    });
+    let result = engine.check(RunMode::Full);
     let mut out = run_report(&result, sample_files);
     if let Some(id) = plugin_id {
-        out.extend(contribution_lines(&engine, id));
+        out.extend(contribution_lines(&result, id));
     }
     out
 }
@@ -391,9 +392,8 @@ fn run_report(result: &kndo_core::engine::RunResult, sample_files: &[String]) ->
     out
 }
 
-fn contribution_lines(engine: &kndo_core::engine::Engine, id: &str) -> Vec<String> {
-    let Some(c) = engine
-        .doctor()
+fn contribution_lines(result: &kndo_core::engine::RunResult, id: &str) -> Vec<String> {
+    let Some(c) = result
         .plugin_contributions
         .iter()
         .find(|c| c.id == id)

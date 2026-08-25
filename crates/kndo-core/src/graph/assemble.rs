@@ -1617,18 +1617,21 @@ pub fn assemble_from_source(
                 finding_diagnostics,
                 pending_snapshot: None,
                 timings,
+                plugin_contributions: None,
             });
         }
         tick("snapshot-probe", &mut phase_start);
         // On a key miss, try the incremental patch off the previous snapshot —
         // any guard failure falls through to the full rebuild below, the one fallback.
-        if let Some((graph, extraction_diagnostics, plugin_diagnostics)) = try_patch(
-            &discovered,
-            adapters,
-            sorted_plugins,
-            current_plugin_digest,
-            cache,
-        ) {
+        if let Some((graph, extraction_diagnostics, plugin_diagnostics, plugin_contributions)) =
+            try_patch(
+                &discovered,
+                adapters,
+                sorted_plugins,
+                current_plugin_digest,
+                cache,
+            )
+        {
             tick("patch", &mut phase_start);
             let pending_snapshot = cache.graph_writer(graph_key, current_plugin_digest);
             let (plugin_findings, finding_diagnostics) =
@@ -1642,6 +1645,7 @@ pub fn assemble_from_source(
                 finding_diagnostics,
                 pending_snapshot,
                 timings,
+                plugin_contributions: Some(plugin_contributions),
             });
         }
         tick("patch-probe", &mut phase_start);
@@ -2626,6 +2630,7 @@ pub fn assemble_from_source(
     if let Some(cache) = cache {
         cache.record_plugin_contributions(&plugin_round.contributions);
     }
+    let plugin_contributions = plugin_round.contributions;
 
     // Canonical order: edge and diagnostic order is *data*, not construction
     // history. Two semantically identical graphs must be identical vectors — the property the
@@ -2688,6 +2693,7 @@ pub fn assemble_from_source(
         finding_diagnostics,
         pending_snapshot,
         timings,
+        plugin_contributions: Some(plugin_contributions),
     })
 }
 
@@ -2719,4 +2725,11 @@ pub struct AssembledGraph {
     /// facts-cache fetches, resolve+link). Empty on the snapshot fast path except its two
     /// entries.
     pub timings: Vec<(&'static str, u64)>,
+    /// This call's own plugin-round audit record — `Some` on the two paths that actually ran
+    /// `run_plugin_round` (full build, patch), `None` on the snapshot-hit fast path (nothing
+    /// ran; the cache's own sidecar, from whichever prior run last executed the round, is still
+    /// accurate — the graph it describes is byte-identical to this one). The engine falls back
+    /// to that sidecar exactly when this is `None`, so a fresh `--no-cache` run — which has no
+    /// sidecar to fall back to, but always takes the full-build path — still reports real data.
+    pub plugin_contributions: Option<Vec<crate::plugin::PluginContribution>>,
 }

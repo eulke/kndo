@@ -17,7 +17,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::adapter::LanguageAdapter;
-use crate::engine::{CheckRequest, ConfigOverrides, Engine, RunMode};
+use crate::engine::{ConfigOverrides, Engine, RunMode};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
 pub struct FixtureFinding {
@@ -128,9 +128,7 @@ pub fn run_fixture_with(
     };
     let mut engine = Engine::open_with_plugins(&project_dir, overrides, adapters, plugins)
         .map_err(|e| ConformanceError(format!("opening {}: {e}", project_dir.display())))?;
-    let result = engine.check(CheckRequest {
-        mode: RunMode::Full,
-    });
+    let result = engine.check(RunMode::Full);
 
     let actual: BTreeSet<FixtureFinding> = result
         .findings

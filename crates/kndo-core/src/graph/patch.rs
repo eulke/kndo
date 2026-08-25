@@ -28,13 +28,23 @@ use super::*;
 /// rebuild of the same tree produces — enforced by the equivalence suite, made possible by
 /// the canonical-order invariant and by sharing the exact per-file machinery
 /// ([`claim_and_extract`], [`emit_file_declarations`], [`resolve_file`]) with the full path.
+/// `(graph, extraction diagnostics, plugin diagnostics, plugin contributions)` — named only to
+/// keep the 4-tuple under clippy's type-complexity lint; callers still destructure it
+/// positionally.
+type PatchOutcome = (
+    ProjectGraph,
+    Vec<Diagnostic>,
+    Vec<Diagnostic>,
+    Vec<crate::plugin::PluginContribution>,
+);
+
 pub(crate) fn try_patch(
     discovered: &discovery::DiscoveredTree,
     adapters: &[Box<dyn LanguageAdapter>],
     sorted_plugins: &[&dyn crate::plugin::Plugin],
     current_plugin_digest: [u8; 32],
     cache: &crate::cache::ProjectCache,
-) -> Option<(ProjectGraph, Vec<Diagnostic>, Vec<Diagnostic>)> {
+) -> Option<PatchOutcome> {
     let crate::cache::LoadedSnapshot {
         mut graph,
         mut extraction_diagnostics,
@@ -545,5 +555,10 @@ pub(crate) fn try_patch(
     extraction_diagnostics.sort_unstable();
 
     cache.count_graph_hit(); // the previous snapshot genuinely served this run
-    Some((graph, extraction_diagnostics, plugin_diagnostics))
+    Some((
+        graph,
+        extraction_diagnostics,
+        plugin_diagnostics,
+        round.contributions,
+    ))
 }

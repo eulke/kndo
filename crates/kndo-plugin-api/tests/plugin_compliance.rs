@@ -8,7 +8,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use kndo_core::engine::{CheckRequest, ConfigOverrides, Engine, RunMode};
+use kndo_core::engine::{ConfigOverrides, Engine, RunMode};
 use kndo_core::plugin::Plugin;
 use kndo_plugin_api::WasmPlugin;
 
@@ -215,9 +215,7 @@ fn external_wasm_plugin_hooks_affect_a_real_check() {
         vec![Box::new(MockAdapter)],
     )
     .expect("opening the baseline engine");
-    let baseline_result = baseline.check(CheckRequest {
-        mode: RunMode::Full,
-    });
+    let baseline_result = baseline.check(RunMode::Full);
     let baseline_unused: Vec<&str> = baseline_result
         .findings
         .iter()
@@ -282,9 +280,7 @@ fn external_wasm_plugin_hooks_affect_a_real_check() {
         vec![Box::new(plugin)],
     )
     .expect("opening the plugin-enabled engine");
-    let result = engine.check(CheckRequest {
-        mode: RunMode::Full,
-    });
+    let result = engine.check(RunMode::Full);
 
     let unused_symbols: Vec<&str> = result
         .findings
@@ -371,9 +367,7 @@ fn external_wasm_plugin_hooks_affect_a_real_check() {
     // And the other half: a SECOND round on the same WasmPlugin must start from a fresh
     // instance. The guest roots `fresh_target` only on an instance's first contribute_roots
     // call — a leaked instance would skip it here and the symbol would go unused.
-    let second = engine.check(CheckRequest {
-        mode: RunMode::Full,
-    });
+    let second = engine.check(RunMode::Full);
     let second_unused: Vec<&str> = second
         .findings
         .iter()

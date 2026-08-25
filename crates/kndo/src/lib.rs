@@ -1032,7 +1032,7 @@ mod activation {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kndo_core::engine::{CheckRequest, RunMode};
+    use kndo_core::engine::RunMode;
 
     #[test]
     fn default_build_registers_at_least_one_language() {
@@ -1082,9 +1082,7 @@ mod tests {
         )
         .unwrap();
         let mut engine = open(&dir, ConfigOverrides::default()).unwrap();
-        let result = engine.check(CheckRequest {
-            mode: RunMode::Full,
-        });
+        let result = engine.check(RunMode::Full);
         // The built-in Go ingester found the well-known coverage.out and the package-guided
         // rebase landed its module-qualified keys — crap runs instead of skipping.
         assert!(
@@ -1105,9 +1103,7 @@ mod tests {
         std::fs::write(dir.join("a.ts"), "export function f() { return 1; }").unwrap();
 
         let mut engine = open(&dir, ConfigOverrides::default()).unwrap();
-        let result = engine.check(CheckRequest {
-            mode: RunMode::Full,
-        });
+        let result = engine.check(RunMode::Full);
         // The js adapter came from the distribution layer, not from this test.
         assert_eq!(result.files_claimed, 1);
         assert_eq!(result.symbols, 1);

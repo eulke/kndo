@@ -87,9 +87,7 @@ fn kndo_open_auto_discovers_a_kndo_plugins_wasm_adapter() {
     )
     .expect("kndo::open must succeed with a plugin present");
 
-    let result = engine.check(kndo_core::engine::CheckRequest {
-        mode: kndo_core::engine::RunMode::Full,
-    });
+    let result = engine.check(kndo_core::engine::RunMode::Full);
 
     assert_eq!(
         result.files_claimed, 1,

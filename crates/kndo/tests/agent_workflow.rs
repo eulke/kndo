@@ -9,7 +9,7 @@
 use std::fs;
 use std::path::Path;
 
-use kndo::engine::{CheckRequest, ConfigOverrides, RunMode};
+use kndo::engine::{ConfigOverrides, RunMode};
 use kndo::query_envelope::{QueryFlags, QueryRequest, ResultEntry, Verb};
 
 fn write(root: &Path, rel: &str, content: &str) {
@@ -135,9 +135,7 @@ fn find_used_by_impact_check_closes_the_loop() {
     // Pre-edit check: the legacy path shows up as test-only debt (the finding the cleanup
     // will fix), and decimal.js — imported only by test-reachable code — as a
     // dependency verdict too.
-    let before = e.check(CheckRequest {
-        mode: RunMode::Full,
-    });
+    let before = e.check(RunMode::Full);
     assert!(
         before.findings.iter().any(|f| f.category == "test-only"
             && f.location
@@ -170,9 +168,7 @@ fn find_used_by_impact_check_closes_the_loop() {
     // 5. check → the machine-verifiable proof: every finding the cleanup targeted is gone
     //    and the edit introduced nothing new.
     let mut e = engine(&root);
-    let after = e.check(CheckRequest {
-        mode: RunMode::Full,
-    });
+    let after = e.check(RunMode::Full);
     assert!(
         after.findings.is_empty(),
         "cleanup must be complete and introduce nothing: {:?}",

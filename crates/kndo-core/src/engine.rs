@@ -248,11 +248,16 @@ impl RunMode {
             _ => None,
         }
     }
-}
 
-#[derive(Debug)]
-pub struct CheckRequest {
-    pub mode: RunMode,
+    /// The `--fail-on` threshold when the frontend's flag/env don't set one explicitly: full
+    /// mode never fails on its own (`None`); a diff mode — run from a pre-commit hook or CI by
+    /// convention — fails at `warning` by default, catching a regression without extra setup.
+    pub fn default_fail_on(&self) -> Option<Severity> {
+        match self {
+            RunMode::Full => None,
+            RunMode::Staged | RunMode::Diff { .. } => Some(Severity::Warning),
+        }
+    }
 }
 
 /// `kndo baseline`'s two modes (see [`Engine::baseline`]): `Create`
@@ -364,6 +369,20 @@ pub enum Severity {
     Error,
     Warning,
     Info,
+}
+
+impl Severity {
+    /// Severity's *declared* order (and derived `Ord`) is worst-first, for display/triage
+    /// sorting — the opposite direction from what an "at least as severe as" gate check wants.
+    /// This is the one place that inversion happens; callers compare `rank()` values instead of
+    /// reasoning about which way `Ord` points.
+    fn rank(self) -> u8 {
+        match self {
+            Severity::Error => 3,
+            Severity::Warning => 2,
+            Severity::Info => 1,
+        }
+    }
 }
 
 /// Where a finding points. Every field is optional because not
@@ -563,6 +582,11 @@ pub struct RunResult {
     /// "after" side, with `previous` computed from "before".
     /// `None` only when assembly itself failed.
     pub health: Option<crate::analysis::health::Health>,
+    /// This run's plugin graph-mutation audit record (`kndo doctor`'s `plugin_contributions`
+    /// used to be the only way to read this after a `check()` — always via the cache's own
+    /// sidecar, which forced a caller wanting fresh data to keep the cache on). Empty when no
+    /// graph-mutating plugin is registered, or (diff modes) when assembly itself failed.
+    pub plugin_contributions: Vec<crate::plugin::PluginContribution>,
 }
 
 /// `"warm"` only when the cache was on *and* actually served something this run — an
@@ -580,6 +604,22 @@ fn cache_status_str(enabled: bool, hits: u64) -> &'static str {
 impl RunResult {
     pub fn cache_status(&self) -> &'static str {
         cache_status_str(self.cache_enabled, self.cache_hits)
+    }
+
+    /// The gate check ("should this run fail?") — the findings half of `--fail-on`; a delta
+    /// budget (`[delta]` in `kndo.toml`) would be the other half, not wired yet. `None`
+    /// (`--fail-on none`, full mode's default) never fails. An advisory finding — a plugin
+    /// finding without an explicit `[plugins.gate]` opt-in — never counts toward the gate,
+    /// whatever its severity and whatever the threshold: installing a finding-emitting plugin
+    /// must be safe by default.
+    pub fn fails_at(&self, threshold: Option<Severity>) -> bool {
+        let Some(threshold) = threshold else {
+            return false;
+        };
+        self.findings
+            .iter()
+            .filter(|f| !f.advisory)
+            .any(|f| f.severity.rank() >= threshold.rank())
     }
 }
 
@@ -711,6 +751,9 @@ struct AnalyzedTree {
     health: crate::analysis::health::Health,
     /// `(phase, µs)` in execution order: assembly + coverage first, then every analysis phase.
     timings: Vec<(String, u64)>,
+    /// This run's plugin graph-mutation audit record — see
+    /// [`graph::AssembledGraph::plugin_contributions`] for the fresh-vs-sidecar rule.
+    plugin_contributions: Vec<crate::plugin::PluginContribution>,
 }
 
 fn describe_rule(rule: &crate::plugin::RuleDescriptor) -> String {
@@ -935,14 +978,14 @@ impl Engine {
 
     /// Full mode reports every current finding; `--staged`/`--diff <ref>` report the
     /// derived-effects delta instead — see [`Self::run_diff`].
-    pub fn check(&mut self, req: CheckRequest) -> RunResult {
+    pub fn check(&mut self, mode: RunMode) -> RunResult {
         let start = Instant::now();
         let started_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
-        let mode = req.mode.as_str().to_string();
-        let base_ref = req.mode.base_ref();
+        let mode_str = mode.as_str().to_string();
+        let base_ref = mode.base_ref();
         let project_root = self.root.display().to_string();
 
-        let outcome = match &req.mode {
+        let outcome = match &mode {
             RunMode::Full => {
                 let root = self.root.clone();
                 let mut raw = self.run_analysis_at(&root);
@@ -960,7 +1003,7 @@ impl Engine {
                     ..raw
                 }
             }
-            RunMode::Staged | RunMode::Diff { .. } => self.run_diff(&req.mode),
+            RunMode::Staged | RunMode::Diff { .. } => self.run_diff(&mode),
         };
 
         if let Some(cache) = &self.cache {
@@ -968,7 +1011,7 @@ impl Engine {
         }
 
         RunResult {
-            mode,
+            mode: mode_str,
             base_ref,
             started_at,
             duration_ms: start.elapsed().as_millis() as u64,
@@ -1106,12 +1149,20 @@ impl Engine {
             before.diagnostics,
             before.health,
         );
-        let (after_graph, after_findings, after_diagnostics, after_suppressed, after_health) = (
+        let (
+            after_graph,
+            after_findings,
+            after_diagnostics,
+            after_suppressed,
+            after_health,
+            plugin_contributions,
+        ) = (
             after.graph,
             after.findings,
             after.diagnostics,
             after.suppressed,
             after.health,
+            after.plugin_contributions,
         );
 
         let (before_findings, _) = self.apply_baseline(before_findings);
@@ -1188,6 +1239,7 @@ impl Engine {
                 Some(health)
             },
             timings: diff_timings,
+            plugin_contributions,
             ..RunResult::default()
         }
     }
@@ -1311,7 +1363,17 @@ impl Engine {
                 finding_diagnostics,
                 pending_snapshot,
                 timings: assembly_timings,
+                plugin_contributions,
             }) => {
+                // `None` means nothing ran this call (the snapshot-hit fast path) — the
+                // sidecar's own record, from whichever prior run last executed the round, is
+                // still accurate for an identical graph.
+                let plugin_contributions = plugin_contributions.unwrap_or_else(|| {
+                    self.cache
+                        .as_ref()
+                        .and_then(|c| c.plugin_contributions())
+                        .unwrap_or_default()
+                });
                 let mut timings = vec![(
                     "assemble".to_string(),
                     assemble_start.elapsed().as_micros() as u64,
@@ -1417,6 +1479,7 @@ impl Engine {
                     suppressed,
                     health,
                     timings,
+                    plugin_contributions,
                 })
             }
             Err(crate::discovery::DiscoveryError::Root(e)) => Err(Diagnostic {
@@ -1544,6 +1607,7 @@ impl Engine {
                 suppressed,
                 health,
                 timings,
+                plugin_contributions,
             }) => {
                 let adapters = self
                     .adapters
@@ -1573,6 +1637,7 @@ impl Engine {
                     suppressed,
                     health: Some(health),
                     timings,
+                    plugin_contributions,
                     ..RunResult::default()
                 }
             }
@@ -1619,6 +1684,75 @@ mod tests {
     use super::*;
     use crate::vocab::RefKind;
     use smol_str::SmolStr;
+
+    fn gate_finding(severity: Severity, advisory: bool) -> Finding {
+        Finding {
+            advisory,
+            id: "kndo-000000000000".to_string(),
+            category: "unused".into(),
+            group: crate::vocab::Group::Waste,
+            subject_kind: "symbol".into(),
+            severity,
+            confidence: crate::vocab::Confidence::Certain,
+            message: "example".to_string(),
+            location: Default::default(),
+            related: Vec::new(),
+            delta: None,
+            delta_origin: None,
+        }
+    }
+
+    #[test]
+    fn default_fail_on_is_none_for_full_and_warning_for_diff_modes() {
+        assert_eq!(RunMode::Full.default_fail_on(), None);
+        assert_eq!(RunMode::Staged.default_fail_on(), Some(Severity::Warning));
+        assert_eq!(
+            RunMode::Diff {
+                base: "main".to_string()
+            }
+            .default_fail_on(),
+            Some(Severity::Warning)
+        );
+    }
+
+    #[test]
+    fn fails_at_none_threshold_never_fails() {
+        let result = RunResult {
+            findings: vec![gate_finding(Severity::Error, false)],
+            ..Default::default()
+        };
+        assert!(!result.fails_at(None));
+    }
+
+    #[test]
+    fn fails_at_trips_on_at_least_as_severe_findings_only() {
+        let below = RunResult {
+            findings: vec![gate_finding(Severity::Info, false)],
+            ..Default::default()
+        };
+        assert!(!below.fails_at(Some(Severity::Warning)));
+
+        let at = RunResult {
+            findings: vec![gate_finding(Severity::Warning, false)],
+            ..Default::default()
+        };
+        assert!(at.fails_at(Some(Severity::Warning)));
+
+        let above = RunResult {
+            findings: vec![gate_finding(Severity::Error, false)],
+            ..Default::default()
+        };
+        assert!(above.fails_at(Some(Severity::Warning)));
+    }
+
+    #[test]
+    fn fails_at_ignores_advisory_findings_whatever_the_severity() {
+        let result = RunResult {
+            findings: vec![gate_finding(Severity::Error, true)],
+            ..Default::default()
+        };
+        assert!(!result.fails_at(Some(Severity::Info)));
+    }
 
     /// True for the category-level skip diagnostics (`untested` with no test roots, `crap`
     /// with no ingested coverage) — expected noise in every diff-mode fixture below, since
@@ -2028,9 +2162,7 @@ mod tests {
             vec![Box::new(DiffMockAdapter)],
         )
         .unwrap();
-        let baseline = baseline_engine.check(CheckRequest {
-            mode: RunMode::Full,
-        });
+        let baseline = baseline_engine.check(RunMode::Full);
         let baseline_unused: Vec<&str> = baseline
             .findings
             .iter()
@@ -2069,9 +2201,7 @@ mod tests {
         let plugins: Vec<Box<dyn crate::plugin::Plugin>> = vec![Box::new(DemoPlugin)];
         let mut engine =
             Engine::open_with_plugins(&dir, ConfigOverrides::default(), adapters, plugins).unwrap();
-        let result = engine.check(CheckRequest {
-            mode: RunMode::Full,
-        });
+        let result = engine.check(RunMode::Full);
 
         let unused_symbols: Vec<&str> = result
             .findings
@@ -2196,16 +2326,12 @@ mod tests {
         )
         .unwrap();
 
-        let first = engine.check(CheckRequest {
-            mode: RunMode::Full,
-        });
+        let first = engine.check(RunMode::Full);
         assert!(first.cache_enabled);
         assert_eq!(first.cache_hits, 0); // nothing cached yet — the whole run is a miss
         assert!(first.to_json().contains("\"cache\": \"cold\""));
 
-        let second = engine.check(CheckRequest {
-            mode: RunMode::Full,
-        });
+        let second = engine.check(RunMode::Full);
         assert_eq!(second.cache_hits, 1);
         assert!(second.to_json().contains("\"cache\": \"warm\""));
 
@@ -2228,9 +2354,7 @@ mod tests {
             vec![Box::new(CacheMockAdapter)],
         )
         .unwrap()
-        .check(CheckRequest {
-            mode: RunMode::Full,
-        });
+        .check(RunMode::Full);
 
         // …then open a fresh engine with the cache disabled: it must never report warm, even
         // though the disk cache is populated and would otherwise hit.
@@ -2244,9 +2368,7 @@ mod tests {
             vec![Box::new(CacheMockAdapter)],
         )
         .unwrap();
-        let result = uncached.check(CheckRequest {
-            mode: RunMode::Full,
-        });
+        let result = uncached.check(RunMode::Full);
         assert!(!result.cache_enabled);
         assert_eq!(result.cache_hits, 0);
         assert!(result.to_json().contains("\"cache\": \"cold\""));
@@ -2268,9 +2390,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let mut engine = Engine::open(&dir, ConfigOverrides::default(), vec![]).unwrap();
-        let result = engine.check(CheckRequest {
-            mode: RunMode::Full,
-        });
+        let result = engine.check(RunMode::Full);
         assert!(result.findings.is_empty());
         assert_eq!(result.files_discovered, 0);
     }
@@ -2284,9 +2404,7 @@ mod tests {
         std::fs::write(dir.join("b.ts"), "export const b = 2;").unwrap();
 
         let mut engine = Engine::open(&dir, ConfigOverrides::default(), vec![]).unwrap();
-        let result = engine.check(CheckRequest {
-            mode: RunMode::Full,
-        });
+        let result = engine.check(RunMode::Full);
         assert_eq!(result.files_discovered, 2);
         // No adapters registered in this test — files exist as nodes but nothing claims them.
         assert_eq!(result.files_claimed, 0);
@@ -2298,9 +2416,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let mut engine = Engine::open(&dir, ConfigOverrides::default(), vec![]).unwrap();
-        let result = engine.check(CheckRequest {
-            mode: RunMode::Full,
-        });
+        let result = engine.check(RunMode::Full);
         let phases: Vec<&str> = result.timings.iter().map(|(p, _)| p.as_str()).collect();
         assert!(phases.contains(&"assemble"));
         assert!(phases.contains(&"reachability"));
@@ -2318,9 +2434,7 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
 
         let mut engine = Engine::open(&dir, ConfigOverrides::default(), vec![]).unwrap();
-        let result = engine.check(CheckRequest {
-            mode: RunMode::Full,
-        });
+        let result = engine.check(RunMode::Full);
         let json = result.to_json();
         let value: serde_json::Value = serde_json::from_str(&json).unwrap();
 
@@ -2411,9 +2525,7 @@ mod tests {
             vec![Box::new(DiffMockAdapter)],
         )
         .unwrap();
-        let result = engine.check(CheckRequest {
-            mode: RunMode::Diff { base: base_sha },
-        });
+        let result = engine.check(RunMode::Diff { base: base_sha });
 
         assert!(
             result.diagnostics.iter().all(is_no_test_roots_diagnostic),
@@ -2480,9 +2592,7 @@ mod tests {
             vec![Box::new(DiffMockAdapter)],
         )
         .unwrap();
-        let result = engine.check(CheckRequest {
-            mode: RunMode::Staged,
-        });
+        let result = engine.check(RunMode::Staged);
 
         assert!(
             result.diagnostics.iter().all(is_no_test_roots_diagnostic),
@@ -2506,9 +2616,7 @@ mod tests {
             vec![Box::new(DiffMockAdapter)],
         )
         .unwrap();
-        let result = engine.check(CheckRequest {
-            mode: RunMode::Staged,
-        });
+        let result = engine.check(RunMode::Staged);
 
         assert!(result.findings.is_empty());
         let err = &result.diagnostics[0];
@@ -2548,9 +2656,7 @@ mod tests {
             vec![Box::new(DiffMockAdapter)],
         )
         .unwrap();
-        let result = engine.check(CheckRequest {
-            mode: RunMode::Diff { base: base_sha },
-        });
+        let result = engine.check(RunMode::Diff { base: base_sha });
 
         assert!(
             result.diagnostics.iter().all(is_no_test_roots_diagnostic),
@@ -2589,9 +2695,7 @@ mod tests {
         // Add a second, unacknowledged dead file — the acknowledged one must not resurface as
         // new or fixed on either side of the diff.
         std::fs::write(dir.join("also-dead.dmock"), "").unwrap();
-        let result = engine.check(CheckRequest {
-            mode: RunMode::Diff { base: base_sha },
-        });
+        let result = engine.check(RunMode::Diff { base: base_sha });
 
         assert!(
             result.diagnostics.iter().all(is_no_test_roots_diagnostic),
@@ -2623,9 +2727,7 @@ mod tests {
             vec![Box::new(DiffMockAdapter)],
         )
         .unwrap();
-        let result = engine.check(CheckRequest {
-            mode: RunMode::Full,
-        });
+        let result = engine.check(RunMode::Full);
 
         assert!(
             !result
@@ -2653,9 +2755,7 @@ mod tests {
             vec![Box::new(DiffMockAdapter)],
         )
         .unwrap();
-        let result = engine.check(CheckRequest {
-            mode: RunMode::Full,
-        });
+        let result = engine.check(RunMode::Full);
 
         assert!(
             !result.findings.iter().any(|f| f.category == "unused"),
@@ -2683,9 +2783,7 @@ mod tests {
             vec![Box::new(DiffMockAdapter)],
         )
         .unwrap();
-        let result = engine.check(CheckRequest {
-            mode: RunMode::Full,
-        });
+        let result = engine.check(RunMode::Full);
 
         assert!(
             !result.findings.iter().any(|f| f.category == "stale"),
@@ -2715,9 +2813,7 @@ mod tests {
             vec![Box::new(DiffMockAdapter)],
         )
         .unwrap();
-        let result = engine.check(CheckRequest {
-            mode: RunMode::Full,
-        });
+        let result = engine.check(RunMode::Full);
 
         assert!(
             result
@@ -2792,9 +2888,7 @@ mod tests {
             vec![Box::new(DiffMockAdapter)],
         )
         .unwrap();
-        let result = engine.check(CheckRequest {
-            mode: RunMode::Full,
-        });
+        let result = engine.check(RunMode::Full);
 
         let stale: Vec<_> = result
             .findings
@@ -2830,10 +2924,8 @@ mod tests {
             vec![Box::new(DiffMockAdapter)],
         )
         .unwrap();
-        let result = engine.check(CheckRequest {
-            mode: RunMode::Diff {
-                base: "no-such-ref".to_string(),
-            },
+        let result = engine.check(RunMode::Diff {
+            base: "no-such-ref".to_string(),
         });
 
         assert!(result.findings.is_empty());
@@ -2867,9 +2959,7 @@ mod tests {
             vec![Box::new(DiffMockAdapter)],
         )
         .unwrap();
-        let result = engine.check(CheckRequest {
-            mode: RunMode::Diff { base: base_sha },
-        });
+        let result = engine.check(RunMode::Diff { base: base_sha });
 
         assert!(
             result.diagnostics.iter().all(is_no_test_roots_diagnostic),
@@ -3182,9 +3272,7 @@ mod tests {
             vec![Box::new(MockCoverageIngester)],
         )
         .unwrap();
-        let result = engine.check(CheckRequest {
-            mode: RunMode::Full,
-        });
+        let result = engine.check(RunMode::Full);
         assert!(
             !result
                 .diagnostics
@@ -3223,9 +3311,7 @@ mod tests {
                 vec![Box::new(MockCoverageIngester)],
             )
             .unwrap();
-            engine.check(CheckRequest {
-                mode: RunMode::Full,
-            })
+            engine.check(RunMode::Full)
         };
         let default = fixture("default", "");
         assert!(
