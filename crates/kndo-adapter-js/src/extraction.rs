@@ -221,6 +221,14 @@ fn push_function_metrics(out: &mut FileFacts, symbol: &str, decl_span: Span, bod
     );
 }
 
+/// Whether an `export_statement` carries the `default` keyword — an anonymous token child,
+/// which is what separates `export default function f(){}` from `export function f(){}`.
+fn has_default_token(node: Node) -> bool {
+    let mut cursor = node.walk();
+    let found = node.children(&mut cursor).any(|c| c.kind() == "default");
+    found
+}
+
 /// Handles a declaration whose only shape variance is its `name` field falling back to
 /// `default` (covers `export default function foo(){}`-style named-but-default exports).
 fn handle_named(node: Node, src: &[u8], exported: bool, out: &mut FileFacts, kind: SymbolKind) {
@@ -255,6 +263,21 @@ fn handle_named(node: Node, src: &[u8], exported: bool, out: &mut FileFacts, kin
 fn handle_export_statement(node: Node, src: &[u8], out: &mut FileFacts) {
     if let Some(decl) = node.child_by_field_name("declaration") {
         handle_statement(decl, src, true, out);
+        // `export default function foo() {}` / `export default class Foo {}`: the declaration
+        // keeps its OWN name, but a consumer writes `import foo from './x.js'`, whose binding
+        // asks the target for `default`. Without the alias that lookup finds nothing, the
+        // reference never binds, and the function reads `unused` however many files call it —
+        // axios's `mergeConfig`, called from five, is the shape. The `default` token is the
+        // structural discriminator (`export function other()` has no such child).
+        //
+        // Anonymous defaults need no alias: `handle_named` already names them `default`, which
+        // is exactly what the consumer looks up. The CJS half of this contract
+        // (`module.exports = local`) has always recorded it; ESM's named default did not.
+        if has_default_token(node) {
+            if let Some(name) = decl.child_by_field_name("name") {
+                out.default_export_alias = Some(SmolStr::new(text(name, src)));
+            }
+        }
         return;
     }
     if let Some(value) = node.child_by_field_name("value") {
@@ -1667,6 +1690,28 @@ mod tests {
     fn default_export_named_function_keeps_its_name() {
         let d = decls("export default function bar() {}");
         assert_eq!(d, vec![("bar".into(), SymbolKind::Function, true)]);
+    }
+
+    #[test]
+    fn a_named_default_export_records_its_alias() {
+        // `export default function foo(){}` keeps its own name, but a consumer writes
+        // `import foo from './x.js'` and that binding asks the target for `default`. Without
+        // the alias the lookup finds nothing, the reference never binds, and the function
+        // reads `unused` however many files call it — axios's `mergeConfig`, called from five,
+        // is the shape, and three more of its findings were downstream of the same miss.
+        for (src, expected) in [
+            ("export default function bar() {}", Some("bar")),
+            ("export default class Baz {}", Some("Baz")),
+            // Anonymous defaults need no alias: the declaration is already named `default`,
+            // which is exactly what a consumer looks up.
+            ("export default class {}", None),
+            // Not a default export at all — recording an alias here would make every named
+            // export answer a consumer's `default` binding.
+            ("export function other() {}", None),
+        ] {
+            let f = extract("a.js", src.as_bytes());
+            assert_eq!(f.default_export_alias.as_deref(), expected, "{src}");
+        }
     }
 
     #[test]

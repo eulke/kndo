@@ -27,7 +27,16 @@ outside).
 **Declarations** — functions, classes (+ methods, fields, getters/setters as members),
 interfaces, type aliases, enums (+ members), top-level `const`/`let`/`var`, namespaces.
 Anonymous default exports (`export default () => {}`) declare a synthetic symbol named
-`default` (symbol path: `file#default`). Property-assignment callables
+`default` (symbol path: `file#default`). A **named** default export
+(`export default function mergeConfig() {}`) keeps its own name and additionally records
+`FileFacts::default_export_alias` — a consumer writes `import mergeConfig from './x.js'`,
+whose binding asks the target for `default`, so without the alias that lookup finds nothing
+and the function reads `unused` however many files call it. The CJS half of this contract
+(`module.exports = local`) always recorded it; ESM's named default did not, which cost axios
+four findings from one miss (`mergeConfig`, `bind`, `shouldBypassProxy`, and the file-local
+const only `shouldBypassProxy` read). Pinned by the `named-default-export` fixture, and
+`export function other() {}` must NOT record one — the `default` keyword token is the
+discriminator. Property-assignment callables
 (`obj.method = function () {}`, the pre-class prototype-extension idiom) are **not**
 declarations and are not extracted — a documented scope limit, not an oversight: it bounds
 recall for symbol-level analyses (`crap`, structural `duplicate`, symbol reachability) on
