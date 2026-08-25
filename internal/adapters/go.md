@@ -108,6 +108,21 @@ block), and `init` (Go's special no-args, unexported-by-construction, called-imp
 runtime function — always a root, §4, regardless of the capitalization rule, and there can be
 more than one per file).
 
+The **blank identifier declares nothing**: `var _ T = …` cannot be named by any source, so
+extracting it as a symbol is a guaranteed false `unused`. It is not silence, though — the
+statement exists to make a compile-time interface assertion, and that assertion is emitted as an
+`Implement` reference from the concrete type to the interface. Both spellings are read: the
+conversion form `var _ StructValidator = (*defaultValidator)(nil)`, which is by far the more
+common (gin, hugo and go-redis each carry several), and the composite-literal form
+`var API Core = jsonApi{}`.
+
+A file that declares nothing at all — `doc.go`, a package doc comment plus `package gin` — is
+handled in the core rather than here, and on a language-blind rule: a declarationless file whose
+compilation **unit** is alive is never independently dead. Go's own rules compile it as part of
+the package, so there is nothing in it to delete. The rule keys on the unit, not on emptiness:
+an orphan that declares nothing and belongs to no live unit is still real waste and still
+reported.
+
 **References**: identifier uses (calls, reads, writes), each tagged with its `RefKind`
 (RFC 0012 §5): `type_identifier` positions are `TypeUse` (the grammar itself is the
 type-position signal), embedded struct/interface fields (a `field_declaration` with no name —

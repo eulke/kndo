@@ -21,7 +21,7 @@
 //! `unused` (manifests are unclaimed, never eligible — see below), so rollup can never
 //! silently cross a package boundary either.
 
-use rustc_hash::FxHashMap as HashMap;
+use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 
 use crate::analysis::reachability::{Reachability, ReachabilityMap};
 use crate::analysis::rollup::{self, DirGroup};
@@ -35,7 +35,35 @@ use crate::vocab::{
 pub fn find_unused_files(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<Finding> {
     let mut findings = Vec::new();
     let mut unused: HashMap<&str, (FileId, PackageId)> = HashMap::default();
+
+    // A file that declares nothing cannot be independently dead when its COMPILATION UNIT is
+    // alive. Go's `doc.go` is the shape: a package doc comment and `package gin`, no
+    // declarations at all, compiled as part of the package by the language's own rules — there
+    // is nothing in it to delete, and deleting it would remove the package's documentation.
+    // The unit is what makes this precise rather than broad: an orphan file that declares
+    // nothing and belongs to no live unit is still real waste and still reported (a
+    // file-scoped language has no unit at all, so nothing here applies to it). Declarations,
+    // not reachability, are the test — a unit is alive if any file in it is.
+    let mut live_units: HashSet<&str> = HashSet::default();
+    for (index, f) in graph.files.iter().enumerate() {
+        let Some(unit) = f.unit.as_deref() else {
+            continue;
+        };
+        if reach.get(NodeRef::File(FileId(index as u32))).0 != Reachability::Unreachable {
+            live_units.insert(unit);
+        }
+    }
+    let mut declares: Vec<bool> = vec![false; graph.files.len()];
+    for symbol in &graph.symbols {
+        if let Some(slot) = declares.get_mut(symbol.file.0 as usize) {
+            *slot = true;
+        }
+    }
+
     for (index, file) in graph.files.iter().enumerate() {
+        if !declares[index] && file.unit.as_deref().is_some_and(|u| live_units.contains(u)) {
+            continue;
+        }
         // Unclaimed: no adapter recognized this file, so no adapter has an opinion on whether
         // it can be a root or a target — out of scope, not a verdict.
         let Some(class) = file.class else {
@@ -235,6 +263,53 @@ mod tests {
         assert_eq!(findings[0].subject_kind, "file");
         assert_eq!(findings[0].group, crate::vocab::Group::Waste);
         assert!(findings[0].message.contains("orphan.ts"));
+    }
+
+    #[test]
+    fn a_declarationless_file_in_a_live_unit_is_not_dead_but_an_orphan_still_is() {
+        // Go's `doc.go`: a package doc comment and `package gin`, no declarations, compiled as
+        // part of the package by the language's own rules. There is nothing in it to delete,
+        // and it is never independently dead while the package is alive.
+        let mut doc = file("doc.go", Some(FileClass::default()));
+        doc.unit = Some(SmolStr::new("./#gin"));
+        let mut api = file("api.go", Some(FileClass::default()));
+        api.unit = Some(SmolStr::new("./#gin"));
+
+        let symbols = vec![SymbolNode {
+            file: FileId(1),
+            name: SmolStr::new("New"),
+            kind: crate::vocab::SymbolKind::Function,
+            span: crate::adapter::Span::default(),
+            exported: true,
+            visibility: crate::adapter::VisibilityLevel(1),
+            member_of: None,
+            signature_span: None,
+            implicitly_invoked: false,
+            nested_scope: false,
+            visibility_inherited: false,
+        }];
+        let edges = vec![edge(
+            EdgeKind::Root {
+                kind: RootKind::Production,
+                target: NodeRef::File(FileId(1)),
+            },
+            Confidence::Certain,
+        )];
+        let graph = ProjectGraph::for_test(vec![doc, api], symbols, vec![], edges);
+        let reach = reachability::compute(&graph);
+        let findings = find_unused_files(&graph, &reach);
+        assert!(
+            !findings.iter().any(|f| f.message.contains("doc.go")),
+            "a declarationless file in a live unit is not independently dead"
+        );
+
+        // The exemption is about belonging to a live unit, NOT about being empty. An orphan
+        // that declares nothing and belongs to no live unit is still real waste — the first
+        // version of this rule keyed on "has no content" and silenced that case too.
+        let orphan = file("stray.ts", Some(FileClass::default()));
+        let graph = ProjectGraph::for_test(vec![orphan], vec![], vec![], vec![]);
+        let reach = reachability::compute(&graph);
+        assert_eq!(find_unused_files(&graph, &reach).len(), 1);
     }
 
     #[test]

@@ -432,14 +432,15 @@ fn handle_value_declaration(
         // `const A, B = 1, 2` / `var X, Y int` — a spec can name more than one identifier.
         let mut name_cursor = spec.walk();
         for name_node in spec.children_by_field_name("name", &mut name_cursor) {
-            push_declaration(
-                out,
-                text(name_node, src),
-                symbol_kind.clone(),
-                span(name_node),
-                None,
-                flags,
-            );
+            let name = text(name_node, src);
+            // The blank identifier declares nothing referenceable — `var _ T = …` exists for
+            // its side effect (the compile-time assertion below), and no source can ever name
+            // it. Extracting it as a symbol is a guaranteed false `unused`, one per assertion,
+            // and the idiom is everywhere: gin, hugo and go-redis all carry several.
+            if name == "_" {
+                continue;
+            }
+            push_declaration(out, name, symbol_kind.clone(), span(name_node), None, flags);
         }
         emit_explicit_witness(spec, src, out);
     }
@@ -451,6 +452,28 @@ fn handle_value_declaration(
 /// structural satisfaction is nameable without a typechecker).
 /// Emits an Implement reference from the literal's type to the declared type; either name
 /// failing to resolve drops the edge silently.
+/// The single name inside a parenthesized conversion target — `defaultValidator` in
+/// `(*defaultValidator)`. Returns `None` when the parens hold anything more complex than one
+/// name, which keeps the witness to the shapes it can read honestly.
+fn innermost_identifier<'a>(node: Node, src: &'a [u8]) -> Option<&'a str> {
+    let mut found = None;
+    let mut stack = vec![node];
+    while let Some(n) = stack.pop() {
+        if matches!(n.kind(), "identifier" | "type_identifier") {
+            if found.is_some() {
+                return None; // more than one name — not a plain conversion
+            }
+            found = Some(text(n, src));
+            continue;
+        }
+        let mut c = n.walk();
+        for child in n.children(&mut c) {
+            stack.push(child);
+        }
+    }
+    found
+}
+
 fn emit_explicit_witness(spec: Node, src: &[u8], out: &mut FileFacts) {
     let Some(declared) = spec
         .child_by_field_name("type")
@@ -463,6 +486,28 @@ fn emit_explicit_witness(spec: Node, src: &[u8], out: &mut FileFacts) {
     };
     let mut stack = vec![value];
     while let Some(n) = stack.pop() {
+        // `var _ Iface = (*T)(nil)` — the conversion form, and by far the most common way to
+        // write the assertion (the composite-literal form below is the other). Tree shape is
+        // `call_expression(parenthesized_expression(… T …), argument_list(nil))`, and `T` sits
+        // there as a plain `identifier` because `*T` in expression position is not a type node.
+        // Without this the idiom contributed nothing at all: the blank name is not extracted
+        // and the assertion it exists to make was invisible.
+        if n.kind() == "call_expression" {
+            if let Some(witness) = n
+                .child_by_field_name("function")
+                .filter(|f| f.kind() == "parenthesized_expression")
+                .and_then(|f| innermost_identifier(f, src))
+            {
+                out.references.push(RawReference {
+                    name: SmolStr::new(text(declared, src)),
+                    scope_context: None,
+                    span: span(declared),
+                    within: Some(SmolStr::new(witness)),
+                    kind: RefKind::Implement,
+                });
+                continue;
+            }
+        }
         if n.kind() == "composite_literal" {
             if let Some(lit_ty) = n
                 .child_by_field_name("type")
@@ -735,6 +780,38 @@ mod tests {
             .iter()
             .find(|d| d.name.as_str() == name)
             .unwrap_or_else(|| panic!("no declaration named {name:?} in {:?}", facts.declarations))
+    }
+
+    #[test]
+    fn a_blank_var_declares_nothing_but_asserts_an_interface() {
+        // `var _ StructValidator = (*defaultValidator)(nil)` is Go's compile-time interface
+        // assertion, and it appears several times per repo in gin, hugo and go-redis. The
+        // blank name is unreferenceable by definition, so extracting it as a symbol is a
+        // guaranteed false `unused`; the assertion it exists to make was meanwhile invisible,
+        // because the witness only read the composite-literal form.
+        let f = extract(
+            "a.go",
+            b"package p\nvar _ StructValidator = (*defaultValidator)(nil)\n",
+        );
+        assert!(
+            !f.declarations.iter().any(|d| d.name == "_"),
+            "the blank identifier is not a declaration"
+        );
+        let witness = f
+            .references
+            .iter()
+            .find(|r| r.kind == RefKind::Implement)
+            .expect("the assertion must still contribute its Implement edge");
+        assert_eq!(witness.name, "StructValidator");
+        assert_eq!(witness.within.as_deref(), Some("defaultValidator"));
+
+        // The composite-literal form keeps working — it is the other half of the same idiom.
+        let f = extract("a.go", b"package p\nvar API Core = jsonApi{}\n");
+        assert!(f.declarations.iter().any(|d| d.name == "API"));
+        assert!(f
+            .references
+            .iter()
+            .any(|r| r.kind == RefKind::Implement && r.within.as_deref() == Some("jsonApi")));
     }
 
     #[test]
