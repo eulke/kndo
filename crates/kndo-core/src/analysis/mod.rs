@@ -18,10 +18,17 @@ pub mod untested;
 pub mod unused;
 pub mod version_skew;
 
+use rustc_hash::FxHashMap as HashMap;
+use rustc_hash::FxHashSet as HashSet;
+
+use rayon::prelude::*;
+
 use crate::adapter::Diagnostic;
+use crate::analysis::reachability::ReachabilityMap;
+use crate::coverage::CoverageMap;
 use crate::engine::Finding;
 use crate::graph::{PackageNode, ProjectGraph};
-use crate::vocab::PackageId;
+use crate::vocab::{FileId, PackageId, SymbolId};
 
 /// The stable finding id: `"kndo-" + blake3(category,
 /// subject_kind, path, symbol path, discriminator)[..12 hex]`. Line/column never participate,
@@ -111,6 +118,216 @@ impl Default for AnalysisTuning {
     }
 }
 
+/// Everything one analysis needs to read — the graph, its precomputed reachability, the run's
+/// ingested coverage, and the resolved tuning knobs. Shared, read-only, borrowed once per run.
+pub(crate) struct AnalysisCtx<'a> {
+    pub(crate) graph: &'a ProjectGraph,
+    pub(crate) reach: &'a ReachabilityMap,
+    pub(crate) coverage: &'a CoverageMap,
+    pub(crate) tuning: &'a AnalysisTuning,
+}
+
+/// One analysis's contribution — findings plus whatever aux data `health` needs from it.
+/// `cycle_files`/`duplicated` are populated by exactly one analysis each (`cyclic`,
+/// `duplicate-functions`); every other analysis leaves them empty, which is why `Default`
+/// merges cleanly regardless of which analysis produced a given output.
+#[derive(Default)]
+pub(crate) struct AnalysisOutput {
+    pub(crate) findings: Vec<Finding>,
+    pub(crate) diagnostics: Vec<Diagnostic>,
+    pub(crate) cycle_files: HashSet<FileId>,
+    pub(crate) duplicated: Vec<(SymbolId, u32)>,
+}
+
+impl AnalysisOutput {
+    fn findings(findings: Vec<Finding>) -> Self {
+        AnalysisOutput {
+            findings,
+            ..Default::default()
+        }
+    }
+}
+
+/// One analysis, over a shared [`AnalysisCtx`]. Internal (contract §6: "may change any
+/// release") — the uniform [`AnalysisOutput`] return type is what replaces the six divergent
+/// shapes (`Vec<Finding>`, `(Vec<Finding>, Option<Diagnostic>)`, …) the underlying `find_*`
+/// functions still return; this trait is the seam between them and [`run_all`]'s registry,
+/// not a rewrite of the analyses themselves.
+pub(crate) trait Analysis: Send + Sync {
+    /// Also the `--verbose` timings label and (for `run_all`'s diagnostic-order lookup) the
+    /// stable key into the collected outputs — matches the historical timing phase names.
+    fn id(&self) -> &'static str;
+    fn run(&self, ctx: &AnalysisCtx<'_>) -> AnalysisOutput;
+}
+
+struct UnusedAnalysis;
+impl Analysis for UnusedAnalysis {
+    fn id(&self) -> &'static str {
+        "unused"
+    }
+    fn run(&self, ctx: &AnalysisCtx<'_>) -> AnalysisOutput {
+        let mut f = unused::find_unused_files(ctx.graph, ctx.reach);
+        f.extend(unused::find_unused_symbols(ctx.graph, ctx.reach));
+        AnalysisOutput::findings(f)
+    }
+}
+
+struct TestOnlyAnalysis;
+impl Analysis for TestOnlyAnalysis {
+    fn id(&self) -> &'static str {
+        "test-only"
+    }
+    fn run(&self, ctx: &AnalysisCtx<'_>) -> AnalysisOutput {
+        let mut f = test_only::find_test_only_files(ctx.graph, ctx.reach);
+        f.extend(test_only::find_test_only_symbols(ctx.graph, ctx.reach));
+        AnalysisOutput::findings(f)
+    }
+}
+
+struct DependenciesAnalysis;
+impl Analysis for DependenciesAnalysis {
+    fn id(&self) -> &'static str {
+        "dependencies"
+    }
+    fn run(&self, ctx: &AnalysisCtx<'_>) -> AnalysisOutput {
+        let mut f = undeclared::find_undeclared_dependencies(ctx.graph);
+        f.extend(version_skew::find_version_skew(ctx.graph));
+        let (hygiene_findings, hygiene_diagnostic) =
+            dependency_hygiene::find_dependency_hygiene(ctx.graph);
+        f.extend(hygiene_findings);
+        AnalysisOutput {
+            findings: f,
+            diagnostics: hygiene_diagnostic.into_iter().collect(),
+            ..Default::default()
+        }
+    }
+}
+
+struct DuplicateFilesAnalysis;
+impl Analysis for DuplicateFilesAnalysis {
+    fn id(&self) -> &'static str {
+        "duplicate-files"
+    }
+    fn run(&self, ctx: &AnalysisCtx<'_>) -> AnalysisOutput {
+        AnalysisOutput::findings(duplicate::find_duplicate_files(ctx.graph))
+    }
+}
+
+struct DuplicateFunctionsAnalysis;
+impl Analysis for DuplicateFunctionsAnalysis {
+    fn id(&self) -> &'static str {
+        "duplicate-functions"
+    }
+    fn run(&self, ctx: &AnalysisCtx<'_>) -> AnalysisOutput {
+        let (findings, duplicated) =
+            duplicate::find_duplicate_functions(ctx.graph, ctx.tuning.duplicate_min_tokens);
+        AnalysisOutput {
+            findings,
+            duplicated,
+            ..Default::default()
+        }
+    }
+}
+
+struct InternalOnlyAnalysis;
+impl Analysis for InternalOnlyAnalysis {
+    fn id(&self) -> &'static str {
+        "internal-only"
+    }
+    fn run(&self, ctx: &AnalysisCtx<'_>) -> AnalysisOutput {
+        AnalysisOutput::findings(internal_only::find_internal_only(ctx.graph, ctx.reach))
+    }
+}
+
+struct PrivateTypeLeakAnalysis;
+impl Analysis for PrivateTypeLeakAnalysis {
+    fn id(&self) -> &'static str {
+        "private-type-leak"
+    }
+    fn run(&self, ctx: &AnalysisCtx<'_>) -> AnalysisOutput {
+        AnalysisOutput::findings(private_type_leak::find_private_type_leaks(ctx.graph))
+    }
+}
+
+struct DeepImportAnalysis;
+impl Analysis for DeepImportAnalysis {
+    fn id(&self) -> &'static str {
+        "deep-import"
+    }
+    fn run(&self, ctx: &AnalysisCtx<'_>) -> AnalysisOutput {
+        AnalysisOutput::findings(deep_import::find_deep_imports(ctx.graph))
+    }
+}
+
+struct CyclicAnalysis;
+impl Analysis for CyclicAnalysis {
+    fn id(&self) -> &'static str {
+        "cyclic"
+    }
+    fn run(&self, ctx: &AnalysisCtx<'_>) -> AnalysisOutput {
+        let (findings, cycle_files) = cyclic::find_cycles(ctx.graph);
+        AnalysisOutput {
+            findings,
+            cycle_files,
+            ..Default::default()
+        }
+    }
+}
+
+struct CrapAnalysis;
+impl Analysis for CrapAnalysis {
+    fn id(&self) -> &'static str {
+        "crap"
+    }
+    fn run(&self, ctx: &AnalysisCtx<'_>) -> AnalysisOutput {
+        let (findings, diagnostic) =
+            crap::find_crap(ctx.graph, ctx.coverage, ctx.tuning.crap_threshold);
+        AnalysisOutput {
+            findings,
+            diagnostics: diagnostic.into_iter().collect(),
+            ..Default::default()
+        }
+    }
+}
+
+struct UntestedAnalysis;
+impl Analysis for UntestedAnalysis {
+    fn id(&self) -> &'static str {
+        "untested"
+    }
+    fn run(&self, ctx: &AnalysisCtx<'_>) -> AnalysisOutput {
+        let (findings, diagnostic) = untested::find_untested(ctx.graph, ctx.reach);
+        AnalysisOutput {
+            findings,
+            diagnostics: diagnostic.into_iter().collect(),
+            ..Default::default()
+        }
+    }
+}
+
+/// Registry order fixes the `--verbose` timings order — matches the historical join-tree push
+/// order exactly, so `--verbose` output is unchanged even though the join tree is gone.
+fn registry() -> Vec<Box<dyn Analysis>> {
+    vec![
+        Box::new(UnusedAnalysis),
+        Box::new(TestOnlyAnalysis),
+        Box::new(DependenciesAnalysis),
+        Box::new(DuplicateFilesAnalysis),
+        Box::new(DuplicateFunctionsAnalysis),
+        Box::new(InternalOnlyAnalysis),
+        Box::new(PrivateTypeLeakAnalysis),
+        Box::new(DeepImportAnalysis),
+        Box::new(CyclicAnalysis),
+        Box::new(CrapAnalysis),
+        Box::new(UntestedAnalysis),
+    ]
+}
+
+/// Diagnostic order predates the registry (`crap`, `untested`, `dependencies`-hygiene) —
+/// preserved exactly rather than falling out of registry order, since only these three ever
+/// emit one and nothing about their relative order is registry-position-derived.
+const DIAGNOSTIC_ORDER: [&str; 3] = ["crap", "untested", "dependencies"];
+
 /// Runs every analysis and returns their findings, sorted by id for deterministic output.
 /// `coverage` is the run's ingested coverage — a separate input rather than part of
 /// the graph, because report freshness varies independently of source content hashes and must
@@ -122,150 +339,45 @@ pub fn run_all(
 ) -> AnalysisOutcome {
     let mut timings = Timings::new();
     let reach = timings.time("reachability", || reachability::compute(graph));
-    let reach = &reach;
-
-    // Independent analyses run concurrently (the inter-analysis parallelism) via an
-    // explicit join tree — parallel compute, deterministic reduce: every result lands in
-    // a named slot, findings are extended in the same fixed order as ever (and id-sorted
-    // below regardless), and per-phase timings are pushed in that fixed order after the join.
-    // The timing values themselves are each phase's own elapsed time — under parallelism they
-    // overlap, so the `--verbose` block's total exceeds the wall clock by design.
-    let timed = |f: &dyn Fn() -> Vec<Finding>| {
-        let start = std::time::Instant::now();
-        (f(), start.elapsed().as_micros() as u64)
+    let ctx = AnalysisCtx {
+        graph,
+        reach: &reach,
+        coverage,
+        tuning,
     };
-    #[allow(clippy::type_complexity)]
-    let (
-        ((unused_r, test_only_r), (dependencies_r, duplicate_files_r)),
-        (
-            ((duplicate_fn_r, duplicate_fn_us), internal_only_r),
-            ((ptl_r, deep_import_r), ((cyclic_r, cyclic_us), (crap_r, untested_r))),
-        ),
-    ) = rayon::join(
-        || {
-            rayon::join(
-                || {
-                    rayon::join(
-                        || {
-                            timed(&|| {
-                                let mut f = unused::find_unused_files(graph, reach);
-                                f.extend(unused::find_unused_symbols(graph, reach));
-                                f
-                            })
-                        },
-                        || {
-                            timed(&|| {
-                                let mut f = test_only::find_test_only_files(graph, reach);
-                                f.extend(test_only::find_test_only_symbols(graph, reach));
-                                f
-                            })
-                        },
-                    )
-                },
-                || {
-                    rayon::join(
-                        || {
-                            let start = std::time::Instant::now();
-                            let mut f = undeclared::find_undeclared_dependencies(graph);
-                            f.extend(version_skew::find_version_skew(graph));
-                            let (hygiene_findings, hygiene_diagnostic) =
-                                dependency_hygiene::find_dependency_hygiene(graph);
-                            f.extend(hygiene_findings);
-                            ((f, hygiene_diagnostic), start.elapsed().as_micros() as u64)
-                        },
-                        || timed(&|| duplicate::find_duplicate_files(graph)),
-                    )
-                },
-            )
-        },
-        || {
-            rayon::join(
-                || {
-                    rayon::join(
-                        || {
-                            let start = std::time::Instant::now();
-                            let out = duplicate::find_duplicate_functions(
-                                graph,
-                                tuning.duplicate_min_tokens,
-                            );
-                            (out, start.elapsed().as_micros() as u64)
-                        },
-                        || timed(&|| internal_only::find_internal_only(graph, reach)),
-                    )
-                },
-                || {
-                    rayon::join(
-                        || {
-                            rayon::join(
-                                || timed(&|| private_type_leak::find_private_type_leaks(graph)),
-                                || timed(&|| deep_import::find_deep_imports(graph)),
-                            )
-                        },
-                        || {
-                            rayon::join(
-                                || {
-                                    let start = std::time::Instant::now();
-                                    let out = cyclic::find_cycles(graph);
-                                    (out, start.elapsed().as_micros() as u64)
-                                },
-                                || {
-                                    rayon::join(
-                                        || {
-                                            let start = std::time::Instant::now();
-                                            let out = crap::find_crap(
-                                                graph,
-                                                coverage,
-                                                tuning.crap_threshold,
-                                            );
-                                            (out, start.elapsed().as_micros() as u64)
-                                        },
-                                        || {
-                                            let start = std::time::Instant::now();
-                                            let out = untested::find_untested(graph, reach);
-                                            (out, start.elapsed().as_micros() as u64)
-                                        },
-                                    )
-                                },
-                            )
-                        },
-                    )
-                },
-            )
-        },
-    );
 
-    let (duplicate_findings, duplicated) = duplicate_fn_r;
-    let (cycle_findings, cycle_files) = cyclic_r;
-    let ((crap_findings, crap_diagnostic), crap_us) = crap_r;
-    let ((untested_findings, untested_diagnostic), untested_us) = untested_r;
-    let ((dependency_findings, hygiene_diagnostic), dependencies_us) = dependencies_r;
+    // Independent analyses run concurrently — a registry, not a hand-built join tree: each
+    // entry's own elapsed time is real (they overlap under parallelism, so `--verbose`'s
+    // total exceeds the wall clock by design, same as before). `par_iter().map().collect()`
+    // preserves registry order regardless of completion order, so the reduce below stays
+    // deterministic without an explicit sort.
+    let registry = registry();
+    let results: Vec<(&'static str, AnalysisOutput, u64)> = registry
+        .par_iter()
+        .map(|a| {
+            let start = std::time::Instant::now();
+            let out = a.run(&ctx);
+            (a.id(), out, start.elapsed().as_micros() as u64)
+        })
+        .collect();
 
-    let mut findings = unused_r.0;
-    timings.entries.push(("unused", unused_r.1));
-    findings.extend(test_only_r.0);
-    timings.entries.push(("test-only", test_only_r.1));
-    findings.extend(dependency_findings);
-    timings.entries.push(("dependencies", dependencies_us));
-    findings.extend(duplicate_files_r.0);
-    timings
-        .entries
-        .push(("duplicate-files", duplicate_files_r.1));
-    findings.extend(duplicate_findings);
-    timings
-        .entries
-        .push(("duplicate-functions", duplicate_fn_us));
-    findings.extend(internal_only_r.0);
-    timings.entries.push(("internal-only", internal_only_r.1));
-    findings.extend(ptl_r.0);
-    timings.entries.push(("private-type-leak", ptl_r.1));
-    findings.extend(deep_import_r.0);
-    timings.entries.push(("deep-import", deep_import_r.1));
-    findings.extend(cycle_findings);
-    timings.entries.push(("cyclic", cyclic_us));
-    findings.extend(crap_findings);
-    timings.entries.push(("crap", crap_us));
-    findings.extend(untested_findings);
-    timings.entries.push(("untested", untested_us));
+    let mut findings = Vec::new();
+    let mut cycle_files: HashSet<FileId> = HashSet::default();
+    let mut duplicated: Vec<(SymbolId, u32)> = Vec::new();
+    let mut diagnostics_by_id: HashMap<&'static str, Vec<Diagnostic>> = HashMap::default();
+    for (id, out, us) in results {
+        findings.extend(out.findings);
+        cycle_files.extend(out.cycle_files);
+        duplicated.extend(out.duplicated);
+        diagnostics_by_id.insert(id, out.diagnostics);
+        timings.entries.push((id, us));
+    }
+    let diagnostics: Vec<Diagnostic> = DIAGNOSTIC_ORDER
+        .into_iter()
+        .filter_map(|id| diagnostics_by_id.remove(id))
+        .flatten()
+        .collect();
+
     timings.time("sort-findings", || {
         findings.sort_unstable_by(|a, b| a.id.cmp(&b.id))
     });
@@ -275,7 +387,7 @@ pub fn run_all(
     let health = timings.time("health", || {
         health::compute(
             graph,
-            reach,
+            &reach,
             &findings,
             &health::HealthInputs {
                 coverage,
@@ -288,11 +400,7 @@ pub fn run_all(
 
     AnalysisOutcome {
         findings,
-        diagnostics: crap_diagnostic
-            .into_iter()
-            .chain(untested_diagnostic)
-            .chain(hygiene_diagnostic)
-            .collect(),
+        diagnostics,
         health,
         timings: timings.entries,
     }

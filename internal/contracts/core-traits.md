@@ -559,19 +559,42 @@ pub trait Plugin: Send + Sync {
 
 ## 4. `Analysis`
 
-Internal trait (not pluggable in 1.0 — RFC 0003 §6), listed here because its shape constrains
-the graph API:
+Internal trait (not pluggable in 1.0 — RFC 0003 §6; §6 below also marks it "Internal — may
+change any release"), listed here because its shape constrains the graph API. What's landed
+(`analysis/mod.rs`) is the uniform-output seam this section originally speculated a
+dirty-region incremental subsystem into, without building that subsystem before anything
+needs it:
 
 ```rust
-pub trait Analysis: Send + Sync {
-    fn id(&self) -> AnalysisId;                       // "unused", "crap", …
-    fn run_full(&self, graph: &GraphView, enrich: &Enrichments) -> Vec<Finding>;
-    /// Incremental entry point; default = run_full (correct, slower). Implementations override
-    /// with dirty-region logic (RFC 0004 §5). CI enforces full ≡ incremental on fixtures.
-    fn run_incremental(&self, graph: &GraphView, dirty: &DirtyRegion, prev: &FindingsView,
-                       enrich: &Enrichments) -> Vec<Finding> { ... }
+pub(crate) struct AnalysisCtx<'a> {
+    graph: &'a ProjectGraph, reach: &'a ReachabilityMap,
+    coverage: &'a CoverageMap, tuning: &'a AnalysisTuning,
+}
+#[derive(Default)]
+pub(crate) struct AnalysisOutput {
+    findings: Vec<Finding>, diagnostics: Vec<Diagnostic>,
+    cycle_files: HashSet<FileId>,        // populated by `cyclic` only
+    duplicated: Vec<(SymbolId, u32)>,    // populated by `duplicate-functions` only
+}
+pub(crate) trait Analysis: Send + Sync {
+    fn id(&self) -> &'static str;                        // "unused", "crap", … — also the
+                                                           // `--verbose` timings label
+    fn run(&self, ctx: &AnalysisCtx<'_>) -> AnalysisOutput;
 }
 ```
+
+`run_all` holds a fixed-order `Vec<Box<dyn Analysis>>` registry, runs it via
+`par_iter().map(...).collect()` (order-preserving regardless of completion order — no
+explicit join tree to hand-maintain per analysis added), then reduces deterministically:
+findings concatenate in registry order and are id-sorted after: `cycle_files`/`duplicated`
+merge from whichever single analysis populates them; diagnostics keep their pre-refactor
+fixed order (`crap`, `untested`, `dependencies`-hygiene — the only three that ever emit one)
+rather than falling out of registry position.
+
+**Not built, and not what this landed as:** `GraphView`/`Enrichments`/`DirtyRegion`/
+`FindingsView` and a `run_incremental` entry point. RFC 0004 §5's dirty-region analysis
+incrementality doesn't exist yet (§5 below); when it lands, the registry above is the seam
+it plugs into — an `Analysis` impl gaining a second method, not a new dispatch mechanism.
 
 ## 5. `Engine` — the frontend boundary
 
