@@ -16,7 +16,7 @@
 //! shared fingerprint — long enough runs can't hide, short accidental overlaps mostly don't
 //! fire.
 
-use kndo_core::adapter::{FileFacts, FunctionMetrics};
+use kndo_core::adapter::{FileFacts, FunctionMetrics, Span};
 use smol_str::SmolStr;
 use tree_sitter::Node;
 
@@ -63,14 +63,19 @@ pub struct FunctionShape {
 }
 
 /// Computes [`function_shape`] and appends the resulting [`FunctionMetrics`] to `out` — the
-/// same five-field mapping duplicated identically across four adapters before this moved here.
+/// same mapping duplicated identically across four adapters before this moved here.
 /// `syntax`/`min_clone_tokens` stay parameters (per-language data, not duplication) — most
-/// adapters wrap this in a one-line local `push_function_metrics(out, symbol, body)` that
-/// partially applies its own [`MetricsSyntax`] and [`MIN_CLONE_TOKENS`], so their own call
-/// sites stay unchanged.
+/// adapters wrap this in a one-line local `push_function_metrics(out, symbol, decl_span, body)`
+/// that partially applies its own [`MetricsSyntax`] and [`MIN_CLONE_TOKENS`].
+///
+/// `decl_span` must be the span of the [`kndo_core::adapter::Declaration`] these metrics
+/// describe — the *declaration's* span, not the body's. Assembly resolves metrics to their
+/// symbol by that span, so a mismatch silently drops the metrics (no duplication/CRAP analysis
+/// for that callable) rather than misattributing them.
 pub fn push_function_metrics(
     out: &mut FileFacts,
     symbol: &str,
+    decl_span: Span,
     body: Node,
     syntax: &MetricsSyntax,
     min_clone_tokens: usize,
@@ -78,6 +83,7 @@ pub fn push_function_metrics(
     let shape = function_shape(body, syntax, min_clone_tokens);
     out.functions.push(FunctionMetrics {
         symbol: SmolStr::new(symbol),
+        span: decl_span,
         cyclomatic: shape.cyclomatic,
         loc: shape.loc,
         token_count: shape.token_count as u32,

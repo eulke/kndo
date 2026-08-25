@@ -78,7 +78,31 @@ cycles don't feed health's cycles axis either). Listed here so the *absence* of 
 finding on this repo isn't triaged as a detector gap — the structure is real and remains
 visible through the graph itself (`kndo query`/doctor), just never as a finding.
 
-## 7. False negative: path references in prose
+## 7. Intra-package visibility leaks (narrower than the four-bucket ladder)
+
+`private-type-leak` accuses only items whose visibility rung is `surface_transitive` — items
+that genuinely cross the package boundary. An item visible to a *sibling module* that names a
+type private to its own module is a real leak by the letter of the language's rules, and is
+now silent: Rust's `pub(super) fn unset_waker` in tokio's `task::state`, returning a
+`state.rs`-private alias that its sibling `task::harness` caller cannot spell.
+
+Root cause: the region such an item is visible to sits strictly between `File` and `Package`,
+and `VisibilityScope` has no rung there — adapters over-approximate a top-level `pub(super)`
+as `pub(crate)` for exactly that reason (`kndo-adapter-rust`'s `restriction_level`). With that
+approximation the model cannot tell the tokio case apart from the far more common inverse,
+where every caller that can reach the item can also name the type (ripgrep's
+`flags::parse::lookup` against the private `Flag` trait, serde's `de::deserialize_custom`
+against `Parameters`) — a field audit found the harmless shape three times for each real one.
+RFC 0012 §2 is explicit about which way to degrade when the model cannot prove the accusation,
+so the gate stays until the scope exists.
+
+Direction: a module-subtree scope in the ladder (`VisibilityScope::Module`, anchored on the
+declaring file's `unit` — Rust already keys units on the module path, RFC 0012 §8), plus
+adapters emitting `pub(super)`/`pub(in path)` as that rung instead of collapsing it upward.
+`scope_contains_site` gains one arm; the containment comparison this analysis already performs
+then decides the case exactly, with no gate needed.
+
+## 8. False negative: path references in prose
 
 When `internal/perf-baseline.json` replaced `docs/perf-baseline.json`, four Markdown
 documents kept pointing at the dead path and nothing flagged them: kndo extracts no

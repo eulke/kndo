@@ -129,12 +129,13 @@ becomes a root too — see §4 for why this is the right per-package analogue of
 `private` check, computed here in extraction rather than there because Go's root-worthiness is a
 **per-file, path-derived fact** (is this file under `internal/`?), not a manifest-level one.
 
-**Metrics** (`FunctionMetrics` — cyclomatic complexity, token fingerprints): **not populated**,
-matching JS/TS's actual current state exactly (verified before writing this doc: `extraction.rs`'s
-own header lists these as "deferred to later commits," and nothing in the codebase populates
-`FunctionMetrics` for any language yet). Not a Go-specific gap — CRAP/duplicate-detection support
-lands with M4 regardless of language, so there is no toolkit-shared complexity walker to call into
-yet either.
+**Metrics** (`FunctionMetrics` — cyclomatic complexity, token fingerprints): populated for every
+function and method, via the shared toolkit walker (`kndo_adapter_toolkit::metrics`), feeding
+`crap` and structural `duplicate`. Each entry carries the **declaration's own span**, which is what
+assembly resolves to a `SymbolId`; the entry's `symbol` name is display only. Passing the body's
+span instead of the declaration's silently drops the metrics for that callable — assembly matches
+spans exactly and does not fall back to a name lookup, deliberately: name lookup is what let
+build-tag-alternated files declaring one name collapse onto a single symbol.
 
 **Suppressions**: `// kndo:allow …` on its own line or trailing a declaration — same syntax and
 scope rules as JS/TS (RFC 0005 §12 is language-neutral; only comment *syntax* is adapter-owned,

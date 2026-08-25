@@ -272,6 +272,18 @@ js-ts gap, unsolved by this RFC rather than half-solved.
 adapters encode their language's *real* resolution unit in it without the core learning
 anything. Conventions per language, recorded so adapters stay mutually consistent in spirit:
 
+**A unit key is unique only within a package.** Java/Kotlin key on the declared package name
+and Swift on the target name, so two Gradle modules declaring `package retrofit2;`, or two
+Swift packages each declaring a target `Core`, share one key repo-wide. The core therefore
+keeps the reverse index in two forms — repo-global, and partitioned by owning package
+(`graph::assemble::build_unit_indexes`, shared with the patch path) — and
+`ResolveCtx::unit_files_from` prefers the importer's own package, falling back to global only
+when it has no candidate. Without the preference a resolver picking `.first()` by path order
+binds intra-module imports to unrelated siblings; without the fallback genuine cross-module
+imports stop resolving. Reachability never depended on which file an edge landed on (same-unit
+fallback), but `cyclic` reads the literal edge as evidence, and read phantom package cycles out
+of it in four of the six languages a field audit covered.
+
 | Language | unit key |
 |----------|----------|
 | Go | `dir#declared-package-name` — splits external test packages (`foo_test`) from `foo` in the same directory, closing the documented §1.1 imprecision of docs/adapters/go.md with zero core changes |

@@ -28,7 +28,7 @@ pub(crate) fn resolve(spec: &ImportSpec, ctx: &ResolveCtx<'_>) -> Resolution {
     if STDLIB_MODULES.contains(&module) {
         return Resolution::Stdlib;
     }
-    let Some(target) = ctx.unit_files(module).first() else {
+    let Some(target) = ctx.unit_files_from(module, &spec.from).first() else {
         return Resolution::Unresolved;
     };
     Resolution::File(target.clone(), kndo_core::vocab::Confidence::Certain)

@@ -158,7 +158,17 @@ pub trait LanguageAdapter: Send + Sync {
     /// no self-declaration contract exists to validate, so assembly derives ImportsFile
     /// only (no phantom `undeclared`, no dependency-usage credit).
     /// ResolveCtx carries the workspace-member index
-    /// (name → { dir, resolved entry }) the core builds from every named manifest's facts.
+    /// (name → { dir, resolved entry }) the core builds from every named manifest's facts,
+    /// and the unit reverse-index in two forms. `unit_files(unit)` is repo-global;
+    /// `unit_files_from(unit, &spec.from)` prefers candidates in the IMPORTER's own package and
+    /// falls back to the global set only when it has none. Prefer the latter: a unit key is
+    /// unique only within a package (§8 of RFC 0012 keys Java/Kotlin units on the declared
+    /// package name and Swift's on the target name), so sibling modules that share a package
+    /// name share a key, and a resolver picking `.first()` by path order could bind an import
+    /// to an unrelated module — a phantom edge `cyclic` reports as a package cycle neither
+    /// module's source supports. Reachability is insulated from the choice (same-unit fallback
+    /// keeps every file in the unit reachable); the literal edge is not, because it is
+    /// evidence. The fallback is what keeps genuine cross-module imports resolving.
     /// When no concrete in-repo file matches (a source checkout whose published entries are
     /// build artifacts), the specifier falls through to the external ladder as a plain
     /// Dependency — the package is still consumed, and dropping to Unresolved would silently
@@ -296,12 +306,23 @@ pub struct FileFacts {
                                              // wildcards over the resolved target's symbols.
     pub roots:        Vec<RawRoot>,         // language-defined only (main, pub API…), target is
                                              // *within this file* — WholeFile | Declaration(name)
-    pub functions:    Vec<FunctionMetrics>, // { symbol, cyclomatic: u32, loc, fingerprints }
-                                             // (RFC 0005 §6): one entry per callable, over its
-                                             // BODY. symbol uses the roots/within naming
-                                             // convention (bare, or qualified Owner.name for
-                                             // members); assembly resolves it to a SymbolId
-                                             // onto ProjectGraph::function_metrics.
+    pub functions:    Vec<FunctionMetrics>, // { symbol, span, cyclomatic: u32, loc,
+                                             // fingerprints } (RFC 0005 §6): one entry per
+                                             // callable, computed over its BODY. `span` is the
+                                             // paired Declaration's OWN span, and is what
+                                             // assembly resolves to a SymbolId onto
+                                             // ProjectGraph::function_metrics — NOT `symbol`,
+                                             // which stays the roots/within naming convention
+                                             // (bare, or qualified Owner.name for members) for
+                                             // display only. Name resolution was wrong here: a
+                                             // file may declare one name twice (cfg-alternated
+                                             // impls, platform-gated overloads) and the
+                                             // per-file name tables are single-slot, so both
+                                             // entries collapsed onto one symbol — read back as
+                                             // a structural clone of itself, with its tokens
+                                             // double-counted into health. There is no default:
+                                             // an adapter emitting metrics must say which
+                                             // declaration they belong to.
                                              // fingerprints = winnowing over the normalized
                                              // token stream (toolkit metrics module: IDs/
                                              // literals canonicalized, comments skipped), empty

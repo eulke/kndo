@@ -210,10 +210,11 @@ const METRICS_SYNTAX: kndo_adapter_toolkit::metrics::MetricsSyntax =
 /// One callable's `FunctionMetrics`, over its *body* — the part that
 /// gets copy-pasted. Used for named function declarations and for callables bound to a
 /// `const`/`let` (`const f = (x) => …`), JS's other ordinary function-definition shape.
-fn push_function_metrics(out: &mut FileFacts, symbol: &str, body: Node) {
+fn push_function_metrics(out: &mut FileFacts, symbol: &str, decl_span: Span, body: Node) {
     kndo_adapter_toolkit::metrics::push_function_metrics(
         out,
         symbol,
+        decl_span,
         body,
         &METRICS_SYNTAX,
         kndo_adapter_toolkit::metrics::MIN_CLONE_TOKENS,
@@ -234,7 +235,7 @@ fn handle_named(node: Node, src: &[u8], exported: bool, out: &mut FileFacts, kin
     };
     if matches!(kind, SymbolKind::Function) {
         if let Some(body) = node.child_by_field_name("body") {
-            push_function_metrics(out, &name, body);
+            push_function_metrics(out, &name, span(node), body);
         }
     }
     out.declarations.push(Declaration {
@@ -456,7 +457,7 @@ fn handle_lexical(node: Node, src: &[u8], exported: bool, out: &mut FileFacts) {
                 "arrow_function" | "function_expression" | "generator_function"
             ) {
                 if let Some(body) = value.child_by_field_name("body") {
-                    push_function_metrics(out, text(name_node, src), body);
+                    push_function_metrics(out, text(name_node, src), span(declarator), body);
                 }
             }
         }

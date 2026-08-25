@@ -15,7 +15,9 @@ use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 use crate::analysis::{finding_id, package_discriminator, package_label, FindingIdParts};
 use crate::engine::{Finding, Location, Severity};
 use crate::graph::ProjectGraph;
-use crate::vocab::{Category, Confidence, DependencyId, EdgeKind, Group, PackageId, SubjectKind};
+use crate::vocab::{
+    Category, Confidence, DependencyId, EdgeKind, FileOrigin, Group, PackageId, SubjectKind,
+};
 
 pub fn find_undeclared_dependencies(graph: &ProjectGraph) -> Vec<Finding> {
     let mut declared_by_package: HashMap<PackageId, HashSet<&str>> = HashMap::default();
@@ -39,6 +41,18 @@ pub fn find_undeclared_dependencies(graph: &ProjectGraph) -> Vec<Finding> {
                 continue;
             }
             let file = &graph.files[from.0 as usize];
+            // Origin exemption, the same two-level shape every sibling analysis applies
+            // (`crap`, `duplicate`, `internal_only`, `private_type_leak`, `test_only`,
+            // `untested`, `unused`, `cyclic`): a generated or vendored file's imports are not
+            // its package's authored intent — nobody is going to add a dependency declaration
+            // to satisfy a checked-in bundle. `undeclared` and `dependency_hygiene` were the
+            // only two analyses missing it.
+            if file
+                .class
+                .is_some_and(|c| matches!(c.origin, FileOrigin::Generated | FileOrigin::Vendored))
+            {
+                continue;
+            }
             importers
                 .entry((to, file.package))
                 .or_default()
@@ -48,6 +62,16 @@ pub fn find_undeclared_dependencies(graph: &ProjectGraph) -> Vec<Finding> {
 
     let mut findings = Vec::new();
     for (&(dep_id, package), files) in &importers {
+        // The manifest has to be able to answer the question at all. When the claiming
+        // adapter says its import specifiers don't structurally identify manifest coordinates
+        // (Swift: `Package.swift` names a dependency's repository URL, never the module names
+        // it exports — so `import Foo` can never be matched against a declaration), "not
+        // declared here" is not evidence of anything. `dependency_hygiene` has always gated on
+        // this; `undeclared` did not, so the two analyses disagreed about whether such a
+        // package could be judged by its declarations at all.
+        if !graph.packages[package.0 as usize].resolves_dependency_usage {
+            continue;
+        }
         let name = graph.dependencies[dep_id.0 as usize].name.as_str();
         let declared = declared_by_package
             .get(&package)
@@ -116,7 +140,9 @@ mod tests {
     use super::*;
     use crate::adapter::ProjectPath;
     use crate::graph::{DeclaredDependency, DependencyNode, FileNode, PackageNode};
-    use crate::vocab::{Confidence, DependencyScope, Edge, FileClass, FileId, Provenance};
+    use crate::vocab::{
+        Confidence, DependencyScope, Edge, FileClass, FileId, FileOrigin, Provenance,
+    };
     use smol_str::SmolStr;
 
     fn file(path: &str, package: PackageId) -> FileNode {
@@ -175,6 +201,72 @@ mod tests {
                 scope: DependencyScope::Prod,
             }]);
         assert!(find_undeclared_dependencies(&graph).is_empty());
+    }
+
+    #[test]
+    fn a_package_whose_imports_cannot_name_declarations_is_never_accused() {
+        // Swift's shape: `Package.swift` states a dependency's repository URL, never the module
+        // names it exports, so `import Foo` can never be matched against a declaration and
+        // "not declared here" is evidence of nothing. `dependency_hygiene` has always gated on
+        // `resolves_dependency_usage`; `undeclared` did not, so the two analyses disagreed —
+        // and every Swift repo in the field audit reported a phantom `jquery` dependency
+        // against its `Package.swift` because a Jazzy-generated `.js` file under `docs/` is
+        // owned by the nearest manifest, which is the Swift one.
+        let files = vec![file("docs/js/typeahead.jquery.js", PackageId(0))];
+        let dependencies = vec![DependencyNode {
+            name: SmolStr::new("jquery"),
+        }];
+        let edges = vec![imports_dep_edge(FileId(0), DependencyId(0))];
+        let graph = ProjectGraph::for_test(files, vec![], dependencies, edges).with_packages(vec![
+            PackageNode {
+                manifest: Some(ProjectPath(SmolStr::new("Package.swift"))),
+                name: Some(SmolStr::new("swift-pkg")),
+                private: false,
+                declares_surface: false,
+                surface: Vec::new(),
+                workspace_entry: None,
+                targets: Vec::new(),
+                executables: Vec::new(),
+                resolves_dependency_usage: false,
+            },
+        ]);
+        assert!(find_undeclared_dependencies(&graph).is_empty());
+    }
+
+    #[test]
+    fn a_generated_or_vendored_file_does_not_accuse_its_package() {
+        // The same two-level origin exemption every sibling analysis applies: a checked-in
+        // bundle's imports are not its package's authored intent — nobody adds a dependency
+        // declaration to satisfy generated code. `undeclared` and `dependency_hygiene` were
+        // the only analyses missing it.
+        let dependencies = || {
+            vec![DependencyNode {
+                name: SmolStr::new("jquery"),
+            }]
+        };
+        let edges = || vec![imports_dep_edge(FileId(0), DependencyId(0))];
+
+        for origin in [FileOrigin::Generated, FileOrigin::Vendored] {
+            let mut f = file("docs/js/bundle.js", PackageId(0));
+            f.class = Some(FileClass {
+                role: crate::vocab::FileRole::Production,
+                origin,
+            });
+            let graph = ProjectGraph::for_test(vec![f], vec![], dependencies(), edges());
+            assert!(
+                find_undeclared_dependencies(&graph).is_empty(),
+                "{origin:?} files must not accuse their package"
+            );
+        }
+
+        // The authored control still reports — the exemption is about origin, not the path.
+        let graph = ProjectGraph::for_test(
+            vec![file("docs/js/bundle.js", PackageId(0))],
+            vec![],
+            dependencies(),
+            edges(),
+        );
+        assert_eq!(find_undeclared_dependencies(&graph).len(), 1);
     }
 
     #[test]

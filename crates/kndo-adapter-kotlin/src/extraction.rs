@@ -406,7 +406,7 @@ fn handle_function(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
     walk_function_signature(item, src, Some(&qualified), out);
     if let Some(body) = body {
         walk_body(body, src, Some(&qualified), out);
-        push_function_metrics(out, &qualified, body);
+        push_function_metrics(out, &qualified, span(item), body);
     }
 }
 
@@ -502,12 +502,19 @@ fn handle_secondary_constructor(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut
     }
     if let Some(block) = block {
         walk_body(block, src, Some(&qualified), out);
-        push_function_metrics(out, &qualified, block);
+        push_function_metrics(out, &qualified, span(item), block);
     }
 }
 
-fn push_function_metrics(out: &mut FileFacts, qualified: &str, body: Node) {
-    toolkit_push_function_metrics(out, qualified, body, &METRICS_SYNTAX, MIN_CLONE_TOKENS);
+fn push_function_metrics(out: &mut FileFacts, qualified: &str, decl_span: Span, body: Node) {
+    toolkit_push_function_metrics(
+        out,
+        qualified,
+        decl_span,
+        body,
+        &METRICS_SYNTAX,
+        MIN_CLONE_TOKENS,
+    );
 }
 
 // ---------------------------------------------------------------- properties, type aliases, init

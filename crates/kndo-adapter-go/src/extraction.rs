@@ -270,6 +270,9 @@ fn push_function_metrics(out: &mut FileFacts, symbol: &str, node: Node) {
     kndo_adapter_toolkit::metrics::push_function_metrics(
         out,
         symbol,
+        // `node` is the declaration node — the same span `push_declaration` recorded, which
+        // is what assembly matches metrics against.
+        span(node),
         body,
         &METRICS_SYNTAX,
         kndo_adapter_toolkit::metrics::MIN_CLONE_TOKENS,

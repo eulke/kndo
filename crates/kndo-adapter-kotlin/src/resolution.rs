@@ -13,7 +13,7 @@ pub(crate) fn resolve(spec: &ImportSpec, ctx: &ResolveCtx<'_>) -> Resolution {
         return Resolution::Stdlib;
     }
 
-    let Some(target) = ctx.unit_files(package).first() else {
+    let Some(target) = ctx.unit_files_from(package, &spec.from).first() else {
         return Resolution::Unresolved;
     };
     Resolution::File(target.clone(), kndo_core::vocab::Confidence::Certain)

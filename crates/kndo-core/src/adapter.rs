@@ -390,6 +390,16 @@ pub struct RawRoot {
 pub struct FunctionMetrics {
     /// Declared name (symbol path within the file).
     pub symbol: SmolStr,
+    /// The span of the [`Declaration`] these metrics describe — byte-for-byte the same
+    /// `Declaration::span`, which is what makes it an exact identity. Metrics resolve to their
+    /// symbol by span, never by name: a file may legitimately declare the same name twice
+    /// (cfg-alternated `impl` blocks each declaring `Data.from_path`, platform-gated
+    /// overloads), and a name lookup against the file's single-slot symbol table silently
+    /// resolved BOTH entries to whichever declaration was inserted last — which then read as a
+    /// structural clone of itself and double-counted its tokens into health's duplication
+    /// ratio. There is deliberately no default: an adapter that emits metrics must say which
+    /// declaration they belong to.
+    pub span: Span,
     pub cyclomatic: u32,
     pub loc: u32,
     /// Normalized-stream token count — `health`'s duplication ratio
@@ -788,6 +798,19 @@ pub struct ResolveCtx<'a> {
     /// no reliable specifier→directory mapping (the source root isn't visible to a bare
     /// dotted package name), so resolution needs the reverse lookup this index provides.
     units: Option<&'a rustc_hash::FxHashMap<SmolStr, Vec<ProjectPath>>>,
+    /// The same reverse index, partitioned by the owning package (nearest-manifest-ancestor).
+    /// A unit key is only unique *within* a package: Java and Kotlin key units on the declared
+    /// package name (RFC 0012 §8 — never directory-derived, deliberately, since a source root
+    /// is a build-tool convention a bare dotted name can't reveal), so two Gradle modules that
+    /// both declare `package retrofit2;` share one unit key across the whole repo. Swift keys
+    /// on the target name, and two packages may each declare a target `Core`. Left unset by
+    /// callers that have no ownership map; [`Self::unit_files_from`] then behaves exactly like
+    /// [`Self::unit_files`].
+    units_by_package:
+        Option<&'a rustc_hash::FxHashMap<u32, rustc_hash::FxHashMap<SmolStr, Vec<ProjectPath>>>>,
+    /// Which package owns each claimed file — the lookup that makes `units_by_package` usable
+    /// from a resolver, which knows only the importing file's path.
+    file_package: Option<&'a rustc_hash::FxHashMap<ProjectPath, u32>>,
 }
 
 impl<'a> ResolveCtx<'a> {
@@ -797,6 +820,8 @@ impl<'a> ResolveCtx<'a> {
             declared_dependencies: None,
             workspace_members: None,
             units: None,
+            units_by_package: None,
+            file_package: None,
         }
     }
 
@@ -821,6 +846,21 @@ impl<'a> ResolveCtx<'a> {
         self
     }
 
+    /// Package-partitioned units plus the file→package lookup they're keyed by. Optional: a
+    /// context without them resolves units repo-globally, exactly as before.
+    pub fn with_package_units(
+        mut self,
+        units_by_package: &'a rustc_hash::FxHashMap<
+            u32,
+            rustc_hash::FxHashMap<SmolStr, Vec<ProjectPath>>,
+        >,
+        file_package: &'a rustc_hash::FxHashMap<ProjectPath, u32>,
+    ) -> Self {
+        self.units_by_package = Some(units_by_package);
+        self.file_package = Some(file_package);
+        self
+    }
+
     pub fn contains(&self, path: &ProjectPath) -> bool {
         self.known_files.contains(path)
     }
@@ -842,11 +882,43 @@ impl<'a> ResolveCtx<'a> {
 
     /// Every known file declaring `unit` (empty when none do, or `with_units` was never
     /// called). Sorted by path — deterministic which entry a caller picking `.first()` gets.
+    ///
+    /// Repo-global, so it cannot tell two same-named units in different packages apart. Prefer
+    /// [`Self::unit_files_from`], which can.
     pub fn unit_files(&self, unit: &str) -> &'a [ProjectPath] {
         self.units
             .and_then(|u| u.get(unit))
             .map(Vec::as_slice)
             .unwrap_or(&[])
+    }
+
+    /// [`Self::unit_files`] resolved from the perspective of the importing file: candidates in
+    /// the importer's OWN package win, and only when it has none does the repo-global set
+    /// answer.
+    ///
+    /// Both halves are load-bearing. Preferring the importer's package is what stops a module
+    /// from binding an import to a same-named package in an unrelated sibling module — the
+    /// resolver picks `.first()` by path order, so `retrofit/` importing `retrofit2.X` could
+    /// land in `android-test/`, inventing a cross-module edge that `cyclic` then reports as a
+    /// package cycle neither module's source supports. Falling back is what keeps *genuine*
+    /// cross-module imports working: a package that genuinely lives only in a sibling module
+    /// (guava's modules really do import each other) has no local candidate, and the global
+    /// set is the right answer there. Reachability was always insulated from the choice —
+    /// same-unit fallback makes every file in a unit reachable whichever one an edge lands on
+    /// — but the literal edge is evidence, and cycle detection reads it as such.
+    pub fn unit_files_from(&self, unit: &str, from: &ProjectPath) -> &'a [ProjectPath] {
+        let local = self
+            .file_package
+            .and_then(|fp| fp.get(from))
+            .zip(self.units_by_package)
+            .and_then(|(pkg, by_pkg)| by_pkg.get(pkg))
+            .and_then(|units| units.get(unit))
+            .map(Vec::as_slice)
+            .unwrap_or(&[]);
+        if local.is_empty() {
+            return self.unit_files(unit);
+        }
+        local
     }
 
     /// Every known file whose *immediate* directory equals `dir` (`""` = project root) — one

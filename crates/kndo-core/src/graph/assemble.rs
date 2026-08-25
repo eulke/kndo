@@ -146,6 +146,53 @@ pub(crate) fn scope_contains_site(
     }
 }
 
+/// The three unit lookups a resolver needs, built once from the file list. THE single
+/// constructor for this logic: the full build and the incremental patch both call it, so the
+/// two paths cannot drift (the same reason `emit_file_declarations` is shared).
+///
+/// `by_unit` is the historical repo-global reverse index. `by_package` partitions it by owning
+/// package and `file_package` makes that partition reachable from a resolver, which knows only
+/// the importing file's path — together they let [`crate::adapter::ResolveCtx::unit_files_from`]
+/// prefer a candidate in the importer's own package. A unit key is only unique within a
+/// package: Java/Kotlin key units on the declared package name, so sibling Gradle modules
+/// sharing a package name share a key, and Swift keys on the target name.
+pub(crate) struct UnitIndexes {
+    pub(crate) by_unit: HashMap<SmolStr, Vec<ProjectPath>>,
+    pub(crate) by_package: HashMap<u32, HashMap<SmolStr, Vec<ProjectPath>>>,
+    pub(crate) file_package: HashMap<ProjectPath, u32>,
+}
+
+pub(crate) fn build_unit_indexes(files: &[FileNode]) -> UnitIndexes {
+    let mut by_unit: HashMap<SmolStr, Vec<ProjectPath>> = HashMap::default();
+    let mut by_package: HashMap<u32, HashMap<SmolStr, Vec<ProjectPath>>> = HashMap::default();
+    let mut file_package: HashMap<ProjectPath, u32> = HashMap::default();
+    for f in files {
+        let Some(u) = &f.unit else { continue };
+        by_unit.entry(u.clone()).or_default().push(f.path.clone());
+        by_package
+            .entry(f.package.0)
+            .or_default()
+            .entry(u.clone())
+            .or_default()
+            .push(f.path.clone());
+        file_package.insert(f.path.clone(), f.package.0);
+    }
+    // Sorted, so `.first()` is deterministic for every caller (RFC 0008 §4).
+    for fs in by_unit.values_mut() {
+        fs.sort();
+    }
+    for units in by_package.values_mut() {
+        for fs in units.values_mut() {
+            fs.sort();
+        }
+    }
+    UnitIndexes {
+        by_unit,
+        by_package,
+        file_package,
+    }
+}
+
 /// Everything phase 3b's per-file resolution reads — immutable once the symbol tables are
 /// built. A named struct (not captured locals) because the incremental patch
 /// builds the same tables from the snapshot and calls the same [`resolve_file`]: one
@@ -731,7 +778,6 @@ pub(crate) fn emit_file_declarations(
     first_symbol: u32,
     symbols: &[SymbolNode],
     bare_table: &HashMap<SmolStr, SymbolId>,
-    qualified_table: &HashMap<String, SymbolId>,
     library_root_files: &HashMap<FileId, Confidence>,
     role_root_files: &HashMap<FileId, crate::vocab::RootKind>,
     ladder: Option<&[crate::adapter::VisibilityRung]>,
@@ -839,22 +885,38 @@ pub(crate) fn emit_file_declarations(
         }
     }
 
-    // Callable shapes: adapter names resolve exactly like root targets — bare
-    // table first, then the qualified member table; a no-match is dropped silently.
-    for fm in &facts.functions {
-        let resolved = bare_table
-            .get(fm.symbol.as_str())
-            .or_else(|| qualified_table.get(fm.symbol.as_str()));
-        if let Some(&symbol_id) = resolved {
-            metrics.push((
-                symbol_id,
-                SymbolMetrics {
-                    cyclomatic: fm.cyclomatic,
-                    loc: fm.loc,
-                    token_count: fm.token_count,
-                    fingerprints: fm.fingerprints.clone(),
-                },
-            ));
+    // Callable shapes resolve by SPAN, not by name. A file may legitimately declare the same
+    // name twice — cfg-alternated `impl` blocks each declaring `Data.from_path`, platform-gated
+    // overloads — and the per-file name tables are single-slot/last-wins, so a name lookup
+    // resolved every same-named metrics entry to whichever declaration was inserted last. That
+    // handed `duplicate` two Instances sharing one SymbolId (reported as a structural clone of
+    // itself, both `related` entries pointing at the identical file+range) and double-counted
+    // the symbol's tokens into health's duplication numerator. `FunctionMetrics::span` is the
+    // paired `Declaration::span` verbatim, and declarations occupy the contiguous symbol run
+    // starting at `first_symbol`, so the mapping is exact and total. A no-match is still
+    // dropped silently — the safe direction: a callable without metrics loses duplication/CRAP
+    // analysis, it never becomes a finding.
+    if !facts.functions.is_empty() {
+        let mut symbol_by_span: HashMap<crate::vocab::Span, SymbolId> = HashMap::default();
+        for (d, decl) in facts.declarations.iter().enumerate() {
+            // First writer wins: two declarations sharing a span would be an adapter bug, and
+            // silently rebinding to the later one is exactly the failure mode being fixed.
+            symbol_by_span
+                .entry(decl.span)
+                .or_insert(SymbolId(first_symbol + d as u32));
+        }
+        for fm in &facts.functions {
+            if let Some(&symbol_id) = symbol_by_span.get(&fm.span) {
+                metrics.push((
+                    symbol_id,
+                    SymbolMetrics {
+                        cyclomatic: fm.cyclomatic,
+                        loc: fm.loc,
+                        token_count: fm.token_count,
+                        fingerprints: fm.fingerprints.clone(),
+                    },
+                ));
+            }
         }
     }
 
@@ -2192,24 +2254,13 @@ pub fn assemble_from_source(
             });
     }
 
-    // Unit reverse-index (Java) — see try_patch's identical
-    // construction for why this mirrors the patch path byte-for-byte.
-    let mut unit_index: HashMap<SmolStr, Vec<ProjectPath>> = HashMap::default();
-    for f in &files {
-        if let Some(u) = &f.unit {
-            unit_index
-                .entry(u.clone())
-                .or_default()
-                .push(f.path.clone());
-        }
-    }
-    for fs in unit_index.values_mut() {
-        fs.sort();
-    }
+    // Unit reverse-indexes — shared with the patch path so the two cannot drift.
+    let units = build_unit_indexes(&files);
     let ctx = ResolveCtx::new(&known_files)
         .with_declared_dependencies(&declared_dependency_names)
         .with_workspace_members(&workspace_member_index)
-        .with_units(&unit_index);
+        .with_units(&units.by_unit)
+        .with_package_units(&units.by_package, &units.file_package);
 
     // Phase 2.7 — library-surface expansion (completing the library mode): a
     // package-surface file's *whole-surface* re-exports — `pub mod x;` in Rust, `export *
@@ -2355,7 +2406,6 @@ pub fn assemble_from_source(
             symbol_range_per_file[i].0,
             &symbols,
             &symbol_by_name_per_file[i],
-            &symbol_by_qualified_per_file[i],
             &library_root_files,
             &role_root_files,
             files[i]

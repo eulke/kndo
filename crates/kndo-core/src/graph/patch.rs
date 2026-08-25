@@ -259,22 +259,12 @@ pub(crate) fn try_patch(
     // per-file `unit` already carried on `FileNode`. The surface-signature guard already
     // ensures a changed file's `unit` never silently drifts under the patch, so
     // reading `graph.files`' current state here stays byte-identical to a full rebuild.
-    let mut unit_index: HashMap<SmolStr, Vec<ProjectPath>> = HashMap::default();
-    for f in &graph.files {
-        if let Some(u) = &f.unit {
-            unit_index
-                .entry(u.clone())
-                .or_default()
-                .push(f.path.clone());
-        }
-    }
-    for files in unit_index.values_mut() {
-        files.sort();
-    }
+    let units = build_unit_indexes(&graph.files);
     let ctx = ResolveCtx::new(&known_files)
         .with_declared_dependencies(&declared_dependency_names)
         .with_workspace_members(&workspace_member_index)
-        .with_units(&unit_index);
+        .with_units(&units.by_unit)
+        .with_package_units(&units.by_package, &units.file_package);
 
     let files_len = graph.files.len();
     let mut symbol_by_name_per_file: Vec<HashMap<SmolStr, SymbolId>> =
@@ -418,7 +408,6 @@ pub(crate) fn try_patch(
                 symbol_range[c].0,
                 &graph.symbols,
                 &symbol_by_name_per_file[c],
-                &symbol_by_qualified_per_file[c],
                 &library_root_files,
                 &role_root_files,
                 graph.files[c]

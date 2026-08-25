@@ -16,11 +16,11 @@
 //!   `#[no_mangle]`/`#[export_name]` → FFI production root, `#[derive(X)]` → `TypeUse`
 //!   references (a derive-only dependency stays honestly used), `#[path]` → mod location.
 
-use kndo_adapter_toolkit::metrics::{function_shape, MetricsSyntax, MIN_CLONE_TOKENS};
+use kndo_adapter_toolkit::metrics::{MetricsSyntax, MIN_CLONE_TOKENS};
 use kndo_adapter_toolkit::parsing::{span, text};
 use kndo_core::adapter::{
-    AdapterDiagnostic, DiagnosticLevel, FileFacts, FunctionMetrics, ImportBinding, ImportKind,
-    RawImport, RawReference, RawRoot, RawRootTarget, Span,
+    AdapterDiagnostic, DiagnosticLevel, FileFacts, ImportBinding, ImportKind, RawImport,
+    RawReference, RawRoot, RawRootTarget, Span,
 };
 use kndo_core::vocab::{Confidence, RefKind, RootKind, SymbolKind};
 use smol_str::SmolStr;
@@ -1324,14 +1324,14 @@ fn handle_function(
             },
             out,
         );
-        let shape = function_shape(body, &METRICS_SYNTAX, MIN_CLONE_TOKENS);
-        out.functions.push(FunctionMetrics {
-            symbol: SmolStr::new(&qualified),
-            cyclomatic: shape.cyclomatic,
-            loc: shape.loc,
-            token_count: shape.token_count as u32,
-            fingerprints: shape.fingerprints,
-        });
+        kndo_adapter_toolkit::metrics::push_function_metrics(
+            out,
+            &qualified,
+            span(item),
+            body,
+            &METRICS_SYNTAX,
+            MIN_CLONE_TOKENS,
+        );
     }
 }
 

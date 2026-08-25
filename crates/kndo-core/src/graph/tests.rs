@@ -2958,3 +2958,96 @@ fn a_changed_file_misses_the_graph_snapshot_but_still_warms_its_sibling_from_fac
     assert_eq!(cache.graph_hits(), 0); // never hit — the key never matched after the edit
     assert_eq!(cache.hits(), 1); // b.mock's facts, unchanged, still served from disk
 }
+
+/// Regression: a file that declares the same name twice — cfg-alternated `impl` blocks, or
+/// platform-gated overloads — must map each declaration's metrics to its OWN symbol.
+///
+/// The per-file name tables assembly hands the emitter are single-slot/last-wins, so when
+/// metrics resolved by NAME both entries landed on whichever declaration was inserted last.
+/// `duplicate` then saw two Instances sharing one SymbolId and reported the declaration as a
+/// structural clone of itself (both `related` entries pointing at the identical file+range),
+/// while health counted the symbol's tokens twice in its duplication numerator. Metrics now
+/// resolve by the declaration's own span, which is exact.
+#[test]
+fn same_named_declarations_keep_their_own_metrics() {
+    use crate::adapter::{Declaration, FileFacts, FunctionMetrics, Span};
+
+    let at = |line: u32| Span {
+        start: (line, 1),
+        end: (line + 2, 1),
+    };
+    let decl = |span: Span| Declaration {
+        name: SmolStr::new("from_path"),
+        kind: crate::vocab::SymbolKind::Function,
+        span,
+        exported: true,
+        visibility: VisibilityLevel(1),
+        member_of: None,
+        signature_span: None,
+        implicitly_invoked: false,
+        nested_scope: false,
+        visibility_inherited: false,
+    };
+    let metrics = |span: Span, tokens: u32| FunctionMetrics {
+        symbol: SmolStr::new("from_path"),
+        span,
+        cyclomatic: 1,
+        loc: 3,
+        token_count: tokens,
+        fingerprints: vec![tokens as u64],
+    };
+
+    let (first, second) = (at(10), at(40));
+    let facts = FileFacts {
+        declarations: vec![decl(first), decl(second)],
+        functions: vec![metrics(first, 11), metrics(second, 22)],
+        ..FileFacts::default()
+    };
+
+    let symbols: Vec<SymbolNode> = facts
+        .declarations
+        .iter()
+        .map(|d| SymbolNode {
+            file: FileId(0),
+            name: d.name.clone(),
+            kind: d.kind.clone(),
+            span: d.span,
+            exported: d.exported,
+            visibility: d.visibility,
+            member_of: None,
+            signature_span: None,
+            implicitly_invoked: false,
+            nested_scope: false,
+            visibility_inherited: false,
+        })
+        .collect();
+
+    // Exactly the shape assembly builds: one slot per name, so the twin displaced the first.
+    let mut bare_table: HashMap<SmolStr, SymbolId> = HashMap::default();
+    bare_table.insert(SmolStr::new("from_path"), SymbolId(1));
+
+    let out = super::assemble::emit_file_declarations(
+        0,
+        &facts,
+        "mock",
+        0,
+        &symbols,
+        &bare_table,
+        &HashMap::default(),
+        &HashMap::default(),
+        None,
+    );
+
+    let mut got: Vec<(u32, u32)> = out
+        .metrics
+        .iter()
+        .map(|(id, m)| (id.0, m.token_count))
+        .collect();
+    got.sort();
+    assert_eq!(
+        got,
+        vec![(0, 11), (1, 22)],
+        "each declaration keeps its own metrics; \
+         resolving by name collapsed both onto SymbolId(1)"
+    );
+}
