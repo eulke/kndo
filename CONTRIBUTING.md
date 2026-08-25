@@ -1,5 +1,10 @@
 # Contributing
 
+See `CLAUDE.md` at the repo root for the architectural working rules (facade imports,
+error/config discipline, finding-identity stability, the toolkit-vs-adapter split, the
+non-negotiable equivalence gates) — it's written for coding agents but applies equally to
+human contributors.
+
 ## Commits
 
 [Conventional Commits](https://www.conventionalcommits.org/): `<type>(<scope>): <subject>`.
