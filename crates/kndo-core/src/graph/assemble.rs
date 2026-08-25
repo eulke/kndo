@@ -257,6 +257,10 @@ pub(crate) struct ResolveTables<'a> {
     /// access yields — what a dotted qualifier pointer resolves its hops through.
     pub(crate) member_types_per_file: &'a [MemberTypeIndex],
     pub(crate) symbol_by_name_per_unit: &'a HashMap<SmolStr, HashMap<SmolStr, SymbolId>>,
+    /// Displaced same-name declarations within one unit (Go's mutually exclusive build-tag
+    /// files). Every twin gets the reference edge — see the union-of-configurations note where
+    /// this is built.
+    pub(crate) symbol_twins_per_unit: &'a HashMap<SmolStr, HashMap<SmolStr, Vec<SymbolId>>>,
     pub(crate) member_by_name: &'a HashMap<SmolStr, Vec<SymbolId>>,
     pub(crate) file_unit: &'a [Option<SmolStr>],
     pub(crate) unit_name_by_file: &'a [Option<SmolStr>],
@@ -301,6 +305,7 @@ pub(crate) fn resolve_file(
         qualified_twins_per_file,
         member_types_per_file: _,
         symbol_by_name_per_unit,
+        symbol_twins_per_unit,
         member_by_name,
         file_unit,
         unit_name_by_file,
@@ -684,17 +689,37 @@ pub(crate) fn resolve_file(
                 .copied()
         };
         if let Some(to) = target {
-            out.edges.push(Edge {
-                owner: file_id,
-                kind: EdgeKind::References {
-                    from,
-                    to,
-                    kind: reference.kind,
-                },
-                confidence: Confidence::Certain,
-                source: provenance(),
-                span: Some(reference.span),
-            });
+            // Every twin of a same-unit name gets the edge, not just the table's winner. Two
+            // files of one unit may legitimately declare one name — Go's mutually exclusive
+            // build-tag files are the case — and kndo analyzes the union of build
+            // configurations, so both are live. Emitting only the winner left the other with
+            // zero incoming references and a false `unused`. Twins are per-unit, so a name
+            // resolved through an import binding or this file's own table has none.
+            let twins = file_unit[i]
+                .as_ref()
+                .and_then(|unit| symbol_twins_per_unit.get(unit))
+                .and_then(|t| t.get(&reference.name))
+                .filter(|_| {
+                    // Only when the winner came from the unit table: a bound import or a
+                    // same-file declaration is a specific symbol, not one of a twin set.
+                    !bound_symbols.contains_key(&reference.name)
+                        && !symbol_by_name_per_file[i].contains_key(&reference.name)
+                })
+                .map(Vec::as_slice)
+                .unwrap_or(&[]);
+            for to in std::iter::once(to).chain(twins.iter().copied()) {
+                out.edges.push(Edge {
+                    owner: file_id,
+                    kind: EdgeKind::References {
+                        from,
+                        to,
+                        kind: reference.kind,
+                    },
+                    confidence: Confidence::Certain,
+                    source: provenance(),
+                    span: Some(reference.span),
+                });
+            }
             continue;
         }
 
@@ -2314,6 +2339,16 @@ pub fn assemble_from_source(
     // today), so this is purely additive: those files never populate or consult these two maps.
     let mut file_unit: Vec<Option<SmolStr>> = vec![None; claimed_per_file.len()];
     let mut patch_meta: Vec<FilePatchMeta> = vec![FilePatchMeta::default(); claimed_per_file.len()];
+    // Same-name declarations across files of ONE unit are legitimate: Go's build tags make
+    // `binding.go` (`//go:build !nomsgpack`) and `binding_nomsgpack.go` (`//go:build nomsgpack`)
+    // mutually exclusive, and both declare `validate` in package `binding`. The table below is
+    // single-slot, so every reference used to land on whichever file was inserted last and the
+    // other read `unused` — in gin, one of the two `validate`s took all 16 references and its
+    // twin took none. kndo analyzes the UNION of build configurations by documented policy
+    // (`internal/adapters/go.md`), under which both are live, so the displaced ones are kept
+    // here and every twin gets the edge.
+    let mut symbol_twins_per_unit: HashMap<SmolStr, HashMap<SmolStr, Vec<SymbolId>>> =
+        HashMap::default();
     let mut symbol_by_name_per_unit: HashMap<SmolStr, HashMap<SmolStr, SymbolId>> =
         HashMap::default();
     // Member declarations (`member_of: Some(..)`) resolve on a separate track:
@@ -2442,10 +2477,15 @@ pub fn assemble_from_source(
                 None => {
                     symbol_by_name_per_file[i].insert(decl.name.clone(), symbol_id);
                     if let Some(unit) = &file_unit[i] {
-                        symbol_by_name_per_unit
-                            .entry(unit.clone())
-                            .or_default()
-                            .insert(decl.name.clone(), symbol_id);
+                        let slot = symbol_by_name_per_unit.entry(unit.clone()).or_default();
+                        if let Some(displaced) = slot.insert(decl.name.clone(), symbol_id) {
+                            symbol_twins_per_unit
+                                .entry(unit.clone())
+                                .or_default()
+                                .entry(decl.name.clone())
+                                .or_default()
+                                .push(displaced);
+                        }
                     }
                 }
                 Some(owner) => {
@@ -2711,6 +2751,7 @@ pub fn assemble_from_source(
         qualified_twins_per_file: &qualified_twins_per_file,
         member_types_per_file: &member_types_per_file,
         symbol_by_name_per_unit: &symbol_by_name_per_unit,
+        symbol_twins_per_unit: &symbol_twins_per_unit,
         member_by_name: &member_by_name,
         file_unit: &file_unit,
         unit_name_by_file: &unit_name_by_file,

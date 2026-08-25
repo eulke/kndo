@@ -3250,3 +3250,80 @@ fn same_name_overloads_each_own_the_references_in_their_body() {
         "the twin whose body contains the reference owns it, not the last-inserted one"
     );
 }
+
+/// Regression: two files of one unit declaring the same name — both stay alive.
+///
+/// Go's `binding.go` (`//go:build !nomsgpack`) and `binding_nomsgpack.go` (`//go:build
+/// nomsgpack`) are mutually exclusive and both declare `validate` in package `binding`. The
+/// same-unit name table is single-slot, so every reference landed on whichever file was
+/// inserted last and its twin read `unused` — in gin one `validate` took all 16 references and
+/// the other took none. kndo analyzes the UNION of build configurations by documented policy
+/// (`internal/adapters/go.md`), under which both are live.
+#[test]
+fn same_unit_twins_both_receive_the_reference() {
+    let dir = project(
+        "unit-twins",
+        &[
+            (
+                "pkg/a.mock",
+                "unit pkg\nprivate-decl validate\nprivate-decl helper",
+            ),
+            ("pkg/b.mock", "unit pkg\nprivate-decl validate"),
+            ("pkg/caller.mock", "unit pkg\nref validate"),
+            // Declares `helper` itself, and so does a.mock: its own reference must resolve to
+            // its own declaration, never spray onto the unit's twin of that name.
+            (
+                "pkg/local.mock",
+                "unit pkg\nprivate-decl helper\nref helper",
+            ),
+        ],
+    );
+    let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
+
+    let symbol_of = |name: &str, file: &str| -> crate::vocab::SymbolId {
+        let (i, _) = graph
+            .symbols
+            .iter()
+            .enumerate()
+            .find(|(_, s)| {
+                s.name.as_str() == name && graph.files[s.file.0 as usize].path.0.ends_with(file)
+            })
+            .expect("declaration exists");
+        crate::vocab::SymbolId(i as u32)
+    };
+    let (a, b) = (
+        symbol_of("validate", "a.mock"),
+        symbol_of("validate", "b.mock"),
+    );
+    let local = symbol_of("helper", "local.mock");
+
+    let refs_from = |file: &str| -> Vec<crate::vocab::SymbolId> {
+        graph
+            .edges
+            .iter()
+            .filter(|e| graph.files[e.owner.0 as usize].path.0.ends_with(file))
+            .filter_map(|e| match e.kind {
+                EdgeKind::References { to, .. } => Some(to),
+                _ => None,
+            })
+            .collect()
+    };
+
+    let mut from_caller = refs_from("caller.mock");
+    from_caller.sort_by_key(|s| s.0);
+    assert_eq!(
+        from_caller,
+        {
+            let mut want = vec![a, b];
+            want.sort_by_key(|s| s.0);
+            want
+        },
+        "every twin receives the reference, not just the single-slot table's winner"
+    );
+
+    assert_eq!(
+        refs_from("local.mock"),
+        vec![local],
+        "a file that declares the name resolves to its own symbol, never to the unit's twin"
+    );
+}

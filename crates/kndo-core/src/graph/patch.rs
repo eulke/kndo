@@ -275,6 +275,9 @@ pub(crate) fn try_patch(
         vec![HashMap::default(); files_len];
     let mut symbol_by_name_per_unit: HashMap<SmolStr, HashMap<SmolStr, SymbolId>> =
         HashMap::default();
+    // Mirrors the full build's construction exactly — `patch_equivalence` requires it.
+    let mut symbol_twins_per_unit: HashMap<SmolStr, HashMap<SmolStr, Vec<SymbolId>>> =
+        HashMap::default();
     let mut member_by_name: HashMap<SmolStr, Vec<SymbolId>> = HashMap::default();
     for (idx, sym) in graph.symbols.iter().enumerate() {
         let i = sym.file.0 as usize;
@@ -283,10 +286,15 @@ pub(crate) fn try_patch(
             None => {
                 symbol_by_name_per_file[i].insert(sym.name.clone(), id);
                 if let Some(unit) = &graph.files[i].unit {
-                    symbol_by_name_per_unit
-                        .entry(unit.clone())
-                        .or_default()
-                        .insert(sym.name.clone(), id);
+                    let slot = symbol_by_name_per_unit.entry(unit.clone()).or_default();
+                    if let Some(displaced) = slot.insert(sym.name.clone(), id) {
+                        symbol_twins_per_unit
+                            .entry(unit.clone())
+                            .or_default()
+                            .entry(sym.name.clone())
+                            .or_default()
+                            .push(displaced);
+                    }
                 }
             }
             Some(owner) => {
@@ -373,6 +381,7 @@ pub(crate) fn try_patch(
             qualified_twins_per_file: &qualified_twins_per_file,
             member_types_per_file: &member_types_per_file,
             symbol_by_name_per_unit: &symbol_by_name_per_unit,
+            symbol_twins_per_unit: &symbol_twins_per_unit,
             member_by_name: &member_by_name,
             file_unit: &file_unit,
             unit_name_by_file: &unit_name_by_file,

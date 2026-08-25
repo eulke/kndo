@@ -296,6 +296,22 @@ imports stop resolving. Reachability never depended on which file an edge landed
 fallback), but `cyclic` reads the literal edge as evidence, and read phantom package cycles out
 of it in four of the six languages a field audit covered.
 
+**And a NAME is not unique within a unit.** The mirror of the §4 twins case, on the incoming
+side: two files of one unit may legitimately declare one name when the language makes them
+mutually exclusive — Go's `//go:build` alternates (gin's `binding.go` under `!nomsgpack` and
+`binding_nomsgpack.go` under `nomsgpack`, both `func validate`), Rust's `#[cfg]` alternates.
+Span containment cannot disambiguate here (the twins sit in *different* files and the
+reference is inside neither), and nothing should: kndo analyzes the union of build
+configurations, so both declarations are live and a reference under either configuration
+reaches its own. The single-slot unit table gave the last-inserted twin every reference — 16
+of them in gin — and left the other at zero incoming edges, falsely `unused`. Core therefore
+keeps the displaced declarations (`symbol_twins_per_unit`, built beside the name table in
+both `graph::assemble` and `graph::patch`) and emits the edge to **every** twin. Twins are
+consulted only when the winner came from the unit table: a name bound by an import, or
+declared in the referencing file itself, is one specific symbol and not a member of a twin
+set. Same keep-alive direction as everywhere else — an extra edge to a twin that some build
+configuration excludes costs recall under that configuration, never a false accusation.
+
 | Language | unit key |
 |----------|----------|
 | Go | `dir#declared-package-name` — splits external test packages (`foo_test`) from `foo` in the same directory, closing the documented §1.1 imprecision of docs/adapters/go.md with zero core changes |
