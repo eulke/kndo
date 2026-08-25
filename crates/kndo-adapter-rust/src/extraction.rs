@@ -130,6 +130,9 @@ pub(crate) fn extract(_path: &str, content: &[u8]) -> FileFacts {
 
     let local_qualifiers = collect_local_qualifiers(root, content);
     let inline_mod_names = collect_inline_mod_names(root, content);
+    let file_type_names = collect_file_type_names(root, content);
+    let crate_probe = crate_probe_allowed(root);
+    let use_bound = collect_use_bound_qualifiers(root, content);
     // Field facts pre-pass: the single source for struct/union field
     // types — the contract's member_types AND the TypeEnv's `self.field` resolution.
     let field_facts = collect_field_facts(root, content);
@@ -144,6 +147,9 @@ pub(crate) fn extract(_path: &str, content: &[u8]) -> FileFacts {
             local_qualifiers: &local_qualifiers,
             inline_mod_names: &inline_mod_names,
             field_types: &field_types,
+            file_type_names: &file_type_names,
+            crate_probe,
+            use_bound: &use_bound,
         },
         &mut out,
     );
@@ -177,14 +183,18 @@ fn walk_pathed_mods(
     src: &[u8],
     out: &mut std::collections::HashMap<String, Vec<String>>,
 ) {
-    let mut pending_path: Option<String> = None;
+    // A Vec, not a single slot: ONE `mod` declaration can carry several relocations, one per
+    // configuration (`#[cfg_attr(from_git, path = "…")] #[cfg_attr(not(from_git), path = "…")]
+    // mod internals;` — serde_derive_internals). Every alternate exists in some configuration,
+    // which is the same reason the map's value is a Vec at all.
+    let mut pending_paths: Vec<String> = Vec::new();
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
         match child.kind() {
-            "attribute_item" => pending_path = path_attr_literal(child, src).or(pending_path),
+            "attribute_item" => pending_paths.extend(path_attr_literal(child, src)),
             "line_comment" | "block_comment" => {}
             _ => {
-                record_pathed_mod(child, src, pending_path.take(), out);
+                record_pathed_mod(child, src, std::mem::take(&mut pending_paths), out);
                 walk_pathed_mods(child, src, out);
             }
         }
@@ -197,25 +207,61 @@ fn walk_pathed_mods(
 fn record_pathed_mod(
     item: Node,
     src: &[u8],
-    pending_path: Option<String>,
+    pending_paths: Vec<String>,
     out: &mut std::collections::HashMap<String, Vec<String>>,
 ) {
     if item.kind() != "mod_item" || item.child_by_field_name("body").is_some() {
         return;
     }
-    if let (Some(name), Some(p)) = (item.child_by_field_name("name"), pending_path) {
-        out.entry(text(name, src).to_string()).or_default().push(p);
+    if pending_paths.is_empty() {
+        return;
+    }
+    if let Some(name) = item.child_by_field_name("name") {
+        out.entry(text(name, src).to_string())
+            .or_default()
+            .extend(pending_paths);
     }
 }
 
-/// The string literal of a `#[path = "…"]` attribute item, if that's what this is.
+/// The string literal of a `#[path = "…"]` attribute item, if that's what this is —
+/// `#[cfg_attr(cond, path = "…")]` included.
+///
+/// The conditional spelling is not exotic: serde_derive_internals declares its whole module
+/// as `#[cfg_attr(serde_build_from_git, path = "…")] #[cfg_attr(not(serde_build_from_git),
+/// path = "src/mod.rs")] mod internals;`. Reading only the bare form left the specifier at
+/// `self::internals`, which resolves by convention to an `internals.rs` that does not exist,
+/// so the module went dark and the `pub use internals::*;` next to it was accused of
+/// importing an undeclared crate. `#[cfg]` alternates are all kept, by the same whole-source
+/// policy the caller's doc states — the caller collects a `Vec` per name.
 fn path_attr_literal(item: Node, src: &[u8]) -> Option<String> {
     let attr = item.named_child(0)?;
-    if text(attr.child(0)?, src) != "path" {
-        return None;
+    match text(attr.child(0)?, src) {
+        "path" => {
+            let value = attr.child_by_field_name("value")?;
+            Some(text(value, src).trim_matches('"').to_string())
+        }
+        // `cfg_attr(cond, path = "…")`: the real attribute is nested inside the arguments,
+        // as one of possibly several — take the first `path`, the same "first wins" the bare
+        // form gets from its caller's `.or(pending_path)`.
+        "cfg_attr" => nested_path_attr_literal(attr.child_by_field_name("arguments")?, src),
+        _ => None,
     }
-    let value = attr.child_by_field_name("value")?;
-    Some(text(value, src).trim_matches('"').to_string())
+}
+
+/// The first `path = "…"` pair inside a `cfg_attr`'s argument token tree.
+fn nested_path_attr_literal(args: Node, src: &[u8]) -> Option<String> {
+    let mut cursor = args.walk();
+    let children: Vec<Node> = args.children(&mut cursor).collect();
+    for (i, child) in children.iter().enumerate() {
+        if text(*child, src) == "path" && children.get(i + 1).map(|n| text(*n, src)) == Some("=") {
+            let value = children.get(i + 2)?;
+            return Some(text(*value, src).trim_matches('"').to_string());
+        }
+        if let Some(found) = nested_path_attr_literal(*child, src) {
+            return Some(found);
+        }
+    }
+    None
 }
 
 /// Post-walk rewrite: a specifier that is exactly `self::<mod>` where `<mod>` is a
@@ -255,10 +301,17 @@ fn pathed_alternates<'a>(
     specifier: &str,
     pathed: &'a std::collections::HashMap<String, Vec<String>>,
 ) -> Option<&'a Vec<String>> {
-    specifier
-        .strip_prefix("self::")
-        .filter(|rest| !rest.contains("::"))
-        .and_then(|name| pathed.get(name))
+    // `self::<mod>` is what `mod name;` itself emits. A BARE `<mod>` is the 2015-edition
+    // spelling of the same thing (`pub use internals::*;` beside `mod internals;` in
+    // serde_derive_internals): crate-relative, and a local module with that name shadows any
+    // extern crate sharing it, so the local relocation is the only reading. Without this the
+    // glob resolved to nothing, the module went dark, and `internals` was accused of being an
+    // undeclared dependency.
+    let name = specifier.strip_prefix("self::").unwrap_or(specifier);
+    if name.contains("::") {
+        return None;
+    }
+    pathed.get(name)
 }
 
 /// Names that qualify paths locally — `use` tails/aliases and `mod` names, anywhere in the
@@ -333,6 +386,17 @@ struct PathEnv<'a> {
     /// Receiver-type environment of the enclosing function ([`TypeEnv`]) — empty outside
     /// function bodies (const initializers, macro templates).
     types: &'a TypeEnv<'a>,
+    /// Type-like names DECLARED in this file (pre-pass). A path rooted at one of these is
+    /// that type's associated item — a type in scope shadows an extern-prelude crate of the
+    /// same name — so it is never evidence of a dependency. The case test alone cannot tell
+    /// them apart: `r#type::r#struct` in serde's test suite reads as a lowercase root and
+    /// was accused of being an undeclared crate.
+    file_types: &'a std::collections::HashSet<String>,
+    /// Whether a bare unknown root HERE is evidence of an external crate — see
+    /// [`crate_probe_allowed`] for what turns it off, and `import_worthy` for what it gates.
+    crate_probe: bool,
+    /// Names this file's own imports bind — see [`collect_use_bound_qualifiers`].
+    use_bound: &'a std::collections::HashSet<String>,
 }
 
 /// Local receiver types, from language FACTS visible in this file: the
@@ -778,6 +842,112 @@ fn scoped_call_type_root(function: Node, src: &[u8]) -> Option<String> {
         .then(|| root.to_string())
 }
 
+/// Type-like names declared anywhere in this file. A path root naming one of them is that
+/// type's associated item, never a crate: a type in scope shadows an extern-prelude crate of
+/// the same name, and Rust's own raw identifiers (`enum r#type`) make the "lowercase root ⇒
+/// crate-shaped" test unreliable on its own.
+///
+/// Deliberately type-like ONLY — functions, consts and statics are excluded. `foo::bar()`
+/// beside a local `fn foo` really can mean the crate `foo` (a value and a crate live in
+/// different namespaces and do not shadow each other for a path root), so suppressing the
+/// probe there would hide genuine phantom dependencies.
+/// Names this file's own `use` statements bind to something ELSE — the tail of a multi-segment
+/// path, a brace member, an `as` alias, and the `self` member of a brace list.
+///
+/// A later `use <name>::…` rooted at one of them re-qualifies that binding, never an extern
+/// crate: an import binding shadows a crate of the same name. alacritty writes
+/// `use serde::de::{self, …};` at file level and `use de::Error;` inside a function forty
+/// lines down, and `de` was accused of being an undeclared dependency of the whole package.
+///
+/// Deliberately NOT every name in [`collect_local_qualifiers`]: a bare `use serde;` binds
+/// `serde` to the crate itself, so a sibling `use serde::Deserialize;` is a genuine crate
+/// import and must keep its full strength.
+fn collect_use_bound_qualifiers(root: Node, src: &[u8]) -> std::collections::HashSet<String> {
+    let mut out = std::collections::HashSet::new();
+    fn walk(node: Node, src: &[u8], out: &mut std::collections::HashSet<String>) {
+        match node.kind() {
+            "use_as_clause" => {
+                if let Some(alias) = node.child_by_field_name("alias") {
+                    out.insert(text(alias, src).to_string());
+                }
+            }
+            "scoped_use_list" => {
+                if let Some(path) = node.child_by_field_name("path") {
+                    // `use a::b::{self, X}` binds `b`; the brace members bind their own names.
+                    let t = text(path, src);
+                    let tail = t.rsplit("::").next().unwrap_or(t);
+                    if let Some(list) = node.child_by_field_name("list") {
+                        let mut c = list.walk();
+                        for el in list.children(&mut c) {
+                            match el.kind() {
+                                "self" => {
+                                    out.insert(tail.to_string());
+                                }
+                                "identifier" => {
+                                    out.insert(text(el, src).to_string());
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+            }
+            "scoped_identifier" if node.parent().is_some_and(|p| p.kind() == "use_declaration") => {
+                let t = text(node, src);
+                out.insert(t.rsplit("::").next().unwrap_or(t).to_string());
+            }
+            _ => {}
+        }
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            walk(child, src, out);
+        }
+    }
+    walk(root, src, &mut out);
+    out
+}
+
+fn collect_file_type_names(root: Node, src: &[u8]) -> std::collections::HashSet<String> {
+    let mut out = std::collections::HashSet::new();
+    fn walk(node: Node, src: &[u8], out: &mut std::collections::HashSet<String>) {
+        if matches!(
+            node.kind(),
+            "struct_item" | "enum_item" | "union_item" | "trait_item" | "type_item"
+        ) {
+            if let Some(name) = node.child_by_field_name("name") {
+                out.insert(text(name, src).to_string());
+            }
+        }
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            walk(child, src, out);
+        }
+    }
+    walk(root, src, &mut out);
+    out
+}
+
+/// Whether a bare unknown path root in this file is EVIDENCE of an external crate.
+///
+/// A glob import (`use crate::lib::*;`, `use super::*;`) binds an open set of names this
+/// adapter cannot enumerate without resolving the target — so after one, a root that matches
+/// nothing local is not evidence of anything. serde re-exports `mem`, `cmp`, `fmt`, `iter`,
+/// `net` and `slice` through exactly that shape and every one of them was accused of being a
+/// phantom dependency of `serde_core`. Turning the probe off for the file costs the
+/// `undeclared` analysis nothing it could have proven, and RFC 0012 §2 decides the direction
+/// when the model cannot prove the accusation.
+fn crate_probe_allowed(root: Node) -> bool {
+    fn has_glob(node: Node) -> bool {
+        if node.kind() == "use_wildcard" {
+            return true;
+        }
+        let mut cursor = node.walk();
+        let children: Vec<Node> = node.children(&mut cursor).collect();
+        children.into_iter().any(has_glob)
+    }
+    !has_glob(root)
+}
+
 fn collect_inline_mod_names(root: Node, src: &[u8]) -> std::collections::HashSet<String> {
     let mut out = std::collections::HashSet::new();
     fn walk(node: Node, src: &[u8], out: &mut std::collections::HashSet<String>) {
@@ -806,6 +976,13 @@ struct Ctx<'a> {
     /// The file's declared field types (pre-pass) — [`TypeEnv`]s resolve `self.field`
     /// through these.
     field_types: &'a FieldTypes,
+    /// The file's declared type-like names, and whether the undeclared-crate probe applies
+    /// to this file at all — both [`PathEnv`] fields of the same name, hoisted to the file.
+    file_type_names: &'a std::collections::HashSet<String>,
+    crate_probe: bool,
+    /// Names this file's own imports bind — see [`collect_use_bound_qualifiers`]. A `use`
+    /// rooted at one of these is re-qualifying a binding, not importing a crate.
+    use_bound: &'a std::collections::HashSet<String>,
 }
 
 impl<'a> Ctx<'a> {
@@ -818,6 +995,9 @@ impl<'a> Ctx<'a> {
             local_qualifiers: self.local_qualifiers,
             inline_mod_names: self.inline_mod_names,
             field_types: self.field_types,
+            file_type_names: self.file_type_names,
+            crate_probe: self.crate_probe,
+            use_bound: self.use_bound,
         }
     }
 }
@@ -1122,6 +1302,9 @@ fn handle_item(item: Node, src: &[u8], ctx: &Ctx<'_>, pending: PendingAttrs, out
                             PathEnv {
                                 locals: ctx.local_qualifiers,
                                 inline_mods: ctx.inline_mod_names,
+                                file_types: ctx.file_type_names,
+                                crate_probe: ctx.crate_probe,
+                                use_bound: ctx.use_bound,
                                 types: TypeEnv::empty(),
                             },
                             out,
@@ -1147,6 +1330,9 @@ fn handle_item(item: Node, src: &[u8], ctx: &Ctx<'_>, pending: PendingAttrs, out
                 PathEnv {
                     locals: ctx.local_qualifiers,
                     inline_mods: ctx.inline_mod_names,
+                    file_types: ctx.file_type_names,
+                    crate_probe: ctx.crate_probe,
+                    use_bound: ctx.use_bound,
                     types: TypeEnv::empty(),
                 },
                 out,
@@ -1165,6 +1351,9 @@ fn handle_item(item: Node, src: &[u8], ctx: &Ctx<'_>, pending: PendingAttrs, out
                         PathEnv {
                             locals: ctx.local_qualifiers,
                             inline_mods: ctx.inline_mod_names,
+                            file_types: ctx.file_type_names,
+                            crate_probe: ctx.crate_probe,
+                            use_bound: ctx.use_bound,
                             types: TypeEnv::empty(),
                         },
                         out,
@@ -1304,6 +1493,9 @@ fn handle_function(
             PathEnv {
                 locals: ctx.local_qualifiers,
                 inline_mods: ctx.inline_mod_names,
+                file_types: ctx.file_type_names,
+                crate_probe: ctx.crate_probe,
+                use_bound: ctx.use_bound,
                 types: TypeEnv::empty(),
             },
             out,
@@ -1320,6 +1512,9 @@ fn handle_function(
             PathEnv {
                 locals: ctx.local_qualifiers,
                 inline_mods: ctx.inline_mod_names,
+                file_types: ctx.file_type_names,
+                crate_probe: ctx.crate_probe,
+                use_bound: ctx.use_bound,
                 types: &types,
             },
             out,
@@ -1362,6 +1557,9 @@ fn handle_type_decl(item: Node, src: &[u8], ctx: &Ctx<'_>, kind: SymbolKind, out
             PathEnv {
                 locals: ctx.local_qualifiers,
                 inline_mods: ctx.inline_mod_names,
+                file_types: ctx.file_type_names,
+                crate_probe: ctx.crate_probe,
+                use_bound: ctx.use_bound,
                 types: TypeEnv::empty(),
             },
             out,
@@ -1558,6 +1756,9 @@ fn handle_enum(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
                     PathEnv {
                         locals: ctx.local_qualifiers,
                         inline_mods: ctx.inline_mod_names,
+                        file_types: ctx.file_type_names,
+                        crate_probe: ctx.crate_probe,
+                        use_bound: ctx.use_bound,
                         types: TypeEnv::empty(),
                     },
                     out,
@@ -1874,6 +2075,9 @@ fn handle_simple_decl(
             PathEnv {
                 locals: ctx.local_qualifiers,
                 inline_mods: ctx.inline_mod_names,
+                file_types: ctx.file_type_names,
+                crate_probe: ctx.crate_probe,
+                use_bound: ctx.use_bound,
                 types: TypeEnv::empty(),
             },
             out,
@@ -1887,6 +2091,9 @@ fn handle_simple_decl(
             PathEnv {
                 locals: ctx.local_qualifiers,
                 inline_mods: ctx.inline_mod_names,
+                file_types: ctx.file_type_names,
+                crate_probe: ctx.crate_probe,
+                use_bound: ctx.use_bound,
                 types: TypeEnv::empty(),
             },
             out,
@@ -1911,6 +2118,9 @@ fn handle_mod(item: Node, src: &[u8], ctx: &Ctx<'_>, pending: &PendingAttrs, out
                     local_qualifiers: ctx.local_qualifiers,
                     inline_mod_names: ctx.inline_mod_names,
                     field_types: ctx.field_types,
+                    file_type_names: ctx.file_type_names,
+                    crate_probe: ctx.crate_probe,
+                    use_bound: ctx.use_bound,
                 },
                 out,
             );
@@ -1973,7 +2183,28 @@ fn handle_use(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
     if ctx.inline_mod_names.contains(root) {
         return;
     }
+    let before = out.imports.len();
     collect_use(argument, src, "", reexported, span(item), out);
+    weaken_rebound_use(root, ctx.use_bound, before, out);
+}
+
+/// A `use` rooted at a name this file's own imports already bind re-qualifies that binding
+/// (`use serde::de::{self, …};` then `use de::Error;`) — it is not a crate import. The
+/// imports it produced are DOWNGRADED, not dropped: `undeclared` ignores the Possible tier so
+/// the accusation goes away, while the edges themselves survive, which is what keeps a
+/// declared dependency reached only through such a path from reading `unused`.
+fn weaken_rebound_use(
+    root: &str,
+    use_bound: &std::collections::HashSet<String>,
+    before: usize,
+    out: &mut FileFacts,
+) {
+    if !use_bound.contains(root) {
+        return;
+    }
+    for imp in &mut out.imports[before..] {
+        imp.confidence = imp.confidence.min(Confidence::Possible);
+    }
 }
 
 fn import_kind(path: &str) -> ImportKind {
@@ -2222,7 +2453,19 @@ fn walk_body(node: Node, src: &[u8], within: Option<&str>, env: PathEnv<'_>, out
             // package references from its intermediate path segments (`use std::{fs::File,
             // os::{fd::AsFd, unix::fs::FileTypeExt}}` → "fs"/"os"/"fd"/"unix" as packages).
             if let Some(argument) = node.child_by_field_name("argument") {
+                // Same inline-mod guard `handle_use` applies at item level: `mod desugared
+                // { … }` declared inside a function body, then `use desugared::Test as …`
+                // right below it, names nothing outside this file — routing it through
+                // package resolution invented a dependency named `desugared` (serde's
+                // test_annotations.rs). Body-scoped `use` reached `collect_use` directly and
+                // so skipped the check.
+                let root = text(argument, src).split("::").next().unwrap_or("").trim();
+                if env.inline_mods.contains(root) {
+                    return;
+                }
+                let before = out.imports.len();
                 collect_use(argument, src, "", false, span(node), out);
+                weaken_rebound_use(root, env.use_bound, before, out);
             }
             return;
         }
@@ -2495,19 +2738,34 @@ fn emit_path(
         // crate's module tree from its entry, so the entry stays alive. For an
         // external crate the extra root import just duplicates the dependency edge.
         let import_worthy = !PRIMITIVES.contains(&root) && !env.locals.contains(root);
+        // Whether this root is EVIDENCE of an external crate, as opposed to merely importable
+        // as one. Two ways to lose it: the name is a type declared in this file, or the
+        // context does not support the probe at all (a glob import in scope, a macro
+        // template) — see `PathEnv`. Losing it downgrades the imports to Possible rather than
+        // dropping them: `undeclared` ignores that tier (it never accuses), while the
+        // dependency edge itself survives, so a DECLARED crate reached only through such a
+        // path still reads as used. Suppressing the import outright instead cost alacritty
+        // exactly that, turning `dirs` and `home` into false `unused` dependencies.
+        let probes_crate = env.crate_probe && !env.file_types.contains(root);
+        let probe_confidence = if probes_crate {
+            Confidence::Probable
+        } else {
+            Confidence::Possible
+        };
         if import_worthy && rest.len() == 1 && !root.chars().next().is_some_and(char::is_uppercase)
         {
             // Single-qualifier bare path (`helpers::run()`, `rand_chacha::x()`): the root
-            // alone imports at Probable — a local module resolves to its file (resolution's
-            // local-retry precedence), an unknown crate becomes the Dependency edge the
-            // `undeclared` analysis needs. The qualified reference stays for binding.
+            // alone imports — a local module resolves to its file (resolution's local-retry
+            // precedence), an unknown crate becomes the Dependency edge the `undeclared`
+            // analysis needs, at `probe_confidence` so it only accuses where the root really
+            // is evidence. The qualified reference stays for binding.
             out.imports.push(RawImport {
                 specifier: SmolStr::new(root),
                 kind: ImportKind::Package,
                 span: at,
                 side_effect_only: true,
                 type_only: false,
-                confidence: Confidence::Probable,
+                confidence: probe_confidence,
                 bindings: Vec::new(),
                 reexported: false,
                 opaque_namespace_use: false,
@@ -2534,9 +2792,10 @@ fn emit_path(
                 // A locals-covered root (`io::x::y` after `use std::io`) reconstructs at
                 // Possible: the import exists for resolution keep-alive; it is NOT evidence
                 // of a crate named `io` (`undeclared` ignores the Possible tier —
-                // suppressing these entirely would kill real cross-crate paths).
+                // suppressing these entirely would kill real cross-crate paths). A root that
+                // IS import-worthy still only reaches Probable when it probes.
                 confidence: if import_worthy {
-                    Confidence::Probable
+                    probe_confidence
                 } else {
                     Confidence::Possible
                 },
@@ -2550,13 +2809,19 @@ fn emit_path(
                 local_alias: None,
             });
             if import_worthy {
+                // The entry-liveness companion for a DEEP path — and it makes the same claim
+                // about the root that the single-qualifier branch does, so it carries the
+                // same `probe_confidence`. Hardcoding Probable here is what kept serde's
+                // `fmt`, `net`, `_serde` and `fragment` accused after the shallow branch
+                // stopped: `fmt::Write::write_fmt(…)` is three segments, so only this branch
+                // ever fired for it.
                 out.imports.push(RawImport {
                     specifier: SmolStr::new(root),
                     kind: ImportKind::Package,
                     span: at,
                     side_effect_only: true,
                     type_only: false,
-                    confidence: Confidence::Probable,
+                    confidence: probe_confidence,
                     bindings: Vec::new(),
                     reexported: false,
                     opaque_namespace_use: false,
@@ -2654,6 +2919,27 @@ fn scan_token_tree(
     env: PathEnv<'_>,
     out: &mut FileFacts,
 ) {
+    // A macro TEMPLATE describes code that does not exist yet, under names the expansion
+    // invents: serde_derive's `quote!` bodies alone name `_serde`, `__S`, `__D`, `__E`, `__A`,
+    // `__Field`, `__private` and `clippy::…`, and a `macro_rules!` right-hand side names
+    // `$crate::fragment::…` with the metavariable stripped by token reconstruction. None of
+    // those is a crate, and every one was reported as a phantom dependency. Identifier reads
+    // and module imports still go out — keep-alive is the whole reason this scan exists — but
+    // nothing inside a template is evidence for an ACCUSATION.
+    //
+    // The boundary is the token tree, not the call: `serde_json::json!(…)`'s own path is
+    // ordinary code at the call site and must keep probing (an undeclared `serde_json` is a
+    // real finding). It is a SIBLING of the token tree under `macro_invocation`, so flipping
+    // the flag here — where the node itself is the tree — leaves it alone, and the recursion
+    // carries the flag down to everything inside.
+    let env = if node.kind() == "token_tree" {
+        PathEnv {
+            crate_probe: false,
+            ..env
+        }
+    } else {
+        env
+    };
     // Rust 2021 inline format captures: `format!("v{VERSION}")` reads `VERSION` from inside
     // the string literal — invisible to the identifier-token scan below, so string content
     // in macro token trees is scanned for `{ident}` / `{ident:spec}` shapes (`{{` escapes
@@ -3863,5 +4149,168 @@ mod tests {
             Some(kndo_core::vocab::FileOrigin::Generated)
         );
         let _ = decl_names(&f);
+    }
+}
+
+#[cfg(test)]
+mod undeclared_probe_tests {
+    use super::*;
+
+    fn facts(src: &str) -> FileFacts {
+        extract("src/lib.rs", src.as_bytes())
+    }
+
+    /// The strength of the claim "this file imports a crate named `<root>`". `Probable` (or
+    /// stronger) is what `undeclared` accuses on; `Possible` keeps the edge and stays silent.
+    fn root_claim(f: &FileFacts, root: &str) -> Option<Confidence> {
+        f.imports
+            .iter()
+            .filter(|i| i.specifier == root || i.specifier.starts_with(&format!("{root}::")))
+            .map(|i| i.confidence)
+            .max()
+    }
+
+    #[test]
+    fn a_glob_import_in_scope_disarms_the_crate_probe() {
+        // serde's shape: `crate::lib` re-exports `core::mem` & co, so `mem::size_of` has no
+        // local `use` to be covered by and read as a phantom dependency of serde_core.
+        let with_glob = facts(
+            "use crate::lib::*;\n\
+             pub fn f<T>() -> usize { mem::size_of::<T>() }\n",
+        );
+        assert_eq!(
+            root_claim(&with_glob, "mem"),
+            Some(Confidence::Possible),
+            "the edge survives for resolution; the accusation does not"
+        );
+
+        // Without a glob the same path is exactly the evidence `undeclared` exists for.
+        let without = facts("pub fn f<T>() -> usize { mem::size_of::<T>() }\n");
+        assert_eq!(root_claim(&without, "mem"), Some(Confidence::Probable));
+    }
+
+    #[test]
+    fn a_deep_path_root_is_gated_too() {
+        // `fmt::Write::write_fmt(…)` is three segments, so only the deep-path branch fires
+        // for it — hardcoding Probable there kept serde's `fmt` accused after the shallow
+        // branch had already been gated.
+        let f = facts(
+            "use crate::lib::*;\n\
+             pub fn f() { fmt::Write::write_fmt(x, y); }\n",
+        );
+        assert_eq!(root_claim(&f, "fmt"), Some(Confidence::Possible));
+    }
+
+    #[test]
+    fn a_macro_template_is_not_evidence_of_a_dependency() {
+        // Names a `quote!` body invents (`_serde`, `__S`) and lint paths inside it are not
+        // crates — but the macro's OWN path is ordinary code and keeps probing.
+        let f = facts(
+            "pub fn build() -> String {\n\
+             \x20   let q = quote::quote! {\n\
+             \x20       #[allow(clippy::useless_attribute)]\n\
+             \x20       fn generated<__S>(s: __S) -> _serde::Result<()> { _serde::helper(s) }\n\
+             \x20   };\n\
+             \x20   q.to_string()\n\
+             }\n",
+        );
+        assert_ne!(root_claim(&f, "_serde"), Some(Confidence::Probable));
+        assert_eq!(
+            root_claim(&f, "quote"),
+            Some(Confidence::Probable),
+            "the invoked macro's own path is real code at the call site"
+        );
+    }
+
+    #[test]
+    fn a_macro_rules_body_is_not_evidence_either() {
+        let f = facts(
+            "pub enum Fragment { Expr(String) }\n\
+             macro_rules! quote_expr {\n\
+             \x20   ($($tt:tt)*) => { $crate::fragment::Fragment::Expr(stringify!($($tt)*)) };\n\
+             }\n",
+        );
+        assert_ne!(root_claim(&f, "fragment"), Some(Confidence::Probable));
+    }
+
+    #[test]
+    fn a_type_declared_in_this_file_is_not_a_crate() {
+        // A raw identifier defeats the "lowercase root ⇒ crate-shaped" test outright:
+        // serde's test suite declares `enum r#type` and uses `r#type::r#struct`.
+        let f = facts(
+            "pub enum r#type { r#struct }\n\
+             pub fn use_it() -> r#type { r#type::r#struct }\n",
+        );
+        assert_ne!(root_claim(&f, "r#type"), Some(Confidence::Probable));
+
+        // A function of the same name does NOT disarm it: a value and a crate live in
+        // different namespaces, so `foo::bar()` beside `fn foo` really can be the crate.
+        let with_fn = facts(
+            "pub fn foo() {}\n\
+             pub fn use_it() { foo::bar(); }\n",
+        );
+        assert_eq!(root_claim(&with_fn, "foo"), Some(Confidence::Probable));
+    }
+
+    #[test]
+    fn a_use_rooted_at_an_imported_binding_is_not_a_crate_import() {
+        // alacritty: `use serde::de::{self, …};` at file level, `use de::Error;` in a body.
+        let f = facts(
+            "use serde::de::{self, Error as SerdeError};\n\
+             pub fn f() {\n\
+             \x20   use de::Error;\n\
+             \x20   let _ = SerdeError::custom;\n\
+             }\n",
+        );
+        assert_eq!(root_claim(&f, "de"), Some(Confidence::Possible));
+        assert_eq!(
+            root_claim(&f, "serde"),
+            Some(Confidence::Certain),
+            "the import that BINDS the name is untouched"
+        );
+
+        // A bare `use serde;` binds the crate to itself — a sibling crate import keeps its
+        // full strength.
+        let self_bound = facts("use serde;\nuse serde::Deserialize;\n");
+        assert_eq!(root_claim(&self_bound, "serde"), Some(Confidence::Certain));
+    }
+
+    #[test]
+    fn an_inline_mod_declared_in_a_function_body_is_not_a_crate() {
+        // serde's test_annotations.rs declares `mod desugared { … }` inside a `#[test]` fn
+        // and `use desugared::Test as …` right below it.
+        let f = facts(
+            "pub fn t() {\n\
+             \x20   mod desugared { pub struct Test; }\n\
+             \x20   use desugared::Test as Aliased;\n\
+             \x20   let _ = Aliased;\n\
+             }\n",
+        );
+        assert_eq!(
+            root_claim(&f, "desugared"),
+            None,
+            "an inline mod names nothing outside this file, at item level or in a body"
+        );
+    }
+
+    #[test]
+    fn a_path_attribute_inside_cfg_attr_relocates_the_mod() {
+        // serde_derive_internals declares its whole module this way; reading only the bare
+        // `#[path]` spelling left it resolving to a nonexistent `internals.rs`.
+        let f = facts(
+            "#[cfg_attr(from_git, path = \"../other/mod.rs\")]\n\
+             #[cfg_attr(not(from_git), path = \"src/mod.rs\")]\n\
+             mod internals;\n\
+             pub use internals::*;\n",
+        );
+        let specs: Vec<&str> = f.imports.iter().map(|i| i.specifier.as_str()).collect();
+        assert!(
+            specs.contains(&"file:../other/mod.rs") && specs.contains(&"file:src/mod.rs"),
+            "both cfg alternates count, per the whole-source policy: {specs:?}"
+        );
+        assert!(
+            !specs.contains(&"internals") && !specs.contains(&"self::internals"),
+            "the bare 2015-edition re-export expands to the same locations: {specs:?}"
+        );
     }
 }

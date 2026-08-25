@@ -106,9 +106,30 @@ file edges when the file exists (RFC 0002 §4) — the CSS/JSON adapters claim t
 
 From `package.json`: name, `private`, `workspaces` globs (+ `pnpm-workspace.yaml` packages),
 dependency scopes mapped `dependencies→prod`, `devDependencies→dev`, `peerDependencies→peer`,
-`optionalDependencies→optional`; entry points (`main`, `module`, `exports`, `bin`, `types`) both
-as resolution inputs and as **roots**: `bin` targets and the export surface of non-`private`
-packages are production roots (library mode); `scripts` file references become tooling roots.
+`optionalDependencies→optional`; entry points (`main`, `module`, `exports`, `browser`, `bin`,
+`types`) both as resolution inputs and as **roots**: `bin` targets and the export surface of
+non-`private` packages are production roots (library mode); `scripts` file references become
+tooling roots.
+
+**`browser`, in both of its spellings.** As a string it is an alternate `main`
+(`"./dist/browser.js"`), read at `certain`. As an OBJECT it is an alias map a bundler applies —
+axios ships `{"./lib/platform/node/index.js": "./lib/platform/browser/index.js"}` — and its
+*values* are the files substituted in. Those values have no incoming import anywhere: nothing
+in the source names them, the bundler rewrites the specifier, so axios's entire
+`lib/platform/browser/` tree read `unused` while shipping in every browser build. The values
+become entries and (library mode) roots at `probable`, the same tier `exports` leaves get for
+the same reason — a conditional build alternate is not unconditionally "the" entry. Keys are
+skipped: they are the node-side files, already reachable through ordinary imports. A `false`
+value ("stub this module out") names no file.
+
+**Node's implicit `index`.** A package declaring neither `main` nor `exports` resolves to
+`index.js` in its own directory — express declares neither, and without the fallback its
+`index.js` plus the whole of `lib/` read `unused`/`test-only`. Synthesized only when nothing
+else was declared (`browser` counts): a package that has stated a surface has stated it, and a
+stray `index.js` beside it is not silently part of that promise. `.d.ts` is excluded
+explicitly — the candidate ladder offers `index.d.ts` and `is_source_entry` does not catch it
+(its final extension is `ts`), but a declaration file carries no runtime edge and Node never
+resolves an entry to one.
 
 **Visibility ladder** (for `internal-only`/`private-type-leak`, RFC 0005 §7):
 module-local < exported < **package-surface** (reachable through the package's `exports` map).

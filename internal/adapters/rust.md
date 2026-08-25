@@ -191,6 +191,30 @@ literals; skipped → `line_comment`, `block_comment`. Winnowing parameters shar
   with no import for a binding to express, which is precisely RFC 0005 §1's wildcard truth.
   The per-macro no-wildcard stance (§2's table) is untouched; this is one edge per
   `#[macro_use]`, not one per invocation.
+
+**When a bare path root is EVIDENCE of a crate (the field-audit pass, serde/alacritty
+corpus).** A bare path (`mem::size_of`, `fmt::Write::write_fmt`) emits a root import so that
+an unknown crate becomes the `Dependency` edge `undeclared` judges. That claim is only as good
+as the file it came from, and five shapes make it worthless — in each the import is
+**downgraded to `Possible`, never dropped**: `undeclared` ignores that tier so the accusation
+disappears, while the edge survives so a *declared* crate reached only through such a path
+still reads as used. (Suppressing them outright instead turned alacritty's `dirs` and `home`
+into false `unused` dependencies — the downgrade is load-bearing, not cosmetic.)
+
+| Shape | Why the root proves nothing | Field case |
+|-------|----------------------------|------------|
+| A glob import anywhere in the file (`use crate::lib::*;`) | a glob binds an open set of names extraction cannot enumerate without resolving the target | serde re-exports `mem`, `cmp`, `fmt`, `iter`, `net`, `slice` this way — all six accused of being phantom deps of `serde_core` |
+| Inside a macro token tree (`quote!` body, `macro_rules!` right-hand side) | a template describes code that does not exist yet, under names the expansion invents | serde_derive's `_serde`, `__S`, `__D`, `__E`, `__A`, `__Field`, `__private`, `private2`, and `clippy::…` lint paths |
+| The root names a **type** declared in this file | a type in scope shadows an extern-prelude crate; raw identifiers (`enum r#type`) defeat the "lowercase root ⇒ crate-shaped" test outright | serde's test suite, `r#type::r#struct` |
+| The root is a name this file's own `use` statements bind to something else | `use serde::de::{self, …};` then `use de::Error;` re-qualifies that binding — an import binding shadows a crate of the same name | alacritty `alacritty/src/config/bindings.rs` |
+| An inline `mod` declared in a **function body**, then `use`d below it | the flatten model puts inline-mod contents in this same file; nothing outside it is named | serde `test_annotations.rs`'s `mod desugared` |
+
+The boundary for the macro rule is the token TREE, not the invocation: `serde_json::json!(…)`'s
+own path is ordinary code at the call site and keeps probing, because it is a sibling of the
+tree rather than inside it. Both emitters carry the gate — the single-qualifier root and the
+deep-path root (`fmt::Write::write_fmt` is three segments, so only the deep one ever fires for
+it; hardcoding `Probable` there kept serde's `fmt` accused after the shallow branch was fixed).
+
 - Member chains inside macro token trees get the same receiver typing as body code:
   `write!(col2, "{}", flag.doc_short())` arrives as token soup, but the receiver's type is
   a declared fact — the reference carries qualifier `Flag` exactly as outside the macro
@@ -358,7 +382,8 @@ is real and legal, not an artifact); `Idiomatic` states the honest stance — an
 | Trait-object / generic dispatch (`dyn Trait`, `T: Trait`) | `Implement` references from impls + the member fallback keep implementations alive when the trait is used — the RFC 0012 §3 dispatch rule, unchanged |
 | `Deref` coercion method calls | member fallback (`probable`/`possible`), by construction |
 | Re-exports of foreign crates (`pub use serde::…`) | dependency stays used; no file alias (nothing in-repo to alias) |
-| `#[path]` on `mod` | honored, literal |
+| `#[path]` on `mod` | honored, literal — `#[cfg_attr(cond, path = "…")]` included, and **every** alternate on one declaration is recorded (serde_derive_internals relocates its whole module with two `cfg_attr`s; reading only the bare spelling left the mod resolving to a nonexistent `internals.rs`, which took the module dark and made the `pub use internals::*;` beside it read as an undeclared crate) |
+| Bare `use <mod>::…` beside a `#[path]`-relocated `mod <mod>;` | the 2015-edition spelling of `self::<mod>`, expanded to the same declared locations — a local module shadows any extern crate sharing its name, so the relocation is the only reading |
 | Same name, `mod x;` and `fn x` | legal Rust; the two-step resolver prefers the module file — accepted approximation |
 | Editions | 2018+ path semantics assumed; edition 2015's bare crate-relative paths would read as dependencies → `Unresolved`, degrading to silence, never to a wrong accusation |
 | `no_std` crates | nothing special — `core`/`alloc` are in the stdlib list |

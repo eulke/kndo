@@ -2,10 +2,11 @@
 //!
 //! Scope: identity (`name`, `private`), scoped dependencies, `exports`
 //! surface detection, and roots. Root detection covers `bin` (unconditional — an executable
-//! entry point is a root regardless of publish status), `main`/`module`/`exports` gated on
-//! `!private` (an unpublished app's exports are not roots on their own; something
-//! must actually import them), and `scripts` → tooling roots (path-looking tokens resolving
-//! to known files). `types`/`typings` are resolution
+//! entry point is a root regardless of publish status), `main`/`module`/`exports` and
+//! `browser` (both spellings: an alternate-`main` string, and the alias map whose values a
+//! bundler substitutes in) gated on `!private` (an unpublished app's exports are not roots on
+//! their own; something must actually import them), and `scripts` → tooling roots (path-looking
+//! tokens resolving to known files). `types`/`typings` are resolution
 //! inputs only — `.d.ts` carries no runtime edge. `pnpm-workspace.yaml` topology
 //! is not parsed (needs a YAML parser this crate doesn't otherwise need).
 
@@ -104,6 +105,46 @@ pub(crate) fn extract(path: &str, content: &[u8], ctx: &ResolveCtx<'_>) -> Manif
             if let Some((target, confidence)) =
                 resolve_entry(path, &spec, ctx, Confidence::Probable)
             {
+                if is_source_entry(&target) {
+                    resolved_entries.push((target.clone(), confidence));
+                }
+                if !private {
+                    roots.push(ManifestRoot {
+                        kind: RootKind::Production,
+                        target,
+                        confidence,
+                    });
+                }
+            }
+        }
+    }
+
+    // `browser`: the bundler-side surface, in both spellings the field has. As a STRING it is
+    // an alternate `main` ("./dist/browser.js"). As an OBJECT it is an ALIAS MAP — axios ships
+    // `{"./lib/platform/node/index.js": "./lib/platform/browser/index.js"}` — whose *values*
+    // are the files a browser bundler substitutes in. Those values have no import edge
+    // anywhere: nothing in the source names them, the bundler rewrites the specifier. Before
+    // this, axios's entire `lib/platform/browser/` tree read `unused` while shipping in every
+    // browser build. A `false` value ("stub this module out") names no file and is skipped, as
+    // is a key: keys are the node-side files, already reachable through ordinary imports.
+    //
+    // Probable for the map's values, the same reasoning `exports` leaves get — a conditional
+    // build alternate, not unconditionally "the" entry. The string form is one declared entry
+    // and reads `Certain`, like `main`.
+    if let Some(browser) = obj.get("browser") {
+        let (specs, confidence) = match browser {
+            serde_json::Value::String(s) => (vec![s.clone()], Confidence::Certain),
+            serde_json::Value::Object(map) => (
+                map.values()
+                    .filter_map(|v| v.as_str().map(str::to_string))
+                    .collect(),
+                Confidence::Probable,
+            ),
+            _ => (Vec::new(), Confidence::Probable),
+        };
+        for spec in specs {
+            entry_points.push(SmolStr::new(&spec));
+            if let Some((target, confidence)) = resolve_entry(path, &spec, ctx, confidence) {
                 if is_source_entry(&target) {
                     resolved_entries.push((target.clone(), confidence));
                 }
@@ -480,6 +521,89 @@ mod tests {
         let known = ctx_with(&["package.json"]);
         let facts = extract_at("package.json", r#"{ "main": "./dist/index.js" }"#, &known);
         assert!(facts.roots.is_empty());
+    }
+
+    #[test]
+    fn browser_alias_map_values_are_roots() {
+        // axios's shape: the node-side file is the KEY, the browser-side file the VALUE, and
+        // nothing in the source ever imports the value — the bundler rewrites the specifier.
+        let known = ctx_with(&[
+            "package.json",
+            "index.js",
+            "lib/platform/node/index.js",
+            "lib/platform/browser/index.js",
+        ]);
+        let facts = extract_at(
+            "package.json",
+            r#"{ "main": "./index.js", "browser": {
+                   "./lib/platform/node/index.js": "./lib/platform/browser/index.js",
+                   "./lib/nope.js": false } }"#,
+            &known,
+        );
+        let targets: Vec<&str> = facts.roots.iter().map(|r| r.target.0.as_str()).collect();
+        assert!(
+            targets.contains(&"lib/platform/browser/index.js"),
+            "the substituted-in file is a root: {targets:?}"
+        );
+        assert!(
+            !targets.contains(&"lib/platform/node/index.js"),
+            "the key is the node-side file, already reachable through ordinary imports"
+        );
+        assert_eq!(
+            targets.len(),
+            2,
+            "`main` plus the one string-valued alias; `false` names no file"
+        );
+        assert!(facts
+            .resolved_entries
+            .iter()
+            .any(|(t, _)| t.0 == "lib/platform/browser/index.js"));
+    }
+
+    #[test]
+    fn browser_string_is_an_alternate_main() {
+        let known = ctx_with(&["package.json", "index.js", "dist/browser.js"]);
+        let facts = extract_at(
+            "package.json",
+            r#"{ "main": "./index.js", "browser": "./dist/browser.js" }"#,
+            &known,
+        );
+        let browser = facts
+            .roots
+            .iter()
+            .find(|r| r.target.0 == "dist/browser.js")
+            .expect("the string form declares one entry");
+        assert_eq!(browser.confidence, Confidence::Certain);
+    }
+
+    #[test]
+    fn browser_is_not_a_root_for_a_private_package() {
+        let known = ctx_with(&["package.json", "dist/browser.js"]);
+        let facts = extract_at(
+            "package.json",
+            r#"{ "private": true, "browser": "./dist/browser.js" }"#,
+            &known,
+        );
+        assert!(facts.roots.is_empty(), "same library-mode gate `main` gets");
+        assert_eq!(
+            facts.resolved_entries.len(),
+            1,
+            "still an entry: a sibling importing this package by name resolves through it"
+        );
+    }
+
+    #[test]
+    fn browser_suppresses_the_implicit_index_fallback() {
+        // A package that states a browser surface has stated a surface: a stray index.js
+        // beside it is not silently part of that promise.
+        let known = ctx_with(&["package.json", "index.js", "dist/browser.js"]);
+        let facts = extract_at(
+            "package.json",
+            r#"{ "browser": "./dist/browser.js" }"#,
+            &known,
+        );
+        let targets: Vec<&str> = facts.roots.iter().map(|r| r.target.0.as_str()).collect();
+        assert_eq!(targets, vec!["dist/browser.js"]);
     }
 
     #[test]
