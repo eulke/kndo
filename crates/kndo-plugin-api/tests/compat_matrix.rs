@@ -16,9 +16,7 @@ use std::path::{Path, PathBuf};
 
 use kndo_core::engine::{CheckRequest, ConfigOverrides, Engine, RunMode};
 
-#[path = "harness/mini_adapter.rs"]
-mod mini_adapter;
-use self::mini_adapter::MiniAdapter;
+use kndo_core::testkit::MockAdapter;
 
 fn compat_component(name: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -117,7 +115,7 @@ fn the_pinned_v1_plugin_component_still_works_against_the_head_host() {
             threads: Some(1),
             min_confidence: None,
         },
-        vec![Box::new(MiniAdapter)],
+        vec![Box::new(MockAdapter)],
         vec![Box::new(plugin)],
     )
     .expect("opening an engine over the pinned plugin");

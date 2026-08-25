@@ -28,4 +28,6 @@ pub mod query_envelope;
 mod rkyv_support;
 pub mod sarif;
 mod suppression;
+#[cfg(any(test, feature = "testkit"))]
+pub mod testkit;
 pub mod vocab;

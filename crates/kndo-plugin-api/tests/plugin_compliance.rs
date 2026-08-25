@@ -12,9 +12,7 @@ use kndo_core::engine::{CheckRequest, ConfigOverrides, Engine, RunMode};
 use kndo_core::plugin::Plugin;
 use kndo_plugin_api::WasmPlugin;
 
-#[path = "harness/mini_adapter.rs"]
-mod mini_adapter;
-use self::mini_adapter::MiniAdapter;
+use kndo_core::testkit::MockAdapter;
 
 fn workspace_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -214,7 +212,7 @@ fn external_wasm_plugin_hooks_affect_a_real_check() {
             threads: Some(1),
             min_confidence: None,
         },
-        vec![Box::new(MiniAdapter)],
+        vec![Box::new(MockAdapter)],
     )
     .expect("opening the baseline engine");
     let baseline_result = baseline.check(CheckRequest {
@@ -280,7 +278,7 @@ fn external_wasm_plugin_hooks_affect_a_real_check() {
             threads: Some(1),
             min_confidence: None,
         },
-        vec![Box::new(MiniAdapter)],
+        vec![Box::new(MockAdapter)],
         vec![Box::new(plugin)],
     )
     .expect("opening the plugin-enabled engine");

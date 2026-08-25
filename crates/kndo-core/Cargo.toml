@@ -31,6 +31,11 @@ schemars = { version = "1", features = ["smol_str03"], optional = true }
 # Dev-time only (`cargo xtask gen-schema`, schema-validation tests) — never needed at analysis
 # time, so it's not in any shipped binary's default feature set.
 schema = ["dep:schemars"]
+# Exposes `testkit` (the in-memory `MockAdapter` + graph-building helpers this crate's own
+# tests use) to other crates' dev-dependencies, so a downstream test suite driving a real
+# `LanguageAdapter` end-to-end (kndo-plugin-api's WASM compliance tests) can reuse the
+# canonical mock instead of reimplementing its grammar because the canonical one was private.
+testkit = []
 
 [dev-dependencies]
 tempfile = "3"

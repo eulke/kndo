@@ -23,3 +23,7 @@ wasmtime = { version = "=27.0.0", features = ["component-model"] }
 [dev-dependencies]
 wit-component = "0.219"
 tempfile = "3"
+# The compliance/compat-matrix test suites drive a real end-to-end LanguageAdapter; the
+# `testkit` feature exposes kndo-core's own MockAdapter for this instead of reimplementing
+# its grammar in this crate.
+kndo-core = { path = "../kndo-core", features = ["testkit"] }

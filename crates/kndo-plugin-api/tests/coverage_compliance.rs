@@ -13,9 +13,7 @@ use kndo_core::engine::{CheckRequest, ConfigOverrides, Engine, RunMode};
 use kndo_core::plugin::Plugin;
 use kndo_plugin_api::{WasmCoverageIngester, WasmPlugin};
 
-#[path = "harness/mini_adapter.rs"]
-mod mini_adapter;
-use self::mini_adapter::MiniAdapter;
+use kndo_core::testkit::MockAdapter;
 
 fn workspace_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -128,7 +126,7 @@ fn coverage_ingester_world_end_to_end() {
     let mut engine = Engine::open_with_plugins(
         project.path(),
         ConfigOverrides::default(),
-        vec![Box::new(MiniAdapter)],
+        vec![Box::new(MockAdapter)],
         vec![Box::new(ingester)],
     )
     .expect("engine over the mini adapter and the WASM ingester");
