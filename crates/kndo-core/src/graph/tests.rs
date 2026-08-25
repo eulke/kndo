@@ -3270,12 +3270,17 @@ fn same_unit_twins_both_receive_the_reference() {
             ),
             ("pkg/b.mock", "unit pkg\nprivate-decl validate"),
             ("pkg/caller.mock", "unit pkg\nref validate"),
-            // Declares `helper` itself, and so does a.mock: its own reference must resolve to
-            // its own declaration, never spray onto the unit's twin of that name.
+            // Declares `helper` itself, and so does a.mock — the shape where the file that
+            // declares one alternate is also where the other's calls live (kotlinx.coroutines
+            // writes `expect inline fun yieldThread()` in the very file that calls it, with
+            // the `actual`s one file over). Its own declaration first, the unit's twin too.
             (
                 "pkg/local.mock",
                 "unit pkg\nprivate-decl helper\nref helper",
             ),
+            // A name with no twin anywhere: exactly one edge, the containment check that
+            // stops the twin machinery from spraying onto ordinary references.
+            ("pkg/solo.mock", "unit pkg\nprivate-decl only\nref only"),
         ],
     );
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
@@ -3296,6 +3301,8 @@ fn same_unit_twins_both_receive_the_reference() {
         symbol_of("validate", "b.mock"),
     );
     let local = symbol_of("helper", "local.mock");
+    let helper_twin = symbol_of("helper", "a.mock");
+    let solo = symbol_of("only", "solo.mock");
 
     let refs_from = |file: &str| -> Vec<crate::vocab::SymbolId> {
         graph
@@ -3321,9 +3328,86 @@ fn same_unit_twins_both_receive_the_reference() {
         "every twin receives the reference, not just the single-slot table's winner"
     );
 
+    let mut from_local = refs_from("local.mock");
+    from_local.sort_by_key(|s| s.0);
     assert_eq!(
-        refs_from("local.mock"),
-        vec![local],
-        "a file that declares the name resolves to its own symbol, never to the unit's twin"
+        from_local,
+        {
+            let mut want = vec![local, helper_twin];
+            want.sort_by_key(|s| s.0);
+            want
+        },
+        "its own declaration AND the unit's twin — under the union of configurations only one \
+         of the two exists at a time, so each is the target under its own configuration"
+    );
+
+    assert_eq!(
+        refs_from("solo.mock"),
+        vec![solo],
+        "a name with no twin resolves to exactly one symbol — the twin set is consulted, \
+         never invented"
+    );
+}
+
+/// A name a wildcard import merely makes VISIBLE sits below members in scope.
+///
+/// Kotlin resolves an unqualified call against local names, then implicit receivers, and only
+/// then imported top-level names — so `updateState(…)` inside a method reaches its own type's
+/// member, not a same-named top-level function in a wildcard-imported package. Consulted above
+/// the member fallback instead, an unrelated `updateState` in `kotlinx.coroutines.internal`
+/// stole both call sites of `StateFlowImpl.updateState` and left it reading `unused`.
+#[test]
+fn a_member_in_scope_outranks_a_wildcard_visible_name() {
+    let dir = project(
+        "visible-vs-member",
+        &[
+            // Same directory, different units — the mock resolver only walks `./` siblings,
+            // and `unit` is declared, not derived from the path.
+            ("src/free.mock", "unit other\nprivate-decl updateState"),
+            (
+                "src/holder.mock",
+                "unit app\nimport-visible ./free.mock\nmember-decl Holder updateState\n\
+                 member-decl Holder setValue\nref updateState",
+            ),
+        ],
+    );
+    let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
+
+    let symbol = |name: &str, file: &str| -> crate::vocab::SymbolId {
+        let (i, _) = graph
+            .symbols
+            .iter()
+            .enumerate()
+            .find(|(_, s)| {
+                s.name.as_str() == name && graph.files[s.file.0 as usize].path.0.ends_with(file)
+            })
+            .expect("declaration exists");
+        crate::vocab::SymbolId(i as u32)
+    };
+    let member = symbol("updateState", "holder.mock");
+    let free = symbol("updateState", "free.mock");
+
+    let targets: Vec<crate::vocab::SymbolId> = graph
+        .edges
+        .iter()
+        .filter(|e| {
+            graph.files[e.owner.0 as usize]
+                .path
+                .0
+                .ends_with("holder.mock")
+        })
+        .filter_map(|e| match e.kind {
+            EdgeKind::References { to, .. } => Some(to),
+            _ => None,
+        })
+        .collect();
+
+    assert!(
+        targets.contains(&member),
+        "the enclosing type's own member is the target of an unqualified call"
+    );
+    assert!(
+        !targets.contains(&free),
+        "the wildcard-visible top-level name of the same name does not take it"
     );
 }

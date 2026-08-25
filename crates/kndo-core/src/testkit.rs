@@ -83,6 +83,7 @@ impl LanguageAdapter for MockAdapter {
         //   import <specifier> [binding[,binding...]]     -> RawImport { reexported: false }
         //   reexport <specifier> [binding[,binding...]]   -> RawImport { reexported: true }
         //   import-opaque <specifier>                     -> RawImport { opaque_namespace_use: true }
+        //   import-visible <specifier>                    -> RawImport { module_names_visible: true }
         //       binding := name          -> ImportBinding { local: name, imported: Some(name) }
         //                | local=imported -> ImportBinding { local, imported: Some(imported) }
         //                | local=          -> ImportBinding { local, imported: None } (default)
@@ -176,6 +177,7 @@ impl LanguageAdapter for MockAdapter {
                 .or_else(|| line.strip_prefix("reexport-opaque "))
                 .or_else(|| line.strip_prefix("reexport "))
                 .or_else(|| line.strip_prefix("import-opaque "))
+                .or_else(|| line.strip_prefix("import-visible "))
             {
                 // `reexport-opaque <spec>` — a re-exported glob (`export * from './x'`,
                 // Rust `pub use x::*`): reexported with no bindings, namespace-opaque.
@@ -183,6 +185,10 @@ impl LanguageAdapter for MockAdapter {
                     line.starts_with("reexport ") || line.starts_with("reexport-opaque ");
                 let opaque_namespace_use =
                     line.starts_with("import-opaque ") || line.starts_with("reexport-opaque ");
+                // `import-visible <spec>` — the language's scoping rule rather than a glob:
+                // every top-level name of the target's unit is legal HERE unqualified
+                // (Kotlin's `import p.*`, Swift's `import SomeKit`).
+                let module_names_visible = line.starts_with("import-visible ");
                 let mut parts = rest.splitn(2, ' ');
                 let spec = parts.next().unwrap_or("");
                 let bindings = parts
@@ -214,7 +220,7 @@ impl LanguageAdapter for MockAdapter {
                     bindings,
                     reexported,
                     opaque_namespace_use,
-                    module_names_visible: false,
+                    module_names_visible,
                     local_alias: None,
                 });
             } else if let Some(rest) = line.strip_prefix("import-as ") {

@@ -220,7 +220,7 @@ Emitted import kinds:
 |------|----------|
 | `import com.foo.Bar` | specifier `com.foo`, binding `[Bar]` — same package/type split as Java, free from the grammar's own `qualified_identifier` nesting |
 | `import com.foo.Bar as Alias` | specifier `com.foo`, binding `[{local: Alias, imported: Bar}]` — Kotlin's own import-aliasing syntax (Java has none); the binding's `local`/`imported` split already exists in the contract for exactly this shape |
-| `import com.foo.*` | specifier `com.foo`, no bindings, `opaque_namespace_use: true` — same keep-alive-only mechanism and same gap as Java's wildcard import (§0, §5) |
+| `import com.foo.*` | specifier `com.foo`, no bindings, **both** `opaque_namespace_use: true` (the wildcard over the target's exports — keeps it alive without naming what it took) and `module_names_visible: true` (the language's scoping rule: every top-level name of that package is legal here *unqualified*, so the core's bare-name fallback consults that unit's table). Emitting only the first meant a bare call to a wildcard-imported top-level function resolved to nothing at all — kotlinx.coroutines calls `recoverStackTrace(…)` that way from dozens of files in other packages, and every declaration of it read `unused`; landing the second took the repo from 3454 findings to 2909 and 69.8 C to 79.3 C |
 | `import com.foo::Bar` sentinel shape | **not applicable** — Kotlin has no `import static`; a top-level `const val`/function is imported the same way a class is (`import com.foo.CONST`), row 1 already covers it |
 
 `ImportKind::Package` throughout (no relative-path import shape), `Confidence::Certain` (an
@@ -281,6 +281,7 @@ manifest-driven root-promotion boost a `src/main/kotlin`-housed file gets.
 | Smart-cast / `is`/`as` type checks | the checked type is an ordinary `TypeUse` reference; the compiler-level flow-sensitive narrowing itself has no representation in kndo's model (nor does any other adapter's) |
 | Meta-annotated, parameterless `annotation class` | not extracted — a verified upstream grammar limitation, not an extraction bug (§0's last bullet) |
 | Kotlin Multiplatform source sets | files still claimed/extracted as ordinary `.kt` source; role classification and root promotion assume single-platform JVM layout and undercount on a real KMP tree (§0, §7) |
+| `expect` / `actual` declarations | ONE logical declaration with several bodies, and the unit key (the declared package name) is the same for all of them — so they are exactly the core's same-unit *twins*, and a reference to the name edges to every one of them. Nothing Kotlin-specific in the core: the same machinery covers Go's mutually exclusive build-tag files and Rust's `#[cfg]` alternates (RFC 0012 §8). Before it, the `expect` took every call and its `actual`s read `unused`, or the reverse |
 | `@JvmStatic`/`@JvmName`/`@JvmOverloads` JVM-interop annotations | not modeled specially — these affect bytecode-level dispatch shape (extra overloads, static vs. instance methods) that has no bearing on kndo's textual liveness model; a call site written in Kotlin always looks like an ordinary Kotlin call regardless of what the annotation generates for Java callers |
 
 ## 6. Conformance fixtures (shared harness, RFC 0002 §8)

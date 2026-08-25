@@ -164,8 +164,17 @@ fn handle_import(item: Node, src: &[u8], out: &mut FileFacts) {
     let alias = import_alias(item, src);
 
     if is_wildcard {
-        out.imports
-            .push(make_import(&full, sp, Vec::new(), true, None));
+        // `import kotlinx.coroutines.internal.*` is BOTH facts at once: a wildcard over the
+        // target's exports (`opaque_namespace_use` — keeps the target alive without naming
+        // what it took), and the language's scoping rule that every top-level name of that
+        // package is now legal HERE, unqualified (`module_names_visible` — the bare-name
+        // fallback consults the unit's table at Certain). Only the first was emitted, so a
+        // bare call to a wildcard-imported top-level function resolved to nothing at all:
+        // kotlinx.coroutines calls `recoverStackTrace(…)` this way from dozens of files in
+        // other packages, and every declaration of it read `unused`.
+        let mut imp = make_import(&full, sp, Vec::new(), true, None);
+        imp.module_names_visible = true;
+        out.imports.push(imp);
         return;
     }
     let Some((pkg, ty)) = full.rsplit_once('.') else {
@@ -1049,6 +1058,12 @@ mod tests {
         let imp = f.imports.iter().find(|i| i.specifier == "com.foo").unwrap();
         assert!(imp.opaque_namespace_use);
         assert!(imp.bindings.is_empty());
+        assert!(
+            imp.module_names_visible,
+            "it is also the language's scoping rule: every top-level name of that package is \
+             legal here unqualified, which is what lets a bare call to a wildcard-imported \
+             top-level function resolve at all"
+        );
     }
 
     #[test]

@@ -344,6 +344,11 @@ pub(crate) fn resolve_file(
     // Local name -> target symbol, from this file's import bindings — the fact that lets a
     // `RawReference` to an *imported* name resolve cross-file instead of only same-file.
     let mut bound_symbols: HashMap<SmolStr, SymbolId> = HashMap::default();
+    // The twin sets behind those bindings, when the binding resolved through the TARGET's
+    // unit table (see `symbol_twins_per_unit`): `import kotlinx.coroutines.internal.recover
+    // StackTrace` names one declaration that exists once per platform (`expect` beside its
+    // `actual`s), and binding only the table's winner left the rest with no incoming edge.
+    let mut bound_twins: HashMap<SmolStr, Vec<SymbolId>> = HashMap::default();
     // Qualifier -> resolved in-repo target file: the import's explicit
     // `local_alias`, or — unaliased — the *target's own* declared `unit_name`. This is
     // where the dir≠package problem dissolves: only assembly holds both sides, so the
@@ -421,18 +426,29 @@ pub(crate) fn resolve_file(
                     // necessarily just one representative file in it (resolution has no
                     // multi-file target), so the symbol a qualified access binds
                     // to may live in any of that directory's other files.
+                    let mut resolving_unit = None;
                     let symbol_id = symbol_by_name_per_file[to.0 as usize]
                         .get(&exported_name)
                         .or_else(|| {
                             file_unit[to.0 as usize].as_ref().and_then(|unit| {
-                                symbol_by_name_per_unit
+                                let found = symbol_by_name_per_unit
                                     .get(unit)
-                                    .and_then(|t| t.get(&exported_name))
+                                    .and_then(|t| t.get(&exported_name));
+                                if found.is_some() {
+                                    resolving_unit = Some(unit);
+                                }
+                                found
                             })
                         })
                         .copied();
                     if let Some(symbol_id) = symbol_id {
                         bound_symbols.insert(binding.local.clone(), symbol_id);
+                        if let Some(twins) = resolving_unit
+                            .and_then(|unit| symbol_twins_per_unit.get(unit))
+                            .and_then(|t| t.get(&exported_name))
+                        {
+                            bound_twins.insert(binding.local.clone(), twins.clone());
+                        }
                     }
                 }
                 let qualifier = imp
@@ -666,47 +682,75 @@ pub(crate) fn resolve_file(
             }
         }
 
-        let target = if is_receiver_access {
+        // The resolving TIER decides whether twins apply, and which unit's twins: a same-file
+        // declaration is one specific symbol, while anything found through a unit table is one
+        // of however many that unit declares under the name. Carrying the unit alongside the
+        // hit is what makes the last tier work — the name lives in a unit this file merely
+        // *sees* (a Kotlin wildcard import), not in its own, so looking twins up under
+        // `file_unit[i]` found nothing.
+        // Every declaration of this name in `unit` EXCEPT `exclude` — the twin set, whichever
+        // of them a tier happened to land on. One unit may legitimately declare a name
+        // several times when the language makes the declarations alternatives: Go's mutually
+        // exclusive build-tag files, Rust's `#[cfg]` alternates, and Kotlin multiplatform's
+        // `expect` beside its per-platform `actual`s. kndo analyzes the union of
+        // configurations, so all of them are live; edging only to the one a single-slot table
+        // returned left the rest with zero incoming references and a false `unused`
+        // (kotlinx.coroutines' `yieldThread` is `expect` in the very file that calls it, with
+        // its `actual`s one file over). Returns empty — no allocation — for the overwhelming
+        // majority of names, which have no twin at all.
+        let unit_twins = |unit: &SmolStr, exclude: SymbolId| -> Vec<SymbolId> {
+            let Some(twins) = symbol_twins_per_unit
+                .get(unit)
+                .and_then(|t| t.get(&reference.name))
+            else {
+                return Vec::new();
+            };
+            symbol_by_name_per_unit
+                .get(unit)
+                .and_then(|t| t.get(&reference.name))
+                .copied()
+                .into_iter()
+                .chain(twins.iter().copied())
+                .filter(|&s| s != exclude)
+                .collect()
+        };
+        // Shared by the exact-name ladder and the wildcard-visible tier further down.
+        let in_visible_unit = |unit: &SmolStr| {
+            symbol_by_name_per_unit
+                .get(unit)
+                .and_then(|t| t.get(&reference.name))
+                .map(|to| (*to, unit_twins(unit, *to)))
+        };
+        let resolved: Option<(SymbolId, Vec<SymbolId>)> = if is_receiver_access {
             None
         } else {
             bound_symbols
                 .get(&reference.name)
-                .or_else(|| symbol_by_name_per_file[i].get(&reference.name))
-                .or_else(|| {
-                    file_unit[i].as_ref().and_then(|unit| {
-                        symbol_by_name_per_unit
-                            .get(unit)
-                            .and_then(|t| t.get(&reference.name))
-                    })
+                .map(|&to| {
+                    (
+                        to,
+                        bound_twins
+                            .get(&reference.name)
+                            .map(|t| t.iter().copied().filter(|&s| s != to).collect())
+                            .unwrap_or_default(),
+                    )
                 })
                 .or_else(|| {
-                    visible_units.iter().find_map(|unit| {
-                        symbol_by_name_per_unit
-                            .get(unit)
-                            .and_then(|t| t.get(&reference.name))
+                    // A same-file hit still carries the unit's twins: the file that DECLARES
+                    // one alternate is exactly where the others' calls live.
+                    symbol_by_name_per_file[i].get(&reference.name).map(|&to| {
+                        (
+                            to,
+                            file_unit[i]
+                                .as_ref()
+                                .map(|unit| unit_twins(unit, to))
+                                .unwrap_or_default(),
+                        )
                     })
                 })
-                .copied()
+                .or_else(|| file_unit[i].as_ref().and_then(&in_visible_unit))
         };
-        if let Some(to) = target {
-            // Every twin of a same-unit name gets the edge, not just the table's winner. Two
-            // files of one unit may legitimately declare one name — Go's mutually exclusive
-            // build-tag files are the case — and kndo analyzes the union of build
-            // configurations, so both are live. Emitting only the winner left the other with
-            // zero incoming references and a false `unused`. Twins are per-unit, so a name
-            // resolved through an import binding or this file's own table has none.
-            let twins = file_unit[i]
-                .as_ref()
-                .and_then(|unit| symbol_twins_per_unit.get(unit))
-                .and_then(|t| t.get(&reference.name))
-                .filter(|_| {
-                    // Only when the winner came from the unit table: a bound import or a
-                    // same-file declaration is a specific symbol, not one of a twin set.
-                    !bound_symbols.contains_key(&reference.name)
-                        && !symbol_by_name_per_file[i].contains_key(&reference.name)
-                })
-                .map(Vec::as_slice)
-                .unwrap_or(&[]);
+        if let Some((to, twins)) = resolved {
             for to in std::iter::once(to).chain(twins.iter().copied()) {
                 out.edges.push(Edge {
                     owner: file_id,
@@ -761,6 +805,31 @@ pub(crate) fn resolve_file(
                     .collect()
             })
             .unwrap_or_default();
+        // Names a wildcard import merely made VISIBLE (`import kotlinx.coroutines.internal.*`,
+        // Swift's `import SomeKit`) sit BELOW members in scope, which is where every language
+        // with this tier puts them: Kotlin resolves an unqualified call against local names,
+        // then implicit receivers, and only then imported top-level names. Consulted above the
+        // member fallback instead, an unrelated top-level `updateState` in a wildcard-imported
+        // package stole both call sites of `StateFlowImpl.updateState` — a method calling its
+        // own type's member — and left it reading `unused`.
+        if candidates.is_empty() {
+            if let Some((to, twins)) = visible_units.iter().find_map(&in_visible_unit) {
+                for to in std::iter::once(to).chain(twins.iter().copied()) {
+                    out.edges.push(Edge {
+                        owner: file_id,
+                        kind: EdgeKind::References {
+                            from,
+                            to,
+                            kind: reference.kind,
+                        },
+                        confidence: Confidence::Certain,
+                        source: provenance(),
+                        span: Some(reference.span),
+                    });
+                }
+                continue;
+            }
+        }
         if !candidates.is_empty() {
             let confidence = if candidates.len() == 1 {
                 Confidence::Probable

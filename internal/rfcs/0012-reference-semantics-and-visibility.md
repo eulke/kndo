@@ -312,6 +312,23 @@ declared in the referencing file itself, is one specific symbol and not a member
 set. Same keep-alive direction as everywhere else — an extra edge to a twin that some build
 configuration excludes costs recall under that configuration, never a false accusation.
 
+**Which tier resolved decides which twins apply.** The bare-name ladder is: names bound by
+this file's imports, then its own declarations, then its unit's, then units a wildcard import
+makes visible. Kotlin multiplatform is the case that exercises every rung — `expect` in
+`common` beside one `actual` per platform, all under one declared package, hence all twins of
+each other — and the callers reach them from all four positions: an explicit import (the
+binding's own twin set, recorded when the binding resolved through the TARGET's unit table),
+the declaring file itself (`expect inline fun yieldThread()` sits in the file that calls it),
+a sibling file of the unit, and a wildcard-imported package. Each tier therefore carries the
+unit's full twin set for the name, minus whichever member of it that tier returned.
+
+**Wildcard-visible names rank BELOW members in scope.** The last rung is consulted only after
+the §3 duck-typed member fallback comes up empty, which is where every language with this tier
+puts it: Kotlin resolves an unqualified call against local names, then implicit receivers, and
+only then imported top-level names. Ranked above the fallback instead, an unrelated top-level
+`updateState` in a wildcard-imported package took both call sites of kotlinx.coroutines'
+`StateFlowImpl.updateState` — a method calling its own type's member — and left it `unused`.
+
 | Language | unit key |
 |----------|----------|
 | Go | `dir#declared-package-name` — splits external test packages (`foo_test`) from `foo` in the same directory, closing the documented §1.1 imprecision of docs/adapters/go.md with zero core changes |
