@@ -221,7 +221,7 @@ Emitted import kinds:
 | Form | Emission |
 |------|----------|
 | `import com.foo.Bar;` | specifier `com.foo`, binding `[Bar]` — this is the ONE shape whose specifier is the *package*, not the full dotted path (unlike Go/Rust, whose two-step tail rule needs the ambiguity; Java's grammar already hands the package/type split via the `scoped_identifier`'s own nesting, so no guessing is needed) |
-| `import com.foo.*;` | specifier `com.foo`, no bindings, `opaque_namespace_use: true` — the resolved target file's own declared symbols stay `Possible`-reachable via the same `Wildcard` keep-alive mechanism Go's dot-import and JS's `export *` already use (contracts §2), at the SAME single-representative-file granularity Go's own package resolution already accepts (§3 point 2). This is a keep-alive mechanism only, **not** a name-resolution one — see §5/§7 for the real gap it doesn't cover (a bare unqualified reference to a wildcard-imported type name) |
+| `import com.foo.*;` | specifier `com.foo`, no bindings, and **two** facts: `opaque_namespace_use: true` — the resolved target file's own declared symbols stay `Possible`-reachable via the same `Wildcard` keep-alive mechanism Go's dot-import and JS's `export *` already use (contracts §2), at the SAME single-representative-file granularity Go's own package resolution already accepts (§3 point 2) — and `module_names_visible: true`, the JLS 7.5.2 type-import-on-demand rule itself: every type in that package is legal here *unqualified*, so the core's bare-name fallback consults that unit's table at Certain. Only top-level declarations live in a unit's name table, so this brings in exactly what the JLS says it does — types, not static members |
 | `import static com.foo.Bar.CONST;` | specifier `com.foo::Bar` (§3.1), binding `[CONST]`, `type_only: false` |
 | `import static com.foo.Bar.*;` | specifier `com.foo::Bar`, `opaque_namespace_use: true` — every static member of `Bar` in scope unqualified |
 | `import com.foo.Bar;` used only in `extends`/`implements`/type positions | same as row 1 — Java has no `import type` keyword; whether a binding is type-only isn't visible at the import site, only at each reference site (`RefKind::TypeUse` there already carries that distinction) |
@@ -377,18 +377,18 @@ Four fixtures, each a real Maven/Gradle module tree run through the real `Engine
   dependency finding — verified end-to-end through the real engine (plus the diagnostic
   message), not just the unit-level `find_dependency_hygiene` test in `dependency_hygiene.rs`.
 
-**A real gap the fixtures surfaced, left honestly unfixed for v1**: a *wildcard* type import
-(`import com.foo.*;`) does not bind the target package's type names the way a plain
-`import com.foo.Bar;` binds `Bar` — extraction has no cross-file knowledge of what a package
-*declares*, and (unlike Go's dot-import, whose target is exactly one file) enumerating a
-Java package's top-level types would need the same core-side, post-extraction step Rust's
-phase 2.7 library-surface fixpoint uses, applied to name *resolution* rather than surface
-*expansion*. Consequence: a **bare, unqualified** reference to a wildcard-imported type name
-(`Helper` used as a bare type, not through `Helper.member()`) does not resolve — the
-`dispatch-and-cross-package` fixture works only because its usage is the qualified-access
-shape (`Helper.assist()`, which resolves the *member* through the duck-typed fallback
-regardless of whether the *type* name itself independently resolved). Parked as an open
-question (§7) rather than silently claimed working.
+**A gap the fixtures surfaced, and how it closed.** A *wildcard* type import
+(`import com.foo.*;`) used not to bind the target package's type names the way a plain
+`import com.foo.Bar;` binds `Bar`, so a **bare, unqualified** reference to a wildcard-imported
+type (`Helper` as a bare type, not through `Helper.member()`) did not resolve at all; the
+`dispatch-and-cross-package` fixture passed only because its usage is the qualified-access
+shape, which the duck-typed member fallback covers regardless of whether the type name itself
+resolved. The core-side, post-extraction enumeration this was thought to need already existed:
+`symbol_by_name_per_unit` is exactly "every top-level declaration of a unit, by name", and
+`unit` for Java is the declared package. All the adapter was missing was
+`module_names_visible` — the contract field Swift's `import SomeKit` already used to say the
+same thing. Kotlin's `import p.*` had the identical gap and closed with the identical one-line
+fact.
 
 **No `undeclared`-dependency fixture, deliberately** — same shape as Go's own stance (§6 there),
 for the different reason §0/§3 document: Java's `resolve()` never emits `Resolution::Dependency`
@@ -413,9 +413,7 @@ for an external import, so there is no code path that could produce one.
    bullet) — deliberately not attempted (a hand-maintained or generated database, `kndo-stdlib`-
    style, is the only sound path here; parked pending real signal that the skip's precision
    cost is worth the ongoing-maintenance cost of such a database).
-6. Wildcard type import name resolution (`import com.foo.*;` making a bare `Bar` reference
-   resolve, not just `Bar.member()`) — needs a core-side, post-extraction step enumerating a
-   package's declared top-level types, analogous to Rust's phase 2.7 library-surface fixpoint
-   but for name resolution rather than surface expansion (§3, §6's conformance-fixture note).
-   Not attempted in v1; qualified access through the same wildcard already works via the
-   duck-typed member fallback, which covers the overwhelmingly common real-world shape.
+6. ~~Wildcard type import name resolution~~ — **resolved.** `import com.foo.*;` now declares
+   `module_names_visible`, and the core's bare-name fallback consults the target unit's table
+   (§3, §5). The post-extraction enumeration this question assumed was missing turned out to be
+   `symbol_by_name_per_unit`, which already existed.

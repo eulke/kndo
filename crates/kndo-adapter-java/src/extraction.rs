@@ -207,9 +207,17 @@ fn handle_import(item: Node, src: &[u8], out: &mut FileFacts) {
     }
 
     if is_wildcard {
-        // `import com.foo.*;` — package-level wildcard, exactly enumerable.
-        out.imports
-            .push(make_import(&full, sp, false, Vec::new(), true));
+        // `import com.foo.*;` — a type-import-on-demand (JLS 7.5.2), which is BOTH facts: a
+        // wildcard over the package's exports (`opaque_namespace_use` — keeps them alive
+        // without naming which one was taken) and the language's scoping rule that every type
+        // in that package is now legal HERE unqualified (`module_names_visible` — the core's
+        // bare-name fallback consults that unit's table). Emitting only the first left a bare
+        // `Helper()` from a wildcard-imported package resolving to nothing at all. Only
+        // top-level declarations live in a unit's name table, so this brings in exactly what
+        // the JLS says it does: types, not static members.
+        let mut imp = make_import(&full, sp, false, Vec::new(), true);
+        imp.module_names_visible = true;
+        out.imports.push(imp);
         return;
     }
 
@@ -1060,6 +1068,11 @@ mod tests {
         let imp = f.imports.iter().find(|i| i.specifier == "com.foo").unwrap();
         assert!(imp.opaque_namespace_use);
         assert!(imp.bindings.is_empty());
+        assert!(
+            imp.module_names_visible,
+            "and the JLS 7.5.2 scoping rule with it: every type in that package is legal here \
+             unqualified, which is what makes a bare `Bar` reference resolve"
+        );
     }
 
     #[test]
