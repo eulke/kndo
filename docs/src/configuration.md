@@ -38,6 +38,10 @@ configuration.
 # paths = ["examples/**"]
 # skip = ["unused"]
 
+# [[externally-invoked]]                 # entry points only your framework knows about
+# markers = ["Controller", "Bean"]       # annotations/attributes/decorators, by name
+# paths = ["src/main/java/**"]           # optional scope; omit to apply project-wide
+
 # [plugins.gate]                         # opt plugin findings into the exit-code gate
 # "github.com/acme/some-plugin" = "warning"        # gate this plugin's rules, capped at warning
 # "github.com/acme/some-plugin/noisy-rule" = "off" # per-rule override wins
@@ -45,7 +49,8 @@ configuration.
 
 > **What the engine reads today:** **`[analysis]`** (`skip`, `min-confidence`),
 > **`[analysis.duplicate]`** (`min-tokens`), **`[analysis.crap]`** (`threshold`),
-> **`[performance]`** (`threads`), **`[[rule]]`**, **`[plugins.gate]`**, and
+> **`[performance]`** (`threads`), **`[[rule]]`**, **`[[externally-invoked]]`**,
+> **`[plugins.gate]`**, and
 > **`[plugins.<id>]`** (`report`, `max-age`) are all live.
 > Still documented-but-unwired: **`[project]`** (discovery is gitignore-aware
 > automatically; scoping it from config doesn't exist yet) and the **`[delta]`** budget
@@ -104,6 +109,48 @@ findings are counted in the report's `suppressed.config`; a finding also covered
 inline pragma counts as `inline` instead (pragmas match first, so config can never make a
 working pragma look stale). `stale` itself can't be skipped — the audit of your
 suppressions stays visible by design.
+
+### `[[externally-invoked]]`
+
+Some code is called from outside your source entirely, and no amount of analysis will find
+the call. A Spring `@Controller` is instantiated by classpath component scanning and its
+methods are dispatched by URL; a JUnit `@AfterEach` is called by the runner; a ByteBuddy
+`@Advice.OnMethodEnter` body is inlined into instrumented bytecode; a Koin `@Scoped`
+annotation is read by an annotation processor that lives in a different repository. kndo is
+*right* that nothing in your code references them — and reporting them `unused` or
+`test-only` is still wrong.
+
+`[[externally-invoked]]` is how you say so, once, for a whole class of declarations:
+
+```toml
+[[externally-invoked]]
+# Spring wires these by component scan and calls them through the dispatcher.
+markers = ["Component", "Configuration", "Bean", "Controller", "RestController",
+           "Service", "Repository", "ControllerAdvice", "SpringBootApplication"]
+paths = ["src/main/java/**"]     # optional; omit and the rule applies project-wide
+
+[[externally-invoked]]
+# JUnit calls the lifecycle hooks; nothing in the source names them.
+markers = ["Test", "BeforeEach", "AfterEach", "BeforeAll", "AfterAll"]
+```
+
+- **`markers`** — annotation names (Java, Kotlin), attribute paths (Rust), attributes
+  (Swift), decorators (JS/TS), matched against what the adapter read off the declaration.
+  Write them the way your source writes them: for `@Advice.OnMethodEnter`, either
+  `"Advice.OnMethodEnter"` or `"OnMethodEnter"` matches. Required and non-empty.
+- **`paths`** — optional globs scoping the rule to some files. Omitted means project-wide.
+
+**This is not a skip.** A matched declaration becomes a real production entry point, so
+everything it reaches comes alive with it and every analysis keeps judging all of it
+normally — an untested controller still reports `untested`, a duplicated one still reports
+`duplicate`. That is the difference from `[[rule]] skip`, which would silence the genuine
+findings in those files along with the false ones. Nothing is counted as suppressed, because
+nothing was suppressed: the graph was simply told the truth about where execution enters.
+
+kndo never guesses these for you and ships no list of framework names: knowing that
+`@Controller` means Spring would mean learning frameworks, and the analysis core is built to
+stay ignorant of even the *languages* it analyzes. What it does is match the strings you
+supply. A marker you never configure is inert.
 
 ### `[plugins.gate]`
 

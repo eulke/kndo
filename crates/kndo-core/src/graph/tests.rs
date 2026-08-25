@@ -42,6 +42,7 @@ fn surface_closure_promotes_transitive_members_of_surface_types_only() {
         implicitly_invoked: false,
         nested_scope: false,
         visibility_inherited: false,
+        markers: Vec::new(),
     };
     let symbols = vec![
         sym("Widget", 1, None, 1, 20),            // surface seed (rooted below)
@@ -2987,6 +2988,7 @@ fn same_named_declarations_keep_their_own_metrics() {
         implicitly_invoked: false,
         nested_scope: false,
         visibility_inherited: false,
+        markers: Vec::new(),
     };
     let metrics = |span: Span, tokens: u32| FunctionMetrics {
         symbol: SmolStr::new("from_path"),
@@ -3019,6 +3021,7 @@ fn same_named_declarations_keep_their_own_metrics() {
             implicitly_invoked: false,
             nested_scope: false,
             visibility_inherited: false,
+            markers: Vec::new(),
         })
         .collect();
 
@@ -3082,6 +3085,7 @@ fn a_nested_types_constructor_inherits_its_containers_liveness() {
             implicitly_invoked: false,
             nested_scope: false,
             visibility_inherited: false,
+            markers: Vec::new(),
         };
     use crate::vocab::SymbolKind;
     let facts = FileFacts {
@@ -3112,6 +3116,7 @@ fn a_nested_types_constructor_inherits_its_containers_liveness() {
             implicitly_invoked: false,
             nested_scope: false,
             visibility_inherited: false,
+            markers: Vec::new(),
         })
         .collect();
 
@@ -3177,6 +3182,7 @@ fn same_name_overloads_each_own_the_references_in_their_body() {
         implicitly_invoked: false,
         nested_scope: false,
         visibility_inherited: false,
+        markers: Vec::new(),
     };
 
     // Two overloads; the reference sits inside the FIRST one's body.
@@ -3211,6 +3217,7 @@ fn same_name_overloads_each_own_the_references_in_their_body() {
             implicitly_invoked: false,
             nested_scope: false,
             visibility_inherited: false,
+            markers: Vec::new(),
         })
         .collect();
 
@@ -3409,5 +3416,83 @@ fn a_member_in_scope_outranks_a_wildcard_visible_name() {
     assert!(
         !targets.contains(&free),
         "the wildcard-visible top-level name of the same name does not take it"
+    );
+}
+
+/// `kndo.toml`'s `[[externally-invoked]]`: the project answers the one question static
+/// analysis cannot.
+///
+/// A Spring `@Controller` is instantiated by classpath scanning and called by a servlet
+/// dispatcher; a JUnit `@AfterEach` by the runner. The graph is right that nothing references
+/// them and the verdict is still a false accusation. The core matches marker STRINGS the
+/// project supplied against the ones adapters report, and learns nothing about any framework.
+#[test]
+fn a_project_declared_marker_makes_a_symbol_an_entry_point() {
+    use crate::analysis::reachability;
+
+    let dir = project(
+        "declared-entry-points",
+        &[(
+            "src/app.mock",
+            "marked-decl Controller show\nmarked-decl Helper hidden\ndecl plain",
+        )],
+    );
+    let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
+    let id = |name: &str| -> crate::vocab::SymbolId {
+        let (i, _) = graph
+            .symbols
+            .iter()
+            .enumerate()
+            .find(|(_, s)| s.name.as_str() == name)
+            .expect("declaration exists");
+        crate::vocab::SymbolId(i as u32)
+    };
+
+    let rule = |markers: &[&str], paths: &[&str]| crate::config::ExternallyInvokedRule {
+        markers: markers.iter().map(|m| SmolStr::new(*m)).collect(),
+        paths: paths
+            .iter()
+            .map(|p| glob::Pattern::new(p).unwrap())
+            .collect(),
+    };
+
+    assert_eq!(
+        reachability::externally_invoked_symbols(&graph, &[]),
+        Vec::new(),
+        "no rules, no entry points — the mechanism is inert until the project uses it"
+    );
+    assert_eq!(
+        reachability::externally_invoked_symbols(&graph, &[rule(&["Controller"], &[])]),
+        vec![id("show")],
+        "only the declaration carrying the configured marker"
+    );
+    assert_eq!(
+        reachability::externally_invoked_symbols(&graph, &[rule(&["Controller"], &["other/**"])]),
+        Vec::new(),
+        "`paths` scopes the rule; a file outside it is untouched"
+    );
+    assert_eq!(
+        reachability::externally_invoked_symbols(&graph, &[rule(&["Controller"], &["src/**"])]),
+        vec![id("show")],
+        "and matches when the file is inside it"
+    );
+
+    // The point of the whole mechanism: the color changes.
+    let before = reachability::compute(&graph);
+    assert_eq!(
+        before.get(crate::vocab::NodeRef::Symbol(id("show"))).0,
+        reachability::Reachability::Unreachable
+    );
+    let declared = reachability::externally_invoked_symbols(&graph, &[rule(&["Controller"], &[])]);
+    let after = reachability::compute_with_roots(&graph, &declared);
+    assert_eq!(
+        after.get(crate::vocab::NodeRef::Symbol(id("show"))),
+        (reachability::Reachability::Production, Confidence::Certain),
+        "a project-declared entry point has the standing of a manifest-declared one"
+    );
+    assert_eq!(
+        after.get(crate::vocab::NodeRef::Symbol(id("hidden"))).0,
+        reachability::Reachability::Unreachable,
+        "an unconfigured marker is inert — this is not a blanket exemption for annotated code"
     );
 }

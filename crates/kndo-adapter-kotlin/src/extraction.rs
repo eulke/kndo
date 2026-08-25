@@ -301,7 +301,7 @@ fn handle_type(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
     let name = text(name_node, src);
     let vis = visibility(item);
     let kind = class_symbol_kind(item);
-    push_declaration(out, name, kind, item, None, ctx.owner, vis);
+    push_declaration(out, src, name, kind, item, None, ctx.owner, vis);
 
     if let Some(primary) = find_child(item, "primary_constructor") {
         handle_primary_constructor(primary, src, name, out);
@@ -337,6 +337,7 @@ fn handle_class_parameter(param: Node, src: &[u8], owner: &str, out: &mut FileFa
             let vis = visibility(param);
             push_declaration(
                 out,
+                src,
                 text(name_node, src),
                 SymbolKind::Field,
                 param,
@@ -371,6 +372,7 @@ fn handle_object(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
     let vis = visibility(item);
     push_declaration(
         out,
+        src,
         name,
         SymbolKind::Other(SmolStr::new("object")),
         item,
@@ -421,7 +423,7 @@ fn handle_function(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
         start: span(item).start,
         end: span(b).start,
     });
-    push_declaration(out, name, kind, item, signature_span, ctx.owner, vis);
+    push_declaration(out, src, name, kind, item, signature_span, ctx.owner, vis);
     root_function_if_entry_point(item, ctx.owner, name, &qualified, out);
 
     walk_function_signature(item, src, Some(&qualified), out);
@@ -508,6 +510,7 @@ fn handle_secondary_constructor(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut
     });
     push_declaration(
         out,
+        src,
         "<init>",
         SymbolKind::Constructor,
         item,
@@ -565,7 +568,7 @@ fn handle_property(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
         SymbolKind::Variable
     };
     let name = text(name_node, src);
-    push_declaration(out, name, kind, item, None, ctx.owner, vis);
+    push_declaration(out, src, name, kind, item, None, ctx.owner, vis);
     // `override val` is dispatch machinery exactly like `override fun` (see
     // root_function_if_entry_point): the supertype's accessor call never names this member.
     mark_override_implicit(item, name, out);
@@ -595,6 +598,7 @@ fn handle_type_alias(item: Node, src: &[u8], _ctx: &Ctx<'_>, out: &mut FileFacts
     };
     push_declaration(
         out,
+        src,
         text(name_node, src),
         SymbolKind::TypeAlias,
         item,
@@ -625,6 +629,7 @@ fn handle_enum_entry(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts)
     };
     push_declaration(
         out,
+        src,
         text(name_node, src),
         SymbolKind::EnumMember,
         item,
@@ -640,8 +645,12 @@ fn handle_enum_entry(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts)
     }
 }
 
+// The declaration funnel: one construction site for every Kotlin declaration shape, which
+// is exactly why it takes this many facts. Same shape and same allow as the Java adapter's.
+#[allow(clippy::too_many_arguments)]
 fn push_declaration(
     out: &mut FileFacts,
+    src: &[u8],
     name: &str,
     kind: SymbolKind,
     item: Node,
@@ -659,8 +668,40 @@ fn push_declaration(
         implicitly_invoked: false,
         nested_scope: false,
         visibility_inherited: false,
+        markers: markers(item, src),
         signature_span,
     });
+}
+
+/// The annotation names written on this declaration, in source order — `Declaration::markers`.
+/// Facts, never verdicts: every annotation is reported, and this adapter has no idea which
+/// ones a framework acts on. `@Named("x")` parses as `annotation > constructor_invocation >
+/// user_type`, the bare `@Repository` as `annotation > user_type` — both contribute the type's
+/// own name. A qualified spelling contributes its last segment as well, for the reason
+/// `kndo-adapter-java`'s twin of this function documents.
+fn markers(item: Node, src: &[u8]) -> Vec<SmolStr> {
+    let Some(modifiers) = find_child(item, "modifiers") else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    let mut c = modifiers.walk();
+    for annotation in modifiers.children(&mut c) {
+        if annotation.kind() != "annotation" {
+            continue;
+        }
+        let Some(user_type) = find_child(annotation, "user_type").or_else(|| {
+            find_child(annotation, "constructor_invocation")
+                .and_then(|call| find_child(call, "user_type"))
+        }) else {
+            continue;
+        };
+        let name = text(user_type, src);
+        if let Some((_, last)) = name.rsplit_once('.') {
+            out.push(SmolStr::new(last));
+        }
+        out.push(SmolStr::new(name));
+    }
+    out
 }
 
 // ---------------------------------------------------------------- type refs & extends
@@ -1050,6 +1091,27 @@ mod tests {
         let imp = f.imports.iter().find(|i| i.specifier == "com.foo").unwrap();
         let b = imp.bindings.iter().find(|b| b.local == "Alias").unwrap();
         assert_eq!(b.imported.as_deref(), Some("Bar"));
+    }
+
+    #[test]
+    fn annotations_become_declaration_markers() {
+        let f = facts(
+            "package p\n\
+             @Repository\n\
+             @Named(\"x\")\n\
+             class Impl {\n\
+             \x20   @AfterEach\n\
+             \x20   fun cleanup() {}\n\
+             \x20   fun plain() {}\n\
+             }\n",
+        );
+        assert_eq!(
+            decl(&f, "Impl").markers,
+            vec![SmolStr::new("Repository"), SmolStr::new("Named")],
+            "the bare form and the argument form alike"
+        );
+        assert_eq!(decl(&f, "cleanup").markers, vec![SmolStr::new("AfterEach")]);
+        assert!(decl(&f, "plain").markers.is_empty());
     }
 
     #[test]

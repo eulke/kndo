@@ -254,7 +254,53 @@ fn fan_out_trait_members(
     }
 }
 
+/// Symbols the PROJECT declared reachable from outside the analyzed source, via
+/// `kndo.toml`'s `[[externally-invoked]]` — a declaration whose
+/// [`crate::adapter::Declaration::markers`] include one of a rule's `markers`, and whose file
+/// matches its `paths` when it scopes any.
+///
+/// The core matches strings and learns nothing: it has no idea that `Controller` means Spring
+/// will instantiate the class and a servlet dispatcher will call its methods, only that this
+/// project said declarations marked so are entry points. That is the ignorance rule applied to
+/// the one question source alone cannot answer.
+pub fn externally_invoked_symbols(
+    graph: &ProjectGraph,
+    rules: &[crate::config::ExternallyInvokedRule],
+) -> Vec<SymbolId> {
+    if rules.is_empty() {
+        return Vec::new();
+    }
+    let mut out: Vec<SymbolId> = Vec::new();
+    for (i, symbol) in graph.symbols.iter().enumerate() {
+        if symbol.markers.is_empty() {
+            continue;
+        }
+        let path = &graph.files[symbol.file.0 as usize].path.0;
+        let matched = rules.iter().any(|rule| {
+            (rule.paths.is_empty() || rule.paths.iter().any(|g| g.matches(path)))
+                && symbol
+                    .markers
+                    .iter()
+                    .any(|m| rule.markers.iter().any(|want| want == m))
+        });
+        if matched {
+            out.push(SymbolId(i as u32));
+        }
+    }
+    out
+}
+
+/// [`compute_with_roots`] with no project-declared entry points — the shape every caller that
+/// has no configuration to apply wants.
 pub fn compute(graph: &ProjectGraph) -> ReachabilityMap {
+    compute_with_roots(graph, &[])
+}
+
+/// `extra_roots` are seeded exactly like a `Root { kind: Production }` edge at `Certain`:
+/// the project asserted the fact, which is the same standing a manifest-declared entry point
+/// has. They are NOT a suppression — everything the symbol reaches comes alive with it, and
+/// every analysis keeps judging all of it normally.
+pub fn compute_with_roots(graph: &ProjectGraph, extra_roots: &[SymbolId]) -> ReachabilityMap {
     let files_len = graph.files.len();
     let n = files_len + graph.symbols.len();
     let node_index = |node: NodeRef| -> usize {
@@ -274,7 +320,11 @@ pub fn compute(graph: &ProjectGraph) -> ReachabilityMap {
         }
     }
 
-    let prod_roots_by_file = production_root_symbols_per_file(graph, files_len);
+    let mut prod_roots_by_file = production_root_symbols_per_file(graph, files_len);
+    for &s in extra_roots {
+        let owner = graph.symbols[s.0 as usize].file.0 as usize;
+        prod_roots_by_file[owner].push(((files_len + s.0 as usize) as u32, Confidence::Certain));
+    }
     // The two member-inheritance rules share one edge shape: implicit `Probable` edges into
     // members the source can never name (machinery hooks) or never statically pick
     // (dispatch through a trait).
@@ -401,6 +451,10 @@ pub fn compute(graph: &ProjectGraph) -> ReachabilityMap {
             seeds[kind_index(kind)].push((node_index(target) as u32, edge.confidence));
         }
     }
+    for &s in extra_roots {
+        seeds[kind_index(RootKind::Production)]
+            .push((node_index(NodeRef::Symbol(s)) as u32, Confidence::Certain));
+    }
 
     // R(kind, tau) for every (kind, tau), literally: BFS seeded only by roots whose own
     // confidence is >= tau, traversing only edges with confidence >= tau. The module-load
@@ -496,6 +550,7 @@ mod tests {
             implicitly_invoked: false,
             nested_scope: false,
             visibility_inherited: false,
+            markers: Vec::new(),
         }
     }
 
@@ -865,6 +920,7 @@ mod tests {
                 implicitly_invoked: true,
                 nested_scope: false,
                 visibility_inherited: false,
+                markers: Vec::new(),
                 ..symbol(FileId(0), "fmt")
             },
             symbol(FileId(0), "Orphan"),
@@ -873,6 +929,7 @@ mod tests {
                 implicitly_invoked: true,
                 nested_scope: false,
                 visibility_inherited: false,
+                markers: Vec::new(),
                 ..symbol(FileId(0), "drop")
             },
         ];

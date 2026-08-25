@@ -1412,6 +1412,7 @@ fn push_declaration(
         implicitly_invoked: false,
         nested_scope: false,
         visibility_inherited: false,
+        markers: Vec::new(),
         signature_span,
     });
 }

@@ -273,6 +273,7 @@ mod tests {
             implicitly_invoked: false,
             nested_scope: false,
             visibility_inherited: false,
+            markers: Vec::new(),
         }
     }
 
@@ -708,6 +709,7 @@ mod tests {
                 implicitly_invoked: true,
                 nested_scope: false,
                 visibility_inherited: false,
+                markers: Vec::new(),
                 ..symbol(FileId(1), "fmt")
             },
         ];

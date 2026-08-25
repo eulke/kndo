@@ -287,6 +287,7 @@ mod tests {
             implicitly_invoked: false,
             nested_scope: false,
             visibility_inherited: false,
+            markers: Vec::new(),
         }];
         let edges = vec![edge(
             EdgeKind::Root {
@@ -534,6 +535,7 @@ mod tests {
             implicitly_invoked: false,
             nested_scope: false,
             visibility_inherited: false,
+            markers: Vec::new(),
         }
     }
 

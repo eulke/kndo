@@ -271,6 +271,27 @@ pub struct Declaration {
     /// itself — it belongs to the container, whose own declaration is measured separately —
     /// so visibility analyses skip it. Default `false`.
     pub visibility_inherited: bool,
+    /// Language-visible MARKERS attached to this declaration: annotation names in Java and
+    /// Kotlin (`@Controller`, `@AfterEach`), attribute paths in Rust, attributes in Swift,
+    /// decorators in JS/TS. Bare names, in source order, duplicates kept — the adapter
+    /// reports what is written, and never interprets it.
+    ///
+    /// The core never interprets them either: it has no list of framework names and cannot
+    /// acquire one without breaking the ignorance rule. What it does is MATCH them against a
+    /// list the project supplies (`kndo.toml`'s `[[externally-invoked]]`), because the
+    /// question these answer is one static analysis cannot decide on its own — "is this
+    /// declaration invoked from outside the analyzed source?" A Spring `@Controller` is
+    /// instantiated by classpath component scanning and called by a servlet dispatcher; a
+    /// JUnit `@AfterEach` method is called by the test runner; a `@Advice.OnMethodEnter`
+    /// body is inlined into instrumented bytecode; a Koin `@Scoped` annotation is read by an
+    /// annotation processor in a different repository. Every one of them reads `unused` or
+    /// `test-only` with perfect correctness from the graph alone, and every one is a false
+    /// accusation (see `internal/detection-gaps.md`).
+    ///
+    /// Markers are FACTS, not verdicts: an adapter emits them for every declaration that
+    /// carries them, whether or not any framework is involved, and whether or not the
+    /// project configures anything. Empty for languages with no such syntax (Go).
+    pub markers: Vec<SmolStr>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

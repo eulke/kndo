@@ -26,7 +26,7 @@ impl LanguageAdapter for JsonAdapter {
             activation: Vec::new(),
             dependencies: Vec::new(),
             id: SmolStr::new("json"),
-            facts_schema_version: 1,
+            facts_schema_version: 2,
             file_globs: vec![SmolStr::new("**/*.json")],
             // No manifest format of its own — every JSON-shaped manifest belongs to
             // the adapter for the language it configures, never to "JSON" as a bare format.

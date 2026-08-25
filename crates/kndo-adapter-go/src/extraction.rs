@@ -202,6 +202,7 @@ fn push_declaration(
         implicitly_invoked: false,
         nested_scope: false,
         visibility_inherited: false,
+        markers: Vec::new(),
         signature_span,
     });
     if exported && flags.promote_exports {
@@ -357,6 +358,7 @@ fn handle_method(node: Node, src: &[u8], flags: Flags, out: &mut FileFacts) {
         ),
         nested_scope: false,
         visibility_inherited: false,
+        markers: Vec::new(),
     });
     push_function_metrics(out, &format!("{receiver_type}.{method_name}"), node);
     if exported && flags.promote_exports {

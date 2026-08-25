@@ -22,6 +22,8 @@
 
 use std::path::Path;
 
+use smol_str::SmolStr;
+
 use crate::engine::Finding;
 use crate::vocab::{Category, Confidence, SubjectKind};
 
@@ -50,6 +52,23 @@ impl SkipSpec {
 pub struct PathRule {
     pub paths: Vec<glob::Pattern>,
     pub skip: Vec<SkipSpec>,
+}
+
+/// One `[[externally-invoked]]` table: declarations carrying one of `markers` are entry
+/// points reached from outside the analyzed source, so reachability seeds them as production
+/// roots. `paths`, when non-empty, scopes the rule to files whose project-relative path
+/// matches one of the globs.
+///
+/// This is the one question static analysis cannot answer from the source alone — a Spring
+/// `@Controller` is instantiated by classpath scanning and called by a servlet dispatcher, a
+/// JUnit `@AfterEach` by the runner, a Koin `@Scoped` by an annotation processor in another
+/// repository — and it is the project, not kndo, that knows which markers mean it. The core
+/// stays ignorant: it matches strings against
+/// [`crate::adapter::Declaration::markers`] and never learns what any of them are.
+#[derive(Debug, Clone)]
+pub struct ExternallyInvokedRule {
+    pub markers: Vec<SmolStr>,
+    pub paths: Vec<glob::Pattern>,
 }
 
 /// One `[plugins.<id>]` options table (RFC 0003 §"Explicit config"). Today's live keys are
@@ -85,6 +104,11 @@ pub struct KndoConfig {
     pub skip: Vec<SkipSpec>,
     /// `[[rule]]` — path-scoped skips, same counting.
     pub rules: Vec<PathRule>,
+    /// `[[externally-invoked]]` — marker-scoped entry-point declarations. Unlike `skip`, this
+    /// is not a suppression: the symbol becomes genuinely reachable, so everything it reaches
+    /// comes alive with it and the analyses keep judging all of it normally. A whole-path
+    /// `[[rule]] skip` would silence the real findings in those files too.
+    pub externally_invoked: Vec<ExternallyInvokedRule>,
     /// `[plugins.gate]` — owned by [`crate::plugin_gate`]; carried here so `kndo.toml` is
     /// parsed exactly once.
     pub(crate) plugins_gate: crate::plugin_gate::PluginsGate,
@@ -132,6 +156,7 @@ impl KndoConfig {
                 duplicate_min_tokens: self
                     .duplicate_min_tokens
                     .unwrap_or(default_tuning.duplicate_min_tokens),
+                externally_invoked: self.externally_invoked.clone(),
             },
         }
     }
@@ -265,6 +290,64 @@ impl KndoConfig {
                     continue;
                 }
                 config.rules.push(PathRule { paths, skip });
+            }
+        }
+
+        if let Some(rules) = table.get("externally-invoked").and_then(|r| r.as_array()) {
+            for rule in rules {
+                let Some(rule) = rule.as_table() else {
+                    problems.push(
+                        "kndo.toml [[externally-invoked]]: expected a table — ignored".to_string(),
+                    );
+                    continue;
+                };
+                let mut markers = Vec::new();
+                for raw in rule
+                    .get("markers")
+                    .and_then(|m| m.as_array())
+                    .into_iter()
+                    .flatten()
+                {
+                    match raw.as_str() {
+                        Some(name) if !name.trim().is_empty() => {
+                            markers.push(SmolStr::new(name.trim()))
+                        }
+                        _ => problems.push(format!(
+                            "kndo.toml [[externally-invoked]] markers entry {raw}: expected a \
+                             non-empty string — entry ignored"
+                        )),
+                    }
+                }
+                let mut paths = Vec::new();
+                for raw in rule
+                    .get("paths")
+                    .and_then(|p| p.as_array())
+                    .into_iter()
+                    .flatten()
+                {
+                    match raw.as_str().map(glob::Pattern::new) {
+                        Some(Ok(pattern)) => paths.push(pattern),
+                        Some(Err(e)) => problems.push(format!(
+                            "kndo.toml [[externally-invoked]] paths entry {raw}: invalid glob \
+                             ({e}) — entry ignored"
+                        )),
+                        None => problems.push(format!(
+                            "kndo.toml [[externally-invoked]] paths entry {raw}: expected a \
+                             string — entry ignored"
+                        )),
+                    }
+                }
+                if markers.is_empty() {
+                    problems.push(
+                        "kndo.toml [[externally-invoked]]: needs a non-empty `markers` list — \
+                         rule ignored"
+                            .to_string(),
+                    );
+                    continue;
+                }
+                config
+                    .externally_invoked
+                    .push(ExternallyInvokedRule { markers, paths });
             }
         }
 
@@ -606,6 +689,49 @@ mod tests {
         );
         assert!(config.rules.is_empty());
         assert_eq!(problems.len(), 3, "{problems:?}");
+    }
+
+    #[test]
+    fn externally_invoked_parses_markers_and_optional_paths() {
+        let (config, problems) = parsed(
+            "[[externally-invoked]]\n\
+             markers = [\"Controller\", \"Bean\"]\n\
+             paths = [\"src/main/java/**\"]\n\
+             \n\
+             [[externally-invoked]]\n\
+             markers = [\"AfterEach\"]\n",
+        );
+        assert!(problems.is_empty(), "{problems:?}");
+        assert_eq!(config.externally_invoked.len(), 2);
+        assert_eq!(
+            config.externally_invoked[0].markers,
+            vec![SmolStr::new("Controller"), SmolStr::new("Bean")]
+        );
+        assert!(config.externally_invoked[0].paths[0].matches("src/main/java/p/C.java"));
+        assert!(
+            config.externally_invoked[1].paths.is_empty(),
+            "`paths` is optional — an unscoped rule applies project-wide"
+        );
+    }
+
+    #[test]
+    fn externally_invoked_without_markers_is_a_problem_and_is_dropped() {
+        let (config, problems) = parsed("[[externally-invoked]]\npaths = [\"src/**\"]\n");
+        assert!(config.externally_invoked.is_empty());
+        assert!(
+            problems.iter().any(|p| p.contains("non-empty `markers`")),
+            "{problems:?}"
+        );
+
+        // A bad glob drops that entry and says so; the rule itself survives on its markers.
+        let (config, problems) =
+            parsed("[[externally-invoked]]\nmarkers = [\"Bean\"]\npaths = [\"src/[\"]\n");
+        assert_eq!(config.externally_invoked.len(), 1);
+        assert!(config.externally_invoked[0].paths.is_empty());
+        assert!(
+            problems.iter().any(|p| p.contains("invalid glob")),
+            "{problems:?}"
+        );
     }
 
     #[test]

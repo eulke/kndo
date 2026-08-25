@@ -2582,6 +2582,7 @@ pub fn assemble_from_source(
                 implicitly_invoked: decl.implicitly_invoked,
                 nested_scope: decl.nested_scope,
                 visibility_inherited: decl.visibility_inherited,
+                markers: decl.markers.clone(),
             });
         }
         // CJS default alias (FileFacts::default_export_alias): `module.exports = local` —

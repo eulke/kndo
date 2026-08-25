@@ -391,6 +391,7 @@ fn from_wit_facts(facts: w::FileFacts) -> FileFacts {
             implicitly_invoked: false,
             nested_scope: false,
             visibility_inherited: false,
+            markers: Vec::new(),
         })
         .collect();
 

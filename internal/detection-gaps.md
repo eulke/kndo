@@ -1,15 +1,25 @@
 # Known detection gaps
 
-Gaps in kndo's own detection, catalogued from a full triage of the self-check corpus (every
-finding on kndo's own repository classified against the source as genuine or
-false). Each entry records the root cause, where to see it in this codebase, and the
-direction a fix would take — so the next person hitting one of these recognizes it as a
-*known* limit with a design sketch, not fresh noise. Genuine-verdict policy questions
-(what the analyses *should* claim) belong in RFC 0005; this file is strictly about recall
-and precision mechanics.
+Gaps in kndo's own detection. §§1–9 come from a full triage of the self-check corpus (every
+finding on kndo's own repository classified against the source as genuine or false), and are
+therefore all Rust; §§10 onward come from a field audit of 24 open-source repositories across
+six languages, 345 findings hand-verified against their sources. Each entry records the root
+cause, where to see it, and the direction a fix would take — so the next person hitting one of
+these recognizes it as a *known* limit with a design sketch, not fresh noise. Genuine-verdict
+policy questions (what the analyses *should* claim) belong in RFC 0005; this file is strictly
+about recall and precision mechanics.
 
 The inline `kndo:allow` pragmas and `kndo.toml` `[[rule]]` entries in this repository that
 cite this file are the acknowledged instances of these gaps.
+
+**What is a gap and what is a limit.** A gap is something kndo could see and doesn't. A limit
+is something no static analysis can see, because the fact lives outside the source: a framework
+instantiating a class it found by scanning the classpath, a runner calling a method it found by
+annotation, a processor in a different repository. For those, `[[externally-invoked]]` in
+`kndo.toml` (see `docs/src/configuration.md`) lets the project state the fact — the declaration
+becomes a real entry point, so its whole reachable tree comes alive and every analysis keeps
+judging it, unlike a `[[rule]] skip` which would silence the genuine findings alongside the
+false ones. Entries below say which kind they are, and the ones the mechanism covers say so.
 
 ## 1. WASM-boundary reachability (host imports)
 
@@ -23,6 +33,12 @@ Direction: an adapter-declared (or plugin-declared) "externally invoked" fact fo
 host-import surfaces, the same shape `annotate_symbols`' externally-consumed marking
 already has — the mechanism exists, what's missing is a producer that recognizes the
 boundary. Acknowledged with a file pragma in `plugin_host.rs`.
+
+**Update:** the general form of that fact now exists as `kndo.toml`'s `[[externally-invoked]]`
+(§§10–13), matching `Declaration::markers` — so any entry point that CARRIES a marker is
+covered with no producer at all. This case still isn't: the host-import functions carry no
+attribute distinguishing them from ordinary ones, so there is nothing to match on. The pragma
+stays until either the boundary grows a marker or a producer recognizes it structurally.
 
 ## 2. Proc-macro derive dispatch (rkyv)
 
@@ -140,3 +156,108 @@ resolution and can go stale silently. Direction: a lightweight docs adapter (or 
 extracting path-shaped tokens from Markdown as `Possible`-confidence references — enough
 for a "documentation references a path that no longer exists" hygiene verdict without
 pretending prose is code.
+
+## 10. Framework dispatch: component scan, HTTP routing, DI wiring (LIMIT — covered)
+
+Spring instantiates a `@Controller`/`@Service`/`@Repository`/`@Configuration` class by scanning
+the classpath and calls its methods from a servlet dispatcher keyed on `@GetMapping`. No source
+reference exists in either direction, and the class is either `unused` or — when only its own
+`@WebMvcTest` calls its methods — `test-only`. spring-petclinic showed both shapes at once
+(`CacheConfiguration` unused, `OwnerController` and `CrashController` test-only), and Exposed's
+sample app the same for a `@Repository`-annotated `UserDaoImpl`.
+
+Not a detection bug: the wiring genuinely is not in the source. **Covered** by
+`[[externally-invoked]]` with the stereotype names — on petclinic that is `test-only` 6 → 0 and
+`unused` 3 → 2, with nothing new reported. What stays behind is §14.
+
+## 11. Reflective test and benchmark harnesses (LIMIT — covered)
+
+JUnit calls `@BeforeEach`/`@AfterEach` from the runner; Guava's own testlib discovers `test*`
+methods by name at runtime through `MapTestSuiteBuilder`; Caliper selects `@Param` enum
+constants by iterating `values()`. mockito's `TestBase5.cleanUpConfigInAnyThread` and guava's
+`MapGetOrDefaultTester.test` are the audit's instances.
+
+The annotated ones (`@BeforeEach`, `@Test`, `@Param`) are **covered** by
+`[[externally-invoked]]`. The name-convention ones are not: `MapTestSuiteBuilder` finds methods
+by the `test` prefix, which is a *runtime* string operation with no marker to match on.
+Direction for those: a plugin, which can see the builder call and the naming rule together —
+the same shape `kndo-plugin-express` uses for its convention-named entries.
+
+## 12. Bytecode instrumentation (LIMIT — covered)
+
+A ByteBuddy `@Advice.OnMethodEnter` method body is *inlined* into instrumented target methods at
+class-generation time; it is never invoked as a Java call and never will be. mockito's
+`ForHashCode.enter` is the case. **Covered** by `[[externally-invoked]]` — this is exactly what
+the mechanism exists for, since no amount of analysis will ever find a call site that does not
+exist.
+
+## 13. Consumers in another repository (LIMIT — partly covered)
+
+Koin's `@Scoped` annotation and `Single.binds` parameter are read by `koin-ksp-compiler`, which
+lives in a different repository; koin's `binds()` DSL function is documented for library
+consumers with no in-repo caller. The annotation halves are **covered** by
+`[[externally-invoked]]`. The DSL function is not, and is really §15: published public API.
+
+## 14. Runtime-config string references (GAP)
+
+A file named only from a config or template — never from code — is invisible:
+- `WKExtensionDelegateClassName` in an `Info.plist` names Alamofire's `ExtensionDelegate` class
+  as a string; the WatchKit runtime instantiates it.
+- Thymeleaf's `th:href="@{/resources/css/petclinic.css}"` in `layout.html` is the only reference
+  to petclinic's stylesheet — the two `unused` findings left there after §10 is configured.
+- vite's `bin/vite.js` does `import('../dist/node/cli.js')`, a built artifact that maps back to
+  `src/node/cli.ts` only through vite's own rollup entry config.
+
+Direction: a plugin per ecosystem, which is what the plugin content channel exists for — it can
+read exactly the non-source files (`Info.plist`, `templates/**`, `rollup.config.*`) the language
+graph never sees, and contribute the root or the edge. Not `[[externally-invoked]]`: there is no
+marker on the declaration to match, the name lives in the other file.
+
+## 15. A published library's public API with no in-repo consumer (POLICY, not a gap)
+
+ripgrep's `grep-searcher` exports `Bytes` and `Lossy` sinks that nothing inside the repository
+uses; koin's `binds()` and its Compose-Navigation3 module are the same shape. Library mode
+already roots a publishable package's public surface, so these fire only where the promotion
+does not reach — a workspace member whose manifest says nothing about being published, a module
+whose entry point is not declared.
+
+Recorded here because the *verdict* is a policy question, not a mechanic: for a crate that is
+published, "no consumer in this repository" is not evidence of anything. Where library-mode
+promotion covers it, this never fires; where it doesn't, the honest fix is at the promotion
+rule, not at the analysis.
+
+## 16. Multi-release and multi-source-set variants of one class (GAP)
+
+retrofit ships `DefaultMethodSupport` three times — `main/java`, `java14`, `java16` — for the
+multi-release-jar pattern; exactly one is on the classpath at runtime, and `Reflection.java`
+calls it by its single name. kndo flags all three unreachable, having resolved the call to
+none of them.
+
+This is a NEAR MISS of a mechanism that already exists: same-unit twins (RFC 0012 §8) is exactly
+this shape — several declarations of one name that are alternatives, all live under the union of
+configurations — and it already covers Go's `//go:build` files, Rust's `#[cfg]` alternates, and
+Kotlin's `expect`/`actual`. It does not fire here because the three variants live in three
+different source roots and so carry three different `unit` keys, not one. Direction: derive the
+Java/Kotlin `unit` from the declared package alone (which it already is) *and* make the source
+root not part of file identity for this purpose — or, more precisely, let a manifest declare
+alternate source roots the way SwiftPM's `unit_overrides` already declares alternate target
+paths.
+
+## 17. Version skew read out of BOM-managed and property-declared coordinates (GAP)
+
+`version-skew` compares declared version strings. Three JVM shapes defeat that comparison and
+produced findings on every JVM repo in the audit:
+- **BOM-managed dependencies** declare no version at all (`platform("io.insert-koin:koin-bom")`
+  then bare artifact coordinates). The differing halves are *artifact ids*, not versions —
+  spring-petclinic's `spring-boot-starter-actuator` vs `spring-boot-docker-compose`, mockito's
+  `mockito-android` vs `mockito-junit-jupiter`, Exposed's 16 "diverging" `kotlin-test-junit5` /
+  `kotlin-reflect` entries.
+- **Property placeholders** are taken verbatim: Maven's `${spring.version}` and Gradle's
+  `$kotlinVersion` compare as literal strings, so `$junit5Version` and `$junit5_version`
+  resolving to the same `gradle.properties` key read as skew.
+- **The `"*"` default** collides with every real version.
+
+Direction, in order of value: resolve `<properties>` and simple Gradle `val x = "1.2.3"`
+declarations from the same manifest; treat an unresolved placeholder as *unknown*, not as a
+version (a comparison the code knows it could not perform must not produce a `certain`
+finding); and never compare across differing artifact ids in the first place.

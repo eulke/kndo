@@ -73,6 +73,7 @@ impl LanguageAdapter for MiniAdapter {
                     implicitly_invoked: false,
                     nested_scope: false,
                     visibility_inherited: false,
+                    markers: Vec::new(),
                 });
             } else if let Some(category) = line.strip_prefix("allow ") {
                 facts.suppressions.push(RawSuppression {

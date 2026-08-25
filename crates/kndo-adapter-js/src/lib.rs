@@ -37,7 +37,7 @@ impl LanguageAdapter for JsTsAdapter {
             activation: Vec::new(),
             dependencies: Vec::new(),
             id: SmolStr::new("js-ts"),
-            facts_schema_version: 13, // bump whenever the serialized facts shape or the emission semantics change
+            facts_schema_version: 14, // bump whenever the serialized facts shape or the emission semantics change
             file_globs: EXTENSIONS
                 .iter()
                 .map(|e| SmolStr::new(format!("**/*.{e}")))

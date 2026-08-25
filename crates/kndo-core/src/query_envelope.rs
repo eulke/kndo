@@ -576,8 +576,15 @@ pub(crate) fn finding_locations(findings: &[Finding]) -> Vec<FindingLocation<'_>
         .collect()
 }
 
-pub(crate) fn compute_reachability(graph: &ProjectGraph) -> ReachabilityMap {
-    reachability::compute(graph)
+/// The navigation verbs' reachability — seeded with the same project-declared entry points
+/// `check` uses, so `kndo used-by` and `kndo check` can never disagree about a symbol's color
+/// (one source per concept: the rules live in config, the derivation in `reachability`).
+pub(crate) fn compute_reachability(
+    graph: &ProjectGraph,
+    rules: &[crate::config::ExternallyInvokedRule],
+) -> ReachabilityMap {
+    let declared = reachability::externally_invoked_symbols(graph, rules);
+    reachability::compute_with_roots(graph, &declared)
 }
 
 /// A cold-build failure (no cache, project root broken) degrades to a single `error` result

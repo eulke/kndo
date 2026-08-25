@@ -330,6 +330,7 @@ fn push_declaration(out: &mut FileFacts, name: &str, kind: SymbolKind, item: Nod
         implicitly_invoked: false,
         nested_scope: false,
         visibility_inherited: false,
+        markers: Vec::new(),
     });
 }
 

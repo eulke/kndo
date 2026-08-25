@@ -1326,7 +1326,8 @@ impl Engine {
             }
         };
         let (graph, findings) = (analyzed.graph, analyzed.findings);
-        let reach = query_envelope::compute_reachability(&graph);
+        let reach =
+            query_envelope::compute_reachability(&graph, &self.effective.tuning.externally_invoked);
         let nav = query::build_graph_index(&graph);
         let findings_owned = findings; // keep the Vec<Finding> alive across the borrow below
         let locations = query_envelope::finding_locations(&findings_owned);
@@ -2006,6 +2007,7 @@ mod tests {
                         implicitly_invoked: false,
                         nested_scope: false,
                         visibility_inherited: false,
+                        markers: Vec::new(),
                     });
                 } else if let Some(name) = line.strip_prefix("ref ") {
                     facts.references.push(crate::adapter::RawReference {

@@ -115,5 +115,10 @@ now on is reported (and gated) normally.
   itself via `stale`.
 - Prefer the **baseline** for bulk adoption and for findings without a source location.
 - If the same suppression keeps recurring for a *framework* reason ("this is a route handler,
-  it is not unused"), the right fix is a [plugin](plugin-authoring.md) that contributes the
-  root or annotation — then nobody needs the pragma.
+  it is not unused"), don't suppress at all — say where execution actually enters. When the
+  code carries a marker (`@Controller`, `@AfterEach`, a decorator), list it under
+  [`[[externally-invoked]]`](configuration.md#externally-invoked) and every declaration
+  carrying it becomes a real entry point, with its reachable tree alive behind it and every
+  analysis still judging all of it. When it doesn't — a convention-based route directory, an
+  entry named only in a config file — a [plugin](plugin-authoring.md) contributes the root.
+  Either way nobody needs the pragma, and no genuine finding is lost along with the false one.

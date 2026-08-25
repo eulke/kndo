@@ -115,6 +115,12 @@ pub(crate) fn package_label(graph: &ProjectGraph, package: PackageId) -> String 
 pub struct AnalysisTuning {
     /// `[analysis.crap] threshold` — scores above it are findings; also health's axis unit.
     pub crap_threshold: f64,
+    /// `[[externally-invoked]]` — the project's own declaration of which markers mean "an
+    /// entry point reached from outside the analyzed source". Belongs here, not in the graph,
+    /// for the reason the struct doc gives: it is interpretation, applied post-assembly, so a
+    /// change to it must never invalidate a cached graph. See
+    /// [`reachability::externally_invoked_symbols`].
+    pub externally_invoked: Vec<crate::config::ExternallyInvokedRule>,
     /// `[analysis.duplicate] min-tokens` — smaller functions are not clone-matched. Never
     /// below the extraction floor ([`crate::config::DUPLICATE_MIN_TOKENS_FLOOR`]): under it
     /// the facts carry no fingerprints to match.
@@ -126,6 +132,7 @@ impl Default for AnalysisTuning {
         AnalysisTuning {
             crap_threshold: crap::CRAP_THRESHOLD,
             duplicate_min_tokens: crate::config::DUPLICATE_MIN_TOKENS_FLOOR,
+            externally_invoked: Vec::new(),
         }
     }
 }
@@ -350,7 +357,10 @@ pub fn run_all(
     tuning: &AnalysisTuning,
 ) -> AnalysisOutcome {
     let mut timings = Timings::new();
-    let reach = timings.time("reachability", || reachability::compute(graph));
+    let reach = timings.time("reachability", || {
+        let declared = reachability::externally_invoked_symbols(graph, &tuning.externally_invoked);
+        reachability::compute_with_roots(graph, &declared)
+    });
     let ctx = AnalysisCtx {
         graph,
         reach: &reach,

@@ -22,7 +22,7 @@ impl LanguageAdapter for CssAdapter {
             activation: Vec::new(),
             dependencies: Vec::new(),
             id: SmolStr::new("css"),
-            facts_schema_version: 1,
+            facts_schema_version: 2,
             file_globs: vec![SmolStr::new("**/*.css"), SmolStr::new("**/*.scss")],
             // No manifest format of its own.
             manifest_globs: vec![],

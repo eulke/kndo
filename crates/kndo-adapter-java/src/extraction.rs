@@ -382,7 +382,7 @@ fn handle_type(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
         "annotation_type_declaration" => SymbolKind::Other(SmolStr::new("annotation")),
         _ => return,
     };
-    push_declaration(out, name, symbol_kind, item, None, ctx.owner, vis);
+    push_declaration(out, src, name, symbol_kind, item, None, ctx.owner, vis);
     walk_annotation_class_literals(item, src, Some(name), out);
 
     // superclass / implements / extends_interfaces → Extend; everything else in the header
@@ -506,6 +506,7 @@ fn handle_body(body: Node, src: &[u8], owner: &str, out: &mut FileFacts) {
                 if let Some(name_node) = member.child_by_field_name("name") {
                     push_declaration(
                         out,
+                        src,
                         text(name_node, src),
                         SymbolKind::EnumMember,
                         member,
@@ -535,6 +536,7 @@ fn handle_body(body: Node, src: &[u8], owner: &str, out: &mut FileFacts) {
                 if let Some(name_node) = member.child_by_field_name("name") {
                     push_declaration(
                         out,
+                        src,
                         text(name_node, src),
                         SymbolKind::Method,
                         member,
@@ -574,6 +576,7 @@ fn handle_field(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
         let name = text(name_node, src);
         push_declaration(
             out,
+            src,
             name,
             SymbolKind::Field,
             declarator,
@@ -613,7 +616,7 @@ fn handle_method(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
         Some(owner) => (SymbolKind::Method, format!("{owner}.{name}")),
         None => (SymbolKind::Function, name.to_string()),
     };
-    push_declaration(out, name, kind, item, signature_span, ctx.owner, vis);
+    push_declaration(out, src, name, kind, item, signature_span, ctx.owner, vis);
 
     // `public static void main(String[] args)` — the JVM entry point, any class.
     if ctx.owner.is_some() && name == "main" && vis.1 && has_modifier(item, "static") {
@@ -689,6 +692,7 @@ fn handle_constructor(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts
     });
     push_declaration(
         out,
+        src,
         "<init>",
         SymbolKind::Constructor,
         item,
@@ -715,6 +719,7 @@ fn handle_constructor(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts
 #[allow(clippy::too_many_arguments)]
 fn push_declaration(
     out: &mut FileFacts,
+    src: &[u8],
     name: &str,
     kind: SymbolKind,
     item: Node,
@@ -732,8 +737,48 @@ fn push_declaration(
         implicitly_invoked: false,
         nested_scope: false,
         visibility_inherited: false,
+        markers: markers(item, src),
         signature_span,
     });
+}
+
+/// The annotation names written on this declaration, in source order — `Declaration::markers`.
+/// Facts, never verdicts: every annotation is reported, and this adapter has no idea which
+/// ones a framework acts on.
+///
+/// A qualified annotation (`@Advice.OnMethodEnter`) contributes BOTH its written text and its
+/// last segment, because either is a legitimate way to name it in `kndo.toml` and the adapter
+/// cannot know which the project will pick. The same reasoning covers a fully-qualified
+/// `@org.springframework.stereotype.Controller`, which is legal Java and would otherwise never
+/// match a `Controller` entry.
+fn markers(item: Node, src: &[u8]) -> Vec<SmolStr> {
+    let Some(modifiers) = modifiers_node(item) else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    let mut c = modifiers.walk();
+    for child in modifiers.children(&mut c) {
+        if !matches!(child.kind(), "marker_annotation" | "annotation") {
+            continue;
+        }
+        let mut cc = child.walk();
+        let Some(name) = child
+            .child_by_field_name("name")
+            .or_else(|| {
+                child
+                    .children(&mut cc)
+                    .find(|n| matches!(n.kind(), "identifier" | "scoped_identifier"))
+            })
+            .map(|n| dotted_text(n, src))
+        else {
+            continue;
+        };
+        if let Some((_, last)) = name.rsplit_once('.') {
+            out.push(SmolStr::new(last));
+        }
+        out.push(SmolStr::new(name));
+    }
+    out
 }
 
 /// Type-position walk (field/param/return/throws/generic-bound types) → `TypeUse`.
@@ -1060,6 +1105,38 @@ mod tests {
         let f = facts("package p;\nimport com.foo.Bar;\nclass C {}\n");
         let imp = f.imports.iter().find(|i| i.specifier == "com.foo").unwrap();
         assert!(imp.bindings.iter().any(|b| b.local == "Bar"));
+    }
+
+    #[test]
+    fn annotations_become_declaration_markers() {
+        let f = facts(
+            "package p;\n\
+             @Controller\n\
+             @RequestMapping(\"/x\")\n\
+             class C {\n\
+             \x20 @Advice.OnMethodEnter\n\
+             \x20 static void enter() {}\n\
+             \x20 void plain() {}\n\
+             }\n",
+        );
+        assert_eq!(
+            decl(&f, "C").markers,
+            vec![SmolStr::new("Controller"), SmolStr::new("RequestMapping")],
+            "source order, the marker form and the argument form alike"
+        );
+        assert_eq!(
+            decl(&f, "enter").markers,
+            vec![
+                SmolStr::new("OnMethodEnter"),
+                SmolStr::new("Advice.OnMethodEnter")
+            ],
+            "a qualified annotation contributes both spellings — either is a legitimate \
+             kndo.toml entry and the adapter cannot know which the project will pick"
+        );
+        assert!(
+            decl(&f, "plain").markers.is_empty(),
+            "markers are facts: nothing is invented for an unannotated declaration"
+        );
     }
 
     #[test]

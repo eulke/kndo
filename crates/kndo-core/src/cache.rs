@@ -874,6 +874,7 @@ mod tests {
                 implicitly_invoked: false,
                 nested_scope: false,
                 visibility_inherited: false,
+                markers: Vec::new(),
             }],
             ..Default::default()
         }
@@ -1098,6 +1099,7 @@ mod tests {
                 implicitly_invoked: false,
                 nested_scope: false,
                 visibility_inherited: false,
+                markers: Vec::new(),
             }],
             vec![DependencyNode {
                 name: "lodash".into(),

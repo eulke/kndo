@@ -80,6 +80,8 @@ impl LanguageAdapter for MockAdapter {
         // Content format for the mock: one directive per line.
         //   decl <name>                 -> an exported Function declaration
         //   private-decl <name>         -> an unexported Function declaration
+        //   marked-decl <markers> <name>  -> an exported Function declaration carrying
+        //                                    `Declaration::markers` (comma-separated)
         //   import <specifier> [binding[,binding...]]     -> RawImport { reexported: false }
         //   reexport <specifier> [binding[,binding...]]   -> RawImport { reexported: true }
         //   import-opaque <specifier>                     -> RawImport { opaque_namespace_use: true }
@@ -115,6 +117,30 @@ impl LanguageAdapter for MockAdapter {
                     implicitly_invoked: false,
                     nested_scope: false,
                     visibility_inherited: false,
+                    markers: Vec::new(),
+                });
+            } else if let Some(rest) = line.strip_prefix("marked-decl ") {
+                // `marked-decl Controller,Bean handle` — the annotation/attribute/decorator
+                // names an adapter reports verbatim, the input `[[externally-invoked]]` matches.
+                let mut parts = rest.splitn(2, ' ');
+                let markers = parts.next().unwrap_or("");
+                let name = parts.next().unwrap_or("");
+                facts.declarations.push(Declaration {
+                    name: SmolStr::new(name),
+                    kind: SymbolKind::Function,
+                    span: Span::default(),
+                    exported: true,
+                    visibility: VisibilityLevel(1),
+                    member_of: None,
+                    signature_span: None,
+                    implicitly_invoked: false,
+                    nested_scope: false,
+                    visibility_inherited: false,
+                    markers: markers
+                        .split(',')
+                        .filter(|m| !m.is_empty())
+                        .map(SmolStr::new)
+                        .collect(),
                 });
             } else if let Some(name) = line.strip_prefix("private-decl ") {
                 facts.declarations.push(Declaration {
@@ -128,6 +154,7 @@ impl LanguageAdapter for MockAdapter {
                     implicitly_invoked: false,
                     nested_scope: false,
                     visibility_inherited: false,
+                    markers: Vec::new(),
                 });
             } else if let Some(rest) = line
                 .strip_prefix("member-decl ")
@@ -152,6 +179,7 @@ impl LanguageAdapter for MockAdapter {
                     implicitly_invoked: false,
                     nested_scope: false,
                     visibility_inherited: false,
+                    markers: Vec::new(),
                 });
             } else if let Some(rest) = line.strip_prefix("member-implicit ") {
                 // `member-implicit <owner> <name>` — a machinery-dispatched member
@@ -171,6 +199,7 @@ impl LanguageAdapter for MockAdapter {
                     implicitly_invoked: true,
                     nested_scope: false,
                     visibility_inherited: false,
+                    markers: Vec::new(),
                 });
             } else if let Some(rest) = line
                 .strip_prefix("import ")
@@ -390,6 +419,7 @@ impl LanguageAdapter for MockAdapter {
                     implicitly_invoked: false,
                     nested_scope: false,
                     visibility_inherited: false,
+                    markers: Vec::new(),
                 });
             } else if let Some(rest) = line.strip_prefix("import-at ") {
                 // `import-at <line> <specifier>` — a plain import sited at a line (for

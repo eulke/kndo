@@ -79,6 +79,14 @@ pub struct SymbolNode {
     /// Mirrors [`crate::adapter::Declaration::visibility_inherited`] — visibility analyses
     /// skip a symbol whose level belongs to its container.
     pub visibility_inherited: bool,
+    /// Mirrors [`crate::adapter::Declaration::markers`] — the language-visible annotations,
+    /// attributes or decorators written on this declaration, verbatim. Carried into the graph
+    /// (and through the snapshot) because the consumer is CONFIG, which arrives after
+    /// assembly: `kndo.toml`'s `[[externally-invoked]]` matches its own marker list against
+    /// these to seed reachability roots. The graph itself stays configuration-independent —
+    /// facts here, interpretation at analysis time.
+    #[rkyv(with = rkyv::with::Map<crate::rkyv_support::SmolStrAsString>)]
+    pub markers: Vec<SmolStr>,
 }
 
 impl SymbolNode {

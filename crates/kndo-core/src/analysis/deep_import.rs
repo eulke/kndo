@@ -436,6 +436,7 @@ mod tests {
             implicitly_invoked: false,
             nested_scope: false,
             visibility_inherited: false,
+            markers: Vec::new(),
         }];
         let mut edges = vec![imports(0, 2)];
         edges.push(Edge {

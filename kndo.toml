@@ -27,6 +27,10 @@
 # paths = ["examples/**"]
 # skip = ["unused"]
 
+# [[externally-invoked]]                 # entry points only your framework knows about
+# markers = ["Controller", "Bean"]       # annotations/attributes/decorators, by name
+# paths = ["src/main/java/**"]           # optional scope; omit to apply project-wide
+
 # Files consumed only through runtime path reads (Rust `PathBuf::join("…")` in xtask and
 # the test suite) — reads no static analysis can see by construction
 # (internal/detection-gaps.md). The schema files are additionally read by every consumer

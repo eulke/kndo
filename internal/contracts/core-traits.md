@@ -209,7 +209,19 @@ pub struct FileFacts {
                                              //   visibility of its own (enum variants, trait
                                              //   items): the level belongs to the container,
                                              //   which is measured separately; visibility
-                                             //   analyses skip the member }
+                                             //   analyses skip the member,
+                                             //   markers: Vec<Name> — the language-visible
+                                             //   annotations/attributes/decorators written on
+                                             //   this declaration, verbatim and in source
+                                             //   order. FACTS, never verdicts: the adapter
+                                             //   never interprets them and the core never
+                                             //   learns what any of them mean. Their consumer
+                                             //   is kndo.toml's [[externally-invoked]], which
+                                             //   matches its own marker list against these to
+                                             //   seed production roots — the one question
+                                             //   source alone cannot answer ("is this called
+                                             //   from outside the analyzed source?"), answered
+                                             //   by the project instead of guessed }
                                              // signature_span (RFC 0012 §5): the declaration's
                                              // *promise* — everything before the body block
                                              // (name, parameters, return/result types).
@@ -606,6 +618,17 @@ pub(crate) trait Analysis: Send + Sync {
     fn run(&self, ctx: &AnalysisCtx<'_>) -> AnalysisOutput;
 }
 ```
+
+`AnalysisTuning` carries `[analysis.crap] threshold`, `[analysis.duplicate] min-tokens`, and
+`[[externally-invoked]]` — every knob that acts strictly POST-assembly, which is why none of
+them belongs in the graph or its cache key. `run_all` resolves the last of these into symbol
+ids (`reachability::externally_invoked_symbols`: a declaration whose `Declaration::markers`
+include one of a rule's `markers`, scoped by its `paths`) and seeds
+`reachability::compute_with_roots` with them, at `Production`/`Certain` — the standing a
+manifest-declared entry point has, because the project asserted the fact. `compute(graph)`
+remains as the no-extra-roots form; the navigation verbs go through
+`query_envelope::compute_reachability`, which takes the same rules so `kndo used-by` and
+`kndo check` can never disagree about a symbol's color.
 
 `run_all` holds a fixed-order `Vec<Box<dyn Analysis>>` registry, runs it via
 `par_iter().map(...).collect()` (order-preserving regardless of completion order — no
