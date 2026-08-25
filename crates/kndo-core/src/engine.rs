@@ -3267,6 +3267,7 @@ mod tests {
             targets: vec![],
             executables: vec![],
             resolves_dependency_usage: false,
+            manifest_claim_languages: Vec::new(),
         });
         let file = |path: &str| crate::graph::FileNode {
             path: crate::adapter::ProjectPath(SmolStr::new(path)),

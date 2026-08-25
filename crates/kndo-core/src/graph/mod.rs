@@ -207,6 +207,32 @@ pub struct PackageNode {
     /// reads this per `DeclaredDependency::package` to decide whether "zero usage edges" means
     /// "genuinely unused" or "this language can't produce usage edges at all."
     pub resolves_dependency_usage: bool,
+    /// Every registered adapter's language whose `claim_manifest` accepts this manifest — not
+    /// just the one that won the claim. Empty for the implicit no-manifest package.
+    ///
+    /// File→package ownership is nearest-ancestor by DIRECTORY, which is right for everything
+    /// it feeds except one question: whose dependency declarations does this file answer to?
+    /// A Jazzy-generated `.js` under `docs/` in a Swift repo, or a `web/app.js` beside a
+    /// `go.mod`, owes nothing to `Package.swift` or `go.mod` — and charged its bare imports
+    /// against them anyway, which is where every Swift repo's phantom `jquery` and hugo's
+    /// whole `undeclared` column came from. The test is not "same language": Java and Kotlin
+    /// both claim `pom.xml`, so a `.kt` file's Maven declarations must keep counting. It is
+    /// "could this file's own adapter have claimed this manifest?", asked of the adapters
+    /// themselves — the core never names a language to answer it.
+    #[rkyv(with = rkyv::with::Map<crate::rkyv_support::SmolStrAsString>)]
+    pub manifest_claim_languages: Vec<SmolStr>,
+}
+
+impl PackageNode {
+    /// Whether a file written in `language` answers to this package's dependency declarations
+    /// — see [`PackageNode::manifest_claim_languages`]. The implicit no-manifest package
+    /// declares nothing, so nothing can contradict it and every file "answers" to it.
+    pub fn governs_dependencies_of(&self, language: Option<&str>) -> bool {
+        if self.manifest.is_none() {
+            return true;
+        }
+        language.is_some_and(|lang| self.manifest_claim_languages.iter().any(|l| l == lang))
+    }
 }
 
 /// One manifest's declaration of an external dependency — the raw fact `undeclared` and
@@ -405,6 +431,7 @@ impl ProjectGraph {
                 targets: Vec::new(),
                 executables: Vec::new(),
                 resolves_dependency_usage: true,
+                manifest_claim_languages: Vec::new(),
             }],
             edges,
             suppressions: Vec::new(),

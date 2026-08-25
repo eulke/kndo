@@ -198,6 +198,18 @@ lives in a different repository; koin's `binds()` DSL function is documented for
 consumers with no in-repo caller. The annotation halves are **covered** by
 `[[externally-invoked]]`. The DSL function is not, and is really §15: published public API.
 
+## 13-bis. Cross-language attribution (WAS a gap — fixed, and now fixtured)
+
+Recorded because the *absence* of these findings is now load-bearing. A file whose own adapter
+would never claim the nearest ancestor manifest used to be charged against it anyway: Jazzy's
+`docs/js/typeahead.jquery.js` made `jquery` a phantom dependency of `Package.swift` in all four
+Swift repos, and hugo's `docs/` JS imports were checked against `go.mod` — its entire
+`undeclared` column. `PackageNode::manifest_claim_languages` plus
+`governs_dependencies_of` closes it on both sides (`undeclared` and `dependency_hygiene`), and
+`crates/kndo/tests/fixtures/` — the cross-language conformance suite, which registers every
+adapter at once — pins it. Neither an adapter's own fixture suite could have: the Swift suite
+has no JS adapter to claim the file, the JS suite has no `Package.swift` to misattribute to.
+
 ## 14. Runtime-config string references (GAP)
 
 A file named only from a config or template — never from code — is invisible:

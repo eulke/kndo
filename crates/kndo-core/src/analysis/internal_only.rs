@@ -666,6 +666,7 @@ mod tests {
                     declares_surface: false,
                     surface: Vec::new(),
                     resolves_dependency_usage: true,
+                    manifest_claim_languages: Vec::new(),
                 },
                 crate::graph::PackageNode {
                     workspace_entry: None,
@@ -677,6 +678,7 @@ mod tests {
                     declares_surface: false,
                     surface: Vec::new(),
                     resolves_dependency_usage: true,
+                    manifest_claim_languages: Vec::new(),
                 },
             ]);
         let reach = crate::analysis::reachability::compute(&graph);
@@ -906,6 +908,7 @@ mod tests {
                     declares_surface: false,
                     surface: Vec::new(),
                     resolves_dependency_usage: true,
+                    manifest_claim_languages: Vec::new(),
                 },
                 crate::graph::PackageNode {
                     workspace_entry: None,
@@ -917,6 +920,7 @@ mod tests {
                     declares_surface: false,
                     surface: Vec::new(),
                     resolves_dependency_usage: true,
+                    manifest_claim_languages: Vec::new(),
                 },
             ])
             .with_visibility_ladders(vec![(

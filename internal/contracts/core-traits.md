@@ -117,6 +117,20 @@ pub trait LanguageAdapter: Send + Sync {
     // "zero usage evidence" isn't a meaningful unused claim when usage evidence can never
     // exist). version-skew is unaffected — it compares declared versions across manifests
     // directly, no usage edge needed.
+    //
+    // Beside it on the PackageNode, and asked of the adapters rather than derived from the
+    // claim: manifest_claim_languages — EVERY registered adapter's claim language whose
+    // claim_manifest accepts this manifest, not just the one that won the claim (Java and
+    // Kotlin both claim pom.xml, so a .kt file's Maven declarations must keep counting no
+    // matter which got there first). File→package ownership is nearest-ancestor by DIRECTORY,
+    // which is right for everything it feeds except one question — whose dependency
+    // declarations does this file answer to? A Jazzy-generated .js under docs/ in a Swift
+    // repo, or a web/app.js beside a go.mod, owes nothing to Package.swift or go.mod, and
+    // charged its bare imports against them anyway (every Swift repo's phantom `jquery`, and
+    // the whole of hugo's undeclared column). PackageNode::governs_dependencies_of is the test
+    // both undeclared and dependency_hygiene apply, symmetrically: such a file is evidence
+    // neither that a declaration is missing nor that one is used. The implicit no-manifest
+    // package declares nothing, so nothing can contradict it and every file answers to it.
     // package_test_dirs: directory names that mark files test-role only when the directory
     // is an immediate child of the owning package's manifest directory (Cargo's tests/,
     // benches/, examples/ — conventions bound to the manifest beside them, unlike

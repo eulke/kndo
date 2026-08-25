@@ -1029,6 +1029,7 @@ mod tests {
             targets: Vec::new(),
             executables: Vec::new(),
             resolves_dependency_usage: true,
+            manifest_claim_languages: Vec::new(),
         };
         let mut real = implicit.clone();
         real.manifest = Some(ProjectPath(SmolStr::new("pkg/package.json")));

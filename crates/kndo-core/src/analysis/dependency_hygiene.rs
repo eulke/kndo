@@ -82,6 +82,15 @@ pub fn find_dependency_hygiene(graph: &ProjectGraph) -> (Vec<Finding>, Option<Di
             {
                 role = FileRole::Test;
             }
+            // The same ownership question `undeclared` asks, from the other side: a file whose
+            // own adapter would never claim this manifest is not evidence about its
+            // declarations — neither that one is missing, nor that one is used. Without the
+            // symmetry a `web/app.js` beside a `go.mod` could keep a Go dependency "used".
+            if !graph.packages[file.package.0 as usize]
+                .governs_dependencies_of(file.language.as_deref())
+            {
+                continue;
+            }
             importer_roles
                 .entry((to, file.package))
                 .or_default()
@@ -282,6 +291,10 @@ mod tests {
                 declares_surface: false,
                 surface: Vec::new(),
                 resolves_dependency_usage: true,
+                // The manifest these files' own adapter claims — without it the
+                // cross-language ownership gate would (correctly) refuse to read any of
+                // them as evidence about this package's declarations.
+                manifest_claim_languages: vec![SmolStr::new("mock")],
             }])
             .with_declared_dependencies(declared_deps)
     }
@@ -351,6 +364,7 @@ mod tests {
                 declares_surface: false,
                 surface: Vec::new(),
                 resolves_dependency_usage: false,
+                manifest_claim_languages: Vec::new(),
             }])
             .with_declared_dependencies(vec![declared("guava", DependencyScope::Prod)]);
         let (findings, diagnostic) = find_dependency_hygiene(&graph);

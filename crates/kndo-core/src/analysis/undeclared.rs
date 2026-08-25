@@ -53,6 +53,17 @@ pub fn find_undeclared_dependencies(graph: &ProjectGraph) -> Vec<Finding> {
             {
                 continue;
             }
+            // Whose declarations does this file answer to? Ownership is nearest-ancestor by
+            // DIRECTORY, which is right everywhere except here: a Jazzy-generated `.js` under
+            // `docs/` in a Swift repo, or a `web/app.js` beside a `go.mod`, is charged to
+            // `Package.swift` / `go.mod` and accused of a dependency that manifest could never
+            // have declared. Every Swift repo in the field audit reported a phantom `jquery`
+            // this way, and it was the whole of hugo's `undeclared` column.
+            if !graph.packages[file.package.0 as usize]
+                .governs_dependencies_of(file.language.as_deref())
+            {
+                continue;
+            }
             importers
                 .entry((to, file.package))
                 .or_default()
@@ -228,6 +239,7 @@ mod tests {
                 targets: Vec::new(),
                 executables: Vec::new(),
                 resolves_dependency_usage: false,
+                manifest_claim_languages: vec![SmolStr::new("mock")],
             },
         ]);
         assert!(find_undeclared_dependencies(&graph).is_empty());
@@ -295,6 +307,7 @@ mod tests {
                 declares_surface: false,
                 surface: Vec::new(),
                 resolves_dependency_usage: true,
+                manifest_claim_languages: Vec::new(),
             },
             PackageNode {
                 workspace_entry: None,
@@ -306,6 +319,7 @@ mod tests {
                 declares_surface: false,
                 surface: Vec::new(),
                 resolves_dependency_usage: true,
+                manifest_claim_languages: vec![SmolStr::new("mock")],
             },
             PackageNode {
                 workspace_entry: None,
@@ -317,6 +331,7 @@ mod tests {
                 declares_surface: false,
                 surface: Vec::new(),
                 resolves_dependency_usage: true,
+                manifest_claim_languages: vec![SmolStr::new("mock")],
             },
         ];
         let graph = ProjectGraph::for_test(files, vec![], dependencies, edges)

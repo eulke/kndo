@@ -294,6 +294,7 @@ mod tests {
             declares_surface,
             surface,
             resolves_dependency_usage: true,
+            manifest_claim_languages: Vec::new(),
         }
     }
 
@@ -308,6 +309,7 @@ mod tests {
             declares_surface: false,
             surface: Vec::new(),
             resolves_dependency_usage: true,
+            manifest_claim_languages: Vec::new(),
         }
     }
 

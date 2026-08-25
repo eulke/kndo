@@ -83,6 +83,15 @@ A fixture change is never a way to make a failing test pass. `expected.json` is 
 a diff there is either a bug in your change or a deliberate, documented contract change
 explained in the commit message.
 
+**Cross-language fixtures live in `crates/kndo/tests/fixtures/`**, same format, run through
+`kndo::default_adapters()` so every adapter is registered at once. An adapter's own suite
+structurally cannot cover what happens BETWEEN adapters: the jquery/Jazzy misattribution — a
+generated `.js` under `docs/` in a Swift repo charged its bare imports to `Package.swift`, and
+every Swift repo in the field audit reported a phantom dependency for it — was invisible to
+both the Swift suite (no JS adapter to claim the file) and the JS suite (no `Package.swift` to
+misattribute to). If your change touches file→package ownership, manifest claiming, or
+anything that reads `FileNode::language`, that is the suite to extend.
+
 ## Coverage
 
 kndo's own `crap` analysis (complexity × untestedness) runs only when a coverage report is

@@ -2099,7 +2099,19 @@ pub fn assemble_from_source(
         targets: Vec::new(),
         executables: Vec::new(),
         resolves_dependency_usage: true,
+        manifest_claim_languages: Vec::new(),
     }];
+    // Claim languages per adapter, from the claims themselves rather than from the descriptor:
+    // `FileNode::language` stores the CLAIM's language, and that is what a package's
+    // `manifest_claim_languages` has to be comparable against. An adapter that claimed no file
+    // contributes nothing, which is exactly right — no file of its language exists to gate.
+    let mut languages_by_adapter: Vec<Vec<SmolStr>> = vec![Vec::new(); adapters.len()];
+    for slot in claimed_per_file.iter().flatten() {
+        let seen = &mut languages_by_adapter[slot.adapter_index];
+        if !seen.contains(&slot.claim.language) {
+            seen.push(slot.claim.language.clone());
+        }
+    }
     let mut manifest_package: Vec<Option<PackageId>> = vec![None; manifests_per_file.len()];
     for (i, slot) in manifests_per_file.iter().enumerate() {
         if let Some((adapter_index, facts)) = slot {
@@ -2124,6 +2136,17 @@ pub fn assemble_from_source(
                 resolves_dependency_usage: adapters[*adapter_index]
                     .descriptor()
                     .resolves_dependency_usage,
+                // EVERY adapter that would claim this manifest, not just the one that won the
+                // claim: Java and Kotlin both claim `pom.xml`, and a `.kt` file's Maven
+                // declarations must keep counting no matter which of the two got there first.
+                // Asked of the adapters, so the core names no language — see
+                // `PackageNode::manifest_claim_languages`.
+                manifest_claim_languages: adapters
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, a)| a.claim_manifest(&files[i].path))
+                    .flat_map(|(index, _)| languages_by_adapter[index].iter().cloned())
+                    .collect(),
             });
             manifest_package[i] = Some(package_id);
         }
