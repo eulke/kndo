@@ -98,6 +98,45 @@ pub struct KndoConfig {
 /// under it.
 pub const DUPLICATE_MIN_TOKENS_FLOOR: u32 = 50;
 
+/// Every knob's final value — `kndo.toml` merged under [`crate::engine::ConfigOverrides`]'s
+/// frontend-supplied precedence, resolved once by [`KndoConfig::resolve`]. Before this
+/// existed, `Engine::open_with_plugins` and `assemble_and_analyze` each re-derived their own
+/// slice of this precedence by hand (the latter constructing `AnalysisTuning::default()`
+/// twice just to pull two fallbacks) — a second merge site is how the two silently drift.
+#[derive(Debug, Clone)]
+pub struct EffectiveConfig {
+    /// `--threads` > `kndo.toml [performance] threads` > `None` ("physical cores").
+    pub threads: Option<usize>,
+    /// The report floor: `--verbose`/override > `kndo.toml [analysis] min-confidence` >
+    /// `Possible` (report every tier).
+    pub min_confidence_floor: Confidence,
+    /// `[analysis.crap]`/`[analysis.duplicate]`, each defended by `AnalysisTuning::default()`.
+    pub tuning: crate::analysis::AnalysisTuning,
+}
+
+impl KndoConfig {
+    /// The one place `kndo.toml` and a frontend's [`crate::engine::ConfigOverrides`] merge.
+    /// Every default lives here or in the types resolved through it
+    /// (`AnalysisTuning::default()`) — nowhere else should fall back to a bare
+    /// `.unwrap_or(...)` for one of these knobs.
+    pub fn resolve(&self, overrides: &crate::engine::ConfigOverrides) -> EffectiveConfig {
+        let default_tuning = crate::analysis::AnalysisTuning::default();
+        EffectiveConfig {
+            threads: overrides.threads.or(self.threads),
+            min_confidence_floor: overrides
+                .min_confidence
+                .or(self.min_confidence)
+                .unwrap_or(Confidence::Possible),
+            tuning: crate::analysis::AnalysisTuning {
+                crap_threshold: self.crap_threshold.unwrap_or(default_tuning.crap_threshold),
+                duplicate_min_tokens: self
+                    .duplicate_min_tokens
+                    .unwrap_or(default_tuning.duplicate_min_tokens),
+            },
+        }
+    }
+}
+
 impl KndoConfig {
     /// Read `<root>/kndo.toml`. Never fails: problems come back as strings for the caller
     /// to surface as run diagnostics.

@@ -10,7 +10,7 @@ use std::path::Path;
 use kndo_adapter_js::JsTsAdapter;
 use kndo_adapter_json::JsonAdapter;
 use kndo_core::adapter::LanguageAdapter;
-use kndo_core::conformance::{discover_fixtures, run_fixture};
+use kndo_core::conformance::{discover_fixtures, run_fixture, ConformanceVerdict};
 
 #[test]
 fn json_conformance_fixtures() {
@@ -28,8 +28,10 @@ fn json_conformance_fixtures() {
             vec![Box::new(JsonAdapter), Box::new(JsTsAdapter)];
         let name = fixture.file_name().unwrap().to_string_lossy().to_string();
         match run_fixture(fixture, adapters) {
-            Ok(Ok(())) => {}
-            Ok(Err(mismatch)) => failures.push(format!("{name}:\n{mismatch}")),
+            Ok(ConformanceVerdict::Pass) => {}
+            Ok(ConformanceVerdict::Mismatch(mismatch)) => {
+                failures.push(format!("{name}:\n{mismatch}"))
+            }
             Err(err) => failures.push(format!("{name}: {err}")),
         }
     }

@@ -36,9 +36,10 @@ pub struct DiscoveredFile {
     pub stat: Option<StatEntry>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum DiscoveryError {
-    Root(std::io::Error),
+    #[error("cannot read the project tree: {0}")]
+    Root(#[source] std::io::Error),
 }
 
 /// Discovery result: the files plus everything that could NOT be read — a file silently

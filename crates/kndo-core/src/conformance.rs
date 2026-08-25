@@ -62,13 +62,18 @@ impl fmt::Display for ConformanceMismatch {
 /// One fixture's setup/read failure — distinct from [`ConformanceMismatch`] (a fixture that
 /// ran and disagreed) because these mean the fixture itself is malformed, not that the adapter
 /// is wrong.
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
+#[error("{0}")]
 pub struct ConformanceError(pub String);
 
-impl fmt::Display for ConformanceError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
+/// [`run_fixture`]/[`run_fixture_with`]'s success outcome — a fixture that ran and either
+/// matched `expected.json` or didn't. Was a nested `Result<Result<(), ConformanceMismatch>,
+/// ConformanceError>`; the two failure modes (a malformed fixture vs. a fixture that ran and
+/// disagreed) are still distinct, just as one flat enum instead of Result-in-Result.
+#[derive(Debug)]
+pub enum ConformanceVerdict {
+    Pass,
+    Mismatch(ConformanceMismatch),
 }
 
 /// Every subdirectory of `root` that looks like a fixture (has `project/` and `expected.json`),
@@ -93,7 +98,7 @@ pub fn discover_fixtures(root: &Path) -> Vec<PathBuf> {
 pub fn run_fixture(
     fixture_dir: &Path,
     adapters: Vec<Box<dyn LanguageAdapter>>,
-) -> Result<Result<(), ConformanceMismatch>, ConformanceError> {
+) -> Result<ConformanceVerdict, ConformanceError> {
     run_fixture_with(fixture_dir, adapters, vec![])
 }
 
@@ -105,7 +110,7 @@ pub fn run_fixture_with(
     fixture_dir: &Path,
     adapters: Vec<Box<dyn LanguageAdapter>>,
     plugins: Vec<Box<dyn crate::plugin::Plugin>>,
-) -> Result<Result<(), ConformanceMismatch>, ConformanceError> {
+) -> Result<ConformanceVerdict, ConformanceError> {
     let expected_path = fixture_dir.join("expected.json");
     let expected_text = fs::read_to_string(&expected_path)
         .map_err(|e| ConformanceError(format!("reading {}: {e}", expected_path.display())))?;
@@ -142,9 +147,9 @@ pub fn run_fixture_with(
     let missing: Vec<_> = expected_set.difference(&actual).cloned().collect();
     let unexpected: Vec<_> = actual.difference(&expected_set).cloned().collect();
     if missing.is_empty() && unexpected.is_empty() {
-        Ok(Ok(()))
+        Ok(ConformanceVerdict::Pass)
     } else {
-        Ok(Err(ConformanceMismatch {
+        Ok(ConformanceVerdict::Mismatch(ConformanceMismatch {
             missing,
             unexpected,
         }))
@@ -182,7 +187,7 @@ mod tests {
         fs::write(dir.join("expected.json"), r#"{"findings": []}"#).unwrap();
 
         let outcome = run_fixture(&dir, vec![]).unwrap();
-        assert!(outcome.is_ok());
+        assert!(matches!(outcome, ConformanceVerdict::Pass));
     }
 
     #[test]
@@ -197,7 +202,9 @@ mod tests {
         .unwrap();
 
         let outcome = run_fixture(&dir, vec![]).unwrap();
-        let mismatch = outcome.unwrap_err();
+        let ConformanceVerdict::Mismatch(mismatch) = outcome else {
+            panic!("expected a mismatch, got {outcome:?}");
+        };
         assert_eq!(mismatch.missing.len(), 1);
         assert!(mismatch.unexpected.is_empty());
     }

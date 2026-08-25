@@ -11,7 +11,6 @@
 //! never compose the product — they call `kndo::open`, which passes the registry in here.
 
 use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
-use std::fmt;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
@@ -221,26 +220,11 @@ impl Default for ConfigOverrides {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum EngineError {
+    #[error("project root does not exist or is not a directory: {}", .0.display())]
     ProjectRootNotFound(PathBuf),
 }
-
-impl fmt::Display for EngineError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            EngineError::ProjectRootNotFound(p) => {
-                write!(
-                    f,
-                    "project root does not exist or is not a directory: {}",
-                    p.display()
-                )
-            }
-        }
-    }
-}
-
-impl std::error::Error for EngineError {}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RunMode {
@@ -817,8 +801,10 @@ pub struct Engine {
     config: crate::config::KndoConfig,
     /// Problems reading it — surfaced as run diagnostics, never a failed open.
     config_problems: Vec<String>,
-    /// The effective report floor: flag > file > `Possible` (report everything).
-    min_confidence_floor: crate::vocab::Confidence,
+    /// `config` merged under this open's `ConfigOverrides` — the one resolution, computed
+    /// once ([`crate::config::KndoConfig::resolve`]) and read everywhere a knob's final
+    /// value is needed.
+    effective: crate::config::EffectiveConfig,
 }
 
 impl Engine {
@@ -853,12 +839,8 @@ impl Engine {
             return Err(EngineError::ProjectRootNotFound(root.to_path_buf()));
         }
         let (config, config_problems) = crate::config::KndoConfig::load(root);
-        // Precedence: explicit override (flag/env, resolved by the frontend) > file > cores.
-        ensure_thread_pool(overrides.threads.or(config.threads));
-        let min_confidence_floor = overrides
-            .min_confidence
-            .or(config.min_confidence)
-            .unwrap_or(crate::vocab::Confidence::Possible);
+        let effective = config.resolve(&overrides);
+        ensure_thread_pool(effective.threads);
         let cache = overrides
             .use_cache
             .then(|| crate::cache::ProjectCache::open(root));
@@ -871,7 +853,7 @@ impl Engine {
             pending_persist: None,
             config,
             config_problems,
-            min_confidence_floor,
+            effective,
         })
     }
 
@@ -1380,17 +1362,7 @@ impl Engine {
                     "coverage-ingest".to_string(),
                     coverage_start.elapsed().as_micros() as u64,
                 ));
-                let tuning = analysis::AnalysisTuning {
-                    crap_threshold: self
-                        .config
-                        .crap_threshold
-                        .unwrap_or(analysis::AnalysisTuning::default().crap_threshold),
-                    duplicate_min_tokens: self
-                        .config
-                        .duplicate_min_tokens
-                        .unwrap_or(analysis::AnalysisTuning::default().duplicate_min_tokens),
-                };
-                let outcome = analysis::run_all(&g, &coverage, &tuning);
+                let outcome = analysis::run_all(&g, &coverage, &self.effective.tuning);
                 let (mut findings, analysis_diagnostics, health) =
                     (outcome.findings, outcome.diagnostics, outcome.health);
                 timings.extend(
@@ -1434,7 +1406,8 @@ impl Engine {
                 // display posture, not an acknowledgment, so it is dropped, not counted.
                 let (findings, config_suppressed) = self.config.filter_findings(findings);
                 suppressed.config = config_suppressed;
-                let findings = apply_confidence_floor(findings, self.min_confidence_floor);
+                let findings =
+                    apply_confidence_floor(findings, self.effective.min_confidence_floor);
                 Ok(AnalyzedTree {
                     graph: g,
                     findings,

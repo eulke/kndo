@@ -348,10 +348,10 @@ fn resolve_selector(graph: &ProjectGraph, raw: &str) -> Result<Resolved, QueryFa
 }
 
 fn parse_selector_entry(raw: &str) -> Result<Selector, QueryFailure> {
-    query::parse_selector(raw).map_err(|message| QueryFailure {
+    query::parse_selector(raw).map_err(|e| QueryFailure {
         status: "error",
         selector: raw.to_string(),
-        message,
+        message: e.to_string(),
     })
 }
 
@@ -385,7 +385,8 @@ fn neighbor_entries(
 ) -> Vec<ResultEntry> {
     let edges = match EdgeFilter::parse(flags.edges.as_deref()) {
         Ok(e) => e,
-        Err(message) => {
+        Err(err) => {
+            let message = err.to_string();
             return selectors
                 .iter()
                 .map(|s| ResultEntry::Failed {
@@ -393,7 +394,7 @@ fn neighbor_entries(
                     selector: s.clone(),
                     message: message.clone(),
                 })
-                .collect()
+                .collect();
         }
     };
     selectors
@@ -425,7 +426,8 @@ fn impact_entries(
 ) -> Vec<ResultEntry> {
     let edges = match EdgeFilter::parse(flags.edges.as_deref()) {
         Ok(e) => e,
-        Err(message) => {
+        Err(err) => {
+            let message = err.to_string();
             return selectors
                 .iter()
                 .map(|s| ResultEntry::Failed {
@@ -433,7 +435,7 @@ fn impact_entries(
                     selector: s.clone(),
                     message: message.clone(),
                 })
-                .collect()
+                .collect();
         }
     };
     selectors
@@ -451,10 +453,10 @@ fn impact_entries(
                 },
             ) {
                 Ok(result) => ResultEntry::Impact(Box::new(result)),
-                Err(message) => ResultEntry::Failed {
+                Err(err) => ResultEntry::Failed {
                     status: "error",
                     selector: raw.clone(),
-                    message,
+                    message: err.to_string(),
                 },
             },
             Err(failed) => failed.into(),

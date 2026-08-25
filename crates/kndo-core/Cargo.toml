@@ -25,6 +25,7 @@ rkyv = { workspace = true }
 memmap2 = { workspace = true }
 chrono = { workspace = true }
 num_cpus = { workspace = true }
+thiserror = { workspace = true }
 schemars = { version = "1", features = ["smol_str03"], optional = true }
 
 [features]

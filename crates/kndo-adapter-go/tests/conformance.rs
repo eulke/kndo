@@ -7,7 +7,7 @@ use std::path::Path;
 
 use kndo_adapter_go::GoAdapter;
 use kndo_core::adapter::LanguageAdapter;
-use kndo_core::conformance::{discover_fixtures, run_fixture};
+use kndo_core::conformance::{discover_fixtures, run_fixture, ConformanceVerdict};
 
 #[test]
 fn go_conformance_fixtures() {
@@ -24,8 +24,10 @@ fn go_conformance_fixtures() {
         let adapters: Vec<Box<dyn LanguageAdapter>> = vec![Box::new(GoAdapter)];
         let name = fixture.file_name().unwrap().to_string_lossy().to_string();
         match run_fixture(fixture, adapters) {
-            Ok(Ok(())) => {}
-            Ok(Err(mismatch)) => failures.push(format!("{name}:\n{mismatch}")),
+            Ok(ConformanceVerdict::Pass) => {}
+            Ok(ConformanceVerdict::Mismatch(mismatch)) => {
+                failures.push(format!("{name}:\n{mismatch}"))
+            }
             Err(err) => failures.push(format!("{name}: {err}")),
         }
     }

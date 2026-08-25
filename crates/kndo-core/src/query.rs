@@ -48,17 +48,44 @@ pub enum Selector {
 
 /// Parses raw CLI/query text into a [`Selector`] — never touches the graph, so it can't fail on
 /// "not found," only on malformed syntax.
-pub fn parse_selector(raw: &str) -> Result<Selector, String> {
+/// Everything a query verb's parsing/resolution can reject with a message, unified so
+/// `parse_selector`, [`EdgeFilter::parse`], and [`impact`] share one error discipline instead
+/// of each returning a bare `Result<_, String>`. Every variant's `Display` is the exact string
+/// the query envelope has always surfaced — callers that used to build a `String` by hand now
+/// call `.to_string()` on this instead, byte-identical.
+#[derive(Debug, thiserror::Error)]
+pub enum QueryError {
+    #[error("`dep:` selector is missing a name")]
+    EmptyDependencySelector,
+    #[error("`pkg:` selector is missing a name")]
+    EmptyPackageSelector,
+    #[error("unknown root set `roots:{0}` (production, test, tooling)")]
+    UnknownRootSet(String),
+    #[error("malformed symbol selector `{0}`")]
+    MalformedSymbolSelector(String),
+    #[error("unknown --edges `{0}` (imports, references, all)")]
+    UnknownEdgeFilter(String),
+    #[error(
+        "--if-deleted does not apply to dep:{0} — removing a declared dependency breaks its \
+         importers outright rather than flipping reachability; use `used-by dep:{0}` to list \
+         them"
+    )]
+    IfDeletedOnDependency(String),
+    #[error("impact does not apply to a root set — trace individual roots")]
+    ImpactOnRootSet,
+}
+
+pub fn parse_selector(raw: &str) -> Result<Selector, QueryError> {
     if let Some(name) = raw.strip_prefix("dep:") {
         return if name.is_empty() {
-            Err("`dep:` selector is missing a name".to_string())
+            Err(QueryError::EmptyDependencySelector)
         } else {
             Ok(Selector::Dependency(SmolStr::new(name)))
         };
     }
     if let Some(name) = raw.strip_prefix("pkg:") {
         return if name.is_empty() {
-            Err("`pkg:` selector is missing a name".to_string())
+            Err(QueryError::EmptyPackageSelector)
         } else {
             Ok(Selector::Package(SmolStr::new(name)))
         };
@@ -68,14 +95,12 @@ pub fn parse_selector(raw: &str) -> Result<Selector, String> {
             "production" => Ok(Selector::RootSet(RootKind::Production)),
             "test" => Ok(Selector::RootSet(RootKind::Test)),
             "tooling" => Ok(Selector::RootSet(RootKind::Tooling)),
-            other => Err(format!(
-                "unknown root set `roots:{other}` (production, test, tooling)"
-            )),
+            other => Err(QueryError::UnknownRootSet(other.to_string())),
         };
     }
     if let Some((path, name)) = raw.split_once('#') {
         return if path.is_empty() || name.is_empty() {
-            Err(format!("malformed symbol selector `{raw}`"))
+            Err(QueryError::MalformedSymbolSelector(raw.to_string()))
         } else {
             Ok(Selector::Symbol(
                 ProjectPath(SmolStr::new(path)),
@@ -111,11 +136,13 @@ pub enum Resolved {
     Dependency(ResolvedDependency),
 }
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum ResolveError {
+    #[error("no node matches the selector")]
     NotFound,
     /// Rendered selector strings for every concrete candidate ("an error listing
     /// the concrete candidates — never a guess").
+    #[error("ambiguous selector — candidates: {}", .0.join(", "))]
     Ambiguous(Vec<String>),
 }
 
@@ -374,7 +401,7 @@ pub struct EdgeFilter {
 }
 
 impl EdgeFilter {
-    pub fn parse(raw: Option<&str>) -> Result<EdgeFilter, String> {
+    pub fn parse(raw: Option<&str>) -> Result<EdgeFilter, QueryError> {
         match raw.unwrap_or("all") {
             "imports" => Ok(EdgeFilter {
                 imports: true,
@@ -391,9 +418,7 @@ impl EdgeFilter {
                 references: true,
                 wildcard: false,
             }),
-            other => Err(format!(
-                "unknown --edges `{other}` (imports, references, all)"
-            )),
+            other => Err(QueryError::UnknownEdgeFilter(other.to_string())),
         }
     }
 
@@ -1673,7 +1698,7 @@ pub fn impact(
     reach: &ReachabilityMap,
     resolved: &Resolved,
     opts: ImpactOpts,
-) -> Result<ImpactResult, String> {
+) -> Result<ImpactResult, QueryError> {
     let node_ref = qnode_ref(graph, reach, resolved);
 
     // Seeds: the graph nodes whose change/removal is being simulated.
@@ -1703,12 +1728,7 @@ pub fn impact(
         }
         Resolved::Dependency(d) => {
             if opts.if_deleted {
-                return Err(format!(
-                    "--if-deleted does not apply to dep:{} — removing a declared dependency \
-                     breaks its importers outright rather than flipping reachability; use \
-                     `used-by dep:{}` to list them",
-                    d.0, d.0
-                ));
+                return Err(QueryError::IfDeletedOnDependency(d.0.to_string()));
             }
             let Some(id) = graph
                 .dependencies
@@ -1730,7 +1750,7 @@ pub fn impact(
             vec![NavNode::Dependency(id)]
         }
         Resolved::Node(ResolvedNode::RootSet(_)) => {
-            return Err("impact does not apply to a root set — trace individual roots".into());
+            return Err(QueryError::ImpactOnRootSet);
         }
     };
     // Deleting a symbol deletes nothing else; deleting a file (or package) deletes every
@@ -2995,7 +3015,7 @@ mod tests {
         let reach = reachability::compute(&graph);
         let target = resolve(&graph, &Selector::Dependency(SmolStr::new("lodash"))).unwrap();
         let err = impact(&graph, &reach, &target, impact_opts(true)).unwrap_err();
-        assert!(err.contains("--if-deleted"), "{err}");
+        assert!(matches!(err, QueryError::IfDeletedOnDependency(_)), "{err}");
         // The default mode still answers: importers are the blast radius.
         let ok = impact(&graph, &reach, &target, impact_opts(false)).unwrap();
         assert!(ok.affected.iter().any(|e| e.node.selector == "a.ts"));

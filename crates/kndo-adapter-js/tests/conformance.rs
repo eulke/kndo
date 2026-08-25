@@ -6,7 +6,7 @@ use std::path::Path;
 
 use kndo_adapter_js::JsTsAdapter;
 use kndo_core::adapter::LanguageAdapter;
-use kndo_core::conformance::{discover_fixtures, run_fixture_with};
+use kndo_core::conformance::{discover_fixtures, run_fixture_with, ConformanceVerdict};
 use kndo_core::plugin::Plugin;
 
 #[test]
@@ -27,8 +27,10 @@ fn js_ts_conformance_fixtures() {
         let plugins: Vec<Box<dyn Plugin>> = vec![Box::new(kndo_plugin_coverage::LcovPlugin)];
         let name = fixture.file_name().unwrap().to_string_lossy().to_string();
         match run_fixture_with(fixture, adapters, plugins) {
-            Ok(Ok(())) => {}
-            Ok(Err(mismatch)) => failures.push(format!("{name}:\n{mismatch}")),
+            Ok(ConformanceVerdict::Pass) => {}
+            Ok(ConformanceVerdict::Mismatch(mismatch)) => {
+                failures.push(format!("{name}:\n{mismatch}"))
+            }
             Err(err) => failures.push(format!("{name}: {err}")),
         }
     }
