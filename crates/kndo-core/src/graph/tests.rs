@@ -3051,3 +3051,100 @@ fn same_named_declarations_keep_their_own_metrics() {
          resolving by name collapsed both onto SymbolId(1)"
     );
 }
+
+/// Regression: a NESTED type's constructor must inherit its container's liveness.
+///
+/// A constructor is engaged by naming its type, so assembly emits a container → `<init>` edge
+/// instead of expecting a reference to bind to `<init>` itself. That lookup went through the
+/// file's bare-name table — which holds only declarations with `member_of: None`. A nested type
+/// IS a member of its enclosing type (Java's `Utils.ParameterizedTypeImpl`, and the same shape
+/// in Kotlin and Swift), so it lives in the qualified table instead and the lookup always
+/// missed: the constructor got no incoming edge, and everything only its body reached died
+/// with it. In retrofit that killed `Utils.checkNotPrimitive`, called from two nested-class
+/// constructors, while the identical top-level shape was fine — the asymmetry this test pins.
+#[test]
+fn a_nested_types_constructor_inherits_its_containers_liveness() {
+    use crate::adapter::{Declaration, FileFacts, Span};
+
+    let at = |line: u32| Span {
+        start: (line, 1),
+        end: (line + 1, 1),
+    };
+    let decl =
+        |name: &str, kind: crate::vocab::SymbolKind, owner: Option<&str>, span: Span| Declaration {
+            name: SmolStr::new(name),
+            kind,
+            span,
+            exported: true,
+            visibility: VisibilityLevel(1),
+            member_of: owner.map(SmolStr::new),
+            signature_span: None,
+            implicitly_invoked: false,
+            nested_scope: false,
+            visibility_inherited: false,
+        };
+    use crate::vocab::SymbolKind;
+    let facts = FileFacts {
+        declarations: vec![
+            decl("Outer", SymbolKind::Class, None, at(1)),
+            // The nested type: a member of `Outer`, so it never enters the bare table.
+            decl("Inner", SymbolKind::Class, Some("Outer"), at(10)),
+            decl("<init>", SymbolKind::Constructor, Some("Inner"), at(12)),
+            // Control: a top-level type's constructor always worked.
+            decl("Free", SymbolKind::Class, None, at(30)),
+            decl("<init>", SymbolKind::Constructor, Some("Free"), at(32)),
+        ],
+        ..FileFacts::default()
+    };
+
+    let symbols: Vec<SymbolNode> = facts
+        .declarations
+        .iter()
+        .map(|d| SymbolNode {
+            file: FileId(0),
+            name: d.name.clone(),
+            kind: d.kind.clone(),
+            span: d.span,
+            exported: d.exported,
+            visibility: d.visibility,
+            member_of: d.member_of.clone(),
+            signature_span: None,
+            implicitly_invoked: false,
+            nested_scope: false,
+            visibility_inherited: false,
+        })
+        .collect();
+
+    // Exactly what assembly builds: only `member_of: None` declarations.
+    let mut bare_table: HashMap<SmolStr, SymbolId> = HashMap::default();
+    bare_table.insert(SmolStr::new("Outer"), SymbolId(0));
+    bare_table.insert(SmolStr::new("Free"), SymbolId(3));
+
+    let out = super::assemble::emit_file_declarations(
+        0,
+        &facts,
+        "mock",
+        0,
+        &symbols,
+        &bare_table,
+        &HashMap::default(),
+        &HashMap::default(),
+        None,
+    );
+
+    let container_of = |ctor: u32| {
+        out.edges.iter().find_map(|e| match e.kind {
+            EdgeKind::References { from, to, .. } if to == SymbolId(ctor) => match from {
+                NodeRef::Symbol(s) => Some(s.0),
+                NodeRef::File(_) => None,
+            },
+            _ => None,
+        })
+    };
+    assert_eq!(
+        container_of(2),
+        Some(1),
+        "the nested type `Inner` must keep its own constructor alive"
+    );
+    assert_eq!(container_of(4), Some(3), "top-level control");
+}

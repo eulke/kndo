@@ -146,6 +146,13 @@ pub(crate) fn scope_contains_site(
     }
 }
 
+/// Whether a declaration kind can own a constructor — the container side of the
+/// engaged-by-naming-its-type rule.
+fn is_type_like(kind: &crate::vocab::SymbolKind) -> bool {
+    use crate::vocab::SymbolKind::*;
+    matches!(kind, Class | Interface | Struct | Enum | TypeAlias)
+}
+
 /// The three unit lookups a resolver needs, built once from the file list. THE single
 /// constructor for this logic: the full build and the incremental patch both call it, so the
 /// two paths cannot drift (the same reason `emit_file_declarations` is shared).
@@ -787,6 +794,18 @@ pub(crate) fn emit_file_declarations(
     let mut edges = Vec::new();
     let mut metrics = Vec::new();
 
+    // Type declarations of this file, by bare name. A constructor's owning type is in the
+    // SAME file by construction, so this is exact — and it is the only lookup that finds a
+    // NESTED type. The per-file `bare_table` holds only declarations with `member_of: None`
+    // (a member lands in the qualified table under `Owner.name` instead), and a nested class
+    // IS a member of its enclosing type: Java's `Utils.ParameterizedTypeImpl`, Swift's and
+    // Kotlin's nested types alike. Looking the container up in `bare_table` therefore missed
+    // every nested type, its constructor got no incoming edge, and the constructor plus
+    // everything only its body reached read as dead — `Utils.checkNotPrimitive`, called from
+    // two nested-class constructors in retrofit, is the shape. Restricted to type-like kinds
+    // so a same-named method can never be mistaken for the owner.
+    let mut types_by_name: Option<HashMap<&str, SymbolId>> = None;
+
     for (d, decl) in facts.declarations.iter().enumerate() {
         let symbol_id = SymbolId(first_symbol + d as u32);
         edges.push(Edge {
@@ -806,7 +825,28 @@ pub(crate) fn emit_file_declarations(
         // container keeps the constructor — and everything its body references, like fields
         // assigned only in constructors — exactly as alive as the type, and exactly as dead.
         if decl.kind == crate::vocab::SymbolKind::Constructor {
-            if let Some(&container) = decl.member_of.as_deref().and_then(|n| bare_table.get(n)) {
+            let owner_symbol = decl.member_of.as_deref().and_then(|owner| {
+                bare_table.get(owner).copied().or_else(|| {
+                    types_by_name
+                        .get_or_insert_with(|| {
+                            let mut index: HashMap<&str, SymbolId> = HashMap::default();
+                            for (d, other) in facts.declarations.iter().enumerate() {
+                                if !is_type_like(&other.kind) {
+                                    continue;
+                                }
+                                // First writer wins: same-named sibling types in one file are
+                                // not legal in the languages that have constructors.
+                                index
+                                    .entry(other.name.as_str())
+                                    .or_insert(SymbolId(first_symbol + d as u32));
+                            }
+                            index
+                        })
+                        .get(owner)
+                        .copied()
+                })
+            });
+            if let Some(container) = owner_symbol {
                 edges.push(Edge {
                     kind: EdgeKind::References {
                         from: NodeRef::Symbol(container),

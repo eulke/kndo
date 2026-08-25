@@ -164,7 +164,23 @@ reference to the method-name segment, with `scope_context` = the qualifier when 
 `identifier`/`this`, mirroring the plain-call qualifier shape in §3). `type_identifier` and
 `scoped_type_identifier` positions (`extends`/`implements`/`throws`/field & parameter types/
 generic bounds/`new` targets) → `TypeUse`; `superclass`'s type and each entry of
-`super_interfaces`'/`extends_interfaces`' `type_list` → `Extend`. Lambda bodies
+`super_interfaces`'/`extends_interfaces`' `type_list` → `Extend`.
+
+A `scoped_type_identifier` emits the LAST segment as the reference name, plus `scope_context`
+= the qualifier **when the qualifier names a type** (`Outer` in `Outer.Inner`) and nothing when
+it is a package path (`java.util.List`). Both discriminators are needed. Structural:
+tree-sitter nests multi-segment paths, so a package path's qualifier is itself a
+`scoped_type_identifier` while a nested type's is a bare `type_identifier`. Lexical: a
+single-segment qualifier is still ambiguous between a one-word package (`p.Foo`) and an
+enclosing type, and only the capitalization convention separates them — guessing wrong on
+`p.Foo` sends a name the free-name tables resolve today into the member-only fallback, which
+top-level types never reach, and loses the edge.
+
+Dropping the qualifier is not merely lossy, it **mis-binds**. Resolution consults the file's
+import bindings before anything else, so a bare `Query` extracted from
+`new ParameterHandler.Query<>(…)` in a file that also does `import retrofit2.http.Query` binds
+to the annotation: the nested type reads as dead and an unrelated type collects a reference it
+never received. Pinned by the `nested-type-qualifier` fixture. Lambda bodies
 (`lambda_expression`) are walked like any other expression — their parameter names shadow
 outer bindings for extraction's purposes exactly the same safe-direction way locals already do
 everywhere else (over-approximating ALIVE, never under).
@@ -344,6 +360,16 @@ Four fixtures, each a real Maven/Gradle module tree run through the real `Engine
   downgrade-recommend to `package-private`, and the outer class itself downgrades too (never
   referenced from outside its own package in this fixture) — six `internal-only` findings in
   one file, each pinned to a distinct rung interaction.
+- **`nested-type-qualifier`** — the two-bug shape a field audit on retrofit surfaced, in the
+  smallest form that reproduces both, and it expects **zero findings**. `Handler.Query` is a
+  nested type (a member, so absent from the file's bare-name table) whose constructor calls a
+  private static on the enclosing class; `Main` constructs it as `new Handler.Query(…)` while
+  also doing `import com.foo.http.Query`, binding that bare name to an unrelated annotation.
+  Before the fixes both `Handler.Query` and `Handler.checkArgument` read `unused`: the
+  constructor found no container to inherit liveness from, and the reference that should have
+  named the nested type was captured by the import binding instead. Neither of the two existing
+  nested-type fixtures caught it — `visibility-ladder-and-nested-members` has no constructor
+  and no name collision — which is why it exists as its own case.
 - **`maven-gradle-dependency-skip`** — a Maven module (`pom.xml`, dependency `com.other:lib`
   `1.0`) beside a Gradle module (`build.gradle`, same coordinate at `2.0`): `version-skew`
   fires (pure manifest-fact comparison, unaffected by `resolves_dependency_usage`); neither

@@ -419,7 +419,7 @@ fn walk_extend_refs(node: Node, src: &[u8], owner: &str, out: &mut FileFacts) {
             if let Some(last) = last_type_name(node, src) {
                 out.references.push(RawReference {
                     name: SmolStr::new(last),
-                    scope_context: None,
+                    scope_context: type_qualifier(node, src).map(SmolStr::new),
                     span: span(node),
                     within: Some(SmolStr::new(owner)),
                     kind: RefKind::Extend,
@@ -438,6 +438,39 @@ fn walk_extend_refs(node: Node, src: &[u8], owner: &str, out: &mut FileFacts) {
 /// The final segment of a dotted type path (`java.io.Closeable` → `Closeable`).
 fn last_type_name<'a>(node: Node, src: &'a [u8]) -> Option<&'a str> {
     text(node, src).rsplit('.').next()
+}
+
+/// The qualifier of a `scoped_type_identifier`, when it names a TYPE rather than a package —
+/// `Outer` in `Outer.Inner`, `None` for `java.util.List`.
+///
+/// Dropping it is not merely lossy, it mis-binds: a bare `Query` extracted from
+/// `new ParameterHandler.Query<>(…)` resolves through the file's import bindings first, and a
+/// file that also does `import retrofit2.http.Query` binds the reference to the **annotation**
+/// — the nested class gets no incoming edge and reads as dead, while an unrelated type gets a
+/// reference it never received. Carried as `scope_context`, the core resolves the member
+/// against the qualifier instead (RFC 0012 §9), and on a miss falls through to the duck-typed
+/// member fallback rather than settling.
+///
+/// Two discriminators, both required. Structural: tree-sitter nests a multi-segment path, so
+/// `java.util.List`'s qualifier is itself a `scoped_type_identifier` while `Outer.Inner`'s is a
+/// bare `type_identifier` — a nested `scoped_type_identifier` is a package path, never a
+/// receiver. Lexical: a single-segment qualifier is still ambiguous between a one-word package
+/// (`p.Foo`) and an enclosing type, and only Java's universal capitalization convention
+/// separates them. Guessing wrong on `p.Foo` would send a resolvable top-level name into the
+/// member-only fallback and lose the edge, so the convention check earns its place — an
+/// adapter may know its language's conventions; the core may not.
+fn type_qualifier<'a>(node: Node, src: &'a [u8]) -> Option<&'a str> {
+    let mut cursor = node.walk();
+    let children: Vec<Node> = node.children(&mut cursor).collect();
+    let qualifier = children.first()?;
+    if qualifier.kind() != "type_identifier" {
+        return None;
+    }
+    let name = text(*qualifier, src);
+    name.chars()
+        .next()
+        .is_some_and(char::is_uppercase)
+        .then_some(name)
 }
 
 /// Walks a type/interface/enum/annotation body, dispatching each member. One
@@ -710,7 +743,7 @@ fn walk_type_refs(node: Node, src: &[u8], within: Option<&str>, out: &mut FileFa
             if let Some(last) = last_type_name(node, src) {
                 out.references.push(RawReference {
                     name: SmolStr::new(last),
-                    scope_context: None,
+                    scope_context: type_qualifier(node, src).map(SmolStr::new),
                     span: span(node),
                     within: within.map(SmolStr::new),
                     kind: RefKind::TypeUse,
@@ -856,7 +889,7 @@ fn walk_body(node: Node, src: &[u8], within: Option<&str>, out: &mut FileFacts) 
             if let Some(last) = last_type_name(node, src) {
                 out.references.push(RawReference {
                     name: SmolStr::new(last),
-                    scope_context: None,
+                    scope_context: type_qualifier(node, src).map(SmolStr::new),
                     span: span(node),
                     within: within.map(SmolStr::new),
                     kind: RefKind::TypeUse,
@@ -1108,6 +1141,39 @@ mod tests {
             .find(|r| r.name == "staticCall")
             .unwrap();
         assert_eq!(call.scope_context.as_deref(), Some("Other"));
+    }
+
+    #[test]
+    fn a_nested_type_reference_keeps_its_qualifier() {
+        // `new Outer.Inner<>(…)` must carry `Outer`. Dropping it does not merely lose an edge:
+        // a bare `Inner` resolves through the file's import bindings first, so a file that also
+        // imports an unrelated type of the same name binds the reference to THAT one — the
+        // nested type reads as dead and the import target collects a reference it never
+        // received. retrofit's `new ParameterHandler.Query<>(…)` beside
+        // `import retrofit2.http.Query` is the shape.
+        let f = facts(
+            "package p;\nclass C {\n             \x20   Object make() { return new Outer.Inner<>(1); }\n             }\n",
+        );
+        let inner = f.references.iter().find(|r| r.name == "Inner").unwrap();
+        assert_eq!(inner.scope_context.as_deref(), Some("Outer"));
+        assert_eq!(inner.kind, RefKind::TypeUse);
+    }
+
+    #[test]
+    fn a_package_qualified_type_carries_no_qualifier() {
+        // The other half: `java.util.List`'s `util` is a package segment, not a receiver.
+        // Emitting it would push a name the free-name tables resolve today into the
+        // member-only fallback, which top-level types never reach — losing the edge.
+        // Structurally the qualifier is a nested `scoped_type_identifier`; `p.Foo`'s is a bare
+        // one, and only capitalization separates that from a real enclosing type.
+        let f = facts("package p;\nclass C { java.util.List<String> f; com.example.Foo g; }\n");
+        for name in ["List", "Foo"] {
+            let r = f.references.iter().find(|r| r.name == name).unwrap();
+            assert_eq!(
+                r.scope_context, None,
+                "{name} is package-qualified, not a nested type"
+            );
+        }
     }
 
     #[test]

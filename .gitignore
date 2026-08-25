@@ -9,7 +9,12 @@ target/
 # git, exercised via the conformance harness's own `cargo test` run, but excluded from kndo's
 # self-check of its own repo (ROADMAP M1 exit: "kndo check on kndo's own JS-free repo returns
 # cleanly"). The `ignore` crate reads this file for its glob rules regardless of git-tracked
-# status, so this line doesn't affect version control at all.
+# status, which is the point of the entry.
+#
+# It DOES affect version control for files git isn't already tracking: the fixtures here
+# predate this line and stay tracked, but **a new fixture needs `git add -f`** or it is
+# silently skipped — committed green locally, absent from CI. Say so here rather than let the
+# next person rediscover it.
 **/tests/fixtures/
 docs/book/
 
