@@ -146,6 +146,46 @@ pub(crate) fn scope_contains_site(
     }
 }
 
+/// The symbol a reference executes inside, given its adapter-reported `within` name.
+///
+/// The name alone can be ambiguous: same-name overloads (Swift's `get(at:)` beside
+/// `get(path:)`, Java's arity overloads) are legitimate twins sharing one `Owner.name`
+/// selector, and the qualified table is single-slot, so every reference in EITHER body used to
+/// attribute to whichever twin was inserted last. The other twin then had no outgoing
+/// references and, if nothing else named it, read as dead — vapor's private `get` overload,
+/// called from its public sibling one line above, is the shape.
+///
+/// The span settles it exactly and with no language knowledge: a reference lies physically
+/// inside exactly one declaration, so among twins the containing one is the author. Falls back
+/// to the single-slot answer when no candidate contains the span, leaving an adapter that
+/// reports `within` without a matching span no worse off than before.
+pub(crate) fn within_owner(
+    within: &str,
+    site: crate::vocab::Span,
+    by_name: &HashMap<SmolStr, SymbolId>,
+    by_qualified: &HashMap<String, SymbolId>,
+    twins: &HashMap<String, Vec<SymbolId>>,
+    symbols: &[SymbolNode],
+) -> Option<SymbolId> {
+    if let Some(&s) = by_name.get(within) {
+        return Some(s);
+    }
+    let single = by_qualified.get(within).copied();
+    match twins.get(within) {
+        None => single,
+        Some(extra) => single
+            .into_iter()
+            .chain(extra.iter().copied())
+            .find(|&s| span_contains(symbols[s.0 as usize].span, site))
+            .or(single),
+    }
+}
+
+/// Whether `outer` covers `inner` — line/column ordered, endpoints inclusive.
+fn span_contains(outer: crate::vocab::Span, inner: crate::vocab::Span) -> bool {
+    outer.start <= inner.start && inner.end <= outer.end
+}
+
 /// Whether a declaration kind can own a constructor — the container side of the
 /// engaged-by-naming-its-type rule.
 fn is_type_like(kind: &crate::vocab::SymbolKind) -> bool {
@@ -460,15 +500,32 @@ pub(crate) fn resolve_file(
     // No lookup models block/parameter shadowing: a same-named local could (incorrectly,
     // but safely — see module docs) resolve to an unrelated declaration.
     for reference in &facts.references {
+        // `within` names the symbol this reference executes inside. The name alone can be
+        // ambiguous — same-name overloads (Swift's `get(at:)` beside `get(path:)`, Java's
+        // arity overloads) are legitimate twins that share one `Owner.name` selector, and the
+        // qualified table is single-slot, so every reference in EITHER body used to attribute
+        // to whichever twin was inserted last. The other twin then had no outgoing references
+        // and, if nothing else named it, read as dead: vapor's private `get` overload, called
+        // from its public sibling one line above, is the shape.
+        //
+        // The span settles it exactly and without any language knowledge: a reference lies
+        // physically inside exactly one declaration, so among twins the containing one is the
+        // author. Falls back to the single-slot answer when no twin contains the span (an
+        // adapter that reports `within` without a matching span is no worse off than before).
         let from = reference
             .within
             .as_ref()
             .and_then(|within| {
-                symbol_by_name_per_file[i]
-                    .get(within)
-                    .or_else(|| symbol_by_qualified_per_file[i].get(within.as_str()))
+                within_owner(
+                    within,
+                    reference.span,
+                    &symbol_by_name_per_file[i],
+                    &symbol_by_qualified_per_file[i],
+                    &qualified_twins_per_file[i],
+                    symbols,
+                )
             })
-            .map(|&s| NodeRef::Symbol(s))
+            .map(NodeRef::Symbol)
             .unwrap_or(NodeRef::File(file_id));
 
         // Qualified references: `q.name` where `q` matches an import

@@ -3148,3 +3148,105 @@ fn a_nested_types_constructor_inherits_its_containers_liveness() {
     );
     assert_eq!(container_of(4), Some(3), "top-level control");
 }
+
+/// Regression: same-name overloads are twins, and each owns the references in its OWN body.
+///
+/// `within` is a name, and a name does not distinguish `get(at:)` from `get(path:)` — both
+/// declare the selector `Server.get`. The qualified table is single-slot, so every reference
+/// in either body attributed to whichever twin landed last; the other had no outgoing
+/// references at all and read as dead unless something else named it. vapor's private `get`
+/// overload, called from its public sibling one line above, is the shape. The reference's span
+/// settles it exactly: it lies inside exactly one of the two bodies.
+#[test]
+fn same_name_overloads_each_own_the_references_in_their_body() {
+    use crate::adapter::{Declaration, FileFacts, RawReference, Span};
+    use crate::vocab::{RefKind, SymbolKind};
+
+    let body = |start: u32, end: u32| Span {
+        start: (start, 1),
+        end: (end, 1),
+    };
+    let member = |span: Span| Declaration {
+        name: SmolStr::new("get"),
+        kind: SymbolKind::Method,
+        span,
+        exported: true,
+        visibility: VisibilityLevel(1),
+        member_of: Some(SmolStr::new("Server")),
+        signature_span: None,
+        implicitly_invoked: false,
+        nested_scope: false,
+        visibility_inherited: false,
+    };
+
+    // Two overloads; the reference sits inside the FIRST one's body.
+    let (first, second) = (body(10, 20), body(30, 40));
+    let facts = FileFacts {
+        declarations: vec![member(first), member(second)],
+        references: vec![RawReference {
+            name: SmolStr::new("helper"),
+            scope_context: None,
+            span: Span {
+                start: (12, 5),
+                end: (12, 20),
+            },
+            within: Some(SmolStr::new("Server.get")),
+            kind: RefKind::Call,
+        }],
+        ..FileFacts::default()
+    };
+
+    let symbols: Vec<SymbolNode> = facts
+        .declarations
+        .iter()
+        .map(|d| SymbolNode {
+            file: FileId(0),
+            name: d.name.clone(),
+            kind: d.kind.clone(),
+            span: d.span,
+            exported: d.exported,
+            visibility: d.visibility,
+            member_of: d.member_of.clone(),
+            signature_span: None,
+            implicitly_invoked: false,
+            nested_scope: false,
+            visibility_inherited: false,
+        })
+        .collect();
+
+    // The single-slot table keeps the LAST twin; the first is displaced into the side map —
+    // exactly what `insert_qualified` builds.
+    let mut qualified: HashMap<String, SymbolId> = HashMap::default();
+    let mut twins: HashMap<String, Vec<SymbolId>> = HashMap::default();
+    super::assemble::insert_qualified(
+        &mut qualified,
+        &mut twins,
+        "Server.get".to_string(),
+        SymbolId(0),
+    );
+    super::assemble::insert_qualified(
+        &mut qualified,
+        &mut twins,
+        "Server.get".to_string(),
+        SymbolId(1),
+    );
+    assert_eq!(
+        qualified.get("Server.get"),
+        Some(&SymbolId(1)),
+        "precondition: the naive lookup answers with the second twin"
+    );
+
+    let owner = super::assemble::within_owner(
+        "Server.get",
+        facts.references[0].span,
+        &HashMap::default(),
+        &qualified,
+        &twins,
+        &symbols,
+    );
+    assert_eq!(
+        owner,
+        Some(SymbolId(0)),
+        "the twin whose body contains the reference owns it, not the last-inserted one"
+    );
+}

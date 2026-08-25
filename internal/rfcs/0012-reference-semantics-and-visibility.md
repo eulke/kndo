@@ -114,7 +114,19 @@ convention), so `within` resolution reuses the same tables.
 **Core mechanism.** Phase 3b resolves `within` against the file's own symbol table and emits
 `References { from: NodeRef::Symbol(enclosing), .. }` when it resolves; **any miss falls back
 to `NodeRef::File` — today's behavior, the safe direction** (this fallback is the load-bearing
-safety property; it gets its own regression test). The reachability algorithm needs *zero
+safety property; it gets its own regression test).
+
+**Twins: the name is not enough, the span is.** `within` is a NAME, and same-name overloads
+are legitimate twins sharing one `Owner.name` selector — Swift's `get(at:)` beside
+`get(path:)`, Java's arity overloads. The qualified table is single-slot, so a name lookup
+attributed every reference in EITHER body to whichever twin was inserted last; the other had
+no outgoing references at all and read as dead unless something else named it (vapor's private
+`get`, called from its public sibling one line above). Resolution therefore disambiguates among
+`insert_qualified`'s twin set by **span containment** — a reference lies physically inside
+exactly one declaration, so the containing one is its author. Exact, language-blind, and it
+falls back to the single-slot answer when no candidate contains the span, so an adapter
+reporting `within` without a matching span is no worse off than before. `graph::assemble`'s
+`within_owner` is the one implementation. The reachability algorithm needs *zero
 changes*: adjacency is already `NodeRef`-keyed, `Symbol → Symbol` edges already traverse, and
 the symbol-reaches-its-owning-file propagation (added in M3, RFC 0005 §1) is the second half
 of this model — formally:
