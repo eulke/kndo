@@ -57,23 +57,29 @@ impl Verb {
 
 /// Every verb-specific `--flag` in one place — irrelevant flags for a given verb
 /// are simply ignored rather than rejected, so a `kndo query` request can carry a superset
-/// without per-verb validation ceremony.
-#[derive(Debug, Clone, Default)]
+/// without per-verb validation ceremony. `Deserialize` doubles as `kndo query`'s JSONL
+/// per-line flags shape — a frontend parsing a `flags` object from stdin deserializes straight
+/// into this type instead of maintaining a mirrored struct + a field-by-field `From` impl.
+#[derive(Debug, Clone, Default, serde::Deserialize)]
 pub struct QueryFlags {
     pub kind: Option<String>,
     pub color: Option<String>,
     pub lang: Option<String>,
     pub depth: Option<u32>,
+    #[serde(default)]
     pub transitive: bool,
     pub edges: Option<String>,
+    #[serde(default)]
     pub all: bool,
     pub max_paths: Option<usize>,
     pub roots: Option<String>,
     /// `trace`'s batched form (the own example): independent directed traces, one
     /// per pair, `results` aligning with this list instead of `selectors` when non-empty.
+    #[serde(default)]
     pub pairs: Vec<(String, String)>,
     pub limit: Option<usize>,
     /// `impact --if-deleted`: simulate removal, report the finding flips.
+    #[serde(default)]
     pub if_deleted: bool,
 }
 

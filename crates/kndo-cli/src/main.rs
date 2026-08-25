@@ -8,8 +8,8 @@
 use std::io::IsTerminal;
 use std::process::ExitCode;
 
-use kndo::engine::{
-    BaselineOp, BaselineResult, ConfigOverrides, RunMode, Severity, SCHEMA_VERSION,
+use kndo::{
+    BaselineOp, BaselineResult, ConfigOverrides, Engine, RunMode, Severity, SCHEMA_VERSION,
 };
 
 mod nav;
@@ -246,19 +246,9 @@ fn ensure_gitignore_entry(root: &std::path::Path) -> std::io::Result<GitignoreOu
 /// JSON shape for this command, so `--format` isn't wired here (a deliberate scoping choice,
 /// not an oversight; `check`/navigation verbs are where the JSON contract matters).
 fn doctor_cmd() -> ExitCode {
-    let cwd = match std::env::current_dir() {
-        Ok(d) => d,
-        Err(e) => {
-            eprintln!("kndo: cannot determine working directory: {e}");
-            return ExitCode::from(2);
-        }
-    };
-    let engine = match kndo::open(&cwd, base_config_overrides()) {
-        Ok(e) => e,
-        Err(e) => {
-            eprintln!("kndo: {e}");
-            return ExitCode::from(2);
-        }
+    let (cwd, engine) = match open_engine(base_config_overrides()) {
+        Ok(t) => t,
+        Err(code) => return code,
     };
     let report = engine.doctor();
 
@@ -675,19 +665,9 @@ fn baseline_cmd(args: &[String]) -> ExitCode {
         BaselineOp::Create
     };
 
-    let cwd = match std::env::current_dir() {
-        Ok(d) => d,
-        Err(e) => {
-            eprintln!("kndo: cannot determine working directory: {e}");
-            return ExitCode::from(2);
-        }
-    };
-    let mut engine = match kndo::open(&cwd, base_config_overrides()) {
-        Ok(e) => e,
-        Err(e) => {
-            eprintln!("kndo: {e}");
-            return ExitCode::from(2);
-        }
+    let (_, mut engine) = match open_engine(base_config_overrides()) {
+        Ok(t) => t,
+        Err(code) => return code,
     };
 
     match engine.baseline(op) {
@@ -812,6 +792,24 @@ pub(crate) fn base_config_overrides() -> ConfigOverrides {
     }
 }
 
+/// The open-engine ritual every command repeats: find the project root, open an `Engine` with
+/// the given overrides, and turn either failure into the same `kndo: <msg>` + exit-2 shape.
+/// Returns the resolved cwd alongside the engine for the one caller (`doctor_cmd`) that still
+/// needs it afterward — every other caller just discards it.
+pub(crate) fn open_engine(
+    overrides: ConfigOverrides,
+) -> Result<(std::path::PathBuf, Engine), ExitCode> {
+    let cwd = std::env::current_dir().map_err(|e| {
+        eprintln!("kndo: cannot determine working directory: {e}");
+        ExitCode::from(2)
+    })?;
+    let engine = kndo::open(&cwd, overrides).map_err(|e| {
+        eprintln!("kndo: {e}");
+        ExitCode::from(2)
+    })?;
+    Ok((cwd, engine))
+}
+
 /// `--staged` and `--diff <ref>` select `RunMode`; mutually exclusive, checked
 /// here rather than left for the engine since "which mode" is entirely a frontend argument-
 /// parsing concern. **Known gap:**
@@ -899,37 +897,17 @@ fn health_cmd(args: &[String]) -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    let cwd = match std::env::current_dir() {
-        Ok(d) => d,
-        Err(e) => {
-            eprintln!("kndo: cannot determine working directory: {e}");
-            return ExitCode::from(2);
-        }
-    };
     let overrides = ConfigOverrides {
         use_cache: !flags.no_cache,
         threads,
-        min_confidence: None,
+        ..ConfigOverrides::default()
     };
-    let mut engine = match kndo::open(&cwd, overrides) {
-        Ok(e) => e,
-        Err(e) => {
-            eprintln!("kndo: {e}");
-            return ExitCode::from(2);
-        }
+    let (_, mut engine) = match open_engine(overrides) {
+        Ok(t) => t,
+        Err(code) => return code,
     };
-    let result = engine.check(kndo::engine::RunMode::Full);
-    for d in &result.diagnostics {
-        let level = match d.level {
-            kndo::adapter::DiagnosticLevel::Error => "error",
-            kndo::adapter::DiagnosticLevel::Warn => "warning",
-            kndo::adapter::DiagnosticLevel::Info => "info",
-        };
-        match &d.path {
-            Some(p) => eprintln!("kndo: {level}: {}: {}", p.0, d.message),
-            None => eprintln!("kndo: {level}: {}", d.message),
-        }
-    }
+    let result = engine.check(RunMode::Full);
+    render::diagnostics(&result.diagnostics);
     let Some(health) = &result.health else {
         eprintln!(
             "kndo: health unavailable - the project tree could not be analyzed (see diagnostics above)"
@@ -951,12 +929,9 @@ fn health_cmd(args: &[String]) -> ExitCode {
                 color: resolve_color(flags.color.as_deref()),
                 quiet: flags.quiet,
                 verbose: flags.verbose,
+                by_package: flags.by_package,
             };
-            let mut health = health.clone();
-            if !flags.by_package {
-                health.packages.clear();
-            }
-            print!("{}", render::render_health(&health, &opts, true));
+            print!("{}", render::render_health(health, &opts, true));
         }
         other => {
             eprintln!("kndo: unknown --format `{other}` (human, json, agent)");
@@ -998,44 +973,24 @@ fn check(args: &[String]) -> ExitCode {
         }
     };
 
-    let cwd = match std::env::current_dir() {
-        Ok(d) => d,
-        Err(e) => {
-            eprintln!("kndo: cannot determine working directory: {e}");
-            return ExitCode::from(2);
-        }
-    };
     let overrides = ConfigOverrides {
         use_cache: !flags.no_cache,
         threads,
         // `--verbose` reveals every tier even when the project config raises the
         // `min-confidence` floor; otherwise the file (or the report-everything default)
         // decides.
-        min_confidence: flags.verbose.then_some(kndo::vocab::Confidence::Possible),
+        min_confidence: flags.verbose.then(ConfigOverrides::verbose_min_confidence),
     };
-    let mut engine = match kndo::open(&cwd, overrides) {
-        Ok(e) => e,
-        Err(e) => {
-            eprintln!("kndo: {e}");
-            return ExitCode::from(2);
-        }
+    let (_, mut engine) = match open_engine(overrides) {
+        Ok(t) => t,
+        Err(code) => return code,
     };
     let result = engine.check(mode);
 
     // Diagnostics degrade the run, they don't kill it: report on stderr and
     // continue — findings and diagnostics are not the same thing. stderr carries diagnostics
     // in every format; stdout stays the pure report, JSON included.
-    for d in &result.diagnostics {
-        let level = match d.level {
-            kndo::adapter::DiagnosticLevel::Error => "error",
-            kndo::adapter::DiagnosticLevel::Warn => "warning",
-            kndo::adapter::DiagnosticLevel::Info => "info",
-        };
-        match &d.path {
-            Some(p) => eprintln!("kndo: {level}: {}: {}", p.0, d.message),
-            None => eprintln!("kndo: {level}: {}", d.message),
-        }
-    }
+    render::diagnostics(&result.diagnostics);
 
     match format.as_str() {
         "json" => println!("{}", result.to_json()),
@@ -1044,6 +999,7 @@ fn check(args: &[String]) -> ExitCode {
                 color: resolve_color(flags.color.as_deref()),
                 quiet: flags.quiet,
                 verbose: flags.verbose,
+                by_package: flags.by_package,
             };
             print!("{}", render::render(&result, &opts));
         }
@@ -1058,7 +1014,7 @@ fn check(args: &[String]) -> ExitCode {
     if result
         .diagnostics
         .iter()
-        .any(|d| d.level == kndo::adapter::DiagnosticLevel::Error)
+        .any(|d| d.level == kndo::DiagnosticLevel::Error)
     {
         // The run could not do what was asked (an error-level diagnostic): the
         // exit-2 tier — never let an analysis that didn't run read as a clean pass.
@@ -1074,7 +1030,7 @@ fn check(args: &[String]) -> ExitCode {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kndo::engine::Finding;
+    use kndo::Finding;
 
     fn tmp_dir(name: &str) -> std::path::PathBuf {
         let dir = std::env::temp_dir().join(format!("kndo-cli-test-{name}"));
@@ -1247,10 +1203,10 @@ mod tests {
             advisory: false,
             id: "kndo-000000000000".to_string(),
             category: "unused".into(),
-            group: kndo::vocab::Group::Waste,
+            group: kndo::Group::Waste,
             subject_kind: "symbol".into(),
             severity,
-            confidence: kndo::vocab::Confidence::Certain,
+            confidence: kndo::Confidence::Certain,
             message: "example".to_string(),
             location: Default::default(),
             related: Vec::new(),
@@ -1259,8 +1215,8 @@ mod tests {
         }
     }
 
-    fn result_with(findings: Vec<Finding>) -> kndo::engine::RunResult {
-        kndo::engine::RunResult {
+    fn result_with(findings: Vec<Finding>) -> kndo::RunResult {
+        kndo::RunResult {
             findings,
             ..Default::default()
         }

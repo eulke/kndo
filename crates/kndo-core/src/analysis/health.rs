@@ -149,6 +149,21 @@ pub fn grade(score: f64) -> &'static str {
     }
 }
 
+/// The threshold `current_grade` sits above, and the grade one step better — for a frontend
+/// reporting "how close to the next grade up" on a score drop. Shares the exact thresholds
+/// `grade()` computes forward from (the same four numbers), so a frontend never hand-copies
+/// them into its own table where they could silently drift out of sync. `None` for `"F"` —
+/// there's no boundary to name below the worst grade.
+pub fn grade_boundary(current_grade: &str) -> Option<(f64, &'static str)> {
+    match current_grade {
+        "A" => Some((90.0, "B")),
+        "B" => Some((80.0, "C")),
+        "C" => Some((65.0, "D")),
+        "D" => Some((50.0, "F")),
+        _ => None,
+    }
+}
+
 /// Everything `run_all` hands over beyond the graph itself: aux stats individual analyses
 /// already computed (never recomputed here) plus the run's ingested coverage.
 pub struct HealthInputs<'a> {

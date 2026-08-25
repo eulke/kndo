@@ -221,6 +221,16 @@ impl Default for ConfigOverrides {
     }
 }
 
+impl ConfigOverrides {
+    /// What `--verbose` means for the report floor: reveal every confidence tier, overriding
+    /// whatever `kndo.toml`'s `min-confidence` (or another override) would otherwise apply —
+    /// core-side, so a frontend's `--verbose` handling never has to know or hand-copy which
+    /// `Confidence` variant "everything" actually is.
+    pub fn verbose_min_confidence() -> crate::vocab::Confidence {
+        crate::vocab::Confidence::Possible
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum EngineError {
     #[error("project root does not exist or is not a directory: {}", .0.display())]

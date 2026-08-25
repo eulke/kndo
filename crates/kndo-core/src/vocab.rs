@@ -419,6 +419,22 @@ pub enum Confidence {
     Certain,
 }
 
+impl Confidence {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Confidence::Possible => "possible",
+            Confidence::Probable => "probable",
+            Confidence::Certain => "certain",
+        }
+    }
+}
+
+impl std::fmt::Display for Confidence {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 #[derive(
     Debug,
     Clone,

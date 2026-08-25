@@ -6,7 +6,7 @@
 use std::io::{BufRead, IsTerminal, Write};
 use std::process::ExitCode;
 
-use kndo::query_envelope::{QueryFlags, QueryRequest, QueryResult, Verb};
+use kndo::{QueryFlags, QueryRequest, QueryResult, Verb};
 
 use crate::render;
 
@@ -113,19 +113,9 @@ fn run_one(verb: Verb, args: &[String]) -> ExitCode {
         return ExitCode::from(2);
     }
 
-    let cwd = match std::env::current_dir() {
-        Ok(d) => d,
-        Err(e) => {
-            eprintln!("kndo: cannot determine working directory: {e}");
-            return ExitCode::from(2);
-        }
-    };
-    let engine = match kndo::open(&cwd, crate::base_config_overrides()) {
-        Ok(e) => e,
-        Err(e) => {
-            eprintln!("kndo: {e}");
-            return ExitCode::from(2);
-        }
+    let (_, engine) = match crate::open_engine(crate::base_config_overrides()) {
+        Ok(t) => t,
+        Err(code) => return code,
     };
 
     let result = engine.query(QueryRequest {
@@ -173,6 +163,7 @@ fn render_and_print(result: &QueryResult, format: Option<&str>) {
                 color: crate::resolve_color(None),
                 verbose: false,
                 quiet: false,
+                by_package: false,
             };
             print!("{}", render::render_query(result, &opts));
         }
@@ -196,46 +187,7 @@ struct QueryLine {
     #[serde(default)]
     selectors: Vec<String>,
     #[serde(default)]
-    flags: QueryLineFlags,
-}
-
-#[derive(serde::Deserialize, Default)]
-struct QueryLineFlags {
-    kind: Option<String>,
-    color: Option<String>,
-    lang: Option<String>,
-    depth: Option<u32>,
-    #[serde(default)]
-    transitive: bool,
-    edges: Option<String>,
-    #[serde(default)]
-    all: bool,
-    max_paths: Option<usize>,
-    roots: Option<String>,
-    #[serde(default)]
-    pairs: Vec<(String, String)>,
-    limit: Option<usize>,
-    #[serde(default)]
-    if_deleted: bool,
-}
-
-impl From<QueryLineFlags> for QueryFlags {
-    fn from(f: QueryLineFlags) -> Self {
-        QueryFlags {
-            kind: f.kind,
-            color: f.color,
-            lang: f.lang,
-            depth: f.depth,
-            transitive: f.transitive,
-            edges: f.edges,
-            all: f.all,
-            max_paths: f.max_paths,
-            roots: f.roots,
-            pairs: f.pairs,
-            limit: f.limit,
-            if_deleted: f.if_deleted,
-        }
-    }
+    flags: QueryFlags,
 }
 
 /// The pure half of `kndo query`: each non-blank input line becomes either a `QueryRequest`
@@ -263,7 +215,7 @@ fn parse_query_lines(
                     id: parsed.id,
                     verb,
                     selectors: parsed.selectors,
-                    flags: parsed.flags.into(),
+                    flags: parsed.flags,
                 }),
                 None => parse_errors.push((n, format!("unknown verb `{}`", parsed.verb))),
             },
@@ -289,19 +241,9 @@ pub(crate) fn query_cmd() -> ExitCode {
     let (batch_requests, parse_errors, truncated) =
         parse_query_lines(stdin.lock().lines().map_while(Result::ok));
 
-    let cwd = match std::env::current_dir() {
-        Ok(d) => d,
-        Err(e) => {
-            eprintln!("kndo: cannot determine working directory: {e}");
-            return ExitCode::from(2);
-        }
-    };
-    let engine = match kndo::open(&cwd, crate::base_config_overrides()) {
-        Ok(e) => e,
-        Err(e) => {
-            eprintln!("kndo: {e}");
-            return ExitCode::from(2);
-        }
+    let (_, engine) = match crate::open_engine(crate::base_config_overrides()) {
+        Ok(t) => t,
+        Err(code) => return code,
     };
 
     let results = engine.query_batch(batch_requests);

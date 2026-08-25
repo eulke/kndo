@@ -32,10 +32,10 @@
 //!   indented `└` lines under the finding — role, location, note.
 
 use kndo::analysis::health::Health;
-use kndo::engine::{DeltaOrigin, Finding, RunResult};
 use kndo::query::{NeighborEntry, QNodeRef};
-use kndo::query_envelope::{QueryResult, ResultEntry};
-use kndo::vocab::{Confidence, Group};
+use kndo::{
+    Confidence, DeltaOrigin, Diagnostic, Finding, Group, QueryResult, ResultEntry, RunResult,
+};
 
 pub(crate) struct RenderOptions {
     pub(crate) color: bool,
@@ -45,6 +45,21 @@ pub(crate) struct RenderOptions {
     /// `check` passes a `Possible` report floor override, so verbose shows every tier
     /// even when the project's `min-confidence` config raises the floor.
     pub(crate) verbose: bool,
+    /// `kndo health --by-package`: include the per-package breakdown table. Only
+    /// `render_health`'s `full_table` (`kndo health` itself) ever looks at this — `check`'s own
+    /// summary health line never shows packages regardless.
+    pub(crate) by_package: bool,
+}
+
+/// Diagnostics print on stderr in every output format — a degraded run must never look silent.
+/// Shared by every command that runs a real analysis (`check`, `kndo health`).
+pub(crate) fn diagnostics(diagnostics: &[Diagnostic]) {
+    for d in diagnostics {
+        match &d.path {
+            Some(p) => eprintln!("kndo: {}: {}: {}", d.level, p.0, d.message),
+            None => eprintln!("kndo: {}: {}", d.level, d.message),
+        }
+    }
 }
 
 fn baseline_suffix(result: &RunResult) -> String {
@@ -128,7 +143,7 @@ pub(crate) fn render(result: &RunResult, opts: &RenderOptions) -> String {
             .iter()
             .filter(|f| f.group == group)
             .collect();
-        kndo::engine::sort_findings_for_display(&mut in_group);
+        kndo::sort_findings_for_display(&mut in_group);
         render_section(&mut out, group, &in_group, opts);
     }
     if let Some(health) = &result.health {
@@ -202,7 +217,7 @@ pub(crate) fn render_health(health: &Health, opts: &RenderOptions, full_table: b
             c.penalty,
         ));
     }
-    if full_table && !health.packages.is_empty() {
+    if full_table && opts.by_package && !health.packages.is_empty() {
         out.push_str("\nby package:\n");
         for p in &health.packages {
             out.push_str(&format!(
@@ -264,14 +279,10 @@ fn health_diff_line(health: &Health) -> String {
 }
 
 fn grade_boundary_suffix(score: f64, grade: &str) -> String {
-    let (threshold, next) = match grade {
-        "A" => (90.0, "B"),
-        "B" => (80.0, "C"),
-        "C" => (65.0, "D"),
-        "D" => (50.0, "F"),
-        _ => return String::new(),
-    };
-    format!("  ({:.1} from {next})", score - threshold)
+    match kndo::analysis::health::grade_boundary(grade) {
+        Some((threshold, next)) => format!("  ({:.1} from {next})", score - threshold),
+        None => String::new(),
+    }
 }
 
 /// Diff modes' rendering: a one-line header (`N new · M fixed · net ±K`), then
@@ -334,7 +345,7 @@ fn render_diff(result: &RunResult, opts: &RenderOptions) -> String {
 /// `NEW`/`FIXED`, not the taxonomy groups.
 fn render_flat(out: &mut String, findings: &[&Finding], opts: &RenderOptions) {
     let mut sorted = findings.to_vec();
-    kndo::engine::sort_findings_for_display(&mut sorted);
+    kndo::sort_findings_for_display(&mut sorted);
     for f in sorted {
         out.push_str("  ");
         out.push_str(&render_finding_line(f, opts));
@@ -388,7 +399,7 @@ fn render_finding_line(f: &Finding, opts: &RenderOptions) -> String {
     let confidence = if f.confidence == Confidence::Certain {
         String::new()
     } else {
-        format!(" ({})", confidence_str(f.confidence))
+        format!(" ({})", f.confidence.as_str())
     };
 
     let glyph = glyph(f.group, opts.color);
@@ -430,14 +441,6 @@ fn color_code(group: Group) -> &'static str {
         Group::Risk => MAGENTA,
         Group::Hygiene => BLUE,
         Group::Convention => CYAN,
-    }
-}
-
-fn confidence_str(c: Confidence) -> &'static str {
-    match c {
-        Confidence::Certain => "certain",
-        Confidence::Probable => "probable",
-        Confidence::Possible => "possible",
     }
 }
 
@@ -668,8 +671,8 @@ fn neighbor_line(e: &NeighborEntry) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kndo::adapter::ProjectPath;
-    use kndo::engine::{Delta, DeltaOrigin, Location, Severity};
+    use kndo::ProjectPath;
+    use kndo::{Delta, DeltaOrigin, Location, Severity};
     use smol_str::SmolStr;
 
     fn parse_group(g: &str) -> Group {
@@ -710,6 +713,7 @@ mod tests {
             color: false,
             quiet: false,
             verbose: false,
+            by_package: false,
         }
     }
 
@@ -768,6 +772,7 @@ mod tests {
                 color: false,
                 quiet: true,
                 verbose: false,
+                by_package: false,
             },
         );
         assert_eq!(out, "kndo · staged · 1 new · 0 fixed · net +1\n");
@@ -797,7 +802,7 @@ mod tests {
     fn nonzero_suppressed_shows_in_the_clean_full_mode_header() {
         let result = RunResult {
             mode: "full".to_string(),
-            suppressed: kndo::engine::SuppressedSummary {
+            suppressed: kndo::SuppressedSummary {
                 inline: 3,
                 config: 1,
             },
@@ -813,7 +818,7 @@ mod tests {
         let result = RunResult {
             mode: "full".to_string(),
             findings: vec![finding("unused", "waste")],
-            suppressed: kndo::engine::SuppressedSummary {
+            suppressed: kndo::SuppressedSummary {
                 inline: 2,
                 config: 0,
             },
@@ -827,7 +832,7 @@ mod tests {
     fn nonzero_suppressed_shows_in_the_diff_mode_header() {
         let result = RunResult {
             mode: "staged".to_string(),
-            suppressed: kndo::engine::SuppressedSummary {
+            suppressed: kndo::SuppressedSummary {
                 inline: 1,
                 config: 0,
             },
@@ -849,9 +854,9 @@ mod tests {
         }
     }
 
-    fn query_result(entry: kndo::query_envelope::ResultEntry) -> QueryResult {
+    fn query_result(entry: kndo::ResultEntry) -> QueryResult {
         QueryResult {
-            verb: kndo::query_envelope::Verb::Describe,
+            verb: kndo::Verb::Describe,
             selectors: vec!["dep:left-pad".to_string()],
             id: None,
             cache: "warm",
@@ -864,7 +869,6 @@ mod tests {
     #[test]
     fn describe_human_output_shows_declaration_file_and_dependency_blocks() {
         use kndo::query::{DeclarationInfo, Degree, DependencyInfo, DescribeResult, NodeSpan};
-        use kndo::query_envelope::ResultEntry;
 
         let symbol = query_result(ResultEntry::Describe(Box::new(DescribeResult {
             node: qnode("src/billing.js#computeTotal", "function"),
@@ -932,6 +936,7 @@ mod tests {
             color: false,
             quiet: false,
             verbose: false,
+            by_package: false,
         };
         assert!(!render(&result, &base).contains("phases"));
         let verbose = RenderOptions {
@@ -972,6 +977,7 @@ mod tests {
             color: false,
             quiet: false,
             verbose: false,
+            by_package: false,
         }
     }
 
