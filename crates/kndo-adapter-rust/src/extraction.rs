@@ -86,8 +86,11 @@ struct PendingAttrs {
     attr_start: Option<(u32, u32)>,
 }
 
-pub(crate) fn extract(_path: &str, content: &[u8]) -> FileFacts {
-    let mut out = FileFacts::default();
+pub(crate) fn extract(path: &str, content: &[u8]) -> FileFacts {
+    let mut out = FileFacts {
+        unit: module_unit(path),
+        ..FileFacts::default()
+    };
     if GENERATED_MARKERS.detect_generated(content) {
         out.detected_origin = Some(kndo_core::vocab::FileOrigin::Generated);
     }
@@ -1163,6 +1166,36 @@ fn inside_inline_mod(node: Node) -> bool {
         cur = n.parent();
     }
     false
+}
+
+/// This file's MODULE, as a unit key. Rust's resolution unit is the module and — under the
+/// file ≈ module approximation this adapter is built on (§0) — a module is a file, so every
+/// key names exactly one file. That degeneracy is the point twice over: it leaves every
+/// unit-keyed table behaving exactly as it did when the key was absent (a file's own
+/// declarations are already the tier consulted before its unit's), and it gives the module
+/// TREE a name to hang on, which visibility needs and a per-file key alone cannot express.
+///
+/// The path IS the module path, so the key is the path with the conventional file names
+/// folded into the directory they stand for: `src/graph/mod.rs` and `src/graph/assemble.rs`
+/// are `…/src/graph` and `…/src/graph/assemble`, and `src/lib.rs` is `…/src` — the crate
+/// root, which the next module up. Keys stay project-relative, so two crates with the same
+/// internal layout do not collide (RFC 0012 §8's "unique only within a package" holds a
+/// fortiori).
+///
+/// `#[path = "…"]` breaks the convention, and inline `mod x {}` flattens into its file — both
+/// are the same standing approximation the rest of the adapter makes.
+fn module_unit(path: &str) -> Option<SmolStr> {
+    let stem = path.strip_suffix(".rs")?;
+    let (dir, name) = match stem.rsplit_once('/') {
+        Some((dir, name)) => (dir, name),
+        None => ("", stem),
+    };
+    let key = if matches!(name, "mod" | "lib" | "main") {
+        dir
+    } else {
+        stem
+    };
+    (!key.is_empty()).then(|| SmolStr::new(key))
 }
 
 /// Item-list walker (source_file, inline-mod bodies — flattened). Attributes are

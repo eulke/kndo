@@ -112,8 +112,21 @@ is this adapter's standing approximation, stated once here and leaned on everywh
 - `pub` → level 2. `exported` = any `pub*` form except `pub(self)` and
   inline-mod `pub(super)`.
 
-**Unit:** `None`. Rust files never resolve each other's names implicitly — everything
-travels through `use` or a qualified path — so Go's `unit` machinery stays off.
+**Unit:** the file's own MODULE, keyed by its path with the conventional file names folded
+into the directory they stand for — `src/graph/mod.rs` and `src/graph/assemble.rs` are
+`…/src/graph` and `…/src/graph/assemble`, and `src/lib.rs` is `…/src`. Rust's resolution unit
+IS the module, and under file ≈ module (§0) a module is a file, so **every key names exactly
+one file**.
+
+That degeneracy is why this is not the Go machinery in disguise. Rust files still never resolve
+each other's names implicitly — a one-file unit table is the file's own table, which the ladder
+already consults first, so no name resolves anywhere it did not before. What the key buys is
+the one thing a per-file table cannot express: **twins**. `#[cfg(target_os = "macos")] fn
+socket_dir` beside `#[cfg(not(…))] fn socket_dir` is two declarations of one name, and the
+single-slot bare table kept one and silently dropped the other, leaving it with no incoming
+edge and a false `unused` on code every other build compiles. Twins are tracked per unit
+(RFC 0012 §8), so a language with no unit key had none. `#[path]` and inline `mod x {}` break
+the path convention, the same standing approximation the rest of the adapter makes.
 `unit_name`: also `None` (qualified references resolve through import aliases instead).
 
 **References** — identifiers with `within` (enclosing fn/method, `Owner.name` form for

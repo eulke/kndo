@@ -159,15 +159,14 @@ RFC 0012 §2 is explicit about which way to degrade when the model cannot prove 
 so the gate stays until the scope exists.
 
 Direction: a module-subtree scope in the ladder (`VisibilityScope::Module`), anchored on the
-declaring file's `unit` — plus the anchor itself, which Rust does **not** have today. RFC 0012
-§8's table claimed Rust keyed units on the module path; it does not (`FileFacts::unit` is
-`None`, `internal/adapters/rust.md` §2, and the RFC row is now corrected). So this direction is
-one step longer than recorded: the Rust adapter must first key units on the crate-root-relative
-module path, and `FileFacts::unit_parent` must make those keys a tree the core can walk without
-knowing any separator. Then adapters emit `pub(super)`/`pub(in path)` as that rung instead of
-collapsing it upward.
+declaring file's `unit`. That anchor did not exist — RFC 0012 §8's table claimed Rust keyed
+units on the module path and it did not — so the direction is one step longer than recorded,
+and **that step is now done**: the Rust adapter keys each file by its own module
+(`internal/adapters/rust.md` §2). What remains is `FileFacts::unit_parent`, to make those keys
+a tree the core can walk without knowing any separator, and adapters emitting
+`pub(super)`/`pub(in path)` as the new rung instead of collapsing it upward.
 `scope_contains_site` gains one arm; the containment comparison this analysis already performs
-then decides the case exactly, with no gate needed.
+then decides the case exactly, and only then does the gate come off.
 
 ## 8. A brace-imported submodule is not a usable qualifier (RESUELTO)
 

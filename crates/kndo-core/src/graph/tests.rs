@@ -881,6 +881,46 @@ fn a_dotted_pointer_with_no_fact_falls_to_the_duck_fallback() {
 }
 
 #[test]
+fn twins_declared_in_one_file_both_receive_the_reference() {
+    // The `#[cfg]` alternate pair, which for Rust sits in ONE file rather than across two:
+    // `#[cfg(target_os = "macos")] fn socket_dir` beside `#[cfg(not(…))] fn socket_dir`. The
+    // single-slot bare table keeps one and displaces the other, so the displaced one had no
+    // incoming edge and read as `unused` — a false "delete this" on code every non-mac build
+    // compiles. Twins are tracked per UNIT, so this only works once the language keys one;
+    // a per-file unit is what a file-scoped module tree gives it (RFC 0012 §8).
+    let dir = project(
+        "same-file-twins",
+        &[
+            ("app/a.mock", "import ./b.mock\nroot-file"),
+            (
+                "app/b.mock",
+                "unit app/b\ndecl socket_dir\ndecl socket_dir\ndecl caller\nref-in caller socket_dir",
+            ),
+        ],
+    );
+    let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
+    // Both declarations share a name, so count the DISTINCT targets rather than the edges to
+    // whichever symbol a name lookup happens to find first.
+    let alternates: Vec<SymbolId> = graph
+        .symbols
+        .iter()
+        .enumerate()
+        .filter(|(_, s)| s.name == "socket_dir")
+        .map(|(i, _)| SymbolId(i as u32))
+        .collect();
+    assert_eq!(alternates.len(), 2, "both alternates are declared");
+    for alternate in alternates {
+        assert!(
+            graph.edges.iter().any(|e| matches!(
+                e.kind,
+                EdgeKind::References { to, .. } if to == alternate
+            )),
+            "each alternate is live under its own configuration; {alternate:?} had none"
+        );
+    }
+}
+
+#[test]
 fn a_qualified_member_hit_lands_on_every_twin_declaration() {
     // cfg-alternated impls declare `Data.from_path` twice; the qualified reference
     // targets whichever is compiled, so BOTH must receive the edge — the single-slot

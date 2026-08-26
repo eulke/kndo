@@ -334,7 +334,7 @@ only then imported top-level names. Ranked above the fallback instead, an unrela
 | Go | `dir#declared-package-name` — splits external test packages (`foo_test`) from `foo` in the same directory, closing the documented §1.1 imprecision of docs/adapters/go.md with zero core changes |
 | Java | declared package name (dotted string from the `package` statement) — never directory-derived, sidestepping source-root detection (`src/main/java` is a build-tool convention, not language-visible from a bare file path); docs/adapters/java.md §0 |
 | Kotlin | same as Java (declared dotted package name) — but note this key carries *zero* visibility meaning for Kotlin (§6), only resolution meaning (same-package unqualified reference, wildcard import enumeration) |
-| Rust | `None` — **not** a module path, and deliberately so: Rust files never resolve each other's names implicitly (everything travels through `use` or a qualified path), so the unit machinery has nothing to do. `internal/adapters/rust.md` §2 is the authority. The module-path key this row once claimed does not exist in the adapter; giving it one is future work (`internal/detection-gaps.md` §7's `VisibilityScope::Module` needs an anchor), not a described fact |
+| Rust | the file's own module, keyed by path with `mod.rs`/`lib.rs`/`main.rs` folded into their directory — so **one file per key**. Rust files still resolve nothing implicitly across files (a one-file unit table IS the file's own, already the earlier tier), which is exactly why turning the key on moves no resolution; what it buys is twin tracking, which is per-unit and which a keyless language therefore had none of. `internal/adapters/rust.md` §2 |
 | Swift | target/module name |
 | JS/TS, CSS, JSON | `None` — file-scoped languages |
 
