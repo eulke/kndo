@@ -238,38 +238,60 @@ published, "no consumer in this repository" is not evidence of anything. Where l
 promotion covers it, this never fires; where it doesn't, the honest fix is at the promotion
 rule, not at the analysis.
 
-## 16. Multi-release and multi-source-set variants of one class (GAP)
+## 16. Multi-release variants of one class (WAS a gap — already covered, now fixtured)
 
 retrofit ships `DefaultMethodSupport` three times — `main/java`, `java14`, `java16` — for the
 multi-release-jar pattern; exactly one is on the classpath at runtime, and `Reflection.java`
-calls it by its single name. kndo flags all three unreachable, having resolved the call to
-none of them.
+calls it by its single name. The audit saw all three flagged unreachable.
 
-This is a NEAR MISS of a mechanism that already exists: same-unit twins (RFC 0012 §8) is exactly
-this shape — several declarations of one name that are alternatives, all live under the union of
-configurations — and it already covers Go's `//go:build` files, Rust's `#[cfg]` alternates, and
-Kotlin's `expect`/`actual`. It does not fire here because the three variants live in three
-different source roots and so carry three different `unit` keys, not one. Direction: derive the
-Java/Kotlin `unit` from the declared package alone (which it already is) *and* make the source
-root not part of file identity for this purpose — or, more precisely, let a manifest declare
-alternate source roots the way SwiftPM's `unit_overrides` already declares alternate target
-paths.
+**This entry was stale when it was written.** Java's `unit` is the declared package name alone,
+never directory-derived (`kndo-adapter-java`'s `handle_top_level`), and all three variants
+declare `package retrofit2;` — so they were always same-unit twins. What was missing was the
+twins mechanism itself, which landed for Go's `//go:build` alternates and Kotlin's
+`expect`/`actual` *after* the audit ran (RFC 0012 §8). Re-measured on retrofit: all three are
+reachable, and the only finding left on them is an `internal-only` on `DefaultMethodSupport.invoke`
+— a different verdict, at the `possible` tier, and one §5-bis now covers. Recorded here because
+the *absence* of `unused` is load-bearing: `kndo-adapter-java`'s `multi-release-variants` fixture
+pins it.
 
-## 17. Version skew read out of BOM-managed and property-declared coordinates (GAP)
+## 5-bis. An `internal-only` message that asserts more than its evidence (GAP)
 
-`version-skew` compares declared version strings. Three JVM shapes defeat that comparison and
-produced findings on every JVM repo in the audit:
-- **BOM-managed dependencies** declare no version at all (`platform("io.insert-koin:koin-bom")`
-  then bare artifact coordinates). The differing halves are *artifact ids*, not versions —
-  spring-petclinic's `spring-boot-starter-actuator` vs `spring-boot-docker-compose`, mockito's
-  `mockito-android` vs `mockito-junit-jupiter`, Exposed's 16 "diverging" `kotlin-test-junit5` /
-  `kotlin-reflect` entries.
-- **Property placeholders** are taken verbatim: Maven's `${spring.version}` and Gradle's
-  `$kotlinVersion` compare as literal strings, so `$junit5Version` and `$junit5_version`
-  resolving to the same `gradle.properties` key read as skew.
-- **The `"*"` default** collides with every real version.
+Surfaced by §16's fixture. `internal-only` deliberately lets a weak (`Possible`) reference from
+wider than the strong requirement demote the *verdict's confidence* rather than widen the
+requirement — the right call, and RFC 0012 §2's direction. But the message it prints is
+unchanged: "declared package-private but **only used within its own file** — private would
+suffice". On retrofit's multi-release variants there IS a cross-file reference; it is a
+`possible`-tier duck-fallback hit, which is why the verdict is `possible` too. The tier is
+honest and the sentence is not, and a reader who acts on the sentence breaks the build.
 
-Direction, in order of value: resolve `<properties>` and simple Gradle `val x = "1.2.3"`
-declarations from the same manifest; treat an unresolved placeholder as *unknown*, not as a
-version (a comparison the code knows it could not perform must not produce a `certain`
-finding); and never compare across differing artifact ids in the first place.
+Direction: when `weak_wider` holds, say what is actually true — no reference stronger than
+`possible` requires more than this scope — instead of asserting exclusivity the graph
+contradicts. Same family as §5: the verdict is defensible, the rendering overclaims.
+
+## 17. Version skew read out of BOM-managed and property-declared coordinates (FIXED)
+
+`version-skew` compares declared version strings, and three JVM shapes defeated that comparison
+on every JVM repository in the audit. The root cause of the loudest one turned out to be a
+parsing bug, not a comparison policy:
+
+- **BOM-managed coordinates.** `gradle_dependency_line` split every coordinate on its LAST
+  colon. A BOM-managed coordinate has **two** segments, not three, so
+  `'org.springframework.boot:spring-boot-starter-actuator'` parsed as *version*
+  `spring-boot-starter-actuator` of a dependency named `org.springframework.boot`. That is why
+  the findings listed **artifact ids** as diverging versions — spring-petclinic, mockito,
+  Exposed's 16 `kotlin-test-junit5`/`kotlin-reflect` entries, koin. Fixed by splitting on
+  segment count: two segments is a complete coordinate with no version.
+- **Property placeholders.** `${spring.version}` and `$kotlinVersion` were compared as literal
+  strings, so two spellings of one `gradle.properties` key read as skew. Fixed by resolving
+  against the manifest's own pool (Maven `<properties>`, Gradle `val`/`def`/`var`), and by
+  leaving what the file cannot answer unknown.
+- **The `"*"` sentinel.** "This manifest states no comparable requirement" was encoded as a
+  version that then diverged from every real one. Fixed by making the fact representable:
+  `ManifestDependency::version_req` and `DeclaredDependency::version_req` are `Option`. npm's
+  `"*"`, which IS a declared requirement, stays a value.
+
+`version_skew` now drops unknowns before grouping — a comparison the code knows it could not
+perform cannot produce a `certain` finding — while a real disagreement among the manifests that
+DID state a requirement still fires. Measured: spring-petclinic 5 → 0, kotlinx.coroutines 4 → 0,
+Exposed 9 → 4, and the four that remain are genuine (`com.h2database:h2` at `2.4.240` in three
+manifests against `2.3.232` in a sample).

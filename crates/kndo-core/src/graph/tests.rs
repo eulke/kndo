@@ -2272,7 +2272,7 @@ fn inherited_dependencies_resolve_against_the_shared_pool_before_reaching_declar
         .declared_dependencies
         .iter()
         .filter(|d| d.name.as_str() == "foo")
-        .map(|d| d.version_req.as_str())
+        .filter_map(|d| d.version_req.as_deref())
         .collect();
     assert_eq!(
         versions,
@@ -2295,7 +2295,7 @@ fn inherited_dependencies_resolve_against_the_shared_pool_before_reaching_declar
         .declared_dependencies
         .iter()
         .filter(|d| d.name.as_str() == "foo")
-        .map(|d| d.version_req.as_str())
+        .filter_map(|d| d.version_req.as_deref())
         .collect();
     assert_eq!(
         versions.len(),

@@ -2207,7 +2207,9 @@ pub fn assemble_from_source(
     for slot in manifests_per_file.iter() {
         let Some((_, facts)) = slot else { continue };
         for dep in &facts.workspace_dependencies {
-            workspace_dependency_versions.insert(&dep.name, &dep.version_req);
+            if let Some(version) = &dep.version_req {
+                workspace_dependency_versions.insert(&dep.name, version);
+            }
         }
     }
     for (i, slot) in manifests_per_file.iter().enumerate() {
@@ -2219,16 +2221,16 @@ pub fn assemble_from_source(
         let package = manifest_package[i].unwrap_or(PackageId(0));
         for dep in &facts.dependencies {
             declared_dependency_names.insert(dep.name.clone());
-            // `inherited` deps carry a placeholder `version_req` (the real value lives in
-            // whichever manifest declared the shared pool) — resolve it now, before
-            // version-skew or any other consumer ever sees it. If no pool entry exists
-            // (defensive: no manifest declared one, or the name isn't in it), fall back to
-            // the placeholder as-is — no worse than today's unresolved behavior.
+            // An `inherited` dep's real value lives in whichever manifest declared the shared
+            // pool — resolve it now, before version-skew or any other consumer ever sees it.
+            // No pool entry (no manifest declared one, or the name isn't in it) leaves it
+            // `None`: unknown, which is exactly what it is, and what every consumer must not
+            // mistake for a version.
             let version_req = if dep.inherited {
                 workspace_dependency_versions
                     .get(&dep.name)
                     .map(|v| (*v).clone())
-                    .unwrap_or_else(|| dep.version_req.clone())
+                    .or_else(|| dep.version_req.clone())
             } else {
                 dep.version_req.clone()
             };

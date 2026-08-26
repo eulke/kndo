@@ -83,7 +83,8 @@ fn extract_maven(
     out.workspace_members = maven_workspace_members(project);
     // `<dependencyManagement>` entries are version pins for CHILDREN, not real dependencies of
     // this module — `collect_maven_deps` only ever sees a plain `<dependencies>` block.
-    collect_maven_deps(xml_child(project, "dependencies"), &mut out);
+    let properties = maven_properties(project);
+    collect_maven_deps(xml_child(project, "dependencies"), &properties, &mut out);
 
     // Only packages (non-virtual poms) get source-tree root promotion; a pure-aggregator
     // `<packaging>pom</packaging>` with no source tree contributes topology only.
@@ -147,7 +148,11 @@ fn xml_child_text<'a>(node: roxmltree::Node<'a, '_>, tag: &str) -> Option<&'a st
     xml_child(node, tag).and_then(|n| n.text()).map(str::trim)
 }
 
-fn collect_maven_deps(deps: Option<roxmltree::Node<'_, '_>>, out: &mut ManifestFacts) {
+fn collect_maven_deps(
+    deps: Option<roxmltree::Node<'_, '_>>,
+    properties: &std::collections::HashMap<String, String>,
+    out: &mut ManifestFacts,
+) {
     let Some(deps) = deps else {
         return;
     };
@@ -155,13 +160,16 @@ fn collect_maven_deps(deps: Option<roxmltree::Node<'_, '_>>, out: &mut ManifestF
         .children()
         .filter(|n| n.is_element() && n.tag_name().name() == "dependency");
     for dep in dependency_nodes {
-        if let Some(dependency) = maven_dependency(dep) {
+        if let Some(dependency) = maven_dependency(dep, properties) {
             out.dependencies.push(dependency);
         }
     }
 }
 
-fn maven_dependency(dep: roxmltree::Node<'_, '_>) -> Option<ManifestDependency> {
+fn maven_dependency(
+    dep: roxmltree::Node<'_, '_>,
+    properties: &std::collections::HashMap<String, String>,
+) -> Option<ManifestDependency> {
     let artifact_id = xml_child_text(dep, "artifactId")?;
     let group_id = xml_child_text(dep, "groupId").unwrap_or("");
     let name = if group_id.is_empty() {
@@ -169,12 +177,56 @@ fn maven_dependency(dep: roxmltree::Node<'_, '_>) -> Option<ManifestDependency> 
     } else {
         format!("{group_id}:{artifact_id}")
     };
+    // No `<version>` at all is the BOM-managed shape (`<dependencyManagement>` in a parent POM
+    // supplies it): the manifest states no comparable requirement, which is `None` — never a
+    // stand-in version that every real one would then "diverge" from.
+    let version_req = xml_child_text(dep, "version")
+        .and_then(|raw| resolve_placeholder(raw, properties))
+        .map(SmolStr::new);
     Some(ManifestDependency {
         name: SmolStr::new(name),
-        version_req: SmolStr::new(xml_child_text(dep, "version").unwrap_or("*")),
+        version_req,
         scope: maven_dependency_scope(xml_child_text(dep, "scope")),
         inherited: false,
     })
+}
+
+/// A declared version with `${…}` / `$…` placeholders substituted from the manifest's own
+/// property pool, or `None` when any placeholder in it is unresolved.
+///
+/// Taking an unresolved placeholder verbatim is what made `${spring.version}` "diverge" from
+/// `5.3.0`, and `$junit5Version` from `$junit5_version` — two spellings of one
+/// `gradle.properties` key. The value is not a version and must not be compared as one; the
+/// honest answer to "what does this manifest require" is that we could not read it.
+fn resolve_placeholder(
+    raw: &str,
+    properties: &std::collections::HashMap<String, String>,
+) -> Option<String> {
+    let raw = raw.trim();
+    if !raw.contains('$') {
+        return (!raw.is_empty()).then(|| raw.to_string());
+    }
+    let key = raw
+        .strip_prefix("${")
+        .and_then(|r| r.strip_suffix('}'))
+        .or_else(|| raw.strip_prefix('$'))?;
+    properties.get(key.trim()).cloned()
+}
+
+/// `<properties>` — Maven's own version pool, resolvable without leaving the file. A parent
+/// POM's properties are out of reach by construction (kndo never resolves the classpath), and
+/// a dependency whose placeholder lives there stays `None`.
+fn maven_properties(project: roxmltree::Node<'_, '_>) -> std::collections::HashMap<String, String> {
+    let mut out = std::collections::HashMap::new();
+    let Some(properties) = xml_child(project, "properties") else {
+        return out;
+    };
+    for property in properties.children().filter(|n| n.is_element()) {
+        if let Some(value) = property.text().map(str::trim) {
+            out.insert(property.tag_name().name().to_string(), value.to_string());
+        }
+    }
+    out
 }
 
 /// "provided": supplied by the runtime environment, not bundled — same contract-with-the-
@@ -276,6 +328,7 @@ fn gradle_dependencies(text: &str) -> Vec<ManifestDependency> {
         return Vec::new();
     };
 
+    let properties = gradle_properties(text);
     let mut deps = Vec::new();
     let mut depth = 1i32;
     for line in text.lines().skip(start + 1) {
@@ -285,14 +338,17 @@ fn gradle_dependencies(text: &str) -> Vec<ManifestDependency> {
         if depth <= 0 {
             break;
         }
-        deps.extend(gradle_dependency_line(trimmed));
+        deps.extend(gradle_dependency_line(trimmed, &properties));
     }
     deps
 }
 
 /// The zero-or-more dependency coordinates literal on one line of a `dependencies` block, e.g.
 /// `implementation 'com.foo:bar:1.0'` or `testImplementation("com.foo:baz:2.0")`.
-fn gradle_dependency_line(trimmed: &str) -> Vec<ManifestDependency> {
+fn gradle_dependency_line(
+    trimmed: &str,
+    properties: &std::collections::HashMap<String, String>,
+) -> Vec<ManifestDependency> {
     let Some((config, rest)) = trimmed.split_once(|c: char| c.is_whitespace() || c == '(') else {
         return Vec::new();
     };
@@ -302,23 +358,68 @@ fn gradle_dependency_line(trimmed: &str) -> Vec<ManifestDependency> {
     string_literals(rest)
         .into_iter()
         .map(|lit| {
-            // "group:artifact:version" — keep group:artifact as the identity, matching
-            // Maven's coordinate shape; a bare "artifact" (no colon) is kept as-is.
-            let name = lit.rsplit_once(':').map_or(lit.clone(), |(head, _ver)| {
-                let mut parts = head.splitn(2, ':');
-                match (parts.next(), parts.next()) {
-                    (Some(a), Some(b)) => format!("{a}:{b}"),
-                    _ => head.to_string(),
-                }
-            });
+            let (name, version_req) = gradle_coordinate(&lit, properties);
             ManifestDependency {
                 name: SmolStr::new(name),
-                version_req: SmolStr::new(lit.rsplit_once(':').map(|(_, v)| v).unwrap_or("*")),
+                version_req: version_req.map(SmolStr::new),
                 scope,
                 inherited: false,
             }
         })
         .collect()
+}
+
+/// Split one Gradle coordinate literal into `(group:artifact, version)` **by segment count**,
+/// never by "everything after the last colon".
+///
+/// A BOM/platform-managed coordinate has TWO segments and no version at all
+/// (`implementation 'org.springframework.boot:spring-boot-starter-actuator'`, with the version
+/// supplied by an imported BOM). Splitting on the last colon read that as
+/// `name = "org.springframework.boot"`, `version = "spring-boot-starter-actuator"` — which is
+/// why the field audit saw `version-skew` report ARTIFACT IDS as diverging versions of a group
+/// id, on every JVM repository it covered.
+fn gradle_coordinate(
+    lit: &str,
+    properties: &std::collections::HashMap<String, String>,
+) -> (String, Option<String>) {
+    let segments: Vec<&str> = lit.split(':').collect();
+    match segments.as_slice() {
+        [group, artifact, version, ..] => (
+            format!("{group}:{artifact}"),
+            resolve_placeholder(version, properties),
+        ),
+        // Two segments: a full coordinate whose version comes from a BOM. One: a project
+        // accessor or a bare name. Neither states a requirement.
+        [group, artifact] => (format!("{group}:{artifact}"), None),
+        _ => (lit.to_string(), None),
+    }
+}
+
+/// `val x = "1.2.3"` / `def x = '1.2.3'` / `ext { x = "1.2.3" }` — Gradle's in-file version
+/// pool, the analogue of Maven's `<properties>`. A `gradle.properties` key or a version catalog
+/// lives outside the manifest and stays unresolved, which is `None`, not a literal.
+fn gradle_properties(text: &str) -> std::collections::HashMap<String, String> {
+    let mut out = std::collections::HashMap::new();
+    for line in text.lines() {
+        let line = line.trim();
+        let assignment = line
+            .strip_prefix("val ")
+            .or_else(|| line.strip_prefix("def "))
+            .or_else(|| line.strip_prefix("var "))
+            .unwrap_or(line);
+        let Some((key, value)) = assignment.split_once('=') else {
+            continue;
+        };
+        let key = key.split(':').next().unwrap_or(key).trim();
+        if key.is_empty() || key.contains(char::is_whitespace) {
+            continue;
+        }
+        let literals = string_literals(value);
+        if let [only] = literals.as_slice() {
+            out.insert(key.to_string(), only.clone());
+        }
+    }
+    out
 }
 
 /// Table-driven rather than matched: a `match` over this many string alternatives is itself a

@@ -145,6 +145,93 @@ mod tests {
     }
 
     #[test]
+    fn a_bom_managed_coordinate_declares_no_version() {
+        // Two segments, not three: the version comes from an imported BOM. Splitting on the
+        // LAST colon read `spring-boot-starter-actuator` as a version of the group id
+        // `org.springframework.boot` — which is how `version-skew` came to report artifact ids
+        // as diverging versions on every JVM repository the field audit covered.
+        let f = gradle_facts(
+            "dependencies {\n\
+             \x20   implementation 'org.springframework.boot:spring-boot-starter-actuator'\n\
+             \x20   implementation 'org.springframework.boot:spring-boot-docker-compose'\n\
+             \x20   implementation 'com.other:pinned:1.0'\n\
+             }\n",
+            &[],
+        );
+        let names: Vec<&str> = f.dependencies.iter().map(|d| d.name.as_str()).collect();
+        assert_eq!(
+            names,
+            vec![
+                "org.springframework.boot:spring-boot-starter-actuator",
+                "org.springframework.boot:spring-boot-docker-compose",
+                "com.other:pinned",
+            ],
+            "the whole two-segment coordinate is the identity"
+        );
+        assert!(
+            f.dependencies[..2].iter().all(|d| d.version_req.is_none()),
+            "no version is stated, and that is not the same as `*`"
+        );
+        assert_eq!(f.dependencies[2].version_req.as_deref(), Some("1.0"));
+    }
+
+    #[test]
+    fn a_gradle_version_variable_resolves_from_the_same_file() {
+        let f = gradle_facts(
+            "val jmhVersion = \"1.36\"\n\
+             dependencies {\n\
+             \x20   implementation \"org.openjdk.jmh:jmh-core:$jmhVersion\"\n\
+             \x20   implementation \"org.other:thing:${'$'}{catalogOnly}\"\n\
+             }\n",
+            &[],
+        );
+        let dep = |n: &str| f.dependencies.iter().find(|d| d.name == n).unwrap();
+        assert_eq!(
+            dep("org.openjdk.jmh:jmh-core").version_req.as_deref(),
+            Some("1.36"),
+            "koin declares this literal two lines above the dependency; comparing \
+             `$jmhVersion` against another module's hardcoded `1.36` was pure noise"
+        );
+        assert_eq!(
+            dep("org.other:thing").version_req,
+            None,
+            "a key that lives outside this manifest (gradle.properties, a version catalog) \
+             stays unknown — never the literal, which would compare as a version"
+        );
+    }
+
+    #[test]
+    fn a_maven_property_resolves_and_an_absent_version_is_unknown() {
+        let f = maven_facts(
+            r#"<project>
+                 <properties><spring.version>5.3.0</spring.version></properties>
+                 <dependencies>
+                   <dependency><groupId>org.springframework</groupId><artifactId>core</artifactId><version>${spring.version}</version></dependency>
+                   <dependency><groupId>org.springframework</groupId><artifactId>web</artifactId><version>${parent.only}</version></dependency>
+                   <dependency><groupId>org.springframework.boot</groupId><artifactId>starter</artifactId></dependency>
+                 </dependencies>
+               </project>"#,
+            &[],
+        );
+        let dep = |n: &str| f.dependencies.iter().find(|d| d.name == n).unwrap();
+        assert_eq!(
+            dep("org.springframework:core").version_req.as_deref(),
+            Some("5.3.0")
+        );
+        assert_eq!(
+            dep("org.springframework:web").version_req,
+            None,
+            "a property a PARENT pom declares is out of reach by construction — kndo never \
+             resolves the classpath — so the requirement is unknown, not the placeholder text"
+        );
+        assert_eq!(
+            dep("org.springframework.boot:starter").version_req,
+            None,
+            "no <version> at all is the BOM-managed shape"
+        );
+    }
+
+    #[test]
     fn gradle_application_plugin_is_private() {
         let f = gradle_facts("plugins {\n    id 'application'\n}\n", &[]);
         assert!(f.private);

@@ -227,25 +227,26 @@ fn collect_deps(table: Option<&toml::Value>, scope: DependencyScope, out: &mut M
 
 /// A single `toml::Value` dependency spec's version requirement, and whether it's inherited
 /// from `[workspace.dependencies]` rather than a literal of its own.
-fn version_req_of(spec: &toml::Value) -> (SmolStr, bool) {
+fn version_req_of(spec: &toml::Value) -> (Option<SmolStr>, bool) {
     match spec {
-        toml::Value::String(v) => (SmolStr::new(v.as_str()), false),
+        toml::Value::String(v) => (Some(SmolStr::new(v.as_str())), false),
         toml::Value::Table(t) => {
             if t.get("workspace").and_then(|w| w.as_bool()) == Some(true) {
-                // Workspace-inherited: a readable placeholder, not a real value to compare —
-                // graph assembly resolves it against ManifestFacts::workspace_dependencies.
-                (SmolStr::new("workspace"), true)
+                // Workspace-inherited: unknown here by construction — graph assembly resolves
+                // it against ManifestFacts::workspace_dependencies before anything compares it.
+                (None, true)
             } else {
-                let version_req = t
-                    .get("version")
-                    .and_then(|v| v.as_str())
-                    .map(SmolStr::new)
-                    // Path/git deps without a version: any.
-                    .unwrap_or_else(|| SmolStr::new("*"));
-                (version_req, false)
+                // A path or git dependency without `version` states no requirement at all.
+                // That is NOT `"*"`: `"*"` is a real requirement someone could have written,
+                // and treating the absence as one made every sibling's real version look like
+                // skew against it.
+                (
+                    t.get("version").and_then(|v| v.as_str()).map(SmolStr::new),
+                    false,
+                )
             }
         }
-        _ => (SmolStr::new("*"), false),
+        _ => (None, false),
     }
 }
 
@@ -312,8 +313,8 @@ cc = "1"
         assert!(f.private);
         let dep = |n: &str| f.dependencies.iter().find(|d| d.name == n).unwrap();
         assert_eq!(dep("serde").scope, DependencyScope::Prod);
-        assert_eq!(dep("serde").version_req.as_str(), "1");
-        assert_eq!(dep("renamed").version_req.as_str(), "2"); // key, not package field
+        assert_eq!(dep("serde").version_req.as_deref(), Some("1"));
+        assert_eq!(dep("renamed").version_req.as_deref(), Some("2")); // key, not package field
         assert_eq!(dep("insta").scope, DependencyScope::Dev);
         assert_eq!(dep("cc").scope, DependencyScope::Build);
     }
@@ -435,9 +436,9 @@ bar = { version = "3", features = ["derive"] }
             &[],
         );
         let pooled = |n: &str| f.workspace_dependencies.iter().find(|d| d.name == n);
-        assert_eq!(pooled("foo").unwrap().version_req.as_str(), "1.2");
+        assert_eq!(pooled("foo").unwrap().version_req.as_deref(), Some("1.2"));
         assert!(!pooled("foo").unwrap().inherited);
-        assert_eq!(pooled("bar").unwrap().version_req.as_str(), "3");
+        assert_eq!(pooled("bar").unwrap().version_req.as_deref(), Some("3"));
 
         let member = facts(
             "crates/x/Cargo.toml",
@@ -450,6 +451,11 @@ bar = { version = "3", features = ["derive"] }
             .find(|d| d.name == "foo")
             .unwrap();
         assert!(dep.inherited);
-        assert_eq!(dep.version_req.as_str(), "workspace"); // placeholder, resolved during assembly
+        assert_eq!(
+            dep.version_req, None,
+            "unknown here by construction — the real value lives in whichever manifest \
+             declares the pool, and assembly resolves it before anything compares it. A \
+             readable placeholder string was worse than nothing: `version-skew` compared it."
+        );
     }
 }

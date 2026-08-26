@@ -269,7 +269,7 @@ mod tests {
             package: PackageId(0),
             manifest: ProjectPath(SmolStr::new("package.json")),
             name: SmolStr::new(name),
-            version_req: SmolStr::new("^1.0.0"),
+            version_req: Some(SmolStr::new("^1.0.0")),
             scope,
         }
     }

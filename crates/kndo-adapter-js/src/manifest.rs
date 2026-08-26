@@ -316,7 +316,9 @@ fn collect_dependencies(
             for (name, version) in map {
                 deps.push(ManifestDependency {
                     name: SmolStr::new(name),
-                    version_req: SmolStr::new(version.as_str().unwrap_or("")),
+                    // npm's `"*"` is a REAL declared requirement and stays one; a non-string
+                    // value is the only shape that states nothing.
+                    version_req: version.as_str().map(SmolStr::new),
                     scope,
                     inherited: false,
                 });

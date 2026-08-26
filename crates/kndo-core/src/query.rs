@@ -2175,7 +2175,7 @@ mod tests {
                 package: PackageId(0),
                 manifest: ProjectPath(SmolStr::new("package.json")),
                 name: SmolStr::new("lodash"),
-                version_req: SmolStr::new("^4"),
+                version_req: Some(SmolStr::new("^4")),
                 scope: DependencyScope::Prod,
             }],
         )
@@ -2260,7 +2260,7 @@ mod tests {
                 package: PackageId(0),
                 manifest: ProjectPath("package.json".into()),
                 name: "never-imported".into(),
-                version_req: "^1".into(),
+                version_req: Some("^1".into()),
                 scope: DependencyScope::Dev,
             }]);
         let resolved = resolve(&graph, &Selector::Dependency("never-imported".into())).unwrap();
@@ -2895,7 +2895,7 @@ mod tests {
                 package: PackageId(0),
                 manifest: ProjectPath(SmolStr::new("package.json")),
                 name: SmolStr::new("lodash"),
-                version_req: SmolStr::new("*"),
+                version_req: Some(SmolStr::new("*")),
                 scope: DependencyScope::Prod,
             },
         ])

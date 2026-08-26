@@ -186,7 +186,7 @@ fn package_dependency(call: Node, src: &[u8]) -> Option<ManifestDependency> {
     let url = string_literal_text(url_node, src)?;
     Some(ManifestDependency {
         name: SmolStr::new(dependency_name_from_url(&url)),
-        version_req: SmolStr::new(dependency_version_req(call, src)),
+        version_req: dependency_version_req(call, src).map(SmolStr::new),
         scope: DependencyScope::Prod,
         inherited: false,
     })
@@ -197,11 +197,14 @@ fn dependency_name_from_url(url: &str) -> String {
     last.strip_suffix(".git").unwrap_or(last).to_string()
 }
 
-fn dependency_version_req(call: Node, src: &[u8]) -> String {
+/// The declared requirement across SwiftPM's several spellings, or `None` when the call names
+/// none of them — a `.package(path:)` local dependency, or a branch/revision pin. That is not
+/// "any version": it is a manifest stating no comparable requirement, and `version-skew` has to
+/// be able to tell the two apart.
+fn dependency_version_req(call: Node, src: &[u8]) -> Option<String> {
     VERSION_ARG_LABELS
         .iter()
         .find_map(|label| labeled_arg(call, label, src).and_then(|v| string_literal_text(v, src)))
-        .unwrap_or_else(|| "*".to_string())
 }
 
 // ---------------------------------------------------------------- targets & root promotion
@@ -349,7 +352,7 @@ let package = Package(
         assert!(!f.private, "a library product makes the package public");
         assert_eq!(f.workspace_members, vec!["MyLib", "MyLibTests"]);
         let dep = f.dependencies.iter().find(|d| d.name == "bar").unwrap();
-        assert_eq!(dep.version_req, "1.0.0");
+        assert_eq!(dep.version_req.as_deref(), Some("1.0.0"));
         assert_eq!(dep.scope, DependencyScope::Prod);
     }
 
@@ -394,6 +397,6 @@ let package = Package(
 "#;
         let f = facts(src, &[]);
         let dep = f.dependencies.iter().find(|d| d.name == "x").unwrap();
-        assert_eq!(dep.version_req, "main");
+        assert_eq!(dep.version_req.as_deref(), Some("main"));
     }
 }

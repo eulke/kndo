@@ -674,14 +674,23 @@ pub struct StringCallArg {
 #[derive(Debug, Clone)]
 pub struct ManifestDependency {
     pub name: SmolStr,
-    pub version_req: SmolStr,
+    /// The declared version requirement, when the manifest declares one at all.
+    ///
+    /// `None` is not "any version" — it is **"this manifest states no comparable
+    /// requirement"**, which is a different fact and has to be representable as one. A
+    /// BOM/platform-managed JVM coordinate (`implementation 'io.insert-koin:koin-ktor'`) names
+    /// no version by design; a Cargo path/git dependency constrains nothing; a `go.mod`
+    /// `require` line can be truncated. Encoding all of those as `"*"` collided with npm's
+    /// `"*"`, which IS a real, declared requirement — and made `version-skew` compare a
+    /// sentinel against a version and call the difference a defect.
+    pub version_req: Option<SmolStr>,
     pub scope: DependencyScope,
-    /// True when `version_req` is a placeholder — the real requirement lives in a
+    /// True when the real requirement lives in a
     /// project-wide shared version pool instead of this manifest (Cargo's
     /// `{ workspace = true }` today; the mechanism generalizes to any adapter with an
     /// equivalent concept — pnpm/Gradle version catalogs, etc.). Resolved against
     /// [`ManifestFacts::workspace_dependencies`] during graph assembly, before any analysis
-    /// ever sees the value — `version_req` here is not meaningful to compare directly.
+    /// ever sees the value; `version_req` here is `None` until it is.
     pub inherited: bool,
 }
 

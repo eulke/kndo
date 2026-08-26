@@ -16,10 +16,20 @@ use crate::vocab::{Category, Confidence, Group, SubjectKind};
 pub fn find_version_skew(graph: &ProjectGraph) -> Vec<Finding> {
     let mut by_name: BTreeMap<&str, Vec<(&str, &str)>> = BTreeMap::new();
     for dep in &graph.declared_dependencies {
+        // A manifest that states no comparable requirement — a BOM/platform-managed JVM
+        // coordinate, a Cargo path dependency, a workspace inheritance no pool resolved — is
+        // not evidence of anything here. It used to arrive as `"*"` and diverge from every
+        // real version, which is how spring-petclinic, mockito, Exposed, koin and
+        // kotlinx.coroutines each drew skew findings over dependencies that agree perfectly.
+        // Silence is the only honest reading: a comparison the code knows it could not
+        // perform must not produce a `certain` finding.
+        let Some(version) = &dep.version_req else {
+            continue;
+        };
         by_name
             .entry(dep.name.as_str())
             .or_default()
-            .push((dep.manifest.0.as_str(), dep.version_req.as_str()));
+            .push((dep.manifest.0.as_str(), version.as_str()));
     }
 
     let mut findings = Vec::new();
@@ -78,9 +88,55 @@ mod tests {
             package: crate::vocab::PackageId(0),
             manifest: ProjectPath(SmolStr::new(manifest)),
             name: SmolStr::new(name),
-            version_req: SmolStr::new(version_req),
+            version_req: Some(SmolStr::new(version_req)),
             scope: DependencyScope::Prod,
         }
+    }
+
+    fn unknown(manifest: &str, name: &str) -> DeclaredDependency {
+        DeclaredDependency {
+            version_req: None,
+            ..declared(manifest, name, "")
+        }
+    }
+
+    #[test]
+    fn a_manifest_stating_no_requirement_is_not_evidence_of_skew() {
+        // The BOM-managed shape: one module pins the version, the others take it from an
+        // imported BOM. They agree perfectly. Encoding "states nothing" as `"*"` made every
+        // real version diverge from it — a finding on every JVM repository in the field audit.
+        let graph = ProjectGraph::for_test(vec![], vec![], vec![], vec![])
+            .with_declared_dependencies(vec![
+                declared(
+                    "app/build.gradle",
+                    "org.springframework.boot:starter",
+                    "3.2.0",
+                ),
+                unknown("web/build.gradle", "org.springframework.boot:starter"),
+                unknown("api/build.gradle", "org.springframework.boot:starter"),
+            ]);
+        assert!(find_version_skew(&graph).is_empty());
+    }
+
+    #[test]
+    fn two_known_versions_still_skew_with_an_unknown_alongside() {
+        // The unknown is dropped, not treated as agreement: a real disagreement between the
+        // two manifests that DID state a requirement is still a finding.
+        let graph = ProjectGraph::for_test(vec![], vec![], vec![], vec![])
+            .with_declared_dependencies(vec![
+                declared("a/build.gradle", "com.other:lib", "1.0"),
+                declared("b/build.gradle", "com.other:lib", "2.0"),
+                unknown("c/build.gradle", "com.other:lib"),
+            ]);
+        let findings = find_version_skew(&graph);
+        assert_eq!(findings.len(), 1);
+        assert!(findings[0].message.contains("1.0"));
+        assert!(findings[0].message.contains("2.0"));
+        assert!(
+            !findings[0].message.contains("c/build.gradle"),
+            "the manifest that states nothing is not cited as evidence: {}",
+            findings[0].message
+        );
     }
 
     #[test]

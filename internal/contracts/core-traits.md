@@ -445,7 +445,22 @@ pub struct ManifestFacts {
     pub package_name:       Option<SmolStr>,
     pub private:            bool,                    // publish signal: true → app mode (RFC 0011 §5)
     pub workspace_members:  Vec<SmolStr>,             // workspace globs (RFC 0011 §3)
-    pub dependencies:       Vec<ManifestDependency>,  // { name, version_req, scope: DependencyScope }
+    pub dependencies:       Vec<ManifestDependency>,  // { name, version_req: Option<Name>,
+                                             //   scope: DependencyScope, inherited: bool }
+                                             // version_req None = this manifest states no
+                                             // COMPARABLE requirement, which is a different
+                                             // fact from "any version" and has to be
+                                             // representable as one: a BOM/platform-managed
+                                             // JVM coordinate names no version by design, a
+                                             // Cargo path/git dep constrains nothing, a
+                                             // SwiftPM branch pin is not a range, an
+                                             // unresolved `${property}` is not a value.
+                                             // Encoding all of those as "*" collided with
+                                             // npm's "*", which IS a declared requirement,
+                                             // and made version-skew compare a sentinel
+                                             // against a version and call it a defect.
+                                             // `inherited` deps arrive None and are resolved
+                                             // against workspace_dependencies at assembly.
     pub entry_points:       Vec<SmolStr>,             // main/module/exports/bin/types, raw and
                                                        // unresolved — future self-import resolution
                                                        // input; NOT the root-worthiness signal

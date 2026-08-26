@@ -468,34 +468,38 @@ impl LanguageAdapter for MockAdapter {
             if let Some(name) = line.strip_prefix("dep ") {
                 facts.dependencies.push(ManifestDependency {
                     name: SmolStr::new(name),
-                    version_req: SmolStr::new("*"),
+                    // `dep <name>` states no requirement — the shape a BOM-managed JVM
+                    // coordinate or a Cargo path dependency has. `dep-version` is the
+                    // directive for a declared one.
+                    version_req: None,
                     scope: DependencyScope::Prod,
                     inherited: false,
                 });
             } else if let Some(name) = line.strip_prefix("dep-inherited ") {
                 facts.dependencies.push(ManifestDependency {
                     name: SmolStr::new(name),
-                    version_req: SmolStr::new("workspace"),
+                    // Unknown until assembly resolves it against the shared pool.
+                    version_req: None,
                     scope: DependencyScope::Prod,
                     inherited: true,
                 });
             } else if let Some(rest) = line.strip_prefix("dep-version ") {
                 let mut parts = rest.splitn(2, ' ');
                 let name = parts.next().unwrap_or("");
-                let version_req = parts.next().unwrap_or("*");
+                let version_req = parts.next();
                 facts.dependencies.push(ManifestDependency {
                     name: SmolStr::new(name),
-                    version_req: SmolStr::new(version_req),
+                    version_req: version_req.map(SmolStr::new),
                     scope: DependencyScope::Prod,
                     inherited: false,
                 });
             } else if let Some(rest) = line.strip_prefix("workspace-dep ") {
                 let mut parts = rest.splitn(2, ' ');
                 let name = parts.next().unwrap_or("");
-                let version_req = parts.next().unwrap_or("*");
+                let version_req = parts.next();
                 facts.workspace_dependencies.push(ManifestDependency {
                     name: SmolStr::new(name),
-                    version_req: SmolStr::new(version_req),
+                    version_req: version_req.map(SmolStr::new),
                     scope: DependencyScope::Prod,
                     inherited: false,
                 });

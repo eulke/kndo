@@ -131,10 +131,10 @@ fn strip_line_comment(line: &str) -> &str {
 fn parse_require_entry(entry: &str) -> Option<ManifestDependency> {
     let mut parts = entry.split_whitespace();
     let name = parts.next()?;
-    let version = parts.next().unwrap_or("");
     Some(ManifestDependency {
         name: SmolStr::new(name),
-        version_req: SmolStr::new(version),
+        // A `require` line always carries a version; a truncated one states none.
+        version_req: parts.next().map(SmolStr::new),
         scope: DependencyScope::Prod,
         inherited: false,
     })
@@ -167,7 +167,10 @@ mod tests {
         );
         assert_eq!(facts.dependencies.len(), 1);
         assert_eq!(facts.dependencies[0].name.as_str(), "golang.org/x/net");
-        assert_eq!(facts.dependencies[0].version_req.as_str(), "v0.10.0");
+        assert_eq!(
+            facts.dependencies[0].version_req.as_deref(),
+            Some("v0.10.0")
+        );
         assert_eq!(facts.dependencies[0].scope, DependencyScope::Prod);
     }
 

@@ -246,8 +246,11 @@ pub struct DeclaredDependency {
     pub manifest: ProjectPath,
     #[rkyv(with = crate::rkyv_support::SmolStrAsString)]
     pub name: SmolStr,
-    #[rkyv(with = crate::rkyv_support::SmolStrAsString)]
-    pub version_req: SmolStr,
+    /// Mirrors [`crate::adapter::ManifestDependency::version_req`], with `inherited`
+    /// already resolved against the shared pool: `None` means this manifest states no
+    /// comparable requirement, never "any version".
+    #[rkyv(with = rkyv::with::Map<crate::rkyv_support::SmolStrAsString>)]
+    pub version_req: Option<SmolStr>,
     pub scope: DependencyScope,
 }
 

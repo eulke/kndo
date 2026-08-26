@@ -208,7 +208,7 @@ mod tests {
                 package: PackageId(0),
                 manifest: ProjectPath(SmolStr::new("package.json")),
                 name: SmolStr::new("lodash"),
-                version_req: SmolStr::new("^4.0.0"),
+                version_req: Some(SmolStr::new("^4.0.0")),
                 scope: DependencyScope::Prod,
             }]);
         assert!(find_undeclared_dependencies(&graph).is_empty());
@@ -340,7 +340,7 @@ mod tests {
                 package: PackageId(1),
                 manifest: ProjectPath(SmolStr::new("packages/a/package.json")),
                 name: SmolStr::new("chalk"),
-                version_req: SmolStr::new("^5.0.0"),
+                version_req: Some(SmolStr::new("^5.0.0")),
                 scope: DependencyScope::Prod,
             }]);
 

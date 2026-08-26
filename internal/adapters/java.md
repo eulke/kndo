@@ -279,6 +279,7 @@ computed is silently invisible, not misparsed).
 | `package.json` concept | Maven equivalent | notes |
 |---|---|---|
 | `name` | `groupId:artifactId` (from `<groupId>`/`<artifactId>`, `<groupId>` falling back to `<parent><groupId>` when omitted — the common parent-inherits pattern) | the two-part coordinate IS the module's cross-module identity; `<version>` similarly falls back to `<parent><version>` |
+| a dependency's `<version>` | `ManifestDependency::version_req`, with `<properties>` substituted | **absent is `None`**, not `"*"` — a `<dependency>` with no `<version>` is the BOM-managed shape, and `dependencyManagement` in a parent POM is out of reach by construction (kndo never resolves the classpath) |
 | `private: true` | `<packaging>` ≠ `jar` (default) | Maven has no `private` flag at all — every `jar`-packaging module is nominally publishable by omission, matching npm's own asymmetric default; `pom` (aggregator, no code) and `war` (deployable app, not an importable dependency) are the two packagings this adapter treats as `private: true` |
 | `workspaces` | `<modules>`/`<module>` (aggregator POM) | `ManifestFacts::workspace_members`, one entry per `<module>` text — RFC 0011 §3 |
 | dependency scopes | `<dependency><scope>` | `compile`/omitted → `Prod`; `test` → `Dev`; `provided` → `Peer` (supplied by the runtime environment, not bundled — same "contract with the consumer" semantics as npm peerDependencies); `runtime` → `Prod` (a documented approximation — genuinely used at runtime, just not compile-visible; kndo's taxonomy has no runtime-only scope); `system` → `Prod` (rare, deprecated); entries inside `<dependencyManagement>` are version pins for *children*, not real dependencies of *this* module — never collected |
@@ -286,10 +287,24 @@ computed is silently invisible, not misparsed).
 | `scripts` | *(no equivalent)* | no script-runner convention in Maven itself |
 
 **Gradle (`build.gradle`/`.kts`)**: line-scanned for the `dependencies { … }` block's literal-
-string entries only (`implementation "com.foo:bar:1.0"`, `testImplementation("com.foo:bar:1.0")`,
-version catalogs' `libs.foo` references and any computed/variable-interpolated coordinate are
-invisible — not misparsed, simply not seen, same honesty as go.mod's `exclude`-globs-not-
-expanded stance). Configuration → scope: `implementation`/`api`/`compile` (legacy) → `Prod`;
+string entries only (version catalogs' `libs.foo` references are invisible — not misparsed,
+simply not seen, same honesty as go.mod's `exclude`-globs-not-expanded stance).
+
+A coordinate is split **by segment count, never by the last colon**. Three segments
+(`com.foo:bar:1.0`) is `name = com.foo:bar`, `version = 1.0`. **Two segments
+(`org.springframework.boot:spring-boot-starter-actuator`) is a complete coordinate whose
+version an imported BOM supplies — the name is the whole thing and there is no version.**
+Splitting on the last colon read that as version `spring-boot-starter-actuator` of a
+dependency named `org.springframework.boot`, which is why `version-skew` reported *artifact
+ids* as diverging versions on every JVM repository the field audit covered
+(`internal/detection-gaps.md` §17).
+
+`$var` / `${var}` version placeholders resolve against the manifest's own pool — Gradle's
+`val`/`def`/`var x = "1.2.3"`, Maven's `<properties>`. What the file itself cannot answer
+(`gradle.properties`, a version catalog, a parent POM's properties) stays **unknown**, never
+the literal: koin declares `val jmhVersion = "1.36"` two lines above its use, and
+kotlinx.coroutines spells one `gradle.properties` key `$junit5Version` in one module and
+`$junit5_version` in another — comparing those strings was pure noise. Configuration → scope: `implementation`/`api`/`compile` (legacy) → `Prod`;
 `testImplementation`/`testCompile`(legacy)/`testRuntimeOnly` → `Dev`; `compileOnly` → `Peer`
 (provided-equivalent); `runtimeOnly`/`runtime`(legacy) → `Prod`; `annotationProcessor`/
 `testAnnotationProcessor` → `Build` (a build-time-only tool, Cargo's build-dependencies

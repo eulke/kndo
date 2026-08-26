@@ -1123,7 +1123,7 @@ mod tests {
             package: PackageId(0),
             manifest: ProjectPath("package.json".into()),
             name: "lodash".into(),
-            version_req: "^4".into(),
+            version_req: Some("^4".into()),
             scope: crate::vocab::DependencyScope::Prod,
         }])
         .with_suppressions(vec![(
