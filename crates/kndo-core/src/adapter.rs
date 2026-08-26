@@ -634,8 +634,15 @@ pub struct FileFacts {
     rkyv::Deserialize,
 )]
 pub struct RawMemberType {
-    #[rkyv(with = crate::rkyv_support::SmolStrAsString)]
-    pub owner: SmolStr,
+    /// The type whose member this is — or `None` for a FREE FUNCTION, where the fact reads
+    /// "calling `member` evaluates to `yields`" rather than "accessing `owner.member`
+    /// does". The two are the same statement about a value's type, and the core walks them
+    /// with the same chain machinery: a `None`-owner fact simply applies where a pointer's
+    /// BASE names the function, before any member segment. Without it `let entry =
+    /// parse_entry(..); entry.path` types as nothing, and `path`'s owner reads as
+    /// file-local (`internal/detection-gaps.md` §3).
+    #[rkyv(with = rkyv::with::Map<crate::rkyv_support::SmolStrAsString>)]
+    pub owner: Option<SmolStr>,
     #[rkyv(with = crate::rkyv_support::SmolStrAsString)]
     pub member: SmolStr,
     /// The BASE type name the access evaluates to, dispatch-reduced by the adapter

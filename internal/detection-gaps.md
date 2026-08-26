@@ -52,18 +52,38 @@ ecosystem — "a type named in `#[rkyv(with = …)]` has its trait-impl members
 machinery-invoked," the same curated-list pattern as `implicitly_invoked` for operator
 overloads/formatting hooks. Acknowledged with a file pragma in `rkyv_support.rs`.
 
-## 3. Field-access recall on inferred-typed locals
+## 3. Field-access recall on inferred-typed locals (3 de 4 CERRADOS)
 
-A struct whose fields are only ever read through a local of *inferred* type never shows
-field usage: in `let entry = parse_entry(..); entry.path`, the receiver's type comes from
-the callee's return type, which the extraction-side `TypeEnv` doesn't chase — so the field
-reference lands in the duck fallback (or nowhere), and `internal-only` sees "no use
-requires this visibility". Live examples in this repo: `gitutil::TreeEntry`
-(consumed in `discovery.rs` through locals), `rollup::DirRollup`, and the plugin sink item
-types (`ContributedRoot`/`ContributedEdge`, read via `root_sink.items` in `graph.rs`).
-Direction: propagate declared types through let-bindings whose initializer has a known
-shape (a call to a function with a declared return type, a struct literal) — bounded type
-propagation, not inference. Acknowledged with declaration pragmas at the affected types.
+A struct whose fields are only ever read through a local of *inferred* type never showed field
+usage: in `let entry = parse_entry(..); entry.path`, the receiver's type comes from the callee's
+return type, which the extraction-side `TypeEnv` didn't chase — so the field reference landed in
+the duck fallback (or nowhere), and `internal-only` saw "no use requires this visibility". Four
+live cases in this repo, each acknowledged with a declaration pragma.
+
+**Lo que cerró, y el mecanismo de cada uno.** `RawMemberType::owner` pasó a `Option`: `None`
+significa *función libre* — "llamar a esto evalúa a T", el mismo enunciado sobre el tipo de un
+valor que `Some(owner)` hace sobre un miembro, así que el core lo camina con la misma maquinaria
+de cadena, aplicada a la BASE del puntero un paso antes de donde `chain_hop` actúa sobre un
+segmento (RFC 0012 §3-ter). Sobre eso:
+
+- **`rollup::DirRollup`** — pedía que la base de un puntero pudiera ser un **qualifier** y no un
+  símbolo: `use …::rollup;` liga el módulo, nunca `directory_rollups`, así que el puntero moría en
+  su primer segmento. `pointer_base` resuelve la base contra la tabla de qualifiers y consume el
+  segmento siguiente como el símbolo dentro de ese archivo.
+- **`ContributedRoot` / `ContributedEdge`** — pedían dos cosas: que `#[derive(Default)]` sea un
+  hecho declarado (`RootSink::default()` apuntaba a un miembro que ningún impl declara) y que la
+  variable de un `for` proyecte el elemento del iterable.
+- **`gitutil::TreeEntry`** — sigue abierto, y es el único. Se lee por
+  `ls_tree(..).map_err(..)?` y después se itera: el tipo del elemento es un parámetro de un
+  parámetro (`Result<Vec<TreeEntry>, GitError>`) y `yields_params` guarda **un solo nivel**, así
+  que el `TreeEntry` no está en los hechos — se perdió al aplanar. Cerrarlo pide que la cadena
+  lleve una *expresión de tipo* en vez de un nombre, y que el adapter pueda declarar qué hacen los
+  genéricos de la stdlib. Es un cambio de contrato propio con su propia medición; el pragma en
+  `crates/kndo-core/src/gitutil.rs` dice exactamente eso.
+
+**Medición.** kndo sobre sí mismo queda en 37 findings / health 96.6 — idéntico al baseline — con
+**tres pragmas menos**. Que el número no se mueva es el punto: los tres tipos dejaron de necesitar
+supresión porque el grafo ahora ve a sus consumidores, no porque se haya silenciado nada.
 
 ## 4. Recall asymmetry — the regression corpus
 
@@ -72,6 +92,11 @@ The mirror image of #3, kept as a regression corpus for whoever implements it:
 draws **no** finding today (its usage happens to resolve through a path the fallback
 catches). Any change to reference recall should check both directions on these sites — the
 goal is symmetric behavior, not moving the false positives around.
+
+**Medido para §3.** `BlobFetcher::spawn` sigue sin producir finding, y los otros seis targets del
+audit (serde 348, alacritty 994, axios 72, Exposed 1128, kotlinx.coroutines 2904, vapor 764) no se
+movieron en ninguna dirección: ni un finding nuevo ni uno perdido. La simetría es el resultado, no
+una intención.
 
 ## 5. Duplicate-group label ambiguity
 

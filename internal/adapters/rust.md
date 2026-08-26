@@ -288,7 +288,28 @@ today's behavior — the core never settles on a receiver-typed qualifier) or hi
 the named type genuinely declares — both degrade toward silence, never toward accusation.
 **Member-type facts (the cross-file tier, `FileFacts::member_types`)** — every struct
 field (named and tuple-positional), impl method return type, and associated const emits an
-`(owner, member, yields)` fact, dispatch-reduced, `Self` resolved to the owner. Member
+`(owner, member, yields)` fact, dispatch-reduced, `Self` resolved to the owner. Three more
+producers, all of them *declared* facts rather than inference (RFC 0012 §3-ter):
+
+- **Every top-level `fn`'s return type**, as an OWNER-LESS fact — "calling this evaluates to
+  that". `let entry = parse_entry(..); entry.path` has no receiver to read a type off anything
+  else, and without the fact the type `parse_entry` returns looks used only where it is declared.
+  `Self` is left alone there: a free function has no impl around it, so the name simply resolves
+  to nothing.
+- **`#[derive(Default)]`** → `(T, default) → T`. The derive states that the impl exists and the
+  trait's signature states what it returns — the same curated-stdlib knowledge
+  `is_machinery_trait` carries, and no derive means no fact.
+- **A `for` variable** binds `{iterable}?0` — the element is parameter 0 of the collection's
+  declared type, which the projection marker below already expresses. Only a CHAIN qualifies:
+  a local's own annotation kept just its base name, and `Vec` alone has no parameters to project.
+
+A CALL initializer types its binding by naming the FUNCTION, never by guessing its return: a bare
+callee binds its own name, and a module-qualified one binds the pointer that matches what the
+path's reconstructed import puts in scope — the trailing name for a `crate`/`self`/`super`-rooted
+path (the import binds it), `module.function` for a bare-rooted one (the import binds the module,
+and the core resolves that base through the qualifier table). Where the path crosses into type
+space first (`crate::plugin::RootSink::default`), the type is what ends up in scope, so the
+pointer is `RootSink.default` — the same split `emit_path` makes for the import itself. Member
 accesses whose base is typed but whose own type is not locally knowable emit a one-hop
 dotted POINTER qualifier — `low.context_separator.into_bytes()` → `LowArgs.context_separator`,
 `Builder::new().opt(x)` → `Builder.new` — which the core resolves hop by hop through the

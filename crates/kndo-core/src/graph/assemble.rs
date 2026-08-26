@@ -777,8 +777,14 @@ pub(crate) fn resolve_references(
                     // access and falls through to the duck-typed fallback exactly like a
                     // receiver expression.
                     let targets = if q.contains('.') {
-                        let (targets, yielded_types) =
-                            chained_member_targets(q, &reference.name, bound_symbols, i, t);
+                        let (targets, yielded_types) = chained_member_targets(
+                            q,
+                            &reference.name,
+                            bound_symbols,
+                            qualifier_targets,
+                            i,
+                            t,
+                        );
                         // Reaching a value THROUGH a member uses its type from this file —
                         // every resolved hop's type, not just the last (without these edges
                         // a type consumed only via fields read as file-local and
@@ -798,7 +804,14 @@ pub(crate) fn resolve_references(
                         }
                         targets
                     } else {
-                        in_scope_member_targets(q, &reference.name, bound_symbols, i, t)
+                        in_scope_member_targets(
+                            q,
+                            &reference.name,
+                            bound_symbols,
+                            qualifier_targets,
+                            i,
+                            t,
+                        )
                     };
                     if !targets.is_empty() {
                         for to in targets {
@@ -1324,24 +1337,95 @@ pub(crate) fn in_scope_member_targets(
     q: &str,
     name: &str,
     bound_symbols: &HashMap<SmolStr, SymbolId>,
+    qualifier_targets: &HashMap<SmolStr, (FileId, bool)>,
     i: usize,
     t: &ResolveTables<'_>,
 ) -> Vec<SymbolId> {
-    let in_scope = bound_symbols
-        .get(q)
-        .or_else(|| t.symbol_by_name_per_file[i].get(q));
-    match in_scope {
-        Some(&bound) => {
-            let owner = &t.symbols[bound.0 as usize];
-            let home = owner.file.0 as usize;
-            qualified_member_targets(
-                &t.symbol_by_qualified_per_file[home],
-                &t.qualified_twins_per_file[home],
-                format!("{}.{}", owner.name, name).as_str(),
-            )
-        }
-        None => Vec::new(),
+    let mut segments = q.split('.');
+    let (base, base_projection) = split_projection(segments.next().unwrap_or(""));
+    let Some((bound, qualified_projection)) =
+        pointer_base(&mut segments, base, bound_symbols, qualifier_targets, i, t)
+    else {
+        return Vec::new();
+    };
+    // A base naming a FREE FUNCTION is a call result, not a namespace: `let entry =
+    // parse_entry(..)` types `entry` by what `parse_entry` yields, so the member lives on
+    // that type, not on the function. A function with no such fact keeps the old reading
+    // (nothing named `fn.member` exists, so the lookup misses into the duck fallback).
+    let projection = qualified_projection.or(base_projection);
+    let bound = call_yield(bound, projection, bound_symbols, i, t).unwrap_or(bound);
+    let owner = &t.symbols[bound.0 as usize];
+    let home = owner.file.0 as usize;
+    qualified_member_targets(
+        &t.symbol_by_qualified_per_file[home],
+        &t.qualified_twins_per_file[home],
+        format!("{}.{}", owner.name, name).as_str(),
+    )
+}
+
+/// A pointer's base, resolved to a symbol and the segments still to walk. Two shapes:
+///
+///  * a NAME in scope — an import binding or a same-file declaration (`config.separator`);
+///  * a QUALIFIER — a module the file imported, whose NEXT segment names the symbol
+///    (`rollup.directory_rollups`, from `use …::rollup;` + `rollup::directory_rollups(..)`).
+///    Rust code reaches free functions through their module constantly, and without this arm
+///    the pointer died at its first segment: `let rolled = rollup::directory_rollups(..)`
+///    typed `rolled` as nothing and every field it reads looked file-local
+///    (`internal/detection-gaps.md` §3).
+///
+/// Language-blind: the qualifier table is whatever the adapters said their imports bind, and
+/// the lookup inside the target is the same bare/unit pair every other tier uses.
+fn pointer_base<'s>(
+    segments: &mut std::str::Split<'s, char>,
+    base: &str,
+    bound_symbols: &HashMap<SmolStr, SymbolId>,
+    qualifier_targets: &HashMap<SmolStr, (FileId, bool)>,
+    i: usize,
+    t: &ResolveTables<'_>,
+) -> Option<(SymbolId, Option<usize>)> {
+    if let Some(&symbol) = bound_symbols
+        .get(base)
+        .or_else(|| t.symbol_by_name_per_file[i].get(base))
+    {
+        return Some((symbol, None));
     }
+    let &(target, _) = qualifier_targets.get(base)?;
+    let (name, projection) = split_projection(segments.next()?);
+    let home = target.0 as usize;
+    let symbol = t.symbol_by_name_per_file[home]
+        .get(name)
+        .or_else(|| {
+            t.file_unit[home].as_ref().and_then(|unit| {
+                t.symbol_by_name_per_unit
+                    .get(unit)
+                    .and_then(|u| u.get(name))
+            })
+        })
+        .copied()?;
+    Some((symbol, projection))
+}
+
+/// The type a symbol EVALUATES to when it is a free function the adapter typed: a
+/// `None`-owner member-type fact in the function's own home file
+/// ([`crate::adapter::RawMemberType::owner`]). `None` for everything else — a type used as
+/// a qualifier is itself, and an untyped function yields nothing knowable.
+///
+/// It is the same hop [`chain_hop`] performs, one step earlier: applied to a pointer's BASE
+/// rather than to a member segment, so `parse_entry.path` and `config.build?.terminator`
+/// walk one machinery. The projection marker composes for the same reason
+/// (`let x = parse_entry(..)?` yields the Ok type, parameter 0).
+pub(crate) fn call_yield(
+    symbol: SymbolId,
+    projection: Option<usize>,
+    bound_symbols: &HashMap<SmolStr, SymbolId>,
+    i: usize,
+    t: &ResolveTables<'_>,
+) -> Option<SymbolId> {
+    let function = &t.symbols[symbol.0 as usize];
+    let home = function.file.0 as usize;
+    let fact = t.member_types_per_file[home].get(&(None, function.name.clone()))?;
+    let type_name = hop_type_name(fact, projection)?;
+    resolve_annotation_name(type_name, home, bound_symbols, i, t)
 }
 
 /// A dotted qualifier pointer `Base.member` (the cross-file tier): the
@@ -1354,19 +1438,26 @@ pub(crate) fn chained_member_targets(
     pointer: &str,
     name: &str,
     bound_symbols: &HashMap<SmolStr, SymbolId>,
+    qualifier_targets: &HashMap<SmolStr, (FileId, bool)>,
     i: usize,
     t: &ResolveTables<'_>,
 ) -> (Vec<SymbolId>, Vec<SymbolId>) {
     let mut segments = pointer.split('.');
-    let base = segments.next().unwrap_or("");
-    let base_symbol = bound_symbols
-        .get(base)
-        .or_else(|| t.symbol_by_name_per_file[i].get(base));
-    let Some(&base_symbol) = base_symbol else {
+    let (base, base_projection) = split_projection(segments.next().unwrap_or(""));
+    let Some((base_symbol, qualified_projection)) =
+        pointer_base(&mut segments, base, bound_symbols, qualifier_targets, i, t)
+    else {
         return (Vec::new(), Vec::new());
     };
     let mut current = base_symbol;
     let mut yielded_types = Vec::new();
+    // The base may itself be a call whose result the chain continues from
+    // (`parse_entry.parent.name`). Same hop, same credit: the yielded type is READ here.
+    let projection = qualified_projection.or(base_projection);
+    if let Some(yielded) = call_yield(base_symbol, projection, bound_symbols, i, t) {
+        current = yielded;
+        yielded_types.push(yielded);
+    }
     for segment in segments {
         let Some(next) = chain_hop(current, segment, bound_symbols, i, t) else {
             return (Vec::new(), yielded_types);
@@ -1400,7 +1491,8 @@ pub(crate) fn chain_hop(
     let (member, projection) = split_projection(segment);
     let owner = &t.symbols[current.0 as usize];
     let home = owner.file.0 as usize;
-    let fact = t.member_types_per_file[home].get(&(owner.name.clone(), SmolStr::new(member)))?;
+    let fact =
+        t.member_types_per_file[home].get(&(Some(owner.name.clone()), SmolStr::new(member)))?;
     let type_name = hop_type_name(fact, projection)?;
     resolve_annotation_name(type_name, home, bound_symbols, i, t)
 }
@@ -1456,7 +1548,9 @@ pub(crate) fn resolve_annotation_name(
 }
 
 /// One file's member-type facts as a lookup: (owner, member) → (yields, yields_params).
-pub(crate) type MemberTypeIndex = HashMap<(SmolStr, SmolStr), (SmolStr, Vec<SmolStr>)>;
+/// A `None` owner is a FREE FUNCTION fact — "calling this evaluates to that" (see
+/// [`crate::adapter::RawMemberType::owner`] and [`call_yield`]).
+pub(crate) type MemberTypeIndex = HashMap<(Option<SmolStr>, SmolStr), (SmolStr, Vec<SmolStr>)>;
 
 pub(crate) fn index_member_types(entries: &[crate::adapter::RawMemberType]) -> MemberTypeIndex {
     entries
@@ -1560,7 +1654,7 @@ pub(crate) fn surface_signature(
         dynamics: Vec<(&'a str, Option<&'a str>)>,
         /// Member-type facts are cross-file resolution inputs: a changed
         /// field/return annotation changes what other files' chained qualifiers resolve to.
-        member_types: Vec<(&'a str, &'a str, &'a str, Vec<&'a str>)>,
+        member_types: Vec<(Option<&'a str>, &'a str, &'a str, Vec<&'a str>)>,
     }
     let view = View {
         adapter_id,
@@ -1628,7 +1722,7 @@ pub(crate) fn surface_signature(
             .iter()
             .map(|m| {
                 (
-                    m.owner.as_str(),
+                    m.owner.as_deref(),
                     m.member.as_str(),
                     m.yields.as_str(),
                     m.yields_params.iter().map(SmolStr::as_str).collect(),
@@ -1743,7 +1837,7 @@ pub(crate) fn promote_package_relative_test_roles<'a>(
 /// an assembly-algorithm change that could produce a different graph from the same facts. Feeds
 /// [`compute_graph_key`] (the "core graph-schema version"); a bump here invalidates
 /// every project's cached `graph.bin` on the next run, same as any other key-input change.
-pub const GRAPH_SCHEMA_VERSION: u32 = 30; // bump whenever the persisted snapshot shape (rkyv layouts included) or the assembly semantics that derive a graph from the same facts change
+pub const GRAPH_SCHEMA_VERSION: u32 = 31; // bump whenever the persisted snapshot shape (rkyv layouts included) or the assembly semantics that derive a graph from the same facts change
 
 /// The graph snapshot's cache key (`cache.rs`'s `graph.bin`): a single digest
 /// folding in the *whole* discovered file set (every path + content hash — this already

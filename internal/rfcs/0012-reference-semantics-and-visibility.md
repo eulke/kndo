@@ -400,6 +400,34 @@ N hops (each hop a declared fact, each resolved hop's type credited with a Read 
 site); a projection index with no parameter at that position is a miss — duck fallback,
 never a settle.
 
+**§3-ter, a value's type from the call that produced it (M6).** `let entry = parse_entry(..);
+entry.path` — the receiver's type is the callee's declared RETURN, which lives in the callee's
+file. `RawMemberType::owner` is therefore `Option`: `None` reads "calling `member` evaluates to
+`yields`", the same statement about a value's type that `Some(owner)` makes about a member
+access, so the core walks it with the same chain machinery — a `None`-owner fact simply applies
+where a pointer's BASE names the function, one step before `chain_hop` acts on a member segment
+(`call_yield`). The projection marker composes there too: `let cfg = build(..)?` takes parameter 0.
+
+A pointer's base also stopped having to be a symbol. Rust reaches free functions through their
+module constantly (`rollup::directory_rollups(..)`), and there the file binds only the MODULE —
+so `pointer_base` resolves a base that matches no name in scope against the qualifier table,
+consuming the next segment as the symbol inside that target (its bare table, then its unit
+siblings, the same pair every other tier uses). Without that arm the pointer died at its first
+segment and every field the caller read looked file-local.
+
+The adapter side of the same tier is language knowledge, and stays in the adapter: a member-type
+fact for every top-level function's declared return; a fact from `#[derive(Default)]` (the derive
+states the impl exists, the trait's signature states what it returns — curated stdlib knowledge
+like `is_machinery_trait`, not inference); a bare or module-qualified callee typing its binding by
+naming the FUNCTION rather than guessing its return; and a `for` variable projecting the
+iterable's parameter 0, only where the iterable is a chain whose last hop is a declared fact — a
+local's own annotation kept just its base name, so `Vec` alone has no parameter to project.
+
+Measured on this repo: three types that carried an acknowledgement pragma
+(`internal/detection-gaps.md` §3 — `DirRollup`, `ContributedRoot`, `ContributedEdge`) stopped
+needing one, with the finding count and health unchanged and no movement in either direction on
+six other codebases (§4's symmetry requirement).
+
 **§9-bis, the one hop through a module file (M6).** `use crate::internals::{attr, check, Ctxt};`
 followed by `check::check(cx, …)` registered ONE qualifier — the specifier's own target — and
 left `check` a mere binding that resolved to no symbol, because `internals/mod.rs` declares

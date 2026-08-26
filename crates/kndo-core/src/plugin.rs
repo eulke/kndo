@@ -582,7 +582,6 @@ impl PluginTarget {
 }
 
 #[derive(Debug, Clone)]
-// kndo:allow internal-only read through inferred-typed sink items in graph.rs, field accesses the graph cannot attribute (internal/detection-gaps.md §3)
 pub(crate) struct ContributedRoot {
     pub target: PluginTarget,
     pub kind: RootKind,
@@ -608,7 +607,6 @@ impl RootSink {
 }
 
 #[derive(Debug, Clone)]
-// kndo:allow internal-only read through inferred-typed sink items in graph.rs, field accesses the graph cannot attribute (internal/detection-gaps.md §3)
 pub(crate) struct ContributedEdge {
     pub from: PluginTarget,
     pub to: PluginTarget,

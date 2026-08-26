@@ -85,7 +85,7 @@ pub(crate) fn write_tree(repo_root: &Path) -> Result<String, GitError> {
 /// guaranteed UTF-8; the caller decides how to degrade), blob id, and file mode (`100644`
 /// regular, `100755` executable, `120000` symlink, `160000` submodule).
 #[derive(Debug, Clone, PartialEq, Eq)]
-// kndo:allow internal-only read through inferred-typed locals in discovery.rs, field accesses the graph cannot attribute (internal/detection-gaps.md §3)
+// kndo:allow internal-only read through `ls_tree(..).map_err(..)?` then iterated: the element type is a parameter of a parameter (`Result<Vec<TreeEntry>, GitError>`) and member-type facts carry one level (internal/detection-gaps.md §3)
 pub(crate) struct TreeEntry {
     pub(crate) path: Vec<u8>,
     pub(crate) sha: String,

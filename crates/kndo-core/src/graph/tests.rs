@@ -1028,6 +1028,81 @@ fn a_reconstructed_imports_qualifier_does_not_settle_on_a_miss() {
 }
 
 #[test]
+fn a_free_functions_return_type_carries_its_callers_member_access() {
+    // `let entry = parse_entry(..); entry.path` — the receiver's type is the callee's
+    // declared return, which lives in the CALLEE's file. Without the fact travelling,
+    // `TreeEntry.path` has no cross-file use and `internal-only` advises narrowing a type
+    // its own consumers read every day (`internal/detection-gaps.md` §3).
+    let dir = project(
+        "call-yield",
+        &[
+            (
+                "a.mock",
+                "import ./b.mock parse_entry\nqref parse_entry path\nroot-file",
+            ),
+            (
+                "b.mock",
+                "decl parse_entry\ncall-type parse_entry TreeEntry\ndecl TreeEntry\nmember-decl-exported TreeEntry path",
+            ),
+        ],
+    );
+    let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
+    let edges = reference_edges_to(&graph, "path");
+    assert_eq!(edges.len(), 1, "the member must resolve through the yield");
+    assert_eq!(edges[0].confidence, Confidence::Certain);
+}
+
+#[test]
+fn a_call_yield_projects_through_the_unwrap_marker() {
+    // `let cfg = build(..)?` — the projection marker composes with the base hop exactly as
+    // it does with a member one: parameter 0 of `Result<Config, Error>`.
+    let dir = project(
+        "call-yield-projection",
+        &[
+            (
+                "a.mock",
+                "import ./b.mock build\nqref build? separator\nroot-file",
+            ),
+            (
+                "b.mock",
+                "decl build\ncall-type build Result Config,Error\ndecl Config\nmember-decl-exported Config separator",
+            ),
+        ],
+    );
+    let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
+    let edges = reference_edges_to(&graph, "separator");
+    assert_eq!(edges.len(), 1);
+    // Certain is the discriminator: without the projected hop the duck-typed member
+    // fallback still finds a `separator` by name, at a weaker tier.
+    assert_eq!(edges[0].confidence, Confidence::Certain);
+}
+
+#[test]
+fn a_pointer_base_may_be_a_qualifier_rather_than_a_symbol() {
+    // `use …::rollup;` + `let rolled = rollup::directory_rollups(..); rolled.dirs` — the
+    // function is never bound by name here, only its module is. Without resolving the base
+    // through the qualifier table the pointer died at its first segment and every field the
+    // caller reads looked file-local (`internal/detection-gaps.md` §3).
+    let dir = project(
+        "pointer-base-qualifier",
+        &[
+            (
+                "a.mock",
+                "import-as rollup ./b.mock\nqref rollup.directory_rollups dirs\nroot-file",
+            ),
+            (
+                "b.mock",
+                "decl directory_rollups\ncall-type directory_rollups DirRollup\ndecl DirRollup\nmember-decl-exported DirRollup dirs",
+            ),
+        ],
+    );
+    let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
+    let edges = reference_edges_to(&graph, "dirs");
+    assert_eq!(edges.len(), 1);
+    assert_eq!(edges[0].confidence, Confidence::Certain);
+}
+
+#[test]
 fn receiver_qualifier_skips_free_names_and_duck_types_to_members() {
     // `t.helper()`: `t` matches no import, so the name is a member access by
     // construction — the same-file free `helper` is not a candidate; the member is,

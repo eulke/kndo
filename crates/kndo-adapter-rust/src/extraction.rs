@@ -522,8 +522,68 @@ fn collect_typed_bindings(
                 record_typed_binding(child, src, init, bindings, conflicted);
                 collect_typed_bindings(child, src, init, bindings, conflicted);
             }
+            "for_expression" => {
+                record_loop_binding(child, src, init, bindings, conflicted);
+                collect_typed_bindings(child, src, init, bindings, conflicted);
+            }
             _ => collect_typed_bindings(child, src, init, bindings, conflicted),
         }
+    }
+}
+
+/// `for x in <iterable>` — the loop variable is the iterable's ELEMENT, which the existing
+/// projection marker already expresses: parameter 0 of the collection's declared type
+/// (`Vec<ContributedRoot>` → `ContributedRoot`). Only iterables whose type is a declared FACT
+/// contribute — a member access, chained as far as the pointer machinery reaches. A local
+/// annotated `Vec<T>` does not, because a binding stores only its base name and the `T` is
+/// already gone by then (`internal/detection-gaps.md` §3's residual).
+fn record_loop_binding(
+    item: Node,
+    src: &[u8],
+    init: &InitCtx<'_>,
+    bindings: &mut std::collections::HashMap<String, String>,
+    conflicted: &mut std::collections::HashSet<String>,
+) {
+    let Some(name) = item
+        .child_by_field_name("pattern")
+        .and_then(|pattern| simple_pattern_name(pattern, src))
+    else {
+        return; // destructuring binds parts of an element, not the element
+    };
+    let Some(value) = item.child_by_field_name("value") else {
+        return;
+    };
+    // A bare name (a local's own annotated type) says nothing about its elements — the
+    // binding kept only the base, and `Vec` alone has no parameter facts. Only a CHAIN,
+    // whose last hop is a declared member type, can be projected.
+    if let Some(pointer) = iterable_pointer(value, init, bindings, src) {
+        if pointer.contains('.') {
+            bind_type(name, format!("{pointer}?0"), bindings, conflicted);
+        }
+    }
+}
+
+/// The pointer naming an iterated expression's type: a member access chained through names
+/// already bound in this environment (`root_sink.items` → `RootSink.default.items`), looking
+/// through the borrow and parenthesis wrappers that mean nothing to a type.
+fn iterable_pointer(
+    value: Node,
+    init: &InitCtx<'_>,
+    bindings: &std::collections::HashMap<String, String>,
+    src: &[u8],
+) -> Option<String> {
+    match value.kind() {
+        "reference_expression" | "parenthesized_expression" => {
+            iterable_pointer(value.named_child(0)?, init, bindings, src)
+        }
+        "identifier" => bindings.get(text(value, src)).cloned(),
+        "self" => init.owner.map(str::to_string),
+        "field_expression" => {
+            let base = iterable_pointer(value.child_by_field_name("value")?, init, bindings, src)?;
+            let field = value.child_by_field_name("field")?;
+            Some(format!("{base}.{}", text(field, src)))
+        }
+        _ => None,
     }
 }
 
@@ -637,21 +697,66 @@ fn init_callee_pointer(function: Node, init: &InitCtx<'_>, src: &[u8]) -> Option
     match function.kind() {
         "scoped_identifier" | "generic_function" => init_scoped_pointer(function, init, src),
         "field_expression" => init_field_pointer(function, init, src),
+        // A bare callee (`let entry = parse_entry(..)`) binds the FUNCTION's name, not a
+        // type: the adapter cannot know what it returns when the function lives in another
+        // file, and should not guess when it lives in this one. The core reads the name as
+        // a pointer base and hops through the callee's own member-type fact — one rule for
+        // both, instead of a same-file special case that drifts from the cross-file one.
+        "identifier" => Some(text(function, src).to_string()),
         _ => None,
     }
 }
 
-/// `T::assoc` / `Self::assoc` scoped callee → `"T.assoc"` (owner-resolved).
+/// `T::assoc` / `Self::assoc` scoped callee → `"T.assoc"` (owner-resolved); a callee reached
+/// through a MODULE instead of a type → the pointer that names the free function it is
+/// ([`init_module_callee`]).
 fn init_scoped_pointer(function: Node, init: &InitCtx<'_>, src: &[u8]) -> Option<String> {
-    let root = scoped_call_type_root(function, src)?;
+    let path = scoped_callee_text(function, src)?;
+    let Some(root) = scoped_call_type_root(function, src) else {
+        return init_module_callee(path);
+    };
     let root = if root == "Self" {
         init.owner?.to_string()
     } else {
         root
     };
-    let path = scoped_callee_text(function, src)?;
     let assoc = path.rsplit("::").next().unwrap_or(path);
     Some(format!("{root}.{assoc}"))
+}
+
+/// A free function reached through its module (`rollup::directory_rollups(..)`,
+/// `crate::analysis::rollup::directory_rollups(..)`): the pointer that lets the core find the
+/// FUNCTION, so its declared return type can type the binding. Which pointer depends on what
+/// the path's own reconstructed import binds — the two shapes `emit_path` produces:
+///
+///  * ROOTED at `crate`/`self`/`super`: the import binds the trailing name itself, so the
+///    function is in scope and the pointer is just that name;
+///  * bare-rooted: the import binds the module under the last module segment, so the pointer
+///    is `module.function` and the core resolves the base as a qualifier.
+///
+/// Nothing here is a guess about what the function returns — only about how to name it. A
+/// pointer that resolves to nothing costs a duck-fallback miss, which is where the binding
+/// was anyway.
+fn init_module_callee(path: &str) -> Option<String> {
+    let segments: Vec<&str> = path.split("::").collect();
+    let [rest @ .., last] = segments.as_slice() else {
+        return None;
+    };
+    let module = rest.last()?;
+    // The path may cross into TYPE space before its last segment
+    // (`crate::plugin::RootSink::default`) — `emit_path` splits its synthetic import there
+    // for the same reason, and the name that ends up in scope is the type, not the module.
+    if let Some(ty) = rest
+        .iter()
+        .rev()
+        .find(|seg| seg.chars().next().is_some_and(char::is_uppercase))
+    {
+        return Some(format!("{ty}.{last}"));
+    }
+    if matches!(rest[0], "crate" | "self" | "super") {
+        return Some((*last).to_string());
+    }
+    Some(format!("{module}.{last}"))
 }
 
 /// `self.field.method` member callee → `"FieldType.method"`.
@@ -1262,8 +1367,12 @@ fn handle_item(item: Node, src: &[u8], ctx: &Ctx<'_>, pending: PendingAttrs, out
         "function_item" => handle_function(item, src, ctx, owner, &pending, None, out),
         "struct_item" | "union_item" => {
             handle_type_decl(item, src, ctx, SymbolKind::Struct, out);
+            push_derived_default_type(item, src, &pending, out);
         }
-        "enum_item" => handle_enum(item, src, ctx, out),
+        "enum_item" => {
+            handle_enum(item, src, ctx, out);
+            push_derived_default_type(item, src, &pending, out);
+        }
         // The container's own #[cfg(test)] folds into the member-walk context so member-level
         // regions stay outermost-only (the container's region, recorded by the item walk,
         // already covers every member).
@@ -1458,6 +1567,17 @@ fn handle_function(
     // Top-level `fn main`: the bin entry point (same unconditional stance as Go's main/init —
     // Probable because only bin targets actually run it; a library's stray `main` over-lives,
     // the safe direction).
+    // Member-type fact for a FREE function: what CALLING it yields. The mirror of the
+    // impl-method fact `handle_impl` pushes, minus an owner — `let entry = parse_entry(..);
+    // entry.path` has no receiver type to read off anything else, and without this the type
+    // `parse_entry` returns looks used only where it is declared
+    // (`internal/detection-gaps.md` §3). Only top-level functions: a nested `fn` is not
+    // callable from where the binding lives.
+    if owner.is_none() {
+        if let Some(ret) = item.child_by_field_name("return_type") {
+            push_member_type(&mut out.member_types, None, name, ret, src);
+        }
+    }
     if owner.is_none() && name == "main" {
         out.roots.push(RawRoot {
             kind: RootKind::Production,
@@ -1593,7 +1713,7 @@ fn collect_field_member_types(
             field.child_by_field_name("name"),
             field.child_by_field_name("type"),
         ) {
-            push_member_type(sink, owner, text(n, src), t, src);
+            push_member_type(sink, Some(owner), text(n, src), t, src);
         }
     }
 }
@@ -1617,15 +1737,18 @@ fn collect_field_facts(root: Node, src: &[u8]) -> Vec<kndo_core::adapter::RawMem
     sink
 }
 
-/// The [`TypeEnv`] lookup view of the field facts: (owner, member) → base type.
+/// The [`TypeEnv`] lookup view of the field facts: (owner, member) → base type. Free-function
+/// facts (no owner) are not part of this view — a `self.field` chain never walks through one,
+/// and the core resolves them at the pointer's base instead.
 fn field_type_map(facts: &[kndo_core::adapter::RawMemberType]) -> FieldTypes {
     facts
         .iter()
-        .map(|m| {
-            (
-                (m.owner.to_string(), m.member.to_string()),
+        .filter_map(|m| {
+            let owner = m.owner.as_ref()?;
+            Some((
+                (owner.to_string(), m.member.to_string()),
                 m.yields.to_string(),
-            )
+            ))
         })
         .collect()
 }
@@ -1645,7 +1768,7 @@ fn collect_tuple_member_types(
         })
         .enumerate()
     {
-        push_member_type(sink, owner, &position.to_string(), ty, src);
+        push_member_type(sink, Some(owner), &position.to_string(), ty, src);
     }
 }
 
@@ -1654,17 +1777,16 @@ fn collect_tuple_member_types(
 /// parameters (`Result<T, E>` → `[T, E]`) ride along for `?N`-marked pointer hops.
 fn push_member_type(
     sink: &mut Vec<kndo_core::adapter::RawMemberType>,
-    owner: &str,
+    owner: Option<&str>,
     member: &str,
     ty: Node,
     src: &[u8],
 ) {
-    let resolve_self = |name: String| {
-        if name == "Self" {
-            owner.to_string()
-        } else {
-            name
-        }
+    // `Self` in a free function's signature is not a thing to resolve — there is no impl
+    // around it — so with no owner the name stays as written and simply resolves to nothing.
+    let resolve_self = |name: String| match (&name[..], owner) {
+        ("Self", Some(owner)) => owner.to_string(),
+        _ => name,
     };
     if let Some(yields) = base_type_name(ty, src).map(resolve_self) {
         let yields_params = type_param_names(ty, src)
@@ -1673,7 +1795,7 @@ fn push_member_type(
             .map(SmolStr::new)
             .collect();
         sink.push(kndo_core::adapter::RawMemberType {
-            owner: SmolStr::new(owner),
+            owner: owner.map(SmolStr::new),
             member: SmolStr::new(member),
             yields: SmolStr::new(yields),
             yields_params,
@@ -1716,10 +1838,35 @@ fn generic_param_names(ty: Node, src: &[u8]) -> Vec<String> {
         .collect()
 }
 
+/// `#[derive(Default)]` on a type is a DECLARED fact about it: `T::default()` evaluates to
+/// `T`. Nothing is inferred here — the derive says the impl exists and the trait's signature
+/// says what it returns, the same curated-stdlib knowledge `is_machinery_trait` already
+/// carries. Without it a `let sink = Sink::default()` binding points at a member no impl block
+/// declares, and every field read off that local resolves nowhere
+/// (`internal/detection-gaps.md` §3 — the plugin sinks are exactly this shape).
+fn push_derived_default_type(item: Node, src: &[u8], pending: &PendingAttrs, out: &mut FileFacts) {
+    let derives_default = pending
+        .derives
+        .iter()
+        .any(|(name, _)| name.rsplit("::").next() == Some("Default"));
+    if !derives_default {
+        return;
+    }
+    let Some(name) = item.child_by_field_name("name").map(|n| text(n, src)) else {
+        return;
+    };
+    out.member_types.push(kndo_core::adapter::RawMemberType {
+        owner: Some(SmolStr::new(name)),
+        member: SmolStr::new("default"),
+        yields: SmolStr::new(name),
+        yields_params: Vec::new(),
+    });
+}
+
 /// A member-type fact for an impl item that carries a name field (fn return, const type).
 fn push_owner_member_type(out: &mut FileFacts, owner: &str, item: Node, ty: Node, src: &[u8]) {
     if let Some(name) = item.child_by_field_name("name") {
-        push_member_type(&mut out.member_types, owner, text(name, src), ty, src);
+        push_member_type(&mut out.member_types, Some(owner), text(name, src), ty, src);
     }
 }
 
@@ -3352,6 +3499,92 @@ mod tests {
     }
 
     #[test]
+    fn a_free_functions_return_type_is_a_member_type_fact() {
+        // "calling this evaluates to that" — the owner-less form. Without it a local bound
+        // to the call has no type and every field read off it lands nowhere.
+        let f = facts("pub fn parse_entry(p: &str) -> TreeEntry { todo!() }\n");
+        let fact = f
+            .member_types
+            .iter()
+            .find(|m| m.member == "parse_entry")
+            .expect("no fact for the free function");
+        assert_eq!(fact.owner, None, "a free function has no owner");
+        assert_eq!(fact.yields, "TreeEntry");
+    }
+
+    #[test]
+    fn a_derived_default_is_a_declared_fact_about_the_type() {
+        // `#[derive(Default)]` states that the impl exists; the trait's signature states what
+        // it returns. Nothing inferred — and without it `let s = Sink::default()` points at a
+        // member no impl block declares.
+        let f = facts("#[derive(Debug, Default)]\npub struct Sink { items: Vec<u8> }\n");
+        let fact = f
+            .member_types
+            .iter()
+            .find(|m| m.member == "default")
+            .expect("no fact from the derive");
+        assert_eq!(fact.owner.as_deref(), Some("Sink"));
+        assert_eq!(fact.yields, "Sink");
+        assert!(
+            !facts("pub struct Sink;\n")
+                .member_types
+                .iter()
+                .any(|m| m.member == "default"),
+            "no derive, no fact — the adapter never assumes an impl"
+        );
+    }
+
+    #[test]
+    fn a_call_through_a_module_types_its_binding_by_the_function() {
+        // Two shapes, two pointers, both matching what the path's own reconstructed import
+        // puts in scope: a bare-rooted path reaches the function through its MODULE
+        // qualifier, a `crate`-rooted one binds the trailing name itself.
+        let bare = facts(
+            "fn run() {\n             \x20   let rolled = rollup::directory_rollups(g);\n             \x20   rolled.dirs;\n             }\n",
+        );
+        assert_eq!(
+            bare.references
+                .iter()
+                .find(|r| r.name == "dirs")
+                .and_then(|r| r.scope_context.as_deref()),
+            Some("rollup.directory_rollups")
+        );
+        let rooted = facts(
+            "fn run() {\n             \x20   let rolled = crate::analysis::rollup::directory_rollups(g);\n             \x20   rolled.dirs;\n             }\n",
+        );
+        assert_eq!(
+            rooted
+                .references
+                .iter()
+                .find(|r| r.name == "dirs")
+                .and_then(|r| r.scope_context.as_deref()),
+            Some("directory_rollups")
+        );
+    }
+
+    #[test]
+    fn a_loop_variable_projects_the_iterables_element_type() {
+        // `for root in sink.items` — the element is parameter 0 of the collection's declared
+        // type, which the projection marker already expresses. Only a CHAIN qualifies: a
+        // local's own annotation kept just its base name, and `Vec` alone has no parameters.
+        let f = facts(
+            "fn run(sink: RootSink, plain: Vec<u8>) {\n             \x20   for root in sink.items { root.target; }\n             \x20   for x in plain { x.mystery(); }\n             }\n",
+        );
+        let ctx = |n: &str| {
+            f.references
+                .iter()
+                .find(|r| r.name == n)
+                .and_then(|r| r.scope_context.as_deref())
+        };
+        assert_eq!(ctx("target"), Some("RootSink.items?0"));
+        assert_eq!(
+            ctx("mystery"),
+            Some("x"),
+            "an un-chained iterable says nothing — the raw name, the duck route"
+        );
+    }
+
+    #[test]
     fn declarations_cover_the_item_zoo() {
         let f = facts(
             "pub fn free() {}\n\
@@ -3462,7 +3695,7 @@ mod tests {
         let fact = |owner: &str, member: &str| {
             f.member_types
                 .iter()
-                .find(|m| m.owner == owner && m.member == member)
+                .find(|m| m.owner.as_deref() == Some(owner) && m.member == member)
                 .map(|m| m.yields.as_str())
         };
         assert_eq!(
@@ -3491,7 +3724,7 @@ mod tests {
         let m = f
             .member_types
             .iter()
-            .find(|m| m.owner == "Config" && m.member == "build")
+            .find(|m| m.owner.as_deref() == Some("Config") && m.member == "build")
             .expect("return fact");
         assert_eq!(m.yields, "Result");
         assert_eq!(m.yields_params, ["ConfiguredHIR", "Error"]);

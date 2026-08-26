@@ -292,12 +292,25 @@ impl LanguageAdapter for MockAdapter {
                     module_names_visible: false,
                     local_alias: Some(SmolStr::new(alias)),
                 });
+            } else if let Some(rest) = line.strip_prefix("call-type ") {
+                // `call-type <fn> <yields> [p0,p1,…]` — a FREE FUNCTION's member-type fact:
+                // calling it evaluates to `yields`. The `None`-owner form.
+                let mut parts = rest.splitn(3, ' ');
+                facts.member_types.push(crate::adapter::RawMemberType {
+                    owner: None,
+                    member: SmolStr::new(parts.next().unwrap_or("")),
+                    yields: SmolStr::new(parts.next().unwrap_or("")),
+                    yields_params: parts
+                        .next()
+                        .map(|list| list.split(',').map(SmolStr::new).collect())
+                        .unwrap_or_default(),
+                });
             } else if let Some(rest) = line.strip_prefix("member-type ") {
                 // `member-type <owner> <member> <yields> [p0,p1,…]` — a member-type
                 // fact; the optional 4th token lists the type parameters in order.
                 let mut parts = rest.splitn(4, ' ');
                 facts.member_types.push(crate::adapter::RawMemberType {
-                    owner: SmolStr::new(parts.next().unwrap_or("")),
+                    owner: Some(SmolStr::new(parts.next().unwrap_or(""))),
                     member: SmolStr::new(parts.next().unwrap_or("")),
                     yields: SmolStr::new(parts.next().unwrap_or("")),
                     yields_params: parts

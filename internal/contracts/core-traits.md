@@ -196,10 +196,17 @@ pub trait LanguageAdapter: Send + Sync {
 
 ```rust
 pub struct FileFacts {
-    pub member_types: Vec<RawMemberType>,   // { owner, member, yields, yields_params } — what accessing
-                                            // owner.member evaluates to (field types, method returns);
-                                            // yields_params: the annotation's type arguments in order,
-                                            // projected by `?N` pointer markers; RFC 0012 §3-bis
+    pub member_types: Vec<RawMemberType>,   // { owner: Option<Name>, member, yields, yields_params }
+                                            // — what accessing owner.member evaluates to (field
+                                            // types, method returns). owner NONE = a free
+                                            // FUNCTION: "calling this evaluates to yields", the
+                                            // same statement about a value's type, walked by the
+                                            // same chain machinery — it just applies where a
+                                            // pointer's BASE names the function, before any member
+                                            // segment (`let e = parse_entry(..); e.path`).
+                                            // yields_params: the annotation's type arguments in
+                                            // order, projected by `?N` pointer markers;
+                                            // RFC 0012 §3-bis
     pub invoked_executables: Vec<SmolStr>,  // workspace executable targets this file runs as a
                                             // subprocess (Rust: env!("CARGO_BIN_EXE_<name>")) —
                                             // resolved against ManifestFacts::executables into
