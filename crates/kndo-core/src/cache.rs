@@ -1158,6 +1158,7 @@ mod tests {
                     loc: 7,
                     token_count: 80,
                     fingerprints: vec![11, 22],
+                    body_is_construction: false,
                 },
             ),
             (
@@ -1172,6 +1173,7 @@ mod tests {
                     loc: 4,
                     token_count: 30,
                     fingerprints: vec![33],
+                    body_is_construction: false,
                 },
             ),
         ])

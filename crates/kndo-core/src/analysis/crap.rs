@@ -203,6 +203,7 @@ mod tests {
             loc: 10,
             token_count: 60,
             fingerprints: Vec::new(),
+            body_is_construction: false,
         }
     }
 

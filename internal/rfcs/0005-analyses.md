@@ -283,6 +283,18 @@ canonicalized ⇒ catches Type-1 and Type-2 clones; Type-3/semantic clones are o
   part of its owner's body — promoting it would leave both halves under the floor and delete
   real findings (measured on the field corpus: 83 clone participants).
 - Winnowing fingerprints into a global index; matches only within the same language.
+- **A body that only constructs a value is not clone-eligible.** There the normalization
+  inverts: a construction expression has no control flow, its structure IS the field list the
+  type declaration dictates, and the only authored content is the field values — exactly what
+  `ID`/`LIT` erases. Two constructions of one type therefore fingerprint alike by definition of
+  the type, not by evidence of copying, and the false family grows with how *central* the type
+  is. `MAX_POSTING` already concedes the same belief using popularity as the proxy; this names
+  the cause. All-or-nothing (a function that constructs *and* does work has authored
+  structure), not configurable (`min-tokens` is a floor on size, and this is not about size),
+  and needing no carve-out for a construction carrying a callback — that callback is its own
+  shape and is not exempt. `MetricsSyntax::construction_kinds` is empty for languages where
+  construction is an ordinary call (Kotlin, Swift), which keeps today's behaviour there rather
+  than having the adapter guess.
 - Finding groups all instances, largest group first; evidence shows the shared shape.
 - **Structural clones target production code**: test-role files and sub-file test regions
   (`FileFacts::test_spans`) are exempt, unconditionally — the same two-level exemption `crap`

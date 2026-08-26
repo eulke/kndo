@@ -64,6 +64,10 @@ const METRICS_SYNTAX: MetricsSyntax = MetricsSyntax {
     // enough; `object_literal` is an object expression whose members are real declarations
     // the extractor already visits.
     nested_callable_kinds: &["lambda_literal", "anonymous_function"],
+    // Nothing to declare, and that IS the answer: constructing a value in Kotlin is an
+    // ordinary `call_expression`, indistinguishable from any other call. Guessing (an
+    // uppercase callee, say) would be this adapter inventing a verdict.
+    construction_kinds: &[],
 };
 
 /// Item-walk context: the member owner (a class/object/companion's bare name), for `member_of`

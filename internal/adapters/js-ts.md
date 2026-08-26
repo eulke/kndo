@@ -78,6 +78,11 @@ that list: in tree-sitter-typescript that name belongs to the unnamed keyword to
 `function_expression` is the node. The split's semantics are uniform across adapters; only the
 kinds that trigger it are per-language.
 
+A body that is **only** a value construction (`object` and `new_expression`) is not clone-eligible
+(`MetricsSyntax::construction_kinds`): normalization erases the field values — the whole
+authored content — and keeps the field list the type declaration dictates, so two constructions
+of one type match by definition of the type rather than by evidence of copying.
+
 **Suppressions** — `// kndo:allow …`, `/* kndo:allow … */`, JSX `{/* kndo:allow … */}`.
 
 ## 3. Imports & resolution

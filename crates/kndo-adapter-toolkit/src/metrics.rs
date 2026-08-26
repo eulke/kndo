@@ -62,6 +62,17 @@ pub struct MetricsSyntax {
     /// Only *named* nodes are considered, so a grammar whose `function` keyword token shares
     /// a name with a node kind can't accidentally split on the keyword.
     pub nested_callable_kinds: &'static [&'static str],
+    /// Kinds that CONSTRUCT a value: a struct/object/record literal, a constructor call used
+    /// as an expression. Only ever consulted for the whole-body test
+    /// ([`FunctionShape::body_is_construction`]) — a construction nested inside real logic is
+    /// ordinary code and stays clone-eligible.
+    ///
+    /// Empty is a valid answer. Kotlin and Swift declare nothing here and that is correct:
+    /// constructing a value in both is an ordinary `call_expression`, syntactically
+    /// indistinguishable from any other call, so the adapter has nothing true to report.
+    /// Guessing (an uppercase callee, say) would be the adapter inventing a verdict, in the
+    /// accusation direction.
+    pub construction_kinds: &'static [&'static str],
 }
 
 /// One callable's computed shape.
@@ -76,6 +87,45 @@ pub struct FunctionShape {
     /// Winnowing fingerprints — empty when `token_count < min_tokens` (too small to
     /// meaningfully clone-match; the metric fields above are still real).
     pub fingerprints: Vec<u64>,
+    /// This body is a single value-construction expression and nothing else.
+    pub body_is_construction: bool,
+}
+
+/// Is this body a single construction expression and nothing else?
+///
+/// Walks the body's NAMED children — punctuation is unnamed and comments are skipped, so no
+/// per-language wrapper vocabulary is needed — following the chain while each level has
+/// exactly one. A `block` holding one `struct_expression`, or a `statement_block` holding one
+/// `return_statement` holding one `object`, both reach the construction; a body that also
+/// binds a local, or branches, or calls anything else, has two named children somewhere and
+/// stops.
+///
+/// Deliberately all-or-nothing. A function that constructs AND does work is ordinary code: its
+/// structure is authored, and copy-paste of it is exactly what `duplicate` should catch.
+///
+/// No carve-out is needed for a construction carrying a callback, and that is the previous
+/// commit paying for itself: a promoted closure's tokens are not in this stream at all (only
+/// an `FN` placeholder is), and the closure is its own shape, which this test never sees.
+fn body_is_construction(body: Node, syntax: &MetricsSyntax) -> bool {
+    if syntax.construction_kinds.is_empty() {
+        return false;
+    }
+    let mut node = body;
+    loop {
+        if syntax.construction_kinds.contains(&node.kind()) {
+            return true;
+        }
+        let mut cursor = node.walk();
+        let named: Vec<Node> = node
+            .named_children(&mut cursor)
+            .filter(|c| !syntax.skip_kinds.contains(&c.kind()))
+            .take(2)
+            .collect();
+        match named.as_slice() {
+            [only] => node = *only,
+            _ => return false,
+        }
+    }
 }
 
 /// Computes [`function_shape`] and appends the resulting [`FunctionMetrics`] to `out` — the
@@ -103,6 +153,7 @@ pub fn push_function_metrics(
         decl_span,
         walk(body, syntax, min_clone_tokens),
         decl_span,
+        syntax,
         min_clone_tokens,
         &mut next_ordinal,
     );
@@ -117,6 +168,7 @@ fn push_shape(
     decl_span: Span,
     walked: Walked<'_>,
     shape_span: Span,
+    syntax: &MetricsSyntax,
     min_clone_tokens: usize,
     next_ordinal: &mut u16,
 ) {
@@ -137,6 +189,7 @@ fn push_shape(
         loc: node.end_position().row as u32 - node.start_position().row as u32 + 1,
         token_count: walked.tokens.len() as u32,
         fingerprints,
+        body_is_construction: body_is_construction(node, syntax),
     });
     for nested in walked.nested {
         let span = crate::parsing::span(nested.node);
@@ -146,6 +199,7 @@ fn push_shape(
             decl_span,
             nested,
             span,
+            syntax,
             min_clone_tokens,
             next_ordinal,
         );
@@ -186,6 +240,7 @@ pub fn function_shape<'t>(
             loc,
             token_count: walked.tokens.len(),
             fingerprints,
+            body_is_construction: body_is_construction(node, syntax),
         },
         nested,
     )
@@ -327,6 +382,7 @@ mod tests {
         literal_kinds: &["string", "number"],
         skip_kinds: &["comment"],
         nested_callable_kinds: &["arrow_function", "function_expression"],
+        construction_kinds: &["object", "new_expression"],
     };
 
     fn parse(src: &str) -> tree_sitter::Tree {
@@ -508,6 +564,7 @@ mod tests {
             literal_kinds: SYNTAX.literal_kinds,
             skip_kinds: SYNTAX.skip_kinds,
             nested_callable_kinds: &[],
+            construction_kinds: SYNTAX.construction_kinds,
         };
         let tree =
             parse("function a(xs) { return xs.map((x) => { if (x) { return 1; } return 0; }); }");
@@ -556,6 +613,61 @@ mod tests {
         );
         assert_eq!(out.functions.len(), 1, "one shape, not zero and not two");
         assert_eq!(out.functions[0].cyclomatic, 2);
+    }
+
+    // ------------------------------------------------------------ construction bodies
+
+    fn constructs(src: &str) -> bool {
+        let tree = parse(src);
+        let func = tree.root_node().child(0).unwrap();
+        let body = func.child_by_field_name("body").unwrap_or(func);
+        function_shape(body, &SYNTAX, 10).0.body_is_construction
+    }
+
+    #[test]
+    fn a_body_that_only_constructs_a_value_is_recognized() {
+        assert!(constructs("function a() { return { x: 1, y: 2, z: 3 }; }"));
+        assert!(constructs("function a() { return new Thing(1, 2, 3); }"));
+    }
+
+    #[test]
+    fn a_body_that_also_does_work_is_not_a_construction() {
+        assert!(!constructs(
+            "function a() { const t = 1; return { x: t }; }"
+        ));
+        assert!(!constructs(
+            "function a(f) { if (f) { return { x: 1 }; } return { x: 2 }; }"
+        ));
+        assert!(!constructs("function a() { compute(); }"));
+    }
+
+    #[test]
+    fn a_construction_carrying_a_callback_is_still_a_construction() {
+        // The narrowing predicate an earlier design needed, made unnecessary: a promoted
+        // closure's tokens are not in this stream at all — only an `FN` placeholder is — and
+        // the closure is its own shape, which this exemption never sees. So the construction
+        // stays exempt AND the duplicated callback stays visible, on the callback.
+        let cb = format!("(x) => {}", big("x"));
+        let src = format!("function a() {{ return new Thing({cb}); }}");
+        assert!(constructs(&src));
+        let shapes = shapes_of(&src);
+        assert_eq!(shapes.len(), 2, "the callback is its own shape: {shapes:?}");
+    }
+
+    #[test]
+    fn an_adapter_declaring_no_construction_kinds_never_exempts_anything() {
+        const NO_KINDS: MetricsSyntax = MetricsSyntax {
+            branch_kinds: SYNTAX.branch_kinds,
+            identifier_kinds: SYNTAX.identifier_kinds,
+            literal_kinds: SYNTAX.literal_kinds,
+            skip_kinds: SYNTAX.skip_kinds,
+            nested_callable_kinds: SYNTAX.nested_callable_kinds,
+            construction_kinds: &[],
+        };
+        let tree = parse("function a() { return { x: 1 }; }");
+        let func = tree.root_node().child(0).unwrap();
+        let body = func.child_by_field_name("body").unwrap();
+        assert!(!function_shape(body, &NO_KINDS, 10).0.body_is_construction);
     }
 
     #[test]

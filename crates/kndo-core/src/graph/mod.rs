@@ -148,6 +148,16 @@ pub struct SymbolMetrics {
     /// their place — so summing over shapes still counts every token exactly once.
     pub token_count: u32,
     pub fingerprints: Vec<u64>,
+    /// This shape's body is a single value-construction expression — a struct/object literal
+    /// or a constructor call — and nothing else.
+    ///
+    /// A FACT about the body's shape, never a verdict. What consumes it is `duplicate`, and
+    /// the reason is that the fingerprint's own normalization inverts on such a body:
+    /// identifiers and literals canonicalize away, and for a construction that is the entire
+    /// authored content, leaving only the field list the TYPE dictates. Two constructions of
+    /// one type therefore fingerprint alike by definition of the type, not by evidence of
+    /// copying.
+    pub body_is_construction: bool,
 }
 
 /// Per-file state the incremental patch needs beyond the graph proper —

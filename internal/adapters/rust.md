@@ -246,6 +246,11 @@ the floor and cost real clone findings (measured: 83 clone participants on the f
 The split's semantics are uniform across adapters; only the kinds that trigger it are
 per-language.
 
+A body that is **only** a value construction (`struct_expression`) is not clone-eligible
+(`MetricsSyntax::construction_kinds`): normalization erases the field values — the whole
+authored content — and keeps the field list the type declaration dictates, so two constructions
+of one type match by definition of the type rather than by evidence of copying.
+
 **Suppressions** — `// kndo:allow …` via the toolkit scanner, like every language.
 
 **Extraction refinements from the M6 FP hunt (ripgrep corpus):**

@@ -210,8 +210,15 @@ stream, which keeps one `FN` in their place, and `crap`/`duplicate` report it in
 right). A smaller one stays an expression inside its owner: promoting it would leave both
 halves under the floor and cost real clone findings — measured, that was 83 clone participants
 on the field corpus. The split's semantics are uniform across adapters; only the node kinds
-that trigger it are per-language. Fingerprints: normalized
-token stream per shape, same `$n`-renaming scheme as every other adapter.
+that trigger it are per-language.
+
+A body that is **only** a value construction (`object_creation_expression`) is not clone-eligible
+(`MetricsSyntax::construction_kinds`): normalization erases the field values — the whole
+authored content — and keeps the field list the type declaration dictates, so two constructions
+of one type match by definition of the type rather than by evidence of copying.
+
+Fingerprints: normalized token stream per shape, same `$n`-renaming scheme as every other
+adapter.
 
 **Dynamic constructs → `DynamicUse`**: none emitted in this slice. `Class.forName(String)`
 reflection exists but is rare in application code and — like Go's `reflect`/`plugin` stance

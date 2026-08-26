@@ -214,6 +214,11 @@ const METRICS_SYNTAX: kndo_adapter_toolkit::metrics::MetricsSyntax =
             "function_expression",
             "generator_function",
         ],
+        // A body that ONLY constructs a value carries no clone evidence: normalization erases
+        // the field values (the whole authored content) and keeps the field list, which the
+        // type declaration dictates. `object` is the object literal; `new_expression` a
+        // constructor call.
+        construction_kinds: &["object", "new_expression"],
     };
 
 /// One callable's `FunctionMetrics`, over its *body* — the part that

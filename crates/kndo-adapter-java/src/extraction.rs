@@ -72,6 +72,10 @@ const METRICS_SYNTAX: MetricsSyntax = MetricsSyntax {
     // Each of these becomes its own shape when it is substantial enough to carry clone
     // evidence by itself; a small one stays an expression inside its owner.
     nested_callable_kinds: &["lambda_expression"],
+    // A body that ONLY constructs a value carries no clone evidence: normalization erases the
+    // field values (the whole authored content) and keeps the field list, which the type
+    // declaration dictates.
+    construction_kinds: &["object_creation_expression"],
 };
 
 /// Item-walk context: the member owner (a class/interface/enum/record's bare name), for

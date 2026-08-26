@@ -63,6 +63,9 @@ const METRICS_SYNTAX: MetricsSyntax = MetricsSyntax {
     // evidence by itself; a small one stays an expression inside its owner.
     // NOT `lambda_function_type`: that is a closure TYPE annotation, not a body.
     nested_callable_kinds: &["lambda_literal"],
+    // Empty for the same reason as Kotlin: Swift construction is a plain
+    // `call_expression`, so there is no node kind that means "construction" to report.
+    construction_kinds: &[],
 };
 
 /// Item-walk context: the member owner (a struct/class/enum/protocol/extension's bare name),

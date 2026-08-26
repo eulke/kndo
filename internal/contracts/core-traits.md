@@ -410,7 +410,8 @@ pub struct FileFacts {
                                              // *within this file* — WholeFile | Declaration(name)
     pub functions:    Vec<FunctionMetrics>, // { symbol, span, shape_span, shape_ordinal,
                                              // cyclomatic: u32, loc, token_count,
-                                             // fingerprints } (RFC 0005 §6): one entry per
+                                             // fingerprints, body_is_construction } (RFC 0005
+                                             // §6): one entry per
                                              // callable SHAPE — a declaration's own body plus
                                              // one for every callable nested inside it that is
                                              // big enough to carry clone evidence by itself
@@ -447,6 +448,16 @@ pub struct FileFacts {
                                              // literals canonicalized, comments skipped), empty
                                              // under the 50-token granularity gate — cyclomatic
                                              // and loc always real (crap's inputs, M4).
+                                             // body_is_construction: this shape's body is a
+                                             // single value-construction expression and
+                                             // nothing else (MetricsSyntax::construction_kinds
+                                             // names the node kinds; empty is valid and means
+                                             // "this language cannot tell"). A FACT, never a
+                                             // verdict — `duplicate` is what consumes it, and
+                                             // exempts such a body because normalization
+                                             // INVERTS there: it erases the field values (the
+                                             // whole authored content) and keeps the field
+                                             // list the type declaration dictates.
     pub dynamics:     Vec<DynamicUse>,      // constructs forcing Wildcard edges (span + reason +
                                             // optional narrowed_to: a *project-relative* dir the
                                             // adapter already resolved — the core only prefix-

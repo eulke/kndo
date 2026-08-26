@@ -692,6 +692,7 @@ mod tests {
                     loc: 5,
                     token_count: 100,
                     fingerprints: vec![1],
+                    body_is_construction: false,
                 },
             ),
             (
@@ -706,6 +707,7 @@ mod tests {
                     loc: 5,
                     token_count: 100,
                     fingerprints: vec![1],
+                    body_is_construction: false,
                 },
             ),
         ]);
@@ -744,6 +746,7 @@ mod tests {
                 loc: 5,
                 token_count: 80,
                 fingerprints: vec![],
+                body_is_construction: false,
             },
         )]);
         let reach = reachability::compute(&graph);
@@ -787,6 +790,7 @@ mod tests {
                 loc: 5,
                 token_count: 80,
                 fingerprints: vec![],
+                body_is_construction: false,
             },
         )]);
         let reach = reachability::compute(&graph);

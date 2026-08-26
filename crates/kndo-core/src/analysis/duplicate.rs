@@ -168,6 +168,21 @@ pub fn find_duplicate_functions(
         if crate::graph::span_in_test_region(&file.test_spans, symbol.span) {
             continue;
         }
+        // Exempt by provenance of the SHAPE, where the exemptions above are by provenance of
+        // the file. Structural clones are evidence of copy-paste; a body that only constructs
+        // a value has no such evidence to give. The fingerprint's normalization inverts there:
+        // it erases the field VALUES — the entire authored content — and keeps the field list,
+        // which the type declaration dictates. Every construction of one type therefore groups
+        // with every other, a false family whose size grows with how CENTRAL the type is, and
+        // acting on that advice is what once produced a constructor hiding a contract struct's
+        // field list. `MAX_POSTING` already concedes the same point for shapes shared 20+ ways,
+        // using popularity as the proxy; this names the cause instead of counting.
+        //
+        // Not configurable, exactly like the exemptions above: `min-tokens` is a floor on size,
+        // and this is not a question of size.
+        if metrics.body_is_construction {
+            continue;
+        }
         let Some(language) = file.language.as_deref() else {
             continue;
         };
@@ -563,6 +578,14 @@ mod tests {
         shape(fingerprints, 0, (1, 1))
     }
 
+    /// A declaration whose whole body is one value construction.
+    fn construction(fingerprints: Vec<u64>) -> SymbolMetrics {
+        SymbolMetrics {
+            body_is_construction: true,
+            ..shape(fingerprints, 0, (1, 1))
+        }
+    }
+
     /// A shape at an explicit position: `shape_ordinal` 0 is the declaration's own, 1..N a
     /// callable nested inside it — several of which may share one `SymbolId`.
     fn shape(fingerprints: Vec<u64>, shape_ordinal: u16, start: (u32, u32)) -> SymbolMetrics {
@@ -576,7 +599,75 @@ mod tests {
             loc: 5,
             token_count: 60,
             fingerprints,
+            body_is_construction: false,
         }
+    }
+
+    #[test]
+    fn construction_bodied_callables_are_not_clone_eligible() {
+        // Two `descriptor()` methods whose whole body is one struct literal fingerprint alike
+        // by definition of the type — normalization keeps the field list the type dictates and
+        // erases the values, which are the entire authored content.
+        let graph = ProjectGraph::for_test(
+            vec![claimed_file("a.mock"), claimed_file("b.mock")],
+            vec![callable(0, "descriptor"), callable(1, "descriptor")],
+            vec![],
+            vec![],
+        )
+        .with_function_metrics(vec![
+            (SymbolId(0), construction(vec![1, 2, 3])),
+            (SymbolId(1), construction(vec![1, 2, 3])),
+        ]);
+        assert!(find_duplicate_functions(&graph, 0).0.is_empty());
+    }
+
+    #[test]
+    fn a_body_that_constructs_and_also_branches_still_groups() {
+        // The exemption is all-or-nothing on purpose: a function that constructs AND does work
+        // has authored structure, and copy-paste of it is what `duplicate` exists to find.
+        let graph = ProjectGraph::for_test(
+            vec![claimed_file("a.mock"), claimed_file("b.mock")],
+            vec![callable(0, "build"), callable(1, "make")],
+            vec![],
+            vec![],
+        )
+        .with_function_metrics(vec![
+            (SymbolId(0), metrics(vec![1, 2, 3])),
+            (SymbolId(1), metrics(vec![1, 2, 3])),
+        ]);
+        assert_eq!(find_duplicate_functions(&graph, 0).0.len(), 1);
+    }
+
+    #[test]
+    fn a_callback_passed_to_a_construction_is_still_reported() {
+        // The pair this exemption must NOT swallow, and the reason it needs no narrowing
+        // predicate: the constructing shapes are exempt, the callbacks they carry are their
+        // own shapes and are not.
+        let graph = ProjectGraph::for_test(
+            vec![claimed_file("a.mock"), claimed_file("b.mock")],
+            vec![callable(0, "wire_a"), callable(1, "wire_b")],
+            vec![],
+            vec![],
+        )
+        .with_function_metrics(vec![
+            // The two constructing bodies are IDENTICAL — without the exemption they would
+            // group too, and this assertion would see two findings instead of one.
+            (SymbolId(0), construction(vec![9, 9])),
+            (SymbolId(0), shape(vec![1, 2, 3], 1, (4, 9))),
+            (SymbolId(1), construction(vec![9, 9])),
+            (SymbolId(1), shape(vec![1, 2, 3], 1, (6, 9))),
+        ]);
+        let findings = find_duplicate_functions(&graph, 0).0;
+        assert_eq!(
+            findings.len(),
+            1,
+            "the constructions are exempt, the callbacks are not: {findings:#?}"
+        );
+        assert!(
+            findings[0].message.contains("wire_a:4"),
+            "{}",
+            findings[0].message
+        );
     }
 
     #[test]

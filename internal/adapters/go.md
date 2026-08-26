@@ -160,6 +160,11 @@ the floor and cost real clone findings (measured: 83 clone participants on the f
 The split's semantics are uniform across adapters; only the kinds that trigger it are
 per-language.
 
+A body that is **only** a value construction (`composite_literal`) is not clone-eligible
+(`MetricsSyntax::construction_kinds`): normalization erases the field values — the whole
+authored content — and keeps the field list the type declaration dictates, so two constructions
+of one type match by definition of the type rather than by evidence of copying.
+
 **Suppressions**: `// kndo:allow …` on its own line or trailing a declaration — same syntax and
 scope rules as JS/TS (RFC 0005 §12 is language-neutral; only comment *syntax* is adapter-owned,
 and `//` line comments are identical between the two languages).

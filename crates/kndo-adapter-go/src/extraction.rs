@@ -263,6 +263,10 @@ const METRICS_SYNTAX: kndo_adapter_toolkit::metrics::MetricsSyntax =
         // Each of these becomes its own shape when it is substantial enough to carry clone
         // evidence by itself; a small one stays an expression inside its owner.
         nested_callable_kinds: &["func_literal"],
+        // A body that ONLY constructs a value carries no clone evidence: normalization erases the
+        // field values (the whole authored content) and keeps the field list, which the type
+        // declaration dictates.
+        construction_kinds: &["composite_literal"],
     };
 
 /// One callable's `FunctionMetrics`, computed over its *body* (signatures are promises,

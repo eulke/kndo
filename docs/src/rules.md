@@ -334,6 +334,13 @@ Two halves:
   instance listed as evidence. Very small functions (under the token floor, 50 by default)
   don't participate — a three-line getter matching another three-line getter is not a copy.
 
+A callable whose body is **only a value construction** — one struct/object literal, one
+constructor call — does not participate. Such bodies match each other by definition of the
+type they build, not by evidence of copying: the comparison deliberately ignores identifiers
+and literals, and for a construction those *are* the authored content, leaving only the field
+list the type dictates. The more central the type, the louder the false group. A function that
+constructs *and* does something else is ordinary code and still participates.
+
 A **closure is measured in its own right**, not folded into the function that contains it, so
 five call sites passing the same callback are reported on the callback — where the duplication
 actually lives — rather than on five otherwise-different functions. The same token floor

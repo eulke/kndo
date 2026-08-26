@@ -195,6 +195,12 @@ halves under the floor and cost real clone findings — measured, that was 83 cl
 on the field corpus. The split's semantics are uniform across adapters; only the node kinds
 that trigger it are per-language.
 
+`MetricsSyntax::construction_kinds` is deliberately **empty** here: constructing a value in
+Swift is an ordinary `call_expression`, indistinguishable from any other call, so this adapter
+has nothing true to report and `duplicate`'s construction exemption simply never fires for
+Swift — today's behaviour, unchanged. Guessing (an uppercase callee, say) would be the adapter
+inventing a verdict, in the accusation direction RFC 0012 §2 forbids.
+
 **Grammar ground truth**: pinned in `kndo-adapter-swift/src/parsing.rs`'s `#[ignore]`d probe
 tests — re-run with `--ignored --nocapture` before any tree-sitter-swift version bump.
 

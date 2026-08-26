@@ -3380,6 +3380,7 @@ fn same_named_declarations_keep_their_own_metrics() {
         loc: 3,
         token_count: tokens,
         fingerprints: vec![tokens as u64],
+        body_is_construction: false,
     };
 
     let (first, second) = (at(10), at(40));
