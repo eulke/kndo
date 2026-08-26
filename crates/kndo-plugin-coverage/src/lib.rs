@@ -129,7 +129,7 @@ impl Plugin for CoberturaPlugin {
         let Ok(text) = std::str::from_utf8(content) else {
             return;
         };
-        let Ok(doc) = roxmltree::Document::parse(text) else {
+        let Ok(doc) = roxmltree::Document::parse_with_options(text, xml_options()) else {
             return;
         };
         let sources: Vec<String> = doc
@@ -159,6 +159,21 @@ impl Plugin for CoberturaPlugin {
                 }
             }
         }
+    }
+}
+
+/// Every XML kndo reads is written by a real tool, and real tools emit a DOCTYPE: JaCoCo
+/// declares `report PUBLIC "-//JACOCO//DTD Report 1.1//EN"` on every report it writes,
+/// Cobertura a SYSTEM identifier, an Apple `Info.plist` the PropertyList DTD. `roxmltree`
+/// refuses those outright by default (`XML with DTD detected`), so parsing without this
+/// option means every real report silently ingests NOTHING while a DOCTYPE-less fixture
+/// passes — which is exactly how it went unnoticed. Safe to allow: roxmltree never resolves
+/// external entities and caps internal expansion, so no document can reach the network or
+/// the filesystem through this.
+fn xml_options() -> roxmltree::ParsingOptions {
+    roxmltree::ParsingOptions {
+        allow_dtd: true,
+        ..Default::default()
     }
 }
 
@@ -195,7 +210,7 @@ impl Plugin for JacocoPlugin {
         let Ok(text) = std::str::from_utf8(content) else {
             return;
         };
-        let Ok(doc) = roxmltree::Document::parse(text) else {
+        let Ok(doc) = roxmltree::Document::parse_with_options(text, xml_options()) else {
             return;
         };
         let module = module_prefix(path.0.as_str());
@@ -378,6 +393,41 @@ mod tests {
         // Verbatim key and source-joined candidate both carry the same facts.
         assert!((cov(&map, "src/a.py", (1, 9)).unwrap() - 0.5).abs() < 1e-9);
         assert!((cov(&map, "/abs/proj/src/a.py", (1, 9)).unwrap() - 0.5).abs() < 1e-9);
+    }
+
+    #[test]
+    fn the_doctype_every_real_report_carries_is_read_not_refused() {
+        // The bug this test exists for: both ingesters parsed with roxmltree's default
+        // options, which REFUSE a document declaring a DTD. Every JaCoCo report declares one
+        // and Cobertura's writer emits a SYSTEM identifier, so both silently ingested nothing
+        // in the field while these tests — whose fixtures had no DOCTYPE — passed.
+        let jacoco = ingest(
+            &JacocoPlugin,
+            "build/reports/jacoco/test/jacocoTestReport.xml",
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!DOCTYPE report PUBLIC "-//JACOCO//DTD Report 1.1//EN" "report.dtd">
+<report name="app"><package name="com/acme">
+  <sourcefile name="Thing.java"><line nr="3" mi="0" ci="2"/><line nr="4" mi="1" ci="0"/></sourcefile>
+</package></report>"#,
+        );
+        assert!(
+            !jacoco.is_empty(),
+            "a JaCoCo report's DOCTYPE must not make the whole report invisible"
+        );
+
+        let cobertura = ingest(
+            &CoberturaPlugin,
+            "coverage.xml",
+            r#"<?xml version="1.0" ?>
+<!DOCTYPE coverage SYSTEM "http://cobertura.sourceforge.net/xml/coverage-04.dtd">
+<coverage><packages><package name="p"><classes>
+    <class name="a" filename="src/a.py"><lines><line number="3" hits="2"/></lines></class>
+</classes></package></packages></coverage>"#,
+        );
+        assert!(
+            !cobertura.is_empty(),
+            "same for Cobertura's SYSTEM identifier"
+        );
     }
 
     #[test]

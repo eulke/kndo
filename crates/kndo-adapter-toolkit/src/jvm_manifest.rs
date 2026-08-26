@@ -68,7 +68,14 @@ fn extract_maven(
     layout: &JvmSourceLayout,
 ) -> ManifestFacts {
     let mut out = ManifestFacts::default();
-    let doc = match roxmltree::Document::parse(text) {
+    // A POM carrying a DOCTYPE is legal and `roxmltree` refuses one by default, which would
+    // fail the whole manifest silently. Allowed for the same reason as the coverage
+    // ingesters': no external entity is ever resolved.
+    let options = roxmltree::ParsingOptions {
+        allow_dtd: true,
+        ..Default::default()
+    };
+    let doc = match roxmltree::Document::parse_with_options(text, options) {
         Ok(d) => d,
         Err(e) => {
             out.diagnostics
