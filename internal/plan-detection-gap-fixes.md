@@ -176,6 +176,41 @@ can say (an always-on ingester's report paths), and
 `PluginDescriptor::on_manifest_dependency(id, dep)` is the whole shape. kndo on itself
 51 → 49 findings, 96.7 → 96.8.
 
+### W8a — a closure is measured as its own callable (`8c2c92d`)
+`internal/adapters/{java,kotlin,swift}.md` each claimed a lambda body "is counted as its own
+function-shape unit". No adapter did it: metrics were emitted only from named declaration
+sites, so a closure's tokens and branches belonged to whatever enclosed them — `crap` blamed
+the two-branch function for its 40-branch closure, and `duplicate` could not see a callback
+copy-pasted across five construction sites at all. Each adapter now names its
+`nested_callable_kinds` (confirmed against every grammar's `node-types.json`), the toolkit
+promotes such a node to its own shape, and `FunctionMetrics`/`SymbolMetrics` carry `shape_span`
+(the location every consumer reports) and `shape_ordinal` (the identity — an ordinal, never a
+line, so a baseline survives edits above the closure). Ordinal 0 changes no existing id.
+
+**The corpus overturned the first version.** Promoting unconditionally lost 83 clone
+participants — `oneshot::Receiver.close`, Exposed's `deleteWhere`, Alamofire's
+`Interceptor.adapt`: functions whose whole substance is one small lambda, where splitting left
+both halves under the 50-token floor. A nested callable is now promoted only if it clears that
+same floor; below it there is no clone evidence to separate, only evidence to take away. Final:
+1 participant lost, 24 gained, nothing outside `duplicate` moved. The single loss is
+`DataStreamRequest.validate`, whose closure genuinely differs — the identical wrapper around it
+had been inflating a three-way similarity that was not there.
+
+### W8b — a body that only constructs a value is not clone-eligible (`608be73`)
+The three `descriptor()` groups that came back with `b102e50`'s revert are a systematic class,
+not noise. The fingerprint's normalization **inverts** on a construction: it erases the field
+values — the whole authored content — and keeps the field list the type declaration dictates,
+so two constructions of one type match by definition of the type. `MAX_POSTING = 20` already
+concedes this with popularity as a worse proxy. The adapter reports
+`MetricsSyntax::construction_kinds`, the toolkit answers one all-or-nothing question,
+`duplicate` owns the verdict. Kotlin and Swift declare nothing and that is correct — their
+construction is an ordinary `call_expression`, so there is nothing true to report.
+
+W8a is what makes this safe with no narrowing predicate: a callback passed to a construction is
+its own shape now, so the exemption never touches it. kndo on itself 34 → 28 duplicate findings,
+all six construction bodies; corpus 7 lost / 0 gained, all seven alacritty `Default` impls whose
+body is one struct literal, read in source to confirm.
+
 ---
 
 ## 2. What remains — W6
