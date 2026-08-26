@@ -255,10 +255,22 @@ pub fn find_internal_only(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<
             subject_kind: SubjectKind::new(facet),
             severity: Severity::Info, // info by default
             confidence,
-            message: format!(
-                "{path}#{qualified} is declared {} but only used within {usage} — {} would suffice for this {facet}",
-                declared.label, tightest.label
-            ),
+            // Two sentences, because there are two evidence states and one of them used to
+            // borrow the other's words: with `weak_wider` the graph HOLDS matches pointing
+            // outside `usage`, just not confident ones, so "only used within its own file" is
+            // a claim this analysis knows to be contradicted. The `possible` tier was already
+            // honest; the prose was not.
+            message: if weak_wider {
+                format!(
+                    "{path}#{qualified} is declared {} and every confidently resolved use is within {usage}, but weaker matches point outside it — {} would suffice for this {facet} only if those are not real uses",
+                    declared.label, tightest.label
+                )
+            } else {
+                format!(
+                    "{path}#{qualified} is declared {} but only used within {usage} — {} would suffice for this {facet}",
+                    declared.label, tightest.label
+                )
+            },
             location: Location {
                 path: Some(file.path.clone()),
                 range: Some(symbol.span),
@@ -494,6 +506,20 @@ mod tests {
         let findings = find_internal_only(&graph, &reach);
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].confidence, Confidence::Possible);
+        // The tier and the prose have to agree: a cross-file match EXISTS in the graph, so
+        // the message must not claim the symbol is used only in its own file.
+        assert!(
+            !findings[0].message.contains("only used within"),
+            "weak-evidence verdict still borrowed the certain tier's words: {}",
+            findings[0].message
+        );
+        assert!(
+            findings[0]
+                .message
+                .contains("weaker matches point outside it"),
+            "{}",
+            findings[0].message
+        );
     }
 
     #[test]

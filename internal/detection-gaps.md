@@ -129,16 +129,24 @@ Vale registrar lo que atrapó la segunda medición: la propia herramienta report
 y `generic_param_names` como `unused` apenas `type_expr` los reemplazó. Eran código muerto que yo
 había dejado, y kndo lo encontró antes que la revisión — el dogfood haciendo su trabajo.
 
-## 5. Duplicate-group label ambiguity
+## 5. Duplicate-group label ambiguity (RESUELTO)
 
-A structural-clone group's instance labels are `path#Owner.name` selectors. Two identical
+A structural-clone group's instance labels were `path#Owner.name` selectors. Two identical
 methods with the same name on the same owner type but in *different impl blocks* (the
-generated-vs-hand-written split of `HostViewData` members in `kndo-plugin-api`) produce
-two indistinguishable labels — the finding is correct, but the reader cannot tell which
-impl block each instance lives in. Direction: selectors (and `related` entries) could
-carry the impl block's span or a disambiguating qualifier when `qualified_name` collides
-within one file. Cosmetic; recorded so the "same label twice" report isn't mistaken for a
-detector bug.
+generated-vs-hand-written split of `HostViewData` members in `kndo-plugin-api`) produced two
+indistinguishable labels — the finding was correct, but the reader could not tell which impl
+block each instance lived in.
+
+Fixed where the ambiguity actually was. The finding's `related` entries carried the two
+distinct spans all along, so the DATA was never ambiguous; only the rendered message was. The
+message now names the trait whose implementation declares each member — `Declaration::implements`,
+the fact §1/§2's plugins introduced — and falls back to the declaration's start line where
+there is no trait to name or where both instances share one (two `#[cfg]` alternates).
+
+The distinguisher deliberately does NOT enter the selector, which is the finding's identity
+(`finding_id`'s discriminator): a line number in an id would churn the baseline every time
+anything above the clone moved. Identity stable, prose readable — which is the same split
+§5-bis asks for.
 
 ## 6. The kndo-core module cycle (legal structure, silent by policy)
 
@@ -361,19 +369,22 @@ reachable, and the only finding left on them is an `internal-only` on `DefaultMe
 the *absence* of `unused` is load-bearing: `kndo-adapter-java`'s `multi-release-variants` fixture
 pins it.
 
-## 5-bis. An `internal-only` message that asserts more than its evidence (GAP)
+## 5-bis. An `internal-only` message that asserts more than its evidence (RESUELTO)
 
 Surfaced by §16's fixture. `internal-only` deliberately lets a weak (`Possible`) reference from
 wider than the strong requirement demote the *verdict's confidence* rather than widen the
-requirement — the right call, and RFC 0012 §2's direction. But the message it prints is
+requirement — the right call, and RFC 0012 §2's direction. But the message it printed was
 unchanged: "declared package-private but **only used within its own file** — private would
 suffice". On retrofit's multi-release variants there IS a cross-file reference; it is a
-`possible`-tier duck-fallback hit, which is why the verdict is `possible` too. The tier is
-honest and the sentence is not, and a reader who acts on the sentence breaks the build.
+`possible`-tier duck-fallback hit, which is why the verdict is `possible` too. The tier was
+honest and the sentence was not, and a reader who acted on the sentence broke the build.
 
-Direction: when `weak_wider` holds, say what is actually true — no reference stronger than
-`possible` requires more than this scope — instead of asserting exclusivity the graph
-contradicts. Same family as §5: the verdict is defensible, the rendering overclaims.
+The two evidence states now have two sentences. With `weak_wider` the finding says that every
+confidently resolved use is within the scope, that weaker matches point outside it, and that
+the narrower rung would suffice *only if those are not real uses* — which is exactly what the
+analysis knows. Pinned by
+`only_possible_confidence_cross_file_reference_demotes_not_exempts`, which now asserts the
+message never borrows the certain tier's words.
 
 ## 17. Version skew read out of BOM-managed and property-declared coordinates (FIXED)
 

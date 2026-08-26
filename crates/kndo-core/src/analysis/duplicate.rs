@@ -240,6 +240,19 @@ pub fn find_duplicate_functions(
             duplicated.push((instances[*i].symbol, instances[*i].token_count));
         }
         let selectors: Vec<String> = named.iter().map(|(p, q, _)| format!("{p}#{q}")).collect();
+        // What the MESSAGE shows. Two identical members of one type declared in different
+        // impl blocks (a trait's and the type's own, or two `#[cfg]` alternates) produce the
+        // same `path#Owner.name` twice, and the reader cannot tell which is which — while
+        // `related` below has carried their distinct spans all along.
+        //
+        // The distinguisher goes here and NOT into `selectors`, which is the finding's
+        // identity: a line number in an id churns the baseline every time anything above the
+        // clone moves. Identity stays stable, prose becomes readable.
+        let group_symbols: Vec<&crate::graph::SymbolNode> = named
+            .iter()
+            .map(|(_, _, i)| &graph.symbols[instances[*i].symbol.0 as usize])
+            .collect();
+        let labels = disambiguated(&selectors, &group_symbols);
         let (_, anchor_name, anchor_idx) = &named[0];
         let anchor_symbol = &graph.symbols[instances[*anchor_idx].symbol.0 as usize];
         let anchor_file = &graph.files[anchor_symbol.file.0 as usize];
@@ -258,7 +271,7 @@ pub fn find_duplicate_functions(
             })
             .collect();
 
-        let shown: Vec<&str> = selectors.iter().map(String::as_str).collect();
+        let shown: Vec<&str> = labels.iter().map(String::as_str).collect();
         findings.push(Finding {
             advisory: false,
             id: finding_id(FindingIdParts {
@@ -292,6 +305,42 @@ pub fn find_duplicate_functions(
     findings.sort_by(|a, b| a.id.cmp(&b.id));
     duplicated.sort();
     (findings, duplicated)
+}
+
+/// Display labels for one group's instances: the plain selector where it is already unique,
+/// and a distinguisher appended where it is not. `symbols` is aligned with `selectors`.
+///
+/// The distinguisher is the trait whose implementation declares the member — the fact that
+/// tells a reader what they actually want to know ("the `Serialize` one, not the inherent
+/// one") and that survives every edit above it. Where the graph has no trait to name, or
+/// where both instances share one (two `#[cfg]` alternates of the same impl), it falls back
+/// to the declaration's start line, which always separates them.
+fn disambiguated(selectors: &[String], symbols: &[&crate::graph::SymbolNode]) -> Vec<String> {
+    let collides = |i: usize| selectors.iter().filter(|s| *s == &selectors[i]).count() > 1;
+    let with_trait = |i: usize| {
+        symbols[i]
+            .implements
+            .as_ref()
+            .map(|t| format!("{} (impl {t})", selectors[i]))
+    };
+
+    (0..selectors.len())
+        .map(|i| {
+            if !collides(i) {
+                return selectors[i].clone();
+            }
+            // The trait only helps if it separates this instance from every other one
+            // sharing its plain selector.
+            let mine = with_trait(i);
+            let separates = mine.is_some()
+                && !(0..selectors.len())
+                    .any(|j| j != i && selectors[j] == selectors[i] && with_trait(j) == mine);
+            match (mine, separates) {
+                (Some(label), true) => label,
+                _ => format!("{}:{}", selectors[i], symbols[i].span.start.0),
+            }
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -443,6 +492,26 @@ mod tests {
         }
     }
 
+    /// A member of `owner` declared at `line`, optionally inside an `impl` of `trait_name`.
+    fn member(
+        file: u32,
+        owner: &str,
+        name: &str,
+        line: u32,
+        trait_name: Option<&str>,
+    ) -> SymbolNode {
+        SymbolNode {
+            member_of: Some(SmolStr::new(owner)),
+            implements: trait_name.map(SmolStr::new),
+            span: crate::adapter::Span {
+                start: (line, 1),
+                end: (line + 4, 1),
+            },
+            kind: SymbolKind::Method,
+            ..callable(file, name)
+        }
+    }
+
     fn metrics(fingerprints: Vec<u64>) -> SymbolMetrics {
         SymbolMetrics {
             cyclomatic: 2,
@@ -450,6 +519,59 @@ mod tests {
             token_count: 60,
             fingerprints,
         }
+    }
+
+    #[test]
+    fn colliding_labels_name_the_impl_block_they_came_from() {
+        // Gap §5: one type, one method name, two impl blocks — the generated-vs-hand-written
+        // split. Both instances used to print the same `path#Owner.name`, leaving the reader
+        // no way to tell them apart.
+        let graph = ProjectGraph::for_test(
+            vec![claimed_file("a.rs")],
+            vec![
+                member(0, "View", "poll", 10, Some("Host")),
+                member(0, "View", "poll", 40, None),
+            ],
+            vec![],
+            vec![],
+        )
+        .with_function_metrics(vec![
+            (SymbolId(0), metrics(vec![1, 2, 3, 4, 5])),
+            (SymbolId(1), metrics(vec![1, 2, 3, 4, 5])),
+        ]);
+        let findings = find_duplicate_functions(&graph, 50).0;
+        assert_eq!(findings.len(), 1);
+        let m = &findings[0].message;
+        assert!(
+            m.contains("a.rs#View.poll (impl Host)"),
+            "the trait is what a reader wants: {m}"
+        );
+        assert!(
+            m.contains("a.rs#View.poll:40"),
+            "the one with no trait to name falls back to its line: {m}"
+        );
+    }
+
+    #[test]
+    fn two_alternates_of_one_trait_impl_fall_back_to_their_lines() {
+        // `#[cfg(unix)]` and `#[cfg(windows)]` impls of the SAME trait: the trait separates
+        // them from nothing, so the label has to reach for something that does.
+        let graph = ProjectGraph::for_test(
+            vec![claimed_file("a.rs")],
+            vec![
+                member(0, "View", "poll", 10, Some("Host")),
+                member(0, "View", "poll", 40, Some("Host")),
+            ],
+            vec![],
+            vec![],
+        )
+        .with_function_metrics(vec![
+            (SymbolId(0), metrics(vec![1, 2, 3, 4, 5])),
+            (SymbolId(1), metrics(vec![1, 2, 3, 4, 5])),
+        ]);
+        let m = find_duplicate_functions(&graph, 50).0[0].message.clone();
+        assert!(m.contains("a.rs#View.poll:10"), "{m}");
+        assert!(m.contains("a.rs#View.poll:40"), "{m}");
     }
 
     #[test]
