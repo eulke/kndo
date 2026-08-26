@@ -340,7 +340,7 @@ read exactly the non-source files (`Info.plist`, `templates/**`, `rollup.config.
 graph never sees, and contribute the root or the edge. Not `[[externally-invoked]]`: there is no
 marker on the declaration to match, the name lives in the other file.
 
-## 15. A published library's public API with no in-repo consumer (POLICY, not a gap)
+## 15. A published library's public API with no in-repo consumer (POLICY — Rust instance no longer reproduces)
 
 ripgrep's `grep-searcher` exports `Bytes` and `Lossy` sinks that nothing inside the repository
 uses; koin's `binds()` and its Compose-Navigation3 module are the same shape. Library mode
@@ -352,6 +352,16 @@ Recorded here because the *verdict* is a policy question, not a mechanic: for a 
 published, "no consumer in this repository" is not evidence of anything. Where library-mode
 promotion covers it, this never fires; where it doesn't, the honest fix is at the promotion
 rule, not at the analysis.
+
+**Mechanic verified, and the Rust instance is gone.** For Cargo, `publish = false` is the
+explicit opt-out and its absence means publishable — `manifest.rs` reads it in exactly that
+direction (`publish = ["registry"]` restrictions stay publishable), and a non-private package
+roots its `[lib] path` (default `src/lib.rs`) at `Certain`. Re-measured against the clone:
+`Bytes` and `Lossy` are still declared in `crates/searcher/src/sink.rs`, `grep-searcher`'s
+manifest still carries no `publish` key, and kndo now reports **zero** `unused`/`internal-only`
+findings anywhere in that crate — the promotion reaches declarations across the crate's module
+tree, not just the root file. What remains under this entry is the policy statement itself, for
+the shapes where promotion genuinely has nothing to key off.
 
 ## 16. Multi-release variants of one class (WAS a gap — already covered, now fixtured)
 
