@@ -2170,11 +2170,11 @@ fn handle_impl(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
     let Some(type_node) = item.child_by_field_name("type") else {
         return;
     };
-    let self_type = last_type_identifier(type_node, src);
+    let self_type = impl_header_name(type_node, src);
     let Some(self_type) = self_type else { return };
     let trait_name = item
         .child_by_field_name("trait")
-        .and_then(|t| last_type_identifier(t, src).map(|n| n.to_string()));
+        .and_then(|t| impl_header_name(t, src).map(|n| n.to_string()));
 
     // Blanket forwarding (`impl<'a, M: Matcher> Matcher for &'a M`, `for &mut S`, `for
     // Box<S>`): Self is one of the impl's OWN type parameters behind a reference/Box —
@@ -2216,7 +2216,7 @@ fn handle_impl(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
     let is_machinery = is_forwarding
         || item
             .child_by_field_name("trait")
-            .and_then(|t| last_type_identifier(t, src))
+            .and_then(|t| impl_header_name(t, src))
             .is_some_and(|t| is_machinery_trait(&t));
     if let Some(body) = item.child_by_field_name("body") {
         let mut members = body.walk();
@@ -2298,14 +2298,31 @@ fn handle_impl(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
 }
 
 /// The rightmost `type_identifier` under a type node — `S`, `S<T>`, `a::b::S` all yield `S`.
-fn last_type_identifier(node: Node, src: &[u8]) -> Option<String> {
+/// The nominal name an impl header's type or trait position reduces to: `Serialize`,
+/// `serde::ser::Serialize`, `ArchiveWith<SmolStr>` and `&'a mut Wrapper<T>` all give the BASE
+/// name — the type being named, never one of its arguments.
+///
+/// The distinction is load-bearing in both positions. `impl Index<usize> for T` implements
+/// `Index`, not `usize`; `impl Deserializer<'de> for StringDeserializer<E>` owns its members
+/// under `StringDeserializer`, not `E`. A walk that simply took the last identifier anywhere
+/// in the subtree answered with the argument, which filed every generic type's members under
+/// a phantom owner (its own type parameter — a name no receiver ever unifies with), pointed
+/// the `Implement` reference at an argument, and cost every GENERIC machinery trait its
+/// members' marks; the non-generic ones, `Display` and `Drop`, worked by accident.
+fn impl_header_name(node: Node, src: &[u8]) -> Option<String> {
     if node.kind() == "type_identifier" {
         return Some(text(node, src).to_string());
+    }
+    // A generic application names its base; the arguments are other types entirely.
+    if node.kind() == "generic_type" {
+        return node
+            .child_by_field_name("type")
+            .and_then(|base| impl_header_name(base, src));
     }
     let mut found = None;
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
-        if let Some(name) = last_type_identifier(child, src) {
+        if let Some(name) = impl_header_name(child, src) {
             found = Some(name);
         }
     }
@@ -4023,6 +4040,46 @@ mod tests {
             "a non-machinery trait's methods dispatch by other means (roots cover them)"
         );
         assert!(!flagged("label"), "inherent methods are name-called");
+    }
+
+    #[test]
+    fn a_generic_impl_header_reduces_to_its_base_not_its_argument() {
+        // `impl Index<usize> for Table` implements `Index`, and a generic self type owns its
+        // members under its own name. Reading the last identifier in the subtree answered
+        // `usize` and the trait itself — a phantom owner no receiver unifies with, which is
+        // why serde's findings named `#E.into_deserializer`.
+        let f = facts(
+            "impl Index<usize> for Table {\n\
+             \x20   fn index(&self, i: usize) -> &u8 { todo!() }\n\
+             }\n\
+             impl<E> IntoDeserializer for StringDeserializer<E> {\n\
+             \x20   fn into_deserializer(self) -> Self { self }\n\
+             }\n",
+        );
+        let owners: Vec<_> = f
+            .declarations
+            .iter()
+            .filter_map(|d| d.member_of.as_deref().map(|o| (o, d.name.as_str())))
+            .collect();
+        assert_eq!(
+            owners,
+            vec![
+                ("Table", "index"),
+                ("StringDeserializer", "into_deserializer")
+            ]
+        );
+        assert!(
+            f.declarations
+                .iter()
+                .any(|d| d.name == "index" && d.implicitly_invoked),
+            "Index is a machinery trait; its generic argument was hiding that"
+        );
+        assert!(
+            f.references
+                .iter()
+                .any(|r| r.name == "Index" && r.kind == RefKind::Implement),
+            "the Implement reference names the trait, not its argument"
+        );
     }
 
     #[test]

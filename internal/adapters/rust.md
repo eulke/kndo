@@ -86,6 +86,19 @@ as expansion-site-wide, core-traits.md §1). Inline modules
 is this adapter's standing approximation, stated once here and leaned on everywhere.
 `mod foo;` (the file-declaring form) is an import, not a declaration (§0).
 
+Both positions of an `impl` header reduce to a **base name**: the type or trait being named,
+never one of its arguments. `impl Index<usize> for Table` implements `Index` and owns `index`
+under `Table`; `impl<E> Deserializer<'de> for StringDeserializer<E>` owns its members under
+`StringDeserializer`. Reading the last identifier in the header's subtree instead — which is
+what this adapter did until the reduction got its own function — answers with the *argument*:
+every generic type's members were filed under a phantom owner (often the impl's own type
+parameter, a name no receiver can ever unify with), the `Implement` reference pointed at an
+argument, and every generic machinery trait (`Add`, `Index`, `PartialEq`) silently lost its
+members' `implicitly_invoked` marks while the non-generic ones worked by accident. serde's
+`#E.into_deserializer` findings were the visible symptom; correcting it removed 123 findings
+from serde, 334 from tokio and 87 from ripgrep, and left the five non-Rust field targets
+byte-identical.
+
 **Visibility ladder** (RFC 0012 §6), declared on the descriptor:
 
 ```
