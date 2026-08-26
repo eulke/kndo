@@ -9,8 +9,4 @@ publish.workspace = true
 
 [dependencies]
 kndo-core = { path = "../kndo-core" }
-
-[dev-dependencies]
-# Only the tests build descriptors by hand; the plugin itself reaches
-# `PluginDescriptor::on_manifest_dependency`, which takes plain `&str`.
 smol_str = { workspace = true }

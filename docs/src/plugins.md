@@ -30,6 +30,15 @@ the reserved `kndo:` namespace and are gated by the same activation rules.
 
 `kndo doctor` shows each with its activation state and reason.
 
+**A plugin's rules are not the only way it turns on.** A plugin that names another in its
+`dependencies` activates it by implication — transitively, and regardless of whether the named
+plugin's own rules match. This is the only path to a plugin whose framework is an *indirect*
+dependency: a company framework that uses Express internally is never `express` in its users'
+manifests, so `kndo:express` can never self-activate there; the framework's own plugin names
+`kndo:express` and that is what reaches it. `kndo doctor` renders the result as
+`active (dependency of <id>)`, and a named coordinate no installed plugin carries is reported
+as a missing dependency rather than silently ignored.
+
 ## Installing plugins
 
 ```console

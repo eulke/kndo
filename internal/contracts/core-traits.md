@@ -647,12 +647,19 @@ pub trait Plugin: Send + Sync {
     // installed, or a built-in with rules), and `detection` is prose for `kndo doctor`
     // describing a gate `activation` CANNOT express (an always-on coverage ingester naming
     // its report paths). A gate that IS a rule leaves `detection` empty rather than restating
-    // it — one concept, one source; `PluginDescriptor::on_manifest_dependency(id, dep)` is
-    // the constructor for that whole shape, and every built-in conventions plugin is one
-    // call to it. `id` is a
+    // it — one concept, one source. Every descriptor is written as a full struct literal, in
+    // built-ins included: the field list is documentation that cannot drift, and a
+    // constructor hiding four of the six is how `dependencies` stopped being visible to the
+    // one author who needed it. `id` is a
     // coordinate (`kndo:` reserved for built-ins, source coordinates for external — RFC 0015
     // §2) and `dependencies` names coordinates whose conventions are part of this plugin's
-    // own (co-install + co-activate fixpoint, RFC 0015 §3).
+    // own (co-install + co-activate fixpoint, RFC 0015 §3). Co-activation is not a
+    // convenience: it is the ONLY path to a plugin whose framework is an indirect
+    // dependency. A company framework that uses Express internally is never `express` in its
+    // users' manifests, so `kndo:express`'s own rule can never fire there; the framework's
+    // plugin names `kndo:express` here, and being active is what activates it. Pinned by
+    // `crates/kndo/tests/plugin_dependency_implication.rs` — external component, built-in
+    // dependency, both halves.
     // No ordering-constraints field yet (RFC 0003 §5's open item) — plugins run sorted by `id`,
     // a real but interim determinism rule.
 

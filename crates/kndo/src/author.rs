@@ -250,6 +250,11 @@ impl Guest for Component {
             activation: vec![ActivationRule::ManifestDependency(
                 "TODO-your-framework-package".to_string(),
             )],
+            // Coordinates of plugins whose conventions are part of yours — installing you
+            // installs them, and you being ACTIVE activates them. This is the only way to
+            // reach a plugin whose own rules cannot fire: a framework that uses Express
+            // internally is not `express` in anyone's manifest, so `kndo:express` never
+            // self-activates for its users — name it here and it does.
             dependencies: Vec::new(),
         }
     }

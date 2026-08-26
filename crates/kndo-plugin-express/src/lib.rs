@@ -9,7 +9,8 @@
 
 use kndo_core::adapter::ProjectPath;
 use kndo_core::plugin::{
-    AnnotationSink, ContentView, GraphView, Plugin, PluginDescriptor, PluginTarget, RootSink,
+    ActivationRule, AnnotationSink, ContentView, GraphView, Plugin, PluginDescriptor, PluginTarget,
+    RootSink,
 };
 use kndo_core::vocab::{Confidence, FileRole, RootKind};
 use smol_str::SmolStr;
@@ -21,16 +22,25 @@ pub struct ExpressPlugin;
 impl Plugin for ExpressPlugin {
     fn descriptor(&self) -> PluginDescriptor {
         PluginDescriptor {
-            // Every app root's own package.json, read through the content channel to derive
-            // the true entry from "main"/"scripts" — an in-memory glob against
-            // already-discovered, gitignore-filtered paths, not a disk walk, so (unlike a raw
+            id: SmolStr::new("kndo:express"),
+            version: SmolStr::new("1"),
+            // Empty: the gate below IS a rule, so prose beside it would be the same fact twice.
+            detection: vec![],
+            // Every app root's own package.json, read through the content channel to derive the
+            // true entry from "main"/"scripts" — an in-memory glob against already-discovered,
+            // gitignore-filtered paths, not a disk walk, so (unlike a raw
             // ActivationRule::FileExists glob) this never touches node_modules regardless of
             // recursion.
             requested_file_access: vec![SmolStr::new("**/package.json")],
-            // The single manifest rule fits express exactly: it is always a declared runtime
-            // dependency, never an implicit peer, and wrapper frameworks reach this plugin
-            // through the `dependencies` implication rather than a gate of their own.
-            ..PluginDescriptor::on_manifest_dependency("kndo:express", "express")
+            // Single rule: express is always a declared runtime dependency, never an implicit
+            // peer.
+            activation: vec![ActivationRule::ManifestDependency(SmolStr::new("express"))],
+            // Empty here, and load-bearing that it is VISIBLE here. A company framework that
+            // uses express internally does not declare `express` in its own manifest, so this
+            // plugin's rule above can never fire for it — that project's wrapper plugin names
+            // `kndo:express` in ITS `dependencies`, and being active is what activates this one
+            // (RFC 0015 §3). Nothing else reaches a plugin whose framework is indirect.
+            dependencies: vec![],
         }
     }
 
@@ -153,7 +163,6 @@ fn exported_top_level<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kndo_core::plugin::ActivationRule;
 
     #[test]
     fn descriptor_claims_the_reserved_namespace_and_gates_on_express() {

@@ -66,7 +66,10 @@ PluginDescriptor {
     // globally — declare a real rule.
     activation: vec![ActivationRule::ManifestDependency("my-framework".to_string())],
     // Coordinates of plugins whose conventions are part of yours: installing you
-    // installs them; activating you activates them.
+    // installs them; activating you activates them — even when their own rules cannot
+    // fire. A framework that uses Express internally is not `express` in its users'
+    // manifests, so `kndo:express` never self-activates for them; naming it here is what
+    // reaches it. Transitive, so wrapper chains compose.
     dependencies: Vec::new(),
 }
 ```

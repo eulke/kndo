@@ -97,5 +97,13 @@ graph/cache/analysis:
 - `--threads 1` and the default thread count produce identical, deterministic output.
 - Every adapter's `tests/conformance.rs` fixtures stay byte-identical unless the PR is a
   deliberate, documented contract change.
+- `plugin_dependency_implication` / `adapter_dependency_implication` — **a plugin named in
+  another plugin's `dependencies` activates even when its own rules never match.** This is the
+  only path to a plugin whose framework is an *indirect* dependency: a company framework that
+  uses Express internally is never `express` in its users' manifests, so `kndo:express` can
+  never self-activate there. No plugin we ship uses it, and it must exist anyway — that is what
+  makes it easy to delete by accident. It already nearly went: a descriptor constructor that
+  hid four of `PluginDescriptor`'s six fields made the field invisible in every built-in, and
+  nothing failed.
 
 No PR should weaken or skip one of these to get green.

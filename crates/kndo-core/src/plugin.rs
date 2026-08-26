@@ -51,13 +51,22 @@ pub struct PluginDescriptor {
     /// already carries is one concept with two sources — and it had already drifted: every
     /// built-in conventions plugin's prose named a single manifest kind ("a package.json
     /// under the project root depends on next") while `ManifestDependency` matches any
-    /// manifest, `Cargo.toml` included. [`PluginDescriptor::on_manifest_dependency`] is the
-    /// constructor that makes leaving it empty the easy path.
+    /// manifest, `Cargo.toml` included.
     pub detection: Vec<SmolStr>,
     /// Globs whose content the host will provide; no ambient fs/net.
     pub requested_file_access: Vec<SmolStr>,
     /// Structured, machine-evaluable version of [`detection`](Self::detection) — what actually
     /// decides whether a *globally* installed plugin turns on for a given project.
+    ///
+    /// **One rule, deliberately**, for a conventions plugin: a project using a framework
+    /// declares it in a manifest somewhere, and the manifest scan is gitignore-aware and
+    /// monorepo-wide. The obvious alternative, a recursive
+    /// `FileExists("**/<tool>.config.*")`, raw-globs through `node_modules` on every run — cost
+    /// and hazard for a signal the manifest rule already carries. A plugin whose signal IS a
+    /// file (no dependency names it) has no such choice and pays the glob; `kndo:info-plist`
+    /// is the case.
+    ///
+    /// Rules are not the only way in: see [`dependencies`](Self::dependencies).
     /// A project-local `.kndo/plugins/*.wasm` file is unconditional (its presence there already
     /// is the opt-in); this only gates the XDG-wide install path, and only when non-empty — an
     /// empty list means "no known structural signal," so a globally installed plugin with none
@@ -73,40 +82,6 @@ pub struct PluginDescriptor {
     /// each other's contributions, so there is no inter-plugin ABI to be compatible about. A
     /// missing dependency is never a runtime error — `kndo doctor` names the missing coordinate.
     pub dependencies: Vec<SmolStr>,
-}
-
-impl PluginDescriptor {
-    /// The conventions-plugin shape: version 1, gated on ONE manifest dependency, no plugin
-    /// dependencies, no file access, and no [`detection`](Self::detection) prose — the rule
-    /// is the description.
-    ///
-    /// One rule, deliberately, and this is where that reasoning lives now that every
-    /// conventions plugin shares it: a project using a framework declares it in a manifest
-    /// somewhere, and the manifest scan is gitignore-aware and monorepo-wide. The obvious
-    /// alternative, a recursive `FileExists("**/<tool>.config.*")`, raw-globs through
-    /// `node_modules` on every run — cost and hazard for a signal the manifest rule already
-    /// carries.
-    ///
-    /// Every built-in conventions plugin is this, and four of them were the same
-    /// twenty-line literal with three words changed, which kndo reports on its own repository
-    /// as a `duplicate` group. A plugin needing more sets the fields it needs over the top:
-    ///
-    /// ```ignore
-    /// PluginDescriptor {
-    ///     requested_file_access: vec![SmolStr::new("**/next.config.*")],
-    ///     ..PluginDescriptor::on_manifest_dependency("kndo:nextjs", "next")
-    /// }
-    /// ```
-    pub fn on_manifest_dependency(id: &str, dependency: &str) -> Self {
-        PluginDescriptor {
-            id: SmolStr::new(id),
-            version: SmolStr::new("1"),
-            detection: Vec::new(),
-            requested_file_access: Vec::new(),
-            activation: vec![ActivationRule::ManifestDependency(SmolStr::new(dependency))],
-            dependencies: Vec::new(),
-        }
-    }
 }
 
 /// Whether `id` claims the reserved built-in namespace — external components

@@ -29,32 +29,29 @@ use kndo_core::coverage::CoverageSink;
 use kndo_core::plugin::{Plugin, PluginDescriptor};
 use smol_str::SmolStr;
 
-fn descriptor(id: &str, detection: &str, paths: &[&str]) -> PluginDescriptor {
-    PluginDescriptor {
-        // Built-ins live in the reserved `kndo:` namespace.
-        id: SmolStr::new(id),
-        version: SmolStr::new("1"),
-        detection: vec![SmolStr::new(detection)],
-        // Well-known locations ("located by config or well-known paths") — overridden,
-        // not extended, by a `[plugins.<id>] report` entry in kndo.toml.
-        requested_file_access: paths.iter().map(SmolStr::new).collect(),
-        // Always-on: see the module doc. `detection` still names the files for doctor.
-        activation: vec![],
-        dependencies: vec![],
-    }
-}
-
 /// The built-in lcov ingester (lcov is the coverage lingua franca:
 /// jest/vitest/nyc, llvm-cov, gcov, Go via converters).
 pub struct LcovPlugin;
 
 impl Plugin for LcovPlugin {
     fn descriptor(&self) -> PluginDescriptor {
-        descriptor(
-            "kndo:coverage-lcov",
-            "an lcov.info file at a well-known path",
-            &["coverage/lcov.info", "lcov.info"],
-        )
+        PluginDescriptor {
+            // Built-ins live in the reserved `kndo:` namespace.
+            id: SmolStr::new("kndo:coverage-lcov"),
+            version: SmolStr::new("1"),
+            // Prose because `activation` below cannot express this gate: the plugin is
+            // always-on and what it actually looks for is a set of report paths.
+            detection: vec![SmolStr::new("an lcov.info file at a well-known path")],
+            // Well-known locations — overridden, NOT extended, by a `[plugins.<id>] report`
+            // entry in kndo.toml.
+            requested_file_access: vec![
+                SmolStr::new("coverage/lcov.info"),
+                SmolStr::new("lcov.info"),
+            ],
+            // Always-on: see the module doc.
+            activation: vec![],
+            dependencies: vec![],
+        }
     }
 
     /// Coverage ingestion only — no graph-mutation hooks. Without this override, this plugin's
@@ -103,15 +100,23 @@ pub struct CoberturaPlugin;
 
 impl Plugin for CoberturaPlugin {
     fn descriptor(&self) -> PluginDescriptor {
-        descriptor(
-            "kndo:coverage-cobertura",
-            "a Cobertura XML report at a well-known path",
-            &[
-                "coverage.xml",
-                "cobertura.xml",
-                "coverage/cobertura-coverage.xml",
+        PluginDescriptor {
+            id: SmolStr::new("kndo:coverage-cobertura"),
+            version: SmolStr::new("1"),
+            // Prose because `activation` below cannot express this gate: the plugin is
+            // always-on and what it actually looks for is a set of report paths.
+            detection: vec![SmolStr::new("a Cobertura XML report at a well-known path")],
+            // Well-known locations — overridden, NOT extended, by a `[plugins.<id>] report`
+            // entry in kndo.toml.
+            requested_file_access: vec![
+                SmolStr::new("coverage.xml"),
+                SmolStr::new("cobertura.xml"),
+                SmolStr::new("coverage/cobertura-coverage.xml"),
             ],
-        )
+            // Always-on: see the module doc.
+            activation: vec![],
+            dependencies: vec![],
+        }
     }
 
     /// See [`LcovPlugin::mutates_graph`] — same reasoning for every ingester here.
@@ -182,15 +187,23 @@ pub struct JacocoPlugin;
 
 impl Plugin for JacocoPlugin {
     fn descriptor(&self) -> PluginDescriptor {
-        descriptor(
-            "kndo:coverage-jacoco",
-            "a JaCoCo XML report at a well-known path",
-            &[
-                "build/reports/jacoco/test/jacocoTestReport.xml",
-                "target/site/jacoco/jacoco.xml",
-                "jacoco.xml",
+        PluginDescriptor {
+            id: SmolStr::new("kndo:coverage-jacoco"),
+            version: SmolStr::new("1"),
+            // Prose because `activation` below cannot express this gate: the plugin is
+            // always-on and what it actually looks for is a set of report paths.
+            detection: vec![SmolStr::new("a JaCoCo XML report at a well-known path")],
+            // Well-known locations — overridden, NOT extended, by a `[plugins.<id>] report`
+            // entry in kndo.toml.
+            requested_file_access: vec![
+                SmolStr::new("build/reports/jacoco/test/jacocoTestReport.xml"),
+                SmolStr::new("target/site/jacoco/jacoco.xml"),
+                SmolStr::new("jacoco.xml"),
             ],
-        )
+            // Always-on: see the module doc.
+            activation: vec![],
+            dependencies: vec![],
+        }
     }
 
     /// See [`LcovPlugin::mutates_graph`].
@@ -263,11 +276,19 @@ pub struct GoCoverPlugin;
 
 impl Plugin for GoCoverPlugin {
     fn descriptor(&self) -> PluginDescriptor {
-        descriptor(
-            "kndo:coverage-go",
-            "a Go coverprofile at a well-known path",
-            &["coverage.out", "cover.out"],
-        )
+        PluginDescriptor {
+            id: SmolStr::new("kndo:coverage-go"),
+            version: SmolStr::new("1"),
+            // Prose because `activation` below cannot express this gate: the plugin is
+            // always-on and what it actually looks for is a set of report paths.
+            detection: vec![SmolStr::new("a Go coverprofile at a well-known path")],
+            // Well-known locations — overridden, NOT extended, by a `[plugins.<id>] report`
+            // entry in kndo.toml.
+            requested_file_access: vec![SmolStr::new("coverage.out"), SmolStr::new("cover.out")],
+            // Always-on: see the module doc.
+            activation: vec![],
+            dependencies: vec![],
+        }
     }
 
     /// See [`LcovPlugin::mutates_graph`].

@@ -47,8 +47,9 @@ impl Plugin for InfoPlistPlugin {
             id: SmolStr::new("kndo:info-plist"),
             version: SmolStr::new("1"),
             // No manifest declares "Apple", so unlike every conventions plugin gated on a
-            // dependency this one has to gate on the file itself, and pays a recursive glob
-            // for it. The file is the signal; there is nothing cheaper to key on.
+            // dependency this one gates on the file itself and pays a recursive glob for it.
+            // The file is the signal; there is nothing cheaper to key on — which `activation`
+            // below cannot say, so it is said here.
             detection: vec![SmolStr::new(
                 "an Info.plist anywhere under the project root",
             )],

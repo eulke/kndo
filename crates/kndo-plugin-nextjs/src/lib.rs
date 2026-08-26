@@ -10,7 +10,8 @@
 use std::collections::BTreeMap;
 
 use kndo_core::plugin::{
-    AnnotationSink, ContentView, GraphView, Plugin, PluginDescriptor, PluginTarget, RootSink,
+    ActivationRule, AnnotationSink, ContentView, GraphView, Plugin, PluginDescriptor, PluginTarget,
+    RootSink,
 };
 use kndo_core::vocab::{Confidence, FileRole, RootKind};
 use smol_str::SmolStr;
@@ -22,14 +23,18 @@ pub struct NextjsPlugin;
 impl Plugin for NextjsPlugin {
     fn descriptor(&self) -> PluginDescriptor {
         PluginDescriptor {
+            id: SmolStr::new("kndo:nextjs"),
+            version: SmolStr::new("1"),
+            // Empty: the gate below IS a rule, so prose beside it would be the same fact twice.
+            detection: vec![],
             // Every app root's own next.config.* is read through the content channel, to
-            // statically read `pageExtensions`. This is a distinct mechanism from the
-            // manifest-dependency gate this descriptor is built on — content-channel globs
-            // match only already-discovered, gitignore-filtered paths (no disk walk of their
-            // own), so unlike an ActivationRule::FileExists glob, recursion here never
-            // touches node_modules.
+            // statically read `pageExtensions`. This is a distinct mechanism from `activation`
+            // below — content-channel globs match only already-discovered, gitignore-filtered
+            // paths (no disk walk of their own), so unlike an ActivationRule::FileExists glob,
+            // recursion here never touches node_modules.
             requested_file_access: vec![SmolStr::new("**/next.config.*")],
-            ..PluginDescriptor::on_manifest_dependency("kndo:nextjs", "next")
+            activation: vec![ActivationRule::ManifestDependency(SmolStr::new("next"))],
+            dependencies: vec![],
         }
     }
 
@@ -161,7 +166,6 @@ fn framework_visible_exports<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kndo_core::plugin::ActivationRule;
 
     #[test]
     fn descriptor_claims_the_reserved_namespace_and_gates_on_next() {

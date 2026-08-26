@@ -70,6 +70,18 @@ relationship. Declaring one has exactly two effects:
    implied, because plugins still never consume each other's output; execution order remains
    the existing sorted-by-id interim rule).
 
+   **This is not a convenience — for the wrapper case it is the only path there is.** A company
+   framework that uses Express internally does not put `express` in its users' manifests; it
+   puts `@company/framework` there. So `kndo:express`'s own
+   `ManifestDependency("express")` rule can *never* fire in such a project, no matter how much
+   Express is really running. Without the implication, that project's Express conventions are
+   unreachable — not degraded, unreachable. Pinned end-to-end, external component naming a
+   built-in, in `crates/kndo/tests/plugin_dependency_implication.rs`, with
+   `examples/kndo-plugin-wrapper-demo` as the real component; the adapter tier's mirror is
+   `adapter_dependency_implication.rs`. Both are named in CLAUDE.md's never-regress list,
+   because no plugin we ship exercises the field and an unused mechanism is the easy one to
+   delete.
+
 Deliberately **one field, not two** ("requires" vs "implies"): since plugins cannot read each
 other's contributions — structurally, `GraphView` exposes only adapter-built facts and sinks go
 to the core — the *only* coherent meaning of inter-plugin dependency is "co-activate and

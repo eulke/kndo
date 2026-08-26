@@ -12,7 +12,10 @@
 //! bridge for a type rkyv does not natively support (kndo's own `SmolStrAsString`,
 //! `TypeExprAsFlat`) is hand-written and reachable only through the expansion.
 
-use kndo_core::plugin::{AnnotationSink, ContentView, GraphView, Plugin, PluginDescriptor};
+use kndo_core::plugin::{
+    ActivationRule, AnnotationSink, ContentView, GraphView, Plugin, PluginDescriptor,
+};
+use smol_str::SmolStr;
 
 pub struct RkyvPlugin;
 
@@ -43,7 +46,16 @@ fn machinery_drives(trait_name: &str, member: &str) -> bool {
 
 impl Plugin for RkyvPlugin {
     fn descriptor(&self) -> PluginDescriptor {
-        PluginDescriptor::on_manifest_dependency("kndo:rkyv", "rkyv")
+        PluginDescriptor {
+            id: SmolStr::new("kndo:rkyv"),
+            version: SmolStr::new("1"),
+            // Empty: the gate below IS a rule, so prose beside it would be the same fact twice.
+            detection: vec![],
+            // Nothing to read: the answer is entirely in the symbol table.
+            requested_file_access: vec![],
+            activation: vec![ActivationRule::ManifestDependency(SmolStr::new("rkyv"))],
+            dependencies: vec![],
+        }
     }
 
     fn mutates_graph(&self) -> bool {
@@ -63,8 +75,6 @@ impl Plugin for RkyvPlugin {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kndo_core::plugin::ActivationRule;
-    use smol_str::SmolStr;
 
     #[test]
     fn descriptor_claims_the_reserved_namespace_and_gates_on_rkyv() {

@@ -11,7 +11,10 @@
 //! merely incomplete — and that shape IS wasmtime's convention, which is what makes this a
 //! plugin for one tool rather than a guess about WASM in general.
 
-use kndo_core::plugin::{AnnotationSink, ContentView, GraphView, Plugin, PluginDescriptor};
+use kndo_core::plugin::{
+    ActivationRule, AnnotationSink, ContentView, GraphView, Plugin, PluginDescriptor,
+};
+use smol_str::SmolStr;
 
 pub struct WasmtimePlugin;
 
@@ -31,7 +34,16 @@ fn machinery_drives(trait_name: &str) -> bool {
 
 impl Plugin for WasmtimePlugin {
     fn descriptor(&self) -> PluginDescriptor {
-        PluginDescriptor::on_manifest_dependency("kndo:wasmtime", "wasmtime")
+        PluginDescriptor {
+            id: SmolStr::new("kndo:wasmtime"),
+            version: SmolStr::new("1"),
+            // Empty: the gate below IS a rule, so prose beside it would be the same fact twice.
+            detection: vec![],
+            // Nothing to read: the answer is entirely in the symbol table.
+            requested_file_access: vec![],
+            activation: vec![ActivationRule::ManifestDependency(SmolStr::new("wasmtime"))],
+            dependencies: vec![],
+        }
     }
 
     fn mutates_graph(&self) -> bool {
@@ -51,8 +63,6 @@ impl Plugin for WasmtimePlugin {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kndo_core::plugin::ActivationRule;
-    use smol_str::SmolStr;
 
     #[test]
     fn descriptor_claims_the_reserved_namespace_and_gates_on_the_dependency() {

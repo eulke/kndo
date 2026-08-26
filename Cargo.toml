@@ -27,6 +27,7 @@ exclude = [
     "spikes/perf",
     "examples/kndo-plugin-demo",
     "examples/kndo-plugin-hooks-demo",
+    "examples/kndo-plugin-wrapper-demo",
     "examples/kndo-coverage-demo",
     "examples/kndo-adapter-wrapper-demo",
 ]
