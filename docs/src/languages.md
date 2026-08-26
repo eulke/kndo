@@ -76,8 +76,10 @@ definition.
 materialized — kndo reads source, it doesn't expand macros; token-tree scanning keeps
 macro-referenced symbols alive, but code generated wholesale by proc-macros is invisible.
 Trait impls dispatched only through external machinery (serialization being the classic
-case) are covered by the built-in [`kndo:serde` plugin](plugins.md#built-in-plugins);
-other such frameworks need their own plugin annotation.
+case) are covered by the built-in [`kndo:serde`, `kndo:rkyv` and `kndo:wasmtime`
+plugins](plugins.md#built-in-plugins) — kndo records which trait's `impl` declares each
+member, and each plugin matches its own ecosystem's traits against that. Another such
+framework needs its own plugin, which is that table and nothing more.
 
 ## Java
 

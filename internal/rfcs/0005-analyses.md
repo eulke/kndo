@@ -138,7 +138,11 @@ field). Two rules govern the traversal:
   TWO sources of the same fact: the adapter's `Declaration::implicitly_invoked` (the
   language's own machinery) and a plugin's `mark_implicitly_invoked` annotation (a
   *framework's* machinery — serde calling `serialize`; `kndo:serde`, docs/plugins/serde.md
-  — third-party dispatch the language adapter must never learn about).
+  — third-party dispatch the language adapter must never learn about). A plugin normally
+  reaches that annotation through `AnnotationSink::mark_machinery_impls`, which matches its
+  curated trait table against `SymbolNode::implements` — the trait whose implementation
+  declares the member, an adapter-supplied fact the core carries and never interprets
+  (core-traits.md). Same rule, same two sources; the plugin brings only the table.
 - **Implement-dispatch rule:** calling through a trait IS plausibly executing every
   implementation — the vtable, as declared. For each `RefKind::Implement` edge
   (`impl Trait for T` emits one from the implementing type's symbol to the trait's), every
