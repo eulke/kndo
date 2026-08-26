@@ -274,7 +274,14 @@ Two further import-side findings:
 Token-based fingerprinting over adapter-normalized token streams (identifiers/literals
 canonicalized ⇒ catches Type-1 and Type-2 clones; Type-3/semantic clones are out of scope for 1.0):
 
-- Granularity: function/method bodies and top-level blocks ≥ `min-tokens` (default 50).
+- Granularity: callable **shapes** ≥ `min-tokens` (default 50). A declaration contributes its
+  own body plus one shape per callable nested inside it that clears the same floor
+  (`MetricsSyntax::nested_callable_kinds` names the node kinds per language); a promoted
+  shape's tokens leave the enclosing stream, which keeps one `FN` in their place. This is what
+  makes N call sites passing the same callback report on the callback, where the duplication
+  is, instead of on N otherwise-different callers. A nested callable *below* the floor stays
+  part of its owner's body — promoting it would leave both halves under the floor and delete
+  real findings (measured on the field corpus: 83 clone participants).
 - Winnowing fingerprints into a global index; matches only within the same language.
 - Finding groups all instances, largest group first; evidence shows the shared shape.
 - **Structural clones target production code**: test-role files and sub-file test regions
@@ -367,6 +374,12 @@ CRAP(m) = comp(m)² × (1 − cov(m))³ + comp(m)
   particular function ⇒ **cov = 0**, flagged "coverage: none" — pessimistic per function, and
   the message says why.
 - Threshold: findings for `CRAP > 30` (standard), configurable. Test code is exempt.
+- Scored per callable **shape** (§6): a substantial closure carries its own complexity and its
+  own coverage rather than its enclosing function's, and the finding points at the closure.
+  Reporting nested shapes is not optional once they exist — a 40-branch closure inside a
+  two-branch function scores 40 on the closure and 2 on the function, so skipping them would
+  delete the risk from the report entirely. Identity: the closure's ordinal within its
+  declaration, never its line, so a baseline survives edits above it.
 - Output ranks the CRAP hotspot list — the refactor-next queue.
 
 ## 11. `health` — project health score

@@ -3374,6 +3374,8 @@ fn same_named_declarations_keep_their_own_metrics() {
     let metrics = |span: Span, tokens: u32| FunctionMetrics {
         symbol: SmolStr::new("from_path"),
         span,
+        shape_span: span,
+        shape_ordinal: 0,
         cyclomatic: 1,
         loc: 3,
         token_count: tokens,

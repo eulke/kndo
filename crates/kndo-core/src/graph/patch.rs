@@ -596,7 +596,7 @@ pub(crate) fn try_patch(
         graph.suppressions.extend(out.suppressions);
     }
     function_metrics.extend(new_metrics);
-    function_metrics.sort_by_key(|(id, _)| *id);
+    function_metrics.sort_by_key(|(id, m)| (*id, m.shape_ordinal));
     graph.function_metrics = function_metrics;
 
     // Re-run the plugin round against the patched graph — the same function the

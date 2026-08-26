@@ -408,9 +408,26 @@ pub struct FileFacts {
                                              // wildcards over the resolved target's symbols.
     pub roots:        Vec<RawRoot>,         // language-defined only (main, pub API…), target is
                                              // *within this file* — WholeFile | Declaration(name)
-    pub functions:    Vec<FunctionMetrics>, // { symbol, span, cyclomatic: u32, loc,
+    pub functions:    Vec<FunctionMetrics>, // { symbol, span, shape_span, shape_ordinal,
+                                             // cyclomatic: u32, loc, token_count,
                                              // fingerprints } (RFC 0005 §6): one entry per
-                                             // callable, computed over its BODY. `span` is the
+                                             // callable SHAPE — a declaration's own body plus
+                                             // one for every callable nested inside it that is
+                                             // big enough to carry clone evidence by itself
+                                             // (MetricsSyntax::nested_callable_kinds names the
+                                             // node kinds; below the clone floor a nested
+                                             // callable stays an expression inside its owner).
+                                             // A promoted shape's branches and tokens LEAVE the
+                                             // enclosing stream, which keeps one `FN` in their
+                                             // place, so summing over shapes counts every token
+                                             // once. Every shape of one declaration repeats that
+                                             // declaration's `span`; `shape_ordinal` (0 = the
+                                             // declaration's own, 1..N nested in pre-order)
+                                             // separates them in a finding id and `shape_span`
+                                             // (== `span` for ordinal 0) is what every consumer
+                                             // reports as the LOCATION. An ordinal, not a line:
+                                             // a line churns a baseline whenever anything above
+                                             // the closure moves. `span` is the
                                              // paired Declaration's OWN span, and is what
                                              // assembly resolves to a SymbolId onto
                                              // ProjectGraph::function_metrics — NOT `symbol`,

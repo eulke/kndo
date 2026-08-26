@@ -62,6 +62,9 @@ const METRICS_SYNTAX: MetricsSyntax = MetricsSyntax {
         "float_literal",
     ],
     skip_kinds: &["line_comment", "block_comment"],
+    // Each of these becomes its own shape when it is substantial enough to carry clone
+    // evidence by itself; a small one stays an expression inside its owner.
+    nested_callable_kinds: &["closure_expression"],
 };
 
 /// Primitive types with associated items (`u64::from`, `str::parse`) — path roots that are

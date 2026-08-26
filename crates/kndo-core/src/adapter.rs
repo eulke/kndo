@@ -502,9 +502,17 @@ pub struct RawRoot {
     pub confidence: Confidence,
 }
 
+/// One **callable shape**: a declaration's own body, or one callable nested inside it.
+///
+/// A declaration emits one shape for itself plus one for every nested callable
+/// ([`crate::adapter`] does not name them; the adapter decides which node kinds qualify).
+/// Every shape of one declaration repeats that declaration's `span` — the resolution key —
+/// and is told apart by `shape_ordinal`. Consumers that report a LOCATION read `shape_span`.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct FunctionMetrics {
-    /// Declared name (symbol path within the file).
+    /// Declared name (symbol path within the file). The same for every shape of one
+    /// declaration: a nested callable is anonymous, and what a reader needs is the named thing
+    /// containing it.
     pub symbol: SmolStr,
     /// The span of the [`Declaration`] these metrics describe — byte-for-byte the same
     /// `Declaration::span`, which is what makes it an exact identity. Metrics resolve to their
@@ -516,6 +524,19 @@ pub struct FunctionMetrics {
     /// ratio. There is deliberately no default: an adapter that emits metrics must say which
     /// declaration they belong to.
     pub span: Span,
+    /// This shape's OWN extent: the declaration's span for the declaration's own shape, the
+    /// nested callable's own node span for a nested one. Every consumer that reports a
+    /// location — `crap`'s finding range, `duplicate`'s `related` entries, the line that
+    /// separates two otherwise identical clone labels — reads this, never the symbol's span,
+    /// which cannot tell two closures in one function apart.
+    pub shape_span: Span,
+    /// 0 for the declaration's own shape; 1..N for callables nested inside it, in pre-order.
+    ///
+    /// The stable identity of a nested shape, and deliberately NOT a line number: a line
+    /// churns a project's baseline whenever anything above the closure moves, which is why
+    /// finding ids carry no lines anywhere in this codebase. An ordinal churns only when
+    /// closures are added, removed or reordered inside this one declaration.
+    pub shape_ordinal: u16,
     pub cyclomatic: u32,
     pub loc: u32,
     /// Normalized-stream token count — `health`'s duplication ratio

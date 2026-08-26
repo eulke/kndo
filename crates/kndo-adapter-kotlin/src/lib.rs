@@ -33,7 +33,7 @@ impl LanguageAdapter for KotlinAdapter {
             activation: Vec::new(),
             dependencies: Vec::new(),
             id: SmolStr::new("kotlin"),
-            facts_schema_version: 5, // bump whenever the serialized facts shape or the emission semantics change
+            facts_schema_version: 6, // bump whenever the serialized facts shape or the emission semantics change
             file_globs: vec![SmolStr::new("**/*.kt")],
             manifest_globs: vec![
                 SmolStr::new("**/pom.xml"),

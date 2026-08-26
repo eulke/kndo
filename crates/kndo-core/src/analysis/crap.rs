@@ -72,7 +72,11 @@ pub fn find_crap(
             continue;
         }
 
-        let cov = coverage.function_coverage(&file.path, symbol.span);
+        // The SHAPE's own extent, not the symbol's: a closure has its own complexity, and it
+        // has its own lines, so it gets its own coverage. `function_coverage` is line-range
+        // based, which makes a sub-range lookup more accurate here than the enclosing
+        // declaration's range, not merely possible.
+        let cov = coverage.function_coverage(&file.path, metrics.shape_span);
         let score = crap_score(metrics.cyclomatic, cov.unwrap_or(0.0));
         if score <= threshold {
             continue;
@@ -81,6 +85,25 @@ pub fn find_crap(
         let path = file.path.0.as_str();
         let facet = symbol.kind.facet();
         let qualified = symbol.qualified_name();
+        // A nested callable is anonymous and has no `SymbolNode`, so it borrows its owner's
+        // name and facet and is told apart by its ordinal. Reporting it is not optional: after
+        // the split, a 40-branch closure inside a 2-branch function scores 40 on the CLOSURE
+        // and 2 on the function — skipping nested shapes would delete that finding outright.
+        //
+        // The ordinal, never a line, is what enters the id: a line churns the baseline
+        // whenever anything above the closure moves. Ordinal 0 keeps an empty discriminator,
+        // so every finding id that existed before the split is byte-identical after it.
+        let nested = metrics.shape_ordinal > 0;
+        let discriminator = if nested {
+            format!("nested#{}", metrics.shape_ordinal)
+        } else {
+            String::new()
+        };
+        let nested_label = if nested {
+            format!(" (nested callable #{})", metrics.shape_ordinal)
+        } else {
+            String::new()
+        };
         let coverage_text = match cov {
             Some(c) => format!("coverage {:.0}%", c * 100.0),
             None => "coverage: none".to_string(),
@@ -92,7 +115,7 @@ pub fn find_crap(
                 subject_kind: &SubjectKind::new(facet),
                 path,
                 symbol_path: &qualified,
-                discriminator: "",
+                discriminator: &discriminator,
             }),
             category: Category::CRAP,
             group: Group::Risk,
@@ -100,13 +123,13 @@ pub fn find_crap(
             severity: Severity::Warning,
             confidence: Confidence::Certain,
             message: format!(
-                "{path}#{qualified} has CRAP {score:.0} (complexity {comp}, {coverage_text}) — \
-                 above the threshold of {threshold:.0}",
+                "{path}#{qualified}{nested_label} has CRAP {score:.0} (complexity {comp}, \
+                 {coverage_text}) — above the threshold of {threshold:.0}",
                 comp = metrics.cyclomatic,
             ),
             location: Location {
                 path: Some(file.path.clone()),
-                range: Some(symbol.span),
+                range: Some(metrics.shape_span),
                 symbol: Some(qualified),
                 package: graph.package_name(file.package).map(str::to_string),
             },
@@ -163,8 +186,19 @@ mod tests {
         }
     }
 
+    /// The declaration's own shape — `shape_span` matches `callable`'s span below, which is
+    /// what every pre-split test asserted against.
     fn metrics(cyclomatic: u32) -> SymbolMetrics {
+        shape(cyclomatic, 0, (1, 1))
+    }
+
+    fn shape(cyclomatic: u32, shape_ordinal: u16, start: (u32, u32)) -> SymbolMetrics {
         SymbolMetrics {
+            shape_span: Span {
+                start,
+                end: (start.0 + 3, 1),
+            },
+            shape_ordinal,
             cyclomatic,
             loc: 10,
             token_count: 60,
@@ -197,6 +231,67 @@ mod tests {
         assert!((crap_score(6, 1.0) - 6.0).abs() < 1e-9);
         // comp 10, cov 0.5: 100 × 0.125 + 10 = 22.5.
         assert!((crap_score(10, 0.5) - 22.5).abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_nested_callable_is_reported_in_its_own_right() {
+        // The reason skipping nested shapes is not an option: after the split, a complex
+        // closure's complexity is the CLOSURE's, and its owner keeps only its own. If `crap`
+        // only looked at ordinal 0 here, the risk would simply disappear from the report.
+        let graph = graph_with(
+            vec![file(
+                "src/a.mock",
+                FileRole::Production,
+                FileOrigin::Authored,
+            )],
+            vec![symbol(FileId(0), "wrapper", 10, 40)],
+            vec![
+                (SymbolId(0), shape(1, 0, (10, 1))),
+                (SymbolId(0), shape(6, 1, (21, 5))),
+            ],
+        );
+        let findings = find_crap(&graph, &unrelated_coverage(), CRAP_THRESHOLD).0;
+        assert_eq!(findings.len(), 1, "only the closure is over threshold");
+        assert!(findings[0].message.contains("nested callable #1"));
+        assert_eq!(
+            findings[0].location.range.map(|r| r.start),
+            Some((21, 5)),
+            "the finding points at the closure, not at its owner's opening line"
+        );
+    }
+
+    #[test]
+    fn two_shapes_of_one_symbol_get_distinct_ids_and_the_first_keeps_the_old_one() {
+        let graph = graph_with(
+            vec![file(
+                "src/a.mock",
+                FileRole::Production,
+                FileOrigin::Authored,
+            )],
+            vec![symbol(FileId(0), "wrapper", 10, 40)],
+            vec![
+                (SymbolId(0), shape(6, 0, (10, 1))),
+                (SymbolId(0), shape(6, 1, (21, 5))),
+            ],
+        );
+        let findings = find_crap(&graph, &unrelated_coverage(), CRAP_THRESHOLD).0;
+        assert_eq!(findings.len(), 2);
+        assert_ne!(findings[0].id, findings[1].id, "ids must not collide");
+
+        // The declaration's own shape keeps the id it had before closures were split out —
+        // an empty discriminator — so no project's baseline churns on this change.
+        let unsplit = graph_with(
+            vec![file(
+                "src/a.mock",
+                FileRole::Production,
+                FileOrigin::Authored,
+            )],
+            vec![symbol(FileId(0), "wrapper", 10, 40)],
+            vec![(SymbolId(0), shape(6, 0, (10, 1)))],
+        );
+        let before = find_crap(&unsplit, &unrelated_coverage(), CRAP_THRESHOLD).0;
+        assert_eq!(before[0].id, findings[0].id);
+        assert!(!before[0].message.contains("nested callable"));
     }
 
     #[test]

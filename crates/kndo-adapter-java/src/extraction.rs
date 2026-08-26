@@ -69,6 +69,9 @@ const METRICS_SYNTAX: MetricsSyntax = MetricsSyntax {
         "null_literal",
     ],
     skip_kinds: &["line_comment", "block_comment"],
+    // Each of these becomes its own shape when it is substantial enough to carry clone
+    // evidence by itself; a small one stays an expression inside its owner.
+    nested_callable_kinds: &["lambda_expression"],
 };
 
 /// Item-walk context: the member owner (a class/interface/enum/record's bare name), for

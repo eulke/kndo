@@ -202,9 +202,13 @@ counting nested clauses), `&&`/`||` (leaf tokens inside `binary_expression`, exa
 Java's). The elvis operator (`?:`) and the not-null assertion (`!!`) are **not** counted as
 branches — `?:` is a value-producing fallback expression, not a control-flow fork the way
 `if`/`when` are (same reasoning JS's optional-chaining `?.` isn't counted either); this keeps
-the metric consistent across adapters rather than inventing a Kotlin-specific bump. Each
-`lambda_literal` body is counted as its own function-shape unit, same "each closure gets its
-own metrics" stance as Java/JS/Rust.
+the metric consistent across adapters rather than inventing a Kotlin-specific bump. Each `lambda_literal` or `anonymous_function` clearing the clone floor becomes its own callable **shape**
+(`MetricsSyntax::nested_callable_kinds` — its branches and tokens leave the enclosing shape's
+stream, which keeps one `FN` in their place, and `crap`/`duplicate` report it in its own
+right). A smaller one stays an expression inside its owner: promoting it would leave both
+halves under the floor and cost real clone findings — measured, that was 83 clone participants
+on the field corpus. The split's semantics are uniform across adapters; only the node kinds
+that trigger it are per-language.
 
 **Grammar ground truth**: pinned in `kndo-adapter-kotlin/src/parsing.rs`'s `#[ignore]`d probe
 tests, covering declarations/modifiers/visibility, imports, `when`/`if`/`for`/`while`/`try`,

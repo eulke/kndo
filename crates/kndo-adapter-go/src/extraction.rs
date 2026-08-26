@@ -260,6 +260,9 @@ const METRICS_SYNTAX: kndo_adapter_toolkit::metrics::MetricsSyntax =
             "imaginary_literal",
         ],
         skip_kinds: &["comment"],
+        // Each of these becomes its own shape when it is substantial enough to carry clone
+        // evidence by itself; a small one stays an expression inside its owner.
+        nested_callable_kinds: &["func_literal"],
     };
 
 /// One callable's `FunctionMetrics`, computed over its *body* (signatures are promises,

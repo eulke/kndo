@@ -238,6 +238,14 @@ identifiers → `identifier`, `field_identifier`, `type_identifier`,
 `shorthand_field_identifier`; literals → string/raw-string/char/byte/integer/float
 literals; skipped → `line_comment`, `block_comment`. Winnowing parameters shared (toolkit).
 
+Each `closure_expression` clearing the clone floor becomes its own callable **shape**
+(`MetricsSyntax::nested_callable_kinds`): its branches and tokens leave the enclosing shape's
+stream, which keeps one `FN` in their place, and `crap`/`duplicate` report it in its own right.
+A smaller one stays an expression inside its owner — promoting it would leave both halves under
+the floor and cost real clone findings (measured: 83 clone participants on the field corpus).
+The split's semantics are uniform across adapters; only the kinds that trigger it are
+per-language.
+
 **Suppressions** — `// kndo:allow …` via the toolkit scanner, like every language.
 
 **Extraction refinements from the M6 FP hunt (ripgrep corpus):**

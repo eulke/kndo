@@ -119,19 +119,33 @@ impl SymbolNode {
     }
 }
 
-/// One callable's computed shape: cyclomatic + LOC feed `crap`, the
-/// winnowing fingerprints feed structural `duplicate`. Keyed by `SymbolId` in
-/// [`ProjectGraph::function_metrics`] — assembly resolves the adapter-side
-/// `FunctionMetrics::span` to that id (an exact match against the paired declaration's own
-/// span) and drops both it and the entry's name. Resolution is deliberately NOT by name: a
-/// file may declare one name twice (cfg-alternated impls, platform-gated overloads), and the
-/// per-file name tables are single-slot, so name lookup collapsed both entries onto one
-/// symbol — which `duplicate` then reported as a clone of itself.
+/// One callable **shape**: cyclomatic + LOC feed `crap`, the winnowing fingerprints feed
+/// structural `duplicate`. Keyed by `SymbolId` in [`ProjectGraph::function_metrics`] —
+/// assembly resolves the adapter-side `FunctionMetrics::span` to that id (an exact match
+/// against the paired declaration's own span) and drops both it and the entry's name.
+/// Resolution is deliberately NOT by name: a file may declare one name twice (cfg-alternated
+/// impls, platform-gated overloads), and the per-file name tables are single-slot, so name
+/// lookup collapsed both entries onto one symbol — which `duplicate` then reported as a clone
+/// of itself.
+///
+/// **One symbol may own several shapes.** A declaration contributes its own shape plus one per
+/// callable nested inside it, so `function_metrics` is a vec of pairs and not a map: nothing
+/// may index it expecting a single entry per `SymbolId`. `shape_ordinal` tells them apart and
+/// `shape_span` says where each one is.
 #[derive(Debug, Clone, PartialEq, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct SymbolMetrics {
+    /// This shape's own extent — equal to the symbol's span for the declaration's own shape,
+    /// the nested callable's own span otherwise. Every location a consumer reports comes from
+    /// here; `SymbolNode::span` cannot separate two closures in one function.
+    pub shape_span: crate::vocab::Span,
+    /// 0 for the declaration's own shape, 1..N for nested callables in pre-order — the stable
+    /// half of a nested shape's finding id (a line number would churn every baseline above it).
+    pub shape_ordinal: u16,
     pub cyclomatic: u32,
     pub loc: u32,
-    /// Normalized-stream token count (the duplication ratio basis).
+    /// Normalized-stream token count (the duplication ratio basis). A nested callable's tokens
+    /// belong to ITS shape, not the enclosing one, which keeps a single `FN` placeholder in
+    /// their place — so summing over shapes still counts every token exactly once.
     pub token_count: u32,
     pub fingerprints: Vec<u64>,
 }

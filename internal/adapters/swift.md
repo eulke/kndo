@@ -187,8 +187,13 @@ try/catch convention exactly: entering a `do` block always happens, only a `catc
 genuine alternate path), `&&`/`||` (leaf tokens, same shape as Java/Kotlin's). Nil-coalescing
 (`??`) and force-unwrap (`!`) are **not** branches — value-producing fallback/assertion
 operators, not control-flow forks, same non-branch stance as Kotlin's elvis/not-null operators.
-Each `lambda_literal` body is counted as its own function-shape unit, same "each closure gets
-its own metrics" stance as every prior adapter.
+Each `lambda_literal` clearing the clone floor becomes its own callable **shape**
+(`MetricsSyntax::nested_callable_kinds` — its branches and tokens leave the enclosing shape's
+stream, which keeps one `FN` in their place, and `crap`/`duplicate` report it in its own
+right). A smaller one stays an expression inside its owner: promoting it would leave both
+halves under the floor and cost real clone findings — measured, that was 83 clone participants
+on the field corpus. The split's semantics are uniform across adapters; only the node kinds
+that trigger it are per-language.
 
 **Grammar ground truth**: pinned in `kndo-adapter-swift/src/parsing.rs`'s `#[ignore]`d probe
 tests — re-run with `--ignored --nocapture` before any tree-sitter-swift version bump.

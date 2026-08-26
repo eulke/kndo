@@ -132,6 +132,10 @@ pub fn find_duplicate_functions(
     // Eligible instances: fingerprinted callables in authored, claimed files.
     struct Instance<'g> {
         symbol: SymbolId,
+        /// The SHAPE's own extent and ordinal — a closure has no `SymbolNode`, so these are
+        /// the only things separating two clones that live inside one function.
+        shape_span: crate::vocab::Span,
+        shape_ordinal: u16,
         path: &'g str,
         language: &'g str,
         token_count: u32,
@@ -169,6 +173,8 @@ pub fn find_duplicate_functions(
         };
         instances.push(Instance {
             symbol: *symbol_id,
+            shape_span: metrics.shape_span,
+            shape_ordinal: metrics.shape_ordinal,
             path: file.path.0.as_str(),
             language,
             token_count: metrics.token_count,
@@ -227,19 +233,47 @@ pub fn find_duplicate_functions(
         if members.len() < 2 {
             continue;
         }
-        // (path, qualified) per instance, lexicographic — the first is the anchor.
-        let mut named: Vec<(String, String, usize)> = members
+        // (path, qualified, shape start) per instance, lexicographic — the first is the
+        // anchor. The third component is not decoration: two closures inside one function
+        // share a path AND a qualified name, and without it their order would depend on
+        // discovery, breaking the `--threads 1` determinism gate.
+        let mut named: Vec<(String, String, (u32, u32), usize)> = members
             .iter()
             .map(|&i| {
                 let symbol = &graph.symbols[instances[i].symbol.0 as usize];
-                (instances[i].path.to_string(), symbol.qualified_name(), i)
+                (
+                    instances[i].path.to_string(),
+                    symbol.qualified_name(),
+                    instances[i].shape_span.start,
+                    i,
+                )
             })
             .collect();
         named.sort();
-        for (_, _, i) in &named[1..] {
+        for (_, _, _, i) in &named[1..] {
             duplicated.push((instances[*i].symbol, instances[*i].token_count));
         }
-        let selectors: Vec<String> = named.iter().map(|(p, q, _)| format!("{p}#{q}")).collect();
+        // The finding's IDENTITY. A nested shape appends its ordinal — stable under every edit
+        // above it, unlike the line — and ordinal 0 appends nothing, so every group that
+        // existed before closures were split keeps its id byte-for-byte.
+        let selectors: Vec<String> = named
+            .iter()
+            .map(|(p, q, _, i)| match instances[*i].shape_ordinal {
+                0 => format!("{p}#{q}"),
+                n => format!("{p}#{q}#nested{n}"),
+            })
+            .collect();
+        // What the reader sees. An ordinal is the right thing to put in an ID and the wrong
+        // thing to show a human — "the second closure in `wire`" is not something you can go
+        // and look at — so a nested shape is shown by the line it starts on instead. The same
+        // split W7b made one level up: identity stays stable, prose becomes findable.
+        let displayed: Vec<String> = named
+            .iter()
+            .map(|(p, q, start, i)| match instances[*i].shape_ordinal {
+                0 => format!("{p}#{q}"),
+                _ => format!("{p}#{q}:{}", start.0),
+            })
+            .collect();
         // What the MESSAGE shows. Two identical members of one type declared in different
         // impl blocks (a trait's and the type's own, or two `#[cfg]` alternates) produce the
         // same `path#Owner.name` twice, and the reader cannot tell which is which — while
@@ -250,22 +284,25 @@ pub fn find_duplicate_functions(
         // clone moves. Identity stays stable, prose becomes readable.
         let group_symbols: Vec<&crate::graph::SymbolNode> = named
             .iter()
-            .map(|(_, _, i)| &graph.symbols[instances[*i].symbol.0 as usize])
+            .map(|(_, _, _, i)| &graph.symbols[instances[*i].symbol.0 as usize])
             .collect();
-        let labels = disambiguated(&selectors, &group_symbols);
-        let (_, anchor_name, anchor_idx) = &named[0];
+        let group_starts: Vec<(u32, u32)> = named.iter().map(|(_, _, start, _)| *start).collect();
+        let labels = disambiguated(&displayed, &group_symbols, &group_starts);
+        let (_, anchor_name, _, anchor_idx) = &named[0];
         let anchor_symbol = &graph.symbols[instances[*anchor_idx].symbol.0 as usize];
         let anchor_file = &graph.files[anchor_symbol.file.0 as usize];
         let facet = anchor_symbol.kind.facet().to_string();
 
         let related = named
             .iter()
-            .map(|(_, q, i)| {
+            .map(|(_, q, _, i)| {
                 let s = &graph.symbols[instances[*i].symbol.0 as usize];
                 crate::engine::RelatedLocation {
                     role: "clone".to_string(),
                     path: graph.files[s.file.0 as usize].path.clone(),
-                    range: Some(s.span),
+                    // The shape's range, not the symbol's: two closures in one function would
+                    // otherwise both point at the function's opening line.
+                    range: Some(instances[*i].shape_span),
                     note: Some(q.clone()),
                 }
             })
@@ -293,7 +330,7 @@ pub fn find_duplicate_functions(
             ),
             location: Location {
                 path: Some(anchor_file.path.clone()),
-                range: Some(anchor_symbol.span),
+                range: Some(instances[*anchor_idx].shape_span),
                 symbol: Some(anchor_name.clone()),
                 package: graph.package_name(anchor_file.package).map(str::to_string),
             },
@@ -314,8 +351,14 @@ pub fn find_duplicate_functions(
 /// tells a reader what they actually want to know ("the `Serialize` one, not the inherent
 /// one") and that survives every edit above it. Where the graph has no trait to name, or
 /// where both instances share one (two `#[cfg]` alternates of the same impl), it falls back
-/// to the declaration's start line, which always separates them.
-fn disambiguated(selectors: &[String], symbols: &[&crate::graph::SymbolNode]) -> Vec<String> {
+/// to `starts` — each shape's OWN start line, which always separates them. For a declaration's
+/// own shape that is its declaration line, exactly as before closures were split out; for a
+/// nested callable it is the only thing that can separate it from its siblings.
+fn disambiguated(
+    selectors: &[String],
+    symbols: &[&crate::graph::SymbolNode],
+    starts: &[(u32, u32)],
+) -> Vec<String> {
     let collides = |i: usize| selectors.iter().filter(|s| *s == &selectors[i]).count() > 1;
     let with_trait = |i: usize| {
         symbols[i]
@@ -337,7 +380,7 @@ fn disambiguated(selectors: &[String], symbols: &[&crate::graph::SymbolNode]) ->
                     .any(|j| j != i && selectors[j] == selectors[i] && with_trait(j) == mine);
             match (mine, separates) {
                 (Some(label), true) => label,
-                _ => format!("{}:{}", selectors[i], symbols[i].span.start.0),
+                _ => format!("{}:{}", selectors[i], starts[i].0),
             }
         })
         .collect()
@@ -348,6 +391,7 @@ mod tests {
     use super::*;
     use crate::adapter::ProjectPath;
     use crate::graph::FileNode;
+    use crate::vocab::Span;
     use smol_str::SmolStr;
 
     fn hash_of(bytes: &[u8]) -> [u8; 32] {
@@ -512,13 +556,115 @@ mod tests {
         }
     }
 
+    /// A declaration's own shape at line 1 — matching `callable`'s span. A test whose symbols
+    /// sit at meaningful lines must use `shape` and repeat them: in production a declaration's
+    /// own `shape_span` IS its declaration span, and the labels depend on it.
     fn metrics(fingerprints: Vec<u64>) -> SymbolMetrics {
+        shape(fingerprints, 0, (1, 1))
+    }
+
+    /// A shape at an explicit position: `shape_ordinal` 0 is the declaration's own, 1..N a
+    /// callable nested inside it — several of which may share one `SymbolId`.
+    fn shape(fingerprints: Vec<u64>, shape_ordinal: u16, start: (u32, u32)) -> SymbolMetrics {
         SymbolMetrics {
+            shape_span: Span {
+                start,
+                end: (start.0 + 3, 1),
+            },
+            shape_ordinal,
             cyclomatic: 2,
             loc: 5,
             token_count: 60,
             fingerprints,
         }
+    }
+
+    #[test]
+    fn two_identical_closures_in_different_functions_group_on_the_closures() {
+        // The case the split exists for: `Foo::new(|x| { …same forty tokens… })` at two sites.
+        // Before it, the closure's tokens belonged to whichever function enclosed them, and
+        // what grouped (if anything did) was the enclosing pair — never the thing copied.
+        let graph = ProjectGraph::for_test(
+            vec![claimed_file("a.mock"), claimed_file("b.mock")],
+            vec![callable(0, "setup_a"), callable(1, "setup_b")],
+            vec![],
+            vec![],
+        )
+        .with_function_metrics(vec![
+            (SymbolId(0), shape(vec![9, 9], 0, (1, 1))),
+            (SymbolId(0), shape(vec![1, 2, 3], 1, (4, 9))),
+            (SymbolId(1), shape(vec![7, 7], 0, (1, 1))),
+            (SymbolId(1), shape(vec![1, 2, 3], 1, (6, 9))),
+        ]);
+        let findings = find_duplicate_functions(&graph, 0).0;
+        assert_eq!(findings.len(), 1, "{findings:#?}");
+        let ranges: Vec<_> = findings[0]
+            .related
+            .iter()
+            .filter_map(|r| r.range.map(|s| s.start))
+            .collect();
+        assert_eq!(
+            ranges,
+            vec![(4, 9), (6, 9)],
+            "`related` must point at the closures, not at their owners' opening lines"
+        );
+    }
+
+    #[test]
+    fn two_closures_inside_one_function_stay_distinguishable() {
+        // One symbol, two shapes: `path#name` is identical for both and the graph has no
+        // trait to name, so the label falls back to each SHAPE's own line — the symbol's own
+        // span would print the same number twice.
+        let graph = ProjectGraph::for_test(
+            vec![claimed_file("a.mock")],
+            vec![callable(0, "wire")],
+            vec![],
+            vec![],
+        )
+        .with_function_metrics(vec![
+            (SymbolId(0), shape(vec![1, 2, 3], 1, (4, 9))),
+            (SymbolId(0), shape(vec![1, 2, 3], 2, (12, 9))),
+        ]);
+        let findings = find_duplicate_functions(&graph, 0).0;
+        assert_eq!(findings.len(), 1, "{findings:#?}");
+        assert!(
+            findings[0].message.contains("a.mock#wire:4"),
+            "{}",
+            findings[0].message
+        );
+        assert!(
+            findings[0].message.contains("a.mock#wire:12"),
+            "{}",
+            findings[0].message
+        );
+    }
+
+    #[test]
+    fn a_groups_id_is_unchanged_when_no_shape_is_nested() {
+        // Ordinal 0 appends nothing to the selector, so every clone group that existed before
+        // closures were split out keeps its id — no baseline churns on this change.
+        let graph = ProjectGraph::for_test(
+            vec![claimed_file("a.mock"), claimed_file("b.mock")],
+            vec![callable(0, "one"), callable(1, "two")],
+            vec![],
+            vec![],
+        )
+        .with_function_metrics(vec![
+            (SymbolId(0), metrics(vec![1, 2, 3])),
+            (SymbolId(1), metrics(vec![1, 2, 3])),
+        ]);
+        let findings = find_duplicate_functions(&graph, 0).0;
+        assert_eq!(findings.len(), 1);
+        assert_eq!(
+            findings[0].id,
+            finding_id(FindingIdParts {
+                category: &Category::DUPLICATE,
+                subject_kind: &SubjectKind::new("function"),
+                path: "",
+                symbol_path: "",
+                discriminator: "a.mock#one\u{1}b.mock#two",
+            })
+        );
     }
 
     #[test]
@@ -536,8 +682,8 @@ mod tests {
             vec![],
         )
         .with_function_metrics(vec![
-            (SymbolId(0), metrics(vec![1, 2, 3, 4, 5])),
-            (SymbolId(1), metrics(vec![1, 2, 3, 4, 5])),
+            (SymbolId(0), shape(vec![1, 2, 3, 4, 5], 0, (10, 1))),
+            (SymbolId(1), shape(vec![1, 2, 3, 4, 5], 0, (40, 1))),
         ]);
         let findings = find_duplicate_functions(&graph, 50).0;
         assert_eq!(findings.len(), 1);
@@ -566,8 +712,8 @@ mod tests {
             vec![],
         )
         .with_function_metrics(vec![
-            (SymbolId(0), metrics(vec![1, 2, 3, 4, 5])),
-            (SymbolId(1), metrics(vec![1, 2, 3, 4, 5])),
+            (SymbolId(0), shape(vec![1, 2, 3, 4, 5], 0, (10, 1))),
+            (SymbolId(1), shape(vec![1, 2, 3, 4, 5], 0, (40, 1))),
         ]);
         let m = find_duplicate_functions(&graph, 50).0[0].message.clone();
         assert!(m.contains("a.rs#View.poll:10"), "{m}");

@@ -59,6 +59,10 @@ const METRICS_SYNTAX: MetricsSyntax = MetricsSyntax {
         "nil",
     ],
     skip_kinds: &["comment", "multiline_comment"],
+    // Each of these becomes its own shape when it is substantial enough to carry clone
+    // evidence by itself; a small one stays an expression inside its owner.
+    // NOT `lambda_function_type`: that is a closure TYPE annotation, not a body.
+    nested_callable_kinds: &["lambda_literal"],
 };
 
 /// Item-walk context: the member owner (a struct/class/enum/protocol/extension's bare name),

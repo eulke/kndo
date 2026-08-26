@@ -334,6 +334,11 @@ Two halves:
   instance listed as evidence. Very small functions (under the token floor, 50 by default)
   don't participate — a three-line getter matching another three-line getter is not a copy.
 
+A **closure is measured in its own right**, not folded into the function that contains it, so
+five call sites passing the same callback are reported on the callback — where the duplication
+actually lives — rather than on five otherwise-different functions. The same token floor
+decides this: a closure too small to carry clone evidence stays part of its owner's body.
+
 ```text
 ◦ duplicate src/utils/retry.ts:10  parseRetryAfter duplicates 2 other functions (structural clone group)
    └ instance: src/http/backoff.ts:22
@@ -362,6 +367,12 @@ CRAP(m) = comp(m)² × (1 − cov(m))³ + comp(m)
 where `comp` is cyclomatic complexity and `cov` is the covered fraction of the function's
 instrumented lines from your **ingested** coverage reports. Findings fire above the score
 threshold of 30.
+
+A substantial closure is scored **as its own callable**: its complexity is its own and no
+longer its owner's, its coverage is read from its own lines, and the finding points at the
+closure. Such a finding names the enclosing function and the closure's position within it
+(`app.ts#configure (nested callable #2)`) — the position, not a line number, so acknowledging
+it in a baseline survives edits above it.
 
 ```text
 ▲ crap src/parser/expr.ts:120  parseExpression: complexity 24, coverage none — score 599.0, above the threshold of 30

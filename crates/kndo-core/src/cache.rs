@@ -1141,6 +1141,40 @@ mod tests {
                 scope: crate::adapter::SuppressionScope::Declaration,
             },
         )])
+        // TWO shapes on ONE symbol — a declaration and a callable nested inside it. The pair
+        // is deliberate: this vec is not a map, and a snapshot that silently kept only one
+        // entry per symbol would lose closures' metrics on every cached run without any other
+        // assertion here noticing.
+        .with_function_metrics(vec![
+            (
+                SymbolId(0),
+                crate::graph::SymbolMetrics {
+                    shape_span: crate::adapter::Span {
+                        start: (3, 1),
+                        end: (9, 2),
+                    },
+                    shape_ordinal: 0,
+                    cyclomatic: 4,
+                    loc: 7,
+                    token_count: 80,
+                    fingerprints: vec![11, 22],
+                },
+            ),
+            (
+                SymbolId(0),
+                crate::graph::SymbolMetrics {
+                    shape_span: crate::adapter::Span {
+                        start: (5, 9),
+                        end: (8, 6),
+                    },
+                    shape_ordinal: 1,
+                    cyclomatic: 2,
+                    loc: 4,
+                    token_count: 30,
+                    fingerprints: vec![33],
+                },
+            ),
+        ])
     }
 
     #[test]
@@ -1186,6 +1220,11 @@ mod tests {
         assert_eq!(
             restored.patch_meta, graph.patch_meta,
             "the patch layer's per-file metadata must round-trip"
+        );
+        assert_eq!(
+            restored.function_metrics, graph.function_metrics,
+            "both shapes of the one symbol must survive the snapshot — spans, ordinals and \
+             fingerprints included"
         );
         assert_eq!(
             restored.file_id(&crate::adapter::ProjectPath("a.mock".into())),

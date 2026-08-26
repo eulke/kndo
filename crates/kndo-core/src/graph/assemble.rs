@@ -1464,6 +1464,10 @@ pub(crate) fn emit_file_declarations(
     // starting at `first_symbol`, so the mapping is exact and total. A no-match is still
     // dropped silently — the safe direction: a callable without metrics loses duplication/CRAP
     // analysis, it never becomes a finding.
+    //
+    // Several entries may resolve to ONE symbol, and that is by design: a declaration emits its
+    // own shape plus one per callable nested inside it, all carrying the declaration's span.
+    // `SymbolMetrics::shape_ordinal`/`shape_span` separate them downstream.
     if !facts.functions.is_empty() {
         let mut symbol_by_span: HashMap<crate::vocab::Span, SymbolId> = HashMap::default();
         for (d, decl) in facts.declarations.iter().enumerate() {
@@ -1478,6 +1482,8 @@ pub(crate) fn emit_file_declarations(
                 metrics.push((
                     symbol_id,
                     SymbolMetrics {
+                        shape_span: fm.shape_span,
+                        shape_ordinal: fm.shape_ordinal,
                         cyclomatic: fm.cyclomatic,
                         loc: fm.loc,
                         token_count: fm.token_count,
@@ -2139,7 +2145,7 @@ pub(crate) fn promote_package_relative_test_roles<'a>(
 /// an assembly-algorithm change that could produce a different graph from the same facts. Feeds
 /// [`compute_graph_key`] (the "core graph-schema version"); a bump here invalidates
 /// every project's cached `graph.bin` on the next run, same as any other key-input change.
-pub const GRAPH_SCHEMA_VERSION: u32 = 36; // bump whenever the persisted snapshot shape (rkyv layouts included) or the assembly semantics that derive a graph from the same facts change
+pub const GRAPH_SCHEMA_VERSION: u32 = 37; // bump whenever the persisted snapshot shape (rkyv layouts included) or the assembly semantics that derive a graph from the same facts change
 
 /// The graph snapshot's cache key (`cache.rs`'s `graph.bin`): a single digest
 /// folding in the *whole* discovered file set (every path + content hash — this already
@@ -3513,7 +3519,11 @@ pub fn assemble_from_source(
     diagnostics.sort_unstable();
     // Same canonical-order rule for the remaining order-bearing vectors:
     // stable sorts, so same-key entries keep facts order — identical on both build paths.
-    function_metrics.sort_by_key(|(id, _)| *id);
+    // (id, ordinal): several shapes share one SymbolId, and the incremental patch rebuilds this
+    // vec from a different starting order than full assembly does. Sorting on the pair is what
+    // makes `patch_equivalence` and the `--threads 1` determinism gate hold by construction
+    // rather than by an argument about stable-sort behaviour.
+    function_metrics.sort_by_key(|(id, m)| (*id, m.shape_ordinal));
     suppressions.sort_by_key(|(f, _)| *f);
 
     // Per-file patch metadata — surface signatures and unit names from phase

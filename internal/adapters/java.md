@@ -204,10 +204,14 @@ identical to JS/Go/Rust's).
 **Metrics**: cyclomatic complexity +1 per `if_statement`, `for_statement`/`enhanced_for_
 statement`, `while_statement`/`do_statement`, `catch_clause`, `case`-arm (switch — one per
 label past the first, matching JS's n-way-match rule), `? :` (ternary), `&&`/`||`, and each
-`lambda_expression` body counted as its own function-shape unit (same "each closure gets its
-own metrics" stance the JS/Rust extractors already take for arrow functions/closures — a
-lambda passed to `.forEach` is a callable shape in its own right). Fingerprints: normalized
-token stream per method/lambda body, same `$n`-renaming scheme as every other adapter.
+Each `lambda_expression` clearing the clone floor becomes its own callable **shape**
+(`MetricsSyntax::nested_callable_kinds` — its branches and tokens leave the enclosing shape's
+stream, which keeps one `FN` in their place, and `crap`/`duplicate` report it in its own
+right). A smaller one stays an expression inside its owner: promoting it would leave both
+halves under the floor and cost real clone findings — measured, that was 83 clone participants
+on the field corpus. The split's semantics are uniform across adapters; only the node kinds
+that trigger it are per-language. Fingerprints: normalized
+token stream per shape, same `$n`-renaming scheme as every other adapter.
 
 **Dynamic constructs → `DynamicUse`**: none emitted in this slice. `Class.forName(String)`
 reflection exists but is rare in application code and — like Go's `reflect`/`plugin` stance

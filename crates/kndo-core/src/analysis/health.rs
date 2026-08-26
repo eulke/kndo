@@ -683,6 +683,11 @@ mod tests {
             (
                 SymbolId(0),
                 SymbolMetrics {
+                    shape_span: Span {
+                        start: (1, 1),
+                        end: (5, 1),
+                    },
+                    shape_ordinal: 0,
                     cyclomatic: 1,
                     loc: 5,
                     token_count: 100,
@@ -692,6 +697,11 @@ mod tests {
             (
                 SymbolId(1),
                 SymbolMetrics {
+                    shape_span: Span {
+                        start: (1, 1),
+                        end: (5, 1),
+                    },
+                    shape_ordinal: 0,
                     cyclomatic: 1,
                     loc: 5,
                     token_count: 100,
@@ -725,6 +735,11 @@ mod tests {
         .with_function_metrics(vec![(
             SymbolId(0),
             SymbolMetrics {
+                shape_span: Span {
+                    start: (1, 1),
+                    end: (5, 1),
+                },
+                shape_ordinal: 0,
                 cyclomatic: 8,
                 loc: 5,
                 token_count: 80,
@@ -763,6 +778,11 @@ mod tests {
         .with_function_metrics(vec![(
             SymbolId(0),
             SymbolMetrics {
+                shape_span: Span {
+                    start: (1, 1),
+                    end: (5, 1),
+                },
+                shape_ordinal: 0,
                 cyclomatic: 8,
                 loc: 5,
                 token_count: 80,

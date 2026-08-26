@@ -68,6 +68,16 @@ without any framework plugin (framework *roots* remain plugin territory, RFC 000
 (consistent `$n` renaming per RFC 0005 §6; template-literal text canonicalized, string/number
 literals bucketed).
 
+Each `arrow_function`, `function_expression` or `generator_function` clearing the clone floor
+becomes its own callable **shape** (`MetricsSyntax::nested_callable_kinds`): its branches and
+tokens leave the enclosing shape's stream, which keeps one `FN` in their place, and
+`crap`/`duplicate` report it in its own right. A smaller one stays an expression inside its
+owner — promoting it would leave both halves under the floor and cost real clone findings
+(measured: 83 clone participants on the field corpus). A bare `function` is deliberately NOT in
+that list: in tree-sitter-typescript that name belongs to the unnamed keyword token, and only
+`function_expression` is the node. The split's semantics are uniform across adapters; only the
+kinds that trigger it are per-language.
+
 **Suppressions** — `// kndo:allow …`, `/* kndo:allow … */`, JSX `{/* kndo:allow … */}`.
 
 ## 3. Imports & resolution

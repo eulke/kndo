@@ -36,7 +36,7 @@ impl LanguageAdapter for GoAdapter {
             activation: Vec::new(),
             dependencies: Vec::new(),
             id: SmolStr::new("go"),
-            facts_schema_version: 13, // bump whenever the serialized facts shape or the emission semantics change
+            facts_schema_version: 14, // bump whenever the serialized facts shape or the emission semantics change
             file_globs: vec![SmolStr::new("**/*.go")],
             manifest_globs: vec![SmolStr::new("**/go.mod"), SmolStr::new("**/go.work")],
             grammar_version: SmolStr::new("tree-sitter-go 0.25"),

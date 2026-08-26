@@ -58,6 +58,12 @@ const METRICS_SYNTAX: MetricsSyntax = MetricsSyntax {
         "null_literal",
     ],
     skip_kinds: &["line_comment", "multiline_comment"],
+    // Each of these becomes its own shape when it is substantial enough to carry clone
+    // evidence by itself; a small one stays an expression inside its owner.
+    // `annotated_lambda` is a wrapper AROUND `lambda_literal`, so naming the literal is
+    // enough; `object_literal` is an object expression whose members are real declarations
+    // the extractor already visits.
+    nested_callable_kinds: &["lambda_literal", "anonymous_function"],
 };
 
 /// Item-walk context: the member owner (a class/object/companion's bare name), for `member_of`

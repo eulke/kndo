@@ -205,6 +205,15 @@ const METRICS_SYNTAX: kndo_adapter_toolkit::metrics::MetricsSyntax =
         ],
         literal_kinds: &["string", "template_string", "number", "regex"],
         skip_kinds: &["comment"],
+        // Each of these becomes its own shape when it is substantial enough to carry clone
+        // evidence by itself; a small one stays an expression inside its owner.
+        // A bare `function` is NOT here: in tree-sitter-typescript that name belongs to the
+        // unnamed keyword token, and only `function_expression` is the node.
+        nested_callable_kinds: &[
+            "arrow_function",
+            "function_expression",
+            "generator_function",
+        ],
     };
 
 /// One callable's `FunctionMetrics`, over its *body* — the part that
