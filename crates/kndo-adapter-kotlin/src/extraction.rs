@@ -223,6 +223,7 @@ fn make_import(
         opaque_namespace_use,
         module_names_visible: false,
         local_alias,
+        reconstructed: false,
     }
 }
 

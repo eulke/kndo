@@ -1052,12 +1052,17 @@ fn a_reconstructed_imports_qualifier_does_not_settle_on_a_miss() {
     // the file makes — so it does not close the namespace: `j.Marshal` missing in the
     // target falls through to the duck-typed member fallback exactly as an unregistered
     // qualifier would. Settling on it would let one misread path kill a live method.
+    //
+    // The fixture states `reconstructed` outright. It used to lean on the import's
+    // CONFIDENCE as a proxy, which was wrong for a whole class: Rust's `crate`/`self`/`super`
+    // rooted synthetic imports are `Certain` about where they resolve while being no
+    // statement at all.
     let dir = project(
         "qref-weak-miss",
         &[
             (
                 "a.mock",
-                "import-as-weak j ./b.mock\nmember-decl T Marshal\nqref j Marshal\nroot-file",
+                "import-reconstructed-as j ./b.mock\nmember-decl T Marshal\nqref j Marshal\nroot-file",
             ),
             ("b.mock", "decl Other"),
         ],
@@ -1167,6 +1172,82 @@ fn a_hop_through_a_language_provided_type_reaches_the_element() {
     let edges = reference_edges_to(&graph, "field");
     assert_eq!(edges.len(), 1, "the element hop must reach the member");
     assert_eq!(edges[0].confidence, Confidence::Certain);
+}
+
+#[test]
+fn a_qualifier_bound_to_alternates_reaches_every_one() {
+    // tokio's platform modules: `#[cfg(windows)] #[path="sys.rs"] mod imp;` beside
+    // `#[cfg(not(windows))] #[path="stub.rs"] mod imp;`. One name, two real files, and
+    // `imp::ctrl_break()` names a live function in each — kndo analyzes the union of build
+    // configurations. Keeping only the first left the other with no incoming edge and a false
+    // `unused`: the same shape `symbol_twins_per_unit` fixes for declarations, one level up at
+    // the module binding.
+    let dir = project(
+        "qualifier-alternates",
+        &[
+            (
+                "a.mock",
+                "import-as imp ./sys.mock\nimport-as imp ./stub.mock\nqref imp ctrl_break\nroot-file",
+            ),
+            ("sys.mock", "decl ctrl_break"),
+            ("stub.mock", "decl ctrl_break"),
+        ],
+    );
+    let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
+    for file in [FileId(1), FileId(2)] {
+        let alternate = graph
+            .symbols
+            .iter()
+            .position(|s| s.name == "ctrl_break" && s.file == file)
+            .map(|i| SymbolId(i as u32))
+            .expect("each alternate is declared");
+        assert!(
+            graph.edges.iter().any(|e| matches!(
+                e.kind,
+                EdgeKind::References { to, .. } if to == alternate
+            )),
+            "the qualifier names both files; {alternate:?} had no edge"
+        );
+    }
+}
+
+#[test]
+fn a_synthesized_import_never_shadows_the_files_own_declaration() {
+    // tokio's `dump.rs`: it declares `pub struct Trace` AND mentions `super::task::trace::Trace`
+    // — a different type — in a field. The adapter synthesizes an import for that inline path so
+    // the mention resolves, and its binding used to outrank the file's own declaration, so the
+    // file's `-> &Trace` bound to the type it merely names in passing and `private-type-leak`
+    // reported a leak that is not there.
+    //
+    // No language kndo supports lets a WRITTEN import shadow a same-named local declaration
+    // (Rust E0255), so a collision here can only ever come from a synthetic import.
+    let dir = project(
+        "synthetic-shadow",
+        &[
+            (
+                "a.mock",
+                "import-reconstructed ./b.mock Trace\ndecl Trace\ndecl caller\nref-in caller Trace\nroot-file",
+            ),
+            ("b.mock", "decl Trace"),
+        ],
+    );
+    let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
+    let local = graph
+        .symbols
+        .iter()
+        .position(|s| s.name == "Trace" && s.file == FileId(0))
+        .map(|i| SymbolId(i as u32))
+        .expect("a.mock declares Trace");
+    let edges: Vec<_> = graph
+        .edges
+        .iter()
+        .filter(|e| matches!(e.kind, EdgeKind::References { to, .. } if to == local))
+        .collect();
+    assert_eq!(
+        edges.len(),
+        1,
+        "the bare reference belongs to the declaration in this very file"
+    );
 }
 
 #[test]

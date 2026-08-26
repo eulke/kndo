@@ -478,6 +478,32 @@ Measured: `gitutil::TreeEntry`, read through `ls_tree(..).map_err(..)?` and then
 last of §3's four acknowledged types. All four pragmas are gone, kndo's own finding count and
 health are unchanged, and six other codebases moved in neither direction.
 
+**§9-quater, what a synthesized import may and may not do (M6).** An adapter may reconstruct an
+import from a use site — Rust writes `crate::a::b::f()` with no `use` in sight, and resolution
+needs something to bind. `RawImport::reconstructed` says so outright. It replaced a proxy that was
+wrong: §9-ter derived "does a qualifier miss settle" from the import's CONFIDENCE, and Rust's
+`crate`/`self`/`super`-rooted synthetic imports are `Certain` about where they resolve while being
+no statement at all. Confidence answers "does this resolve as stated"; this answers "did the file
+state it". Two rules follow.
+
+**A synthesized binding ranks below the file's own declarations.** The bare-name ladder is five
+tiers now — a STATED import, the file's own declarations, a RECONSTRUCTED import, the unit, the
+units a wildcard makes visible — and the middle move is the fix. No language kndo supports lets a
+written import shadow a same-named local declaration (Rust E0255), so a collision there can only
+ever come from a synthetic one, claiming a precedence the language never grants it. tokio's
+`dump.rs` declares `pub struct Trace` and merely *mentions* `super::task::trace::Trace` in a
+field; the synthetic binding captured the file's own `-> &Trace` and `private-type-leak` reported
+a leak that was not there. Every site that asks what a bare name refers to shares one function
+(`graph::assemble::name_in_scope`) so the order cannot drift between them.
+
+**A qualifier names every file bound to it, not the first.** Rust's platform modules are
+`#[cfg(windows)] #[path = "windows/sys.rs"] mod imp;` beside a `not(windows)` twin, so
+`imp::ctrl_break()` names two live functions and the union-of-configurations rule (§8) says both
+are real. `qualifier_targets` holds a LIST; a hit emits to all of them. Keeping the first left
+every alternate but one with no incoming edge and a false `unused` — the same shape
+`symbol_twins_per_unit` fixes for declarations, one level up at the module binding. A hop (§9-bis)
+still fills only a qualifier nothing else claimed: a direct alias is stronger provenance.
+
 **§9-bis, the one hop through a module file (M6).** `use crate::internals::{attr, check, Ctxt};`
 followed by `check::check(cx, …)` registered ONE qualifier — the specifier's own target — and
 left `check` a mere binding that resolved to no symbol, because `internals/mod.rs` declares

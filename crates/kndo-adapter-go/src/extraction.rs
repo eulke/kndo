@@ -588,6 +588,7 @@ fn handle_import_spec(node: Node, src: &[u8], out: &mut FileFacts) {
         opaque_namespace_use,
         module_names_visible: false,
         local_alias,
+        reconstructed: false,
     });
 }
 

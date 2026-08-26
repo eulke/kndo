@@ -327,12 +327,46 @@ impl LanguageAdapter for MockAdapter {
                     opaque_namespace_use,
                     module_names_visible,
                     local_alias: None,
+                    reconstructed: false,
                 });
-            } else if let Some(rest) = line.strip_prefix("import-as-weak ") {
-                // `import-as-weak <alias> <specifier>` — an import the adapter
-                // RECONSTRUCTED from a use site rather than read from a statement (Rust's
-                // inline `a::b::f()` with no `use`): it names its qualifier like any alias,
-                // but at `Probable`, so a miss under that qualifier must NOT settle.
+            } else if let Some(rest) = line.strip_prefix("import-reconstructed ") {
+                // `import-reconstructed <specifier> [binding[,binding...]]` — an import the
+                // adapter SYNTHESIZED from a use site: the file writes the path inline and
+                // contains no import statement for it. Its bindings rank below the file's own
+                // declarations, and its qualifier does not settle a miss.
+                let mut parts = rest.splitn(2, ' ');
+                let spec = parts.next().unwrap_or("");
+                let bindings = parts
+                    .next()
+                    .map(|tokens| {
+                        tokens
+                            .split(',')
+                            .map(|tok| ImportBinding {
+                                local: SmolStr::new(tok),
+                                imported: Some(SmolStr::new(tok)),
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                facts.imports.push(RawImport {
+                    specifier: SmolStr::new(spec),
+                    kind: ImportKind::Relative,
+                    span: Span::default(),
+                    side_effect_only: false,
+                    type_only: false,
+                    confidence: Confidence::Certain,
+                    bindings,
+                    reexported: false,
+                    opaque_namespace_use: false,
+                    module_names_visible: false,
+                    local_alias: None,
+                    reconstructed: true,
+                });
+            } else if let Some(rest) = line.strip_prefix("import-reconstructed-as ") {
+                // `import-reconstructed-as <alias> <specifier>` — the aliased form of the
+                // directive above: an import the adapter synthesized from a use site (Rust's
+                // inline `a::b::f()` with no `use`). It names its qualifier like any alias,
+                // but a miss under that qualifier must NOT settle.
                 let mut parts = rest.splitn(2, ' ');
                 let alias = parts.next().unwrap_or("");
                 let spec = parts.next().unwrap_or("");
@@ -348,6 +382,7 @@ impl LanguageAdapter for MockAdapter {
                     opaque_namespace_use: false,
                     module_names_visible: false,
                     local_alias: Some(SmolStr::new(alias)),
+                    reconstructed: true,
                 });
             } else if let Some(rest) = line.strip_prefix("import-as ") {
                 // `import-as <alias> <specifier>` — an explicitly-aliased namespace
@@ -367,6 +402,7 @@ impl LanguageAdapter for MockAdapter {
                     opaque_namespace_use: false,
                     module_names_visible: false,
                     local_alias: Some(SmolStr::new(alias)),
+                    reconstructed: false,
                 });
             } else if let Some(rest) = line.strip_prefix("call-type ") {
                 // `call-type <fn> <yields> [p0,p1,…]` — a FREE FUNCTION's member-type fact:
@@ -500,6 +536,7 @@ impl LanguageAdapter for MockAdapter {
                     opaque_namespace_use: false,
                     module_names_visible: false,
                     local_alias: Some(SmolStr::new(spec.rsplit('/').next().unwrap_or(spec))),
+                    reconstructed: false,
                 });
             } else if let Some(rest) = line.strip_prefix("decl-at ") {
                 // `decl-at <line> <name>` — an exported declaration spanning that line
@@ -545,6 +582,7 @@ impl LanguageAdapter for MockAdapter {
                     opaque_namespace_use: false,
                     module_names_visible: false,
                     local_alias: None,
+                    reconstructed: false,
                 });
             }
         }

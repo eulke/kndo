@@ -369,6 +369,7 @@ fn handle_reexport_statement(node: Node, source_node: Node, src: &[u8], out: &mu
         opaque_namespace_use: false,
         module_names_visible: false,
         local_alias: None,
+        reconstructed: false,
     });
 }
 
@@ -555,6 +556,7 @@ fn handle_import_statement(node: Node, src: &[u8], out: &mut FileFacts) {
         opaque_namespace_use: false,
         module_names_visible: false,
         local_alias: None,
+        reconstructed: false,
     });
 }
 
@@ -745,6 +747,7 @@ fn push_dynamic_import(
         opaque_namespace_use: false,
         module_names_visible: false,
         local_alias: None,
+        reconstructed: false,
     });
 }
 
@@ -906,6 +909,7 @@ fn handle_literal_require(node: Node, string_node: Node, src: &[u8], out: &mut F
         opaque_namespace_use: false,
         module_names_visible: false,
         local_alias: None,
+        reconstructed: false,
     });
 }
 

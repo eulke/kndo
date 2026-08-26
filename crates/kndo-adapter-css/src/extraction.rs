@@ -295,6 +295,7 @@ fn handle_import_like(
         opaque_namespace_use: false,
         module_names_visible: false,
         local_alias: None,
+        reconstructed: false,
     });
 }
 

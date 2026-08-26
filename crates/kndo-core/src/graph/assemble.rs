@@ -130,12 +130,13 @@ pub(crate) struct ImportResolution {
         FileId,
         Provenance,
     )>,
-    /// Local name → target symbol, from this file's import bindings.
-    pub(crate) bound_symbols: HashMap<SmolStr, SymbolId>,
+    /// Local name → what this file's import bindings put under it, and whether the file
+    /// actually STATES that import ([`BoundName`]).
+    pub(crate) bound_symbols: HashMap<SmolStr, BoundName>,
     /// The twin sets behind those bindings, when one resolved through the target's unit table.
     pub(crate) bound_twins: HashMap<SmolStr, Vec<SymbolId>>,
     /// Qualifier → (target file, whether a member miss SETTLES there).
-    pub(crate) qualifier_targets: HashMap<SmolStr, (FileId, bool)>,
+    pub(crate) qualifier_targets: HashMap<SmolStr, QualifierTarget>,
     /// Units whose every top-level name this file sees bare.
     pub(crate) visible_units: Vec<SmolStr>,
     /// **Every name this file's imports bind to another FILE**, the table
@@ -146,6 +147,75 @@ pub(crate) struct ImportResolution {
     /// same reason `member_types` is: the patch resolves a CHANGED file's qualifiers against
     /// UNCHANGED files' tables without re-fetching their facts.
     pub(crate) module_bindings: Vec<crate::graph::ModuleBinding>,
+}
+
+/// Where a qualifier points, and whether a miss under it closes the namespace.
+///
+/// `files` is a LIST because one name legitimately binds several: Rust's platform modules are
+/// `#[cfg(windows)] #[path = "windows/sys.rs"] mod imp;` beside
+/// `#[cfg(not(windows))] #[path = "windows/stub.rs"] mod imp;`, so `imp::ctrl_break()` names
+/// two real functions and kndo analyzes the union of configurations. Keeping only the first
+/// left every alternate but one with no incoming edge and a false `unused` — the same shape
+/// `symbol_twins_per_unit` fixes for declarations, one level up at the module binding.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct QualifierTarget {
+    pub(crate) files: Vec<FileId>,
+    /// True once any import that registered this qualifier is one the file STATES: a written
+    /// import names a closed namespace, so a member miss under it settles rather than falling
+    /// through (RFC 0012 §9-ter).
+    pub(crate) settles: bool,
+}
+
+impl QualifierTarget {
+    fn add(&mut self, file: FileId, settles: bool) {
+        if !self.files.contains(&file) {
+            self.files.push(file);
+        }
+        self.settles |= settles;
+    }
+}
+
+/// A name an import binds, with the one thing the ladder needs to rank it: whether the file
+/// contains the import statement or the adapter reconstructed it from a use site
+/// ([`crate::adapter::RawImport::reconstructed`]).
+///
+/// Provenance travels WITH the value rather than in a second parallel table so no lookup site
+/// can consult one and forget the other — the bug this type exists to prevent is precisely a
+/// site that asked "is this name bound?" without asking "by what".
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct BoundName {
+    pub(crate) symbol: SymbolId,
+    pub(crate) reconstructed: bool,
+}
+
+impl BoundName {
+    /// The symbol, only if the file STATES the import that binds it — the tier that outranks
+    /// the file's own declarations, because no language lets a written import shadow one.
+    pub(crate) fn stated(&self) -> Option<SymbolId> {
+        (!self.reconstructed).then_some(self.symbol)
+    }
+}
+
+/// What a bare name refers to at a site in file `i`, in the order the languages actually bind
+/// them: an import the file STATES, then the file's own declarations, then an import the
+/// adapter reconstructed from a use site.
+///
+/// That last tier is the whole point. A synthetic import exists so an inline path has
+/// something to bind; it is not a statement, and every language kndo supports forbids a real
+/// import from shadowing a same-named local declaration (Rust E0255), so a collision here can
+/// only ever come from a synthetic one. Letting it win made tokio's `dump.rs` resolve its own
+/// `pub struct Trace` to the `pub(crate)` one it merely mentions in a field path.
+pub(crate) fn name_in_scope(
+    name: &str,
+    bound_symbols: &HashMap<SmolStr, BoundName>,
+    i: usize,
+    t: &ResolveTables<'_>,
+) -> Option<SymbolId> {
+    bound_symbols
+        .get(name)
+        .and_then(BoundName::stated)
+        .or_else(|| t.symbol_by_name_per_file[i].get(name).copied())
+        .or_else(|| bound_symbols.get(name).map(|b| b.symbol))
 }
 
 // Whether a declaration in `decl_file` at `scope` is visible to a reference site in
@@ -593,7 +663,13 @@ pub(crate) fn resolve_imports(
                         })
                         .copied();
                     if let Some(symbol_id) = symbol_id {
-                        out.bound_symbols.insert(binding.local.clone(), symbol_id);
+                        out.bound_symbols.insert(
+                            binding.local.clone(),
+                            BoundName {
+                                symbol: symbol_id,
+                                reconstructed: imp.reconstructed,
+                            },
+                        );
                         if let Some(twins) = resolving_unit
                             .and_then(|unit| symbol_twins_per_unit.get(unit))
                             .and_then(|t| t.get(&exported_name))
@@ -623,9 +699,9 @@ pub(crate) fn resolve_imports(
                     .local_alias
                     .clone()
                     .or_else(|| unit_name_by_file[to.0 as usize].clone())
-                    .map(|q| (q, imp.confidence == Confidence::Certain));
+                    .map(|q| (q, !imp.reconstructed));
                 if let Some((q, settles)) = qualifier {
-                    out.qualifier_targets.entry(q).or_insert((to, settles));
+                    out.qualifier_targets.entry(q).or_default().add(to, settles);
                 }
                 // Every name this import puts in scope pointing at a FILE — the table the hop
                 // pass follows. Both shapes count, and the pair is the whole point:
@@ -707,10 +783,15 @@ pub(crate) fn link_module_bindings(
             })
             .collect();
         for (name, hopped) in hops {
+            // A hop only fills a qualifier nothing else claimed: a direct alias is stronger
+            // provenance, and one that already names several files names them all.
             imports
                 .qualifier_targets
                 .entry(name)
-                .or_insert((hopped, false));
+                .or_insert_with(|| QualifierTarget {
+                    files: vec![hopped],
+                    settles: false,
+                });
         }
     }
 }
@@ -827,44 +908,51 @@ pub(crate) fn resolve_references(
             // the name may belong to an in-scope type instead, so it takes the in-scope
             // ladder below exactly as an unregistered qualifier would (settling the miss
             // to the wrong file would kill a live method).
-            let qualified_targets = qualifier_targets
-                .get(q)
-                .and_then(|&(target_file, settles)| {
-                    let t = target_file.0 as usize;
-                    let bare = symbol_by_name_per_file[t]
-                        .get(&reference.name)
-                        .or_else(|| {
-                            file_unit[t].as_ref().and_then(|unit| {
-                                symbol_by_name_per_unit
-                                    .get(unit)
-                                    .and_then(|tab| tab.get(&reference.name))
+            let qualified_targets = qualifier_targets.get(q).and_then(|qualified| {
+                // Every file the qualifier names, because it may name several: cfg-alternated
+                // `mod imp;` declarations bind one name to two platform modules, and both
+                // halves are live under the union of configurations.
+                let targets: Vec<SymbolId> = qualified
+                    .files
+                    .iter()
+                    .flat_map(|target_file| {
+                        let t = target_file.0 as usize;
+                        let bare = symbol_by_name_per_file[t]
+                            .get(&reference.name)
+                            .or_else(|| {
+                                file_unit[t].as_ref().and_then(|unit| {
+                                    symbol_by_name_per_unit
+                                        .get(unit)
+                                        .and_then(|tab| tab.get(&reference.name))
+                                })
                             })
-                        })
-                        .copied();
-                    let targets = match bare {
-                        Some(s) => vec![s],
-                        // The alias may name a TYPE rather than a module: resolve the
-                        // qualifier itself as a symbol in the target (its bare table
-                        // includes the re-export fixpoint's aliases, so a barrel-routed
-                        // type lands on its original), then look the member up in the
-                        // file where that symbol actually lives — `Mode::Standard`
-                        // through `use crate::opts::{Mode}` reaches
-                        // `types.rs`'s member table via `opts/mod.rs`'s alias. Twins
-                        // included: cfg-alternated impls both own the selector.
-                        None => symbol_by_name_per_file[t]
-                            .get(q.as_str())
-                            .map(|&type_symbol| {
-                                let home = symbols[type_symbol.0 as usize].file.0 as usize;
-                                qualified_member_targets(
-                                    &symbol_by_qualified_per_file[home],
-                                    &qualified_twins_per_file[home],
-                                    format!("{q}.{}", reference.name).as_str(),
-                                )
-                            })
-                            .unwrap_or_default(),
-                    };
-                    (!targets.is_empty() || settles).then_some(targets)
-                });
+                            .copied();
+                        match bare {
+                            Some(s) => vec![s],
+                            // The alias may name a TYPE rather than a module: resolve the
+                            // qualifier itself as a symbol in the target (its bare table
+                            // includes the re-export fixpoint's aliases, so a barrel-routed
+                            // type lands on its original), then look the member up in the
+                            // file where that symbol actually lives — `Mode::Standard`
+                            // through `use crate::opts::{Mode}` reaches
+                            // `types.rs`'s member table via `opts/mod.rs`'s alias. Twins
+                            // included: cfg-alternated impls both own the selector.
+                            None => symbol_by_name_per_file[t]
+                                .get(q.as_str())
+                                .map(|&type_symbol| {
+                                    let home = symbols[type_symbol.0 as usize].file.0 as usize;
+                                    qualified_member_targets(
+                                        &symbol_by_qualified_per_file[home],
+                                        &qualified_twins_per_file[home],
+                                        format!("{q}.{}", reference.name).as_str(),
+                                    )
+                                })
+                                .unwrap_or_default(),
+                        }
+                    })
+                    .collect();
+                (!targets.is_empty() || qualified.settles).then_some(targets)
+            });
             match qualified_targets {
                 Some(targets) => {
                     for to in targets {
@@ -996,17 +1084,25 @@ pub(crate) fn resolve_references(
         let resolved: Option<(SymbolId, Vec<SymbolId>)> = if is_receiver_access {
             None
         } else {
+            // Five tiers, and the ORDER is the language's, not the table's: an import the
+            // file states outranks its own declarations (no language lets one shadow the
+            // other, so they never collide); its own declarations outrank a RECONSTRUCTED
+            // import, which is not a statement at all but the adapter's reading of an inline
+            // path (`name_in_scope`).
+            let bound_tier = |b: &BoundName| {
+                let to = b.symbol;
+                (
+                    to,
+                    bound_twins
+                        .get(&reference.name)
+                        .map(|t| t.iter().copied().filter(|&s| s != to).collect())
+                        .unwrap_or_default(),
+                )
+            };
             bound_symbols
                 .get(&reference.name)
-                .map(|&to| {
-                    (
-                        to,
-                        bound_twins
-                            .get(&reference.name)
-                            .map(|t| t.iter().copied().filter(|&s| s != to).collect())
-                            .unwrap_or_default(),
-                    )
-                })
+                .filter(|b| !b.reconstructed)
+                .map(bound_tier)
                 .or_else(|| {
                     // A same-file hit still carries the unit's twins: the file that DECLARES
                     // one alternate is exactly where the others' calls live.
@@ -1020,6 +1116,7 @@ pub(crate) fn resolve_references(
                         )
                     })
                 })
+                .or_else(|| bound_symbols.get(&reference.name).map(bound_tier))
                 .or_else(|| file_unit[i].as_ref().and_then(&in_visible_unit))
         };
         if let Some((to, twins)) = resolved {
@@ -1464,8 +1561,8 @@ pub(crate) fn insert_qualified(
 pub(crate) fn in_scope_member_targets(
     q: &str,
     name: &str,
-    bound_symbols: &HashMap<SmolStr, SymbolId>,
-    qualifier_targets: &HashMap<SmolStr, (FileId, bool)>,
+    bound_symbols: &HashMap<SmolStr, BoundName>,
+    qualifier_targets: &HashMap<SmolStr, QualifierTarget>,
     i: usize,
     t: &ResolveTables<'_>,
 ) -> Vec<SymbolId> {
@@ -1508,30 +1605,32 @@ pub(crate) fn in_scope_member_targets(
 fn pointer_base<'s>(
     segments: &mut std::str::Split<'s, char>,
     base: &str,
-    bound_symbols: &HashMap<SmolStr, SymbolId>,
-    qualifier_targets: &HashMap<SmolStr, (FileId, bool)>,
+    bound_symbols: &HashMap<SmolStr, BoundName>,
+    qualifier_targets: &HashMap<SmolStr, QualifierTarget>,
     i: usize,
     t: &ResolveTables<'_>,
 ) -> Option<(SymbolId, Option<usize>)> {
-    if let Some(&symbol) = bound_symbols
-        .get(base)
-        .or_else(|| t.symbol_by_name_per_file[i].get(base))
-    {
+    if let Some(symbol) = name_in_scope(base, bound_symbols, i, t) {
         return Some((symbol, None));
     }
-    let &(target, _) = qualifier_targets.get(base)?;
+    let qualified = qualifier_targets.get(base)?;
     let (name, projection) = split_projection(segments.next()?);
-    let home = target.0 as usize;
-    let symbol = t.symbol_by_name_per_file[home]
-        .get(name)
-        .or_else(|| {
-            t.file_unit[home].as_ref().and_then(|unit| {
-                t.symbol_by_name_per_unit
-                    .get(unit)
-                    .and_then(|u| u.get(name))
+    // A pointer walks ONE chain, so it takes the first file that actually holds the name
+    // rather than every file the qualifier names — cfg alternates declare the same thing, and
+    // a chain through either reaches the same members.
+    let symbol = qualified.files.iter().find_map(|target| {
+        let home = target.0 as usize;
+        t.symbol_by_name_per_file[home]
+            .get(name)
+            .or_else(|| {
+                t.file_unit[home].as_ref().and_then(|unit| {
+                    t.symbol_by_name_per_unit
+                        .get(unit)
+                        .and_then(|u| u.get(name))
+                })
             })
-        })
-        .copied()?;
+            .copied()
+    })?;
     Some((symbol, projection))
 }
 
@@ -1547,7 +1646,7 @@ fn pointer_base<'s>(
 pub(crate) fn call_yield(
     symbol: SymbolId,
     projection: Option<usize>,
-    bound_symbols: &HashMap<SmolStr, SymbolId>,
+    bound_symbols: &HashMap<SmolStr, BoundName>,
     i: usize,
     t: &ResolveTables<'_>,
 ) -> Option<ChainStep> {
@@ -1593,7 +1692,7 @@ impl ChainStep {
     fn resolve(
         ty: crate::adapter::TypeExpr,
         home: usize,
-        bound_symbols: &HashMap<SmolStr, SymbolId>,
+        bound_symbols: &HashMap<SmolStr, BoundName>,
         i: usize,
         t: &ResolveTables<'_>,
     ) -> ChainStep {
@@ -1613,8 +1712,8 @@ impl ChainStep {
 pub(crate) fn chained_member_targets(
     pointer: &str,
     name: &str,
-    bound_symbols: &HashMap<SmolStr, SymbolId>,
-    qualifier_targets: &HashMap<SmolStr, (FileId, bool)>,
+    bound_symbols: &HashMap<SmolStr, BoundName>,
+    qualifier_targets: &HashMap<SmolStr, QualifierTarget>,
     i: usize,
     t: &ResolveTables<'_>,
 ) -> (Vec<SymbolId>, Vec<SymbolId>) {
@@ -1674,7 +1773,7 @@ pub(crate) fn chained_member_targets(
 pub(crate) fn chain_hop(
     current: &ChainStep,
     segment: &str,
-    bound_symbols: &HashMap<SmolStr, SymbolId>,
+    bound_symbols: &HashMap<SmolStr, BoundName>,
     i: usize,
     t: &ResolveTables<'_>,
 ) -> Option<ChainStep> {
@@ -1750,15 +1849,16 @@ pub(crate) fn project(
 pub(crate) fn resolve_annotation_name(
     type_name: &SmolStr,
     home: usize,
-    bound_symbols: &HashMap<SmolStr, SymbolId>,
+    bound_symbols: &HashMap<SmolStr, BoundName>,
     i: usize,
     t: &ResolveTables<'_>,
 ) -> Option<SymbolId> {
+    // The home file first — an annotation means what it means where it was written — then the
+    // site's own scope, in the order that scope actually binds names.
     t.symbol_by_name_per_file[home]
         .get(type_name.as_str())
-        .or_else(|| bound_symbols.get(type_name.as_str()))
-        .or_else(|| t.symbol_by_name_per_file[i].get(type_name.as_str()))
         .copied()
+        .or_else(|| name_in_scope(type_name.as_str(), bound_symbols, i, t))
 }
 
 /// One file's member-type facts as a lookup: (owner, member) → the type it yields.
@@ -2039,7 +2139,7 @@ pub(crate) fn promote_package_relative_test_roles<'a>(
 /// an assembly-algorithm change that could produce a different graph from the same facts. Feeds
 /// [`compute_graph_key`] (the "core graph-schema version"); a bump here invalidates
 /// every project's cached `graph.bin` on the next run, same as any other key-input change.
-pub const GRAPH_SCHEMA_VERSION: u32 = 34; // bump whenever the persisted snapshot shape (rkyv layouts included) or the assembly semantics that derive a graph from the same facts change
+pub const GRAPH_SCHEMA_VERSION: u32 = 35; // bump whenever the persisted snapshot shape (rkyv layouts included) or the assembly semantics that derive a graph from the same facts change
 
 /// The graph snapshot's cache key (`cache.rs`'s `graph.bin`): a single digest
 /// folding in the *whole* discovered file set (every path + content hash — this already

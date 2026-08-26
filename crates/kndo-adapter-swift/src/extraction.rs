@@ -201,6 +201,7 @@ fn handle_import(item: Node, src: &[u8], out: &mut FileFacts) {
         // resolved target's whole unit for imports carrying this.
         module_names_visible: true,
         local_alias: None,
+        reconstructed: false,
     });
 }
 

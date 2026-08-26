@@ -443,6 +443,26 @@ pub struct RawImport {
     /// import's qualifier falls through the in-scope/duck ladder, while a miss under a real
     /// statement's alias settles.
     pub local_alias: Option<SmolStr>,
+    /// The file contains **no import statement for this**: the adapter synthesized it from a
+    /// use site (`crate::a::b::f()` with no `use` in sight) so resolution has something to
+    /// bind. Two things read it, and both are the difference between a statement the file
+    /// makes and the adapter's reading of a path:
+    ///
+    ///  * a qualifier registered by a reconstructed import does NOT settle a member miss — a
+    ///    misread path must fall through the ladder, not close a namespace (RFC 0012 §9-ter);
+    ///  * its BINDINGS rank below the file's own declarations. Every language kndo supports
+    ///    forbids a real import from shadowing a same-named local declaration (Rust E0255),
+    ///    so such a collision can only ever come from a synthetic one — and it must not win.
+    ///    tokio's `dump.rs` declares `pub struct Trace` and merely *mentions*
+    ///    `super::task::trace::Trace` in a field; the synthetic binding used to capture the
+    ///    file's own return type and fabricate a `private-type-leak`.
+    ///
+    /// `false` for every import the source actually contains, which is the default and the
+    /// case that keeps its precedence. Confidence is a different question — how sure the
+    /// adapter is that the import RESOLVES as stated — and cannot stand in for this: Rust's
+    /// `crate`/`self`/`super`-rooted synthetic imports are `Certain` about their target.
+    #[serde(default)]
+    pub reconstructed: bool,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

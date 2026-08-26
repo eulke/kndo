@@ -179,6 +179,14 @@ binds again follows that one hop, and `internals/mod.rs`'s `mod check;` — with
 load-bearing, and why extending the specifier to `crate::internals::check` was the wrong fix: it
 would teach the core that `::` joins path segments.
 
+**Which imports are reconstructed.** Every import the adapter synthesizes from a use site —
+attribute paths, body paths (both the rooted and bare-rooted branches), the root probes, and paths
+inside macro token trees — carries `reconstructed: true`. A `use`, a `mod foo;` and an
+`extern crate` do not: the file contains those. The flag is what stops a synthesized binding from
+shadowing the file's own declaration and what keeps its qualifier from settling a miss
+(RFC 0012 §9-quater); confidence cannot stand in for it, since a `crate`/`self`/`super`-rooted
+synthetic import is `Certain` about where it resolves.
+
 **And the adapter names every qualifier the core used to guess.** A body path with no `use`
 behind it (`helpers::run()`, `kndo_core::discovery::find_files_named(..)`) reconstructs as a
 synthetic module import, and that import carries `local_alias` — the segment the use site

@@ -1996,6 +1996,7 @@ mod tests {
                         opaque_namespace_use: false,
                         module_names_visible: false,
                         local_alias: None,
+                        reconstructed: false,
                     });
                 } else if let Some(name) = line.strip_prefix("decl ") {
                     facts.declarations.push(crate::adapter::Declaration {

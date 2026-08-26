@@ -39,7 +39,7 @@ impl LanguageAdapter for RustAdapter {
             dependencies: Vec::new(),
             id: SmolStr::new("rust"),
             // Bump whenever the serialized facts shape or the emission semantics change.
-            facts_schema_version: 19,
+            facts_schema_version: 20,
             file_globs: vec![SmolStr::new("**/*.rs")],
             manifest_globs: vec![SmolStr::new("**/Cargo.toml")],
             grammar_version: SmolStr::new("tree-sitter-rust 0.24"),

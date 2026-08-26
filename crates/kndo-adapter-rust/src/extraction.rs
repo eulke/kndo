@@ -1424,6 +1424,9 @@ fn emit_attr_path(segments: &[&str], at: Span, out: &mut FileFacts) {
             opaque_namespace_use: false,
             module_names_visible: false,
             local_alias: None,
+            // Synthesized from a use SITE: the file writes this path inline and no import
+            // statement for it exists, so its binding must not outrank the file's own declarations.
+            reconstructed: true,
         });
         out.references.push(RawReference {
             name: SmolStr::new(*last),
@@ -1571,6 +1574,7 @@ fn handle_item(item: Node, src: &[u8], ctx: &Ctx<'_>, pending: PendingAttrs, out
                     opaque_namespace_use: false,
                     module_names_visible: false,
                     local_alias: None,
+                    reconstructed: false,
                 });
             }
         }
@@ -2423,6 +2427,7 @@ fn handle_mod(item: Node, src: &[u8], ctx: &Ctx<'_>, pending: &PendingAttrs, out
                 opaque_namespace_use: pending.macro_use,
                 module_names_visible: false,
                 local_alias: Some(SmolStr::new(text(name, src))),
+                reconstructed: false,
             });
         }
     }
@@ -2500,6 +2505,7 @@ fn push_entry_import(specifier: &str, at: Span, out: &mut FileFacts) {
         opaque_namespace_use: false,
         module_names_visible: false,
         local_alias: None,
+        reconstructed: false,
     });
 }
 
@@ -2516,6 +2522,7 @@ fn make_import(specifier: &str, kind_span: (ImportKind, Span), reexported: bool)
         opaque_namespace_use: false,
         module_names_visible: false,
         local_alias: None,
+        reconstructed: false,
     }
 }
 
@@ -2936,6 +2943,9 @@ fn emit_path(
             opaque_namespace_use: false,
             module_names_visible: false,
             local_alias: None,
+            // Synthesized from a use SITE: the file writes this path inline and no import
+            // statement for it exists, so its binding must not outrank the file's own declarations.
+            reconstructed: true,
         });
         if bound != *last {
             // The type itself is used by the traversal, and the trailing item resolves as
@@ -3041,6 +3051,9 @@ fn emit_path(
                 opaque_namespace_use: false,
                 module_names_visible: false,
                 local_alias: Some(SmolStr::new(root)),
+                // Synthesized from a use SITE: the file writes this path inline and no import
+                // statement for it exists, so its binding must not outrank the file's own declarations.
+                reconstructed: true,
             });
         }
         // The parent-path MODULE import is emitted regardless of `locals`: that guard
@@ -3081,6 +3094,9 @@ fn emit_path(
                 // Same reason as the shallow branch — the adapter knows the separator, the
                 // core must not. Reconstructed, hence never Certain, hence non-settling.
                 local_alias: Some(SmolStr::new(rest[rest.len() - 1])),
+                // Synthesized from a use SITE: the file writes this path inline and no import
+                // statement for it exists, so its binding must not outrank the file's own declarations.
+                reconstructed: true,
             });
             if import_worthy {
                 // The entry-liveness companion for a DEEP path — and it makes the same claim
@@ -3101,6 +3117,9 @@ fn emit_path(
                     opaque_namespace_use: false,
                     module_names_visible: false,
                     local_alias: None,
+                    // Synthesized from a use SITE: the file writes this path inline and no import
+                    // statement for it exists, so its binding must not outrank the file's own declarations.
+                    reconstructed: true,
                 });
             }
             // The binding resolves the plain name — no qualifier needed for this one.
@@ -3163,6 +3182,7 @@ fn handle_macro(
                 opaque_namespace_use: false,
                 module_names_visible: false,
                 local_alias: None,
+                reconstructed: false,
             });
             return;
         }
@@ -3263,6 +3283,9 @@ fn scan_token_tree(
                         opaque_namespace_use: false,
                         module_names_visible: false,
                         local_alias: None,
+                        // Synthesized from a use SITE: the file writes this path inline and no import
+                        // statement for it exists, so its binding must not outrank the file's own declarations.
+                        reconstructed: true,
                     });
                 }
             }

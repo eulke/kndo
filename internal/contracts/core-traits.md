@@ -361,6 +361,17 @@ pub struct FileFacts {
                                              // segment that site qualifies by, which only the
                                              // adapter can identify; the core does not split
                                              // specifiers on any separator (RFC 0012 §9-ter).
+                                             // reconstructed: the file contains NO import
+                                             // statement for this — the adapter synthesized it
+                                             // from a use site so resolution has something to
+                                             // bind. Two rules read it: such an import's
+                                             // qualifier does not SETTLE a member miss, and its
+                                             // bindings rank BELOW the file's own declarations
+                                             // (no language lets a written import shadow one,
+                                             // so a collision can only come from a synthetic).
+                                             // Confidence cannot stand in for it — Rust's
+                                             // crate/self/super-rooted synthetic imports are
+                                             // Certain about where they resolve.
                                              // kind is syntactic shape only — Stdlib is a
                                              // resolve()-time fact, never claimed here.
                                              // ImportBinding { local, imported: Option<Name> } —

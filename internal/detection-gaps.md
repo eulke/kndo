@@ -188,25 +188,6 @@ resolve the path to a unit key (7 occurrences in all of tokio). And `internal_on
 rung scopes, so it can no longer suggest narrowing `pub(super)` to `private`: both are `Module`
 and differ only by anchor, which that comparison does not see. A silence, not an accusation, and
 the fix is to make its rung walk region-aware the way this analysis now is.
-
-## 18. A path-synthesized binding shadows the file's own declaration
-
-Found while measuring §7, and **pre-existing** — not caused by it. tokio's `dump.rs` declares
-`pub struct Trace` and, in its field, writes the path `super::task::trace::Trace` (a *different*,
-`pub(crate)` type). The adapter reconstructs a synthetic import from that inline path, and its
-binding lands in `bound_symbols` — which the bare-name ladder consults **before** the file's own
-declarations. So `pub fn trace(&self) -> &Trace` binds to the crate-private type instead of the
-public one declared six lines above, and `private-type-leak` reports a leak that is not there.
-
-Rust would not allow a real `use` to shadow a same-named local declaration (E0255), so the
-synthetic binding is claiming a precedence the language never grants it.
-
-Direction, and it needs no new mechanism: RFC 0012 §9-ter already separates an import the file
-STATES (`Certain`) from one the adapter RECONSTRUCTED from a use site (`Probable`/`Possible`). A
-reconstructed binding should rank below the file's own declarations for the same reason it does
-not settle a qualifier miss. Its own item, with its own measurement — the ladder order affects
-every language.
-
 ## 8. A brace-imported submodule is not a usable qualifier (RESUELTO)
 
 `use crate::internals::{attr, check, Ctxt, Derive};` followed by `check::check(cx, …)` bound
