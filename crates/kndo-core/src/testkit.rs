@@ -153,6 +153,8 @@ impl LanguageAdapter for MockAdapter {
         //   private-decl <name>         -> an unexported Function declaration
         //   marked-decl <markers> <name>  -> an exported Function declaration carrying
         //                                    `Declaration::markers` (comma-separated)
+        //   member-impl <trait> <owner> <name> -> a member declared inside an `impl` of that
+        //                                    trait (`Declaration::implements`)
         //   import <specifier> [binding[,binding...]]     -> RawImport { reexported: false }
         //   reexport <specifier> [binding[,binding...]]   -> RawImport { reexported: true }
         //   import-opaque <specifier>                     -> RawImport { opaque_namespace_use: true }
@@ -189,6 +191,7 @@ impl LanguageAdapter for MockAdapter {
                     nested_scope: false,
                     visibility_inherited: false,
                     visible_in_unit: None,
+                    implements: None,
                     markers: Vec::new(),
                 });
             } else if let Some(rest) = line.strip_prefix("marked-decl ") {
@@ -209,6 +212,7 @@ impl LanguageAdapter for MockAdapter {
                     nested_scope: false,
                     visibility_inherited: false,
                     visible_in_unit: None,
+                    implements: None,
                     markers: markers
                         .split(',')
                         .filter(|m| !m.is_empty())
@@ -228,6 +232,7 @@ impl LanguageAdapter for MockAdapter {
                     nested_scope: false,
                     visibility_inherited: false,
                     visible_in_unit: None,
+                    implements: None,
                     markers: Vec::new(),
                 });
             } else if let Some(rest) = line
@@ -254,6 +259,30 @@ impl LanguageAdapter for MockAdapter {
                     nested_scope: false,
                     visibility_inherited: false,
                     visible_in_unit: None,
+                    implements: None,
+                    markers: Vec::new(),
+                });
+            } else if let Some(rest) = line.strip_prefix("member-impl ") {
+                // `member-impl <trait> <owner> <name>` — a member declared inside an
+                // implementation of that trait/protocol (`Declaration::implements`). The
+                // fact a convention plugin matches its curated table against.
+                let mut parts = rest.splitn(3, ' ');
+                let trait_name = parts.next().unwrap_or("");
+                let owner = parts.next().unwrap_or("");
+                let name = parts.next().unwrap_or("");
+                facts.declarations.push(Declaration {
+                    name: SmolStr::new(name),
+                    kind: SymbolKind::Method,
+                    span: Span::default(),
+                    exported: false,
+                    visibility: VisibilityLevel(0),
+                    member_of: Some(SmolStr::new(owner)),
+                    signature_span: None,
+                    implicitly_invoked: false,
+                    nested_scope: false,
+                    visibility_inherited: false,
+                    visible_in_unit: None,
+                    implements: Some(SmolStr::new(trait_name)),
                     markers: Vec::new(),
                 });
             } else if let Some(rest) = line.strip_prefix("member-implicit ") {
@@ -275,6 +304,7 @@ impl LanguageAdapter for MockAdapter {
                     nested_scope: false,
                     visibility_inherited: false,
                     visible_in_unit: None,
+                    implements: None,
                     markers: Vec::new(),
                 });
             } else if let Some(rest) = line
@@ -559,6 +589,7 @@ impl LanguageAdapter for MockAdapter {
                     nested_scope: false,
                     visibility_inherited: false,
                     visible_in_unit: None,
+                    implements: None,
                     markers: Vec::new(),
                 });
             } else if let Some(rest) = line.strip_prefix("import-at ") {

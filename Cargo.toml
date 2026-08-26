@@ -17,6 +17,8 @@ members = [
     "crates/kndo-plugin-nextjs",
     "crates/kndo-plugin-express",
     "crates/kndo-plugin-serde",
+    "crates/kndo-plugin-rkyv",
+    "crates/kndo-plugin-wasmtime",
     "crates/kndo-plugin-coverage",
     "xtask",
 ]

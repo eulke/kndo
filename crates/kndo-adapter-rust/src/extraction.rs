@@ -1612,6 +1612,7 @@ fn push_declaration(
         nested_scope: false,
         visibility_inherited: false,
         visible_in_unit: None,
+        implements: None,
         markers: Vec::new(),
         signature_span,
     });
@@ -2114,16 +2115,37 @@ fn is_machinery_trait(name: &str) -> bool {
     )
 }
 
-/// Flip [`kndo_core::adapter::Declaration::implicitly_invoked`] on the just-pushed member —
-/// searched from the end, where `handle_function` left it.
-fn mark_implicitly_invoked(out: &mut FileFacts, owner: &str, name: &str) {
-    if let Some(decl) = out
-        .declarations
+/// The member declaration `handle_function`/`push_declaration` just pushed — searched from
+/// the end, where they left it. Both facts an impl block knows about its members
+/// (`implicitly_invoked`, `implements`) are recorded through this one lookup.
+fn last_member_decl<'a>(
+    out: &'a mut FileFacts,
+    owner: &str,
+    name: &str,
+) -> Option<&'a mut kndo_core::adapter::Declaration> {
+    out.declarations
         .iter_mut()
         .rev()
         .find(|d| d.name == name && d.member_of.as_deref() == Some(owner))
-    {
+}
+
+/// Flip [`kndo_core::adapter::Declaration::implicitly_invoked`] on the just-pushed member —
+/// the language's OWN machinery traits, this adapter's curated verdict.
+fn mark_implicitly_invoked(out: &mut FileFacts, owner: &str, name: &str) {
+    if let Some(decl) = last_member_decl(out, owner, name) {
         decl.implicitly_invoked = true;
+    }
+}
+
+/// Record [`kndo_core::adapter::Declaration::implements`] on the just-pushed member: the
+/// trait whose `impl` block declares it. A FACT, recorded for every trait impl regardless of
+/// whether this adapter considers the trait machinery — because the consumer that knows a
+/// third-party trait's meaning is a plugin, and it can only know it if the fact survives
+/// extraction. Reducing it to `implicitly_invoked` alone is what once forced `kndo:serde` to
+/// re-parse Rust source the adapter had already parsed.
+fn record_implements(out: &mut FileFacts, owner: &str, name: &str, trait_name: &str) {
+    if let Some(decl) = last_member_decl(out, owner, name) {
+        decl.implements = Some(SmolStr::new(trait_name));
     }
 }
 
@@ -2248,6 +2270,9 @@ fn handle_impl(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
                                 ))),
                                 confidence: Confidence::Probable,
                             });
+                            if let Some(t) = trait_name.as_deref() {
+                                record_implements(out, &self_type, text(mname, src), t);
+                            }
                             if is_machinery {
                                 mark_implicitly_invoked(out, &self_type, text(mname, src));
                             }
@@ -2288,6 +2313,9 @@ fn handle_impl(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
                                 ))),
                                 confidence: Confidence::Probable,
                             });
+                            if let Some(t) = trait_name.as_deref() {
+                                record_implements(out, &self_type, text(mname, src), t);
+                            }
                         }
                     }
                 }
@@ -2303,12 +2331,11 @@ fn handle_impl(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
 /// name — the type being named, never one of its arguments.
 ///
 /// The distinction is load-bearing in both positions. `impl Index<usize> for T` implements
-/// `Index`, not `usize`; `impl Deserializer<'de> for StringDeserializer<E>` owns its members
-/// under `StringDeserializer`, not `E`. A walk that simply took the last identifier anywhere
-/// in the subtree answered with the argument, which filed every generic type's members under
-/// a phantom owner (its own type parameter — a name no receiver ever unifies with), pointed
-/// the `Implement` reference at an argument, and cost every GENERIC machinery trait its
-/// members' marks; the non-generic ones, `Display` and `Drop`, worked by accident.
+/// `Index`, not `usize`; `impl Serialize for Vec<Token>` owns its members under `Vec`, not
+/// `Token`. A walk that simply took the last identifier anywhere in the subtree answered with
+/// the argument, which pointed the `Implement` reference at the wrong name and cost every
+/// GENERIC machinery trait its members' marks (`Add`, `Index`, `PartialEq` — the non-generic
+/// ones, `Display` and `Drop`, worked by accident).
 fn impl_header_name(node: Node, src: &[u8]) -> Option<String> {
     if node.kind() == "type_identifier" {
         return Some(text(node, src).to_string());
@@ -4040,6 +4067,73 @@ mod tests {
             "a non-machinery trait's methods dispatch by other means (roots cover them)"
         );
         assert!(!flagged("label"), "inherent methods are name-called");
+    }
+
+    #[test]
+    fn a_members_impl_block_names_the_trait_it_implements() {
+        // The fact a convention plugin matches its table against. Recorded for EVERY trait
+        // impl, machinery or not — `Serialize` is nothing to this adapter and everything to
+        // `kndo:serde`, and only the fact surviving extraction lets that plugin be a table
+        // instead of a second Rust parser.
+        let f = facts(
+            "use std::fmt;\n\
+             struct Token;\n\
+             impl fmt::Display for Token {\n\
+             \x20   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { todo!() }\n\
+             }\n\
+             impl serde::Serialize for Token {\n\
+             \x20   fn serialize<S>(&self, s: S) -> Result<S::Ok, S::Error> { todo!() }\n\
+             }\n\
+             impl Add for Token {\n\
+             \x20   type Output = Token;\n\
+             \x20   fn add(self, o: Token) -> Token { self }\n\
+             }\n\
+             impl Token {\n\
+             \x20   fn label(&self) -> u8 { 1 }\n\
+             }\n",
+        );
+        let implements = |name: &str| {
+            f.declarations
+                .iter()
+                .find(|d| d.name == name && d.member_of.as_deref() == Some("Token"))
+                .unwrap_or_else(|| panic!("no member {name}"))
+                .implements
+                .as_deref()
+                .map(str::to_string)
+        };
+        assert_eq!(implements("fmt").as_deref(), Some("Display"));
+        assert_eq!(
+            implements("serialize").as_deref(),
+            Some("Serialize"),
+            "a path-qualified trait reduces to its last segment, however the file spells it"
+        );
+        assert_eq!(
+            implements("Output").as_deref(),
+            Some("Add"),
+            "an associated type is declared in the block just like a method"
+        );
+        assert_eq!(
+            implements("label"),
+            None,
+            "an inherent impl names no trait, so there is nothing to report"
+        );
+
+        // A generic trait reduces to its base too, which is what the `*With` adapters rkyv
+        // projects hand-write look like.
+        let g = facts(
+            "impl ArchiveWith<SmolStr> for SmolStrAsString {\n\
+             \x20   fn resolve_with(f: &SmolStr) {}\n\
+             }\n",
+        );
+        assert_eq!(
+            g.declarations
+                .iter()
+                .find(|d| d.name == "resolve_with")
+                .unwrap()
+                .implements
+                .as_deref(),
+            Some("ArchiveWith")
+        );
     }
 
     #[test]

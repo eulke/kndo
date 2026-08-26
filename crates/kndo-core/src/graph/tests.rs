@@ -44,6 +44,7 @@ fn surface_closure_promotes_transitive_members_of_surface_types_only() {
         nested_scope: false,
         visibility_inherited: false,
         visible_in_unit: None,
+        implements: None,
         markers: Vec::new(),
     };
     let symbols = vec![
@@ -2136,6 +2137,77 @@ fn a_plugin_marked_member_inherits_its_owners_colors() {
     );
 }
 
+#[test]
+fn a_plugin_reads_the_trait_a_member_was_declared_under() {
+    // What makes a convention plugin a TABLE and nothing else: the adapter recorded which
+    // trait's impl declares each member, so the plugin selects by that fact instead of
+    // re-parsing the file. The two members share an owner AND a language — only the impl
+    // block tells them apart, which is exactly the case that forced source reading before.
+    struct TableDriven;
+    impl crate::plugin::Plugin for TableDriven {
+        fn descriptor(&self) -> crate::plugin::PluginDescriptor {
+            crate::plugin::PluginDescriptor {
+                id: SmolStr::new("kndo:table-driven"),
+                version: SmolStr::new("1"),
+                detection: vec![],
+                // Nothing to read — the point of the fact.
+                requested_file_access: vec![],
+                activation: vec![],
+                dependencies: vec![],
+            }
+        }
+        fn mutates_graph(&self) -> bool {
+            true
+        }
+        fn annotate_symbols(
+            &self,
+            graph: &crate::plugin::GraphView<'_>,
+            _content: &crate::plugin::ContentView<'_>,
+            out: &mut crate::plugin::AnnotationSink,
+        ) {
+            for file in graph.files() {
+                for s in graph.symbols_in(&file.path) {
+                    let (Some(owner), Some(t)) = (&s.member_of, &s.implements) else {
+                        continue;
+                    };
+                    if t == "Serialize" && s.name == "serialize" {
+                        out.mark_implicitly_invoked(
+                            file.path.clone(),
+                            format!("{owner}.{name}", name = s.name),
+                        );
+                    }
+                }
+            }
+        }
+    }
+    let dir = project(
+        "plugin-reads-implements",
+        &[(
+            "a.mock",
+            "decl Glob\n\
+             member-impl Serialize Glob serialize\n\
+             member-impl Display Glob fmt\n\
+             root-decl Glob",
+        )],
+    );
+    let plugins: Vec<Box<dyn crate::plugin::Plugin>> = vec![Box::new(TableDriven)];
+    let (graph, _) = assemble(dir.path(), &mock_adapters(), &plugins).unwrap();
+    let id =
+        |name: &str| SymbolId(graph.symbols.iter().position(|s| s.name == name).unwrap() as u32);
+    assert_eq!(
+        graph.symbols[id("serialize").0 as usize]
+            .implements
+            .as_deref(),
+        Some("Serialize"),
+        "the fact survives assembly onto the symbol"
+    );
+    assert!(graph.is_plugin_implicitly_invoked(id("serialize")));
+    assert!(
+        !graph.is_plugin_implicitly_invoked(id("fmt")),
+        "same owner, same file, different impl block — the table must not reach it"
+    );
+}
+
 fn has_root_me_root(graph: &ProjectGraph) -> bool {
     graph.edges.iter().any(|e| {
         matches!(&e.kind, EdgeKind::Root { target: NodeRef::Symbol(s), .. }
@@ -3296,6 +3368,7 @@ fn same_named_declarations_keep_their_own_metrics() {
         nested_scope: false,
         visibility_inherited: false,
         visible_in_unit: None,
+        implements: None,
         markers: Vec::new(),
     };
     let metrics = |span: Span, tokens: u32| FunctionMetrics {
@@ -3330,6 +3403,7 @@ fn same_named_declarations_keep_their_own_metrics() {
             nested_scope: false,
             visibility_inherited: false,
             visible_in_unit: None,
+            implements: None,
             markers: Vec::new(),
         })
         .collect();
@@ -3395,6 +3469,7 @@ fn a_nested_types_constructor_inherits_its_containers_liveness() {
             nested_scope: false,
             visibility_inherited: false,
             visible_in_unit: None,
+            implements: None,
             markers: Vec::new(),
         };
     use crate::vocab::SymbolKind;
@@ -3427,6 +3502,7 @@ fn a_nested_types_constructor_inherits_its_containers_liveness() {
             nested_scope: false,
             visibility_inherited: false,
             visible_in_unit: None,
+            implements: None,
             markers: Vec::new(),
         })
         .collect();
@@ -3494,6 +3570,7 @@ fn same_name_overloads_each_own_the_references_in_their_body() {
         nested_scope: false,
         visibility_inherited: false,
         visible_in_unit: None,
+        implements: None,
         markers: Vec::new(),
     };
 
@@ -3530,6 +3607,7 @@ fn same_name_overloads_each_own_the_references_in_their_body() {
             nested_scope: false,
             visibility_inherited: false,
             visible_in_unit: None,
+            implements: None,
             markers: Vec::new(),
         })
         .collect();

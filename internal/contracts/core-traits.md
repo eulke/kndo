@@ -260,6 +260,25 @@ pub struct FileFacts {
                                              //   items): the level belongs to the container,
                                              //   which is measured separately; visibility
                                              //   analyses skip the member,
+                                             //   implements: Option<Name> — the trait /
+                                             //   protocol / interface whose IMPLEMENTATION
+                                             //   declares this member (Rust's `impl Serialize
+                                             //   for T`, Swift's `extension T: Codable`).
+                                             //   A FACT about where the member is written,
+                                             //   never a verdict about what invokes it, and
+                                             //   None wherever a language declares members in
+                                             //   the type body with the interface separate
+                                             //   (Java, Kotlin, Go, JS) — an optional fact a
+                                             //   language may simply never fill. The core
+                                             //   carries it and interprets nothing; its
+                                             //   consumer is a PLUGIN that legitimately holds
+                                             //   one ecosystem's knowledge, matching a curated
+                                             //   trait table through
+                                             //   AnnotationSink::mark_machinery_impls. That is
+                                             //   what lets kndo:serde / kndo:rkyv /
+                                             //   kndo:wasmtime be their tables and nothing
+                                             //   else, instead of re-parsing a grammar the
+                                             //   adapter already parsed,
                                              //   markers: Vec<Name> — the language-visible
                                              //   annotations/attributes/decorators written on
                                              //   this declaration, verbatim and in source
@@ -656,7 +675,14 @@ pub trait Plugin: Send + Sync {
   `Edge`/root/annotation is attributed `Provenance::Plugin(id)` and folds into that one sort, no
   second pass. `annotate_symbols`' marks land in `ProjectGraph::externally_consumed:
   Vec<SymbolId>` (sorted, deduplicated — `is_externally_consumed` binary-searches it), consumed
-  by `internal-only`/`private-type-leak` (RFC 0005 §7's exemption). `classify_file` runs earlier,
+  by `internal-only`/`private-type-leak` (RFC 0005 §7's exemption). `AnnotationSink` also offers
+  **`mark_machinery_impls(graph, drives)`** — the whole body of an ecosystem conventions
+  plugin: it walks the graph's members and marks every one whose `implements` fact and name the
+  caller's `drives(trait_name, member_name)` closure accepts. The walk lives here and the
+  CURATED TABLE is what a plugin brings, which is the split the layer demands: the core has no
+  list of trait names and cannot acquire one without breaking the ignorance rule, while a
+  plugin has no business re-parsing a grammar its adapter already parsed (which is exactly what
+  `kndo:serde` did before `Declaration::implements` existed). `classify_file` runs earlier,
   inline in phase 2's file-node build, right after RFC 0012 §7's content-derived origin
   correction — its answer is what every downstream role/origin exemption sees.
 - Any registered plugin whose `mutates_graph()` returns `true` makes `assemble_from_source`

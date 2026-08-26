@@ -89,6 +89,13 @@ pub struct SymbolNode {
     /// pure graph functions (`crate::adapter::Declaration::visible_in_unit`).
     #[rkyv(with = rkyv::with::Map<crate::rkyv_support::SmolStrAsString>)]
     pub visible_in_unit: Option<SmolStr>,
+    /// Mirrors [`crate::adapter::Declaration::implements`] — the trait/protocol whose
+    /// implementation declares this member. Carried onto the graph (and through the snapshot)
+    /// because the consumer is a PLUGIN, which runs after assembly: an ecosystem plugin
+    /// matches its curated trait table against this instead of re-reading source the adapter
+    /// already parsed. Facts here, interpretation at plugin/analysis time.
+    #[rkyv(with = rkyv::with::Map<crate::rkyv_support::SmolStrAsString>)]
+    pub implements: Option<SmolStr>,
     /// Mirrors [`crate::adapter::Declaration::markers`] — the language-visible annotations,
     /// attributes or decorators written on this declaration, verbatim. Carried into the graph
     /// (and through the snapshot) because the consumer is CONFIG, which arrives after

@@ -273,6 +273,14 @@ world plugin {
     import package-of: func(path: string) -> option<wasm-package-info>;
     import file-details: func(path: string) -> option<wasm-file-details>;
     import symbol-details: func(path: string, symbol: string) -> option<wasm-symbol-details>;
+    /// The trait/protocol/interface whose implementation declares a member
+    /// (`SymbolNode::implements`) — what lets an ecosystem plugin be its curated table
+    /// instead of re-parsing a grammar the adapter already parsed. `none` for a member
+    /// declared in its type's own body, and for every language whose adapter does not fill
+    /// the fact. Its OWN import rather than a field on `wasm-symbol-details`, because
+    /// growing a record is a breaking change in the component model — the same additive rule
+    /// `symbol-details` itself followed when it grew out of frozen `wasm-symbol-info`.
+    import symbol-implements: func(path: string, symbol: string) -> option<string>;
     import imports-of: func(path: string) -> list<string>;
     import importers-of: func(path: string) -> list<string>;
     import references-to: func(path: string, symbol: string) -> list<wasm-ref-site>;
@@ -317,6 +325,14 @@ world plugin-findings {
     import package-of: func(path: string) -> option<wasm-package-info>;
     import file-details: func(path: string) -> option<wasm-file-details>;
     import symbol-details: func(path: string, symbol: string) -> option<wasm-symbol-details>;
+    /// The trait/protocol/interface whose implementation declares a member
+    /// (`SymbolNode::implements`) — what lets an ecosystem plugin be its curated table
+    /// instead of re-parsing a grammar the adapter already parsed. `none` for a member
+    /// declared in its type's own body, and for every language whose adapter does not fill
+    /// the fact. Its OWN import rather than a field on `wasm-symbol-details`, because
+    /// growing a record is a breaking change in the component model — the same additive rule
+    /// `symbol-details` itself followed when it grew out of frozen `wasm-symbol-info`.
+    import symbol-implements: func(path: string, symbol: string) -> option<string>;
     import imports-of: func(path: string) -> list<string>;
     import importers-of: func(path: string) -> list<string>;
     import references-to: func(path: string, symbol: string) -> list<wasm-ref-site>;

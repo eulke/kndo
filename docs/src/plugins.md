@@ -24,6 +24,8 @@ the reserved `kndo:` namespace and are gated by the same activation rules.
 | `kndo:nextjs` | any manifest in the project declares `next` | roots `pages/**`/`app/**` convention files and their framework-consumed exports; reads `next.config.*` for custom page extensions; marks framework-visible exports externally consumed |
 | `kndo:express` | any manifest declares `express` | roots the conventional server entry files (from `main`/`scripts` and entry-name conventions) that are *launched*, never imported |
 | `kndo:serde` | any `Cargo.toml` declares `serde` | marks hand-written `Serialize`/`Deserialize` impls as implicitly invoked, so a serialized type's impl doesn't read as a test blind spot |
+| `kndo:rkyv` | any `Cargo.toml` declares `rkyv` | marks hand-written `Archive`/`Serialize`/`Deserialize` impls — and the `*With` adapters `#[rkyv(with = …)]` reaches through generated code — as implicitly invoked |
+| `kndo:wasmtime` | any `Cargo.toml` declares `wasmtime` | marks the members of the host traits `wasmtime::component::bindgen!` generates, whose only caller is the guest |
 
 `kndo doctor` shows each with its activation state and reason.
 

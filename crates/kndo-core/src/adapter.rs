@@ -313,6 +313,28 @@ pub struct Declaration {
     /// other rung. Default `None`.
     #[serde(default)]
     pub visible_in_unit: Option<SmolStr>,
+    /// The trait/protocol/interface whose IMPLEMENTATION declares this member — Rust's
+    /// `impl Serialize for T`, Swift's `extension T: Codable`. A fact about where the member
+    /// is written, never a verdict about what invokes it: the adapter reports the name it
+    /// read and interprets nothing.
+    ///
+    /// `None` wherever the concept doesn't apply — a member declared in its type's own body,
+    /// a free function, and every language that declares members in the type body with the
+    /// interface as a separate declaration (Java, Kotlin, Go, JS). Like every optional fact
+    /// in this contract, a language that has no such grouping simply never fills it.
+    ///
+    /// The core never interprets it either, for the same reason it never interprets
+    /// [`Declaration::markers`]: it has no list of trait names and cannot acquire one without
+    /// breaking the ignorance rule. What it does is CARRY it, so a consumer that legitimately
+    /// holds one ecosystem's knowledge can match against it. That consumer is a plugin —
+    /// `kndo:serde` knows serde's traits drive `serialize`, `kndo:rkyv` knows rkyv's drive
+    /// `resolve_with` — and this field is what lets such a plugin be its curated table and
+    /// nothing else, instead of re-parsing a grammar the adapter already parsed.
+    ///
+    /// The adapter's OWN curated knowledge stays separate and stays a verdict:
+    /// [`Declaration::implicitly_invoked`] is where a language's own machinery traits are
+    /// decided, because those are facts about the language rather than about a tool.
+    pub implements: Option<SmolStr>,
     /// Language-visible MARKERS attached to this declaration: annotation names in Java and
     /// Kotlin (`@Controller`, `@AfterEach`), attribute paths in Rust, attributes in Swift,
     /// decorators in JS/TS. Bare names, in source order, duplicates kept — the adapter

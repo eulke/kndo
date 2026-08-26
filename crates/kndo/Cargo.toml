@@ -22,6 +22,8 @@ kndo-plugin-nextjs = { path = "../kndo-plugin-nextjs", optional = true }
 kndo-plugin-express = { path = "../kndo-plugin-express", optional = true }
 kndo-plugin-coverage = { path = "../kndo-plugin-coverage", optional = true }
 kndo-plugin-serde = { path = "../kndo-plugin-serde", optional = true }
+kndo-plugin-rkyv = { path = "../kndo-plugin-rkyv", optional = true }
+kndo-plugin-wasmtime = { path = "../kndo-plugin-wasmtime", optional = true }
 # Plugin activation-rule evaluation: manifest-dependency and file-glob checks
 # against the project root. Behind `plugin-activation` — needed by the WASM tier's global
 # install path AND by any gated built-in convention plugin.
@@ -65,6 +67,8 @@ default = [
     "plugin-nextjs",
     "plugin-express",
     "plugin-serde",
+    "plugin-rkyv",
+    "plugin-wasmtime",
     "plugin-coverage",
     "plugin-install",
 ]
@@ -88,6 +92,8 @@ external-adapters = ["dep:kndo-plugin-api", "dep:dirs", "dep:wit-component", "pl
 plugin-nextjs = ["dep:kndo-plugin-nextjs", "plugin-activation"]
 plugin-express = ["dep:kndo-plugin-express", "plugin-activation"]
 plugin-serde = ["dep:kndo-plugin-serde", "plugin-activation"]
+plugin-rkyv = ["dep:kndo-plugin-rkyv", "plugin-activation"]
+plugin-wasmtime = ["dep:kndo-plugin-wasmtime", "plugin-activation"]
 # Coverage ingesters are the one built-in family that does NOT imply `plugin-activation`:
 # they are always-on by contract (empty activation — a FileExists gate would deactivate
 # them exactly when kndo.toml points `report` at a non-well-known path), and they declare

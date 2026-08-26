@@ -104,6 +104,10 @@ pub fn default_plugins() -> Vec<Box<dyn Plugin>> {
         plugins.push(Box::new(kndo_plugin_express::ExpressPlugin));
         #[cfg(feature = "plugin-serde")]
         plugins.push(Box::new(kndo_plugin_serde::SerdePlugin));
+        #[cfg(feature = "plugin-rkyv")]
+        plugins.push(Box::new(kndo_plugin_rkyv::RkyvPlugin));
+        #[cfg(feature = "plugin-wasmtime")]
+        plugins.push(Box::new(kndo_plugin_wasmtime::WasmtimePlugin));
         plugins
     }
 }

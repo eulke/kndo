@@ -86,6 +86,13 @@ as expansion-site-wide, core-traits.md §1). Inline modules
 is this adapter's standing approximation, stated once here and leaned on everywhere.
 `mod foo;` (the file-declaring form) is an import, not a declaration (§0).
 
+A member declared inside a trait `impl` records **`Declaration::implements`** — the trait's
+base name — for *every* trait impl, machinery or not. `Serialize` means nothing to this
+adapter and everything to `kndo:serde`; the fact is what lets that plugin be a curated table
+rather than a second Rust parser, and reducing it to `implicitly_invoked` alone (this
+adapter's own verdict about the language's stdlib machinery traits, §2's `is_machinery_trait`
+list) is what forced the plugin to re-read source before.
+
 Both positions of an `impl` header reduce to a **base name**: the type or trait being named,
 never one of its arguments. `impl Index<usize> for Table` implements `Index` and owns `index`
 under `Table`; `impl<E> Deserializer<'de> for StringDeserializer<E>` owns its members under

@@ -1,0 +1,12 @@
+[package]
+name = "kndo-plugin-wasmtime"
+description = "Built-in kndo:wasmtime plugin — bindgen! host-trait members the call graph can't see"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+kndo-core = { path = "../kndo-core" }
+smol_str = { workspace = true }

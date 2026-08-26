@@ -700,6 +700,7 @@ fn push_declaration(
         nested_scope: false,
         visibility_inherited: false,
         visible_in_unit: None,
+        implements: None,
         markers: Vec::new(),
         signature_span,
     });

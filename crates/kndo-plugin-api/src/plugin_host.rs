@@ -3,10 +3,6 @@
 //! (`host.rs`), this world is bidirectional: the guest calls back into two host-provided query
 //! functions (`list-files`, `symbols-in`) while computing its contributions.
 
-// kndo:allow-file untested every host function here is exercised through the WASM boundary
-// (plugin_compliance.rs builds and runs a real guest against this bridge); the caller is
-// generated wasmtime code no reference edge can see — internal/detection-gaps.md §1.
-
 use std::fmt;
 use std::path::Path;
 use std::sync::Mutex;
@@ -87,6 +83,9 @@ struct HostViewData {
     packages: Vec<w::WasmPackageInfo>,
     file_details: rustc_hash::FxHashMap<String, w::WasmFileDetails>,
     symbol_details: rustc_hash::FxHashMap<String, Vec<(String, w::WasmSymbolDetails)>>,
+    /// `SymbolNode::implements` per file, in `symbols-in` order — only the members that
+    /// have one, so a project with no trait impls carries nothing.
+    symbol_implements: rustc_hash::FxHashMap<String, Vec<(String, String)>>,
     imports_of: rustc_hash::FxHashMap<String, Vec<String>>,
     importers_of: rustc_hash::FxHashMap<String, Vec<String>>,
     ref_sites: rustc_hash::FxHashMap<(String, String), Vec<w::WasmRefSite>>,
@@ -201,6 +200,7 @@ fn collect_symbol_projections(
     });
     let mut symbols = Vec::new();
     let mut details = Vec::new();
+    let mut implements = Vec::new();
     for s in graph.symbols_in(&file.path) {
         symbols.push(w::WasmSymbolInfo {
             name: s.name.to_string(),
@@ -215,9 +215,14 @@ fn collect_symbol_projections(
                 span: to_wit_span(s.span),
             },
         ));
+        if let Some(t) = &s.implements {
+            implements.push((s.name.to_string(), t.to_string()));
+        }
     }
     data.symbols_by_file.insert(file.path.0.clone(), symbols);
     data.symbol_details.insert(file.path.0.to_string(), details);
+    data.symbol_implements
+        .insert(file.path.0.to_string(), implements);
 }
 
 /// The `references-to` projection, keyed by (target path, target bare name), sites sorted.
@@ -275,6 +280,14 @@ impl bindings::PluginImports for HostViewData {
             .map(|(_, d)| *d)
     }
 
+    fn symbol_implements(&mut self, path: String, symbol: String) -> Option<String> {
+        self.symbol_implements
+            .get(path.as_str())?
+            .iter()
+            .find(|(name, _)| *name == symbol)
+            .map(|(_, t)| t.clone())
+    }
+
     fn imports_of(&mut self, path: String) -> Vec<String> {
         self.imports_of
             .get(path.as_str())
@@ -328,6 +341,9 @@ impl findings_bindings::PluginFindingsImports for HostViewData {
     }
     fn symbol_details(&mut self, path: String, symbol: String) -> Option<w::WasmSymbolDetails> {
         bindings::PluginImports::symbol_details(self, path, symbol)
+    }
+    fn symbol_implements(&mut self, path: String, symbol: String) -> Option<String> {
+        bindings::PluginImports::symbol_implements(self, path, symbol)
     }
     fn imports_of(&mut self, path: String) -> Vec<String> {
         bindings::PluginImports::imports_of(self, path)

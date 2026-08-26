@@ -395,6 +395,11 @@ fn from_wit_facts(facts: w::FileFacts) -> FileFacts {
             nested_scope: false,
             visibility_inherited: false,
             visible_in_unit: None,
+            // A WASM adapter's v1 `declaration` record has no trait/protocol field, so a
+            // third-party adapter cannot report the fact yet. `None` is the same conservative
+            // v1 cut every optional field above takes, and it degrades exactly the right way:
+            // a convention plugin marks nothing rather than marking the wrong thing.
+            implements: None,
             markers: Vec::new(),
         })
         .collect();

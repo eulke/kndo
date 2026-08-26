@@ -672,6 +672,42 @@ impl AnnotationSink {
         self.implicitly_invoked
             .push(PluginTarget::symbol(path, symbol));
     }
+
+    /// Mark every member the graph says was declared in an implementation of a trait
+    /// (`SymbolNode::implements`) that `drives(trait_name, member_name)` accepts — the whole
+    /// body of an ecosystem conventions plugin.
+    ///
+    /// This is the dynamic; the CURATED TABLE is what a plugin brings. `kndo:serde` passes a
+    /// closure that knows serde's traits drive `serialize`, `kndo:rkyv` one that knows rkyv's
+    /// drive `resolve_with`, `kndo:wasmtime` one that accepts every member of a `bindgen!`
+    /// host trait. None of that vocabulary can live here: the core has no list of trait names
+    /// and cannot acquire one without breaking the ignorance rule — and none of the WALK
+    /// belongs in a plugin, which is how three of them ended up re-parsing a grammar their
+    /// adapter had already parsed.
+    ///
+    /// Language-blind by construction: it matches a fact any adapter may fill and no adapter
+    /// must (`None` everywhere a language has no such grouping). Over-matching a same-named
+    /// local trait can only keep a member alive alongside its owner, never accuse it, which
+    /// is why a table may be as loose as its ecosystem requires.
+    pub fn mark_machinery_impls(
+        &mut self,
+        graph: &GraphView<'_>,
+        drives: impl Fn(&str, &str) -> bool,
+    ) {
+        for file in graph.files() {
+            for s in graph.symbols_in(&file.path) {
+                let (Some(owner), Some(t)) = (&s.member_of, &s.implements) else {
+                    continue;
+                };
+                if drives(t, &s.name) {
+                    self.mark_implicitly_invoked(
+                        file.path.clone(),
+                        format!("{owner}.{name}", name = s.name),
+                    );
+                }
+            }
+        }
+    }
 }
 
 /// What one plugin actually asserted into the graph during a round (the auditability
@@ -935,6 +971,7 @@ mod tests {
             nested_scope: false,
             visibility_inherited: false,
             visible_in_unit: None,
+            implements: None,
             markers: Vec::new(),
         }
     }

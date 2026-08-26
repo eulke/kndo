@@ -8,16 +8,48 @@
 //! This plugin closes that gap with the framework counterpart of the contract's
 //! `implicitly_invoked` flag — `mark_implicitly_invoked`, the machinery-dispatch
 //! rule — so a `Serialize` impl on a test-covered type doesn't read as a test blind spot.
+//!
+//! Everything below the table is one loop over `SymbolNode::implements`, the fact the adapter
+//! already extracted. The plugin holds serde's knowledge and nothing else: it reads no source,
+//! parses no grammar, and would be the same shape in any language whose adapter fills that
+//! field.
 
 use kndo_core::plugin::{
     ActivationRule, AnnotationSink, ContentView, GraphView, Plugin, PluginDescriptor,
 };
-use kndo_core::vocab::FileRole;
 use smol_str::SmolStr;
 
-mod conventions;
-
 pub struct SerdePlugin;
+
+/// serde's dispatch surface, curated: each trait, and which of an implementor's members that
+/// trait's machinery drives. `DeserializeSeed` drives the same member as `Deserialize` and
+/// gets its own row rather than sharing one — a row is one trait, and reading the table should
+/// not require knowing which traits happen to agree.
+///
+/// A same-named local trait over-matches and marks a member serde does not actually drive.
+/// That is the safe direction and deliberately so: marking only ever keeps a member alive
+/// alongside its owner, never accuses it — and the plugin is gated on the manifest depending
+/// on serde in the first place.
+/// One row: a trait name, and which of an implementor's members that trait's machinery
+/// drives.
+type MachineryTrait = (&'static str, fn(&str) -> bool);
+
+const TRAITS: &[MachineryTrait] = &[
+    ("Serialize", |m| m == "serialize"),
+    ("Deserialize", |m| {
+        m == "deserialize" || m == "deserialize_in_place"
+    }),
+    ("DeserializeSeed", |m| m == "deserialize"),
+    ("Visitor", |m| m == "expecting" || m.starts_with("visit_")),
+];
+
+/// Does serde's machinery invoke `member` on a type by virtue of it being declared in an
+/// `impl` of `trait_name`?
+fn machinery_drives(trait_name: &str, member: &str) -> bool {
+    TRAITS
+        .iter()
+        .any(|(t, drives)| *t == trait_name && drives(member))
+}
 
 impl Plugin for SerdePlugin {
     fn descriptor(&self) -> PluginDescriptor {
@@ -27,9 +59,8 @@ impl Plugin for SerdePlugin {
             detection: vec![SmolStr::new(
                 "a Cargo.toml under the project root depends on serde",
             )],
-            // Only files that already declare serde-shaped members are ever read —
-            // the glob grants access, the symbol table narrows the actual reads.
-            requested_file_access: vec![SmolStr::new("**/*.rs")],
+            // Nothing to read: the answer is entirely in the symbol table.
+            requested_file_access: vec![],
             activation: vec![ActivationRule::ManifestDependency(SmolStr::new("serde"))],
             dependencies: vec![],
         }
@@ -42,63 +73,11 @@ impl Plugin for SerdePlugin {
     fn annotate_symbols(
         &self,
         graph: &GraphView<'_>,
-        content: &ContentView<'_>,
+        _content: &ContentView<'_>,
         out: &mut AnnotationSink,
     ) {
-        for file in graph.files() {
-            if file.language.as_deref() != Some("rust") || !has_serde_shaped_members(graph, file) {
-                continue;
-            }
-            let Some(bytes) = content.read(&file.path) else {
-                continue;
-            };
-            let Ok(source) = std::str::from_utf8(&bytes) else {
-                continue;
-            };
-            mark_file(graph, file, source, out);
-        }
+        out.mark_machinery_impls(graph, machinery_drives);
     }
-}
-
-/// One file's marks: the graph's `(owner, member)` pairs filtered through the source's
-/// serde impl headers, emitted as qualified member selectors.
-fn mark_file(
-    graph: &GraphView<'_>,
-    file: &kndo_core::graph::FileNode,
-    source: &str,
-    out: &mut AnnotationSink,
-) {
-    let members: Vec<(&str, &str)> = graph
-        .symbols_in(&file.path)
-        .filter_map(|s| s.member_of.as_deref().map(|o| (o, s.name.as_str())))
-        .collect();
-    for (owner, member) in conventions::machinery_marks(source, &members) {
-        out.mark_implicitly_invoked(file.path.clone(), format!("{owner}.{member}"));
-    }
-}
-
-/// The cheap pre-gate: a file is only ever READ when its symbol table already
-/// declares a member serde's machinery could invoke — `serialize`, `deserialize`,
-/// `expecting`, `visit_*`. Everything else never touches the content channel.
-fn has_serde_shaped_members(graph: &GraphView<'_>, file: &kndo_core::graph::FileNode) -> bool {
-    if file
-        .class
-        .as_ref()
-        .is_some_and(|c| c.role != FileRole::Production)
-    {
-        return false;
-    }
-    graph
-        .symbols_in(&file.path)
-        .any(|s| s.member_of.is_some() && serde_shaped(&s.name))
-}
-
-/// The member names serde's machinery could invoke — the read gate's whole vocabulary.
-fn serde_shaped(name: &str) -> bool {
-    matches!(
-        name,
-        "serialize" | "deserialize" | "deserialize_in_place" | "expecting"
-    ) || name.starts_with("visit_")
 }
 
 #[cfg(test)]
@@ -114,10 +93,25 @@ mod tests {
             d.activation,
             vec![ActivationRule::ManifestDependency(SmolStr::new("serde"))]
         );
+        assert!(d.requested_file_access.is_empty());
     }
 
     #[test]
     fn the_plugin_mutates_the_graph() {
         assert!(SerdePlugin.mutates_graph());
+    }
+
+    #[test]
+    fn each_trait_drives_only_its_own_members() {
+        assert!(machinery_drives("Serialize", "serialize"));
+        assert!(!machinery_drives("Serialize", "helper"));
+        assert!(machinery_drives("Deserialize", "deserialize_in_place"));
+        assert!(machinery_drives("Visitor", "expecting"));
+        assert!(machinery_drives("Visitor", "visit_str"));
+        // The reason the fact is per-impl-block rather than per-type: a type implementing
+        // both `Serialize` and `Display` files both methods under the same owner, and only
+        // the trait each was declared under tells them apart.
+        assert!(!machinery_drives("Display", "fmt"));
+        assert!(!machinery_drives("Visitor", "serialize"));
     }
 }

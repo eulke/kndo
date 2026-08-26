@@ -21,36 +21,46 @@ becomes a real entry point, so its whole reachable tree comes alive and every an
 judging it, unlike a `[[rule]] skip` which would silence the genuine findings alongside the
 false ones. Entries below say which kind they are, and the ones the mechanism covers say so.
 
-## 1. WASM-boundary reachability (host imports)
+## 1. WASM-boundary reachability (host imports) (RESUELTO)
 
-The functions `crates/kndo-core/src/plugin_host.rs` hands to the component runtime are
-called only *through* the WASM boundary: the caller is generated bridge code inside
-wasmtime, not any source file the graph walks, so no reference edge can exist and the
-functions read as `untested`/`unused` — while `plugin_compliance.rs` builds and runs a real
-guest against exactly these functions every CI run. Root cause: reachability's evidence
-universe is source references; a host-side ABI surface is reached from outside it.
-Direction: an adapter-declared (or plugin-declared) "externally invoked" fact for
-host-import surfaces, the same shape `annotate_symbols`' externally-consumed marking
-already has — the mechanism exists, what's missing is a producer that recognizes the
-boundary. Acknowledged with a file pragma in `plugin_host.rs`.
+The functions `crates/kndo-plugin-api/src/plugin_host.rs` hands to the component runtime are
+called only *through* the WASM boundary: the caller is generated bridge code inside wasmtime,
+not any source file the graph walks, so no reference edge can exist and the functions read as
+`untested` — while `plugin_compliance.rs` builds and runs a real guest against exactly these
+functions every CI run. The file carried a `kndo:allow-file untested` pragma. **Ya no.**
 
-**Update:** the general form of that fact now exists as `kndo.toml`'s `[[externally-invoked]]`
-(§§10–13), matching `Declaration::markers` — so any entry point that CARRIES a marker is
-covered with no producer at all. This case still isn't: the host-import functions carry no
-attribute distinguishing them from ordinary ones, so there is nothing to match on. The pragma
-stays until either the boundary grows a marker or a producer recognizes it structurally.
+The producer the entry asked for is `kndo:wasmtime` (plugins/wasmtime.md), and what made it
+writable is that the fact it needs now has a name. The Rust adapter knew which trait's `impl`
+declares each member — `handle_impl` reads it to decide `implicitly_invoked` — and threw the
+name away; `Declaration::implements` keeps it, and `AnnotationSink::mark_machinery_impls`
+matches a plugin's curated table against it. The boundary is recognized *structurally*, by the
+shape `wasmtime::component::bindgen!` gives its generated traits, which is what the original
+direction note asked for and could not express.
 
-## 2. Proc-macro derive dispatch (rkyv)
+**Sigue siendo un límite, no un gap, para un ecosistema sin plugin.** Nothing here generalizes
+to "any code called through generated glue": each tool's convention is that tool's, which is
+why the answer is one plugin per tool rather than a mechanism in the core.
 
-`crates/kndo-core/src/rkyv_support.rs`'s wrapper impls (`SmolStrAsString`) are invoked by
-code a derive macro generates (`#[rkyv(with = …)]`): the call sites exist only in the
-macro expansion, which extraction never sees. The attr-ident scan keeps the *type* alive
-(an identifier inside an attribute is a read), but the impl *members* the generated code
-calls have no incoming edges. Root cause: dispatch through generated code is invisible to
-source-level extraction by construction. Direction: adapter-curated knowledge per derive
-ecosystem — "a type named in `#[rkyv(with = …)]` has its trait-impl members
-machinery-invoked," the same curated-list pattern as `implicitly_invoked` for operator
-overloads/formatting hooks. Acknowledged with a file pragma in `rkyv_support.rs`.
+## 2. Proc-macro derive dispatch (rkyv) (RESUELTO)
+
+`crates/kndo-core/src/rkyv_support.rs`'s wrapper impls (`SmolStrAsString`, `TypeExprAsFlat`)
+are invoked by code a derive macro generates (`#[rkyv(with = …)]`): the call sites exist only
+in the macro expansion, which extraction never sees. The attr-ident scan kept the *type* alive
+(an identifier inside an attribute is a read), but the impl *members* the generated code calls
+had no incoming edges. The file carried a `kndo:allow-file untested` pragma. **Ya no.**
+
+Same root cause and same answer as §1 — `kndo:rkyv` (plugins/rkyv.md) is the curated ecosystem
+knowledge the entry's direction note described, and it is a table of six rows because the
+mechanism it plugs into belongs to the core and the grammar it reads belongs to the adapter.
+The direction note guessed the knowledge would be *adapter*-curated; that was wrong in a way
+worth recording: teaching the Rust adapter about rkyv is exactly the coupling the
+adapter/plugin split exists to prevent. What belongs to the adapter is the fact
+(`Declaration::implements`), not the interpretation.
+
+**Field test, both entries:** deleting the two file pragmas leaves kndo's own findings
+unchanged (50 → 50 at the time of the change, inline suppressions 30 → 7). Without the two
+plugins compiled in, the same tree reports 23 `untested` findings across those two files — so
+the absence is load-bearing and the plugins are what produce it.
 
 ## 3. Field-access recall on inferred-typed locals (RESUELTO)
 

@@ -37,26 +37,31 @@ there is nothing to accuse.
 **Activation:** `ManifestDependency("serde")` — a repo that doesn't depend on serde never
 runs the plugin (and never pays the graph-cache bypass).
 
-**Candidate gating, cheapest check first:** a file is only ever read through the content
-channel (`requested_file_access: **/*.rs`) when its symbol table already declares a member
-serde's machinery could invoke — `serialize`, `deserialize`, `deserialize_in_place`,
-`expecting`, `visit_*` — on a production-role Rust file. Everything else never touches the
-channel.
+**No file access at all** (`requested_file_access: []`). The plugin is a curated table and a
+single call to `AnnotationSink::mark_machinery_impls`, which matches the table against
+`SymbolNode::implements` — the trait whose `impl` block declares each member, extracted by
+the Rust adapter (docs/adapters/rust.md §2). The trait reduces to its base name there, so
+bare (`impl Serialize for Glob`), qualified (`impl<'a> serde::Serialize for Message<'a>`) and
+generic (`impl<'de> Visitor<'de> for GlobVisitor`) forms all land identically:
 
-**Impl-header detection** is a deterministic single-line scan of the read source (every
-observed corpus shape writes the header on one line; a hand-wrapped header contributes
-nothing — degrade toward silence, RFC 0002 §5). The trait matches by its path's last
-segment, so bare (`impl Serialize for Glob`), qualified (`impl<'a> serde::Serialize for
-Message<'a>`), and generic (`impl<'de> Visitor<'de> for GlobVisitor`) forms all land:
-
-| Header names | Members marked |
+| Trait names | Members marked |
 |--------------|----------------|
 | `Serialize` | `serialize` |
-| `Deserialize` / `DeserializeSeed` | `deserialize`, `deserialize_in_place` |
+| `Deserialize` | `deserialize`, `deserialize_in_place` |
+| `DeserializeSeed` | `deserialize` |
 | `Visitor` (serde::de) | `expecting`, `visit_*` |
 
 A same-named *local* trait would over-mark — at `Probable`, silence-direction only, and
 gated on the manifest actually depending on serde; recorded, accepted.
+
+**History, because it is the architectural point.** This plugin used to request `**/*.rs`,
+gate on a member-name pre-check, and run its own single-line scan of impl headers — it
+re-parsed a grammar the adapter had already parsed, because the adapter reduced "which trait
+declares this member" to a single `implicitly_invoked` bool and threw the name away. Parsing
+Rust is language knowledge and belongs to the adapter; knowing what `Serialize` means is
+tool knowledge and belongs here. Giving the fact a name in the contract put each half where
+it goes and left this plugin as its table. Verified equivalent: the serde repository's
+findings are byte-identical across the change.
 
 ## 3. Mechanism & recorded limits
 
@@ -66,12 +71,16 @@ snapshot-round-tripped, discarded and re-derived by the incremental patch like e
 contribution), and reachability's machinery-dispatch rule reads them alongside the
 adapter's own declaration flags. Two sources, one rule.
 
-- **Native-only for now:** the WIT ABI v1 `annotate-symbols` surface does not carry the
-  mark — an ABI v2 candidate. External WASM plugins cannot emit it yet.
+- **Native-only for now:** the WIT ABI `annotate-symbols` surface does not carry the
+  mark — an ABI candidate. External WASM plugins cannot emit it yet, though they *can* read
+  the fact it keys off: `symbol-implements` is an additive import (contracts/wasm-abi.md
+  §5.2).
 - **`Serializer`/`Deserializer` implementors** (the format-crate side of serde) are out of
   scope: format crates are the machinery, their methods are called by serde's *generated*
   code paths in ways this convention set doesn't model. Revisit against a real format-crate
   corpus.
-- Other ecosystems with the same shape (an ORM's lifecycle hooks, a test framework's
-  fixtures) get their own plugins on the same channel — this spec deliberately covers serde
-  alone.
+- Other ecosystems with the same shape get their own plugins on the same channel — this spec
+  deliberately covers serde alone. `kndo:rkyv` and `kndo:wasmtime` ship as siblings
+  (plugins/rkyv.md, plugins/wasmtime.md) and share not one line of serde vocabulary: what
+  they share is `mark_machinery_impls`, which is the core's, and the fact it reads, which is
+  the adapter's.

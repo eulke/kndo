@@ -1225,7 +1225,9 @@ dependencies = [
  "kndo-plugin-coverage",
  "kndo-plugin-express",
  "kndo-plugin-nextjs",
+ "kndo-plugin-rkyv",
  "kndo-plugin-serde",
+ "kndo-plugin-wasmtime",
  "serde_json",
  "sha2",
  "smol_str",
@@ -1424,7 +1426,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "kndo-plugin-rkyv"
+version = "0.1.0"
+dependencies = [
+ "kndo-core",
+ "smol_str",
+]
+
+[[package]]
 name = "kndo-plugin-serde"
+version = "0.1.0"
+dependencies = [
+ "kndo-core",
+ "smol_str",
+]
+
+[[package]]
+name = "kndo-plugin-wasmtime"
 version = "0.1.0"
 dependencies = [
  "kndo-core",

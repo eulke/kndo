@@ -274,10 +274,16 @@ shape every other host-mediated lookup in this ABI already has.
   §5).** `wasm-file-info` (path/role/origin) and `wasm-symbol-info`
   (name/kind/exported/member-of) never gain fields — growing a record is a breaking change in
   the component model. Everything else the graph stably holds arrives through the additive
-  imports `packages`/`package-of`, `file-details`/`symbol-details`,
+  imports `packages`/`package-of`, `file-details`/`symbol-details`, `symbol-implements`,
   `imports-of`/`importers-of`/`references-to`, and `call-sites-in` (each with its own new
   record type — `wasm-package-info`, `wasm-file-details`, `wasm-symbol-details`,
-  `wasm-ref-site`, `wasm-call-site`, `wasm-span`). All answer from the same
+  `wasm-ref-site`, `wasm-call-site`, `wasm-span`; `symbol-implements` needs none, it answers
+  `option<string>`). `symbol-implements` is the rule applied to itself: the trait/protocol
+  whose implementation declares a member is a new fact, and it arrived as its own import
+  rather than a field on `wasm-symbol-details`, which is just as frozen in practice as the v1
+  records once a component is built against it. It is what lets a THIRD-PARTY conventions
+  plugin be its curated table, exactly like the built-in `kndo:serde`/`kndo:rkyv`/
+  `kndo:wasmtime`, instead of asking for source access and re-parsing a grammar. All answer from the same
   pre-instantiation snapshot as `list-files`/`symbols-in`, sorted and deterministic, and from
   **adapter-derived data only** (RFC 0017 §2's rule R1): no plugin ever observes another
   plugin's contributions, which is what keeps runs identical across plugin compositions. The
