@@ -642,9 +642,14 @@ either way yet.
 pub trait Plugin: Send + Sync {
     fn descriptor(&self) -> PluginDescriptor;
     // { id, version, detection: Vec<SmolStr>, requested_file_access: Vec<SmolStr>,
-    //   activation: Vec<ActivationRule>, dependencies: Vec<SmolStr> } — `detection` is prose
-    // for `kndo doctor`; `activation` (RFC 0003 §4) is what gates a plugin that isn't
-    // unconditionally present (globally installed, or a built-in with rules); `id` is a
+    //   activation: Vec<ActivationRule>, dependencies: Vec<SmolStr> } — `activation`
+    // (RFC 0003 §4) is what gates a plugin that isn't unconditionally present (globally
+    // installed, or a built-in with rules), and `detection` is prose for `kndo doctor`
+    // describing a gate `activation` CANNOT express (an always-on coverage ingester naming
+    // its report paths). A gate that IS a rule leaves `detection` empty rather than restating
+    // it — one concept, one source; `PluginDescriptor::on_manifest_dependency(id, dep)` is
+    // the constructor for that whole shape, and every built-in conventions plugin is one
+    // call to it. `id` is a
     // coordinate (`kndo:` reserved for built-ins, source coordinates for external — RFC 0015
     // §2) and `dependencies` names coordinates whose conventions are part of this plugin's
     // own (co-install + co-activate fixpoint, RFC 0015 §3).

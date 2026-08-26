@@ -9,8 +9,7 @@
 
 use kndo_core::adapter::ProjectPath;
 use kndo_core::plugin::{
-    ActivationRule, AnnotationSink, ContentView, GraphView, Plugin, PluginDescriptor, PluginTarget,
-    RootSink,
+    AnnotationSink, ContentView, GraphView, Plugin, PluginDescriptor, PluginTarget, RootSink,
 };
 use kndo_core::vocab::{Confidence, FileRole, RootKind};
 use smol_str::SmolStr;
@@ -22,22 +21,16 @@ pub struct ExpressPlugin;
 impl Plugin for ExpressPlugin {
     fn descriptor(&self) -> PluginDescriptor {
         PluginDescriptor {
-            id: SmolStr::new("kndo:express"),
-            version: SmolStr::new("1"),
-            detection: vec![SmolStr::new(
-                "a package.json under the project root depends on express",
-            )],
-            // Every app root's own package.json, read through the content
-            // channel to derive the true entry from "main"/"scripts" —
-            // in-memory glob against already-discovered, gitignore-filtered paths, not a disk
-            // walk, so (unlike a raw ActivationRule::FileExists glob) this never touches
-            // node_modules regardless of recursion.
+            // Every app root's own package.json, read through the content channel to derive
+            // the true entry from "main"/"scripts" — an in-memory glob against
+            // already-discovered, gitignore-filtered paths, not a disk walk, so (unlike a raw
+            // ActivationRule::FileExists glob) this never touches node_modules regardless of
+            // recursion.
             requested_file_access: vec![SmolStr::new("**/package.json")],
-            // Single rule: express is always a declared runtime dependency, never
-            // an implicit peer; wrapper frameworks reach this plugin through the
-            // `dependencies` implication.
-            activation: vec![ActivationRule::ManifestDependency(SmolStr::new("express"))],
-            dependencies: vec![],
+            // The single manifest rule fits express exactly: it is always a declared runtime
+            // dependency, never an implicit peer, and wrapper frameworks reach this plugin
+            // through the `dependencies` implication rather than a gate of their own.
+            ..PluginDescriptor::on_manifest_dependency("kndo:express", "express")
         }
     }
 
@@ -160,6 +153,7 @@ fn exported_top_level<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use kndo_core::plugin::ActivationRule;
 
     #[test]
     fn descriptor_claims_the_reserved_namespace_and_gates_on_express() {

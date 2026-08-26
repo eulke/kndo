@@ -54,8 +54,11 @@ PluginDescriptor {
     // installed or depended on. The kndo: namespace is reserved and will not load.
     id: "github.com/you/my-conventions".to_string(),
     version: "0.1.0".to_string(),
-    // One line of prose: when does this plugin apply? (Shown by kndo doctor.)
-    detection: vec!["a package.json depends on my-framework".to_string()],
+    // Prose for a gate `activation` below cannot express — an always-on plugin naming
+    // the files it looks for. (Shown by kndo doctor.) If your gate IS an activation rule,
+    // leave this empty: doctor already shows the rule, and prose beside it is the same
+    // fact twice, free to drift.
+    detection: Vec::new(),
     // Files outside the language graph you need to read — globs served through the
     // host's content channel. Empty = no reads.
     requested_file_access: vec!["**/my-framework.config.*".to_string()],

@@ -42,9 +42,17 @@ pub struct PluginDescriptor {
     /// it to be addressable.
     pub id: SmolStr,
     pub version: SmolStr,
-    /// Auto-detection predicates, in prose ("package.json depends on react") — shown by
-    /// `kndo doctor`, never evaluated. [`activation`](Self::activation) is the machine-checkable
-    /// counterpart these describe.
+    /// Prose for a gate [`activation`](Self::activation) CANNOT express — shown by
+    /// `kndo doctor`, never evaluated. An always-on coverage ingester uses it to name the
+    /// report paths it looks for and the config key that overrides them; nothing in
+    /// [`ActivationRule`] can say that.
+    ///
+    /// A gate that IS a rule leaves this empty, because restating a rule the descriptor
+    /// already carries is one concept with two sources — and it had already drifted: every
+    /// built-in conventions plugin's prose named a single manifest kind ("a package.json
+    /// under the project root depends on next") while `ManifestDependency` matches any
+    /// manifest, `Cargo.toml` included. [`PluginDescriptor::on_manifest_dependency`] is the
+    /// constructor that makes leaving it empty the easy path.
     pub detection: Vec<SmolStr>,
     /// Globs whose content the host will provide; no ambient fs/net.
     pub requested_file_access: Vec<SmolStr>,
@@ -65,6 +73,40 @@ pub struct PluginDescriptor {
     /// each other's contributions, so there is no inter-plugin ABI to be compatible about. A
     /// missing dependency is never a runtime error — `kndo doctor` names the missing coordinate.
     pub dependencies: Vec<SmolStr>,
+}
+
+impl PluginDescriptor {
+    /// The conventions-plugin shape: version 1, gated on ONE manifest dependency, no plugin
+    /// dependencies, no file access, and no [`detection`](Self::detection) prose — the rule
+    /// is the description.
+    ///
+    /// One rule, deliberately, and this is where that reasoning lives now that every
+    /// conventions plugin shares it: a project using a framework declares it in a manifest
+    /// somewhere, and the manifest scan is gitignore-aware and monorepo-wide. The obvious
+    /// alternative, a recursive `FileExists("**/<tool>.config.*")`, raw-globs through
+    /// `node_modules` on every run — cost and hazard for a signal the manifest rule already
+    /// carries.
+    ///
+    /// Every built-in conventions plugin is this, and four of them were the same
+    /// twenty-line literal with three words changed, which kndo reports on its own repository
+    /// as a `duplicate` group. A plugin needing more sets the fields it needs over the top:
+    ///
+    /// ```ignore
+    /// PluginDescriptor {
+    ///     requested_file_access: vec![SmolStr::new("**/next.config.*")],
+    ///     ..PluginDescriptor::on_manifest_dependency("kndo:nextjs", "next")
+    /// }
+    /// ```
+    pub fn on_manifest_dependency(id: &str, dependency: &str) -> Self {
+        PluginDescriptor {
+            id: SmolStr::new(id),
+            version: SmolStr::new("1"),
+            detection: Vec::new(),
+            requested_file_access: Vec::new(),
+            activation: vec![ActivationRule::ManifestDependency(SmolStr::new(dependency))],
+            dependencies: Vec::new(),
+        }
+    }
 }
 
 /// Whether `id` claims the reserved built-in namespace — external components

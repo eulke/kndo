@@ -237,7 +237,11 @@ impl Guest for Component {
             // but can never be installed or depended on.
             id: "github.com/you/__NAME__".to_string(),
             version: "0.1.0".to_string(),
-            detection: vec!["TODO: one line on when this plugin applies".to_string()],
+            // Prose only for a gate `activation` below cannot express (an always-on
+            // plugin naming the files it looks for). Yours is a rule, so leave this
+            // empty — `kndo doctor` shows the rule, and prose beside it is the same
+            // fact twice, free to drift.
+            detection: Vec::new(),
             // Files outside the language graph you need to read (configs, templates) —
             // globs, served through the host's content channel. Empty = no reads.
             requested_file_access: Vec::new(),
