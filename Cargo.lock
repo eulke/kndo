@@ -1224,6 +1224,7 @@ dependencies = [
  "kndo-plugin-api",
  "kndo-plugin-coverage",
  "kndo-plugin-express",
+ "kndo-plugin-info-plist",
  "kndo-plugin-nextjs",
  "kndo-plugin-rkyv",
  "kndo-plugin-serde",
@@ -1414,6 +1415,15 @@ version = "0.1.0"
 dependencies = [
  "kndo-core",
  "serde_json",
+ "smol_str",
+]
+
+[[package]]
+name = "kndo-plugin-info-plist"
+version = "0.1.0"
+dependencies = [
+ "kndo-core",
+ "roxmltree",
  "smol_str",
 ]
 

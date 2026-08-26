@@ -48,6 +48,7 @@ default = [
     "plugin-nextjs",
     "plugin-express",
     "plugin-serde",
+    "plugin-info-plist",
     "plugin-rkyv",
     "plugin-wasmtime",
     "plugin-coverage",
@@ -65,6 +66,7 @@ external-adapters = ["kndo/external-adapters"]
 plugin-nextjs = ["kndo/plugin-nextjs"]
 plugin-express = ["kndo/plugin-express"]
 plugin-serde = ["kndo/plugin-serde"]
+plugin-info-plist = ["kndo/plugin-info-plist"]
 plugin-rkyv = ["kndo/plugin-rkyv"]
 plugin-wasmtime = ["kndo/plugin-wasmtime"]
 plugin-coverage = ["kndo/plugin-coverage"]
