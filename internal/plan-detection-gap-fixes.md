@@ -242,12 +242,20 @@ knowledge, not the nearest one.
 
 ---
 
-## 5. Transport note (2026-08-26)
+## 5. Transport note (2026-08-26) — resolved
 
 This session lost its git credentials mid-run (`could not read Username for
-'https://github.com'`; ~52 push attempts over 45 minutes, plus `add_repo` with push access, all
-refused; egress works but unauthenticated). The commits listed above beyond
-`3283bb2` were produced locally and handed off as a `git format-patch` bundle. A session with
-working credentials should `git am` them onto
-`claude/core-api-ergonomics-architecture-983pom` and push; the branch `tmp/w5-w7-transfer` holds
-an earlier copy of the same patch and can be deleted once the real push lands.
+'https://github.com'`) for roughly forty-five minutes: about fifty-two push attempts, plus
+re-attaching the repository with push access, all refused, while plain egress kept working
+unauthenticated. It came back on its own and everything through `ef76d4d` is pushed normally,
+so nothing here needs recovering.
+
+Two leftovers from that window, neither load-bearing:
+
+- `tmp/w5-w7-transfer` holds a `git format-patch` copy of the commits, now redundant. The git
+  proxy refuses branch deletions (`send-pack: unexpected disconnect`), so it has to go by hand
+  from the GitHub UI or a session whose transport allows deletes. `tmp/kondo-bundle-transfer`
+  is the same kind of leftover from an earlier session.
+- The rule this cost is already in §0: work that only exists in an ephemeral container is work
+  at risk. Commit early, push often, and when the push is refused, say so rather than
+  accumulating.
