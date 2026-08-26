@@ -39,17 +39,33 @@ impl LanguageAdapter for RustAdapter {
             dependencies: Vec::new(),
             id: SmolStr::new("rust"),
             // Bump whenever the serialized facts shape or the emission semantics change.
-            facts_schema_version: 18,
+            facts_schema_version: 19,
             file_globs: vec![SmolStr::new("**/*.rs")],
             manifest_globs: vec![SmolStr::new("**/Cargo.toml")],
             grammar_version: SmolStr::new("tree-sitter-rust 0.24"),
-            // [File "private", Package "pub(crate)", Public "pub"].
-            // pub(super)/pub(in …) are widened to the crate rung — widening only ever
-            // silences; narrowing would fabricate internal-only accusations.
+            // [File "private", Module "pub(super)", Package "pub(crate)", Public "pub"].
+            // `pub(super)` names the parent module's SUBTREE — a region strictly between one
+            // file and one package, which the four-bucket ladder had nowhere to put and so
+            // widened into `pub(crate)`. That approximation is what kept `private-type-leak`
+            // gated (`internal/detection-gaps.md` §7). `pub(in path)` still widens: this
+            // adapter does not resolve its path to a unit key yet, and widening only ever
+            // silences an accusation, never fabricates one.
             visibility_ladder: vec![
                 VisibilityRung {
-                    scope: VisibilityScope::File,
+                    // Rust's "private" is NOT the file: it is the declaring module AND its
+                    // descendants, which is exactly what a Module rung anchored on the file's
+                    // own unit says. The adapter used to approximate it as `File` because the
+                    // ladder had nowhere else to put it — and that approximation is what made
+                    // `private-type-leak` accuse ripgrep's `flags::parse::lookup` for naming
+                    // `flags::mod`'s private `Flag`, which every module under `flags` can spell
+                    // perfectly well (`internal/detection-gaps.md` §7).
+                    scope: VisibilityScope::Module,
                     label: SmolStr::new("private"),
+                    surface_transitive: false,
+                },
+                VisibilityRung {
+                    scope: VisibilityScope::Module,
+                    label: SmolStr::new("pub(super)"),
                     surface_transitive: false,
                 },
                 VisibilityRung {
@@ -284,7 +300,7 @@ mod tests {
         let a = RustAdapter;
         let d = a.descriptor();
         assert_eq!(d.id, "rust");
-        assert_eq!(d.visibility_ladder.len(), 3);
+        assert_eq!(d.visibility_ladder.len(), 4);
 
         let src_path = path("src/lib.rs");
         let facts = a.extract(&SourceFile {

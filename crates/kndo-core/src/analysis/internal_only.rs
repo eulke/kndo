@@ -45,6 +45,7 @@ use crate::graph::ProjectGraph;
 use crate::vocab::{
     Category, Confidence, EdgeKind, FileId, FileOrigin, Group, NodeRef, SubjectKind, SymbolId,
 };
+use smol_str::SmolStr;
 
 fn origin_file(graph: &ProjectGraph, node: NodeRef) -> FileId {
     match node {
@@ -55,8 +56,13 @@ fn origin_file(graph: &ProjectGraph, node: NodeRef) -> FileId {
 
 /// The narrowest scope that relates `origin` to the declaring file `decl` — what a reference
 /// from `origin` *requires* the declaration's visibility to at least be. Scopes nest
-/// (File ⊂ Unit ⊂ Package ⊂ Public), so this is a straight first-match walk.
-fn required_scope(graph: &ProjectGraph, decl: FileId, origin: FileId) -> VisibilityScope {
+/// (File ⊂ Unit ⊂ Module ⊂ Package ⊂ Public), so this is a straight first-match walk.
+fn required_scope(
+    graph: &ProjectGraph,
+    decl: FileId,
+    origin: FileId,
+    unit_parents: &HashMap<SmolStr, SmolStr>,
+) -> VisibilityScope {
     if decl == origin {
         return VisibilityScope::File;
     }
@@ -65,6 +71,12 @@ fn required_scope(graph: &ProjectGraph, decl: FileId, origin: FileId) -> Visibil
     if let (Some(a), Some(b)) = (&decl_file.unit, &origin_file.unit) {
         if a == b {
             return VisibilityScope::Unit;
+        }
+        // A use from somewhere BELOW the declaring unit needs the subtree, not the whole
+        // package — otherwise a `pub(super)` item used only where `pub(super)` reaches would
+        // read as needing `pub(crate)` and its available narrowing would go unsaid.
+        if crate::graph::unit_ancestry_contains(b, a, unit_parents) {
+            return VisibilityScope::Module;
         }
     }
     if decl_file.package == origin_file.package {
@@ -103,6 +115,7 @@ pub fn find_internal_only(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<
         }
     }
 
+    let unit_parents = crate::graph::unit_parent_index(&graph.files);
     let mut findings = Vec::new();
     for (index, symbol) in graph.symbols.iter().enumerate() {
         let file = &graph.files[symbol.file.0 as usize];
@@ -169,7 +182,7 @@ pub fn find_internal_only(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<
             if via_macro {
                 VisibilityScope::Public
             } else {
-                required_scope(graph, symbol.file, f)
+                required_scope(graph, symbol.file, f, &unit_parents)
             }
         };
         let required = refs
@@ -221,6 +234,7 @@ pub fn find_internal_only(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<
         let usage = match required {
             VisibilityScope::File => "its own file",
             VisibilityScope::Unit => "its own unit",
+            VisibilityScope::Module => "its own module subtree",
             VisibilityScope::Package => "its own package",
             VisibilityScope::Public => "the project", // unreachable: Public rungs cover it
         };
@@ -280,6 +294,7 @@ mod tests {
             }),
             package: crate::vocab::PackageId(0),
             unit: None,
+            unit_parent: None,
             test_spans: Vec::new(),
             string_call_sites: Vec::new(),
         }
@@ -298,6 +313,7 @@ mod tests {
             implicitly_invoked: false,
             nested_scope: false,
             visibility_inherited: false,
+            visible_in_unit: None,
             markers: Vec::new(),
         }
     }
@@ -548,6 +564,7 @@ mod tests {
             }),
             package: crate::vocab::PackageId(0),
             unit: None,
+            unit_parent: None,
             test_spans: Vec::new(),
             string_call_sites: Vec::new(),
         }];

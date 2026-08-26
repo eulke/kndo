@@ -188,6 +188,7 @@ impl LanguageAdapter for MockAdapter {
                     implicitly_invoked: false,
                     nested_scope: false,
                     visibility_inherited: false,
+                    visible_in_unit: None,
                     markers: Vec::new(),
                 });
             } else if let Some(rest) = line.strip_prefix("marked-decl ") {
@@ -207,6 +208,7 @@ impl LanguageAdapter for MockAdapter {
                     implicitly_invoked: false,
                     nested_scope: false,
                     visibility_inherited: false,
+                    visible_in_unit: None,
                     markers: markers
                         .split(',')
                         .filter(|m| !m.is_empty())
@@ -225,6 +227,7 @@ impl LanguageAdapter for MockAdapter {
                     implicitly_invoked: false,
                     nested_scope: false,
                     visibility_inherited: false,
+                    visible_in_unit: None,
                     markers: Vec::new(),
                 });
             } else if let Some(rest) = line
@@ -250,6 +253,7 @@ impl LanguageAdapter for MockAdapter {
                     implicitly_invoked: false,
                     nested_scope: false,
                     visibility_inherited: false,
+                    visible_in_unit: None,
                     markers: Vec::new(),
                 });
             } else if let Some(rest) = line.strip_prefix("member-implicit ") {
@@ -270,6 +274,7 @@ impl LanguageAdapter for MockAdapter {
                     implicitly_invoked: true,
                     nested_scope: false,
                     visibility_inherited: false,
+                    visible_in_unit: None,
                     markers: Vec::new(),
                 });
             } else if let Some(rest) = line
@@ -516,6 +521,7 @@ impl LanguageAdapter for MockAdapter {
                     implicitly_invoked: false,
                     nested_scope: false,
                     visibility_inherited: false,
+                    visible_in_unit: None,
                     markers: Vec::new(),
                 });
             } else if let Some(rest) = line.strip_prefix("import-at ") {

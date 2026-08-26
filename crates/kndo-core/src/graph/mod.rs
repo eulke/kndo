@@ -32,6 +32,11 @@ pub struct FileNode {
     /// alone, warm path included. `None` for file-scoped languages, exactly as in the facts.
     #[rkyv(with = rkyv::with::Map<crate::rkyv_support::SmolStrAsString>)]
     pub unit: Option<SmolStr>,
+    /// The unit containing this file's unit — the link that makes unit keys a TREE
+    /// ([`crate::adapter::FileFacts::unit_parent`]). Carried onto the graph so
+    /// `VisibilityScope::Module` containment stays a pure graph question.
+    #[rkyv(with = rkyv::with::Map<crate::rkyv_support::SmolStrAsString>)]
+    pub unit_parent: Option<SmolStr>,
     /// Sub-file test regions ([`crate::adapter::FileFacts::test_spans`]), sorted by span.
     /// Role-sensitive consumers check containment via [`span_in_test_region`]: `crap` and
     /// health's symbol tallies skip contained symbols, `dependency_hygiene` treats a
@@ -79,6 +84,11 @@ pub struct SymbolNode {
     /// Mirrors [`crate::adapter::Declaration::visibility_inherited`] — visibility analyses
     /// skip a symbol whose level belongs to its container.
     pub visibility_inherited: bool,
+    /// The unit anchoring this declaration's [`crate::adapter::VisibilityScope::Module`]
+    /// region, when it declares one — carried onto the graph so visibility analyses stay
+    /// pure graph functions (`crate::adapter::Declaration::visible_in_unit`).
+    #[rkyv(with = rkyv::with::Map<crate::rkyv_support::SmolStrAsString>)]
+    pub visible_in_unit: Option<SmolStr>,
     /// Mirrors [`crate::adapter::Declaration::markers`] — the language-visible annotations,
     /// attributes or decorators written on this declaration, verbatim. Carried into the graph
     /// (and through the snapshot) because the consumer is CONFIG, which arrives after

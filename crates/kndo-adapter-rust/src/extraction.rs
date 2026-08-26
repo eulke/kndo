@@ -87,8 +87,10 @@ struct PendingAttrs {
 }
 
 pub(crate) fn extract(path: &str, content: &[u8]) -> FileFacts {
+    let unit = module_unit(path);
     let mut out = FileFacts {
-        unit: module_unit(path),
+        unit_parent: unit.as_deref().and_then(module_parent),
+        unit,
         ..FileFacts::default()
     };
     if GENERATED_MARKERS.detect_generated(content) {
@@ -156,6 +158,20 @@ pub(crate) fn extract(path: &str, content: &[u8]) -> FileFacts {
         },
         &mut out,
     );
+    // Every declaration on the `pub(super)` rung is visible in the PARENT module's subtree.
+    // Setting it here rather than at each `push_declaration` is deliberate: the anchor is a
+    // property of the rung, not of the call site, so one pass cannot drift from another.
+    // Both Module rungs anchor here rather than at each `push_declaration`: the anchor is a
+    // property of the RUNG, not of the call site, so one pass cannot drift from another.
+    // `private` is the declaring module and its descendants (Rust's real rule); `pub(super)`
+    // is the parent module's subtree.
+    for decl in &mut out.declarations {
+        decl.visible_in_unit = match decl.visibility.0 {
+            VIS_PRIVATE => out.unit.clone(),
+            VIS_SUPER => out.unit_parent.clone(),
+            _ => None,
+        };
+    }
     expand_pathed_mod_specifiers(&collect_pathed_mod_paths(root, content), &mut out);
     kndo_adapter_toolkit::suppression::collect_suppressions(
         root,
@@ -1135,23 +1151,40 @@ fn visibility(node: Node) -> (u8, bool) {
 }
 
 /// One `pub…` modifier mapped to the ladder: bare `pub` is the top rung; `pub(self)` is
-/// private everywhere; `pub(super)` is private only when `super` stays inside the file.
+/// private everywhere; `pub(super)` is private only when `super` stays inside the file, and
+/// otherwise names the PARENT MODULE's subtree — the rung this adapter's ladder gained so it
+/// no longer has to widen a real region into `pub(crate)`.
 fn visibility_of_modifier(modifier: Node, item: Node) -> (u8, bool) {
     if modifier.child_count() <= 1 {
-        return (2, true); // bare `pub`
+        return (VIS_PUBLIC, true); // bare `pub`
     }
     let mut cursor = modifier.walk();
     let level = modifier
         .children(&mut cursor)
         .find_map(|c| restriction_level(c, item))
-        .unwrap_or(1); // pub(crate), pub(in …), top-level pub(super)
+        .unwrap_or(VIS_CRATE); // pub(crate), pub(in …)
     (level, level > 0)
 }
 
+/// The ladder's rungs by name, so the numbering lives in one place and the descriptor and the
+/// mapping cannot drift apart.
+const VIS_PRIVATE: u8 = 0;
+const VIS_SUPER: u8 = 1;
+const VIS_CRATE: u8 = 2;
+const VIS_PUBLIC: u8 = 3;
+
 fn restriction_level(restriction: Node, item: Node) -> Option<u8> {
     match restriction.kind() {
-        "self" => Some(0),
-        "super" if inside_inline_mod(item) => Some(0),
+        "self" => Some(VIS_PRIVATE),
+        // `super` of an INLINE mod is a module within this same file, so under file ≈ module
+        // the item never leaves the file.
+        "super" if inside_inline_mod(item) => Some(VIS_PRIVATE),
+        // A top-level `pub(super)` names the parent module's subtree — a real region, and the
+        // one the four-bucket ladder had nowhere to put.
+        "super" => Some(VIS_SUPER),
+        // `pub(in path)` names an ancestor this adapter does not resolve to a unit key yet, so
+        // it keeps the old conservative widening: `pub(crate)`. Widening only ever silences an
+        // `internal-only`, never accuses (7 occurrences across tokio, for scale).
         _ => None,
     }
 }
@@ -1196,6 +1229,18 @@ fn module_unit(path: &str) -> Option<SmolStr> {
         stem
     };
     (!key.is_empty()).then(|| SmolStr::new(key))
+}
+
+/// The module CONTAINING a module key — the link that makes the keys a tree. It is the key's
+/// containing directory, and `None` at a crate root, which under Cargo's layout is the `src`
+/// directory itself: nothing above `src/lib.rs` is a module, and a top-level `pub(super)`
+/// there would not compile anyway.
+fn module_parent(unit: &str) -> Option<SmolStr> {
+    if unit.rsplit('/').next() == Some("src") {
+        return None;
+    }
+    let (parent, _) = unit.rsplit_once('/')?;
+    (!parent.is_empty()).then(|| SmolStr::new(parent))
 }
 
 /// Item-list walker (source_file, inline-mod bodies — flattened). Attributes are
@@ -1562,6 +1607,7 @@ fn push_declaration(
         implicitly_invoked: false,
         nested_scope: false,
         visibility_inherited: false,
+        visible_in_unit: None,
         markers: Vec::new(),
         signature_span,
     });
@@ -3748,19 +3794,25 @@ mod tests {
     }
 
     #[test]
-    fn visibility_maps_to_the_three_rung_ladder() {
+    fn visibility_maps_to_the_four_rung_ladder() {
         let f = facts(
             "fn private_fn() {}\n\
              pub(crate) fn crate_fn() {}\n\
              pub(super) fn super_fn() {}\n\
+             pub(in crate::a) fn in_path_fn() {}\n\
              pub fn public_fn() {}\n",
         );
         let by_name = |n: &str| f.declarations.iter().find(|d| d.name == n).unwrap();
-        assert_eq!(by_name("private_fn").visibility.0, 0);
+        assert_eq!(by_name("private_fn").visibility.0, VIS_PRIVATE);
         assert!(!by_name("private_fn").exported);
-        assert_eq!(by_name("crate_fn").visibility.0, 1);
-        assert_eq!(by_name("super_fn").visibility.0, 1); // top-level: super leaves the file
-        assert_eq!(by_name("public_fn").visibility.0, 2);
+        assert_eq!(by_name("crate_fn").visibility.0, VIS_CRATE);
+        // Top-level `super` leaves the file and lands on its OWN rung, no longer widened into
+        // the crate one — the region `private-type-leak` needs to see (§7).
+        assert_eq!(by_name("super_fn").visibility.0, VIS_SUPER);
+        // `pub(in path)` still widens: the path is not resolved to a unit key, and widening
+        // only ever silences.
+        assert_eq!(by_name("in_path_fn").visibility.0, VIS_CRATE);
+        assert_eq!(by_name("public_fn").visibility.0, VIS_PUBLIC);
         assert!(by_name("public_fn").exported);
     }
 
@@ -4081,11 +4133,11 @@ mod tests {
              }\n",
         );
         let by_name = |n: &str| f.declarations.iter().find(|d| d.name == n).unwrap();
-        assert_eq!(by_name("reaches_file_only").visibility.0, 0);
+        assert_eq!(by_name("reaches_file_only").visibility.0, VIS_PRIVATE);
         assert!(!by_name("reaches_file_only").exported);
-        assert_eq!(by_name("mod_private").visibility.0, 0);
+        assert_eq!(by_name("mod_private").visibility.0, VIS_PRIVATE);
         assert!(!by_name("mod_private").exported);
-        assert_eq!(by_name("reaches_crate").visibility.0, 1);
+        assert_eq!(by_name("reaches_crate").visibility.0, VIS_CRATE);
         assert!(by_name("reaches_crate").exported);
     }
 
@@ -4320,9 +4372,9 @@ mod tests {
              trait Private { fn hidden(&self); }\n",
         );
         let by_name = |n: &str| f.declarations.iter().find(|d| d.name == n).unwrap();
-        assert_eq!(by_name("claim").visibility.0, 2);
-        assert_eq!(by_name("helper").visibility.0, 1);
-        assert_eq!(by_name("hidden").visibility.0, 0);
+        assert_eq!(by_name("claim").visibility.0, VIS_PUBLIC);
+        assert_eq!(by_name("helper").visibility.0, VIS_CRATE);
+        assert_eq!(by_name("hidden").visibility.0, VIS_PRIVATE);
     }
 
     #[test]

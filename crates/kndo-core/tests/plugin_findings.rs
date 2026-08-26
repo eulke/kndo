@@ -74,6 +74,7 @@ impl LanguageAdapter for MiniAdapter {
                     implicitly_invoked: false,
                     nested_scope: false,
                     visibility_inherited: false,
+                    visible_in_unit: None,
                     markers: Vec::new(),
                 });
             } else if let Some(category) = line.strip_prefix("allow ") {

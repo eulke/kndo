@@ -84,9 +84,16 @@ pub trait LanguageAdapter: Send + Sync {
     // { id: "js-ts", facts_schema_version: u32, file_globs, manifest_globs, grammar_version,
     //   visibility_ladder: Vec<VisibilityRung> }
     // visibility_ladder (RFC 0012 §6): what VisibilityLevel indexes into — each rung a
-    // { scope: File|Unit|Package|Public, label, surface_transitive } triple; the scope is what the core can check
-    // (same file / same FileFacts::unit / same PackageId / anywhere — nested, narrowest to
-    // widest), the label is the language's own word, used verbatim in remediation text.
+    // { scope: File|Unit|Module|Package|Public, label, surface_transitive } triple; the scope is
+    // what the core can check (same file / same FileFacts::unit / a unit AND ITS SUBTREE /
+    // same PackageId / anywhere — nested, narrowest to widest), the label is the language's own
+    // word, used verbatim in remediation text. Module is anchored per DECLARATION
+    // (Declaration::visible_in_unit) and walks FileFacts::unit_parent: it is the rung a
+    // four-bucket ladder had nowhere to put, so adapters widened Rust's pub(super) into
+    // pub(crate) and mapped its `private` — which is really module-and-descendants — down to a
+    // file, and private-type-leak had to stay gated behind surface_transitive as a result
+    // (internal/detection-gaps.md §7). Two rungs may share the Module scope and differ only by
+    // anchor; comparing them is a REGION question (graph::region_covers), not an enum one.
     // Empty ladder = no visibility semantics (CSS, JSON): visibility analyses skip the
     // language. surface_transitive (M6): whether a re-export chain can carry this rung
     // outside its package — relative rungs (Rust pub, JS export, Java public/protected)
@@ -401,6 +408,15 @@ pub struct FileFacts {
     pub diagnostics:  Vec<Diagnostic>,
     pub unit:         Option<SmolStr>,      // reference-resolution scope beyond "this file" —
                                              // see below; `None` for file-scoped languages
+    pub unit_parent:  Option<SmolStr>,      // the unit CONTAINING this file's unit — the link
+                                             // that turns the flat key set into a TREE the core
+                                             // walks without knowing any separator (the adapter,
+                                             // which knows its language's, supplies it). None at
+                                             // a root and for languages whose units do not nest,
+                                             // where VisibilityScope::Module collapses to Unit.
+                                             // Every file of one unit must report the same
+                                             // parent: first writer wins, a disagreement is an
+                                             // adapter bug rather than something to merge
     pub unit_name:    Option<SmolStr>,      // the name IMPORTERS bind this unit by (RFC 0012
                                              // §9): Go's `package` clause name. Distinct from
                                              // `unit` (the opaque grouping key, dir#package):

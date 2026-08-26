@@ -737,6 +737,7 @@ fn push_declaration(
         implicitly_invoked: false,
         nested_scope: false,
         visibility_inherited: false,
+        visible_in_unit: None,
         markers: markers(item, src),
         signature_span,
     });

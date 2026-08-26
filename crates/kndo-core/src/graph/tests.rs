@@ -24,6 +24,7 @@ fn surface_closure_promotes_transitive_members_of_surface_types_only() {
         }),
         package: crate::vocab::PackageId(0),
         unit: None,
+        unit_parent: None,
         test_spans: Vec::new(),
         string_call_sites: Vec::new(),
     };
@@ -42,6 +43,7 @@ fn surface_closure_promotes_transitive_members_of_surface_types_only() {
         implicitly_invoked: false,
         nested_scope: false,
         visibility_inherited: false,
+        visible_in_unit: None,
         markers: Vec::new(),
     };
     let symbols = vec![
@@ -3212,6 +3214,7 @@ fn same_named_declarations_keep_their_own_metrics() {
         implicitly_invoked: false,
         nested_scope: false,
         visibility_inherited: false,
+        visible_in_unit: None,
         markers: Vec::new(),
     };
     let metrics = |span: Span, tokens: u32| FunctionMetrics {
@@ -3245,6 +3248,7 @@ fn same_named_declarations_keep_their_own_metrics() {
             implicitly_invoked: false,
             nested_scope: false,
             visibility_inherited: false,
+            visible_in_unit: None,
             markers: Vec::new(),
         })
         .collect();
@@ -3309,6 +3313,7 @@ fn a_nested_types_constructor_inherits_its_containers_liveness() {
             implicitly_invoked: false,
             nested_scope: false,
             visibility_inherited: false,
+            visible_in_unit: None,
             markers: Vec::new(),
         };
     use crate::vocab::SymbolKind;
@@ -3340,6 +3345,7 @@ fn a_nested_types_constructor_inherits_its_containers_liveness() {
             implicitly_invoked: false,
             nested_scope: false,
             visibility_inherited: false,
+            visible_in_unit: None,
             markers: Vec::new(),
         })
         .collect();
@@ -3406,6 +3412,7 @@ fn same_name_overloads_each_own_the_references_in_their_body() {
         implicitly_invoked: false,
         nested_scope: false,
         visibility_inherited: false,
+        visible_in_unit: None,
         markers: Vec::new(),
     };
 
@@ -3441,6 +3448,7 @@ fn same_name_overloads_each_own_the_references_in_their_body() {
             implicitly_invoked: false,
             nested_scope: false,
             visibility_inherited: false,
+            visible_in_unit: None,
             markers: Vec::new(),
         })
         .collect();

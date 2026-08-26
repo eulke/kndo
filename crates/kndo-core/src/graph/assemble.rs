@@ -149,14 +149,19 @@ pub(crate) struct ImportResolution {
 }
 
 // Whether a declaration in `decl_file` at `scope` is visible to a reference site in
-// `site_file`. Scopes nest (File ⊂ Unit ⊂ Package ⊂ Public), so each arm
+// `site_file`. Scopes nest (File ⊂ Unit ⊂ Module ⊂ Package ⊂ Public), so each arm
 // accepts everything the narrower one would: a Unit-scoped Go method is visible to its own
 // file whether or not the adapter set a unit key.
+///
+/// `anchor` is the declaration's [`crate::adapter::Declaration::visible_in_unit`] and only
+/// the `Module` arm reads it.
 pub(crate) fn scope_contains_site(
     scope: crate::adapter::VisibilityScope,
+    anchor: Option<&SmolStr>,
     decl_file: usize,
     site_file: usize,
     file_unit: &[Option<SmolStr>],
+    unit_parents: &HashMap<SmolStr, SmolStr>,
     files: &[FileNode],
 ) -> bool {
     use crate::adapter::VisibilityScope::*;
@@ -169,9 +174,111 @@ pub(crate) fn scope_contains_site(
                     (Some(a), Some(b)) if a == b
                 )
         }
+        // The anchor's whole SUBTREE: walk up from the site's unit looking for it. With no
+        // anchor the region is the declaring file's own unit, which makes this arm exactly
+        // `Unit` — so a language whose units do not nest never sees a difference.
+        Module => {
+            let Some(target) = anchor.or(file_unit[decl_file].as_ref()) else {
+                return decl_file == site_file;
+            };
+            unit_ancestry(file_unit[site_file].as_ref(), unit_parents).any(|u| u == target)
+        }
         Package => files[decl_file].package == files[site_file].package,
         Public => true,
     }
+}
+
+/// A unit and every unit above it, nearest first. Cycle-guarded by a step budget rather than
+/// a seen-set: a parent link that loops is an adapter bug, and the honest response is to stop
+/// walking, not to allocate against it. Depth 64 is far past any real module nesting.
+fn unit_ancestry<'a>(
+    start: Option<&'a SmolStr>,
+    unit_parents: &'a HashMap<SmolStr, SmolStr>,
+) -> impl Iterator<Item = &'a SmolStr> {
+    let mut current = start;
+    let mut budget = 64u32;
+    std::iter::from_fn(move || {
+        let unit = current?;
+        if budget == 0 {
+            return None;
+        }
+        budget -= 1;
+        current = unit_parents.get(unit);
+        Some(unit)
+    })
+}
+
+/// The region a declaration is visible in: the rung's scope, the unit anchoring it when the
+/// rung is [`VisibilityScope::Module`], and the file it was declared in (which every narrower
+/// scope is relative to).
+pub(crate) struct VisibilityRegion<'a> {
+    pub(crate) scope: crate::adapter::VisibilityScope,
+    pub(crate) anchor: Option<&'a SmolStr>,
+    pub(crate) file: usize,
+}
+
+/// Whether `outer` reaches everywhere `inner` reaches.
+///
+/// The question `private-type-leak` actually asks — "can everyone this item promises itself to
+/// also NAME the type in its signature?" — and the reason it used to need a blanket gate
+/// instead: a scope is meaningless without the thing it is relative to, so two `File` scopes in
+/// different files, or two module subtrees anchored at different depths, name disjoint regions
+/// that an enum comparison reads as equal. Comparing regions decides it exactly, which is what
+/// lets the gate go (`internal/detection-gaps.md` §7).
+pub(crate) fn region_covers(
+    outer: &VisibilityRegion<'_>,
+    inner: &VisibilityRegion<'_>,
+    file_unit: &[Option<SmolStr>],
+    unit_parents: &HashMap<SmolStr, SmolStr>,
+    files: &[FileNode],
+) -> bool {
+    use crate::adapter::VisibilityScope::*;
+    let same_unit = |a: usize, b: usize| {
+        matches!((&file_unit[a], &file_unit[b]), (Some(x), Some(y)) if x == y) || a == b
+    };
+    match outer.scope {
+        Public => true,
+        Package => inner.scope != Public && files[outer.file].package == files[inner.file].package,
+        Module => {
+            // The subtree the outer region is rooted at; with no anchor, its own unit.
+            let Some(root) = outer.anchor.or(file_unit[outer.file].as_ref()) else {
+                return outer.file == inner.file;
+            };
+            let reach = match inner.scope {
+                Public | Package => return false,
+                // Everything the inner region reaches is under ITS anchor, so covering that
+                // anchor covers all of it.
+                Module => inner.anchor.or(file_unit[inner.file].as_ref()),
+                Unit | File => file_unit[inner.file].as_ref(),
+            };
+            reach.is_some_and(|u| unit_ancestry_contains(u, root, unit_parents))
+        }
+        Unit => matches!(inner.scope, Unit | File) && same_unit(outer.file, inner.file),
+        File => inner.scope == File && outer.file == inner.file,
+    }
+}
+
+/// Whether `unit` is `ancestor` or sits anywhere below it — the containment question
+/// [`VisibilityScope::Module`] asks, exposed for analyses that need it without a file index.
+pub(crate) fn unit_ancestry_contains(
+    unit: &SmolStr,
+    ancestor: &SmolStr,
+    unit_parents: &HashMap<SmolStr, SmolStr>,
+) -> bool {
+    unit_ancestry(Some(unit), unit_parents).any(|u| u == ancestor)
+}
+
+/// Unit key → containing unit key, from the files that declare each. First writer wins: every
+/// file of one unit must report the same parent, so a disagreement is an adapter bug rather
+/// than something to merge.
+pub(crate) fn unit_parent_index(files: &[FileNode]) -> HashMap<SmolStr, SmolStr> {
+    let mut out: HashMap<SmolStr, SmolStr> = HashMap::default();
+    for file in files {
+        if let (Some(unit), Some(parent)) = (&file.unit, &file.unit_parent) {
+            out.entry(unit.clone()).or_insert_with(|| parent.clone());
+        }
+    }
+    out
 }
 
 /// The symbol a reference executes inside, given its adapter-reported `within` name.
@@ -291,6 +398,9 @@ pub(crate) struct ResolveTables<'a> {
     pub(crate) symbol_twins_per_unit: &'a HashMap<SmolStr, HashMap<SmolStr, Vec<SymbolId>>>,
     pub(crate) member_by_name: &'a HashMap<SmolStr, Vec<SymbolId>>,
     pub(crate) file_unit: &'a [Option<SmolStr>],
+    /// Unit key → containing unit key, the tree `VisibilityScope::Module` walks
+    /// ([`unit_parent_index`]).
+    pub(crate) unit_parents: &'a HashMap<SmolStr, SmolStr>,
     pub(crate) unit_name_by_file: &'a [Option<SmolStr>],
     pub(crate) ladders:
         &'a std::collections::BTreeMap<SmolStr, Vec<crate::adapter::VisibilityRung>>,
@@ -345,6 +455,7 @@ pub(crate) fn resolve_imports(
         symbol_twins_per_unit,
         member_by_name: _,
         file_unit,
+        unit_parents: _,
         unit_name_by_file,
         ladders: _,
         builtin_member_types: _,
@@ -626,6 +737,7 @@ pub(crate) fn resolve_references(
         symbol_twins_per_unit,
         member_by_name,
         file_unit,
+        unit_parents,
         unit_name_by_file: _,
         ladders,
         builtin_member_types: _,
@@ -960,7 +1072,15 @@ pub(crate) fn resolve_references(
                             .and_then(|ladder| ladder.get(sym.visibility.0 as usize))
                             .map(|rung| rung.scope)
                             .unwrap_or(crate::adapter::VisibilityScope::Public);
-                        scope_contains_site(scope, j, i, file_unit, files)
+                        scope_contains_site(
+                            scope,
+                            sym.visible_in_unit.as_ref(),
+                            j,
+                            i,
+                            file_unit,
+                            unit_parents,
+                            files,
+                        )
                     })
                     .collect()
             })
@@ -1919,7 +2039,7 @@ pub(crate) fn promote_package_relative_test_roles<'a>(
 /// an assembly-algorithm change that could produce a different graph from the same facts. Feeds
 /// [`compute_graph_key`] (the "core graph-schema version"); a bump here invalidates
 /// every project's cached `graph.bin` on the next run, same as any other key-input change.
-pub const GRAPH_SCHEMA_VERSION: u32 = 33; // bump whenever the persisted snapshot shape (rkyv layouts included) or the assembly semantics that derive a graph from the same facts change
+pub const GRAPH_SCHEMA_VERSION: u32 = 34; // bump whenever the persisted snapshot shape (rkyv layouts included) or the assembly semantics that derive a graph from the same facts change
 
 /// The graph snapshot's cache key (`cache.rs`'s `graph.bin`): a single digest
 /// folding in the *whole* discovered file set (every path + content hash — this already
@@ -2340,7 +2460,7 @@ pub fn assemble_from_source(
     for (i, df) in discovered.files.iter().enumerate() {
         let file_id = FileId(i as u32);
         file_index.insert(df.path.clone(), file_id);
-        let (language, class, unit) = match &claimed_per_file[i] {
+        let (language, class, unit, unit_parent) = match &claimed_per_file[i] {
             Some(c) => {
                 // Content-derived origin override: extraction saw the bytes,
                 // claim only saw the path — the content wins on the origin axis. Applied here,
@@ -2367,9 +2487,10 @@ pub fn assemble_from_source(
                         .unit
                         .clone()
                         .or_else(|| override_unit(df.path.0.as_str())),
+                    c.facts.unit_parent.clone(),
                 )
             }
-            None => (None, None, None),
+            None => (None, None, None, None),
         };
         let test_spans = match &claimed_per_file[i] {
             Some(c) => {
@@ -2394,6 +2515,7 @@ pub fn assemble_from_source(
             class,
             package: PackageId(0), // patched in phase 2a once ownership is computed
             unit,
+            unit_parent,
             test_spans,
             string_call_sites,
         });
@@ -2929,6 +3051,7 @@ pub fn assemble_from_source(
                 implicitly_invoked: decl.implicitly_invoked,
                 nested_scope: decl.nested_scope,
                 visibility_inherited: decl.visibility_inherited,
+                visible_in_unit: decl.visible_in_unit.clone(),
                 markers: decl.markers.clone(),
             });
         }
@@ -3171,6 +3294,7 @@ pub fn assemble_from_source(
         symbol_twins_per_unit: &symbol_twins_per_unit,
         member_by_name: &member_by_name,
         file_unit: &file_unit,
+        unit_parents: &unit_parent_index(&files),
         unit_name_by_file: &unit_name_by_file,
         ladders: &ladders,
         builtin_member_types: &builtin_member_types,

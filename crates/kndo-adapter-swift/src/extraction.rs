@@ -698,6 +698,7 @@ fn push_declaration(
         implicitly_invoked: false,
         nested_scope: false,
         visibility_inherited: false,
+        visible_in_unit: None,
         markers: Vec::new(),
         signature_span,
     });

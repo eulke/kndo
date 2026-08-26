@@ -2009,6 +2009,7 @@ mod tests {
                         implicitly_invoked: false,
                         nested_scope: false,
                         visibility_inherited: false,
+                        visible_in_unit: None,
                         markers: Vec::new(),
                     });
                 } else if let Some(name) = line.strip_prefix("ref ") {
@@ -3278,6 +3279,7 @@ mod tests {
             class: None,
             package: crate::vocab::PackageId(0),
             unit: None,
+            unit_parent: None,
             test_spans: vec![],
             string_call_sites: vec![],
         };

@@ -249,6 +249,7 @@ mod tests {
             }),
             package: PackageId(0),
             unit: None,
+            unit_parent: None,
             test_spans: Vec::new(),
             string_call_sites: Vec::new(),
         }

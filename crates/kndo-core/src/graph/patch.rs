@@ -319,6 +319,7 @@ pub(crate) fn try_patch(
         }
     }
     let file_unit: Vec<Option<SmolStr>> = graph.files.iter().map(|f| f.unit.clone()).collect();
+    let unit_parents = crate::graph::assemble::unit_parent_index(&graph.files);
     let unit_name_by_file: Vec<Option<SmolStr>> = graph
         .patch_meta
         .iter()
@@ -406,6 +407,7 @@ pub(crate) fn try_patch(
             symbol_twins_per_unit: &symbol_twins_per_unit,
             member_by_name: &member_by_name,
             file_unit: &file_unit,
+            unit_parents: &unit_parents,
             unit_name_by_file: &unit_name_by_file,
             ladders: &ladders,
             builtin_member_types: &builtin_member_types,

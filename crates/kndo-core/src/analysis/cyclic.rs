@@ -488,6 +488,7 @@ mod tests {
             }),
             package: PackageId(package),
             unit: None,
+            unit_parent: None,
             test_spans: Vec::new(),
             string_call_sites: Vec::new(),
         }

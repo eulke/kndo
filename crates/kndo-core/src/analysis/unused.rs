@@ -237,6 +237,7 @@ mod tests {
             class,
             package: crate::vocab::PackageId(0),
             unit: None,
+            unit_parent: None,
             test_spans: Vec::new(),
             string_call_sites: Vec::new(),
         }
@@ -287,6 +288,7 @@ mod tests {
             implicitly_invoked: false,
             nested_scope: false,
             visibility_inherited: false,
+            visible_in_unit: None,
             markers: Vec::new(),
         }];
         let edges = vec![edge(
@@ -535,6 +537,7 @@ mod tests {
             implicitly_invoked: false,
             nested_scope: false,
             visibility_inherited: false,
+            visible_in_unit: None,
             markers: Vec::new(),
         }
     }

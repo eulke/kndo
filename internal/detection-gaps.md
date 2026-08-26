@@ -140,33 +140,72 @@ cycles don't feed health's cycles axis either). Listed here so the *absence* of 
 finding on this repo isn't triaged as a detector gap — the structure is real and remains
 visible through the graph itself (`kndo query`/doctor), just never as a finding.
 
-## 7. Intra-package visibility leaks (narrower than the four-bucket ladder)
+## 7. Intra-package visibility leaks (RESUELTO)
 
-`private-type-leak` accuses only items whose visibility rung is `surface_transitive` — items
-that genuinely cross the package boundary. An item visible to a *sibling module* that names a
-type private to its own module is a real leak by the letter of the language's rules, and is
-now silent: Rust's `pub(super) fn unset_waker` in tokio's `task::state`, returning a
-`state.rs`-private alias that its sibling `task::harness` caller cannot spell.
+`private-type-leak` accused only items whose visibility rung was `surface_transitive` — items
+that genuinely cross the package boundary. An item visible to a *sibling module* naming a type
+private to its own module is a real leak by the letter of the language's rules, and was silent:
+Rust's `pub(super) fn unset_waker` in tokio's `task::state`, returning a `state.rs`-private
+alias that its sibling `task::harness` caller cannot spell.
 
-Root cause: the region such an item is visible to sits strictly between `File` and `Package`,
-and `VisibilityScope` has no rung there — adapters over-approximate a top-level `pub(super)`
-as `pub(crate)` for exactly that reason (`kndo-adapter-rust`'s `restriction_level`). With that
-approximation the model cannot tell the tokio case apart from the far more common inverse,
-where every caller that can reach the item can also name the type (ripgrep's
-`flags::parse::lookup` against the private `Flag` trait, serde's `de::deserialize_custom`
-against `Parameters`) — a field audit found the harmless shape three times for each real one.
-RFC 0012 §2 is explicit about which way to degrade when the model cannot prove the accusation,
-so the gate stays until the scope exists.
+The gate was standing in for a comparison the model could not make. Two things had to be true
+before it could go, and the second was not in the original diagnosis:
 
-Direction: a module-subtree scope in the ladder (`VisibilityScope::Module`), anchored on the
-declaring file's `unit`. That anchor did not exist — RFC 0012 §8's table claimed Rust keyed
-units on the module path and it did not — so the direction is one step longer than recorded,
-and **that step is now done**: the Rust adapter keys each file by its own module
-(`internal/adapters/rust.md` §2). What remains is `FileFacts::unit_parent`, to make those keys
-a tree the core can walk without knowing any separator, and adapters emitting
-`pub(super)`/`pub(in path)` as the new rung instead of collapsing it upward.
-`scope_contains_site` gains one arm; the containment comparison this analysis already performs
-then decides the case exactly, and only then does the gate come off.
+1. **A rung for the region.** `VisibilityScope::Module` — a unit and its subtree — with the
+   anchor coming from the declaration (`Declaration::visible_in_unit`) and the tree from
+   `FileFacts::unit_parent`. `pub(super)` stopped being widened into `pub(crate)`.
+2. **The adapter had to stop lying about `private`.** This is what the catalogue missed. Rust
+   privacy is module-**and-descendants**, and `internal/adapters/rust.md` said so while mapping
+   it to `File` scope anyway, because the ladder had nowhere else to put it. With `private`
+   modelled as a file, ripgrep's `flags::parse::lookup` still read as leaking `flags/mod.rs`'s
+   private `Flag` — a type every module under `flags` can name perfectly well. The Module rung
+   alone would have swapped one false positive for another.
+
+**And the comparison itself was wrong in a way the gate had been hiding.** A scope means nothing
+without the thing it is relative to: two `File` scopes in different files, or two subtrees
+anchored at different depths, are disjoint regions an enum comparison reads as equal. The
+analysis now asks one question — *does the region the TYPE is visible in reach everywhere the
+item promises itself to?* — as `graph::region_covers`, region against region. That single test
+replaced the gate and the three-way scope comparison both.
+
+**Medición**, and it is the whole argument:
+
+| repo | antes | ahora | |
+|---|---|---|---|
+| tokio | 0 | **6** | `unset_waker` and `set_join_waker` among them — the case this entry exists for |
+| ripgrep | 0 | 1 | `flags::parse::lookup` is **not** one: `WalkParallel::run` naming the private `FnVisitor` is, and it is real |
+| serde | 0 | **0** | with the rung but before the private-is-a-subtree fix it was 16, every one of them noise |
+| alacritty | 0 | 2 | both real (`Window::new` returns a module-private `Result` alias) |
+| axios, Exposed, vapor | — | unchanged | no language but Rust declares a Module rung |
+
+`internal-only` gained a finding class from the same correction: a `pub(crate)` item used only
+within its own module subtree really can be plain `private` in Rust, which the `File`
+approximation could never say. On kndo itself that is +17 true findings, four of them about
+constants this very commit introduced.
+
+**Lo que queda fuera.** `pub(in path)` still widens to `pub(crate)` — the adapter does not
+resolve the path to a unit key (7 occurrences in all of tokio). And `internal_only` compares
+rung scopes, so it can no longer suggest narrowing `pub(super)` to `private`: both are `Module`
+and differ only by anchor, which that comparison does not see. A silence, not an accusation, and
+the fix is to make its rung walk region-aware the way this analysis now is.
+
+## 18. A path-synthesized binding shadows the file's own declaration
+
+Found while measuring §7, and **pre-existing** — not caused by it. tokio's `dump.rs` declares
+`pub struct Trace` and, in its field, writes the path `super::task::trace::Trace` (a *different*,
+`pub(crate)` type). The adapter reconstructs a synthetic import from that inline path, and its
+binding lands in `bound_symbols` — which the bare-name ladder consults **before** the file's own
+declarations. So `pub fn trace(&self) -> &Trace` binds to the crate-private type instead of the
+public one declared six lines above, and `private-type-leak` reports a leak that is not there.
+
+Rust would not allow a real `use` to shadow a same-named local declaration (E0255), so the
+synthetic binding is claiming a precedence the language never grants it.
+
+Direction, and it needs no new mechanism: RFC 0012 §9-ter already separates an import the file
+STATES (`Certain`) from one the adapter RECONSTRUCTED from a use site (`Probable`/`Possible`). A
+reconstructed binding should rank below the file's own declarations for the same reason it does
+not settle a qualifier miss. Its own item, with its own measurement — the ladder order affects
+every language.
 
 ## 8. A brace-imported submodule is not a usable qualifier (RESUELTO)
 

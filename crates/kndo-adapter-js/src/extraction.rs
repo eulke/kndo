@@ -256,6 +256,7 @@ fn handle_named(node: Node, src: &[u8], exported: bool, out: &mut FileFacts, kin
         implicitly_invoked: false,
         nested_scope: false,
         visibility_inherited: false,
+        visible_in_unit: None,
         markers: Vec::new(),
         signature_span,
     });
@@ -300,6 +301,7 @@ fn handle_export_statement(node: Node, src: &[u8], out: &mut FileFacts) {
             implicitly_invoked: false,
             nested_scope: false,
             visibility_inherited: false,
+            visible_in_unit: None,
             markers: Vec::new(),
         });
         return;
@@ -414,6 +416,7 @@ fn handle_enum(node: Node, src: &[u8], exported: bool, out: &mut FileFacts) {
         implicitly_invoked: false,
         nested_scope: false,
         visibility_inherited: false,
+        visible_in_unit: None,
         markers: Vec::new(),
     });
 
@@ -441,6 +444,7 @@ fn handle_enum(node: Node, src: &[u8], exported: bool, out: &mut FileFacts) {
                 implicitly_invoked: false,
                 nested_scope: false,
                 visibility_inherited: false,
+                visible_in_unit: None,
                 markers: Vec::new(),
             });
         }
@@ -499,6 +503,7 @@ fn handle_lexical(node: Node, src: &[u8], exported: bool, out: &mut FileFacts) {
             implicitly_invoked: false,
             nested_scope: false,
             visibility_inherited: false,
+            visible_in_unit: None,
             markers: Vec::new(),
         });
     }
@@ -1162,6 +1167,7 @@ fn handle_cjs_module_exports(
         implicitly_invoked: false,
         nested_scope: false,
         visibility_inherited: false,
+        visible_in_unit: None,
         markers: Vec::new(),
     });
 }
@@ -1212,6 +1218,7 @@ fn handle_cjs_named_export(
         implicitly_invoked: false,
         nested_scope: false,
         visibility_inherited: false,
+        visible_in_unit: None,
         markers: Vec::new(),
     });
 }

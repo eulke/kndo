@@ -202,6 +202,7 @@ fn push_declaration(
         implicitly_invoked: false,
         nested_scope: false,
         visibility_inherited: false,
+        visible_in_unit: None,
         markers: Vec::new(),
         signature_span,
     });
@@ -358,6 +359,7 @@ fn handle_method(node: Node, src: &[u8], flags: Flags, out: &mut FileFacts) {
         ),
         nested_scope: false,
         visibility_inherited: false,
+        visible_in_unit: None,
         markers: Vec::new(),
     });
     push_function_metrics(out, &format!("{receiver_type}.{method_name}"), node);

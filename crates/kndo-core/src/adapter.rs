@@ -157,7 +157,19 @@ pub enum VisibilityScope {
     File,
     /// Same `FileFacts::unit` key (Go package, Rust module) — contains `File`.
     Unit,
-    /// Same `PackageId` (manifest ownership) — contains `Unit`.
+    /// A unit and every unit BELOW it in the tree [`FileFacts::unit_parent`] builds —
+    /// contains `Unit`. Which unit is the anchor comes from the declaration
+    /// ([`Declaration::visible_in_unit`]); with none, the declaring file's own unit, which
+    /// makes this rung exactly `Unit` and a flat unit tree collapse it away.
+    ///
+    /// The rung the four-bucket ladder was missing: Rust's `pub(super)` and `pub(in path)`
+    /// name a region strictly between one file and one package, and adapters that had to
+    /// pick a bucket widened them to `Package` — which cannot tell a real leak (tokio's
+    /// `task::state::unset_waker` returning a `state.rs`-private alias its `task::harness`
+    /// caller cannot spell) from the far more common harmless inverse, and so kept
+    /// `private-type-leak` gated. `internal/detection-gaps.md` §7.
+    Module,
+    /// Same `PackageId` (manifest ownership) — contains `Module`.
     Package,
     /// Everywhere.
     Public,
@@ -293,6 +305,14 @@ pub struct Declaration {
     /// itself — it belongs to the container, whose own declaration is measured separately —
     /// so visibility analyses skip it. Default `false`.
     pub visibility_inherited: bool,
+    /// For a declaration on a [`VisibilityScope::Module`] rung: WHICH unit anchors the
+    /// subtree it is visible in. Rust's `pub(super)` anchors on the parent module,
+    /// `pub(in crate::a::b)` on the named one — and only the adapter can say which unit key
+    /// that is, because only it knows the language's path syntax. `None` on a `Module` rung
+    /// means the declaring file's own unit, which degenerates to `Unit`. Ignored on every
+    /// other rung. Default `None`.
+    #[serde(default)]
+    pub visible_in_unit: Option<SmolStr>,
     /// Language-visible MARKERS attached to this declaration: annotation names in Java and
     /// Kotlin (`@Controller`, `@AfterEach`), attribute paths in Rust, attributes in Swift,
     /// decorators in JS/TS. Bare names, in source order, duplicates kept — the adapter
@@ -560,6 +580,16 @@ pub struct FileFacts {
     /// safely-wrong. The adapter computes the key (for Go: the file's directory, from its own
     /// path — no extra input needed); the core only groups by it, staying language-blind.
     pub unit: Option<SmolStr>,
+    /// The key of the unit that CONTAINS this file's unit, turning the flat set of keys into
+    /// a **tree the core can walk without knowing any separator** — the adapter, which does
+    /// know its language's, provides the link. `None` at a root (a crate's top module, a
+    /// package with nothing above it) and for languages whose units do not nest at all,
+    /// where the tree is flat and [`VisibilityScope::Module`] collapses to `Unit`.
+    ///
+    /// Every file of one unit must report the same parent; the core takes the first it sees
+    /// and a disagreement is an adapter bug, not a merge.
+    #[serde(default)]
+    pub unit_parent: Option<SmolStr>,
     /// Content-derived correction of the claim-time origin axis: extraction may
     /// report what the *content* proves about origin — a `// Code generated … DO NOT EDIT.`
     /// banner, an `@generated` marker — which claim (path-only, by design fast and name-based)

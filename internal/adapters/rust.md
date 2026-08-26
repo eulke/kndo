@@ -89,26 +89,30 @@ is this adapter's standing approximation, stated once here and leaned on everywh
 **Visibility ladder** (RFC 0012 §6), declared on the descriptor:
 
 ```
-[ File "private", Package "pub(crate)", Public "pub" ]
+[ Module@own "private", Module@parent "pub(super)", Package "pub(crate)", Public "pub" ]
 ```
 
-- no `pub` → level 0. True Rust privacy is module-and-descendants; under file ≈ module that
-  is `File` scope. Descendant files reaching a parent's private item is real Rust and will
-  read as a `possible`-confidence resolution miss, not a false `unused` — accepted, rare.
-- `pub(crate)` → level 1 (`Package` scope — crate = kndo package, exactly).
+- no `pub` → level 0, on the **`Module` rung anchored at the file's own unit**. Rust privacy is
+  module-and-descendants, and that is now sayable: it used to be approximated as `File` scope
+  because the ladder had no rung for a subtree, and the approximation is what made
+  `private-type-leak` accuse `flags::parse::lookup` for naming `flags/mod.rs`'s private `Flag`
+  — a type every module under `flags` can spell perfectly well.
+- `pub(crate)` → level 2 (`Package` scope — crate = kndo package, exactly).
 - `pub(self)` → level 0 — it IS `private`, spelled long.
 - `pub(super)` on an item **inside an inline mod** → level 0, not exported: `super` of an
   inline mod is a module within this same file, so under file ≈ module the item never
   leaves the file (widening it to the crate rung fabricated `internal-only` on ripgrep's
   `mod convert { pub(super) fn … }` — M6 residuals).
-- Top-level `pub(super)` / `pub(in path)` → level 1, deliberately **widened**: `super` of
-  the file's own module leaves the file, and mapping these down to `File` would fabricate
-  `internal-only`/leak findings; widening to the crate rung only ever silences an
-  `internal-only`, never accuses. Recorded as the conservative direction — with one known
-  residual on the other side: `private-type-leak` can pair a widened `pub(super)` subject
-  with a genuinely narrower type from the *parent* module (ripgrep's
-  `parse.rs#lookup(… dyn Flag)`) and accuse where real Rust visibility is coherent.
-  Accepted until rungs are module-relative rather than file-relative.
+- Top-level `pub(super)` → level 1, its own rung: the **`Module` rung anchored at the PARENT
+  unit**. It used to be widened into `pub(crate)` because nothing sat between one file and one
+  package, and that widening was what kept `private-type-leak` gated — the model could not tell
+  tokio's `task::state::unset_waker` (whose sibling caller genuinely cannot name the
+  `state.rs`-private `UpdateResult`) from the harmless inverse. Both rungs are `Module` and
+  differ only by ANCHOR, which is the honest shape: in Rust every visibility but `pub` is a
+  module subtree, and what distinguishes them is how high the subtree is rooted.
+- `pub(in path)` → level 2, still widened to `pub(crate)`: this adapter does not resolve the
+  path to a unit key yet. Widening only ever silences an `internal-only`, never accuses (7
+  occurrences across the whole of tokio, for scale).
 - `pub` → level 2. `exported` = any `pub*` form except `pub(self)` and
   inline-mod `pub(super)`.
 
