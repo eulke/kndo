@@ -162,6 +162,18 @@ binds again follows that one hop, and `internals/mod.rs`'s `mod check;` — with
 load-bearing, and why extending the specifier to `crate::internals::check` was the wrong fix: it
 would teach the core that `::` joins path segments.
 
+**And the adapter names every qualifier the core used to guess.** A body path with no `use`
+behind it (`helpers::run()`, `kndo_core::discovery::find_files_named(..)`) reconstructs as a
+synthetic module import, and that import carries `local_alias` — the segment the use site
+actually qualifies by, which only something that knows what `::` joins can identify. The core
+previously recovered it by splitting the specifier, its single piece of hardcoded language
+syntax; that fallback is gone (RFC 0012 §9-ter). These imports are reconstructions, so they
+carry `probable`/`possible` confidence, and the core reads that as "does not close the
+namespace": a miss under such a qualifier keeps falling through to the in-scope/duck ladder,
+where a real `use` statement's alias would settle. The braced form without `self`
+(`use a::b::{X, Y}`) deliberately sets no alias — Rust does not bring `b` into scope, and the
+extraction table above has always said so.
+
 **Dynamic constructs** — macros, with a deliberately bounded stance:
 
 | Construct | Effect |

@@ -484,27 +484,28 @@ pub(crate) fn resolve_imports(
                         }
                     }
                 }
+                // The name this import puts in scope as a qualifier — stated by the
+                // adapter (`local_alias`) or by the target itself (`unit_name`), never
+                // guessed from the specifier's text. The core used to take the specifier's
+                // last `::`-separated segment as a last resort, which was the one place it
+                // knew a language's path separator; the adapters that need the qualifier
+                // now say so, and `internal/detection-gaps.md` §8's hop covers the case
+                // that motivated the guess.
+                //
+                // Whether a MISS under that qualifier settles is the import's own
+                // confidence. An import the adapter states outright (a real `use`/`import`
+                // statement, `Certain`) names a closed namespace: the member is in there or
+                // it is nowhere, and settling is the honest answer. An import RECONSTRUCTED
+                // from a use site (Rust's inline `a::b::f()` with no `use`, emitted at
+                // `Probable`/`Possible`) is the adapter's reading of a path, not a
+                // statement the file makes — closing a namespace on it would let one
+                // misread path kill a live method, so a miss falls through the
+                // in-scope/duck ladder instead (see qualifier_targets).
                 let qualifier = imp
                     .local_alias
                     .clone()
                     .or_else(|| unit_name_by_file[to.0 as usize].clone())
-                    .map(|q| (q, true))
-                    // A path specifier (Rust inline module paths, Java static-import
-                    // classes) puts its LAST segment in scope as the qualifier at the use
-                    // site: `kndo_core::discovery::find_files_named(..)` reaches
-                    // `discovery`'s file under the qualifier `discovery`, and a
-                    // single-segment specifier (`selfy` from a path call `selfy::api()` —
-                    // a package's own tests naming it by package name) is its own last
-                    // segment — without this the reference's scope_context matched nothing
-                    // and the whole path fell to the duck fallback (a path call into the
-                    // resolved file would bind zero references and its target would read
-                    // as dead). Non-settling (see qualifier_targets).
-                    .or_else(|| {
-                        imp.specifier
-                            .rsplit("::")
-                            .next()
-                            .map(|q| (SmolStr::new(q), false))
-                    });
+                    .map(|q| (q, imp.confidence == Confidence::Certain));
                 if let Some((q, settles)) = qualifier {
                     out.qualifier_targets.entry(q).or_insert((to, settles));
                 }
@@ -1742,7 +1743,7 @@ pub(crate) fn promote_package_relative_test_roles<'a>(
 /// an assembly-algorithm change that could produce a different graph from the same facts. Feeds
 /// [`compute_graph_key`] (the "core graph-schema version"); a bump here invalidates
 /// every project's cached `graph.bin` on the next run, same as any other key-input change.
-pub const GRAPH_SCHEMA_VERSION: u32 = 29; // bump whenever the persisted snapshot shape (rkyv layouts included) or the assembly semantics that derive a graph from the same facts change
+pub const GRAPH_SCHEMA_VERSION: u32 = 30; // bump whenever the persisted snapshot shape (rkyv layouts included) or the assembly semantics that derive a graph from the same facts change
 
 /// The graph snapshot's cache key (`cache.rs`'s `graph.bin`): a single digest
 /// folding in the *whole* discovered file set (every path + content hash — this already

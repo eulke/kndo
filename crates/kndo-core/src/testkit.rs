@@ -252,6 +252,27 @@ impl LanguageAdapter for MockAdapter {
                     module_names_visible,
                     local_alias: None,
                 });
+            } else if let Some(rest) = line.strip_prefix("import-as-weak ") {
+                // `import-as-weak <alias> <specifier>` — an import the adapter
+                // RECONSTRUCTED from a use site rather than read from a statement (Rust's
+                // inline `a::b::f()` with no `use`): it names its qualifier like any alias,
+                // but at `Probable`, so a miss under that qualifier must NOT settle.
+                let mut parts = rest.splitn(2, ' ');
+                let alias = parts.next().unwrap_or("");
+                let spec = parts.next().unwrap_or("");
+                facts.imports.push(RawImport {
+                    specifier: SmolStr::new(spec),
+                    kind: ImportKind::Relative,
+                    span: Span::default(),
+                    side_effect_only: false,
+                    type_only: false,
+                    confidence: Confidence::Probable,
+                    bindings: Vec::new(),
+                    reexported: false,
+                    opaque_namespace_use: false,
+                    module_names_visible: false,
+                    local_alias: Some(SmolStr::new(alias)),
+                });
             } else if let Some(rest) = line.strip_prefix("import-as ") {
                 // `import-as <alias> <specifier>` — an explicitly-aliased namespace
                 // import (the `local_alias`).

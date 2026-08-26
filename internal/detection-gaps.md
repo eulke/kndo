@@ -166,13 +166,18 @@ axios, vapor, Exposed and coroutines unchanged; the shape is Rust's. Regression:
 `a_direct_qualifier_outranks_the_module_hop` in `graph::tests`, each verified failing without
 its half of the fix.
 
-Still open, and deliberately a separate change: the `rsplit("::")` qualifier fallback in
-`resolve_imports`. With per-member qualifiers registered it is no longer needed for the case
-above, but it still over-approximates another (`use a::b::{X, Y}` without `self`, where Rust
-does *not* bring `b` into scope). Removing it is more correct and may cost recall wherever
-something leaned on the over-approximation, so it gets its own measurement — and if it does
-cost recall, the fix is for the adapter to set `local_alias` where the language genuinely binds
-the name, not to put the separator back in the core.
+**Y el `::` se fue con ello.** The `rsplit("::")` qualifier fallback in `resolve_imports` — the
+core's one piece of hardcoded language syntax — is gone, in its own commit and measured on its
+own. Two Rust shapes leaned on it and now state the name themselves in `local_alias`: the
+single-qualifier bare path (`helpers::run()`) and the deep one
+(`kndo_core::discovery::find_files_named(..)`), both synthetic imports the adapter reconstructs
+from a use site and qualifies by a segment only it can identify. The over-approximation the
+fallback also carried — registering `b` for `use a::b::{X, Y}`, where Rust does *not* bring `b`
+into scope — is simply gone. Whether a qualifier miss settles now follows the import's own
+confidence (`Certain` = a statement the file makes, a closed namespace; anything less = the
+adapter's reading of a path, which must keep falling through), locked in by
+`a_reconstructed_imports_qualifier_does_not_settle_on_a_miss`. Field result: byte-identical
+findings on all seven measured targets — the adapter-side alias reproduces the split exactly.
 
 ## 9. False negative: path references in prose
 

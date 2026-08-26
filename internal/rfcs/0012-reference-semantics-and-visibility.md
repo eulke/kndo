@@ -433,6 +433,26 @@ import list, so any change to F's imports moves F's surface and forces a full re
 hop is unrepresentable. `FilePatchMeta` carries each file's `module_bindings` so an unchanged
 file contributes its table without re-extraction; `patch_equivalence` is the harness.
 
+**§9-ter, the last hardcoded separator (M6).** With §9-bis's hop in place, the core stopped
+deriving a qualifier from the specifier's last `::`-separated segment — the one place it knew a
+language's path syntax. Two Rust shapes depended on that guess and now state the name
+themselves, in `local_alias`: the single-qualifier bare path (`helpers::run()`) and the deep
+one (`kndo_core::discovery::find_files_named(..)`), both of which the adapter reconstructs as
+synthetic imports and both of which it qualifies by a segment only it can identify. What the
+guess also did — registering `b` for `use a::b::{X, Y}`, where Rust does **not** bring `b` into
+scope — is simply gone; the adapter already declines to set `local_alias` there, and did before
+this change.
+
+The alias's *strength* is no longer uniform, and it is the import's own confidence that decides
+it: a qualifier miss settles iff the import is `Certain`. A real `use`/`import` statement names
+a closed namespace — the member is in there or nowhere — while a reconstructed import is the
+adapter's reading of a path, and closing a namespace on a misread path would kill a live method.
+That is the same asymmetry §9 already stated between an alias (settles) and a binding (does
+not), now derived from a fact the contract already carried instead of from which code path
+produced the qualifier. Measured across serde, alacritty, axios, Exposed, kotlinx.coroutines,
+vapor and kndo itself: byte-identical findings, so the adapter-side alias reproduces the split
+exactly and the dropped over-approximation cost nothing.
+
 ## 10. Multi-module topology (`go.work` et al) — adapter work, one recorded divergence
 
 `go.work` becomes a second claimed manifest contributing `workspace_members` (the field

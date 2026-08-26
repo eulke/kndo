@@ -2759,7 +2759,12 @@ fn emit_path(
             // alone imports — a local module resolves to its file (resolution's local-retry
             // precedence), an unknown crate becomes the Dependency edge the `undeclared`
             // analysis needs, at `probe_confidence` so it only accuses where the root really
-            // is evidence. The qualified reference stays for binding.
+            // is evidence. The qualified reference stays for binding, and `local_alias`
+            // carries the name it qualifies BY: the reference this branch emits reads
+            // `scope_context: root`, and the adapter is the only side that can say so —
+            // splitting the specifier to recover it was the core's one hardcoded path
+            // separator. Non-settling by construction: the import is reconstructed, so its
+            // confidence is never Certain and a miss keeps falling through the ladder.
             out.imports.push(RawImport {
                 specifier: SmolStr::new(root),
                 kind: ImportKind::Package,
@@ -2771,7 +2776,7 @@ fn emit_path(
                 reexported: false,
                 opaque_namespace_use: false,
                 module_names_visible: false,
-                local_alias: None,
+                local_alias: Some(SmolStr::new(root)),
             });
         }
         // The parent-path MODULE import is emitted regardless of `locals`: that guard
@@ -2807,7 +2812,11 @@ fn emit_path(
                 reexported: false,
                 opaque_namespace_use: false,
                 module_names_visible: false,
-                local_alias: None,
+                // The segment the use site qualifies by: `kndo_core::discovery::find_files_named(..)`
+                // writes `discovery`, and this synthetic import is what reaches that file.
+                // Same reason as the shallow branch — the adapter knows the separator, the
+                // core must not. Reconstructed, hence never Certain, hence non-settling.
+                local_alias: Some(SmolStr::new(rest[rest.len() - 1])),
             });
             if import_worthy {
                 // The entry-liveness companion for a DEEP path — and it makes the same claim

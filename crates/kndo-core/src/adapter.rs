@@ -389,6 +389,17 @@ pub struct RawImport {
     /// correct by construction where a "last specifier segment" guess would go wrong
     /// (dir≠package mismatches like `gopkg.in/yaml.v3` →
     /// `yaml`). Languages whose imports bind names, not namespaces (JS/TS), leave it `None`.
+    ///
+    /// An import the adapter RECONSTRUCTED from a use site sets it too, and must: Rust's
+    /// inline `kndo_core::discovery::find_files_named(..)` with no `use` in sight emits a
+    /// synthetic import for `kndo_core::discovery` and a reference qualified by
+    /// `discovery` — and the adapter, which knows what `::` joins, is the only side that
+    /// can name that segment. The core used to recover it by splitting the specifier on
+    /// `::`, its one piece of hardcoded language knowledge; saying it here is what let that
+    /// go. Such an import carries a non-`Certain` [`RawImport::confidence`], which is
+    /// exactly what stops it from closing the namespace: a miss under a reconstructed
+    /// import's qualifier falls through the in-scope/duck ladder, while a miss under a real
+    /// statement's alias settles.
     pub local_alias: Option<SmolStr>,
 }
 

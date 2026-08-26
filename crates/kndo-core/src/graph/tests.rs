@@ -1003,6 +1003,31 @@ fn a_matched_qualifier_settles_resolution_even_on_a_miss() {
 }
 
 #[test]
+fn a_reconstructed_imports_qualifier_does_not_settle_on_a_miss() {
+    // The mirror of the test above, and the rule that let the core stop splitting
+    // specifiers on `::`. An import the adapter reconstructed from a use site names its
+    // qualifier like any other, but it is the adapter's reading of a path, not a statement
+    // the file makes — so it does not close the namespace: `j.Marshal` missing in the
+    // target falls through to the duck-typed member fallback exactly as an unregistered
+    // qualifier would. Settling on it would let one misread path kill a live method.
+    let dir = project(
+        "qref-weak-miss",
+        &[
+            (
+                "a.mock",
+                "import-as-weak j ./b.mock\nmember-decl T Marshal\nqref j Marshal\nroot-file",
+            ),
+            ("b.mock", "decl Other"),
+        ],
+    );
+    let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
+    assert!(
+        !reference_edges_to(&graph, "Marshal").is_empty(),
+        "a reconstructed import must not settle a miss away from the member fallback"
+    );
+}
+
+#[test]
 fn receiver_qualifier_skips_free_names_and_duck_types_to_members() {
     // `t.helper()`: `t` matches no import, so the name is a member access by
     // construction — the same-file free `helper` is not a candidate; the member is,

@@ -296,9 +296,15 @@ pub struct FileFacts {
                                              // Assembly matches it against the file's imports —
                                              // explicit local_alias, or the resolved target's
                                              // unit_name — and resolves the name INSIDE that
-                                             // target at Certain (hit or miss, a matched
-                                             // qualifier settles resolution; the local tables
-                                             // are never candidates). An unmatched qualifier is
+                                             // target at Certain. A matched qualifier settles
+                                             // resolution hit or miss — the local tables are
+                                             // never candidates — WHEN the import that
+                                             // registered it is Certain: a statement the file
+                                             // makes names a closed namespace. An import the
+                                             // adapter reconstructed from a use site
+                                             // (non-Certain) does not settle; its miss keeps
+                                             // falling through (RFC 0012 §9-ter).
+                                             // An unmatched qualifier is
                                              // a receiver expression: member access by
                                              // construction — skips free-name tables, goes
                                              // straight to the §3 member fallback.
@@ -314,7 +320,11 @@ pub struct FileFacts {
                                              // qualifier from the resolved target's own
                                              // unit_name, fixing dir≠package specifiers
                                              // (gopkg.in/yaml.v3 binds as `yaml`). JS/TS
-                                             // (name-binding imports) always None.
+                                             // (name-binding imports) always None. An import
+                                             // RECONSTRUCTED from a use site sets it too — the
+                                             // segment that site qualifies by, which only the
+                                             // adapter can identify; the core does not split
+                                             // specifiers on any separator (RFC 0012 §9-ter).
                                              // kind is syntactic shape only — Stdlib is a
                                              // resolve()-time fact, never claimed here.
                                              // ImportBinding { local, imported: Option<Name> } —
