@@ -294,6 +294,12 @@ pub(crate) struct ResolveTables<'a> {
     pub(crate) unit_name_by_file: &'a [Option<SmolStr>],
     pub(crate) ladders:
         &'a std::collections::BTreeMap<SmolStr, Vec<crate::adapter::VisibilityRung>>,
+    /// Per-language member-type facts about types the language PROVIDES, which no file
+    /// declares (`AdapterDescriptor::builtin_member_types`). Consulted by [`chain_hop`] after
+    /// the owner's home file, and the only tier that can apply when the owner name resolves
+    /// to no symbol at all — which is every stdlib type. Same data-on-the-descriptor path as
+    /// `ladders`, keyed the same way.
+    pub(crate) builtin_member_types: &'a std::collections::BTreeMap<SmolStr, MemberTypeIndex>,
     /// Workspace executable name → entry file (the invoked-program rule) — what
     /// a file's `invoked_executables` names resolve against. See [`executable_name_index`].
     pub(crate) executable_by_name: &'a HashMap<SmolStr, FileId>,
@@ -341,6 +347,7 @@ pub(crate) fn resolve_imports(
         file_unit,
         unit_name_by_file,
         ladders: _,
+        builtin_member_types: _,
         executable_by_name,
         ctx,
     } = t;
@@ -621,6 +628,7 @@ pub(crate) fn resolve_references(
         file_unit,
         unit_name_by_file: _,
         ladders,
+        builtin_member_types: _,
         executable_by_name: _,
         ctx: _,
     } = t;
@@ -1353,7 +1361,9 @@ pub(crate) fn in_scope_member_targets(
     // that type, not on the function. A function with no such fact keeps the old reading
     // (nothing named `fn.member` exists, so the lookup misses into the duck fallback).
     let projection = qualified_projection.or(base_projection);
-    let bound = call_yield(bound, projection, bound_symbols, i, t).unwrap_or(bound);
+    let bound = call_yield(bound, projection, bound_symbols, i, t)
+        .and_then(|step| step.symbol)
+        .unwrap_or(bound);
     let owner = &t.symbols[bound.0 as usize];
     let home = owner.file.0 as usize;
     qualified_member_targets(
@@ -1420,12 +1430,58 @@ pub(crate) fn call_yield(
     bound_symbols: &HashMap<SmolStr, SymbolId>,
     i: usize,
     t: &ResolveTables<'_>,
-) -> Option<SymbolId> {
+) -> Option<ChainStep> {
     let function = &t.symbols[symbol.0 as usize];
     let home = function.file.0 as usize;
     let fact = t.member_types_per_file[home].get(&(None, function.name.clone()))?;
-    let type_name = hop_type_name(fact, projection)?;
-    resolve_annotation_name(type_name, home, bound_symbols, i, t)
+    // No receiver to substitute from: a free function's fact that names a parameter of
+    // something is naming nothing here, and `Unknown` is the honest reading.
+    let yielded = fact.substitute(&crate::adapter::TypeExpr::Unknown);
+    let projected = project(&yielded, projection)?;
+    Some(ChainStep::resolve(
+        projected.clone(),
+        home,
+        bound_symbols,
+        i,
+        t,
+    ))
+}
+
+/// Where a chain currently stands: the TYPE it has reached, and — when that type's head name
+/// resolves to a declaration in this project — the symbol whose home file carries its member
+/// table. The two are separate because they genuinely can be: `Vec<TreeEntry>` is a type this
+/// project never declares, so it has no symbol, and yet the chain has to keep walking through
+/// it to reach the `TreeEntry` inside. A chain whose state was a `SymbolId` could not hold
+/// that, which is the whole reason the state is a type now.
+#[derive(Clone)]
+pub(crate) struct ChainStep {
+    pub(crate) ty: crate::adapter::TypeExpr,
+    /// The declaration this type's head name refers to, when the project declares one.
+    pub(crate) symbol: Option<SymbolId>,
+    /// The file this type was WRITTEN in — where its names mean what they mean. A builtin
+    /// hop introduces no new one: `Vec<TreeEntry>`'s `TreeEntry` was written wherever the
+    /// receiver's own fact was, and resolving it against the reference site instead found
+    /// nothing (the site imports the container's owner, not every type inside it).
+    pub(crate) home: usize,
+}
+
+impl ChainStep {
+    /// Resolve a type's head name where the annotation was WRITTEN (`home`), then in the
+    /// reference site's own scope — the same two-place rule [`resolve_annotation_name`] has
+    /// always applied. A head that resolves nowhere is not a failure: a type the language
+    /// provides never resolves, and the chain keeps walking through its arguments.
+    fn resolve(
+        ty: crate::adapter::TypeExpr,
+        home: usize,
+        bound_symbols: &HashMap<SmolStr, SymbolId>,
+        i: usize,
+        t: &ResolveTables<'_>,
+    ) -> ChainStep {
+        let symbol = ty
+            .name()
+            .and_then(|n| resolve_annotation_name(n, home, bound_symbols, i, t));
+        ChainStep { ty, symbol, home }
+    }
 }
 
 /// A dotted qualifier pointer `Base.member` (the cross-file tier): the
@@ -1449,27 +1505,41 @@ pub(crate) fn chained_member_targets(
     else {
         return (Vec::new(), Vec::new());
     };
-    let mut current = base_symbol;
     let mut yielded_types = Vec::new();
+    let mut current = ChainStep {
+        ty: crate::adapter::TypeExpr::named(t.symbols[base_symbol.0 as usize].name.clone()),
+        symbol: Some(base_symbol),
+        home: t.symbols[base_symbol.0 as usize].file.0 as usize,
+    };
     // The base may itself be a call whose result the chain continues from
     // (`parse_entry.parent.name`). Same hop, same credit: the yielded type is READ here.
     let projection = qualified_projection.or(base_projection);
     if let Some(yielded) = call_yield(base_symbol, projection, bound_symbols, i, t) {
+        if let Some(s) = yielded.symbol {
+            yielded_types.push(s);
+        }
         current = yielded;
-        yielded_types.push(yielded);
     }
     for segment in segments {
-        let Some(next) = chain_hop(current, segment, bound_symbols, i, t) else {
+        let Some(next) = chain_hop(&current, segment, bound_symbols, i, t) else {
             return (Vec::new(), yielded_types);
         };
+        if let Some(s) = next.symbol {
+            yielded_types.push(s);
+        }
         current = next;
-        yielded_types.push(next);
     }
-    let home = t.symbols[current.0 as usize].file.0 as usize;
+    // Members live on a DECLARED type. A chain that ends on a stdlib type it walked through
+    // (`Vec<TreeEntry>` with no further segment) has no member table to consult — silence,
+    // which is the same answer the duck fallback gives.
+    let Some(landed) = current.symbol else {
+        return (Vec::new(), yielded_types);
+    };
+    let home = t.symbols[landed.0 as usize].file.0 as usize;
     let members = qualified_member_targets(
         &t.symbol_by_qualified_per_file[home],
         &t.qualified_twins_per_file[home],
-        format!("{}.{}", t.symbols[current.0 as usize].name, name).as_str(),
+        format!("{}.{}", t.symbols[landed.0 as usize].name, name).as_str(),
     );
     (members, yielded_types)
 }
@@ -1482,19 +1552,41 @@ pub(crate) fn chained_member_targets(
 /// shape (the field's type imported by the very file doing the access) makes the site's
 /// bindings the right stand-in.
 pub(crate) fn chain_hop(
-    current: SymbolId,
+    current: &ChainStep,
     segment: &str,
     bound_symbols: &HashMap<SmolStr, SymbolId>,
     i: usize,
     t: &ResolveTables<'_>,
-) -> Option<SymbolId> {
+) -> Option<ChainStep> {
     let (member, projection) = split_projection(segment);
-    let owner = &t.symbols[current.0 as usize];
-    let home = owner.file.0 as usize;
-    let fact =
-        t.member_types_per_file[home].get(&(Some(owner.name.clone()), SmolStr::new(member)))?;
-    let type_name = hop_type_name(fact, projection)?;
-    resolve_annotation_name(type_name, home, bound_symbols, i, t)
+    let key = (Some(current.ty.name()?.clone()), SmolStr::new(member));
+    // The owner's own home file first — a fact written beside the declaration is the
+    // authority on it. Then the language's builtin table, which is the ONLY tier that can
+    // apply when the head resolves to no declaration at all: `Result` and `Vec` have no home
+    // file in this project, and a chain that crosses one used to stop dead there.
+    let home = current
+        .symbol
+        .map(|s| t.symbols[s.0 as usize].file.0 as usize);
+    let fact = home
+        .and_then(|home| t.member_types_per_file[home].get(&key))
+        .or_else(|| {
+            t.files[i]
+                .language
+                .as_ref()
+                .and_then(|lang| t.builtin_member_types.get(lang))
+                .and_then(|table| table.get(&key))
+        })?;
+    // The fact may state a RELATIONSHIP rather than a concrete type ("still a `Result` over
+    // the same `T`"); the receiver's own arguments make it concrete.
+    let yielded = fact.substitute(&current.ty);
+    let projected = project(&yielded, projection)?;
+    Some(ChainStep::resolve(
+        projected.clone(),
+        home.unwrap_or(current.home),
+        bound_symbols,
+        i,
+        t,
+    ))
 }
 
 /// A segment's projection marker, purely structural: `member` → none, `member?` → parameter
@@ -1519,15 +1611,17 @@ pub(crate) fn projection_index(index: &str) -> Option<usize> {
     }
 }
 
-/// The type a hop lands on: the projected type parameter under a `?N` marker, the yielded
-/// type itself otherwise.
-pub(crate) fn hop_type_name(
-    fact: &(SmolStr, Vec<SmolStr>),
+/// The type a hop lands on: argument N of the yielded type under a `?N` marker, the yielded
+/// type itself otherwise. What comes back is a whole SUBTREE — `Result<Vec<TreeEntry>, E>`
+/// projected at 0 is `Vec<TreeEntry>`, still carrying the argument a one-level list threw
+/// away, which is what lets the next hop keep going.
+pub(crate) fn project(
+    yielded: &crate::adapter::TypeExpr,
     projection: Option<usize>,
-) -> Option<&SmolStr> {
+) -> Option<&crate::adapter::TypeExpr> {
     match projection {
-        Some(n) => fact.1.get(n),
-        None => Some(&fact.0),
+        Some(n) => yielded.arg(n),
+        None => Some(yielded),
     }
 }
 
@@ -1547,20 +1641,15 @@ pub(crate) fn resolve_annotation_name(
         .copied()
 }
 
-/// One file's member-type facts as a lookup: (owner, member) → (yields, yields_params).
+/// One file's member-type facts as a lookup: (owner, member) → the type it yields.
 /// A `None` owner is a FREE FUNCTION fact — "calling this evaluates to that" (see
 /// [`crate::adapter::RawMemberType::owner`] and [`call_yield`]).
-pub(crate) type MemberTypeIndex = HashMap<(Option<SmolStr>, SmolStr), (SmolStr, Vec<SmolStr>)>;
+pub(crate) type MemberTypeIndex = HashMap<(Option<SmolStr>, SmolStr), crate::adapter::TypeExpr>;
 
 pub(crate) fn index_member_types(entries: &[crate::adapter::RawMemberType]) -> MemberTypeIndex {
     entries
         .iter()
-        .map(|m| {
-            (
-                (m.owner.clone(), m.member.clone()),
-                (m.yields.clone(), m.yields_params.clone()),
-            )
-        })
+        .map(|m| ((m.owner.clone(), m.member.clone()), m.yields.clone()))
         .collect()
 }
 
@@ -1654,7 +1743,7 @@ pub(crate) fn surface_signature(
         dynamics: Vec<(&'a str, Option<&'a str>)>,
         /// Member-type facts are cross-file resolution inputs: a changed
         /// field/return annotation changes what other files' chained qualifiers resolve to.
-        member_types: Vec<(Option<&'a str>, &'a str, &'a str, Vec<&'a str>)>,
+        member_types: Vec<(Option<&'a str>, &'a str, &'a crate::adapter::TypeExpr)>,
     }
     let view = View {
         adapter_id,
@@ -1720,14 +1809,7 @@ pub(crate) fn surface_signature(
         member_types: facts
             .member_types
             .iter()
-            .map(|m| {
-                (
-                    m.owner.as_deref(),
-                    m.member.as_str(),
-                    m.yields.as_str(),
-                    m.yields_params.iter().map(SmolStr::as_str).collect(),
-                )
-            })
+            .map(|m| (m.owner.as_deref(), m.member.as_str(), &m.yields))
             .collect(),
     };
     let bytes = bincode::serialize(&view).unwrap_or_default();
@@ -1837,7 +1919,7 @@ pub(crate) fn promote_package_relative_test_roles<'a>(
 /// an assembly-algorithm change that could produce a different graph from the same facts. Feeds
 /// [`compute_graph_key`] (the "core graph-schema version"); a bump here invalidates
 /// every project's cached `graph.bin` on the next run, same as any other key-input change.
-pub const GRAPH_SCHEMA_VERSION: u32 = 31; // bump whenever the persisted snapshot shape (rkyv layouts included) or the assembly semantics that derive a graph from the same facts change
+pub const GRAPH_SCHEMA_VERSION: u32 = 32; // bump whenever the persisted snapshot shape (rkyv layouts included) or the assembly semantics that derive a graph from the same facts change
 
 /// The graph snapshot's cache key (`cache.rs`'s `graph.bin`): a single digest
 /// folding in the *whole* discovered file set (every path + content hash — this already
@@ -2641,6 +2723,10 @@ pub fn assemble_from_source(
         std::collections::BTreeMap::new();
     let mut cycle_policies: std::collections::BTreeMap<SmolStr, crate::adapter::CyclePolicy> =
         std::collections::BTreeMap::new();
+    // The language's own facts about the types it PROVIDES, indexed the same way its
+    // per-file facts are, so `chain_hop` consults one shape from two places.
+    let mut builtin_member_types: std::collections::BTreeMap<SmolStr, MemberTypeIndex> =
+        std::collections::BTreeMap::new();
     for slot in claimed_per_file.iter().flatten() {
         let descriptor = adapters[slot.adapter_index].descriptor();
         ladders
@@ -2649,6 +2735,9 @@ pub fn assemble_from_source(
         cycle_policies
             .entry(slot.claim.language.clone())
             .or_insert(descriptor.cycle_policy);
+        builtin_member_types
+            .entry(slot.claim.language.clone())
+            .or_insert_with(|| index_member_types(&descriptor.builtin_member_types));
     }
 
     // Phase 3a — symbols (Declares edges) and in-source roots, sequentially in FileId order.
@@ -3084,6 +3173,7 @@ pub fn assemble_from_source(
         file_unit: &file_unit,
         unit_name_by_file: &unit_name_by_file,
         ladders: &ladders,
+        builtin_member_types: &builtin_member_types,
         executable_by_name: &executable_by_name,
         ctx: &ctx,
     };

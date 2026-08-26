@@ -751,7 +751,7 @@ fn an_unwrap_marked_hop_resolves_through_the_payload_parameter() {
             (
                 "b.mock",
                 "decl Config\ndecl ConfiguredHIR\n\
-                 member-type Config build Result ConfiguredHIR\n\
+                 member-type Config build Result<ConfiguredHIR>\n\
                  member-decl-exported ConfiguredHIR line_terminator",
             ),
         ],
@@ -789,7 +789,7 @@ fn an_indexed_projection_selects_that_type_parameter() {
             (
                 "b.mock",
                 "decl Registry\ndecl Key\ndecl Value\n\
-                 member-type Registry get Map Key,Value\n\
+                 member-type Registry get Map<Key,Value>\n\
                  member-decl-exported Value into_bytes",
             ),
         ],
@@ -1065,7 +1065,7 @@ fn a_call_yield_projects_through_the_unwrap_marker() {
             ),
             (
                 "b.mock",
-                "decl build\ncall-type build Result Config,Error\ndecl Config\nmember-decl-exported Config separator",
+                "decl build\ncall-type build Result<Config,Error>\ndecl Config\nmember-decl-exported Config separator",
             ),
         ],
     );
@@ -1099,6 +1099,31 @@ fn a_pointer_base_may_be_a_qualifier_rather_than_a_symbol() {
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     let edges = reference_edges_to(&graph, "dirs");
     assert_eq!(edges.len(), 1);
+    assert_eq!(edges[0].confidence, Confidence::Certain);
+}
+
+#[test]
+fn a_hop_through_a_language_provided_type_reaches_the_element() {
+    // `Box<Item>` is a type no file declares — it has no home to hold a fact — so the chain
+    // used to stop dead on it and everything behind it read as unused. The adapter's builtin
+    // table says what iterating one yields, in terms of its own argument, and the argument
+    // comes from the receiver: the two halves of `internal/detection-gaps.md` §3's last case.
+    let dir = project(
+        "builtin-element",
+        &[
+            (
+                "a.mock",
+                "import ./b.mock make\nqref make.@element field\nroot-file",
+            ),
+            (
+                "b.mock",
+                "decl make\ncall-type make Box<Item>\ndecl Item\nmember-decl-exported Item field",
+            ),
+        ],
+    );
+    let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
+    let edges = reference_edges_to(&graph, "field");
+    assert_eq!(edges.len(), 1, "the element hop must reach the member");
     assert_eq!(edges[0].confidence, Confidence::Certain);
 }
 

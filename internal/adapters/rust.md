@@ -317,10 +317,23 @@ facts (and also credits the *yielded type* with a Read from the site: consuming 
 through a field IS a use of its type). Fact-first ordering: pointer, then the TypeEnv's
 direct type, then the opaque receiver (duck fallback).
 
-**Payload unwrapping (`yields_params`)**: a parameterized annotation also records its type
-arguments, in order (`Result<ConfiguredHIR, Error>` → params `[ConfiguredHIR, Error]`;
-`Box`/`Rc`/`Arc` are looked through), and an unwrapping operation marks its pointer hop
-with `?N` — the index of the parameter it extracts. The try operator extracts the success
+**The language's own generics (`builtin_member_types`)** — `Result<T, E>::map_err` still yields a
+`Result` over the same `T`; a `Vec<T>` iterates to its `T`. Those are facts about types whose
+declaration lives in the standard library, so no file here can emit them and they are declared on
+the descriptor instead. Two names in that table are this adapter's own choice and mean nothing to
+the core, which sees them as ordinary members: `@element` is the hop an iteration takes (a
+container that declares none simply does not type its loop variable — a map iterates to a tuple,
+which the model cannot name, and silence beats a confident wrong element), and `@slice` names the
+anonymous slice/array type so it can carry an `@element` like any other container. The table is
+deliberately small and grows only on measured evidence, the same discipline as the machinery-trait
+list — it is a curated set of facts, not a model of the standard library.
+
+**Payload unwrapping (`yields`'s arguments)**: an annotation is recorded as a TREE, not a base
+name plus a flat list — `Result<Vec<TreeEntry>, GitError>` keeps the `TreeEntry` two levels down,
+which is what a one-level list threw away and could never give back (`Box`/`Rc`/`Arc` are still
+looked through, and a lifetime or fn type holds its POSITION as `Unknown` so `?N` keeps indexing
+the arguments as written). An unwrapping operation marks its pointer hop
+with `?N` — the index of the argument it extracts, landing on a whole subtree. The try operator extracts the success
 payload, parameter 0 (`?` is shorthand for `?0`): `let chir = self.config.build_many(x)?`
 binds `chir` to `Config.build_many?`, resolved by the core through that parameter instead
 of the wrapper. WHICH index an operation projects is this adapter's knowledge — the core

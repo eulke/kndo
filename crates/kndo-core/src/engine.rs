@@ -1883,6 +1883,7 @@ mod tests {
                 },
                 resolves_dependency_usage: true,
                 package_test_dirs: Vec::new(),
+                builtin_member_types: Vec::new(),
             }
         }
         fn claim(&self, path: &ProjectPath) -> Option<crate::adapter::FileClaim> {
@@ -1950,6 +1951,7 @@ mod tests {
                 },
                 resolves_dependency_usage: true,
                 package_test_dirs: Vec::new(),
+                builtin_member_types: Vec::new(),
             }
         }
         fn claim(&self, path: &ProjectPath) -> Option<crate::adapter::FileClaim> {

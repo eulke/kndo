@@ -18,6 +18,54 @@ use crate::adapter::*;
 use crate::vocab::*;
 use smol_str::SmolStr;
 
+/// Parses the DSL's type-expression syntax: `TreeEntry`, `Vec<TreeEntry>`,
+/// `Result<Vec<TreeEntry>,?>`, `Result<#0,?>`. `#N` is [`TypeExpr::Param`] (the argument of
+/// the type this fact is about) and `?` is [`TypeExpr::Unknown`] — the two forms a fact needs
+/// to state a relationship rather than a concrete type.
+fn parse_type_expr(text: &str) -> TypeExpr {
+    let text = text.trim();
+    if text == "?" || text.is_empty() {
+        return TypeExpr::Unknown;
+    }
+    if let Some(n) = text.strip_prefix('#') {
+        return n.parse().map(TypeExpr::Param).unwrap_or(TypeExpr::Unknown);
+    }
+    let Some(open) = text.find('<') else {
+        return TypeExpr::named(text);
+    };
+    let name = &text[..open];
+    let inner = text[open + 1..]
+        .strip_suffix('>')
+        .unwrap_or(&text[open + 1..]);
+    TypeExpr::Named {
+        name: SmolStr::new(name),
+        args: split_type_args(inner)
+            .into_iter()
+            .map(parse_type_expr)
+            .collect(),
+    }
+}
+
+/// Splits `A,B<C,D>,E` at the commas that sit at nesting depth zero.
+fn split_type_args(inner: &str) -> Vec<&str> {
+    let (mut out, mut depth, mut start) = (Vec::new(), 0usize, 0usize);
+    for (i, c) in inner.char_indices() {
+        match c {
+            '<' => depth += 1,
+            '>' => depth = depth.saturating_sub(1),
+            ',' if depth == 0 => {
+                out.push(&inner[start..i]);
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    if start <= inner.len() {
+        out.push(&inner[start..]);
+    }
+    out
+}
+
 pub struct MockAdapter;
 
 impl LanguageAdapter for MockAdapter {
@@ -48,6 +96,29 @@ impl LanguageAdapter for MockAdapter {
             },
             resolves_dependency_usage: true,
             package_test_dirs: Vec::new(),
+            // The mock's "standard library": a container that iterates to its own element,
+            // and a wrapper whose `unwrap` gives it back. Enough to exercise the tier and the
+            // `Param` substitution behind it — the same shapes a real adapter declares.
+            builtin_member_types: vec![
+                crate::adapter::RawMemberType {
+                    owner: Some(SmolStr::new("Box")),
+                    member: SmolStr::new("@element"),
+                    yields: TypeExpr::Param(0),
+                },
+                crate::adapter::RawMemberType {
+                    owner: Some(SmolStr::new("Wrapper")),
+                    member: SmolStr::new("unwrap"),
+                    yields: TypeExpr::Param(0),
+                },
+                crate::adapter::RawMemberType {
+                    owner: Some(SmolStr::new("Wrapper")),
+                    member: SmolStr::new("relabel"),
+                    yields: TypeExpr::Named {
+                        name: SmolStr::new("Wrapper"),
+                        args: vec![TypeExpr::Param(0), TypeExpr::Unknown],
+                    },
+                },
+            ],
         }
     }
 
@@ -295,28 +366,20 @@ impl LanguageAdapter for MockAdapter {
             } else if let Some(rest) = line.strip_prefix("call-type ") {
                 // `call-type <fn> <yields> [p0,p1,…]` — a FREE FUNCTION's member-type fact:
                 // calling it evaluates to `yields`. The `None`-owner form.
-                let mut parts = rest.splitn(3, ' ');
+                let mut parts = rest.splitn(2, ' ');
                 facts.member_types.push(crate::adapter::RawMemberType {
                     owner: None,
                     member: SmolStr::new(parts.next().unwrap_or("")),
-                    yields: SmolStr::new(parts.next().unwrap_or("")),
-                    yields_params: parts
-                        .next()
-                        .map(|list| list.split(',').map(SmolStr::new).collect())
-                        .unwrap_or_default(),
+                    yields: parse_type_expr(parts.next().unwrap_or("")),
                 });
             } else if let Some(rest) = line.strip_prefix("member-type ") {
-                // `member-type <owner> <member> <yields> [p0,p1,…]` — a member-type
-                // fact; the optional 4th token lists the type parameters in order.
-                let mut parts = rest.splitn(4, ' ');
+                // `member-type <owner> <member> <type>` — a member-type fact. The type is a
+                // full expression: `Vec<TreeEntry>`, `Result<Vec<TreeEntry>,?>`.
+                let mut parts = rest.splitn(3, ' ');
                 facts.member_types.push(crate::adapter::RawMemberType {
                     owner: Some(SmolStr::new(parts.next().unwrap_or(""))),
                     member: SmolStr::new(parts.next().unwrap_or("")),
-                    yields: SmolStr::new(parts.next().unwrap_or("")),
-                    yields_params: parts
-                        .next()
-                        .map(|list| list.split(',').map(SmolStr::new).collect())
-                        .unwrap_or_default(),
+                    yields: parse_type_expr(parts.next().unwrap_or("")),
                 });
             } else if let Some(name) = line.strip_prefix("invokes-executable ") {
                 // A declared subprocess invocation of a workspace executable target

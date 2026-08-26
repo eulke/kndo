@@ -52,38 +52,54 @@ ecosystem — "a type named in `#[rkyv(with = …)]` has its trait-impl members
 machinery-invoked," the same curated-list pattern as `implicitly_invoked` for operator
 overloads/formatting hooks. Acknowledged with a file pragma in `rkyv_support.rs`.
 
-## 3. Field-access recall on inferred-typed locals (3 de 4 CERRADOS)
+## 3. Field-access recall on inferred-typed locals (RESUELTO)
 
 A struct whose fields are only ever read through a local of *inferred* type never showed field
 usage: in `let entry = parse_entry(..); entry.path`, the receiver's type comes from the callee's
 return type, which the extraction-side `TypeEnv` didn't chase — so the field reference landed in
 the duck fallback (or nowhere), and `internal-only` saw "no use requires this visibility". Four
-live cases in this repo, each acknowledged with a declaration pragma.
+live cases in this repo, each acknowledged with a declaration pragma. **Los cuatro pragmas ya no
+existen.**
 
-**Lo que cerró, y el mecanismo de cada uno.** `RawMemberType::owner` pasó a `Option`: `None`
+**La primera mitad** (RFC 0012 §3-ter): `RawMemberType::owner` pasó a `Option`, donde `None`
 significa *función libre* — "llamar a esto evalúa a T", el mismo enunciado sobre el tipo de un
 valor que `Some(owner)` hace sobre un miembro, así que el core lo camina con la misma maquinaria
-de cadena, aplicada a la BASE del puntero un paso antes de donde `chain_hop` actúa sobre un
-segmento (RFC 0012 §3-ter). Sobre eso:
+de cadena, aplicada a la BASE del puntero. Con eso, más que la base de un puntero pueda ser un
+**qualifier** y no un símbolo (Rust llega a funciones libres por su módulo constantemente), y más
+`#[derive(Default)]` como hecho declarado y la variable de un `for` proyectando el elemento del
+iterable, cerraron `rollup::DirRollup`, `ContributedRoot` y `ContributedEdge`.
 
-- **`rollup::DirRollup`** — pedía que la base de un puntero pudiera ser un **qualifier** y no un
-  símbolo: `use …::rollup;` liga el módulo, nunca `directory_rollups`, así que el puntero moría en
-  su primer segmento. `pointer_base` resuelve la base contra la tabla de qualifiers y consume el
-  segmento siguiente como el símbolo dentro de ese archivo.
-- **`ContributedRoot` / `ContributedEdge`** — pedían dos cosas: que `#[derive(Default)]` sea un
-  hecho declarado (`RootSink::default()` apuntaba a un miembro que ningún impl declara) y que la
-  variable de un `for` proyecte el elemento del iterable.
-- **`gitutil::TreeEntry`** — sigue abierto, y es el único. Se lee por
-  `ls_tree(..).map_err(..)?` y después se itera: el tipo del elemento es un parámetro de un
-  parámetro (`Result<Vec<TreeEntry>, GitError>`) y `yields_params` guarda **un solo nivel**, así
-  que el `TreeEntry` no está en los hechos — se perdió al aplanar. Cerrarlo pide que la cadena
-  lleve una *expresión de tipo* en vez de un nombre, y que el adapter pueda declarar qué hacen los
-  genéricos de la stdlib. Es un cambio de contrato propio con su propia medición; el pragma en
-  `crates/kndo-core/src/gitutil.rs` dice exactamente eso.
+**La segunda mitad** (RFC 0012 §3-quater) cerró `gitutil::TreeEntry`, que necesitaba un cambio de
+contrato porque **el hecho no era representable**: se lee por `ls_tree(..).map_err(..)?` y después
+se itera, y el tipo del elemento es un parámetro de un parámetro
+(`Result<Vec<TreeEntry>, GitError>`). `yields` guardaba un nombre base más una lista de un nivel,
+así que el `TreeEntry` no estaba en los hechos — se había perdido al aplanar, y ninguna proyección
+puede recuperar lo que nunca se guardó. Aplanar no era un detalle de representación: era la causa.
+
+Ahora `yields` es un `TypeExpr` (`Named { name, args }` | `Param(N)` | `Unknown`) y el estado de
+la cadena es un tipo, no un símbolo — porque `Vec<TreeEntry>` es un tipo que este proyecto no
+declara y la cadena igual tiene que caminar *a través* de él. Sobre eso, dos piezas más: los
+hechos sobre los genéricos que **provee el lenguaje** viven en el descriptor
+(`builtin_member_types`, el segundo tier — el único que puede aplicar cuando la cabeza no resuelve
+a ninguna declaración), y `Param(N)` deja que un hecho enuncie una *relación* ("sigue siendo un
+`Result` sobre el mismo argumento 0") que los argumentos del receptor vuelven concreta. Iterar no
+necesitó sintaxis nueva: es un segmento de miembro común cuyo nombre elige el adapter en los dos
+lados (`@element`), declarado por contenedor — un mapa no lo declara y su variable de loop
+simplemente no tipa, en vez de tipar mal.
 
 **Medición.** kndo sobre sí mismo queda en 37 findings / health 96.6 — idéntico al baseline — con
-**tres pragmas menos**. Que el número no se mueva es el punto: los tres tipos dejaron de necesitar
-supresión porque el grafo ahora ve a sus consumidores, no porque se haya silenciado nada.
+**cero pragmas de §3**. Que el número no se mueva es el punto: los cuatro tipos dejaron de
+necesitar supresión porque el grafo ahora ve a sus consumidores, no porque se haya silenciado
+nada. La única supresión que quedó en pie es de otra especie y lo dice: `FlatAtom`
+(`rkyv_support.rs`) es `pub(crate)` porque Rust lo exige para el tipo asociado de un impl
+`pub(crate)`, y el angostamiento que el finding aconseja no es expresable.
+
+**Lo que sigue fuera de alcance, dicho explícitamente.** Los genéricos declarados por el usuario
+(`struct Wrapper<T> { inner: T }`) necesitarían `Declaration::type_params` para sustituir `T`
+desde el receptor. El diseño es forward-compatible — la sustitución ya existe, sólo falta de dónde
+sacar los nombres — pero nada en el corpus lo pide, y agregarlo ahora sería adivinar. Y un local
+anotado `Vec<T>` no tipa su variable de loop: el binding del `TypeEnv` guarda sólo el nombre base
+(es lo que termina siendo un `scope_context`), así que el argumento ya se perdió antes.
 
 ## 4. Recall asymmetry — the regression corpus
 
@@ -93,10 +109,15 @@ draws **no** finding today (its usage happens to resolve through a path the fall
 catches). Any change to reference recall should check both directions on these sites — the
 goal is symmetric behavior, not moving the false positives around.
 
-**Medido para §3.** `BlobFetcher::spawn` sigue sin producir finding, y los otros seis targets del
-audit (serde 348, alacritty 994, axios 72, Exposed 1128, kotlinx.coroutines 2904, vapor 764) no se
-movieron en ninguna dirección: ni un finding nuevo ni uno perdido. La simetría es el resultado, no
-una intención.
+**Medido para §3, en sus dos mitades.** `BlobFetcher::spawn` sigue sin producir finding, y los
+otros seis targets del audit (serde 348, alacritty 994, axios 72, Exposed 1128,
+kotlinx.coroutines 2904, vapor 764) no se movieron en ninguna dirección — ni un finding nuevo ni
+uno perdido — ni cuando aterrizó `call_yield` ni cuando la cadena pasó a llevar un tipo. La
+simetría es el resultado, no una intención.
+
+Vale registrar lo que atrapó la segunda medición: la propia herramienta reportó `type_param_names`
+y `generic_param_names` como `unused` apenas `type_expr` los reemplazó. Eran código muerto que yo
+había dejado, y kndo lo encontró antes que la revisión — el dogfood haciendo su trabajo.
 
 ## 5. Duplicate-group label ambiguity
 

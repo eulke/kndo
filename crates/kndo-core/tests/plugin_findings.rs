@@ -39,6 +39,7 @@ impl LanguageAdapter for MiniAdapter {
             },
             resolves_dependency_usage: false,
             package_test_dirs: Vec::new(),
+            builtin_member_types: Vec::new(),
         }
     }
 

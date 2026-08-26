@@ -140,6 +140,20 @@ pub trait LanguageAdapter: Send + Sync {
     // package anchor at the project root. Promotion only — a file already test- or
     // tooling-role is never demoted, so a nested package whose sources live under an
     // ancestor's tests/ tree keeps its own classification.
+    // builtin_member_types: member-type facts about the types the LANGUAGE provides, which no
+    // file in the project declares — the same (owner, member, yields) shape as
+    // FileFacts::member_types, declared once here because there is no home file to hang them
+    // on. Result<T,E>::map_err still yields a Result over the same T; a Vec<T> iterates to its
+    // T. Same data-on-the-descriptor pattern as the ladder and the cycle policy: the knowledge
+    // is the adapter's (it is ITS language's standard library), the core gets a second lookup
+    // tier keyed by claim language, consulted after the owner's home file and the only one
+    // that can apply when the owner name resolves to no declaration at all. Two conventions
+    // the core is blind to: TypeExpr::Param says "the same argument the receiver had", and an
+    // adapter may name an operation or an anonymous type with a string of its own choosing
+    // (Rust's @element for iteration, @slice for &[T]) as long as it emits that same string on
+    // the reference side — a member is a member, the core never interprets the name. Keep the
+    // table small and evidence-driven, like the machinery-trait list: a fact earns its place
+    // by closing a measured case, not by completing an API surface.
 
     /// Claim & classify a path (fast; name-based, content peeking only when unavoidable).
     fn claim(&self, path: &ProjectPath) -> Option<FileClaim>;   // { language, class: FileClass }
@@ -196,7 +210,7 @@ pub trait LanguageAdapter: Send + Sync {
 
 ```rust
 pub struct FileFacts {
-    pub member_types: Vec<RawMemberType>,   // { owner: Option<Name>, member, yields, yields_params }
+    pub member_types: Vec<RawMemberType>,   // { owner: Option<Name>, member, yields: TypeExpr }
                                             // — what accessing owner.member evaluates to (field
                                             // types, method returns). owner NONE = a free
                                             // FUNCTION: "calling this evaluates to yields", the
@@ -204,8 +218,16 @@ pub struct FileFacts {
                                             // same chain machinery — it just applies where a
                                             // pointer's BASE names the function, before any member
                                             // segment (`let e = parse_entry(..); e.path`).
-                                            // yields_params: the annotation's type arguments in
-                                            // order, projected by `?N` pointer markers;
+                                            // yields is a TREE, because a type is one:
+                                            // Named { name, args } | Param(N) | Unknown.
+                                            // `?N` projects argument N and lands on a SUBTREE
+                                            // with its own arguments intact — Result<Vec<T>, E>
+                                            // at 0 is Vec<T>, which a flat list could not say.
+                                            // Param(N) states a RELATIONSHIP rather than a type
+                                            // ("still a Result over the same T"), substituted
+                                            // against the receiver's own arguments at the hop;
+                                            // Unknown is a type the fact cannot name, explicit so
+                                            // no fact has to lie about its arity to stay silent.
                                             // RFC 0012 §3-bis
     pub invoked_executables: Vec<SmolStr>,  // workspace executable targets this file runs as a
                                             // subprocess (Rust: env!("CARGO_BIN_EXE_<name>")) —

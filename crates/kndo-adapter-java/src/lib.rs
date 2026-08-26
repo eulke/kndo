@@ -96,6 +96,9 @@ impl LanguageAdapter for JavaAdapter {
             // unused/test-only verdicts would be a false-positive flood if attempted here.
             resolves_dependency_usage: false,
             package_test_dirs: Vec::new(),
+            // No builtin type facts yet: this adapter declares none, and an empty table
+            // simply means the chain resolver has no second tier to consult for it.
+            builtin_member_types: Vec::new(),
         }
     }
 

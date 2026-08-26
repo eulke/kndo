@@ -81,6 +81,28 @@ pub struct AdapterDescriptor {
     /// the toolkit's `PathPatterns::test_dirs`, which matches the segment anywhere in the
     /// path — right for conventions like `__tests__/` that hold at any depth.
     pub package_test_dirs: Vec<SmolStr>,
+    /// Member-type facts about types the LANGUAGE provides, which no file in the project
+    /// declares — the same `(owner, member, yields)` shape as [`FileFacts::member_types`],
+    /// declared once here because there is no home file to hang them on. `Result<T, E>`'s
+    /// `map_err` still yields a `Result` over the same `T`; a `Vec<T>` iterates to its `T`.
+    /// Without them a chain that crosses one stdlib call stops dead, and the type behind it
+    /// reads as consumed only where it is declared.
+    ///
+    /// Same data-on-the-descriptor pattern as the ladder and the cycle policy: the knowledge
+    /// is the adapter's (it is *its* language's standard library), the core just gets a
+    /// second lookup tier keyed by claim language, consulted after the owner's home file and
+    /// the only one that can apply when the owner name resolves to no symbol at all.
+    ///
+    /// Two conventions worth stating because the core is blind to both: a fact may use
+    /// [`TypeExpr::Param`] to say "the same argument the receiver had", and an adapter may
+    /// name an operation or an anonymous type with a string of its own choosing (Rust's
+    /// `@element` for iteration, `@slice` for `&[T]`) as long as it emits the same string on
+    /// the reference side. The core never interprets either — a member is a member.
+    ///
+    /// Keep it small and evidence-driven. This is a curated table like the machinery-trait
+    /// list, not a model of the standard library: a fact earns its place by closing a
+    /// measured case.
+    pub builtin_member_types: Vec<RawMemberType>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -618,8 +640,77 @@ pub struct FileFacts {
     pub invoked_executables: Vec<SmolStr>,
 }
 
-/// One [`FileFacts::member_types`] entry: accessing `owner.member` yields a value of the
-/// (base) type named `yields`. Carries rkyv derives because the incremental patch persists
+/// What a value's type IS, as declared — a tree, because a type is one:
+/// `Result<Vec<TreeEntry>, GitError>` has a `TreeEntry` two levels down, and flattening it to
+/// a list of one-level parameter names threw that away irrecoverably. The chain resolver
+/// (RFC 0012 §3-bis) carries one of these rather than a bare name, so a projection selects a
+/// SUBTREE with its own arguments intact.
+///
+/// Adapters build it recursively from their own grammar; the archive format is not allowed to
+/// dictate the shape here (`crate::rkyv_support::TypeExprAsFlat` stores it flat, and nothing
+/// outside that module knows).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum TypeExpr {
+    /// A named type with its arguments, as written: `Vec<TreeEntry>` is
+    /// `Named { name: "Vec", args: [Named { name: "TreeEntry", args: [] }] }`. The name is
+    /// dispatch-reduced by the adapter (references stripped, auto-deref wrappers unwrapped,
+    /// `Self` already resolved), exactly as the flat form's base name was.
+    Named { name: SmolStr, args: Vec<TypeExpr> },
+    /// Argument N of the type this fact is ABOUT — how a fact states a relationship rather
+    /// than a concrete type: `Result<T, E>::map_err` still yields a `Result` over the same
+    /// `T`, so its fact is `Named { "Result", [Param(0), Unknown] }`. Substituted against the
+    /// receiver's own arguments at the hop; `Unknown` when the receiver has no argument there
+    /// (and always, for a free function — there is no receiver to substitute from).
+    Param(usize),
+    /// A type the fact cannot name: a closure's output, an opaque `impl Trait`, the error a
+    /// `map_err` produces. Explicit so a fact never has to lie about its arity to stay
+    /// silent — resolving it yields nothing, which is the honest answer.
+    Unknown,
+}
+
+impl TypeExpr {
+    /// The head name, when there is one. `None` for `Param`/`Unknown` — nothing to look up.
+    pub fn name(&self) -> Option<&SmolStr> {
+        match self {
+            TypeExpr::Named { name, .. } => Some(name),
+            _ => None,
+        }
+    }
+
+    /// Argument N, for a projection marker. Out of range — or not a named type at all — is a
+    /// miss, never a substitute.
+    pub fn arg(&self, index: usize) -> Option<&TypeExpr> {
+        match self {
+            TypeExpr::Named { args, .. } => args.get(index),
+            _ => None,
+        }
+    }
+
+    /// A leaf type: the common case, and what every depth-1 fact used to be.
+    pub fn named(name: impl Into<SmolStr>) -> TypeExpr {
+        TypeExpr::Named {
+            name: name.into(),
+            args: Vec::new(),
+        }
+    }
+
+    /// This expression with every [`TypeExpr::Param`] replaced by the receiver's argument at
+    /// that index — the substitution that makes a relationship fact concrete. A parameter the
+    /// receiver does not have becomes [`TypeExpr::Unknown`]: the hop stays silent instead of
+    /// binding to whatever happened to sit at that position.
+    pub fn substitute(&self, receiver: &TypeExpr) -> TypeExpr {
+        match self {
+            TypeExpr::Named { name, args } => TypeExpr::Named {
+                name: name.clone(),
+                args: args.iter().map(|a| a.substitute(receiver)).collect(),
+            },
+            TypeExpr::Param(n) => receiver.arg(*n).cloned().unwrap_or(TypeExpr::Unknown),
+            TypeExpr::Unknown => TypeExpr::Unknown,
+        }
+    }
+}
+
+/// One [`FileFacts::member_types`] entry: accessing `owner.member` evaluates to `yields`. Carries rkyv derives because the incremental patch persists
 /// these per file (`FilePatchMeta`) — resolution of changed files needs unchanged files'
 /// member types.
 #[derive(
@@ -645,18 +736,14 @@ pub struct RawMemberType {
     pub owner: Option<SmolStr>,
     #[rkyv(with = crate::rkyv_support::SmolStrAsString)]
     pub member: SmolStr,
-    /// The BASE type name the access evaluates to, dispatch-reduced by the adapter
-    /// (references stripped, auto-deref wrappers unwrapped, `Self` already resolved).
-    #[rkyv(with = crate::rkyv_support::SmolStrAsString)]
-    pub yields: SmolStr,
-    /// The base names of EVERY type parameter, in declaration order, when `yields` is
-    /// parameterized (`Result<Config, Error>` → `["Config", "Error"]`,
-    /// `Map<Key, Value>` → `["Key", "Value"]`). A pointer segment marked `?N` projects
-    /// parameter N instead of `yields` itself (`?` alone is `?0`); WHICH parameter an
-    /// operation extracts is the adapter's knowledge (Rust's try operator → 0; a
-    /// map-index fact would be 1) — the core's selection is purely structural.
-    #[rkyv(with = rkyv::with::Map<crate::rkyv_support::SmolStrAsString>)]
-    pub yields_params: Vec<SmolStr>,
+    /// The type the access evaluates to, with its arguments — a [`TypeExpr`], not a name.
+    /// A pointer segment marked `?N` projects argument N of it (`?` alone is `?0`), and what
+    /// that yields is a whole subtree: `Result<Vec<TreeEntry>, E>` projected at 0 is
+    /// `Vec<TreeEntry>`, still carrying its own argument, which a one-level list could not
+    /// express. WHICH argument an operation extracts stays the adapter's knowledge (Rust's
+    /// try operator → 0) — the core's selection is purely structural.
+    #[rkyv(with = crate::rkyv_support::TypeExprAsFlat)]
+    pub yields: TypeExpr,
 }
 
 /// One [`FileFacts::string_call_args`] entry. Carries rkyv derives because assembly persists

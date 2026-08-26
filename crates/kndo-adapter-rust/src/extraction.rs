@@ -553,13 +553,13 @@ fn record_loop_binding(
     let Some(value) = item.child_by_field_name("value") else {
         return;
     };
-    // A bare name (a local's own annotated type) says nothing about its elements — the
-    // binding kept only the base, and `Vec` alone has no parameter facts. Only a CHAIN,
-    // whose last hop is a declared member type, can be projected.
+    // `@element` is a member hop like any other: the adapter's builtin table declares, per
+    // container, which argument iterating it yields, so a container that declares none (a map,
+    // whose element is a tuple) simply does not type its loop variable instead of typing it
+    // wrong. The core never interprets the name — it appears on both sides, here and in the
+    // table, and that is all it needs to be.
     if let Some(pointer) = iterable_pointer(value, init, bindings, src) {
-        if pointer.contains('.') {
-            bind_type(name, format!("{pointer}?0"), bindings, conflicted);
-        }
+        bind_type(name, format!("{pointer}.@element"), bindings, conflicted);
     }
 }
 
@@ -773,6 +773,14 @@ fn init_base_type(base: Node, init: &InitCtx<'_>, src: &[u8]) -> Option<String> 
     match base.kind() {
         "self" => init.owner.map(str::to_string),
         "field_expression" => init_field_base(base, init, src),
+        // A CALL as the base: `gitutil::ls_tree(..).map_err(..)`. The pointer it produces is
+        // the receiver of the method that follows, and the core walks the two hops in one
+        // chain. Without this the chain died at the first link and everything the final value
+        // is read through looked file-local (`internal/detection-gaps.md` §3).
+        "call_expression"
+        | "try_expression"
+        | "reference_expression"
+        | "parenthesized_expression" => init_qualifier(base, init, src),
         _ => None,
     }
 }
@@ -1745,9 +1753,12 @@ fn field_type_map(facts: &[kndo_core::adapter::RawMemberType]) -> FieldTypes {
         .iter()
         .filter_map(|m| {
             let owner = m.owner.as_ref()?;
+            // The TypeEnv keys receivers by NAME — it emits a qualifier, not a type tree —
+            // so this view keeps the head and drops the arguments. The arguments still live
+            // in the fact itself, which is what the core's chain walks.
             Some((
                 (owner.to_string(), m.member.to_string()),
-                m.yields.to_string(),
+                m.yields.name()?.to_string(),
             ))
         })
         .collect()
@@ -1788,54 +1799,82 @@ fn push_member_type(
         ("Self", Some(owner)) => owner.to_string(),
         _ => name,
     };
-    if let Some(yields) = base_type_name(ty, src).map(resolve_self) {
-        let yields_params = type_param_names(ty, src)
-            .into_iter()
-            .map(resolve_self)
-            .map(SmolStr::new)
-            .collect();
+    if let Some(yields) = type_expr(ty, src, &resolve_self) {
         sink.push(kndo_core::adapter::RawMemberType {
             owner: owner.map(SmolStr::new),
             member: SmolStr::new(member),
-            yields: SmolStr::new(yields),
-            yields_params,
+            yields,
         });
     }
 }
 
-/// The base names of a parameterized annotation's type arguments, in order —
-/// `Result<ConfiguredHIR, Error>` → `["ConfiguredHIR", "Error"]`; an argument with no
-/// single base (a lifetime, a fn type) contributes nothing at its position, so consumers
-/// see only nameable parameters. References and the auto-deref wrappers are looked
-/// through, matching [`base_type_name`]'s reduction.
-fn type_param_names(ty: Node, src: &[u8]) -> Vec<String> {
+/// An annotation as a TYPE EXPRESSION — the tree, not its base name. Applies the same
+/// dispatch reduction [`base_type_name`] always did (references and `impl`/`dyn` looked
+/// through, `Box`/`Rc`/`Arc` unwrapped to the pointee, `Self` resolved by the caller), and
+/// then keeps going into the arguments instead of stopping at one level. `Result<Vec<T>, E>`
+/// used to reduce to `Result` plus the names `["Vec", "E"]`, which lost the `T` for good.
+///
+/// A slice or array is anonymous in the grammar, so it is named `@slice` — a name only this
+/// adapter uses, on both the fact side and the reference side, which lets it carry an
+/// `@element` fact like any other container. The core never interprets either string.
+fn type_expr(
+    ty: Node,
+    src: &[u8],
+    resolve_self: &impl Fn(String) -> String,
+) -> Option<kndo_core::adapter::TypeExpr> {
+    use kndo_core::adapter::TypeExpr;
     match ty.kind() {
-        "reference_type" => ty
-            .child_by_field_name("type")
-            .map(|inner| type_param_names(inner, src))
-            .unwrap_or_default(),
-        "generic_type" => generic_param_names(ty, src),
-        _ => Vec::new(),
+        "generic_type" => generic_type_expr(ty, src, resolve_self),
+        "type_identifier" | "scoped_type_identifier" => {
+            let t = text(ty, src);
+            let base = t.rsplit("::").next().unwrap_or(t).to_string();
+            Some(TypeExpr::named(resolve_self(base)))
+        }
+        "array_type" | "slice_type" => {
+            let element = ty
+                .child_by_field_name("element")
+                .or_else(|| ty.named_child(0))
+                .and_then(|e| type_expr(e, src, resolve_self))?;
+            Some(TypeExpr::Named {
+                name: SmolStr::new("@slice"),
+                args: vec![element],
+            })
+        }
+        _ => unwrapped_type(ty).and_then(|inner| type_expr(inner, src, resolve_self)),
     }
 }
 
-/// A generic annotation's argument bases, looking through the auto-deref wrappers.
-fn generic_param_names(ty: Node, src: &[u8]) -> Vec<String> {
-    let base = ty.child_by_field_name("type").map(|b| text(b, src));
-    let Some(args) = ty.child_by_field_name("type_arguments") else {
-        return Vec::new();
-    };
-    if matches!(base, Some("Box" | "Rc" | "Arc")) {
+/// A generic annotation as a tree: the base plus every argument, recursively. The auto-deref
+/// pointer wrappers dispatch on the pointee, so they vanish into it — the same reduction
+/// [`generic_base_type`] makes, carried through to the arguments.
+fn generic_type_expr(
+    ty: Node,
+    src: &[u8],
+    resolve_self: &impl Fn(String) -> String,
+) -> Option<kndo_core::adapter::TypeExpr> {
+    use kndo_core::adapter::TypeExpr;
+    let base = ty.child_by_field_name("type")?;
+    let base_name = text(base, src);
+    let base_name = base_name.rsplit("::").next().unwrap_or(base_name);
+    let args = ty.child_by_field_name("type_arguments");
+    if matches!(base_name, "Box" | "Rc" | "Arc") {
         return args
-            .named_child(0)
-            .map(|inner| type_param_names(inner, src))
-            .unwrap_or_default();
+            .and_then(|a| a.named_child(0))
+            .and_then(|inner| type_expr(inner, src, resolve_self));
     }
-    let mut cursor = args.walk();
-    args.children(&mut cursor)
-        .filter(|n| n.is_named())
-        .filter_map(|arg| base_type_name(arg, src))
-        .collect()
+    let mut collected = Vec::new();
+    if let Some(args) = args {
+        let mut cursor = args.walk();
+        for arg in args.children(&mut cursor).filter(|n| n.is_named()) {
+            // A lifetime or a fn type has no expression of its own; `Unknown` holds its
+            // POSITION so a `?N` projection still indexes the arguments as written.
+            collected.push(type_expr(arg, src, resolve_self).unwrap_or(TypeExpr::Unknown));
+        }
+    }
+    Some(TypeExpr::Named {
+        name: SmolStr::new(resolve_self(base_name.to_string())),
+        args: collected,
+    })
 }
 
 /// `#[derive(Default)]` on a type is a DECLARED fact about it: `T::default()` evaluates to
@@ -1858,8 +1897,7 @@ fn push_derived_default_type(item: Node, src: &[u8], pending: &PendingAttrs, out
     out.member_types.push(kndo_core::adapter::RawMemberType {
         owner: Some(SmolStr::new(name)),
         member: SmolStr::new("default"),
-        yields: SmolStr::new(name),
-        yields_params: Vec::new(),
+        yields: kndo_core::adapter::TypeExpr::named(name),
     });
 }
 
@@ -3374,6 +3412,7 @@ fn format_captures(s: &str) -> Vec<&str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use kndo_core::adapter::TypeExpr;
 
     fn facts(src: &str) -> FileFacts {
         extract("src/lib.rs", src.as_bytes())
@@ -3499,6 +3538,70 @@ mod tests {
     }
 
     #[test]
+    fn a_type_annotation_becomes_a_tree_not_a_base_and_a_list() {
+        // `Result<Vec<TreeEntry>, GitError>` — the `TreeEntry` is two levels down, and a
+        // one-level parameter list lost it for good (`internal/detection-gaps.md` §3).
+        let f = facts("pub fn ls_tree(p: &str) -> Result<Vec<TreeEntry>, GitError> { todo!() }\n");
+        let fact = f
+            .member_types
+            .iter()
+            .find(|m| m.member == "ls_tree")
+            .expect("no fact");
+        assert_eq!(
+            fact.yields,
+            TypeExpr::Named {
+                name: SmolStr::new("Result"),
+                args: vec![
+                    TypeExpr::Named {
+                        name: SmolStr::new("Vec"),
+                        args: vec![TypeExpr::named("TreeEntry")],
+                    },
+                    TypeExpr::named("GitError"),
+                ],
+            }
+        );
+    }
+
+    #[test]
+    fn a_slice_is_named_so_it_can_carry_an_element_fact() {
+        // Slices and arrays are anonymous in the grammar. Naming one `@slice` — a string only
+        // this adapter uses, on both sides — lets it hold an `@element` like any container.
+        let f = facts("pub fn heads(x: u8) -> &[TreeEntry] { todo!() }\n");
+        let fact = f
+            .member_types
+            .iter()
+            .find(|m| m.member == "heads")
+            .expect("no fact");
+        assert_eq!(
+            fact.yields,
+            TypeExpr::Named {
+                name: SmolStr::new("@slice"),
+                args: vec![TypeExpr::named("TreeEntry")],
+            }
+        );
+    }
+
+    #[test]
+    fn a_chain_crosses_a_call_and_its_unwrap() {
+        // The shape §3's last case is made of: a module-qualified free call, a method on its
+        // result, the try operator, and then iteration. Every link is a declared fact, and
+        // the pointer names them in order.
+        let f = facts(
+            "fn run() {\n\
+             \x20   let entries = gitutil::ls_tree(root, tree).map_err(git_error)?;\n\
+             \x20   for entry in &entries { entry.path; }\n\
+             }\n",
+        );
+        assert_eq!(
+            f.references
+                .iter()
+                .find(|r| r.name == "path")
+                .and_then(|r| r.scope_context.as_deref()),
+            Some("gitutil.ls_tree.map_err?.@element")
+        );
+    }
+
+    #[test]
     fn a_free_functions_return_type_is_a_member_type_fact() {
         // "calling this evaluates to that" — the owner-less form. Without it a local bound
         // to the call has no type and every field read off it lands nowhere.
@@ -3509,7 +3612,7 @@ mod tests {
             .find(|m| m.member == "parse_entry")
             .expect("no fact for the free function");
         assert_eq!(fact.owner, None, "a free function has no owner");
-        assert_eq!(fact.yields, "TreeEntry");
+        assert_eq!(fact.yields, TypeExpr::named("TreeEntry"));
     }
 
     #[test]
@@ -3524,7 +3627,7 @@ mod tests {
             .find(|m| m.member == "default")
             .expect("no fact from the derive");
         assert_eq!(fact.owner.as_deref(), Some("Sink"));
-        assert_eq!(fact.yields, "Sink");
+        assert_eq!(fact.yields, TypeExpr::named("Sink"));
         assert!(
             !facts("pub struct Sink;\n")
                 .member_types
@@ -3576,12 +3679,12 @@ mod tests {
                 .find(|r| r.name == n)
                 .and_then(|r| r.scope_context.as_deref())
         };
-        assert_eq!(ctx("target"), Some("RootSink.items?0"));
-        assert_eq!(
-            ctx("mystery"),
-            Some("x"),
-            "an un-chained iterable says nothing — the raw name, the duck route"
-        );
+        assert_eq!(ctx("target"), Some("RootSink.items.@element"));
+        // The un-parameterized case still says nothing USEFUL, but it says it as a hop rather
+        // than as silence: the binding for `plain` kept only the base name `Vec`, so the
+        // builtin `@element` fact projects an argument that is not there and the chain
+        // resolves to nothing — a miss into the duck fallback, exactly as before.
+        assert_eq!(ctx("mystery"), Some("Vec.@element"));
     }
 
     #[test]
@@ -3696,7 +3799,8 @@ mod tests {
             f.member_types
                 .iter()
                 .find(|m| m.owner.as_deref() == Some(owner) && m.member == member)
-                .map(|m| m.yields.as_str())
+                .and_then(|m| m.yields.name())
+                .map(SmolStr::as_str)
         };
         assert_eq!(
             fact("LowArgs", "context_separator"),
@@ -3726,8 +3830,15 @@ mod tests {
             .iter()
             .find(|m| m.owner.as_deref() == Some("Config") && m.member == "build")
             .expect("return fact");
-        assert_eq!(m.yields, "Result");
-        assert_eq!(m.yields_params, ["ConfiguredHIR", "Error"]);
+        // The whole expression, not a base plus a flat list: an argument keeps its own
+        // arguments, which is what lets a projection land on a type that has more inside it.
+        assert_eq!(
+            m.yields,
+            TypeExpr::Named {
+                name: SmolStr::new("Result"),
+                args: vec![TypeExpr::named("ConfiguredHIR"), TypeExpr::named("Error"),],
+            }
+        );
     }
 
     #[test]
@@ -3759,12 +3870,13 @@ mod tests {
         assert_eq!(by_name("doc_short").kind, RefKind::Call);
         assert_eq!(
             by_name("mystery").scope_context.as_deref(),
-            Some("untyped"),
-            "untyped receiver keeps the raw name — the duck route, same as outside"
+            Some("Vec.@element"),
+            "an element hop off a base-name-only binding: it resolves to nothing (the \
+             argument was never kept), so the receiver still takes the duck route"
         );
         assert_eq!(
             by_name("deeper").scope_context.as_deref(),
-            Some("untyped.mystery"),
+            Some("Vec.@element.mystery"),
             "hops extend the dotted pointer"
         );
         assert!(

@@ -334,6 +334,25 @@ pub(crate) fn try_patch(
         .collect();
     let ladders: std::collections::BTreeMap<SmolStr, Vec<crate::adapter::VisibilityRung>> =
         graph.visibility_ladders.iter().cloned().collect();
+    // Straight from the descriptors, exactly as the full build does: these are the adapter's
+    // own facts about its language, so they are never stale in the way a persisted table
+    // could be, and building them the same way in both paths is what keeps the two from
+    // drifting. Only languages the graph actually claims contribute.
+    let mut builtin_member_types: std::collections::BTreeMap<SmolStr, MemberTypeIndex> =
+        std::collections::BTreeMap::new();
+    for adapter in adapters {
+        let descriptor = adapter.descriptor();
+        if ladders.contains_key(&descriptor.id)
+            || graph
+                .files
+                .iter()
+                .any(|f| f.language.as_deref() == Some(&descriptor.id))
+        {
+            builtin_member_types
+                .entry(descriptor.id.clone())
+                .or_insert_with(|| index_member_types(&descriptor.builtin_member_types));
+        }
+    }
 
     // Library roots for the changed files, from the KEPT (manifest-owned) edges — a changed
     // file's own in-source production roots were just removed and regenerate below.
@@ -389,6 +408,7 @@ pub(crate) fn try_patch(
             file_unit: &file_unit,
             unit_name_by_file: &unit_name_by_file,
             ladders: &ladders,
+            builtin_member_types: &builtin_member_types,
             executable_by_name: &executable_by_name,
             ctx: &ctx,
         };

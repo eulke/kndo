@@ -1081,7 +1081,7 @@ regressions. Still deliberately unmodeled: `.unwrap()`/`.expect()` (stdlib metho
 semantics — a curated fact table is the legitimate future source), `match` payloads,
 untyped closures, multi-bound generics.
 
-### M6 progress — `yields_params` list + indexed `?N` projection ✅ (landed 2026-08-23)
+### M6 progress — type-argument list + indexed `?N` projection ✅ (landed 2026-08-23; the list became a `TypeExpr` tree, RFC 0012 §3-quater)
 
 The singular-first-parameter shortcut generalized before anyone builds on it (task #87):
 `RawMemberType.yields_param: Option` → `yields_params: Vec` — every type argument of a

@@ -391,11 +391,12 @@ scope, and the final member resolves in the yielded type's home — twins includ
 a declared fact, Certain on hit, duck fallback on any miss (never a settle). The resolved
 chain also credits the yielded TYPE with a Read from the site. Facts are part of the
 RFC 0013 §4 surface signature (an annotation change re-resolves dependents) and persist in
-`FilePatchMeta` for the patch path. `RawMemberType.yields_params` carries every type
-parameter's base, in order (`Result<ConfiguredHIR, Error>` → `[ConfiguredHIR, Error]`); a
-pointer segment marked `?N` projects parameter N instead of the wrapper (`?` is shorthand
-for `?0`). The marker is structural — WHICH parameter an operation extracts is the
-adapter's knowledge (Rust's try operator → 0), the core just indexes. Pointers compose to
+`FilePatchMeta` for the patch path. `RawMemberType.yields` carries the annotation's arguments
+as written (`Result<ConfiguredHIR, Error>`); a pointer segment marked `?N` projects argument N
+instead of the wrapper (`?` is shorthand for `?0`). The marker is structural — WHICH argument an
+operation extracts is the adapter's knowledge (Rust's try operator → 0), the core just indexes.
+**As landed, `yields` is a tree and a projection lands on a subtree** (§3-quater below): the
+one-level list this paragraph originally described could not hold `Result<Vec<T>, E>`'s `T`. Pointers compose to
 N hops (each hop a declared fact, each resolved hop's type credited with a Read from the
 site); a projection index with no parameter at that position is a miss — duck fallback,
 never a settle.
@@ -427,6 +428,55 @@ Measured on this repo: three types that carried an acknowledgement pragma
 (`internal/detection-gaps.md` §3 — `DirRollup`, `ContributedRoot`, `ContributedEdge`) stopped
 needing one, with the finding count and health unchanged and no movement in either direction on
 six other codebases (§4's symmetry requirement).
+
+**§3-quater, the chain carries a TYPE (M6).** `RawMemberType::yields` was a base name plus a
+one-level list of parameter names, and the chain walked `SymbolId → SymbolId`. Both halves of
+that lose the same thing: `Result<Vec<TreeEntry>, GitError>` reduced to `Result` +
+`["Vec", "GitError"]`, and the `TreeEntry` was gone from the facts entirely — no projection
+could recover what was never stored. Flattening was not a representation detail; it was the
+reason `internal/detection-gaps.md` §3's last case could not be fixed.
+
+`yields` is now a `TypeExpr` — `Named { name, args }` | `Param(N)` | `Unknown` — and the chain's
+state is one of those plus, when the head name resolves to something this project declares, the
+symbol whose home file holds its member table. The two are separate because they genuinely are:
+`Vec<TreeEntry>` is a type no file here declares, so it has no symbol, and the chain still has to
+walk *through* it to reach the `TreeEntry` inside. A `?N` marker means exactly what it meant, and
+now lands on a SUBTREE with its own arguments intact.
+
+Three pieces follow from that, all language-blind:
+
+- **`Param(N)` and substitution.** A fact may state a relationship rather than a type — "`map_err`
+  still yields a `Result` over the same argument 0" — and the receiver's own arguments make it
+  concrete at the hop. A parameter the receiver does not have becomes `Unknown`: silence, not the
+  type that happened to sit at that position. `Unknown` is a variant rather than a short argument
+  list so a fact never has to lie about its arity to admit it cannot name something.
+- **`AdapterDescriptor::builtin_member_types`**, a second lookup tier keyed by claim language,
+  consulted after the owner's home file. It is the only tier that can apply when the head resolves
+  to no declaration at all, which is every type the language itself provides. Same
+  data-on-the-descriptor path as the ladder and the cycle policy; the knowledge stays the
+  adapter's, the core just gets another table.
+- **The chain carries the file its type was WRITTEN in.** A builtin hop introduces no home of its
+  own: `Vec<TreeEntry>`'s `TreeEntry` was written wherever the receiver's fact was, and resolving
+  it against the reference site instead finds nothing — the site imports the container's owner,
+  not every type inside it.
+
+Iteration needed no new syntax and got none. A `for` variable's pointer ends in an ordinary
+member segment whose name the adapter chooses on both sides (Rust uses `@element`), and the
+adapter's builtin table declares, per container, which argument iterating one yields. A container
+that declares none simply does not type its loop variable — a map iterates to a tuple, which this
+model has no way to name, and silence beats a confident wrong element. The same trick names
+anonymous types: Rust calls a slice `@slice` so it can carry an `@element` like any container. The
+core never interprets either string.
+
+Persistence stayed out of the contract's way. rkyv 0.8 cannot derive `Archive` for a type that
+recurses through `Vec<Self>`, so `crate::rkyv_support::TypeExprAsFlat` archives the tree as a
+preorder walk with arity — each atom carries its own, its children are the next `arity` subtrees,
+and a cursor rebuilds it with no indices to dangle. That module exists for exactly this: the
+archive format does not get to dictate the shape adapters write.
+
+Measured: `gitutil::TreeEntry`, read through `ls_tree(..).map_err(..)?` and then iterated, was the
+last of §3's four acknowledged types. All four pragmas are gone, kndo's own finding count and
+health are unchanged, and six other codebases moved in neither direction.
 
 **§9-bis, the one hop through a module file (M6).** `use crate::internals::{attr, check, Ctxt};`
 followed by `check::check(cx, …)` registered ONE qualifier — the specifier's own target — and
