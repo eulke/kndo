@@ -104,11 +104,25 @@ pub(crate) fn claim_and_extract(
     }))
 }
 
-/// One file's phase-3b output, merged deterministically in FileId order.
+/// One file's phase-3b PASS TWO output (references, dynamics), merged deterministically in
+/// FileId order right behind its [`ImportResolution`]. Dependency claims live on that struct —
+/// only imports can make one.
 pub(crate) struct ResolvedFile {
     pub(crate) edges: Vec<Edge>,
-    /// `(name, confidence, span, from, provenance)` — becomes `ImportsDependency` in the
-    /// merge once the name has a deterministic id.
+    pub(crate) diagnostics: Vec<Diagnostic>,
+    pub(crate) suppressions: Vec<(FileId, crate::adapter::RawSuppression)>,
+}
+
+/// One file's resolved IMPORTS — phase 3b's first pass, and everything its second pass reads.
+/// Its `dep_imports` are `(name, confidence, span, from, provenance)`, becoming
+/// `ImportsDependency` in the merge once each name has a deterministic id.
+///
+/// Imports resolve without consulting any other file's imports, so this whole pass is
+/// embarrassingly parallel; references do not, which is the entire reason the two are separate
+/// (`module_bindings`, and the hop `link_module_bindings` builds on it).
+#[derive(Default)]
+pub(crate) struct ImportResolution {
+    pub(crate) edges: Vec<Edge>,
     pub(crate) dep_imports: Vec<(
         SmolStr,
         Confidence,
@@ -116,8 +130,22 @@ pub(crate) struct ResolvedFile {
         FileId,
         Provenance,
     )>,
-    pub(crate) diagnostics: Vec<Diagnostic>,
-    pub(crate) suppressions: Vec<(FileId, crate::adapter::RawSuppression)>,
+    /// Local name → target symbol, from this file's import bindings.
+    pub(crate) bound_symbols: HashMap<SmolStr, SymbolId>,
+    /// The twin sets behind those bindings, when one resolved through the target's unit table.
+    pub(crate) bound_twins: HashMap<SmolStr, Vec<SymbolId>>,
+    /// Qualifier → (target file, whether a member miss SETTLES there).
+    pub(crate) qualifier_targets: HashMap<SmolStr, (FileId, bool)>,
+    /// Units whose every top-level name this file sees bare.
+    pub(crate) visible_units: Vec<SmolStr>,
+    /// **Every name this file's imports bind to another FILE**, the table
+    /// [`link_module_bindings`] follows one hop. `use crate::internals::{attr, check, …};`
+    /// binds `check`, and `internals/mod.rs`'s own `mod check;` binds `check` to `check.rs` —
+    /// so the qualifier in `check::check(cx, …)` is answerable, but only by a pass that has
+    /// already resolved `internals/mod.rs`'s imports. Persisted in `FilePatchMeta` for the
+    /// same reason `member_types` is: the patch resolves a CHANGED file's qualifiers against
+    /// UNCHANGED files' tables without re-fetching their facts.
+    pub(crate) module_bindings: Vec<crate::graph::ModuleBinding>,
 }
 
 // Whether a declaration in `decl_file` at `scope` is visible to a reference site in
@@ -242,7 +270,7 @@ pub(crate) fn build_unit_indexes(files: &[FileNode]) -> UnitIndexes {
 
 /// Everything phase 3b's per-file resolution reads — immutable once the symbol tables are
 /// built. A named struct (not captured locals) because the incremental patch
-/// builds the same tables from the snapshot and calls the same [`resolve_file`]: one
+/// builds the same tables from the snapshot and drives the same three passes: one
 /// resolution semantics, two data sources, zero drift.
 pub(crate) struct ResolveTables<'a> {
     pub(crate) files: &'a [FileNode],
@@ -288,38 +316,44 @@ pub(crate) fn executable_name_index(
     index
 }
 
-/// One file's phase-3b contributions (imports, bindings, references, dynamics, diagnostics,
-/// suppressions) — the parallel full build and the incremental patch both call this.
-pub(crate) fn resolve_file(
+/// Phase 3b, pass ONE: one file's imports, bindings, qualifiers and dependency claims.
+///
+/// The parallel full build and the incremental patch both call this, then
+/// [`link_module_bindings`], then [`resolve_references`] — one resolution semantics, two data
+/// sources, zero drift.
+pub(crate) fn resolve_imports(
     i: usize,
     facts: &crate::adapter::FileFacts,
     adapter: &dyn LanguageAdapter,
     t: &ResolveTables<'_>,
-) -> ResolvedFile {
+) -> ImportResolution {
     let ResolveTables {
         files,
         file_index,
-        symbols,
+        symbols: _,
         symbol_by_name_per_file,
-        symbol_by_qualified_per_file,
-        qualified_twins_per_file,
+        symbol_by_qualified_per_file: _,
+        qualified_twins_per_file: _,
         member_types_per_file: _,
         symbol_by_name_per_unit,
         symbol_twins_per_unit,
-        member_by_name,
+        member_by_name: _,
         file_unit,
         unit_name_by_file,
-        ladders,
+        ladders: _,
         executable_by_name,
         ctx,
     } = t;
     let file_id = FileId(i as u32);
     let provenance = || Provenance::Adapter(adapter.descriptor().id.clone());
-    let mut out = ResolvedFile {
+    let mut out = ImportResolution {
         edges: Vec::new(),
         dep_imports: Vec::new(),
-        diagnostics: Vec::new(),
-        suppressions: Vec::new(),
+        bound_symbols: HashMap::default(),
+        bound_twins: HashMap::default(),
+        qualifier_targets: HashMap::default(),
+        visible_units: Vec::new(),
+        module_bindings: Vec::new(),
     };
 
     // Invoked-program edges: a declared subprocess invocation of a workspace
@@ -341,15 +375,15 @@ pub(crate) fn resolve_file(
         }
     }
 
-    // Local name -> target symbol, from this file's import bindings — the fact that lets a
-    // `RawReference` to an *imported* name resolve cross-file instead of only same-file.
-    let mut bound_symbols: HashMap<SmolStr, SymbolId> = HashMap::default();
-    // The twin sets behind those bindings, when the binding resolved through the TARGET's
-    // unit table (see `symbol_twins_per_unit`): `import kotlinx.coroutines.internal.recover
-    // StackTrace` names one declaration that exists once per platform (`expect` beside its
-    // `actual`s), and binding only the table's winner left the rest with no incoming edge.
-    let mut bound_twins: HashMap<SmolStr, Vec<SymbolId>> = HashMap::default();
-    // Qualifier -> resolved in-repo target file: the import's explicit
+    // `out.bound_symbols` — local name -> target symbol, from this file's import bindings: the
+    // fact that lets a `RawReference` to an *imported* name resolve cross-file instead of only
+    // same-file. `out.bound_twins` holds the twin sets behind those bindings, when one
+    // resolved through the TARGET's unit table (see `symbol_twins_per_unit`): `import
+    // kotlinx.coroutines.internal.recoverStackTrace` names one declaration that exists once
+    // per platform (`expect` beside its `actual`s), and binding only the table's winner left
+    // the rest with no incoming edge.
+    //
+    // `out.qualifier_targets` — qualifier -> resolved in-repo target file: the import's explicit
     // `local_alias`, or — unaliased — the *target's own* declared `unit_name`. This is
     // where the dir≠package problem dissolves: only assembly holds both sides, so the
     // qualifier for `gopkg.in/yaml.v3`-style imports comes from the target's `package`
@@ -361,12 +395,11 @@ pub(crate) fn resolve_file(
     // same-named type in scope is entirely possible — so a miss falls through to the
     // in-scope/duck ladder instead (a tail-derived qualifier that settled a member miss
     // could bind the access to the wrong file and kill a live method).
-    let mut qualifier_targets: HashMap<SmolStr, (FileId, bool)> = HashMap::default();
-    // Units whose every top-level name this file sees bare (`RawImport::module_names_visible`
-    // — Swift's `import SomeKit`): the bare-name fallback consults these unit tables after
-    // the file's own, at Certain — it is the language's scoping rule, not a guess.
-    let mut visible_units: Vec<SmolStr> = Vec::new();
-
+    //
+    // `out.visible_units` — units whose every top-level name this file sees bare
+    // (`RawImport::module_names_visible` — Swift's `import SomeKit`): the bare-name fallback
+    // consults these unit tables after the file's own, at Certain — it is the language's
+    // scoping rule, not a guess.
     for imp in &facts.imports {
         let spec = ImportSpec {
             specifier: imp.specifier.clone(),
@@ -410,8 +443,8 @@ pub(crate) fn resolve_file(
                 });
                 if imp.module_names_visible {
                     if let Some(unit) = &file_unit[to.0 as usize] {
-                        if !visible_units.contains(unit) {
-                            visible_units.push(unit.clone());
+                        if !out.visible_units.contains(unit) {
+                            out.visible_units.push(unit.clone());
                         }
                     }
                 }
@@ -442,12 +475,12 @@ pub(crate) fn resolve_file(
                         })
                         .copied();
                     if let Some(symbol_id) = symbol_id {
-                        bound_symbols.insert(binding.local.clone(), symbol_id);
+                        out.bound_symbols.insert(binding.local.clone(), symbol_id);
                         if let Some(twins) = resolving_unit
                             .and_then(|unit| symbol_twins_per_unit.get(unit))
                             .and_then(|t| t.get(&exported_name))
                         {
-                            bound_twins.insert(binding.local.clone(), twins.clone());
+                            out.bound_twins.insert(binding.local.clone(), twins.clone());
                         }
                     }
                 }
@@ -473,7 +506,25 @@ pub(crate) fn resolve_file(
                             .map(|q| (SmolStr::new(q), false))
                     });
                 if let Some((q, settles)) = qualifier {
-                    qualifier_targets.entry(q).or_insert((to, settles));
+                    out.qualifier_targets.entry(q).or_insert((to, settles));
+                }
+                // Every name this import puts in scope pointing at a FILE — the table the hop
+                // pass follows. Both shapes count, and the pair is the whole point:
+                //
+                //   * a BINDING, recorded even when it resolved to no symbol above — a brace
+                //     member naming a submodule (`use crate::internals::{attr, check, …}`)
+                //     binds nothing in `internals/mod.rs`, and is the consumer side of the hop;
+                //   * the LOCAL ALIAS, which is how a file-linking `mod check;` states the same
+                //     fact — no bindings at all, the name lives in `local_alias`. That is the
+                //     producer side, and omitting it left the hop finding nothing to follow.
+                let bound_names = imp
+                    .bindings
+                    .iter()
+                    .map(|b| b.local.clone())
+                    .chain(imp.local_alias.clone());
+                for name in bound_names {
+                    out.module_bindings
+                        .push(crate::graph::ModuleBinding { name, target: to });
                 }
                 // The namespace escaped static tracking (`ns[key]`, ns passed
                 // along) — every symbol in the target is plausibly used
@@ -499,6 +550,93 @@ pub(crate) fn resolve_file(
                 .push((name, confidence, imp.span, file_id, provenance()));
         }
     }
+    out
+}
+
+/// Phase 3b, pass ONE-AND-A-HALF: the one hop a qualifier may take through the file it binds
+/// to. Runs between [`resolve_imports`] and [`resolve_references`], over every file's tables.
+///
+/// `use crate::internals::{attr, check, Ctxt, Derive};` followed by `check::check(cx, …)` bound
+/// nothing: the import registers ONE qualifier (`internals`), and `check` stayed a mere binding.
+/// The answer was in the data all along — `internals/mod.rs` has its own `mod check;`, so the
+/// chain is "a binding on the TARGET's own import table" — but no single-pass resolver can
+/// follow it, because the target's table does not exist yet when its consumer is resolved. In
+/// serde this killed `internals::check` and the whole family of `check_*` helpers it reaches
+/// (`internal/detection-gaps.md` §8).
+///
+/// One hop, never a fixpoint: chasing further would need a cycle guard for no evidence anyone
+/// writes such chains. Non-settling, like every derived qualifier — a miss falls through to the
+/// in-scope/duck ladder rather than binding the access to the wrong file and killing a live
+/// method. And an existing qualifier always wins (`or_insert`): a direct alias is stronger
+/// provenance than a hop.
+///
+/// Language-blind by construction: no separator, no path arithmetic, nothing but "this name
+/// binds to that file, and that file binds this name to another file."
+pub(crate) fn link_module_bindings(
+    per_file: &mut [ImportResolution],
+    bindings_by_file: &[HashMap<SmolStr, FileId>],
+) {
+    for imports in per_file.iter_mut() {
+        let hops: Vec<(SmolStr, FileId)> = imports
+            .module_bindings
+            .iter()
+            .filter_map(|binding| {
+                bindings_by_file
+                    .get(binding.target.0 as usize)
+                    .and_then(|table| table.get(&binding.name))
+                    .map(|&hopped| (binding.name.clone(), hopped))
+            })
+            .collect();
+        for (name, hopped) in hops {
+            imports
+                .qualifier_targets
+                .entry(name)
+                .or_insert((hopped, false));
+        }
+    }
+}
+
+/// Phase 3b, pass TWO: one file's references, dynamics, diagnostics and suppressions, resolved
+/// against its own [`ImportResolution`] — which [`link_module_bindings`] has already extended
+/// with any one-hop qualifiers.
+pub(crate) fn resolve_references(
+    i: usize,
+    facts: &crate::adapter::FileFacts,
+    adapter: &dyn LanguageAdapter,
+    t: &ResolveTables<'_>,
+    imports: &ImportResolution,
+) -> ResolvedFile {
+    let ResolveTables {
+        files,
+        file_index: _,
+        symbols,
+        symbol_by_name_per_file,
+        symbol_by_qualified_per_file,
+        qualified_twins_per_file,
+        member_types_per_file: _,
+        symbol_by_name_per_unit,
+        symbol_twins_per_unit,
+        member_by_name,
+        file_unit,
+        unit_name_by_file: _,
+        ladders,
+        executable_by_name: _,
+        ctx: _,
+    } = t;
+    let ImportResolution {
+        bound_symbols,
+        bound_twins,
+        qualifier_targets,
+        visible_units,
+        ..
+    } = imports;
+    let file_id = FileId(i as u32);
+    let provenance = || Provenance::Adapter(adapter.descriptor().id.clone());
+    let mut out = ResolvedFile {
+        edges: Vec::new(),
+        diagnostics: Vec::new(),
+        suppressions: Vec::new(),
+    };
 
     // Edge attribution: a reference carrying `within` is attributed to the
     // enclosing symbol it executes inside — resolved against this file's own declarations
@@ -639,7 +777,7 @@ pub(crate) fn resolve_file(
                     // receiver expression.
                     let targets = if q.contains('.') {
                         let (targets, yielded_types) =
-                            chained_member_targets(q, &reference.name, &bound_symbols, i, t);
+                            chained_member_targets(q, &reference.name, bound_symbols, i, t);
                         // Reaching a value THROUGH a member uses its type from this file —
                         // every resolved hop's type, not just the last (without these edges
                         // a type consumed only via fields read as file-local and
@@ -659,7 +797,7 @@ pub(crate) fn resolve_file(
                         }
                         targets
                     } else {
-                        in_scope_member_targets(q, &reference.name, &bound_symbols, i, t)
+                        in_scope_member_targets(q, &reference.name, bound_symbols, i, t)
                     };
                     if !targets.is_empty() {
                         for to in targets {
@@ -1604,7 +1742,7 @@ pub(crate) fn promote_package_relative_test_roles<'a>(
 /// an assembly-algorithm change that could produce a different graph from the same facts. Feeds
 /// [`compute_graph_key`] (the "core graph-schema version"); a bump here invalidates
 /// every project's cached `graph.bin` on the next run, same as any other key-input change.
-pub const GRAPH_SCHEMA_VERSION: u32 = 28; // bump whenever the persisted snapshot shape (rkyv layouts included) or the assembly semantics that derive a graph from the same facts change
+pub const GRAPH_SCHEMA_VERSION: u32 = 29; // bump whenever the persisted snapshot shape (rkyv layouts included) or the assembly semantics that derive a graph from the same facts change
 
 /// The graph snapshot's cache key (`cache.rs`'s `graph.bin`): a single digest
 /// folding in the *whole* discovered file set (every path + content hash — this already
@@ -2807,7 +2945,7 @@ pub fn assemble_from_source(
     }
 
     // Every file's declared unit name (the qualifier default) as a plain slice —
-    // resolve_file consumes this instead of reaching into other files' facts, which is what
+    // resolve_imports consumes this instead of reaching into other files' facts, which is what
     // lets the incremental patch feed it from the snapshot.
     let unit_name_by_file: Vec<Option<SmolStr>> = claimed_per_file
         .iter()
@@ -2854,23 +2992,60 @@ pub fn assemble_from_source(
         executable_by_name: &executable_by_name,
         ctx: &ctx,
     };
-    let resolved_files: Vec<Option<ResolvedFile>> = claimed_per_file
+    // Pass one: imports, in parallel — no file's imports depend on another's.
+    let mut imports_per_file: Vec<ImportResolution> = claimed_per_file
         .par_iter()
         .enumerate()
-        .map(|(i, slot)| {
-            let claimed = slot.as_ref()?;
-            Some(resolve_file(
+        .map(|(i, slot)| match slot.as_ref() {
+            Some(claimed) => resolve_imports(
                 i,
                 &claimed.facts,
                 &*adapters[claimed.adapter_index],
                 &tables,
-            ))
+            ),
+            None => ImportResolution::default(),
         })
         .collect();
+    // Pass one-and-a-half: the hop, which needs every file's table at once (see
+    // `link_module_bindings`). Persisted into `patch_meta` for the same reason
+    // `member_types` is — the patch resolves changed files against unchanged ones.
+    let bindings_by_file: Vec<HashMap<SmolStr, FileId>> = imports_per_file
+        .iter()
+        .map(|r| {
+            r.module_bindings
+                .iter()
+                .map(|b| (b.name.clone(), b.target))
+                .collect()
+        })
+        .collect();
+    for (meta, resolution) in patch_meta.iter_mut().zip(imports_per_file.iter()) {
+        meta.module_bindings = resolution.module_bindings.clone();
+    }
+    link_module_bindings(&mut imports_per_file, &bindings_by_file);
 
-    for resolved in resolved_files.into_iter().flatten() {
-        edges.extend(resolved.edges);
-        for (name, confidence, span, from, source) in resolved.dep_imports {
+    // Pass two: references, in parallel again, each reading its own file's resolved imports.
+    let resolved_files: Vec<Option<ResolvedFile>> = claimed_per_file
+        .par_iter()
+        .zip(imports_per_file.par_iter())
+        .enumerate()
+        .map(
+            |(i, (slot, imports)): (usize, (&Option<Claimed>, &ImportResolution))| {
+                let claimed = slot.as_ref()?;
+                Some(resolve_references(
+                    i,
+                    &claimed.facts,
+                    &*adapters[claimed.adapter_index],
+                    &tables,
+                    imports,
+                ))
+            },
+        )
+        .collect();
+    // Merged per FILE, imports before references — the order the single pass emitted them in,
+    // and the order `DependencyId` assignment depends on (first appearance in file order).
+    for (imports, resolved) in imports_per_file.into_iter().zip(resolved_files.into_iter()) {
+        edges.extend(imports.edges);
+        for (name, confidence, span, from, source) in imports.dep_imports {
             let to = *dep_index.entry(name.clone()).or_insert_with(|| {
                 let id = DependencyId(dependencies.len() as u32);
                 dependencies.push(DependencyNode { name: name.clone() });
@@ -2884,6 +3059,8 @@ pub fn assemble_from_source(
                 span: Some(span),
             });
         }
+        let Some(resolved) = resolved else { continue };
+        edges.extend(resolved.edges);
         diagnostics.extend(resolved.diagnostics);
         suppressions.extend(resolved.suppressions);
     }

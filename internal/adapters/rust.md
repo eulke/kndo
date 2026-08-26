@@ -145,11 +145,22 @@ and what places them on a published crate's API surface.
 | `use p::*` | specifier `p`, no bindings, `opaque_namespace_use: true` → the core's `Wildcard` over the target's exports, which is the truth of a glob |
 | `use p as q` | specifier `p`, `local_alias: q` (qualifier alias for `q::…` references) |
 | `pub use …` | same as above + `reexported: true` — Rust re-export facades ride the same barrel machinery as JS, fixpoint-resolved (RFC 0013 §3b), multi-hop included |
-| `mod foo;` | specifier `self::foo`, `side_effect_only: true` — the file-linking edge (§0); `#[path = "…"]` on the `mod` overrides the conventional location with the literal path |
+| `mod foo;` | specifier `self::foo`, `side_effect_only: true`, `local_alias: foo` — the file-linking edge (§0); `#[path = "…"]` on the `mod` overrides the conventional location with the literal path. The alias is not decoration: it is how this file states "the name `foo` binds to that file", which is the producer side of the core's module hop (below) |
 | `extern crate name;` | specifier `name` (resolves as a dependency/stdlib like any bare first segment) |
 
 `ImportKind::Relative` for `crate::`/`self::`/`super::` paths, `Package` for bare-first-
 segment paths. All `use` edges are `certain` — Rust has no bundler ambiguity.
+
+**A brace member may be a submodule, and the core hops for it.** `use crate::internals::{attr,
+check, Ctxt};` emits bindings for all three, but `check` names a *module*, not an item — nothing
+in `internals/mod.rs` declares it, so the binding resolves to no symbol and `check::check(cx, …)`
+used to bind nothing (`internal/detection-gaps.md` §8: this killed serde's whole `check_*`
+family). The adapter emits nothing special for it; the resolution is core-side and
+language-blind (RFC 0012 §9-bis): a name bound to a file that the *target's own* import table
+binds again follows that one hop, and `internals/mod.rs`'s `mod check;` — with its
+`local_alias` — is exactly that second binding. This is why the alias on `mod foo;` is
+load-bearing, and why extending the specifier to `crate::internals::check` was the wrong fix: it
+would teach the core that `::` joins path segments.
 
 **Dynamic constructs** — macros, with a deliberately bounded stance:
 

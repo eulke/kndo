@@ -112,40 +112,67 @@ against `Parameters`) — a field audit found the harmless shape three times for
 RFC 0012 §2 is explicit about which way to degrade when the model cannot prove the accusation,
 so the gate stays until the scope exists.
 
-Direction: a module-subtree scope in the ladder (`VisibilityScope::Module`, anchored on the
-declaring file's `unit` — Rust already keys units on the module path, RFC 0012 §8), plus
-adapters emitting `pub(super)`/`pub(in path)` as that rung instead of collapsing it upward.
+Direction: a module-subtree scope in the ladder (`VisibilityScope::Module`), anchored on the
+declaring file's `unit` — plus the anchor itself, which Rust does **not** have today. RFC 0012
+§8's table claimed Rust keyed units on the module path; it does not (`FileFacts::unit` is
+`None`, `internal/adapters/rust.md` §2, and the RFC row is now corrected). So this direction is
+one step longer than recorded: the Rust adapter must first key units on the crate-root-relative
+module path, and `FileFacts::unit_parent` must make those keys a tree the core can walk without
+knowing any separator. Then adapters emit `pub(super)`/`pub(in path)` as that rung instead of
+collapsing it upward.
 `scope_contains_site` gains one arm; the containment comparison this analysis already performs
 then decides the case exactly, with no gate needed.
 
-## 8. A brace-imported submodule is not a usable qualifier
+## 8. A brace-imported submodule is not a usable qualifier (RESUELTO)
 
-`use crate::internals::{attr, check, Ctxt, Derive};` followed by `check::check(cx, …)` binds
-nothing: `check` reads as dead, and so does everything only it reaches. In serde this killed
+`use crate::internals::{attr, check, Ctxt, Derive};` followed by `check::check(cx, …)` bound
+nothing: `check` read as dead, and so did everything only it reached. In serde this killed
 `internals::check` and the whole family of `check_*` helpers it calls.
 
-Extraction is correct and was verified — the Rust adapter emits the import with
+Extraction was correct and was verified — the Rust adapter emits the import with
 `specifier: "crate::internals"` and bindings `[attr, check, Ctxt, Derive]`, plus the reference
-`check` with `scope_context: Some("check")`. The gap is in resolution: assembly registers a
+`check` with `scope_context: Some("check")`. The gap was in resolution: assembly registered a
 qualifier for the specifier's own last segment (`internals` → `internals/mod.rs`) but not for
-each brace member, so the qualifier `check` matches nothing and the qualified reference falls
-to the duck fallback, which finds no member of that name. The one-hop that would close it is
-real and available in the data: `internals/mod.rs` itself imports `check.rs` under the name
-`check` (its `mod check;`), so the chain is *binding on the target's own import table*.
+each brace member, so the qualifier `check` matched nothing and the qualified reference fell
+to the duck fallback, which finds no member of that name. The one hop that closes it was
+always in the data: `internals/mod.rs` itself imports `check.rs` under the name `check` (its
+`mod check;`), so the chain is *a binding on the target's own import table*.
 
-Direction, and the reason it is not simply done: the obvious shortcut — extend the specifier
-with the binding name and re-resolve `crate::internals::check` — requires the core to know
-that `::` joins path segments, which is exactly the language knowledge the ignorance rule
-forbids it. (One such separator is already hardcoded in `assemble.rs`'s qualifier fallback;
-that is a wart to remove, not a precedent to widen.) The language-blind version needs no
-separator at all: resolve every file's imports into a `file → (binding name → target file)`
-map first, then let a qualifier that binds to file F and names one of F's own import bindings
-follow it one hop. That splits phase 3b's single per-file pass into an import pass and a
-reference pass — a restructure, not a patch, which is why it is recorded here rather than
-attempted in passing.
+**How it was closed.** Not by extending the specifier and re-resolving `crate::internals::check`
+— that shortcut requires the core to know that `::` joins path segments, exactly the language
+knowledge the ignorance rule forbids it. The landed fix needs no separator at all: phase 3b's
+single per-file pass became three (`resolve_imports` → `link_module_bindings` →
+`resolve_references`, all three shared by `graph::assemble` and `graph::patch`). The first pass
+records, per file, every name an import puts in scope that points at an in-repo FILE
+(`graph::ModuleBinding`) — both the brace members that resolved to no symbol (the consumer side)
+and the `local_alias` of a file-linking `mod x;`, which carries its name there and in no
+bindings at all (the producer side; omitting it was why the hop first shipped inert). The middle
+pass then follows one hop: a name bound to file F that F's own table binds again resolves to
+where F sends it. One hop, never a fixpoint; non-settling, so a miss falls through to the
+in-scope/duck ladder rather than binding the access to the wrong file; and an existing qualifier
+always wins, because a direct alias is stronger provenance than a derived hop. RFC 0012 §9.
 
-Worth weighing before scheduling: `use path::{submodule, Type}` is a very common Rust shape,
-so this likely suppresses real recall across every Rust codebase, including kndo's own.
+The patch path needed no signature change: `surface_signature` already hashes a file's complete
+import list, so any change to F's imports changes F's surface and forces a full rebuild — a
+stale hop is unrepresentable. `patch_equivalence` remains the harness, and `FilePatchMeta`
+carries each file's `module_bindings` so an unchanged file contributes its table without being
+re-extracted.
+
+**Medido en campo.** serde 363 → 348 findings (`unused` 66 → 52), health 82.8 → 83.7 —
+`internals::check` and the whole `check_*` family. alacritty 993 → 994 (`unused` 155 → 150):
+six *new* findings, all on code that only became reachable — exactly the shape of a recall fix.
+axios, vapor, Exposed and coroutines unchanged; the shape is Rust's. Regression:
+`a_brace_member_naming_a_submodule_hops_through_the_module_file` and
+`a_direct_qualifier_outranks_the_module_hop` in `graph::tests`, each verified failing without
+its half of the fix.
+
+Still open, and deliberately a separate change: the `rsplit("::")` qualifier fallback in
+`resolve_imports`. With per-member qualifiers registered it is no longer needed for the case
+above, but it still over-approximates another (`use a::b::{X, Y}` without `self`, where Rust
+does *not* bring `b` into scope). Removing it is more correct and may cost recall wherever
+something leaned on the over-approximation, so it gets its own measurement — and if it does
+cost recall, the fix is for the adapter to set `local_alias` where the language genuinely binds
+the name, not to put the separator back in the core.
 
 ## 9. False negative: path references in prose
 

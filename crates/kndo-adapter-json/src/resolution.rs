@@ -1,6 +1,7 @@
 //! Import resolution: structurally unreachable in normal operation.
 //! `extraction::extract` never populates `FileFacts::imports` (JSON has no import syntax of its
-//! own), and `kndo-core/src/graph.rs`'s `resolve_file` only ever calls an adapter's `resolve()`
+//! own), and `kndo-core/src/graph/assemble.rs`'s `resolve_imports` only ever calls an adapter's
+//! `resolve()`
 //! once per entry in *that adapter's own claimed file's* `facts.imports` — never as a fan-out
 //! to every registered adapter. This exists only to satisfy the `LanguageAdapter` trait.
 

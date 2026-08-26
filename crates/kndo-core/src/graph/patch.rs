@@ -27,7 +27,8 @@ use super::*;
 /// The correctness obligation: the returned graph is byte-identical to what the full
 /// rebuild of the same tree produces — enforced by the equivalence suite, made possible by
 /// the canonical-order invariant and by sharing the exact per-file machinery
-/// ([`claim_and_extract`], [`emit_file_declarations`], [`resolve_file`]) with the full path.
+/// ([`claim_and_extract`], [`emit_file_declarations`], and phase 3b's three passes
+/// [`resolve_imports`] / [`link_module_bindings`] / [`resolve_references`]) with the full path.
 /// `(graph, extraction diagnostics, plugin diagnostics, plugin contributions)` — named only to
 /// keep the 4-tuple under clippy's type-complexity lint; callers still destructure it
 /// positionally.
@@ -366,10 +367,12 @@ pub(crate) fn try_patch(
     }
 
     // ---- regenerate the changed files' contributions, via the SAME machinery as the full
-    // build (emit_file_declarations + resolve_file) ----
+    // build (emit_file_declarations + resolve_imports/link_module_bindings/resolve_references) ----
     let mut new_edges: Vec<Edge> = Vec::new();
     let mut new_metrics: Vec<(SymbolId, SymbolMetrics)> = Vec::new();
-    let mut resolved_outputs: Vec<ResolvedFile> = Vec::new();
+    let mut resolved_outputs: Vec<(ImportResolution, ResolvedFile)> = Vec::new();
+    let mut changed_imports: Vec<(usize, ImportResolution)> = Vec::new();
+    let mut new_patch_meta_bindings: Vec<(usize, Vec<crate::graph::ModuleBinding>)> = Vec::new();
     {
         let executable_by_name = executable_name_index(&graph.packages, &graph.file_index);
         let tables = ResolveTables {
@@ -486,9 +489,56 @@ pub(crate) fn try_patch(
                     });
                 }
             }
-            // Phase 3b, shared resolver.
-            resolved_outputs.push(resolve_file(c, &claimed.facts, &**adapter, &tables));
+            // Phase 3b pass one, shared resolver. References wait for the hop below.
+            changed_imports.push((c, resolve_imports(c, &claimed.facts, &**adapter, &tables)));
         }
+
+        // Phase 3b pass one-and-a-half — the qualifier hop, over the SAME table shape the
+        // full build builds. Unchanged files' bindings come from the snapshot
+        // (`FilePatchMeta::module_bindings`, persisted for exactly this); changed files' come
+        // from the pass just run. Correctness rests on a guard that already exists: a file
+        // whose imports moved has a different surface signature, and the patch refuses those
+        // outright — so an unchanged file's persisted table can never be stale here.
+        let mut bindings_by_file: Vec<HashMap<SmolStr, FileId>> = graph
+            .patch_meta
+            .iter()
+            .map(|meta| {
+                meta.module_bindings
+                    .iter()
+                    .map(|b| (b.name.clone(), b.target))
+                    .collect()
+            })
+            .collect();
+        let (changed_indexes, mut changed_resolutions): (Vec<usize>, Vec<ImportResolution>) =
+            std::mem::take(&mut changed_imports).into_iter().unzip();
+        for (&c, resolution) in changed_indexes.iter().zip(changed_resolutions.iter()) {
+            bindings_by_file[c] = resolution
+                .module_bindings
+                .iter()
+                .map(|b| (b.name.clone(), b.target))
+                .collect();
+        }
+        link_module_bindings(&mut changed_resolutions, &bindings_by_file);
+
+        // Phase 3b pass two, in the same changed-file order pass one ran in.
+        let mut claims_by_index: HashMap<usize, &Claimed> = HashMap::default();
+        for cf in &changed_files {
+            if let Some(claimed) = &cf.claimed {
+                claims_by_index.insert(cf.index, claimed);
+            }
+        }
+        for (c, imports) in changed_indexes.into_iter().zip(changed_resolutions) {
+            let Some(claimed) = claims_by_index.get(&c) else {
+                continue;
+            };
+            let adapter = &adapters[claimed.adapter_index];
+            let references = resolve_references(c, &claimed.facts, &**adapter, &tables, &imports);
+            new_patch_meta_bindings.push((c, imports.module_bindings.clone()));
+            resolved_outputs.push((imports, references));
+        }
+    }
+    for (c, bindings) in new_patch_meta_bindings {
+        graph.patch_meta[c].module_bindings = bindings;
     }
 
     // ---- apply, then restore the canonical order ----
@@ -499,9 +549,12 @@ pub(crate) fn try_patch(
         .map(|(i, d)| (d.name.clone(), DependencyId(i as u32)))
         .collect();
     graph.edges.extend(new_edges);
-    for out in resolved_outputs {
+    for (imports, out) in resolved_outputs {
+        // Imports before references, per file — the order the full build merges them in, and
+        // the order `DependencyId` assignment depends on.
+        graph.edges.extend(imports.edges);
         graph.edges.extend(out.edges);
-        for (name, confidence, span, from, source) in out.dep_imports {
+        for (name, confidence, span, from, source) in imports.dep_imports {
             let to = *dep_index.entry(name.clone()).or_insert_with(|| {
                 let id = DependencyId(graph.dependencies.len() as u32);
                 graph

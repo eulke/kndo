@@ -495,7 +495,7 @@ was structurally *invisible* to `unused`, not merely reachable, because nothing 
 `FileClass`. Claiming is the entire fix.
 
 That framing also settled two things the RFC's own prose left ambiguous: `resolve()` turned out
-to be genuinely unreachable in normal operation, not just trivial — `graph.rs`'s `resolve_file`
+to be genuinely unreachable in normal operation, not just trivial — `graph/assemble.rs`'s `resolve_imports`
 only ever calls the *claiming* adapter's own `resolve()` over *that file's own* `facts.imports`,
 never a fan-out to every registered adapter the trait doc comment's wording suggests. Since
 JSON's `extract()` never populates `imports` (JSON has no import syntax), its `resolve()` is

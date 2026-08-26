@@ -334,7 +334,7 @@ only then imported top-level names. Ranked above the fallback instead, an unrela
 | Go | `dir#declared-package-name` — splits external test packages (`foo_test`) from `foo` in the same directory, closing the documented §1.1 imprecision of docs/adapters/go.md with zero core changes |
 | Java | declared package name (dotted string from the `package` statement) — never directory-derived, sidestepping source-root detection (`src/main/java` is a build-tool convention, not language-visible from a bare file path); docs/adapters/java.md §0 |
 | Kotlin | same as Java (declared dotted package name) — but note this key carries *zero* visibility meaning for Kotlin (§6), only resolution meaning (same-package unqualified reference, wildcard import enumeration) |
-| Rust | module path (crate-root-relative; inline `mod` appends a segment) |
+| Rust | `None` — **not** a module path, and deliberately so: Rust files never resolve each other's names implicitly (everything travels through `use` or a qualified path), so the unit machinery has nothing to do. `internal/adapters/rust.md` §2 is the authority. The module-path key this row once claimed does not exist in the adapter; giving it one is future work (`internal/detection-gaps.md` §7's `VisibilityScope::Module` needs an anchor), not a described fact |
 | Swift | target/module name |
 | JS/TS, CSS, JSON | `None` — file-scoped languages |
 
@@ -399,6 +399,39 @@ adapter's knowledge (Rust's try operator → 0), the core just indexes. Pointers
 N hops (each hop a declared fact, each resolved hop's type credited with a Read from the
 site); a projection index with no parameter at that position is a miss — duck fallback,
 never a settle.
+
+**§9-bis, the one hop through a module file (M6).** `use crate::internals::{attr, check, Ctxt};`
+followed by `check::check(cx, …)` registered ONE qualifier — the specifier's own target — and
+left `check` a mere binding that resolved to no symbol, because `internals/mod.rs` declares
+nothing by that name: it only re-links the file with its own `mod check;`. The chain is *a
+binding on the target's own import table*, and no single pass can follow it (the target's table
+does not exist when its consumer is resolved). Phase 3b is therefore three passes, shared by
+`graph::assemble` and `graph::patch` alike — one resolution semantics, two data sources:
+
+1. `resolve_imports` — per file, no cross-file dependency. Alongside the bindings, qualifiers,
+   visible units and edges it already produced, it records `module_bindings`: every name this
+   file's imports put in scope that points at an in-repo FILE (`graph::ModuleBinding`). Both
+   shapes count and the pair is the point — a brace member kept even though it bound no symbol
+   (the consumer side), and an import's `local_alias`, which is where a file-linking `mod x;`
+   carries its name when it has no bindings at all (the producer side).
+2. `link_module_bindings` — per file, reading every file's table. A name bound to file F that
+   F's own table binds again registers the qualifier F sends it to. **One hop, never a
+   fixpoint** (chasing further needs a cycle guard for evidence nobody has produced);
+   **non-settling**, like every derived qualifier, so a miss takes the in-scope/duck ladder
+   rather than binding the access to the wrong file and killing a live method; and an existing
+   qualifier **always wins** — a direct alias is stronger provenance than a hop.
+3. `resolve_references` — per file, the reference/dynamic/diagnostic body, against its own
+   (now hop-extended) import resolution.
+
+Language-blind by construction: no separator, no path arithmetic, nothing but "this name binds
+to that file, and that file binds this name to another file." The alternative — extend the
+specifier and re-resolve `crate::internals::check` — would teach the core that `::` joins path
+segments, which the ignorance rule forbids.
+
+No RFC 0013 §4 signature change was needed: `surface_signature` already hashes a file's complete
+import list, so any change to F's imports moves F's surface and forces a full rebuild — a stale
+hop is unrepresentable. `FilePatchMeta` carries each file's `module_bindings` so an unchanged
+file contributes its table without re-extraction; `patch_equivalence` is the harness.
 
 ## 10. Multi-module topology (`go.work` et al) — adapter work, one recorded divergence
 

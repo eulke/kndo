@@ -141,6 +141,22 @@ pub struct FilePatchMeta {
     /// persisted verbatim: the patch resolves CHANGED files' chained qualifiers against
     /// UNCHANGED files' member types without re-fetching their facts.
     pub member_types: Vec<crate::adapter::RawMemberType>,
+    /// Every name this file's imports bind to another FILE, as resolved
+    /// (`ImportResolution::module_bindings`). Persisted for exactly the reason `member_types`
+    /// is: the qualifier hop (`graph::assemble::link_module_bindings`) lets a CHANGED file's
+    /// qualifier follow one binding through an UNCHANGED file's table, and re-resolving every
+    /// unchanged file's imports to learn it would defeat the patch.
+    pub module_bindings: Vec<ModuleBinding>,
+}
+
+/// One resolved import binding: the name `name` in the owning file's scope binds to `target`.
+/// Named rather than a tuple for the same reason [`AliasEntry`] is — rkyv's `with` attribute
+/// applies to fields, not to tuple elements.
+#[derive(Debug, Clone, PartialEq, Eq, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+pub struct ModuleBinding {
+    #[rkyv(with = crate::rkyv_support::SmolStrAsString)]
+    pub name: SmolStr,
+    pub target: FileId,
 }
 
 /// One resolved re-export alias: importing `name` from the owning file resolves to `symbol`.

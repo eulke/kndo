@@ -597,6 +597,65 @@ fn qualified_resolution_reaches_the_targets_unit_siblings() {
 }
 
 #[test]
+fn a_brace_member_naming_a_submodule_hops_through_the_module_file() {
+    // `use crate::internals::{attr, check, Ctxt};` followed by `check::check(cx, ..)`.
+    // The import registers ONE qualifier (the target's own name), and `check` stays a mere
+    // binding that resolves to no symbol — the module file declares nothing called `check`,
+    // it only re-links the file with its own `mod check;`. The answer is in the module
+    // file's OWN import table, one hop away (`internal/detection-gaps.md` §8): without it
+    // the whole family of helpers behind such a submodule reads as dead.
+    let dir = project(
+        "qref-module-hop",
+        &[
+            (
+                "src/main.mock",
+                "import ./internals/mod.mock check,Ctxt\nqref check verify\nroot-file",
+            ),
+            ("src/internals/mod.mock", "import-as check ./check.mock"),
+            ("src/internals/check.mock", "decl verify"),
+        ],
+    );
+    let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
+    let edges = reference_edges_to(&graph, "verify");
+    assert_eq!(edges.len(), 1);
+    assert_eq!(edges[0].confidence, Confidence::Certain);
+}
+
+#[test]
+fn a_direct_qualifier_outranks_the_module_hop() {
+    // Both shapes bind the name `check` here: an explicit alias onto one file, and a brace
+    // member of a module file that itself links a DIFFERENT `check`. The hop is derived
+    // evidence and never overwrites an import that states the binding outright — otherwise
+    // a same-named submodule anywhere in the import list could steal a direct alias.
+    let dir = project(
+        "qref-module-hop-precedence",
+        &[
+            (
+                "src/main.mock",
+                "import-as check ./direct.mock\nimport ./internals/mod.mock check\nqref check verify\nroot-file",
+            ),
+            ("src/direct.mock", "decl verify"),
+            ("src/internals/mod.mock", "import-as check ./check.mock"),
+            ("src/internals/check.mock", "decl verify"),
+        ],
+    );
+    let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
+    let edges = reference_edges_to(&graph, "verify");
+    assert_eq!(edges.len(), 1);
+    let target = match edges[0].kind {
+        EdgeKind::References { to, .. } => to,
+        _ => unreachable!(),
+    };
+    assert_eq!(
+        graph.files[graph.symbols[target.0 as usize].file.0 as usize]
+            .path
+            .0
+            .as_str(),
+        "src/direct.mock"
+    );
+}
+
+#[test]
 fn a_type_naming_qualifier_resolves_the_targets_member() {
     // The alias names a TYPE in the target, and the reference is that type's member —
     // Rust's `Thing::from_low_args()` through `use crate::thing::Thing`. The bare table
