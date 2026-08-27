@@ -36,6 +36,31 @@ pub struct JvmSourceLayout {
     pub skip_file_names: &'static [&'static str],
 }
 
+/// The JVM half of [`kndo_core::adapter::LanguageAdapter::declares_dependency`]: a Maven or
+/// Gradle dependency is stored under its full `groupId:artifactId` coordinate, but an
+/// activation rule is written by a human who says `spring-boot-starter-thymeleaf`, not
+/// `org.springframework.boot:spring-boot-starter-thymeleaf`. So a query matches either the
+/// whole coordinate or the artifact id alone.
+///
+/// Matching the bare artifact id can in principle match two groups publishing the same
+/// artifact name. That is the keep-alive direction — a conventions plugin turning on for a
+/// project that does not use that exact vendor's artifact contributes roots and edges nobody
+/// asked for, which can only suppress findings, never invent one (RFC 0012 §2) — and it is the
+/// only spelling an author can reasonably be expected to write.
+pub fn declares_dependency(facts: &ManifestFacts, query: &str) -> bool {
+    facts
+        .dependencies
+        .iter()
+        .chain(&facts.workspace_dependencies)
+        .any(|d| {
+            d.name == query
+                || d.name
+                    .rsplit(':')
+                    .next()
+                    .is_some_and(|artifact| artifact == query)
+        })
+}
+
 pub fn extract(
     path: &str,
     content: &[u8],

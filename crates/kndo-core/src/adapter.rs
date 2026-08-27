@@ -1261,6 +1261,29 @@ pub trait LanguageAdapter: Send + Sync {
         ManifestFacts::default()
     }
 
+    /// Does this manifest declare a dependency that an activation rule naming `query` means?
+    ///
+    /// Plugin and adapter activation asks this — `ActivationRule::ManifestDependency` — and the
+    /// core cannot answer it, because how a coordinate is SPELLED is ecosystem knowledge. npm's
+    /// name is the literal key a plugin author would write. Cargo treats `-` and `_` as
+    /// interchangeable, so `serde-json` must find `serde_json`. A Maven or Gradle coordinate is
+    /// `groupId:artifactId`, while a plugin author naturally writes the artifact id alone —
+    /// nobody types `org.springframework.boot:spring-boot-starter-thymeleaf` into a rule.
+    ///
+    /// The default is exact equality over this manifest's own dependencies and the shared
+    /// version pool ([`ManifestFacts::workspace_dependencies`] — a virtual workspace root
+    /// declares its dependencies only there). It is correct wherever the spelling an author
+    /// writes IS the spelling the manifest carries, which is why most adapters need no
+    /// override: like every other rung of the authoring surface, this is a dynamic offered to
+    /// languages that need it, not an obligation on every one.
+    fn declares_dependency(&self, facts: &ManifestFacts, query: &str) -> bool {
+        facts
+            .dependencies
+            .iter()
+            .chain(&facts.workspace_dependencies)
+            .any(|d| d.name == query)
+    }
+
     /// Resolve an import specifier to a concrete target. Called by the core's resolution
     /// driver — including for specifiers emitted by *other* adapters.
     fn resolve(&self, spec: &ImportSpec, ctx: &ResolveCtx<'_>) -> Resolution;

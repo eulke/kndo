@@ -125,6 +125,18 @@ impl LanguageAdapter for RustAdapter {
         manifest::extract(file.path.0.as_str(), file.content, ctx)
     }
 
+    /// Cargo treats `-` and `_` as interchangeable in a crate name, so a plugin author should
+    /// not have to guess which spelling a project used: `serde-json` finds `serde_json`.
+    fn declares_dependency(&self, facts: &ManifestFacts, query: &str) -> bool {
+        let normalize = |n: &str| n.replace('_', "-");
+        let query = normalize(query);
+        facts
+            .dependencies
+            .iter()
+            .chain(&facts.workspace_dependencies)
+            .any(|d| normalize(&d.name) == query)
+    }
+
     fn resolve(&self, spec: &ImportSpec, ctx: &ResolveCtx<'_>) -> Resolution {
         resolution::resolve(spec, ctx)
     }

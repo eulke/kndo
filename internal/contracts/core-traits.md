@@ -181,6 +181,16 @@ pub trait LanguageAdapter: Send + Sync {
     /// resolution rules to guess one with.
     fn extract_manifest(&self, file: &SourceFile, ctx: &ResolveCtx) -> ManifestFacts;
 
+    /// Does this manifest declare a dependency that an `ActivationRule::ManifestDependency`
+    /// naming `query` means? How a coordinate is SPELLED is ecosystem knowledge the core has
+    /// no way to hold: npm's name is the literal key an author would write, Cargo treats `-`
+    /// and `_` as interchangeable, and a Maven/Gradle coordinate is `groupId:artifactId` while
+    /// an author writes the artifact id alone. Defaults to exact equality over `dependencies`
+    /// plus `workspace_dependencies` (a virtual workspace root declares only the latter) — so
+    /// an adapter whose spelling needs no translation overrides nothing, the same
+    /// dynamic-not-obligation posture as `visibility_ladder` and `claim_manifest`.
+    fn declares_dependency(&self, facts: &ManifestFacts, query: &str) -> bool;
+
     /// Resolve an import specifier to a concrete target, given an index of claimable paths.
     /// Called by the core's resolution driver — including for specifiers emitted by *other*
     /// adapters (cross-language edges, RFC 0002 §4). Internal-package specifiers
@@ -672,7 +682,11 @@ pub trait Plugin: Send + Sync {
     // { id, version, detection: Vec<SmolStr>, requested_file_access: Vec<SmolStr>,
     //   activation: Vec<ActivationRule>, dependencies: Vec<SmolStr> } — `activation`
     // (RFC 0003 §4) is what gates a plugin that isn't unconditionally present (globally
-    // installed, or a built-in with rules), and `detection` is prose for `kndo doctor`
+    // installed, or a built-in with rules). `ManifestDependency` is evaluated against EVERY
+    // manifest the compiled-in adapters claim, parsed by those adapters' own
+    // `extract_manifest` and matched by their own `declares_dependency` — the frontend holds
+    // no manifest parser of its own. It once held two (`package.json` and `Cargo.toml`), which
+    // silently made the rule unmatchable for every JVM, Go and Swift project; and `detection` is prose for `kndo doctor`
     // describing a gate `activation` CANNOT express (an always-on coverage ingester naming
     // its report paths). A gate that IS a rule leaves `detection` empty rather than restating
     // it — one concept, one source. Every descriptor is written as a full struct literal, in

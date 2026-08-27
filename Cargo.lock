@@ -1229,6 +1229,7 @@ dependencies = [
  "kndo-plugin-rkyv",
  "kndo-plugin-serde",
  "kndo-plugin-wasmtime",
+ "rustc-hash",
  "serde_json",
  "sha2",
  "smol_str",

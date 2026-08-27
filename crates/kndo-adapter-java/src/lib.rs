@@ -134,6 +134,13 @@ impl LanguageAdapter for JavaAdapter {
         manifest::extract(file.path.0.as_str(), file.content, ctx)
     }
 
+    /// A Maven/Gradle coordinate is `groupId:artifactId`; an activation rule is written as the
+    /// artifact id alone. The shared JVM matcher accepts either — the same module that parses
+    /// these manifests in the first place owns the question of how one is spelled.
+    fn declares_dependency(&self, facts: &ManifestFacts, query: &str) -> bool {
+        kndo_adapter_toolkit::jvm_manifest::declares_dependency(facts, query)
+    }
+
     fn resolve(&self, spec: &ImportSpec, ctx: &ResolveCtx<'_>) -> Resolution {
         resolution::resolve(spec, ctx)
     }
