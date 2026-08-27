@@ -15,7 +15,7 @@ fn tsx_language() -> Language {
 
 /// Parse source with the TSX grammar (JSX-aware) when `tsx` is true, else plain TypeScript —
 /// which also parses ordinary JS/CJS (one grammar, two module systems).
-pub fn parse(source: &[u8], tsx: bool) -> Option<Tree> {
+pub(crate) fn parse(source: &[u8], tsx: bool) -> Option<Tree> {
     let mut parser = tree_sitter::Parser::new();
     let lang = if tsx {
         tsx_language()

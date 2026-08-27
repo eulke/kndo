@@ -268,9 +268,14 @@ pub struct FileFacts {
                                              //   nested_scope: bool — declared inside a scope
                                              //   unit nested within the file (an inline module):
                                              //   the tightest declarable level there means "this
-                                             //   scope", strictly narrower than the ladder's
-                                             //   file rung, so file-local evidence can't certify
-                                             //   that rung and internal-only advances past it,
+                                             //   scope", strictly narrower than any scope the
+                                             //   core can compute, since every scope up to and
+                                             //   including Module is derived from file/unit
+                                             //   co-location and none of it sees inside a file;
+                                             //   internal-only therefore certifies only rungs
+                                             //   strictly wider than Module for such a
+                                             //   declaration (Package and Public are unaffected:
+                                             //   nesting cannot change a package),
                                              //   visibility_inherited: bool — no declarable
                                              //   visibility of its own (enum variants, trait
                                              //   items): the level belongs to the container,

@@ -191,7 +191,7 @@ pub(crate) struct BoundName {
 impl BoundName {
     /// The symbol, only if the file STATES the import that binds it — the tier that outranks
     /// the file's own declarations, because no language lets a written import shadow one.
-    pub(crate) fn stated(&self) -> Option<SymbolId> {
+    fn stated(&self) -> Option<SymbolId> {
         (!self.reconstructed).then_some(self.symbol)
     }
 }

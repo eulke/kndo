@@ -66,9 +66,7 @@ pub fn finding_id(parts: FindingIdParts<'_>) -> String {
 /// first language whose tests live inside production files). `test-only` and `untested`
 /// exempt them: a test being reachable only from tests is the definition of a test, not a
 /// finding.
-pub(crate) fn test_root_symbols(
-    graph: &ProjectGraph,
-) -> std::collections::HashSet<crate::vocab::SymbolId> {
+fn test_root_symbols(graph: &ProjectGraph) -> std::collections::HashSet<crate::vocab::SymbolId> {
     use crate::vocab::{EdgeKind, NodeRef, RootKind};
     graph
         .edges
@@ -87,14 +85,14 @@ pub(crate) fn test_root_symbols(
 /// *not* the human-readable label (which can be absent or a display name), so ids stay stable
 /// across packages that share a name but not a manifest path. Shared by every per-package
 /// dependency analysis (`undeclared`, `dependency_hygiene`).
-pub(crate) fn package_discriminator(graph: &ProjectGraph, package: PackageId) -> String {
+fn package_discriminator(graph: &ProjectGraph, package: PackageId) -> String {
     match graph.packages[package.0 as usize].manifest.as_ref() {
         Some(path) => path.0.to_string(),
         None => String::new(),
     }
 }
 
-pub(crate) fn package_label(graph: &ProjectGraph, package: PackageId) -> String {
+fn package_label(graph: &ProjectGraph, package: PackageId) -> String {
     match &graph.packages[package.0 as usize] {
         PackageNode {
             name: Some(name), ..
@@ -138,7 +136,7 @@ impl Default for AnalysisTuning {
 
 /// Everything one analysis needs to read — the graph, its precomputed reachability, the run's
 /// ingested coverage, and the resolved tuning knobs. Shared, read-only, borrowed once per run.
-pub(crate) struct AnalysisCtx<'a> {
+struct AnalysisCtx<'a> {
     pub(crate) graph: &'a ProjectGraph,
     pub(crate) reach: &'a ReachabilityMap,
     pub(crate) coverage: &'a CoverageMap,
@@ -180,7 +178,7 @@ pub struct Abstention {
 /// `duplicate-functions`); every other analysis leaves them empty, which is why `Default`
 /// merges cleanly regardless of which analysis produced a given output.
 #[derive(Default)]
-pub(crate) struct AnalysisOutput {
+struct AnalysisOutput {
     pub(crate) findings: Vec<Finding>,
     /// Diagnostics the analysis emits *while judging*. An abstention's own diagnostic does
     /// NOT belong here — it lives in `verdict`, and `run_all` folds it into the stream, so
@@ -205,7 +203,7 @@ impl AnalysisOutput {
 /// shapes (`Vec<Finding>`, `(Vec<Finding>, Option<Diagnostic>)`, …) the underlying `find_*`
 /// functions still return; this trait is the seam between them and [`run_all`]'s registry,
 /// not a rewrite of the analyses themselves.
-pub(crate) trait Analysis: Send + Sync {
+trait Analysis: Send + Sync {
     /// Also the `--verbose` timings label — matches the historical timing phase names. Not a
     /// category: one analysis may own several (`dependencies` emits three).
     fn id(&self) -> &'static str;

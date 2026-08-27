@@ -196,19 +196,27 @@ pub fn find_internal_only(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<
             .filter(|&&(_, c, _)| c < Confidence::Probable)
             .any(|&(f, _, m)| origin_scope(f, m) > required);
 
-        // A nested-scope declaration's tightest level means "visible to the enclosing
-        // scope", strictly narrower than the file-scope rung's "visible to this file" —
-        // file-local evidence cannot certify it, so the floor moves one scope wider
-        // (an inline-mod item used same-file can narrow to the crate rung, never to
-        // private). Scopes, not indices: whatever the ladder's rung layout, the rule is
-        // "strictly wider than File".
-        let floor = if symbol.nested_scope && required <= VisibilityScope::File {
+        // A nested-scope declaration lives in a scope unit INSIDE its file, and the core
+        // cannot see where that unit's subtree ends — `required_scope` reasons about files.
+        // Every scope up to and including `Module` is derived from file/unit co-location, so
+        // for such a declaration none of them is evidence: two references in one file can sit
+        // in different inner units, and a reference the file-level walk calls "inside the
+        // declaring module's subtree" may be outside the inner one. Only `Package` and wider
+        // survive, because nesting inside a file cannot change which package a declaration is
+        // in. So the floor moves to the first rung strictly wider than `Module`.
+        //
+        // Concretely, the false positive this prevents: an item inside `mod activation { … }`
+        // used from the enclosing file's top level and from a sibling module. File-derived
+        // evidence read that as "its own module subtree" and recommended making it private —
+        // which does not compile, because a parent module cannot see a child's private items.
+        // Scopes, not indices: whatever the ladder's rung layout, the rule is the same.
+        let floor = if symbol.nested_scope && required <= VisibilityScope::Module {
             let Some(wider) = ladder
                 .iter()
                 .map(|rung| rung.scope)
-                .find(|&s| s > VisibilityScope::File)
+                .find(|&s| s > VisibilityScope::Module)
             else {
-                continue; // single-scope ladder — nothing certifiable to suggest
+                continue; // no rung wider than the file's own module — nothing certifiable
             };
             wider
         } else {
@@ -904,6 +912,72 @@ mod tests {
             suggestion(true).contains("pub(crate) would suffice"),
             "nested: the floor moves past the file rung"
         );
+    }
+
+    /// Rust's own ladder, verbatim: `private` is a **Module** rung (a private item is visible
+    /// to its declaring module *and its descendants*), not a File one.
+    fn rust_ladder() -> Vec<crate::adapter::VisibilityRung> {
+        use crate::adapter::VisibilityScope::*;
+        vec![
+            rung(Module, "private"),
+            rung(Module, "pub(super)"),
+            rung(Package, "pub(crate)"),
+            rung(Public, "pub"),
+        ]
+    }
+
+    #[test]
+    fn a_nested_scope_symbol_is_never_narrowed_to_a_module_rung() {
+        // The regression kndo found on its own source. A `pub(crate) fn` inside an inline
+        // `mod activation { … }`, used from the enclosing file, was told "private would
+        // suffice" — because `private` is a Module rung and file-local evidence looked like
+        // it certified the module. It does not: the declaration's module is `activation`,
+        // strictly inside the file, and the use is in the file's own (parent) module, which
+        // cannot see a child module's private items. Applying the advice does not compile.
+        //
+        // Everything up to and including Module is derived from file/unit co-location, so for
+        // a declaration nested inside its file none of it is evidence. Package survives:
+        // nesting inside a file cannot change which package something is in.
+        let suggestion = |nested: bool| {
+            let files = vec![file("src/lib.rs")];
+            let mut s = symbol(FileId(0), "global_plugin_dir", 3);
+            s.nested_scope = nested;
+            let edges = root_and_ref(FileId(0), FileId(0), SymbolId(0));
+            let graph = ProjectGraph::for_test(files, vec![s], vec![], edges)
+                .with_visibility_ladders(vec![(SmolStr::new("mock"), rust_ladder())]);
+            let reach = crate::analysis::reachability::compute(&graph);
+            find_internal_only(&graph, &reach)
+                .first()
+                .map(|f| f.message.clone())
+        };
+        assert!(
+            suggestion(false)
+                .expect("a top-level pub item used only in its own file can go private")
+                .contains("private would suffice"),
+            "top-level: the Module rung is certifiable from file-local evidence"
+        );
+        assert!(
+            suggestion(true)
+                .expect("nested: pub is still narrowable, just not that far")
+                .contains("pub(crate) would suffice"),
+            "nested: the floor clears every Module rung, not just the File one"
+        );
+    }
+
+    #[test]
+    fn a_nested_scope_symbol_declared_at_the_package_rung_is_left_alone() {
+        // The exact shape of the false positive: already `pub(crate)`, nested, used only
+        // within its own file. The raised floor IS the declared rung, so there is nothing
+        // honest left to suggest — and kndo says nothing rather than something that would
+        // not compile.
+        let files = vec![file("src/lib.rs")];
+        let mut s = symbol(FileId(0), "global_plugin_dir", 2);
+        s.nested_scope = true;
+        let edges = root_and_ref(FileId(0), FileId(0), SymbolId(0));
+        let graph = ProjectGraph::for_test(files, vec![s], vec![], edges)
+            .with_visibility_ladders(vec![(SmolStr::new("mock"), rust_ladder())]);
+        let reach = crate::analysis::reachability::compute(&graph);
+        assert!(find_internal_only(&graph, &reach).is_empty());
     }
 
     #[test]

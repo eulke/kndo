@@ -135,33 +135,38 @@ pub struct PackageHealth {
     pub grade: String,
 }
 
+/// The grade bands, best first: a grade and the score at or above which it is earned. RFC 0006
+/// fixes these four numbers, and they are written **once** — [`grade`] reads them forward and
+/// [`grade_boundary`] backward. The two used to carry their own copy of the same four literals,
+/// while `grade_boundary`'s doc claimed it existed so that nobody would have to duplicate them.
+const GRADE_BANDS: [(&str, f64); 5] = [
+    ("A", 90.0),
+    ("B", 80.0),
+    ("C", 65.0),
+    ("D", 50.0),
+    ("F", f64::NEG_INFINITY),
+];
+
 pub fn grade(score: f64) -> &'static str {
-    if score >= 90.0 {
-        "A"
-    } else if score >= 80.0 {
-        "B"
-    } else if score >= 65.0 {
-        "C"
-    } else if score >= 50.0 {
-        "D"
-    } else {
-        "F"
-    }
+    GRADE_BANDS
+        .iter()
+        .find(|(_, floor)| score >= *floor)
+        .map(|(grade, _)| *grade)
+        // Unreachable: the last band's floor is -inf, so every finite score matches. NaN would
+        // fall through, and "F" is the honest answer for a score that is not a number.
+        .unwrap_or("F")
 }
 
-/// The threshold `current_grade` sits above, and the grade one step better — for a frontend
-/// reporting "how close to the next grade up" on a score drop. Shares the exact thresholds
-/// `grade()` computes forward from (the same four numbers), so a frontend never hand-copies
-/// them into its own table where they could silently drift out of sync. `None` for `"F"` —
-/// there's no boundary to name below the worst grade.
+/// The threshold `current_grade` sits above, and the grade one step worse — for a frontend
+/// reporting "how close to dropping a grade". Reads [`GRADE_BANDS`] backward, the same table
+/// [`grade`] reads forward, so a frontend never hand-copies the thresholds into a table of its
+/// own where they could silently drift. `None` for the worst grade (nothing below it) and for
+/// any string that is not a grade.
 pub fn grade_boundary(current_grade: &str) -> Option<(f64, &'static str)> {
-    match current_grade {
-        "A" => Some((90.0, "B")),
-        "B" => Some((80.0, "C")),
-        "C" => Some((65.0, "D")),
-        "D" => Some((50.0, "F")),
-        _ => None,
-    }
+    let i = GRADE_BANDS.iter().position(|(g, _)| *g == current_grade)?;
+    let (_, floor) = GRADE_BANDS[i];
+    let (next, _) = *GRADE_BANDS.get(i + 1)?;
+    Some((floor, next))
 }
 
 /// Everything `run_all` hands over beyond the graph itself: aux stats individual analyses
@@ -868,6 +873,30 @@ mod tests {
         assert_eq!(grade(64.9), "D");
         assert_eq!(grade(50.0), "D");
         assert_eq!(grade(49.9), "F");
+    }
+
+    #[test]
+    fn the_forward_and_backward_readings_of_the_grade_table_agree() {
+        // `grade_boundary` is what a frontend uses to say "3.2 points from a B". It named the
+        // same four thresholds `grade` did, in its own copy, under a doc comment claiming it
+        // existed precisely so nobody would keep a second copy. This is the test that would
+        // have caught the drift, and the reason `grade_boundary` had no test at all is that
+        // kndo reported it — `untested` on its own source.
+        for (g, _) in GRADE_BANDS {
+            match grade_boundary(g) {
+                Some((floor, next)) => {
+                    assert_eq!(grade(floor), g, "{g}'s own floor must grade back to {g}");
+                    assert_eq!(
+                        grade(floor - 0.1),
+                        next,
+                        "a hair below {g}'s floor must be {next}"
+                    );
+                }
+                // Only the worst grade has nothing below it.
+                None => assert_eq!(g, GRADE_BANDS[GRADE_BANDS.len() - 1].0),
+            }
+        }
+        assert_eq!(grade_boundary("not-a-grade"), None);
     }
 
     #[test]

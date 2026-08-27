@@ -783,7 +783,7 @@ fn resolve_threads(explicit: Option<&str>, env: Option<&str>) -> Result<Option<u
 /// A malformed `KNDO_THREADS` degrades to the default (physical cores) rather than failing the
 /// command — surfacing a parse error for an env var on every unrelated subcommand would be more
 /// surprising than just falling back.
-pub(crate) fn base_config_overrides() -> ConfigOverrides {
+fn base_config_overrides() -> ConfigOverrides {
     let env_threads = std::env::var("KNDO_THREADS").ok();
     let threads = resolve_threads(None, env_threads.as_deref()).unwrap_or(None);
     ConfigOverrides {
@@ -796,9 +796,7 @@ pub(crate) fn base_config_overrides() -> ConfigOverrides {
 /// the given overrides, and turn either failure into the same `kndo: <msg>` + exit-2 shape.
 /// Returns the resolved cwd alongside the engine for the one caller (`doctor_cmd`) that still
 /// needs it afterward — every other caller just discards it.
-pub(crate) fn open_engine(
-    overrides: ConfigOverrides,
-) -> Result<(std::path::PathBuf, Engine), ExitCode> {
+fn open_engine(overrides: ConfigOverrides) -> Result<(std::path::PathBuf, Engine), ExitCode> {
     let cwd = std::env::current_dir().map_err(|e| {
         eprintln!("kndo: cannot determine working directory: {e}");
         ExitCode::from(2)
@@ -847,7 +845,7 @@ fn resolve_fail_on(explicit: Option<&str>, mode: &RunMode) -> Result<Option<Seve
 }
 
 /// `--format` flag > `KNDO_FORMAT` env > TTY auto-detect (human on TTY, json when piped).
-pub(crate) fn resolve_format(explicit: Option<&str>) -> String {
+fn resolve_format(explicit: Option<&str>) -> String {
     if let Some(f) = explicit {
         return f.to_string();
     }
@@ -864,7 +862,7 @@ pub(crate) fn resolve_format(explicit: Option<&str>) -> String {
 }
 
 /// `NO_COLOR` always wins over `auto`; `--color always|never` overrides the TTY auto-detect.
-pub(crate) fn resolve_color(explicit: Option<&str>) -> bool {
+fn resolve_color(explicit: Option<&str>) -> bool {
     if std::env::var_os("NO_COLOR").is_some() {
         return false;
     }

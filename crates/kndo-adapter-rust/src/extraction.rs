@@ -128,11 +128,10 @@ pub(crate) fn extract(path: &str, content: &[u8]) -> FileFacts {
     let mut whole_file_test = false;
     let mut cursor = root.walk();
     for child in root.children(&mut cursor) {
-        if child.kind() == "inner_attribute_item" {
-            let t = text(child, content);
-            if t.starts_with("#![cfg") && t.contains("test") {
-                whole_file_test = true;
-            }
+        if child.kind() == "inner_attribute_item"
+            && cfg_predicate(text(child, content)).is_some_and(cfg_is_harness_only)
+        {
+            whole_file_test = true;
         }
     }
     drop(cursor);
@@ -1104,6 +1103,95 @@ fn collect_inline_mod_names(root: Node, src: &[u8]) -> std::collections::HashSet
     out
 }
 
+/// Cfg flags that only a test or verification harness ever sets — never `cargo build`, and
+/// never a user through Cargo's feature system. Curated adapter knowledge, like the
+/// machinery-dispatch trait list: the criterion is "no ordinary build of this crate compiles
+/// the item", which is what makes the item test infrastructure rather than production code.
+///
+/// `unix`, `debug_assertions`, `target_os = "…"` are deliberately absent: those ARE ordinary
+/// builds. So is `feature = "…"` — a Cargo feature is part of the crate's published surface,
+/// and a downstream crate turning it on is a real, supported configuration.
+const HARNESS_CFGS: [&str; 5] = ["test", "loom", "fuzzing", "miri", "kani"];
+
+/// Whether a `cfg` predicate is satisfiable **only** under a harness — the criterion for
+/// treating the item it gates as test infrastructure rather than production code.
+///
+/// A substring search for `"test"` was the previous rule, and it was wrong in both directions.
+/// `any(test, feature = "testkit")` also compiles with the feature on, so the item is
+/// production code a downstream crate can reach; marking its region as tests silences every
+/// finding inside it and makes the dependencies it imports look dev-only. `not(test)` is the
+/// exact opposite of a test region and matched too, as did anything merely spelling the
+/// substring — `feature = "fastest"`, `target_os = "latest"`.
+///
+/// Uncertainty resolves toward silence, never toward accusation (RFC 0012 §2): an unrecognized
+/// predicate is treated as an ordinary build, so its items stay production and kndo keeps
+/// measuring them, but a predicate every branch of which is harness-only stays quiet.
+fn cfg_is_harness_only(pred: &str) -> bool {
+    let pred = pred.trim();
+    if HARNESS_CFGS.contains(&pred) {
+        return true;
+    }
+    let Some((head, inner)) = pred
+        .find('(')
+        .filter(|_| pred.ends_with(')'))
+        .map(|i| (pred[..i].trim(), &pred[i + 1..pred.len() - 1]))
+    else {
+        return false;
+    };
+    match head {
+        // One harness conjunct is enough: `all(loom, unix)` never compiles without loom.
+        "all" => split_predicates(inner)
+            .iter()
+            .any(|p| cfg_is_harness_only(p)),
+        // Every branch must be, or some ordinary build satisfies it.
+        "any" => {
+            let parts = split_predicates(inner);
+            !parts.is_empty() && parts.iter().all(|p| cfg_is_harness_only(p))
+        }
+        // `not(test)` is production-only, and `not(anything else)` says nothing about harnesses.
+        _ => false,
+    }
+}
+
+/// Splits a `cfg` predicate list at the commas that sit at nesting depth zero, ignoring
+/// commas inside string literals (`feature = "a,b"` is one predicate).
+fn split_predicates(inner: &str) -> Vec<&str> {
+    let (mut out, mut depth, mut start, mut in_str) = (Vec::new(), 0usize, 0usize, false);
+    for (i, c) in inner.char_indices() {
+        match c {
+            '"' => in_str = !in_str,
+            '(' if !in_str => depth += 1,
+            ')' if !in_str => depth = depth.saturating_sub(1),
+            ',' if depth == 0 && !in_str => {
+                out.push(inner[start..i].trim());
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    let last = inner[start..].trim();
+    if !last.is_empty() {
+        out.push(last);
+    }
+    out
+}
+
+/// The predicate inside a `#[cfg(…)]`/`#![cfg(…)]` attribute's own text, if it is a `cfg` at
+/// all. `cfg_attr` is deliberately not accepted: `#[cfg_attr(test, derive(Debug))]` applies an
+/// attribute conditionally, it does not gate the item — an item carrying it is ordinary
+/// production code and used to be classified as test infrastructure.
+fn cfg_predicate(attr_text: &str) -> Option<&str> {
+    let t = attr_text.trim();
+    let t = t
+        .strip_prefix("#!")
+        .or_else(|| t.strip_prefix('#'))
+        .unwrap_or(t);
+    let t = t.trim().strip_prefix('[')?.strip_suffix(']')?.trim();
+    let rest = t.strip_prefix("cfg")?.trim_start();
+    let inner = rest.strip_prefix('(')?.strip_suffix(')')?;
+    Some(inner)
+}
+
 /// Item-walk context: the member owner, whether we're under a `#[cfg(test)]` module (its
 /// declarations become test roots — inline test infrastructure), and the file's
 /// local qualifier names.
@@ -1330,10 +1418,18 @@ fn collect_attr(item: Node, src: &[u8], pending: &mut PendingAttrs, out: &mut Fi
                 scan_attr_idents(args, src, out);
             }
         }
-        "cfg" | "cfg_attr" => {
-            // Both branches kept, always — but `#[cfg(test)]` marks the next item
-            // (typically `mod tests`) as inline test infrastructure.
-            if text(attr, src).contains("test") {
+        "cfg" => {
+            // Both branches kept, always — but a test-exclusive `cfg` marks the next item
+            // (typically `mod tests`) as inline test infrastructure. `cfg_attr` is NOT this:
+            // it applies an attribute conditionally, it does not gate the item.
+            // Exactly one paren off each end: `trim_end_matches(')')` is greedy, and
+            // `(all(test, not(loom)))` would come back as `all(test, not(loom`.
+            if attr
+                .child_by_field_name("arguments")
+                .map(|args| text(args, src))
+                .and_then(|t| t.strip_prefix('(')?.strip_suffix(')'))
+                .is_some_and(cfg_is_harness_only)
+            {
                 pending.cfg_test = true;
             }
         }
@@ -4363,6 +4459,59 @@ mod tests {
         assert!(by_name("m").visibility_inherited);
         assert!(by_name("C").visibility_inherited);
         assert!(!by_name("own_vis").visibility_inherited);
+    }
+
+    #[test]
+    fn only_a_harness_only_cfg_marks_a_test_region() {
+        // `contains("test")` was the old rule. Every case below is one it got wrong.
+        assert!(cfg_is_harness_only("test"));
+        assert!(cfg_is_harness_only("all(test, unix)"));
+        assert!(cfg_is_harness_only("any(test, all(test, unix))"));
+        // Other harnesses count: tokio's `#[cfg(any(test, fuzzing))] mod tests` is not
+        // production code in any build a user can ask for.
+        assert!(cfg_is_harness_only("any(test, fuzzing)"));
+        assert!(cfg_is_harness_only("all(loom, test)"));
+        // …but an ordinary-build predicate does not, however unusual.
+        assert!(!cfg_is_harness_only("any(test, unix)"));
+        assert!(!cfg_is_harness_only("debug_assertions"));
+        // A nested predicate: the arguments node's own parens must come off one at a time,
+        // not with a greedy trim that would eat `not(loom)`'s closing paren too.
+        assert!(cfg_is_harness_only("all(test, not(loom))"));
+        // Also compiles without `test`, whenever the feature is on: production code a
+        // downstream crate reaches, not test infrastructure.
+        assert!(!cfg_is_harness_only("any(test, feature = \"testkit\")"));
+        // The exact opposite of a test region.
+        assert!(!cfg_is_harness_only("not(test)"));
+        // Merely spelling the substring.
+        assert!(!cfg_is_harness_only("feature = \"fastest\""));
+        assert!(!cfg_is_harness_only("feature = \"test-utils\""));
+        assert!(!cfg_is_harness_only("target_os = \"latest\""));
+        // A comma inside a string literal is not a predicate separator.
+        assert!(!cfg_is_harness_only("feature = \"a,test\""));
+    }
+
+    #[test]
+    fn a_feature_gated_helper_module_is_not_test_infrastructure() {
+        // kndo found this on its own source: `testkit` is `#[cfg(any(test, feature =
+        // "testkit"))]`, so the old rule swallowed the whole module as tests — which made the
+        // `tempfile` it imports look like a dev-dependency, and would have silenced every
+        // finding inside it.
+        let f = facts(
+            "#[cfg(any(test, feature = \"testkit\"))]\nmod testkit {\n    pub fn helper() {}\n}\n",
+        );
+        assert!(
+            f.test_spans.is_empty(),
+            "a feature-reachable module is production code: {:?}",
+            f.test_spans
+        );
+    }
+
+    #[test]
+    fn cfg_attr_does_not_gate_the_item_it_decorates() {
+        // `#[cfg_attr(test, derive(Debug))]` applies an attribute conditionally; the item
+        // itself compiles in every build. It used to be classified as test infrastructure.
+        let f = facts("#[cfg_attr(test, derive(Debug))]\npub struct Config {}\n");
+        assert!(f.test_spans.is_empty(), "{:?}", f.test_spans);
     }
 
     #[test]

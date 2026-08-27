@@ -32,7 +32,7 @@ use super::*;
 /// `(graph, extraction diagnostics, plugin diagnostics, plugin contributions)` — named only to
 /// keep the 4-tuple under clippy's type-complexity lint; callers still destructure it
 /// positionally.
-type PatchOutcome = (
+pub(crate) type PatchOutcome = (
     ProjectGraph,
     Vec<Diagnostic>,
     Vec<Diagnostic>,

@@ -300,11 +300,14 @@ pub struct Declaration {
     /// those. Default `false`.
     pub implicitly_invoked: bool,
     /// The declaration lives in a scope unit nested *inside* its file (an inline
-    /// module, a local namespace) rather than at the file's top level. The ladder's
-    /// file-scope rung means "visible to this file"; for a nested declaration the language's
-    /// tightest level means "visible to the enclosing scope" — strictly narrower — so
-    /// file-local usage evidence alone cannot justify recommending that rung
-    /// (`internal-only` advances past it). Default `false`.
+    /// module, a local namespace) rather than at the file's top level. For such a declaration
+    /// the language's tightest declarable level means "visible to the enclosing scope", which
+    /// is strictly narrower than anything the core can measure: every scope up to and
+    /// including [`VisibilityScope::Module`] is derived from file and unit co-location, and
+    /// none of it can see inside a file. So no usage evidence certifies those rungs and
+    /// `internal-only` advances past all of them — `Package` and wider still stand, because
+    /// nesting inside a file cannot change which package a declaration is in. Default
+    /// `false`.
     pub nested_scope: bool,
     /// The declaration has no declarable visibility of its own — the recorded level is
     /// inherited from its container (an enum's variants in Rust; any member the language
