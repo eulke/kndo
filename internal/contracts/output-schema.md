@@ -27,9 +27,13 @@ round-trip these examples in CI.
   "health": { /* §4 */ },
   "budget": {                            // diff modes, only when [delta] rules are configured (RFC 0006 §5)
     "verdict": "fail",                   // "pass" | "fail"
-    "rules": [
-      { "rule": "max-health-drop", "limit": 0.0, "measured": 1.7, "verdict": "pass" },
-      { "rule": "max-net-findings", "limit": 0, "measured": 1, "verdict": "fail", "over_by": 1 }
+    "rules": [                           // in evaluation order: the two ratchets, then [delta.budget] keys sorted
+      // limit/measured/over_by are always JSON numbers, counts included — a count is a
+      // measurement against the same scale as a health drop, and one type keeps a consumer
+      // from having to branch on the rule name to know what it is reading.
+      { "rule": "max-health-drop", "limit": 0.0, "measured": -1.7, "verdict": "pass" },
+      { "rule": "max-net-findings", "limit": 0.0, "measured": 1.0, "verdict": "fail", "over_by": 1.0 },
+      { "rule": "defect", "limit": 0.0, "measured": 0.0, "verdict": "pass" }
     ]
   },
   "findings": [ /* §2 — in diff modes: only new findings */ ],
@@ -253,7 +257,7 @@ version stays available for one release cycle, like JSON majors.
 ```
 kndo 0.3.1 agent-format 1 | mode staged | cache warm | 312ms
 result: 3 new, 2 fixed, net +1 | health 82.4 -> 84.1 (B) | baseline 412 acknowledged
-budget: fail (2/3) | health-drop<=0.0 ok +1.7 | defects=0 ok 0 | net<=0 FAIL +1 over-by 1
+budget: fail (2/3) | health-drop<=0 ok -1.7 | net<=0 FAIL 1 over-by 1 | defect<=0 ok 0
 new:
 1. [kndo-a3f81c92e5d4] unused function src/billing/tax.ts:41 calcLegacyTax
    cause: last production reference removed by src/billing/index.ts:12 (this change)
@@ -271,8 +275,9 @@ Grammar rules (normative):
 - **Header + result lines always first**, fixed field order, `|`-separated. An agent reads two
   lines and knows the outcome.
 - **`budget:` line** appears only when `[delta]` rules are configured (RFC 0006 §5): overall
-  verdict + one `rule op limit ok|FAIL measured [over-by N]` segment per rule — a failing agent
-  reads `over-by` and knows exactly how much work remains, without interpretation.
+  verdict + one `rule<=limit ok|FAIL measured [over-by N]` segment per rule — a failing agent
+  reads `over-by` and knows exactly how much work remains, without interpretation. Absence is
+  itself information: it says no budget was configured, never that every budget held.
 - **One finding = one numbered line**: `N. [id] <category> <subject_kind> <path:line> <name>`,
   followed by optional indented `cause:` / `fix:` / `evidence:` lines. Numbers let a model refer
   to findings cheaply ("fix 1 and 3"); ids are the durable anchors.

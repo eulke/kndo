@@ -4,9 +4,8 @@
 //! emits byte-identical agent text, never reconstructed per-frontend.
 //!
 //! Diff modes render `new:`/`fixed:` blocks instead of `findings:` (the schema's own
-//! example), with one numbering sequence running across both. No `budget:` line yet — health
-//! scoring landed in M4 and is rendered below; what is still missing is the `[delta]` half,
-//! whose rules nothing parses. Findings carrying a `related`
+//! example), with one numbering sequence running across both, and a `budget:` line whenever
+//! a `[delta]` section is configured. Findings carrying a `related`
 //! evidence chain (populated by `cyclic`) render it as indented `evidence:` lines — the
 //! format "can never carry information absent from the JSON", and `related`
 //! IS in the JSON. `remediation` isn't — no `fix:` lines. Diff mode's NEW findings
@@ -77,6 +76,9 @@ fn render_diff(result: &RunResult) -> String {
     out.push('\n');
     out.push_str(&diff_result_line(result));
     out.push('\n');
+    if let Some(budget) = &result.budget {
+        out.push_str(&budget_line(budget));
+    }
 
     let mut n = 0usize;
     if !result.findings.is_empty() {
@@ -132,8 +134,54 @@ fn append_health(line: String, result: &RunResult) -> String {
     }
 }
 
+/// The `budget:` line (output-schema §9): overall verdict with a passed/total count, then one
+/// `rule op limit ok|FAIL measured [over-by N]` segment per rule. Absent entirely when no
+/// `[delta]` section is configured — an agent must be able to tell "every budget held" from
+/// "nobody set one".
+///
+/// ASCII only, like every other line here: no `<=`-as-glyph, no check marks. The rule names
+/// are the operator forms the schema's own example uses (`health-drop<=0.0`, `net<=0`), which
+/// read as the comparison being made rather than as the config key that set it.
+fn budget_line(budget: &crate::delta::Budget) -> String {
+    let (passed, total) = budget.passed_of_total();
+    let verdict = if budget.failed() { "fail" } else { "ok" };
+    let mut line = format!("budget: {verdict} ({passed}/{total})");
+    for rule in &budget.rules {
+        let name = match rule.rule.as_str() {
+            "max-health-drop" => "health-drop",
+            "max-net-findings" => "net",
+            other => other,
+        };
+        let outcome = if rule.verdict == crate::delta::BudgetVerdict::Fail {
+            "FAIL"
+        } else {
+            "ok"
+        };
+        line.push_str(&format!(
+            " | {name}<={} {outcome} {}",
+            trim_num(rule.limit),
+            trim_num(rule.measured)
+        ));
+        if let Some(over) = rule.over_by {
+            line.push_str(&format!(" over-by {}", trim_num(over)));
+        }
+    }
+    line.push('\n');
+    line
+}
+
+/// Whole numbers print without a decimal tail — `net<=0`, not `net<=0.0` — while a real
+/// fraction keeps one place, matching how health scores render elsewhere.
+fn trim_num(v: f64) -> String {
+    if v.fract() == 0.0 {
+        format!("{}", v as i64)
+    } else {
+        format!("{v:.1}")
+    }
+}
+
 fn diff_result_line(result: &RunResult) -> String {
-    let net = result.findings.len() as i64 - result.fixed.len() as i64;
+    let net = result.net_findings();
     let base = append_health(
         format!(
             "result: {} new, {} fixed, net {net:+}",
@@ -529,6 +577,70 @@ mod tests {
         assert!(out.contains("new:\n1. [kndo-unused]"));
         assert!(out.contains("fixed:\n2. [kndo-test-only]"));
         assert!(!out.contains("findings:"));
+    }
+
+    fn budget(rules: Vec<crate::delta::BudgetRule>) -> crate::delta::Budget {
+        let verdict = if rules
+            .iter()
+            .any(|r| r.verdict == crate::delta::BudgetVerdict::Fail)
+        {
+            crate::delta::BudgetVerdict::Fail
+        } else {
+            crate::delta::BudgetVerdict::Pass
+        };
+        crate::delta::Budget { verdict, rules }
+    }
+
+    fn budget_rule(rule: &str, limit: f64, measured: f64) -> crate::delta::BudgetRule {
+        let over = measured - limit;
+        crate::delta::BudgetRule {
+            rule: rule.to_string(),
+            limit,
+            measured,
+            verdict: if over > 0.0 {
+                crate::delta::BudgetVerdict::Fail
+            } else {
+                crate::delta::BudgetVerdict::Pass
+            },
+            over_by: (over > 0.0).then_some(over),
+        }
+    }
+
+    #[test]
+    fn the_budget_line_matches_the_schema_documents_own_example() {
+        // output-schema §9 prints this line as its normative example. It is a contract sample,
+        // not an illustration: an agent parsing kndo's agent format is parsing THIS shape.
+        //
+        // The health rule measures the DROP, so a run that improved health by 1.7 reports
+        // `-1.7` and passes a 0.0 limit. That sign convention is what makes `measured <= limit`
+        // the pass test for every rule alike — the earlier doc example had `1.7` against a
+        // limit of `0.0` marked `pass`, which no consumer could have reproduced.
+        let out = render(&RunResult {
+            mode: "diff".to_string(),
+            base_ref: Some("main".to_string()),
+            duration_ms: 7,
+            budget: Some(budget(vec![
+                budget_rule("max-health-drop", 0.0, -1.7),
+                budget_rule("max-net-findings", 0.0, 1.0),
+                budget_rule("defect", 0.0, 0.0),
+            ])),
+            ..RunResult::default()
+        });
+        let expected = "budget: fail (2/3) | health-drop<=0 ok -1.7 | net<=0 FAIL 1 over-by 1 | defect<=0 ok 0\n";
+        assert!(out.contains(expected), "want:\n{expected}\ngot:\n{out}");
+    }
+
+    #[test]
+    fn no_budget_line_when_no_delta_section_is_configured() {
+        // "Every budget held" and "nobody set one" are different answers, and an agent reading
+        // this format can only tell them apart by the line's absence.
+        let out = render(&RunResult {
+            mode: "diff".to_string(),
+            base_ref: Some("main".to_string()),
+            duration_ms: 7,
+            ..RunResult::default()
+        });
+        assert!(!out.contains("budget:"), "{out}");
     }
 
     #[test]

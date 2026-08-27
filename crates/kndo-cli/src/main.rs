@@ -118,9 +118,13 @@ const KNDO_TOML_TEMPLATE: &str = r#"# kndo.toml — everything here is optional;
 # [performance]
 # threads = 0                            # 0 = physical cores; --threads flag wins
 
-# [delta]                                # diff-mode gate budgets
-# max-health-drop = 0.0
-# max-net-findings = 0
+# [delta]                                # diff-mode gate budgets; writing the section IS the opt-in
+# max-health-drop = 0.0                  # the largest health DROP a change may cause
+# max-net-findings = 0                   # new − fixed; `fixed` compensates only here
+
+# [delta.budget]                         # finer tolerances, by group or category
+# defect = 0                             # absolute: zero new defects, whatever else is fixed
+# duplicate = 2
 
 # [[rule]]                               # per-path overrides
 # paths = ["examples/**"]
@@ -1023,7 +1027,10 @@ fn check(args: &[String]) -> ExitCode {
         // exit-2 tier — never let an analysis that didn't run read as a clean pass.
         return ExitCode::from(2);
     }
-    if result.fails_at(fail_on) {
+    // Both halves of the gate, through core's single reader: findings at/above `--fail-on`
+    // OR a `[delta]` budget exceeded (RFC 0006 §5). Composing them here by hand is how a
+    // frontend ends up honoring one and forgetting the other.
+    if result.gate_fails(fail_on) {
         ExitCode::from(1)
     } else {
         ExitCode::SUCCESS
@@ -1034,6 +1041,42 @@ fn check(args: &[String]) -> ExitCode {
 mod tests {
     use super::*;
     use kndo::Finding;
+
+    /// Every key the template offers, uncommented — what a user gets the moment they delete a
+    /// `# `. A template line the parser rejects would hand every new project a diagnostic on
+    /// its first run, and nothing else in the tree reads this string.
+    #[test]
+    fn every_line_of_the_init_template_parses_once_uncommented() {
+        let live: String = KNDO_TOML_TEMPLATE
+            .lines()
+            .filter_map(|line| match line.strip_prefix("# ") {
+                // The first two lines are prose about the file, not commented-out config.
+                Some(rest) if rest.starts_with("kndo.toml —") || rest.starts_with("Written by") => {
+                    None
+                }
+                Some(rest) => Some(rest.to_string()),
+                None => Some(line.to_string()),
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("kndo.toml"), &live).unwrap();
+        let mut engine = kndo::open(dir.path(), kndo::ConfigOverrides::default()).unwrap();
+        let result = engine.check(kndo::RunMode::Full);
+
+        let config_complaints: Vec<&str> = result
+            .diagnostics
+            .iter()
+            .map(|d| d.message.as_str())
+            .filter(|m| m.contains("kndo.toml"))
+            .collect();
+        assert!(
+            config_complaints.is_empty(),
+            "the template we hand every new project does not parse cleanly: \
+             {config_complaints:?}\n--- rendered ---\n{live}"
+        );
+    }
 
     #[test]
     fn gitignore_created_when_absent() {

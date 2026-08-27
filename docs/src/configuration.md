@@ -31,8 +31,12 @@ configuration.
 # threads = 0                            # 0 = physical cores; --threads flag wins
 
 # [delta]                                # diff-mode gate budgets
-# max-health-drop = 0.0
-# max-net-findings = 0
+# max-health-drop = 0.0                  # the largest health DROP a change may cause
+# max-net-findings = 0                   # the largest allowed `new − fixed`
+
+# [delta.budget]                         # finer tolerances, by group or category
+# defect = 0                             # absolute: `fixed` never pays for these
+# duplicate = 2
 
 # [[rule]]                               # per-path overrides
 # paths = ["examples/**"]
@@ -50,12 +54,12 @@ configuration.
 > **What the engine reads today:** **`[analysis]`** (`skip`, `min-confidence`),
 > **`[analysis.duplicate]`** (`min-tokens`), **`[analysis.crap]`** (`threshold`),
 > **`[performance]`** (`threads`), **`[[rule]]`**, **`[[externally-invoked]]`**,
-> **`[plugins.gate]`**, and
-> **`[plugins.<id>]`** (`report`, `max-age`) are all live.
+> **`[plugins.gate]`**, **`[plugins.<id>]`** (`report`, `max-age`), and
+> **`[delta]`**/**`[delta.budget]`** are all live.
 > Still documented-but-unwired: **`[project]`** (discovery is gitignore-aware
-> automatically; scoping it from config doesn't exist yet) and the **`[delta]`** budget
-> gate — kndo prefers an honestly inert commented section over half-applied
-> configuration. This page will always state exactly which keys are live.
+> automatically; scoping it from config doesn't exist yet) — kndo prefers an honestly
+> inert commented section over half-applied configuration. This page will always state
+> exactly which keys are live.
 
 ## Key by key
 
@@ -96,10 +100,41 @@ configuration.
 
 ### `[delta]`
 
-Budgets for diff modes (`--staged`, `--diff`), judging the *change*:
+Budgets for diff modes (`--staged`, `--diff`), judging the *change* rather than the debt.
+They compose with `--fail-on` by OR: a run exits 1 when findings reach the severity
+threshold **or** any budget is exceeded.
 
-- **`max-health-drop`** — the largest health-score decrease a change may cause.
+- **`max-health-drop`** — the largest health-score decrease a change may cause. Measured as
+  a drop, so a change that *improves* health measures negative and passes any limit.
 - **`max-net-findings`** — the largest allowed `new − fixed` count.
+
+Three things about the section as a whole:
+
+- **Writing `[delta]` at all is the opt-in.** With no section, nothing is evaluated and the
+  JSON envelope carries no `budget` block — which is how a consumer tells "every budget
+  held" from "nobody set one". A project that never opts in cannot change exit code because
+  budgets exist.
+- **Inside the section, the strict ratchet is the default.** Writing `[delta]` with only
+  `max-net-findings` leaves `max-health-drop` at `0.0`.
+- **Advisory findings never count.** A plugin finding without a `[plugins.gate]` opt-in is
+  excluded from every budget, exactly as it is from `--fail-on`: installing a
+  finding-emitting plugin must not move your gate.
+
+### `[delta.budget]`
+
+Finer tolerances, keyed by **group** (`defect`, `waste`, `risk`, `hygiene`, `convention`) or
+by **category** (`duplicate`, `unused`, …). Each value is the largest number of *new*
+findings of that kind a change may introduce:
+
+```toml
+[delta.budget]
+defect = 0        # never a new defect
+duplicate = 2     # up to two new clones
+```
+
+These are **absolute, not net**: `fixed` findings compensate only inside `max-net-findings`.
+`defect = 0` means zero new defects even if the same change fixes ten others — otherwise a
+change could trade a repaired typo for a fresh security defect and call it even.
 
 ### `[[rule]]`
 

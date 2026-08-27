@@ -23,10 +23,11 @@ pub use kndo_core::{
 // `kndo-core` directly instead of routing through this crate's surface.
 pub use kndo_core::plugin::ActivationReason;
 pub use kndo_core::{
-    sort_findings_for_display, BaselineOp, BaselineResult, Category, Confidence, ConfigOverrides,
-    Delta, DeltaOrigin, Diagnostic, DiagnosticLevel, DoctorReport, Engine, EngineError, Finding,
-    Group, Location, ProjectPath, QueryFlags, QueryRequest, QueryResult, ResultEntry, RunMode,
-    RunResult, Severity, SubjectKind, SuppressedSummary, Verb, KNDO_VERSION, SCHEMA_VERSION,
+    sort_findings_for_display, BaselineOp, BaselineResult, Budget, BudgetRule, BudgetVerdict,
+    Category, Confidence, ConfigOverrides, Delta, DeltaOrigin, Diagnostic, DiagnosticLevel,
+    DoctorReport, Engine, EngineError, Finding, Group, Location, ProjectPath, QueryFlags,
+    QueryRequest, QueryResult, ResultEntry, RunMode, RunResult, Severity, SubjectKind,
+    SuppressedSummary, Verb, KNDO_VERSION, SCHEMA_VERSION,
 };
 
 use kndo_core::adapter::LanguageAdapter;

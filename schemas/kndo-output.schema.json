@@ -14,6 +14,16 @@
         }
       ]
     },
+    "budget": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Budget"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "diagnostics": {
       "type": "array",
       "items": {
@@ -117,6 +127,68 @@
       "required": [
         "acknowledged",
         "stale"
+      ]
+    },
+    "Budget": {
+      "description": "The whole `[delta]` evaluation for one run — the `budget` block of the output schema.",
+      "type": "object",
+      "properties": {
+        "rules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/BudgetRule"
+          }
+        },
+        "verdict": {
+          "description": "`fail` when any rule failed. The gate reads this; `rules` explains it.",
+          "$ref": "#/$defs/BudgetVerdict"
+        }
+      },
+      "required": [
+        "verdict",
+        "rules"
+      ]
+    },
+    "BudgetRule": {
+      "description": "One configured limit and what the change measured against it.",
+      "type": "object",
+      "properties": {
+        "limit": {
+          "type": "number",
+          "format": "double"
+        },
+        "measured": {
+          "type": "number",
+          "format": "double"
+        },
+        "over_by": {
+          "description": "How far past `limit` the measurement landed — present only when this rule failed, so a\nconsumer reading it always has a number worth acting on.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "rule": {
+          "description": "Lower-kebab, as configured: `max-health-drop`, `max-net-findings`, or the\ngroup/category name under `[delta.budget]`.",
+          "type": "string"
+        },
+        "verdict": {
+          "$ref": "#/$defs/BudgetVerdict"
+        }
+      },
+      "required": [
+        "rule",
+        "limit",
+        "measured",
+        "verdict"
+      ]
+    },
+    "BudgetVerdict": {
+      "type": "string",
+      "enum": [
+        "pass",
+        "fail"
       ]
     },
     "Category": {

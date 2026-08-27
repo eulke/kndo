@@ -23,11 +23,12 @@
 //!   unreadable, only less decorated than the richest tier could be.
 //! - Width-based column truncation and the below-60-columns two-line fallback — lines
 //!   are never truncated here.
-//! - The budget block — budgets need the config file's [delta] rules, which aren't
-//!   wired here; the health half IS rendered: a score/grade line plus per-category
-//!   penalty bars (non-zero categories only in `check` output; `kndo health` renders the full
-//!   table), and diff mode's header carries the before ──▶ after health line with the
-//!   grade-boundary distance on drops.
+//!
+//! Rendered in full, and listed because earlier drafts of this doc claimed otherwise:
+//! - The health block — a score/grade line plus per-category penalty bars (non-zero
+//!   categories only in `check` output; `kndo health` renders the full table), with diff
+//!   mode's before ──▶ after line carrying the grade-boundary distance on drops.
+//! - The `[delta]` budget block, beside it, whenever budgets are configured.
 //! - Findings that carry a `related` evidence chain (first populated by `cyclic`) render it as
 //!   indented `└` lines under the finding — role, location, note.
 
@@ -278,6 +279,51 @@ fn health_diff_line(health: &Health) -> String {
     )
 }
 
+/// The budget block: the label on the first row only, then one row per configured rule —
+/// `<rule> ≤ <limit>   <measured>   ok|FAIL`, with the overrun spelled out on the rows that
+/// broke. Aligned into columns for the same reason the health table is: a reader scans the
+/// limit column to find the one that gave way, not the prose.
+///
+/// No color-conditional glyphs. `penalty_bar` branches on `opts.color` because it draws a
+/// *chart*; a verdict is a word, and the word is the same in both terminals — which is also
+/// what keeps this block diffable in a CI log.
+fn budget_block(budget: &kndo::Budget) -> String {
+    let width = budget
+        .rules
+        .iter()
+        .map(|r| r.rule.len())
+        .max()
+        .unwrap_or(0)
+        .max("max-net-findings".len());
+    let mut out = String::new();
+    for (i, rule) in budget.rules.iter().enumerate() {
+        // The label names the block once, like `health` does; repeating it on every row would
+        // read as several budgets rather than one budget with several rules.
+        let label = if i == 0 { "budget" } else { "" };
+        let verdict = match rule.over_by {
+            Some(over) => format!("FAIL   (over by {})", trim_num(over)),
+            None => "ok".to_string(),
+        };
+        out.push_str(&format!(
+            "{label:<8} {:<width$} ≤ {:<6} {:<8} {verdict}\n",
+            rule.rule,
+            trim_num(rule.limit),
+            trim_num(rule.measured),
+        ));
+    }
+    out
+}
+
+/// Whole numbers lose the decimal tail; a real fraction keeps one place. Same rule the agent
+/// format uses, so the two renderers describe one limit identically.
+fn trim_num(v: f64) -> String {
+    if v.fract() == 0.0 {
+        format!("{}", v as i64)
+    } else {
+        format!("{v:.1}")
+    }
+}
+
 fn grade_boundary_suffix(score: f64, grade: &str) -> String {
     match kndo::analysis::health::grade_boundary(grade) {
         Some((threshold, next)) => format!("  ({:.1} from {next})", score - threshold),
@@ -289,7 +335,7 @@ fn grade_boundary_suffix(score: f64, grade: &str) -> String {
 /// `NEW (introduced by this change)`, `NEW (derived, in untouched code)`, and `FIXED` sections
 /// — each present only when non-empty, in that fixed order.
 fn render_diff(result: &RunResult, opts: &RenderOptions) -> String {
-    let net = result.findings.len() as i64 - result.fixed.len() as i64;
+    let net = result.net_findings();
     let baseline_suffix = baseline_suffix(result);
     let suppressed_suffix = suppressed_suffix(result);
     let header = format!(
@@ -305,11 +351,19 @@ fn render_diff(result: &RunResult, opts: &RenderOptions) -> String {
         .map(health_diff_line)
         .unwrap_or_default();
 
-    if opts.quiet || (result.findings.is_empty() && result.fixed.is_empty()) {
+    let budget_lines = result.budget.as_ref().map(budget_block).unwrap_or_default();
+
+    // `--quiet` is header + exit code by contract (RFC 0009 §6), so it stays bare. The clean
+    // branch is NOT: a change can move zero findings and still break `max-health-drop`, and
+    // that is precisely the case where a bare header would leave the exit code unexplained.
+    if opts.quiet {
         return format!("{header}{health_line}");
     }
+    if result.findings.is_empty() && result.fixed.is_empty() {
+        return format!("{header}{health_line}{budget_lines}");
+    }
 
-    let mut out = format!("{header}{health_line}");
+    let mut out = format!("{header}{health_line}{budget_lines}");
     out.push('\n');
 
     let introduced: Vec<&Finding> = result
@@ -760,6 +814,92 @@ mod tests {
             ..RunResult::default()
         };
         let out = render(&result, &opts());
+        assert_eq!(out, "kndo · diff · 0 new · 0 fixed · net +0\n");
+    }
+
+    fn budget(rules: Vec<kndo::BudgetRule>) -> kndo::Budget {
+        let verdict = if rules.iter().any(|r| r.verdict == kndo::BudgetVerdict::Fail) {
+            kndo::BudgetVerdict::Fail
+        } else {
+            kndo::BudgetVerdict::Pass
+        };
+        kndo::Budget { verdict, rules }
+    }
+
+    fn budget_rule(rule: &str, limit: f64, measured: f64) -> kndo::BudgetRule {
+        let over = measured - limit;
+        kndo::BudgetRule {
+            rule: rule.to_string(),
+            limit,
+            measured,
+            verdict: if over > 0.0 {
+                kndo::BudgetVerdict::Fail
+            } else {
+                kndo::BudgetVerdict::Pass
+            },
+            over_by: (over > 0.0).then_some(over),
+        }
+    }
+
+    #[test]
+    fn the_budget_block_names_itself_once_and_spells_out_every_overrun() {
+        let result = RunResult {
+            mode: "diff".to_string(),
+            base_ref: Some("main".to_string()),
+            budget: Some(budget(vec![
+                budget_rule("max-health-drop", 0.0, -1.7),
+                budget_rule("max-net-findings", 0.0, 1.0),
+                budget_rule("defect", 2.0, 0.0),
+            ])),
+            ..RunResult::default()
+        };
+        let out = render(&result, &opts());
+        // Exact, not `contains`: the columns ARE the feature — a reader scans the limit
+        // column to find the rule that gave way, and drifting alignment is how that stops
+        // working without any test noticing.
+        let expected = concat!(
+            "kndo · diff · 0 new · 0 fixed · net +0\n",
+            "budget   max-health-drop  ≤ 0      -1.7     ok\n",
+            "         max-net-findings ≤ 0      1        FAIL   (over by 1)\n",
+            "         defect           ≤ 2      0        ok\n",
+        );
+        assert_eq!(out, expected, "got:\n{out}");
+    }
+
+    #[test]
+    fn a_clean_diff_still_prints_a_budget_that_broke() {
+        // The case the old "no findings, no body" shortcut got wrong: a change can move zero
+        // findings and still break `max-health-drop` (a function got longer, coverage fell).
+        // Printing only the header there would leave the exit code with no stated reason.
+        let result = RunResult {
+            mode: "diff".to_string(),
+            base_ref: Some("main".to_string()),
+            budget: Some(budget(vec![budget_rule("max-health-drop", 0.0, 2.5)])),
+            ..RunResult::default()
+        };
+        let out = render(&result, &opts());
+        assert!(out.contains("FAIL   (over by 2.5)"), "{out}");
+    }
+
+    #[test]
+    fn quiet_stays_a_one_liner_even_when_a_budget_broke() {
+        // `--quiet` is header + exit code by contract (RFC 0009 §6). The budget is why the
+        // exit code is 1, and the caller asked not to be told.
+        let result = RunResult {
+            mode: "diff".to_string(),
+            base_ref: Some("main".to_string()),
+            budget: Some(budget(vec![budget_rule("max-net-findings", 0.0, 3.0)])),
+            ..RunResult::default()
+        };
+        let out = render(
+            &result,
+            &RenderOptions {
+                color: false,
+                quiet: true,
+                verbose: false,
+                by_package: false,
+            },
+        );
         assert_eq!(out, "kndo · diff · 0 new · 0 fixed · net +0\n");
     }
 

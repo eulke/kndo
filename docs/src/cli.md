@@ -68,11 +68,16 @@ judges only the new findings.
 
 | Code | Meaning |
 |---|---|
-| `0` | clean — no findings at/above the `--fail-on` threshold |
-| `1` | findings at/above the threshold |
+| `0` | clean — no findings at/above the `--fail-on` threshold, and no budget exceeded |
+| `1` | findings at/above the threshold, **or** a `[delta]` budget exceeded |
 | `2` | kndo could not do what was asked: usage error, unresolvable ref, broken project root, or any error-level diagnostic during the run |
 
-Two details worth knowing:
+Three details worth knowing:
+
+- **Exit `1` has two independent causes**, composed with OR: severity (`--fail-on`) and
+  aggregate movement (`[delta]` budgets, diff modes only —
+  see [CI](ci.md#budgets-for-the-change)). A change that adds no finding severe enough to
+  trip `--fail-on` can still fail on a health drop, and the output says which rule broke.
 
 - **Advisory findings never move the exit code.** Plugin-contributed findings without a
   `[plugins.gate]` opt-in are advisory whatever their displayed severity — installing a

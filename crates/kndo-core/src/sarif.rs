@@ -303,6 +303,7 @@ mod tests {
             project_root: "/tmp/x".to_string(),
             adapters: Vec::new(),
             plugins: Vec::new(),
+            budget: None,
             cache_enabled: false,
             cache_hits: 0,
             baseline: None,

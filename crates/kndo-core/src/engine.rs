@@ -652,6 +652,10 @@ pub struct RunResult {
     /// its very first run and is still, correctly, cold.
     pub cache_enabled: bool,
     pub cache_hits: u64,
+    /// The `[delta]` budget verdict — `None` in full mode and whenever no `[delta]` section
+    /// is configured, which are the two cases where there is nothing to judge. The gate reads
+    /// [`Budget::failed`]; the rules explain it.
+    pub budget: Option<crate::delta::Budget>,
     /// `None` when `.kndo/baseline.json` doesn't exist — distinct from `Some`
     /// with zero counts, which means a baseline exists and is fully clean/reproducing.
     pub baseline: Option<BaselineSummary>,
@@ -700,8 +704,23 @@ impl RunResult {
         cache_status_str(self.cache_enabled, self.cache_hits)
     }
 
-    /// The gate check ("should this run fail?") — the findings half of `--fail-on`; a delta
-    /// budget (`[delta]` in `kndo.toml`) would be the other half, not wired yet. `None`
+    /// `new − fixed` in a diff mode — what `max-net-findings` judges and what every renderer
+    /// prints. Both renderers derived it themselves before this existed, and the budget would
+    /// have been the third copy of one subtraction.
+    ///
+    /// Advisory findings are excluded on both sides, for the same reason [`Self::fails_at`]
+    /// excludes them: a plugin without a `[plugins.gate]` opt-in must not move anyone's gate,
+    /// and a net count that counted them would do exactly that.
+    pub fn net_findings(&self) -> i64 {
+        let gated = |f: &&Finding| !f.advisory;
+        self.findings.iter().filter(gated).count() as i64
+            - self.fixed.iter().filter(gated).count() as i64
+    }
+
+    /// The gate check ("should this run fail?") — the **findings** half, judging severity
+    /// against `--fail-on`. The other half is [`Self::budget_failed`], judging aggregate
+    /// movement against `[delta]`; RFC 0006 §5 composes them with OR, and a frontend that
+    /// forgets one silently loosens the gate, so [`Self::gate_fails`] does it once. `None`
     /// (`--fail-on none`, full mode's default) never fails. An advisory finding — a plugin
     /// finding without an explicit `[plugins.gate]` opt-in — never counts toward the gate,
     /// whatever its severity and whatever the threshold: installing a finding-emitting plugin
@@ -714,6 +733,19 @@ impl RunResult {
             .iter()
             .filter(|f| !f.advisory)
             .any(|f| f.severity.rank() >= threshold.rank())
+    }
+
+    /// The aggregate half: did any configured `[delta]` budget give way? `false` when no
+    /// section is configured (nothing to judge) and in full mode (nothing to judge it against).
+    pub fn budget_failed(&self) -> bool {
+        self.budget.as_ref().is_some_and(|b| b.failed())
+    }
+
+    /// The whole gate, as RFC 0006 §5 states it: exit 1 when findings reach `--fail-on`
+    /// **or** a delta budget is exceeded. One reader, so the two halves cannot be composed
+    /// differently by two frontends — or one of them forgotten.
+    pub fn gate_fails(&self, threshold: Option<Severity>) -> bool {
+        self.fails_at(threshold) || self.budget_failed()
     }
 }
 
@@ -756,6 +788,8 @@ struct Envelope<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     health: Option<&'a crate::analysis::health::Health>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    budget: Option<&'a crate::delta::Budget>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     baseline: Option<&'a BaselineSummary>,
     suppressed: SuppressedSummary,
     diagnostics: &'a [Diagnostic],
@@ -780,6 +814,7 @@ impl RunResult {
             findings: &self.findings,
             fixed: &self.fixed,
             health: self.health.as_ref(),
+            budget: self.budget.as_ref(),
             baseline: self.baseline.as_ref(),
             suppressed: self.suppressed,
             diagnostics: &self.diagnostics,
@@ -1354,6 +1389,19 @@ impl Engine {
         let mut diagnostics = after_diagnostics;
         diagnostics.extend(before_diagnostics);
 
+        // Evaluated here rather than in the literal below: the budget reads both finding
+        // vectors, and the literal moves them. A drop is positive, so `max-health-drop = 0.0`
+        // reads as "must not go down". Both sides assembled — the early returns above are the
+        // only way that is not true, and they leave `budget` at `None`, which is what makes a
+        // failed run distinguishable from a run whose budgets all held.
+        let budget = self.config.delta.as_ref().map(|d| {
+            d.evaluate(
+                &new_findings,
+                &fixed_findings,
+                before_health.score - after_health.score,
+            )
+        });
+
         RunResult {
             diagnostics,
             // The "after" side, mirroring `suppressed` — a diff reports what the current tree
@@ -1363,6 +1411,7 @@ impl Engine {
             fixed: fixed_findings,
             baseline,
             suppressed: after_suppressed,
+            budget,
             health: {
                 let mut health = after_health;
                 health.previous = Some(crate::analysis::health::HealthSummary {
@@ -2872,6 +2921,127 @@ mod tests {
             .expect("orphan.dmock should be fixed");
         assert_eq!(fixed_orphan.delta, Some(Delta::Fixed));
         assert_eq!(result.fixed.len(), 1, "{:?}", result.fixed);
+    }
+
+    /// A base commit with one live file, plus an uncommitted dead one — one new finding, net
+    /// +1, which is what every budget test below is judged against.
+    fn diff_repo_with_one_new_finding(kndo_toml: &str) -> (tempfile::TempDir, String) {
+        let dir = git_repo();
+        std::fs::write(dir.path().join("root.dmock"), "root-file\n").unwrap();
+        if !kndo_toml.is_empty() {
+            std::fs::write(dir.path().join("kndo.toml"), kndo_toml).unwrap();
+        }
+        git_add_all_commit(dir.path(), "base");
+        let base = git_rev_parse(dir.path(), "HEAD");
+        std::fs::write(dir.path().join("dead.dmock"), "").unwrap();
+        (dir, base)
+    }
+
+    fn diff_run(dir: &tempfile::TempDir, base: String) -> RunResult {
+        let mut engine = Engine::open(
+            dir.path(),
+            ConfigOverrides::default(),
+            vec![Box::new(DiffMockAdapter)],
+        )
+        .unwrap();
+        engine.check(RunMode::Diff { base })
+    }
+
+    #[test]
+    fn no_delta_section_means_no_budget_and_no_gate_change() {
+        // The opt-in, from the outside: a project that never wrote `[delta]` must not gain a
+        // `budget` block or a new way to exit 1 just because the subsystem now exists. The
+        // config file has to EXIST for this to be worth anything — with no `kndo.toml` at all
+        // the section parser never runs, so the absence would prove nothing about the opt-in.
+        let (dir, base) = diff_repo_with_one_new_finding("[analysis]\nskip = []\n");
+        let result = diff_run(&dir, base);
+
+        assert_eq!(result.findings.len(), 1, "{:?}", result.findings);
+        assert!(result.budget.is_none());
+        assert!(!result.budget_failed());
+        assert!(!result.gate_fails(None));
+        assert!(
+            !result.to_json().contains("\"budget\""),
+            "an absent budget is an absent key, not a null: {}",
+            result.to_json()
+        );
+    }
+
+    #[test]
+    fn a_configured_ratchet_fails_the_gate_that_fail_on_alone_would_pass() {
+        // The whole point of the aggregate half. `--fail-on none` is full mode's default and
+        // the findings half therefore passes; the budget is what turns this run red.
+        let (dir, base) = diff_repo_with_one_new_finding("[delta]\nmax-net-findings = 0\n");
+        let result = diff_run(&dir, base);
+
+        assert!(
+            !result.fails_at(None),
+            "the findings half has nothing to say"
+        );
+        let budget = result.budget.as_ref().expect("the section opts in");
+        assert!(budget.failed());
+        assert!(result.gate_fails(None), "OR, per RFC 0006 §5");
+
+        let net = budget
+            .rules
+            .iter()
+            .find(|r| r.rule == "max-net-findings")
+            .unwrap();
+        assert_eq!(net.measured, 1.0);
+        assert_eq!(net.over_by, Some(1.0));
+
+        let json = result.to_json();
+        assert!(json.contains("\"budget\""), "{json}");
+        assert!(json.contains("\"verdict\": \"fail\""), "{json}");
+    }
+
+    #[test]
+    fn a_tolerance_that_covers_the_change_passes_the_whole_gate() {
+        // Same run, one tolerance wider: the budget must be the *only* thing that moved, so a
+        // team can loosen a ratchet without loosening anything else.
+        let (dir, base) = diff_repo_with_one_new_finding(
+            "[delta]\nmax-net-findings = 1\nmax-health-drop = 100.0\n",
+        );
+        let result = diff_run(&dir, base);
+
+        assert_eq!(result.findings.len(), 1, "{:?}", result.findings);
+        let budget = result.budget.as_ref().expect("the section opts in");
+        assert!(!budget.failed(), "{:?}", budget.rules);
+        assert!(!result.gate_fails(None));
+    }
+
+    #[test]
+    fn a_per_category_budget_reads_the_categories_the_run_actually_emitted() {
+        // `[delta.budget]` keys are group *or* category names, matched against live findings —
+        // this pins that the key reaches the same vocabulary the findings carry, which is the
+        // half a config-only test cannot see.
+        let (dir, base) = diff_repo_with_one_new_finding(
+            "[delta]\nmax-net-findings = 9\n[delta.budget]\nunused = 0\n",
+        );
+        let result = diff_run(&dir, base);
+
+        let budget = result.budget.as_ref().expect("the section opts in");
+        let unused = budget
+            .rules
+            .iter()
+            .find(|r| r.rule == "unused")
+            .expect("the configured key is reported whether or not it matched");
+        assert_eq!(unused.measured, 1.0, "the new finding is an `unused`");
+        assert_eq!(unused.verdict, crate::delta::BudgetVerdict::Fail);
+        assert!(result.gate_fails(None));
+    }
+
+    #[test]
+    fn a_run_that_could_not_assemble_emits_no_budget_at_all() {
+        // The distinction `evaluate` deliberately does not model: a failed run reports no
+        // budget rather than a passing one. A gate that read "no failures" off a run that
+        // never measured anything would be worse than no gate.
+        let (dir, _) = diff_repo_with_one_new_finding("[delta]\nmax-net-findings = 0\n");
+        let result = diff_run(&dir, "no-such-revision".to_string());
+
+        assert!(!result.diagnostics.is_empty());
+        assert!(result.budget.is_none());
+        assert!(!result.budget_failed());
     }
 
     #[test]

@@ -78,11 +78,29 @@ anywhere with `kndo check --format sarif`.
 
 ## Budgets for the change
 
-Diff-mode gating is severity-based today: `fail-on` judges the *new* findings a PR
-introduces. The `[delta]` section of `kndo.toml`
-([Configuration](configuration.md#delta)) defines the budget vocabulary for gating on
-aggregate movement — a maximum health drop, a maximum net finding count — as the config
-surface those checks own.
+`--fail-on` judges each new finding by severity. Budgets judge the change *in aggregate* —
+how far health moved, how many more findings there are than before — and the two compose
+with OR: the run exits `1` when either gives way.
+
+```toml
+[delta]
+max-health-drop = 0.0     # this PR may not lower the score
+max-net-findings = 0      # pay for what you dirty: new − fixed ≤ 0
+
+[delta.budget]
+defect = 0                # and never a new defect, whatever else it fixes
+```
+
+Budgets only exist in diff modes (`--staged`, `--diff`), and only when the section is
+written — see [Configuration](configuration.md#delta) for the full semantics. Every run
+that evaluated them reports what it measured, so a red build says how much work is left
+rather than only that it failed:
+
+```
+budget: fail (2/3) | health-drop<=0 ok -1.7 | net<=0 FAIL 1 over-by 1 | defect<=0 ok 0
+```
+
+The same block is `"budget"` in the JSON envelope, with `over_by` on the rules that broke.
 
 ## The local half: the pre-commit hook
 

@@ -2,14 +2,15 @@
 //! `[plugins.gate]` posture throughout: a missing file is empty config, a malformed file or
 //! value is reported as a problem string (surfaced as a run diagnostic) and otherwise
 //! ignored, and unknown tables/keys are skipped silently — both forward compatibility and
-//! honesty about the documented-but-unwired sections (`[project]`, `[delta]`), which parse
-//! as unknown keys until their subsystems exist.
+//! honesty about `[project]`, still documented-but-unwired, which parses as unknown keys
+//! until its subsystem exists.
 //!
 //! What is live: `[analysis]` (`skip`, `min-confidence`), `[analysis.crap]` (`threshold`),
 //! `[analysis.duplicate]` (`min-tokens`), `[performance]` (`threads`), `[[rule]]`
 //! (path-scoped `skip`), `[plugins.gate]` (parsed by `plugin_gate`, carried here so the
-//! file is read exactly once), and `[plugins.<id>]` (`report`, `max-age` — per-plugin
-//! coverage-report location and freshness, RFC 0003's "Explicit config").
+//! file is read exactly once), `[delta]`/`[delta.budget]` (parsed by `delta`, same reason),
+//! and `[plugins.<id>]` (`report`, `max-age` — per-plugin coverage-report location and
+//! freshness, RFC 0003's "Explicit config").
 //!
 //! Config suppression runs *after* inline pragmas ([`crate::suppression::apply`]) — pragma
 //! staleness is judged against the complete pre-suppression finding set, so a pragma
@@ -112,6 +113,11 @@ pub struct KndoConfig {
     /// `[plugins.gate]` — owned by [`crate::plugin_gate`]; carried here so `kndo.toml` is
     /// parsed exactly once.
     pub(crate) plugins_gate: crate::plugin_gate::PluginsGate,
+    /// `[delta]` — owned by [`crate::delta`], carried here for the same reason. `None` when
+    /// the section is absent, which is NOT the same as a section of zeroes: absent evaluates
+    /// no budgets and emits no `budget` block, zeroes are the strict ratchet. That is what
+    /// keeps opting in a single deliberate act instead of a silent exit-code change.
+    pub(crate) delta: Option<crate::delta::DeltaBudget>,
     /// `[plugins.<id>]` — per-plugin option tables, keyed by the raw TOML key; resolved
     /// against descriptor ids by [`KndoConfig::plugin_options_for`].
     pub plugin_options: Vec<(String, PluginOptions)>,
@@ -356,6 +362,10 @@ impl KndoConfig {
         );
         config.plugins_gate = gate;
         problems.extend(gate_problems);
+
+        let (delta, delta_problems) = crate::delta::DeltaBudget::from_table(table.get("delta"));
+        config.delta = delta;
+        problems.extend(delta_problems);
 
         if let Some(plugins) = table.get("plugins").and_then(|p| p.as_table()) {
             parse_plugin_options(plugins, &mut config, &mut problems);
@@ -671,11 +681,24 @@ mod tests {
 
     #[test]
     fn unknown_tables_are_silently_ignored_for_forward_compat() {
-        let (config, problems) = parsed(
-            "[project]\nroots = [\"src\"]\n[delta]\nmax-net-findings = 0\n[future]\nx = 1\n",
-        );
+        // `[project]` is written by `kndo init` but not yet read (G3); `[future]` stands in for
+        // a table a newer kndo will understand. Neither may become a diagnostic — a config a
+        // newer version writes has to stay readable by an older one.
+        let (config, problems) = parsed("[project]\nroots = [\"src\"]\n[future]\nx = 1\n");
         assert!(problems.is_empty(), "{problems:?}");
         assert!(config.skip.is_empty());
+        assert!(config.delta.is_none());
+    }
+
+    #[test]
+    fn the_delta_section_reaches_the_effective_config() {
+        // `[delta]` used to sit in the same test as the forward-compat tables, asserting it had
+        // no effect. It has one now: `crate::delta` owns the semantics, but the single file
+        // read is here, so this is the seam that has to be pinned.
+        let (config, problems) = parsed("[delta]\nmax-net-findings = 3\n");
+        assert!(problems.is_empty(), "{problems:?}");
+        let delta = config.delta.expect("the section opts in");
+        assert_eq!(delta.max_net_findings, 3);
     }
 
     #[test]

@@ -932,10 +932,18 @@ impl Engine {
 // additive when it comes; the contract lists only what exists.
 //
 // Gate policy lives here too, as data rather than an exit code (the core-never-prints rule
-// covers exit codes as much as ANSI): `RunMode::default_fail_on() -> Option<Severity>` (full
-// mode: None; a diff mode: Some(Warning)) and `RunResult::fails_at(threshold:
-// Option<Severity>) -> bool` (severity ranking + the advisory-finding exemption). A frontend's
-// own job shrinks to parsing `--fail-on` and mapping the bool to its own exit-code convention.
+// covers exit codes as much as ANSI). It has TWO halves, and a frontend must call the reader
+// that composes them, never one half:
+//   RunMode::default_fail_on() -> Option<Severity>   // full: None; a diff mode: Some(Warning)
+//   RunResult::fails_at(Option<Severity>) -> bool    // severity + the advisory exemption
+//   RunResult::budget_failed() -> bool               // the [delta] budgets (see below)
+//   RunResult::gate_fails(Option<Severity>) -> bool  // fails_at OR budget_failed — CALL THIS
+// RFC 0006 §5 composes them with OR; two frontends each reimplementing that composition is how
+// one of them silently honors half a gate. A frontend's own job shrinks to parsing `--fail-on`
+// and mapping one bool to its own exit-code convention.
+//
+// `RunResult::net_findings() -> i64` is `new − fixed` under the same advisory exemption — what
+// `max-net-findings` judges and what every renderer prints as `net ±N`.
 // `RunResult::plugin_contributions: Vec<PluginContribution>` carries this run's own
 // graph-mutation audit record — `Some` whenever `run_plugin_round` actually ran this call
 // (full build, patch), falling back to the cache's sidecar record only on a pure
@@ -999,6 +1007,23 @@ impl Engine {
   fully-rebuilt output is test-enforced (`patch_equivalence`). Still unimplemented from RFC 0004:
   the findings snapshot and dirty-region *analysis* incrementality (§5) — analyses always re-run
   over the (possibly patched) graph.
+
+- **Delta budgets (`crate::delta`)** are the gate's aggregate half. `RunResult.budget:
+  Option<Budget>` is `Some` exactly when the run is a diff mode *and* `kndo.toml` has a
+  `[delta]` section; `Budget { verdict, rules: Vec<BudgetRule { rule, limit, measured,
+  verdict, over_by }> }` serializes straight into the envelope's top-level `budget`
+  ([output-schema.md](output-schema.md) §1) — a sibling of `health`, not a member of `run`.
+  Three rule kinds, in this evaluation order: `max-health-drop` (a **drop**, so an improving
+  change measures negative), `max-net-findings` (`new − fixed`), and one rule per
+  `[delta.budget]` key sorted, each an **absolute** count of new findings whose group *or*
+  category matches — `fixed` compensates only inside `max-net-findings` (RFC 0006 §5).
+  Advisory findings are excluded throughout, as they are from `fails_at`. A rule passes when
+  `measured <= limit`, so a measurement landing exactly on its own stated maximum is not a
+  failure. **`None` is load-bearing and never means "everything passed":** no `[delta]`
+  section, full mode, and a run that could not assemble either side all report no budget at
+  all, which is how a consumer tells "nobody set one" from "every budget held". The section's
+  presence is the entire opt-in; inside it the strict ratchet (0.0 / 0) is the default, so no
+  existing project changes exit code because the subsystem exists.
 
 ## 6. Stability tiers
 

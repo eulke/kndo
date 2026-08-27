@@ -21,6 +21,9 @@ pub mod cache;
 pub mod config;
 pub mod conformance;
 pub mod coverage;
+/// Delta budgets (`[delta]`) — the gate's aggregate half, alongside `--fail-on`'s severity
+/// half. Public because `Budget` lands in the output schema and frontends render it.
+pub mod delta;
 pub mod discovery;
 pub mod engine;
 mod gitutil;
@@ -47,6 +50,7 @@ pub mod vocab;
 // `engine`/`vocab`/`query_envelope` internals. Adapter/plugin authoring types
 // (`adapter::LanguageAdapter`, `plugin::Plugin`, `graph::GraphView`, …) are a different
 // surface — component authors, not frontends — and stay reached through their own modules.
+pub use crate::delta::{Budget, BudgetRule, BudgetVerdict};
 pub use engine::{
     sort_findings_for_display, BaselineOp, BaselineResult, ConfigOverrides, Delta, DeltaOrigin,
     DoctorReport, Engine, EngineError, Finding, Location, RunMode, RunResult, Severity,
