@@ -131,6 +131,7 @@ pub fn find_unused_files(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<F
                 package: graph.package_name(package).map(str::to_string),
             },
             related: Vec::new(),
+            rolled_up: None,
             delta: None,
             delta_origin: None,
         });
@@ -256,6 +257,7 @@ pub fn find_unused_symbols(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec
                 package: graph.package_name(file.package).map(str::to_string),
             },
             related: Vec::new(),
+            rolled_up: None,
             delta: None,
             delta_origin: None,
         });
@@ -477,6 +479,22 @@ mod tests {
         assert_eq!(findings[0].subject_kind, "directory");
         assert_eq!(findings[0].location.path.as_ref().unwrap().0, "src/legacy");
         assert!(findings[0].message.contains("3 files"));
+        // The same number the prose carries, as a field a consumer can read without parsing
+        // English — that is the whole reason the field exists.
+        assert_eq!(findings[0].rolled_up, Some(3));
+    }
+
+    #[test]
+    fn a_finding_that_subsumes_nothing_has_no_rolled_up_count() {
+        // Absent, not `Some(1)`: "a rollup of one" is not a fact, and a consumer summing the
+        // field to weigh a report must not double-count leaves.
+        let (files, edges) = with_live_root(vec![file("src/dead.ts", Some(FileClass::default()))]);
+        let graph = ProjectGraph::for_test(files, vec![], vec![], edges);
+        let reach = reachability::compute(&graph);
+        let findings = find_unused_files(&graph, &reach);
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].subject_kind, "file");
+        assert_eq!(findings[0].rolled_up, None);
     }
 
     #[test]

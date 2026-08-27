@@ -63,6 +63,7 @@ pub fn find_unresolved(graph: &ProjectGraph) -> Vec<Finding> {
                         .map(str::to_string),
                 },
                 related: Vec::new(),
+                rolled_up: None,
                 delta: None,
                 delta_origin: None,
             }

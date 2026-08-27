@@ -9,7 +9,7 @@ round-trip these examples in CI.
 
 ```jsonc
 {
-  "schema_version": "1.2.0",
+  "schema_version": "1.3.0",
   "kndo_version": "0.3.1",
   "run": {
     "mode": "staged",                    // "full" | "staged" | "diff"
@@ -80,7 +80,7 @@ pass. Consumers must treat unknown levels as at least `warn`.
   "message": "calcLegacyTax() is unreachable from any production or test root",
   "location": { "path": "src/billing/tax.ts", "range": { "start": [41,1], "end": [78,2] },
                 "symbol": "calcLegacyTax", "package": "@org/billing" },   // owning workspace package (RFC 0011)
-  "rolled_up": null,                    // file/directory rollups: count of subsumed findings
+  "rolled_up": 50,                      // rollup ladder: how many findings this one subsumes; ABSENT when it subsumes nothing
   "related": [                           // evidence chain (also what `kndo explain` renders)
     { "role": "cause", "path": "src/billing/index.ts", "range": { "start": [12,1], "end": [12,42] },
       "note": "last production reference removed by this change" }
@@ -190,7 +190,7 @@ more", never as "that's all".
 
 ```jsonc
 {
-  "schema_version": "1.2.0",
+  "schema_version": "1.3.0",
   "query": { "verb": "used-by", "selectors": ["src/billing/tax.ts#calcLegacyTax"],
              "flags": { "depth": 1, "split_by_color": true }, "id": "q1" },   // id: query-mode echo, optional
   "run": { "cache": "warm", "duration_ms": 74 },

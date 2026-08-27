@@ -201,7 +201,7 @@
       ]
     },
     "Finding": {
-      "description": "Typed form of the output-schema finding (every field lands in the JSON schema\nfirst — that document is normative). Not yet present:\n`evidence` (category-specific block), `sources`, `remediation`, `rolled_up` — each needs\ninfrastructure that doesn't exist yet (computed remediation text) and is omitted\nrather than fabricated with a placeholder.",
+      "description": "Typed form of the output-schema finding (every field lands in the JSON schema\nfirst — that document is normative).\n\nTwo fields the schema deliberately does NOT have, so nobody re-adds them looking for\nparity: `evidence` (a category-specific block specified before any category had one — no\nanalysis has since produced a fact `related` cannot carry) and `remediation` (the advice a\nfinding carries travels inside `message`, written by the analysis that knows the subject;\n`deep-import` is the worked example). Both are cut rather than emitted null: a field that\nis always null teaches a consumer to stop reading it.",
       "type": "object",
       "properties": {
         "advisory": {
@@ -252,6 +252,15 @@
           "items": {
             "$ref": "#/$defs/RelatedLocation"
           }
+        },
+        "rolled_up": {
+          "description": "How many findings this one subsumes, on the rollup ladder (symbol → file → directory →\npackage, RFC 0005 taxonomy rule 3): a directory reported once instead of fifty times\nsays `50` here. `None` on a finding that subsumes nothing, which is most of them —\nabsent rather than `1`, because \"this is a rollup of one\" is not a fact, and a\nconsumer summing the field must not double-count leaves.\n\nWithout it the count survives only inside the message prose (\"4 files, none\nreferenced\"), so a consumer deciding how much a finding is worth has to parse English\n— the same defect `location`/`related` had for multi-place subjects.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0
         },
         "severity": {
           "$ref": "#/$defs/Severity"

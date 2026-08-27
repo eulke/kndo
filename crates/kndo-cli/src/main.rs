@@ -1206,6 +1206,7 @@ mod tests {
             message: "example".to_string(),
             location: Default::default(),
             related: Vec::new(),
+            rolled_up: None,
             delta: None,
             delta_origin: None,
         }

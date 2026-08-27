@@ -184,8 +184,12 @@ fn store_health_snapshot(root: &Path, score: f64, grade: &str) {
     }
 }
 
-/// Mirrors the output schema's `schema_version` (contracts/output-schema.md).
-pub const SCHEMA_VERSION: &str = "1.2.0";
+/// Mirrors the output schema's `schema_version` (contracts/output-schema.md), which is the
+/// normative document — semver, additive = minor, breaking = major (RFC 0006 §4). Pinned
+/// against that file by `schema_version_matches_the_contract_document`: the generated JSON
+/// Schema types this field as a plain string with no `const`, so nothing else would notice
+/// the two drifting apart, and they already had.
+pub const SCHEMA_VERSION: &str = "1.3.0";
 
 /// The product version — every crate shares `version.workspace = true`, so kndo-core's own
 /// `CARGO_PKG_VERSION` is the same string the distribution crate and CLI would report.
@@ -493,10 +497,14 @@ impl RelatedLocation {
 }
 
 /// Typed form of the output-schema finding (every field lands in the JSON schema
-/// first — that document is normative). Not yet present:
-/// `evidence` (category-specific block), `sources`, `remediation`, `rolled_up` — each needs
-/// infrastructure that doesn't exist yet (computed remediation text) and is omitted
-/// rather than fabricated with a placeholder.
+/// first — that document is normative).
+///
+/// Two fields the schema deliberately does NOT have, so nobody re-adds them looking for
+/// parity: `evidence` (a category-specific block specified before any category had one — no
+/// analysis has since produced a fact `related` cannot carry) and `remediation` (the advice a
+/// finding carries travels inside `message`, written by the analysis that knows the subject;
+/// `deep-import` is the worked example). Both are cut rather than emitted null: a field that
+/// is always null teaches a consumer to stop reading it.
 #[derive(Debug, Clone, serde::Serialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Finding {
@@ -513,6 +521,17 @@ pub struct Finding {
     /// generator the field is optional, matching the skip-when-empty serialization.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub related: Vec<RelatedLocation>,
+    /// How many findings this one subsumes, on the rollup ladder (symbol → file → directory →
+    /// package, RFC 0005 taxonomy rule 3): a directory reported once instead of fifty times
+    /// says `50` here. `None` on a finding that subsumes nothing, which is most of them —
+    /// absent rather than `1`, because "this is a rollup of one" is not a fact, and a
+    /// consumer summing the field must not double-count leaves.
+    ///
+    /// Without it the count survives only inside the message prose ("4 files, none
+    /// referenced"), so a consumer deciding how much a finding is worth has to parse English
+    /// — the same defect `location`/`related` had for multi-place subjects.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rolled_up: Option<usize>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub delta: Option<Delta>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -657,15 +676,22 @@ pub struct RunResult {
     pub plugin_contributions: Vec<crate::plugin::PluginContribution>,
 }
 
-/// `"warm"` only when the cache was on *and* actually served something this run — an
-/// enabled-but-empty cache (first run ever, or every file changed) is honestly `"cold"`.
-/// Shared by every renderer (`RunResult`'s `to_json`/`to_agent_format` and
-/// `Engine::query`'s envelope alike) so "what counts as warm" is defined exactly once.
+/// Three states, and the third one matters: `"disabled"` (`--no-cache`) is not the same claim
+/// as `"cold"`. Cold says the cache was consulted and had nothing — a fact about this project's
+/// history. Disabled says nobody looked, which is a fact about this *invocation*. Collapsing
+/// them, as this did, told a CI job debugging a slow run that its cache was empty when the
+/// truth was that its own flag had turned the cache off.
+///
+/// `"warm"` stays the strict reading: on *and* actually served something. An enabled-but-empty
+/// cache (first run ever, or every file changed) is honestly cold.
+///
+/// Shared by every renderer (`RunResult`'s `to_json`/`to_agent_format` and `Engine::query`'s
+/// envelope alike) so "what counts as warm" is defined exactly once.
 fn cache_status_str(enabled: bool, hits: u64) -> &'static str {
-    if enabled && hits > 0 {
-        "warm"
-    } else {
-        "cold"
+    match (enabled, hits) {
+        (false, _) => "disabled",
+        (true, 0) => "cold",
+        (true, _) => "warm",
     }
 }
 
@@ -880,6 +906,7 @@ fn plugin_finding(
             package: proto.package,
         },
         related: Vec::new(),
+        rolled_up: None,
         delta: None,
         delta_origin: None,
         advisory,
@@ -1015,6 +1042,21 @@ impl Engine {
 
     pub fn root(&self) -> &Path {
         &self.root
+    }
+
+    /// This engine's cache state as the envelope spells it, for the query path — the same
+    /// three-state answer `RunResult::cache_status` gives a check, from the live cache rather
+    /// than a finished run's counters. One reader, so a query and a check can never disagree
+    /// about whether the cache was off; the failure path needs it too, which is what the
+    /// second call site is.
+    fn query_cache_status(&self) -> &'static str {
+        cache_status_str(
+            self.cache_enabled,
+            self.cache
+                .as_ref()
+                .map(|c| c.hits() + c.graph_hits())
+                .unwrap_or(0),
+        )
     }
 
     /// `kndo doctor`. Deliberately does not assemble or analyze
@@ -1399,7 +1441,13 @@ impl Engine {
             Err(d) => {
                 return requests
                     .into_iter()
-                    .map(|req| query_envelope::build_failure(req, d.message.clone()))
+                    .map(|req| {
+                        query_envelope::build_failure(
+                            req,
+                            d.message.clone(),
+                            self.query_cache_status(),
+                        )
+                    })
                     .collect()
             }
         };
@@ -1409,13 +1457,7 @@ impl Engine {
         let nav = query::build_graph_index(&graph);
         let findings_owned = findings; // keep the Vec<Finding> alive across the borrow below
         let locations = query_envelope::finding_locations(&findings_owned);
-        let cache = cache_status_str(
-            self.cache_enabled,
-            self.cache
-                .as_ref()
-                .map(|c| c.hits() + c.graph_hits())
-                .unwrap_or(0),
-        );
+        let cache = self.query_cache_status();
         let duration_ms = start.elapsed().as_millis() as u64;
 
         requests
@@ -1828,6 +1870,7 @@ mod tests {
             message: "example".to_string(),
             location: Default::default(),
             related: Vec::new(),
+            rolled_up: None,
             delta: None,
             delta_origin: None,
         }
@@ -1917,6 +1960,7 @@ mod tests {
                     ..Location::default()
                 },
                 related: Vec::new(),
+                rolled_up: None,
                 delta: None,
                 delta_origin: None,
             }
@@ -2562,7 +2606,7 @@ mod tests {
     }
 
     #[test]
-    fn no_cache_override_reports_cold_even_after_a_prior_warm_engine() {
+    fn no_cache_override_reports_disabled_not_cold() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("a.mock"), "hello").unwrap();
 
@@ -2575,8 +2619,10 @@ mod tests {
         .unwrap()
         .check(RunMode::Full);
 
-        // …then open a fresh engine with the cache disabled: it must never report warm, even
-        // though the disk cache is populated and would otherwise hit.
+        // …then open a fresh engine with the cache disabled. It must never report warm, even
+        // though the disk cache is populated and would otherwise hit — and it must not report
+        // `cold` either: cold is a claim about this project (the cache was consulted and had
+        // nothing), and here nobody consulted anything.
         let mut uncached = Engine::open(
             dir.path(),
             ConfigOverrides {
@@ -2590,7 +2636,26 @@ mod tests {
         let result = uncached.check(RunMode::Full);
         assert!(!result.cache_enabled);
         assert_eq!(result.cache_hits, 0);
-        assert!(result.to_json().contains("\"cache\": \"cold\""));
+        assert_eq!(result.cache_status(), "disabled");
+        assert!(result.to_json().contains("\"cache\": \"disabled\""));
+    }
+
+    #[test]
+    fn an_enabled_but_empty_cache_is_cold_not_disabled() {
+        // The other half of the distinction: a first-ever run has the cache ON and empty.
+        // Reporting `disabled` there would be the same conflation in the opposite direction.
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("a.mock"), "hello").unwrap();
+        let mut engine = Engine::open(
+            dir.path(),
+            ConfigOverrides::default(),
+            vec![Box::new(CacheMockAdapter)],
+        )
+        .unwrap();
+        let result = engine.check(RunMode::Full);
+        assert!(result.cache_enabled);
+        assert_eq!(result.cache_hits, 0);
+        assert_eq!(result.cache_status(), "cold");
     }
 
     #[test]
@@ -2718,6 +2783,7 @@ mod tests {
             message: "example".to_string(),
             location: Location::default(),
             related: Vec::new(),
+            rolled_up: None,
             delta: None,
             delta_origin: None,
         };
@@ -3094,6 +3160,7 @@ mod tests {
                 package: None,
             },
             related: Vec::new(),
+            rolled_up: None,
             delta: None,
             delta_origin: None,
         };

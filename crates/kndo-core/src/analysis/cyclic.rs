@@ -189,6 +189,7 @@ pub fn find_cycles(graph: &ProjectGraph) -> (Vec<Finding>, HashSet<FileId>) {
                 package: graph.package_name(anchor_file.package).map(str::to_string),
             },
             related,
+            rolled_up: None,
             delta: None,
             delta_origin: None,
         });
@@ -310,6 +311,7 @@ pub fn find_cycles(graph: &ProjectGraph) -> (Vec<Finding>, HashSet<FileId>) {
                 package: graph.package_name(anchor).map(str::to_string),
             },
             related,
+            rolled_up: None,
             delta: None,
             delta_origin: None,
         });

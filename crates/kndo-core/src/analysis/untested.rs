@@ -154,6 +154,7 @@ fn find_untested_files(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<Fin
                 package: graph.package_name(package).map(str::to_string),
             },
             related: Vec::new(),
+            rolled_up: None,
             delta: None,
             delta_origin: None,
         });
@@ -275,6 +276,7 @@ fn find_untested_symbols(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<F
                 package: graph.package_name(file.package).map(str::to_string),
             },
             related: Vec::new(),
+            rolled_up: None,
             delta: None,
             delta_origin: None,
         });

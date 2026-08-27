@@ -104,6 +104,7 @@ pub fn find_test_only_files(graph: &ProjectGraph, reach: &ReachabilityMap) -> Ve
                 package: graph.package_name(package).map(str::to_string),
             },
             related: Vec::new(),
+            rolled_up: None,
             delta: None,
             delta_origin: None,
         });
@@ -163,6 +164,7 @@ pub fn find_test_only_symbols(graph: &ProjectGraph, reach: &ReachabilityMap) -> 
                 package: graph.package_name(file.package).map(str::to_string),
             },
             related: Vec::new(),
+            rolled_up: None,
             delta: None,
             delta_origin: None,
         });

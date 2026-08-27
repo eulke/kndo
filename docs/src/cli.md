@@ -21,7 +21,7 @@ General rules that apply everywhere:
 - `kndo help`, `--help`, or `-h` anywhere on the line prints usage and exits `0` — asking for
   help never triggers an analysis run.
 - `kndo --version` / `-V` prints the binary version and the output schema version:
-  `kndo 0.1.0 (schema 1.0.0)`.
+  `kndo 0.1.0 (schema 1.3.0)`.
 - Bare flags with no subcommand (`kndo --format json`) are an implicit `check`.
 - Valued flags accept both spellings: `--diff main` and `--diff=main`.
 - **Unknown flags and missing values are hard errors (exit `2`)**, never silently ignored — a

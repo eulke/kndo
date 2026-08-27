@@ -82,6 +82,8 @@ pub(crate) fn directory_finding(
             package: graph.package_name(dir.package).map(str::to_string),
         },
         related: Vec::new(),
+        // The whole point of a rollup: this one finding stands in for `files.len()` of them.
+        rolled_up: Some(dir.files.len()),
         delta: None,
         delta_origin: None,
     }

@@ -291,6 +291,7 @@ fn stale_finding(
                 .map(|n| n.to_string()),
         },
         related: Vec::new(),
+        rolled_up: None,
         delta: None,
         delta_origin: None,
         advisory: false,
@@ -517,6 +518,7 @@ mod tests {
                 package: None,
             },
             related: Vec::new(),
+            rolled_up: None,
             delta: None,
             delta_origin: None,
         }

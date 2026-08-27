@@ -608,14 +608,22 @@ pub(crate) fn compute_reachability(
     reachability::compute_with_roots(graph, &declared)
 }
 
-/// A cold-build failure (no cache, project root broken) degrades to a single `error` result
+/// A build failure (project root broken, unreadable tree) degrades to a single `error` result
 /// entry plus a diagnostic — never a panic (same contract as `check`'s `RunMode` dispatch).
-pub(crate) fn build_failure(req: QueryRequest, message: String) -> QueryResult {
+///
+/// `cache` is passed in rather than assumed: the failure says nothing about whether the cache
+/// was consulted, and hardcoding `"cold"` here would report an empty cache to a caller who had
+/// switched the cache off — the same conflation `cache_status_str` exists to prevent.
+pub(crate) fn build_failure(
+    req: QueryRequest,
+    message: String,
+    cache: &'static str,
+) -> QueryResult {
     QueryResult {
         verb: req.verb,
         selectors: req.selectors.clone(),
         id: req.id,
-        cache: "cold",
+        cache,
         duration_ms: 0,
         results: req
             .selectors

@@ -280,6 +280,7 @@ pub fn find_private_type_leaks(graph: &ProjectGraph) -> Vec<Finding> {
                 package: graph.package_name(decl_file.package).map(str::to_string),
             },
             related: Vec::new(),
+            rolled_up: None,
             delta: None,
             delta_origin: None,
         });

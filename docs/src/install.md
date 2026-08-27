@@ -12,7 +12,7 @@ project's GitHub releases page. Download, extract, and put `kndo` on your `PATH`
 $ curl -fsSL https://github.com/eulke/kondo/releases/latest/download/kndo-0.1.0-aarch64-apple-darwin.tar.gz \
     | tar -xz
 $ ./kndo --version
-kndo 0.1.0 (schema 1.0.0)
+kndo 0.1.0 (schema 1.3.0)
 ```
 
 In GitHub Actions you do not need to install anything by hand — the

@@ -161,6 +161,7 @@ pub fn find_deep_imports(graph: &ProjectGraph) -> Vec<Finding> {
                 package: graph.package_name(consumer).map(str::to_string),
             },
             related: Vec::new(),
+            rolled_up: None,
             delta: None,
             delta_origin: None,
         });

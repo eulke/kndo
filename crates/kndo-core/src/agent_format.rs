@@ -489,6 +489,7 @@ mod tests {
                 package: None,
             },
             related: Vec::new(),
+            rolled_up: None,
             delta: None,
             delta_origin: None,
         }
@@ -499,6 +500,10 @@ mod tests {
             mode: "full".to_string(),
             duration_ms: 42,
             findings,
+            // A real `kndo check` has the cache ON — `RunResult::default()`'s `false` would
+            // render `cache disabled`, which is a fixture accident, not what these tests are
+            // about. Enabled with zero hits is `cold`, the ordinary first-run state.
+            cache_enabled: true,
             ..RunResult::default()
         }
     }

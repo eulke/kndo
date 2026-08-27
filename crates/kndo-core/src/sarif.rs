@@ -279,6 +279,7 @@ mod tests {
                 range: None,
                 note: Some("imports a.ts".to_string()),
             }],
+            rolled_up: None,
             delta: None,
             delta_origin: None,
         }

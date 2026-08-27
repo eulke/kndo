@@ -134,6 +134,7 @@ pub fn find_crap(
                 package: graph.package_name(file.package).map(str::to_string),
             },
             related: Vec::new(),
+            rolled_up: None,
             delta: None,
             delta_origin: None,
         });
