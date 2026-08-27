@@ -573,11 +573,7 @@ fn handle_property(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
         return;
     };
     let vis = visibility(item);
-    let kind = if ctx.owner.is_some() {
-        SymbolKind::Field
-    } else {
-        SymbolKind::Variable
-    };
+    let kind = property_symbol_kind(item, ctx);
     let name = text(name_node, src);
     push_declaration(out, src, name, kind, item, None, ctx.owner, vis);
     // `override val` is dispatch machinery exactly like `override fun` (see
@@ -588,6 +584,28 @@ fn handle_property(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
     }
     if let Some(value) = property_initializer(item) {
         walk_body(value, src, ctx.owner, out);
+    }
+}
+
+/// A property with an accessor BODY is computed: `val slug: String get() = name.lowercase()`
+/// compiles to a getter method and has code a test can exercise, where `val MAX = 255` has a
+/// value and nothing to exercise. Calling both `Field` made the kind unable to tell a constant
+/// from real logic — which is what let `untested` accuse Exposed's `MAX_VARCHAR_LENGTH` and
+/// vapor's header-name constants of not being tested.
+///
+/// A bodyless accessor (`private set`, an annotated bare `get`) leaves the property stored: it
+/// changes the accessor's visibility, not what the property is.
+fn property_symbol_kind(item: Node, ctx: &Ctx<'_>) -> SymbolKind {
+    let computed = ["getter", "setter"].iter().any(|a| {
+        find_child(item, a)
+            .and_then(|node| find_child(node, "function_body"))
+            .is_some()
+    });
+    match (computed, ctx.owner.is_some()) {
+        (true, true) => SymbolKind::Method,
+        (true, false) => SymbolKind::Function,
+        (false, true) => SymbolKind::Field,
+        (false, false) => SymbolKind::Variable,
     }
 }
 
@@ -948,6 +966,29 @@ mod tests {
 
     fn decl<'a>(f: &'a FileFacts, name: &str) -> &'a kndo_core::adapter::Declaration {
         f.declarations.iter().find(|d| d.name == name).unwrap()
+    }
+
+    #[test]
+    fn a_property_with_an_accessor_body_is_a_callable_and_a_constant_is_not() {
+        let f = facts(
+            "class Movie {\n\
+             \x20   val slug: String get() = title.lowercase()\n\
+             \x20   val title: String = \"x\"\n\
+             \x20   var guarded: Int = 0\n\
+             \x20       private set\n\
+             }\n\
+             const val MAX_VARCHAR_LENGTH = 255\n\
+             val topLevelComputed: Int get() = 1\n",
+        );
+        assert_eq!(decl(&f, "slug").kind, SymbolKind::Method);
+        assert_eq!(decl(&f, "title").kind, SymbolKind::Field);
+        assert_eq!(
+            decl(&f, "guarded").kind,
+            SymbolKind::Field,
+            "a bodyless accessor changes visibility, not what the property IS"
+        );
+        assert_eq!(decl(&f, "MAX_VARCHAR_LENGTH").kind, SymbolKind::Variable);
+        assert_eq!(decl(&f, "topLevelComputed").kind, SymbolKind::Function);
     }
 
     #[test]

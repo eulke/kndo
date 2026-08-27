@@ -201,6 +201,15 @@ has nothing true to report and `duplicate`'s construction exemption simply never
 Swift — today's behaviour, unchanged. Guessing (an uppercase callee, say) would be the adapter
 inventing a verdict, in the accusation direction RFC 0012 §2 forbids.
 
+**Properties**: a property with an accessor BODY is a callable, not a value — `Method` when it
+has an owner, `Function` at top level; a stored one stays `Field`/`Variable`. Swift compiles such
+a property to a getter, so this is the truthful kind, and the distinguishing node is `computed_property`.
+A bodyless accessor (a `private set`, an annotated bare `get`, `willSet`/`didSet` observers)
+leaves the property stored: it changes the accessor, not what the property IS.
+
+Naming both `Field` made the kind unable to separate a constant from real logic, which is what
+let `untested` accuse header-name constants and `MAX_VARCHAR_LENGTH` of not being tested.
+
 **Grammar ground truth**: pinned in `kndo-adapter-swift/src/parsing.rs`'s `#[ignore]`d probe
 tests — re-run with `--ignored --nocapture` before any tree-sitter-swift version bump.
 

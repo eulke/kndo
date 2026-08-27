@@ -35,7 +35,7 @@ impl LanguageAdapter for SwiftAdapter {
             activation: Vec::new(),
             dependencies: Vec::new(),
             id: SmolStr::new("swift"),
-            facts_schema_version: 7, // bump whenever the serialized facts shape or the emission semantics change
+            facts_schema_version: 8, // bump whenever the serialized facts shape or the emission semantics change
             file_globs: vec![SmolStr::new("**/*.swift")],
             manifest_globs: vec![SmolStr::new("**/Package.swift")],
             grammar_version: SmolStr::new("tree-sitter-swift 0.7.3"),

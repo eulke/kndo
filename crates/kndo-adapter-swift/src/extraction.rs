@@ -605,7 +605,7 @@ fn handle_property(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
     push_declaration(
         out,
         name,
-        property_symbol_kind(ctx),
+        property_symbol_kind(item, ctx),
         item,
         None,
         ctx.owner,
@@ -617,11 +617,21 @@ fn handle_property(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
     walk_property_bodies(item, src, property_value_within(ctx, name), out);
 }
 
-fn property_symbol_kind(ctx: &Ctx<'_>) -> SymbolKind {
-    if ctx.owner.is_some() {
-        SymbolKind::Field
-    } else {
-        SymbolKind::Variable
+/// A **computed** property is a getter, not a value: `var isValid: Bool { … }` compiles to a
+/// method and has a body a test can exercise, where `static let https = Scheme("https")` has a
+/// value and nothing to exercise. Calling both `Field` made the kind unable to tell a header-name
+/// constant from real logic, which is what let `untested` accuse 185 of vapor's stored constants
+/// of not being tested.
+///
+/// `willSet`/`didSet` observers do NOT make a property computed — the property still stores its
+/// value, and the observers run around the store rather than instead of it.
+fn property_symbol_kind(item: Node, ctx: &Ctx<'_>) -> SymbolKind {
+    let computed = find_child(item, "computed_property").is_some();
+    match (computed, ctx.owner.is_some()) {
+        (true, true) => SymbolKind::Method,
+        (true, false) => SymbolKind::Function,
+        (false, true) => SymbolKind::Field,
+        (false, false) => SymbolKind::Variable,
     }
 }
 
@@ -954,6 +964,38 @@ mod tests {
     fn a_loose_path_leaves_unit_none() {
         let f = extract("scripts/loose.swift", b"class Widget {}\n");
         assert_eq!(f.unit, None);
+    }
+
+    #[test]
+    fn a_computed_property_is_a_callable_and_a_stored_one_is_not() {
+        // The kind has to separate `static let https = Scheme("https")` — a value with nothing
+        // to exercise — from `var isValid: Bool { … }`, which is a getter with a body. Both
+        // used to be `Field`, so nothing downstream could tell a header-name constant from
+        // real logic.
+        let f = facts(
+            "struct Scheme {\n\
+             \x20   static let https = Scheme()\n\
+             \x20   var isValid: Bool { return true }\n\
+             \x20   var stored: Int = 0 {\n\
+             \x20       didSet { print(stored) }\n\
+             \x20   }\n\
+             }\n\
+             var topLevelComputed: Int { return 1 }\n\
+             let topLevelStored = 2\n",
+        );
+        assert_eq!(decl(&f, "https").kind, SymbolKind::Field);
+        assert_eq!(decl(&f, "isValid").kind, SymbolKind::Method);
+        assert_eq!(
+            decl(&f, "stored").kind,
+            SymbolKind::Field,
+            "willSet/didSet observers run AROUND the store — the property still stores a value"
+        );
+        assert_eq!(
+            decl(&f, "topLevelComputed").kind,
+            SymbolKind::Function,
+            "a computed global is a getter function, not a method of anything"
+        );
+        assert_eq!(decl(&f, "topLevelStored").kind, SymbolKind::Variable);
     }
 
     #[test]

@@ -216,6 +216,15 @@ has nothing true to report and `duplicate`'s construction exemption simply never
 Kotlin — today's behaviour, unchanged. Guessing (an uppercase callee, say) would be the adapter
 inventing a verdict, in the accusation direction RFC 0012 §2 forbids.
 
+**Properties**: a property with an accessor BODY is a callable, not a value — `Method` when it
+has an owner, `Function` at top level; a stored one stays `Field`/`Variable`. Kotlin compiles such
+a property to a getter, so this is the truthful kind, and the distinguishing node is a `getter`/`setter` with a `function_body`.
+A bodyless accessor (a `private set`, an annotated bare `get`)
+leaves the property stored: it changes the accessor, not what the property IS.
+
+Naming both `Field` made the kind unable to separate a constant from real logic, which is what
+let `untested` accuse header-name constants and `MAX_VARCHAR_LENGTH` of not being tested.
+
 **Grammar ground truth**: pinned in `kndo-adapter-kotlin/src/parsing.rs`'s `#[ignore]`d probe
 tests, covering declarations/modifiers/visibility, imports, `when`/`if`/`for`/`while`/`try`,
 lambdas/string templates/elvis/not-null, companion objects/secondary constructors/inner
