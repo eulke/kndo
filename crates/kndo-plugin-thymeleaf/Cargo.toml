@@ -1,0 +1,13 @@
+[package]
+name = "kndo-plugin-thymeleaf"
+description = "Built-in kndo:thymeleaf plugin — templates a Spring view resolver loads by name, and the static assets they link"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+kndo-core = { path = "../kndo-core" }
+smol_str = { workspace = true }
+rustc-hash = { workspace = true }

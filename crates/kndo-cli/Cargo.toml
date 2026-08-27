@@ -22,6 +22,8 @@ libc = "0.2"
 
 [dev-dependencies]
 smol_str = { workspace = true }
+# `default_features_mirror_the_library` reads both crates' manifests.
+toml = { workspace = true }
 tempfile = "3"
 
 [target.'cfg(unix)'.dev-dependencies]
@@ -49,6 +51,7 @@ default = [
     "plugin-express",
     "plugin-serde",
     "plugin-info-plist",
+    "plugin-thymeleaf",
     "plugin-rkyv",
     "plugin-wasmtime",
     "plugin-coverage",
@@ -67,6 +70,7 @@ plugin-nextjs = ["kndo/plugin-nextjs"]
 plugin-express = ["kndo/plugin-express"]
 plugin-serde = ["kndo/plugin-serde"]
 plugin-info-plist = ["kndo/plugin-info-plist"]
+plugin-thymeleaf = ["kndo/plugin-thymeleaf"]
 plugin-rkyv = ["kndo/plugin-rkyv"]
 plugin-wasmtime = ["kndo/plugin-wasmtime"]
 plugin-coverage = ["kndo/plugin-coverage"]

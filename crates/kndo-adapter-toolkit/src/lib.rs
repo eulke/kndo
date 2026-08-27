@@ -12,6 +12,8 @@ pub mod classify;
 pub mod jvm_manifest;
 pub mod metrics;
 pub mod parsing;
-pub mod paths;
+/// Re-export: the arithmetic moved to `kndo-core` when a plugin needed it too (the
+/// toolkit's audience is adapters). Adapters keep calling `kndo_adapter_toolkit::paths::*`.
+pub use kndo_core::paths;
 pub mod stdlib;
 pub mod suppression;

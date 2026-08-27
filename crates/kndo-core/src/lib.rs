@@ -25,6 +25,7 @@ pub mod discovery;
 pub mod engine;
 mod gitutil;
 pub mod graph;
+pub mod paths;
 pub mod plugin;
 mod plugin_gate;
 pub mod query;

@@ -26,6 +26,7 @@ the reserved `kndo:` namespace and are gated by the same activation rules.
 | `kndo:serde` | any `Cargo.toml` declares `serde` | marks hand-written `Serialize`/`Deserialize` impls as implicitly invoked, so a serialized type's impl doesn't read as a test blind spot |
 | `kndo:rkyv` | any `Cargo.toml` declares `rkyv` | marks hand-written `Archive`/`Serialize`/`Deserialize` impls — and the `*With` adapters `#[rkyv(with = …)]` reaches through generated code — as implicitly invoked |
 | `kndo:wasmtime` | any `Cargo.toml` declares `wasmtime` | marks the members of the host traits `wasmtime::component::bindgen!` generates, whose only caller is the guest |
+| `kndo:thymeleaf` | any manifest declares `spring-boot-starter-thymeleaf` | roots the templates a Spring view resolver loads by logical name, and links each to the static assets its `th:href`/`th:src` (or plain `href`/`src`) name — resolved through Spring Boot's static locations and only where a file is actually there |
 | `kndo:info-plist` | an `Info.plist` exists anywhere under the project root | roots the classes an Apple bundle names by string and the system instantiates — `NSPrincipalClass`, `WKExtensionDelegateClassName`, a scene manifest's delegate |
 
 `kndo doctor` shows each with its activation state and reason.

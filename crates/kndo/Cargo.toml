@@ -23,6 +23,7 @@ kndo-plugin-express = { path = "../kndo-plugin-express", optional = true }
 kndo-plugin-coverage = { path = "../kndo-plugin-coverage", optional = true }
 kndo-plugin-serde = { path = "../kndo-plugin-serde", optional = true }
 kndo-plugin-info-plist = { path = "../kndo-plugin-info-plist", optional = true }
+kndo-plugin-thymeleaf = { path = "../kndo-plugin-thymeleaf", optional = true }
 kndo-plugin-rkyv = { path = "../kndo-plugin-rkyv", optional = true }
 kndo-plugin-wasmtime = { path = "../kndo-plugin-wasmtime", optional = true }
 # `plugin install` (GitHub release JSON) and `kndo plugin new`/plugins.lock (TOML).
@@ -72,6 +73,7 @@ default = [
     "plugin-express",
     "plugin-serde",
     "plugin-info-plist",
+    "plugin-thymeleaf",
     "plugin-rkyv",
     "plugin-wasmtime",
     "plugin-coverage",
@@ -106,6 +108,7 @@ plugin-nextjs = ["dep:kndo-plugin-nextjs", "plugin-activation"]
 plugin-express = ["dep:kndo-plugin-express", "plugin-activation"]
 plugin-serde = ["dep:kndo-plugin-serde", "plugin-activation"]
 plugin-info-plist = ["dep:kndo-plugin-info-plist", "plugin-activation"]
+plugin-thymeleaf = ["dep:kndo-plugin-thymeleaf", "plugin-activation"]
 plugin-rkyv = ["dep:kndo-plugin-rkyv", "plugin-activation"]
 plugin-wasmtime = ["dep:kndo-plugin-wasmtime", "plugin-activation"]
 # Coverage ingesters are the one built-in family that does NOT imply `plugin-activation`:

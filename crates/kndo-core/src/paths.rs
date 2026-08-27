@@ -1,8 +1,13 @@
-//! Pure `ProjectPath` string manipulation shared by every adapter's resolver.
+//! Pure `ProjectPath` string manipulation.
 //!
 //! Nothing here touches the filesystem (the adapter purity rule) and nothing is
 //! language-specific: relative-specifier joining is the same operation for a TS `import`, a
-//! CSS `@import`, or a Go relative path. One implementation, tested once.
+//! CSS `@import`, a Go relative path, or the design-time `src="../static/…"` a Thymeleaf
+//! template carries. It lived in `kndo-adapter-toolkit` while adapters were its only audience;
+//! a PLUGIN needing the same arithmetic is what moved it here, since the toolkit's audience is
+//! adapters and copying twenty lines into a second crate is the duplication this codebase
+//! forbids. `kndo_adapter_toolkit::paths` re-exports it, so every adapter call site is
+//! unchanged. One implementation, tested once.
 
 /// Directory part of a `/`-separated project path (`""` for root-level files).
 pub fn dirname(path: &str) -> &str {
