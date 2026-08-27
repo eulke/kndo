@@ -1008,6 +1008,18 @@ impl Engine {
   the findings snapshot and dirty-region *analysis* incrementality (§5) — analyses always re-run
   over the (possibly patched) graph.
 
+- **Provenance (`graph::provenance::ProvenanceIndex`)** answers "whose facts is this resting
+  on" for one graph, once. [`Provenance`](#1-graph-vocabulary) lives on **edges**; both
+  consumers that need it per *node* — a `describe` envelope's `sources` and every
+  `Finding.sources` ([output-schema.md](output-schema.md) §2.1) — read this index rather than
+  deriving their own, so the two cannot answer differently about the same node, and a new
+  `EdgeKind` teaches both at once. `Engine` fills findings in one pass after suppression and
+  config filtering: a verdict knows what it decided, not who supplied the graph it decided on,
+  and thirteen analyses each answering would be thirteen chances to answer differently. It is
+  read off the **persisted graph**, never off the live plugin round — a snapshot-hit run runs
+  no plugins, and provenance sourced from that round would silently vanish exactly when the
+  cache is warm.
+
 - **Delta budgets (`crate::delta`)** are the gate's aggregate half. `RunResult.budget:
   Option<Budget>` is `Some` exactly when the run is a diff mode *and* `kndo.toml` has a
   `[delta]` section; `Budget { verdict, rules: Vec<BudgetRule { rule, limit, measured,

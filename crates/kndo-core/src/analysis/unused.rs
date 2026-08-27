@@ -132,6 +132,7 @@ pub fn find_unused_files(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<F
             },
             related: Vec::new(),
             rolled_up: None,
+            sources: Vec::new(),
             delta: None,
             delta_origin: None,
         });
@@ -258,6 +259,7 @@ pub fn find_unused_symbols(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec
             },
             related: Vec::new(),
             rolled_up: None,
+            sources: Vec::new(),
             delta: None,
             delta_origin: None,
         });

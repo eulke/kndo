@@ -484,6 +484,10 @@ pub(crate) struct GraphIndex {
     forward: HashMap<NavNode, Vec<NavEdge>>,
     reverse: HashMap<NavNode, Vec<NavEdge>>,
     roots: HashMap<RootKind, Vec<(NavNode, Confidence)>>,
+    /// Who contributed what, for `describe`'s `sources`. Built here rather than per described
+    /// node: the previous shape scanned the whole edge list once *per node*, so a `query`
+    /// batch of sixty describes scanned it sixty times.
+    provenance: crate::graph::provenance::ProvenanceIndex,
 }
 
 /// Every edge kind we build a [`NavEdge`] from has a `from` that's either a file or a symbol
@@ -626,6 +630,7 @@ pub(crate) fn build_graph_index(graph: &ProjectGraph) -> GraphIndex {
         forward,
         reverse,
         roots,
+        provenance: crate::graph::provenance::ProvenanceIndex::build(graph),
     }
 }
 
@@ -1028,7 +1033,7 @@ pub(crate) fn describe(
         .map(|f| f.id.to_string())
         .collect();
 
-    let sources = describe_sources(graph, resolved);
+    let sources = describe_sources(graph, nav, resolved);
     let metrics = shape_metrics(graph, coverage, resolved);
     let duplication = duplication_groups(finding_locations, &selector);
 
@@ -1214,47 +1219,33 @@ fn reached_by_roots(nav: &GraphIndex, resolved: &Resolved) -> Vec<NavNode> {
     found
 }
 
-fn provenance_label(p: &crate::vocab::Provenance) -> String {
-    match p {
-        crate::vocab::Provenance::Adapter(id) => format!("adapter:{id}"),
-        crate::vocab::Provenance::Plugin(id) => format!("plugin:{id}"),
-        crate::vocab::Provenance::Surface => "core:surface".to_string(),
-    }
-}
-
-fn describe_sources(graph: &ProjectGraph, resolved: &Resolved) -> Vec<String> {
-    let mut sources: HashSet<String> = HashSet::default();
-    let mark = |sources: &mut HashSet<String>, p: &crate::vocab::Provenance| {
-        sources.insert(provenance_label(p));
+/// A described node's `sources`. Delegates to the shared index so `describe` and every
+/// finding answer the provenance question the same way — the alternative is two derivations
+/// that agree until one of them learns about a new edge kind.
+fn describe_sources(graph: &ProjectGraph, nav: &GraphIndex, resolved: &Resolved) -> Vec<String> {
+    let node = match resolved {
+        Resolved::Node(ResolvedNode::File(f)) => crate::graph::provenance::Node::File(*f),
+        Resolved::Node(ResolvedNode::Symbol(s)) => crate::graph::provenance::Node::Symbol(*s),
+        // A dependency node resolves by name; the index is keyed by id. Unlike files and
+        // symbols this needs a scan, but it is one scan of the dependency list (hundreds),
+        // not of the edge list, and only for the one node being described. `describe` used to
+        // answer `[]` here — its node-kind match had no dependency arm at all.
+        Resolved::Dependency(ResolvedDependency(name)) => {
+            let Some(i) = graph.dependencies.iter().position(|d| &d.name == name) else {
+                return Vec::new();
+            };
+            crate::graph::provenance::Node::Dependency(crate::vocab::DependencyId(i as u32))
+        }
+        Resolved::Node(ResolvedNode::Package(p)) => crate::graph::provenance::Node::Package(*p),
+        // A root set is not a node — it is a query over edges, and "which components
+        // contributed" is answered per member, not for the set.
+        Resolved::Node(ResolvedNode::RootSet(_)) => return Vec::new(),
     };
-    for edge in &graph.edges {
-        if edge_touches(&edge.kind, resolved) {
-            mark(&mut sources, &edge.source);
-        }
-    }
-    let mut sources: Vec<String> = sources.into_iter().collect();
-    sources.sort();
-    sources
-}
-
-fn edge_touches(kind: &crate::vocab::EdgeKind, resolved: &Resolved) -> bool {
-    use crate::vocab::EdgeKind;
-    let node = nav_node_of(resolved);
-    match (kind, node) {
-        (EdgeKind::Declares { file, .. }, Some(NavNode::File(f))) => *file == f,
-        (EdgeKind::Declares { symbol, .. }, Some(NavNode::Symbol(s))) => *symbol == s,
-        (EdgeKind::ImportsFile { from, to }, Some(NavNode::File(f))) => *from == f || *to == f,
-        (EdgeKind::ImportsDependency { from, .. }, Some(NavNode::File(f))) => *from == f,
-        (EdgeKind::ImportsDependency { to, .. }, Some(NavNode::Dependency(d))) => *to == d,
-        (EdgeKind::References { from, to, .. }, Some(NavNode::Symbol(s))) => {
-            *to == s || *from == NodeRef::Symbol(s)
-        }
-        (EdgeKind::References { from, .. }, Some(NavNode::File(f))) => *from == NodeRef::File(f),
-        (EdgeKind::Root { target, .. }, Some(NavNode::File(f))) => *target == NodeRef::File(f),
-        (EdgeKind::Root { target, .. }, Some(NavNode::Symbol(s))) => *target == NodeRef::Symbol(s),
-        (EdgeKind::Wildcard { from }, Some(NavNode::File(f))) => *from == f,
-        _ => false,
-    }
+    nav.provenance
+        .union([node])
+        .into_iter()
+        .map(str::to_string)
+        .collect()
 }
 
 // ---------------------------------------------------------------- finding attachment (describe)

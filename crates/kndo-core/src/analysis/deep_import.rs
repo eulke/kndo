@@ -162,6 +162,7 @@ pub fn find_deep_imports(graph: &ProjectGraph) -> Vec<Finding> {
             },
             related: Vec::new(),
             rolled_up: None,
+            sources: Vec::new(),
             delta: None,
             delta_origin: None,
         });

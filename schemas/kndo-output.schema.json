@@ -337,6 +337,13 @@
         "severity": {
           "$ref": "#/$defs/Severity"
         },
+        "sources": {
+          "description": "Provenance: which adapters and plugins the subject's facts came from —\n`[\"adapter:js-ts\", \"plugin:kndo:nextjs\"]`. Filled by one pass over the finished\nfinding set (`fill_sources`), never by the analyses: a verdict knows what it decided,\nnot who supplied the graph it decided on, and thirteen analyses each answering the\nquestion would be thirteen chances to answer it differently.\n\nEmpty — and so absent — when the subject resolves to no graph node: a finding about a\npath outside the graph, or one the analysis left unanchored. Never a lie by omission:\nthis names components whose facts are *present*, and cannot name the plugin that would\nhave kept a symbol alive had it activated.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "subject_kind": {
           "$ref": "#/$defs/SubjectKind"
         }

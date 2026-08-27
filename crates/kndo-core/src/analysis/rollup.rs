@@ -84,6 +84,7 @@ pub(crate) fn directory_finding(
         related: Vec::new(),
         // The whole point of a rollup: this one finding stands in for `files.len()` of them.
         rolled_up: Some(dir.files.len()),
+        sources: Vec::new(),
         delta: None,
         delta_origin: None,
     }

@@ -105,6 +105,7 @@ pub fn find_test_only_files(graph: &ProjectGraph, reach: &ReachabilityMap) -> Ve
             },
             related: Vec::new(),
             rolled_up: None,
+            sources: Vec::new(),
             delta: None,
             delta_origin: None,
         });
@@ -165,6 +166,7 @@ pub fn find_test_only_symbols(graph: &ProjectGraph, reach: &ReachabilityMap) -> 
             },
             related: Vec::new(),
             rolled_up: None,
+            sources: Vec::new(),
             delta: None,
             delta_origin: None,
         });

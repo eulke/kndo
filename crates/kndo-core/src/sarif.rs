@@ -280,6 +280,7 @@ mod tests {
                 note: Some("imports a.ts".to_string()),
             }],
             rolled_up: None,
+            sources: Vec::new(),
             delta: None,
             delta_origin: None,
         }

@@ -292,6 +292,7 @@ fn stale_finding(
         },
         related: Vec::new(),
         rolled_up: None,
+        sources: Vec::new(),
         delta: None,
         delta_origin: None,
         advisory: false,
@@ -519,6 +520,7 @@ mod tests {
             },
             related: Vec::new(),
             rolled_up: None,
+            sources: Vec::new(),
             delta: None,
             delta_origin: None,
         }

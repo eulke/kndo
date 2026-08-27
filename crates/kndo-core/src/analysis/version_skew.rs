@@ -82,6 +82,7 @@ pub fn find_version_skew(graph: &ProjectGraph) -> Vec<Finding> {
                 })
                 .collect(),
             rolled_up: None,
+            sources: Vec::new(),
             delta: None,
             delta_origin: None,
         });

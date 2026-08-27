@@ -101,6 +101,7 @@ pub fn find_duplicate_files(graph: &ProjectGraph) -> Vec<Finding> {
                 })
                 .collect(),
             rolled_up: None,
+            sources: Vec::new(),
             delta: None,
             delta_origin: None,
         });
@@ -371,6 +372,7 @@ pub fn find_duplicate_functions(
             },
             related,
             rolled_up: None,
+            sources: Vec::new(),
             delta: None,
             delta_origin: None,
         });

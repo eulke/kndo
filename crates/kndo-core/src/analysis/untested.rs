@@ -155,6 +155,7 @@ fn find_untested_files(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<Fin
             },
             related: Vec::new(),
             rolled_up: None,
+            sources: Vec::new(),
             delta: None,
             delta_origin: None,
         });
@@ -277,6 +278,7 @@ fn find_untested_symbols(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<F
             },
             related: Vec::new(),
             rolled_up: None,
+            sources: Vec::new(),
             delta: None,
             delta_origin: None,
         });

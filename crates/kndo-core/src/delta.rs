@@ -231,6 +231,7 @@ mod tests {
             location: Location::default(),
             related: Vec::new(),
             rolled_up: None,
+            sources: Vec::new(),
             delta: None,
             delta_origin: None,
             advisory,

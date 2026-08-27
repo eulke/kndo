@@ -1250,6 +1250,7 @@ mod tests {
             location: Default::default(),
             related: Vec::new(),
             rolled_up: None,
+            sources: Vec::new(),
             delta: None,
             delta_origin: None,
         }

@@ -89,7 +89,7 @@ pass. Consumers must treat unknown levels as at least `warn`.
     { "role": "cause", "path": "src/billing/index.ts", "range": { "start": [12,1], "end": [12,42] },
       "note": "last production reference removed by this change" }
   ],
-  "sources": ["adapter:js-ts"],          // provenance: adapters/plugins whose facts contributed
+  "sources": ["adapter:js-ts", "plugin:kndo:nextjs"],  // §2.1 — ABSENT when nothing claimed the subject
   "delta": "new",                        // diff modes: "new"; absent in full mode
   "delta_origin": "derived",             // diff modes: "introduced" (inside the change set — dead on arrival) | "derived" (flipped by it); RFC 0004 §6
   "advisory": true                       // RFC 0018 §2.2: never influences exit codes/budgets; only ever present (as true) on plugin: findings without a [plugins.gate] opt-in
@@ -104,6 +104,37 @@ finding addressable, `related` makes it complete, and only then may `message` su
 covers. The anchor is presentation, not identity: `id` for those categories stays keyed on the
 content hash or the coordinate, so renaming one member while the group survives is the same
 finding, not a new one.
+
+### 2.1 `sources` (normative)
+
+The adapters and plugins whose **facts** the finding's subject rests on, sorted, deduplicated,
+spelled `adapter:<adapter-id>` · `plugin:<coordinate>` · `core:surface`. Same values and same
+derivation as a `describe` envelope's `sources` — one index answers both, so the two can never
+disagree about a node.
+
+A subject contributes:
+
+- the adapter that **claimed** its file, whether or not any edge touches it (a claimed file's
+  declarations, spans and metrics are that adapter's facts);
+- every adapter or plugin that contributed an **edge touching** it, in either direction — an
+  incoming reference is as load-bearing as an outgoing one, which is what puts a plugin's name
+  on the symbol it keeps alive;
+- for a **dependency** subject, the adapters that read the manifest declaring it. A dependency
+  declared and never imported has no edge anywhere, and the manifest's readers are the only
+  honest answer;
+- for a **directory** subject (the rollup ladder), every file underneath — a rollup stands in
+  for exactly those findings, so its provenance is exactly theirs;
+- every `related` path as well as the anchor, so a finding that spans places names every
+  component it rests on.
+
+**Absent means no component was involved, and is a real answer.** `duplicate` over two
+identical files no adapter claims rests on nobody's facts: the core hashed the bytes. Consumers
+must read absence as "no adapter or plugin contributed", never as "not recorded".
+
+**What `sources` cannot say.** It names components whose facts are *present*. It can never name
+the plugin that would have kept a symbol alive had it activated — a verdict of absence
+(`unused` is the whole category) rests on the silence of every component that ran, and silence
+has no provenance. `run.plugins` (§1) is the field that says who ran.
 
 **Two fields this object deliberately does NOT have.** `evidence` — a category-specific block —
 was specified before any category had one, and no analysis has since produced a fact that

@@ -622,6 +622,7 @@ impl ProjectGraph {
 mod assemble;
 mod patch;
 mod plugin_round;
+pub(crate) mod provenance;
 mod surface;
 
 #[cfg(test)]

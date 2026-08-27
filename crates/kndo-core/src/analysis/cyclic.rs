@@ -190,6 +190,7 @@ pub fn find_cycles(graph: &ProjectGraph) -> (Vec<Finding>, HashSet<FileId>) {
             },
             related,
             rolled_up: None,
+            sources: Vec::new(),
             delta: None,
             delta_origin: None,
         });
@@ -312,6 +313,7 @@ pub fn find_cycles(graph: &ProjectGraph) -> (Vec<Finding>, HashSet<FileId>) {
             },
             related,
             rolled_up: None,
+            sources: Vec::new(),
             delta: None,
             delta_origin: None,
         });

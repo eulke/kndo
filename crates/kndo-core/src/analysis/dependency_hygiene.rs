@@ -190,6 +190,7 @@ fn dependency_finding(
         location: dependency_location(graph, dep),
         related: Vec::new(),
         rolled_up: None,
+        sources: Vec::new(),
         delta: None,
         delta_origin: None,
     }

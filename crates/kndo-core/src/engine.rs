@@ -532,6 +532,18 @@ pub struct Finding {
     /// — the same defect `location`/`related` had for multi-place subjects.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rolled_up: Option<usize>,
+    /// Provenance: which adapters and plugins the subject's facts came from —
+    /// `["adapter:js-ts", "plugin:kndo:nextjs"]`. Filled by one pass over the finished
+    /// finding set (`fill_sources`), never by the analyses: a verdict knows what it decided,
+    /// not who supplied the graph it decided on, and thirteen analyses each answering the
+    /// question would be thirteen chances to answer it differently.
+    ///
+    /// Empty — and so absent — when the subject resolves to no graph node: a finding about a
+    /// path outside the graph, or one the analysis left unanchored. Never a lie by omission:
+    /// this names components whose facts are *present*, and cannot name the plugin that would
+    /// have kept a symbol alive had it activated.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sources: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub delta: Option<Delta>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -942,6 +954,7 @@ fn plugin_finding(
         },
         related: Vec::new(),
         rolled_up: None,
+        sources: Vec::new(),
         delta: None,
         delta_origin: None,
         advisory,
@@ -1680,8 +1693,12 @@ impl Engine {
                 // display posture, not an acknowledgment, so it is dropped, not counted.
                 let (findings, config_suppressed) = self.config.filter_findings(findings);
                 suppressed.config = config_suppressed;
-                let findings =
+                let mut findings =
                     apply_confidence_floor(findings, self.effective.min_confidence_floor);
+                // Last, over the findings that survived: provenance is a property of the
+                // subject, so filling it before suppression would be work done for findings
+                // nobody will ever read.
+                Self::fill_sources(&g, &mut findings);
                 Ok(AnalyzedTree {
                     graph: g,
                     findings,
@@ -1875,6 +1892,145 @@ impl Engine {
     /// `check()` returns) and counted in the summary instead. `None` when no baseline file
     /// exists — distinct from `Some` with `acknowledged: 0`, a baseline that exists but matches
     /// nothing right now (everything it acknowledged got fixed).
+    /// Fill every surviving finding's `sources` (output-schema §2) from one shared provenance
+    /// index, after suppression and config filtering have decided which findings there are.
+    ///
+    /// One pass, one place — not thirteen analyses each answering the question. A verdict knows
+    /// what it decided; it does not know who supplied the graph it decided on, and the answer is
+    /// mechanical from the subject either way. The alternative is the failure `CLAUDE.md` names
+    /// directly: the same concept spelled thirteen times, drifting the moment a new edge kind
+    /// lands and twelve of the thirteen are updated.
+    ///
+    /// What a finding's subject resolves to:
+    /// - a **dependency** (`subject_kind: "dependency"`) → the dependency node `location.symbol`
+    ///   names. It cannot go through the path: a manifest is a `Package`, not a `File`, so
+    ///   `unused`/`undeclared`/`version-skew` would otherwise resolve to nothing at all;
+    /// - a **file** path → that file node, plus the symbol node when `location.symbol` names one
+    ///   of its declarations;
+    /// - a **directory** (the rollup ladder's own subject kind) → every file underneath, because
+    ///   a rollup stands in for exactly those findings and its provenance is exactly theirs;
+    /// - every `related` path as well, so a finding that spans places (a clone group, disagreeing
+    ///   manifests) names every component it rests on rather than only the anchor's.
+    ///
+    /// A subject that resolves to nothing leaves `sources` empty, and empty is a real answer:
+    /// `duplicate` over two identical `.html` files nobody's adapter claimed rests on no
+    /// component's facts — the core hashed the bytes. Absent means "no adapter or plugin was
+    /// involved", which is different from, and must not be spelled the same as, "we did not
+    /// record who was".
+    fn fill_sources(graph: &crate::graph::ProjectGraph, findings: &mut [Finding]) {
+        use crate::graph::provenance::{Node, ProvenanceIndex};
+        if findings.is_empty() {
+            return;
+        }
+        let index = ProvenanceIndex::build(graph);
+
+        // Symbol resolution is by (file, qualified name), and building that map over the whole
+        // graph would allocate a `String` per symbol in the project. Only the files some finding
+        // actually names can ever be looked up, so the map is scoped to those.
+        let anchored: rustc_hash::FxHashSet<u32> = findings
+            .iter()
+            .filter_map(|f| f.location.path.as_ref())
+            .filter_map(|p| graph.file_id(p))
+            .map(|f| f.0)
+            .collect();
+        let mut symbols: rustc_hash::FxHashMap<(u32, String), crate::vocab::SymbolId> =
+            rustc_hash::FxHashMap::default();
+        if !anchored.is_empty() {
+            for (i, sym) in graph.symbols.iter().enumerate() {
+                if anchored.contains(&sym.file.0) {
+                    symbols.insert(
+                        (sym.file.0, sym.qualified_name()),
+                        crate::vocab::SymbolId(i as u32),
+                    );
+                }
+            }
+        }
+
+        // A manifest is BOTH a `File` node (unclaimed — no adapter claims it as source) and a
+        // `Package`. Only the package half knows who read it, so a finding anchored on a manifest
+        // has to be asked of both or it comes back with nothing at all, which is what every
+        // `unused` dependency did.
+        let manifests: rustc_hash::FxHashMap<&str, crate::vocab::PackageId> = graph
+            .packages
+            .iter()
+            .enumerate()
+            .filter_map(|(i, p)| {
+                p.manifest
+                    .as_ref()
+                    .map(|m| (m.0.as_str(), crate::vocab::PackageId(i as u32)))
+            })
+            .collect();
+
+        // Dependency subjects are named, not located: the finding's `path` is the manifest that
+        // declared them, and a manifest is a Package rather than a File node.
+        let mut by_name: rustc_hash::FxHashMap<&str, Vec<crate::vocab::DependencyId>> =
+            rustc_hash::FxHashMap::default();
+        if findings
+            .iter()
+            .any(|f| f.subject_kind == crate::vocab::SubjectKind::DEPENDENCY)
+        {
+            for (i, dep) in graph.dependencies.iter().enumerate() {
+                by_name
+                    .entry(dep.name.as_str())
+                    .or_default()
+                    .push(crate::vocab::DependencyId(i as u32));
+            }
+        }
+
+        let mut nodes: Vec<Node> = Vec::new();
+        for finding in findings.iter_mut() {
+            nodes.clear();
+            if finding.subject_kind == crate::vocab::SubjectKind::DEPENDENCY {
+                // One coordinate can be declared by several packages in a workspace; all of them
+                // are the subject, so all of their provenance counts.
+                if let Some(name) = &finding.location.symbol {
+                    nodes.extend(
+                        by_name
+                            .get(name.as_str())
+                            .into_iter()
+                            .flatten()
+                            .map(|&d| Node::Dependency(d)),
+                    );
+                }
+            }
+            let paths = finding
+                .location
+                .path
+                .iter()
+                .map(|p| p.0.as_str())
+                .chain(finding.related.iter().map(|r| r.path.0.as_str()));
+            for path in paths {
+                if let Some(&package) = manifests.get(path) {
+                    nodes.push(Node::Package(package));
+                }
+                match graph.file_id(&crate::adapter::ProjectPath(smol_str::SmolStr::new(path))) {
+                    Some(file) => {
+                        nodes.push(Node::File(file));
+                        if let Some(name) = &finding.location.symbol {
+                            if let Some(&sym) = symbols.get(&(file.0, name.clone())) {
+                                nodes.push(Node::Symbol(sym));
+                            }
+                        }
+                    }
+                    // Not a file: a directory subject, or a path the graph never saw. Only the
+                    // first is worth a scan, and only for the finding kind that produces it.
+                    None if finding.subject_kind == crate::vocab::SubjectKind::DIRECTORY => {
+                        nodes.extend(graph.files.iter().enumerate().filter_map(|(i, f)| {
+                            crate::graph::package_owns(path, f.path.0.as_str())
+                                .then_some(Node::File(crate::vocab::FileId(i as u32)))
+                        }));
+                    }
+                    None => {}
+                }
+            }
+            finding.sources = index
+                .union(nodes.iter().copied())
+                .into_iter()
+                .map(str::to_string)
+                .collect();
+        }
+    }
+
     fn apply_baseline(&self, findings: Vec<Finding>) -> (Vec<Finding>, Option<BaselineSummary>) {
         let Some(entries) = crate::baseline::load(&self.root) else {
             return (findings, None);
@@ -1920,6 +2076,7 @@ mod tests {
             location: Default::default(),
             related: Vec::new(),
             rolled_up: None,
+            sources: Vec::new(),
             delta: None,
             delta_origin: None,
         }
@@ -2010,6 +2167,7 @@ mod tests {
                 },
                 related: Vec::new(),
                 rolled_up: None,
+                sources: Vec::new(),
                 delta: None,
                 delta_origin: None,
             }
@@ -2444,6 +2602,68 @@ mod tests {
         );
     }
 
+    /// Contributes one edge *out of* a file that stays dead. The edge is evidence the plugin
+    /// looked at that file; the file is still unreachable, so a finding survives to carry it.
+    struct WitnessPlugin;
+
+    impl crate::plugin::Plugin for WitnessPlugin {
+        fn descriptor(&self) -> crate::plugin::PluginDescriptor {
+            crate::plugin::PluginDescriptor {
+                id: SmolStr::new("witness"),
+                version: SmolStr::new("1"),
+                detection: vec![],
+                requested_file_access: vec![],
+                activation: vec![],
+                dependencies: vec![],
+            }
+        }
+        fn mutates_graph(&self) -> bool {
+            true
+        }
+        fn contribute_edges(
+            &self,
+            _graph: &crate::plugin::GraphView<'_>,
+            _content: &crate::plugin::ContentView<'_>,
+            out: &mut crate::plugin::EdgeSink,
+        ) {
+            out.add(
+                crate::plugin::PluginTarget::file(ProjectPath(SmolStr::new("orphan.dmock"))),
+                crate::plugin::PluginTarget::file(ProjectPath(SmolStr::new("root.dmock"))),
+                RefKind::Call,
+                Confidence::Probable,
+            );
+        }
+    }
+
+    #[test]
+    fn a_plugins_contribution_shows_up_on_the_findings_it_touched() {
+        // The case that makes `sources` worth having: without it, a reader seeing an `unused`
+        // on a file a plugin analyzed has no way to know a plugin was involved at all, and no
+        // way to know which one to look at when the verdict seems wrong. An edge pointing OUT
+        // of the dead file — the plugin looked at it and found nothing keeping it alive.
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("root.dmock"), "root-file\n").unwrap();
+        std::fs::write(dir.path().join("orphan.dmock"), "").unwrap();
+
+        let adapters: Vec<Box<dyn LanguageAdapter>> = vec![Box::new(DiffMockAdapter)];
+        let plugins: Vec<Box<dyn crate::plugin::Plugin>> = vec![Box::new(WitnessPlugin)];
+        let mut engine =
+            Engine::open_with_plugins(dir.path(), ConfigOverrides::default(), adapters, plugins)
+                .unwrap();
+        let result = engine.check(RunMode::Full);
+
+        let orphan = result
+            .findings
+            .iter()
+            .find(|f| finding_path(f) == "orphan.dmock")
+            .expect("a plugin edge out of a file does not make that file reachable");
+        assert_eq!(
+            orphan.sources,
+            vec!["adapter:dmock".to_string(), "plugin:witness".to_string()],
+            "the adapter that claimed it AND the plugin that contributed an edge on it"
+        );
+    }
+
     #[test]
     fn plugin_graph_hooks_affect_a_real_check() {
         let dir = tempfile::tempdir().unwrap();
@@ -2833,6 +3053,7 @@ mod tests {
             location: Location::default(),
             related: Vec::new(),
             rolled_up: None,
+            sources: Vec::new(),
             delta: None,
             delta_origin: None,
         };
@@ -2945,6 +3166,109 @@ mod tests {
         )
         .unwrap();
         engine.check(RunMode::Diff { base })
+    }
+
+    /// A project the mock adapter fully understands: one live root importing a dead file, and
+    /// a `.txt` nothing claims. Enough to exercise every arm `fill_sources` has.
+    fn sources_repo() -> tempfile::TempDir {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("root.dmock"),
+            "root-file\ndecl liveThing\nimport ./dead.dmock\n",
+        )
+        .unwrap();
+        std::fs::write(dir.path().join("dead.dmock"), "decl deadThing\n").unwrap();
+        dir
+    }
+
+    fn sources_of<'a>(result: &'a RunResult, path: &str) -> Vec<&'a str> {
+        result
+            .findings
+            .iter()
+            .find(|f| finding_path(f) == path)
+            .map(|f| f.sources.iter().map(String::as_str).collect())
+            .unwrap_or_default()
+    }
+
+    #[test]
+    fn a_finding_names_the_adapter_whose_facts_it_rests_on() {
+        let dir = sources_repo();
+        let mut engine = Engine::open(
+            dir.path(),
+            ConfigOverrides::default(),
+            vec![Box::new(DiffMockAdapter)],
+        )
+        .unwrap();
+        let result = engine.check(RunMode::Full);
+
+        assert!(!result.findings.is_empty(), "{:?}", result.findings);
+        for finding in &result.findings {
+            assert_eq!(
+                finding.sources,
+                vec!["adapter:dmock".to_string()],
+                "every finding here is about a file the mock adapter claimed: {finding:?}"
+            );
+        }
+        assert!(
+            result.to_json().contains("\"sources\": [\n"),
+            "the field reaches the envelope: {}",
+            result.to_json()
+        );
+    }
+
+    #[test]
+    fn an_unclaimed_subject_reports_no_sources_rather_than_a_plausible_one() {
+        // The honest-empty case, and the reason the field is omitted rather than null: two
+        // identical files no adapter claims rest on nobody's facts — the core hashed the
+        // bytes. Inventing `adapter:<something>` here would be the exact failure this whole
+        // stage exists to remove.
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("root.dmock"), "root-file\n").unwrap();
+        let clone = "the same bytes, twice, in a language nothing here claims\n";
+        std::fs::write(dir.path().join("a.unclaimed"), clone).unwrap();
+        std::fs::write(dir.path().join("b.unclaimed"), clone).unwrap();
+
+        let mut engine = Engine::open(
+            dir.path(),
+            ConfigOverrides::default(),
+            vec![Box::new(DiffMockAdapter)],
+        )
+        .unwrap();
+        let result = engine.check(RunMode::Full);
+
+        let duplicate = result
+            .findings
+            .iter()
+            .find(|f| f.category.as_str() == "duplicate")
+            .expect("identical unclaimed files are still duplicates");
+        assert!(duplicate.sources.is_empty(), "{duplicate:?}");
+        let json = serde_json::to_string(&duplicate).unwrap();
+        assert!(
+            !json.contains("sources"),
+            "empty means absent, never null: {json}"
+        );
+    }
+
+    #[test]
+    fn sources_survive_a_warm_cache_because_they_come_from_the_graph() {
+        // The trap this design exists to avoid: provenance read off the live plugin round
+        // would vanish on a snapshot hit, where nothing runs. It comes off the persisted
+        // graph instead, so warm and cold must agree exactly.
+        let dir = sources_repo();
+        let mut engine = Engine::open(
+            dir.path(),
+            ConfigOverrides::default(),
+            vec![Box::new(DiffMockAdapter)],
+        )
+        .unwrap();
+        let cold = engine.check(RunMode::Full);
+        let warm = engine.check(RunMode::Full);
+        assert!(warm.cache_hits > 0, "the second run has to be warm");
+        assert_eq!(
+            sources_of(&cold, "dead.dmock"),
+            sources_of(&warm, "dead.dmock")
+        );
+        assert_eq!(sources_of(&warm, "dead.dmock"), vec!["adapter:dmock"]);
     }
 
     #[test]
@@ -3331,6 +3655,7 @@ mod tests {
             },
             related: Vec::new(),
             rolled_up: None,
+            sources: Vec::new(),
             delta: None,
             delta_origin: None,
         };
