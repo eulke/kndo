@@ -4,13 +4,16 @@
 //!
 //! Implemented verbs: `find`, `describe`, `uses`/`used-by` (one shared implementation —
 //! direction is just "forward" vs "reverse" adjacency), `trace` (both the two-argument directed
-//! form and the single-argument liveness form). `impact` isn't implemented —
-//! the navigation-verb set is find/describe/uses/used-by/trace + `kndo query` only.
+//! form and the single-argument liveness form), and `impact` (the reverse closure, with
+//! `--if-deleted` simulating the deletion).
 //!
-//! Deliberately absent from `describe`, honestly rather than fabricated: `metrics` (cyclomatic/
-//! CRAP/coverage — no such data exists anywhere in the graph) and duplication
-//! group membership. `findings` (open findings attached to a node) IS implemented — it
-//! reruns the same suppression-aware finding computation `check` uses and filters by node.
+//! `describe` reports everything RFC 0007 §4.2 asks for. Two of them are worth naming because
+//! this doc claimed for a long time that they could not exist: **metrics** come from
+//! `graph.function_metrics`, one entry per callable *shape* rather than one per symbol, with
+//! coverage and CRAP filled in only when a report was ingested — absent means unmeasured, never
+//! zero; **duplication group membership** is read off the `duplicate` findings the run already
+//! computed, whose `related` list is the group. `findings` (open findings attached to a node)
+//! reruns the same suppression-aware computation `check` uses and filters by node.
 //!
 //! `trace --all`'s path-enumeration policy is an open design question —
 //! this implementation takes a direct, bounded reading: BFS for the shortest path,
@@ -800,6 +803,48 @@ pub struct Degree {
     pub out_by_kind: HashMap<String, usize>,
 }
 
+/// One callable **shape**'s measurements — a declaration's own body, or one callable nested
+/// inside it. A symbol can own several ([`crate::graph::SymbolMetrics`]'s doc), so `describe`
+/// reports a list ordered by `shape_ordinal` rather than one set of numbers that would
+/// silently be the first shape's.
+#[derive(Debug, Clone, serde::Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct ShapeMetrics {
+    /// 0 for the declaration's own body, 1..N for nested callables in pre-order.
+    pub shape_ordinal: u16,
+    /// This shape's own extent, not the symbol's.
+    pub span: NodeSpan,
+    pub cyclomatic: u32,
+    pub loc: u32,
+    /// Normalized-stream token count — the basis of the duplication ratio.
+    pub token_count: u32,
+    /// Covered fraction of this shape's instrumented lines, when a report was ingested and
+    /// instruments them. **Absent means unknown, never zero**: `crap` scores an uninstrumented
+    /// function pessimistically at 0, but reporting that 0 here would be a fabricated
+    /// measurement — the rule [`crate::coverage::CoverageMap::function_coverage`] states.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub coverage: Option<f64>,
+    /// `cyclomatic² × (1 - coverage)³ + cyclomatic`, from the same function `crap` scores
+    /// with. Absent for the same reason `coverage` is.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub crap: Option<f64>,
+}
+
+/// One duplication group this node belongs to: the `duplicate` finding that named it, and
+/// every member including this node.
+///
+/// Read off the findings the run already computed, not a second index on the graph — a
+/// cross-file fingerprint index would need its own invalidation semantics in the incremental
+/// patch, for an answer the analysis has already produced.
+#[derive(Debug, Clone, serde::Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct DuplicationInfo {
+    /// The `duplicate` finding's id — the group's stable identity.
+    pub finding: String,
+    /// Every member's selector, in the finding's own order.
+    pub members: Vec<String>,
+}
+
 #[derive(Debug, Clone, serde::Serialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct DescribeResult {
@@ -812,6 +857,14 @@ pub struct DescribeResult {
     pub dependency: Option<DependencyInfo>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub package: Option<PackageInfo>,
+    /// Per-shape measurements, ordered by `shape_ordinal`. Empty for a node that owns no
+    /// callable shape — a type, a file, a dependency (RFC 0007 §4.2).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub metrics: Vec<ShapeMetrics>,
+    /// Duplication groups this node belongs to. Plural because a symbol with two substantial
+    /// closures can be in two different groups.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub duplication: Vec<DuplicationInfo>,
     pub degree: Degree,
     pub reached_by_roots: Vec<QNodeRef>,
     pub findings: Vec<String>,
@@ -829,11 +882,13 @@ pub(crate) fn describe(
     reach: &ReachabilityMap,
     resolved: &Resolved,
     finding_locations: &[FindingLocation<'_>],
+    coverage: &crate::coverage::CoverageMap,
     nav: &GraphIndex,
 ) -> DescribeResult {
     let node_ref = qnode_ref(graph, reach, resolved);
 
-    let (declaration, file, dependency, package, declared_symbols) = match resolved {
+    let (declaration, file, dependency, package, declared_symbols, symbols_elided) = match resolved
+    {
         Resolved::Node(ResolvedNode::Symbol(s)) => {
             let sym = &graph.symbols[s.0 as usize];
             (
@@ -851,6 +906,7 @@ pub(crate) fn describe(
                 None,
                 None,
                 Vec::new(),
+                0,
             )
         }
         Resolved::Node(ResolvedNode::File(f)) => {
@@ -882,8 +938,9 @@ pub(crate) fn describe(
                     )
                 })
                 .collect();
+            let elided = symbols.len().saturating_sub(DECLARE_SYMBOLS_CAP);
             symbols.truncate(DECLARE_SYMBOLS_CAP);
-            (None, info, None, None, symbols)
+            (None, info, None, None, symbols, elided)
         }
         Resolved::Node(ResolvedNode::Package(p)) => {
             let files = graph.files.iter().filter(|f| f.package == *p).count();
@@ -903,6 +960,7 @@ pub(crate) fn describe(
                     dependents,
                 }),
                 Vec::new(),
+                0,
             )
         }
         Resolved::Dependency(name) => {
@@ -948,9 +1006,10 @@ pub(crate) fn describe(
                 }),
                 None,
                 Vec::new(),
+                0,
             )
         }
-        Resolved::Node(ResolvedNode::RootSet(_)) => (None, None, None, None, Vec::new()),
+        Resolved::Node(ResolvedNode::RootSet(_)) => (None, None, None, None, Vec::new(), 0),
     };
 
     let degree = describe_degree(nav, resolved);
@@ -970,10 +1029,15 @@ pub(crate) fn describe(
         .collect();
 
     let sources = describe_sources(graph, resolved);
+    let metrics = shape_metrics(graph, coverage, resolved);
+    let duplication = duplication_groups(finding_locations, &selector);
 
     let mut elided = HashMap::default();
     if roots_elided > 0 {
         elided.insert("reached_by_roots".to_string(), roots_elided);
+    }
+    if symbols_elided > 0 {
+        elided.insert("declared_symbols".to_string(), symbols_elided);
     }
 
     DescribeResult {
@@ -982,6 +1046,8 @@ pub(crate) fn describe(
         file,
         dependency,
         package,
+        metrics,
+        duplication,
         degree,
         reached_by_roots,
         findings,
@@ -989,6 +1055,72 @@ pub(crate) fn describe(
         declared_symbols,
         elided,
     }
+}
+
+/// Every shape this node owns, ordered by `shape_ordinal`, with coverage and CRAP filled in
+/// when a report was ingested. Only a symbol owns shapes; everything else gets an empty list.
+fn shape_metrics(
+    graph: &ProjectGraph,
+    coverage: &crate::coverage::CoverageMap,
+    resolved: &Resolved,
+) -> Vec<ShapeMetrics> {
+    let Resolved::Node(ResolvedNode::Symbol(s)) = resolved else {
+        return Vec::new();
+    };
+    let path = &graph.files[graph.symbols[s.0 as usize].file.0 as usize].path;
+    let mut out: Vec<ShapeMetrics> = graph
+        .function_metrics
+        .iter()
+        .filter(|(id, _)| id == s)
+        .map(|(_, m)| {
+            // The SHAPE's own extent, the same sub-range lookup `crap` scores with — a closure
+            // has its own lines, so it has its own coverage.
+            let cov = coverage.function_coverage(path, m.shape_span);
+            ShapeMetrics {
+                shape_ordinal: m.shape_ordinal,
+                span: NodeSpan {
+                    path: path.0.to_string(),
+                    start: m.shape_span.start,
+                    end: m.shape_span.end,
+                },
+                cyclomatic: m.cyclomatic,
+                loc: m.loc,
+                token_count: m.token_count,
+                coverage: cov,
+                // Scored only against a real measurement. `crap` itself substitutes 0 for an
+                // uninstrumented function, which is the right pessimism for a verdict and the
+                // wrong number to publish as one.
+                crap: cov.map(|c| crate::analysis::crap::crap_score(m.cyclomatic, c)),
+            }
+        })
+        .collect();
+    out.sort_by_key(|m| m.shape_ordinal);
+    out
+}
+
+/// The duplication groups `selector` belongs to. A `duplicate` finding's `related` list IS its
+/// group — one entry per member, `path` and `note` spelling the member exactly as a selector
+/// does — so membership is a lookup, not a second fingerprint pass.
+fn duplication_groups(
+    finding_locations: &[FindingLocation<'_>],
+    selector: &str,
+) -> Vec<DuplicationInfo> {
+    let member_selector =
+        |r: &crate::engine::RelatedLocation| Some(format!("{}#{}", r.path.0, r.note.as_deref()?));
+    finding_locations
+        .iter()
+        .filter(|f| f.category == crate::vocab::Category::DUPLICATE.as_str())
+        .filter_map(|f| {
+            let members: Vec<String> = f.related.iter().filter_map(member_selector).collect();
+            members
+                .iter()
+                .any(|m| m == selector)
+                .then(|| DuplicationInfo {
+                    finding: f.id.to_string(),
+                    members,
+                })
+        })
+        .collect()
 }
 
 fn dependency_scope_str(scope: crate::vocab::DependencyScope) -> &'static str {
@@ -1134,6 +1266,12 @@ pub struct FindingLocation<'a> {
     pub id: &'a str,
     pub path: Option<&'a str>,
     pub symbol: Option<&'a str>,
+    /// The finding's category — `describe` picks the `duplicate` ones out to answer
+    /// "which duplication group is this node in".
+    pub category: &'a str,
+    /// The finding's related locations. For a `duplicate` finding this IS the group: one
+    /// entry per member, `note` carrying the member's qualified name.
+    pub related: &'a [crate::engine::RelatedLocation],
 }
 
 impl FindingLocation<'_> {
@@ -2366,7 +2504,7 @@ mod tests {
             &Selector::Symbol(ProjectPath("b.ts".into()), "bar".to_string()),
         )
         .unwrap();
-        let result = describe(&graph, &reach, &resolved, &[], &nav);
+        let result = describe(&graph, &reach, &resolved, &[], &Default::default(), &nav);
         let decl = result
             .declaration
             .expect("symbol should carry a declaration");
@@ -2375,13 +2513,189 @@ mod tests {
         assert_eq!(*result.degree.in_by_kind.get("references").unwrap(), 1);
     }
 
+    /// `linear_graph` with one shape on `b.ts#bar`: cyclomatic 8, 5 lines, 80 tokens.
+    fn graph_with_metrics() -> ProjectGraph {
+        linear_graph().with_function_metrics(vec![(
+            SymbolId(1),
+            crate::graph::SymbolMetrics {
+                shape_span: crate::adapter::Span {
+                    start: (5, 1),
+                    end: (9, 1),
+                },
+                shape_ordinal: 0,
+                cyclomatic: 8,
+                loc: 5,
+                token_count: 80,
+                fingerprints: vec![],
+                body_is_construction: false,
+            },
+        )])
+    }
+
+    fn describe_symbol(
+        graph: &ProjectGraph,
+        coverage: &crate::coverage::CoverageMap,
+        path: &str,
+        name: &str,
+    ) -> DescribeResult {
+        let reach = reachability::compute(graph);
+        let nav = build_graph_index(graph);
+        let resolved = resolve(
+            graph,
+            &Selector::Symbol(ProjectPath(path.into()), name.to_string()),
+        )
+        .unwrap();
+        describe(graph, &reach, &resolved, &[], coverage, &nav)
+    }
+
+    #[test]
+    fn a_capped_declared_symbols_list_says_how_many_it_dropped() {
+        // `reached_by_roots` has always reported its elision; `declared_symbols` truncated
+        // silently, which reads as "that's all" — the exact misreading RFC 0007 §2 forbids.
+        let files = vec![file("big.ts")];
+        let symbols: Vec<_> = (0..DECLARE_SYMBOLS_CAP + 3)
+            .map(|i| symbol(FileId(0), &format!("s{i}"), 1, 1))
+            .collect();
+        let edges: Vec<_> = (0..symbols.len())
+            .map(|i| {
+                edge(
+                    EdgeKind::Declares {
+                        file: FileId(0),
+                        symbol: SymbolId(i as u32),
+                    },
+                    Confidence::Certain,
+                    None,
+                )
+            })
+            .collect();
+        let graph = ProjectGraph::for_test(files, symbols, vec![], edges);
+        let reach = reachability::compute(&graph);
+        let nav = build_graph_index(&graph);
+        let resolved = resolve(&graph, &Selector::File(ProjectPath("big.ts".into()))).unwrap();
+        let d = describe(&graph, &reach, &resolved, &[], &Default::default(), &nav);
+        assert_eq!(d.declared_symbols.len(), DECLARE_SYMBOLS_CAP);
+        assert_eq!(d.elided.get("declared_symbols"), Some(&3));
+    }
+
+    #[test]
+    fn describe_reports_one_metrics_entry_per_shape() {
+        // RFC 0007 §4.2's metrics block. `loc` had no reader at all before this: it was
+        // computed by every adapter, carried through the facts contract and cached in the
+        // graph snapshot, and nothing ever read it back.
+        let graph = graph_with_metrics();
+        let d = describe_symbol(&graph, &Default::default(), "b.ts", "bar");
+        assert_eq!(d.metrics.len(), 1);
+        let m = &d.metrics[0];
+        assert_eq!(m.shape_ordinal, 0);
+        assert_eq!((m.cyclomatic, m.loc, m.token_count), (8, 5, 80));
+        assert_eq!(m.span.start, (5, 1), "the SHAPE's extent, not the symbol's");
+    }
+
+    #[test]
+    fn an_unmeasured_shape_reports_no_coverage_rather_than_zero() {
+        // `crap` scores an uninstrumented function at 0 coverage — the right pessimism for a
+        // verdict, and a fabricated measurement if published as one. With no report there is
+        // nothing to report.
+        let graph = graph_with_metrics();
+        let d = describe_symbol(&graph, &Default::default(), "b.ts", "bar");
+        assert_eq!(d.metrics[0].coverage, None);
+        assert_eq!(d.metrics[0].crap, None);
+
+        // With a report, both appear — and `crap` is the same function the analysis scores
+        // with, so `describe` and a `crap` finding can never disagree about a number.
+        let mut sink = crate::coverage::CoverageSink::default();
+        for line in 5..=9 {
+            sink.add_line(ProjectPath("b.ts".into()), line, 0);
+        }
+        let d = describe_symbol(&graph, &sink.into_map(), "b.ts", "bar");
+        assert_eq!(d.metrics[0].coverage, Some(0.0));
+        assert_eq!(
+            d.metrics[0].crap,
+            Some(crate::analysis::crap::crap_score(8, 0.0))
+        );
+    }
+
+    #[test]
+    fn describe_reports_the_duplication_group_a_node_belongs_to() {
+        // Membership is read off the `duplicate` finding the run already computed — its
+        // `related` list IS the group — rather than from a second fingerprint index that the
+        // incremental patch would then have to invalidate.
+        let graph = linear_graph();
+        let related = vec![
+            crate::engine::RelatedLocation {
+                role: "clone".to_string(),
+                path: ProjectPath("a.ts".into()),
+                range: None,
+                note: Some("foo".to_string()),
+            },
+            crate::engine::RelatedLocation {
+                role: "clone".to_string(),
+                path: ProjectPath("b.ts".into()),
+                range: None,
+                note: Some("bar".to_string()),
+            },
+        ];
+        let locations = vec![
+            FindingLocation {
+                id: "kndo-dup000000",
+                path: None,
+                symbol: None,
+                category: "duplicate",
+                related: &related,
+            },
+            // A finding of another category with the same related shape must not be read as a
+            // group.
+            FindingLocation {
+                id: "kndo-cyc000000",
+                path: None,
+                symbol: None,
+                category: "cyclic",
+                related: &related,
+            },
+        ];
+        let reach = reachability::compute(&graph);
+        let nav = build_graph_index(&graph);
+        let resolved = resolve(
+            &graph,
+            &Selector::Symbol(ProjectPath("b.ts".into()), "bar".to_string()),
+        )
+        .unwrap();
+        let d = describe(
+            &graph,
+            &reach,
+            &resolved,
+            &locations,
+            &Default::default(),
+            &nav,
+        );
+        assert_eq!(d.duplication.len(), 1);
+        assert_eq!(d.duplication[0].finding, "kndo-dup000000");
+        assert_eq!(d.duplication[0].members, vec!["a.ts#foo", "b.ts#bar"]);
+
+        // A node outside the group says nothing about it.
+        let resolved = resolve(
+            &graph,
+            &Selector::Symbol(ProjectPath("a.ts".into()), "foo".to_string()),
+        )
+        .unwrap();
+        let d = describe(
+            &graph,
+            &reach,
+            &resolved,
+            &locations,
+            &Default::default(),
+            &nav,
+        );
+        assert_eq!(d.duplication.len(), 1, "foo is the other member");
+    }
+
     #[test]
     fn describe_file_reports_role_origin_and_declared_symbols() {
         let graph = linear_graph();
         let reach = reachability::compute(&graph);
         let nav = build_graph_index(&graph);
         let resolved = resolve(&graph, &Selector::File(ProjectPath("a.ts".into()))).unwrap();
-        let result = describe(&graph, &reach, &resolved, &[], &nav);
+        let result = describe(&graph, &reach, &resolved, &[], &Default::default(), &nav);
         let file_info = result.file.expect("file node should carry file info");
         assert_eq!(file_info.role, "production");
         assert_eq!(file_info.origin, "authored");
@@ -2395,7 +2709,7 @@ mod tests {
         let reach = reachability::compute(&graph);
         let nav = build_graph_index(&graph);
         let resolved = resolve(&graph, &Selector::Dependency("lodash".into())).unwrap();
-        let result = describe(&graph, &reach, &resolved, &[], &nav);
+        let result = describe(&graph, &reach, &resolved, &[], &Default::default(), &nav);
         let dep = result
             .dependency
             .expect("dep: selector should carry dependency info");
@@ -2418,8 +2732,17 @@ mod tests {
             id: "kndo-abc123",
             path: Some("b.ts"),
             symbol: Some("bar"),
+            category: "unused",
+            related: &[],
         }];
-        let result = describe(&graph, &reach, &resolved, &locations, &nav);
+        let result = describe(
+            &graph,
+            &reach,
+            &resolved,
+            &locations,
+            &Default::default(),
+            &nav,
+        );
         assert_eq!(result.findings, vec!["kndo-abc123".to_string()]);
     }
 
@@ -2433,7 +2756,7 @@ mod tests {
             &Selector::Symbol(ProjectPath("b.ts".into()), "bar".to_string()),
         )
         .unwrap();
-        let result = describe(&graph, &reach, &resolved, &[], &nav);
+        let result = describe(&graph, &reach, &resolved, &[], &Default::default(), &nav);
         assert_eq!(result.reached_by_roots.len(), 1);
         assert_eq!(result.reached_by_roots[0].selector, "a.ts");
     }

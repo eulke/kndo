@@ -537,6 +537,35 @@ fn render_query_entry(out: &mut String, entry: &ResultEntry, opts: &RenderOption
                     if pkg.dependents == 1 { "" } else { "s" }
                 ));
             }
+            for m in &d.metrics {
+                let shape = match m.shape_ordinal {
+                    0 => String::new(),
+                    n => format!(" (nested shape {n} at line {})", m.span.start.0),
+                };
+                // "unmeasured", never "0%": no coverage report means unknown.
+                let covered = match m.coverage {
+                    Some(c) => format!("{:.0}% covered", c * 100.0),
+                    None => "coverage unmeasured".to_string(),
+                };
+                let crap = match m.crap {
+                    Some(c) => format!(" · crap {c:.1}"),
+                    None => String::new(),
+                };
+                out.push_str(&format!(
+                    "  metrics{shape}: cyclomatic {} · {} loc · {} tokens · {covered}{crap}\n",
+                    m.cyclomatic, m.loc, m.token_count
+                ));
+            }
+            for g in &d.duplication {
+                out.push_str(&format!(
+                    "  duplication: {} clones ({})\n",
+                    g.members.len(),
+                    g.finding
+                ));
+                for m in &g.members {
+                    out.push_str(&format!("    {m}\n"));
+                }
+            }
             out.push_str(&format!(
                 "  degree: in={} out={}\n",
                 d.degree.in_by_kind.values().sum::<usize>(),
@@ -862,6 +891,8 @@ mod tests {
             file: None,
             dependency: None,
             package: None,
+            metrics: Vec::new(),
+            duplication: Vec::new(),
             degree: Degree::default(),
             reached_by_roots: vec![],
             findings: vec![],
@@ -885,6 +916,8 @@ mod tests {
                 used: true,
             }),
             package: None,
+            metrics: Vec::new(),
+            duplication: Vec::new(),
             degree: Degree::default(),
             reached_by_roots: vec![],
             findings: vec![],

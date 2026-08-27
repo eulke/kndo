@@ -211,6 +211,13 @@
             }
           ]
         },
+        "duplication": {
+          "description": "Duplication groups this node belongs to. Plural because a symbol with two substantial\nclosures can be in two different groups.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DuplicationInfo"
+          }
+        },
         "elided": {
           "type": "object",
           "additionalProperties": {
@@ -233,6 +240,13 @@
           "type": "array",
           "items": {
             "type": "string"
+          }
+        },
+        "metrics": {
+          "description": "Per-shape measurements, ordered by `shape_ordinal`. Empty for a node that owns no\ncallable shape — a type, a file, a dependency (RFC 0007 §4.2).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ShapeMetrics"
           }
         },
         "node": {
@@ -320,6 +334,27 @@
           "type": "string",
           "const": "error"
         }
+      ]
+    },
+    "DuplicationInfo": {
+      "description": "One duplication group this node belongs to: the `duplicate` finding that named it, and\nevery member including this node.\n\nRead off the findings the run already computed, not a second index on the graph — a\ncross-file fingerprint index would need its own invalidation semantics in the incremental\npatch, for an answer the analysis has already produced.",
+      "type": "object",
+      "properties": {
+        "finding": {
+          "description": "The `duplicate` finding's id — the group's stable identity.",
+          "type": "string"
+        },
+        "members": {
+          "description": "Every member's selector, in the finding's own order.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "finding",
+        "members"
       ]
     },
     "FileInfo": {
@@ -746,6 +781,62 @@
       "required": [
         "cache",
         "duration_ms"
+      ]
+    },
+    "ShapeMetrics": {
+      "description": "One callable **shape**'s measurements — a declaration's own body, or one callable nested\ninside it. A symbol can own several ([`crate::graph::SymbolMetrics`]'s doc), so `describe`\nreports a list ordered by `shape_ordinal` rather than one set of numbers that would\nsilently be the first shape's.",
+      "type": "object",
+      "properties": {
+        "coverage": {
+          "description": "Covered fraction of this shape's instrumented lines, when a report was ingested and\ninstruments them. **Absent means unknown, never zero**: `crap` scores an uninstrumented\nfunction pessimistically at 0, but reporting that 0 here would be a fabricated\nmeasurement — the rule [`crate::coverage::CoverageMap::function_coverage`] states.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "crap": {
+          "description": "`cyclomatic² × (1 - coverage)³ + cyclomatic`, from the same function `crap` scores\nwith. Absent for the same reason `coverage` is.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "cyclomatic": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "loc": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "shape_ordinal": {
+          "description": "0 for the declaration's own body, 1..N for nested callables in pre-order.",
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "span": {
+          "description": "This shape's own extent, not the symbol's.",
+          "$ref": "#/$defs/NodeSpan"
+        },
+        "token_count": {
+          "description": "Normalized-stream token count — the basis of the duplication ratio.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "shape_ordinal",
+        "span",
+        "cyclomatic",
+        "loc",
+        "token_count"
       ]
     },
     "Span": {

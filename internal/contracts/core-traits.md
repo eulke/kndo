@@ -468,7 +468,10 @@ pub struct FileFacts {
                                              // token stream (toolkit metrics module: IDs/
                                              // literals canonicalized, comments skipped), empty
                                              // under the 50-token granularity gate — cyclomatic
-                                             // and loc always real (crap's inputs, M4).
+                                             // and loc always real. cyclomatic is crap's
+                                             // complexity input; loc is reported by
+                                             // `describe`'s metrics block (RFC 0007 §4.2) and
+                                             // is NOT a term of the crap score.
                                              // body_is_construction: this shape's body is a
                                              // single value-construction expression and
                                              // nothing else (MetricsSyntax::construction_kinds

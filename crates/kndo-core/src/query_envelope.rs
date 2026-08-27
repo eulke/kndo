@@ -254,11 +254,13 @@ pub fn json_schema() -> schemars::Schema {
 /// entry point `Engine::query` (single request) and `Engine::query_batch` (`kndo query`'s JSONL
 /// loop, one shared graph load) both call, so cache revalidation happens exactly once per
 /// process regardless of how many requests are answered (the batching tenet).
+#[allow(clippy::too_many_arguments)] // one shared snapshot's worth of borrows, all read-only
 pub(crate) fn run(
     graph: &ProjectGraph,
     reach: &ReachabilityMap,
     nav: &query::GraphIndex,
     finding_locations: &[FindingLocation<'_>],
+    coverage: &crate::coverage::CoverageMap,
     req: QueryRequest,
     cache: &'static str,
     duration_ms: u64,
@@ -266,7 +268,14 @@ pub(crate) fn run(
     let limit = req.flags.limit.unwrap_or(DEFAULT_LIMIT);
     let results = match req.verb {
         Verb::Find => find_entries(graph, reach, &req.selectors, &req.flags, limit),
-        Verb::Describe => describe_entries(graph, reach, nav, finding_locations, &req.selectors),
+        Verb::Describe => describe_entries(
+            graph,
+            reach,
+            nav,
+            finding_locations,
+            coverage,
+            &req.selectors,
+        ),
         Verb::Uses => neighbor_entries(
             graph,
             reach,
@@ -369,6 +378,7 @@ fn describe_entries(
     reach: &ReachabilityMap,
     nav: &query::GraphIndex,
     finding_locations: &[FindingLocation<'_>],
+    coverage: &crate::coverage::CoverageMap,
     selectors: &[String],
 ) -> Vec<ResultEntry> {
     resolved_entries(graph, selectors, |_, resolved| {
@@ -377,6 +387,7 @@ fn describe_entries(
             reach,
             resolved,
             finding_locations,
+            coverage,
             nav,
         )))
     })
@@ -580,6 +591,8 @@ pub(crate) fn finding_locations(findings: &[Finding]) -> Vec<FindingLocation<'_>
             id: f.id.as_str(),
             path: f.location.path.as_ref().map(|p| p.0.as_str()),
             symbol: f.location.symbol.as_deref(),
+            category: f.category.as_str(),
+            related: &f.related,
         })
         .collect()
 }

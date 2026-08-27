@@ -795,6 +795,11 @@ struct AnalyzedTree {
     diagnostics: Vec<Diagnostic>,
     /// Categories no analysis judged this run — see [`crate::analysis::Abstention`].
     abstained: Vec<crate::analysis::Abstention>,
+    /// This run's ingested coverage. Kept rather than dropped after `run_all` because
+    /// `describe` reports per-shape coverage and CRAP (RFC 0007 §4.2) and would otherwise
+    /// re-read the reports — deliberately NOT on the graph, for the freshness reason
+    /// [`crate::coverage`]'s own module doc gives.
+    coverage: crate::coverage::CoverageMap,
     suppressed: SuppressedSummary,
     health: crate::analysis::health::Health,
     /// `(phase, µs)` in execution order: assembly + coverage first, then every analysis phase.
@@ -1340,7 +1345,7 @@ impl Engine {
                     .collect()
             }
         };
-        let (graph, findings) = (analyzed.graph, analyzed.findings);
+        let (graph, findings, coverage) = (analyzed.graph, analyzed.findings, analyzed.coverage);
         let reach =
             query_envelope::compute_reachability(&graph, &self.effective.tuning.externally_invoked);
         let nav = query::build_graph_index(&graph);
@@ -1358,7 +1363,16 @@ impl Engine {
         requests
             .into_iter()
             .map(|req| {
-                query_envelope::run(&graph, &reach, &nav, &locations, req, cache, duration_ms)
+                query_envelope::run(
+                    &graph,
+                    &reach,
+                    &nav,
+                    &locations,
+                    &coverage,
+                    req,
+                    cache,
+                    duration_ms,
+                )
             })
             .collect()
     }
@@ -1524,6 +1538,7 @@ impl Engine {
                     findings,
                     diagnostics,
                     abstained,
+                    coverage,
                     suppressed,
                     health,
                     timings,
@@ -1683,6 +1698,7 @@ impl Engine {
                 findings,
                 diagnostics,
                 abstained,
+                coverage: _, // `check` reports findings; per-shape metrics are `describe`'s
                 suppressed,
                 health,
                 timings,

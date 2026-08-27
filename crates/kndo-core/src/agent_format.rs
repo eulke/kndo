@@ -311,6 +311,34 @@ fn render_query_entry(out: &mut String, entry: &ResultEntry) {
                     pkg.mode, pkg.files, pkg.dependents
                 ));
             }
+            for m in &d.metrics {
+                // `coverage=unmeasured`/`crap=unmeasured`, never a fabricated 0: an absent
+                // report means nobody measured, which is not the same as "none covered".
+                out.push_str(&format!(
+                    "metrics: shape={} line={} cyclomatic={} loc={} tokens={} coverage={} crap={}\n",
+                    m.shape_ordinal,
+                    m.span.start.0,
+                    m.cyclomatic,
+                    m.loc,
+                    m.token_count,
+                    m.coverage
+                        .map(|c| format!("{c:.2}"))
+                        .unwrap_or_else(|| "unmeasured".to_string()),
+                    m.crap
+                        .map(|c| format!("{c:.1}"))
+                        .unwrap_or_else(|| "unmeasured".to_string()),
+                ));
+            }
+            for g in &d.duplication {
+                out.push_str(&format!(
+                    "duplication: finding={} members={}\n",
+                    g.finding,
+                    g.members.len()
+                ));
+                for (n, m) in g.members.iter().enumerate() {
+                    out.push_str(&format!("  {}. {}\n", n + 1, m));
+                }
+            }
             out.push_str(&format!(
                 "degree: in={} out={}\n",
                 sum_degree(&d.degree.in_by_kind),
@@ -658,6 +686,8 @@ mod tests {
             file: None,
             dependency: None,
             package: None,
+            metrics: Vec::new(),
+            duplication: Vec::new(),
             degree: Degree::default(),
             reached_by_roots: vec![],
             findings: vec![],
@@ -681,6 +711,8 @@ mod tests {
                 used: true,
             }),
             package: None,
+            metrics: Vec::new(),
+            duplication: Vec::new(),
             degree: Degree::default(),
             reached_by_roots: vec![],
             findings: vec![],
