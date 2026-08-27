@@ -82,13 +82,11 @@ fn query(
 
 #[test]
 fn find_used_by_impact_check_closes_the_loop() {
-    let root = std::env::temp_dir().join("kndo-agent-workflow-e2e");
-    let _ = fs::remove_dir_all(&root);
-    fs::create_dir_all(&root).unwrap();
-    project(&root);
+    let root = tempfile::tempdir().unwrap();
+    project(root.path());
 
     // 1. find calcLegacyTax → the selector, no path knowledge needed up front.
-    let mut e = engine(&root);
+    let mut e = engine(root.path());
     let found = query(&mut e, Verb::Find, "calcLegacyTax", QueryFlags::default());
     let ResultEntry::Find(found) = found else {
         panic!("find failed: {found:?}");
@@ -152,10 +150,10 @@ fn find_used_by_impact_check_closes_the_loop() {
 
     // 4. The agent edits: delete function, tests, table, dependency — exactly the plan the
     //    three queries computed.
-    fs::remove_file(root.join("src/legacy.ts")).unwrap();
-    fs::remove_file(root.join("src/legacy.test.ts")).unwrap();
+    fs::remove_file(root.path().join("src/legacy.ts")).unwrap();
+    fs::remove_file(root.path().join("src/legacy.test.ts")).unwrap();
     write(
-        &root,
+        root.path(),
         "package.json",
         r#"{
   "name": "tax-demo",
@@ -167,7 +165,7 @@ fn find_used_by_impact_check_closes_the_loop() {
 
     // 5. check → the machine-verifiable proof: every finding the cleanup targeted is gone
     //    and the edit introduced nothing new.
-    let mut e = engine(&root);
+    let mut e = engine(root.path());
     let after = e.check(RunMode::Full);
     assert!(
         after.findings.is_empty(),
@@ -179,5 +177,5 @@ fn find_used_by_impact_check_closes_the_loop() {
             .collect::<Vec<_>>()
     );
 
-    let _ = fs::remove_dir_all(&root);
+    let _ = fs::remove_dir_all(root.path());
 }

@@ -66,6 +66,7 @@ chrono = { version = "0.4", default-features = false, features = ["std", "clock"
 num_cpus = "1"
 rustc-hash = "2"
 thiserror = "2"
+tempfile = "3"
 
 [profile.dev]
 # Full DWARF isn't needed for the edit-compile-run loop this profile serves —

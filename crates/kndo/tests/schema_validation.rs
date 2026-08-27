@@ -48,25 +48,28 @@ fn committed_schema_matches_the_type_it_was_generated_from() {
 
 #[test]
 fn real_json_output_validates_against_the_committed_schema() {
-    let dir = std::env::temp_dir().join("kndo-schema-validation-test");
-    let _ = fs::remove_dir_all(&dir);
-    fs::create_dir_all(dir.join("src")).unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    fs::create_dir_all(dir.path().join("src")).unwrap();
     fs::write(
-        dir.join("package.json"),
+        dir.path().join("package.json"),
         r#"{"name": "schema-validation-fixture", "private": false, "main": "src/index.ts"}"#,
     )
     .unwrap();
-    fs::write(dir.join("src/index.ts"), "console.log(\"alive\");\n").unwrap();
+    fs::write(dir.path().join("src/index.ts"), "console.log(\"alive\");\n").unwrap();
     // Not `main`'s own exports (those are the package's public API, a production root in
     // their own right) — an orphan file nothing imports, genuinely dead.
     fs::write(
-        dir.join("src/orphan.ts"),
+        dir.path().join("src/orphan.ts"),
         "export function dead(): void {}\n",
     )
     .unwrap();
 
-    let mut engine = Engine::open(&dir, ConfigOverrides::default(), kndo::default_adapters())
-        .expect("engine opens on a real temp project");
+    let mut engine = Engine::open(
+        dir.path(),
+        ConfigOverrides::default(),
+        kndo::default_adapters(),
+    )
+    .expect("engine opens on a real temp project");
     let result = engine.check(RunMode::Full);
     // A non-empty findings array exercises more of the schema than a clean run would.
     assert!(!result.findings.is_empty());
@@ -120,22 +123,25 @@ fn committed_query_schema_matches_the_type_it_was_generated_from() {
 
 #[test]
 fn real_query_output_validates_against_the_committed_schema() {
-    let dir = std::env::temp_dir().join("kndo-query-schema-validation-test");
-    let _ = fs::remove_dir_all(&dir);
-    fs::create_dir_all(dir.join("src")).unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    fs::create_dir_all(dir.path().join("src")).unwrap();
     fs::write(
-        dir.join("package.json"),
+        dir.path().join("package.json"),
         r#"{"name": "query-schema-validation-fixture", "private": false, "main": "src/index.ts"}"#,
     )
     .unwrap();
     fs::write(
-        dir.join("src/index.ts"),
+        dir.path().join("src/index.ts"),
         "export function alive(): number { return helper(); }\nfunction helper(): number { return 1; }\n",
     )
     .unwrap();
 
-    let engine = Engine::open(&dir, ConfigOverrides::default(), kndo::default_adapters())
-        .expect("engine opens on a real temp project");
+    let engine = Engine::open(
+        dir.path(),
+        ConfigOverrides::default(),
+        kndo::default_adapters(),
+    )
+    .expect("engine opens on a real temp project");
 
     let validator = jsonschema::validator_for(&query_schema_value())
         .expect("committed query schema itself compiles");

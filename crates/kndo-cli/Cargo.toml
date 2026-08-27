@@ -24,7 +24,7 @@ libc = "0.2"
 smol_str = { workspace = true }
 # `default_features_mirror_the_library` reads both crates' manifests.
 toml = { workspace = true }
-tempfile = "3"
+tempfile = { workspace = true }
 
 [target.'cfg(unix)'.dev-dependencies]
 libc = "0.2"

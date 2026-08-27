@@ -237,13 +237,13 @@ fn drive_fixture(
     plugin_id: Option<&str>,
     project: Option<&Path>,
 ) -> Vec<String> {
-    let dir = match fixture_dir() {
+    // A `TempDir`: unique by construction (this is a plain function, safe to call
+    // concurrently) and removed on drop, including on an early return from below.
+    let dir = match tempfile::tempdir() {
         Ok(d) => d,
         Err(e) => return vec![format!("fixture drive skipped: temp dir failed ({e})")],
     };
-    let out = drive_fixture_in(dir.as_path(), component, sample_files, plugin_id, project);
-    let _ = std::fs::remove_dir_all(&dir);
-    out
+    drive_fixture_in(dir.path(), component, sample_files, plugin_id, project)
 }
 
 fn drive_fixture_in(
@@ -416,18 +416,6 @@ fn contribution_lines(result: &kndo_core::engine::RunResult, id: &str) -> Vec<St
         out.push(format!("dropped: {miss}"));
     }
     out
-}
-
-/// Per-call-unique fixture root under the system temp dir — same reasoning (and shape) as
-/// `plugin_install`'s own probe dir: `verify` is a plain function safe to call concurrently.
-fn fixture_dir() -> std::io::Result<std::path::PathBuf> {
-    let nonce = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_nanos())
-        .unwrap_or(0);
-    let dir = std::env::temp_dir().join(format!("kndo-verify-{}-{nonce}", std::process::id()));
-    std::fs::create_dir_all(&dir)?;
-    Ok(dir)
 }
 
 fn describe_rules(rules: &[kndo_core::plugin::ActivationRule]) -> Vec<String> {

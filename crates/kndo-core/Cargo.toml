@@ -27,6 +27,8 @@ chrono = { workspace = true }
 num_cpus = { workspace = true }
 thiserror = { workspace = true }
 schemars = { version = "1", features = ["smol_str03"], optional = true }
+# `testkit` only — see the feature's comment below.
+tempfile = { workspace = true, optional = true }
 
 [features]
 # Dev-time only (`cargo xtask gen-schema`, schema-validation tests) — never needed at analysis
@@ -36,7 +38,10 @@ schema = ["dep:schemars"]
 # tests use) to other crates' dev-dependencies, so a downstream test suite driving a real
 # `LanguageAdapter` end-to-end (kndo-plugin-api's WASM compliance tests) can reuse the
 # canonical mock instead of reimplementing its grammar because the canonical one was private.
-testkit = []
+# `dep:tempfile`: the shared fixture helpers `testkit` exposes hand out `TempDir`s, so a
+# downstream test suite gets the same unique-by-construction, deleted-on-drop directory this
+# crate's own tests use instead of re-deriving a name under the system temp dir.
+testkit = ["dep:tempfile"]
 
 [dev-dependencies]
-tempfile = "3"
+tempfile = { workspace = true }

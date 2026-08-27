@@ -1161,10 +1161,8 @@ mod tests {
         // A report-less project: FileExists gates would deactivate the ingesters here,
         // which is exactly wrong once kndo.toml can point `report` anywhere — always-on
         // (empty activation) is the contract.
-        let dir = std::env::temp_dir().join("kndo-dist-test-cov-alwayson");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        let (_plugins, resolution) = compose_plugins(&dir);
+        let dir = tempfile::tempdir().unwrap();
+        let (_plugins, resolution) = compose_plugins(dir.path());
         let ingesters: Vec<_> = resolution
             .plugins
             .iter()
@@ -1184,21 +1182,23 @@ mod tests {
 
     #[test]
     fn go_coverprofile_ingests_end_to_end_with_module_qualified_paths() {
-        let dir = std::env::temp_dir().join("kndo-dist-test-go-cov");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("go.mod"), "module github.com/x/y\n\ngo 1.22\n").unwrap();
+        let dir = tempfile::tempdir().unwrap();
         std::fs::write(
-            dir.join("main.go"),
+            dir.path().join("go.mod"),
+            "module github.com/x/y\n\ngo 1.22\n",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.path().join("main.go"),
             "package main\n\nfunc main() {\n\tprintln(1)\n}\n",
         )
         .unwrap();
         std::fs::write(
-            dir.join("coverage.out"),
+            dir.path().join("coverage.out"),
             "mode: set\ngithub.com/x/y/main.go:3.1,5.2 2 1\n",
         )
         .unwrap();
-        let mut engine = open(&dir, ConfigOverrides::default()).unwrap();
+        let mut engine = open(dir.path(), ConfigOverrides::default()).unwrap();
         let result = engine.check(RunMode::Full);
         // The built-in Go ingester found the well-known coverage.out and the package-guided
         // rebase landed its module-qualified keys — crap runs instead of skipping.
@@ -1214,12 +1214,10 @@ mod tests {
 
     #[test]
     fn open_composes_the_full_product() {
-        let dir = std::env::temp_dir().join("kndo-dist-test");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("a.ts"), "export function f() { return 1; }").unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("a.ts"), "export function f() { return 1; }").unwrap();
 
-        let mut engine = open(&dir, ConfigOverrides::default()).unwrap();
+        let mut engine = open(dir.path(), ConfigOverrides::default()).unwrap();
         let result = engine.check(RunMode::Full);
         // The js adapter came from the distribution layer, not from this test.
         assert_eq!(result.files_claimed, 1);

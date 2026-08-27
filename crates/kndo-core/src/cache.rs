@@ -864,13 +864,6 @@ mod tests {
     use crate::adapter::Declaration;
     use crate::vocab::SymbolKind;
 
-    fn tmp(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("kndo-cache-test-{name}"));
-        let _ = fs::remove_dir_all(&dir);
-        fs::create_dir_all(&dir).unwrap();
-        dir
-    }
-
     fn sample_facts() -> FileFacts {
         FileFacts {
             declarations: vec![Declaration {
@@ -894,8 +887,8 @@ mod tests {
 
     #[test]
     fn miss_on_empty_cache_then_hit_after_put() {
-        let dir = tmp("hit-miss");
-        let cache = ProjectCache::open(&dir);
+        let dir = tempfile::tempdir().unwrap();
+        let cache = ProjectCache::open(dir.path());
         let hash = [1u8; 32];
         assert!(cache.get("js-ts", 1, &hash).is_none());
         assert_eq!(cache.hits(), 0);
@@ -909,8 +902,8 @@ mod tests {
 
     #[test]
     fn distinct_hashes_and_adapters_never_collide() {
-        let dir = tmp("distinct-keys");
-        let cache = ProjectCache::open(&dir);
+        let dir = tempfile::tempdir().unwrap();
+        let cache = ProjectCache::open(dir.path());
         let a = [1u8; 32];
         let b = [2u8; 32];
         cache.put("js-ts", 1, &a, &sample_facts());
@@ -921,10 +914,10 @@ mod tests {
 
     #[test]
     fn a_second_writer_degrades_to_read_only() {
-        let dir = tmp("second-writer");
-        let first = ProjectCache::open(&dir);
+        let dir = tempfile::tempdir().unwrap();
+        let first = ProjectCache::open(dir.path());
         assert!(first.writable);
-        let second = ProjectCache::open(&dir);
+        let second = ProjectCache::open(dir.path());
         assert!(!second.writable);
 
         let hash = [7u8; 32];
@@ -938,19 +931,19 @@ mod tests {
 
     #[test]
     fn dropping_the_writer_releases_the_lock_for_the_next_open() {
-        let dir = tmp("lock-release");
+        let dir = tempfile::tempdir().unwrap();
         {
-            let first = ProjectCache::open(&dir);
+            let first = ProjectCache::open(dir.path());
             assert!(first.writable);
         } // dropped — lock file removed
-        let second = ProjectCache::open(&dir);
+        let second = ProjectCache::open(dir.path());
         assert!(second.writable);
     }
 
     #[test]
     fn corrupt_entry_is_a_silent_miss_not_an_error() {
-        let dir = tmp("corrupt");
-        let cache = ProjectCache::open(&dir);
+        let dir = tempfile::tempdir().unwrap();
+        let cache = ProjectCache::open(dir.path());
         let hash = [3u8; 32];
         cache.put("js-ts", 1, &hash, &sample_facts());
         let path = cache.entry_path("js-ts", 1, &hash);
@@ -960,8 +953,8 @@ mod tests {
 
     #[test]
     fn stale_format_version_is_a_silent_miss() {
-        let dir = tmp("stale-version");
-        let cache = ProjectCache::open(&dir);
+        let dir = tempfile::tempdir().unwrap();
+        let cache = ProjectCache::open(dir.path());
         let hash = [4u8; 32];
         let mut bytes = encode(&sample_facts()).unwrap();
         // Corrupt just the format-version field to simulate a future kndo build's layout.
@@ -974,16 +967,16 @@ mod tests {
 
     #[test]
     fn gitignore_makes_the_cache_disposable_regardless_of_the_project_gitignore() {
-        let dir = tmp("gitignore");
-        let _cache = ProjectCache::open(&dir);
-        let contents = fs::read_to_string(dir.join(".kndo/.gitignore")).unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let _cache = ProjectCache::open(dir.path());
+        let contents = fs::read_to_string(dir.path().join(".kndo/.gitignore")).unwrap();
         assert!(contents.contains("cache/"));
     }
 
     #[test]
     fn prune_evicts_oldest_entries_first_down_to_the_cap() {
-        let dir = tmp("prune");
-        let cache = ProjectCache::open(&dir);
+        let dir = tempfile::tempdir().unwrap();
+        let cache = ProjectCache::open(dir.path());
         // Distinct content per entry so sizes differ enough to matter, and put() calls stagger
         // mtimes in insertion order (filesystem mtime resolution is coarse but monotonic here).
         for i in 0..5u8 {
@@ -1020,8 +1013,8 @@ mod tests {
 
     #[test]
     fn prune_is_a_noop_under_the_cap() {
-        let dir = tmp("prune-noop");
-        let cache = ProjectCache::open(&dir);
+        let dir = tempfile::tempdir().unwrap();
+        let cache = ProjectCache::open(dir.path());
         let hash = [9u8; 32];
         cache.put("js-ts", 1, &hash, &sample_facts());
         cache.prune(DEFAULT_CAP_BYTES);
@@ -1030,8 +1023,8 @@ mod tests {
 
     #[test]
     fn blob_hash_sidecar_round_trips_and_merges_across_saves() {
-        let dir = tmp("blob-sidecar");
-        let cache = ProjectCache::open(&dir);
+        let dir = tempfile::tempdir().unwrap();
+        let cache = ProjectCache::open(dir.path());
         assert!(cache.load_blob_hashes().is_empty());
 
         cache.save_blob_hashes(&[("aaaa".to_string(), [1u8; 32])]);
@@ -1045,17 +1038,17 @@ mod tests {
 
     #[test]
     fn corrupt_blob_hash_sidecar_is_an_empty_map_not_an_error() {
-        let dir = tmp("blob-sidecar-corrupt");
-        let cache = ProjectCache::open(&dir);
+        let dir = tempfile::tempdir().unwrap();
+        let cache = ProjectCache::open(dir.path());
         cache.save_blob_hashes(&[("aaaa".to_string(), [1u8; 32])]);
-        fs::write(dir.join(".kndo/cache/blob-hashes.bin"), b"garbage").unwrap();
+        fs::write(dir.path().join(".kndo/cache/blob-hashes.bin"), b"garbage").unwrap();
         assert!(cache.load_blob_hashes().is_empty());
     }
 
     #[test]
     fn stats_reflect_facts_and_graph_state() {
-        let dir = tmp("stats");
-        let cache = ProjectCache::open(&dir);
+        let dir = tempfile::tempdir().unwrap();
+        let cache = ProjectCache::open(dir.path());
         let empty = cache.stats();
         assert!(empty.writable);
         assert_eq!(empty.facts_entries, 0);
@@ -1078,9 +1071,9 @@ mod tests {
 
     #[test]
     fn stats_on_a_read_only_handle_still_reports_writable_false() {
-        let dir = tmp("stats-readonly");
-        let _first = ProjectCache::open(&dir);
-        let second = ProjectCache::open(&dir);
+        let dir = tempfile::tempdir().unwrap();
+        let _first = ProjectCache::open(dir.path());
+        let second = ProjectCache::open(dir.path());
         assert!(!second.stats().writable);
     }
 
@@ -1191,8 +1184,8 @@ mod tests {
 
     #[test]
     fn graph_round_trips_including_diagnostics_and_misses_on_key_mismatch() {
-        let dir = tmp("graph-roundtrip");
-        let cache = ProjectCache::open(&dir);
+        let dir = tempfile::tempdir().unwrap();
+        let cache = ProjectCache::open(dir.path());
         let key = [5u8; GRAPH_KEY_LEN];
         let graph = sample_graph();
         let diagnostics = vec![Diagnostic {
@@ -1284,9 +1277,9 @@ mod tests {
 
     #[test]
     fn a_second_writer_never_writes_a_graph_snapshot() {
-        let dir = tmp("graph-read-only");
-        let first = ProjectCache::open(&dir);
-        let second = ProjectCache::open(&dir);
+        let dir = tempfile::tempdir().unwrap();
+        let first = ProjectCache::open(dir.path());
+        let second = ProjectCache::open(dir.path());
         assert!(!second.writable);
 
         let key = [1u8; GRAPH_KEY_LEN];
@@ -1299,8 +1292,8 @@ mod tests {
 
     #[test]
     fn corrupt_graph_snapshot_is_a_silent_miss() {
-        let dir = tmp("graph-corrupt");
-        let cache = ProjectCache::open(&dir);
+        let dir = tempfile::tempdir().unwrap();
+        let cache = ProjectCache::open(dir.path());
         let key = [2u8; GRAPH_KEY_LEN];
         cache.put_graph(&key, &sample_graph(), &[]);
         fs::write(cache.graph_snapshot_path(&key), b"not a valid snapshot").unwrap();
@@ -1311,8 +1304,8 @@ mod tests {
     fn two_graph_snapshots_coexist_and_hit_independently() {
         // The diff-mode property: before/after keys must never evict each other — a single
         // mutable slot ping-ponged between them with a 0% hit rate on every warm diff run.
-        let dir = tmp("graph-coexist");
-        let cache = ProjectCache::open(&dir);
+        let dir = tempfile::tempdir().unwrap();
+        let cache = ProjectCache::open(dir.path());
         let key_a = [7u8; GRAPH_KEY_LEN];
         let key_b = [8u8; GRAPH_KEY_LEN];
         cache.put_graph(&key_a, &sample_graph(), &[]);
@@ -1324,8 +1317,8 @@ mod tests {
 
     #[test]
     fn prune_covers_graph_snapshots_too() {
-        let dir = tmp("graph-prune");
-        let cache = ProjectCache::open(&dir);
+        let dir = tempfile::tempdir().unwrap();
+        let cache = ProjectCache::open(dir.path());
         for i in 0..4u8 {
             cache.put_graph(&[i; GRAPH_KEY_LEN], &sample_graph(), &[]);
         }

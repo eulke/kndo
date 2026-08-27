@@ -1232,32 +1232,26 @@ mod tests {
 
     // ------------------------------------------------------------ ContentView
 
+    /// Returns the `TempDir` alongside the tree, and callers must hold it: `ContentView` reads
+    /// the files back off disk, so the directory has to outlive the tree. The hand-rolled
+    /// directory this replaced was simply never deleted, which is the only reason returning
+    /// the tree alone used to work.
     fn content_tree_fixture(
-        name: &str,
         files: &[(&str, &str)],
-    ) -> crate::discovery::DiscoveredTree {
-        let dir = std::env::temp_dir().join(format!("kndo-plugin-content-test-{name}"));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        for (path, content) in files {
-            let full = dir.join(path);
-            std::fs::create_dir_all(full.parent().unwrap()).unwrap();
-            std::fs::write(full, content).unwrap();
-        }
-        crate::discovery::discover_source(
-            &crate::discovery::TreeSource::Directory(&dir),
+    ) -> (tempfile::TempDir, crate::discovery::DiscoveredTree) {
+        let dir = crate::testkit::fixture::project(files);
+        let tree = crate::discovery::discover_source(
+            &crate::discovery::TreeSource::Directory(dir.path()),
             &HashMap::default(),
             None,
         )
-        .unwrap()
+        .unwrap();
+        (dir, tree)
     }
 
     #[test]
     fn content_view_reads_a_path_matching_its_declared_glob() {
-        let tree = content_tree_fixture(
-            "reads-declared",
-            &[("package.json", "{\"main\":\"index.js\"}")],
-        );
+        let (_dir, tree) = content_tree_fixture(&[("package.json", "{\"main\":\"index.js\"}")]);
         let view = ContentView::new(
             &tree,
             SmolStr::new("test-plugin"),
@@ -1269,10 +1263,8 @@ mod tests {
 
     #[test]
     fn content_view_refuses_a_path_outside_its_declared_globs() {
-        let tree = content_tree_fixture(
-            "refuses-undeclared",
-            &[("package.json", "{}"), ("src/index.js", "code")],
-        );
+        let (_dir, tree) =
+            content_tree_fixture(&[("package.json", "{}"), ("src/index.js", "code")]);
         // Declares only package.json — src/index.js is source the language graph already
         // covers, and the point of scoping is that a plugin can't read it through this door
         // even though the file genuinely exists and is genuinely readable.
@@ -1286,14 +1278,11 @@ mod tests {
 
     #[test]
     fn content_view_matching_paths_reflects_the_glob_not_the_whole_tree() {
-        let tree = content_tree_fixture(
-            "matching-paths",
-            &[
-                ("views/index.ejs", "a"),
-                ("views/about.ejs", "b"),
-                ("package.json", "{}"),
-            ],
-        );
+        let (_dir, tree) = content_tree_fixture(&[
+            ("views/index.ejs", "a"),
+            ("views/about.ejs", "b"),
+            ("package.json", "{}"),
+        ]);
         let view = ContentView::new(
             &tree,
             SmolStr::new("test-plugin"),
@@ -1313,7 +1302,7 @@ mod tests {
             .iter()
             .map(|(p, c)| (p.as_str(), c.as_str()))
             .collect();
-        let tree = content_tree_fixture("budget-cutoff", &file_refs);
+        let (_dir, tree) = content_tree_fixture(&file_refs);
         let view = ContentView::new(
             &tree,
             SmolStr::new("greedy-plugin"),
@@ -1341,7 +1330,7 @@ mod tests {
 
     #[test]
     fn content_view_an_unparsable_glob_is_dropped_not_fatal() {
-        let tree = content_tree_fixture("bad-glob", &[("package.json", "{}")]);
+        let (_dir, tree) = content_tree_fixture(&[("package.json", "{}")]);
         // "[" is an unterminated character class — invalid glob syntax.
         let view = ContentView::new(
             &tree,

@@ -44,6 +44,11 @@ wit-component = { version = "0.219", optional = true }
 # `kndo plugin install` (plugin-install): release fetch + checksum verification.
 ureq = { version = "3", optional = true, features = ["platform-verifier"] }
 sha2 = { version = "0.10", optional = true }
+# `plugin install`/`verify` unpack into a scratch directory. A `TempDir`, not a hand-built
+# name: unique by construction (these are plain functions, called concurrently), 0700, and
+# removed on drop — including on the `?` paths, which a bare `PathBuf` leaked into the user's
+# temp dir on every failed install.
+tempfile = { workspace = true, optional = true }
 
 [dev-dependencies]
 # "schema" here is test-only, to detect a stale committed schema — the shipped binary above
@@ -52,7 +57,7 @@ kndo-core = { path = "../kndo-core", features = ["schema"] }
 jsonschema = { version = "0.49", default-features = false }
 serde_json = { workspace = true }
 wit-component = "0.219"
-tempfile = "3"
+tempfile = { workspace = true }
 smol_str = { workspace = true }
 # plugin_install_probe.rs computes release checksums for its canned source.
 sha2 = "0.10"
@@ -101,6 +106,7 @@ external-adapters = [
     "dep:dirs",
     "dep:wit-component",
     "dep:toml",
+    "dep:tempfile",
     "plugin-activation",
 ]
 # Built-in convention plugins — each pulls in `plugin-activation`

@@ -2272,21 +2272,19 @@ mod tests {
 
     #[test]
     fn plugin_graph_hooks_affect_a_real_check() {
-        let dir = std::env::temp_dir().join("kndo-engine-test-plugin-hooks");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
+        let dir = tempfile::tempdir().unwrap();
         // `import ./handler` makes `handler.dmock` reachable *as a file* (an `ImportsFile`
         // edge from the already-rooted `root.dmock`) without reaching any of its individual
         // declarations — those need their own root/reference edge, which is exactly what
         // distinguishes the four scenarios below instead of collapsing them into one
         // file-level `unused` rollup.
         std::fs::write(
-            dir.join("root.dmock"),
+            dir.path().join("root.dmock"),
             "root-file\nimport ./handler.dmock\n",
         )
         .unwrap();
         std::fs::write(
-            dir.join("handler.dmock"),
+            dir.path().join("handler.dmock"),
             "decl rootedByPlugin\n\
              decl referencedByPlugin\n\
              decl almostInternalOnly\n\
@@ -2295,17 +2293,17 @@ mod tests {
              decl contentGatedRoot\n",
         )
         .unwrap();
-        std::fs::write(dir.join("noise.banner.dmock"), "decl bannerDecl\n").unwrap();
+        std::fs::write(dir.path().join("noise.banner.dmock"), "decl bannerDecl\n").unwrap();
         // Content the plugin's contribute_roots reads through the host-mediated
         // channel to decide whether to root `contentGatedRoot` — not itself part of the
         // language graph (the mock adapter never claims `.marker` files).
-        std::fs::write(dir.join("content.marker"), "promote").unwrap();
+        std::fs::write(dir.path().join("content.marker"), "promote").unwrap();
 
         // Baseline, no plugin: every one of the four declarations the plugin later rescues
         // must actually be flagged on its own — otherwise the assertions below would pass
         // vacuously regardless of whether the plugin wiring does anything at all.
         let mut baseline_engine = Engine::open(
-            &dir,
+            dir.path(),
             ConfigOverrides::default(),
             vec![Box::new(DiffMockAdapter)],
         )
@@ -2348,7 +2346,8 @@ mod tests {
         let adapters: Vec<Box<dyn LanguageAdapter>> = vec![Box::new(DiffMockAdapter)];
         let plugins: Vec<Box<dyn crate::plugin::Plugin>> = vec![Box::new(DemoPlugin)];
         let mut engine =
-            Engine::open_with_plugins(&dir, ConfigOverrides::default(), adapters, plugins).unwrap();
+            Engine::open_with_plugins(dir.path(), ConfigOverrides::default(), adapters, plugins)
+                .unwrap();
         let result = engine.check(RunMode::Full);
 
         let unused_symbols: Vec<&str> = result
@@ -2400,12 +2399,10 @@ mod tests {
 
     #[test]
     fn doctor_reports_every_registered_plugin() {
-        let dir = std::env::temp_dir().join("kndo-engine-test-doctor-plugins");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
+        let dir = tempfile::tempdir().unwrap();
 
         let engine = Engine::open_with_plugins(
-            &dir,
+            dir.path(),
             ConfigOverrides::default(),
             vec![],
             vec![Box::new(DemoPlugin)],
@@ -2419,21 +2416,20 @@ mod tests {
 
         // The zero-plugin case is zero — callers who ask for no plugins get no plugins.
         let bare =
-            Engine::open_with_plugins(&dir, ConfigOverrides::default(), vec![], vec![]).unwrap();
+            Engine::open_with_plugins(dir.path(), ConfigOverrides::default(), vec![], vec![])
+                .unwrap();
         assert!(bare.doctor().plugins.is_empty());
     }
 
     /// A throwaway git repo for diff-mode tests — local signing disabled for the same reason
     /// `gitutil`'s own test fixtures disable it (this sandbox signs every commit via an
     /// MCP-backed tool unrelated to what's under test, and it occasionally times out).
-    fn git_repo(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("kndo-engine-difftest-{name}"));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
+    fn git_repo() -> tempfile::TempDir {
+        let dir = tempfile::tempdir().unwrap();
         let git = |args: &[&str]| {
             let status = std::process::Command::new("git")
                 .arg("-C")
-                .arg(&dir)
+                .arg(dir.path())
                 .args(args)
                 .status()
                 .unwrap();
@@ -2462,13 +2458,11 @@ mod tests {
 
     #[test]
     fn a_second_check_on_the_same_engine_is_warm() {
-        let dir = std::env::temp_dir().join("kndo-engine-test-warm");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("a.mock"), "hello").unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("a.mock"), "hello").unwrap();
 
         let mut engine = Engine::open(
-            &dir,
+            dir.path(),
             ConfigOverrides::default(),
             vec![Box::new(CacheMockAdapter)],
         )
@@ -2490,14 +2484,12 @@ mod tests {
 
     #[test]
     fn no_cache_override_reports_cold_even_after_a_prior_warm_engine() {
-        let dir = std::env::temp_dir().join("kndo-engine-test-no-cache");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("a.mock"), "hello").unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("a.mock"), "hello").unwrap();
 
         // Warm the on-disk cache with one engine…
         Engine::open(
-            &dir,
+            dir.path(),
             ConfigOverrides::default(),
             vec![Box::new(CacheMockAdapter)],
         )
@@ -2507,7 +2499,7 @@ mod tests {
         // …then open a fresh engine with the cache disabled: it must never report warm, even
         // though the disk cache is populated and would otherwise hit.
         let mut uncached = Engine::open(
-            &dir,
+            dir.path(),
             ConfigOverrides {
                 use_cache: false,
                 threads: None,
@@ -2534,10 +2526,8 @@ mod tests {
 
     #[test]
     fn check_on_empty_project_is_clean() {
-        let dir = std::env::temp_dir().join("kndo-engine-test-empty");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        let mut engine = Engine::open(&dir, ConfigOverrides::default(), vec![]).unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let mut engine = Engine::open(dir.path(), ConfigOverrides::default(), vec![]).unwrap();
         let result = engine.check(RunMode::Full);
         assert!(result.findings.is_empty());
         assert_eq!(result.files_discovered, 0);
@@ -2545,13 +2535,11 @@ mod tests {
 
     #[test]
     fn check_counts_discovered_files_with_no_adapters_registered() {
-        let dir = std::env::temp_dir().join("kndo-engine-test-files");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("a.ts"), "export const a = 1;").unwrap();
-        std::fs::write(dir.join("b.ts"), "export const b = 2;").unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("a.ts"), "export const a = 1;").unwrap();
+        std::fs::write(dir.path().join("b.ts"), "export const b = 2;").unwrap();
 
-        let mut engine = Engine::open(&dir, ConfigOverrides::default(), vec![]).unwrap();
+        let mut engine = Engine::open(dir.path(), ConfigOverrides::default(), vec![]).unwrap();
         let result = engine.check(RunMode::Full);
         assert_eq!(result.files_discovered, 2);
         // No adapters registered in this test — files exist as nodes but nothing claims them.
@@ -2560,10 +2548,8 @@ mod tests {
 
     #[test]
     fn full_mode_populates_phase_timings_and_json_omits_them() {
-        let dir = std::env::temp_dir().join("kndo-engine-test-timings");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        let mut engine = Engine::open(&dir, ConfigOverrides::default(), vec![]).unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let mut engine = Engine::open(dir.path(), ConfigOverrides::default(), vec![]).unwrap();
         let result = engine.check(RunMode::Full);
         let phases: Vec<&str> = result.timings.iter().map(|(p, _)| p.as_str()).collect();
         assert!(phases.contains(&"assemble"));
@@ -2577,11 +2563,9 @@ mod tests {
 
     #[test]
     fn to_json_produces_the_envelope_shape() {
-        let dir = std::env::temp_dir().join("kndo-engine-test-json");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
+        let dir = tempfile::tempdir().unwrap();
 
-        let mut engine = Engine::open(&dir, ConfigOverrides::default(), vec![]).unwrap();
+        let mut engine = Engine::open(dir.path(), ConfigOverrides::default(), vec![]).unwrap();
         let result = engine.check(RunMode::Full);
         let json = result.to_json();
         let value: serde_json::Value = serde_json::from_str(&json).unwrap();
@@ -2612,10 +2596,6 @@ mod tests {
 
     #[test]
     fn to_json_omits_absent_finding_location_fields() {
-        let dir = std::env::temp_dir().join("kndo-engine-test-json-location");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-
         let finding = Finding {
             advisory: false,
             id: "kndo-000000000000".to_string(),
@@ -2653,22 +2633,30 @@ mod tests {
 
     #[test]
     fn diff_mode_reports_introduced_and_derived_new_findings_plus_fixed() {
-        let dir = git_repo("delta-basic");
-        std::fs::write(dir.join("root.dmock"), "root-file\nimport ./b.dmock\n").unwrap();
-        std::fs::write(dir.join("b.dmock"), "").unwrap();
-        std::fs::write(dir.join("orphan.dmock"), "").unwrap(); // already dead at the base
-        git_add_all_commit(&dir, "base");
-        let base_sha = git_rev_parse(&dir, "HEAD");
+        let dir = git_repo();
+        std::fs::write(
+            dir.path().join("root.dmock"),
+            "root-file\nimport ./b.dmock\n",
+        )
+        .unwrap();
+        std::fs::write(dir.path().join("b.dmock"), "").unwrap();
+        std::fs::write(dir.path().join("orphan.dmock"), "").unwrap(); // already dead at the base
+        git_add_all_commit(dir.path(), "base");
+        let base_sha = git_rev_parse(dir.path(), "HEAD");
 
         // Uncommitted working-tree changes: root.dmock stops importing b.dmock (b.dmock goes
         // dead — "derived", since b.dmock itself isn't the touched file), starts importing
         // orphan.dmock instead (orphan.dmock comes alive — "fixed"), and a brand new dead file
         // shows up ("introduced" — it's the touched file itself).
-        std::fs::write(dir.join("root.dmock"), "root-file\nimport ./orphan.dmock\n").unwrap();
-        std::fs::write(dir.join("c.dmock"), "").unwrap();
+        std::fs::write(
+            dir.path().join("root.dmock"),
+            "root-file\nimport ./orphan.dmock\n",
+        )
+        .unwrap();
+        std::fs::write(dir.path().join("c.dmock"), "").unwrap();
 
         let mut engine = Engine::open(
-            &dir,
+            dir.path(),
             ConfigOverrides::default(),
             vec![Box::new(DiffMockAdapter)],
         )
@@ -2711,22 +2699,22 @@ mod tests {
 
     #[test]
     fn staged_mode_uses_the_index_not_the_raw_working_tree() {
-        let dir = git_repo("staged-index");
-        std::fs::write(dir.join("root.dmock"), "root-file\n").unwrap();
-        git_add_all_commit(&dir, "base");
+        let dir = git_repo();
+        std::fs::write(dir.path().join("root.dmock"), "root-file\n").unwrap();
+        git_add_all_commit(dir.path(), "base");
 
         // Stage a new dead file, then make a further UNSTAGED edit to root.dmock — that
         // unstaged edit must not affect the "after" side, which is exactly the index.
-        std::fs::write(dir.join("staged.dmock"), "").unwrap();
+        std::fs::write(dir.path().join("staged.dmock"), "").unwrap();
         let status = std::process::Command::new("git")
             .arg("-C")
-            .arg(&dir)
+            .arg(dir.path())
             .args(["add", "staged.dmock"])
             .status()
             .unwrap();
         assert!(status.success());
         std::fs::write(
-            dir.join("root.dmock"),
+            dir.path().join("root.dmock"),
             "root-file\nimport ./unstaged.dmock\n",
         )
         .unwrap();
@@ -2735,7 +2723,7 @@ mod tests {
         // assertion is that `staged.dmock` (and only it) shows up as new.
 
         let mut engine = Engine::open(
-            &dir,
+            dir.path(),
             ConfigOverrides::default(),
             vec![Box::new(DiffMockAdapter)],
         )
@@ -2753,13 +2741,11 @@ mod tests {
 
     #[test]
     fn diff_mode_outside_a_git_repo_is_an_error_diagnostic_not_a_panic() {
-        let dir = std::env::temp_dir().join("kndo-engine-difftest-no-git");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("a.dmock"), "").unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("a.dmock"), "").unwrap();
 
         let mut engine = Engine::open(
-            &dir,
+            dir.path(),
             ConfigOverrides::default(),
             vec![Box::new(DiffMockAdapter)],
         )
@@ -2783,23 +2769,23 @@ mod tests {
     /// the subdir would appear removed.
     #[test]
     fn diff_mode_from_a_subdirectory_scopes_both_sides_to_it() {
-        let dir = git_repo("subdir-scope");
-        std::fs::create_dir_all(dir.join("pkg")).unwrap();
-        std::fs::write(dir.join("outside.dmock"), "").unwrap(); // dead, but OUTSIDE the scope
+        let dir = git_repo();
+        std::fs::create_dir_all(dir.path().join("pkg")).unwrap();
+        std::fs::write(dir.path().join("outside.dmock"), "").unwrap(); // dead, but OUTSIDE the scope
         std::fs::write(
-            dir.join("pkg/root.dmock"),
+            dir.path().join("pkg/root.dmock"),
             "root-file\nimport ./used.dmock\n",
         )
         .unwrap();
-        std::fs::write(dir.join("pkg/used.dmock"), "").unwrap();
-        git_add_all_commit(&dir, "base");
-        let base_sha = git_rev_parse(&dir, "HEAD");
+        std::fs::write(dir.path().join("pkg/used.dmock"), "").unwrap();
+        git_add_all_commit(dir.path(), "base");
+        let base_sha = git_rev_parse(dir.path(), "HEAD");
 
         // Working-tree change inside pkg only: stop importing used.dmock.
-        std::fs::write(dir.join("pkg/root.dmock"), "root-file\n").unwrap();
+        std::fs::write(dir.path().join("pkg/root.dmock"), "root-file\n").unwrap();
 
         let mut engine = Engine::open(
-            &dir.join("pkg"),
+            &dir.path().join("pkg"),
             ConfigOverrides::default(),
             vec![Box::new(DiffMockAdapter)],
         )
@@ -2821,14 +2807,14 @@ mod tests {
 
     #[test]
     fn baseline_applies_symmetrically_in_diff_mode() {
-        let dir = git_repo("delta-baseline");
-        std::fs::write(dir.join("root.dmock"), "root-file\n").unwrap();
-        std::fs::write(dir.join("orphan.dmock"), "").unwrap();
-        git_add_all_commit(&dir, "base");
-        let base_sha = git_rev_parse(&dir, "HEAD");
+        let dir = git_repo();
+        std::fs::write(dir.path().join("root.dmock"), "root-file\n").unwrap();
+        std::fs::write(dir.path().join("orphan.dmock"), "").unwrap();
+        git_add_all_commit(dir.path(), "base");
+        let base_sha = git_rev_parse(dir.path(), "HEAD");
 
         let mut engine = Engine::open(
-            &dir,
+            dir.path(),
             ConfigOverrides::default(),
             vec![Box::new(DiffMockAdapter)],
         )
@@ -2842,7 +2828,7 @@ mod tests {
 
         // Add a second, unacknowledged dead file — the acknowledged one must not resurface as
         // new or fixed on either side of the diff.
-        std::fs::write(dir.join("also-dead.dmock"), "").unwrap();
+        std::fs::write(dir.path().join("also-dead.dmock"), "").unwrap();
         let result = engine.check(RunMode::Diff { base: base_sha });
 
         assert!(
@@ -2864,13 +2850,11 @@ mod tests {
 
     #[test]
     fn inline_suppression_hides_a_finding_from_full_mode_but_still_counts_it() {
-        let dir = std::env::temp_dir().join("kndo-engine-test-suppress-full");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("orphan.dmock"), "suppress-file unused\n").unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("orphan.dmock"), "suppress-file unused\n").unwrap();
 
         let mut engine = Engine::open(
-            &dir,
+            dir.path(),
             ConfigOverrides::default(),
             vec![Box::new(DiffMockAdapter)],
         )
@@ -2891,14 +2875,16 @@ mod tests {
 
     #[test]
     fn config_skip_hides_a_finding_and_counts_it_as_config_suppressed() {
-        let dir = std::env::temp_dir().join("kndo-engine-test-config-skip");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("orphan.dmock"), "").unwrap();
-        std::fs::write(dir.join("kndo.toml"), "[analysis]\nskip = [\"unused\"]\n").unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("orphan.dmock"), "").unwrap();
+        std::fs::write(
+            dir.path().join("kndo.toml"),
+            "[analysis]\nskip = [\"unused\"]\n",
+        )
+        .unwrap();
 
         let mut engine = Engine::open(
-            &dir,
+            dir.path(),
             ConfigOverrides::default(),
             vec![Box::new(DiffMockAdapter)],
         )
@@ -2919,14 +2905,16 @@ mod tests {
         // The ordering guarantee: pragmas run first, so a finding covered by BOTH
         // mechanisms counts as inline (config never sees it) and the pragma stays
         // honestly non-stale — deleting the config entry could never flicker it.
-        let dir = std::env::temp_dir().join("kndo-engine-test-config-plus-pragma");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("orphan.dmock"), "suppress-file unused\n").unwrap();
-        std::fs::write(dir.join("kndo.toml"), "[analysis]\nskip = [\"unused\"]\n").unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("orphan.dmock"), "suppress-file unused\n").unwrap();
+        std::fs::write(
+            dir.path().join("kndo.toml"),
+            "[analysis]\nskip = [\"unused\"]\n",
+        )
+        .unwrap();
 
         let mut engine = Engine::open(
-            &dir,
+            dir.path(),
             ConfigOverrides::default(),
             vec![Box::new(DiffMockAdapter)],
         )
@@ -2944,19 +2932,18 @@ mod tests {
 
     #[test]
     fn a_path_rule_scopes_its_skip_to_matching_paths() {
-        let dir = std::env::temp_dir().join("kndo-engine-test-config-rule");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(dir.join("gen")).unwrap();
-        std::fs::write(dir.join("orphan.dmock"), "").unwrap();
-        std::fs::write(dir.join("gen/tool.dmock"), "").unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("gen")).unwrap();
+        std::fs::write(dir.path().join("orphan.dmock"), "").unwrap();
+        std::fs::write(dir.path().join("gen/tool.dmock"), "").unwrap();
         std::fs::write(
-            dir.join("kndo.toml"),
+            dir.path().join("kndo.toml"),
             "[[rule]]\npaths = [\"gen/**\"]\nskip = [\"unused\"]\n",
         )
         .unwrap();
 
         let mut engine = Engine::open(
-            &dir,
+            dir.path(),
             ConfigOverrides::default(),
             vec![Box::new(DiffMockAdapter)],
         )
@@ -3019,19 +3006,17 @@ mod tests {
 
     #[test]
     fn a_matchless_pragma_surfaces_as_a_stale_finding_in_full_mode() {
-        let dir = std::env::temp_dir().join("kndo-engine-test-stale-full");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
+        let dir = tempfile::tempdir().unwrap();
         // A root file (never `unused`) acknowledging a category it will never produce: the
         // pragma suppresses nothing, so the `stale` rule flags the pragma itself.
         std::fs::write(
-            dir.join("root.dmock"),
+            dir.path().join("root.dmock"),
             "root-file\nsuppress-file version-skew\n",
         )
         .unwrap();
 
         let mut engine = Engine::open(
-            &dir,
+            dir.path(),
             ConfigOverrides::default(),
             vec![Box::new(DiffMockAdapter)],
         )
@@ -3097,17 +3082,17 @@ mod tests {
         // A Warn + empty result would fail open — a typo'd base ref in CI
         // would read as zero findings at exit 0. This is the exit-2 tier, signaled
         // through the one channel every format carries (an error-level diagnostic).
-        let dir = git_repo("bad-diff-base");
+        let dir = git_repo();
         std::fs::write(
-            dir.join("root.dmock"),
+            dir.path().join("root.dmock"),
             "root-file
 ",
         )
         .unwrap();
-        git_add_all_commit(&dir, "base");
+        git_add_all_commit(dir.path(), "base");
 
         let mut engine = Engine::open(
-            &dir,
+            dir.path(),
             ConfigOverrides::default(),
             vec![Box::new(DiffMockAdapter)],
         )
@@ -3132,17 +3117,17 @@ mod tests {
 
     #[test]
     fn a_suppression_present_on_both_sides_of_a_diff_never_surfaces_as_new_or_fixed() {
-        let dir = git_repo("delta-suppressed");
-        std::fs::write(dir.join("root.dmock"), "root-file\n").unwrap();
-        std::fs::write(dir.join("orphan.dmock"), "suppress-file unused\n").unwrap();
-        git_add_all_commit(&dir, "base");
-        let base_sha = git_rev_parse(&dir, "HEAD");
+        let dir = git_repo();
+        std::fs::write(dir.path().join("root.dmock"), "root-file\n").unwrap();
+        std::fs::write(dir.path().join("orphan.dmock"), "suppress-file unused\n").unwrap();
+        git_add_all_commit(dir.path(), "base");
+        let base_sha = git_rev_parse(dir.path(), "HEAD");
 
         // Touch an unrelated file so the diff isn't a total no-op.
-        std::fs::write(dir.join("also-dead.dmock"), "").unwrap();
+        std::fs::write(dir.path().join("also-dead.dmock"), "").unwrap();
 
         let mut engine = Engine::open(
-            &dir,
+            dir.path(),
             ConfigOverrides::default(),
             vec![Box::new(DiffMockAdapter)],
         )
@@ -3179,12 +3164,10 @@ mod tests {
 
     #[test]
     fn query_find_locates_a_declared_symbol() {
-        let dir = std::env::temp_dir().join("kndo-engine-query-find");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("root.dmock"), "root-file\ndecl handler\n").unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("root.dmock"), "root-file\ndecl handler\n").unwrap();
 
-        let engine = query_engine(&dir);
+        let engine = query_engine(dir.path());
         let result = engine.query(crate::query_envelope::QueryRequest {
             id: None,
             verb: crate::query_envelope::Verb::Find,
@@ -3200,12 +3183,10 @@ mod tests {
 
     #[test]
     fn query_describe_reports_a_not_found_selector() {
-        let dir = std::env::temp_dir().join("kndo-engine-query-not-found");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("root.dmock"), "root-file\n").unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("root.dmock"), "root-file\n").unwrap();
 
-        let engine = query_engine(&dir);
+        let engine = query_engine(dir.path());
         let result = engine.query(crate::query_envelope::QueryRequest {
             id: Some("q1".to_string()),
             verb: crate::query_envelope::Verb::Describe,
@@ -3224,13 +3205,15 @@ mod tests {
 
     #[test]
     fn query_used_by_finds_the_importing_file() {
-        let dir = std::env::temp_dir().join("kndo-engine-query-used-by");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("root.dmock"), "root-file\nimport ./lib.dmock\n").unwrap();
-        std::fs::write(dir.join("lib.dmock"), "").unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("root.dmock"),
+            "root-file\nimport ./lib.dmock\n",
+        )
+        .unwrap();
+        std::fs::write(dir.path().join("lib.dmock"), "").unwrap();
 
-        let engine = query_engine(&dir);
+        let engine = query_engine(dir.path());
         let result = engine.query(crate::query_envelope::QueryRequest {
             id: None,
             verb: crate::query_envelope::Verb::UsedBy,
@@ -3246,16 +3229,18 @@ mod tests {
 
     #[test]
     fn query_trace_finds_the_liveness_path() {
-        let dir = std::env::temp_dir().join("kndo-engine-query-trace");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
+        let dir = tempfile::tempdir().unwrap();
         // The mock adapter never populates import bindings, so a cross-file `ref` can't resolve
         // (matches the real js-ts adapter's own binding-driven cross-file resolution — this is
         // a same-file reference instead, which the mock's `symbol_by_name_per_file` fallback can
         // resolve on its own).
-        std::fs::write(dir.join("root.dmock"), "root-file\ndecl bar\nref bar\n").unwrap();
+        std::fs::write(
+            dir.path().join("root.dmock"),
+            "root-file\ndecl bar\nref bar\n",
+        )
+        .unwrap();
 
-        let engine = query_engine(&dir);
+        let engine = query_engine(dir.path());
         let result = engine.query(crate::query_envelope::QueryRequest {
             id: None,
             verb: crate::query_envelope::Verb::Trace,
@@ -3271,12 +3256,14 @@ mod tests {
 
     #[test]
     fn query_batch_shares_one_graph_load_and_aligns_results_with_requests() {
-        let dir = std::env::temp_dir().join("kndo-engine-query-batch");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("root.dmock"), "root-file\ndecl foo\ndecl bar\n").unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("root.dmock"),
+            "root-file\ndecl foo\ndecl bar\n",
+        )
+        .unwrap();
 
-        let engine = query_engine(&dir);
+        let engine = query_engine(dir.path());
         let results = engine.query_batch(vec![
             crate::query_envelope::QueryRequest {
                 id: Some("q1".to_string()),
@@ -3310,12 +3297,14 @@ mod tests {
     /// each landing its own answer.
     #[test]
     fn concurrent_queries_on_a_shared_engine_each_get_the_right_answer() {
-        let dir = std::env::temp_dir().join("kndo-engine-query-concurrent");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("root.dmock"), "root-file\ndecl foo\ndecl bar\n").unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("root.dmock"),
+            "root-file\ndecl foo\ndecl bar\n",
+        )
+        .unwrap();
 
-        let engine = query_engine(&dir);
+        let engine = query_engine(dir.path());
         let find_req = |selector: &str| crate::query_envelope::QueryRequest {
             id: None,
             verb: crate::query_envelope::Verb::Find,
@@ -3387,15 +3376,14 @@ mod tests {
 
     #[test]
     fn expand_report_pattern_stats_literals_and_walks_globs_sorted() {
-        let dir = std::env::temp_dir().join("kndo-engine-test-expand-report");
-        let _ = std::fs::remove_dir_all(&dir);
+        let dir = tempfile::tempdir().unwrap();
         for package in ["b", "a"] {
-            let cov = dir.join("packages").join(package).join("coverage");
+            let cov = dir.path().join("packages").join(package).join("coverage");
             std::fs::create_dir_all(&cov).unwrap();
             std::fs::write(cov.join("lcov.info"), "x").unwrap();
         }
-        assert!(expand_report_pattern(&dir, "lcov.info").is_empty());
-        let matches = expand_report_pattern(&dir, "packages/*/coverage/lcov.info");
+        assert!(expand_report_pattern(dir.path(), "lcov.info").is_empty());
+        let matches = expand_report_pattern(dir.path(), "packages/*/coverage/lcov.info");
         let rels: Vec<&str> = matches.iter().map(|(_, rel)| rel.as_str()).collect();
         assert_eq!(
             rels,
@@ -3404,7 +3392,7 @@ mod tests {
                 "packages/b/coverage/lcov.info"
             ]
         );
-        let literal = expand_report_pattern(&dir, "packages/a/coverage/lcov.info");
+        let literal = expand_report_pattern(dir.path(), "packages/a/coverage/lcov.info");
         assert_eq!(literal.len(), 1);
     }
 
@@ -3473,28 +3461,26 @@ mod tests {
 
     #[test]
     fn configured_report_glob_replaces_well_known_paths_and_finds_monorepo_reports() {
-        let dir = std::env::temp_dir().join("kndo-engine-test-cov-glob");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("a.mock"), "decl covered\n").unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("a.mock"), "decl covered\n").unwrap();
         // Reports are normally gitignored — glob expansion must not depend on discovery.
-        std::fs::write(dir.join(".gitignore"), "coverage/\n").unwrap();
+        std::fs::write(dir.path().join(".gitignore"), "coverage/\n").unwrap();
         for package in ["a", "b"] {
-            let cov = dir.join("packages").join(package).join("coverage");
+            let cov = dir.path().join("packages").join(package).join("coverage");
             std::fs::create_dir_all(&cov).unwrap();
             std::fs::write(cov.join("lcov.info"), "a.mock 1 1\n").unwrap();
         }
         // A stale report at the well-known path: replace semantics means it is never
         // visited — no freshness warning about it may appear.
-        std::fs::write(dir.join("lcov.info"), "a.mock 1 1\n").unwrap();
-        backdate(&dir.join("lcov.info"), 30);
+        std::fs::write(dir.path().join("lcov.info"), "a.mock 1 1\n").unwrap();
+        backdate(&dir.path().join("lcov.info"), 30);
         std::fs::write(
-            dir.join("kndo.toml"),
+            dir.path().join("kndo.toml"),
             "[plugins.coverage-mock]\nreport = \"packages/*/coverage/lcov.info\"\n",
         )
         .unwrap();
         let mut engine = Engine::open_with_plugins(
-            &dir,
+            dir.path(),
             ConfigOverrides::default(),
             vec![Box::new(CacheMockAdapter)],
             vec![Box::new(MockCoverageIngester)],
@@ -3522,18 +3508,16 @@ mod tests {
     #[test]
     fn max_age_gates_by_default_and_is_overridable_per_plugin() {
         let stale_days = 10;
-        let fixture = |name: &str, config: &str| {
-            let dir = std::env::temp_dir().join(format!("kndo-engine-test-maxage-{name}"));
-            let _ = std::fs::remove_dir_all(&dir);
-            std::fs::create_dir_all(&dir).unwrap();
-            std::fs::write(dir.join("a.mock"), "decl covered\n").unwrap();
-            std::fs::write(dir.join("lcov.info"), "a.mock 1 1\n").unwrap();
-            backdate(&dir.join("lcov.info"), stale_days);
+        let fixture = |config: &str| {
+            let dir = tempfile::tempdir().unwrap();
+            std::fs::write(dir.path().join("a.mock"), "decl covered\n").unwrap();
+            std::fs::write(dir.path().join("lcov.info"), "a.mock 1 1\n").unwrap();
+            backdate(&dir.path().join("lcov.info"), stale_days);
             if !config.is_empty() {
-                std::fs::write(dir.join("kndo.toml"), config).unwrap();
+                std::fs::write(dir.path().join("kndo.toml"), config).unwrap();
             }
             let mut engine = Engine::open_with_plugins(
-                &dir,
+                dir.path(),
                 ConfigOverrides::default(),
                 vec![Box::new(CacheMockAdapter)],
                 vec![Box::new(MockCoverageIngester)],
@@ -3541,7 +3525,7 @@ mod tests {
             .unwrap();
             engine.check(RunMode::Full)
         };
-        let default = fixture("default", "");
+        let default = fixture("");
         assert!(
             default
                 .diagnostics
@@ -3550,7 +3534,7 @@ mod tests {
             "{:?}",
             default.diagnostics
         );
-        let widened = fixture("widened", "[plugins.coverage-mock]\nmax-age = \"30d\"\n");
+        let widened = fixture("[plugins.coverage-mock]\nmax-age = \"30d\"\n");
         assert!(
             !widened
                 .diagnostics

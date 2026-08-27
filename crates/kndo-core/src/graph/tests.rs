@@ -94,32 +94,23 @@ fn surface_closure_promotes_transitive_members_of_surface_types_only() {
     assert_eq!(graph.edges.len(), before);
 }
 
-/// `name` used to disambiguate the directory by hand — every caller had to invent a unique
-/// name, and two tests reusing one raced (documented in `kndo-adapter-go/tests/assembly.rs`).
-/// `tempfile::tempdir()` makes every call unique by construction; the leading underscore-name
-/// param is kept only as a human-readable label some callers still pass.
-fn project(_name: &str, files: &[(&str, &str)]) -> tempfile::TempDir {
-    let dir = tempfile::tempdir().unwrap();
-    for (path, content) in files {
-        let full = dir.path().join(path);
-        if let Some(parent) = full.parent() {
-            fs::create_dir_all(parent).unwrap();
-        }
-        fs::write(full, content).unwrap();
-    }
-    dir
+/// The canonical fixture helper — see [`crate::testkit::fixture::project`] for why every
+/// temporary directory in this workspace comes from `tempfile`. The `name` parameter this
+/// helper used to take existed only to disambiguate hand-built directory names; the last
+/// thing still feeding it was the sibling `cache_dir`, which is a `TempDir` now too.
+fn project(files: &[(&str, &str)]) -> tempfile::TempDir {
+    crate::testkit::fixture::project(files)
 }
 
 /// One assertion shape for both cap tests: every Root edge that targets `path`'s file
 /// or its symbols carries `expected`, and the file colors `expected_reach`.
 fn assert_roots_capped(
     tree: &[(&str, &str)],
-    name: &str,
     path: &str,
     expected: crate::vocab::RootKind,
     expected_reach: crate::analysis::reachability::Reachability,
 ) {
-    let dir = project(name, tree);
+    let dir = project(tree);
     let adapters: Vec<Box<dyn LanguageAdapter>> = vec![Box::new(MockAdapter)];
     let (graph, _) = assemble(dir.path(), &adapters, &[]).unwrap();
     let file_id = graph
@@ -171,7 +162,6 @@ fn production_roots_are_capped_to_tooling_by_file_role() {
             ("manifest.mock", "name p\nroot tool.config.mock\n"),
             ("tool.config.mock", "decl main\nroot-decl main\n"),
         ],
-        "root-cap-tooling",
         "tool.config.mock",
         crate::vocab::RootKind::Tooling,
         crate::analysis::reachability::Reachability::ToolingOnly,
@@ -185,7 +175,6 @@ fn production_roots_are_capped_to_test_by_file_role() {
             ("manifest.mock", "name p\nroot helper.test.mock\n"),
             ("helper.test.mock", "decl main\nroot-decl main\n"),
         ],
-        "root-cap-test",
         "helper.test.mock",
         crate::vocab::RootKind::Test,
         crate::analysis::reachability::Reachability::TestOnly,
@@ -226,22 +215,19 @@ impl LanguageAdapter for PackageTestDirsAdapter {
 
 #[test]
 fn package_test_dirs_promote_relative_to_the_owning_manifest() {
-    let dir = project(
-        "pkg-test-dirs",
-        &[
-            ("manifest.json", ""),
-            ("src/a.mock", "decl prod"),
-            ("tests/t.mock", "decl t"),
-            // A nested package whose sources live under the root package's `tests/`
-            // tree: ownership moves to the nested manifest, so nothing in it is
-            // test-role by the ROOT's convention — the false positive this exists for.
-            ("tests/guest/manifest.json", ""),
-            ("tests/guest/src/l.mock", "decl lib"),
-            // Deeper files under a test dir still promote (relative path
-            // `tests/deep/d.mock` starts with the declared segment).
-            ("tests/deep/d.mock", "decl deep"),
-        ],
-    );
+    let dir = project(&[
+        ("manifest.json", ""),
+        ("src/a.mock", "decl prod"),
+        ("tests/t.mock", "decl t"),
+        // A nested package whose sources live under the root package's `tests/`
+        // tree: ownership moves to the nested manifest, so nothing in it is
+        // test-role by the ROOT's convention — the false positive this exists for.
+        ("tests/guest/manifest.json", ""),
+        ("tests/guest/src/l.mock", "decl lib"),
+        // Deeper files under a test dir still promote (relative path
+        // `tests/deep/d.mock` starts with the declared segment).
+        ("tests/deep/d.mock", "decl deep"),
+    ]);
     let adapters: Vec<Box<dyn LanguageAdapter>> = vec![Box::new(PackageTestDirsAdapter)];
     let (graph, _) = assemble(dir.path(), &adapters, &[]).unwrap();
     let role = |p: &str| {
@@ -265,10 +251,7 @@ fn package_test_dirs_anchor_at_the_root_for_the_implicit_package() {
     // No manifest anywhere: the implicit package's anchor is the project root, so only
     // a top-level `tests/` matches — a deeper `tests/` belongs to no known package
     // convention and stays production.
-    let dir = project(
-        "pkg-test-dirs-implicit",
-        &[("tests/t.mock", "decl t"), ("deep/tests/d.mock", "decl d")],
-    );
+    let dir = project(&[("tests/t.mock", "decl t"), ("deep/tests/d.mock", "decl d")]);
     let adapters: Vec<Box<dyn LanguageAdapter>> = vec![Box::new(PackageTestDirsAdapter)];
     let (graph, _) = assemble(dir.path(), &adapters, &[]).unwrap();
     let role = |p: &str| {
@@ -283,7 +266,7 @@ fn package_test_dirs_anchor_at_the_root_for_the_implicit_package() {
 
 #[test]
 fn unclaimed_files_still_become_file_nodes() {
-    let dir = project("unclaimed", &[("README.md", "hello")]);
+    let dir = project(&[("README.md", "hello")]);
     let (graph, diags) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     assert!(diags.is_empty());
     assert_eq!(graph.files.len(), 1);
@@ -292,7 +275,7 @@ fn unclaimed_files_still_become_file_nodes() {
 
 #[test]
 fn declarations_become_symbols_with_declares_edges() {
-    let dir = project("decls", &[("a.mock", "decl foo\ndecl bar")]);
+    let dir = project(&[("a.mock", "decl foo\ndecl bar")]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     assert_eq!(graph.symbols.len(), 2);
     assert_eq!(graph.symbols[0].name.as_str(), "foo");
@@ -307,13 +290,10 @@ fn declarations_become_symbols_with_declares_edges() {
 
 #[test]
 fn suppressions_are_collected_per_file_during_assembly() {
-    let dir = project(
-        "suppressions",
-        &[
-            ("a.mock", "decl foo\nsuppress unused"),
-            ("b.mock", "decl bar"),
-        ],
-    );
+    let dir = project(&[
+        ("a.mock", "decl foo\nsuppress unused"),
+        ("b.mock", "decl bar"),
+    ]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     let a = graph.file_id(&ProjectPath(SmolStr::new("a.mock"))).unwrap();
     assert_eq!(graph.suppressions.len(), 1);
@@ -323,10 +303,7 @@ fn suppressions_are_collected_per_file_during_assembly() {
 
 #[test]
 fn relative_import_produces_imports_file_edge() {
-    let dir = project(
-        "imports-file",
-        &[("a.mock", "import ./b.mock"), ("b.mock", "decl target")],
-    );
+    let dir = project(&[("a.mock", "import ./b.mock"), ("b.mock", "decl target")]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     let a = graph.file_id(&ProjectPath(SmolStr::new("a.mock"))).unwrap();
     let b = graph.file_id(&ProjectPath(SmolStr::new("b.mock"))).unwrap();
@@ -340,13 +317,10 @@ fn relative_import_produces_imports_file_edge() {
 fn same_unit_files_resolve_each_other_s_symbols_without_any_import() {
     // Go's ordinary case (FileFacts::unit): two files sharing a package
     // directory call each other's declarations with no import statement at all.
-    let dir = project(
-        "same-unit",
-        &[
-            ("pkg/a.mock", "unit pkg\nref target"),
-            ("pkg/b.mock", "unit pkg\nprivate-decl target"),
-        ],
-    );
+    let dir = project(&[
+        ("pkg/a.mock", "unit pkg\nref target"),
+        ("pkg/b.mock", "unit pkg\nprivate-decl target"),
+    ]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     let a = graph
         .file_id(&ProjectPath(SmolStr::new("pkg/a.mock")))
@@ -365,13 +339,10 @@ fn same_unit_files_resolve_each_other_s_symbols_without_any_import() {
 
 #[test]
 fn different_unit_files_do_not_resolve_each_other_s_symbols() {
-    let dir = project(
-        "different-unit",
-        &[
-            ("pkg1/a.mock", "unit pkg1\nref target"),
-            ("pkg2/b.mock", "unit pkg2\nprivate-decl target"),
-        ],
-    );
+    let dir = project(&[
+        ("pkg1/a.mock", "unit pkg1\nref target"),
+        ("pkg2/b.mock", "unit pkg2\nprivate-decl target"),
+    ]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     let a = graph
         .file_id(&ProjectPath(SmolStr::new("pkg1/a.mock")))
@@ -404,13 +375,10 @@ fn member_call_resolves_via_fallback_at_probable_with_one_candidate() {
     // The Go bug this exists for: `t.helper()` is a bare `helper` reference; the
     // declaration is a member of T. Exact resolution must miss (members never enter the
     // bare-name table), the duck-typed fallback must hit at Probable.
-    let dir = project(
-        "member-fallback-one",
-        &[(
-            "a.mock",
-            "member-decl T helper\ndecl caller\nref helper\nroot-decl caller",
-        )],
-    );
+    let dir = project(&[(
+        "a.mock",
+        "member-decl T helper\ndecl caller\nref helper\nroot-decl caller",
+    )]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     let edges = reference_edges_to(&graph, "helper");
     assert_eq!(edges.len(), 1);
@@ -419,13 +387,10 @@ fn member_call_resolves_via_fallback_at_probable_with_one_candidate() {
 
 #[test]
 fn member_call_with_several_candidates_keeps_all_alive_at_possible() {
-    let dir = project(
-        "member-fallback-many",
-        &[(
-            "a.mock",
-            "member-decl T get\nmember-decl U get\nref get\nroot-file",
-        )],
-    );
+    let dir = project(&[(
+        "a.mock",
+        "member-decl T get\nmember-decl U get\nref get\nroot-file",
+    )]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     let t_get = SymbolId(
         graph
@@ -455,16 +420,13 @@ fn member_call_with_several_candidates_keeps_all_alive_at_possible() {
 fn member_fallback_reaches_same_unit_siblings() {
     // The cross-file half of the Go bug: the method lives in a sibling file of the same
     // package; the caller has no import and no same-file candidate.
-    let dir = project(
-        "member-fallback-unit",
-        &[
-            (
-                "pkg/a.mock",
-                "unit pkg\ndecl caller\nref helper\nroot-decl caller",
-            ),
-            ("pkg/b.mock", "unit pkg\nmember-decl T helper"),
-        ],
-    );
+    let dir = project(&[
+        (
+            "pkg/a.mock",
+            "unit pkg\ndecl caller\nref helper\nroot-decl caller",
+        ),
+        ("pkg/b.mock", "unit pkg\nmember-decl T helper"),
+    ]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     let edges = reference_edges_to(&graph, "helper");
     assert_eq!(edges.len(), 1);
@@ -475,13 +437,10 @@ fn member_fallback_reaches_same_unit_siblings() {
 fn member_never_certain_resolves_and_exact_names_still_win() {
     // A free declaration with the same name as a member: the exact (Certain) resolution
     // wins and the fallback never fires — members must not pollute exact-name lookup.
-    let dir = project(
-        "member-vs-free",
-        &[(
-            "a.mock",
-            "decl helper\nmember-decl T helper\nref helper\nroot-file",
-        )],
-    );
+    let dir = project(&[(
+        "a.mock",
+        "decl helper\nmember-decl T helper\nref helper\nroot-file",
+    )]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     let free = SymbolId(
         graph
@@ -511,16 +470,13 @@ fn unexported_member_is_not_a_candidate_outside_its_unit() {
     // the visibility-scoped candidacy: a Unit-scoped member (mock ladder level
     // 0) in another unit can't plausibly be the callee — Go's own rule (an unexported
     // method is only legally callable in-package).
-    let dir = project(
-        "member-scope-unit",
-        &[
-            (
-                "pkg1/a.mock",
-                "unit pkg1\ndecl caller\nref helper\nroot-decl caller",
-            ),
-            ("pkg2/b.mock", "unit pkg2\nmember-decl T helper"),
-        ],
-    );
+    let dir = project(&[
+        (
+            "pkg1/a.mock",
+            "unit pkg1\ndecl caller\nref helper\nroot-decl caller",
+        ),
+        ("pkg2/b.mock", "unit pkg2\nmember-decl T helper"),
+    ]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     assert!(reference_edges_to(&graph, "helper").is_empty());
 }
@@ -529,16 +485,13 @@ fn unexported_member_is_not_a_candidate_outside_its_unit() {
 fn exported_member_is_a_candidate_project_wide() {
     // The other half: a Public-scoped member (mock ladder level 1) is a candidate for
     // any same-language site, unit boundaries notwithstanding.
-    let dir = project(
-        "member-scope-public",
-        &[
-            (
-                "pkg1/a.mock",
-                "unit pkg1\ndecl caller\nref helper\nroot-decl caller",
-            ),
-            ("pkg2/b.mock", "unit pkg2\nmember-decl-exported T helper"),
-        ],
-    );
+    let dir = project(&[
+        (
+            "pkg1/a.mock",
+            "unit pkg1\ndecl caller\nref helper\nroot-decl caller",
+        ),
+        ("pkg2/b.mock", "unit pkg2\nmember-decl-exported T helper"),
+    ]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     let edges = reference_edges_to(&graph, "helper");
     assert_eq!(edges.len(), 1);
@@ -549,13 +502,10 @@ fn exported_member_is_a_candidate_project_wide() {
 
 #[test]
 fn aliased_import_qualifier_resolves_inside_the_target() {
-    let dir = project(
-        "qref-aliased",
-        &[
-            ("a.mock", "import-as j ./b.mock\nqref j Marshal\nroot-file"),
-            ("b.mock", "decl Marshal"),
-        ],
-    );
+    let dir = project(&[
+        ("a.mock", "import-as j ./b.mock\nqref j Marshal\nroot-file"),
+        ("b.mock", "decl Marshal"),
+    ]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     let edges = reference_edges_to(&graph, "Marshal");
     assert_eq!(edges.len(), 1);
@@ -568,13 +518,10 @@ fn unaliased_import_qualifier_comes_from_the_targets_unit_name() {
     // "b.mock", but the target declares itself `yaml` — the qualifier the importer
     // actually writes. Resolution must use the target's declared name, not a specifier
     // guess.
-    let dir = project(
-        "qref-unit-name",
-        &[
-            ("a.mock", "import ./b.mock\nqref yaml Parse\nroot-file"),
-            ("b.mock", "unit-name yaml\ndecl Parse"),
-        ],
-    );
+    let dir = project(&[
+        ("a.mock", "import ./b.mock\nqref yaml Parse\nroot-file"),
+        ("b.mock", "unit-name yaml\ndecl Parse"),
+    ]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     let edges = reference_edges_to(&graph, "Parse");
     assert_eq!(edges.len(), 1);
@@ -585,14 +532,11 @@ fn unaliased_import_qualifier_comes_from_the_targets_unit_name() {
 fn qualified_resolution_reaches_the_targets_unit_siblings() {
     // A Go import names a *package*; the resolved target is one representative file, but
     // the accessed symbol may live in any same-unit sibling.
-    let dir = project(
-        "qref-unit-sibling",
-        &[
-            ("app/a.mock", "import-as p ./b.mock\nqref p X\nroot-file"),
-            ("app/b.mock", "unit app#p"),
-            ("app/c.mock", "unit app#p\ndecl X"),
-        ],
-    );
+    let dir = project(&[
+        ("app/a.mock", "import-as p ./b.mock\nqref p X\nroot-file"),
+        ("app/b.mock", "unit app#p"),
+        ("app/c.mock", "unit app#p\ndecl X"),
+    ]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     let edges = reference_edges_to(&graph, "X");
     assert_eq!(edges.len(), 1);
@@ -607,17 +551,14 @@ fn a_brace_member_naming_a_submodule_hops_through_the_module_file() {
     // it only re-links the file with its own `mod check;`. The answer is in the module
     // file's OWN import table, one hop away (`internal/detection-gaps.md` §8): without it
     // the whole family of helpers behind such a submodule reads as dead.
-    let dir = project(
-        "qref-module-hop",
-        &[
-            (
-                "src/main.mock",
-                "import ./internals/mod.mock check,Ctxt\nqref check verify\nroot-file",
-            ),
-            ("src/internals/mod.mock", "import-as check ./check.mock"),
-            ("src/internals/check.mock", "decl verify"),
-        ],
-    );
+    let dir = project(&[
+        (
+            "src/main.mock",
+            "import ./internals/mod.mock check,Ctxt\nqref check verify\nroot-file",
+        ),
+        ("src/internals/mod.mock", "import-as check ./check.mock"),
+        ("src/internals/check.mock", "decl verify"),
+    ]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     let edges = reference_edges_to(&graph, "verify");
     assert_eq!(edges.len(), 1);
@@ -631,7 +572,6 @@ fn a_direct_qualifier_outranks_the_module_hop() {
     // evidence and never overwrites an import that states the binding outright — otherwise
     // a same-named submodule anywhere in the import list could steal a direct alias.
     let dir = project(
-        "qref-module-hop-precedence",
         &[
             (
                 "src/main.mock",
@@ -664,16 +604,13 @@ fn a_type_naming_qualifier_resolves_the_targets_member() {
     // Rust's `Thing::from_low_args()` through `use crate::thing::Thing`. The bare table
     // misses (members aren't in it); the target's member table under the qualifier
     // itself is the hit, at Certain.
-    let dir = project(
-        "qref-type-member",
-        &[
-            (
-                "a.mock",
-                "import-as Thing ./b.mock\nqref Thing from_low\nroot-file",
-            ),
-            ("b.mock", "decl Thing\nmember-decl-exported Thing from_low"),
-        ],
-    );
+    let dir = project(&[
+        (
+            "a.mock",
+            "import-as Thing ./b.mock\nqref Thing from_low\nroot-file",
+        ),
+        ("b.mock", "decl Thing\nmember-decl-exported Thing from_low"),
+    ]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     let edges = reference_edges_to(&graph, "from_low");
     assert_eq!(edges.len(), 1);
@@ -686,20 +623,17 @@ fn an_imported_name_as_qualifier_reaches_the_bound_symbols_members() {
     // registers no alias, but the BINDING names the type — the member resolves in the
     // bound symbol's home file at Certain. A member the type doesn't have must NOT
     // settle: it falls through to the duck fallback like any receiver access.
-    let dir = project(
-        "qref-bound-type-member",
-        &[
-            (
-                "a.mock",
-                "import ./b.mock Mode\nqref Mode Standard\nqref Mode stray\nroot-file",
-            ),
-            (
-                "b.mock",
-                "decl Mode\nmember-decl-exported Mode Standard\n\
+    let dir = project(&[
+        (
+            "a.mock",
+            "import ./b.mock Mode\nqref Mode Standard\nqref Mode stray\nroot-file",
+        ),
+        (
+            "b.mock",
+            "decl Mode\nmember-decl-exported Mode Standard\n\
                  decl Other\nmember-decl-exported Other stray",
-            ),
-        ],
-    );
+        ),
+    ]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     let standard = reference_edges_to(&graph, "Standard");
     assert_eq!(standard.len(), 1);
@@ -718,21 +652,18 @@ fn a_dotted_pointer_chains_through_member_type_facts() {
     // LowArgs and its field's type live in b.mock. Every hop is a declared fact:
     // LowArgs in scope (binding) → its home's member-type fact yields ContextSeparator
     // → resolved in that same home → `into_bytes` in its member table, at Certain.
-    let dir = project(
-        "qref-chained-pointer",
-        &[
-            (
-                "a.mock",
-                "import ./b.mock LowArgs\nqref LowArgs.context_separator into_bytes\nroot-file",
-            ),
-            (
-                "b.mock",
-                "decl LowArgs\ndecl ContextSeparator\n\
+    let dir = project(&[
+        (
+            "a.mock",
+            "import ./b.mock LowArgs\nqref LowArgs.context_separator into_bytes\nroot-file",
+        ),
+        (
+            "b.mock",
+            "decl LowArgs\ndecl ContextSeparator\n\
                  member-type LowArgs context_separator ContextSeparator\n\
                  member-decl-exported ContextSeparator into_bytes",
-            ),
-        ],
-    );
+        ),
+    ]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     let edges = reference_edges_to(&graph, "into_bytes");
     assert_eq!(edges.len(), 1);
@@ -744,21 +675,18 @@ fn an_unwrap_marked_hop_resolves_through_the_payload_parameter() {
     // `let chir = config.build()?` then `chir.line_terminator()`: the pointer
     // `Config.build?` takes the member's yields_param (the Result payload), not the
     // wrapper — and the payload type itself gets the Read credit.
-    let dir = project(
-        "qref-unwrap-hop",
-        &[
-            (
-                "a.mock",
-                "import ./b.mock Config\nqref Config.build? line_terminator\nroot-file",
-            ),
-            (
-                "b.mock",
-                "decl Config\ndecl ConfiguredHIR\n\
+    let dir = project(&[
+        (
+            "a.mock",
+            "import ./b.mock Config\nqref Config.build? line_terminator\nroot-file",
+        ),
+        (
+            "b.mock",
+            "decl Config\ndecl ConfiguredHIR\n\
                  member-type Config build Result<ConfiguredHIR>\n\
                  member-decl-exported ConfiguredHIR line_terminator",
-            ),
-        ],
-    );
+        ),
+    ]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     let edges = reference_edges_to(&graph, "line_terminator");
     assert_eq!(edges.len(), 1);
@@ -782,21 +710,18 @@ fn an_indexed_projection_selects_that_type_parameter() {
     // `Registry.get?1` projects the SECOND type argument of the member's annotation
     // (`Map<Key, Value>` → `Value`): the `?N` marker is structural — which index an
     // operation extracts is the adapter's knowledge, the core just follows it.
-    let dir = project(
-        "qref-indexed-hop",
-        &[
-            (
-                "a.mock",
-                "import ./b.mock Registry\nqref Registry.get?1 into_bytes\nroot-file",
-            ),
-            (
-                "b.mock",
-                "decl Registry\ndecl Key\ndecl Value\n\
+    let dir = project(&[
+        (
+            "a.mock",
+            "import ./b.mock Registry\nqref Registry.get?1 into_bytes\nroot-file",
+        ),
+        (
+            "b.mock",
+            "decl Registry\ndecl Key\ndecl Value\n\
                  member-type Registry get Map<Key,Value>\n\
                  member-decl-exported Value into_bytes",
-            ),
-        ],
-    );
+        ),
+    ]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     let edges = reference_edges_to(&graph, "into_bytes");
     assert_eq!(edges.len(), 1);
@@ -820,17 +745,14 @@ fn a_declared_executable_invocation_emits_an_invokes_file_edge() {
     // `invokes-executable app` resolves through the manifest's named executable
     // targets to the bin's entry file (the invoked-program rule); a name no
     // manifest declares emits nothing — silence, never a guess.
-    let dir = project(
-        "invoked-program",
-        &[
-            ("manifest.json", "name app\nexecutable app src/main.mock"),
-            ("src/main.mock", "decl main\nroot-decl main"),
-            (
-                "tests/e2e.test.mock",
-                "invokes-executable app\ninvokes-executable ghost",
-            ),
-        ],
-    );
+    let dir = project(&[
+        ("manifest.json", "name app\nexecutable app src/main.mock"),
+        ("src/main.mock", "decl main\nroot-decl main"),
+        (
+            "tests/e2e.test.mock",
+            "invokes-executable app\ninvokes-executable ghost",
+        ),
+    ]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     let file_id = |suffix: &str| {
         FileId(
@@ -863,20 +785,17 @@ fn a_declared_executable_invocation_emits_an_invokes_file_edge() {
 fn a_dotted_pointer_with_no_fact_falls_to_the_duck_fallback() {
     // The chain misses (no member-type fact): the member name still reaches the
     // duck fallback — a pointer never settles.
-    let dir = project(
-        "qref-chained-miss",
-        &[
-            (
-                "a.mock",
-                "import ./b.mock LowArgs\nqref LowArgs.mystery into_bytes\nroot-file",
-            ),
-            (
-                "b.mock",
-                "decl LowArgs\ndecl ContextSeparator\n\
+    let dir = project(&[
+        (
+            "a.mock",
+            "import ./b.mock LowArgs\nqref LowArgs.mystery into_bytes\nroot-file",
+        ),
+        (
+            "b.mock",
+            "decl LowArgs\ndecl ContextSeparator\n\
                  member-decl-exported ContextSeparator into_bytes",
-            ),
-        ],
-    );
+        ),
+    ]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     let edges = reference_edges_to(&graph, "into_bytes");
     assert_eq!(edges.len(), 1, "duck fallback still reaches the member");
@@ -891,16 +810,13 @@ fn twins_declared_in_one_file_both_receive_the_reference() {
     // incoming edge and read as `unused` — a false "delete this" on code every non-mac build
     // compiles. Twins are tracked per UNIT, so this only works once the language keys one;
     // a per-file unit is what a file-scoped module tree gives it (RFC 0012 §8).
-    let dir = project(
-        "same-file-twins",
-        &[
-            ("app/a.mock", "import ./b.mock\nroot-file"),
-            (
-                "app/b.mock",
-                "unit app/b\ndecl socket_dir\ndecl socket_dir\ndecl caller\nref-in caller socket_dir",
-            ),
-        ],
-    );
+    let dir = project(&[
+        ("app/a.mock", "import ./b.mock\nroot-file"),
+        (
+            "app/b.mock",
+            "unit app/b\ndecl socket_dir\ndecl socket_dir\ndecl caller\nref-in caller socket_dir",
+        ),
+    ]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     // Both declarations share a name, so count the DISTINCT targets rather than the edges to
     // whichever symbol a name lookup happens to find first.
@@ -928,14 +844,11 @@ fn a_qualified_member_hit_lands_on_every_twin_declaration() {
     // cfg-alternated impls declare `Data.from_path` twice; the qualified reference
     // targets whichever is compiled, so BOTH must receive the edge — the single-slot
     // table's winner alone would leave the displaced twin reading as dead.
-    let dir = project(
-        "qref-twin-members",
-        &[(
-            "a.mock",
-            "decl Data\nmember-decl-exported Data from_path\n\
+    let dir = project(&[(
+        "a.mock",
+        "decl Data\nmember-decl-exported Data from_path\n\
              member-decl-exported Data from_path\nqref Data from_path\nroot-file",
-        )],
-    );
+    )]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     let hit: std::collections::HashSet<SymbolId> = graph
         .edges
@@ -957,13 +870,10 @@ fn a_qualified_member_hit_lands_on_every_twin_declaration() {
 fn a_same_file_declared_type_as_qualifier_reaches_its_members() {
     // An adapter that types a receiver rewrites `args.matcher()` to qualifier `Mode`,
     // and `Mode` may be declared in the referencing file itself — no import involved.
-    let dir = project(
-        "qref-local-type-member",
-        &[(
-            "a.mock",
-            "decl Mode\nmember-decl-exported Mode Standard\nqref Mode Standard\nroot-file",
-        )],
-    );
+    let dir = project(&[(
+        "a.mock",
+        "decl Mode\nmember-decl-exported Mode Standard\nqref Mode Standard\nroot-file",
+    )]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     let edges = reference_edges_to(&graph, "Standard");
     assert_eq!(edges.len(), 1);
@@ -976,20 +886,17 @@ fn a_barrel_routed_type_qualifier_reaches_the_originals_members() {
     // the barrel re-exports it from a leaf file): the alias lands on the barrel file,
     // whose bare table holds the fixpoint's alias to the original symbol — the member
     // lookup must follow that symbol home, not stop at the barrel's own member table.
-    let dir = project(
-        "qref-barrel-type-member",
-        &[
-            (
-                "a.mock",
-                "import-as SearchMode ./barrel.mock\nqref SearchMode Standard\nroot-file",
-            ),
-            ("barrel.mock", "reexport ./leaf.mock SearchMode"),
-            (
-                "leaf.mock",
-                "decl SearchMode\nmember-decl-exported SearchMode Standard",
-            ),
-        ],
-    );
+    let dir = project(&[
+        (
+            "a.mock",
+            "import-as SearchMode ./barrel.mock\nqref SearchMode Standard\nroot-file",
+        ),
+        ("barrel.mock", "reexport ./leaf.mock SearchMode"),
+        (
+            "leaf.mock",
+            "decl SearchMode\nmember-decl-exported SearchMode Standard",
+        ),
+    ]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     let edges = reference_edges_to(&graph, "Standard");
     assert_eq!(edges.len(), 1);
@@ -1002,18 +909,15 @@ fn a_reexported_glob_aliases_the_targets_exported_surface() {
     // front, yet a consumer reaching through it (`qref b read` with `b` aliased to the
     // barrel) must land on the leaf's export — and the leaf's private names must NOT
     // travel. Chained through a second barrel to exercise the fixpoint rounds.
-    let dir = project(
-        "reexport-glob",
-        &[
-            (
-                "a.mock",
-                "import-as b ./barrel.mock\nqref b read\nroot-file",
-            ),
-            ("barrel.mock", "reexport-opaque ./mid.mock"),
-            ("mid.mock", "reexport-opaque ./leaf.mock"),
-            ("leaf.mock", "decl read\nprivate-decl hidden"),
-        ],
-    );
+    let dir = project(&[
+        (
+            "a.mock",
+            "import-as b ./barrel.mock\nqref b read\nroot-file",
+        ),
+        ("barrel.mock", "reexport-opaque ./mid.mock"),
+        ("mid.mock", "reexport-opaque ./leaf.mock"),
+        ("leaf.mock", "decl read\nprivate-decl hidden"),
+    ]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     let edges = reference_edges_to(&graph, "read");
     assert_eq!(edges.len(), 1, "glob re-export chain must resolve `read`");
@@ -1028,16 +932,13 @@ fn a_reexported_glob_aliases_the_targets_exported_surface() {
 fn a_matched_qualifier_settles_resolution_even_on_a_miss() {
     // `j.Marshal` where the target has no `Marshal`: the name lives in that target or
     // nowhere — a same-file free `Marshal` must NOT capture the qualified reference.
-    let dir = project(
-        "qref-miss",
-        &[
-            (
-                "a.mock",
-                "import-as j ./b.mock\ndecl Marshal\nqref j Marshal\nroot-file",
-            ),
-            ("b.mock", "decl Other"),
-        ],
-    );
+    let dir = project(&[
+        (
+            "a.mock",
+            "import-as j ./b.mock\ndecl Marshal\nqref j Marshal\nroot-file",
+        ),
+        ("b.mock", "decl Other"),
+    ]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     assert!(
         reference_edges_to(&graph, "Marshal").is_empty(),
@@ -1058,16 +959,13 @@ fn a_reconstructed_imports_qualifier_does_not_settle_on_a_miss() {
     // CONFIDENCE as a proxy, which was wrong for a whole class: Rust's `crate`/`self`/`super`
     // rooted synthetic imports are `Certain` about where they resolve while being no
     // statement at all.
-    let dir = project(
-        "qref-weak-miss",
-        &[
-            (
-                "a.mock",
-                "import-reconstructed-as j ./b.mock\nmember-decl T Marshal\nqref j Marshal\nroot-file",
-            ),
-            ("b.mock", "decl Other"),
-        ],
-    );
+    let dir = project(&[
+        (
+            "a.mock",
+            "import-reconstructed-as j ./b.mock\nmember-decl T Marshal\nqref j Marshal\nroot-file",
+        ),
+        ("b.mock", "decl Other"),
+    ]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     assert!(
         !reference_edges_to(&graph, "Marshal").is_empty(),
@@ -1082,7 +980,6 @@ fn a_free_functions_return_type_carries_its_callers_member_access() {
     // `TreeEntry.path` has no cross-file use and `internal-only` advises narrowing a type
     // its own consumers read every day (`internal/detection-gaps.md` §3).
     let dir = project(
-        "call-yield",
         &[
             (
                 "a.mock",
@@ -1105,7 +1002,6 @@ fn a_call_yield_projects_through_the_unwrap_marker() {
     // `let cfg = build(..)?` — the projection marker composes with the base hop exactly as
     // it does with a member one: parameter 0 of `Result<Config, Error>`.
     let dir = project(
-        "call-yield-projection",
         &[
             (
                 "a.mock",
@@ -1132,7 +1028,6 @@ fn a_pointer_base_may_be_a_qualifier_rather_than_a_symbol() {
     // through the qualifier table the pointer died at its first segment and every field the
     // caller reads looked file-local (`internal/detection-gaps.md` §3).
     let dir = project(
-        "pointer-base-qualifier",
         &[
             (
                 "a.mock",
@@ -1156,19 +1051,16 @@ fn a_hop_through_a_language_provided_type_reaches_the_element() {
     // used to stop dead on it and everything behind it read as unused. The adapter's builtin
     // table says what iterating one yields, in terms of its own argument, and the argument
     // comes from the receiver: the two halves of `internal/detection-gaps.md` §3's last case.
-    let dir = project(
-        "builtin-element",
-        &[
-            (
-                "a.mock",
-                "import ./b.mock make\nqref make.@element field\nroot-file",
-            ),
-            (
-                "b.mock",
-                "decl make\ncall-type make Box<Item>\ndecl Item\nmember-decl-exported Item field",
-            ),
-        ],
-    );
+    let dir = project(&[
+        (
+            "a.mock",
+            "import ./b.mock make\nqref make.@element field\nroot-file",
+        ),
+        (
+            "b.mock",
+            "decl make\ncall-type make Box<Item>\ndecl Item\nmember-decl-exported Item field",
+        ),
+    ]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     let edges = reference_edges_to(&graph, "field");
     assert_eq!(edges.len(), 1, "the element hop must reach the member");
@@ -1183,17 +1075,14 @@ fn a_qualifier_bound_to_alternates_reaches_every_one() {
     // configurations. Keeping only the first left the other with no incoming edge and a false
     // `unused`: the same shape `symbol_twins_per_unit` fixes for declarations, one level up at
     // the module binding.
-    let dir = project(
-        "qualifier-alternates",
-        &[
-            (
-                "a.mock",
-                "import-as imp ./sys.mock\nimport-as imp ./stub.mock\nqref imp ctrl_break\nroot-file",
-            ),
-            ("sys.mock", "decl ctrl_break"),
-            ("stub.mock", "decl ctrl_break"),
-        ],
-    );
+    let dir = project(&[
+        (
+            "a.mock",
+            "import-as imp ./sys.mock\nimport-as imp ./stub.mock\nqref imp ctrl_break\nroot-file",
+        ),
+        ("sys.mock", "decl ctrl_break"),
+        ("stub.mock", "decl ctrl_break"),
+    ]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     for file in [FileId(1), FileId(2)] {
         let alternate = graph
@@ -1223,7 +1112,6 @@ fn a_synthesized_import_never_shadows_the_files_own_declaration() {
     // No language kndo supports lets a WRITTEN import shadow a same-named local declaration
     // (Rust E0255), so a collision here can only ever come from a synthetic import.
     let dir = project(
-        "synthetic-shadow",
         &[
             (
                 "a.mock",
@@ -1256,13 +1144,10 @@ fn receiver_qualifier_skips_free_names_and_duck_types_to_members() {
     // `t.helper()`: `t` matches no import, so the name is a member access by
     // construction — the same-file free `helper` is not a candidate; the member is,
     // via the duck fallback.
-    let dir = project(
-        "qref-receiver",
-        &[(
-            "a.mock",
-            "decl helper\nmember-decl T helper\nqref t helper\nroot-file",
-        )],
-    );
+    let dir = project(&[(
+        "a.mock",
+        "decl helper\nmember-decl T helper\nqref t helper\nroot-file",
+    )]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     let free = SymbolId(
         graph
@@ -1296,10 +1181,7 @@ fn receiver_qualifier_skips_free_names_and_duck_types_to_members() {
 fn detected_origin_overrides_the_claim_time_origin_on_the_file_node() {
     // Claim classifies by path (Authored here); extraction saw a generated banner — the
     // FileNode must carry the corrected origin so every analysis exemption sees it.
-    let dir = project(
-        "detected-origin",
-        &[("a.mock", "detected-generated\ndecl dead")],
-    );
+    let dir = project(&[("a.mock", "detected-generated\ndecl dead")]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     let class = graph.files[0].class.expect("claimed");
     assert_eq!(class.origin, FileOrigin::Generated);
@@ -1309,10 +1191,7 @@ fn detected_origin_overrides_the_claim_time_origin_on_the_file_node() {
 #[test]
 fn member_with_no_matching_call_anywhere_stays_certain_dead() {
     // Dead-is-certain survives the fallback: zero same-named call sites ⇒ zero edges.
-    let dir = project(
-        "member-still-dead",
-        &[("a.mock", "member-decl T orphan\ndecl live\nroot-decl live")],
-    );
+    let dir = project(&[("a.mock", "member-decl T orphan\ndecl live\nroot-decl live")]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     assert!(reference_edges_to(&graph, "orphan").is_empty());
 }
@@ -1323,16 +1202,13 @@ fn member_with_no_matching_call_anywhere_stays_certain_dead() {
 fn test_gated_module_link_demotes_the_target_file_to_test_role() {
     // `#[cfg(test)] mod tests;` → the child file is a whole-file test the path claim
     // cannot see: phase 2.55 demotes it, and phase 2.6 then gives it the Test root.
-    let dir = project(
-        "test-gated-demotion",
-        &[
-            (
-                "a.mock",
-                "decl keep\nroot-decl keep\ntest-region 5 9\nmod-link ./child.mock 6",
-            ),
-            ("child.mock", "decl helper"),
-        ],
-    );
+    let dir = project(&[
+        (
+            "a.mock",
+            "decl keep\nroot-decl keep\ntest-region 5 9\nmod-link ./child.mock 6",
+        ),
+        ("child.mock", "decl helper"),
+    ]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     let child = graph
         .files
@@ -1360,14 +1236,11 @@ fn test_gated_module_link_demotes_the_target_file_to_test_role() {
 fn a_production_module_link_vetoes_the_demotion() {
     // The same child linked from a second file's production code stays production: any
     // ungated module link means the file is compiled outside test builds.
-    let dir = project(
-        "test-gated-veto",
-        &[
-            ("a.mock", "test-region 5 9\nmod-link ./child.mock 6"),
-            ("b.mock", "mod-link ./child.mock 2"),
-            ("child.mock", "decl helper"),
-        ],
-    );
+    let dir = project(&[
+        ("a.mock", "test-region 5 9\nmod-link ./child.mock 6"),
+        ("b.mock", "mod-link ./child.mock 2"),
+        ("child.mock", "decl helper"),
+    ]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     let child = graph
         .files
@@ -1382,13 +1255,10 @@ fn declarations_inside_test_regions_get_derived_test_roots() {
     // The single-producer contract: adapters declare only the spans;
     // assembly derives the in-source Test roots by containment. A declaration outside
     // every region gets none.
-    let dir = project(
-        "derived-test-roots",
-        &[(
-            "a.mock",
-            "decl-at 2 prod_fn\ntest-region 5 9\ndecl-at 6 test_helper",
-        )],
-    );
+    let dir = project(&[(
+        "a.mock",
+        "decl-at 2 prod_fn\ntest-region 5 9\ndecl-at 6 test_helper",
+    )]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     let sym = |name: &str| {
         SymbolId(
@@ -1419,10 +1289,7 @@ fn declarations_inside_test_regions_get_derived_test_roots() {
 
 #[test]
 fn file_node_carries_sorted_test_spans() {
-    let dir = project(
-        "test-span-store",
-        &[("a.mock", "test-region 20 30\ntest-region 5 9\ndecl x")],
-    );
+    let dir = project(&[("a.mock", "test-region 20 30\ntest-region 5 9\ndecl x")]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     assert_eq!(
         graph.files[0].test_spans,
@@ -1470,10 +1337,7 @@ fn import_gating_participates_in_the_surface_signature() {
 
 #[test]
 fn within_attributes_the_reference_edge_to_the_enclosing_symbol() {
-    let dir = project(
-        "within-attribution",
-        &[("a.mock", "decl caller\ndecl callee\nref-in caller callee")],
-    );
+    let dir = project(&[("a.mock", "decl caller\ndecl callee\nref-in caller callee")]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     let caller = SymbolId(
         graph
@@ -1501,10 +1365,7 @@ fn unresolvable_within_falls_back_to_file_attribution() {
     // The design's load-bearing safety property: a `within` naming nothing
     // this file declares degrades to today's file attribution — keep-alive, never a new
     // way to lose an edge.
-    let dir = project(
-        "within-fallback",
-        &[("a.mock", "decl callee\nref-in ghost callee\nroot-file")],
-    );
+    let dir = project(&[("a.mock", "decl callee\nref-in ghost callee\nroot-file")]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     let a = graph.file_id(&ProjectPath(SmolStr::new("a.mock"))).unwrap();
     let callee = SymbolId(
@@ -1525,13 +1386,10 @@ fn unresolvable_within_falls_back_to_file_attribution() {
 fn transitively_dead_code_is_visible() {
     // The precision symbol attribution exists for: `main → a` (both alive); dead `z → b` — b must
     // die with z instead of surviving through the live file's blanket attribution.
-    let dir = project(
-        "transitive-dead",
-        &[(
-            "a.mock",
-            "decl main\ndecl a\ndecl z\ndecl b\nref-in main a\nref-in z b\nroot-decl main",
-        )],
-    );
+    let dir = project(&[(
+        "a.mock",
+        "decl main\ndecl a\ndecl z\ndecl b\nref-in main a\nref-in z b\nroot-decl main",
+    )]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     let findings = crate::analysis::run_all(
         &graph,
@@ -1557,13 +1415,10 @@ fn transitively_dead_code_is_visible() {
 fn module_level_references_still_fire_when_the_file_loads() {
     // `within: None` = load-time code: importing the file keeps its module-level
     // references alive (the module-load rule).
-    let dir = project(
-        "module-level-refs",
-        &[
-            ("entry.mock", "import ./lib.mock\nroot-file"),
-            ("lib.mock", "decl used\nref used"),
-        ],
-    );
+    let dir = project(&[
+        ("entry.mock", "import ./lib.mock\nroot-file"),
+        ("lib.mock", "decl used\nref used"),
+    ]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     let findings = crate::analysis::run_all(
         &graph,
@@ -1583,13 +1438,10 @@ fn files_with_no_unit_are_unaffected_same_name_in_another_unit_does_not_leak_in(
     // A file that never sets `unit` (a file-scoped language) must be unaffected
     // — no accidental cross-file resolution just because some *other*, unrelated file
     // happens to declare a `unit`.
-    let dir = project(
-        "no-unit-unaffected",
-        &[
-            ("a.mock", "ref target"),
-            ("pkg/b.mock", "unit pkg\nprivate-decl target"),
-        ],
-    );
+    let dir = project(&[
+        ("a.mock", "ref target"),
+        ("pkg/b.mock", "unit pkg\nprivate-decl target"),
+    ]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     let a = graph.file_id(&ProjectPath(SmolStr::new("a.mock"))).unwrap();
     assert!(!graph
@@ -1600,7 +1452,7 @@ fn files_with_no_unit_are_unaffected_same_name_in_another_unit_does_not_leak_in(
 
 #[test]
 fn bare_import_produces_dependency_node_and_edge() {
-    let dir = project("imports-dep", &[("a.mock", "import lodash")]);
+    let dir = project(&[("a.mock", "import lodash")]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     assert_eq!(graph.dependencies.len(), 1);
     assert_eq!(graph.dependencies[0].name.as_str(), "lodash");
@@ -1614,17 +1466,14 @@ fn bare_import_produces_dependency_node_and_edge() {
 
 #[test]
 fn same_dependency_imported_twice_shares_one_node() {
-    let dir = project(
-        "dep-dedup",
-        &[("a.mock", "import lodash"), ("b.mock", "import lodash")],
-    );
+    let dir = project(&[("a.mock", "import lodash"), ("b.mock", "import lodash")]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     assert_eq!(graph.dependencies.len(), 1);
 }
 
 #[test]
 fn unresolved_import_produces_no_edge_and_no_diagnostic() {
-    let dir = project("unresolved", &[("a.mock", "import ./missing.mock")]);
+    let dir = project(&[("a.mock", "import ./missing.mock")]);
     let (graph, diags) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     assert!(graph
         .edges
@@ -1638,7 +1487,7 @@ fn unresolved_import_produces_no_edge_and_no_diagnostic() {
 
 #[test]
 fn manifest_is_not_itself_claimed_as_source() {
-    let dir = project("manifest-unclaimed", &[("manifest.json", "dep lodash")]);
+    let dir = project(&[("manifest.json", "dep lodash")]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     assert_eq!(graph.files.len(), 1);
     assert!(
@@ -1649,7 +1498,7 @@ fn manifest_is_not_itself_claimed_as_source() {
 
 #[test]
 fn no_manifest_means_everyone_owns_the_implicit_package() {
-    let dir = project("pkg-implicit", &[("a.mock", "decl f")]);
+    let dir = project(&[("a.mock", "decl f")]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     assert_eq!(graph.packages.len(), 1);
     assert!(graph.packages[0].manifest.is_none());
@@ -1658,10 +1507,7 @@ fn no_manifest_means_everyone_owns_the_implicit_package() {
 
 #[test]
 fn root_manifest_owns_every_file_under_it() {
-    let dir = project(
-        "pkg-root",
-        &[("manifest.json", "dep lodash"), ("src/a.mock", "decl f")],
-    );
+    let dir = project(&[("manifest.json", "dep lodash"), ("src/a.mock", "decl f")]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     assert_eq!(graph.packages.len(), 2);
     let manifest_id = graph
@@ -1676,15 +1522,12 @@ fn root_manifest_owns_every_file_under_it() {
 
 #[test]
 fn nested_manifest_shadows_the_root_package_for_its_own_subtree() {
-    let dir = project(
-        "pkg-nested",
-        &[
-            ("manifest.json", "dep lodash"),
-            ("root.mock", "decl f"),
-            ("packages/ui/manifest.json", "dep react"),
-            ("packages/ui/button.mock", "decl g"),
-        ],
-    );
+    let dir = project(&[
+        ("manifest.json", "dep lodash"),
+        ("root.mock", "decl f"),
+        ("packages/ui/manifest.json", "dep react"),
+        ("packages/ui/button.mock", "decl g"),
+    ]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     // implicit(0) is never used (a root manifest exists); root manifest is 1, nested is 2 —
     // discovery order is alphabetical, so `manifest.json` (root) claims package 1 before
@@ -1712,13 +1555,10 @@ fn nested_manifest_shadows_the_root_package_for_its_own_subtree() {
 
 #[test]
 fn manifest_root_becomes_root_edge_to_target_file() {
-    let dir = project(
-        "manifest-root",
-        &[
-            ("manifest.json", "root entry.mock"),
-            ("entry.mock", "decl f"),
-        ],
-    );
+    let dir = project(&[
+        ("manifest.json", "root entry.mock"),
+        ("entry.mock", "decl f"),
+    ]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     let entry = graph
         .file_id(&ProjectPath(SmolStr::new("entry.mock")))
@@ -1735,13 +1575,10 @@ fn library_root_files_promote_their_exported_symbols_to_production_roots() {
     // "Published/library: its public API is a production root — external
     // consumers exist by definition." A library's second named export, never called
     // by the package's own code, must not read as `unused`.
-    let dir = project(
-        "library-root-promotion",
-        &[
-            ("manifest.json", "root entry.mock"),
-            ("entry.mock", "decl publicApi\nprivate-decl helper"),
-        ],
-    );
+    let dir = project(&[
+        ("manifest.json", "root entry.mock"),
+        ("entry.mock", "decl publicApi\nprivate-decl helper"),
+    ]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     let symbol_id = |name: &str| {
         graph
@@ -1766,14 +1603,11 @@ fn barrel_reexport_resolves_transparently_to_the_original_symbol() {
     // `a` from barrel.mock, which never declares `a` itself — only re-exports it from
     // source.mock. A pure barrel entry point re-exporting hundreds of individual types
     // is a very common real-world shape.
-    let dir = project(
-        "barrel-reexport",
-        &[
-            ("source.mock", "decl a"),
-            ("barrel.mock", "reexport ./source.mock a"),
-            ("consumer.mock", "import ./barrel.mock a\nref a"),
-        ],
-    );
+    let dir = project(&[
+        ("source.mock", "decl a"),
+        ("barrel.mock", "reexport ./source.mock a"),
+        ("consumer.mock", "import ./barrel.mock a\nref a"),
+    ]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     let a_symbol = SymbolId(
         graph
@@ -1820,10 +1654,9 @@ fn patch_equivalence_case(
         .collect();
     let mut all: Vec<(&str, &str)> = files.to_vec();
     all.extend(filler.iter().map(|(n, c)| (n.as_str(), c.as_str())));
-    let dir = project(name, &all);
-    let cache_dir = std::env::temp_dir().join(format!("kndo-graph-test-{name}-cache"));
-    let _ = fs::remove_dir_all(&cache_dir);
-    let cache = crate::cache::ProjectCache::open(&cache_dir);
+    let dir = project(&all);
+    let cache_dir = tempfile::tempdir().unwrap();
+    let cache = crate::cache::ProjectCache::open(cache_dir.path());
     assemble_with_cache(dir.path(), &mock_adapters(), &[], Some(&cache)).unwrap();
 
     fs::write(dir.path().join(mutate.0), mutate.1).unwrap();
@@ -1895,7 +1728,6 @@ fn patch_falls_back_when_imports_change() {
 fn patch_handles_reference_retargeting_within_the_body() {
     // The regenerated references must resolve against the *other* files' unchanged
     // tables — a.mock stops referencing helper and starts referencing other.
-    let name = "patch-ref-retarget";
     let filler: Vec<(String, String)> = (0..20)
         .map(|i| (format!("filler{i}.mock"), format!("decl filler{i}")))
         .collect();
@@ -1906,10 +1738,9 @@ fn patch_handles_reference_retargeting_within_the_body() {
         ("d.mock", "decl d1"),
     ];
     all.extend(filler.iter().map(|(n, c)| (n.as_str(), c.as_str())));
-    let dir = project(name, &all);
-    let cache_dir = std::env::temp_dir().join(format!("kndo-graph-test-{name}-cache"));
-    let _ = fs::remove_dir_all(&cache_dir);
-    let cache = crate::cache::ProjectCache::open(&cache_dir);
+    let dir = project(&all);
+    let cache_dir = tempfile::tempdir().unwrap();
+    let cache = crate::cache::ProjectCache::open(cache_dir.path());
     assemble_with_cache(dir.path(), &mock_adapters(), &[], Some(&cache)).unwrap();
     fs::write(
         dir.path().join("a.mock"),
@@ -1928,7 +1759,6 @@ fn patch_handles_reference_retargeting_within_the_body() {
 fn patched_snapshot_serves_the_next_run_verbatim() {
     // The patched graph is persisted under the new key; a third run with no further
     // changes must hit that snapshot and reproduce the patched graph exactly.
-    let name = "patch-then-hit";
     let filler: Vec<(String, String)> = (0..20)
         .map(|i| (format!("filler{i}.mock"), format!("decl filler{i}")))
         .collect();
@@ -1939,10 +1769,9 @@ fn patched_snapshot_serves_the_next_run_verbatim() {
         ("d.mock", "decl d1"),
     ];
     all.extend(filler.iter().map(|(n, c)| (n.as_str(), c.as_str())));
-    let dir = project(name, &all);
-    let cache_dir = std::env::temp_dir().join(format!("kndo-graph-test-{name}-cache"));
-    let _ = fs::remove_dir_all(&cache_dir);
-    let cache = crate::cache::ProjectCache::open(&cache_dir);
+    let dir = project(&all);
+    let cache_dir = tempfile::tempdir().unwrap();
+    let cache = crate::cache::ProjectCache::open(cache_dir.path());
     assemble_with_cache(dir.path(), &mock_adapters(), &[], Some(&cache)).unwrap();
     fs::write(dir.path().join("a.mock"), "\ndecl x\nref y").unwrap();
     let (patched, _) =
@@ -1982,11 +1811,9 @@ fn a_coverage_only_plugin_keeps_the_snapshot_fast_path() {
             false
         }
     }
-    let name = "coverage-plugin-keeps-cache";
-    let dir = project(name, &[("a.mock", "decl x\nref y"), ("b.mock", "decl y")]);
-    let cache_dir = std::env::temp_dir().join(format!("kndo-graph-test-{name}-cache"));
-    let _ = fs::remove_dir_all(&cache_dir);
-    let cache = crate::cache::ProjectCache::open(&cache_dir);
+    let dir = project(&[("a.mock", "decl x\nref y"), ("b.mock", "decl y")]);
+    let cache_dir = tempfile::tempdir().unwrap();
+    let cache = crate::cache::ProjectCache::open(cache_dir.path());
     let plugins: Vec<Box<dyn crate::plugin::Plugin>> = vec![Box::new(CoverageOnlyPlugin)];
     assemble_with_cache(dir.path(), &mock_adapters(), &plugins, Some(&cache)).unwrap();
     let (warm, _) =
@@ -2109,13 +1936,10 @@ fn a_plugin_marked_member_inherits_its_owners_colors() {
             out.mark_implicitly_invoked(path, "Ghost.nothing");
         }
     }
-    let dir = project(
-        "plugin-implicit-member",
-        &[(
-            "a.mock",
-            "decl Glob\nmember-decl Glob serialize\nroot-decl Glob",
-        )],
-    );
+    let dir = project(&[(
+        "a.mock",
+        "decl Glob\nmember-decl Glob serialize\nroot-decl Glob",
+    )]);
     let plugins: Vec<Box<dyn crate::plugin::Plugin>> = vec![Box::new(MarkSerialize)];
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &plugins).unwrap();
     let serialize = SymbolId(
@@ -2180,16 +2004,13 @@ fn a_plugin_reads_the_trait_a_member_was_declared_under() {
             }
         }
     }
-    let dir = project(
-        "plugin-reads-implements",
-        &[(
-            "a.mock",
-            "decl Glob\n\
+    let dir = project(&[(
+        "a.mock",
+        "decl Glob\n\
              member-impl Serialize Glob serialize\n\
              member-impl Display Glob fmt\n\
              root-decl Glob",
-        )],
-    );
+    )]);
     let plugins: Vec<Box<dyn crate::plugin::Plugin>> = vec![Box::new(TableDriven)];
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &plugins).unwrap();
     let id =
@@ -2219,7 +2040,7 @@ fn has_root_me_root(graph: &ProjectGraph) -> bool {
 /// (so the marker flip is the ONLY change), 20 filler files keep one changed file under
 /// the patch's 5% work threshold, and `marker.txt` is unclaimed — its content change is
 /// invisible to every adapter guard and only a re-run plugin round can react to it.
-fn marker_project(name: &str) -> tempfile::TempDir {
+fn marker_project() -> tempfile::TempDir {
     let filler: Vec<(String, String)> = (0..20)
         .map(|i| (format!("filler{i}.mock"), format!("decl filler{i}")))
         .collect();
@@ -2229,7 +2050,7 @@ fn marker_project(name: &str) -> tempfile::TempDir {
         ("marker.txt", "off"),
     ];
     all.extend(filler.iter().map(|(n, c)| (n.as_str(), c.as_str())));
-    project(name, &all)
+    project(&all)
 }
 
 #[test]
@@ -2238,11 +2059,9 @@ fn the_patch_re_derives_plugin_contributions_instead_of_bypassing() {
     // against the patched graph — proven by flipping a content-channel file the plugin's
     // own gate reads. The flip is invisible to every adapter-side guard (the file is
     // unclaimed), so ONLY a genuinely re-run round can produce the new root.
-    let name = "patch-rederives-plugin-round";
-    let dir = marker_project(name);
-    let cache_dir = std::env::temp_dir().join(format!("kndo-graph-test-{name}-cache"));
-    let _ = fs::remove_dir_all(&cache_dir);
-    let cache = crate::cache::ProjectCache::open(&cache_dir);
+    let dir = marker_project();
+    let cache_dir = tempfile::tempdir().unwrap();
+    let cache = crate::cache::ProjectCache::open(cache_dir.path());
     let plugins: Vec<Box<dyn crate::plugin::Plugin>> =
         vec![Box::new(MarkerGatedPlugin { version: "1" })];
 
@@ -2284,11 +2103,9 @@ fn a_changed_plugin_set_refuses_the_patch_and_rebuilds() {
     // The plugin-set guard: `classify_file` overrides are baked into
     // `FileNode.class` untagged, so the snapshot's stored plugin-set digest must match —
     // a version bump alone (same id, same hooks) is a different set and full-rebuilds.
-    let name = "patch-plugin-set-changed";
-    let dir = marker_project(name);
-    let cache_dir = std::env::temp_dir().join(format!("kndo-graph-test-{name}-cache"));
-    let _ = fs::remove_dir_all(&cache_dir);
-    let cache = crate::cache::ProjectCache::open(&cache_dir);
+    let dir = marker_project();
+    let cache_dir = tempfile::tempdir().unwrap();
+    let cache = crate::cache::ProjectCache::open(cache_dir.path());
 
     let v1: Vec<Box<dyn crate::plugin::Plugin>> =
         vec![Box::new(MarkerGatedPlugin { version: "1" })];
@@ -2315,11 +2132,9 @@ fn the_contribution_record_tracks_what_the_round_actually_resolved() {
     // The audit record: the cache's last-run sidecar reflects what each plugin
     // resolved into the graph, and a patch (which re-runs the round) refreshes it — the
     // marker flip changes the recorded root count from 0 to 1.
-    let name = "contribution-record";
-    let dir = marker_project(name);
-    let cache_dir = std::env::temp_dir().join(format!("kndo-graph-test-{name}-cache"));
-    let _ = fs::remove_dir_all(&cache_dir);
-    let cache = crate::cache::ProjectCache::open(&cache_dir);
+    let dir = marker_project();
+    let cache_dir = tempfile::tempdir().unwrap();
+    let cache = crate::cache::ProjectCache::open(cache_dir.path());
     let plugins: Vec<Box<dyn crate::plugin::Plugin>> =
         vec![Box::new(MarkerGatedPlugin { version: "1" })];
 
@@ -2358,11 +2173,9 @@ fn externally_consumed_round_trips_through_the_snapshot() {
     // must persist `externally_consumed` — otherwise every warm hit would silently drop
     // `annotate_symbols` output, losing the exemptions. `ProjectGraph`'s derived
     // `PartialEq` covers the field, so plain equality is the whole assertion.
-    let name = "externally-consumed-roundtrip";
-    let dir = marker_project(name);
-    let cache_dir = std::env::temp_dir().join(format!("kndo-graph-test-{name}-cache"));
-    let _ = fs::remove_dir_all(&cache_dir);
-    let cache = crate::cache::ProjectCache::open(&cache_dir);
+    let dir = marker_project();
+    let cache_dir = tempfile::tempdir().unwrap();
+    let cache = crate::cache::ProjectCache::open(cache_dir.path());
     let plugins: Vec<Box<dyn crate::plugin::Plugin>> =
         vec![Box::new(MarkerGatedPlugin { version: "1" })];
 
@@ -2477,9 +2290,9 @@ fn compute_graph_key_distinguishes_wasm_plugin_content_from_its_own_id_and_versi
 fn surface_signature_ignores_spans_but_sees_surface_changes() {
     // Bodies and positions move freely under the patch guard; any change to
     // what other files can resolve against must move the signature.
-    let base = project("sig-base", &[("a.mock", "decl x\nref y")]);
-    let moved = project("sig-moved", &[("a.mock", "\n\ndecl x\nref y")]);
-    let grown = project("sig-grown", &[("a.mock", "decl x\ndecl z\nref y")]);
+    let base = project(&[("a.mock", "decl x\nref y")]);
+    let moved = project(&[("a.mock", "\n\ndecl x\nref y")]);
+    let grown = project(&[("a.mock", "decl x\ndecl z\nref y")]);
     let sig = |dir: &std::path::Path| {
         let (g, _) = assemble(dir, &mock_adapters(), &[]).unwrap();
         g.patch_meta[g.file_id(&ProjectPath(SmolStr::new("a.mock"))).unwrap().0 as usize]
@@ -2500,13 +2313,10 @@ fn surface_signature_ignores_spans_but_sees_surface_changes() {
 
 #[test]
 fn patch_meta_records_unit_names_and_reexport_aliases() {
-    let dir = project(
-        "patch-meta",
-        &[
-            ("source.mock", "decl a"),
-            ("barrel.mock", "reexport ./source.mock a"),
-        ],
-    );
+    let dir = project(&[
+        ("source.mock", "decl a"),
+        ("barrel.mock", "reexport ./source.mock a"),
+    ]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     let barrel = graph
         .file_id(&ProjectPath(SmolStr::new("barrel.mock")))
@@ -2526,15 +2336,12 @@ fn barrel_chains_resolve_regardless_of_discovery_order() {
     // real source — and `outer.mock` sorts BEFORE `zeta.mock`, exactly the discovery
     // order a single-pass one-hop resolution could not handle (outer's lookup would run
     // before zeta's alias exists). The consumer must still reach the one real symbol.
-    let dir = project(
-        "barrel-chain-order",
-        &[
-            ("aaa_source.mock", "decl deep"),
-            ("outer.mock", "reexport ./zeta.mock deep"),
-            ("zeta.mock", "reexport ./aaa_source.mock deep"),
-            ("consumer.mock", "import ./outer.mock deep\nref deep"),
-        ],
-    );
+    let dir = project(&[
+        ("aaa_source.mock", "decl deep"),
+        ("outer.mock", "reexport ./zeta.mock deep"),
+        ("zeta.mock", "reexport ./aaa_source.mock deep"),
+        ("consumer.mock", "import ./outer.mock deep\nref deep"),
+    ]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     assert_eq!(
         graph
@@ -2569,14 +2376,11 @@ fn barrel_chains_resolve_regardless_of_discovery_order() {
 fn reexport_cycles_terminate_and_resolve_to_nothing() {
     // A cycle of re-exports makes no progress and must simply terminate —
     // no alias ever materializes, nothing hangs, nothing panics.
-    let dir = project(
-        "barrel-cycle",
-        &[
-            ("ping.mock", "reexport ./pong.mock ghost"),
-            ("pong.mock", "reexport ./ping.mock ghost"),
-            ("consumer.mock", "import ./ping.mock ghost\nref ghost"),
-        ],
-    );
+    let dir = project(&[
+        ("ping.mock", "reexport ./pong.mock ghost"),
+        ("pong.mock", "reexport ./ping.mock ghost"),
+        ("consumer.mock", "import ./ping.mock ghost\nref ghost"),
+    ]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     assert!(graph.symbols.iter().all(|s| s.name.as_str() != "ghost"));
 }
@@ -2586,27 +2390,21 @@ fn assembled_edge_and_diagnostic_order_is_canonical() {
     // Order is data. Assembling the same tree twice — or any two
     // construction paths over identical inputs — must yield identical vectors, which is
     // what the sort guarantees; spot-check that the vector is actually sorted.
-    let dir = project(
-        "canonical-order",
-        &[
-            ("a.mock", "decl x\nref y"),
-            ("b.mock", "decl y\nimport ./a.mock x\nref x"),
-        ],
-    );
+    let dir = project(&[
+        ("a.mock", "decl x\nref y"),
+        ("b.mock", "decl y\nimport ./a.mock x\nref x"),
+    ]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     assert!(graph.edges.windows(2).all(|w| w[0] <= w[1]));
 }
 
 #[test]
 fn barrel_reexport_from_a_library_root_promotes_the_original_symbol_to_a_production_root() {
-    let dir = project(
-        "barrel-root-reexport",
-        &[
-            ("manifest.json", "root barrel.mock"),
-            ("source.mock", "decl a"),
-            ("barrel.mock", "reexport ./source.mock a"),
-        ],
-    );
+    let dir = project(&[
+        ("manifest.json", "root barrel.mock"),
+        ("source.mock", "decl a"),
+        ("barrel.mock", "reexport ./source.mock a"),
+    ]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     let a_symbol = SymbolId(
         graph
@@ -2624,10 +2422,7 @@ fn barrel_reexport_from_a_library_root_promotes_the_original_symbol_to_a_product
 
 #[test]
 fn manifest_root_naming_an_unknown_file_is_dropped_not_fabricated() {
-    let dir = project(
-        "manifest-root-missing",
-        &[("manifest.json", "root nope.mock")],
-    );
+    let dir = project(&[("manifest.json", "root nope.mock")]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     assert!(graph
         .edges
@@ -2638,7 +2433,7 @@ fn manifest_root_naming_an_unknown_file_is_dropped_not_fabricated() {
 #[test]
 fn manifest_dependencies_reach_the_resolver_as_declared() {
     // With no manifest, `lodash` resolves undeclared (the mock demotes to `probable`).
-    let dir = project("no-manifest-dep", &[("a.mock", "import lodash")]);
+    let dir = project(&[("a.mock", "import lodash")]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     let edge = graph
         .edges
@@ -2649,10 +2444,7 @@ fn manifest_dependencies_reach_the_resolver_as_declared() {
 
     // Declared in a manifest, the same import resolves `certain` — proof
     // `declared_dependencies` actually threads from manifest facts into the resolver ctx.
-    let dir = project(
-        "manifest-dep",
-        &[("manifest.json", "dep lodash"), ("a.mock", "import lodash")],
-    );
+    let dir = project(&[("manifest.json", "dep lodash"), ("a.mock", "import lodash")]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     let edge = graph
         .edges
@@ -2667,14 +2459,11 @@ fn inherited_dependencies_resolve_against_the_shared_pool_before_reaching_declar
     // Root declares the shared pool; a member manifest's `foo` is `inherited` (an
     // unresolved placeholder at extraction time); an unrelated manifest pins the SAME
     // version directly — the two only agree once the placeholder actually resolves.
-    let dir = project(
-        "workspace-inherited-dep",
-        &[
-            ("manifest.json", "workspace-dep foo 1.2"),
-            ("member/manifest.json", "dep-inherited foo"),
-            ("external/manifest.json", "dep-version foo 1.2"),
-        ],
-    );
+    let dir = project(&[
+        ("manifest.json", "workspace-dep foo 1.2"),
+        ("member/manifest.json", "dep-inherited foo"),
+        ("external/manifest.json", "dep-version foo 1.2"),
+    ]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     let versions: std::collections::BTreeSet<&str> = graph
         .declared_dependencies
@@ -2690,14 +2479,11 @@ fn inherited_dependencies_resolve_against_the_shared_pool_before_reaching_declar
 
     // A genuinely differing pin must still show up as a real divergence — resolution
     // only removes the false positive, it never masks a real one.
-    let dir = project(
-        "workspace-inherited-dep-real-divergence",
-        &[
-            ("manifest.json", "workspace-dep foo 1.2"),
-            ("member/manifest.json", "dep-inherited foo"),
-            ("external/manifest.json", "dep-version foo 1.3"),
-        ],
-    );
+    let dir = project(&[
+        ("manifest.json", "workspace-dep foo 1.2"),
+        ("member/manifest.json", "dep-inherited foo"),
+        ("external/manifest.json", "dep-version foo 1.3"),
+    ]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     let versions: std::collections::BTreeSet<&str> = graph
         .declared_dependencies
@@ -2718,18 +2504,15 @@ fn inherited_dependencies_resolve_against_the_shared_pool_before_reaching_declar
 fn workspace_name_import_produces_both_file_and_dependency_edges() {
     // A workspace-member import: resolution yields the concrete internal file (real reachability) AND
     // the declaration contract stays checkable (an ImportsDependency edge by name).
-    let dir = project(
-        "ws-both-edges",
-        &[
-            ("packages/a/manifest.json", "name pkg-a\ndep pkg-b"),
-            ("packages/a/src.mock", "import pkg-b\nroot-file"),
-            (
-                "packages/b/manifest.json",
-                "name pkg-b\nentry packages/b/lib.mock",
-            ),
-            ("packages/b/lib.mock", "decl util"),
-        ],
-    );
+    let dir = project(&[
+        ("packages/a/manifest.json", "name pkg-a\ndep pkg-b"),
+        ("packages/a/src.mock", "import pkg-b\nroot-file"),
+        (
+            "packages/b/manifest.json",
+            "name pkg-b\nentry packages/b/lib.mock",
+        ),
+        ("packages/b/lib.mock", "decl util"),
+    ]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     let a_src = graph
         .file_id(&ProjectPath(SmolStr::new("packages/a/src.mock")))
@@ -2770,17 +2553,14 @@ fn same_package_import_gets_the_file_edge_but_no_dependency_contract() {
     // library by package name): `same_package` keeps reachability — the ImportsFile
     // edge — while deriving no ImportsDependency, so neither a phantom `undeclared`
     // ("the package doesn't declare itself") nor dependency-usage credit can appear.
-    let dir = project(
-        "ws-same-package",
-        &[
-            (
-                "packages/a/manifest.json",
-                "name pkg-a\nentry packages/a/lib.mock",
-            ),
-            ("packages/a/lib.mock", "decl util"),
-            ("packages/a/consumer.mock", "import pkg-a\nroot-file"),
-        ],
-    );
+    let dir = project(&[
+        (
+            "packages/a/manifest.json",
+            "name pkg-a\nentry packages/a/lib.mock",
+        ),
+        ("packages/a/lib.mock", "decl util"),
+        ("packages/a/consumer.mock", "import pkg-a\nroot-file"),
+    ]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     let consumer = graph
         .file_id(&ProjectPath(SmolStr::new("packages/a/consumer.mock")))
@@ -2816,18 +2596,15 @@ fn phantom_internal_dependency_is_undeclared() {
     // packages/a imports pkg-b by name WITHOUT declaring it — the table:
     // "import resolves into a sibling package not declared in the importer's manifest →
     // undeclared (phantom internal dependency)".
-    let dir = project(
-        "ws-phantom",
-        &[
-            ("packages/a/manifest.json", "name pkg-a"),
-            ("packages/a/src.mock", "import pkg-b\nroot-file"),
-            (
-                "packages/b/manifest.json",
-                "name pkg-b\nentry packages/b/lib.mock",
-            ),
-            ("packages/b/lib.mock", "decl util"),
-        ],
-    );
+    let dir = project(&[
+        ("packages/a/manifest.json", "name pkg-a"),
+        ("packages/a/src.mock", "import pkg-b\nroot-file"),
+        (
+            "packages/b/manifest.json",
+            "name pkg-b\nentry packages/b/lib.mock",
+        ),
+        ("packages/b/lib.mock", "decl util"),
+    ]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     let findings = crate::analysis::run_all(
         &graph,
@@ -2844,18 +2621,15 @@ fn phantom_internal_dependency_is_undeclared() {
 fn declared_but_unimported_workspace_dep_is_unused() {
     // The other direction of the table: "internal dep declared, no import
     // resolves into that package → unused (subject dependency)".
-    let dir = project(
-        "ws-unused-dep",
-        &[
-            ("packages/a/manifest.json", "name pkg-a\ndep pkg-b"),
-            ("packages/a/src.mock", "root-file"),
-            (
-                "packages/b/manifest.json",
-                "name pkg-b\nentry packages/b/lib.mock",
-            ),
-            ("packages/b/lib.mock", "root-file"),
-        ],
-    );
+    let dir = project(&[
+        ("packages/a/manifest.json", "name pkg-a\ndep pkg-b"),
+        ("packages/a/src.mock", "root-file"),
+        (
+            "packages/b/manifest.json",
+            "name pkg-b\nentry packages/b/lib.mock",
+        ),
+        ("packages/b/lib.mock", "root-file"),
+    ]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     let findings = crate::analysis::run_all(
         &graph,
@@ -2873,21 +2647,18 @@ fn workspace_bindings_resolve_to_the_siblings_symbols() {
     // `import { util } from 'pkg-b'` — the binding resolves through b's entry file's
     // symbol table, so `util` is kept alive by a's reference while b's other export
     // is still caught.
-    let dir = project(
-        "ws-bindings",
-        &[
-            ("packages/a/manifest.json", "name pkg-a\ndep pkg-b"),
-            (
-                "packages/a/src.mock",
-                "import pkg-b util\nref util\nroot-file",
-            ),
-            (
-                "packages/b/manifest.json",
-                "name pkg-b\nentry packages/b/lib.mock",
-            ),
-            ("packages/b/lib.mock", "decl util\ndecl dead"),
-        ],
-    );
+    let dir = project(&[
+        ("packages/a/manifest.json", "name pkg-a\ndep pkg-b"),
+        (
+            "packages/a/src.mock",
+            "import pkg-b util\nref util\nroot-file",
+        ),
+        (
+            "packages/b/manifest.json",
+            "name pkg-b\nentry packages/b/lib.mock",
+        ),
+        ("packages/b/lib.mock", "decl util\ndecl dead"),
+    ]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     let findings = crate::analysis::run_all(
         &graph,
@@ -2910,17 +2681,14 @@ fn import_binding_resolves_through_the_target_s_unit_not_just_its_own_file() {
     // symbol may be declared in a *different* file that merely shares the same package
     // (`unit`) — e.g. `resolve()` picks `pkg/x.mock` as the nominal target, but `target` is
     // declared in its sibling `pkg/y.mock`.
-    let dir = project(
-        "import-binding-unit-fallback",
-        &[
-            (
-                "a.mock",
-                "import ./pkg/x.mock target\nref target\nroot-file",
-            ),
-            ("pkg/x.mock", "unit pkg"),
-            ("pkg/y.mock", "unit pkg\nprivate-decl target"),
-        ],
-    );
+    let dir = project(&[
+        (
+            "a.mock",
+            "import ./pkg/x.mock target\nref target\nroot-file",
+        ),
+        ("pkg/x.mock", "unit pkg"),
+        ("pkg/y.mock", "unit pkg\nprivate-decl target"),
+    ]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     let findings = crate::analysis::run_all(
         &graph,
@@ -2940,7 +2708,7 @@ fn import_binding_resolves_through_the_target_s_unit_not_just_its_own_file() {
 
 #[test]
 fn cli_invoke_directive_reaches_script_invoked_dependencies() {
-    let dir = project("cli-invoke", &[("manifest.json", "dep xo\ncli-invoke xo")]);
+    let dir = project(&[("manifest.json", "dep xo\ncli-invoke xo")]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     assert!(graph
         .script_invoked_dependencies
@@ -2949,7 +2717,7 @@ fn cli_invoke_directive_reaches_script_invoked_dependencies() {
 
 #[test]
 fn raw_root_whole_file_becomes_root_edge_to_the_file() {
-    let dir = project("raw-root-file", &[("a.mock", "root-file")]);
+    let dir = project(&[("a.mock", "root-file")]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     let a = graph.file_id(&ProjectPath(SmolStr::new("a.mock"))).unwrap();
     assert!(graph.edges.iter().any(|e| e.kind
@@ -2961,7 +2729,7 @@ fn raw_root_whole_file_becomes_root_edge_to_the_file() {
 
 #[test]
 fn raw_root_declaration_becomes_root_edge_to_the_symbol() {
-    let dir = project("raw-root-decl", &[("a.mock", "decl f\nroot-decl f")]);
+    let dir = project(&[("a.mock", "decl f\nroot-decl f")]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     let f = graph.symbols.iter().position(|s| s.name == "f").unwrap() as u32;
     assert!(graph.edges.iter().any(|e| e.kind
@@ -2973,7 +2741,7 @@ fn raw_root_declaration_becomes_root_edge_to_the_symbol() {
 
 #[test]
 fn raw_root_naming_an_unknown_declaration_is_dropped_not_fabricated() {
-    let dir = project("raw-root-decl-missing", &[("a.mock", "root-decl ghost")]);
+    let dir = project(&[("a.mock", "root-decl ghost")]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     assert!(graph
         .edges
@@ -2986,10 +2754,7 @@ fn test_role_files_are_test_roots_not_unused() {
     // "Test roots — test functions/files (language role detection…)". A test
     // file nothing imports is TestOnly, not Unreachable — while a production orphan next
     // to it is still caught.
-    let dir = project(
-        "role-roots-test",
-        &[("a.test.mock", "decl helper"), ("orphan.mock", "decl gone")],
-    );
+    let dir = project(&[("a.test.mock", "decl helper"), ("orphan.mock", "decl gone")]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     let test_file = graph
         .file_id(&ProjectPath(SmolStr::new("a.test.mock")))
@@ -3026,13 +2791,10 @@ fn tooling_role_files_root_their_exported_symbols_too() {
     // A config file's exports ARE its interface to the tool that loads it — neither the
     // file nor its exported symbol may be flagged; an unexported dead helper inside the
     // same config still is (symbol-level precision survives the promotion).
-    let dir = project(
-        "role-roots-tooling",
-        &[(
-            "build.config.mock",
-            "decl configObject\nprivate-decl helper",
-        )],
-    );
+    let dir = project(&[(
+        "build.config.mock",
+        "decl configObject\nprivate-decl helper",
+    )]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     let findings = crate::analysis::run_all(
         &graph,
@@ -3053,14 +2815,11 @@ fn opaque_namespace_import_wildcards_over_the_target() {
     // `import * as ns; f(ns)` / `ns[key]` — the namespace escaped static tracking, so
     // every symbol in the target is plausibly used. End-to-end: the
     // target's never-referenced-by-name symbol must stay out of `unused`.
-    let dir = project(
-        "opaque-namespace",
-        &[
-            ("a.mock", "root-file\nimport-opaque ./b.mock"),
-            ("b.mock", "decl viaKey"),
-            ("dead.mock", "decl gone"),
-        ],
-    );
+    let dir = project(&[
+        ("a.mock", "root-file\nimport-opaque ./b.mock"),
+        ("b.mock", "decl viaKey"),
+        ("dead.mock", "decl gone"),
+    ]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     let b = graph.file_id(&ProjectPath(SmolStr::new("b.mock"))).unwrap();
     let wildcard = graph
@@ -3086,7 +2845,7 @@ fn opaque_namespace_import_wildcards_over_the_target() {
 
 #[test]
 fn unnarrowed_dynamic_becomes_a_wildcard_edge_from_the_file() {
-    let dir = project("dynamic-plain", &[("a.mock", "dynamic")]);
+    let dir = project(&[("a.mock", "dynamic")]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     let a = graph.file_id(&ProjectPath(SmolStr::new("a.mock"))).unwrap();
     let wildcard = graph
@@ -3099,16 +2858,13 @@ fn unnarrowed_dynamic_becomes_a_wildcard_edge_from_the_file() {
 
 #[test]
 fn narrowed_dynamic_imports_the_directorys_files_at_possible() {
-    let dir = project(
-        "dynamic-narrowed",
-        &[
-            ("a.mock", "dynamic-narrowed handlers"),
-            ("handlers/one.mock", "decl run"),
-            ("handlers/sub/two.mock", ""),
-            ("handlers/data.json", "{}"), // unclaimed — still a plausible target
-            ("elsewhere/other.mock", ""),
-        ],
-    );
+    let dir = project(&[
+        ("a.mock", "dynamic-narrowed handlers"),
+        ("handlers/one.mock", "decl run"),
+        ("handlers/sub/two.mock", ""),
+        ("handlers/data.json", "{}"), // unclaimed — still a plausible target
+        ("elsewhere/other.mock", ""),
+    ]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     let a = graph.file_id(&ProjectPath(SmolStr::new("a.mock"))).unwrap();
     let id = |p: &str| graph.file_id(&ProjectPath(SmolStr::new(p))).unwrap();
@@ -3146,14 +2902,11 @@ fn narrowed_dynamic_keeps_target_symbols_possible_alive_end_to_end() {
     // analysis level: a root file dynamically loading `handlers/` keeps the handler's
     // exported symbol out of `unused`, while a file outside the narrowed scope is still
     // caught.
-    let dir = project(
-        "dynamic-liveness",
-        &[
-            ("a.mock", "root-file\ndynamic-narrowed handlers"),
-            ("handlers/one.mock", "decl run"),
-            ("dead.mock", "decl gone"),
-        ],
-    );
+    let dir = project(&[
+        ("a.mock", "root-file\ndynamic-narrowed handlers"),
+        ("handlers/one.mock", "decl run"),
+        ("dead.mock", "decl gone"),
+    ]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     let findings = crate::analysis::run_all(
         &graph,
@@ -3180,13 +2933,10 @@ fn narrowed_dynamic_keeps_target_symbols_possible_alive_end_to_end() {
 fn cross_file_reference_resolves_via_import_binding() {
     // a.mock (index 0) references `used`, imported (bound) from b.mock (index 1) — a
     // forward reference in file-discovery order, the case phase 3a/3b split exists for.
-    let dir = project(
-        "ref-cross-file",
-        &[
-            ("a.mock", "import ./b.mock used\nref used"),
-            ("b.mock", "decl used"),
-        ],
-    );
+    let dir = project(&[
+        ("a.mock", "import ./b.mock used\nref used"),
+        ("b.mock", "decl used"),
+    ]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     let a = graph.file_id(&ProjectPath(SmolStr::new("a.mock"))).unwrap();
     let used = SymbolId(graph.symbols.iter().position(|s| s.name == "used").unwrap() as u32);
@@ -3201,13 +2951,10 @@ fn cross_file_reference_resolves_via_import_binding() {
 #[test]
 fn renamed_binding_resolves_to_the_original_exported_name() {
     // `import { used as alias }` — alias.local != alias.imported.
-    let dir = project(
-        "ref-renamed-binding",
-        &[
-            ("a.mock", "import ./b.mock alias=used\nref alias"),
-            ("b.mock", "decl used"),
-        ],
-    );
+    let dir = project(&[
+        ("a.mock", "import ./b.mock alias=used\nref alias"),
+        ("b.mock", "decl used"),
+    ]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     let used_symbol = graph.symbols.iter().find(|s| s.name == "used").unwrap();
     assert!(graph
@@ -3218,13 +2965,10 @@ fn renamed_binding_resolves_to_the_original_exported_name() {
 
 #[test]
 fn default_binding_resolves_to_the_synthetic_default_export() {
-    let dir = project(
-        "ref-default-binding",
-        &[
-            ("a.mock", "import ./b.mock main=\nref main"),
-            ("b.mock", "decl default"),
-        ],
-    );
+    let dir = project(&[
+        ("a.mock", "import ./b.mock main=\nref main"),
+        ("b.mock", "decl default"),
+    ]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     assert!(graph
         .edges
@@ -3234,7 +2978,7 @@ fn default_binding_resolves_to_the_synthetic_default_export() {
 
 #[test]
 fn same_file_reference_resolves_without_an_import() {
-    let dir = project("ref-same-file", &[("a.mock", "decl helper\nref helper")]);
+    let dir = project(&[("a.mock", "decl helper\nref helper")]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     let a = graph.file_id(&ProjectPath(SmolStr::new("a.mock"))).unwrap();
     let helper = SymbolId(
@@ -3254,7 +2998,7 @@ fn same_file_reference_resolves_without_an_import() {
 
 #[test]
 fn reference_to_an_unresolvable_name_produces_no_edge() {
-    let dir = project("ref-unresolved", &[("a.mock", "ref ghost")]);
+    let dir = project(&[("a.mock", "ref ghost")]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     assert!(graph
         .edges
@@ -3264,14 +3008,11 @@ fn reference_to_an_unresolvable_name_produces_no_edge() {
 
 #[test]
 fn assembly_is_deterministic_across_runs() {
-    let dir = project(
-        "determinism",
-        &[
-            ("a.mock", "decl x\nimport ./b.mock\nimport lodash"),
-            ("b.mock", "decl y"),
-            ("c.mock", "decl z\nimport ./a.mock"),
-        ],
-    );
+    let dir = project(&[
+        ("a.mock", "decl x\nimport ./b.mock\nimport lodash"),
+        ("b.mock", "decl y"),
+        ("c.mock", "decl z\nimport ./a.mock"),
+    ]);
     let (g1, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     let (g2, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     assert_eq!(g1.edges, g2.edges);
@@ -3292,19 +3033,15 @@ fn assembly_is_deterministic_across_runs() {
 // edges and symbols as a cold one on identical input.
 #[test]
 fn warm_assemble_matches_a_cold_assemble_byte_for_byte() {
-    let dir = project(
-        "cache-equivalence",
-        &[
-            ("a.mock", "decl x\nimport ./b.mock\nimport lodash"),
-            ("b.mock", "decl y"),
-            ("c.mock", "decl z\nimport ./a.mock"),
-        ],
-    );
+    let dir = project(&[
+        ("a.mock", "decl x\nimport ./b.mock\nimport lodash"),
+        ("b.mock", "decl y"),
+        ("c.mock", "decl z\nimport ./a.mock"),
+    ]);
     let cold = assemble(dir.path(), &mock_adapters(), &[]).unwrap().0;
 
-    let cache_dir = std::env::temp_dir().join("kndo-graph-test-cache-equivalence-cache");
-    let _ = fs::remove_dir_all(&cache_dir);
-    let cache = crate::cache::ProjectCache::open(&cache_dir);
+    let cache_dir = tempfile::tempdir().unwrap();
+    let cache = crate::cache::ProjectCache::open(cache_dir.path());
     // First cached run populates every entry (all misses); second is fully warm.
     assemble_with_cache(dir.path(), &mock_adapters(), &[], Some(&cache)).unwrap();
     let warm = assemble_with_cache(dir.path(), &mock_adapters(), &[], Some(&cache))
@@ -3328,13 +3065,9 @@ fn warm_assemble_matches_a_cold_assemble_byte_for_byte() {
 
 #[test]
 fn unchanged_files_are_served_from_the_facts_cache_on_the_second_assemble() {
-    let dir = project(
-        "cache-hits",
-        &[("a.mock", "decl x"), ("b.mock", "decl y\nimport ./a.mock")],
-    );
-    let cache_dir = std::env::temp_dir().join("kndo-graph-test-cache-hits-cache");
-    let _ = fs::remove_dir_all(&cache_dir);
-    let cache = crate::cache::ProjectCache::open(&cache_dir);
+    let dir = project(&[("a.mock", "decl x"), ("b.mock", "decl y\nimport ./a.mock")]);
+    let cache_dir = tempfile::tempdir().unwrap();
+    let cache = crate::cache::ProjectCache::open(cache_dir.path());
 
     assemble_with_cache(dir.path(), &mock_adapters(), &[], Some(&cache)).unwrap();
     assert_eq!(cache.hits(), 0); // first run: every file is a miss, then gets stored
@@ -3350,13 +3083,9 @@ fn unchanged_files_are_served_from_the_facts_cache_on_the_second_assemble() {
 
 #[test]
 fn a_changed_file_misses_the_graph_snapshot_but_still_warms_its_sibling_from_facts() {
-    let dir = project(
-        "graph-key-sensitivity",
-        &[("a.mock", "decl x"), ("b.mock", "decl y\nimport ./a.mock")],
-    );
-    let cache_dir = std::env::temp_dir().join("kndo-graph-test-graph-key-sensitivity-cache");
-    let _ = fs::remove_dir_all(&cache_dir);
-    let cache = crate::cache::ProjectCache::open(&cache_dir);
+    let dir = project(&[("a.mock", "decl x"), ("b.mock", "decl y\nimport ./a.mock")]);
+    let cache_dir = tempfile::tempdir().unwrap();
+    let cache = crate::cache::ProjectCache::open(cache_dir.path());
 
     assemble_with_cache(dir.path(), &mock_adapters(), &[], Some(&cache)).unwrap();
 
@@ -3691,28 +3420,25 @@ fn same_name_overloads_each_own_the_references_in_their_body() {
 /// (`internal/adapters/go.md`), under which both are live.
 #[test]
 fn same_unit_twins_both_receive_the_reference() {
-    let dir = project(
-        "unit-twins",
-        &[
-            (
-                "pkg/a.mock",
-                "unit pkg\nprivate-decl validate\nprivate-decl helper",
-            ),
-            ("pkg/b.mock", "unit pkg\nprivate-decl validate"),
-            ("pkg/caller.mock", "unit pkg\nref validate"),
-            // Declares `helper` itself, and so does a.mock — the shape where the file that
-            // declares one alternate is also where the other's calls live (kotlinx.coroutines
-            // writes `expect inline fun yieldThread()` in the very file that calls it, with
-            // the `actual`s one file over). Its own declaration first, the unit's twin too.
-            (
-                "pkg/local.mock",
-                "unit pkg\nprivate-decl helper\nref helper",
-            ),
-            // A name with no twin anywhere: exactly one edge, the containment check that
-            // stops the twin machinery from spraying onto ordinary references.
-            ("pkg/solo.mock", "unit pkg\nprivate-decl only\nref only"),
-        ],
-    );
+    let dir = project(&[
+        (
+            "pkg/a.mock",
+            "unit pkg\nprivate-decl validate\nprivate-decl helper",
+        ),
+        ("pkg/b.mock", "unit pkg\nprivate-decl validate"),
+        ("pkg/caller.mock", "unit pkg\nref validate"),
+        // Declares `helper` itself, and so does a.mock — the shape where the file that
+        // declares one alternate is also where the other's calls live (kotlinx.coroutines
+        // writes `expect inline fun yieldThread()` in the very file that calls it, with
+        // the `actual`s one file over). Its own declaration first, the unit's twin too.
+        (
+            "pkg/local.mock",
+            "unit pkg\nprivate-decl helper\nref helper",
+        ),
+        // A name with no twin anywhere: exactly one edge, the containment check that
+        // stops the twin machinery from spraying onto ordinary references.
+        ("pkg/solo.mock", "unit pkg\nprivate-decl only\nref only"),
+    ]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
 
     let symbol_of = |name: &str, file: &str| -> crate::vocab::SymbolId {
@@ -3788,19 +3514,16 @@ fn same_unit_twins_both_receive_the_reference() {
 /// stole both call sites of `StateFlowImpl.updateState` and left it reading `unused`.
 #[test]
 fn a_member_in_scope_outranks_a_wildcard_visible_name() {
-    let dir = project(
-        "visible-vs-member",
-        &[
-            // Same directory, different units — the mock resolver only walks `./` siblings,
-            // and `unit` is declared, not derived from the path.
-            ("src/free.mock", "unit other\nprivate-decl updateState"),
-            (
-                "src/holder.mock",
-                "unit app\nimport-visible ./free.mock\nmember-decl Holder updateState\n\
+    let dir = project(&[
+        // Same directory, different units — the mock resolver only walks `./` siblings,
+        // and `unit` is declared, not derived from the path.
+        ("src/free.mock", "unit other\nprivate-decl updateState"),
+        (
+            "src/holder.mock",
+            "unit app\nimport-visible ./free.mock\nmember-decl Holder updateState\n\
                  member-decl Holder setValue\nref updateState",
-            ),
-        ],
-    );
+        ),
+    ]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
 
     let symbol = |name: &str, file: &str| -> crate::vocab::SymbolId {
@@ -3853,13 +3576,10 @@ fn a_member_in_scope_outranks_a_wildcard_visible_name() {
 fn a_project_declared_marker_makes_a_symbol_an_entry_point() {
     use crate::analysis::reachability;
 
-    let dir = project(
-        "declared-entry-points",
-        &[(
-            "src/app.mock",
-            "marked-decl Controller show\nmarked-decl Helper hidden\ndecl plain",
-        )],
-    );
+    let dir = project(&[(
+        "src/app.mock",
+        "marked-decl Controller show\nmarked-decl Helper hidden\ndecl plain",
+    )]);
     let (graph, _) = assemble(dir.path(), &mock_adapters(), &[]).unwrap();
     let id = |name: &str| -> crate::vocab::SymbolId {
         let (i, _) = graph

@@ -1032,45 +1032,38 @@ mod tests {
     use super::*;
     use kndo::Finding;
 
-    fn tmp_dir(name: &str) -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join(format!("kndo-cli-test-{name}"));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        dir
-    }
-
     #[test]
     fn gitignore_created_when_absent() {
-        let dir = tmp_dir("gitignore-create");
+        let dir = tempfile::tempdir().unwrap();
         assert!(matches!(
-            ensure_gitignore_entry(&dir).unwrap(),
+            ensure_gitignore_entry(dir.path()).unwrap(),
             GitignoreOutcome::Appended
         ));
-        let text = std::fs::read_to_string(dir.join(".gitignore")).unwrap();
+        let text = std::fs::read_to_string(dir.path().join(".gitignore")).unwrap();
         assert_eq!(text, ".kndo/\n");
     }
 
     #[test]
     fn gitignore_entry_appended_to_existing_content() {
-        let dir = tmp_dir("gitignore-append");
-        std::fs::write(dir.join(".gitignore"), "target/").unwrap(); // no trailing newline
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join(".gitignore"), "target/").unwrap(); // no trailing newline
         assert!(matches!(
-            ensure_gitignore_entry(&dir).unwrap(),
+            ensure_gitignore_entry(dir.path()).unwrap(),
             GitignoreOutcome::Appended
         ));
-        let text = std::fs::read_to_string(dir.join(".gitignore")).unwrap();
+        let text = std::fs::read_to_string(dir.path().join(".gitignore")).unwrap();
         assert_eq!(text, "target/\n.kndo/\n");
     }
 
     #[test]
     fn gitignore_entry_is_idempotent() {
-        let dir = tmp_dir("gitignore-idempotent");
-        std::fs::write(dir.join(".gitignore"), "target/\n.kndo/\n").unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join(".gitignore"), "target/\n.kndo/\n").unwrap();
         assert!(matches!(
-            ensure_gitignore_entry(&dir).unwrap(),
+            ensure_gitignore_entry(dir.path()).unwrap(),
             GitignoreOutcome::AlreadyPresent
         ));
-        let text = std::fs::read_to_string(dir.join(".gitignore")).unwrap();
+        let text = std::fs::read_to_string(dir.path().join(".gitignore")).unwrap();
         assert_eq!(text, "target/\n.kndo/\n"); // unchanged, not duplicated
     }
 

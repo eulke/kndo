@@ -20,20 +20,12 @@ fn workspace_root() -> PathBuf {
         .to_path_buf()
 }
 
-/// Same isolation reasoning as `global_adapter_activation.rs`: a process-unique target dir per
-/// demo build keeps concurrent test binaries from racing on shared artifacts.
-fn isolated_target_dir() -> PathBuf {
-    let nonce = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .expect("system clock before the epoch")
-        .as_nanos();
-    std::env::temp_dir().join(format!("kndo-wasm-target-{}-{nonce}", std::process::id()))
-}
-
 /// Builds one of the `examples/` demo guests and encodes it as a WASM component.
 fn build_component(example_dir: &str, artifact: &str) -> Vec<u8> {
     let demo_dir = workspace_root().join(example_dir);
-    let target_dir = isolated_target_dir();
+    // A `TempDir`: unique by construction and removed on drop, unwind included —
+    // the hand-rolled pid+nonce name it replaced leaked the whole build tree on panic.
+    let target_dir = tempfile::tempdir().expect("wasm target dir");
     let status = Command::new("cargo")
         .args(["build", "--release", "--target", "wasm32-unknown-unknown"])
         // Cross-target guest build: instrumentation flags from the host environment
@@ -42,16 +34,17 @@ fn build_component(example_dir: &str, artifact: &str) -> Vec<u8> {
         .env_remove("RUSTFLAGS")
         .env_remove("CARGO_ENCODED_RUSTFLAGS")
         .env_remove("LLVM_PROFILE_FILE")
-        .env("CARGO_TARGET_DIR", &target_dir)
+        .env("CARGO_TARGET_DIR", target_dir.path())
         .current_dir(&demo_dir)
         .status()
         .unwrap_or_else(|e| panic!("failed to invoke cargo for {example_dir}: {e}"));
     assert!(status.success(), "{example_dir} guest build failed");
 
-    let core_wasm_path = target_dir.join(format!("wasm32-unknown-unknown/release/{artifact}"));
+    let core_wasm_path = target_dir
+        .path()
+        .join(format!("wasm32-unknown-unknown/release/{artifact}"));
     let core_wasm = std::fs::read(&core_wasm_path)
         .unwrap_or_else(|e| panic!("reading {}: {e}", core_wasm_path.display()));
-    let _ = std::fs::remove_dir_all(&target_dir);
 
     wit_component::ComponentEncoder::default()
         .module(&core_wasm)

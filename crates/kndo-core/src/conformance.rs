@@ -198,46 +198,47 @@ mod tests {
 
     #[test]
     fn discover_fixtures_finds_only_well_formed_directories() {
-        let root = std::env::temp_dir().join("kndo-conformance-discover-test");
-        let _ = fs::remove_dir_all(&root);
-        fs::create_dir_all(root.join("good/project")).unwrap();
-        fs::write(root.join("good/expected.json"), r#"{"findings": []}"#).unwrap();
-        fs::create_dir_all(root.join("missing-expected/project")).unwrap();
-        fs::create_dir_all(root.join("missing-project")).unwrap();
+        let root = tempfile::tempdir().unwrap();
+        fs::create_dir_all(root.path().join("good/project")).unwrap();
         fs::write(
-            root.join("missing-project/expected.json"),
+            root.path().join("good/expected.json"),
             r#"{"findings": []}"#,
         )
         .unwrap();
-        fs::write(root.join("not-a-fixture.txt"), "").unwrap();
+        fs::create_dir_all(root.path().join("missing-expected/project")).unwrap();
+        fs::create_dir_all(root.path().join("missing-project")).unwrap();
+        fs::write(
+            root.path().join("missing-project/expected.json"),
+            r#"{"findings": []}"#,
+        )
+        .unwrap();
+        fs::write(root.path().join("not-a-fixture.txt"), "").unwrap();
 
-        let found = discover_fixtures(&root);
-        assert_eq!(found, vec![root.join("good")]);
+        let found = discover_fixtures(root.path());
+        assert_eq!(found, vec![root.path().join("good")]);
     }
 
     #[test]
     fn run_fixture_reports_clean_on_a_perfect_match() {
-        let dir = std::env::temp_dir().join("kndo-conformance-clean-test");
-        let _ = fs::remove_dir_all(&dir);
-        fs::create_dir_all(dir.join("project")).unwrap();
-        fs::write(dir.join("expected.json"), r#"{"findings": []}"#).unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        fs::create_dir_all(dir.path().join("project")).unwrap();
+        fs::write(dir.path().join("expected.json"), r#"{"findings": []}"#).unwrap();
 
-        let outcome = run_fixture(&dir, vec![]).unwrap();
+        let outcome = run_fixture(dir.path(), vec![]).unwrap();
         assert!(matches!(outcome, ConformanceVerdict::Pass));
     }
 
     #[test]
     fn run_fixture_reports_a_mismatch_when_expected_findings_never_fire() {
-        let dir = std::env::temp_dir().join("kndo-conformance-mismatch-test");
-        let _ = fs::remove_dir_all(&dir);
-        fs::create_dir_all(dir.join("project")).unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        fs::create_dir_all(dir.path().join("project")).unwrap();
         fs::write(
-            dir.join("expected.json"),
+            dir.path().join("expected.json"),
             r#"{"findings": [{"category": "unused", "subject_kind": "file", "path": "ghost.ts"}]}"#,
         )
         .unwrap();
 
-        let outcome = run_fixture(&dir, vec![]).unwrap();
+        let outcome = run_fixture(dir.path(), vec![]).unwrap();
         let ConformanceVerdict::Mismatch(mismatch) = outcome else {
             panic!("expected a mismatch, got {outcome:?}");
         };
@@ -247,11 +248,10 @@ mod tests {
 
     #[test]
     fn run_fixture_errors_on_a_malformed_expected_file() {
-        let dir = std::env::temp_dir().join("kndo-conformance-malformed-test");
-        let _ = fs::remove_dir_all(&dir);
-        fs::create_dir_all(dir.join("project")).unwrap();
-        fs::write(dir.join("expected.json"), "not json").unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        fs::create_dir_all(dir.path().join("project")).unwrap();
+        fs::write(dir.path().join("expected.json"), "not json").unwrap();
 
-        assert!(run_fixture(&dir, vec![]).is_err());
+        assert!(run_fixture(dir.path(), vec![]).is_err());
     }
 }

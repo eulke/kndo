@@ -762,3 +762,31 @@ impl LanguageAdapter for MockAdapter {
         Resolution::Dependency(spec.specifier.clone(), confidence)
     }
 }
+
+/// Filesystem fixtures. **Every** temporary directory a test needs comes from `tempfile`, and
+/// nothing anywhere builds a name under `std::env::temp_dir()` — a rule with a guard test
+/// (`crates/kndo-core/tests/no_hand_rolled_temp_dirs.rs`), because the alternative was tried
+/// and the failure was worse than a leak.
+///
+/// The shape it took here was a fixed literal name plus `remove_dir_all` **on entry**: two
+/// tests that happened to pick the same string did not merely collide, the second one to start
+/// deleted the first one's fixture out from under it mid-read (documented at the time in
+/// `kndo-adapter-go/tests/assembly.rs`). `tempfile::tempdir()` is unique by construction, mode
+/// 0700, and deleted on drop — including on unwind, which is why a panicking test cleans up
+/// after itself and a hand-rolled `PathBuf` never did.
+pub mod fixture {
+    /// A throwaway project tree: each `(path, content)` written relative to the returned
+    /// directory, parent directories created. Hold the returned `TempDir` for as long as the
+    /// test needs the tree — dropping it deletes the directory.
+    pub fn project(files: &[(&str, &str)]) -> tempfile::TempDir {
+        let dir = tempfile::tempdir().expect("temp project");
+        for (path, content) in files {
+            let full = dir.path().join(path);
+            if let Some(parent) = full.parent() {
+                std::fs::create_dir_all(parent).expect("fixture parent dir");
+            }
+            std::fs::write(full, content).expect("fixture file");
+        }
+        dir
+    }
+}
