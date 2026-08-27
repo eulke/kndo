@@ -2153,7 +2153,9 @@ pub const GRAPH_SCHEMA_VERSION: u32 = 38; // bump whenever the persisted snapsho
 /// subsumes "manifest hashes," since a manifest is just one more discovered file, and a
 /// plugin's content-channel reads too, since a `ContentView` never answers a
 /// path outside this same discovered set), each registered adapter's id and facts-schema
-/// version, each registered *graph-mutating* plugin's identity (id,
+/// version, the shared facts-contract shape ([`crate::cache::ENTRY_FORMAT_VERSION`], via
+/// [`fold_facts_format`] — so a change to a type every adapter emits is ONE bump, not one per
+/// adapter), each registered *graph-mutating* plugin's identity (id,
 /// declared version, and — WASM only — component content hash, [`Plugin::content_hash`]), and
 /// [`GRAPH_SCHEMA_VERSION`] itself. A kndo config hash is deliberately not folded in:
 /// every knob the config subsystem reads (`crate::config`) acts strictly post-assembly —
@@ -2208,6 +2210,7 @@ pub(crate) fn fold_adapter_versions(
     hasher: &mut blake3::Hasher,
     adapters: &[Box<dyn LanguageAdapter>],
 ) {
+    fold_facts_format(hasher, crate::cache::ENTRY_FORMAT_VERSION);
     let mut adapter_versions: Vec<(String, u32)> = adapters
         .iter()
         .map(|a| {
@@ -2221,6 +2224,21 @@ pub(crate) fn fold_adapter_versions(
         hasher.update(id.as_bytes());
         hasher.update(&version.to_le_bytes());
     }
+}
+
+/// The shared facts-contract shape, folded in beside each adapter's own number.
+///
+/// Without it, a change to a type EVERY adapter emits (`FunctionMetrics` growing a field) had
+/// to be spelled as a bump in every adapter's `facts_schema_version` for the graph key to
+/// move — the same fact repeated six-plus times, silently under-invalidating the moment
+/// someone bumps five of six. [`crate::cache::ENTRY_FORMAT_VERSION`] already guarded the facts
+/// entries against exactly this; folding it here extends that one bump to the graph snapshot,
+/// so nobody has to reason about whether a facts change reached the graph.
+///
+/// Takes the version as a parameter rather than reading the constant directly so a test can
+/// vary it — a constant folded in silently is a fold nothing can prove.
+pub(crate) fn fold_facts_format(hasher: &mut blake3::Hasher, facts_format_version: u32) {
+    hasher.update(&facts_format_version.to_le_bytes());
 }
 
 // Sorted by id: `graph_mutating_plugins` is already the caller's `sorted_plugins` slice

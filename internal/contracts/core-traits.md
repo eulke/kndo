@@ -82,6 +82,12 @@ filesystem: all content arrives via parameters (determinism, sandboxing, testing
 pub trait LanguageAdapter: Send + Sync {
     fn descriptor(&self) -> AdapterDescriptor;
     // { id: "js-ts", facts_schema_version: u32, file_globs, manifest_globs, grammar_version,
+    //   ... } — `facts_schema_version` is for a change in what THIS adapter emits. A shape
+    //   change in the facts contract ITSELF (`FileFacts` and everything reachable from it —
+    //   `Declaration`, `FunctionMetrics`, …) is `cache::ENTRY_FORMAT_VERSION`: ONE constant,
+    //   folded into both the facts entries and the graph key. Spelling that as a bump in every
+    //   adapter is the same fact six-plus times, and silently under-invalidates when someone
+    //   bumps five of six.
     //   visibility_ladder: Vec<VisibilityRung> }
     // visibility_ladder (RFC 0012 §6): what VisibilityLevel indexes into — each rung a
     // { scope: File|Unit|Module|Package|Public, label, surface_transitive } triple; the scope is

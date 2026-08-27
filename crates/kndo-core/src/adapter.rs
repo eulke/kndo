@@ -31,7 +31,14 @@ pub struct AdapterDescriptor {
     /// component coordinates (`kndo:js-ts`, `github.com/owner/repo`) —
     /// not done eagerly because renaming ids churns cache keys.
     pub id: SmolStr,
-    /// Bumping invalidates only this adapter's cached facts.
+    /// Bumping invalidates only this adapter's cached facts — for a change in what THIS
+    /// adapter emits (new roots, corrected spans, a different claim rule).
+    ///
+    /// **Not for a shape change in the facts contract itself.** [`FileFacts`] and the types
+    /// reachable from it are shared by every adapter; when one of those grows a field, the
+    /// answer is [`crate::cache::ENTRY_FORMAT_VERSION`] — one constant, covering both the facts
+    /// entries and the graph key — not this number repeated across every adapter in the
+    /// workspace.
     pub facts_schema_version: u32,
     pub file_globs: Vec<SmolStr>,
     pub manifest_globs: Vec<SmolStr>,

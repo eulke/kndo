@@ -2382,6 +2382,35 @@ fn externally_consumed_round_trips_through_the_snapshot() {
 }
 
 #[test]
+fn the_graph_key_folds_the_shared_facts_contract_shape() {
+    // A change to a type EVERY adapter emits — `FunctionMetrics` growing a field — used to
+    // need a bump in every adapter's `facts_schema_version` for this key to move: the same
+    // fact spelled six-plus times, and silently under-invalidating the moment someone bumps
+    // five of six. `cache::ENTRY_FORMAT_VERSION` is the one knob for that shape, and folding
+    // it here is what makes ONE bump reach the graph snapshot too.
+    //
+    // Over an EMPTY adapter set the contract term is the only thing `fold_adapter_versions`
+    // writes, which is what makes this an exact assertion rather than a "something changed"
+    // one: delete the fold and the digest becomes the empty hash.
+    let mut folded = blake3::Hasher::new();
+    crate::graph::assemble::fold_adapter_versions(&mut folded, &[]);
+
+    let mut expected = blake3::Hasher::new();
+    crate::graph::assemble::fold_facts_format(&mut expected, crate::cache::ENTRY_FORMAT_VERSION);
+
+    assert_eq!(
+        folded.finalize().as_bytes(),
+        expected.finalize().as_bytes(),
+        "the adapter-version fold must carry the shared facts-contract shape, so bumping it \
+         once reaches the graph snapshot and not only the facts entries"
+    );
+    // …and the term is a real function of the version, not a constant byte string.
+    let mut other = blake3::Hasher::new();
+    crate::graph::assemble::fold_facts_format(&mut other, crate::cache::ENTRY_FORMAT_VERSION + 1);
+    assert_ne!(expected.finalize().as_bytes(), other.finalize().as_bytes());
+}
+
+#[test]
 fn compute_graph_key_distinguishes_wasm_plugin_content_from_its_own_id_and_version() {
     // A WASM plugin's declared id+version alone isn't enough — a swapped
     // `.wasm` file with no version bump must still produce a different key. Same

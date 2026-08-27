@@ -45,11 +45,21 @@ use crate::graph::{
 use crate::vocab::{Edge, FileId, PackageId, SymbolId};
 use smol_str::SmolStr;
 
-/// Facts-entry envelope header: bumped whenever the serialized shape changes, independent of
-/// any adapter's own `facts_schema_version` (which already keys the entry's path) — this is
-/// the belt to that suspenders, guarding against a kndo binary upgrade whose `FileFacts` type
-/// changed shape while an adapter's declared version didn't move.
-const ENTRY_FORMAT_VERSION: u32 = 3; // bump whenever the serialized FileFacts shape changes (bincode has no field defaults, so any layout change invalidates all entries once)
+/// **The one knob for "a type in the facts contract changed shape".**
+///
+/// [`crate::adapter::FileFacts`] and everything reachable from it — `Declaration`,
+/// `FunctionMetrics`, `RawRoot`, … — are emitted by every adapter and serialized with bincode,
+/// which has no field defaults: any layout change makes every existing entry decode to garbage,
+/// so [`decode`] treats a mismatch here as a silent miss. Folded into the graph key too
+/// (`graph::assemble::compute_graph_key`), so ONE bump invalidates both layers and nobody has
+/// to reason about whether a facts change reached the graph.
+///
+/// **This is not `AdapterDescriptor::facts_schema_version`.** That one is per adapter, for an
+/// adapter changing what it emits. This one is for the shared shape they all emit INTO. Getting
+/// it backwards costs six-plus identical edits for one fact, and silently under-invalidates
+/// when someone bumps five of six — which is exactly what happened when `FunctionMetrics` grew
+/// `shape_span`/`shape_ordinal`.
+pub const ENTRY_FORMAT_VERSION: u32 = 3;
 const FACTS_MAGIC: [u8; 4] = *b"KNF1";
 const HEADER_LEN: usize = FACTS_MAGIC.len() + 4;
 

@@ -40,6 +40,23 @@ of these is data core exports, never a constant copied into a frontend or anothe
 you find yourself copying a constant or table between crates, it belongs in core (frontend
 concerns) or the adapter toolkit (adapter concerns), not duplicated at the call site.
 
+## Cache invalidation: pick the right knob, not every knob
+
+Three constants, three questions, and they are not interchangeable:
+
+- **`cache::ENTRY_FORMAT_VERSION`** — a type in the facts contract changed shape (`FileFacts`
+  and anything reachable from it: `Declaration`, `FunctionMetrics`, …). ONE bump; it is folded
+  into the facts entries *and* the graph key.
+- **`AdapterDescriptor::facts_schema_version`** — one adapter changed what it emits (new roots,
+  corrected spans, a different claim rule). Bump that adapter only.
+- **`GRAPH_SCHEMA_VERSION`** — the persisted graph's own shape (rkyv layouts) or the assembly
+  semantics that derive a graph from the same facts.
+
+Bumping every adapter for a core-contract change is the failure this exists to prevent: the
+same fact spelled six-plus times, silently under-invalidating the moment someone bumps five of
+six. If you are about to edit more than one `facts_schema_version` in a single change, you want
+`ENTRY_FORMAT_VERSION` instead.
+
 ## Errors
 
 Use `thiserror` enums with `Display` impls. Do not introduce a new `Result<_, String>` —
