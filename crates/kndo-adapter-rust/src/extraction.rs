@@ -88,6 +88,10 @@ struct PendingAttrs {
     macro_use: bool,
     mod_path: Option<String>,
     derives: Vec<(SmolStr, Span)>,
+    /// `#[proc_macro_derive(Serialize, …)]` — the derive's *invocation* name and the span of
+    /// the identifier that declares it. The name a `#[derive(…)]` site writes is declared by
+    /// this attribute, not by the `fn` it decorates.
+    proc_macro_derive: Option<(SmolStr, Span)>,
     /// Start of the first attribute in this pending run — a test region's extent covers the
     /// attributes that gate it (`FileFacts::test_spans` records `#[cfg(test)]`'s own line).
     attr_start: Option<(u32, u32)>,
@@ -1418,6 +1422,24 @@ fn collect_attr(item: Node, src: &[u8], pending: &mut PendingAttrs, out: &mut Fi
                 scan_attr_idents(args, src, out);
             }
         }
+        // `#[proc_macro_derive(Serialize, attributes(serde))] pub fn derive_serialize` — the
+        // compiler invokes this function wherever `#[derive(Serialize)]` appears, under a name
+        // the `fn` never spells. Without the mapping, a proc-macro crate looks like production
+        // code no test ever reaches, however thoroughly its derive sites are tested: serde's
+        // `test_suite` derives `Serialize` several hundred times and none of it reached
+        // `serde_derive`. The FIRST identifier argument is the derive's name; the rest belong
+        // to `attributes(…)`.
+        "proc_macro_derive" => {
+            if let Some(args) = attr.child_by_field_name("arguments") {
+                let mut c = args.walk();
+                let first = args
+                    .children(&mut c)
+                    .find(|n| n.kind() == "identifier")
+                    .map(|tok| (SmolStr::new(text(tok, src)), span(tok)));
+                drop(c);
+                pending.proc_macro_derive = first;
+            }
+        }
         "cfg" => {
             // Both branches kept, always — but a test-exclusive `cfg` marks the next item
             // (typically `mod tests`) as inline test infrastructure. `cfg_attr` is NOT this:
@@ -1556,7 +1578,10 @@ fn handle_item(item: Node, src: &[u8], ctx: &Ctx<'_>, pending: PendingAttrs, out
     }
 
     match item.kind() {
-        "function_item" => handle_function(item, src, ctx, owner, &pending, None, out),
+        "function_item" => {
+            handle_function(item, src, ctx, owner, &pending, None, out);
+            push_proc_macro_derive(item, src, &pending, out);
+        }
         "struct_item" | "union_item" => {
             handle_type_decl(item, src, ctx, SymbolKind::Struct, out);
             push_derived_default_type(item, src, &pending, out);
@@ -1695,6 +1720,47 @@ fn handle_item(item: Node, src: &[u8], ctx: &Ctx<'_>, pending: PendingAttrs, out
 }
 
 #[allow(clippy::too_many_arguments)]
+/// The macro a `#[proc_macro_derive(Name)]` function declares, plus the edge from it to the
+/// function that implements it.
+///
+/// Two symbols, because there are two: `Name` is what a `#[derive(Name)]` site references and
+/// the only thing the crate exports (a proc-macro crate has no value namespace to export), and
+/// the `fn` is where the code lives — its span, its complexity, its callees. `within` says
+/// which use triggers which code, exactly as the contract defines it: using `Name` runs the
+/// function. Reachability then flows from every derive site — including the test suite's —
+/// through the macro and into everything the implementation calls.
+fn push_proc_macro_derive(item: Node, src: &[u8], pending: &PendingAttrs, out: &mut FileFacts) {
+    let Some((macro_name, name_span)) = pending.proc_macro_derive.clone() else {
+        return;
+    };
+    let Some(fn_name) = item.child_by_field_name("name").map(|n| text(n, src)) else {
+        return;
+    };
+    out.declarations.push(kndo_core::adapter::Declaration {
+        name: macro_name.clone(),
+        kind: SymbolKind::Macro,
+        // The identifier inside the attribute — where the name is actually written.
+        span: name_span,
+        exported: true,
+        visibility: kndo_core::adapter::VisibilityLevel(3),
+        member_of: None,
+        implicitly_invoked: false,
+        nested_scope: false,
+        visibility_inherited: false,
+        visible_in_unit: None,
+        implements: None,
+        markers: Vec::new(),
+        signature_span: None,
+    });
+    out.references.push(RawReference {
+        name: SmolStr::new(fn_name),
+        scope_context: None,
+        span: name_span,
+        within: Some(macro_name),
+        kind: RefKind::Call,
+    });
+}
+
 fn push_declaration(
     out: &mut FileFacts,
     name: &str,
@@ -4459,6 +4525,44 @@ mod tests {
         assert!(by_name("m").visibility_inherited);
         assert!(by_name("C").visibility_inherited);
         assert!(!by_name("own_vis").visibility_inherited);
+    }
+
+    #[test]
+    fn a_proc_macro_derive_declares_the_name_the_derive_site_writes() {
+        // `#[derive(Serialize)]` elsewhere emits a reference to `Serialize`. Without a
+        // declaration under that name, it resolves to nothing and the whole proc-macro crate
+        // looks like production code no test ever reaches — serde_derive's exact shape.
+        let f = facts(
+            "#[proc_macro_derive(Serialize, attributes(serde))]\n             pub fn derive_serialize(input: TokenStream) -> TokenStream { expand(input) }\n",
+        );
+        let mac = f
+            .declarations
+            .iter()
+            .find(|d| d.name == "Serialize")
+            .expect("the derive's own name is declared");
+        assert_eq!(mac.kind, SymbolKind::Macro);
+        assert!(mac.exported, "it is the only thing the crate exports");
+        // The `attributes(serde)` list must not be mistaken for the derive's name.
+        assert!(!f.declarations.iter().any(|d| d.name == "serde"));
+        // The function keeps its own declaration — its span, its metrics, its callees.
+        assert!(f
+            .declarations
+            .iter()
+            .any(|d| d.name == "derive_serialize" && d.kind == SymbolKind::Function));
+        // …and using the macro is what runs it.
+        assert!(
+            f.references
+                .iter()
+                .any(|r| r.name == "derive_serialize" && r.within.as_deref() == Some("Serialize")),
+            "{:?}",
+            f.references
+        );
+    }
+
+    #[test]
+    fn a_plain_function_declares_no_macro() {
+        let f = facts("pub fn derive_serialize(input: TokenStream) -> TokenStream { input }\n");
+        assert!(!f.declarations.iter().any(|d| d.kind == SymbolKind::Macro));
     }
 
     #[test]
