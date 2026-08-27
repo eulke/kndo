@@ -2088,6 +2088,7 @@ mod tests {
             &self,
             path: &ProjectPath,
             current: crate::vocab::FileClass,
+            _content: &crate::plugin::ContentView<'_>,
         ) -> Option<crate::vocab::FileClass> {
             path.0
                 .ends_with(".banner.dmock")
@@ -2158,6 +2159,93 @@ mod tests {
                 "almostInternalOnly",
             );
         }
+    }
+
+    /// A plugin that decides origin from a CONFIG FILE rather than from the path — the shape
+    /// every build tool has: `libsass-maven-plugin` naming an `outputPath`, a bundler naming an
+    /// output directory. Nothing about `generated.dmock`'s name says it is generated; only
+    /// `build.marker` does.
+    struct ConfigDrivenPlugin;
+
+    impl crate::plugin::Plugin for ConfigDrivenPlugin {
+        fn descriptor(&self) -> crate::plugin::PluginDescriptor {
+            crate::plugin::PluginDescriptor {
+                id: SmolStr::new("config-driven"),
+                version: SmolStr::new("1"),
+                detection: vec![],
+                requested_file_access: vec![SmolStr::new("build.marker")],
+                activation: vec![],
+                dependencies: vec![],
+            }
+        }
+
+        fn mutates_graph(&self) -> bool {
+            true
+        }
+
+        fn classify_file(
+            &self,
+            path: &ProjectPath,
+            current: crate::vocab::FileClass,
+            content: &crate::plugin::ContentView<'_>,
+        ) -> Option<crate::vocab::FileClass> {
+            let marker = content.read(&ProjectPath(SmolStr::new("build.marker")))?;
+            let declared = String::from_utf8(marker).ok()?;
+            declared
+                .lines()
+                .any(|l| l.trim() == path.0.as_str())
+                .then_some(crate::vocab::FileClass {
+                    role: current.role,
+                    origin: crate::vocab::FileOrigin::Generated,
+                })
+        }
+    }
+
+    #[test]
+    fn classify_file_reads_the_content_channel() {
+        // `classify_file` used to be a pure function of path + current class, and the WASM
+        // bridge answered its `read-file` import with nothing. That made "this file is
+        // generated because a build tool's config SAYS SO" inexpressible — the one shape that
+        // matters most, since a generated file checked into the tree carries no marker of its
+        // own and no path convention identifies it.
+        let dir = tempfile::tempdir().expect("temp project");
+        let dir = dir.path();
+        std::fs::write(
+            dir.join("root.dmock"),
+            "root-file\nimport ./generated.dmock\n",
+        )
+        .unwrap();
+        std::fs::write(dir.join("generated.dmock"), "decl deadInGenerated\n").unwrap();
+        std::fs::write(dir.join("build.marker"), "generated.dmock\n").unwrap();
+
+        let dead = |result: &crate::engine::RunResult| {
+            result.findings.iter().any(|f| {
+                f.category == "unused" && f.location.symbol.as_deref() == Some("deadInGenerated")
+            })
+        };
+
+        // Without the plugin the declaration is plainly dead — otherwise the assertion below
+        // would pass for reasons having nothing to do with the content channel.
+        let mut bare = Engine::open(
+            dir,
+            ConfigOverrides::default(),
+            vec![Box::new(DiffMockAdapter)],
+        )
+        .unwrap();
+        assert!(dead(&bare.check(RunMode::Full)), "baseline must flag it");
+
+        let mut with_plugin = Engine::open_with_plugins(
+            dir,
+            ConfigOverrides::default(),
+            vec![Box::new(DiffMockAdapter)],
+            vec![Box::new(ConfigDrivenPlugin)],
+        )
+        .unwrap();
+        assert!(
+            !dead(&with_plugin.check(RunMode::Full)),
+            "the plugin read build.marker at classify time and the file is generated — \
+             generated origins are exempt from `unused`"
+        );
     }
 
     #[test]

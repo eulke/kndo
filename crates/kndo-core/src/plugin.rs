@@ -877,7 +877,19 @@ pub trait Plugin: Send + Sync {
     /// Runs once per claimed file, right after the content-derived origin correction
     /// and before role-derived roots (phase 2.6) — so a plugin's answer is what every downstream
     /// consumer (root promotion, `unused`/`test-only`'s per-file exemptions) sees.
-    fn classify_file(&self, _path: &ProjectPath, _current: FileClass) -> Option<FileClass> {
+    ///
+    /// `content` is the same host-mediated channel the other hooks get, scoped to this
+    /// plugin's own `requested_file_access` globs. It is here because a file is often generated
+    /// for a reason no path convention can express: a build tool's config SAYS SO — Maven's
+    /// `libsass-maven-plugin` naming an `outputPath`, a bundler config naming an output
+    /// directory. Reading it needs no graph, which is why this hook can have it even though it
+    /// runs before the graph exists.
+    fn classify_file(
+        &self,
+        _path: &ProjectPath,
+        _current: FileClass,
+        _content: &ContentView<'_>,
+    ) -> Option<FileClass> {
         None
     }
 

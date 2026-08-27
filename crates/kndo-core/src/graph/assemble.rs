@@ -2578,6 +2578,18 @@ pub fn assemble_from_source(
             .map(|(_, unit)| unit.clone())
     };
 
+    // One content view per plugin for the whole phase, scoped to that plugin's own declared
+    // globs and carrying its own budget — built once here rather than per file, since a
+    // `ContentView` needs only the discovered tree (no graph, which does not exist yet) and
+    // its budget is per plugin per pass by contract.
+    let classify_content: Vec<crate::plugin::ContentView<'_>> = sorted_plugins
+        .iter()
+        .map(|p| {
+            let d = p.descriptor();
+            crate::plugin::ContentView::new(&discovered, d.id.clone(), &d.requested_file_access)
+        })
+        .collect();
+
     // Phase 2 — assign FileId (already the discovery-sorted index) and build File nodes.
     let mut files = Vec::with_capacity(discovered.files.len());
     let mut file_index =
@@ -2600,8 +2612,8 @@ pub fn assemble_from_source(
                 // determinism rule — no topological-ordering-constraints field
                 // exists); each plugin sees the
                 // prior one's answer, so a later plugin can refine an earlier one's override.
-                for plugin in sorted_plugins {
-                    if let Some(overridden) = plugin.classify_file(&df.path, class) {
+                for (plugin, content) in sorted_plugins.iter().zip(&classify_content) {
+                    if let Some(overridden) = plugin.classify_file(&df.path, class, content) {
                         class = overridden;
                     }
                 }

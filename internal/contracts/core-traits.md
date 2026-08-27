@@ -712,7 +712,8 @@ pub trait Plugin: Send + Sync {
     // a real but interim determinism rule.
 
     fn mutates_graph(&self) -> bool; // REQUIRED, no default — see the bullet below
-    fn classify_file(&self, path: &ProjectPath, current: FileClass) -> Option<FileClass> { None }
+    fn classify_file(&self, path: &ProjectPath, current: FileClass,
+                     content: &ContentView) -> Option<FileClass> { None }
     fn contribute_roots(&self, graph: &GraphView<'_>, out: &mut RootSink) {}
     fn contribute_edges(&self, graph: &GraphView<'_>, out: &mut EdgeSink) {}
     fn annotate_symbols(&self, graph: &GraphView<'_>, out: &mut AnnotationSink) {}
@@ -744,7 +745,13 @@ pub trait Plugin: Send + Sync {
   plugin has no business re-parsing a grammar its adapter already parsed (which is exactly what
   `kndo:serde` did before `Declaration::implements` existed). `classify_file` runs earlier,
   inline in phase 2's file-node build, right after RFC 0012 §7's content-derived origin
-  correction — its answer is what every downstream role/origin exemption sees.
+  correction — its answer is what every downstream role/origin exemption sees. It gets the same
+  content channel the other hooks do, scoped to its own globs: a file is often generated for a
+  reason no path convention can express — a build tool's config SAYS SO (Maven's
+  `libsass-maven-plugin` naming an `outputPath`) — and reading that needs no graph, which is why
+  the hook can have it despite running before the graph exists. The WASM side needed no ABI
+  change: `read-file` was already an import in both plugin worlds, and the host was simply
+  answering it with an empty view here.
 - Any registered plugin whose `mutates_graph()` returns `true` makes `assemble_from_source`
   skip both the graph-snapshot cache hit and the incremental patch, full-rebuilding every run:
   neither reuse path re-invokes plugin hooks, and RFC 0003 §5's plugin-identity-in-the-cache-key

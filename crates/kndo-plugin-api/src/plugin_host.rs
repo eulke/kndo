@@ -114,6 +114,20 @@ impl HostViewData {
         HostViewData::default()
     }
 
+    /// Content only — no graph projections at all. `classify_file` runs in phase 2, before the
+    /// graph exists, and by contract sees just the one file it is asked about; what it DOES
+    /// need is its own declared content, because a file is often generated for a reason only a
+    /// build tool's config states.
+    fn content_only(content: &ContentView<'_>) -> Self {
+        let mut data = HostViewData::default();
+        for path in content.matching_paths() {
+            if let Some(bytes) = content.read(path) {
+                data.content_by_path.insert(path.0.to_string(), bytes);
+            }
+        }
+        data
+    }
+
     fn from_view(graph: &GraphView<'_>, content: &ContentView<'_>) -> Self {
         let mut data = HostViewData {
             packages: graph.packages().map(|p| to_wit_package(&p)).collect(),
@@ -746,17 +760,27 @@ impl Plugin for WasmPlugin {
         true
     }
 
-    fn classify_file(&self, path: &ProjectPath, current: FileClass) -> Option<FileClass> {
+    fn classify_file(
+        &self,
+        path: &ProjectPath,
+        current: FileClass,
+        content: &ContentView<'_>,
+    ) -> Option<FileClass> {
         // classify_file runs before contribute_roots/contribute_edges/annotate_symbols in the
-        // assembly pipeline (phase 2 vs. after phase 3b) and needs no graph queries of its own
-        // (the hook contract: it only ever sees the one file it's asked about),
-        // so it gets a lightweight, view-less instance rather than forcing a premature
-        // `refresh_instance` — the graph isn't even fully built yet at this point.
+        // assembly pipeline (phase 2 vs. after phase 3b) and needs no GRAPH queries of its own
+        // (the hook contract: it only ever sees the one file it's asked about), so it gets a
+        // lightweight graph-less instance rather than forcing a premature `refresh_instance` —
+        // the graph isn't even fully built yet at this point.
+        //
+        // It does carry the component's own content, though: the `read-file` import already
+        // exists in both worlds, and answering it with nothing here was the only thing
+        // stopping a guest from classifying by what a build tool's config declares. No WIT
+        // change was needed — the exported signature is unchanged.
         let (mut store, bindings) = instantiate_with(
             &self.engine,
             &self.component,
             &self.linker,
-            HostViewData::empty(),
+            HostViewData::content_only(content),
             self.flavor,
         )
         .ok()?;
