@@ -145,6 +145,11 @@ pub fn run_fixture(
 /// fixtures ship an lcov report, and the coverage ingesters are composition, not core:
 /// `Engine::open` registers no plugins, so the adapter's test crate passes the ingester in,
 /// exactly the way the product's own composition layer does).
+// The shape this shares with `query_envelope::finding_locations` is
+// `findings.iter().map(|f| …).collect()` — an idiom, not a decision. This projects findings
+// into the golden comparison shape (owned, ordered, category + subject); that one builds a
+// borrowed query index (id + path + symbol). Nothing is decided in both places.
+// kndo:allow duplicate the shared shape is an iterator idiom, not a shared decision
 pub fn run_fixture_with(
     fixture_dir: &Path,
     adapters: Vec<Box<dyn LanguageAdapter>>,

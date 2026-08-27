@@ -24,7 +24,7 @@
 use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 
 use crate::analysis::reachability::{Reachability, ReachabilityMap};
-use crate::analysis::rollup::{self, DirGroup};
+use crate::analysis::rollup;
 use crate::analysis::{finding_id, FindingIdParts};
 use crate::engine::{Finding, Location, Severity};
 use crate::graph::ProjectGraph;
@@ -88,7 +88,22 @@ pub fn find_unused_files(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<F
 
     let rolled_up = rollup::directory_rollups(graph, &unused);
     for dir in &rolled_up.dirs {
-        findings.push(directory_finding(graph, dir));
+        findings.push(rollup::directory_finding(
+            graph,
+            dir,
+            rollup::DirVerdict {
+                category: Category::UNUSED,
+                group: Group::Waste,
+                severity: Severity::Warning,
+                confidence: Confidence::Certain,
+            },
+            format!(
+                "{} is unreachable: {} files, none referenced — safe to delete the whole \
+                 directory",
+                dir.display(),
+                dir.files.len()
+            ),
+        ));
     }
     for (&path, &(_, package)) in &unused {
         if rolled_up.covered.contains(path) {
@@ -121,38 +136,6 @@ pub fn find_unused_files(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<F
         });
     }
     findings
-}
-
-fn directory_finding(graph: &ProjectGraph, dir: &DirGroup<'_>) -> Finding {
-    let display = if dir.path.is_empty() { "." } else { dir.path };
-    Finding {
-        advisory: false,
-        id: finding_id(FindingIdParts {
-                category: &Category::UNUSED,
-                subject_kind: &SubjectKind::DIRECTORY,
-                path: dir.path,
-                symbol_path: "",
-                discriminator: "",
-            }),
-        category: Category::UNUSED,
-        group: Group::Waste,
-        subject_kind: SubjectKind::DIRECTORY,
-        severity: Severity::Warning,
-        confidence: Confidence::Certain,
-        message: format!(
-            "{display} is unreachable: {} files, none referenced — safe to delete the whole directory",
-            dir.files.len()
-        ),
-        location: Location {
-            path: Some(crate::adapter::ProjectPath(smol_str::SmolStr::new(dir.path))),
-            range: None,
-            symbol: None,
-            package: graph.package_name(dir.package).map(str::to_string),
-        },
-        related: Vec::new(),
-        delta: None,
-        delta_origin: None,
-    }
 }
 
 /// Files alive ONLY through file-liveness evidence: a `<link href>` in a template, an asset a

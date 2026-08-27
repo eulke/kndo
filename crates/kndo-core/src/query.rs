@@ -1192,6 +1192,108 @@ pub enum Direction {
     UsedBy,
 }
 
+/// Every node a navigation walk reached, paired with the edge that reached it *first* — the
+/// shallowest one, since the BFS never overwrites an existing entry. `(depth, label,
+/// confidence, span, site file)`.
+type Reached = HashMap<NavNode, (u32, EdgeLabel, Confidence, Option<Span>, FileId)>;
+
+/// Bounded breadth-first walk over one adjacency map from a seed set, honoring `edges` and
+/// stopping at `max_depth`. Seeds are removed from the result: a node is not its own neighbor.
+///
+/// One walk, two callers, because it is one question — "what does this reach, and by which
+/// edge" — asked forward by `uses`, backward by `used-by`, and backward from many seeds at
+/// once by `impact`. The `site_file`/`span` pair travels off the `NavEdge` that reached the
+/// node and is never re-derived from the node itself (see [`NavEdge::site_file`]).
+fn reach_from(
+    adjacency: &HashMap<NavNode, Vec<NavEdge>>,
+    seeds: &[NavNode],
+    edges: EdgeFilter,
+    max_depth: u32,
+) -> Reached {
+    let mut best: Reached = HashMap::default();
+    let mut queue: VecDeque<(NavNode, u32)> = VecDeque::new();
+    let mut queued: HashSet<NavNode> = HashSet::default();
+    for &seed in seeds {
+        queue.push_back((seed, 0));
+        queued.insert(seed);
+    }
+    while let Some((node, d)) = queue.pop_front() {
+        if d >= max_depth {
+            continue;
+        }
+        for e in adjacency.get(&node).map(Vec::as_slice).unwrap_or(&[]) {
+            if !edges.allows(e.label) {
+                continue;
+            }
+            let next_depth = d + 1;
+            best.entry(e.to)
+                .or_insert((next_depth, e.label, e.confidence, e.span, e.site_file));
+            if queued.insert(e.to) {
+                queue.push_back((e.to, next_depth));
+            }
+        }
+    }
+    for seed in seeds {
+        best.remove(seed);
+    }
+    best
+}
+
+/// A reached set as the envelope reports it: sorted by `(depth, selector)` so the order is
+/// deterministic and shallowest-first, tallied by reachability color over the WHOLE set, then
+/// capped at `limit`. Returns the capped entries, the tally, and how many were elided —
+/// `elided > 0` means "there is more", never "that's all" (RFC 0007 §2).
+fn reached_entries(
+    graph: &ProjectGraph,
+    reach: &ReachabilityMap,
+    best: Reached,
+    limit: usize,
+) -> (Vec<NeighborEntry>, ByColor, usize) {
+    let mut entries: Vec<(NavNode, u32, EdgeLabel, Confidence, Option<Span>, FileId)> = best
+        .into_iter()
+        .map(|(n, (d, l, c, s, sf))| (n, d, l, c, s, sf))
+        .collect();
+    entries.sort_by(|a, b| {
+        a.1.cmp(&b.1).then_with(|| {
+            selector_string(graph, &nav_to_resolved(graph, a.0))
+                .cmp(&selector_string(graph, &nav_to_resolved(graph, b.0)))
+        })
+    });
+
+    let mut by_color = ByColor::default();
+    for (n, ..) in &entries {
+        if let Some(color) = node_color(graph, reach, &nav_to_resolved(graph, *n)) {
+            match color.as_str() {
+                "production" => by_color.production += 1,
+                "test-only" => by_color.test_only += 1,
+                "tooling-only" => by_color.tooling_only += 1,
+                "unreachable" => by_color.unreachable += 1,
+                _ => {}
+            }
+        }
+    }
+
+    let total = entries.len();
+    let out = entries
+        .into_iter()
+        .take(limit)
+        .map(|(n, d, l, c, s, sf)| NeighborEntry {
+            node: qnode_ref(graph, reach, &nav_to_resolved(graph, n)),
+            via: QEdgeRef {
+                edge: l.as_str().to_string(),
+                confidence: c,
+                site: s.map(|sp| NodeSpan {
+                    path: graph.files[sf.0 as usize].path.0.to_string(),
+                    start: sp.start,
+                    end: sp.end,
+                }),
+            },
+            depth: d,
+        })
+        .collect();
+    (out, by_color, total.saturating_sub(limit))
+}
+
 /// [`neighbors`]'s flags, bundled into one struct purely to stay under clippy's argument-count
 /// lint — each field is exactly one CLI `--flag`.
 #[derive(Debug, Clone, Copy)]
@@ -1237,84 +1339,14 @@ pub(crate) fn neighbors(
     };
 
     let max_depth = if transitive { u32::MAX } else { depth.max(1) };
-    // `site_file`/`span` travel together from here on — both come straight off the `NavEdge`
-    // that reached this neighbor, never re-derived from the neighbor itself (see `NavEdge::
-    // site_file`'s doc: that derivation silently pairs the right line/column with the wrong
-    // file whenever traversing `uses`, where the neighbor is `to`, not the edge's `from`).
-    let mut best: HashMap<NavNode, (u32, EdgeLabel, Confidence, Option<Span>, FileId)> =
-        HashMap::default();
-    let mut queue: VecDeque<(NavNode, u32)> = VecDeque::new();
-    let mut queued: HashSet<NavNode> = HashSet::default();
-    queue.push_back((start, 0));
-    queued.insert(start);
-
-    while let Some((node, d)) = queue.pop_front() {
-        if d >= max_depth {
-            continue;
-        }
-        for e in adjacency.get(&node).map(Vec::as_slice).unwrap_or(&[]) {
-            if !edges.allows(e.label) {
-                continue;
-            }
-            let next_depth = d + 1;
-            best.entry(e.to)
-                .or_insert((next_depth, e.label, e.confidence, e.span, e.site_file));
-            if queued.insert(e.to) {
-                queue.push_back((e.to, next_depth));
-            }
-        }
-    }
-    best.remove(&start);
-
-    let mut entries: Vec<(NavNode, u32, EdgeLabel, Confidence, Option<Span>, FileId)> = best
-        .into_iter()
-        .map(|(n, (d, l, c, s, sf))| (n, d, l, c, s, sf))
-        .collect();
-    entries.sort_by(|a, b| {
-        a.1.cmp(&b.1).then_with(|| {
-            selector_string(graph, &nav_to_resolved(graph, a.0))
-                .cmp(&selector_string(graph, &nav_to_resolved(graph, b.0)))
-        })
-    });
-
-    let mut by_color = ByColor::default();
-    for (n, ..) in &entries {
-        let resolved_n = nav_to_resolved(graph, *n);
-        if let Some(color) = node_color(graph, reach, &resolved_n) {
-            match color.as_str() {
-                "production" => by_color.production += 1,
-                "test-only" => by_color.test_only += 1,
-                "tooling-only" => by_color.tooling_only += 1,
-                "unreachable" => by_color.unreachable += 1,
-                _ => {}
-            }
-        }
-    }
-
-    let total = entries.len();
-    let out_entries = entries
-        .into_iter()
-        .take(limit)
-        .map(|(n, d, l, c, s, sf)| NeighborEntry {
-            node: qnode_ref(graph, reach, &nav_to_resolved(graph, n)),
-            via: QEdgeRef {
-                edge: l.as_str().to_string(),
-                confidence: c,
-                site: s.map(|sp| NodeSpan {
-                    path: graph.files[sf.0 as usize].path.0.to_string(),
-                    start: sp.start,
-                    end: sp.end,
-                }),
-            },
-            depth: d,
-        })
-        .collect();
+    let best = reach_from(adjacency, &[start], edges, max_depth);
+    let (entries, by_color, elided) = reached_entries(graph, reach, best, limit);
 
     NeighborsResult {
         node: node_ref,
-        entries: out_entries,
+        entries,
         by_color,
-        elided: total.saturating_sub(limit),
+        elided,
     }
 }
 
@@ -1796,32 +1828,7 @@ pub(crate) fn impact(
         _ => None,
     };
     let max_depth = opts.depth.unwrap_or(u32::MAX);
-    let mut best: HashMap<NavNode, (u32, EdgeLabel, Confidence, Option<Span>, FileId)> =
-        HashMap::default();
-    let mut queue: VecDeque<(NavNode, u32)> = VecDeque::new();
-    let mut queued: HashSet<NavNode> = HashSet::default();
-    for &seed in &seeds {
-        queue.push_back((seed, 0));
-        queued.insert(seed);
-    }
-    while let Some((node, d)) = queue.pop_front() {
-        if d >= max_depth {
-            continue;
-        }
-        for e in nav.reverse.get(&node).map(Vec::as_slice).unwrap_or(&[]) {
-            if !opts.edges.allows(e.label) {
-                continue;
-            }
-            best.entry(e.to)
-                .or_insert((d + 1, e.label, e.confidence, e.span, e.site_file));
-            if queued.insert(e.to) {
-                queue.push_back((e.to, d + 1));
-            }
-        }
-    }
-    for seed in &seeds {
-        best.remove(seed);
-    }
+    let mut best = reach_from(&nav.reverse, &seeds, opts.edges, max_depth);
     if let Some(p) = excluded_package {
         best.retain(|n, _| match n {
             NavNode::File(f) => graph.files[f.0 as usize].package != p,
@@ -1832,48 +1839,10 @@ pub(crate) fn impact(
         });
     }
 
+    // Captured before capping: the roots below are asked about the WHOLE closure, not the
+    // page of it the caller's `--limit` happens to show.
     let closure: HashSet<NavNode> = best.keys().copied().collect();
-    let mut entries: Vec<(NavNode, u32, EdgeLabel, Confidence, Option<Span>, FileId)> = best
-        .into_iter()
-        .map(|(n, (d, l, c, s, sf))| (n, d, l, c, s, sf))
-        .collect();
-    entries.sort_by(|a, b| {
-        a.1.cmp(&b.1).then_with(|| {
-            selector_string(graph, &nav_to_resolved(graph, a.0))
-                .cmp(&selector_string(graph, &nav_to_resolved(graph, b.0)))
-        })
-    });
-
-    let mut by_color = ByColor::default();
-    for (n, ..) in &entries {
-        if let Some(color) = node_color(graph, reach, &nav_to_resolved(graph, *n)) {
-            match color.as_str() {
-                "production" => by_color.production += 1,
-                "test-only" => by_color.test_only += 1,
-                "tooling-only" => by_color.tooling_only += 1,
-                "unreachable" => by_color.unreachable += 1,
-                _ => {}
-            }
-        }
-    }
-    let total = entries.len();
-    let affected: Vec<NeighborEntry> = entries
-        .into_iter()
-        .take(opts.limit)
-        .map(|(n, d, l, c, s, sf)| NeighborEntry {
-            node: qnode_ref(graph, reach, &nav_to_resolved(graph, n)),
-            via: QEdgeRef {
-                edge: l.as_str().to_string(),
-                confidence: c,
-                site: s.map(|sp| NodeSpan {
-                    path: graph.files[sf.0 as usize].path.0.to_string(),
-                    start: sp.start,
-                    end: sp.end,
-                }),
-            },
-            depth: d,
-        })
-        .collect();
+    let (affected, by_color, elided) = reached_entries(graph, reach, best, opts.limit);
 
     // Affected roots: every Root edge whose target sits in the closure (or IS a seed) — the
     // entry points whose behavior a change here can reach, i.e. where retesting starts.
@@ -1921,7 +1890,7 @@ pub(crate) fn impact(
         node: node_ref,
         affected,
         by_color,
-        elided: total.saturating_sub(opts.limit),
+        elided,
         affected_roots: roots,
         affected_roots_elided,
         if_deleted,

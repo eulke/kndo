@@ -19,7 +19,7 @@
 use rustc_hash::FxHashMap as HashMap;
 
 use crate::analysis::reachability::{Reachability, ReachabilityMap};
-use crate::analysis::rollup::{self, DirGroup};
+use crate::analysis::rollup;
 use crate::analysis::{finding_id, FindingIdParts};
 use crate::engine::{Finding, Location, Severity};
 use crate::graph::ProjectGraph;
@@ -62,7 +62,21 @@ pub fn find_test_only_files(graph: &ProjectGraph, reach: &ReachabilityMap) -> Ve
             .filter_map(|f| test_only.get(f).map(|&(_, _, c)| c))
             .min()
             .unwrap_or(Confidence::Possible);
-        findings.push(directory_finding(graph, dir, confidence));
+        findings.push(rollup::directory_finding(
+            graph,
+            dir,
+            rollup::DirVerdict {
+                category: Category::TEST_ONLY,
+                group: Group::Waste,
+                severity: Severity::Info,
+                confidence,
+            },
+            format!(
+                "{} is reachable only from tests: {} files, production never calls them",
+                dir.display(),
+                dir.files.len()
+            ),
+        ));
     }
     for (&path, &(_, package, confidence)) in &test_only {
         if rolled_up.covered.contains(path) {
@@ -95,40 +109,6 @@ pub fn find_test_only_files(graph: &ProjectGraph, reach: &ReachabilityMap) -> Ve
         });
     }
     findings
-}
-
-fn directory_finding(graph: &ProjectGraph, dir: &DirGroup<'_>, confidence: Confidence) -> Finding {
-    let display = if dir.path.is_empty() { "." } else { dir.path };
-    Finding {
-        advisory: false,
-        id: finding_id(FindingIdParts {
-            category: &Category::TEST_ONLY,
-            subject_kind: &SubjectKind::DIRECTORY,
-            path: dir.path,
-            symbol_path: "",
-            discriminator: "",
-        }),
-        category: Category::TEST_ONLY,
-        group: Group::Waste,
-        subject_kind: SubjectKind::DIRECTORY,
-        severity: Severity::Info,
-        confidence,
-        message: format!(
-            "{display} is reachable only from tests: {} files, production never calls them",
-            dir.files.len()
-        ),
-        location: Location {
-            path: Some(crate::adapter::ProjectPath(smol_str::SmolStr::new(
-                dir.path,
-            ))),
-            range: None,
-            symbol: None,
-            package: graph.package_name(dir.package).map(str::to_string),
-        },
-        related: Vec::new(),
-        delta: None,
-        delta_origin: None,
-    }
 }
 
 pub fn find_test_only_symbols(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<Finding> {

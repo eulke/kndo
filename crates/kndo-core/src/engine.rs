@@ -1246,43 +1246,16 @@ impl Engine {
             })
             .collect();
 
-        let adapters = self
-            .adapters
-            .iter()
-            .map(|a| {
-                let id = a.descriptor().id;
-                let files = after_graph
-                    .files
-                    .iter()
-                    .filter(|f| f.language.as_deref() == Some(id.as_str()))
-                    .count();
-                AdapterRunInfo {
-                    id: id.to_string(),
-                    files,
-                }
-            })
-            .collect();
-
         let mut diagnostics = after_diagnostics;
         diagnostics.extend(before_diagnostics);
 
         RunResult {
-            files_discovered: after_graph.files.len(),
-            files_claimed: after_graph
-                .files
-                .iter()
-                .filter(|f| f.language.is_some())
-                .count(),
-            symbols: after_graph.symbols.len(),
-            dependencies: after_graph.dependencies.len(),
-            edges: after_graph.edges.len(),
             diagnostics,
             // The "after" side, mirroring `suppressed` — a diff reports what the current tree
             // did and did not judge.
             abstained: after_abstained,
             findings: new_findings,
             fixed: fixed_findings,
-            adapters,
             baseline,
             suppressed: after_suppressed,
             health: {
@@ -1295,7 +1268,7 @@ impl Engine {
             },
             timings: diff_timings,
             plugin_contributions,
-            ..RunResult::default()
+            ..self.run_result_over(&after_graph)
         }
     }
 
@@ -1670,6 +1643,36 @@ impl Engine {
         map
     }
 
+    /// A `RunResult` carrying everything the graph itself determines: the file, symbol,
+    /// dependency and edge counters, and the per-adapter file tally (`run.adapters[]`). Full
+    /// mode and diff mode report the same numbers about their own graph — diff's are the
+    /// "after" side's — so the counting happens once and each mode fills in the rest.
+    fn run_result_over(&self, graph: &graph::ProjectGraph) -> RunResult {
+        RunResult {
+            files_discovered: graph.files.len(),
+            files_claimed: graph.files.iter().filter(|f| f.language.is_some()).count(),
+            symbols: graph.symbols.len(),
+            dependencies: graph.dependencies.len(),
+            edges: graph.edges.len(),
+            adapters: self
+                .adapters
+                .iter()
+                .map(|a| {
+                    let id = a.descriptor().id;
+                    AdapterRunInfo {
+                        files: graph
+                            .files
+                            .iter()
+                            .filter(|f| f.language.as_deref() == Some(id.as_str()))
+                            .count(),
+                        id: id.to_string(),
+                    }
+                })
+                .collect(),
+            ..RunResult::default()
+        }
+    }
+
     /// Full-mode `RunResult` construction — assemble + analyze at `root`, plus the run counters
     /// (`files_discovered`, `symbols`, …) that only full mode reports directly (diff mode
     /// builds its own `RunResult` in [`Self::run_diff`], from the "after" side).
@@ -1684,40 +1687,16 @@ impl Engine {
                 health,
                 timings,
                 plugin_contributions,
-            }) => {
-                let adapters = self
-                    .adapters
-                    .iter()
-                    .map(|a| {
-                        let id = a.descriptor().id;
-                        let files = g
-                            .files
-                            .iter()
-                            .filter(|f| f.language.as_deref() == Some(id.as_str()))
-                            .count();
-                        AdapterRunInfo {
-                            id: id.to_string(),
-                            files,
-                        }
-                    })
-                    .collect();
-                RunResult {
-                    files_discovered: g.files.len(),
-                    files_claimed: g.files.iter().filter(|f| f.language.is_some()).count(),
-                    symbols: g.symbols.len(),
-                    dependencies: g.dependencies.len(),
-                    edges: g.edges.len(),
-                    diagnostics,
-                    abstained,
-                    findings,
-                    adapters,
-                    suppressed,
-                    health: Some(health),
-                    timings,
-                    plugin_contributions,
-                    ..RunResult::default()
-                }
-            }
+            }) => RunResult {
+                diagnostics,
+                abstained,
+                findings,
+                suppressed,
+                health: Some(health),
+                timings,
+                plugin_contributions,
+                ..self.run_result_over(&g)
+            },
             Err(d) => RunResult {
                 diagnostics: vec![d],
                 ..RunResult::default()

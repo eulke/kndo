@@ -371,17 +371,45 @@ fn describe_entries(
     finding_locations: &[FindingLocation<'_>],
     selectors: &[String],
 ) -> Vec<ResultEntry> {
+    resolved_entries(graph, selectors, |_, resolved| {
+        ResultEntry::Describe(Box::new(query::describe(
+            graph,
+            reach,
+            resolved,
+            finding_locations,
+            nav,
+        )))
+    })
+}
+
+/// One entry per selector, in argument order: resolve it and hand the resolution to `entry`,
+/// or turn a resolution failure into that selector's own `Failed` entry. The envelope's
+/// `status` is per-result, so one unresolvable selector never sinks the batch — a rule every
+/// verb follows, and one each of them used to spell out.
+fn resolved_entries(
+    graph: &ProjectGraph,
+    selectors: &[String],
+    entry: impl Fn(&str, &query::Resolved) -> ResultEntry,
+) -> Vec<ResultEntry> {
     selectors
         .iter()
         .map(|raw| match resolve_selector(graph, raw) {
-            Ok(resolved) => ResultEntry::Describe(Box::new(query::describe(
-                graph,
-                reach,
-                &resolved,
-                finding_locations,
-                nav,
-            ))),
+            Ok(resolved) => entry(raw, &resolved),
             Err(failed) => failed.into(),
+        })
+        .collect()
+}
+
+/// Every selector in the batch failed the same way. A malformed `--edges` filter is an error
+/// about the *request*, not about any one selector, so each entry carries the identical
+/// message rather than the batch failing as a whole — the envelope's `status` is per-result.
+fn failed_batch(selectors: &[String], message: &str) -> Vec<ResultEntry> {
+    selectors
+        .iter()
+        .map(|s| ResultEntry::Failed {
+            status: "error",
+            selector: s.clone(),
+            message: message.to_string(),
         })
         .collect()
 }
@@ -397,39 +425,30 @@ fn neighbor_entries(
 ) -> Vec<ResultEntry> {
     let edges = match EdgeFilter::parse(flags.edges.as_deref()) {
         Ok(e) => e,
-        Err(err) => {
-            let message = err.to_string();
-            return selectors
-                .iter()
-                .map(|s| ResultEntry::Failed {
-                    status: "error",
-                    selector: s.clone(),
-                    message: message.clone(),
-                })
-                .collect();
-        }
+        Err(err) => return failed_batch(selectors, &err.to_string()),
     };
-    selectors
-        .iter()
-        .map(|raw| match resolve_selector(graph, raw) {
-            Ok(resolved) => ResultEntry::Neighbors(query::neighbors(
-                graph,
-                reach,
-                &resolved,
-                NeighborsOpts {
-                    direction,
-                    edges,
-                    depth: flags.depth.unwrap_or(1),
-                    transitive: flags.transitive,
-                    limit,
-                },
-                nav,
-            )),
-            Err(failed) => failed.into(),
-        })
-        .collect()
+    resolved_entries(graph, selectors, |_, resolved| {
+        ResultEntry::Neighbors(query::neighbors(
+            graph,
+            reach,
+            resolved,
+            NeighborsOpts {
+                direction,
+                edges,
+                depth: flags.depth.unwrap_or(1),
+                transitive: flags.transitive,
+                limit,
+            },
+            nav,
+        ))
+    })
 }
 
+// What `impact_entries` and `neighbor_entries` share is now `failed_batch` and
+// `resolved_entries`. What is left is each verb's own options struct and result variant —
+// plus `impact`'s extra failure arm, which no other verb has. Sharing further would mean one
+// verb's entry builder knowing the other's options.
+// kndo:allow duplicate the shared halves are failed_batch and resolved_entries
 fn impact_entries(
     graph: &ProjectGraph,
     reach: &ReachabilityMap,
@@ -440,43 +459,32 @@ fn impact_entries(
 ) -> Vec<ResultEntry> {
     let edges = match EdgeFilter::parse(flags.edges.as_deref()) {
         Ok(e) => e,
-        Err(err) => {
-            let message = err.to_string();
-            return selectors
-                .iter()
-                .map(|s| ResultEntry::Failed {
-                    status: "error",
-                    selector: s.clone(),
-                    message: message.clone(),
-                })
-                .collect();
-        }
+        Err(err) => return failed_batch(selectors, &err.to_string()),
     };
-    selectors
-        .iter()
-        .map(|raw| match resolve_selector(graph, raw) {
-            Ok(resolved) => match query::impact(
-                graph,
-                reach,
-                &resolved,
-                ImpactOpts {
-                    edges,
-                    depth: flags.depth,
-                    limit,
-                    if_deleted: flags.if_deleted,
-                },
-                nav,
-            ) {
-                Ok(result) => ResultEntry::Impact(Box::new(result)),
-                Err(err) => ResultEntry::Failed {
-                    status: "error",
-                    selector: raw.clone(),
-                    message: err.to_string(),
-                },
+    resolved_entries(graph, selectors, |raw, resolved| {
+        // `impact` is the one verb that can refuse a selector it resolved fine — `--if-deleted`
+        // on a dependency, `impact` on a root set — so it needs the raw text for its own
+        // failure entry.
+        match query::impact(
+            graph,
+            reach,
+            resolved,
+            ImpactOpts {
+                edges,
+                depth: flags.depth,
+                limit,
+                if_deleted: flags.if_deleted,
             },
-            Err(failed) => failed.into(),
-        })
-        .collect()
+            nav,
+        ) {
+            Ok(result) => ResultEntry::Impact(Box::new(result)),
+            Err(err) => ResultEntry::Failed {
+                status: "error",
+                selector: raw.to_string(),
+                message: err.to_string(),
+            },
+        }
+    })
 }
 
 fn trace_entries(

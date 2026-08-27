@@ -19,7 +19,7 @@ use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 
 use crate::adapter::{Diagnostic, DiagnosticLevel};
 use crate::analysis::reachability::{Reachability, ReachabilityMap};
-use crate::analysis::rollup::{self, DirGroup};
+use crate::analysis::rollup;
 use crate::analysis::{finding_id, FindingIdParts};
 use crate::engine::{Finding, Location, Severity};
 use crate::graph::ProjectGraph;
@@ -112,7 +112,21 @@ fn find_untested_files(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<Fin
             .filter_map(|f| untested.get(f).map(|&(_, _, c)| c))
             .min()
             .unwrap_or(Confidence::Possible);
-        findings.push(directory_finding(graph, dir, confidence));
+        findings.push(rollup::directory_finding(
+            graph,
+            dir,
+            rollup::DirVerdict {
+                category: Category::UNTESTED,
+                group: Group::Risk,
+                severity: Severity::Info,
+                confidence,
+            },
+            format!(
+                "{} is production-reachable but no test reaches it: {} files",
+                dir.display(),
+                dir.files.len()
+            ),
+        ));
     }
     for (&path, &(_, package, confidence)) in &untested {
         if rolled_up.covered.contains(path) {
@@ -145,40 +159,6 @@ fn find_untested_files(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<Fin
         });
     }
     findings
-}
-
-fn directory_finding(graph: &ProjectGraph, dir: &DirGroup<'_>, confidence: Confidence) -> Finding {
-    let display = if dir.path.is_empty() { "." } else { dir.path };
-    Finding {
-        advisory: false,
-        id: finding_id(FindingIdParts {
-            category: &Category::UNTESTED,
-            subject_kind: &SubjectKind::DIRECTORY,
-            path: dir.path,
-            symbol_path: "",
-            discriminator: "",
-        }),
-        category: Category::UNTESTED,
-        group: Group::Risk,
-        subject_kind: SubjectKind::DIRECTORY,
-        severity: Severity::Info,
-        confidence,
-        message: format!(
-            "{display} is production-reachable but no test reaches it: {} files",
-            dir.files.len()
-        ),
-        location: Location {
-            path: Some(crate::adapter::ProjectPath(smol_str::SmolStr::new(
-                dir.path,
-            ))),
-            range: None,
-            symbol: None,
-            package: graph.package_name(dir.package).map(str::to_string),
-        },
-        related: Vec::new(),
-        delta: None,
-        delta_origin: None,
-    }
 }
 
 /// Is this kind something a person writes a test FOR?

@@ -165,14 +165,28 @@ fn string_array(node: Node, src: &[u8]) -> Vec<String> {
 
 const VERSION_ARG_LABELS: &[&str] = &["from", "exact", "branch", "revision"];
 
-fn collect_package_dependencies(deps: Option<Node>, src: &[u8]) -> Vec<ManifestDependency> {
-    let Some(deps) = deps else {
-        return Vec::new();
+/// Each `call_expression` element of an optional array-literal node, run through `pick`.
+/// `Package.swift` writes every list this way — `dependencies: [.package(…)]`,
+/// `targets: [.target(…)]` — so the absent-list-is-an-empty-list rule and the element walk are
+/// written once and each caller supplies only what it pulls out of an element. Generic in the
+/// collection so a caller can gather pairs into a map.
+fn collect_calls<T, C: FromIterator<T>>(
+    array: Option<Node>,
+    src: &[u8],
+    pick: impl Fn(Node, &[u8]) -> Option<T>,
+) -> C {
+    let Some(array) = array else {
+        return C::from_iter(std::iter::empty());
     };
-    deps.children(&mut deps.walk())
+    array
+        .children(&mut array.walk())
         .filter(|n| n.kind() == "call_expression")
-        .filter_map(|call| package_dependency(call, src))
+        .filter_map(|call| pick(call, src))
         .collect()
+}
+
+fn collect_package_dependencies(deps: Option<Node>, src: &[u8]) -> Vec<ManifestDependency> {
+    collect_calls(deps, src, package_dependency)
 }
 
 /// `.package(url: "...", from/exact/branch/revision: "...")` — `name` is a best-effort identity
@@ -210,14 +224,7 @@ fn dependency_version_req(call: Node, src: &[u8]) -> Option<String> {
 // ---------------------------------------------------------------- targets & root promotion
 
 fn collect_target_names(targets: Option<Node>, src: &[u8]) -> Vec<String> {
-    let Some(targets) = targets else {
-        return Vec::new();
-    };
-    targets
-        .children(&mut targets.walk())
-        .filter(|n| n.kind() == "call_expression")
-        .filter_map(|call| target_name(call, src))
-        .collect()
+    collect_calls(targets, src, target_name)
 }
 
 fn target_name(call: Node, src: &[u8]) -> Option<String> {
@@ -230,18 +237,11 @@ fn collect_target_paths(
     targets: Option<Node>,
     src: &[u8],
 ) -> std::collections::HashMap<String, String> {
-    let Some(targets) = targets else {
-        return Default::default();
-    };
-    targets
-        .children(&mut targets.walk())
-        .filter(|n| n.kind() == "call_expression")
-        .filter_map(|call| {
-            let name = target_name(call, src)?;
-            let path = labeled_arg(call, "path", src).and_then(|v| string_literal_text(v, src))?;
-            Some((name, path))
-        })
-        .collect()
+    collect_calls(targets, src, |call, src| {
+        let name = target_name(call, src)?;
+        let path = labeled_arg(call, "path", src).and_then(|v| string_literal_text(v, src))?;
+        Some((name, path))
+    })
 }
 
 /// One `ManifestRoot{Production, Certain}` per non-test `.swift` file under a publicly-

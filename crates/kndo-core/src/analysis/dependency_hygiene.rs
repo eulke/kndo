@@ -159,30 +159,34 @@ pub fn find_dependency_hygiene(graph: &ProjectGraph) -> (Vec<Finding>, Option<Di
     (findings, diagnostic)
 }
 
-fn unused_finding(
+/// A finding about a declared dependency. Its identity, group, subject, location and the
+/// fields a fresh finding leaves empty are the same whatever the verdict is — only the
+/// category, the severity and the sentence differ, which is exactly what the two callers below
+/// pass. Both verdicts are `Waste`: a dependency you declare and do not need is waste whether
+/// nothing imports it or only tests do.
+fn dependency_finding(
     graph: &ProjectGraph,
     dep: &DeclaredDependency,
+    category: Category,
+    severity: Severity,
     confidence: Confidence,
+    message: String,
 ) -> Finding {
-    let name = dep.name.as_str();
     Finding {
         advisory: false,
         id: finding_id(FindingIdParts {
-            category: &Category::UNUSED,
+            category: &category,
             subject_kind: &SubjectKind::DEPENDENCY,
-            path: name,
+            path: dep.name.as_str(),
             symbol_path: "",
             discriminator: &package_discriminator(graph, dep.package),
         }),
-        category: Category::UNUSED,
+        category,
         group: Group::Waste,
         subject_kind: SubjectKind::DEPENDENCY,
-        severity: Severity::Warning,
+        severity,
         confidence,
-        message: format!(
-            "{name} is declared in {}'s manifest but never imported",
-            package_label(graph, dep.package)
-        ),
+        message,
         location: dependency_location(graph, dep),
         related: Vec::new(),
         delta: None,
@@ -190,35 +194,44 @@ fn unused_finding(
     }
 }
 
+fn unused_finding(
+    graph: &ProjectGraph,
+    dep: &DeclaredDependency,
+    confidence: Confidence,
+) -> Finding {
+    dependency_finding(
+        graph,
+        dep,
+        Category::UNUSED,
+        Severity::Warning,
+        confidence,
+        format!(
+            "{} is declared in {}'s manifest but never imported",
+            dep.name.as_str(),
+            package_label(graph, dep.package)
+        ),
+    )
+}
+
 fn test_only_finding(
     graph: &ProjectGraph,
     dep: &DeclaredDependency,
     confidence: Confidence,
 ) -> Finding {
-    let name = dep.name.as_str();
-    Finding {
-        advisory: false,
-        id: finding_id(FindingIdParts {
-            category: &Category::TEST_ONLY,
-            subject_kind: &SubjectKind::DEPENDENCY,
-            path: name,
-            symbol_path: "",
-            discriminator: &package_discriminator(graph, dep.package),
-        }),
-        category: Category::TEST_ONLY,
-        group: Group::Waste,
-        subject_kind: SubjectKind::DEPENDENCY,
-        severity: Severity::Info, // info by default
+    dependency_finding(
+        graph,
+        dep,
+        Category::TEST_ONLY,
+        // Info by default: the dependency IS needed, just declared in the wrong section.
+        Severity::Info,
         confidence,
-        message: format!(
-            "{name} is declared in {}'s manifest but only imported by test files — belongs in devDependencies",
+        format!(
+            "{} is declared in {}'s manifest but only imported by test files — belongs in \
+             devDependencies",
+            dep.name.as_str(),
             package_label(graph, dep.package)
         ),
-        location: dependency_location(graph, dep),
-        related: Vec::new(),
-        delta: None,
-        delta_origin: None,
-    }
+    )
 }
 
 fn dependency_location(graph: &ProjectGraph, dep: &DeclaredDependency) -> Location {

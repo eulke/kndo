@@ -185,16 +185,7 @@ fn native_descriptor(raw: w::AdapterDescriptor) -> AdapterDescriptor {
     }
 }
 
-fn from_wit_activation_rule(rule: w::ActivationRule) -> kndo_core::plugin::ActivationRule {
-    match rule {
-        w::ActivationRule::FileExists(glob) => {
-            kndo_core::plugin::ActivationRule::FileExists(SmolStr::new(&glob))
-        }
-        w::ActivationRule::ManifestDependency(name) => {
-            kndo_core::plugin::ActivationRule::ManifestDependency(SmolStr::new(&name))
-        }
-    }
-}
+wit_activation_rule_conversion!(w);
 
 impl LanguageAdapter for WasmAdapter {
     fn descriptor(&self) -> AdapterDescriptor {

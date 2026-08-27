@@ -3623,17 +3623,21 @@ fn scan_member_chain(
     env: PathEnv<'_>,
     out: &mut FileFacts,
 ) -> Option<usize> {
-    let follows_dot_ident = |at: usize| {
-        children.get(at).is_some_and(|n| n.kind() == ".")
-            && children
-                .get(at + 1)
-                .is_some_and(|n| n.kind() == "identifier")
-    };
-    if !follows_dot_ident(j) {
+    if !follows_dot_ident(children, j) {
         return None;
     }
     let qualifier = chain_receiver_qualifier(receiver, src, within, env, out)?;
     Some(walk_chain(children, j, qualifier, src, within, env, out))
+}
+
+/// The next hop of a member chain: a `.` at `at` followed by an identifier. The chain walker
+/// and its entry check both ask it, so it is one function rather than the same closure written
+/// twice inside each.
+fn follows_dot_ident(children: &[Node], at: usize) -> bool {
+    children.get(at).is_some_and(|n| n.kind() == ".")
+        && children
+            .get(at + 1)
+            .is_some_and(|n| n.kind() == "identifier")
 }
 
 /// The chain's hops, one member reference each, the qualifier extending per hop; argument
@@ -3649,14 +3653,8 @@ fn walk_chain(
     env: PathEnv<'_>,
     out: &mut FileFacts,
 ) -> usize {
-    let follows_dot_ident = |at: usize| {
-        children.get(at).is_some_and(|n| n.kind() == ".")
-            && children
-                .get(at + 1)
-                .is_some_and(|n| n.kind() == "identifier")
-    };
     let mut at = j;
-    while follows_dot_ident(at) {
+    while follows_dot_ident(children, at) {
         let member = children[at + 1];
         let name = text(member, src);
         let args = children

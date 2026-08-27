@@ -228,34 +228,32 @@ impl<'a> GraphView<'a> {
     /// Files `path` imports (`ImportsFile` edges, adapter-derived only — rule R1), sorted by
     /// path. Empty for an unknown path or a file with no imports.
     pub fn imports_of(&self, path: &ProjectPath) -> Vec<&'a ProjectPath> {
-        let Some(&file) = self.file_index.get(path) else {
-            return Vec::new();
-        };
-        self.with_import_index(|idx| {
-            idx.imports_of
-                .get(&file)
-                .map(|targets| {
-                    targets
-                        .iter()
-                        .map(|t| &self.files[t.0 as usize].path)
-                        .collect()
-                })
-                .unwrap_or_default()
-        })
+        self.import_neighbors(path, |idx| &idx.imports_of)
     }
 
     /// Files importing `path` — [`Self::imports_of`]'s reverse, same rules.
     pub fn importers_of(&self, path: &ProjectPath) -> Vec<&'a ProjectPath> {
+        self.import_neighbors(path, |idx| &idx.importers_of)
+    }
+
+    /// One direction of the import adjacency as paths. The two public methods above ask the
+    /// same question about opposite arrows, so the unknown-path guard, the index lookup and
+    /// the file-id-to-path mapping are written once and `side` picks the arrow.
+    fn import_neighbors(
+        &self,
+        path: &ProjectPath,
+        side: impl Fn(&ImportIndex) -> &HashMap<FileId, Vec<FileId>>,
+    ) -> Vec<&'a ProjectPath> {
         let Some(&file) = self.file_index.get(path) else {
             return Vec::new();
         };
         self.with_import_index(|idx| {
-            idx.importers_of
+            side(idx)
                 .get(&file)
-                .map(|sources| {
-                    sources
+                .map(|neighbors| {
+                    neighbors
                         .iter()
-                        .map(|s| &self.files[s.0 as usize].path)
+                        .map(|f| &self.files[f.0 as usize].path)
                         .collect()
                 })
                 .unwrap_or_default()

@@ -460,6 +460,14 @@ impl AnyBindings {
     }
 }
 
+/// Whether a hook must start from a new guest instance or may run on the one a previous hook
+/// of the same round left behind. The first hook of a round is always `Fresh` — guest state
+/// must not survive across rounds.
+enum RoundInstance {
+    Fresh,
+    Reused,
+}
+
 struct GuestState {
     store: WStore,
     bindings: AnyBindings,
@@ -542,6 +550,42 @@ impl WasmPlugin {
             return true;
         }
         self.refresh_instance(graph, content).is_some()
+    }
+
+    /// Runs one guest export on this round's instance and returns what it produced, or `None`
+    /// if anything along the way said no.
+    ///
+    /// Every graph hook is the same five steps — get an instance (`reuse` picks whether an
+    /// existing one counts), take the store lock, refuel, call, use the result — and every
+    /// failure degrades to "this plugin contributes nothing this round", never a panic in the
+    /// middle of assembly. Three hooks each wrote those steps out; the shape is the contract,
+    /// so it belongs in one place and the export call is what the caller supplies.
+    fn on_round_instance<T>(
+        &self,
+        graph: &GraphView<'_>,
+        content: &ContentView<'_>,
+        instance: RoundInstance,
+        call: impl FnOnce(&mut WStore, &AnyBindings) -> Option<T>,
+    ) -> Option<T> {
+        match instance {
+            RoundInstance::Fresh => {
+                self.refresh_instance(graph, content)?;
+            }
+            RoundInstance::Reused => {
+                if !self.ensure_instance(graph, content) {
+                    return None;
+                }
+            }
+        }
+        let mut guard = self
+            .round_instance
+            .lock()
+            .expect("wasm plugin store poisoned");
+        let GuestState { store, bindings } = guard.as_mut()?;
+        if store.set_fuel(FUEL_PER_CALL).is_err() {
+            return None;
+        }
+        call(store, bindings)
     }
 }
 
@@ -731,16 +775,7 @@ fn from_wit_rule(raw: w::RuleDescriptor) -> kndo_core::plugin::RuleDescriptor {
     }
 }
 
-fn from_wit_activation_rule(rule: w::ActivationRule) -> kndo_core::plugin::ActivationRule {
-    match rule {
-        w::ActivationRule::FileExists(glob) => {
-            kndo_core::plugin::ActivationRule::FileExists(SmolStr::new(&glob))
-        }
-        w::ActivationRule::ManifestDependency(name) => {
-            kndo_core::plugin::ActivationRule::ManifestDependency(SmolStr::new(&name))
-        }
-    }
-}
+wit_activation_rule_conversion!(w);
 
 impl Plugin for WasmPlugin {
     fn descriptor(&self) -> PluginDescriptor {
@@ -811,20 +846,13 @@ impl Plugin for WasmPlugin {
         content: &ContentView<'_>,
         out: &mut RootSink,
     ) {
-        if self.refresh_instance(graph, content).is_none() {
-            return;
-        }
-        let mut guard = self
-            .round_instance
-            .lock()
-            .expect("wasm plugin store poisoned");
-        let Some(GuestState { store, bindings }) = guard.as_mut() else {
-            return;
-        };
-        if store.set_fuel(FUEL_PER_CALL).is_err() {
-            return;
-        }
-        let Ok(roots) = bindings.call_contribute_roots(&mut *store) else {
+        // The FIRST hook of a round: a fresh instance, never a reused one — guest state must
+        // not survive from the previous round.
+        let Some(roots) =
+            self.on_round_instance(graph, content, RoundInstance::Fresh, |store, bindings| {
+                bindings.call_contribute_roots(&mut *store).ok()
+            })
+        else {
             return;
         };
         for r in roots {
@@ -836,26 +864,22 @@ impl Plugin for WasmPlugin {
         }
     }
 
+    // Everything this shares with `contribute_roots` — instance, lock, fuel, call,
+    // give-up-on-failure — is `on_round_instance`. What is left in each is a drain loop over a
+    // different guest record into a different sink, and a generic over sink and record types
+    // would name nothing the two WIT worlds don't already say themselves.
+    // kndo:allow duplicate the shared half is on_round_instance; the rest is per-sink draining
     fn contribute_edges(
         &self,
         graph: &GraphView<'_>,
         content: &ContentView<'_>,
         out: &mut EdgeSink,
     ) {
-        if !self.ensure_instance(graph, content) {
-            return;
-        }
-        let mut guard = self
-            .round_instance
-            .lock()
-            .expect("wasm plugin store poisoned");
-        let Some(GuestState { store, bindings }) = guard.as_mut() else {
-            return;
-        };
-        if store.set_fuel(FUEL_PER_CALL).is_err() {
-            return;
-        }
-        let Ok(edges) = bindings.call_contribute_edges(&mut *store) else {
+        let Some(edges) =
+            self.on_round_instance(graph, content, RoundInstance::Reused, |store, bindings| {
+                bindings.call_contribute_edges(&mut *store).ok()
+            })
+        else {
             return;
         };
         for e in edges {
@@ -874,23 +898,15 @@ impl Plugin for WasmPlugin {
         content: &ContentView<'_>,
         out: &mut AnnotationSink,
     ) {
-        if !self.ensure_instance(graph, content) {
-            return;
-        }
-        let mut guard = self
+        let result = self.on_round_instance(graph, content, RoundInstance::Reused, |store, b| {
+            b.call_annotate_symbols(&mut *store).ok()
+        });
+        // End of round, success or not: the instance never survives into the next one.
+        *self
             .round_instance
             .lock()
-            .expect("wasm plugin store poisoned");
-        let Some(GuestState { store, bindings }) = guard.as_mut() else {
-            return;
-        };
-        if store.set_fuel(FUEL_PER_CALL).is_err() {
-            return;
-        }
-        let result = bindings.call_annotate_symbols(&mut *store);
-        // End of round, success or not: the instance never survives into the next one.
-        *guard = None;
-        let Ok(targets) = result else {
+            .expect("wasm plugin store poisoned") = None;
+        let Some(targets) = result else {
             return;
         };
         for t in targets {
