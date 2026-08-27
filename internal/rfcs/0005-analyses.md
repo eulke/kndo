@@ -226,6 +226,18 @@ per-symbol findings it summarizes, and a directory whose every file carries the 
 rolls up once more (subject `directory`) — "you can delete this whole folder" is one finding,
 not fifty. Generated and vendored origins are exempt by default.
 
+**Served is not used.** A file whose ONLY inbound evidence is `EdgeKind::ReferencesFile` — the
+file-liveness edge, "if `from` is alive, that file is in use", what a template's `<link href>`
+or a framework config naming an asset by path contributes — is *served*, not *used*, and its
+symbols are not judged one by one. The evidence says the bytes ship and names none of them, so
+reporting each unread symbol is an accusation it cannot support: connecting spring-petclinic's
+layout to its stylesheet turned one file-level verdict into 48 dead `--bs-*` custom properties
+from a compiled Bootstrap bundle. The FILE is judged normally (the link is exactly the evidence
+that keeps it alive), and any other inbound edge at all — an `ImportsFile`, an `InvokesFile`, a
+`Root`, a `References` naming one of its symbols — is symbol-level evidence and restores
+ordinary jurisdiction. This is the same asymmetry `ReferencesFile` already carries by contract:
+liveness evidence, never architecture evidence.
+
 ## 5. Dependency & import hygiene
 
 For each `ManifestDependency` with scope `prod`, classify by its importers:

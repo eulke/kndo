@@ -87,6 +87,11 @@ flagging every CLI dev-dependency.
 - Generated and vendored files are exempt (they're not yours to delete); files no adapter
   claims (unknown extensions) can be part of the graph via other adapters' references but
   never accused on their own.
+- A file kept alive **only** because something links it as an asset — a template's
+  `<link href>`, a framework config naming it by path — is *served*, not *used*: the evidence
+  says its bytes ship and names none of its symbols, so its symbols are not judged one by one.
+  The file itself is judged normally, and any other evidence at all (an import, an invocation,
+  a root, a reference to one of its symbols) puts it back in ordinary jurisdiction.
 - Code invoked **out-of-band** — a binary run as a subprocess by tests or scripts with
   dynamically constructed paths, an entry point referenced only from infrastructure kndo
   doesn't read — has no edge for kndo to see. Built-in conventions (manifest `scripts`,

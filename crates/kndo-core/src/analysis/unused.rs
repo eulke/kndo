@@ -29,7 +29,8 @@ use crate::analysis::{finding_id, FindingIdParts};
 use crate::engine::{Finding, Location, Severity};
 use crate::graph::ProjectGraph;
 use crate::vocab::{
-    Category, Confidence, FileId, FileOrigin, Group, NodeRef, PackageId, SubjectKind, SymbolId,
+    Category, Confidence, EdgeKind, FileId, FileOrigin, Group, NodeRef, PackageId, SubjectKind,
+    SymbolId,
 };
 
 pub fn find_unused_files(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<Finding> {
@@ -154,14 +155,71 @@ fn directory_finding(graph: &ProjectGraph, dir: &DirGroup<'_>) -> Finding {
     }
 }
 
+/// Files alive ONLY through file-liveness evidence: a `<link href>` in a template, an asset a
+/// framework config names by path.
+///
+/// Such a file is **served, not used**. The evidence says its bytes ship; it says nothing about
+/// which of its symbols anyone consumes, because nothing in the project ever names one. Judging
+/// those symbols one by one on that basis reports a stylesheet's every unread custom property
+/// the moment a template links it — 48 of them on spring-petclinic, all `--bs-*` from a
+/// compiled Bootstrap bundle — which is an accusation the evidence cannot support (RFC 0012
+/// §2). The file-level verdict, which the evidence CAN support, is unaffected either way.
+///
+/// `EdgeKind::ReferencesFile` is the only kind carrying this meaning, by contract ("liveness
+/// evidence, never architecture evidence"). Every other inbound edge is symbol-level evidence
+/// and disqualifies the file: an `ImportsFile` means a consumer loaded this module and can name
+/// what is in it, an `InvokesFile` runs it, a `Root` declares it (or something in it) an entry
+/// point, a `References`/`Wildcard` names a symbol directly. The test is deliberately
+/// all-or-nothing in the *reporting* direction — any other evidence at all, and the file is
+/// judged normally.
+fn served_only(graph: &ProjectGraph) -> HashSet<FileId> {
+    let mut served: HashSet<FileId> = HashSet::default();
+    let mut used: HashSet<FileId> = HashSet::default();
+    let file_of = |node: NodeRef| match node {
+        NodeRef::File(f) => Some(f),
+        NodeRef::Symbol(s) => graph.symbols.get(s.0 as usize).map(|sym| sym.file),
+    };
+    for edge in &graph.edges {
+        match edge.kind {
+            EdgeKind::ReferencesFile { to, .. } => {
+                served.insert(to);
+            }
+            EdgeKind::ImportsFile { to, .. } | EdgeKind::InvokesFile { to, .. } => {
+                used.insert(to);
+            }
+            EdgeKind::Root { target, .. } => {
+                used.extend(file_of(target));
+            }
+            // A reference from OUTSIDE the file: someone else names this file's symbol, which
+            // is exactly the evidence a served-only file lacks. An intra-file one is not —
+            // a stylesheet's `var(--bs-primary)` naming its own custom property says nothing
+            // about whether any consumer does, and counting it disqualified every CSS file
+            // from this rule (which is how the 48 findings survived the first version).
+            EdgeKind::References { from, to, .. } => {
+                let target = graph.symbols.get(to.0 as usize).map(|s| s.file);
+                if target.is_some() && file_of(from) != target {
+                    used.extend(target);
+                }
+            }
+            EdgeKind::Wildcard { .. }
+            | EdgeKind::Declares { .. }
+            | EdgeKind::ImportsDependency { .. } => {}
+        }
+    }
+    served.retain(|f| !used.contains(f));
+    served
+}
+
 /// The per-symbol scope gate: symbols in unclaimed/generated/vendored files are out of
-/// jurisdiction; symbols in unreachable files roll up to the file finding; constructors are
-/// never accused directly — instantiation references the *type*, so a constructor's
-/// unreachability is structurally unknowable and its liveness follows the class (whose own
-/// finding/rollup covers real death).
+/// jurisdiction; symbols in unreachable files roll up to the file finding; symbols in a file
+/// that is only *served* have no symbol-level evidence to be judged against ([`served_only`]);
+/// constructors are never accused directly — instantiation references the *type*, so a
+/// constructor's unreachability is structurally unknowable and its liveness follows the class
+/// (whose own finding/rollup covers real death).
 fn symbol_in_scope(
     graph: &ProjectGraph,
     reach: &ReachabilityMap,
+    served_only: &HashSet<FileId>,
     symbol: &crate::graph::SymbolNode,
 ) -> bool {
     let file = &graph.files[symbol.file.0 as usize];
@@ -170,14 +228,16 @@ fn symbol_in_scope(
     };
     !matches!(class.origin, FileOrigin::Generated | FileOrigin::Vendored)
         && reach.get(NodeRef::File(symbol.file)).0 != Reachability::Unreachable
+        && !served_only.contains(&symbol.file)
         && symbol.kind != crate::vocab::SymbolKind::Constructor
 }
 
 pub fn find_unused_symbols(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<Finding> {
+    let served_only = served_only(graph);
     let mut findings = Vec::new();
     for (index, symbol) in graph.symbols.iter().enumerate() {
         let file = &graph.files[symbol.file.0 as usize];
-        if !symbol_in_scope(graph, reach, symbol) {
+        if !symbol_in_scope(graph, reach, &served_only, symbol) {
             continue;
         }
 
@@ -572,6 +632,124 @@ mod tests {
         assert_eq!(findings[0].category, "unused");
         assert_eq!(findings[0].subject_kind, "function");
         assert!(findings[0].message.contains("main.ts#dead"));
+    }
+
+    #[test]
+    fn symbols_of_a_file_that_is_only_served_are_not_judged() {
+        // spring-petclinic in miniature: a template is the root, and it LINKS a stylesheet.
+        // That link says the bytes ship; it names none of the stylesheet's 1185 custom
+        // properties, so judging them one by one on its strength reported 48 of them as dead
+        // the moment `kndo:thymeleaf` connected the two.
+        let files = vec![
+            file("templates/layout.html", Some(FileClass::default())),
+            file("static/app.css", Some(FileClass::default())),
+        ];
+        let symbols = vec![symbol(FileId(1), "--bs-gray-600")];
+        let edges = vec![
+            edge(
+                EdgeKind::Root {
+                    kind: RootKind::Production,
+                    target: NodeRef::File(FileId(0)),
+                },
+                Confidence::Certain,
+            ),
+            edge(
+                EdgeKind::ReferencesFile {
+                    from: NodeRef::File(FileId(0)),
+                    to: FileId(1),
+                },
+                Confidence::Certain,
+            ),
+        ];
+        let graph = ProjectGraph::for_test(files, symbols, vec![], edges);
+        let reach = reachability::compute(&graph);
+        assert!(
+            find_unused_symbols(&graph, &reach).is_empty(),
+            "a served file's symbols have no symbol-level evidence to be judged against"
+        );
+        // …and the file itself is alive, which is what the link DOES support.
+        assert!(find_unused_files(&graph, &reach).is_empty());
+    }
+
+    #[test]
+    fn a_served_files_own_internal_references_do_not_make_it_used() {
+        // The hole the first version had: a stylesheet's `var(--bs-primary)` names its own
+        // custom property, and counting that as symbol-level evidence disqualified every CSS
+        // file from the rule — the 48 findings survived unchanged.
+        let files = vec![
+            file("templates/layout.html", Some(FileClass::default())),
+            file("static/app.css", Some(FileClass::default())),
+        ];
+        let symbols = vec![
+            symbol(FileId(1), "--bs-primary"),
+            symbol(FileId(1), "--bs-gray"),
+        ];
+        let edges = vec![
+            edge(
+                EdgeKind::Root {
+                    kind: RootKind::Production,
+                    target: NodeRef::File(FileId(0)),
+                },
+                Confidence::Certain,
+            ),
+            edge(
+                EdgeKind::ReferencesFile {
+                    from: NodeRef::File(FileId(0)),
+                    to: FileId(1),
+                },
+                Confidence::Certain,
+            ),
+            edge(
+                EdgeKind::References {
+                    from: NodeRef::File(FileId(1)),
+                    to: crate::vocab::SymbolId(0),
+                    kind: crate::vocab::RefKind::Read,
+                },
+                Confidence::Certain,
+            ),
+        ];
+        let graph = ProjectGraph::for_test(files, symbols, vec![], edges);
+        let reach = reachability::compute(&graph);
+        assert!(find_unused_symbols(&graph, &reach).is_empty());
+    }
+
+    #[test]
+    fn any_symbol_level_evidence_puts_a_served_file_back_in_jurisdiction() {
+        // The exemption is only about what the evidence supports: the same stylesheet, also
+        // imported by another stylesheet, is a module whose consumer can name what is in it.
+        let files = vec![
+            file("templates/layout.html", Some(FileClass::default())),
+            file("static/app.css", Some(FileClass::default())),
+        ];
+        let symbols = vec![symbol(FileId(1), "--bs-gray-600")];
+        let edges = vec![
+            edge(
+                EdgeKind::Root {
+                    kind: RootKind::Production,
+                    target: NodeRef::File(FileId(0)),
+                },
+                Confidence::Certain,
+            ),
+            edge(
+                EdgeKind::ReferencesFile {
+                    from: NodeRef::File(FileId(0)),
+                    to: FileId(1),
+                },
+                Confidence::Certain,
+            ),
+            edge(
+                EdgeKind::ImportsFile {
+                    from: FileId(0),
+                    to: FileId(1),
+                },
+                Confidence::Certain,
+            ),
+        ];
+        let graph = ProjectGraph::for_test(files, symbols, vec![], edges);
+        let reach = reachability::compute(&graph);
+        let findings = find_unused_symbols(&graph, &reach);
+        assert_eq!(findings.len(), 1, "{findings:#?}");
+        assert!(findings[0].message.contains("--bs-gray-600"));
     }
 
     #[test]
