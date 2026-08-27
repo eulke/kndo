@@ -8,13 +8,20 @@
 //! algorithm): nodes get dense indices (files first, then symbols), the traversable edges are
 //! built once into CSR-style columnar adjacency (offsets + targets + confidences — BFS walks
 //! contiguous `u32` columns, not hash buckets), and each of the nine per-`(kind, tier)`
-//! reached sets is a bitset. The module-load rule (reaching a symbol reaches its owning
-//! file) becomes an ordinary implicit CSR edge `symbol → owner` at `Certain` — the
-//! same semantics the special-cased visit had, since a certain edge passes every tier's
-//! filter exactly like the unconditional visit did. Its counterpart, the execution rule,
-//! still needs no code: symbol-attributed references hang off the symbol node and traverse
-//! only once it's reached. (Without the symbol→owner edge, a rooted Go `func main()`
-//! would never enqueue `main.go`.)
+//! reached sets is a bitset.
+//!
+//! Four rules have no edge in the graph and become implicit CSR edges here. Two are
+//! **containment**, both `Certain`, and they are one rule at two levels: the *module-load
+//! rule* (`symbol → its file` — without it a rooted Go `func main()` would never enqueue
+//! `main.go`) and the *containment rule* (`member → its owning declaration` — without it a
+//! class whose only live member is container-invoked reads as dead while its own methods
+//! read as production). A `Certain` edge passes every tier's filter, so both carry whatever
+//! tier reached the source, exactly as the special-cased visits they replaced did. Two are
+//! **dispatch**, both `Probable`, both pointing down into members a call site can never name:
+//! the *machinery-dispatch rule* (`owner → implicitly-invoked member`) and the
+//! *implement-dispatch rule* (`trait member → impl member`). The execution rule needs no code
+//! at all: symbol-attributed references hang off the symbol node and traverse only once it is
+//! reached.
 
 use rustc_hash::FxHashMap as HashMap;
 
@@ -190,6 +197,51 @@ fn link_owners_to_hooks(
     edges
 }
 
+/// The containment rule's implicit `(member, owner)` edges: a member cannot execute without
+/// the declaration that owns it, so reaching `Foo.bar` reaches `Foo` — you cannot delete the
+/// type and keep the method.
+///
+/// It is the module-load rule one level down. That one says reaching a symbol reaches its
+/// FILE; this one says reaching a member reaches its OWNING DECLARATION, and the two together
+/// are what make "alive" transitive all the way up. Without it, a class whose only live member
+/// is invoked by a container reads as dead while its own methods read as production —
+/// spring-petclinic's `CacheConfiguration` was reported `unreachable` and
+/// `production-reachable` in the same run, which is not a false positive so much as two
+/// answers to one question.
+///
+/// Owner resolution is the `member_of` convention [`machinery_dispatch_edges`] already uses,
+/// read in the other direction: the owner is a declaration in the member's own file carrying
+/// the member's `member_of` name and no owner of its own. Every same-name candidate links,
+/// twins included — the same answer that rule gives, for the same reason (the convention
+/// cannot tell them apart, and linking both degrades toward keep-alive).
+///
+/// Traversed at `Certain`, unlike the two dispatch rules: containment is structural rather
+/// than inferred. That does not make the owner *certainly* alive — a `Certain` edge passes
+/// every tier's filter unchanged, so the owner simply inherits whichever tier reached the
+/// member.
+fn containment_edges(graph: &ProjectGraph, files_len: usize) -> Vec<(u32, u32)> {
+    let mut owners: HashMap<(u32, &smol_str::SmolStr), Vec<u32>> = HashMap::default();
+    for (i, s) in graph.symbols.iter().enumerate() {
+        if s.member_of.is_none() {
+            owners
+                .entry((s.file.0, &s.name))
+                .or_default()
+                .push((files_len + i) as u32);
+        }
+    }
+    let mut edges: Vec<(u32, u32)> = Vec::new();
+    for (i, s) in graph.symbols.iter().enumerate() {
+        let Some(owner_name) = &s.member_of else {
+            continue;
+        };
+        if let Some(candidates) = owners.get(&(s.file.0, owner_name)) {
+            let member = (files_len + i) as u32;
+            edges.extend(candidates.iter().map(|&owner| (member, owner)));
+        }
+    }
+    edges
+}
+
 /// The implement-dispatch rule's implicit `(trait member, impl member)`
 /// edges: calling through a trait IS plausibly executing every implementation — the vtable,
 /// as declared. Derived entirely from `RefKind::Implement`/`RefKind::Extend` edges (`impl
@@ -330,6 +382,10 @@ pub fn compute_with_roots(graph: &ProjectGraph, extra_roots: &[SymbolId]) -> Rea
     // (dispatch through a trait).
     let mut machinery_edges = machinery_dispatch_edges(graph, files_len);
     machinery_edges.extend(implement_dispatch_edges(graph, files_len));
+    // The containment rule points the other way — up from a member to its owner — and at a
+    // different strength, so it is its own edge set rather than another entry in the two
+    // dispatch rules' shared shape.
+    let containment_edges = containment_edges(graph, files_len);
 
     let mut degree: Vec<u32> = vec![0; n];
     let count = |degree: &mut Vec<u32>, from: usize, extra: usize| degree[from] += extra as u32;
@@ -361,6 +417,10 @@ pub fn compute_with_roots(graph: &ProjectGraph, extra_roots: &[SymbolId]) -> Rea
     // The machinery-dispatch rule's implicit owner → member edges.
     for &(owner, _) in &machinery_edges {
         degree[owner as usize] += 1;
+    }
+    // The containment rule's implicit member → owner edges.
+    for &(member, _) in &containment_edges {
+        degree[member as usize] += 1;
     }
 
     let mut offsets: Vec<u32> = Vec::with_capacity(n + 1);
@@ -442,6 +502,14 @@ pub fn compute_with_roots(graph: &ProjectGraph, extra_roots: &[SymbolId]) -> Rea
             owner as usize,
             member as usize,
             Confidence::Probable,
+        );
+    }
+    for &(member, owner) in &containment_edges {
+        push_edge(
+            &mut cursor,
+            member as usize,
+            owner as usize,
+            Confidence::Certain,
         );
     }
 
@@ -958,6 +1026,74 @@ mod tests {
             reach.get(NodeRef::Symbol(SymbolId(3))).0,
             Reachability::Unreachable,
             "an unreached owner propagates nothing"
+        );
+    }
+
+    #[test]
+    fn a_reached_member_brings_its_owning_declaration_with_it() {
+        // spring-petclinic's shape exactly: a container roots the `@Bean` METHOD, never the
+        // `@Configuration` class that declares it. Before the containment rule the run said
+        // both "CacheConfiguration is unreachable" and "CacheConfiguration.java is
+        // production-reachable" — two answers to one question. You cannot invoke the method
+        // without the type, so reaching one reaches the other.
+        let files = vec![file("CacheConfiguration.java")];
+        let symbols = vec![
+            symbol(FileId(0), "CacheConfiguration"),
+            SymbolNode {
+                member_of: Some(SmolStr::new("CacheConfiguration")),
+                ..symbol(FileId(0), "cacheConfiguration")
+            },
+            // An unrelated top-level declaration must stay dead: containment lifts owners,
+            // not neighbours.
+            symbol(FileId(0), "Unrelated"),
+        ];
+        let edges = vec![edge(
+            EdgeKind::Root {
+                kind: RootKind::Production,
+                target: NodeRef::Symbol(SymbolId(1)), // the bean method, not the class
+            },
+            Confidence::Certain,
+        )];
+        let graph = ProjectGraph::for_test(files, symbols, vec![], edges);
+        let reach = compute(&graph);
+
+        assert_eq!(
+            reach.get(NodeRef::Symbol(SymbolId(0))).0,
+            Reachability::Production,
+            "the owning declaration must come alive with its member"
+        );
+        assert_eq!(
+            reach.get(NodeRef::Symbol(SymbolId(2))).0,
+            Reachability::Unreachable,
+            "containment lifts the owner, not every declaration in the file"
+        );
+    }
+
+    #[test]
+    fn containment_carries_the_tier_that_reached_the_member() {
+        // The edge is `Certain`, which is not the same as making the owner certainly alive:
+        // a `Certain` edge passes every tier's filter, so the owner inherits the member's own
+        // strength. A test-only member yields a test-only owner, never a production one.
+        let files = vec![file("Widget.ts")];
+        let symbols = vec![
+            symbol(FileId(0), "Widget"),
+            SymbolNode {
+                member_of: Some(SmolStr::new("Widget")),
+                ..symbol(FileId(0), "render")
+            },
+        ];
+        let edges = vec![edge(
+            EdgeKind::Root {
+                kind: RootKind::Test,
+                target: NodeRef::Symbol(SymbolId(1)),
+            },
+            Confidence::Certain,
+        )];
+        let graph = ProjectGraph::for_test(files, symbols, vec![], edges);
+        let reach = compute(&graph);
+        assert_eq!(
+            reach.get(NodeRef::Symbol(SymbolId(0))).0,
+            Reachability::TestOnly
         );
     }
 

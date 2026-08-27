@@ -109,6 +109,15 @@ field). Two rules govern the traversal:
   main`/`init`/exported-declaration promotion, docs/adapters/go.md §0, §2 — no manifest-level
   entry file to root alongside them): `R(κ, τ)`'s traversal enqueues a reached symbol's owning
   file alongside the symbol.
+- **Containment rule:** reaching a member also reaches its owning declaration, at the same τ —
+  a method cannot execute without the type that declares it, so if the member is alive the
+  owner is too, and a class whose only live member is invoked by a container or dispatched
+  through a vtable is not deletable. The owner resolves by the `member_of` convention in the
+  member's own file (same lookup the machinery-dispatch rule uses, read upward); every
+  same-name candidate links. Without it a run could assert both halves of a contradiction:
+  spring-petclinic's `@Configuration` class was reported `unreachable` while the same run
+  called its own `@Bean` methods production-reachable, and three Java conformance fixtures had
+  codified the same shape by expecting `unused` on the class holding `public static void main`.
 - **Invoked-program rule:** an `InvokesFile` edge — a file executing another file **as a
   program**, the process boundary no import crosses (a test running its own workspace binary
   via `env!("CARGO_BIN_EXE_…")`, resolved through the manifest's named executable targets,
