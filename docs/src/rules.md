@@ -156,6 +156,13 @@ Details and limits:
 
 - Active **only when the project has test roots at all**: a repository without tests gets one
   diagnostic, not a thousand findings.
+- Reported only on **units you write a test for** — callables and types. A value has nothing to
+  exercise: `Scheme.https`, `Genre.HORROR`, `MAX_VARCHAR_LENGTH`, a CSS custom property. And a
+  file that declares values and *only* values — a declarative stylesheet, a JSON document —
+  isn't an untested file, it's a file the question doesn't apply to. That is derived from what
+  the file declares, so a stylesheet carrying a Sass `@function` stays in scope. A file the
+  language adapter extracted nothing from stays in scope too: an absence of evidence is not
+  evidence there is nothing to test.
 - "A test reaches it" is import/reference reachability, not execution: a test that reaches a
   module transitively silences `untested` for everything it reaches, even if assertions never
   touch it. For *executed*-line truth, ingest a coverage report and watch

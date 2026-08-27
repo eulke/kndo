@@ -378,6 +378,19 @@ statically, zero-config, day one.
   not a thousand findings.
 - Severity: info. Subject granularity and rollup as usual (an entire untested file or package
   rolls up). Confidence demotes through wildcard edges like every reachability verdict.
+- **Only units of testing.** A value is not one: `EnumMember`, `Const`, `Static`, `Variable`,
+  `Field`, `CssRule`, `CssVariable` join `TypeAlias`, which was already excluded here with this
+  exact reasoning ("no runtime footprint — can never be 'covered'"). Callables and types stay,
+  and it is a DENYLIST so an adapter-defined kind (Kotlin's `object` arrives as `Other`) is not
+  silenced by a guess. Measured before adopting: 422 of 2621 findings across the field corpus,
+  56% of one project's, were values. This is only sound because a computed property is no longer
+  a `Field` — while a stored constant and a getter-with-a-body shared one kind, excluding
+  `Field` would have taken real logic with it.
+- A file that declares symbols and not one of them is a unit of testing is out of scope, which
+  is what answers "a `.scss`/`.json`/`.md` cannot be tested" without any per-language opt-out —
+  and keeps a `.scss` carrying a `@function` in scope, which such a flag would have silenced. A
+  file the adapter extracted NOTHING from stays in scope deliberately: dropping that guard
+  silenced 14 real source files across the corpus whose adapters simply saw no declarations.
 - Evidence: the production roots that reach the symbol (proof it matters) and the nearest tested
   neighbor (where a test could start).
 

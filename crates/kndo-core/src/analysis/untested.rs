@@ -15,7 +15,7 @@
 //! test-unreached by definition, which is true but useless. That gate is checked once, up
 //! front, not per node.
 
-use rustc_hash::FxHashMap as HashMap;
+use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 
 use crate::adapter::{Diagnostic, DiagnosticLevel};
 use crate::analysis::reachability::{Reachability, ReachabilityMap};
@@ -78,6 +78,7 @@ fn is_untested_node(
 
 fn find_untested_files(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<Finding> {
     let mut findings = Vec::new();
+    let values_only = files_declaring_only_values(graph);
     let mut untested: HashMap<&str, (FileId, PackageId, Confidence)> = HashMap::default();
     for (index, file) in graph.files.iter().enumerate() {
         let Some(class) = file.class else {
@@ -85,6 +86,14 @@ fn find_untested_files(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<Fin
         };
         let file_id = FileId(index as u32);
         if !is_untested_node(class.role, class.origin, reach, NodeRef::File(file_id)) {
+            continue;
+        }
+        // A file that declares only values is not an untested file — it is a file the question
+        // does not apply to. Derived from what the file DECLARES, so it needs no per-language
+        // opt-out and stays right per file: a `.scss` carrying a `@function` (Sass has
+        // unit-testing tooling) is still in scope, which a "SCSS is not testable" flag would
+        // have silenced.
+        if values_only.contains(&file_id) {
             continue;
         }
         let confidence = reach.get(NodeRef::File(file_id)).1;
@@ -172,18 +181,76 @@ fn directory_finding(graph: &ProjectGraph, dir: &DirGroup<'_>, confidence: Confi
     }
 }
 
-/// Symbols the per-symbol pass never flags: type aliases (no runtime footprint — `type
-/// Output = Stats` can never be "covered", and flagging the alias would hide the
-/// actually-dead enclosing impl), whole-file rollups, and anything not untested itself.
+/// Is this kind something a person writes a test FOR?
+///
+/// `untested` asks "does a test exercise this", and for a value there is nothing to exercise:
+/// `Scheme.https`, `Genre.HORROR`, `MAX_VARCHAR_LENGTH`, `--bs-gray-600`. Nobody opens a pull
+/// request titled "add a test for a header-name constant", and 457 of these — 17% of every
+/// `untested` finding across the field corpus, 56% of one project's — were exactly that.
+///
+/// `TypeAlias` was already excluded here, with this same reasoning stated in place ("no runtime
+/// footprint — `type Output = Stats` can never be 'covered'"). This generalizes that one
+/// carve-out into the rule it always was.
+///
+/// A DENYLIST, not an allowlist, and deliberately: `Other(name)` is adapter-defined vocabulary
+/// — Kotlin's `object` arrives that way, and an object is a type someone tests — so guessing
+/// about kinds that do not exist yet would silence them. Types (`Class`/`Interface`/`Struct`/
+/// `Enum`) stay too: a person does write a test for a type.
+///
+/// This is only correct because a computed property is no longer a `Field`. While a stored
+/// constant and a getter-with-a-body shared one kind, excluding `Field` would have taken real
+/// logic with it.
+fn is_a_unit_of_testing(kind: &crate::vocab::SymbolKind) -> bool {
+    use crate::vocab::SymbolKind as K;
+    !matches!(
+        kind,
+        K::TypeAlias
+            | K::EnumMember
+            | K::Const
+            | K::Static
+            | K::Variable
+            | K::Field
+            | K::CssRule
+            | K::CssVariable
+    )
+}
+
+/// Symbols the per-symbol pass never flags: values, which are not units of testing
+/// ([`is_a_unit_of_testing`]), whole-file rollups, and anything not untested itself.
 fn symbol_skipped(
     symbol: &crate::graph::SymbolNode,
     class: crate::vocab::FileClass,
     reach: &ReachabilityMap,
     symbol_id: SymbolId,
 ) -> bool {
-    matches!(symbol.kind, crate::vocab::SymbolKind::TypeAlias)
+    !is_a_unit_of_testing(&symbol.kind)
         || is_untested_node(class.role, class.origin, reach, NodeRef::File(symbol.file))
         || !is_untested_node(class.role, class.origin, reach, NodeRef::Symbol(symbol_id))
+}
+
+/// Files that declare symbols and NOT ONE of them is a unit of testing — a declarative
+/// stylesheet, a JSON document, a Markdown page.
+///
+/// "Declares symbols" is required, not incidental: a file the adapter extracted nothing from
+/// says nothing about what it contains, and concluding "nothing to test" from an absence of
+/// evidence would silence it for a reason nobody could see. Only a file that demonstrably
+/// declares values and only values is exempt.
+///
+/// One pass over the symbol table rather than a scan per file — `find_untested_files` asks this
+/// for every file, and the two together would be quadratic.
+fn files_declaring_only_values(graph: &ProjectGraph) -> HashSet<FileId> {
+    let mut declares_anything: HashSet<FileId> = HashSet::default();
+    let mut declares_a_unit: HashSet<FileId> = HashSet::default();
+    for symbol in &graph.symbols {
+        declares_anything.insert(symbol.file);
+        if is_a_unit_of_testing(&symbol.kind) {
+            declares_a_unit.insert(symbol.file);
+        }
+    }
+    declares_anything
+        .into_iter()
+        .filter(|f| !declares_a_unit.contains(f))
+        .collect()
 }
 
 fn find_untested_symbols(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<Finding> {
@@ -306,6 +373,143 @@ mod tests {
         assert!(findings.is_empty());
         assert!(diagnostic.is_some());
         assert_eq!(diagnostic.unwrap().level, DiagnosticLevel::Info);
+    }
+
+    fn kinded(file: FileId, name: &str, kind: SymbolKind) -> SymbolNode {
+        SymbolNode {
+            kind,
+            ..symbol(file, name)
+        }
+    }
+
+    /// The per-SYMBOL shape (modelled on
+    /// `symbol_untested_but_file_has_some_tested_symbols_is_reported_individually`): the
+    /// declaring file IS test-reachable, so no whole-file rollup swallows its symbols, while
+    /// each symbol is referenced only from a production-only file the test side never reaches.
+    fn untested_project(symbols: Vec<SymbolNode>) -> ProjectGraph {
+        let files = vec![
+            file("tests/spec.test.mock", FileRole::Test),
+            file("src/caller.mock", FileRole::Production),
+            file("src/main.mock", FileRole::Production),
+        ];
+        let mut edges = vec![
+            edge(
+                EdgeKind::Root {
+                    kind: RootKind::Production,
+                    target: NodeRef::File(FileId(1)),
+                },
+                Confidence::Certain,
+            ),
+            edge(
+                EdgeKind::Root {
+                    kind: RootKind::Production,
+                    target: NodeRef::File(FileId(2)),
+                },
+                Confidence::Certain,
+            ),
+            edge(
+                EdgeKind::Root {
+                    kind: RootKind::Test,
+                    target: NodeRef::File(FileId(0)),
+                },
+                Confidence::Certain,
+            ),
+            edge(
+                EdgeKind::ImportsFile {
+                    from: FileId(0),
+                    to: FileId(2),
+                },
+                Confidence::Certain,
+            ),
+        ];
+        for i in 0..symbols.len() {
+            edges.push(edge(
+                EdgeKind::References {
+                    from: NodeRef::File(FileId(1)),
+                    to: SymbolId(i as u32),
+                    kind: RefKind::Read,
+                },
+                Confidence::Certain,
+            ));
+        }
+        ProjectGraph::for_test(files, symbols, vec![], edges)
+    }
+
+    /// Symbol-level findings only — `src/caller.mock` draws its own file-level verdict here,
+    /// which is a separate, real one and not what these tests are about.
+    fn untested_symbols(graph: &ProjectGraph) -> Vec<String> {
+        let reach = reachability::compute(graph);
+        let mut names: Vec<String> = find_untested(graph, &reach)
+            .0
+            .iter()
+            .filter(|f| f.subject_kind != "file" && f.subject_kind != "directory")
+            .filter_map(|f| f.location.symbol.clone())
+            .collect();
+        names.sort();
+        names
+    }
+
+    #[test]
+    fn a_value_is_not_a_unit_of_testing() {
+        // 457 findings across the field corpus — 17% of every `untested`, 56% of one project's
+        // — were `Scheme.https`, `Genre.HORROR`, `MAX_VARCHAR_LENGTH`. Nobody writes a test for
+        // a constant. `TypeAlias` was already excluded here for exactly this reason; the rest
+        // of the values join it.
+        let graph = untested_project(vec![
+            kinded(FileId(2), "compute", SymbolKind::Function),
+            kinded(FileId(2), "Widget", SymbolKind::Class),
+            kinded(FileId(2), "MAX_LEN", SymbolKind::Const),
+            kinded(FileId(2), "https", SymbolKind::Field),
+            kinded(FileId(2), "HORROR", SymbolKind::EnumMember),
+            kinded(FileId(2), "accent", SymbolKind::CssVariable),
+        ]);
+        assert_eq!(
+            untested_symbols(&graph),
+            vec!["Widget", "compute"],
+            "a callable and a type are units of testing; a value is not"
+        );
+    }
+
+    #[test]
+    fn an_adapter_defined_kind_is_still_a_unit_of_testing() {
+        // `Other` is adapter vocabulary — Kotlin's `object` arrives that way and IS a type
+        // someone tests. The rule is a denylist precisely so kinds that don't exist yet are
+        // not silenced by a guess.
+        let graph = untested_project(vec![kinded(
+            FileId(2),
+            "Registry",
+            SymbolKind::Other(SmolStr::new("object")),
+        )]);
+        assert_eq!(untested_symbols(&graph), vec!["Registry"]);
+    }
+
+    #[test]
+    fn a_file_declaring_only_values_is_not_an_untested_file() {
+        // The `.scss`/`.json`/`.md` case, derived rather than declared: the verdict would be
+        // true and useless. A stylesheet carrying a Sass `@function` — a real testing unit —
+        // stays in scope, which a per-language "not testable" flag would have silenced.
+        // `src/caller.mock` declares nothing and stays eligible — an adapter that extracted
+        // nothing says nothing about what the file contains, so absence of evidence must not
+        // silence it. `src/main.mock` declares values and only values, and drops out.
+        let values = untested_project(vec![
+            kinded(FileId(2), "accent", SymbolKind::CssVariable),
+            kinded(FileId(2), "card", SymbolKind::CssRule),
+        ]);
+        let reach = reachability::compute(&values);
+        let value_findings = find_untested(&values, &reach).0;
+        let paths: Vec<&str> = value_findings
+            .iter()
+            .filter_map(|f| f.location.path.as_ref().map(|p| p.0.as_str()))
+            .collect();
+        assert_eq!(paths, vec!["src/caller.mock"], "main.mock is out of scope");
+        assert!(untested_symbols(&values).is_empty());
+
+        // The same file carrying a Sass-style `@function` is a testing unit again.
+        let with_function = untested_project(vec![
+            kinded(FileId(2), "accent", SymbolKind::CssVariable),
+            kinded(FileId(2), "double", SymbolKind::Function),
+        ]);
+        assert_eq!(untested_symbols(&with_function), vec!["double"]);
     }
 
     #[test]
