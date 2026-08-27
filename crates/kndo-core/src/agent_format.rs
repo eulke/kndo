@@ -59,10 +59,7 @@ pub fn render(result: &RunResult) -> String {
         }
     }
 
-    // Elision is always explicit (extended here by the same principle): this
-    // renderer never caps or paginates, so it is always "none" — but the line is never
-    // skipped, so a reader never has to guess whether truncation happened silently.
-    out.push_str("more: none\n");
+    out.push_str(&more_line(result));
     out.push_str("next: kndo check --format json\n");
     out
 }
@@ -113,7 +110,7 @@ fn render_diff(result: &RunResult) -> String {
         }
     }
 
-    out.push_str("more: none\n");
+    out.push_str(&more_line(result));
     out.push_str("next: kndo check --format json\n");
     out
 }
@@ -131,6 +128,17 @@ fn append_health(line: String, result: &RunResult) -> String {
             None => format!("{line} | health {:.1} ({})", h.score, h.grade),
         },
         None => line,
+    }
+}
+
+/// `more:` — elision is always explicit, so a reader never has to guess whether it saw
+/// everything. This renderer never caps or paginates, so the only thing that can hide a
+/// finding from it is a `--only` lens the caller asked for, and the count of what that lens
+/// removed is exactly what the line reports. `none` is a claim, not a placeholder.
+fn more_line(result: &RunResult) -> String {
+    match result.elided {
+        0 => "more: none\n".to_string(),
+        n => format!("more: {n} outside --only (kndo check --format agent)\n"),
     }
 }
 

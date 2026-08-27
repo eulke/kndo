@@ -81,6 +81,16 @@ fn suppressed_suffix(result: &RunResult) -> String {
     }
 }
 
+/// `--only`'s narrowing, and never omitted when non-zero — least of all on the clean line.
+/// A `kndo · clean` header printed over a report that quietly dropped forty findings is the
+/// worst sentence this program can write.
+fn elided_suffix(result: &RunResult) -> String {
+    match result.elided {
+        0 => String::new(),
+        n => format!(" · {n} outside --only"),
+    }
+}
+
 const RED: &str = "\x1b[31m";
 const YELLOW: &str = "\x1b[33m";
 const MAGENTA: &str = "\x1b[35m";
@@ -94,7 +104,7 @@ pub(crate) fn render(result: &RunResult, opts: &RenderOptions) -> String {
     }
 
     let baseline_suffix = baseline_suffix(result);
-    let suppressed_suffix = suppressed_suffix(result);
+    let suppressed_suffix = suppressed_suffix(result) + &elided_suffix(result);
 
     if result.findings.is_empty() {
         let mut out = format!(
@@ -131,6 +141,12 @@ pub(crate) fn render(result: &RunResult, opts: &RenderOptions) -> String {
             "suppressed: {} inline, {} config\n\n",
             result.suppressed.inline, result.suppressed.config
         ));
+    }
+    // The findings listing has no header line to hang a suffix on, and this is exactly the
+    // output a `--only` run produces — so the narrowing gets its own line rather than being
+    // the one branch where the lens goes unmentioned.
+    if result.elided > 0 {
+        out.push_str(&format!("{} outside --only\n\n", result.elided));
     }
     let present: std::collections::BTreeSet<Group> =
         result.findings.iter().map(|f| f.group).collect();
@@ -337,7 +353,7 @@ fn grade_boundary_suffix(score: f64, grade: &str) -> String {
 fn render_diff(result: &RunResult, opts: &RenderOptions) -> String {
     let net = result.net_findings();
     let baseline_suffix = baseline_suffix(result);
-    let suppressed_suffix = suppressed_suffix(result);
+    let suppressed_suffix = suppressed_suffix(result) + &elided_suffix(result);
     let header = format!(
         "kndo · {} · {} new · {} fixed · net {net:+}{baseline_suffix}{suppressed_suffix}\n",
         result.mode,
@@ -805,6 +821,38 @@ mod tests {
         let derived_pos = out.find("NEW (derived, in untouched code)").unwrap();
         let fixed_pos = out.find("FIXED").unwrap();
         assert!(introduced_pos < derived_pos && derived_pos < fixed_pos);
+    }
+
+    #[test]
+    fn a_clean_line_never_stands_alone_over_a_narrowed_run() {
+        // The worst sentence this program can write: `kndo · clean` over a report that
+        // dropped everything because the caller narrowed it. A `--only` that matches nothing
+        // is exactly how that happens.
+        let result = RunResult {
+            mode: "full".to_string(),
+            elided: 235,
+            files_discovered: 339,
+            ..RunResult::default()
+        };
+        let out = render(&result, &opts());
+        assert!(out.contains("clean"), "{out}");
+        assert!(out.contains("· 235 outside --only"), "{out}");
+    }
+
+    #[test]
+    fn the_findings_listing_says_what_the_lens_removed() {
+        // The listing has no header line to hang a suffix on — the one branch where a lens
+        // could have gone unmentioned.
+        let mut f = finding("unused", "waste");
+        f.delta = None;
+        let result = RunResult {
+            mode: "full".to_string(),
+            findings: vec![f],
+            elided: 47,
+            ..RunResult::default()
+        };
+        let out = render(&result, &opts());
+        assert!(out.starts_with("47 outside --only\n\n"), "{out}");
     }
 
     #[test]

@@ -38,12 +38,42 @@ General rules that apply everywhere:
 | `--staged` | analyze what `git commit` would commit (the index) vs `HEAD` |
 | `--diff <ref>` | analyze the working tree vs `merge-base(<ref>, HEAD)` |
 | `--fail-on <sev>` | exit `1` on findings at/above: `error` \| `warning` \| `info` \| `none` |
+| `--only <cats>` | report only these categories — comma-separated, repeatable |
+| `--skip <cats>` | report everything except these — same vocabulary, adds to `[analysis] skip` |
+| `--strict` | promote the severities RFC 0005 marks promotable (today: `undeclared` → `error`) |
 | `--format <f>` | `human` \| `json` \| `agent` \| `sarif` |
 | `--color <c>` | `auto` (default) \| `always` \| `never` |
 | `--quiet` | one-line summary |
 | `--verbose` | per-phase timing block and cache state |
 | `--no-cache` | disable the facts/graph cache for this run (never changes findings, only speed) |
 | `--threads <n>` | worker threads; `0` = physical cores (the default) |
+
+### `--only` and `--skip`
+
+Both take the vocabulary [suppressions](suppressions.md) use — a category (`unused`) or a
+category narrowed to a subject (`unused:enum-member`) — comma-separated, repeatable, and
+interchangeable between the two spellings:
+
+```sh
+kndo check --only unused,duplicate
+kndo check --only unused --only duplicate      # the same request
+kndo check --skip unused:enum-member
+```
+
+They are **not** two directions of one switch:
+
+- **`--skip` is suppression**, the same policy `[analysis] skip` expresses from another
+  source. It *adds* to what the project already skips (never replaces it), counts into the
+  same `suppressed` total, and — like the file — cannot silence `stale`: the "your
+  suppressions are dead" signal is never silenceable by the thing it audits.
+- **`--only` is a lens** over this one invocation. What it narrows away is counted and
+  reported (`· N outside --only` in the header, `more: N outside --only` in the agent format,
+  `"elided"` in JSON), so a narrowed run can never be mistaken for a clean one. Nothing is
+  exempt from it, including `stale` — that count is what keeps it honest.
+
+A category kndo doesn't know — neither a core category nor a `plugin:`-namespaced one — is
+a usage error (exit `2`), not an empty report: `--only unsued` silently
+matching nothing would print a clean report for a codebase nobody looked at.
 
 `--staged` and `--diff` are mutually exclusive. Both need `git` and a repository; a base ref
 that doesn't resolve is an error-level diagnostic and exit `2` — with a hint to

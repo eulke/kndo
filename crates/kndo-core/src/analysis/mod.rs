@@ -123,6 +123,14 @@ pub struct AnalysisTuning {
     /// below the extraction floor ([`crate::config::DUPLICATE_MIN_TOKENS_FLOOR`]): under it
     /// the facts carry no fingerprints to match.
     pub duplicate_min_tokens: u32,
+    /// `--strict`: the analyses RFC 0005 marks as promotable raise their severity.
+    ///
+    /// Deliberately read by the analyses that own a promotable verdict rather than applied as
+    /// a blanket post-pass: severity is part of what a verdict *means*, and a central table
+    /// mapping every category to a strict severity would be a second place to keep in sync
+    /// with the analysis that decides the ordinary one. Exactly one reads it today
+    /// (`undeclared`), and adding a second is one line in that analysis.
+    pub strict: bool,
 }
 
 impl Default for AnalysisTuning {
@@ -131,6 +139,7 @@ impl Default for AnalysisTuning {
             crap_threshold: crap::CRAP_THRESHOLD,
             duplicate_min_tokens: crate::config::DUPLICATE_MIN_TOKENS_FLOOR,
             externally_invoked: Vec::new(),
+            strict: false,
         }
     }
 }
@@ -277,7 +286,7 @@ impl Analysis for DependenciesAnalysis {
         &DEPENDENCIES_CATEGORIES
     }
     fn run(&self, ctx: &AnalysisCtx<'_>) -> AnalysisOutput {
-        let mut f = undeclared::find_undeclared_dependencies(ctx.graph);
+        let mut f = undeclared::find_undeclared_dependencies(ctx.graph, ctx.tuning.strict);
         f.extend(version_skew::find_version_skew(ctx.graph));
         let (hygiene_findings, hygiene_diagnostic) =
             dependency_hygiene::find_dependency_hygiene(ctx.graph);

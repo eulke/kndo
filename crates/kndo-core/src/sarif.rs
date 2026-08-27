@@ -307,6 +307,7 @@ mod tests {
             budget: None,
             cache_enabled: false,
             cache_hits: 0,
+            elided: 0,
             baseline: None,
             suppressed: SuppressedSummary::default(),
             health: None,

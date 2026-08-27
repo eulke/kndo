@@ -93,7 +93,7 @@ fn trulyDead() {
     let overrides = kndo_core::engine::ConfigOverrides {
         use_cache: false,
         threads: Some(1),
-        min_confidence: None,
+        ..kndo_core::engine::ConfigOverrides::default()
     };
 
     // Baseline: same fixture, no plugin present (delete it from the directory first) — every

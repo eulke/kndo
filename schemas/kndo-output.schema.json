@@ -30,6 +30,15 @@
         "$ref": "#/$defs/Diagnostic"
       }
     },
+    "elided": {
+      "description": "`--only`'s narrowing, absent when nothing was narrowed away. Beside `suppressed`\nrather than inside it: the two are different answers about why a finding is not here.\n\n`Option` rather than a `skip_serializing_if` predicate on a `usize`: serde would need\na named local function for that, and a function reachable only from an attribute\nstring is invisible to every call-graph tool — this one included.",
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint",
+      "minimum": 0
+    },
     "findings": {
       "type": "array",
       "items": {

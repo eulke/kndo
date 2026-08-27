@@ -40,6 +40,7 @@ round-trip these examples in CI.
   "fixed": [ /* §3 — diff modes only */ ],
   "baseline": { "acknowledged": 412, "stale": 3 },
   "suppressed": { "inline": 9, "config": 2 },
+  "elided": 47,                          // `--only` narrowed these away; ABSENT when nothing was narrowed
   "diagnostics": [ { "level": "warn", "message": "coverage report older than 7d — ignored" } ]
 }
 ```
@@ -63,6 +64,15 @@ findings in an abstained category is the absence of a measurement, not a passing
 categories were judged, so their emptiness does mean clean. Usually `[]`. The same value drives
 the `stale` rule (a pragma naming an abstained category is never reported matched-nothing) and
 the health axes, so the three can never disagree.
+
+**`elided` vs `suppressed` (normative).** Both say a finding is not in `findings`, and they
+are not interchangeable. `suppressed` counts findings *acknowledged* — an inline pragma or a
+configured/flagged skip; a consumer may treat them as known and accepted. `elided` counts
+findings the caller's `--only` lens did not ask for; they are neither acknowledged nor clean,
+merely out of view, and a consumer that read a narrowed run as a clean one would be wrong.
+Absent (never `0`) when nothing was narrowed. `--only` narrows every category alike, `stale`
+included — the lens is one invocation's scope, not a stored policy, and this count is what
+keeps it from hiding anything silently.
 
 Diagnostic levels: `info` · `warn` (the run degraded but ran) · `error` (M6, additive) — the
 run could not do what was asked (a `--diff` base that doesn't resolve): frontends exit 2 when

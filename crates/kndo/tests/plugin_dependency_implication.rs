@@ -87,7 +87,7 @@ fn unused_paths(root: &Path) -> Vec<String> {
     let overrides = kndo_core::engine::ConfigOverrides {
         use_cache: false,
         threads: Some(1),
-        min_confidence: None,
+        ..kndo_core::engine::ConfigOverrides::default()
     };
     let mut engine = kndo::open(root, overrides).expect("kndo::open");
     engine

@@ -36,7 +36,45 @@ pub struct SkipSpec {
     pub subject: Option<SubjectKind>,
 }
 
+/// Why a `category[:subject]` string is not a usable spec. Both sources of skip specs — the
+/// `[analysis] skip` array and the `--only`/`--skip` flags — reject the same two strings for
+/// the same two reasons, so the reasons live here rather than once per source.
+#[derive(Debug, thiserror::Error, PartialEq, Eq)]
+pub enum SkipSpecError {
+    #[error("`stale` audits suppressions and cannot itself be skipped")]
+    MetaSuppression,
+    #[error("empty category")]
+    EmptyCategory,
+}
+
 impl SkipSpec {
+    /// `"unused"` or `"unused:enum-member"` — the vocabulary [suppressions] use, and now the
+    /// vocabulary `--only`/`--skip` use, because they are the same policy from another source.
+    ///
+    /// Does not validate that the category exists: `plugin:<coordinate>/<rule>` is an open
+    /// namespace (RFC 0018 §2.1), so "unknown" is not a thing this layer can decide. A
+    /// frontend that wants to reject a typo checks against [`Category::ALL`] itself, where it
+    /// can also say what the valid ones are.
+    pub fn parse(raw: &str) -> Result<SkipSpec, SkipSpecError> {
+        let (category, subject) = match raw.split_once(':') {
+            // `plugin:acme/rule` is one category, not a category with a subject — the
+            // namespace separator and the subject separator are the same character.
+            Some(("plugin", _)) => (raw, None),
+            Some((c, s)) => (c, Some(SubjectKind::new(s))),
+            None => (raw, None),
+        };
+        if category == "stale" {
+            return Err(SkipSpecError::MetaSuppression);
+        }
+        if category.is_empty() {
+            return Err(SkipSpecError::EmptyCategory);
+        }
+        Ok(SkipSpec {
+            category: Category::new(category),
+            subject,
+        })
+    }
+
     fn covers(&self, finding: &Finding) -> bool {
         self.category == finding.category
             && self
@@ -49,7 +87,7 @@ impl SkipSpec {
 /// One `[[rule]]` table: `skip` entries that apply only to findings whose `location.path`
 /// matches one of `paths` (glob patterns, matched against the project-relative path).
 /// A finding with no path never matches a path rule.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PathRule {
     pub paths: Vec<glob::Pattern>,
     pub skip: Vec<SkipSpec>,
@@ -142,6 +180,74 @@ pub struct EffectiveConfig {
     pub min_confidence_floor: Confidence,
     /// `[analysis.crap]`/`[analysis.duplicate]`, each defended by `AnalysisTuning::default()`.
     pub tuning: crate::analysis::AnalysisTuning,
+    /// Which findings reach the report: `--only`'s lens, then `--skip` unioned with
+    /// `[analysis] skip` and `[[rule]]`. Lived on `KndoConfig` before the flags existed,
+    /// which would have made the flags a second merge site — exactly what this type is for.
+    pub report: ReportFilter,
+}
+
+/// Everything that decides whether a finding is *reported*, merged from both sources.
+///
+/// Two mechanisms, deliberately not one:
+///
+/// - **`only` is a lens.** It narrows this invocation's view and nothing else. Findings it
+///   drops are counted and reported (`RunResult::elided`) so no one has to guess whether they
+///   saw everything — that count, not an exemption, is what keeps `--only` honest. It is the
+///   one filter `stale` is subject to: a lens the caller asked for this once is not a stored
+///   policy that could bury the audit signal.
+/// - **`skip` is suppression.** `--skip` and `[analysis] skip` mean the same thing from two
+///   sources, count the same way (`SuppressedSummary::config`), and share `stale`'s exemption
+///   — the "your suppressions are dead" signal must never be silenceable by the thing it
+///   audits, whichever source asks.
+#[derive(Debug, Default, Clone)]
+pub struct ReportFilter {
+    pub only: Vec<SkipSpec>,
+    pub skip: Vec<SkipSpec>,
+    pub rules: Vec<PathRule>,
+}
+
+/// What a report filter removed, split by mechanism because the two mean different things to
+/// a reader: a suppressed finding was acknowledged, an elided one was merely not asked for.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct FilterCounts {
+    pub suppressed: usize,
+    pub elided: usize,
+}
+
+impl ReportFilter {
+    pub(crate) fn apply(&self, findings: Vec<Finding>) -> (Vec<Finding>, FilterCounts) {
+        if self.only.is_empty() && self.skip.is_empty() && self.rules.is_empty() {
+            return (findings, FilterCounts::default());
+        }
+        let mut counts = FilterCounts::default();
+        let kept = findings
+            .into_iter()
+            .filter(|f| {
+                if !self.only.is_empty() && !self.only.iter().any(|s| s.covers(f)) {
+                    counts.elided += 1;
+                    return false;
+                }
+                // The pragma meta-rule: the "your suppressions are dead" signal must never be
+                // silenceable by the thing it audits.
+                if f.category == "stale" {
+                    return true;
+                }
+                let skipped = self.skip.iter().any(|s| s.covers(f))
+                    || self.rules.iter().any(|rule| {
+                        f.location
+                            .path
+                            .as_ref()
+                            .is_some_and(|p| rule.paths.iter().any(|g| g.matches(p.0.as_str())))
+                            && rule.skip.iter().any(|s| s.covers(f))
+                    });
+                if skipped {
+                    counts.suppressed += 1;
+                }
+                !skipped
+            })
+            .collect();
+        (kept, counts)
+    }
 }
 
 impl KndoConfig {
@@ -163,6 +269,20 @@ impl KndoConfig {
                     .duplicate_min_tokens
                     .unwrap_or(default_tuning.duplicate_min_tokens),
                 externally_invoked: self.externally_invoked.clone(),
+                strict: overrides.strict,
+            },
+            report: ReportFilter {
+                only: overrides.only.clone(),
+                // Union, not override: `--skip` adds to what the project already skips. A
+                // flag that silently dropped the project's own list would make one CI job's
+                // narrowing look like a policy change.
+                skip: self
+                    .skip
+                    .iter()
+                    .chain(overrides.skip.iter())
+                    .cloned()
+                    .collect(),
+                rules: self.rules.clone(),
             },
         }
     }
@@ -384,40 +504,6 @@ impl KndoConfig {
             .find(|(key, _)| *key == id || id.strip_prefix("kndo:") == Some(key.as_str()))
             .map(|(_, options)| options)
     }
-
-    /// Applies `[analysis].skip` and every matching `[[rule]]` to the post-pragma finding
-    /// set, returning the kept findings and how many were config-suppressed (the
-    /// `SuppressedSummary::config` count). Runs strictly after inline pragmas — see the
-    /// module docs for the ordering guarantee — and before the `min-confidence` floor.
-    pub(crate) fn filter_findings(&self, findings: Vec<Finding>) -> (Vec<Finding>, usize) {
-        if self.skip.is_empty() && self.rules.is_empty() {
-            return (findings, 0);
-        }
-        let mut config_suppressed = 0usize;
-        let kept = findings
-            .into_iter()
-            .filter(|f| {
-                // The pragma meta-rule, mirrored: the "your suppressions are dead" signal
-                // must never be silenceable by the thing it audits.
-                if f.category == "stale" {
-                    return true;
-                }
-                let skipped = self.skip.iter().any(|s| s.covers(f))
-                    || self.rules.iter().any(|rule| {
-                        f.location
-                            .path
-                            .as_ref()
-                            .is_some_and(|p| rule.paths.iter().any(|g| g.matches(p.0.as_str())))
-                            && rule.skip.iter().any(|s| s.covers(f))
-                    });
-                if skipped {
-                    config_suppressed += 1;
-                }
-                !skipped
-            })
-            .collect();
-        (kept, config_suppressed)
-    }
 }
 
 /// Every `[plugins.<id>]` options table under `[plugins]`. `gate` is the tier policy,
@@ -529,27 +615,12 @@ fn parse_skip_list(
             ));
             continue;
         };
-        let (category, subject) = match raw.split_once(':') {
-            Some((c, s)) => (c, Some(SubjectKind::new(s))),
-            None => (raw, None),
-        };
-        if category == "stale" {
-            problems.push(format!(
-                "kndo.toml {context} entry \"{raw}\": `stale` audits suppressions and cannot \
-                 itself be skipped — entry ignored"
-            ));
-            continue;
+        match SkipSpec::parse(raw) {
+            Ok(spec) => specs.push(spec),
+            Err(e) => problems.push(format!(
+                "kndo.toml {context} entry \"{raw}\": {e} — entry ignored"
+            )),
         }
-        if category.is_empty() {
-            problems.push(format!(
-                "kndo.toml {context} entry \"{raw}\": empty category — entry ignored"
-            ));
-            continue;
-        }
-        specs.push(SkipSpec {
-            category: Category::new(category),
-            subject,
-        });
     }
     specs
 }
@@ -824,8 +895,12 @@ mod tests {
             finding("internal-only", "function", Some("src/a.rs")),
             finding("stale", "suppression", Some("src/a.rs")),
         ];
-        let (kept, config_suppressed) = config.filter_findings(findings);
-        assert_eq!(config_suppressed, 2);
+        let (kept, counts) = config
+            .resolve(&crate::engine::ConfigOverrides::default())
+            .report
+            .apply(findings);
+        assert_eq!(counts.suppressed, 2);
+        assert_eq!(counts.elided, 0, "no `--only` lens is in play");
         let categories: Vec<(&str, &str)> = kept
             .iter()
             .map(|f| (f.category.as_str(), f.subject_kind.as_str()))
@@ -848,8 +923,11 @@ mod tests {
             finding("untested", "file", Some("schemas/output.json")),
             finding("unused", "file", None),
         ];
-        let (kept, config_suppressed) = config.filter_findings(findings);
-        assert_eq!(config_suppressed, 2);
+        let (kept, counts) = config
+            .resolve(&crate::engine::ConfigOverrides::default())
+            .report
+            .apply(findings);
+        assert_eq!(counts.suppressed, 2);
         assert_eq!(kept.len(), 3);
         assert!(kept
             .iter()

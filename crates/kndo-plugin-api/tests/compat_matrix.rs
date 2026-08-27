@@ -52,7 +52,7 @@ fn the_pinned_v1_adapter_component_still_works_against_the_head_host() {
         ConfigOverrides {
             use_cache: false,
             threads: Some(1),
-            min_confidence: None,
+            ..ConfigOverrides::default()
         },
         vec![Box::new(adapter)],
     )
@@ -111,7 +111,7 @@ fn the_pinned_v1_plugin_component_still_works_against_the_head_host() {
         ConfigOverrides {
             use_cache: false,
             threads: Some(1),
-            min_confidence: None,
+            ..ConfigOverrides::default()
         },
         vec![Box::new(MockAdapter)],
         vec![Box::new(plugin)],

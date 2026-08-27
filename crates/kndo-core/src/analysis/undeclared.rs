@@ -19,7 +19,15 @@ use crate::vocab::{
     Category, Confidence, DependencyId, EdgeKind, FileOrigin, Group, PackageId, SubjectKind,
 };
 
-pub fn find_undeclared_dependencies(graph: &ProjectGraph) -> Vec<Finding> {
+/// `strict` is `--strict` (RFC 0005 §"undeclared": *"Severity: warning; error in `--strict`"*).
+/// A phantom dependency is a build that works by accident — it resolves today through
+/// hoisting or transitivity and breaks on a clean install elsewhere — so a project that opts
+/// into strictness wants its build to say so rather than to warn about it.
+///
+/// Read here rather than promoted by a central post-pass: severity is part of what a verdict
+/// means, and a table mapping categories to strict severities would be a second place to keep
+/// in sync with the analysis that decides the ordinary one.
+pub fn find_undeclared_dependencies(graph: &ProjectGraph, strict: bool) -> Vec<Finding> {
     let mut declared_by_package: HashMap<PackageId, HashSet<&str>> = HashMap::default();
     for dep in &graph.declared_dependencies {
         declared_by_package
@@ -103,7 +111,10 @@ pub fn find_undeclared_dependencies(graph: &ProjectGraph) -> Vec<Finding> {
             category: Category::UNDECLARED,
             group: Group::Defect,
             subject_kind: SubjectKind::DEPENDENCY,
-            severity: Severity::Warning, // error under --strict — not implemented yet
+            severity: match strict {
+                true => Severity::Error,
+                false => Severity::Warning,
+            },
             confidence: Confidence::Certain,
             message: format!(
                 "{name} is imported but not declared in {}'s manifest (phantom dependency — likely resolving via hoisting/transitivity){}",
@@ -190,7 +201,7 @@ mod tests {
         }];
         let edges = vec![imports_dep_edge(FileId(0), DependencyId(0))];
         let graph = ProjectGraph::for_test(files, vec![], dependencies, edges);
-        let findings = find_undeclared_dependencies(&graph);
+        let findings = find_undeclared_dependencies(&graph, false);
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].category, "undeclared");
         assert_eq!(findings[0].group, crate::vocab::Group::Defect);
@@ -214,7 +225,7 @@ mod tests {
                 version_req: Some(SmolStr::new("^4.0.0")),
                 scope: DependencyScope::Prod,
             }]);
-        assert!(find_undeclared_dependencies(&graph).is_empty());
+        assert!(find_undeclared_dependencies(&graph, false).is_empty());
     }
 
     #[test]
@@ -245,7 +256,7 @@ mod tests {
                 manifest_claim_languages: vec![SmolStr::new("mock")],
             },
         ]);
-        assert!(find_undeclared_dependencies(&graph).is_empty());
+        assert!(find_undeclared_dependencies(&graph, false).is_empty());
     }
 
     #[test]
@@ -269,7 +280,7 @@ mod tests {
             });
             let graph = ProjectGraph::for_test(vec![f], vec![], dependencies(), edges());
             assert!(
-                find_undeclared_dependencies(&graph).is_empty(),
+                find_undeclared_dependencies(&graph, false).is_empty(),
                 "{origin:?} files must not accuse their package"
             );
         }
@@ -281,7 +292,34 @@ mod tests {
             dependencies(),
             edges(),
         );
-        assert_eq!(find_undeclared_dependencies(&graph).len(), 1);
+        assert_eq!(find_undeclared_dependencies(&graph, false).len(), 1);
+    }
+
+    #[test]
+    fn strict_promotes_the_verdict_to_error_and_changes_nothing_else() {
+        // RFC 0005: "Severity: warning; error in `--strict`". A phantom dependency is a build
+        // that works by accident; a project that opts into strictness wants the build to say
+        // so. Everything else about the finding — its id above all — must be identical, or
+        // `--strict` would silently invalidate baselines and suppressions.
+        let graph = ProjectGraph::for_test(
+            vec![file("docs/js/bundle.js", PackageId(0))],
+            vec![],
+            vec![DependencyNode {
+                name: SmolStr::new("jquery"),
+            }],
+            vec![imports_dep_edge(FileId(0), DependencyId(0))],
+        );
+        let lenient = find_undeclared_dependencies(&graph, false);
+        let strict = find_undeclared_dependencies(&graph, true);
+        assert_eq!(lenient.len(), 1);
+        assert_eq!(strict.len(), 1);
+        assert_eq!(lenient[0].severity, Severity::Warning);
+        assert_eq!(strict[0].severity, Severity::Error);
+        assert_eq!(
+            lenient[0].id, strict[0].id,
+            "identity is a stability contract — severity is not part of it"
+        );
+        assert_eq!(lenient[0].message, strict[0].message);
     }
 
     #[test]
@@ -347,7 +385,7 @@ mod tests {
                 scope: DependencyScope::Prod,
             }]);
 
-        let findings = find_undeclared_dependencies(&graph);
+        let findings = find_undeclared_dependencies(&graph, false);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("@demo/b"));
         assert!(findings[0].message.contains("packages/b/index.ts"));
@@ -361,8 +399,8 @@ mod tests {
         }];
         let edges = vec![imports_dep_edge(FileId(0), DependencyId(0))];
         let graph = ProjectGraph::for_test(files, vec![], dependencies, edges);
-        let a = find_undeclared_dependencies(&graph);
-        let b = find_undeclared_dependencies(&graph);
+        let a = find_undeclared_dependencies(&graph, false);
+        let b = find_undeclared_dependencies(&graph, false);
         assert_eq!(a[0].id, b[0].id);
     }
 }

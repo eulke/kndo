@@ -213,6 +213,17 @@ pub struct ConfigOverrides {
     /// The CLI passes `Some(Possible)` under `--verbose` so verbose always shows
     /// everything even when the project config raises the floor.
     pub min_confidence: Option<crate::vocab::Confidence>,
+    /// `--only <cats>`: report ONLY these. A lens over this invocation, not a policy — what
+    /// it drops is counted into [`RunResult::elided`] rather than silently vanishing.
+    /// Empty means no lens.
+    pub only: Vec<crate::config::SkipSpec>,
+    /// `--skip <cats>`: the same policy `[analysis] skip` expresses, from the command line.
+    /// The two are unioned, never overridden, and counted together.
+    pub skip: Vec<crate::config::SkipSpec>,
+    /// `--strict`: promote the severities RFC 0005 marks as promotable. Today that is
+    /// `undeclared` alone (warning → error) — a phantom dependency is a build that works by
+    /// accident, and a project that opts in wants its build to say so.
+    pub strict: bool,
 }
 
 impl Default for ConfigOverrides {
@@ -221,6 +232,9 @@ impl Default for ConfigOverrides {
             use_cache: true,
             threads: None,
             min_confidence: None,
+            only: Vec::new(),
+            skip: Vec::new(),
+            strict: false,
         }
     }
 }
@@ -620,10 +634,7 @@ pub struct SuppressedSummary {
 /// Typed form of the output-schema envelope. JSON/SARIF/agent serializers live core-side so
 /// every frontend emits byte-identical machine output; *human* rendering is frontend-owned.
 /// Flat here for ergonomic Rust consumption; [`RunResult::to_json`] nests it into
-/// the schema's actual shape. Not yet present: `budget` — the delta-budget gate subsystem
-/// doesn't exist yet, so the field is omitted rather
-/// than emitted empty/null. Adding it later is additive (minor schema bump), not
-/// a breaking change.
+/// the schema's actual shape.
 #[derive(Debug, Default)]
 pub struct RunResult {
     /// Full mode: every finding. Diff modes: only *new*
@@ -664,6 +675,11 @@ pub struct RunResult {
     /// its very first run and is still, correctly, cold.
     pub cache_enabled: bool,
     pub cache_hits: u64,
+    /// Findings `--only` narrowed out of this report. NOT suppression: a suppressed finding
+    /// was acknowledged, an elided one was merely not asked for, and conflating the two would
+    /// make narrowing a view look like a policy change. Reported so that elision is always
+    /// explicit — a caller must never have to guess whether it saw everything.
+    pub elided: usize,
     /// The `[delta]` budget verdict — `None` in full mode and whenever no `[delta]` section
     /// is configured, which are the two cases where there is nothing to judge. The gate reads
     /// [`Budget::failed`]; the rules explain it.
@@ -801,6 +817,14 @@ struct Envelope<'a> {
     health: Option<&'a crate::analysis::health::Health>,
     #[serde(skip_serializing_if = "Option::is_none")]
     budget: Option<&'a crate::delta::Budget>,
+    /// `--only`'s narrowing, absent when nothing was narrowed away. Beside `suppressed`
+    /// rather than inside it: the two are different answers about why a finding is not here.
+    ///
+    /// `Option` rather than a `skip_serializing_if` predicate on a `usize`: serde would need
+    /// a named local function for that, and a function reachable only from an attribute
+    /// string is invisible to every call-graph tool — this one included.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    elided: Option<usize>,
     #[serde(skip_serializing_if = "Option::is_none")]
     baseline: Option<&'a BaselineSummary>,
     suppressed: SuppressedSummary,
@@ -827,6 +851,7 @@ impl RunResult {
             fixed: &self.fixed,
             health: self.health.as_ref(),
             budget: self.budget.as_ref(),
+            elided: (self.elided > 0).then_some(self.elided),
             baseline: self.baseline.as_ref(),
             suppressed: self.suppressed,
             diagnostics: &self.diagnostics,
@@ -893,6 +918,9 @@ fn ensure_thread_pool(threads: Option<usize>) {
 struct AnalyzedTree {
     graph: std::sync::Arc<graph::ProjectGraph>,
     findings: Vec<Finding>,
+    /// How many findings `--only` narrowed away — never suppression, see
+    /// [`crate::config::ReportFilter`].
+    elided: usize,
     diagnostics: Vec<Diagnostic>,
     /// Categories no analysis judged this run — see [`crate::analysis::Abstention`].
     abstained: Vec<crate::analysis::Abstention>,
@@ -1358,6 +1386,7 @@ impl Engine {
             after_diagnostics,
             after_abstained,
             after_suppressed,
+            after_elided,
             after_health,
             plugin_contributions,
         ) = (
@@ -1366,6 +1395,7 @@ impl Engine {
             after.diagnostics,
             after.abstained,
             after.suppressed,
+            after.elided,
             after.health,
             after.plugin_contributions,
         );
@@ -1424,6 +1454,9 @@ impl Engine {
             fixed: fixed_findings,
             baseline,
             suppressed: after_suppressed,
+            // The "after" side, like `suppressed`: a diff reports what the current tree's
+            // report narrowed away, not what the merge-base's would have.
+            elided: after_elided,
             budget,
             health: {
                 let mut health = after_health;
@@ -1691,8 +1724,8 @@ impl Engine {
                 // finding stays honestly non-stale, and a finding covered by both counts
                 // as inline (config never saw it). Then the min-confidence floor — a
                 // display posture, not an acknowledgment, so it is dropped, not counted.
-                let (findings, config_suppressed) = self.config.filter_findings(findings);
-                suppressed.config = config_suppressed;
+                let (findings, filtered) = self.effective.report.apply(findings);
+                suppressed.config = filtered.suppressed;
                 let mut findings =
                     apply_confidence_floor(findings, self.effective.min_confidence_floor);
                 // Last, over the findings that survived: provenance is a property of the
@@ -1702,6 +1735,7 @@ impl Engine {
                 Ok(AnalyzedTree {
                     graph: g,
                     findings,
+                    elided: filtered.elided,
                     diagnostics,
                     abstained,
                     coverage,
@@ -1863,6 +1897,7 @@ impl Engine {
             Ok(AnalyzedTree {
                 graph: g,
                 findings,
+                elided,
                 diagnostics,
                 abstained,
                 coverage: _, // `check` reports findings; per-shape metrics are `describe`'s
@@ -1874,6 +1909,7 @@ impl Engine {
                 diagnostics,
                 abstained,
                 findings,
+                elided,
                 suppressed,
                 health: Some(health),
                 timings,
@@ -2896,8 +2932,7 @@ mod tests {
             dir.path(),
             ConfigOverrides {
                 use_cache: false,
-                threads: None,
-                min_confidence: None,
+                ..ConfigOverrides::default()
             },
             vec![Box::new(CacheMockAdapter)],
         )
@@ -3188,6 +3223,125 @@ mod tests {
             .find(|f| finding_path(f) == path)
             .map(|f| f.sources.iter().map(String::as_str).collect())
             .unwrap_or_default()
+    }
+
+    /// One dead file and, separately, one dead function inside a live one — so `unused` fires
+    /// at two subject kinds and a lens can be watched narrowing rather than emptying.
+    fn filter_repo() -> tempfile::TempDir {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("root.dmock"),
+            "root-file\nimport ./live.dmock\n",
+        )
+        .unwrap();
+        std::fs::write(dir.path().join("live.dmock"), "decl deadThing\n").unwrap();
+        std::fs::write(dir.path().join("orphan.dmock"), "").unwrap();
+        dir
+    }
+
+    fn run_with(dir: &tempfile::TempDir, overrides: ConfigOverrides) -> RunResult {
+        Engine::open(dir.path(), overrides, vec![Box::new(DiffMockAdapter)])
+            .unwrap()
+            .check(RunMode::Full)
+    }
+
+    fn spec(raw: &str) -> crate::config::SkipSpec {
+        crate::config::SkipSpec::parse(raw).unwrap()
+    }
+
+    #[test]
+    fn only_is_a_lens_and_says_how_much_it_narrowed() {
+        // The safeguard that makes a lens safe: what it removes is counted and reported, so a
+        // `--only` that matches nothing prints `0 findings` next to "and N you didn't ask
+        // for", never a bare clean report over a codebase nobody looked at.
+        let dir = filter_repo();
+        let all = run_with(&dir, ConfigOverrides::default());
+        assert!(all.findings.len() >= 2, "{:?}", all.findings);
+        assert_eq!(all.elided, 0);
+
+        let lens = run_with(
+            &dir,
+            ConfigOverrides {
+                only: vec![spec("unused:file")],
+                ..ConfigOverrides::default()
+            },
+        );
+        assert_eq!(lens.findings.len(), 1, "{:?}", lens.findings);
+        assert_eq!(
+            lens.findings[0].subject_kind,
+            crate::vocab::SubjectKind::FILE
+        );
+        assert_eq!(
+            lens.elided,
+            all.findings.len() - lens.findings.len(),
+            "everything the lens removed is accounted for"
+        );
+        assert_eq!(
+            lens.suppressed.config, 0,
+            "a lens is not a suppression — conflating them would make narrowing a view look \
+             like a policy change"
+        );
+        assert!(lens.to_json().contains("\"elided\""), "{}", lens.to_json());
+    }
+
+    #[test]
+    fn skip_from_the_flag_and_from_the_file_are_the_same_policy_and_add_up() {
+        // `--skip` is `[analysis] skip` from another source: same vocabulary, same count, and
+        // unioned rather than overriding — a flag that silently dropped the project's own list
+        // would make one CI job's narrowing look like a policy change.
+        let dir = filter_repo();
+        std::fs::write(
+            dir.path().join("kndo.toml"),
+            "[analysis]\nskip = [\"unused:file\"]\n",
+        )
+        .unwrap();
+
+        let from_file = run_with(&dir, ConfigOverrides::default());
+        assert!(from_file
+            .findings
+            .iter()
+            .all(|f| f.subject_kind != crate::vocab::SubjectKind::FILE));
+        assert_eq!(from_file.suppressed.config, 1);
+
+        let both = run_with(
+            &dir,
+            ConfigOverrides {
+                skip: vec![spec("unused:function")],
+                ..ConfigOverrides::default()
+            },
+        );
+        assert!(
+            both.findings.is_empty(),
+            "the file's skip still applies alongside the flag's: {:?}",
+            both.findings
+        );
+        assert!(both.suppressed.config > from_file.suppressed.config);
+        assert_eq!(both.elided, 0, "skip is suppression, never elision");
+    }
+
+    #[test]
+    fn strict_promotes_undeclared_and_nothing_else() {
+        // RFC 0005: "Severity: warning; error in `--strict`". Exactly one category promotes
+        // today, and the test says so — a blanket promotion would be a different feature.
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("root.dmock"), "root-file\n").unwrap();
+        std::fs::write(dir.path().join("dead.dmock"), "").unwrap();
+
+        let strict = run_with(
+            &dir,
+            ConfigOverrides {
+                strict: true,
+                ..ConfigOverrides::default()
+            },
+        );
+        assert!(
+            strict
+                .findings
+                .iter()
+                .all(|f| f.severity != Severity::Error),
+            "no undeclared dependency here, so nothing promotes: {:?}",
+            strict.findings
+        );
     }
 
     #[test]

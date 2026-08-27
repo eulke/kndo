@@ -26,8 +26,8 @@ pub use kndo_core::{
     sort_findings_for_display, BaselineOp, BaselineResult, Budget, BudgetRule, BudgetVerdict,
     Category, Confidence, ConfigOverrides, Delta, DeltaOrigin, Diagnostic, DiagnosticLevel,
     DoctorReport, Engine, EngineError, Finding, Group, Location, ProjectPath, QueryFlags,
-    QueryRequest, QueryResult, ResultEntry, RunMode, RunResult, Severity, SubjectKind,
-    SuppressedSummary, Verb, KNDO_VERSION, SCHEMA_VERSION,
+    QueryRequest, QueryResult, ResultEntry, RunMode, RunResult, Severity, SkipSpec, SkipSpecError,
+    SubjectKind, SuppressedSummary, Verb, KNDO_VERSION, SCHEMA_VERSION,
 };
 
 use kndo_core::adapter::LanguageAdapter;

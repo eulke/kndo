@@ -74,7 +74,8 @@ configuration.
 
 - **`skip`** — verdicts to disable outright, as categories (`"duplicate"`) or
   category-subject pairs (`"unused:enum-member"`) using the same vocabulary as
-  [suppressions](suppressions.md).
+  [suppressions](suppressions.md). `kndo check --skip` adds to this list from the command
+  line rather than replacing it; see [CLI](cli.md#--only-and---skip).
 - **`min-confidence`** — the report floor. Default `"possible"`: every tier is reported.
   Raise it to `"probable"` (or `"certain"`) to hide speculative findings by default;
   `--verbose` always shows every tier regardless of the floor, and `stale` findings (the

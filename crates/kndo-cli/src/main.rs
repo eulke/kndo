@@ -33,6 +33,9 @@ check flags
   --staged         analyze what `git commit` would commit, vs HEAD
   --diff <ref>     analyze the change vs merge-base(<ref>, HEAD)
   --fail-on <sev>  exit 1 at/above: error | warning (diff default) | info | none (full default)
+  --only <cats>    report only these categories (comma-separated, repeatable)
+  --skip <cats>    report everything except these
+  --strict         promote what RFC 0005 marks promotable (today: undeclared → error)
   --format <f>     human (tty default) | json (piped default) | agent | sarif
   --quiet | --verbose | --no-cache | --threads <n> | --color <auto|always|never>
 
@@ -711,6 +714,11 @@ struct Flags {
     fail_on: Option<String>,
     threads: Option<String>,
     by_package: bool,
+    /// `--only`/`--skip`, raw. Repeatable and comma-separated both work — a shell loop that
+    /// appends one flag per category and a hand-typed list should not be different features.
+    only: Vec<String>,
+    skip: Vec<String>,
+    strict: bool,
 }
 
 fn parse_flags(args: &[String]) -> Result<Flags, String> {
@@ -725,6 +733,9 @@ fn parse_flags(args: &[String]) -> Result<Flags, String> {
         fail_on: None,
         threads: None,
         by_package: false,
+        only: Vec::new(),
+        skip: Vec::new(),
+        strict: false,
     };
     // A valued flag with no value, and any token kndo doesn't know, are hard errors:
     // a typo'd `--fail-onn warning` silently un-gating CI is
@@ -747,6 +758,9 @@ fn parse_flags(args: &[String]) -> Result<Flags, String> {
             "--fail-on" => flags.fail_on = Some(value(&mut it, "--fail-on")?),
             "--threads" => flags.threads = Some(value(&mut it, "--threads")?),
             "--by-package" => flags.by_package = true,
+            "--only" => flags.only.push(value(&mut it, "--only")?),
+            "--skip" => flags.skip.push(value(&mut it, "--skip")?),
+            "--strict" => flags.strict = true,
             s if s.starts_with("--format=") => {
                 flags.format = Some(s["--format=".len()..].to_string())
             }
@@ -758,6 +772,8 @@ fn parse_flags(args: &[String]) -> Result<Flags, String> {
             s if s.starts_with("--threads=") => {
                 flags.threads = Some(s["--threads=".len()..].to_string())
             }
+            s if s.starts_with("--only=") => flags.only.push(s["--only=".len()..].to_string()),
+            s if s.starts_with("--skip=") => flags.skip.push(s["--skip=".len()..].to_string()),
             other => {
                 return Err(format!(
                     "unknown argument `{other}` — see `kndo --help` for flags"
@@ -766,6 +782,35 @@ fn parse_flags(args: &[String]) -> Result<Flags, String> {
         }
     }
     Ok(flags)
+}
+
+/// `--only`/`--skip` values into core's own skip vocabulary. Comma-separated within one flag,
+/// repeatable across flags; both spellings mean the same list, because a shell loop appending
+/// `--skip $c` and a hand-typed `--skip a,b` should not be two different features.
+///
+/// A category neither the core registry nor the `plugin:` namespace knows is a **hard error**,
+/// not a silent no-op: `--only unsued` matching nothing would print a clean report for a
+/// codebase nobody looked at, which is the single worst thing this tool can do. `--skip unsued`
+/// is rejected on the same principle the parser already applies to `--fail-onn`.
+fn parse_category_filters(raws: &[String], flag: &str) -> Result<Vec<kndo::SkipSpec>, String> {
+    let mut specs = Vec::new();
+    for raw in raws.iter().flat_map(|r| r.split(',')) {
+        let raw = raw.trim();
+        if raw.is_empty() {
+            continue;
+        }
+        let spec = kndo::SkipSpec::parse(raw).map_err(|e| format!("{flag} `{raw}`: {e}"))?;
+        if !spec.category.is_plugin() && !kndo::Category::all().contains(&spec.category) {
+            let known: Vec<&str> = kndo::Category::all().iter().map(|c| c.as_str()).collect();
+            return Err(format!(
+                "{flag} `{raw}`: unknown category `{}` — one of: {}",
+                spec.category,
+                known.join(", ")
+            ));
+        }
+        specs.push(spec);
+    }
+    Ok(specs)
 }
 
 /// `--threads N` > `KNDO_THREADS` env > default physical cores — resolved to a
@@ -980,6 +1025,20 @@ fn check(args: &[String]) -> ExitCode {
         }
     };
 
+    // Category filters are `check`'s alone. `health` scores the whole project by construction
+    // — a score computed over a narrowed view would be a different number wearing the same
+    // name — so it neither offers them nor silently ignores them.
+    let (only, skip) = match (
+        parse_category_filters(&flags.only, "--only"),
+        parse_category_filters(&flags.skip, "--skip"),
+    ) {
+        (Ok(only), Ok(skip)) => (only, skip),
+        (Err(e), _) | (_, Err(e)) => {
+            eprintln!("kndo: {e}");
+            return ExitCode::from(2);
+        }
+    };
+
     let overrides = ConfigOverrides {
         use_cache: !flags.no_cache,
         threads,
@@ -987,6 +1046,9 @@ fn check(args: &[String]) -> ExitCode {
         // `min-confidence` floor; otherwise the file (or the report-everything default)
         // decides.
         min_confidence: flags.verbose.then(ConfigOverrides::verbose_min_confidence),
+        only,
+        skip,
+        strict: flags.strict,
     };
     let (_, mut engine) = match open_engine(overrides) {
         Ok(t) => t,
@@ -1125,7 +1187,45 @@ mod tests {
             fail_on: fail_on.map(str::to_string),
             threads: None,
             by_package: false,
+            only: Vec::new(),
+            skip: Vec::new(),
+            strict: false,
         }
+    }
+
+    #[test]
+    fn category_filters_accept_both_spellings_and_the_subject_vocabulary() {
+        // A shell loop appending `--skip $c` and a hand-typed `--skip a,b` are the same list,
+        // and both speak the vocabulary suppressions already use.
+        let repeated =
+            parse_category_filters(&["unused".to_string(), "duplicate".to_string()], "--skip")
+                .unwrap();
+        let comma = parse_category_filters(&["unused, duplicate".to_string()], "--skip").unwrap();
+        assert_eq!(repeated, comma);
+        assert_eq!(repeated.len(), 2);
+
+        let narrowed =
+            parse_category_filters(&["unused:enum-member".to_string()], "--only").unwrap();
+        assert_eq!(
+            narrowed[0].subject.as_ref().unwrap().as_str(),
+            "enum-member"
+        );
+    }
+
+    #[test]
+    fn an_unknown_category_is_a_hard_error_not_an_empty_report() {
+        // `--only unsued` matching nothing would print a clean report for a codebase nobody
+        // looked at. Same principle the parser already applies to `--fail-onn`.
+        let e = parse_category_filters(&["unsued".to_string()], "--only").unwrap_err();
+        assert!(e.contains("unknown category"), "{e}");
+        assert!(e.contains("unused"), "the message lists the real ones: {e}");
+
+        // A plugin category is an open namespace and must still be accepted.
+        assert!(parse_category_filters(&["plugin:acme/x".to_string()], "--skip").is_ok());
+
+        // And the meta-suppression rule reaches the flag, not just the file.
+        let e = parse_category_filters(&["stale".to_string()], "--skip").unwrap_err();
+        assert!(e.contains("cannot itself be skipped"), "{e}");
     }
 
     #[test]

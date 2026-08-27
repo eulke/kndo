@@ -51,6 +51,7 @@ pub mod vocab;
 // (`adapter::LanguageAdapter`, `plugin::Plugin`, `graph::GraphView`, …) are a different
 // surface — component authors, not frontends — and stay reached through their own modules.
 pub use crate::delta::{Budget, BudgetRule, BudgetVerdict};
+pub use config::{SkipSpec, SkipSpecError};
 pub use engine::{
     sort_findings_for_display, BaselineOp, BaselineResult, ConfigOverrides, Delta, DeltaOrigin,
     DoctorReport, Engine, EngineError, Finding, Location, RunMode, RunResult, Severity,

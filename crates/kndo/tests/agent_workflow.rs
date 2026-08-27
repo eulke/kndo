@@ -57,8 +57,7 @@ fn engine(root: &Path) -> kndo::engine::Engine {
         root,
         ConfigOverrides {
             use_cache: false,
-            threads: None,
-            min_confidence: None,
+            ..ConfigOverrides::default()
         },
     )
     .unwrap()

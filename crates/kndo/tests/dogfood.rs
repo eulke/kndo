@@ -36,7 +36,7 @@ fn kndo_is_clean_under_kndo() {
         // a `.kndo/` behind in the working tree of whoever ran the suite.
         use_cache: false,
         threads: Some(1),
-        min_confidence: None,
+        ..kndo_core::engine::ConfigOverrides::default()
     };
     let mut engine = kndo::open(&root, overrides).expect("kndo::open on its own workspace");
     let result = engine.check(kndo_core::engine::RunMode::Full);
@@ -116,7 +116,7 @@ fn zero_findings_means_measured_and_not_merely_unjudged() {
     let overrides = kndo_core::engine::ConfigOverrides {
         use_cache: false,
         threads: Some(1),
-        min_confidence: None,
+        ..kndo_core::engine::ConfigOverrides::default()
     };
     let mut engine = kndo::open(&root, overrides).expect("kndo::open on its own workspace");
     let result = engine.check(kndo_core::engine::RunMode::Full);

@@ -73,7 +73,7 @@ fn a_globally_installed_adapter_only_activates_when_its_rule_matches() {
     let overrides = kndo_core::engine::ConfigOverrides {
         use_cache: false,
         threads: Some(1),
-        min_confidence: None,
+        ..kndo_core::engine::ConfigOverrides::default()
     };
 
     // Scenario 1: no `*.kdemo-enable` marker — the globally installed adapter's own activation
