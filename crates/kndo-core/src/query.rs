@@ -313,6 +313,21 @@ pub struct QNodeRef {
     pub span: Option<NodeSpan>,
 }
 
+/// One node's one-line spelling: `[selector] kind path:line`, with the coordinates dropped for
+/// a node that has no span. Lives with the type rather than in a frontend, because it is the
+/// same line in every frontend that prints one — the human renderer and the agent format each
+/// carried a byte-identical copy of it, which is exactly the drift the facade rule exists to
+/// prevent.
+impl std::fmt::Display for QNodeRef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "[{}] {}", self.selector, self.kind)?;
+        match &self.span {
+            Some(s) => write!(f, " {}:{}", s.path, s.start.0),
+            None => Ok(()),
+        }
+    }
+}
+
 pub fn qnode_ref(graph: &ProjectGraph, reach: &ReachabilityMap, node: &Resolved) -> QNodeRef {
     QNodeRef {
         selector: selector_string(graph, node),

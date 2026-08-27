@@ -32,7 +32,7 @@
 //!   indented `└` lines under the finding — role, location, note.
 
 use kndo::analysis::health::Health;
-use kndo::query::{NeighborEntry, QNodeRef};
+use kndo::query::NeighborEntry;
 use kndo::{
     Confidence, DeltaOrigin, Diagnostic, Finding, Group, QueryResult, ResultEntry, RunResult,
 };
@@ -359,14 +359,8 @@ fn render_flat(out: &mut String, findings: &[&Finding], opts: &RenderOptions) {
 /// per entry: location, then the note that explains the hop.
 fn render_related(out: &mut String, f: &Finding) {
     for r in &f.related {
-        let location = match r.range {
-            Some(range) => format!("{}:{}", r.path.0, range.start.0),
-            None => r.path.0.to_string(),
-        };
-        match &r.note {
-            Some(note) => out.push_str(&format!("      └ {location} — {note}\n")),
-            None => out.push_str(&format!("      └ {location}\n")),
-        }
+        out.push_str(&r.render("      └ ", " — "));
+        out.push('\n');
     }
 }
 
@@ -506,14 +500,14 @@ fn render_query_entry(out: &mut String, entry: &ResultEntry, opts: &RenderOption
         }
         ResultEntry::Find(r) => {
             for (n, m) in r.matches.iter().enumerate() {
-                out.push_str(&format!("  {}. {}\n", n + 1, node_line(m)));
+                out.push_str(&format!("  {}. {}\n", n + 1, m));
             }
             if r.elided > 0 {
                 out.push_str(&format!("  … {} more (--limit)\n", r.elided));
             }
         }
         ResultEntry::Describe(d) => {
-            out.push_str(&format!("  {}\n", node_line(&d.node)));
+            out.push_str(&format!("  {}\n", d.node));
             if let Some(decl) = &d.declaration {
                 out.push_str(&format!(
                     "  declaration: {} · visibility {}{}\n",
@@ -551,13 +545,13 @@ fn render_query_entry(out: &mut String, entry: &ResultEntry, opts: &RenderOption
             if !d.reached_by_roots.is_empty() {
                 out.push_str("  reached by roots:\n");
                 for r in &d.reached_by_roots {
-                    out.push_str(&format!("    {}\n", node_line(r)));
+                    out.push_str(&format!("    {}\n", r));
                 }
             }
             if !d.declared_symbols.is_empty() {
                 out.push_str("  declared symbols:\n");
                 for s in &d.declared_symbols {
-                    out.push_str(&format!("    {}\n", node_line(s)));
+                    out.push_str(&format!("    {}\n", s));
                 }
             }
             if !d.findings.is_empty() {
@@ -568,7 +562,7 @@ fn render_query_entry(out: &mut String, entry: &ResultEntry, opts: &RenderOption
             }
         }
         ResultEntry::Neighbors(r) => {
-            out.push_str(&format!("  {}\n", node_line(&r.node)));
+            out.push_str(&format!("  {}\n", r.node));
             for e in &r.entries {
                 out.push_str(&format!("    {}\n", neighbor_line(e)));
             }
@@ -577,7 +571,7 @@ fn render_query_entry(out: &mut String, entry: &ResultEntry, opts: &RenderOption
             }
         }
         ResultEntry::Impact(r) => {
-            out.push_str(&format!("  {}\n", node_line(&r.node)));
+            out.push_str(&format!("  {}\n", r.node));
             out.push_str(&format!(
                 "  affected: {} (production={} test-only={} tooling-only={} unreachable={})\n",
                 r.affected.len() + r.elided,
@@ -595,7 +589,7 @@ fn render_query_entry(out: &mut String, entry: &ResultEntry, opts: &RenderOption
             if !r.affected_roots.is_empty() {
                 out.push_str("  affected roots:\n");
                 for root in &r.affected_roots {
-                    out.push_str(&format!("    [{}] {}\n", root.kind, node_line(&root.node)));
+                    out.push_str(&format!("    [{}] {}\n", root.kind, root.node));
                 }
                 if r.affected_roots_elided > 0 {
                     out.push_str(&format!("    … {} more\n", r.affected_roots_elided));
@@ -608,14 +602,14 @@ fn render_query_entry(out: &mut String, entry: &ResultEntry, opts: &RenderOption
                     sim.newly_unreachable.len() + sim.newly_unreachable_elided
                 ));
                 for q in &sim.newly_unreachable {
-                    out.push_str(&format!("      {}\n", node_line(q)));
+                    out.push_str(&format!("      {}\n", q));
                 }
                 out.push_str(&format!(
                     "    newly test-only: {}\n",
                     sim.newly_test_only.len() + sim.newly_test_only_elided
                 ));
                 for q in &sim.newly_test_only {
-                    out.push_str(&format!("      {}\n", node_line(q)));
+                    out.push_str(&format!("      {}\n", q));
                 }
                 if !sim.freed_dependencies.is_empty() {
                     out.push_str(&format!(
@@ -627,16 +621,12 @@ fn render_query_entry(out: &mut String, entry: &ResultEntry, opts: &RenderOption
         }
         ResultEntry::Trace(r) => {
             if r.paths.is_empty() {
-                out.push_str(&format!(
-                    "  {} -/-> {}  (no path)\n",
-                    node_line(&r.from),
-                    node_line(&r.to)
-                ));
+                out.push_str(&format!("  {} -/-> {}  (no path)\n", r.from, r.to));
             }
             for path in &r.paths {
-                let mut line = format!("  {}", node_line(&r.from));
+                let mut line = format!("  {}", r.from);
                 for hop in &path.hops {
-                    line.push_str(&format!(" → [{}] {}", hop.via.edge, node_line(&hop.node)));
+                    line.push_str(&format!(" → [{}] {}", hop.via.edge, hop.node));
                 }
                 out.push_str(&line);
                 out.push('\n');
@@ -651,21 +641,8 @@ fn render_query_entry(out: &mut String, entry: &ResultEntry, opts: &RenderOption
     }
 }
 
-fn node_line(n: &QNodeRef) -> String {
-    let loc = match &n.span {
-        Some(s) => format!(" {}:{}", s.path, s.start.0),
-        None => String::new(),
-    };
-    format!("[{}] {}{loc}", n.selector, n.kind)
-}
-
 fn neighbor_line(e: &NeighborEntry) -> String {
-    format!(
-        "{} via {} (depth {})",
-        node_line(&e.node),
-        e.via.edge,
-        e.depth
-    )
+    format!("{} via {} (depth {})", e.node, e.via.edge, e.depth)
 }
 
 #[cfg(test)]

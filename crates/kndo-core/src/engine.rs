@@ -454,6 +454,33 @@ pub struct RelatedLocation {
     pub note: Option<String>,
 }
 
+impl RelatedLocation {
+    /// Where this location is, as text: `path:line`, or bare `path` when there is no range.
+    /// Frontends decorate it differently (the human renderer draws a tree, the agent format
+    /// writes `evidence:`) but they agree on the coordinates, so the coordinates live here —
+    /// both used to spell them out themselves.
+    pub fn coordinates(&self) -> String {
+        match self.range {
+            Some(range) => format!("{}:{}", self.path.0, range.start.0),
+            None => self.path.0.to_string(),
+        }
+    }
+
+    /// This location as one rendered line, without its newline: the coordinates, plus
+    /// `separator` and the note when there is one.
+    ///
+    /// The decision that lives here is "a note is appended after the coordinates, and its
+    /// absence changes the line" — which every frontend that prints related locations makes,
+    /// and which the human renderer and the agent format each used to make on their own. What
+    /// stays theirs is how it looks: the tree glyph and em dash, or `evidence:` and a space.
+    pub fn render(&self, prefix: &str, separator: &str) -> String {
+        match &self.note {
+            Some(note) => format!("{prefix}{}{separator}{note}", self.coordinates()),
+            None => format!("{prefix}{}", self.coordinates()),
+        }
+    }
+}
+
 /// Typed form of the output-schema finding (every field lands in the JSON schema
 /// first — that document is normative). Not yet present:
 /// `evidence` (category-specific block), `sources`, `remediation`, `rolled_up` — each needs
