@@ -114,6 +114,12 @@ graph/cache/analysis:
 - `--threads 1` and the default thread count produce identical, deterministic output.
 - Every adapter's `tests/conformance.rs` fixtures stay byte-identical unless the PR is a
   deliberate, documented contract change.
+- `dogfood` (`crates/kndo/tests/dogfood.rs`) — **kndo on kndo reports nothing.** Zero is the
+  standing state, not a target: the `ACCEPTED` list in that file is empty, and an entry added to
+  it needs a written reason in the same commit. Its second test is the one that keeps the first
+  honest — no analysis other than `crap` may abstain, because a change that quietly stopped an
+  analysis from judging would make a zero-findings gate *easier* to pass, which is the one
+  failure direction a dogfood gate must not have.
 - `plugin_dependency_implication` / `adapter_dependency_implication` — **a plugin named in
   another plugin's `dependencies` activates even when its own rules never match.** This is the
   only path to a plugin whose framework is an *indirect* dependency: a company framework that
