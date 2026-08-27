@@ -61,13 +61,26 @@ pub fn find_version_skew(graph: &ProjectGraph) -> Vec<Finding> {
             confidence: Confidence::Certain,
             message: format!("{name} is declared with diverging version requirements: {evidence}"),
             location: Location {
-                // Spans every declaring manifest — no single `path` is *the* location (the
-                // message already lists all of them; `related` would express it properly and
-                // isn't built yet), but the dependency's own name is a real, single fact.
+                // Anchored on the lexicographically-first declaring manifest, with every
+                // declaration — that one included — in `related`, each noting the requirement
+                // it states. The dependency's own name is the single real fact about the
+                // subject, so it stays the `symbol`; the anchor makes the finding addressable
+                // without asking a consumer to parse the message for a path.
+                path: Some(crate::adapter::ProjectPath(smol_str::SmolStr::new(
+                    declarations[0].0,
+                ))),
                 symbol: Some(name.to_string()),
                 ..Location::default()
             },
-            related: Vec::new(),
+            related: declarations
+                .iter()
+                .map(|(manifest, version)| crate::engine::RelatedLocation {
+                    role: "declaration".to_string(),
+                    path: crate::adapter::ProjectPath(smol_str::SmolStr::new(*manifest)),
+                    range: None,
+                    note: Some((*version).to_string()),
+                })
+                .collect(),
             delta: None,
             delta_origin: None,
         });
@@ -174,6 +187,27 @@ mod tests {
         assert!(findings[0]
             .message
             .contains("packages/b/package.json (^3.10.1)"));
+
+        // Addressable without parsing the message: anchored on the first declaring manifest,
+        // with every declaration in `related` carrying the requirement it states.
+        assert_eq!(
+            findings[0].location.path.as_ref().map(|p| p.0.as_str()),
+            Some("packages/a/package.json")
+        );
+        assert_eq!(findings[0].location.symbol.as_deref(), Some("lodash"));
+        let related: Vec<(&str, Option<&str>)> = findings[0]
+            .related
+            .iter()
+            .map(|r| (r.path.0.as_str(), r.note.as_deref()))
+            .collect();
+        assert_eq!(
+            related,
+            vec![
+                ("packages/a/package.json", Some("^4.0.0")),
+                ("packages/b/package.json", Some("^3.10.1")),
+            ]
+        );
+        assert!(findings[0].related.iter().all(|r| r.role == "declaration"));
     }
 
     #[test]

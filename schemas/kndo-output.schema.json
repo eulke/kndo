@@ -403,7 +403,7 @@
       ]
     },
     "Location": {
-      "description": "Where a finding points. Every field is optional because not\nevery subject has all of them: `version-skew`/`duplicate` findings span multiple manifests\nor files, so no single `path` is *the* location — expressing that properly is the `related`\nevidence chain, not yet implemented (deferred, not faked with an arbitrary first path).",
+      "description": "Where a finding points. Every field is optional because not every subject has all of them —\na `version-skew` has no range, a directory rollup has no symbol.\n\nA finding whose subject genuinely spans several places (`duplicate` over identical files,\n`version-skew` over disagreeing manifests) anchors on the lexicographically-first member and\ncarries **every** member in `related`. That pairing is the contract: the anchor makes the\nfinding addressable, `related` makes it complete, and the message is then free to summarize.\nThe alternative shipped for a while — an empty `Location` with the members named only in the\nmessage prose — and it meant 278 findings across the corpus that no consumer could act on\nwithout parsing English, some of which truncated the list and lost the rest outright.",
       "type": "object",
       "properties": {
         "package": {

@@ -77,10 +77,29 @@ pub fn find_duplicate_files(graph: &ProjectGraph) -> Vec<Finding> {
                 paths.len(),
                 summarize(&paths)
             ),
-            // Spans every copy — no single path is *the* location (the message lists them
-            // all); expressing that properly is `related`, not built yet.
-            location: Location::default(),
-            related: Vec::new(),
+            // Anchored on the lexicographically-first copy, with every copy — that one
+            // included — in `related`: the same shape the symbol facet below uses, so a
+            // consumer reads one convention for both. The message may summarize; `related`
+            // never does, which is what makes the summary safe.
+            //
+            // The anchor is presentation, NOT identity: `id` above stays keyed on the content
+            // hash with an empty path, so renaming one copy while the group survives is still
+            // the same finding rather than a new one.
+            location: Location {
+                path: Some(crate::adapter::ProjectPath(smol_str::SmolStr::new(
+                    paths[0],
+                ))),
+                ..Location::default()
+            },
+            related: paths
+                .iter()
+                .map(|path| crate::engine::RelatedLocation {
+                    role: "clone".to_string(),
+                    path: crate::adapter::ProjectPath(smol_str::SmolStr::new(*path)),
+                    range: None,
+                    note: None,
+                })
+                .collect(),
             delta: None,
             delta_origin: None,
         });
@@ -438,6 +457,63 @@ mod tests {
         assert_eq!(findings[0].subject_kind, "file");
         assert!(findings[0].message.contains("a.png"));
         assert!(findings[0].message.contains("b.png"));
+    }
+
+    #[test]
+    fn every_copy_is_addressable_without_reading_the_message() {
+        // Five copies, so the message summarizes ("and 2 more") and the prose alone cannot
+        // name them all. `related` must still carry every one, and the finding must have an
+        // anchor: this is the whole difference between a finding an agent can act on and one
+        // it has to parse English to understand.
+        let files = vec![
+            file("z/e.bin", b"same"),
+            file("a/b.bin", b"same"),
+            file("m/c.bin", b"same"),
+            file("a/a.bin", b"same"),
+            file("q/d.bin", b"same"),
+        ];
+        let graph = ProjectGraph::for_test(files, vec![], vec![], vec![]);
+        let findings = find_duplicate_files(&graph);
+        assert_eq!(findings.len(), 1);
+        let f = &findings[0];
+
+        // The message truncates — which is fine, and exactly why the rest matters.
+        assert!(f.message.contains("and 2 more"), "{}", f.message);
+
+        // Anchor: the lexicographically-first copy, matching the symbol facet's convention.
+        assert_eq!(
+            f.location.path.as_ref().map(|p| p.0.as_str()),
+            Some("a/a.bin")
+        );
+
+        // `related` names every copy, anchor included, in sorted order.
+        let related: Vec<&str> = f.related.iter().map(|r| r.path.0.as_str()).collect();
+        assert_eq!(
+            related,
+            vec!["a/a.bin", "a/b.bin", "m/c.bin", "q/d.bin", "z/e.bin"]
+        );
+        assert!(f.related.iter().all(|r| r.role == "clone"));
+    }
+
+    #[test]
+    fn the_anchor_is_presentation_and_the_id_stays_content_keyed() {
+        // Renaming one copy must not mint a new finding: the id is keyed on the content hash,
+        // not on the anchor path, even though the anchor moves.
+        let before = ProjectGraph::for_test(
+            vec![file("a.bin", b"same"), file("b.bin", b"same")],
+            vec![],
+            vec![],
+            vec![],
+        );
+        let after = ProjectGraph::for_test(
+            vec![file("aaa.bin", b"same"), file("b.bin", b"same")],
+            vec![],
+            vec![],
+            vec![],
+        );
+        let (before, after) = (find_duplicate_files(&before), find_duplicate_files(&after));
+        assert_eq!(before[0].id, after[0].id);
+        assert_ne!(before[0].location.path, after[0].location.path);
     }
 
     #[test]

@@ -3,6 +3,7 @@
     {
       "category": "version-skew",
       "subject_kind": "dependency",
+      "path": "module-gradle/build.gradle",
       "symbol": "com.other:lib"
     },
     {

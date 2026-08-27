@@ -16,7 +16,7 @@ round-trip these examples in CI.
     "base_ref": null,                    // set for "diff"
     "started_at": "2026-08-18T12:00:00Z",
     "duration_ms": 312,
-    "cache": "warm",                     // "warm" | "cold" | "partial" | "disabled"
+    "cache": "warm",                     // "warm" | "cold" | "disabled" (--no-cache)
     "project_root": ".",
     "adapters": [ { "id": "js-ts", "files": 1240 } ],
     "plugins":  [ { "id": "kndo:nextjs", "activated_by": "manifest-dependency: next" } ],
@@ -85,17 +85,31 @@ pass. Consumers must treat unknown levels as at least `warn`.
     { "role": "cause", "path": "src/billing/index.ts", "range": { "start": [12,1], "end": [12,42] },
       "note": "last production reference removed by this change" }
   ],
-  "evidence": {                          // category-specific block, keyed by category
-    "test_roots": [],                    // e.g. for test-only
-    "kept_alive_by": []
-  },
   "sources": ["adapter:js-ts"],          // provenance: adapters/plugins whose facts contributed
-  "remediation": "Delete calcLegacyTax() (and its export in src/billing/index.ts).",
   "delta": "new",                        // diff modes: "new"; absent in full mode
   "delta_origin": "derived",             // diff modes: "introduced" (inside the change set — dead on arrival) | "derived" (flipped by it); RFC 0004 §6
   "advisory": true                       // RFC 0018 §2.2: never influences exit codes/budgets; only ever present (as true) on plugin: findings without a [plugins.gate] opt-in
 }
 ```
+
+**A finding whose subject spans several places** (`duplicate` over identical files,
+`version-skew` over disagreeing manifests) **anchors on the lexicographically-first member and
+carries every member — that one included — in `related`.** Normative: `location` makes the
+finding addressable, `related` makes it complete, and only then may `message` summarize
+("… and 3 more"). A consumer must never have to read the prose to learn which places a finding
+covers. The anchor is presentation, not identity: `id` for those categories stays keyed on the
+content hash or the coordinate, so renaming one member while the group survives is the same
+finding, not a new one.
+
+**Two fields this object deliberately does NOT have.** `evidence` — a category-specific block —
+was specified before any category had one, and no analysis has since produced a fact that
+`related` cannot carry; a per-category schema invented ahead of its first consumer is a shape
+every consumer would have to tolerate and none could rely on. `remediation` — the advice a
+finding carries travels *inside* `message`, where it is written by the analysis that knows the
+subject (`deep-import` is the worked example); lifting it into its own field means committing to
+computed remediation prose for every category, which is a product decision, not a serialization
+one. Both stay cut rather than emitted null: a field that is always `null` teaches a consumer to
+stop reading it.
 
 ## 3. Fixed finding (diff modes)
 

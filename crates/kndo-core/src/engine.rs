@@ -401,10 +401,16 @@ impl Severity {
     }
 }
 
-/// Where a finding points. Every field is optional because not
-/// every subject has all of them: `version-skew`/`duplicate` findings span multiple manifests
-/// or files, so no single `path` is *the* location — expressing that properly is the `related`
-/// evidence chain, not yet implemented (deferred, not faked with an arbitrary first path).
+/// Where a finding points. Every field is optional because not every subject has all of them —
+/// a `version-skew` has no range, a directory rollup has no symbol.
+///
+/// A finding whose subject genuinely spans several places (`duplicate` over identical files,
+/// `version-skew` over disagreeing manifests) anchors on the lexicographically-first member and
+/// carries **every** member in `related`. That pairing is the contract: the anchor makes the
+/// finding addressable, `related` makes it complete, and the message is then free to summarize.
+/// The alternative shipped for a while — an empty `Location` with the members named only in the
+/// message prose — and it meant 278 findings across the corpus that no consumer could act on
+/// without parsing English, some of which truncated the list and lost the rest outright.
 #[derive(Debug, Clone, Default, serde::Serialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Location {
