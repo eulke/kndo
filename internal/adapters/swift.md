@@ -207,6 +207,17 @@ a property to a getter, so this is the truthful kind, and the distinguishing nod
 A bodyless accessor (a `private set`, an annotated bare `get`, `willSet`/`didSet` observers)
 leaves the property stored: it changes the accessor, not what the property IS.
 
+Being a callable, it also gets a **shape**: `FileFacts::functions` carries one entry per accessor
+body, so `crap` and `duplicate` can see a getter the way they see a method. One symbol, one
+numbering — the first accessor in source order is `shape_ordinal` 0 and the rest continue, which
+is what keeps `get` and `set` from colliding on a nested shape's identity. Verified against
+tree-sitter-swift 0.7.3's `node-types.json`: a `computed_property` holds either a bare
+`statements` (the implicit-getter shorthand `var x: Int { 1 + 2 }`) or one
+`computed_getter`/`computed_setter`/`computed_modify` each with its own. `willSet`/`didSet` get
+no shape: they run *around* a store, so the property is still stored and there is no getter to
+measure.
+
+
 Naming both `Field` made the kind unable to separate a constant from real logic, which is what
 let `untested` accuse header-name constants and `MAX_VARCHAR_LENGTH` of not being tested.
 

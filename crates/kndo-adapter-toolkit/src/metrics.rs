@@ -146,17 +146,56 @@ pub fn push_function_metrics(
     syntax: &MetricsSyntax,
     min_clone_tokens: usize,
 ) {
+    push_accessor_metrics(out, symbol, decl_span, [body], syntax, min_clone_tokens);
+}
+
+/// Several bodies belonging to **one** symbol — a property's accessors, where `get` and `set`
+/// are two callables written under a single name.
+///
+/// Ordinals continue across them, which is the whole reason this exists: `shape_ordinal` is a
+/// per-symbol pre-order numbering and half of a nested shape's finding id, so two separate
+/// `push_function_metrics` calls for one property would both start at 0 and collide. The first
+/// body is ordinal 0 — the declaration's "own" shape, which for a property is what reading it
+/// runs — and everything after continues the numbering.
+pub fn push_accessor_metrics<'a>(
+    out: &mut FileFacts,
+    symbol: &str,
+    decl_span: Span,
+    bodies: impl IntoIterator<Item = Node<'a>>,
+    syntax: &MetricsSyntax,
+    min_clone_tokens: usize,
+) {
     let mut next_ordinal = 0u16;
-    push_shape(
-        out,
-        symbol,
-        decl_span,
-        walk(body, syntax, min_clone_tokens),
-        decl_span,
-        syntax,
-        min_clone_tokens,
-        &mut next_ordinal,
-    );
+    for body in bodies {
+        // Ordinal 0 keeps the declaration's own span, as `SymbolMetrics::shape_span`'s
+        // contract requires ("equal to the symbol's span for the declaration's own shape").
+        // A second accessor gets its own extent instead, so a finding about the setter points
+        // at the setter rather than at the property's first line.
+        let shape_span = if next_ordinal == 0 {
+            decl_span
+        } else {
+            Span {
+                start: (
+                    body.start_position().row as u32 + 1,
+                    body.start_position().column as u32 + 1,
+                ),
+                end: (
+                    body.end_position().row as u32 + 1,
+                    body.end_position().column as u32 + 1,
+                ),
+            }
+        };
+        push_shape(
+            out,
+            symbol,
+            decl_span,
+            walk(body, syntax, min_clone_tokens),
+            shape_span,
+            syntax,
+            min_clone_tokens,
+            &mut next_ordinal,
+        );
+    }
 }
 
 /// One shape, then every callable promoted out of it — depth-first, so `shape_ordinal` is a

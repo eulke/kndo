@@ -8,6 +8,7 @@
 //! in one dispatcher).
 
 use kndo_adapter_toolkit::metrics::{
+    push_accessor_metrics as toolkit_push_accessor_metrics,
     push_function_metrics as toolkit_push_function_metrics, MetricsSyntax, MIN_CLONE_TOKENS,
 };
 use kndo_adapter_toolkit::parsing::{find_child, span, text};
@@ -615,6 +616,43 @@ fn handle_property(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
         walk_type_refs(annotation, src, ctx.owner, out);
     }
     walk_property_bodies(item, src, property_value_within(ctx, name), out);
+    // A computed property is a callable and now says so in its kind — so it must have a shape
+    // too, or `crap` and `duplicate` cannot see a getter however gnarly it is. Observers are
+    // deliberately excluded: `willSet`/`didSet` run around a store, they are not the property.
+    let accessors = computed_accessor_bodies(item);
+    if !accessors.is_empty() {
+        let (_, qualified) = qualify(ctx.owner, name);
+        toolkit_push_accessor_metrics(
+            out,
+            &qualified,
+            span(item),
+            accessors,
+            &METRICS_SYNTAX,
+            MIN_CLONE_TOKENS,
+        );
+    }
+}
+
+/// Every accessor body of a computed property, in source order. Verified against
+/// tree-sitter-swift 0.7.3's `node-types.json`: a `computed_property` holds either a bare
+/// `statements` child (the implicit-getter shorthand `var x: Int { 1 + 2 }`) or one
+/// `computed_getter`/`computed_setter`/`computed_modify` per accessor, each with its own
+/// `statements`. Source order, so the numbering is faithful and deterministic together.
+fn computed_accessor_bodies(item: Node) -> Vec<Node> {
+    let Some(computed) = find_child(item, "computed_property") else {
+        return Vec::new();
+    };
+    let mut c = computed.walk();
+    computed
+        .children(&mut c)
+        .filter_map(|n| match n.kind() {
+            "statements" => Some(n),
+            "computed_getter" | "computed_setter" | "computed_modify" => {
+                find_child(n, "statements")
+            }
+            _ => None,
+        })
+        .collect()
 }
 
 /// A **computed** property is a getter, not a value: `var isValid: Bool { … }` compiles to a
@@ -951,6 +989,55 @@ mod tests {
 
     fn decl<'a>(f: &'a FileFacts, name: &str) -> &'a kndo_core::adapter::Declaration {
         f.declarations.iter().find(|d| d.name == name).unwrap()
+    }
+
+    #[test]
+    fn a_computed_property_gets_a_shape_and_a_stored_one_does_not() {
+        // Reclassifying computed properties to `Method` without giving them a shape left a
+        // callable `crap` and `duplicate` could not see. One symbol, one numbering: the getter
+        // is ordinal 0 (reading the property runs it) and the setter continues, so the two
+        // cannot collide on a nested shape's identity.
+        let f = facts(
+            "struct S {\n\
+             \x20   var stored: Int = 0\n\
+             \x20   var computed: Int { return stored + 1 }\n\
+             \x20   var both: Int {\n\
+             \x20       get { return stored }\n\
+             \x20       set { stored = newValue }\n\
+             \x20   }\n\
+             \x20   var observed: Int = 0 {\n\
+             \x20       didSet { print(observed) }\n\
+             \x20   }\n\
+             }\n",
+        );
+        let shapes = |name: &str| -> Vec<u16> {
+            let mut o: Vec<u16> = f
+                .functions
+                .iter()
+                .filter(|m| m.symbol == name)
+                .map(|m| m.shape_ordinal)
+                .collect();
+            o.sort();
+            o
+        };
+        assert_eq!(
+            shapes("S.computed"),
+            vec![0],
+            "the implicit getter is one shape"
+        );
+        assert_eq!(
+            shapes("S.both"),
+            vec![0, 1],
+            "get and set are two, numbered once"
+        );
+        assert!(
+            shapes("S.stored").is_empty(),
+            "a stored property is a value"
+        );
+        assert!(
+            shapes("S.observed").is_empty(),
+            "observers run around a store; the property is still stored"
+        );
     }
 
     #[test]

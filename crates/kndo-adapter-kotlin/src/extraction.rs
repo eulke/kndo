@@ -10,6 +10,7 @@
 //! covers — the same pattern `kndo_adapter_toolkit::jvm_manifest::gradle_scope` already uses.
 
 use kndo_adapter_toolkit::metrics::{
+    push_accessor_metrics as toolkit_push_accessor_metrics,
     push_function_metrics as toolkit_push_function_metrics, MetricsSyntax, MIN_CLONE_TOKENS,
 };
 use kndo_adapter_toolkit::parsing::{find_child, span, text};
@@ -582,8 +583,26 @@ fn handle_property(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
     if let Some(ty) = find_any_child(decl, &["user_type", "nullable_type"]) {
         walk_type_refs(ty, src, ctx.owner, out);
     }
-    if let Some(value) = property_initializer(item) {
-        walk_body(value, src, ctx.owner, out);
+    for code in property_code_children(item) {
+        walk_body(code, src, ctx.owner, out);
+    }
+    // A computed property is a callable and now says so in its kind — so it must have a shape
+    // too, or `crap` and `duplicate` cannot see a getter however gnarly it is. One symbol,
+    // one numbering: `get` is ordinal 0 (reading the property runs it) and `set` continues.
+    let accessors: Vec<Node> = ["getter", "setter"]
+        .iter()
+        .filter_map(|a| find_child(item, a).and_then(|n| find_child(n, "function_body")))
+        .collect();
+    if !accessors.is_empty() {
+        let (_, qualified) = qualify(ctx.owner, name);
+        toolkit_push_accessor_metrics(
+            out,
+            &qualified,
+            span(item),
+            accessors,
+            &METRICS_SYNTAX,
+            MIN_CLONE_TOKENS,
+        );
     }
 }
 
@@ -609,16 +628,58 @@ fn property_symbol_kind(item: Node, ctx: &Ctx<'_>) -> SymbolKind {
     }
 }
 
-/// The expression after `=` in a `property_declaration` — the last child when it isn't the
-/// `variable_declaration`/`val`/`var`/`modifiers`/`=` itself (positional, no field name).
-fn property_initializer(item: Node) -> Option<Node> {
+/// Every child of a `property_declaration` that carries CODE: the `= expr` initializer, the
+/// `by expr` delegate, and each accessor's body.
+///
+/// Enumerated by kind, not by position. The previous rule took the LAST child and filtered a
+/// short list of kinds out, which is right only for a property whose initializer is the last
+/// thing written. `val x = foo()` followed by a `get()` returns the *getter*, and `foo()`'s
+/// references vanish; `var x = 1` with a `private set` the same. Verified against the vendored
+/// grammar's `node-types.json`: `property_declaration`'s children are `expression`, `getter`,
+/// `setter`, `property_delegate`, `variable_declaration` and the type/modifier nodes.
+fn property_code_children(item: Node) -> Vec<Node> {
     let mut c = item.walk();
-    item.children(&mut c).last().filter(|n| {
-        !matches!(
-            n.kind(),
-            "variable_declaration" | "val" | "var" | "modifiers" | "="
-        )
-    })
+    item.children(&mut c)
+        .filter_map(|n| match n.kind() {
+            // `= expr` — the initializer, which the grammar spells as a bare expression child.
+            k if k == "expression" || is_expression_kind(k) => Some(n),
+            // `by expr` — the delegate is real code (`by lazy { … }` runs its lambda).
+            "property_delegate" => Some(n),
+            // `get() = …` / `set(v) { … }` — a bodyless accessor contributes nothing.
+            "getter" | "setter" => find_child(n, "function_body"),
+            _ => None,
+        })
+        .collect()
+}
+
+/// Whether a node kind is an expression the grammar names concretely rather than as the
+/// abstract `expression` supertype (`call_expression`, `string_literal`, …). Everything a
+/// `property_declaration` can hold that is NOT one of its structural children is an
+/// initializer expression, so the test is by exclusion — new expression kinds in a grammar
+/// bump keep working without a list to maintain.
+fn is_expression_kind(kind: &str) -> bool {
+    !matches!(
+        kind,
+        "variable_declaration"
+            | "multi_variable_declaration"
+            | "val"
+            | "var"
+            | "="
+            | "by"
+            | "modifiers"
+            | "type_parameters"
+            | "type_constraints"
+            | "type_modifiers"
+            | "user_type"
+            | "nullable_type"
+            | "parenthesized_type"
+            | "getter"
+            | "setter"
+            | "property_delegate"
+            | "comment"
+            | "line_comment"
+            | "multiline_comment"
+    )
 }
 
 fn handle_type_alias(item: Node, src: &[u8], _ctx: &Ctx<'_>, out: &mut FileFacts) {
@@ -966,6 +1027,40 @@ mod tests {
 
     fn decl<'a>(f: &'a FileFacts, name: &str) -> &'a kndo_core::adapter::Declaration {
         f.declarations.iter().find(|d| d.name == name).unwrap()
+    }
+
+    #[test]
+    fn a_property_with_both_an_initializer_and_an_accessor_keeps_both() {
+        // The positional "last child" rule returned the getter and lost `compute()` entirely,
+        // which made everything the initializer referenced read as unused. 78 findings on
+        // Exposed came from this shape.
+        let f = facts(
+            "fun compute(): Int = 1\n\
+             fun log(v: Int) {}\n\
+             class C {\n\
+             \x20   val cached: Int = compute()\n\
+             \x20       get() = field\n\
+             \x20   var tracked: Int = 0\n\
+             \x20       private set\n\
+             \x20   val lazyOne: Int by lazy { compute() }\n\
+             }\n",
+        );
+        let names: Vec<&str> = f.references.iter().map(|r| r.name.as_str()).collect();
+        assert!(
+            names.iter().filter(|n| **n == "compute").count() >= 2,
+            "both the initializer's and the delegate's calls must survive: {names:?}"
+        );
+    }
+
+    #[test]
+    fn an_accessor_body_is_walked_for_references() {
+        let f = facts(
+            "fun helper(): Int = 1\n\
+             class C {\n\
+             \x20   val computed: Int get() = helper()\n\
+             }\n",
+        );
+        assert!(f.references.iter().any(|r| r.name == "helper"));
     }
 
     #[test]

@@ -222,6 +222,19 @@ a property to a getter, so this is the truthful kind, and the distinguishing nod
 A bodyless accessor (a `private set`, an annotated bare `get`)
 leaves the property stored: it changes the accessor, not what the property IS.
 
+Being a callable, it also gets a **shape**: `FileFacts::functions` carries one entry per accessor
+body, so `crap` and `duplicate` can see a getter the way they see a function. One symbol, one
+numbering — `get` is `shape_ordinal` 0 (reading the property runs it) and `set` continues from
+there, which is what keeps two accessors of one property from colliding on a nested shape's
+identity. `by lazy { … }` is an initializer, not an accessor: its lambda is walked for
+references and belongs to the property's own liveness, not to a shape of its own.
+
+Every child of a `property_declaration` that carries code is walked — the `= expr` initializer,
+the `by expr` delegate, and each accessor body — enumerated **by kind**, never by position. The
+positional "last child" rule this replaced returned the *getter* for `val x = compute()` followed
+by a `get()`, and `compute()`'s reference vanished with it.
+
+
 Naming both `Field` made the kind unable to separate a constant from real logic, which is what
 let `untested` accuse header-name constants and `MAX_VARCHAR_LENGTH` of not being tested.
 
