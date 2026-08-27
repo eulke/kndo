@@ -121,7 +121,10 @@ fn resolve_relative(from: &str, spec: &str, ctx: &ResolveCtx<'_>) -> Resolution 
             return Resolution::File(path, Confidence::Certain);
         }
     }
-    Resolution::Unresolved
+    // Every candidate the resolution rules allow was tried — the extension ladder and the
+    // directory `index.*` fallback both. A relative specifier that survives all of them names
+    // no file, which is a complete answer and a real defect, not a shape we failed to model.
+    Resolution::Missing
 }
 
 /// Candidate paths in resolution order: explicit path as given, then extension appends
@@ -226,10 +229,13 @@ mod tests {
     }
 
     #[test]
-    fn unresolved_when_no_candidate_exists() {
+    fn a_relative_specifier_matching_nothing_is_missing() {
+        // The extension ladder and the directory `index.*` fallback were both tried, so this
+        // is a complete answer: the path names no file. Distinct from `Unresolved`, which the
+        // `unresolved` analysis treats as "no answer" and reports nothing for.
         let known = ctx_with(&["src/a.ts"]);
         let r = resolve(&spec("src/a.ts", "./missing"), &ResolveCtx::new(&known));
-        assert_eq!(r, Resolution::Unresolved);
+        assert_eq!(r, Resolution::Missing);
     }
 
     #[test]

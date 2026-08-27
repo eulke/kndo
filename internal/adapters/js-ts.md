@@ -87,6 +87,13 @@ of one type match by definition of the type rather than by evidence of copying.
 
 ## 3. Imports & resolution
 
+**`Missing` vs `Unresolved` (contracts §2.1).** A relative specifier (`./x`, `/x`) that
+survives the whole candidate ladder — the explicit path, the extension appends, `.d.ts`, the
+directory `index.*` — resolves to `Resolution::Missing`: every spelling the language allows was
+tried, so the path names no file and the `unresolved` analysis reports it at severity `error`.
+A `#`-prefixed self-reference stays `Unresolved`: it needs `package.json`'s `imports` map,
+which this adapter does not parse, so kndo has no answer rather than an accusation.
+
 Emitted import kinds and their confidence:
 
 | Form | Edge | Confidence |

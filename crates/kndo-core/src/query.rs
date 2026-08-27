@@ -2100,6 +2100,7 @@ fn simulate_deletion(
         patch_meta: graph.patch_meta.clone(),
         externally_consumed: graph.externally_consumed.clone(),
         plugin_implicitly_invoked: graph.plugin_implicitly_invoked.clone(),
+        unresolved_imports: graph.unresolved_imports.clone(),
     });
     let after = crate::analysis::reachability::compute(&sim);
 

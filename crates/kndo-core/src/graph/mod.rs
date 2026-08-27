@@ -313,6 +313,23 @@ pub struct DeclaredDependency {
 
 /// [`ProjectGraph::from_snapshot_parts`]'s input, bundled into one struct purely to stay under
 /// clippy's argument-count lint — every field here is one `ProjectGraph` field, verbatim.
+/// An import whose specifier the claiming adapter understood as a path and could not resolve to
+/// any file — `Resolution::Unresolved` after every adapter declined. Recorded by assembly so
+/// the `unresolved` analysis can report it; assembly itself never turns facts into findings.
+///
+/// Only *relative* imports land here. A `Package` specifier that resolves to nothing is the
+/// declaration contract's business (`undeclared`), never reported twice.
+#[derive(Debug, Clone, PartialEq, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+pub struct UnresolvedImport {
+    #[rkyv(with = crate::rkyv_support::SmolStrAsString)]
+    pub specifier: SmolStr,
+    pub span: crate::vocab::Span,
+    /// The adapter's own confidence in the import. A dynamic specifier the adapter could only
+    /// partly read arrives below `Certain` and the finding inherits that — an
+    /// `import(templated)` is not evidence of a broken path.
+    pub confidence: crate::vocab::Confidence,
+}
+
 pub(crate) struct GraphSnapshotParts {
     pub files: Vec<FileNode>,
     pub symbols: Vec<SymbolNode>,
@@ -328,6 +345,7 @@ pub(crate) struct GraphSnapshotParts {
     pub patch_meta: Vec<FilePatchMeta>,
     pub externally_consumed: Vec<SymbolId>,
     pub plugin_implicitly_invoked: Vec<SymbolId>,
+    pub unresolved_imports: Vec<(FileId, UnresolvedImport)>,
 }
 
 /// The assembled language-neutral graph. Read-only once built; the incremental
@@ -376,6 +394,9 @@ pub struct ProjectGraph {
     /// machinery-dispatch rule reads both). Sorted, deduplicated; same snapshot round-trip
     /// rationale as `externally_consumed`.
     pub plugin_implicitly_invoked: Vec<SymbolId>,
+    /// Relative imports that resolved to no file — see [`UnresolvedImport`]. Persisted through
+    /// the snapshot like every other fact here, so a warm run reports them too.
+    pub unresolved_imports: Vec<(FileId, UnresolvedImport)>,
     file_index: HashMap<ProjectPath, FileId>,
 }
 
@@ -455,6 +476,7 @@ impl ProjectGraph {
             // `annotate_symbols` exemptions on every warm hit.
             externally_consumed: parts.externally_consumed,
             plugin_implicitly_invoked: parts.plugin_implicitly_invoked,
+            unresolved_imports: parts.unresolved_imports,
             file_index,
         }
     }
@@ -495,6 +517,7 @@ impl ProjectGraph {
             }],
             edges,
             suppressions: Vec::new(),
+            unresolved_imports: Vec::new(),
             // The "mock" test language's ladder, mirroring Go's shape (the language whose
             // rules the member-fallback and internal-only tests exercise): 0 = unit-private,
             // 1 = public. Tests needing a different shape override via

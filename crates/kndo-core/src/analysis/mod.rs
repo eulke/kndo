@@ -14,6 +14,7 @@ pub mod reachability;
 mod rollup;
 pub mod test_only;
 pub mod undeclared;
+pub mod unresolved;
 pub mod untested;
 pub mod unused;
 pub mod version_skew;
@@ -235,6 +236,7 @@ static DEEP_IMPORT_CATEGORIES: [Category; 1] = [Category::DEEP_IMPORT];
 static CYCLIC_CATEGORIES: [Category; 1] = [Category::CYCLIC];
 static CRAP_CATEGORIES: [Category; 1] = [Category::CRAP];
 static UNTESTED_CATEGORIES: [Category; 1] = [Category::UNTESTED];
+static UNRESOLVED_CATEGORIES: [Category; 1] = [Category::UNRESOLVED];
 
 struct UnusedAnalysis;
 impl Analysis for UnusedAnalysis {
@@ -396,6 +398,19 @@ impl Analysis for CrapAnalysis {
     }
 }
 
+struct UnresolvedAnalysis;
+impl Analysis for UnresolvedAnalysis {
+    fn id(&self) -> &'static str {
+        "unresolved"
+    }
+    fn categories(&self) -> &'static [Category] {
+        &UNRESOLVED_CATEGORIES
+    }
+    fn run(&self, ctx: &AnalysisCtx<'_>) -> AnalysisOutput {
+        AnalysisOutput::findings(unresolved::find_unresolved(ctx.graph))
+    }
+}
+
 struct UntestedAnalysis;
 impl Analysis for UntestedAnalysis {
     fn id(&self) -> &'static str {
@@ -429,6 +444,7 @@ fn registry() -> Vec<Box<dyn Analysis>> {
         Box::new(CyclicAnalysis),
         Box::new(CrapAnalysis),
         Box::new(UntestedAnalysis),
+        Box::new(UnresolvedAnalysis),
     ]
 }
 

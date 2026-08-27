@@ -45,25 +45,6 @@ use crate::engine::{Finding, Location, SuppressedSummary};
 use crate::graph::ProjectGraph;
 use crate::vocab::{Confidence, FileId};
 
-/// The 1.0 category registry — the closed set of core verdicts
-/// a suppression may name. `plugin:`-namespaced categories are validated dynamically against
-/// declared rules instead.
-const CATEGORY_REGISTRY: [&str; 13] = [
-    "unused",
-    "test-only",
-    "untested",
-    "undeclared",
-    "unresolved",
-    "version-skew",
-    "duplicate",
-    "internal-only",
-    "private-type-leak",
-    "cyclic",
-    "deep-import",
-    "crap",
-    "stale",
-];
-
 enum Scope {
     File,
     /// Line-inclusive range of the bound declaration ("the symbol and everything it
@@ -185,8 +166,13 @@ fn validate_category(
     if raw.category == "stale" {
         return Some(Classified::Stale(StaleKind::Meta));
     }
-    (!CATEGORY_REGISTRY.contains(&raw.category.as_str()))
-        .then_some(Classified::Stale(StaleKind::UnknownCategory))
+    // The closed set of core verdicts a suppression may name is [`Category::ALL`] itself —
+    // not a second list beside it. `plugin:`-namespaced categories are validated dynamically
+    // against the rules active plugins declare.
+    (!crate::vocab::Category::all()
+        .iter()
+        .any(|c| c.as_str() == raw.category.as_str()))
+    .then_some(Classified::Stale(StaleKind::UnknownCategory))
 }
 
 /// The marking pass: filters findings any binding covers out of the set —
@@ -358,9 +344,9 @@ fn typo_hint(cat: &str) -> String {
 
 /// Closest registry category within edit distance 2 — a typo hint, not a correction.
 fn nearest_category(cat: &str) -> Option<&'static str> {
-    CATEGORY_REGISTRY
+    crate::vocab::Category::all()
         .iter()
-        .map(|c| (edit_distance(cat, c), *c))
+        .map(|c| (edit_distance(cat, c.as_str()), c.as_str()))
         .min()
         .filter(|(d, _)| *d <= 2)
         .map(|(_, c)| c)

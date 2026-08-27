@@ -278,8 +278,11 @@ Two further import-side findings:
 - `unresolved` (subject `import`) — a relative/internal import specifier that resolves to no file
   (`Resolution::Unresolved` after all adapters decline): almost always a broken path or a missed
   rename. Failed *package* resolution surfaces as `undeclared` instead, never twice.
-  Severity: error (it is a defect, not waste) — but confidence-gated: dynamic specifiers demote
-  to `possible` and drop below the default report floor.
+  Severity: error (it is a defect, not waste) — but confidence-gated: the finding inherits the
+  import's own confidence, so a dynamic specifier the adapter could only partly read demotes and
+  drops below the default report floor. **Which specifiers are relative is the adapter's call**
+  (`ImportKind`), never a shape the core guesses at; assembly records the failed resolutions and
+  the analysis decides what follows. Generated and vendored files are exempt, like everywhere.
 
 ## 6. `duplicate` — structural clones
 

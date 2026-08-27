@@ -147,6 +147,9 @@ pub(crate) struct ImportResolution {
     /// same reason `member_types` is: the patch resolves a CHANGED file's qualifiers against
     /// UNCHANGED files' tables without re-fetching their facts.
     pub(crate) module_bindings: Vec<crate::graph::ModuleBinding>,
+    /// Relative imports that resolved to no file. Recorded, not judged: assembly states facts
+    /// and the `unresolved` analysis decides what follows (RFC 0005 §5).
+    pub(crate) unresolved_imports: Vec<crate::graph::UnresolvedImport>,
 }
 
 /// Where a qualifier points, and whether a miss under it closes the namespace.
@@ -538,6 +541,7 @@ pub(crate) fn resolve_imports(
         edges: Vec::new(),
         dep_imports: Vec::new(),
         bound_symbols: HashMap::default(),
+        unresolved_imports: Vec::new(),
         bound_twins: HashMap::default(),
         qualifier_targets: HashMap::default(),
         visible_units: Vec::new(),
@@ -603,20 +607,34 @@ pub(crate) fn resolve_imports(
         // resolution is intentionally incomplete right now (self-reference imports,
         // exports maps); turning it into a finding is the future `unresolved`
         // analysis's job, not assembly's.
-        let (file_target, dep_target) = match adapter.resolve(&spec, ctx) {
-            Resolution::File(path, confidence) => (Some((path, confidence)), None),
-            Resolution::Dependency(name, confidence) => (None, Some((name, confidence))),
+        let resolution = adapter.resolve(&spec, ctx);
+        let (file_target, dep_target) = match &resolution {
+            Resolution::File(path, confidence) => (Some((path.clone(), *confidence)), None),
+            Resolution::Dependency(name, confidence) => (None, Some((name.clone(), *confidence))),
             Resolution::WorkspaceMember {
                 name,
                 target,
                 confidence,
                 same_package,
             } => (
-                Some((target, confidence)),
-                (!same_package).then_some((name, confidence)),
+                Some((target.clone(), *confidence)),
+                (!same_package).then(|| (name.clone(), *confidence)),
             ),
-            Resolution::Stdlib | Resolution::Unresolved => (None, None),
+            Resolution::Stdlib | Resolution::Missing | Resolution::Unresolved => (None, None),
         };
+
+        // The one place a failed resolution is a FACT rather than a shrug — and the adapter
+        // is the only party that can tell the two apart, which is why `Missing` exists beside
+        // `Unresolved` (see its doc). Assembly records; the `unresolved` analysis judges. The
+        // import's own confidence rides along, so a specifier the adapter could only partly
+        // read arrives below `Certain` and lands under the default report floor.
+        if matches!(resolution, Resolution::Missing) {
+            out.unresolved_imports.push(crate::graph::UnresolvedImport {
+                specifier: imp.specifier.clone(),
+                span: imp.span,
+                confidence: imp.confidence,
+            });
+        }
 
         if let Some((path, confidence)) = file_target {
             // Resolvers only ever match against `ctx`'s known-files set, so this
@@ -2146,7 +2164,7 @@ pub(crate) fn promote_package_relative_test_roles<'a>(
 /// an assembly-algorithm change that could produce a different graph from the same facts. Feeds
 /// [`compute_graph_key`] (the "core graph-schema version"); a bump here invalidates
 /// every project's cached `graph.bin` on the next run, same as any other key-input change.
-pub const GRAPH_SCHEMA_VERSION: u32 = 38; // bump whenever the persisted snapshot shape (rkyv layouts included) or the assembly semantics that derive a graph from the same facts change
+pub const GRAPH_SCHEMA_VERSION: u32 = 39; // bump whenever the persisted snapshot shape (rkyv layouts included) or the assembly semantics that derive a graph from the same facts change
 
 /// The graph snapshot's cache key (`cache.rs`'s `graph.bin`): a single digest
 /// folding in the *whole* discovered file set (every path + content hash — this already
@@ -3470,6 +3488,17 @@ pub fn assemble_from_source(
     }
     link_module_bindings(&mut imports_per_file, &bindings_by_file);
 
+    // File order, then the order the file states them — deterministic without a sort.
+    let unresolved_imports: Vec<(FileId, crate::graph::UnresolvedImport)> = imports_per_file
+        .iter()
+        .enumerate()
+        .flat_map(|(i, r)| {
+            r.unresolved_imports
+                .iter()
+                .map(move |u| (FileId(i as u32), u.clone()))
+        })
+        .collect();
+
     // Pass two: references, in parallel again, each reading its own file's resolved imports.
     let resolved_files: Vec<Option<ResolvedFile>> = claimed_per_file
         .par_iter()
@@ -3582,6 +3611,7 @@ pub fn assemble_from_source(
         patch_meta,
         externally_consumed,
         plugin_implicitly_invoked,
+        unresolved_imports,
         file_index,
     };
     // The snapshot is NOT written here (cache persist happens off the critical

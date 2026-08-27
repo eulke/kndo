@@ -647,6 +647,23 @@ impl std::fmt::Display for Group {
 #[serde(transparent)]
 pub struct Category(SmolStr);
 
+/// See [`Category::all`].
+static ALL_CATEGORIES: [Category; 13] = [
+    Category::CRAP,
+    Category::CYCLIC,
+    Category::DEEP_IMPORT,
+    Category::DUPLICATE,
+    Category::INTERNAL_ONLY,
+    Category::PRIVATE_TYPE_LEAK,
+    Category::STALE,
+    Category::TEST_ONLY,
+    Category::UNDECLARED,
+    Category::UNRESOLVED,
+    Category::UNTESTED,
+    Category::UNUSED,
+    Category::VERSION_SKEW,
+];
+
 impl Category {
     pub const CRAP: Category = Category(SmolStr::new_static("crap"));
     pub const CYCLIC: Category = Category(SmolStr::new_static("cyclic"));
@@ -658,8 +675,22 @@ impl Category {
     pub const TEST_ONLY: Category = Category(SmolStr::new_static("test-only"));
     pub const UNDECLARED: Category = Category(SmolStr::new_static("undeclared"));
     pub const UNTESTED: Category = Category(SmolStr::new_static("untested"));
+    pub const UNRESOLVED: Category = Category(SmolStr::new_static("unresolved"));
     pub const UNUSED: Category = Category(SmolStr::new_static("unused"));
     pub const VERSION_SKEW: Category = Category(SmolStr::new_static("version-skew"));
+
+    /// **The** closed set of core categories — the registry `docs/src/rules.md` publishes and
+    /// suppression validates a pragma's category against. One list, so a category cannot exist
+    /// in the vocabulary and be unspellable in a pragma, or the reverse: `unresolved` spent a
+    /// long time in the suppression registry with no `Category` const and no analysis emitting
+    /// it, which made `kndo:allow unresolved` a pragma that was valid, matched nothing by
+    /// construction, and was reported stale forever.
+    ///
+    /// A `static` behind a function, not an associated `const`: [`Category`] wraps a `SmolStr`,
+    /// so a borrowed const array is a temporary and nothing could hold a `&'static str` from it.
+    pub fn all() -> &'static [Category] {
+        &ALL_CATEGORIES
+    }
 
     pub fn new(raw: impl Into<SmolStr>) -> Category {
         Category(raw.into())
@@ -737,6 +768,7 @@ impl SubjectKind {
     pub const DIRECTORY: SubjectKind = SubjectKind(SmolStr::new_static("directory"));
     pub const FILE: SubjectKind = SubjectKind(SmolStr::new_static("file"));
     pub const PACKAGE: SubjectKind = SubjectKind(SmolStr::new_static("package"));
+    pub const IMPORT: SubjectKind = SubjectKind(SmolStr::new_static("import"));
     pub const SUPPRESSION: SubjectKind = SubjectKind(SmolStr::new_static("suppression"));
 
     pub fn new(raw: impl Into<SmolStr>) -> SubjectKind {
@@ -745,6 +777,34 @@ impl SubjectKind {
 
     pub fn as_str(&self) -> &str {
         self.0.as_str()
+    }
+}
+
+#[cfg(test)]
+mod category_registry_tests {
+    use super::Category;
+
+    /// `docs/src/rules.md` publishes the closed registry, and `internal/contracts/
+    /// output-schema.md` restates it. They were hand-maintained beside a third copy in
+    /// `suppression.rs` and a fourth in this file's consts, and they had already diverged:
+    /// `unresolved` was in the registry with no `Category` const and nothing emitting it.
+    #[test]
+    fn the_published_registry_matches_the_vocabulary() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(std::path::Path::parent)
+            .expect("workspace root");
+        for doc in ["docs/src/rules.md", "internal/contracts/output-schema.md"] {
+            let text = std::fs::read_to_string(root.join(doc))
+                .unwrap_or_else(|e| panic!("reading {doc}: {e}"));
+            for c in Category::all() {
+                assert!(
+                    text.contains(&format!("`{}`", c.as_str())),
+                    "{doc} never mentions the `{}` category",
+                    c.as_str()
+                );
+            }
+        }
     }
 }
 

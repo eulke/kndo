@@ -1233,6 +1233,24 @@ pub enum Resolution {
         same_package: bool,
     },
     Stdlib,
+    /// **The adapter understood this specifier as a path into the project and no file is
+    /// there.** A defect the `unresolved` analysis reports — a broken path, or a rename that
+    /// missed this call site.
+    ///
+    /// Say `Missing` only when the miss is a *complete* answer: every candidate this language's
+    /// resolution rules allow was tried and none exists. When the specifier's shape is one this
+    /// adapter does not model — a self-reference `imports` map, an inline module's `super::`,
+    /// an alias a build tool defines elsewhere — say [`Resolution::Unresolved`] instead. The
+    /// distinction cannot be made in the core, which sees only that no edge came back, and
+    /// getting it wrong here is an error-severity accusation about working code.
+    ///
+    /// Adopting it is per-adapter and optional: an adapter whose resolver cannot yet tell the
+    /// two apart keeps returning `Unresolved` and simply reports nothing, which is the safe
+    /// direction (RFC 0012 §2 — degrade toward keep-alive, never toward accusation).
+    Missing,
+    /// No answer. The specifier's shape is not one this adapter resolves, or the information it
+    /// would need lives somewhere the adapter does not read. Says nothing about the code, and
+    /// produces no finding.
     Unresolved,
 }
 

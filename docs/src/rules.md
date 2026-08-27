@@ -443,10 +443,19 @@ See [Suppressions & baseline](suppressions.md) for the pragma syntax and binding
 
 ## unresolved
 
-Registered in the category vocabulary (you may name it in suppressions and consumers must
-accept it in the schema) for imports that resolve to nothing — but **no current analysis
-emits it**: an import that fails to resolve today simply produces no edge. The name is
-reserved so its arrival is an additive change.
+**Group** defect · **severity** error · **confidence** the import's own ·
+**subject** import.
+
+A **relative** import specifier that resolves to no file — almost always a broken path, or a
+rename that missed this call site. Located at the import itself.
+
+A *package* specifier that resolves to nothing is a different question, and
+[`undeclared`](#undeclared) answers it; nothing is reported twice. Confidence is the adapter's
+own confidence in the import, so a dynamic specifier it could only partly read (`import(expr)`)
+arrives below `certain` and falls under the default report floor: a templated path is not
+evidence of a broken one.
+
+**Fix:** correct the path, or delete the import if what it pointed at is gone.
 
 ---
 

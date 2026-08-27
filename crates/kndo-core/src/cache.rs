@@ -160,6 +160,9 @@ struct GraphSnapshot {
     /// `mark_implicitly_invoked` output — same plugin-derived, no-per-item-provenance
     /// round-trip rationale as `externally_consumed` above.
     plugin_implicitly_invoked: Vec<SymbolId>,
+    /// Relative imports that resolved to nothing — adapter-derived like the edges, and a
+    /// finding on the next run, so a warm hit must not drop them.
+    unresolved_imports: Vec<(FileId, crate::graph::UnresolvedImport)>,
     /// Plugin-round diagnostics (content-budget cutoffs), stored apart from the extraction
     /// `diagnostics` above because the two have different patch-time fates: the
     /// incremental patch keeps extraction diagnostics for unchanged files but discards and
@@ -660,6 +663,7 @@ impl ProjectCache {
             patch_meta: snapshot.patch_meta,
             externally_consumed: snapshot.externally_consumed,
             plugin_implicitly_invoked: snapshot.plugin_implicitly_invoked,
+            unresolved_imports: snapshot.unresolved_imports,
         });
         Some(LoadedSnapshot {
             graph,
@@ -807,6 +811,7 @@ impl GraphSnapshotWriter {
             diagnostics: diagnostics.to_vec(),
             externally_consumed: graph.externally_consumed.clone(),
             plugin_implicitly_invoked: graph.plugin_implicitly_invoked.clone(),
+            unresolved_imports: graph.unresolved_imports.clone(),
             plugin_diagnostics: plugin_diagnostics.to_vec(),
             plugin_set_digest: self.plugin_set_digest,
             graph_schema_version: crate::graph::GRAPH_SCHEMA_VERSION,

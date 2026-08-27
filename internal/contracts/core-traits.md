@@ -227,7 +227,20 @@ pub trait LanguageAdapter: Send + Sync {
     fn resolve(&self, spec: &ImportSpec, ctx: &ResolveCtx) -> Resolution;
     // Resolution = File(ProjectPath, Confidence) | Dependency(DependencyName, Confidence)
     //            | WorkspaceMember { name, target: ProjectPath, confidence, same_package }
-    //            | Stdlib | Unresolved
+    //            | Stdlib | Missing | Unresolved
+    //
+    // Missing vs Unresolved is a normative distinction and only the adapter can make it.
+    // MISSING = "I understood this specifier as a path into the project, tried every candidate
+    // my language's rules allow, and no file is there" — a complete answer, and the fact the
+    // `unresolved` analysis reports at severity error. UNRESOLVED = "no answer": the shape is
+    // one I do not model (a self-reference imports map, an inline module's `super::`, a Sass
+    // load-path name, a URL), or the information lives somewhere I do not read. The core sees
+    // only that no edge came back and cannot tell them apart, so a resolver that says Missing
+    // where it means Unresolved makes kndo accuse working code of being broken.
+    //
+    // Adoption is per-adapter and optional, like the visibility ladder: an adapter that cannot
+    // yet separate the two keeps returning Unresolved and simply reports nothing. Degrading
+    // toward silence is always available; degrading toward accusation never is.
 }
 ```
 
