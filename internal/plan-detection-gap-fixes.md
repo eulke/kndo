@@ -211,6 +211,28 @@ its own shape now, so the exemption never touches it. kndo on itself 34 → 28 d
 all six construction bodies; corpus 7 lost / 0 gained, all seven alacritty `Default` impls whose
 body is one struct literal, read in source to confirm.
 
+### W6 — el primer tramo: activación, served-only, thymeleaf, libsass (`f63e1e0`…`3ebf8ef`)
+`ManifestDependency` leía solo `package.json` y `Cargo.toml`: **ninguna regla podía dispararse en
+un proyecto JVM, Go o Swift**, así que todo plugin de convenciones para esos ecosistemas nacía
+muerto y nada objetaba. El frontend ya no parsea manifiestos — se los pide a los adapters, que
+además responden cómo se escribe una coordenada en su ecosistema
+(`LanguageAdapter::declares_dependency`).
+
+`kndo:thymeleaf` cierra el `petclinic.css` inalcanzable, y al hacerlo destapó 48 falsos
+positivos de variables CSS: un `<link href>` dice que los bytes se sirven, no nombra ninguno de
+los 1185 símbolos. De ahí la regla de core **servido ≠ usado**. Su primera versión no disparó
+—contaba las referencias internas del archivo, y cada CSS se auto-descalificaba— y eso lo
+encontró la medición, no los tests.
+
+`kndo:libsass-maven-plugin` cierra los dos que quedaban leyendo el pom. Para eso `classify_file`
+recibió el canal de contenido: **sin cambio de ABI**, porque `read-file` ya era import en los dos
+worlds y el host simplemente lo respondía vacío. petclinic: `unused` 3 → 1.
+
+Dos guardas nuevas nacidas de errores propios: el set default de features de `kndo-cli` se
+verifica contra el de la librería (shipeé un plugin que no estaba en ningún binario), y
+`cache::ENTRY_FORMAT_VERSION` se mezcla en la clave del grafo — un cambio de forma en un tipo del
+contrato es **una** constante, no un bump por adapter.
+
 ---
 
 ## 2. What remains — W6
