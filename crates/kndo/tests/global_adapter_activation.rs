@@ -126,7 +126,9 @@ fn a_globally_installed_adapter_only_activates_when_its_rule_matches() {
     assert_eq!(candidates_with.len(), 1);
     assert_eq!(
         candidates_with[0].active,
-        Some(kndo::ActivationReason::RuleMatched)
+        Some(kndo::ActivationReason::RuleMatched(
+            kndo::plugin::ActivationRule::FileExists("*.kdemo-enable".into())
+        ))
     );
 
     // Claim priority: project-local > global > compiled-in. Drop a second copy of the same

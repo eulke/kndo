@@ -114,6 +114,81 @@ impl ActivationRule {
     }
 }
 
+/// Why a component (plugin or adapter) is running for this project — the answer to "why is
+/// this active?", decided by whoever composed the run and carried, never re-derived.
+///
+/// Core owns the vocabulary because every term in it is core's own: [`ActivationRule`] and
+/// `dependencies` are descriptor fields this crate defines. What core does *not* own is the
+/// decision — which tier a candidate came from, which rules were evaluated, which
+/// implication fired. That belongs to the composition layer (the `kndo` crate), which reports
+/// its verdict in this shape. One enum for plugins and adapters alike: both descriptors carry
+/// the same `activation`/`dependencies` fields, and two parallel enums would be one concept
+/// with two spellings.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ActivationReason {
+    /// Registered unconditionally — presence *is* the opt-in. A `.kndo/plugins/*.wasm`
+    /// drop-in, or an embedder handing the engine a component directly.
+    Registered,
+    /// Ships with the product and declares no activation rules, so it is always on.
+    AlwaysOn,
+    /// One of its own [`ActivationRule`]s matched the project — this one, the first that did.
+    RuleMatched(ActivationRule),
+    /// Activated because the named (active) component lists it in `dependencies`, possibly
+    /// transitively. The only path for a component whose framework is an *indirect*
+    /// dependency.
+    ImpliedBy(SmolStr),
+}
+
+impl std::fmt::Display for ActivationReason {
+    /// The one rendering, shared by `kndo doctor` and the JSON envelope's
+    /// `run.plugins[].activated_by`: a rule match renders as the rule itself
+    /// (`manifest-dependency: react`), because [`ActivationRule::describe`] is already the
+    /// single source for how a rule reads.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ActivationReason::Registered => f.write_str("registered"),
+            ActivationReason::AlwaysOn => f.write_str("always-on"),
+            ActivationReason::RuleMatched(rule) => f.write_str(&rule.describe()),
+            ActivationReason::ImpliedBy(id) => write!(f, "dependency of {id}"),
+        }
+    }
+}
+
+/// A [`Plugin`] as handed to an [`Engine`](crate::Engine): the component plus the composition
+/// layer's own answer to why it is running.
+///
+/// The pairing exists because the engine has to *report* activation
+/// (`run.plugins[].activated_by`) and must not *decide* it: the tiers, the rule evaluation and
+/// the dependency fixpoint all live above core, and a second derivation down here would be the
+/// same fact spelled twice. Registering a bare plugin still works — `Box<dyn Plugin>` converts
+/// into this with [`ActivationReason::Registered`], which is the truth for an embedder that
+/// chose the set by hand.
+pub struct RegisteredPlugin {
+    pub plugin: Box<dyn Plugin>,
+    pub activated_by: ActivationReason,
+}
+
+impl From<Box<dyn Plugin>> for RegisteredPlugin {
+    fn from(plugin: Box<dyn Plugin>) -> Self {
+        RegisteredPlugin {
+            plugin,
+            activated_by: ActivationReason::Registered,
+        }
+    }
+}
+
+/// The same conversion for a boxed *concrete* plugin, so a caller composing a set by hand
+/// writes `vec![Box::new(MyPlugin)]` without spelling the trait object out. Disjoint from the
+/// impl above: `dyn Plugin` is unsized, so it can never be this `P`.
+impl<P: Plugin + 'static> From<Box<P>> for RegisteredPlugin {
+    fn from(plugin: Box<P>) -> Self {
+        RegisteredPlugin {
+            plugin: plugin as Box<dyn Plugin>,
+            activated_by: ActivationReason::Registered,
+        }
+    }
+}
+
 // ---------------------------------------------------------------- read side: GraphView
 
 /// Read-only view over the assembled-so-far graph, handed to `contribute_roots`/

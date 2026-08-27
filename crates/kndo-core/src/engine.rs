@@ -185,7 +185,7 @@ fn store_health_snapshot(root: &Path, score: f64, grade: &str) {
 }
 
 /// Mirrors the output schema's `schema_version` (contracts/output-schema.md).
-pub const SCHEMA_VERSION: &str = "1.1.0";
+pub const SCHEMA_VERSION: &str = "1.2.0";
 
 /// The product version — every crate shares `version.workspace = true`, so kndo-core's own
 /// `CARGO_PKG_VERSION` is the same string the distribution crate and CLI would report.
@@ -338,6 +338,11 @@ pub struct DoctorCacheInfo {
 pub struct DoctorPluginInfo {
     pub id: String,
     pub version: String,
+    /// Why this plugin is running, rendered from the reason the composition layer handed in at
+    /// open — the same string the JSON envelope's `run.plugins[].activated_by` carries. Every
+    /// plugin an `Engine` holds is active by construction, so this answers "why", not
+    /// "whether"; the rules below say what COULD have fired, this says what did.
+    pub activated_by: String,
     pub detection: Vec<String>,
     pub activation: Vec<String>,
     /// Dependency coordinates — rendered so an activation chain is inspectable; whether each
@@ -540,6 +545,17 @@ pub struct AdapterRunInfo {
     pub files: usize,
 }
 
+/// One registered plugin and why it is running (`run.plugins[]`). `activated_by` is rendered
+/// from the [`ActivationReason`](crate::plugin::ActivationReason) the composition layer handed
+/// in at open — a plugin's presence in this list already means it is active, so the field
+/// answers "why", never "whether".
+#[derive(Debug, Clone, serde::Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct PluginRunInfo {
+    pub id: String,
+    pub activated_by: String,
+}
+
 /// `baseline` summary (the `baseline` envelope field):
 /// `acknowledged` counts baseline entries that still match a current finding (excluded from
 /// `findings` and from `--fail-on`); `stale` counts entries that match nothing anymore — the
@@ -600,6 +616,10 @@ pub struct RunResult {
     pub duration_ms: u64,
     pub project_root: String,
     pub adapters: Vec<AdapterRunInfo>,
+    /// The registered plugin set and why each one is running (`run.plugins[]`), in registration
+    /// order. Every entry is active by construction: composition hands the engine only the
+    /// plugins that activated.
+    pub plugins: Vec<PluginRunInfo>,
     /// Whether the cache was consulted at all (`--no-cache` ⇒ `false`) and how many things it
     /// actually served this run — facts entries plus, when the whole graph matched, one graph
     /// snapshot (`ProjectCache::hits() + ProjectCache::graph_hits()`) — the only honest way to
@@ -679,6 +699,7 @@ struct RunInfo<'a> {
     cache: &'static str,
     project_root: &'a str,
     adapters: &'a [AdapterRunInfo],
+    plugins: &'a [PluginRunInfo],
     /// Categories this run did not judge, and why. Always present (usually `[]`): the absence
     /// of a finding is only evidence of cleanliness for categories NOT listed here.
     abstained: &'a [crate::analysis::Abstention],
@@ -721,6 +742,7 @@ impl RunResult {
                 cache: self.cache_status(),
                 project_root: &self.project_root,
                 adapters: &self.adapters,
+                plugins: &self.plugins,
                 abstained: &self.abstained,
             },
             findings: &self.findings,
@@ -886,6 +908,11 @@ pub struct Engine {
     root: PathBuf,
     adapters: Vec<Box<dyn LanguageAdapter>>,
     plugins: Vec<Box<dyn crate::plugin::Plugin>>,
+    /// Why each registered plugin is running, recorded at open and reported verbatim as
+    /// `run.plugins[]`. Split out of the registration input rather than kept alongside each
+    /// plugin because assembly wants the plugins and only the envelope wants the reasons —
+    /// both halves come from the one `RegisteredPlugin` list, so they cannot drift.
+    plugin_activation: Vec<PluginRunInfo>,
     cache: Option<crate::cache::ProjectCache>,
     cache_enabled: bool,
     /// The in-flight background snapshot write (persist off the critical path)
@@ -922,18 +949,29 @@ impl Engine {
         // set, coverage ingesters included, is composed by the `kndo` crate's
         // `default_plugins()` and arrives through `open_with_plugins`, exactly like
         // adapters do.
-        Engine::open_with_plugins(root, overrides, adapters, vec![])
+        Engine::open_with_plugins(
+            root,
+            overrides,
+            adapters,
+            Vec::<crate::plugin::RegisteredPlugin>::new(),
+        )
     }
 
     /// Same as [`Self::open`], additionally taking the registered plugin set —
     /// compiled-in first-party plugins (the `kndo` crate's `default_plugins()`, coverage
     /// ingesters included) and WASM-bridged third-party plugins alike. [`Self::open`] itself
     /// registers none: plugins are composition, not core.
+    ///
+    /// Each plugin arrives as a [`RegisteredPlugin`](crate::plugin::RegisteredPlugin) — the
+    /// component plus the caller's answer to why it is active, which the run reports as
+    /// `run.plugins[].activated_by`. A caller that chose the set by hand passes bare
+    /// `Box<dyn Plugin>`s and gets [`ActivationReason::Registered`](crate::plugin::ActivationReason::Registered),
+    /// which is exactly what happened.
     pub fn open_with_plugins(
         root: &Path,
         overrides: ConfigOverrides,
         adapters: Vec<Box<dyn LanguageAdapter>>,
-        plugins: Vec<Box<dyn crate::plugin::Plugin>>,
+        plugins: impl IntoIterator<Item = impl Into<crate::plugin::RegisteredPlugin>>,
     ) -> Result<Engine, EngineError> {
         if !root.is_dir() {
             return Err(EngineError::ProjectRootNotFound(root.to_path_buf()));
@@ -944,10 +982,22 @@ impl Engine {
         let cache = overrides
             .use_cache
             .then(|| crate::cache::ProjectCache::open(root));
+        let (plugins, plugin_activation) = plugins
+            .into_iter()
+            .map(|registered| {
+                let registered = registered.into();
+                let info = PluginRunInfo {
+                    id: registered.plugin.descriptor().id.to_string(),
+                    activated_by: registered.activated_by.to_string(),
+                };
+                (registered.plugin, info)
+            })
+            .unzip();
         Ok(Engine {
             root: root.to_path_buf(),
             adapters,
             plugins,
+            plugin_activation,
             cache,
             cache_enabled: overrides.use_cache,
             pending_persist: std::sync::Mutex::new(None),
@@ -985,11 +1035,13 @@ impl Engine {
         let plugins = self
             .plugins
             .iter()
-            .map(|p| {
+            .zip(&self.plugin_activation)
+            .map(|(p, activation)| {
                 let d = p.descriptor();
                 DoctorPluginInfo {
                     id: d.id.to_string(),
                     version: d.version.to_string(),
+                    activated_by: activation.activated_by.clone(),
                     detection: d.detection.iter().map(|s| s.to_string()).collect(),
                     activation: d.activation.iter().map(|r| r.describe()).collect(),
                     dependencies: d.dependencies.iter().map(|c| c.to_string()).collect(),
@@ -1684,6 +1736,7 @@ impl Engine {
                     }
                 })
                 .collect(),
+            plugins: self.plugin_activation.clone(),
             ..RunResult::default()
         }
     }
@@ -2437,9 +2490,7 @@ mod tests {
         assert!(report.plugins[0].activation.is_empty());
 
         // The zero-plugin case is zero — callers who ask for no plugins get no plugins.
-        let bare =
-            Engine::open_with_plugins(dir.path(), ConfigOverrides::default(), vec![], vec![])
-                .unwrap();
+        let bare = Engine::open(dir.path(), ConfigOverrides::default(), vec![]).unwrap();
         assert!(bare.doctor().plugins.is_empty());
     }
 
@@ -2581,6 +2632,38 @@ mod tests {
         // envelopes byte-for-byte).
         let v: serde_json::Value = serde_json::from_str(&result.to_json()).unwrap();
         assert!(v.get("timings").is_none());
+    }
+
+    #[test]
+    fn run_plugins_reports_every_registered_plugin_and_why() {
+        let dir = tempfile::tempdir().unwrap();
+        // Two registration shapes, one carrying the composition layer's own verdict and one
+        // a bare plugin an embedder picked by hand — both must reach `run.plugins[]`, in
+        // registration order, and neither reason may be invented here.
+        let mut engine = Engine::open_with_plugins(
+            dir.path(),
+            ConfigOverrides::default(),
+            vec![],
+            vec![
+                crate::plugin::RegisteredPlugin {
+                    plugin: Box::new(DemoPlugin),
+                    activated_by: crate::plugin::ActivationReason::RuleMatched(
+                        crate::plugin::ActivationRule::ManifestDependency(SmolStr::new("next")),
+                    ),
+                },
+                Box::new(ConfigDrivenPlugin).into(),
+            ],
+        )
+        .unwrap();
+        let value: serde_json::Value =
+            serde_json::from_str(&engine.check(RunMode::Full).to_json()).unwrap();
+        assert_eq!(
+            value["run"]["plugins"],
+            serde_json::json!([
+                { "id": "demo", "activated_by": "manifest-dependency: next" },
+                { "id": "config-driven", "activated_by": "registered" },
+            ])
+        );
     }
 
     #[test]

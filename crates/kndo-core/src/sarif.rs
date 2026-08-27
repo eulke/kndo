@@ -301,6 +301,7 @@ mod tests {
             duration_ms: 1,
             project_root: "/tmp/x".to_string(),
             adapters: Vec::new(),
+            plugins: Vec::new(),
             cache_enabled: false,
             cache_hits: 0,
             baseline: None,

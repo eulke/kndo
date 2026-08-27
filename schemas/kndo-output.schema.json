@@ -461,6 +461,22 @@
         "grade"
       ]
     },
+    "PluginRunInfo": {
+      "description": "One registered plugin and why it is running (`run.plugins[]`). `activated_by` is rendered\nfrom the [`ActivationReason`](crate::plugin::ActivationReason) the composition layer handed\nin at open — a plugin's presence in this list already means it is active, so the field\nanswers \"why\", never \"whether\".",
+      "type": "object",
+      "properties": {
+        "activated_by": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "activated_by"
+      ]
+    },
     "ProjectPath": {
       "description": "Project-relative path with `/` separators, the only path form that crosses the adapter\nboundary (case handling and symlink resolution are the core's discovery concern).",
       "type": "string"
@@ -532,6 +548,12 @@
         "mode": {
           "type": "string"
         },
+        "plugins": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PluginRunInfo"
+          }
+        },
         "project_root": {
           "type": "string"
         },
@@ -546,6 +568,7 @@
         "cache",
         "project_root",
         "adapters",
+        "plugins",
         "abstained"
       ]
     },

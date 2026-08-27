@@ -90,12 +90,14 @@ fn an_active_adapters_dependencies_imply_a_globally_installed_adapter() {
     };
     assert_eq!(
         by_id("kwrap").active,
-        Some(kndo::ActivationReason::RuleMatched),
+        Some(kndo::ActivationReason::RuleMatched(
+            kndo::plugin::ActivationRule::FileExists("*.kwrap-enable".into())
+        )),
         "the wrapper's own *.kwrap-enable rule must have fired"
     );
     assert_eq!(
         by_id("kdemo").active,
-        Some(kndo::ActivationReason::ImpliedBy("kwrap".to_string())),
+        Some(kndo::ActivationReason::ImpliedBy("kwrap".into())),
         "kdemo's own rule never matched — it must be active purely as kwrap's dependency"
     );
     assert!(

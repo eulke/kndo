@@ -758,6 +758,17 @@ pub trait Plugin: Send + Sync {
 }
 ```
 
+- **`ActivationReason` (landed).** Core owns the *vocabulary* of why a component is active —
+  `Registered` (presence is the opt-in) · `AlwaysOn` (ships with the product, declares no
+  rules) · `RuleMatched(ActivationRule)` (this rule, not merely "a rule") · `ImpliedBy(id)` —
+  because every term in it is a field core already defines. Core does NOT own the *decision*:
+  the tiers, the rule evaluation and the `dependencies` fixpoint live in the distribution layer,
+  which reports its verdict in this shape and passes it to `open_with_plugins` inside a
+  `RegisteredPlugin`. One enum serves plugins and adapters alike (both descriptors carry
+  `activation`/`dependencies`), and its `Display` is the single rendering behind both
+  `kndo doctor`'s `active (…)` line and the envelope's `run.plugins[].activated_by` — two
+  spellings is how those two would come to disagree about the same run.
+
 - **Landed (M5).** `GraphView<'a>` borrows the graph's own `files`/`symbols` (built, never
   copied) and exposes `files()` plus `symbols_in(path)` — the latter backed by a one-time
   `FileId -> [symbol index]` map built when the view is constructed, so a plugin walking every
@@ -885,9 +896,19 @@ impl Engine {
     pub fn open(root: &Path, overrides: ConfigOverrides,
                 adapters: Vec<Box<dyn LanguageAdapter>>) -> Result<Engine, EngineError>;
     /// Same as `open`, additionally taking the registered `Plugin` set explicitly (landed M5).
+    /// Each plugin arrives as a `RegisteredPlugin { plugin, activated_by: ActivationReason }`
+    /// — the component plus the CALLER's answer to why it is active, which the run reports
+    /// verbatim as `run.plugins[].activated_by`. The engine never derives that answer: the
+    /// tiers, the rule evaluation and the `dependencies` fixpoint all live in the distribution
+    /// layer, and a second derivation in core would be one fact with two sources (the failure
+    /// mode that left this field specified-but-unemitted for three milestones). A bare
+    /// `Box<dyn Plugin>` — or a boxed concrete plugin — converts in, yielding
+    /// `ActivationReason::Registered`, which is exactly what an embedder choosing the set by
+    /// hand did.
     pub fn open_with_plugins(root: &Path, overrides: ConfigOverrides,
                 adapters: Vec<Box<dyn LanguageAdapter>>,
-                plugins: Vec<Box<dyn Plugin>>) -> Result<Engine, EngineError>;
+                plugins: impl IntoIterator<Item = impl Into<RegisteredPlugin>>)
+                -> Result<Engine, EngineError>;
     pub fn check(&mut self, mode: RunMode) -> RunResult;    // full | staged | diff
     pub fn query(&self, req: QueryRequest) -> QueryResult;  // RFC 0007 verbs, incl. batches
     pub fn query_batch(&self, requests: Vec<QueryRequest>) -> Vec<QueryResult>;  // one shared graph load

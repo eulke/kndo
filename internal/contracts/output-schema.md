@@ -9,7 +9,7 @@ round-trip these examples in CI.
 
 ```jsonc
 {
-  "schema_version": "1.1.0",
+  "schema_version": "1.2.0",
   "kndo_version": "0.3.1",
   "run": {
     "mode": "staged",                    // "full" | "staged" | "diff"
@@ -19,7 +19,7 @@ round-trip these examples in CI.
     "cache": "warm",                     // "warm" | "cold" | "partial" | "disabled"
     "project_root": ".",
     "adapters": [ { "id": "js-ts", "files": 1240 } ],
-    "plugins":  [ { "id": "nextjs", "activated_by": "detected: dependency react" } ],
+    "plugins":  [ { "id": "kndo:nextjs", "activated_by": "manifest-dependency: next" } ],
     "abstained": [                       // categories NO analysis judged this run
       { "category": "crap", "reason": "crap: no coverage ingested — skipped (…)" }
     ]
@@ -39,6 +39,18 @@ round-trip these examples in CI.
   "diagnostics": [ { "level": "warn", "message": "coverage report older than 7d — ignored" } ]
 }
 ```
+
+**`run.plugins` (normative).** The plugins that actually ran, in registration order — a
+plugin appears here **only if it was active**, so `activated_by` answers *why*, never
+*whether*. Its value is the composition layer's own verdict, rendered once
+(`ActivationReason`'s `Display`) and reported unchanged: `"manifest-dependency: next"` /
+`"file-exists: next.config.*"` for a plugin whose own activation rule fired (the rule itself,
+because "a rule matched" does not answer the question), `"dependency of <id>"` for one another active
+plugin implied through `dependencies`, `"always-on"` for a built-in that declares no
+rules, `"registered"` for one whose presence *is* the opt-in (a `.kndo/plugins/` drop-in, or an
+embedder's explicit set). The engine never derives these: whoever activated a plugin says why,
+which is what keeps this field and `kndo doctor` from disagreeing. New reason spellings are
+additive; consumers must not exhaustively match on the string.
 
 **`run.abstained` (normative).** A category listed here was **not judged** this run: the analysis
 that owns it could not (no ingested coverage report for `crap`, no test roots for `untested`) and
@@ -164,7 +176,7 @@ more", never as "that's all".
 
 ```jsonc
 {
-  "schema_version": "1.1.0",
+  "schema_version": "1.2.0",
   "query": { "verb": "used-by", "selectors": ["src/billing/tax.ts#calcLegacyTax"],
              "flags": { "depth": 1, "split_by_color": true }, "id": "q1" },   // id: query-mode echo, optional
   "run": { "cache": "warm", "duration_ms": 74 },

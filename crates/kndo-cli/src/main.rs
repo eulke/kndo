@@ -301,10 +301,14 @@ fn doctor_cmd() -> ExitCode {
     }
     for p in &report.plugins {
         println!("  {} v{}", p.id, p.version);
+        // Every plugin in this section is active, so the rule that FIRED is the answer.
+        println!("    active:       {}", p.activated_by);
         if !p.detection.is_empty() {
             println!("    detection:    {}", p.detection.join(", "));
         }
-        if !p.activation.is_empty() {
+        // The full gate, only where it says something the line above doesn't: with a single
+        // declared rule the two are the same string, and printing it twice reads as two facts.
+        if p.activation.len() > 1 {
             println!("    activation:   {}", p.activation.join(", "));
         }
         if !p.dependencies.is_empty() {
@@ -407,10 +411,11 @@ fn doctor_cmd() -> ExitCode {
 /// One line of doctor status for a global candidate (adapter or plugin — the
 /// vocabulary is shared): why it's running, or the plain fact that it isn't.
 fn activation_status(active: &Option<kndo::ActivationReason>) -> String {
+    // The reason renders itself (`ActivationReason`'s `Display`) — the same text the JSON
+    // envelope's `run.plugins[].activated_by` carries. A second spelling here is how doctor
+    // and the envelope would come to disagree about why the same plugin is running.
     match active {
-        Some(kndo::ActivationReason::RuleMatched) => "active (rule matched)".to_string(),
-        Some(kndo::ActivationReason::ImpliedBy(by)) => format!("active (dependency of {by})"),
-        Some(_) => "active".to_string(),
+        Some(reason) => format!("active ({reason})"),
         None => "inactive".to_string(),
     }
 }

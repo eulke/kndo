@@ -93,8 +93,9 @@ Any single matching rule activates. An empty rule list **never** self-activates 
 global tier — silence over a guess. Additionally, an active plugin activates every plugin it
 declares as a dependency, transitively — a company framework plugin brings the plugins for
 the frameworks it wraps. `kndo doctor` shows every candidate, active or not, with the exact
-rule that fired (or didn't): `active (rule matched)`, `active (dependency of X)`, or
-`inactive`.
+rule that fired (or didn't): `active (manifest-dependency: next)`, `active (dependency of X)`,
+`active (always-on)`, `active (registered)`, or `inactive`. The `--format json` envelope
+carries the same reason for every *active* plugin under `run.plugins[].activated_by`.
 
 ## Plugin findings
 

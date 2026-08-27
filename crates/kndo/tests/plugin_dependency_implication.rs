@@ -130,12 +130,14 @@ fn an_external_plugins_dependencies_activate_a_builtin_whose_own_rule_never_fire
         .expect("the wrapper component is installed globally");
     assert_eq!(
         wrapper_state.active,
-        Some(kndo::ActivationReason::RuleMatched),
+        Some(kndo::ActivationReason::RuleMatched(
+            kndo::plugin::ActivationRule::FileExists("*.acme-framework-enable".into())
+        )),
         "the wrapper's own *.acme-framework-enable rule must have fired"
     );
     assert_eq!(
         express(project.path()).active,
-        Some(kndo::ActivationReason::ImpliedBy(WRAPPER_ID.to_string())),
+        Some(kndo::ActivationReason::ImpliedBy(WRAPPER_ID.into())),
         "no manifest declares express, so this activation can only have come through the \
          wrapper's `dependencies` — if it did not, a plugin whose framework is an indirect \
          dependency is unreachable"

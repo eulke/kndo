@@ -21,6 +21,7 @@ pub use kndo_core::{
 // deliberately not re-exported here: nothing outside a handful of `kndo-core`-internal tests
 // and this crate's own patch-equivalence test needs them, and that test now depends on
 // `kndo-core` directly instead of routing through this crate's surface.
+pub use kndo_core::plugin::ActivationReason;
 pub use kndo_core::{
     sort_findings_for_display, BaselineOp, BaselineResult, Category, Confidence, ConfigOverrides,
     Delta, DeltaOrigin, Diagnostic, DiagnosticLevel, DoctorReport, Engine, EngineError, Finding,
@@ -29,7 +30,7 @@ pub use kndo_core::{
 };
 
 use kndo_core::adapter::LanguageAdapter;
-use kndo_core::plugin::Plugin;
+use kndo_core::plugin::{Plugin, RegisteredPlugin};
 use std::path::Path;
 
 /// `kndo plugin install/list/remove` — the registry-less installer over the
@@ -136,20 +137,6 @@ pub enum PluginSource {
     Global,
 }
 
-/// Why a plugin is active for this project — the doctor-visible answer to "why is this
-/// running?", dependency implication chains included.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ActivationReason {
-    /// Dropped in `.kndo/plugins/` — presence is the opt-in.
-    ProjectLocal,
-    /// A built-in with no activation rules — always on.
-    BuiltinAlwaysOn,
-    /// One of its own `activation` rules matched the project.
-    RuleMatched,
-    /// Activated because the named (active) plugin lists it in `dependencies`.
-    ImpliedBy(String),
-}
-
 /// One plugin the composition layer considered — active or not — with everything `kndo doctor`
 /// needs to explain the outcome.
 #[derive(Debug, Clone)]
@@ -192,7 +179,7 @@ pub fn plugin_resolution(root: &Path) -> PluginResolution {
 /// closed over `dependencies` implication as a fixpoint. Built-ins with non-empty `activation`
 /// are gated exactly like global candidates — a built-in convention plugin must never run (or
 /// cost the cache bypass) on a project that doesn't match it.
-fn compose_plugins(root: &Path) -> (Vec<Box<dyn Plugin>>, PluginResolution) {
+fn compose_plugins(root: &Path) -> (Vec<RegisteredPlugin>, PluginResolution) {
     #[cfg(feature = "plugin-activation")]
     {
         let candidates = collect_candidates(root);
@@ -213,7 +200,12 @@ fn compose_plugins(root: &Path) -> (Vec<Box<dyn Plugin>>, PluginResolution) {
         let plugins = candidates
             .into_iter()
             .zip(active)
-            .filter_map(|((plugin, _), reason)| reason.map(|_| plugin))
+            .filter_map(|((plugin, _), reason)| {
+                reason.map(|activated_by| RegisteredPlugin {
+                    plugin,
+                    activated_by,
+                })
+            })
             .collect();
         (plugins, resolution)
     }
@@ -225,15 +217,23 @@ fn compose_plugins(root: &Path) -> (Vec<Box<dyn Plugin>>, PluginResolution) {
         // because every gated built-in's feature (`plugin-nextjs`/`plugin-express`) implies
         // `plugin-activation`, so the only built-ins that can appear here are the coverage
         // ingesters (always-on by contract, and they declare `mutates_graph() == false`).
-        let plugins = default_plugins();
+        let plugins: Vec<RegisteredPlugin> = default_plugins()
+            .into_iter()
+            .map(|plugin| RegisteredPlugin {
+                plugin,
+                activated_by: ActivationReason::AlwaysOn,
+            })
+            .collect();
+        // The report is derived from the registered set, not from a second `default_plugins()`
+        // call: what ran and what is reported as having run are one list.
         let resolution = PluginResolution {
             plugins: plugins
                 .iter()
                 .map(|p| {
                     resolved_plugin(
-                        &p.descriptor(),
+                        &p.plugin.descriptor(),
                         PluginSource::Builtin,
-                        Some(ActivationReason::BuiltinAlwaysOn),
+                        Some(p.activated_by.clone()),
                     )
                 })
                 .collect(),
@@ -391,10 +391,10 @@ fn compose_adapters(root: &Path) -> (Vec<Box<dyn LanguageAdapter>>, AdapterResol
             .iter()
             .zip(&sources)
             .map(|(d, source)| match source {
-                AdapterSource::ProjectLocal => Some(ActivationReason::ProjectLocal),
-                AdapterSource::Builtin => Some(ActivationReason::BuiltinAlwaysOn),
+                AdapterSource::ProjectLocal => Some(ActivationReason::Registered),
+                AdapterSource::Builtin => Some(ActivationReason::AlwaysOn),
                 AdapterSource::Global => activation::activates(&d.activation, &activation_ctx)
-                    .then_some(ActivationReason::RuleMatched),
+                    .map(|rule| ActivationReason::RuleMatched(rule.clone())),
             })
             .collect();
         activation::imply_fixpoint(&identities, &mut active);
@@ -437,7 +437,7 @@ fn compose_adapters(root: &Path) -> (Vec<Box<dyn LanguageAdapter>>, AdapterResol
                 resolved_adapter(
                     &a.descriptor(),
                     AdapterSource::Builtin,
-                    Some(ActivationReason::BuiltinAlwaysOn),
+                    Some(ActivationReason::AlwaysOn),
                 )
             })
             .collect();
@@ -593,11 +593,17 @@ mod activation {
         dirs::data_dir().map(|d| d.join("kndo").join("plugins"))
     }
 
-    /// A plugin with no activation rules never self-activates from the global directory — an
-    /// empty list means "no known structural signal," not "always on" (zero-false-positive
-    /// discipline: silence over a guess). Otherwise, any single matching rule is enough.
-    pub(crate) fn activates(rules: &[ActivationRule], ctx: &ActivationCtx) -> bool {
-        !rules.is_empty() && rules.iter().any(|rule| matches(rule, ctx))
+    /// The first of `rules` that matches this project, or `None`. A component with no
+    /// activation rules never self-activates from the global directory — an empty list means
+    /// "no known structural signal," not "always on" (zero-false-positive discipline: silence
+    /// over a guess). Otherwise, any single matching rule is enough, and *which* one it was is
+    /// the answer `run.plugins[].activated_by` and `kndo doctor` report: returning the rule
+    /// rather than a bool is what keeps that answer from being re-derived later.
+    pub(crate) fn activates<'a>(
+        rules: &'a [ActivationRule],
+        ctx: &ActivationCtx,
+    ) -> Option<&'a ActivationRule> {
+        rules.iter().find(|rule| matches(rule, ctx))
     }
 
     /// Everything an activation rule may consult about a project, with the project's manifests
@@ -746,13 +752,12 @@ mod activation {
             .iter()
             .zip(sources)
             .map(|(d, source)| match source {
-                PluginSource::ProjectLocal => Some(ActivationReason::ProjectLocal),
+                PluginSource::ProjectLocal => Some(ActivationReason::Registered),
                 PluginSource::Builtin if d.activation.is_empty() => {
-                    Some(ActivationReason::BuiltinAlwaysOn)
+                    Some(ActivationReason::AlwaysOn)
                 }
-                PluginSource::Builtin | PluginSource::Global => {
-                    activates(&d.activation, ctx).then_some(ActivationReason::RuleMatched)
-                }
+                PluginSource::Builtin | PluginSource::Global => activates(&d.activation, ctx)
+                    .map(|rule| ActivationReason::RuleMatched(rule.clone())),
             })
             .collect()
     }
@@ -766,7 +771,9 @@ mod activation {
         while changed {
             changed = false;
             for (target, requirer_id) in pending_implications(descriptors, active) {
-                active[target] = Some(crate::ActivationReason::ImpliedBy(requirer_id));
+                active[target] = Some(crate::ActivationReason::ImpliedBy(
+                    requirer_id.as_str().into(),
+                ));
                 changed = true;
             }
         }
@@ -850,7 +857,7 @@ mod activation {
         #[test]
         fn no_rules_never_activates() {
             let dir = tempfile::tempdir().unwrap();
-            assert!(!activates(&[], &ActivationCtx::new(dir.path())));
+            assert!(activates(&[], &ActivationCtx::new(dir.path())).is_none());
         }
 
         #[test]
@@ -858,14 +865,14 @@ mod activation {
             let dir = tempfile::tempdir().unwrap();
             std::fs::write(dir.path().join("next.config.js"), "").unwrap();
             let rules = vec![ActivationRule::FileExists(SmolStr::new("next.config.*"))];
-            assert!(activates(&rules, &ActivationCtx::new(dir.path())));
+            assert!(activates(&rules, &ActivationCtx::new(dir.path())).is_some());
         }
 
         #[test]
         fn file_glob_rule_does_not_match_when_absent() {
             let dir = tempfile::tempdir().unwrap();
             let rules = vec![ActivationRule::FileExists(SmolStr::new("next.config.*"))];
-            assert!(!activates(&rules, &ActivationCtx::new(dir.path())));
+            assert!(activates(&rules, &ActivationCtx::new(dir.path())).is_none());
         }
 
         #[test]
@@ -877,7 +884,7 @@ mod activation {
             )
             .unwrap();
             let rules = vec![ActivationRule::ManifestDependency(SmolStr::new("react"))];
-            assert!(activates(&rules, &ActivationCtx::new(dir.path())));
+            assert!(activates(&rules, &ActivationCtx::new(dir.path())).is_some());
         }
 
         #[test]
@@ -891,7 +898,7 @@ mod activation {
             let rules = vec![ActivationRule::ManifestDependency(SmolStr::new(
                 "serde-json",
             ))];
-            assert!(activates(&rules, &ActivationCtx::new(dir.path())));
+            assert!(activates(&rules, &ActivationCtx::new(dir.path())).is_some());
         }
 
         #[test]
@@ -917,13 +924,13 @@ mod activation {
             let rules = vec![ActivationRule::ManifestDependency(SmolStr::new(
                 "spring-boot-starter-thymeleaf",
             ))];
-            assert!(activates(&rules, &ActivationCtx::new(dir.path())));
+            assert!(activates(&rules, &ActivationCtx::new(dir.path())).is_some());
 
             // …and the full coordinate works too, for an author who prefers to be explicit.
             let full = vec![ActivationRule::ManifestDependency(SmolStr::new(
                 "org.springframework.boot:spring-boot-starter-thymeleaf",
             ))];
-            assert!(activates(&full, &ActivationCtx::new(dir.path())));
+            assert!(activates(&full, &ActivationCtx::new(dir.path())).is_some());
         }
 
         #[test]
@@ -937,7 +944,7 @@ mod activation {
             let rules = vec![ActivationRule::ManifestDependency(SmolStr::new(
                 "ktor-server-core",
             ))];
-            assert!(activates(&rules, &ActivationCtx::new(gradle.path())));
+            assert!(activates(&rules, &ActivationCtx::new(gradle.path())).is_some());
 
             let go = tempfile::tempdir().unwrap();
             std::fs::write(
@@ -951,9 +958,9 @@ mod activation {
             let module_path = vec![ActivationRule::ManifestDependency(SmolStr::new(
                 "github.com/gin-gonic/gin",
             ))];
-            assert!(activates(&module_path, &ActivationCtx::new(go.path())));
+            assert!(activates(&module_path, &ActivationCtx::new(go.path())).is_some());
             let bare = vec![ActivationRule::ManifestDependency(SmolStr::new("gin"))];
-            assert!(!activates(&bare, &ActivationCtx::new(go.path())));
+            assert!(activates(&bare, &ActivationCtx::new(go.path())).is_none());
         }
 
         #[test]
@@ -961,7 +968,7 @@ mod activation {
             let dir = tempfile::tempdir().unwrap();
             std::fs::write(dir.path().join("package.json"), r#"{"dependencies": {}}"#).unwrap();
             let rules = vec![ActivationRule::ManifestDependency(SmolStr::new("react"))];
-            assert!(!activates(&rules, &ActivationCtx::new(dir.path())));
+            assert!(activates(&rules, &ActivationCtx::new(dir.path())).is_none());
         }
 
         #[test]
@@ -979,7 +986,7 @@ mod activation {
             )
             .unwrap();
             let rules = vec![ActivationRule::ManifestDependency(SmolStr::new("react"))];
-            assert!(activates(&rules, &ActivationCtx::new(dir.path())));
+            assert!(activates(&rules, &ActivationCtx::new(dir.path())).is_some());
         }
 
         #[test]
@@ -998,7 +1005,7 @@ mod activation {
             )
             .unwrap();
             let rules = vec![ActivationRule::ManifestDependency(SmolStr::new("react"))];
-            assert!(!activates(&rules, &ActivationCtx::new(dir.path())));
+            assert!(activates(&rules, &ActivationCtx::new(dir.path())).is_none());
         }
 
         fn descriptor(
@@ -1051,18 +1058,21 @@ mod activation {
                 crate::PluginSource::Builtin,
             ];
             let (active, missing) = resolve(&descriptors, &sources, dir.path());
-            assert_eq!(active[0], Some(crate::ActivationReason::RuleMatched));
+            assert_eq!(
+                active[0],
+                Some(crate::ActivationReason::RuleMatched(
+                    ActivationRule::ManifestDependency(SmolStr::new("@company/framework"))
+                ))
+            );
             assert_eq!(
                 active[1],
                 Some(crate::ActivationReason::ImpliedBy(
-                    "github.com/company/framework-plugin".to_string()
+                    "github.com/company/framework-plugin".into()
                 ))
             );
             assert_eq!(
                 active[2],
-                Some(crate::ActivationReason::ImpliedBy(
-                    "kndo:nextjs".to_string()
-                ))
+                Some(crate::ActivationReason::ImpliedBy("kndo:nextjs".into()))
             );
             assert!(missing.is_empty());
         }
@@ -1080,10 +1090,10 @@ mod activation {
                 crate::PluginSource::Global,
             ];
             let (active, missing) = resolve(&descriptors, &sources, dir.path());
-            assert_eq!(active[0], Some(crate::ActivationReason::ProjectLocal));
+            assert_eq!(active[0], Some(crate::ActivationReason::Registered));
             assert_eq!(
                 active[1],
-                Some(crate::ActivationReason::ImpliedBy("a".to_string()))
+                Some(crate::ActivationReason::ImpliedBy("a".into()))
             );
             assert!(missing.is_empty());
         }
@@ -1141,7 +1151,7 @@ mod activation {
             let sources = vec![crate::PluginSource::Builtin, crate::PluginSource::Builtin];
             let (active, _) = resolve(&descriptors, &sources, dir.path());
             assert!(active[0].is_none());
-            assert_eq!(active[1], Some(crate::ActivationReason::BuiltinAlwaysOn));
+            assert_eq!(active[1], Some(crate::ActivationReason::AlwaysOn));
         }
     }
 }
@@ -1172,7 +1182,7 @@ mod tests {
         for ingester in ingesters {
             assert_eq!(
                 ingester.active,
-                Some(ActivationReason::BuiltinAlwaysOn),
+                Some(ActivationReason::AlwaysOn),
                 "{} must be always-on",
                 ingester.id
             );
