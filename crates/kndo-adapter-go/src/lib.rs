@@ -83,14 +83,7 @@ impl LanguageAdapter for GoAdapter {
     }
 
     fn claim(&self, path: &ProjectPath) -> Option<FileClaim> {
-        let p = path.0.as_str();
-        if !p.ends_with(".go") {
-            return None;
-        }
-        Some(FileClaim {
-            language: SmolStr::new("go"),
-            class: kndo_adapter_toolkit::classify::classify(p, &PATH_PATTERNS),
-        })
+        kndo_adapter_toolkit::classify::claim_by_extension(path, &["go"], "go", &PATH_PATTERNS)
     }
 
     fn claim_manifest(&self, path: &ProjectPath) -> bool {

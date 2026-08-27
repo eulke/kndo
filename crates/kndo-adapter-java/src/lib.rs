@@ -103,14 +103,7 @@ impl LanguageAdapter for JavaAdapter {
     }
 
     fn claim(&self, path: &ProjectPath) -> Option<FileClaim> {
-        let p = path.0.as_str();
-        if !p.ends_with(".java") {
-            return None;
-        }
-        Some(FileClaim {
-            language: SmolStr::new("java"),
-            class: kndo_adapter_toolkit::classify::classify(p, &PATH_PATTERNS),
-        })
+        kndo_adapter_toolkit::classify::claim_by_extension(path, &["java"], "java", &PATH_PATTERNS)
     }
 
     fn claim_manifest(&self, path: &ProjectPath) -> bool {

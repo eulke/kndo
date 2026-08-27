@@ -735,21 +735,16 @@ fn push_declaration(
     member_of: Option<&str>,
     (level, exported): (u8, bool),
 ) {
-    out.declarations.push(kndo_core::adapter::Declaration {
-        name: SmolStr::new(name),
+    kndo_adapter_toolkit::decls::push_declaration(
+        out,
+        name,
         kind,
-        span: span(item),
-        exported,
-        visibility: kndo_core::adapter::VisibilityLevel(level),
-        member_of: member_of.map(SmolStr::new),
-        implicitly_invoked: false,
-        nested_scope: false,
-        visibility_inherited: false,
-        visible_in_unit: None,
-        implements: None,
-        markers: markers(item, src),
+        item,
         signature_span,
-    });
+        member_of,
+        (level, exported),
+        markers(item, src),
+    );
 }
 
 /// The annotation names written on this declaration, in source order — `Declaration::markers`.

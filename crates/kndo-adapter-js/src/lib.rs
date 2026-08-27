@@ -85,17 +85,12 @@ impl LanguageAdapter for JsTsAdapter {
     }
 
     fn claim(&self, path: &ProjectPath) -> Option<FileClaim> {
-        let p = path.0.as_str();
-        // Extension match covers `.d.ts` too (its final extension is `ts`); the
-        // declarations-only handling of `.d.ts` is extraction's concern, not claiming's.
-        let ext = p.rsplit('.').next()?;
-        if !EXTENSIONS.contains(&ext) {
-            return None;
-        }
-        Some(FileClaim {
-            language: SmolStr::new("js-ts"),
-            class: kndo_adapter_toolkit::classify::classify(p, &PATH_PATTERNS),
-        })
+        kndo_adapter_toolkit::classify::claim_by_extension(
+            path,
+            EXTENSIONS,
+            "js-ts",
+            &PATH_PATTERNS,
+        )
     }
 
     fn claim_manifest(&self, path: &ProjectPath) -> bool {

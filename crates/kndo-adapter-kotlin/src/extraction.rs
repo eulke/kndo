@@ -13,7 +13,11 @@ use kndo_adapter_toolkit::metrics::{
     push_accessor_metrics as toolkit_push_accessor_metrics,
     push_function_metrics as toolkit_push_function_metrics, MetricsSyntax, MIN_CLONE_TOKENS,
 };
-use kndo_adapter_toolkit::parsing::{find_child, span, text};
+use kndo_adapter_toolkit::parsing::{
+    find_child, handler_for, has_modifier_wrapper,
+    last_identifier_text as toolkit_last_identifier_text, span, text, visibility_level,
+};
+use kndo_adapter_toolkit::refs::{self, BodyHandler, BodySyntax};
 use kndo_core::adapter::{
     AdapterDiagnostic, DiagnosticLevel, FileFacts, ImportBinding, ImportKind, RawImport,
     RawReference, RawRoot, RawRootTarget, Span,
@@ -93,10 +97,9 @@ const DECL_HANDLERS: &[(&str, DeclHandler)] = &[
 ];
 
 fn dispatch_declaration(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
-    let Some((_, handler)) = DECL_HANDLERS.iter().find(|(k, _)| *k == item.kind()) else {
-        return;
-    };
-    handler(item, src, ctx, out);
+    if let Some(handler) = handler_for(item.kind(), DECL_HANDLERS) {
+        handler(item, src, ctx, out);
+    }
 }
 
 pub(crate) fn extract(_path: &str, content: &[u8]) -> FileFacts {
@@ -251,40 +254,8 @@ const VISIBILITY_LEVELS: &[(&str, u8)] = &[
 /// modifier at all defaults to `public` (3) — the OPPOSITE default from Java's package-private,
 /// a load-bearing difference.
 fn visibility(item: Node) -> (u8, bool) {
-    let level = visibility_keyword(item)
-        .and_then(|kw| VISIBILITY_LEVELS.iter().find(|(k, _)| *k == kw))
-        .map_or(3, |(_, l)| *l);
+    let level = visibility_level(item, VISIBILITY_LEVELS, 3);
     (level, level == 3)
-}
-
-fn visibility_keyword(item: Node) -> Option<&'static str> {
-    let modifiers = modifiers_node(item)?;
-    let vis = modifiers
-        .children(&mut modifiers.walk())
-        .find(|n| n.kind() == "visibility_modifier")?;
-    vis.children(&mut vis.walk())
-        .find_map(|c| VISIBILITY_LEVELS.iter().find(|(k, _)| *k == c.kind()))
-        .map(|(k, _)| *k)
-}
-
-fn modifiers_node(item: Node) -> Option<Node> {
-    item.children(&mut item.walk())
-        .find(|n| n.kind() == "modifiers")
-}
-
-fn has_modifier_wrapper(item: Node, wrapper: &str, keyword: &str) -> bool {
-    let Some(modifiers) = modifiers_node(item) else {
-        return false;
-    };
-    let Some(found) = modifiers
-        .children(&mut modifiers.walk())
-        .find(|n| n.kind() == wrapper)
-    else {
-        return false;
-    };
-    found
-        .children(&mut found.walk())
-        .any(|c| c.kind() == keyword)
 }
 
 fn has_keyword_child(item: Node, keyword: &str) -> bool {
@@ -748,21 +719,16 @@ fn push_declaration(
     member_of: Option<&str>,
     (level, exported): (u8, bool),
 ) {
-    out.declarations.push(kndo_core::adapter::Declaration {
-        name: SmolStr::new(name),
+    kndo_adapter_toolkit::decls::push_declaration(
+        out,
+        name,
         kind,
-        span: span(item),
-        exported,
-        visibility: kndo_core::adapter::VisibilityLevel(level),
-        member_of: member_of.map(SmolStr::new),
-        implicitly_invoked: false,
-        nested_scope: false,
-        visibility_inherited: false,
-        visible_in_unit: None,
-        implements: None,
-        markers: markers(item, src),
+        item,
         signature_span,
-    });
+        member_of,
+        (level, exported),
+        markers(item, src),
+    );
 }
 
 /// The annotation names written on this declaration, in source order — `Declaration::markers`.
@@ -801,6 +767,18 @@ fn markers(item: Node, src: &[u8]) -> Vec<SmolStr> {
 /// `user_type` positions → `TypeUse`; recurses into `type_arguments` for generics
 /// (`List<Foo>` → `Foo` too) but not into the base path's own segments (already captured by
 /// `last_identifier_text`).
+/// The body walk reaches type positions through a handler; every other caller here already
+/// knows it is looking at a type, so the walk itself keeps the shorter shape.
+fn walk_type_refs_handler(
+    node: Node,
+    src: &[u8],
+    within: Option<&str>,
+    out: &mut FileFacts,
+    _syntax: &BodySyntax,
+) {
+    walk_type_refs(node, src, within, out);
+}
+
 fn walk_type_refs(node: Node, src: &[u8], within: Option<&str>, out: &mut FileFacts) {
     if node.kind() != "user_type" {
         let mut c = node.walk();
@@ -826,15 +804,7 @@ fn walk_type_refs(node: Node, src: &[u8], within: Option<&str>, out: &mut FileFa
 /// The base path's own last `identifier` segment (`java.util.List` used as a type → `List`),
 /// recursing into nested `user_type` (qualified-path nesting) but not into `type_arguments`.
 fn last_identifier_text<'a>(node: Node, src: &'a [u8]) -> Option<&'a str> {
-    let mut result = None;
-    for child in node.children(&mut node.walk()) {
-        match child.kind() {
-            "identifier" => result = Some(text(child, src)),
-            "user_type" => result = last_identifier_text(child, src).or(result),
-            _ => {}
-        }
-    }
-    result
+    toolkit_last_identifier_text(node, src, "identifier", "user_type")
 }
 
 fn walk_extend_refs(node: Node, src: &[u8], owner: &str, out: &mut FileFacts) {
@@ -861,91 +831,57 @@ fn walk_extend_refs(node: Node, src: &[u8], owner: &str, out: &mut FileFacts) {
 }
 
 fn emit_extend_ref(ty: Option<Node>, site: Node, src: &[u8], owner: &str, out: &mut FileFacts) {
-    let Some(name) = ty.and_then(|t| last_identifier_text(t, src)) else {
-        return;
-    };
-    out.references.push(RawReference {
-        name: SmolStr::new(name),
-        scope_context: None,
-        span: span(site),
-        within: Some(SmolStr::new(owner)),
-        kind: RefKind::Extend,
-    });
+    refs::emit_extend_ref(ty, site, src, owner, out, &BODY_SYNTAX);
 }
 
 // ---------------------------------------------------------------- expression/body references
 
-type BodyHandler = fn(Node, &[u8], Option<&str>, &mut FileFacts);
-
 const BODY_HANDLERS: &[(&str, BodyHandler)] = &[
-    ("call_expression", handle_call),
+    ("call_expression", refs::handle_call),
     ("navigation_expression", handle_navigation),
-    ("user_type", walk_type_refs),
-    ("identifier", handle_identifier_ref),
+    ("user_type", walk_type_refs_handler),
+    ("identifier", refs::handle_identifier_ref),
 ];
 
+/// What this grammar spells things with — everything the shared body walk needs to know about
+/// Kotlin, and nothing it decides. The traversal itself lives in the toolkit
+/// (`refs::walk_body`), which Swift drives with its own table.
+static BODY_SYNTAX: BodySyntax = BodySyntax {
+    comment_kinds: &["line_comment", "multiline_comment"],
+    identifier_kind: "identifier",
+    type_nesting_kind: "user_type",
+    // Kotlin spells a type name with the same `identifier` leaf as a value name.
+    type_identifier_kind: "identifier",
+    navigation_kind: "navigation_expression",
+    emit_navigation_ref,
+    is_reference_position,
+    handlers: BODY_HANDLERS,
+};
+
 /// Expression/statement bodies: calls, navigation (field/property access), bare identifier
-/// reads, type positions inside expressions (`is`/`as` checks) — table-driven for the same
-/// CRAP-ceiling reason `DECL_HANDLERS` is (module doc comment).
+/// reads, type positions inside expressions (`is`/`as` checks). The walk itself is
+/// `refs::walk_body`; this binds it to Kotlin's own table so the twenty-odd call sites below
+/// stay one argument long.
 fn walk_body(node: Node, src: &[u8], within: Option<&str>, out: &mut FileFacts) {
-    if matches!(node.kind(), "line_comment" | "multiline_comment") {
-        return;
-    }
-    if let Some((_, handler)) = BODY_HANDLERS.iter().find(|(k, _)| *k == node.kind()) {
-        handler(node, src, within, out);
-        return;
-    }
-    for child in node.children(&mut node.walk()) {
-        walk_body(child, src, within, out);
-    }
+    refs::walk_body(node, src, within, out, &BODY_SYNTAX);
 }
 
-fn handle_identifier_ref(node: Node, src: &[u8], within: Option<&str>, out: &mut FileFacts) {
-    if !is_reference_position(node) {
-        return;
-    }
-    out.references.push(RawReference {
-        name: SmolStr::new(text(node, src)),
-        scope_context: None,
-        span: span(node),
-        within: within.map(SmolStr::new),
-        kind: RefKind::Read,
-    });
-}
-
-fn handle_call(node: Node, src: &[u8], within: Option<&str>, out: &mut FileFacts) {
-    let mut cursor = node.walk();
-    let mut children = node.children(&mut cursor);
-    let Some(callee) = children.next() else {
-        return;
-    };
-    emit_call_ref(callee, src, within, out);
-    for child in children {
-        walk_body(child, src, within, out);
-    }
-}
-
-fn emit_call_ref(callee: Node, src: &[u8], within: Option<&str>, out: &mut FileFacts) {
-    match callee.kind() {
-        "identifier" => out.references.push(RawReference {
-            name: SmolStr::new(text(callee, src)),
-            scope_context: None,
-            span: span(callee),
-            within: within.map(SmolStr::new),
-            kind: RefKind::Call,
-        }),
-        "navigation_expression" => emit_navigation_ref(callee, src, within, out, RefKind::Call),
-        _ => walk_body(callee, src, within, out),
-    }
-}
-
-fn handle_navigation(node: Node, src: &[u8], within: Option<&str>, out: &mut FileFacts) {
+fn handle_navigation(
+    node: Node,
+    src: &[u8],
+    within: Option<&str>,
+    out: &mut FileFacts,
+    _syntax: &BodySyntax,
+) {
     emit_navigation_ref(node, src, within, out, RefKind::Read);
 }
 
 /// `a.b`/`a.b.c()` — the terminal segment becomes the reference, `scope_context` is set when
 /// the immediately-preceding segment is a plain identifier/`this`; a complex receiver
 /// (a nested navigation/call) is walked for its own references instead.
+/// A dotted access chain, taken apart POSITIONALLY — Kotlin's grammar exposes the qualifier
+/// and the accessed name as ordered children rather than named fields, which is why this stays
+/// here rather than in the shared driver (Swift's is field-addressed).
 fn emit_navigation_ref(
     node: Node,
     src: &[u8],

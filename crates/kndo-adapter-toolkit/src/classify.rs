@@ -28,6 +28,36 @@ fn in_dir(path: &str, dir: &str) -> bool {
     path.starts_with(&format!("{dir}/")) || path.contains(&format!("/{dir}/"))
 }
 
+/// The whole claim an extension-gated adapter makes: *this file's final extension is one of
+/// mine, so it is mine, and its role/origin follow from this language's path conventions*.
+///
+/// Six of the eight first-party adapters had this body copied out verbatim — four of them
+/// character for character — which is the promotion rule's exact trigger. An adapter whose
+/// claim needs more than the extension still owns that part at the call site: Swift rejects
+/// `Package.swift` (a manifest that is also real source) before asking, and the two adapters
+/// whose `FileClass` is fixed rather than path-derived (`css`, `json`) keep their own bodies —
+/// forcing them through here would be a shared abstraction over a decision they don't share.
+///
+/// Extensions are given without the dot (`["kt"]`, `["ts", "tsx", "js"]`) and matched against
+/// the segment after the LAST dot, so `.d.ts` claims as `ts` — the declarations-only handling
+/// of such a file is extraction's business, not claiming's.
+pub fn claim_by_extension(
+    path: &kndo_core::adapter::ProjectPath,
+    extensions: &[&str],
+    language: &str,
+    patterns: &PathPatterns,
+) -> Option<kndo_core::adapter::FileClaim> {
+    let p = path.0.as_str();
+    let (_, extension) = p.rsplit_once('.')?;
+    if !extensions.contains(&extension) {
+        return None;
+    }
+    Some(kndo_core::adapter::FileClaim {
+        language: smol_str::SmolStr::new(language),
+        class: classify(p, patterns),
+    })
+}
+
 /// Classifies a `/`-separated project-relative path. Precedence: test beats tooling (a
 /// `*.spec.ts` under `.storybook/` is a test); origin is independent of role.
 pub fn classify(path: &str, patterns: &PathPatterns) -> FileClass {

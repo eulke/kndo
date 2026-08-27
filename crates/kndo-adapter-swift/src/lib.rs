@@ -99,19 +99,20 @@ impl LanguageAdapter for SwiftAdapter {
     }
 
     fn claim(&self, path: &ProjectPath) -> Option<FileClaim> {
-        let p = path.0.as_str();
         // `Package.swift` is real Swift source too — the one adapter in this codebase
         // where a manifest file also matches the source glob. "Manifests are not claimed"
         // is a load-bearing principle elsewhere in the engine (a manifest never
         // gets a `FileClaim` alongside its `ManifestFacts`), so it's excluded here explicitly
         // rather than accidentally satisfied the way every non-Swift manifest format is.
-        if !p.ends_with(".swift") || self.claim_manifest(path) {
+        if self.claim_manifest(path) {
             return None;
         }
-        Some(FileClaim {
-            language: SmolStr::new("swift"),
-            class: kndo_adapter_toolkit::classify::classify(p, &PATH_PATTERNS),
-        })
+        kndo_adapter_toolkit::classify::claim_by_extension(
+            path,
+            &["swift"],
+            "swift",
+            &PATH_PATTERNS,
+        )
     }
 
     fn claim_manifest(&self, path: &ProjectPath) -> bool {
