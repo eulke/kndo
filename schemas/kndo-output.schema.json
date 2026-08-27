@@ -64,6 +64,23 @@
     "diagnostics"
   ],
   "$defs": {
+    "Abstention": {
+      "description": "One category nobody judged this run, and why — [`Verdict::Abstained`] crossed with the\nabstaining analysis's [`Analysis::categories`]. Reaches `RunResult` and the JSON envelope\nbecause a consumer seeing zero findings in a category otherwise cannot tell \"clean\" from\n\"not measured\", nor what would make it measurable.",
+      "type": "object",
+      "properties": {
+        "category": {
+          "$ref": "#/$defs/Category"
+        },
+        "reason": {
+          "description": "The abstaining diagnostic's message, verbatim.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "category",
+        "reason"
+      ]
+    },
     "AdapterRunInfo": {
       "description": "One registered adapter's contribution (`run.adapters[]`).",
       "type": "object",
@@ -482,9 +499,16 @@
       ]
     },
     "RunInfo": {
-      "description": "Owned mirror of the JSON envelope's `run` object — not borrowed, unlike a hot-path type,\nbecause this exists purely to be serialized (and, behind `schema`, to derive the JSON\nSchema from): the one-time clone per `--format json` invocation is free by comparison.",
+      "description": "The JSON envelope's `run` object. Borrowed from [`RunResult`], like [`Envelope`] itself and\nfor the same reason (see its doc): this exists purely to be serialized and, behind `schema`,\nto derive the JSON Schema from — schemars sees through the references to the same shapes.",
       "type": "object",
       "properties": {
+        "abstained": {
+          "description": "Categories this run did not judge, and why. Always present (usually `[]`): the absence\nof a finding is only evidence of cleanliness for categories NOT listed here.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Abstention"
+          }
+        },
         "adapters": {
           "type": "array",
           "items": {
@@ -521,7 +545,8 @@
         "duration_ms",
         "cache",
         "project_root",
-        "adapters"
+        "adapters",
+        "abstained"
       ]
     },
     "Severity": {

@@ -430,6 +430,11 @@ specific of four verdicts:
 3. it attaches to no declaration — nothing starts on its line or the line after;
 4. it bound correctly but matched zero findings this run — the issue it acknowledged is gone.
 
+Verdict 4 requires that the category was actually judged. An analysis that could not judge —
+`crap` with no ingested coverage report, `untested` in a project with no test roots — abstains
+and emits nothing, and the run lists its categories under `run.abstained`. A pragma for such a
+category is left alone: its emptiness is a missing measurement, not a fixed issue.
+
 **Fix:** delete (or re-aim) the pragma. Because staleness is judged against the complete
 pre-suppression finding set, an actively-suppressing pragma can never be stale, and deleting
 a stale pragma can never resurrect a finding.

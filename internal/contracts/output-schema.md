@@ -9,7 +9,7 @@ round-trip these examples in CI.
 
 ```jsonc
 {
-  "schema_version": "1.0.0",
+  "schema_version": "1.1.0",
   "kndo_version": "0.3.1",
   "run": {
     "mode": "staged",                    // "full" | "staged" | "diff"
@@ -19,7 +19,10 @@ round-trip these examples in CI.
     "cache": "warm",                     // "warm" | "cold" | "partial" | "disabled"
     "project_root": ".",
     "adapters": [ { "id": "js-ts", "files": 1240 } ],
-    "plugins":  [ { "id": "nextjs", "activated_by": "detected: dependency react" } ]
+    "plugins":  [ { "id": "nextjs", "activated_by": "detected: dependency react" } ],
+    "abstained": [                       // categories NO analysis judged this run
+      { "category": "crap", "reason": "crap: no coverage ingested — skipped (…)" }
+    ]
   },
   "health": { /* §4 */ },
   "budget": {                            // diff modes, only when [delta] rules are configured (RFC 0006 §5)
@@ -36,6 +39,14 @@ round-trip these examples in CI.
   "diagnostics": [ { "level": "warn", "message": "coverage report older than 7d — ignored" } ]
 }
 ```
+
+**`run.abstained` (normative).** A category listed here was **not judged** this run: the analysis
+that owns it could not (no ingested coverage report for `crap`, no test roots for `untested`) and
+emitted nothing. Consumers must read a listed category as *unknown*, never as clean — zero
+findings in an abstained category is the absence of a measurement, not a passing verdict. Absent
+categories were judged, so their emptiness does mean clean. Usually `[]`. The same value drives
+the `stale` rule (a pragma naming an abstained category is never reported matched-nothing) and
+the health axes, so the three can never disagree.
 
 Diagnostic levels: `info` · `warn` (the run degraded but ran) · `error` (M6, additive) — the
 run could not do what was asked (a `--diff` base that doesn't resolve): frontends exit 2 when
@@ -153,7 +164,7 @@ more", never as "that's all".
 
 ```jsonc
 {
-  "schema_version": "1.0.0",
+  "schema_version": "1.1.0",
   "query": { "verb": "used-by", "selectors": ["src/billing/tax.ts#calcLegacyTax"],
              "flags": { "depth": 1, "split_by_color": true }, "id": "q1" },   // id: query-mode echo, optional
   "run": { "cache": "warm", "duration_ms": 74 },

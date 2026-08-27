@@ -185,7 +185,7 @@ fn store_health_snapshot(root: &Path, score: f64, grade: &str) {
 }
 
 /// Mirrors the output schema's `schema_version` (contracts/output-schema.md).
-pub const SCHEMA_VERSION: &str = "1.0.0";
+pub const SCHEMA_VERSION: &str = "1.1.0";
 
 /// The product version — every crate shares `version.workspace = true`, so kndo-core's own
 /// `CARGO_PKG_VERSION` is the same string the distribution crate and CLI would report.
@@ -556,6 +556,10 @@ pub struct RunResult {
     /// Typed diagnostics (the schema's `diagnostics` array) — one representation everywhere,
     /// never parallel stringly-typed variants.
     pub diagnostics: Vec<Diagnostic>,
+    /// Categories no analysis judged this run, with the reason (`run.abstained`). A consumer
+    /// must read a category listed here as *unknown*, never as clean: zero `crap` findings
+    /// with `crap` abstained means nobody measured, not that nothing is CRAPpy.
+    pub abstained: Vec<crate::analysis::Abstention>,
     pub files_discovered: usize,
     /// Files a registered adapter recognized (subset of `files_discovered`); `adapters` below
     /// is the per-language breakdown the schema actually wants (`run.adapters[].files`).
@@ -634,9 +638,9 @@ impl RunResult {
     }
 }
 
-/// Owned mirror of the JSON envelope's `run` object — not borrowed, unlike a hot-path type,
-/// because this exists purely to be serialized (and, behind `schema`, to derive the JSON
-/// Schema from): the one-time clone per `--format json` invocation is free by comparison.
+/// The JSON envelope's `run` object. Borrowed from [`RunResult`], like [`Envelope`] itself and
+/// for the same reason (see its doc): this exists purely to be serialized and, behind `schema`,
+/// to derive the JSON Schema from — schemars sees through the references to the same shapes.
 #[derive(serde::Serialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 struct RunInfo<'a> {
@@ -648,6 +652,9 @@ struct RunInfo<'a> {
     cache: &'static str,
     project_root: &'a str,
     adapters: &'a [AdapterRunInfo],
+    /// Categories this run did not judge, and why. Always present (usually `[]`): the absence
+    /// of a finding is only evidence of cleanliness for categories NOT listed here.
+    abstained: &'a [crate::analysis::Abstention],
 }
 
 /// The full `--format json` envelope shape — also the schema
@@ -687,6 +694,7 @@ impl RunResult {
                 cache: self.cache_status(),
                 project_root: &self.project_root,
                 adapters: &self.adapters,
+                abstained: &self.abstained,
             },
             findings: &self.findings,
             fixed: &self.fixed,
@@ -758,6 +766,8 @@ struct AnalyzedTree {
     graph: std::sync::Arc<graph::ProjectGraph>,
     findings: Vec<Finding>,
     diagnostics: Vec<Diagnostic>,
+    /// Categories no analysis judged this run — see [`crate::analysis::Abstention`].
+    abstained: Vec<crate::analysis::Abstention>,
     suppressed: SuppressedSummary,
     health: crate::analysis::health::Health,
     /// `(phase, µs)` in execution order: assembly + coverage first, then every analysis phase.
@@ -1166,6 +1176,7 @@ impl Engine {
             after_graph,
             after_findings,
             after_diagnostics,
+            after_abstained,
             after_suppressed,
             after_health,
             plugin_contributions,
@@ -1173,6 +1184,7 @@ impl Engine {
             after.graph,
             after.findings,
             after.diagnostics,
+            after.abstained,
             after.suppressed,
             after.health,
             after.plugin_contributions,
@@ -1238,6 +1250,9 @@ impl Engine {
             dependencies: after_graph.dependencies.len(),
             edges: after_graph.edges.len(),
             diagnostics,
+            // The "after" side, mirroring `suppressed` — a diff reports what the current tree
+            // did and did not judge.
+            abstained: after_abstained,
             findings: new_findings,
             fixed: fixed_findings,
             adapters,
@@ -1455,8 +1470,12 @@ impl Engine {
                     coverage_start.elapsed().as_micros() as u64,
                 ));
                 let outcome = analysis::run_all(&g, &coverage, &self.effective.tuning);
-                let (mut findings, analysis_diagnostics, health) =
-                    (outcome.findings, outcome.diagnostics, outcome.health);
+                let (mut findings, analysis_diagnostics, abstained, health) = (
+                    outcome.findings,
+                    outcome.diagnostics,
+                    outcome.abstained,
+                    outcome.health,
+                );
                 timings.extend(
                     outcome
                         .timings
@@ -1490,7 +1509,7 @@ impl Engine {
                     })
                     .collect();
                 let (findings, mut suppressed) =
-                    crate::suppression::apply(&g, findings, &plugin_categories);
+                    crate::suppression::apply(&g, findings, &plugin_categories, &abstained);
                 // Config suppression runs strictly AFTER pragmas: staleness was judged
                 // against the complete finding set, so a pragma covering a config-skipped
                 // finding stays honestly non-stale, and a finding covered by both counts
@@ -1504,6 +1523,7 @@ impl Engine {
                     graph: g,
                     findings,
                     diagnostics,
+                    abstained,
                     suppressed,
                     health,
                     timings,
@@ -1632,6 +1652,7 @@ impl Engine {
                 graph: g,
                 findings,
                 diagnostics,
+                abstained,
                 suppressed,
                 health,
                 timings,
@@ -1660,6 +1681,7 @@ impl Engine {
                     dependencies: g.dependencies.len(),
                     edges: g.edges.len(),
                     diagnostics,
+                    abstained,
                     findings,
                     adapters,
                     suppressed,
@@ -3028,6 +3050,46 @@ mod tests {
         assert_eq!(finding_path(stale[0]), "root.dmock");
         assert!(stale[0].message.contains("version-skew"));
         assert_eq!(result.suppressed.inline, 0);
+    }
+
+    #[test]
+    fn a_pragma_for_an_analysis_that_abstained_is_not_reported_stale() {
+        // End to end, the accusation-direction bug: no coverage report ⇒ `crap` abstains ⇒ its
+        // finding list is empty because nobody judged, not because the code is clean. Telling
+        // the user to delete the pragma is the allow/stale flicker the contract forbids: they
+        // delete it, add a report, and the finding comes back.
+        let dir = tempfile::tempdir().expect("temp project");
+        std::fs::write(
+            dir.path().join("root.dmock"),
+            "root-file\nsuppress-file crap\n",
+        )
+        .unwrap();
+
+        let mut engine = Engine::open(
+            dir.path(),
+            ConfigOverrides::default(),
+            vec![Box::new(DiffMockAdapter)],
+        )
+        .unwrap();
+        let result = engine.check(RunMode::Full);
+
+        assert!(
+            !result.findings.iter().any(|f| f.category == "stale"),
+            "{:?}",
+            result.findings
+        );
+        // …and the run says so out loud, so a consumer reading zero `crap` findings can tell
+        // "clean" from "nobody measured".
+        let crap = result
+            .abstained
+            .iter()
+            .find(|a| a.category == crate::vocab::Category::CRAP)
+            .expect("crap abstained and must be reported as such");
+        assert!(
+            crap.reason.starts_with("crap: no coverage ingested"),
+            "{}",
+            crap.reason
+        );
     }
 
     #[test]

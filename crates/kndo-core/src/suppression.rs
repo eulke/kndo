@@ -17,7 +17,14 @@
 //!
 //! Because staleness is judged against the *complete* pre-suppression finding set, an
 //! actively-suppressing pragma can never be `stale`, and deleting a stale pragma can never
-//! resurrect a finding (no allow/stale flicker). `stale` findings are appended
+//! resurrect a finding (no allow/stale flicker). Verdict 3 additionally requires that the
+//! category was *judged* this run: an analysis that abstained
+//! ([`crate::analysis::Verdict::Abstained`] — no coverage report, no test roots) produces an
+//! empty finding list that says nothing about the code, and reading that emptiness as "the
+//! issue is gone" is the flicker loop in disguise — delete the pragma on the advice, add the
+//! coverage report, and the finding returns. Verdicts 1 and 2 are unaffected: an unknown
+//! category and a pragma attached to nothing are structural errors, verifiable without running
+//! any analysis. `stale` findings are appended
 //! *after* pragma matching, so they are structurally not inline-suppressible ("`stale` itself is
 //! not inline-suppressible") — and a `kndo:allow stale` pragma is rejected up
 //! front as meta-suppression, itself stale. `plugin:`-prefixed categories are validated against
@@ -100,6 +107,7 @@ pub(crate) fn apply(
     graph: &ProjectGraph,
     findings: Vec<Finding>,
     plugin_categories: &HashSet<String>,
+    abstained: &[crate::analysis::Abstention],
 ) -> (Vec<Finding>, SuppressedSummary) {
     if graph.suppressions.is_empty() {
         return (findings, SuppressedSummary::default());
@@ -113,7 +121,7 @@ pub(crate) fn apply(
     stale.extend(
         bindings
             .iter()
-            .filter(|b| !b.matched)
+            .filter(|b| !b.matched && !abstained.iter().any(|a| a.category.as_str() == b.category))
             .map(|b| (b.file, b.raw, StaleKind::MatchedNothing, b.anchor)),
     );
     append_stale_findings(graph, stale, &mut kept);
@@ -532,7 +540,7 @@ mod tests {
         graph: &ProjectGraph,
         findings: Vec<Finding>,
     ) -> (Vec<Finding>, SuppressedSummary) {
-        apply(graph, findings, &HashSet::default())
+        apply(graph, findings, &HashSet::default(), &[])
     }
 
     fn stale_of(kept: &[Finding]) -> Vec<&Finding> {
@@ -674,6 +682,77 @@ mod tests {
         assert_eq!(stale[0].location.symbol.as_deref(), Some("foo"));
     }
 
+    fn abstained(category: &str) -> Vec<crate::analysis::Abstention> {
+        vec![crate::analysis::Abstention {
+            category: crate::vocab::Category::new(category),
+            reason: "test fixture: not measured".to_string(),
+        }]
+    }
+
+    #[test]
+    fn a_pragma_for_an_abstained_category_is_not_stale() {
+        // The accusation-direction bug: with no coverage report the `crap` analysis abstains
+        // and emits nothing, and reading that emptiness as "the issue is gone" told the user
+        // to delete a pragma that is doing its job — add the report and the finding returns.
+        let graph = graph_with(
+            vec![symbol("foo", 3, 3)],
+            vec![(
+                FileId(0),
+                suppression("crap", None, SuppressionScope::Declaration, 3, 3),
+            )],
+        );
+        let (kept, summary) = apply(&graph, vec![], &HashSet::default(), &abstained("crap"));
+        assert_eq!(summary.inline, 0);
+        assert!(
+            stale_of(&kept).is_empty(),
+            "an unjudged category cannot make a pragma stale: {:?}",
+            stale_of(&kept)
+        );
+    }
+
+    #[test]
+    fn a_pragma_for_a_judged_category_is_still_stale_when_it_matches_nothing() {
+        // The other half: abstention exempts only the category that abstained. `unused` was
+        // judged in this run, so its matchless pragma is genuinely dead.
+        let graph = graph_with(
+            vec![symbol("foo", 3, 3)],
+            vec![(
+                FileId(0),
+                suppression("unused", None, SuppressionScope::Declaration, 3, 3),
+            )],
+        );
+        let (kept, _) = apply(&graph, vec![], &HashSet::default(), &abstained("crap"));
+        let stale = stale_of(&kept);
+        assert_eq!(stale.len(), 1);
+        assert!(stale[0].message.contains("matches no finding"));
+    }
+
+    #[test]
+    fn abstention_never_excuses_an_unbound_or_misspelled_pragma() {
+        // Verdicts 1 and 2 are structural: an unknown category and a pragma attached to no
+        // declaration are wrong regardless of which analyses ran, so they stay reported.
+        let graph = graph_with(
+            vec![symbol("foo", 3, 3)],
+            vec![
+                (
+                    FileId(0),
+                    suppression("crapp", None, SuppressionScope::Declaration, 3, 3),
+                ),
+                (
+                    FileId(0),
+                    suppression("crap", None, SuppressionScope::Declaration, 40, 40),
+                ),
+            ],
+        );
+        let (kept, _) = apply(&graph, vec![], &HashSet::default(), &abstained("crap"));
+        let stale = stale_of(&kept);
+        assert_eq!(stale.len(), 2, "{stale:?}");
+        assert!(stale.iter().any(|f| f.message.contains("unknown category")));
+        assert!(stale
+            .iter()
+            .any(|f| f.message.contains("attaches to no declaration")));
+    }
+
     #[test]
     fn an_unknown_category_pragma_is_stale_with_a_typo_hint() {
         let graph = graph_with(
@@ -739,11 +818,12 @@ mod tests {
             &graph,
             vec![finding_at("plugin:kndo:express/route-shadowed", "call", 9)],
             &declared,
+            &[],
         );
         assert!(kept.is_empty());
         assert_eq!(summary.inline, 1);
         // …and a declared-but-matchless pragma is stale like any core one.
-        let (kept, _) = apply(&graph, vec![], &declared);
+        let (kept, _) = apply(&graph, vec![], &declared, &[]);
         assert_eq!(stale_of(&kept).len(), 1);
     }
 

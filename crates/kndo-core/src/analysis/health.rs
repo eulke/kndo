@@ -26,7 +26,7 @@ use crate::coverage::CoverageMap;
 use crate::engine::Finding;
 use crate::graph::ProjectGraph;
 use crate::vocab::{
-    EdgeKind, FileId, FileOrigin, FileRole, NodeRef, PackageId, RootKind, SymbolId,
+    Category, FileId, FileOrigin, FileRole, NodeRef, PackageId, RootKind, SymbolId,
 };
 
 /// One category's weight and the ratio at which its full weight saturates (the
@@ -175,6 +175,17 @@ pub struct HealthInputs<'a> {
     /// The effective CRAP threshold (`AnalysisTuning::crap_threshold`) — the same value the
     /// `crap` analysis judged with, so the axis and the findings can never disagree.
     pub crap_threshold: f64,
+    /// Categories no analysis judged this run (from `run_all`). The axes read this instead of
+    /// re-deriving each analysis's skip condition: health once recomputed `coverage.is_empty()`
+    /// and the test-root scan itself, so an axis could disagree with the very analysis it
+    /// summarizes. The analysis decides; health consults.
+    pub abstained: &'a [super::Abstention],
+}
+
+impl HealthInputs<'_> {
+    fn judged(&self, category: &Category) -> bool {
+        !self.abstained.iter().any(|a| &a.category == category)
+    }
 }
 
 pub fn compute(
@@ -250,15 +261,9 @@ fn tally(
     let mut production_symbols = 0usize;
     let mut untested_symbols = 0usize;
     let mut exported_symbols = 0usize;
-    let has_test_roots = graph.edges.iter().any(|e| {
-        matches!(
-            e.kind,
-            EdgeKind::Root {
-                kind: RootKind::Test,
-                ..
-            }
-        )
-    });
+    // Same source as the `untested` findings themselves: the analysis abstains exactly when
+    // the project has no test roots, so the axis and the findings cannot disagree.
+    let has_test_roots = inputs.judged(&Category::UNTESTED);
     for (index, symbol) in graph.symbols.iter().enumerate() {
         if !eligible_file(graph, symbol.file, scope) {
             continue;
@@ -351,10 +356,10 @@ fn tally(
         .sum();
 
     // CRAP axis: excess over the threshold, normalized by threshold-units per function.
-    // With no coverage ingested the crap analysis is skipped (its diagnostic says so), and
-    // the score must not silently punish what the check deliberately didn't measure — the
-    // axis contributes zero penalty and the category row reports the absence explicitly.
-    let crap_measured = !inputs.coverage.is_empty();
+    // When the crap analysis abstained, the score must not silently punish what the check
+    // deliberately didn't measure — the axis contributes zero penalty and the category row
+    // reports the absence explicitly.
+    let crap_measured = inputs.judged(&Category::CRAP);
     let mut crap_functions = 0usize;
     let mut crapload = 0.0f64;
     let mut crap_excess = 0.0f64;
@@ -489,7 +494,7 @@ mod tests {
     use crate::adapter::{ProjectPath, Span, VisibilityLevel};
     use crate::analysis::reachability;
     use crate::graph::{FileNode, SymbolMetrics, SymbolNode};
-    use crate::vocab::{Confidence, Edge, FileClass, Provenance, SymbolKind};
+    use crate::vocab::{Confidence, Edge, EdgeKind, FileClass, Provenance, SymbolKind};
     use smol_str::SmolStr;
 
     fn file(path: &str, package: u32) -> FileNode {
@@ -548,13 +553,33 @@ mod tests {
         coverage: &'a CoverageMap,
         cycles: &'a HashSet<FileId>,
         duplicated: &'a [(SymbolId, u32)],
+        abstained: &'a [crate::analysis::Abstention],
     ) -> HealthInputs<'a> {
         HealthInputs {
             coverage,
             cycle_files: cycles,
             duplicated,
             crap_threshold: crate::analysis::crap::CRAP_THRESHOLD,
+            abstained,
         }
+    }
+
+    /// What `run_all` hands `compute` for these fixtures: none declares a `Test` root, so
+    /// `untested` always abstains, and `crap` abstains too whenever the fixture has no report.
+    /// Stated rather than re-derived here on purpose — a health test that computed its own
+    /// skip predicate is exactly the divergence this change removed from production code.
+    fn unmeasured(categories: &[Category]) -> Vec<crate::analysis::Abstention> {
+        categories
+            .iter()
+            .map(|category| crate::analysis::Abstention {
+                category: category.clone(),
+                reason: "test fixture: not measured".to_string(),
+            })
+            .collect()
+    }
+
+    fn nothing_measured() -> Vec<crate::analysis::Abstention> {
+        unmeasured(&[Category::UNTESTED, Category::CRAP])
     }
 
     #[test]
@@ -580,7 +605,12 @@ mod tests {
         );
         let reach = reachability::compute(&graph);
         let (cov, cyc, dup) = (CoverageMap::default(), HashSet::default(), vec![]);
-        let h = compute(&graph, &reach, &[], &inputs(&cov, &cyc, &dup));
+        let h = compute(
+            &graph,
+            &reach,
+            &[],
+            &inputs(&cov, &cyc, &dup, &nothing_measured()),
+        );
         assert_eq!(h.score, 100.0);
         assert_eq!(h.grade, "A");
         assert!(h.packages.is_empty(), "single package: no breakdown");
@@ -623,7 +653,12 @@ mod tests {
         );
         let reach = reachability::compute(&graph);
         let (cov, cyc, dup) = (CoverageMap::default(), HashSet::default(), vec![]);
-        let h = compute(&graph, &reach, &[], &inputs(&cov, &cyc, &dup));
+        let h = compute(
+            &graph,
+            &reach,
+            &[],
+            &inputs(&cov, &cyc, &dup, &nothing_measured()),
+        );
         assert_eq!(
             h.score, 100.0,
             "the unreferenced in-region symbol must not charge unused-symbols"
@@ -657,7 +692,12 @@ mod tests {
         );
         let reach = reachability::compute(&graph);
         let (cov, cyc, dup) = (CoverageMap::default(), HashSet::default(), vec![]);
-        let h = compute(&graph, &reach, &[], &inputs(&cov, &cyc, &dup));
+        let h = compute(
+            &graph,
+            &reach,
+            &[],
+            &inputs(&cov, &cyc, &dup, &nothing_measured()),
+        );
         let unused = h
             .categories
             .iter()
@@ -714,7 +754,12 @@ mod tests {
         let reach = reachability::compute(&graph);
         let (cov, cyc) = (CoverageMap::default(), HashSet::default());
         let dup = vec![(SymbolId(1), 100u32)];
-        let h = compute(&graph, &reach, &[], &inputs(&cov, &cyc, &dup));
+        let h = compute(
+            &graph,
+            &reach,
+            &[],
+            &inputs(&cov, &cyc, &dup, &nothing_measured()),
+        );
         let d = h
             .categories
             .iter()
@@ -760,7 +805,12 @@ mod tests {
         }
         let cov = sink.into_map();
         let (cyc, dup) = (HashSet::default(), vec![]);
-        let h = compute(&graph, &reach, &[], &inputs(&cov, &cyc, &dup));
+        let h = compute(
+            &graph,
+            &reach,
+            &[],
+            &inputs(&cov, &cyc, &dup, &unmeasured(&[Category::UNTESTED])),
+        );
         let c = h.categories.iter().find(|c| c.category == "crap").unwrap();
         assert_eq!(c.count, Some(1));
         assert_eq!(c.crapload, Some(72.0));
@@ -795,7 +845,12 @@ mod tests {
         )]);
         let reach = reachability::compute(&graph);
         let (cov, cyc, dup) = (CoverageMap::default(), HashSet::default(), vec![]);
-        let h = compute(&graph, &reach, &[], &inputs(&cov, &cyc, &dup));
+        let h = compute(
+            &graph,
+            &reach,
+            &[],
+            &inputs(&cov, &cyc, &dup, &nothing_measured()),
+        );
         let c = h.categories.iter().find(|c| c.category == "crap").unwrap();
         assert_eq!(c.count, None);
         assert_eq!(c.crapload, None);
@@ -878,7 +933,12 @@ mod tests {
         ]);
         let reach = reachability::compute(&graph);
         let (cov, cyc, dup) = (CoverageMap::default(), HashSet::default(), vec![]);
-        let h = compute(&graph, &reach, &[], &inputs(&cov, &cyc, &dup));
+        let h = compute(
+            &graph,
+            &reach,
+            &[],
+            &inputs(&cov, &cyc, &dup, &nothing_measured()),
+        );
         assert_eq!(h.packages.len(), 2);
         let a = h.packages.iter().find(|p| p.package == "pkg-a").unwrap();
         let b = h.packages.iter().find(|p| p.package == "pkg-b").unwrap();

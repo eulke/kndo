@@ -662,10 +662,25 @@ pub enum SuppressionScope { Declaration, File }
 - **Evaluation order (no-flicker guarantee):** analyses run as if no pragmas existed and compute
   the full finding set; suppression then *marks* matched findings (hidden from report and
   `--fail-on`, still counted) — it never deletes them. A pragma is `stale` only when it binds to
-  nothing, names an unknown category, or matches nothing in that **pre-suppression** set. Thus
-  "actively suppressing" and "stale" are mutually exclusive by construction: deleting a stale
-  pragma cannot resurrect a finding (it was stale precisely because the finding no longer
-  exists), and deleting an active one correctly un-hides its finding.
+  nothing, names an unknown category, or matches nothing in that **pre-suppression** set *for a
+  category some analysis judged*. Thus "actively suppressing" and "stale" are mutually exclusive
+  by construction: deleting a stale pragma cannot resurrect a finding (it was stale precisely
+  because the finding no longer exists), and deleting an active one correctly un-hides its
+  finding.
+- **Abstention.** An analysis returns a `Verdict`: `Judged`, or `Abstained(Diagnostic)` when the
+  input its verdict needs is absent this run (`crap` without an ingested coverage report,
+  `untested` in a project with no test roots). An abstained analysis emits no findings, so its
+  categories carry **no information** — and an empty finding list read as "clean" is what breaks
+  the guarantee above: the user deletes the pragma on kndo's advice, drops in a coverage report,
+  and the finding returns. A category is unknown only when *every* analysis that can emit it
+  (`Analysis::categories`) abstained. Consequences, all from that one value:
+  - the matched-nothing verdict skips pragmas naming an unknown category (the binds-to-nothing
+    and unknown-category verdicts do not: both are structural errors, verifiable without
+    running any analysis);
+  - `health` leaves the corresponding axis unmeasured rather than scoring zero penalty against
+    a re-derived skip predicate of its own;
+  - the run reports `run.abstained: [{category, reason}]`, so a consumer can tell "clean" from
+    "not measured" and knows what would make it measurable.
 - `stale` findings are not inline-suppressible (`kndo:allow stale` is rejected as unknown-target
   meta-suppression); acknowledge them via baseline or config if needed.
 - Adapters do **not** interpret pragmas — extraction only. Validation, binding, counting, and

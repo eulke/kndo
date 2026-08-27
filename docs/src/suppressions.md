@@ -73,13 +73,21 @@ targeting `stale` itself, or simply matching nothing anymore because the issue i
 acknowledged is gone. The fix is always the same: delete the pragma. Suppressions are
 self-cleaning by construction — they cannot silently accumulate.
 
-Two edge rules:
+Three edge rules:
 
 - `kndo:allow stale` is rejected as meta-suppression (and is itself stale): stale findings
   are not inline-suppressible. If you must, acknowledge them via the baseline.
 - A `plugin:` pragma whose category no **active** plugin declares this run is skipped
   entirely — neither suppressing nor stale. The plugin may simply not be activated in this
   checkout, and flagging the pragma would flicker with activation state.
+- A pragma naming a category **nobody judged this run** is never reported as matching nothing.
+  Some analyses need an input that may be absent: `crap` needs an ingested coverage report,
+  `untested` needs the project to have test roots. Without it the analysis *abstains* — it
+  emits one diagnostic and no findings, and the run lists the category under `run.abstained`
+  in the JSON envelope. Its emptiness says nothing about your code, so calling the pragma dead
+  would be wrong in the worst way: you would delete it, add a coverage report next week, and
+  the finding you had acknowledged would come back. A misspelled category or a pragma attached
+  to no declaration is still reported — those are wrong whatever ran.
 
 ## The baseline
 

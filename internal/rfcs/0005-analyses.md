@@ -374,8 +374,9 @@ coverage" (dynamic, needs a report) but "no test even *imports* this, transitive
 you complex code is poorly covered *if* you feed it coverage; `untested` finds the blind spots
 statically, zero-config, day one.
 
-- Active only when the project has test roots at all — a repo without tests gets one diagnostic,
-  not a thousand findings.
+- Active only when the project has test roots at all — a repo without tests **abstains** (§12):
+  one diagnostic, not a thousand findings, and the category is reported as unjudged rather than
+  as clean.
 - Severity: info. Subject granularity and rollup as usual (an entire untested file or package
   rolls up). Confidence demotes through wildcard edges like every reachability verdict.
 - **Only units of testing.** A value is not one: `EnumMember`, `Const`, `Static`, `Variable`,
@@ -404,10 +405,13 @@ CRAP(m) = comp(m)² × (1 − cov(m))³ + comp(m)
 ```
 
 - Coverage comes from ingested reports (plugins, ADR 0005). No report at all ⇒ the analysis
-  is **skipped with one diagnostic** — the coverage factor would be a guess for every function
-  at once, not a measurement, and a category-wide guess is noise, not risk (the same posture
-  `untested` takes for a project with no test roots); the health score's crap axis contributes
-  zero penalty with the absence reported explicitly. A report that doesn't instrument a
+  **abstains with one diagnostic** (§12) — the coverage factor would be a guess for every
+  function at once, not a measurement, and a category-wide guess is noise, not risk (the same
+  posture `untested` takes for a project with no test roots); the health score's crap axis
+  contributes zero penalty with the absence reported explicitly. Coverage is *ingested, never
+  measured*, so the absence of a report is routine (fresh clone, a CI job separate from the test
+  job, a project with no coverage tooling) — which is exactly why it must be reported as
+  unknown, not silently as clean. A report that doesn't instrument a
   particular function ⇒ **cov = 0**, flagged "coverage: none" — pessimistic per function, and
   the message says why.
 - Threshold: findings for `CRAP > 30` (standard), configurable. Test code is exempt.
@@ -482,6 +486,14 @@ The score floors at 0 (weights sum to 115).
   against it, so an actively-suppressing pragma can never be `stale` and deleting a stale pragma
   can never resurrect a finding (no allow/stale flicker loop; contracts §2.1). `stale` itself is
   not inline-suppressible.
+- **Abstention.** An analysis that could not judge (`crap` with no ingested report, `untested`
+  with no test roots) emits no findings and returns `Verdict::Abstained`; its categories are
+  *unknown* this run, not clean. A pragma naming such a category is **never** matched-nothing
+  stale — reading that emptiness as "the issue is gone" is the flicker loop by another route:
+  delete the pragma on the advice, add the coverage report, and the finding returns. The
+  unknown-category and attaches-to-nothing verdicts still apply: both are structural errors that
+  no analysis needs to run to establish. A category is unknown only when every analysis able to
+  emit it abstained, and the run reports the set as `run.abstained` with each reason.
 - Baseline: `.kndo/baseline.json` acknowledges existing findings at adoption time (RFC 0006 §6).
 - Config: per-glob disables of categories or `category:subject` pairs (e.g. `examples/**` exempt
   from `unused`; `unused:enum-member` off globally for codebases with wire-format enums).

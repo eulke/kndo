@@ -35,11 +35,11 @@ pub fn find_crap(
     graph: &ProjectGraph,
     coverage: &CoverageMap,
     threshold: f64,
-) -> (Vec<Finding>, Option<Diagnostic>) {
+) -> (Vec<Finding>, super::Verdict) {
     if coverage.is_empty() {
         return (
             Vec::new(),
-            Some(Diagnostic {
+            crate::analysis::Verdict::Abstained(Diagnostic {
                 level: DiagnosticLevel::Info,
                 path: None,
                 message: "crap: no coverage ingested — skipped (the score is complexity × \
@@ -138,7 +138,7 @@ pub fn find_crap(
             delta_origin: None,
         });
     }
-    (findings, None)
+    (findings, crate::analysis::Verdict::Judged)
 }
 
 #[cfg(test)]
@@ -468,12 +468,14 @@ mod tests {
             vec![symbol(FileId(0), "gnarly", 1, 30)],
             vec![(SymbolId(0), metrics(20))],
         );
-        let (findings, diagnostic) = find_crap(&graph, &CoverageMap::default(), CRAP_THRESHOLD);
+        let (findings, verdict) = find_crap(&graph, &CoverageMap::default(), CRAP_THRESHOLD);
         assert!(
             findings.is_empty(),
             "no report ⇒ no findings, however complex the code"
         );
-        let d = diagnostic.expect("the skip must say so");
+        let crate::analysis::Verdict::Abstained(d) = verdict else {
+            panic!("no report ⇒ crap must abstain, not report a clean verdict");
+        };
         assert!(
             d.message.starts_with("crap: no coverage ingested"),
             "{}",

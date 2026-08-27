@@ -28,12 +28,12 @@ use crate::vocab::{
     RootKind, SubjectKind, SymbolId,
 };
 
-/// Findings plus, when the project has no test roots at all, one diagnostic
+/// Findings plus, when the project has no test roots at all, an abstention
 /// instead of a false positive per production node.
 pub fn find_untested(
     graph: &ProjectGraph,
     reach: &ReachabilityMap,
-) -> (Vec<Finding>, Option<Diagnostic>) {
+) -> (Vec<Finding>, super::Verdict) {
     let has_test_roots = graph.edges.iter().any(|e| {
         matches!(
             e.kind,
@@ -46,7 +46,7 @@ pub fn find_untested(
     if !has_test_roots {
         return (
             Vec::new(),
-            Some(Diagnostic {
+            crate::analysis::Verdict::Abstained(Diagnostic {
                 level: DiagnosticLevel::Info,
                 path: None,
                 message: "untested: no test roots detected — skipped (a project with no tests \
@@ -59,7 +59,7 @@ pub fn find_untested(
 
     let mut findings = find_untested_files(graph, reach);
     findings.extend(find_untested_symbols(graph, reach));
-    (findings, None)
+    (findings, crate::analysis::Verdict::Judged)
 }
 
 fn is_untested_node(
@@ -369,10 +369,12 @@ mod tests {
         )];
         let graph = ProjectGraph::for_test(files, vec![], vec![], edges);
         let reach = reachability::compute(&graph);
-        let (findings, diagnostic) = find_untested(&graph, &reach);
+        let (findings, verdict) = find_untested(&graph, &reach);
         assert!(findings.is_empty());
-        assert!(diagnostic.is_some());
-        assert_eq!(diagnostic.unwrap().level, DiagnosticLevel::Info);
+        let crate::analysis::Verdict::Abstained(d) = verdict else {
+            panic!("no test roots ⇒ untested must abstain, not report a clean verdict");
+        };
+        assert_eq!(d.level, DiagnosticLevel::Info);
     }
 
     fn kinded(file: FileId, name: &str, kind: SymbolKind) -> SymbolNode {
@@ -541,8 +543,8 @@ mod tests {
         ];
         let graph = ProjectGraph::for_test(files, vec![], vec![], edges);
         let reach = reachability::compute(&graph);
-        let (findings, diagnostic) = find_untested(&graph, &reach);
-        assert!(diagnostic.is_none());
+        let (findings, verdict) = find_untested(&graph, &reach);
+        assert!(matches!(verdict, crate::analysis::Verdict::Judged));
         assert!(
             findings.is_empty(),
             "a ToolingOnly file is not a test blind spot: {findings:?}"
@@ -588,8 +590,8 @@ mod tests {
         ];
         let graph = ProjectGraph::for_test(files, vec![], vec![], edges);
         let reach = reachability::compute(&graph);
-        let (findings, diagnostic) = find_untested(&graph, &reach);
-        assert!(diagnostic.is_none());
+        let (findings, verdict) = find_untested(&graph, &reach);
+        assert!(matches!(verdict, crate::analysis::Verdict::Judged));
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].category, "untested");
         assert_eq!(findings[0].group, crate::vocab::Group::Risk);

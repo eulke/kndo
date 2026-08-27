@@ -289,6 +289,7 @@ mod tests {
             findings,
             fixed: Vec::new(),
             diagnostics: Vec::new(),
+            abstained: Vec::new(),
             files_discovered: 0,
             files_claimed: 0,
             symbols: 0,
