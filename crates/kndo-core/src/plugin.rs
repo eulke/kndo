@@ -3,9 +3,11 @@
 //! Adapters describe what code *is*; plugins describe what an ecosystem *means* by it.
 //! All hooks are optional; the same trait serves built-ins (statically linked) and external
 //! WASM components (bridged via `kndo-plugin-api` — `kndo:plugin@0.1.0` for the four
-//! graph-mutation hooks below, `kndo:adapter@0.1.0` for
-//! `LanguageAdapter`, and the `coverage-ingester` world bridges `ingest_coverage`).
-//! `suppress` isn't bridged either way yet.
+//! graph-mutation hooks below, `kndo:adapter@0.1.0` for `LanguageAdapter`, `plugin-findings`
+//! for [`Plugin::rules`]/[`Plugin::contribute_findings`], and `coverage-ingester` for
+//! [`Plugin::ingest_coverage`]). There is no `suppress` hook: RFC 0016 §7 evaluated
+//! domain-specific suppression against the components actually shipping and cut it — a real
+//! use case reopens it as a new, additive hook rather than a deferred one.
 //! `GraphView` is read-only; mutation happens only through typed sinks the core validates and
 //! attributes (`Provenance::Plugin`). `contribute_roots`/`contribute_edges`/`annotate_symbols`
 //! additionally get [`ContentView`], the host-mediated content channel for files

@@ -26,10 +26,10 @@ This directory is the single source of truth for product and technical decisions
 | Workspaces & monorepos | [rfcs/0011-workspaces-and-monorepos.md](rfcs/0011-workspaces-and-monorepos.md) | Accepted |
 | Precise reference semantics & visibility | [rfcs/0012-reference-semantics-and-visibility.md](rfcs/0012-reference-semantics-and-visibility.md) | Accepted |
 | Incremental graph patch | [rfcs/0013-incremental-graph-patch.md](rfcs/0013-incremental-graph-patch.md) | Accepted |
-| Distribution & release | [rfcs/0014-distribution-and-release.md](rfcs/0014-distribution-and-release.md) | Accepted |
+| Distribution & release | [rfcs/0014-distribution-and-release.md](rfcs/0014-distribution-and-release.md) | Accepted · mechanism unexercised (§7 punch list) |
 | Plugin identity & dependencies | [rfcs/0015-plugin-identity-and-dependencies.md](rfcs/0015-plugin-identity-and-dependencies.md) | Accepted |
 | Uniform component model | [rfcs/0016-uniform-component-model.md](rfcs/0016-uniform-component-model.md) | Accepted (all phases landed) |
-| Plugin platform: second pass | [rfcs/0017-plugin-platform-second-pass.md](rfcs/0017-plugin-platform-second-pass.md) | Accepted (phased, in progress) |
+| Plugin platform: second pass | [rfcs/0017-plugin-platform-second-pass.md](rfcs/0017-plugin-platform-second-pass.md) | Accepted (all five §8 phases landed) |
 | Spike: warm-budget validation | [spikes/0001-performance.md](spikes/0001-performance.md) | Done |
 | Adapter spec: JS/TS | [adapters/js-ts.md](adapters/js-ts.md) | Draft (M1 working spec) |
 | Adapter spec: Go | [adapters/go.md](adapters/go.md) | Draft (M3 working spec) |

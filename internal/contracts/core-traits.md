@@ -713,10 +713,12 @@ Compliance: every adapter must pass the shared conformance harness with its fixt
 ## 3. `Plugin`
 
 All hooks optional; a plugin implements what it needs (RFC 0003 §2). Same trait for built-ins
-(statically linked) and external WASM components — both the four graph-mutation hooks
-(`kndo:plugin@0.1.0`) and `LanguageAdapter` (`kndo:adapter@0.1.0`) are bridged
-(`kndo-plugin-api`, [wasm-abi.md](wasm-abi.md) §5). `ingest_coverage`/`suppress` aren't bridged
-either way yet.
+(statically linked) and external WASM components. Four WIT worlds carry it
+(`kndo-plugin-api`, [wasm-abi.md](wasm-abi.md) §5): `adapter` (`kndo:adapter@0.1.0`) for
+`LanguageAdapter`, `plugin` (`kndo:plugin@0.1.0`) for the four graph-mutation hooks,
+`plugin-findings` for `rules`/`contribute_findings` (RFC 0018), and `coverage-ingester` for
+`ingest_coverage`. A component declares the world it implements; the host accepts each
+separately, which is what lets a coverage ingester ship without a graph-mutation surface.
 
 ```rust
 pub trait Plugin: Send + Sync {
@@ -754,9 +756,20 @@ pub trait Plugin: Send + Sync {
     fn contribute_edges(&self, graph: &GraphView<'_>, out: &mut EdgeSink) {}
     fn annotate_symbols(&self, graph: &GraphView<'_>, out: &mut AnnotationSink) {}
     fn ingest_coverage(&self, path: &ProjectPath, content: &[u8], out: &mut CoverageSink) {}
-    fn suppress(&self, finding: &Finding) -> Option<SuppressReason> { None } // not wired yet
+    // RFC 0018, landed: what a plugin MAY assert, declared before any hook runs, and the
+    // hook that asserts it. `contribute_findings` is NOT a graph-mutation hook — it runs
+    // after assembly on every path (cold, patch, warm snapshot hit) and its output lands
+    // under `plugin:<coordinate>/<rule>` on the advisory channel.
+    fn rules(&self) -> Vec<RuleDescriptor> { Vec::new() }
+    fn contribute_findings(&self, graph: &GraphView<'_>, content: &ContentView<'_>,
+                           out: &mut FindingSink) {}
 }
 ```
+
+- **No `suppress` hook, and this is a decision rather than a gap.** RFC 0016 §7 evaluated
+  domain-specific suppression against the components actually shipping and **cut** it — not
+  deferred it. It is on no trait, in no WIT world (wasm-abi.md §5.2), and this listing is the
+  whole surface. A real use case reopens it as a new, additive hook; none exists.
 
 - **`ActivationReason` (landed).** Core owns the *vocabulary* of why a component is active —
   `Registered` (presence is the opt-in) · `AlwaysOn` (ships with the product, declares no

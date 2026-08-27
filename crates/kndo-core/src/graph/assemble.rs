@@ -603,10 +603,11 @@ pub(crate) fn resolve_imports(
         // phantom internal dependencies, declared-but-unimported ones are unused) —
         // EXCEPT within the importing file's own package (`same_package`), where no
         // self-declaration contract exists to validate: file edge and bindings only.
-        // Stdlib: not a graph node — there is nothing to point an edge at. Unresolved:
-        // resolution is intentionally incomplete right now (self-reference imports,
-        // exports maps); turning it into a finding is the future `unresolved`
-        // analysis's job, not assembly's.
+        // Stdlib: not a graph node — there is nothing to point an edge at. `Unresolved` is a
+        // shape this adapter does not model (self-reference imports, exports maps) and stays
+        // silent; `Missing` is "the adapter modelled it and there is no file there", retained
+        // on the graph as `ProjectGraph::unresolved_imports` — turning THAT into a finding is
+        // `analysis::unresolved`'s job, not assembly's.
         let resolution = adapter.resolve(&spec, ctx);
         let (file_target, dep_target) = match &resolution {
             Resolution::File(path, confidence) => (Some((path.clone(), *confidence)), None),

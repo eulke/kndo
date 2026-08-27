@@ -815,11 +815,11 @@ fn open_engine(overrides: ConfigOverrides) -> Result<(std::path::PathBuf, Engine
 
 /// `--staged` and `--diff <ref>` select `RunMode`; mutually exclusive, checked
 /// here rather than left for the engine since "which mode" is entirely a frontend argument-
-/// parsing concern. **Known gap:**
-/// neither mode scopes the report to the change's effects (derived-effects
-/// diffing is not implemented) — every mode walks and reports the full
-/// tree; only `run.mode`/`run.base_ref` and the `--fail-on` default (below) react to the
-/// selected mode.
+/// parsing concern. Both trees are fully analyzed and the engine reports the *difference*
+/// (`Engine::run_diff`): `findings` carries what the change introduced — each tagged
+/// `introduced` when it lands inside a touched file, `derived` when the change flipped it
+/// elsewhere — and `fixed` carries what it removed. The `--fail-on` default (below) also
+/// reacts to the mode.
 fn resolve_mode(flags: &Flags) -> Result<RunMode, String> {
     match (flags.staged, &flags.diff) {
         (true, Some(_)) => Err("--staged and --diff are mutually exclusive".to_string()),

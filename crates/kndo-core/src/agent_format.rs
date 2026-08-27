@@ -4,8 +4,9 @@
 //! emits byte-identical agent text, never reconstructed per-frontend.
 //!
 //! Diff modes render `new:`/`fixed:` blocks instead of `findings:` (the schema's own
-//! example), with one numbering sequence running across both. No `budget:` line: delta budgets
-//! depend on health scoring, which doesn't exist yet. Findings carrying a `related`
+//! example), with one numbering sequence running across both. No `budget:` line yet — health
+//! scoring landed in M4 and is rendered below; what is still missing is the `[delta]` half,
+//! whose rules nothing parses. Findings carrying a `related`
 //! evidence chain (populated by `cyclic`) render it as indented `evidence:` lines — the
 //! format "can never carry information absent from the JSON", and `related`
 //! IS in the JSON. `remediation` isn't — no `fix:` lines. Diff mode's NEW findings

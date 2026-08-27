@@ -67,15 +67,18 @@ pub struct AdapterDescriptor {
     /// `true` in spirit (every adapter sets it explicitly; there is no `Default` impl here so a
     /// new adapter must make the call, not inherit a silent default).
     pub resolves_dependency_usage: bool,
-    /// Dormant reservation: the machine-checkable activation predicates
-    /// a *globally installed* adapter will be gated by when adapters componentize
-    /// (same rules and semantics as `PluginDescriptor::activation`). Nothing evaluates
-    /// this yet; compiled-in and project-local adapters are scoped by their file claims alone.
-    /// Reserved before the 1.0 freeze so componentization is additive, not breaking.
+    /// What gates a *globally installed* adapter for a project — same rules and semantics as
+    /// `PluginDescriptor::activation`, evaluated by the distribution layer's composition pass
+    /// (RFC 0016 §4). Compiled-in and project-local adapters ignore it: the first are
+    /// unconditional, the second are opted in by their presence in `.kndo/plugins/`, and both
+    /// are scoped by their file claims. Empty means "no known structural signal", so a global
+    /// candidate with none never self-activates rather than guessing.
     pub activation: Vec<crate::plugin::ActivationRule>,
-    /// Dormant reservation: component dependencies by coordinate id,
-    /// with co-install/co-activate semantics once componentization exists. Unread
-    /// today, same reservation rationale as [`activation`](Self::activation).
+    /// Component dependencies by coordinate id, with the co-install/co-activate semantics
+    /// RFC 0017 §6 gave them: an *active* adapter activates every present adapter it names
+    /// here, transitively, as a fixpoint. The wrapper-adapter case is why it exists — a
+    /// `.vue`-style superset language whose extraction degrades without its base language's
+    /// adapter present. Pinned by `crates/kndo/tests/adapter_dependency_implication.rs`.
     pub dependencies: Vec<SmolStr>,
     /// Directory names that mark files as test-role only when the directory is an
     /// *immediate child of the owning package's manifest directory* — conventions that are
