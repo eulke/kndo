@@ -63,8 +63,8 @@ Two tiers (decision in ADR 0003):
    (examples, each its own doc before implementation): `react`, `nextjs`, `jest/vitest`,
    `spring`, `junit`, `gradle-conventions`, `swiftui`, `coverage-lcov`, `coverage-jacoco`.
    **Landed so far**: `kndo:coverage-lcov` (in-core), and the first two convention plugins of
-   RFC 0015 §6 phase 4 — `kndo:nextjs` ([plugins/nextjs.md](../plugins/nextjs.md)) and
-   `kndo:express` ([plugins/express.md](../plugins/express.md)), each its own crate
+   RFC 0015 §6 phase 4 — `kndo:nextjs` ([plugins/nextjs.md](../../docs/src/plugins/nextjs.md)) and
+   `kndo:express` ([plugins/express.md](../../docs/src/plugins/express.md)), each its own crate
    (`crates/kndo-plugin-{nextjs,express}`), feature-gated in the `kndo` distribution crate
    (`plugin-nextjs`/`plugin-express`, on by default) and gated at composition by their own
    `activation` rules (§4).

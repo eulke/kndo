@@ -38,7 +38,7 @@ impl LanguageAdapter for JavaAdapter {
             activation: Vec::new(),
             dependencies: Vec::new(),
             id: SmolStr::new("java"),
-            facts_schema_version: 8, // bump whenever the serialized facts shape or the emission semantics change
+            facts_schema_version: 9, // bump whenever the serialized facts shape or the emission semantics change
             file_globs: vec![SmolStr::new("**/*.java")],
             manifest_globs: vec![
                 SmolStr::new("**/pom.xml"),

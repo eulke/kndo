@@ -110,7 +110,8 @@ These are checked by name in CI — the `gates` job in `.github/workflows/ci.yml
 per entry below, and its first step fails if any of them has been renamed or deleted, which a
 bulk `cargo test --workspace` cannot notice. Adding an entry here means adding its step there;
 the two lists are one list. All of them must stay green on every PR that touches
-graph/cache/analysis:
+graph/cache/analysis — and `doc_links`, whose subject is Markdown, on every PR that touches a
+`.md`:
 
 - `patch_equivalence` — full assembly and incremental patch produce identical graphs.
 - cache equivalence — a cached run and `--no-cache` produce byte-identical output.
@@ -139,5 +140,14 @@ graph/cache/analysis:
   `default_plugins()`, so a new built-in without a proof fails the suite — the same posture as
   `Plugin::mutates_graph()` having no default. A plugin nothing asserts is a plugin nothing
   notices breaking, and the effect of one is measured in findings that silently return.
+
+- `doc_links` (`crates/kndo/tests/doc_links.rs`) — **every relative Markdown link in the
+  repository resolves.** A link is the author asserting a path exists, and moving a document
+  means updating what points at it in the same commit; two links broke when the plugin specs
+  moved into the book and nothing noticed. Deliberately links only: prose paths measured 63
+  non-resolving candidates on this repo with essentially no defects among them (examples from
+  other repositories, invented illustrations, paths that exist in a *user's* project), so an
+  analysis firing on those would be noise. The scanner blanks code spans first — a path inside
+  backticks is quoted, not claimed.
 
 No PR should weaken or skip one of these to get green.

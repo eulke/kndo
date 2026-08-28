@@ -220,6 +220,20 @@ of one type match by definition of the type rather than by evidence of copying.
 Fingerprints: normalized token stream per shape, same `$n`-renaming scheme as every other
 adapter.
 
+**String call arguments → `FileFacts::string_call_args`** (plugin fuel, ecosystem-blind).
+Every `method_invocation` whose callee is a plain dotted path — `t`, `res.render`, `a.b.c`,
+`this.log` — and whose arguments include a string literal records `(callee as written, first
+string literal, span)`. Text blocks count; `""` does not (it names nothing). A receiver with no
+written name is skipped rather than given an invented spelling: `build().render("x")`,
+`items[0].render("x")` and `(cond ? a : b).render("x")` are real receivers a convention cannot
+match on. No resolution and no callee filtering — `a.b` is recorded whether it is a package
+qualifier, a static field or a local, because which one it is depends on the classpath and the
+syntactic form is what a convention matches anyway; a name-based exclusion list would be the
+ecosystem knowledge this layer must not carry. No analysis consumes these: plugins read them
+through `GraphView::string_call_sites_in` or the ABI's `call-sites-in`, which is what lets a
+framework plugin build on a fact this adapter already parsed instead of re-parsing the grammar.
+Same contract the JS/TS adapter implements, so a plugin sees one shape regardless of grammar.
+
 **Dynamic constructs → `DynamicUse`**: none emitted in this slice. `Class.forName(String)`
 reflection exists but is rare in application code and — like Go's `reflect`/`plugin` stance
 (§5 there) — not modeled; the wildcard-edge machinery stays available if dogfooding on a real

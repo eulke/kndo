@@ -54,6 +54,17 @@ computed/spread members demote the file's export surface to `probable`.
 `<Button/>` is a `certain` reference to `Button`, which is what keeps React components alive
 without any framework plugin (framework *roots* remain plugin territory, RFC 0003).
 
+**String call arguments → `FileFacts::string_call_args`** (plugin fuel, ecosystem-blind).
+Every call whose callee is a plain identifier or member chain — `t`, `res.render`, `a.b.c` —
+and whose arguments include a string literal records `(callee as written, first string literal,
+span)`. Direct literals only, never computed strings (determinism over coverage); a callee that
+is not a written path (a call result, a subscript, an IIFE) is skipped rather than given an
+invented spelling. No callee filtering: an exclusion list by name would be exactly the
+ecosystem knowledge this layer must not carry. No analysis consumes these — plugins read them
+through `GraphView::string_call_sites_in` or the ABI's `call-sites-in`, which is how a route
+convention is built on a fact the adapter already parsed instead of re-parsing source through
+the content channel. The Java adapter implements the same contract.
+
 **Dynamic constructs → `DynamicUse`** (wildcard edges, RFC 0005 §1 expansion):
 
 | Construct | Effect |

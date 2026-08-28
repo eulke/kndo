@@ -817,6 +817,88 @@ fn walk_type_refs(node: Node, src: &[u8], within: Option<&str>, out: &mut FileFa
     }
 }
 
+/// The generic call-site fact: any invocation whose callee is a plain dotted path — `t`,
+/// `res.render`, `a.b.c` — and whose arguments include a string literal is recorded as callee
+/// + first string literal + span.
+///
+/// The adapter stays framework-blind: it records "a call passed this literal", never what any
+/// ecosystem means by it. Interpretation is plugin territory, through
+/// `GraphView::string_call_sites_in` natively or `call-sites-in` over the ABI — which is what
+/// lets a plugin build a convention on a fact the adapter already parsed instead of asking for
+/// source access and re-parsing this grammar itself. No callee filtering, deliberately: a
+/// name-based exclusion list would be exactly the ecosystem knowledge this layer must not
+/// carry.
+fn record_string_call_arg(node: Node, src: &[u8], out: &mut FileFacts) {
+    let Some(callee) = dotted_callee(node, src) else {
+        return;
+    };
+    let Some(args) = node.child_by_field_name("arguments") else {
+        return;
+    };
+    let mut cursor = args.walk();
+    let literal = args
+        .named_children(&mut cursor)
+        .filter(|a| a.kind() == "string_literal")
+        .find_map(|a| string_literal_value(a, src));
+    if let Some(literal) = literal {
+        out.string_call_args
+            .push(kndo_core::adapter::StringCallArg {
+                callee,
+                literal,
+                span: span(node),
+            });
+    }
+}
+
+/// A `method_invocation`'s callee as a dotted path — `None` when the receiver is anything
+/// without a stable written name (a call result, an array access, a parenthesized
+/// expression). Those exist and are common; a convention cannot match on them, and inventing
+/// a spelling for them would put a name in the fact that no source line contains.
+///
+/// No resolution: `a.b.c` is recorded exactly as written, whether `a.b` is a package
+/// qualifier, a static field or a local. Which one it is depends on the classpath, and the
+/// syntactic form is what a convention matches on anyway.
+fn dotted_callee(invocation: Node, src: &[u8]) -> Option<SmolStr> {
+    let name = invocation.child_by_field_name("name")?;
+    let name = text(name, src);
+    match invocation.child_by_field_name("object") {
+        None => Some(SmolStr::new(name)),
+        Some(object) => {
+            let base = dotted_receiver(object, src)?;
+            Some(SmolStr::new(format!("{base}.{name}")))
+        }
+    }
+}
+
+fn dotted_receiver(node: Node, src: &[u8]) -> Option<String> {
+    match node.kind() {
+        "identifier" => Some(text(node, src).to_string()),
+        "this" => Some("this".to_string()),
+        "field_access" => {
+            let object = node.child_by_field_name("object")?;
+            let field = node.child_by_field_name("field")?;
+            Some(format!(
+                "{}.{}",
+                dotted_receiver(object, src)?,
+                text(field, src)
+            ))
+        }
+        _ => None,
+    }
+}
+
+/// A string literal's content. `string_fragment` is the ordinary form and
+/// `multiline_string_fragment` a text block (Java 15+) — both carry the text without its
+/// delimiters. An empty literal has neither child and yields nothing, which is correct: `""`
+/// names nothing a convention could resolve.
+fn string_literal_value(node: Node, src: &[u8]) -> Option<SmolStr> {
+    let mut cursor = node.walk();
+    let found = node
+        .children(&mut cursor)
+        .find(|c| matches!(c.kind(), "string_fragment" | "multiline_string_fragment"));
+    found.map(|c| SmolStr::new(text(c, src)))
+}
+
 /// Expression/statement bodies: calls, field access, identifier reads, method references,
 /// lambdas, anonymous classes.
 fn walk_body(node: Node, src: &[u8], within: Option<&str>, out: &mut FileFacts) {
@@ -862,6 +944,7 @@ fn walk_body(node: Node, src: &[u8], within: Option<&str>, out: &mut FileFacts) 
                     kind: RefKind::Call,
                 });
             }
+            record_string_call_arg(node, src, out);
             if let Some(args) = node.child_by_field_name("arguments") {
                 walk_body(args, src, within, out);
             }
@@ -1366,5 +1449,86 @@ mod tests {
         );
         let fm = f.functions.iter().find(|f| f.symbol == "C.m").unwrap();
         assert_eq!(fm.cyclomatic, 3); // base 1 + if + for
+    }
+}
+
+#[cfg(test)]
+mod string_call_arg_tests {
+    use super::*;
+
+    fn sites(src: &str) -> Vec<(String, String)> {
+        extract("A.java", src.as_bytes())
+            .string_call_args
+            .into_iter()
+            .map(|c| (c.callee.to_string(), c.literal.to_string()))
+            .collect()
+    }
+
+    #[test]
+    fn dotted_callees_and_the_first_string_literal_are_recorded() {
+        // The generic call-site fact — framework-blind, direct literals only. The same
+        // contract the JS adapter already implements, so a plugin reading `call-sites-in`
+        // sees one shape regardless of which grammar produced it.
+        assert_eq!(
+            sites(
+                "class A {\n\
+                 \x20 void m() {\n\
+                 \x20   res.render(\"index\");\n\
+                 \x20   t(\"bare-callee\");\n\
+                 \x20   this.log(\"receiver-is-this\");\n\
+                 \x20   a.b.c(\"nested-field-access\");\n\
+                 \x20   flags.isEnabled(\"first-only\", \"second\");\n\
+                 \x20   describe(\"\"\"\n\
+                 text block\n\
+                 \"\"\");\n\
+                 \x20 }\n\
+                 }\n"
+            ),
+            vec![
+                ("res.render".to_string(), "index".to_string()),
+                ("t".to_string(), "bare-callee".to_string()),
+                ("this.log".to_string(), "receiver-is-this".to_string()),
+                ("a.b.c".to_string(), "nested-field-access".to_string()),
+                ("flags.isEnabled".to_string(), "first-only".to_string()),
+                ("describe".to_string(), "\ntext block\n".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_receiver_with_no_written_name_records_nothing() {
+        // A call result, an array element, a parenthesized expression: each is a real
+        // receiver and none has a spelling a convention could match. Recording an invented
+        // one would put a name in the fact that no source line contains — silence instead.
+        assert_eq!(
+            sites(
+                "class A {\n\
+                 \x20 void m() {\n\
+                 \x20   build().render(\"call-result-receiver\");\n\
+                 \x20   items[0].render(\"array-receiver\");\n\
+                 \x20   (cond ? a : b).render(\"ternary-receiver\");\n\
+                 \x20 }\n\
+                 }\n"
+            ),
+            Vec::<(String, String)>::new()
+        );
+    }
+
+    #[test]
+    fn a_call_with_no_string_argument_records_nothing() {
+        assert_eq!(
+            sites(
+                "class A {\n\
+                 \x20 void m() {\n\
+                 \x20   compute(key);\n\
+                 \x20   concat(\"a\" + suffix);\n\
+                 \x20   empty(\"\");\n\
+                 \x20 }\n\
+                 }\n"
+            ),
+            // `"a" + suffix` is a binary expression, not a literal argument; `""` has no
+            // fragment child and names nothing. Determinism over coverage.
+            Vec::<(String, String)>::new()
+        );
     }
 }

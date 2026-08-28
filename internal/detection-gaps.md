@@ -262,15 +262,43 @@ adapter's reading of a path, which must keep falling through), locked in by
 `a_reconstructed_imports_qualifier_does_not_settle_on_a_miss`. Field result: byte-identical
 findings on all seven measured targets — the adapter-side alias reproduces the split exactly.
 
-## 9. False negative: path references in prose
+## 9. Path references in prose (MEASURED — the proposed direction is wrong; the narrow half shipped as a gate)
 
-When `internal/perf-baseline.json` replaced `docs/perf-baseline.json`, four Markdown
-documents kept pointing at the dead path and nothing flagged them: kndo extracts no
-references from prose, so a path-shaped string in documentation participates in no
-resolution and can go stale silently. Direction: a lightweight docs adapter (or plugin)
-extracting path-shaped tokens from Markdown as `Possible`-confidence references — enough
-for a "documentation references a path that no longer exists" hygiene verdict without
-pretending prose is code.
+The original entry: when `internal/perf-baseline.json` replaced `docs/perf-baseline.json`,
+four Markdown documents kept pointing at the dead path and nothing flagged them. The proposed
+direction was a lightweight docs adapter extracting path-shaped tokens from Markdown as
+`Possible`-confidence references.
+
+**Measured before building, and the measurement killed the adapter.** Three findings, on this
+repository:
+
+1. **The motivating case no longer reproduces.** The four documents were fixed. The only two
+   remaining mentions of `docs/perf-baseline.json` are the two documents *describing this gap*
+   — not stale pointers.
+2. **Prose path tokens are noise.** 195 backticked path-shaped tokens; **63 resolve to
+   nothing, and essentially none is a defect**: examples from other repositories
+   (`crates/searcher/src/sink.rs` is ripgrep's), invented illustrations
+   (`com/foo/bar/Widget.java`), paths that exist in a *user's* project
+   (`coverage/lcov.info`, `.kndo/plugins/your.wasm`), module-relative shorthand
+   (`analysis/reachability.rs`). Firing on those is 63 findings and no fix — the same
+   collision arithmetic that decided §14-bis, at a worse ratio.
+3. **Claiming `**/*.md` at all breaks the dogfood gate.** It makes every document eligible for
+   `unused`, and 15 of this repository's 74 Markdown files are linked from nothing:
+   `CLAUDE.md`, `CONTRIBUTING.md`, `SECURITY.md`, every adapter spec, several RFCs. All
+   legitimate. Exempting them needs a `FileRole::Docs` that does not exist — a vocabulary
+   change to make viable a component with no measured case.
+
+**What shipped instead.** A Markdown **link** is different in kind from a prose path: it is the
+author asserting that the path resolves, the closest thing prose has to an import. 189 of them
+exist here, and two were broken — both introduced by the commit that moved the plugin specs
+into the book, and caught by nothing. `crates/kndo/tests/doc_links.rs` is now a named gate that
+checks every one of them, and it would have failed on that commit. The scanner blanks code
+spans and fenced blocks first: `internal/adapters/go.md` writes Go generics as
+`` `func F[T any](x T)` ``, and the naive scan read `](x T)` as a link to `x` — a path inside
+backticks is quoted, not claimed, which is the same rule the whole entry turns on.
+
+Prose is deliberately not checked. That is the measurement above, not an omission. If a real
+stale-prose-path case ever appears in the field, it reopens with its own evidence.
 
 ## 10. Framework dispatch: component scan, HTTP routing, DI wiring (LIMIT — covered)
 
