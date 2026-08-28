@@ -75,6 +75,95 @@ jobs:
           version: source
           fail-on: warning
 
+  # The named gates. `CLAUDE.md` lists seven invariants that "must stay green on every PR
+  # that touches graph/cache/analysis" and calls them checked BY NAME in CI — this job is what
+  # makes that sentence true. Each runs in `test` too (they are ordinary cargo tests); running
+  # them here as well buys two things the bulk run cannot:
+  #
+  #   * a break fails on its own line, naming the invariant rather than "cargo test failed" —
+  #     the same reasoning as `compat-matrix` below;
+  #   * a DELETED or renamed gate fails. A bulk `cargo test --workspace` is green when a test
+  #     disappears, which is precisely the failure mode a gate exists to prevent. A `--test
+  #     <target>` step below catches a deleted FILE (cargo errors on an unknown target), but a
+  #     name filter silently matches zero tests, so the first step checks the names against
+  #     `--list` — what the compiled harnesses actually contain, not what the source says.
+  #
+  # Adding an invariant to CLAUDE.md's list without adding it here leaves the claim false
+  # again; the two are meant to be edited together.
+  gates:
+    name: named gates (CLAUDE.md invariants)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # `dogfood` runs kndo over this very checkout; a shallow one changes what it sees.
+          fetch-depth: 0
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: gates
+          cache-on-failure: true
+
+      - name: build the gate harnesses
+        run: cargo test --workspace --all-features --no-run
+
+      # A gate that was renamed or deleted must fail HERE rather than pass silently in the
+      # bulk run. `--list` enumerates what the harnesses actually contain, so this is a
+      # statement about the compiled binaries, not about the source text.
+      - name: every named gate still exists
+        run: |
+          set -eu
+          cargo test --workspace --all-features -- --list > /tmp/gate-list.txt
+          missing=""
+          for name in \
+            comment_appends_are_equivalent_and_exercise_the_patch \
+            warm_assemble_matches_a_cold_assemble_byte_for_byte \
+            threads_1_and_threads_4_produce_byte_identical_json \
+            kndo_is_clean_under_kndo \
+            zero_findings_means_measured_and_not_merely_unjudged \
+            every_built_in_plugin_is_proven_here
+          do
+            grep -q "$name" /tmp/gate-list.txt || missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "named gates missing from the compiled test harnesses:$missing"
+            echo "CLAUDE.md lists these as invariants; deleting or renaming one is a"
+            echo "deliberate contract change, not a refactor."
+            exit 1
+          fi
+          echo "all named gates present"
+
+      - name: gate — patch_equivalence (full assembly == incremental patch)
+        run: cargo test -p kndo --all-features --test patch_equivalence
+
+      - name: gate — cache equivalence (warm == cold, byte for byte)
+        run: cargo test -p kndo-core --all-features warm_assemble_matches_a_cold_assemble_byte_for_byte
+
+      - name: gate — --threads 1 == default thread count
+        run: cargo test -p kndo-cli --all-features --test threads_determinism
+
+      - name: gate — adapter conformance fixtures are byte-identical
+        run: |
+          set -eu
+          for adapter in css go java js json kotlin rust swift; do
+            cargo test -p "kndo-adapter-$adapter" --all-features --test conformance
+          done
+
+      - name: gate — dependency implication (a named plugin/adapter activates)
+        run: |
+          set -eu
+          cargo test -p kndo --all-features --test plugin_dependency_implication
+          cargo test -p kndo --all-features --test adapter_dependency_implication
+
+      - name: gate — every built-in plugin is proven (baseline-then-plugin)
+        run: cargo test -p kndo --all-features --test builtin_plugin_proofs
+
+      - name: gate — dogfood (kndo on kndo reports nothing)
+        run: cargo test -p kndo --all-features --test dogfood
+
   # The ABI compatibility matrix: the two reference components, PRE-BUILT and committed
   # under crates/kndo-plugin-api/tests/compat/, run against the HEAD host. the ABI's
   # "a v1 component keeps working against every v1-compatible host" promise as a job that

@@ -881,7 +881,7 @@ coordinate-based ids — `github.com/owner/repo` external, reserved `kndo:` for 
 (`Plugin::mutates_graph()`), 2 (identity + dependencies fixpoint) and 4 — the **first ecosystem
 plugins**, `kndo:nextjs` and `kndo:express`, spec'd in `docs/plugins/{nextjs,express}.md` and
 shipped as gated built-ins (`crates/kndo-plugin-{nextjs,express}`, feature-gated in the `kndo`
-crate, proven end to end by `crates/kndo/tests/builtin_convention_plugins.rs`'s
+crate, proven end to end by `crates/kndo/tests/builtin_plugin_proofs.rs`'s
 baseline-then-plugin fixtures) — and phase 3, `kndo plugin install/list/remove`
 (`kndo::plugin_install`: GitHub-release fetch, checksum + identity-binding verification,
 transitive dependency closure, `plugins.lock`, stage-then-commit atomicity; policies unit-

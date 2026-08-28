@@ -106,7 +106,10 @@ Decide it, don't default it.
 
 ## Gates that must never regress
 
-These are checked by name in CI and must stay green on every PR that touches
+These are checked by name in CI — the `gates` job in `.github/workflows/ci.yml` runs one step
+per entry below, and its first step fails if any of them has been renamed or deleted, which a
+bulk `cargo test --workspace` cannot notice. Adding an entry here means adding its step there;
+the two lists are one list. All of them must stay green on every PR that touches
 graph/cache/analysis:
 
 - `patch_equivalence` — full assembly and incremental patch produce identical graphs.
@@ -128,5 +131,13 @@ graph/cache/analysis:
   makes it easy to delete by accident. It already nearly went: a descriptor constructor that
   hid four of `PluginDescriptor`'s six fields made the field invisible in every built-in, and
   nothing failed.
+- `builtin_plugin_proofs` (`crates/kndo/tests/builtin_plugin_proofs.rs`) — **every built-in
+  plugin has a baseline-then-plugin proof**, the standard `plugins/authoring.md` §8 already
+  demands of anyone writing one: the fixture's findings fire without the plugin, exactly those
+  disappear with it, unrelated dead code stays reported, and `PluginContribution` matches down
+  to `dropped`. `every_built_in_plugin_is_proven_here` closes the file against
+  `default_plugins()`, so a new built-in without a proof fails the suite — the same posture as
+  `Plugin::mutates_graph()` having no default. A plugin nothing asserts is a plugin nothing
+  notices breaking, and the effect of one is measured in findings that silently return.
 
 No PR should weaken or skip one of these to get green.

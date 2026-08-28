@@ -365,6 +365,20 @@ a `kndo:plugin@0.2.0` ever exists — and `0.1.0` components keep working even t
   your plugin (baseline — the findings your plugin should fix must actually fire, or your test
   is vacuous), then *with* it, and assert the delta. This is precisely how kndo's own
   `plugin_compliance.rs` and `external_plugin.rs` suites work — copy their shape.
+- **The four assertions**, because "fewer findings" is not one of them.
+  `crates/kndo/tests/builtin_plugin_proofs.rs` proves every built-in this way and is the shape
+  to copy: *(1)* the baseline fires; *(2)* exactly the named findings disappear, not merely
+  fewer; *(3)* unrelated dead code in the same fixture stays reported — without this, a plugin
+  that keeps everything alive passes (1) and (2) and is worthless; *(4)* `PluginContribution`
+  matches, `dropped` spelled out rather than counted, since "two edges" looks identical whether
+  the right two landed or the walk lost one and gained another.
+  For a built-in this is not optional: `every_built_in_plugin_is_proven_here` closes that file
+  against `default_plugins()`, and it is one of `CLAUDE.md`'s named CI gates.
+- **Build the fixture from a real project, reduced** — Kingfisher's storyboard,
+  spring-petclinic's pom and template — never from an invented example. A convention plugin
+  exists because a real tool wires things a real way; a fixture you designed to pass proves
+  your fixture. If your plugin has no field case that reduces, that is itself a finding worth
+  writing down rather than a reason to fabricate one.
 - **What "correct" means**: the zero-false-positive discipline applies to you too. A root you
   contribute keeps code alive forever; if your convention has exceptions, use
   `Confidence::Probable`/`Possible` instead of `Certain`, or don't contribute the fact at all —
@@ -397,5 +411,5 @@ user's environment — their existing GitHub credential, nothing plugin-specific
   plugins (built-in, but the trait is identical to what a WASM guest implements): pure path
   classifiers unit-tested in isolation, spec-first design
   ([nextjs.md](nextjs.md) / [express.md](express.md)), and
-  `crates/kndo/tests/builtin_convention_plugins.rs` as the baseline-then-plugin (§8) fixture
+  `crates/kndo/tests/builtin_plugin_proofs.rs` as the baseline-then-plugin (§8) fixture
   suite proving activation gating and contributed facts together.

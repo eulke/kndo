@@ -290,7 +290,7 @@ new one; the mechanism, not the fixture composition, is what determines the cost
 1. **Content channel (§5) — Landed.** Highest value per unit of new surface; upgrades
    `kndo:express` and `kndo:nextjs` from their documented approximations, which also made it
    the phase with built-in dogfood — both plugins' own baseline-then-plugin fixture suites
-   (`crates/kndo/tests/builtin_convention_plugins.rs`) grew a scenario apiece proving the
+   (`crates/kndo/tests/builtin_plugin_proofs.rs`) grew a scenario apiece proving the
    content-derived rescue actually fires, plus native (`kndo-core`) and WASM
    (`kndo-plugin-api`'s compliance suite, `examples/kndo-plugin-hooks-demo`) round-trip tests
    for the channel mechanism itself.

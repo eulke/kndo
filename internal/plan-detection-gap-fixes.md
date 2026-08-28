@@ -54,10 +54,13 @@ the rest were established during this plan's execution.
    re-running. Do this with a *file copy*, never `git checkout` — that command silently ate
    this session's work twice.
 
-7. **Non-negotiable gates**, checked by name in CI on every PR touching graph/cache/analysis:
-   `patch_equivalence`, cache equivalence, `--threads 1` vs default determinism, and the 72
-   adapter `expected.json` fixtures byte-identical. A fixture diff is either a bug in the
-   change or a deliberate, documented contract change — never something to fix by regenerating.
+7. **Non-negotiable gates**, checked by name in CI on every PR touching graph/cache/analysis.
+   `CLAUDE.md`'s "Gates that must never regress" is the list, and `.github/workflows/ci.yml`'s
+   `gates` job is what makes "by name" true — one step per gate, plus a step that fails when a
+   gate has been renamed or deleted. Among them: `patch_equivalence`, cache equivalence,
+   `--threads 1` vs default determinism, `builtin_plugin_proofs`, and the 72 adapter
+   `expected.json` fixtures byte-identical. A fixture diff is either a bug in the change or a
+   deliberate, documented contract change — never something to fix by regenerating.
 
 8. **Contract-first.** A change to a contractual signature updates
    `internal/contracts/core-traits.md` (and the relevant RFC and `internal/adapters/*.md`) in
