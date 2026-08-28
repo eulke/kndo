@@ -266,6 +266,12 @@ imports —
 - `call-sites-in(path)` — including calls with string-literal arguments (`res.render("index")`,
   `flags.isEnabled("checkout-v2")`), the raw material for route conventions and the fact to
   build on instead of ever re-parsing source;
+- `attr-strings-in(path)` — its attribute sibling: `(attribute head, key, literal, decorated
+  declaration)` for every string written inside an attribute or annotation
+  (`#[serde(skip_serializing_if = "is_zero")]`, `@JsonDeserialize(using = "Foo")`). What the
+  string *means* is your plugin's knowledge, deliberately: `skip_serializing_if = "f"` names a
+  function and `rename = "f"` names a wire label, and no adapter can tell them apart without
+  knowing the framework — which is the whole reason the fact stops at the key;
 - `read-file(path)` — the **content channel**: raw bytes of files matching your declared
   `requested_file_access` globs, from the discovered (gitignore-filtered) tree only, under a
   per-run byte budget. Out-of-glob and over-budget reads answer `none`.

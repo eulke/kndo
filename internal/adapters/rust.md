@@ -168,7 +168,23 @@ body paths (`#[rkyv(with = crate::rkyv_support::SmolStrAsString)]` imports the m
 level and field/variant level alike — a struct alive only through a field attribute stays
 alive. Lint-control and non-item attributes (`allow`/`warn`/`deny`/`forbid`/`expect`,
 `doc`, `cfg`/`cfg_attr`) are excluded: their arguments are lint paths and config keys, and
-`#[allow(clippy::x)]` must never invent a `clippy` dependency. **Trait items inherit the
+`#[allow(clippy::x)]` must never invent a `clippy` dependency.
+
+**Attribute STRINGS are a different fact, and stop short of being references.** Alongside the
+ident scan, every attribute outside that exclusion list records its `key = "literal"` pairs
+into `FileFacts::string_attr_args` — attribute head, key, literal, and the declaration it
+decorates (a field or variant attribute is attributed to its enclosing type, which is where
+the generated impl lives). The adapter emits no reference for these, and the measurement is
+why: over the same attributes, serde alone writes 482 identifier-shaped pairs, 248 of whose
+values collide with a real declaration in the crate, and only 176 sit under a key that names
+an item. Treating a collision as a reference would contribute 72 keep-alive edges in one crate
+to close one real case, and a keep-alive edge silences a true finding. `skip_serializing_if =
+"f"` names a function and `rename = "f"` names a wire label; telling them apart is knowing what
+serde is, so the interpretation lives in `kndo:serde` and the fact stops at the key. Bump the
+adapter's `facts_schema_version` when what it emits changes; the shape of the fact itself is
+`cache::ENTRY_FORMAT_VERSION`'s.
+
+**Trait items inherit the
 trait's visibility** (the same language rule as enum variants): a `pub trait`'s methods sit
 on the public rung, which is what lets the member fallback see their cross-file call sites
 and what places them on a published crate's API surface.

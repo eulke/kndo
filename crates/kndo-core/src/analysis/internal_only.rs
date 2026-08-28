@@ -319,6 +319,7 @@ mod tests {
             unit_parent: None,
             test_spans: Vec::new(),
             string_call_sites: Vec::new(),
+            string_attr_args: Vec::new(),
         }
     }
 
@@ -604,6 +605,7 @@ mod tests {
             unit_parent: None,
             test_spans: Vec::new(),
             string_call_sites: Vec::new(),
+            string_attr_args: Vec::new(),
         }];
         let symbols = vec![symbol(FileId(0), "helper", 1)];
         let edges = vec![edge(

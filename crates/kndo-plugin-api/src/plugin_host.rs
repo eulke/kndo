@@ -90,6 +90,7 @@ struct HostViewData {
     importers_of: rustc_hash::FxHashMap<String, Vec<String>>,
     ref_sites: rustc_hash::FxHashMap<(String, String), Vec<w::WasmRefSite>>,
     call_sites: rustc_hash::FxHashMap<String, Vec<w::WasmCallSite>>,
+    attr_strings: rustc_hash::FxHashMap<String, Vec<w::WasmAttrString>>,
 }
 
 fn to_wit_span(span: kndo_core::adapter::Span) -> w::WasmSpan {
@@ -193,7 +194,21 @@ fn collect_file_projections(
         })
         .collect();
     if !call_sites.is_empty() {
-        data.call_sites.insert(path, call_sites);
+        data.call_sites.insert(path.clone(), call_sites);
+    }
+    let attr_strings: Vec<w::WasmAttrString> = graph
+        .attr_strings_in(&file.path)
+        .iter()
+        .map(|a| w::WasmAttrString {
+            attribute: a.attribute.to_string(),
+            key: a.key.to_string(),
+            literal: a.literal.to_string(),
+            owner: a.owner.as_ref().map(|o| o.to_string()),
+            span: to_wit_span(a.span),
+        })
+        .collect();
+    if !attr_strings.is_empty() {
+        data.attr_strings.insert(path, attr_strings);
     }
 }
 
@@ -330,6 +345,13 @@ impl bindings::PluginImports for HostViewData {
             .unwrap_or_default()
     }
 
+    fn attr_strings_in(&mut self, path: String) -> Vec<w::WasmAttrString> {
+        self.attr_strings
+            .get(path.as_str())
+            .cloned()
+            .unwrap_or_default()
+    }
+
     fn read_file(&mut self, path: String) -> Option<Vec<u8>> {
         self.content_by_path.get(&path).cloned()
     }
@@ -370,6 +392,9 @@ impl findings_bindings::PluginFindingsImports for HostViewData {
     }
     fn call_sites_in(&mut self, path: String) -> Vec<w::WasmCallSite> {
         bindings::PluginImports::call_sites_in(self, path)
+    }
+    fn attr_strings_in(&mut self, path: String) -> Vec<w::WasmAttrString> {
+        bindings::PluginImports::attr_strings_in(self, path)
     }
     fn read_file(&mut self, path: String) -> Option<Vec<u8>> {
         bindings::PluginImports::read_file(self, path)

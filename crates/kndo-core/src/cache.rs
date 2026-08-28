@@ -59,7 +59,7 @@ use smol_str::SmolStr;
 /// it backwards costs six-plus identical edits for one fact, and silently under-invalidates
 /// when someone bumps five of six — which is exactly what happened when `FunctionMetrics` grew
 /// `shape_span`/`shape_ordinal`.
-pub const ENTRY_FORMAT_VERSION: u32 = 3;
+pub const ENTRY_FORMAT_VERSION: u32 = 4;
 const FACTS_MAGIC: [u8; 4] = *b"KNF1";
 const HEADER_LEN: usize = FACTS_MAGIC.len() + 4;
 
@@ -1097,6 +1097,7 @@ mod tests {
                 unit_parent: None,
                 test_spans: Vec::new(),
                 string_call_sites: Vec::new(),
+                string_attr_args: Vec::new(),
             }],
             vec![SymbolNode {
                 file: FileId(0),

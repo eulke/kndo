@@ -15,8 +15,10 @@
 //! field.
 
 use kndo_core::plugin::{
-    ActivationRule, AnnotationSink, ContentView, GraphView, Plugin, PluginDescriptor,
+    ActivationRule, AnnotationSink, ContentView, EdgeSink, GraphView, Plugin, PluginDescriptor,
+    PluginTarget,
 };
+use kndo_core::vocab::{Confidence, RefKind};
 use smol_str::SmolStr;
 
 pub struct SerdePlugin;
@@ -51,6 +53,35 @@ fn machinery_drives(trait_name: &str, member: &str) -> bool {
         .any(|(t, drives)| *t == trait_name && drives(member))
 }
 
+/// The `#[serde(...)]` keys whose value **names an item**, and the whole of what this plugin
+/// knows about attribute strings.
+///
+/// Everything else serde writes between quotes is data — `rename`, `rename_all`, `tag`,
+/// `content`, `crate`, `expecting`, `variant_identifier` — and this plugin ignores it, which
+/// is precisely the decision no adapter can make. Measured over the attributes the Rust
+/// adapter scans: serde alone writes 482 such key-value pairs, 248 of whose values collide
+/// with a real declaration in the crate, and only 176 of those sit under a key from this
+/// table. An adapter treating every collision as a reference would contribute 72 keep-alive
+/// edges in serde to close one real case, and every one of them silences a true finding.
+///
+/// The list is serde's field- and container-attribute reference, restricted to the keys whose
+/// documented value is a path: <https://serde.rs/field-attrs.html>. `remote` is here because
+/// its value names a type — it looked like noise in the first measurement and is not, which is
+/// exactly the kind of detail only serde's own plugin can be right about.
+const PATH_KEYS: &[&str] = &[
+    "skip_serializing_if",
+    "serialize_with",
+    "deserialize_with",
+    "with",
+    "default",
+    "getter",
+    "bound",
+    "remote",
+    "try_from",
+    "into",
+    "from",
+];
+
 impl Plugin for SerdePlugin {
     fn descriptor(&self) -> PluginDescriptor {
         PluginDescriptor {
@@ -67,6 +98,53 @@ impl Plugin for SerdePlugin {
 
     fn mutates_graph(&self) -> bool {
         true
+    }
+
+    /// A serde attribute naming a function is a call site the language cannot see: the
+    /// function's only caller is code serde's derive macro generates, which exists in no
+    /// source file. `#[serde(skip_serializing_if = "usize_is_zero")]` reads, to plain
+    /// reachability, as a struct field with a string on it — and `usize_is_zero` as dead code.
+    ///
+    /// The edge runs from the **decorated declaration** to the named item, which is the true
+    /// direction: the generated impl belongs to the type, so the function runs exactly when
+    /// that type is serialized. `Probable`, not `Certain`: the value may name a method rather
+    /// than a free function, or a same-named item that is not the one serde resolves.
+    ///
+    /// Scoped to the declaring file, because a `plugin-target` is `{path, symbol}` and the
+    /// attribute knows only a name. A value naming another module or crate
+    /// (`crate::util::is_zero`, `chrono::serde::ts_seconds`) therefore resolves to nothing and
+    /// is dropped — visible in `kndo doctor`'s dropped count, and the right outcome for a
+    /// cross-crate path either way. Reaching the cross-module case needs a project-wide target
+    /// form, which is a contract change, not something to approximate here.
+    fn contribute_edges(
+        &self,
+        graph: &GraphView<'_>,
+        _content: &ContentView<'_>,
+        out: &mut EdgeSink,
+    ) {
+        for file in graph.files() {
+            for attr in graph.attr_strings_in(&file.path) {
+                if attr.attribute != "serde" || !PATH_KEYS.contains(&attr.key.as_str()) {
+                    continue;
+                }
+                let Some(owner) = &attr.owner else {
+                    continue; // nothing to hang the edge on; contribute nothing
+                };
+                // The last segment: serde accepts a full path (`crate::util::is_zero`), and
+                // the target vocabulary is a declared name. A path into another crate simply
+                // resolves to nothing, which is the correct outcome for it.
+                let named = attr.literal.rsplit("::").next().unwrap_or_default();
+                if named.is_empty() {
+                    continue;
+                }
+                out.add(
+                    PluginTarget::symbol(file.path.clone(), owner.clone()),
+                    PluginTarget::symbol(file.path.clone(), SmolStr::new(named)),
+                    RefKind::Call,
+                    Confidence::Probable,
+                );
+            }
+        }
     }
 
     fn annotate_symbols(

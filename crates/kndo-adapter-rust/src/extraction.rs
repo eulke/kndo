@@ -95,6 +95,10 @@ struct PendingAttrs {
     /// Start of the first attribute in this pending run — a test region's extent covers the
     /// attributes that gate it (`FileFacts::test_spans` records `#[cfg(test)]`'s own line).
     attr_start: Option<(u32, u32)>,
+    /// `(attribute head, key, literal, the literal's span)` for every string written in this
+    /// run's attributes — held here rather than emitted on sight because the fact carries the
+    /// declaration it decorates, and `collect_attr` runs before that declaration exists.
+    attr_strings: Vec<(SmolStr, SmolStr, SmolStr, Span)>,
 }
 
 pub(crate) fn extract(path: &str, content: &[u8]) -> FileFacts {
@@ -1462,6 +1466,79 @@ fn collect_attr(item: Node, src: &[u8], pending: &mut PendingAttrs, out: &mut Fi
             scan_unknown_attr(attr, name, src, out);
         }
     }
+    // Independent of the match above, and deliberately: what a string inside an attribute
+    // MEANS is not this adapter's question (`FileFacts::string_attr_args`). Every attribute
+    // that could name an item records its `key = "literal"` pairs; the same
+    // lint/doc/cfg exclusion applies, because those keys are prose and config, never paths.
+    if !NON_ITEM_ATTRS.contains(&name) {
+        let before = pending.attr_strings.len();
+        // The arguments, or a bare `#[x = "v"]`'s value — never the whole attribute node,
+        // whose own head identifier would otherwise read as the key of a bare value.
+        if let Some(args) = attr.child_by_field_name("arguments") {
+            collect_attr_strings(args, src, &mut pending.attr_strings);
+        } else if let Some(value) = attr.child_by_field_name("value") {
+            collect_attr_strings(value, src, &mut pending.attr_strings);
+        }
+        for entry in &mut pending.attr_strings[before..] {
+            entry.0 = SmolStr::new(name);
+        }
+    }
+}
+
+/// Every string literal in an attribute's arguments, with the key it was written under —
+/// `("skip_serializing_if", "usize_is_zero")`, or an empty key for a bare
+/// `#[my_attr = "value"]`. The attribute head is filled in by the caller, which knows it.
+///
+/// Nesting is walked (`#[rkyv(attr(serde(rename = "x")))]`), and the key is always the
+/// identifier immediately before the `=`, at the literal's own level: an attribute grammar is
+/// token soup, and "the name written next to this string" is the most this adapter can say
+/// without knowing whose attribute it is.
+fn collect_attr_strings(node: Node, src: &[u8], out: &mut Vec<(SmolStr, SmolStr, SmolStr, Span)>) {
+    let mut cursor = node.walk();
+    let children: Vec<Node> = node.children(&mut cursor).collect();
+    for (i, tok) in children.iter().enumerate() {
+        if matches!(tok.kind(), "string_literal" | "raw_string_literal") {
+            // The key is the identifier immediately before the `=`, at this level. Anything
+            // else — a positional string, a nested call's argument — has no key, and saying
+            // so is the honest answer rather than reaching for a plausible neighbour.
+            let keyed =
+                i >= 2 && children[i - 1].kind() == "=" && children[i - 2].kind() == "identifier";
+            let key = if keyed {
+                SmolStr::new(text(children[i - 2], src))
+            } else {
+                SmolStr::default()
+            };
+            out.push((
+                SmolStr::default(), // the head, filled in by the caller
+                key,
+                SmolStr::new(unquote(text(*tok, src))),
+                span(*tok),
+            ));
+        } else if tok.child_count() > 0 {
+            collect_attr_strings(*tok, src, out);
+        }
+    }
+}
+
+/// A Rust string literal's content, quotes removed. Escapes are left exactly as written: this
+/// adapter is recording what the author typed, and a plugin matching a declaration name never
+/// wants an escape resolved (a name cannot contain one).
+fn unquote(literal: &str) -> &str {
+    // A raw string carries `n` hashes on each side of the quotes: `r"…"`, `r##"…"##`.
+    let (body, hashes) = match literal.strip_prefix('r') {
+        Some(rest) => {
+            let trimmed = rest.trim_start_matches('#');
+            (trimmed, rest.len() - trimmed.len())
+        }
+        None => (literal, 0),
+    };
+    let Some(inner) = body.strip_prefix('"') else {
+        return literal; // not a shape this function understands: return it whole
+    };
+    match inner.len().checked_sub(hashes + 1) {
+        Some(end) if inner[end..].starts_with('"') => &inner[..end],
+        _ => literal,
+    }
 }
 
 /// Attribute names whose arguments are lint paths, doc text, or config keys — never item
@@ -1716,7 +1793,95 @@ fn handle_item(item: Node, src: &[u8], ctx: &Ctx<'_>, pending: PendingAttrs, out
     // No per-declaration Test rooting here: `test_spans` (recorded by `walk_items`) is the
     // single producer-side declaration of test regions, and assembly derives the in-source
     // Test roots for span-contained declarations — one fact, one emitter.
-    let _ = decls_before;
+    flush_attr_strings(item, src, pending, decls_before, out);
+}
+
+/// Emits this item's [`kndo_core::adapter::StringAttrArg`]s, now that the declaration they
+/// decorate exists.
+///
+/// **The owner is the item's own declaration**, which is also the answer for an attribute
+/// written on a *field* or an enum variant: fields are not declarations in this adapter, and
+/// the struct is the honest owner of a field attribute anyway — serde's generated impl belongs
+/// to the type, so "if the struct is alive, that function runs" is exactly true. Blocks that
+/// declare nothing themselves (`impl`, `mod`, `trait`) get `None` rather than borrowing their
+/// first member's name.
+///
+/// Field and variant attributes are collected here rather than by the item walker because the
+/// walker only sees item-level attributes. Only the three body kinds that cannot contain a
+/// nested item are descended into — anything else would record a nested item's attributes
+/// twice, once here and once on its own pass.
+fn flush_attr_strings(
+    item: Node,
+    src: &[u8],
+    pending: PendingAttrs,
+    decls_before: usize,
+    out: &mut FileFacts,
+) {
+    let mut strings = pending.attr_strings;
+    if matches!(item.kind(), "struct_item" | "union_item" | "enum_item") {
+        if let Some(body) = item.child_by_field_name("body") {
+            let mut inner = Vec::new();
+            collect_inner_attr_strings(body, src, &mut inner);
+            strings.extend(inner);
+        }
+    }
+    if strings.is_empty() {
+        return;
+    }
+    let owner = match item.kind() {
+        "impl_item" | "mod_item" | "trait_item" => None,
+        _ => out
+            .declarations
+            .get(decls_before)
+            .map(|d| match &d.member_of {
+                Some(owner) => SmolStr::from(format!("{owner}.{}", d.name)),
+                None => d.name.clone(),
+            }),
+    };
+    for (attribute, key, literal, span) in strings {
+        out.string_attr_args
+            .push(kndo_core::adapter::StringAttrArg {
+                attribute,
+                key,
+                literal,
+                owner: owner.clone(),
+                span,
+            });
+    }
+}
+
+/// Every `attribute_item` inside a type body — field and variant attributes — with each
+/// attribute's own head as the recorded `attribute`.
+fn collect_inner_attr_strings(
+    node: Node,
+    src: &[u8],
+    out: &mut Vec<(SmolStr, SmolStr, SmolStr, Span)>,
+) {
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        if child.kind() == "attribute_item" {
+            let Some(attr) = child.named_child(0) else {
+                continue;
+            };
+            let Some(name) = attr.child(0).map(|n| text(n, src)) else {
+                continue;
+            };
+            if NON_ITEM_ATTRS.contains(&name) {
+                continue;
+            }
+            let before = out.len();
+            if let Some(args) = attr.child_by_field_name("arguments") {
+                collect_attr_strings(args, src, out);
+            } else if let Some(value) = attr.child_by_field_name("value") {
+                collect_attr_strings(value, src, out);
+            }
+            for entry in &mut out[before..] {
+                entry.0 = SmolStr::new(name);
+            }
+        } else if child.child_count() > 0 {
+            collect_inner_attr_strings(child, src, out);
+        }
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -5180,6 +5345,57 @@ mod undeclared_probe_tests {
         assert!(
             !specs.contains(&"internals") && !specs.contains(&"self::internals"),
             "the bare 2015-edition re-export expands to the same locations: {specs:?}"
+        );
+    }
+}
+
+#[cfg(test)]
+mod attr_string_tests {
+    use super::*;
+
+    #[test]
+    fn attribute_strings_are_recorded_with_their_key_and_owner() {
+        let facts = extract(
+            "src/lib.rs",
+            b"#[derive(serde::Serialize)]\n\
+              #[serde(rename_all = \"camelCase\")]\n\
+              pub struct Envelope {\n\
+              \x20   #[serde(skip_serializing_if = \"usize_is_zero\")]\n\
+              \x20   pub elided: usize,\n\
+              \x20   #[serde(rename = \"b\")]\n\
+              \x20   pub a: u32,\n\
+              }\n\
+              \n\
+              pub fn usize_is_zero(n: &usize) -> bool { *n == 0 }\n",
+        );
+        let seen: Vec<(&str, &str, &str, Option<&str>)> = facts
+            .string_attr_args
+            .iter()
+            .map(|a| {
+                (
+                    a.attribute.as_str(),
+                    a.key.as_str(),
+                    a.literal.as_str(),
+                    a.owner.as_deref(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            seen,
+            vec![
+                ("serde", "rename_all", "camelCase", Some("Envelope")),
+                (
+                    "serde",
+                    "skip_serializing_if",
+                    "usize_is_zero",
+                    Some("Envelope")
+                ),
+                ("serde", "rename", "b", Some("Envelope")),
+            ],
+            "the container attribute and both field attributes, each owned by the struct — the \
+             adapter records that a key carried a string and stops there: `rename` is a wire \
+             label and `skip_serializing_if` names a function, and telling them apart is serde's \
+             knowledge, not this grammar's"
         );
     }
 }

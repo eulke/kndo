@@ -2664,6 +2664,14 @@ pub fn assemble_from_source(
             }
             None => Vec::new(),
         };
+        let string_attr_args = match &claimed_per_file[i] {
+            Some(c) => {
+                let mut args = c.facts.string_attr_args.clone();
+                args.sort_unstable(); // canonical order invariant
+                args
+            }
+            None => Vec::new(),
+        };
         files.push(FileNode {
             path: df.path.clone(),
             content_hash: df.content_hash,
@@ -2674,6 +2682,7 @@ pub fn assemble_from_source(
             unit_parent,
             test_spans,
             string_call_sites,
+            string_attr_args,
         });
     }
 

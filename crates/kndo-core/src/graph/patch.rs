@@ -221,6 +221,9 @@ pub(crate) fn try_patch(
             let mut sites = claimed.facts.string_call_args.clone();
             sites.sort_unstable();
             graph.files[c].string_call_sites = sites;
+            let mut attrs = claimed.facts.string_attr_args.clone();
+            attrs.sort_unstable();
+            graph.files[c].string_attr_args = attrs;
             graph.patch_meta[c].surface_sig = Some(claimed.surface_sig);
         }
     }

@@ -193,6 +193,26 @@ interface types {
         span: wasm-span,
     }
 
+    /// One string literal written inside an attribute or annotation on a declaration —
+    /// `#[serde(skip_serializing_if = "usize_is_zero")]`, `@JsonDeserialize(using = "Foo")`.
+    /// The attribute sibling of `wasm-call-site`, and ecosystem-blind to the same degree:
+    /// the adapter records that a key carried a string, never that the string names an item.
+    /// It cannot know which: telling `skip_serializing_if = "f"` from `rename = "f"` requires
+    /// knowing what serde is, and an adapter that knew would be the coupling the
+    /// adapter/plugin split exists to prevent.
+    record wasm-attr-string {
+        /// The attribute's path as written: `serde`, `config`, `JsonDeserialize`.
+        attribute: string,
+        /// The key the literal sits under, or "" for a bare-value attribute (`#[path = "…"]`)
+        /// — empty is "no key", distinguishable from a key the plugin doesn't recognize.
+        key: string,
+        literal: string,
+        /// The decorated declaration (`Owner.name` form), or `none` when the attribute
+        /// decorates something that is not one. This is the `from` a contributed edge needs.
+        owner: option<string>,
+        span: wasm-span,
+    }
+
     /// A rule's declared severity — its own enum, never the host's finding
     /// severity: the host maps it under the advisory-channel rules, so a guest can
     /// never construct a gate-eligible severity directly.
@@ -247,6 +267,7 @@ world plugin {
         plugin-descriptor, file-class, plugin-target, contributed-root, contributed-edge,
         wasm-file-info, wasm-symbol-info, activation-rule, wasm-package-info,
         wasm-file-details, wasm-symbol-details, wasm-ref-site, wasm-call-site,
+        wasm-attr-string,
     };
 
     /// Host-provided graph queries — the guest calls these from inside `contribute-roots`/
@@ -285,6 +306,10 @@ world plugin {
     import importers-of: func(path: string) -> list<string>;
     import references-to: func(path: string, symbol: string) -> list<wasm-ref-site>;
     import call-sites-in: func(path: string) -> list<wasm-call-site>;
+    /// String literals inside attributes/annotations on a file's declarations. Its OWN
+    /// import, for the reason `symbol-implements` states above: a new record and a new
+    /// function are additive, and growing an existing record is not.
+    import attr-strings-in: func(path: string) -> list<wasm-attr-string>;
 
     /// Called once at load time; the host caches the result.
     export descriptor: func() -> plugin-descriptor;
@@ -315,6 +340,7 @@ world plugin-findings {
         plugin-descriptor, file-class, plugin-target, contributed-root, contributed-edge,
         wasm-file-info, wasm-symbol-info, activation-rule, wasm-package-info,
         wasm-file-details, wasm-symbol-details, wasm-ref-site, wasm-call-site,
+        wasm-attr-string,
         rule-descriptor, contributed-finding,
     };
 
@@ -337,6 +363,7 @@ world plugin-findings {
     import importers-of: func(path: string) -> list<string>;
     import references-to: func(path: string, symbol: string) -> list<wasm-ref-site>;
     import call-sites-in: func(path: string) -> list<wasm-call-site>;
+    import attr-strings-in: func(path: string) -> list<wasm-attr-string>;
 
     export descriptor: func() -> plugin-descriptor;
     export classify-file: func(path: string, current: file-class) -> option<file-class>;

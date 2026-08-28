@@ -27,6 +27,7 @@ fn surface_closure_promotes_transitive_members_of_surface_types_only() {
         unit_parent: None,
         test_spans: Vec::new(),
         string_call_sites: Vec::new(),
+        string_attr_args: Vec::new(),
     };
     let sym = |name: &str, vis: u8, member_of: Option<&str>, start: u32, end: u32| SymbolNode {
         file: FileId(0),

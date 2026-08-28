@@ -724,6 +724,28 @@ pub struct FileFacts {
     /// convention-bearing position in every motivating pattern — and only for direct
     /// literals, never computed strings (determinism over coverage).
     pub string_call_args: Vec<StringCallArg>,
+    /// String literals written inside an **attribute or annotation** on a declaration:
+    /// `#[serde(skip_serializing_if = "usize_is_zero")]`, `@JsonDeserialize(using =
+    /// "FooDeserializer")`. The attribute sibling of [`Self::string_call_args`], and
+    /// ecosystem-blind for the same reason and to the same degree: the adapter records
+    /// *"this attribute wrote this string under this key"*, never that the string names a
+    /// function.
+    ///
+    /// It cannot record more than that, and the measurement says so. Over the attributes the
+    /// Rust adapter already scans, 482 key-value pairs in serde alone have a value shaped
+    /// like an identifier, 248 collide with a real declaration in the repo, and only 176 of
+    /// those sit under a key that names an item — leaving 72 pairs where `tag = "type"`,
+    /// `content = "content"` or `rename = "b"` happens to match something declared elsewhere.
+    /// An adapter that treated a collision as a reference would contribute 72 keep-alive
+    /// edges in one crate to resolve one real case, and each one silences a true finding.
+    /// Telling `skip_serializing_if = "foo"` from `rename = "foo"` requires knowing what
+    /// serde is, and knowing that is the plugin's job — which is exactly why the fact stops
+    /// at the key.
+    ///
+    /// Optional per adapter, default empty (same contract posture as
+    /// [`Self::string_call_args`]); Rust implements it first. Read by plugins through
+    /// `GraphView::attr_strings_in` (natively) or `attr-strings-in` (WASM).
+    pub string_attr_args: Vec<StringAttrArg>,
     /// Member type facts (the cross-file tier): what accessing a member of
     /// a type YIELDS, as declared in this file — a struct field's annotated type, a
     /// method's return type, an associated const's type. Pure resolution metadata (no
@@ -887,6 +909,50 @@ pub struct StringCallArg {
     #[rkyv(with = crate::rkyv_support::SmolStrAsString)]
     pub literal: SmolStr,
     /// The whole call expression's extent.
+    pub span: Span,
+}
+
+/// One [`FileFacts::string_attr_args`] entry — the same persistence posture as
+/// [`StringCallArg`], for the same reason.
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    serde::Serialize,
+    serde::Deserialize,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+)]
+pub struct StringAttrArg {
+    /// The attribute's own path as written, dotted form: `serde`, `config`, `clap`,
+    /// `JsonDeserialize`. No resolution and no import following — the *syntactic* head is
+    /// what a convention matches on, and a plugin that cares about `serde` cares about the
+    /// word the author typed.
+    #[rkyv(with = crate::rkyv_support::SmolStrAsString)]
+    pub attribute: SmolStr,
+    /// The key this literal was written under — `skip_serializing_if`, `rename`, `using`.
+    /// **Empty when the attribute takes a bare value** (`#[path = "…"]`, `#[doc = "…"]`), so
+    /// a plugin can still tell "no key" from a key it does not recognize.
+    #[rkyv(with = crate::rkyv_support::SmolStrAsString)]
+    pub key: SmolStr,
+    /// The literal's value, unescaped.
+    #[rkyv(with = crate::rkyv_support::SmolStrAsString)]
+    pub literal: SmolStr,
+    /// The declaration the attribute decorates, in the same `Owner.name` form targets use —
+    /// `None` when the attribute decorates something that is not a declaration (a module, a
+    /// statement, a crate root).
+    ///
+    /// This is what makes an edge possible at all: a plugin's contributed reference needs a
+    /// `from`, and "the item this was written on" is the only honest one. Without it the
+    /// best a plugin could do is root the target, which keeps it alive but says nothing about
+    /// who uses it.
+    #[rkyv(with = rkyv::with::Map<crate::rkyv_support::SmolStrAsString>)]
+    pub owner: Option<SmolStr>,
+    /// The attribute's extent.
     pub span: Span,
 }
 

@@ -542,8 +542,41 @@ pub struct FileFacts {
                                              // extents only; regions never overlap. Empty
                                              // for per-file test detection (JS/TS, Go).
                                              // Consumers — see below.
+    pub string_call_args:                    // PLUGIN FUEL, ecosystem-blind. `(callee dotted
+        Vec<StringCallArg>,                  // path, first string-literal argument, span)`:
+                                             // `res.render("index")`, `app.get("/users", …)`.
+                                             // The adapter records that a call carried a
+                                             // literal, never what a framework means by it.
+                                             // First literal argument only, direct literals
+                                             // only. Optional per adapter, default empty;
+                                             // JS/TS first.
+    pub string_attr_args:                    // Its ATTRIBUTE sibling. `(attribute head, key,
+        Vec<StringAttrArg>,                  // literal, decorated declaration, span)`:
+                                             // `#[serde(skip_serializing_if = "is_zero")]`.
+                                             // Key empty for a bare `#[x = "v"]`; owner None
+                                             // when the attribute decorates a block rather
+                                             // than a declaration. Optional per adapter,
+                                             // default empty; Rust first.
 }
 ```
+
+**`string_call_args` / `string_attr_args` — the two ecosystem-blind literal facts.** Both
+exist so a plugin can build a framework convention on what the adapter already parsed instead
+of re-parsing claimed source through the content channel, and both stop at the same line: the
+adapter records *what was written*, never what it means. That line is not stylistic. Over the
+attributes the Rust adapter scans, serde alone writes 482 `key = "literal"` pairs whose value
+is identifier-shaped; 248 of those values collide with a real declaration in the crate, and
+only 176 sit under a key whose value serde actually resolves as a path. An adapter that
+treated a collision as a reference would contribute 72 keep-alive edges in one crate to close
+one real case — and a keep-alive edge silences a true finding. Telling
+`skip_serializing_if = "f"` from `rename = "f"` requires knowing what serde is, and an adapter
+that knew would be the adapter/plugin coupling §0.2 exists to prevent.
+
+Both travel the same road: `FileFacts` → `FileNode` (canonically sorted, so the graph snapshot
+round-trips them) → `GraphView::string_call_sites_in` / `attr_strings_in` natively, or
+`call-sites-in` / `attr-strings-in` over the WASM ABI. **No analysis consumes either.** A
+change to their shape is a change to the facts contract: bump `cache::ENTRY_FORMAT_VERSION`,
+not a per-adapter `facts_schema_version`. An adapter beginning to *emit* one bumps its own.
 
 **`test_spans` (added M5, surfaced by the Rust adapter):** the file's *role* stays a per-path,
 claim-time axis; this field is the extraction-side truth that a *region* of a production file
@@ -783,7 +816,8 @@ pub trait Plugin: Send + Sync {
   spellings is how those two would come to disagree about the same run.
 
 - **Landed (M5).** `GraphView<'a>` borrows the graph's own `files`/`symbols` (built, never
-  copied) and exposes `files()` plus `symbols_in(path)` — the latter backed by a one-time
+  copied) and exposes `files()` plus `symbols_in(path)` (and the two literal readers above,
+  `string_call_sites_in(path)` / `attr_strings_in(path)`) — `symbols_in` backed by a one-time
   `FileId -> [symbol index]` map built when the view is constructed, so a plugin walking every
   file's symbols costs `O(files + symbols)`, not `O(files * symbols)`. `RootSink`/`EdgeSink`/
   `AnnotationSink` are **write-only and id-free**: every call takes a `PluginTarget { path:

@@ -275,15 +275,22 @@ shape every other host-mediated lookup in this ABI already has.
   (name/kind/exported/member-of) never gain fields — growing a record is a breaking change in
   the component model. Everything else the graph stably holds arrives through the additive
   imports `packages`/`package-of`, `file-details`/`symbol-details`, `symbol-implements`,
-  `imports-of`/`importers-of`/`references-to`, and `call-sites-in` (each with its own new
-  record type — `wasm-package-info`, `wasm-file-details`, `wasm-symbol-details`,
-  `wasm-ref-site`, `wasm-call-site`, `wasm-span`; `symbol-implements` needs none, it answers
-  `option<string>`). `symbol-implements` is the rule applied to itself: the trait/protocol
+  `imports-of`/`importers-of`/`references-to`, `call-sites-in`, and `attr-strings-in` (each
+  with its own new record type — `wasm-package-info`, `wasm-file-details`,
+  `wasm-symbol-details`, `wasm-ref-site`, `wasm-call-site`, `wasm-attr-string`, `wasm-span`;
+  `symbol-implements` needs none, it answers `option<string>`). `symbol-implements` is the rule applied to itself: the trait/protocol
   whose implementation declares a member is a new fact, and it arrived as its own import
   rather than a field on `wasm-symbol-details`, which is just as frozen in practice as the v1
   records once a component is built against it. It is what lets a THIRD-PARTY conventions
   plugin be its curated table, exactly like the built-in `kndo:serde`/`kndo:rkyv`/
-  `kndo:wasmtime`, instead of asking for source access and re-parsing a grammar. All answer from the same
+  `kndo:wasmtime`, instead of asking for source access and re-parsing a grammar.
+  `attr-strings-in` is the same rule applied a second time, and the pair it completes says
+  what the rule is *for*: `call-sites-in` carries string literals written in a call,
+  `attr-strings-in` carries them written in an attribute or annotation, and neither says what
+  the string means. `#[serde(skip_serializing_if = "is_zero")]` names a function and
+  `#[serde(rename = "is_zero")]` names a wire label; only a plugin that knows serde can tell
+  them apart, and putting that knowledge in the record — or in an adapter — is the coupling
+  the split exists to prevent. All answer from the same
   pre-instantiation snapshot as `list-files`/`symbols-in`, sorted and deterministic, and from
   **adapter-derived data only** (RFC 0017 §2's rule R1): no plugin ever observes another
   plugin's contributions, which is what keeps runs identical across plugin compositions. The

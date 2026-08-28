@@ -797,6 +797,15 @@ struct RunInfo<'a> {
     abstained: &'a [crate::analysis::Abstention],
 }
 
+/// `serde(skip_serializing_if)`'s predicate for the counts an envelope omits when they are
+/// zero. Reachable from nowhere but an attribute string — which is precisely why it is here:
+/// this file once carried an `Option<usize>` chosen to avoid needing it, because kndo could
+/// not see the reference and reported this function dead. `kndo:serde` reads the attribute
+/// now, so the encoding is free to be the one the format wants.
+fn usize_is_zero(n: &usize) -> bool {
+    *n == 0
+}
+
 /// The full `--format json` envelope shape — also the schema
 /// generator's root type (`cargo xtask gen-schema`, gated behind the `schema` feature): the
 /// JSON Schema is derived from this struct, not maintained as a second hand-written document.
@@ -820,11 +829,12 @@ struct Envelope<'a> {
     /// `--only`'s narrowing, absent when nothing was narrowed away. Beside `suppressed`
     /// rather than inside it: the two are different answers about why a finding is not here.
     ///
-    /// `Option` rather than a `skip_serializing_if` predicate on a `usize`: serde would need
-    /// a named local function for that, and a function reachable only from an attribute
-    /// string is invisible to every call-graph tool — this one included.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    elided: Option<usize>,
+    /// `default` alongside the skip, like `fixed` above: schemars derives a field's
+    /// *required*-ness from whether it has a default, not from the skip predicate — without
+    /// it the committed schema demands a key the output legitimately omits, and
+    /// `schema_validation` catches it.
+    #[serde(default, skip_serializing_if = "usize_is_zero")]
+    elided: usize,
     #[serde(skip_serializing_if = "Option::is_none")]
     baseline: Option<&'a BaselineSummary>,
     suppressed: SuppressedSummary,
@@ -851,7 +861,7 @@ impl RunResult {
             fixed: &self.fixed,
             health: self.health.as_ref(),
             budget: self.budget.as_ref(),
-            elided: (self.elided > 0).then_some(self.elided),
+            elided: self.elided,
             baseline: self.baseline.as_ref(),
             suppressed: self.suppressed,
             diagnostics: &self.diagnostics,
@@ -4356,6 +4366,7 @@ mod tests {
             unit_parent: None,
             test_spans: vec![],
             string_call_sites: vec![],
+            string_attr_args: vec![],
         };
         graph.files.push(file("pkg/a.go"));
         graph.files.push(file("github.com/x/y/pkg/b.go")); // pathological: matches as-is

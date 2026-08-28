@@ -397,6 +397,20 @@ impl<'a> GraphView<'a> {
             .unwrap_or(&[])
     }
 
+    /// `path`'s attribute string literals ([`crate::adapter::FileFacts::string_attr_args`]),
+    /// canonically sorted; empty for an unknown path or an adapter that doesn't extract them.
+    ///
+    /// The entries say what was written, not what it means. Deciding that
+    /// `skip_serializing_if = "foo"` names a function while `rename = "foo"` names a wire
+    /// label is the reading plugin's job, and the only place that knowledge can live without
+    /// teaching an adapter what serde is.
+    pub fn attr_strings_in(&self, path: &ProjectPath) -> &'a [crate::adapter::StringAttrArg] {
+        self.file_index
+            .get(path)
+            .map(|f| self.files[f.0 as usize].string_attr_args.as_slice())
+            .unwrap_or(&[])
+    }
+
     /// Every adapter-derived reference edge as `(target path, target bare name, site)` — the
     /// bulk counterpart of [`Self::references_to`]: host bridges snapshot reference sites in
     /// one pass before instantiating a guest (the wasm-abi borrow constraint), while import
@@ -1058,6 +1072,7 @@ mod tests {
             unit_parent: None,
             test_spans: Vec::new(),
             string_call_sites: Vec::new(),
+            string_attr_args: Vec::new(),
         }
     }
 

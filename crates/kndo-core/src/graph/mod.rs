@@ -48,6 +48,12 @@ pub struct FileNode {
     /// [`crate::plugin::GraphView::string_call_sites_in`] (natively) or `call-sites-in`
     /// (WASM) on warm paths too — no analysis consumes them directly; they are plugin fuel.
     pub string_call_sites: Vec<crate::adapter::StringCallArg>,
+    /// Attribute string literals ([`crate::adapter::FileFacts::string_attr_args`]),
+    /// canonically sorted. Same posture as [`Self::string_call_sites`] and here for the same
+    /// reason: no analysis consumes them, and a plugin must be able to read them on a warm
+    /// run too — through [`crate::plugin::GraphView::attr_strings_in`] (natively) or
+    /// `attr-strings-in` (WASM).
+    pub string_attr_args: Vec<crate::adapter::StringAttrArg>,
 }
 
 /// Whether `span` lies inside any of `regions` — inclusive containment on the `(line,

@@ -798,6 +798,57 @@ fn libsass_compilation_is_gated_by_the_pom_declaration() {
     assert_contributed(&with, "kndo:libsass-maven-plugin", 0, 1, 0);
 }
 
+#[test]
+fn serde_attribute_paths_are_gated_by_the_manifest() {
+    // kndo's own shape, reduced: a predicate named only by `skip_serializing_if`. Its caller
+    // is code serde's derive macro generates, which exists in no source file — so plain
+    // reachability sees a struct field carrying a string and a function nobody calls. kndo
+    // reported exactly this about itself, and the tree was reshaped to dodge it.
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    write(
+        root,
+        "src/lib.rs",
+        "#[derive(serde::Serialize)]\n         pub struct Envelope {\n         \x20   #[serde(skip_serializing_if = \"usize_is_zero\")]\n         \x20   pub elided: usize,\n         \x20   // A wire label that collides with a real declaration. The adapter records\n         \x20   // this string exactly like the one above; only the plugin's key table tells\n         \x20   // them apart, and getting it wrong here would keep `unrelated` alive.\n         \x20   #[serde(rename = \"unrelated\")]\n         \x20   pub a: u32,\n         }\n         \n         fn usize_is_zero(n: &u32) -> bool {\n    *n == 0\n}\n         \n         fn unrelated() -> u32 {\n    7\n}\n         \n         pub fn build() -> Envelope {\n    Envelope { elided: 0, a: 1 }\n}\n",
+    );
+
+    let manifest = "[package]\nname = \"f\"\nversion = \"0.1.0\"\n";
+    write(root, "Cargo.toml", manifest);
+    let without = check(root);
+    let unused_without = findings_of(&without, "unused");
+    assert!(
+        unused_without.contains(&"src/lib.rs#usize_is_zero".to_string()),
+        "a function named only by an attribute string is invisible to the call graph: the \
+         baseline must fire, or this proof is vacuous: {unused_without:?}"
+    );
+    assert!(!active_ids(root).contains(&"kndo:serde".to_string()));
+
+    write(
+        root,
+        "Cargo.toml",
+        &format!("{manifest}\n[dependencies]\nserde = \"1\"\n"),
+    );
+    let with = check(root);
+    let unused_with = findings_of(&with, "unused");
+    assert!(
+        !unused_with.contains(&"src/lib.rs#usize_is_zero".to_string()),
+        "`skip_serializing_if` names a function serde calls: {unused_with:?}"
+    );
+    // The whole point of the key table, asserted rather than assumed: `rename`'s value is a
+    // wire label, and a plugin that treated every attribute string as a path would keep
+    // `unrelated` alive here — 72 such collisions in serde's own repo alone, each one a true
+    // finding silenced.
+    assert!(
+        unused_with.contains(&"src/lib.rs#unrelated".to_string()),
+        "`rename` names data, not an item — a declaration that merely shares the name stays \
+         reported: {unused_with:?}"
+    );
+
+    // Exactly one edge: the `skip_serializing_if` value. No roots, no annotations — the
+    // fixture's only impl is derived, and a derived impl declares nothing to mark.
+    assert_contributed(&with, "kndo:serde", 0, 1, 0);
+}
+
 /// Every id proven above, one line per `#[test]`. The list is written out rather than derived
 /// so that adding a plugin and adding its proof are two deliberate edits: a derived list would
 /// close the gate against itself and prove nothing.

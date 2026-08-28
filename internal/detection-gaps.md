@@ -340,6 +340,42 @@ read exactly the non-source files (`Info.plist`, `templates/**`, `rollup.config.
 graph never sees, and contribute the root or the edge. Not `[[externally-invoked]]`: there is no
 marker on the declaration to match, the name lives in the other file.
 
+## 14-bis. A name written inside an ATTRIBUTE, not a config file (RESUELTO)
+
+§14's siblings all live in a file the language graph never opens. This one lives in the source
+itself, and was invisible anyway: `#[serde(skip_serializing_if = "usize_is_zero")]` names a
+function whose only caller is code serde's derive macro generates. The attr-ident scan (§2)
+does not reach it — a `string_literal` is not an `identifier` token, and `emit_attr_path`
+requires an uppercase initial for a lone segment besides.
+
+kndo reported it **about its own tree**, and the tree was changed to avoid the finding: an
+envelope field became `Option<usize>` purely so no named predicate would be needed. A tool
+whose own source is shaped around what it cannot see is the worst version of this gap, so it
+is the one that got fixed.
+
+**Three layers, and the middle one is the point.** The adapter records
+`FileFacts::string_attr_args` — attribute head, key, literal, decorated declaration — and
+emits no reference. The core carries the fact to `FileNode`, `GraphView::attr_strings_in` and
+the WASM import `attr-strings-in`. `kndo:serde` holds the key table and contributes the edge.
+
+**Why the adapter cannot do it alone, measured.** Over the attributes the Rust adapter already
+scans: serde writes 482 identifier-shaped `key = "literal"` pairs, 248 of whose values collide
+with a real declaration in the crate, and only 176 sit under a key serde resolves as a path —
+leaving **72 pairs** where `tag = "type"` or `rename = "b"` merely happens to match something
+declared elsewhere. tokio adds 2, alacritty 4, ripgrep 0. An adapter treating a collision as a
+reference would contribute 78 keep-alive edges across the corpus to close one real case, and
+every keep-alive edge silences a true finding. RFC 0012 §2 says degrade toward keeping alive,
+but keeping alive blindly at that ratio is how a tool stops finding things. Telling
+`skip_serializing_if = "f"` from `rename = "f"` requires knowing what serde is — the coupling
+§0.2 of the fix plan exists to prevent.
+
+**Field test:** +0/−0 across all thirteen corpus repositories (the 0-FP prediction, confirmed),
+and `dogfood` green with the `Option<usize>` workaround reverted — red the moment
+`kndo:serde`'s key table is emptied, so the mechanism is what carries it.
+
+Generalizes: Java and Kotlin annotations take string arguments and Swift has attributes; the
+fact is optional per adapter, like `string_call_args`.
+
 ## 15. A published library's public API with no in-repo consumer (POLICY — Rust instance no longer reproduces)
 
 ripgrep's `grep-searcher` exports `Bytes` and `Lossy` sinks that nothing inside the repository
