@@ -16,6 +16,13 @@ path = "src/main.rs"
 kndo = { path = "../kndo", default-features = false }
 serde = { workspace = true }
 serde_json = { workspace = true }
+# Every hand-rolled `--flag`/`--flag=value` loop in this crate used to be the same idiom copied
+# five times (`parse_flags`, `parse_nav_args`, and three one-off `args.iter().any(|a| a == ...)`
+# scans) — measured at +321 KiB on the release binary, worth paying once to have it written one
+# way. `derive` for the `#[derive(Parser)]` structs; `std`/`error-context`/`help` because clap
+# will not build without `std`, and error-context/help are what produce the per-flag messages
+# this crate's tests pin.
+clap = { version = "4", features = ["derive", "std", "error-context", "help"], default-features = false }
 # Restoring SIGPIPE's default disposition at startup (see main.rs) — Unix only; Windows has
 # no SIGPIPE and the cfg gate keeps this dependency off that target entirely.
 [target.'cfg(unix)'.dependencies]

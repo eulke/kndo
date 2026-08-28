@@ -15,84 +15,63 @@ use crate::render;
 /// silently dropping them.
 const MAX_QUERY_BATCH: usize = 1000;
 
-#[cfg_attr(test, derive(Debug))]
-struct NavArgs {
-    selectors: Vec<String>,
-    flags: QueryFlags,
-    format: Option<String>,
-}
-
 /// Nav verbs use `--color` for the reachability-color filter (`find --color
 /// unreachable|test-only|…`), not for terminal-color control like `check`'s `--color
 /// always|never` — the flag name belongs to `find`'s filter, and no nav verb
 /// needs a terminal-color override of its own; TTY/`NO_COLOR` auto-detection alone decides that.
-fn parse_nav_args(args: &[String]) -> Result<NavArgs, String> {
-    let mut selectors = Vec::new();
-    let mut flags = QueryFlags::default();
-    let mut format = None;
-
-    let mut it = args.iter();
-    while let Some(arg) = it.next() {
-        match arg.as_str() {
-            "--kind" => flags.kind = Some(next_value(&mut it, "--kind")?),
-            "--color" => flags.color = Some(next_value(&mut it, "--color")?),
-            "--lang" => flags.lang = Some(next_value(&mut it, "--lang")?),
-            "--depth" => {
-                let raw = next_value(&mut it, "--depth")?;
-                flags.depth = Some(
-                    raw.parse()
-                        .map_err(|_| format!("--depth `{raw}` is not a number"))?,
-                );
-            }
-            "--transitive" => flags.transitive = true,
-            "--edges" => flags.edges = Some(next_value(&mut it, "--edges")?),
-            "--split-by-color" => {} // by_color is always computed; flag accepted for parity
-            "--if-deleted" => flags.if_deleted = true,
-            "--all" => flags.all = true,
-            "--max-paths" => {
-                let raw = next_value(&mut it, "--max-paths")?;
-                flags.max_paths = Some(
-                    raw.parse()
-                        .map_err(|_| format!("--max-paths `{raw}` is not a number"))?,
-                );
-            }
-            "--roots" => flags.roots = Some(next_value(&mut it, "--roots")?),
-            "--pair" => {
-                let raw = next_value(&mut it, "--pair")?;
-                let (a, b) = raw
-                    .split_once(',')
-                    .ok_or_else(|| format!("--pair `{raw}` must be `A,B`"))?;
-                flags.pairs.push((a.to_string(), b.to_string()));
-            }
-            "--limit" => {
-                let raw = next_value(&mut it, "--limit")?;
-                flags.limit = Some(
-                    raw.parse()
-                        .map_err(|_| format!("--limit `{raw}` is not a number"))?,
-                );
-            }
-            "--format" => format = Some(next_value(&mut it, "--format")?),
-            s if s.starts_with("--format=") => format = Some(s["--format=".len()..].to_string()),
-            s if s.starts_with("--kind=") => flags.kind = Some(s["--kind=".len()..].to_string()),
-            s if s.starts_with("--color=") => flags.color = Some(s["--color=".len()..].to_string()),
-            s if s.starts_with("--lang=") => flags.lang = Some(s["--lang=".len()..].to_string()),
-            s if s.starts_with("--edges=") => flags.edges = Some(s["--edges=".len()..].to_string()),
-            s if s.starts_with("--roots=") => flags.roots = Some(s["--roots=".len()..].to_string()),
-            s if s.starts_with("--") => return Err(format!("unknown flag `{s}`")),
-            positional => selectors.push(positional.to_string()),
-        }
-    }
-    Ok(NavArgs {
-        selectors,
-        flags,
-        format,
-    })
+#[derive(Debug, clap::Parser)]
+struct NavArgs {
+    selectors: Vec<String>,
+    #[arg(long)]
+    kind: Option<String>,
+    #[arg(long)]
+    color: Option<String>,
+    #[arg(long)]
+    lang: Option<String>,
+    #[arg(long)]
+    depth: Option<u32>,
+    #[arg(long)]
+    transitive: bool,
+    #[arg(long)]
+    edges: Option<String>,
+    // `by_color` is always computed; the flag is accepted for parity with older docs/muscle
+    // memory and otherwise does nothing.
+    #[arg(long = "split-by-color")]
+    split_by_color: bool,
+    #[arg(long = "if-deleted")]
+    if_deleted: bool,
+    #[arg(long)]
+    all: bool,
+    #[arg(long = "max-paths")]
+    max_paths: Option<usize>,
+    #[arg(long)]
+    roots: Option<String>,
+    #[arg(long, value_parser = parse_pair)]
+    pair: Vec<(String, String)>,
+    #[arg(long)]
+    limit: Option<usize>,
+    #[arg(long)]
+    format: Option<String>,
 }
 
-fn next_value(it: &mut std::slice::Iter<'_, String>, flag: &str) -> Result<String, String> {
-    it.next()
-        .cloned()
-        .ok_or_else(|| format!("{flag} needs a value"))
+/// clap's `value_parser = parse_pair` names this function as a bare, lowercase attribute value
+/// — the exact shape `emit_attr_path` (kndo-adapter-rust) deliberately does not treat as a
+/// reference, per the measured false-positive rate (78 of 79 candidates on serde alone) that
+/// ruled out relaxing that guard.
+// kndo:allow unused only visible reference is inside clap's `#[arg(value_parser = ...)]`, a bare lowercase attribute value the Rust adapter deliberately does not scan (measured 78/79 FP rate)
+fn parse_pair(raw: &str) -> Result<(String, String), String> {
+    raw.split_once(',')
+        .map(|(a, b)| (a.to_string(), b.to_string()))
+        .ok_or_else(|| format!("--pair `{raw}` must be `A,B`"))
+}
+
+/// Every nav verb's own dispatch parses through here, so a typo'd `--kidn` or a missing value
+/// on `--depth` is a hard error naming the flag, not a silently-ignored no-op — clap owns the
+/// exact wording; every caller of this only depends on the flag name appearing in it.
+fn parse_nav_args(args: &[String]) -> Result<NavArgs, String> {
+    use clap::Parser;
+    NavArgs::try_parse_from(std::iter::once("kndo".to_string()).chain(args.iter().cloned()))
+        .map_err(|e| e.to_string())
 }
 
 /// Shared setup for every single-shot nav command: open the engine, run one `QueryRequest`,
@@ -122,7 +101,20 @@ fn run_one(verb: Verb, args: &[String]) -> ExitCode {
         id: None,
         verb,
         selectors: parsed.selectors,
-        flags: parsed.flags,
+        flags: QueryFlags {
+            kind: parsed.kind,
+            color: parsed.color,
+            lang: parsed.lang,
+            depth: parsed.depth,
+            transitive: parsed.transitive,
+            edges: parsed.edges,
+            all: parsed.all,
+            max_paths: parsed.max_paths,
+            roots: parsed.roots,
+            pairs: parsed.pair,
+            limit: parsed.limit,
+            if_deleted: parsed.if_deleted,
+        },
     });
 
     render_and_print(&result, parsed.format.as_deref());
@@ -324,11 +316,11 @@ mod tests {
             "json",
         ]))
         .unwrap();
-        assert_eq!(parsed.flags.kind.as_deref(), Some("function"));
-        assert_eq!(parsed.flags.color.as_deref(), Some("unreachable"));
-        assert_eq!(parsed.flags.lang.as_deref(), Some("rust"));
-        assert_eq!(parsed.flags.edges.as_deref(), Some("imports"));
-        assert_eq!(parsed.flags.roots.as_deref(), Some("production"));
+        assert_eq!(parsed.kind.as_deref(), Some("function"));
+        assert_eq!(parsed.color.as_deref(), Some("unreachable"));
+        assert_eq!(parsed.lang.as_deref(), Some("rust"));
+        assert_eq!(parsed.edges.as_deref(), Some("imports"));
+        assert_eq!(parsed.roots.as_deref(), Some("production"));
         assert_eq!(parsed.format.as_deref(), Some("json"));
     }
 
@@ -343,11 +335,11 @@ mod tests {
             "--format=agent",
         ]))
         .unwrap();
-        assert_eq!(parsed.flags.kind.as_deref(), Some("method"));
-        assert_eq!(parsed.flags.color.as_deref(), Some("test-only"));
-        assert_eq!(parsed.flags.lang.as_deref(), Some("go"));
-        assert_eq!(parsed.flags.edges.as_deref(), Some("references"));
-        assert_eq!(parsed.flags.roots.as_deref(), Some("test"));
+        assert_eq!(parsed.kind.as_deref(), Some("method"));
+        assert_eq!(parsed.color.as_deref(), Some("test-only"));
+        assert_eq!(parsed.lang.as_deref(), Some("go"));
+        assert_eq!(parsed.edges.as_deref(), Some("references"));
+        assert_eq!(parsed.roots.as_deref(), Some("test"));
         assert_eq!(parsed.format.as_deref(), Some("agent"));
     }
 
@@ -355,13 +347,15 @@ mod tests {
     fn numeric_flags_parse_and_reject_non_numbers() {
         let parsed =
             parse_nav_args(&args(&["--depth", "3", "--max-paths", "2", "--limit", "5"])).unwrap();
-        assert_eq!(parsed.flags.depth, Some(3));
-        assert_eq!(parsed.flags.max_paths, Some(2));
-        assert_eq!(parsed.flags.limit, Some(5));
+        assert_eq!(parsed.depth, Some(3));
+        assert_eq!(parsed.max_paths, Some(2));
+        assert_eq!(parsed.limit, Some(5));
+        // clap's own message for a bad numeric value (e.g. "invalid digit found in string")
+        // replaces the hand-written "not a number" text; every caller only depends on the flag
+        // name appearing in the error, which it still does.
         for flag in ["--depth", "--max-paths", "--limit"] {
             let err = parse_nav_args(&args(&[flag, "abc"])).unwrap_err();
             assert!(err.contains(flag), "{err}");
-            assert!(err.contains("not a number"), "{err}");
         }
     }
 
@@ -370,7 +364,7 @@ mod tests {
         let parsed =
             parse_nav_args(&args(&["--pair", "a.rs,b.rs", "--pair", "c.rs,d.rs"])).unwrap();
         assert_eq!(
-            parsed.flags.pairs,
+            parsed.pair,
             vec![
                 ("a.rs".to_string(), "b.rs".to_string()),
                 ("c.rs".to_string(), "d.rs".to_string()),
@@ -389,25 +383,28 @@ mod tests {
             "--split-by-color",
         ]))
         .unwrap();
-        assert!(parsed.flags.transitive);
-        assert!(parsed.flags.if_deleted);
-        assert!(parsed.flags.all);
+        assert!(parsed.transitive);
+        assert!(parsed.if_deleted);
+        assert!(parsed.all);
     }
 
     #[test]
     fn unknown_flag_and_missing_value_are_errors() {
+        // clap's own wording ("unexpected argument", "a value is required for") replaces the
+        // hand-written phrasing; what every caller actually depends on is the flag name
+        // appearing in the error, which both assertions still check.
         let err = parse_nav_args(&args(&["--nope"])).unwrap_err();
-        assert!(err.contains("unknown flag `--nope`"), "{err}");
+        assert!(err.contains("--nope"), "{err}");
         let err = parse_nav_args(&args(&["--kind"])).unwrap_err();
-        assert!(err.contains("--kind needs a value"), "{err}");
+        assert!(err.contains("--kind"), "{err}");
     }
 
     #[test]
     fn flags_and_selectors_interleave() {
         let parsed = parse_nav_args(&args(&["foo", "--kind", "class", "bar", "--all"])).unwrap();
         assert_eq!(parsed.selectors, vec!["foo", "bar"]);
-        assert_eq!(parsed.flags.kind.as_deref(), Some("class"));
-        assert!(parsed.flags.all);
+        assert_eq!(parsed.kind.as_deref(), Some("class"));
+        assert!(parsed.all);
     }
 
     // ------------------------------------------------------------ parse_query_lines

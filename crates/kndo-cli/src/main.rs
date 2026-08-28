@@ -152,8 +152,23 @@ const PRE_COMMIT_HOOK: &str = "#!/bin/sh\nexec kndo check --staged --fail-on war
 /// surprising action for a tool to take on its own. Default behavior only *prints* the
 /// recommended hook and how to install it; `--hook` opts into actually writing it, and even
 /// then only when `.git/hooks/pre-commit` doesn't already exist.
+#[derive(clap::Parser)]
+struct InitArgs {
+    #[arg(long)]
+    hook: bool,
+}
+
 fn init_cmd(args: &[String]) -> ExitCode {
-    let install_hook = args.iter().any(|a| a == "--hook");
+    use clap::Parser;
+    let install_hook = match InitArgs::try_parse_from(
+        std::iter::once("kndo".to_string()).chain(args.iter().cloned()),
+    ) {
+        Ok(a) => a.hook,
+        Err(e) => {
+            eprintln!("kndo: {e}");
+            return ExitCode::from(2);
+        }
+    };
     let cwd = match std::env::current_dir() {
         Ok(d) => d,
         Err(e) => {
@@ -671,11 +686,23 @@ fn plugin_remove(spec: &str) -> ExitCode {
 /// identically (a full snapshot replace), and fixed entries are auto-dropped by it.
 /// All the actual file I/O lives behind `Engine::baseline` — this is
 /// purely argument parsing and rendering the outcome, like every other command here.
+#[derive(clap::Parser)]
+struct BaselineArgs {
+    #[arg(long)]
+    update: bool,
+}
+
 fn baseline_cmd(args: &[String]) -> ExitCode {
-    let op = if args.iter().any(|a| a == "--update") {
-        BaselineOp::Update
-    } else {
-        BaselineOp::Create
+    use clap::Parser;
+    let op = match BaselineArgs::try_parse_from(
+        std::iter::once("kndo".to_string()).chain(args.iter().cloned()),
+    ) {
+        Ok(a) if a.update => BaselineOp::Update,
+        Ok(_) => BaselineOp::Create,
+        Err(e) => {
+            eprintln!("kndo: {e}");
+            return ExitCode::from(2);
+        }
     };
 
     let (_, mut engine) = match open_engine(base_config_overrides()) {
@@ -703,86 +730,50 @@ fn baseline_cmd(args: &[String]) -> ExitCode {
     }
 }
 
-#[derive(Debug)]
+/// `check` and `health` share one flag surface — `health` silently ignores the filtering flags
+/// (`--only`/`--skip`/`--strict`/`--staged`/`--diff`/`--fail-on`) it has no use for, the same way
+/// `parse_flags` always has; splitting the two out into narrower structs would change what
+/// `kndo health --staged` currently does (parses, does nothing) into a hard error, which is a
+/// real behavior change nobody asked for here.
+#[derive(Debug, clap::Parser)]
 struct Flags {
+    #[arg(long)]
     format: Option<String>,
+    #[arg(long)]
     color: Option<String>,
+    #[arg(long)]
     quiet: bool,
+    #[arg(long)]
     verbose: bool,
+    #[arg(long = "no-cache")]
     no_cache: bool,
+    #[arg(long)]
     staged: bool,
+    #[arg(long)]
     diff: Option<String>,
+    #[arg(long = "fail-on")]
     fail_on: Option<String>,
+    #[arg(long)]
     threads: Option<String>,
+    #[arg(long = "by-package")]
     by_package: bool,
     /// `--only`/`--skip`, raw. Repeatable and comma-separated both work — a shell loop that
     /// appends one flag per category and a hand-typed list should not be different features.
+    #[arg(long, value_delimiter = ',')]
     only: Vec<String>,
+    #[arg(long, value_delimiter = ',')]
     skip: Vec<String>,
+    #[arg(long)]
     strict: bool,
 }
 
+/// A typo'd `--fail-onn warning` silently un-gating CI, or any token kndo doesn't know, must be
+/// a hard error — clap's own `unexpected argument`/`a value is required for` messages already
+/// name the offending flag, which is what every caller of this actually depends on.
 fn parse_flags(args: &[String]) -> Result<Flags, String> {
-    let mut flags = Flags {
-        format: None,
-        color: None,
-        quiet: false,
-        verbose: false,
-        no_cache: false,
-        staged: false,
-        diff: None,
-        fail_on: None,
-        threads: None,
-        by_package: false,
-        only: Vec::new(),
-        skip: Vec::new(),
-        strict: false,
-    };
-    // A valued flag with no value, and any token kndo doesn't know, are hard errors:
-    // a typo'd `--fail-onn warning` silently un-gating CI is
-    // worse than any friction rejecting it costs.
-    let value = |it: &mut std::slice::Iter<'_, String>, flag: &str| {
-        it.next()
-            .cloned()
-            .ok_or_else(|| format!("{flag} needs a value — see `kndo --help`"))
-    };
-    let mut it = args.iter();
-    while let Some(arg) = it.next() {
-        match arg.as_str() {
-            "--format" => flags.format = Some(value(&mut it, "--format")?),
-            "--color" => flags.color = Some(value(&mut it, "--color")?),
-            "--quiet" => flags.quiet = true,
-            "--verbose" => flags.verbose = true,
-            "--no-cache" => flags.no_cache = true,
-            "--staged" => flags.staged = true,
-            "--diff" => flags.diff = Some(value(&mut it, "--diff")?),
-            "--fail-on" => flags.fail_on = Some(value(&mut it, "--fail-on")?),
-            "--threads" => flags.threads = Some(value(&mut it, "--threads")?),
-            "--by-package" => flags.by_package = true,
-            "--only" => flags.only.push(value(&mut it, "--only")?),
-            "--skip" => flags.skip.push(value(&mut it, "--skip")?),
-            "--strict" => flags.strict = true,
-            s if s.starts_with("--format=") => {
-                flags.format = Some(s["--format=".len()..].to_string())
-            }
-            s if s.starts_with("--color=") => flags.color = Some(s["--color=".len()..].to_string()),
-            s if s.starts_with("--diff=") => flags.diff = Some(s["--diff=".len()..].to_string()),
-            s if s.starts_with("--fail-on=") => {
-                flags.fail_on = Some(s["--fail-on=".len()..].to_string())
-            }
-            s if s.starts_with("--threads=") => {
-                flags.threads = Some(s["--threads=".len()..].to_string())
-            }
-            s if s.starts_with("--only=") => flags.only.push(s["--only=".len()..].to_string()),
-            s if s.starts_with("--skip=") => flags.skip.push(s["--skip=".len()..].to_string()),
-            other => {
-                return Err(format!(
-                    "unknown argument `{other}` — see `kndo --help` for flags"
-                ))
-            }
-        }
-    }
-    Ok(flags)
+    use clap::Parser;
+    Flags::try_parse_from(std::iter::once("kndo".to_string()).chain(args.iter().cloned()))
+        .map_err(|e| e.to_string())
 }
 
 /// `--only`/`--skip` values into core's own skip vocabulary. Comma-separated within one flag,
@@ -1301,11 +1292,13 @@ mod tests {
 
     #[test]
     fn unknown_arguments_and_missing_values_are_rejected() {
-        // A typo'd flag silently un-gating CI is worse than any friction.
+        // A typo'd flag silently un-gating CI is worse than any friction. clap's own wording
+        // ("unexpected argument", "a value is required for") replaces the hand-written phrasing;
+        // what every caller actually depends on is the flag name appearing in the error.
         let args: Vec<String> = vec!["--fail-onn".into(), "warning".into()];
         assert!(parse_flags(&args).unwrap_err().contains("--fail-onn"));
         let args: Vec<String> = vec!["--diff".into()];
-        assert!(parse_flags(&args).unwrap_err().contains("needs a value"));
+        assert!(parse_flags(&args).unwrap_err().contains("--diff"));
         let args: Vec<String> = vec!["stray".into()];
         assert!(parse_flags(&args).unwrap_err().contains("stray"));
     }
