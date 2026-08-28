@@ -112,6 +112,8 @@ pub fn default_plugins() -> Vec<Box<dyn Plugin>> {
         plugins.push(Box::new(kndo_plugin_thymeleaf::ThymeleafPlugin));
         #[cfg(feature = "plugin-libsass")]
         plugins.push(Box::new(kndo_plugin_libsass::LibsassMavenPlugin));
+        #[cfg(feature = "plugin-uikit")]
+        plugins.push(Box::new(kndo_plugin_uikit::UikitPlugin));
         #[cfg(feature = "plugin-rkyv")]
         plugins.push(Box::new(kndo_plugin_rkyv::RkyvPlugin));
         #[cfg(feature = "plugin-wasmtime")]

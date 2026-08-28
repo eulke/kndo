@@ -28,6 +28,7 @@ the reserved `kndo:` namespace and are gated by the same activation rules.
 | `kndo:wasmtime` | any `Cargo.toml` declares `wasmtime` | marks the members of the host traits `wasmtime::component::bindgen!` generates, whose only caller is the guest |
 | `kndo:thymeleaf` | any manifest declares `spring-boot-starter-thymeleaf` | roots the templates a Spring view resolver loads by logical name, and links each to the static assets its `th:href`/`th:src` (or plain `href`/`src`) name — resolved through Spring Boot's static locations and only where a file is actually there |
 | `kndo:libsass-maven-plugin` | any `*.scss` exists under the project root | reads the pom's `libsass-maven-plugin` configuration: marks the CSS under its `outputPath` as generated (build output committed into the source tree), and links each output back to the `.scss` it was compiled from |
+| `kndo:uikit` | any `*.storyboard` or `*.xib` exists under the project root | reads the UIKit Interface Builder documents (`targetRuntime="iOS.CocoaTouch"` — AppKit and WatchKit are siblings, not this one): roots the classes `customClass` names and UIKit instantiates, and links each `@IBOutlet` / `@IBAction` the document connects, so a wired property doesn't read as file-private |
 | `kndo:info-plist` | an `Info.plist` exists anywhere under the project root | roots the classes an Apple bundle names by string and the system instantiates — `NSPrincipalClass`, `WKExtensionDelegateClassName`, a scene manifest's delegate |
 
 `kndo doctor` shows each with its activation state and reason.

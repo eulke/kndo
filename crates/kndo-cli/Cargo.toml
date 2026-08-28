@@ -53,6 +53,7 @@ default = [
     "plugin-info-plist",
     "plugin-thymeleaf",
     "plugin-libsass",
+    "plugin-uikit",
     "plugin-rkyv",
     "plugin-wasmtime",
     "plugin-coverage",
@@ -73,6 +74,7 @@ plugin-serde = ["kndo/plugin-serde"]
 plugin-info-plist = ["kndo/plugin-info-plist"]
 plugin-thymeleaf = ["kndo/plugin-thymeleaf"]
 plugin-libsass = ["kndo/plugin-libsass"]
+plugin-uikit = ["kndo/plugin-uikit"]
 plugin-rkyv = ["kndo/plugin-rkyv"]
 plugin-wasmtime = ["kndo/plugin-wasmtime"]
 plugin-coverage = ["kndo/plugin-coverage"]

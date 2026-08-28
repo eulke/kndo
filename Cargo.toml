@@ -18,6 +18,7 @@ members = [
     "crates/kndo-plugin-express",
     "crates/kndo-plugin-info-plist",
     "crates/kndo-plugin-libsass",
+    "crates/kndo-plugin-uikit",
     "crates/kndo-plugin-serde",
     "crates/kndo-plugin-thymeleaf",
     "crates/kndo-plugin-rkyv",

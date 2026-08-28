@@ -1230,6 +1230,7 @@ dependencies = [
  "kndo-plugin-rkyv",
  "kndo-plugin-serde",
  "kndo-plugin-thymeleaf",
+ "kndo-plugin-uikit",
  "kndo-plugin-wasmtime",
  "rustc-hash",
  "serde_json",
@@ -1470,6 +1471,15 @@ version = "0.1.0"
 dependencies = [
  "kndo-core",
  "rustc-hash",
+ "smol_str",
+]
+
+[[package]]
+name = "kndo-plugin-uikit"
+version = "0.1.0"
+dependencies = [
+ "kndo-core",
+ "roxmltree",
  "smol_str",
 ]
 
