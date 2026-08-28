@@ -26,6 +26,7 @@ commands
   doctor           what kndo sees: adapters, cache, plugins, config
   plugin           install | list | remove | new | build | wit | verify
   init             write kndo.toml (--hook also installs the pre-commit hook)
+  explain <id>     everything behind one finding: evidence chain + its subject
   find|describe|uses|used-by|trace|impact   graph navigation verbs (JSON envelopes)
   query            batched navigation requests from stdin (one JSON per line)
 
@@ -82,6 +83,7 @@ fn main() -> ExitCode {
         Some("init") => init_cmd(&args[1..]),
         Some("find") => nav::find_cmd(&args[1..]),
         Some("describe") => nav::describe_cmd(&args[1..]),
+        Some("explain") => nav::explain_cmd(&args[1..]),
         Some("uses") => nav::uses_cmd(&args[1..]),
         Some("used-by") => nav::used_by_cmd(&args[1..]),
         Some("trace") => nav::trace_cmd(&args[1..]),

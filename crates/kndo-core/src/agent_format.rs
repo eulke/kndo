@@ -314,11 +314,116 @@ pub fn render_query(result: &QueryResult) -> String {
     }
 
     out.push_str("more: none\n");
-    out.push_str(&format!(
-        "next: kndo {} --format json\n",
-        result.verb.as_str()
-    ));
+    out.push_str(&query_next_line(result));
     out
+}
+
+/// `next:` — "the drill-down commands relevant to what was shown" (output-schema §9), which
+/// for most verbs is the same request in JSON. `explain` can do better: it just named a
+/// subject, and the question a reader asks next is almost always who reaches it.
+fn query_next_line(result: &QueryResult) -> String {
+    let subject = result.results.iter().find_map(|entry| match entry {
+        ResultEntry::Explain(e) => e.subject.as_ref().and(e.subject_selector.as_deref()),
+        _ => None,
+    });
+    match subject {
+        Some(selector) => format!(
+            "next: kndo used-by {selector} --format agent | kndo trace roots:production \
+             {selector} --format agent\n"
+        ),
+        None => format!("next: kndo {} --format json\n", result.verb.as_str()),
+    }
+}
+
+/// The `describe` block — shared by `describe` and `explain`, which shows the same block over
+/// the subject a finding landed on. One renderer, so the two can never describe a node
+/// differently.
+fn render_describe(out: &mut String, d: &crate::query::DescribeResult) {
+    out.push_str(&format!("node: {}\n", d.node));
+    if let Some(decl) = &d.declaration {
+        out.push_str(&format!(
+            "declaration: {} visibility={}{}\n",
+            decl.kind,
+            // The label when the adapter has one, the ordinal when it does not — never
+            // the bare number as the only answer, which asks a reader to know a ladder
+            // they cannot see.
+            decl.visibility_label
+                .clone()
+                .unwrap_or_else(|| decl.visibility.to_string()),
+            if decl.exported { " exported" } else { "" }
+        ));
+    }
+    if let Some(file) = &d.file {
+        out.push_str(&format!(
+            "file: role={} origin={}\n",
+            file.role, file.origin
+        ));
+    }
+    if let Some(dep) = &d.dependency {
+        out.push_str(&format!(
+            "dependency: scopes={} importing_files={} {}\n",
+            dep.manifest_scopes.join(","),
+            dep.importing_files,
+            if dep.used { "used" } else { "unused" }
+        ));
+    }
+    if let Some(pkg) = &d.package {
+        out.push_str(&format!(
+            "package: mode={} files={} dependents={}\n",
+            pkg.mode, pkg.files, pkg.dependents
+        ));
+    }
+    for m in &d.metrics {
+        // `coverage=unmeasured`/`crap=unmeasured`, never a fabricated 0: an absent
+        // report means nobody measured, which is not the same as "none covered".
+        out.push_str(&format!(
+            "metrics: shape={} line={} cyclomatic={} loc={} tokens={} coverage={} crap={}\n",
+            m.shape_ordinal,
+            m.span.start.0,
+            m.cyclomatic,
+            m.loc,
+            m.token_count,
+            m.coverage
+                .map(|c| format!("{c:.2}"))
+                .unwrap_or_else(|| "unmeasured".to_string()),
+            m.crap
+                .map(|c| format!("{c:.1}"))
+                .unwrap_or_else(|| "unmeasured".to_string()),
+        ));
+    }
+    for g in &d.duplication {
+        out.push_str(&format!(
+            "duplication: finding={} members={}\n",
+            g.finding,
+            g.members.len()
+        ));
+        for (n, m) in g.members.iter().enumerate() {
+            out.push_str(&format!("  {}. {}\n", n + 1, m));
+        }
+    }
+    out.push_str(&format!(
+        "degree: in={} out={}\n",
+        sum_degree(&d.degree.in_by_kind),
+        sum_degree(&d.degree.out_by_kind)
+    ));
+    if !d.reached_by_roots.is_empty() {
+        out.push_str("reached_by_roots:\n");
+        for (n, r) in d.reached_by_roots.iter().enumerate() {
+            out.push_str(&format!("  {}. {}\n", n + 1, r));
+        }
+    }
+    if !d.declared_symbols.is_empty() {
+        out.push_str("declared_symbols:\n");
+        for (n, s) in d.declared_symbols.iter().enumerate() {
+            out.push_str(&format!("  {}. {}\n", n + 1, s));
+        }
+    }
+    if !d.findings.is_empty() {
+        out.push_str(&format!("findings: {}\n", d.findings.join(", ")));
+    }
+    if !d.sources.is_empty() {
+        out.push_str(&format!("sources: {}\n", d.sources.join(", ")));
+    }
 }
 
 fn render_query_entry(out: &mut String, entry: &ResultEntry) {
@@ -338,86 +443,25 @@ fn render_query_entry(out: &mut String, entry: &ResultEntry) {
                 out.push_str(&format!("more: {} elided\n", r.elided));
             }
         }
-        ResultEntry::Describe(d) => {
-            out.push_str(&format!("node: {}\n", d.node));
-            if let Some(decl) = &d.declaration {
-                out.push_str(&format!(
-                    "declaration: {} visibility={}{}\n",
-                    decl.kind,
-                    decl.visibility,
-                    if decl.exported { " exported" } else { "" }
-                ));
+        ResultEntry::Describe(d) => render_describe(out, d),
+        ResultEntry::Explain(e) => {
+            // The finding first, in the same grammar `check` prints it — an agent that can
+            // read one line of a report can read this one — then the same `describe` block
+            // every `describe` answer uses, over the subject it landed on.
+            out.push_str(&finding_line(1, &e.finding));
+            out.push('\n');
+            push_evidence(out, &e.finding);
+            if !e.finding.sources.is_empty() {
+                out.push_str(&format!("sources: {}\n", e.finding.sources.join(", ")));
             }
-            if let Some(file) = &d.file {
-                out.push_str(&format!(
-                    "file: role={} origin={}\n",
-                    file.role, file.origin
-                ));
-            }
-            if let Some(dep) = &d.dependency {
-                out.push_str(&format!(
-                    "dependency: scopes={} importing_files={} {}\n",
-                    dep.manifest_scopes.join(","),
-                    dep.importing_files,
-                    if dep.used { "used" } else { "unused" }
-                ));
-            }
-            if let Some(pkg) = &d.package {
-                out.push_str(&format!(
-                    "package: mode={} files={} dependents={}\n",
-                    pkg.mode, pkg.files, pkg.dependents
-                ));
-            }
-            for m in &d.metrics {
-                // `coverage=unmeasured`/`crap=unmeasured`, never a fabricated 0: an absent
-                // report means nobody measured, which is not the same as "none covered".
-                out.push_str(&format!(
-                    "metrics: shape={} line={} cyclomatic={} loc={} tokens={} coverage={} crap={}\n",
-                    m.shape_ordinal,
-                    m.span.start.0,
-                    m.cyclomatic,
-                    m.loc,
-                    m.token_count,
-                    m.coverage
-                        .map(|c| format!("{c:.2}"))
-                        .unwrap_or_else(|| "unmeasured".to_string()),
-                    m.crap
-                        .map(|c| format!("{c:.1}"))
-                        .unwrap_or_else(|| "unmeasured".to_string()),
-                ));
-            }
-            for g in &d.duplication {
-                out.push_str(&format!(
-                    "duplication: finding={} members={}\n",
-                    g.finding,
-                    g.members.len()
-                ));
-                for (n, m) in g.members.iter().enumerate() {
-                    out.push_str(&format!("  {}. {}\n", n + 1, m));
+            match (&e.subject, &e.subject_selector) {
+                (Some(d), _) => render_describe(out, d),
+                // Absent context is stated, never omitted: a directory rollup has no single
+                // node, and a subject the graph never saw is a fact worth reading.
+                (None, Some(selector)) => {
+                    out.push_str(&format!("subject: {selector} (not a graph node)\n"))
                 }
-            }
-            out.push_str(&format!(
-                "degree: in={} out={}\n",
-                sum_degree(&d.degree.in_by_kind),
-                sum_degree(&d.degree.out_by_kind)
-            ));
-            if !d.reached_by_roots.is_empty() {
-                out.push_str("reached_by_roots:\n");
-                for (n, r) in d.reached_by_roots.iter().enumerate() {
-                    out.push_str(&format!("  {}. {}\n", n + 1, r));
-                }
-            }
-            if !d.declared_symbols.is_empty() {
-                out.push_str("declared_symbols:\n");
-                for (n, s) in d.declared_symbols.iter().enumerate() {
-                    out.push_str(&format!("  {}. {}\n", n + 1, s));
-                }
-            }
-            if !d.findings.is_empty() {
-                out.push_str(&format!("findings: {}\n", d.findings.join(", ")));
-            }
-            if !d.sources.is_empty() {
-                out.push_str(&format!("sources: {}\n", d.sources.join(", ")));
+                (None, None) => out.push_str("subject: not a single node (rollup)\n"),
             }
         }
         ResultEntry::Neighbors(r) => {
@@ -809,6 +853,7 @@ mod tests {
                 },
                 exported: true,
                 visibility: 1,
+                visibility_label: None,
             }),
             file: None,
             dependency: None,

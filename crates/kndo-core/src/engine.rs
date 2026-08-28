@@ -1555,20 +1555,19 @@ impl Engine {
         let cache = self.query_cache_status();
         let duration_ms = start.elapsed().as_millis() as u64;
 
+        let snapshot = query_envelope::QuerySnapshot {
+            graph: &graph,
+            reach: &reach,
+            nav: &nav,
+            findings: &findings_owned,
+            finding_locations: &locations,
+            coverage: &coverage,
+            cache,
+            duration_ms,
+        };
         requests
             .into_iter()
-            .map(|req| {
-                query_envelope::run(
-                    &graph,
-                    &reach,
-                    &nav,
-                    &locations,
-                    &coverage,
-                    req,
-                    cache,
-                    duration_ms,
-                )
-            })
+            .map(|req| query_envelope::run(&snapshot, req))
             .collect()
     }
 
@@ -3247,6 +3246,114 @@ mod tests {
 
     fn spec(raw: &str) -> crate::config::SkipSpec {
         crate::config::SkipSpec::parse(raw).unwrap()
+    }
+
+    #[test]
+    fn explain_pairs_the_finding_with_a_describe_of_what_it_landed_on() {
+        // The whole design in one assertion: `explain` is the finding verbatim plus
+        // `describe` of its subject, so the two can never say different things about the same
+        // node. Anything it re-derived would be the copy that drifts.
+        let dir = filter_repo();
+        let mut engine = Engine::open(
+            dir.path(),
+            ConfigOverrides::default(),
+            vec![Box::new(DiffMockAdapter)],
+        )
+        .unwrap();
+        let findings = engine.run_analysis_at(dir.path()).findings;
+        let target = findings
+            .iter()
+            .find(|f| finding_path(f) == "live.dmock")
+            .expect("the dead function inside a live file");
+
+        let result = engine.query(crate::query_envelope::QueryRequest {
+            id: None,
+            verb: crate::query_envelope::Verb::Explain,
+            selectors: vec![target.id.clone()],
+            flags: Default::default(),
+        });
+        assert_eq!(result.status(), "ok");
+        let crate::query_envelope::ResultEntry::Explain(explained) = &result.results[0] else {
+            panic!("expected an explain entry: {:?}", result.results[0]);
+        };
+        assert_eq!(explained.finding.id, target.id);
+        assert_eq!(explained.finding.message, target.message);
+
+        let subject = explained
+            .subject
+            .as_ref()
+            .expect("a symbol IS a graph node");
+        assert!(
+            subject.findings.contains(&target.id),
+            "describe of the subject lists the very finding being explained: {:?}",
+            subject.findings
+        );
+        assert_eq!(
+            explained.subject_selector.as_deref(),
+            Some("live.dmock#deadThing")
+        );
+    }
+
+    #[test]
+    fn an_id_nothing_reported_is_not_found_not_an_error() {
+        // `not-found` and `error` are different exit codes, and a stale id from yesterday's
+        // report is the ordinary case, not a malformed request.
+        let dir = filter_repo();
+        let engine = Engine::open(
+            dir.path(),
+            ConfigOverrides::default(),
+            vec![Box::new(DiffMockAdapter)],
+        )
+        .unwrap();
+        let result = engine.query(crate::query_envelope::QueryRequest {
+            id: None,
+            verb: crate::query_envelope::Verb::Explain,
+            selectors: vec!["kndo-000000000000".to_string()],
+            flags: Default::default(),
+        });
+        assert_eq!(result.status(), "not-found");
+        let json = result.to_json();
+        assert!(
+            json.contains("fixed, suppressed, or acknowledged"),
+            "the message says WHY an id can be missing, not just that it is: {json}"
+        );
+    }
+
+    #[test]
+    fn explaining_a_rollup_says_it_has_no_single_node_rather_than_guessing_one() {
+        // A directory rollup stands in for many findings and names a directory, which is not
+        // a graph node. Answering `subject: null` beats picking one of its files to describe.
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("root.dmock"), "root-file\n").unwrap();
+        std::fs::create_dir(dir.path().join("dead")).unwrap();
+        std::fs::write(dir.path().join("dead/a.dmock"), "").unwrap();
+        std::fs::write(dir.path().join("dead/b.dmock"), "").unwrap();
+
+        let mut engine = Engine::open(
+            dir.path(),
+            ConfigOverrides::default(),
+            vec![Box::new(DiffMockAdapter)],
+        )
+        .unwrap();
+        let findings = engine.run_analysis_at(dir.path()).findings;
+        let rollup = findings
+            .iter()
+            .find(|f| f.subject_kind == crate::vocab::SubjectKind::DIRECTORY)
+            .expect("a uniformly dead directory rolls up");
+
+        let result = engine.query(crate::query_envelope::QueryRequest {
+            id: None,
+            verb: crate::query_envelope::Verb::Explain,
+            selectors: vec![rollup.id.clone()],
+            flags: Default::default(),
+        });
+        let crate::query_envelope::ResultEntry::Explain(explained) = &result.results[0] else {
+            panic!("expected an explain entry");
+        };
+        assert_eq!(result.status(), "ok", "the finding still explains itself");
+        assert!(explained.subject.is_none());
+        assert!(explained.subject_selector.is_none());
+        assert_eq!(explained.finding.rolled_up, Some(2));
     }
 
     #[test]

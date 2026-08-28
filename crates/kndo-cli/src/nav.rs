@@ -153,6 +153,15 @@ pub(crate) fn trace_cmd(args: &[String]) -> ExitCode {
     run_one(Verb::Trace, args)
 }
 
+/// `kndo explain <finding-id>` (RFC 0006 §2). Routed through the same `run_one` as every
+/// navigation verb — the envelope, the `--format` handling, the `not-found` status and the
+/// exit code all come from there, so `explain` cannot end up with its own second convention
+/// for any of them. Its "selector" is a finding id rather than a node selector; that is the
+/// only difference, and it lives entirely core-side.
+pub(crate) fn explain_cmd(args: &[String]) -> ExitCode {
+    run_one(Verb::Explain, args)
+}
+
 fn render_and_print(result: &QueryResult, format: Option<&str>) {
     let format = crate::resolve_format(format);
     match format.as_str() {

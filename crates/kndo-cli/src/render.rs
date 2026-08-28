@@ -549,6 +549,99 @@ pub(crate) fn render_query(result: &QueryResult, opts: &RenderOptions) -> String
     out
 }
 
+/// The `describe` block — shared by `describe` and `explain`, which shows the same block over
+/// the subject a finding landed on. One renderer, so the two can never describe a node
+/// differently in the same terminal.
+fn render_describe(out: &mut String, d: &kndo::query::DescribeResult) {
+    out.push_str(&format!("  {}\n", d.node));
+    if let Some(decl) = &d.declaration {
+        out.push_str(&format!(
+            "  declaration: {} · visibility {}{}\n",
+            decl.kind,
+            // The label when the adapter has one, the ordinal when it does not — never
+            // the bare number as the only answer, which asks a reader to know a ladder
+            // they cannot see.
+            decl.visibility_label
+                .clone()
+                .unwrap_or_else(|| decl.visibility.to_string()),
+            if decl.exported { " · exported" } else { "" }
+        ));
+    }
+    if let Some(file) = &d.file {
+        out.push_str(&format!("  file: {} · {}\n", file.role, file.origin));
+    }
+    if let Some(dep) = &d.dependency {
+        out.push_str(&format!(
+            "  dependency: {} · {} importing file{} · {}\n",
+            dep.manifest_scopes.join(", "),
+            dep.importing_files,
+            if dep.importing_files == 1 { "" } else { "s" },
+            if dep.used { "used" } else { "unused" }
+        ));
+    }
+    if let Some(pkg) = &d.package {
+        out.push_str(&format!(
+            "  package: {} · {} files · {} dependent{}\n",
+            pkg.mode,
+            pkg.files,
+            pkg.dependents,
+            if pkg.dependents == 1 { "" } else { "s" }
+        ));
+    }
+    for m in &d.metrics {
+        let shape = match m.shape_ordinal {
+            0 => String::new(),
+            n => format!(" (nested shape {n} at line {})", m.span.start.0),
+        };
+        // "unmeasured", never "0%": no coverage report means unknown.
+        let covered = match m.coverage {
+            Some(c) => format!("{:.0}% covered", c * 100.0),
+            None => "coverage unmeasured".to_string(),
+        };
+        let crap = match m.crap {
+            Some(c) => format!(" · crap {c:.1}"),
+            None => String::new(),
+        };
+        out.push_str(&format!(
+            "  metrics{shape}: cyclomatic {} · {} loc · {} tokens · {covered}{crap}\n",
+            m.cyclomatic, m.loc, m.token_count
+        ));
+    }
+    for g in &d.duplication {
+        out.push_str(&format!(
+            "  duplication: {} clones ({})\n",
+            g.members.len(),
+            g.finding
+        ));
+        for m in &g.members {
+            out.push_str(&format!("    {m}\n"));
+        }
+    }
+    out.push_str(&format!(
+        "  degree: in={} out={}\n",
+        d.degree.in_by_kind.values().sum::<usize>(),
+        d.degree.out_by_kind.values().sum::<usize>()
+    ));
+    if !d.reached_by_roots.is_empty() {
+        out.push_str("  reached by roots:\n");
+        for r in &d.reached_by_roots {
+            out.push_str(&format!("    {}\n", r));
+        }
+    }
+    if !d.declared_symbols.is_empty() {
+        out.push_str("  declared symbols:\n");
+        for s in &d.declared_symbols {
+            out.push_str(&format!("    {}\n", s));
+        }
+    }
+    if !d.findings.is_empty() {
+        out.push_str(&format!("  findings: {}\n", d.findings.join(", ")));
+    }
+    if !d.sources.is_empty() {
+        out.push_str(&format!("  sources: {}\n", d.sources.join(", ")));
+    }
+}
+
 fn render_query_entry(out: &mut String, entry: &ResultEntry, opts: &RenderOptions) {
     match entry {
         ResultEntry::Failed {
@@ -576,88 +669,26 @@ fn render_query_entry(out: &mut String, entry: &ResultEntry, opts: &RenderOption
                 out.push_str(&format!("  … {} more (--limit)\n", r.elided));
             }
         }
-        ResultEntry::Describe(d) => {
-            out.push_str(&format!("  {}\n", d.node));
-            if let Some(decl) = &d.declaration {
-                out.push_str(&format!(
-                    "  declaration: {} · visibility {}{}\n",
-                    decl.kind,
-                    decl.visibility,
-                    if decl.exported { " · exported" } else { "" }
-                ));
+        ResultEntry::Describe(d) => render_describe(out, d),
+        ResultEntry::Explain(e) => {
+            // The finding exactly as `check` prints it — same glyph, same category, same id —
+            // then its evidence chain, then the same describe block over what it landed on.
+            out.push_str(&format!("  {}\n", render_finding_line(&e.finding, opts)));
+            render_related(out, &e.finding);
+            if !e.finding.sources.is_empty() {
+                out.push_str(&format!("  sources: {}\n", e.finding.sources.join(", ")));
             }
-            if let Some(file) = &d.file {
-                out.push_str(&format!("  file: {} · {}\n", file.role, file.origin));
-            }
-            if let Some(dep) = &d.dependency {
-                out.push_str(&format!(
-                    "  dependency: {} · {} importing file{} · {}\n",
-                    dep.manifest_scopes.join(", "),
-                    dep.importing_files,
-                    if dep.importing_files == 1 { "" } else { "s" },
-                    if dep.used { "used" } else { "unused" }
-                ));
-            }
-            if let Some(pkg) = &d.package {
-                out.push_str(&format!(
-                    "  package: {} · {} files · {} dependent{}\n",
-                    pkg.mode,
-                    pkg.files,
-                    pkg.dependents,
-                    if pkg.dependents == 1 { "" } else { "s" }
-                ));
-            }
-            for m in &d.metrics {
-                let shape = match m.shape_ordinal {
-                    0 => String::new(),
-                    n => format!(" (nested shape {n} at line {})", m.span.start.0),
-                };
-                // "unmeasured", never "0%": no coverage report means unknown.
-                let covered = match m.coverage {
-                    Some(c) => format!("{:.0}% covered", c * 100.0),
-                    None => "coverage unmeasured".to_string(),
-                };
-                let crap = match m.crap {
-                    Some(c) => format!(" · crap {c:.1}"),
-                    None => String::new(),
-                };
-                out.push_str(&format!(
-                    "  metrics{shape}: cyclomatic {} · {} loc · {} tokens · {covered}{crap}\n",
-                    m.cyclomatic, m.loc, m.token_count
-                ));
-            }
-            for g in &d.duplication {
-                out.push_str(&format!(
-                    "  duplication: {} clones ({})\n",
-                    g.members.len(),
-                    g.finding
-                ));
-                for m in &g.members {
-                    out.push_str(&format!("    {m}\n"));
+            match (&e.subject, &e.subject_selector) {
+                (Some(d), _) => {
+                    out.push('\n');
+                    render_describe(out, d);
                 }
-            }
-            out.push_str(&format!(
-                "  degree: in={} out={}\n",
-                d.degree.in_by_kind.values().sum::<usize>(),
-                d.degree.out_by_kind.values().sum::<usize>()
-            ));
-            if !d.reached_by_roots.is_empty() {
-                out.push_str("  reached by roots:\n");
-                for r in &d.reached_by_roots {
-                    out.push_str(&format!("    {}\n", r));
+                // Stated, not omitted: a rollup has no single node, and a subject the graph
+                // never saw is itself worth reading.
+                (None, Some(selector)) => {
+                    out.push_str(&format!("  subject: {selector} (not a graph node)\n"))
                 }
-            }
-            if !d.declared_symbols.is_empty() {
-                out.push_str("  declared symbols:\n");
-                for s in &d.declared_symbols {
-                    out.push_str(&format!("    {}\n", s));
-                }
-            }
-            if !d.findings.is_empty() {
-                out.push_str(&format!("  findings: {}\n", d.findings.join(", ")));
-            }
-            if !d.sources.is_empty() {
-                out.push_str(&format!("  sources: {}\n", d.sources.join(", ")));
+                (None, None) => out.push_str("  subject: not a single node (rollup)\n"),
             }
         }
         ResultEntry::Neighbors(r) => {
@@ -1077,6 +1108,7 @@ mod tests {
                 },
                 exported: true,
                 visibility: 1,
+                visibility_label: None,
             }),
             file: None,
             dependency: None,

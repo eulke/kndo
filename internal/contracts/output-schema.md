@@ -288,6 +288,35 @@ Verb result shapes (fields beyond these are additive/minor):
 
 Query exit codes are defined in RFC 0007 §6 and are part of this contract.
 
+### 8.1 `explain` (normative)
+
+`kndo explain <finding-id>` answers in the §8 query envelope with `verb: "explain"` and the
+id in `selectors`. Each result is:
+
+```jsonc
+{
+  "finding": { /* §2, verbatim — the same object `check` reported */ },
+  "subject": { /* §8 describe result for what the finding landed on */ },
+  "subject_selector": "src/billing/tax.ts#calcLegacyTax"
+}
+```
+
+Normative points:
+
+- **It is a pair, never a derivation.** The finding's own message, `related` chain, `sources`
+  and `rolled_up` are the explanation the analysis already wrote; the subject block is
+  `describe`'s answer about the node. A consumer comparing `kndo explain <id>` with
+  `kndo describe <subject_selector>` must see the same node facts.
+- **`subject` is absent when the subject is not one graph node** — a directory rollup stands
+  in for many files, and a path the graph never saw has none. `subject_selector` is absent
+  with it in the rollup case, and present-without-`subject` when a selector was formed but
+  did not resolve. The finding is still returned: an explanation with less context beats an
+  invented node.
+- **An id nothing reported is `not-found`, not `error`** — the exit-code tier every other
+  verb's unresolvable selector uses. A finding can be missing because it was fixed,
+  suppressed, or acknowledged in a baseline since the reader saw it, and the message says so
+  rather than implying a typo.
+
 ## 9. Agent format (`--format agent`)
 
 A line-oriented plain-text rendering of the same data, optimized for LLM context windows:

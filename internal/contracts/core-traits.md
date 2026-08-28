@@ -928,8 +928,17 @@ impl Engine {
     pub fn baseline(&mut self, op: BaselineOp) -> BaselineResult;
     pub fn doctor(&self) -> DoctorReport;
 }
-// Planned, not landed: `explain(id) -> Explanation` (per-finding remediation prose). Purely
-// additive when it comes; the contract lists only what exists.
+// `kndo explain <finding-id>` (RFC 0006 §2) is NOT a method here: it is `Verb::Explain`,
+// answered through `query`/`query_batch` like every other verb. Its "selector" is a finding
+// id rather than a node selector, and that is the only thing about it that differs — the
+// envelope, the `not-found` status, the exit-code mapping and `kndo query` batching all come
+// from the machinery the navigation verbs already use, rather than from a second copy of it.
+// What it returns is deliberately a pair, not a derivation: the finding verbatim plus
+// `describe` of its subject (`ExplainResult { finding, subject: Option<DescribeResult>,
+// subject_selector }`). `subject` is `None` for a subject that is not one graph node — a
+// directory rollup stands in for many — and the finding still explains itself there. The
+// per-finding remediation prose an earlier draft imagined stays cut for the reason
+// output-schema §2 gives about `remediation`.
 //
 // Gate policy lives here too, as data rather than an exit code (the core-never-prints rule
 // covers exit codes as much as ANSI). It has TWO halves, and a frontend must call the reader

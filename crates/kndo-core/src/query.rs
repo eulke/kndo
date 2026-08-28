@@ -27,6 +27,7 @@ use smol_str::SmolStr;
 
 use crate::adapter::{ProjectPath, Span};
 use crate::analysis::reachability::{Reachability, ReachabilityMap};
+use crate::engine::Finding;
 use crate::graph::ProjectGraph;
 use crate::vocab::{Confidence, DependencyId, FileId, NodeRef, PackageId, RootKind, SymbolId};
 
@@ -775,7 +776,16 @@ pub struct DeclarationInfo {
     pub kind: String,
     pub span: NodeSpan,
     pub exported: bool,
+    /// The rung's ordinal on the claiming adapter's visibility ladder — comparable
+    /// (`>` means "more visible") and meaningless on its own, which is what
+    /// `visibility_label` is for.
     pub visibility: u8,
+    /// The rung's own name, as the adapter spells it (`private`, `pub(crate)`, `internal`,
+    /// `exported`). The ordinal alone rendered as `visibility 3`, which asks a reader to
+    /// know a ladder they cannot see; the core still names no language, because the label
+    /// comes from the adapter's own ladder rather than from a table here.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub visibility_label: Option<String>,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -879,6 +889,77 @@ pub struct DescribeResult {
     pub elided: HashMap<String, usize>,
 }
 
+/// `kndo explain <finding-id>` — one finding, and everything the graph knows about what it
+/// landed on.
+///
+/// Deliberately a *pair*, not a new derivation: the finding verbatim (its own message,
+/// evidence chain, provenance and rollup count are the explanation the analysis already
+/// wrote) plus `describe` of its subject (color, roots that reach it, degree, the other
+/// findings on the same node). Re-deriving either half here would be a second answer to a
+/// question that already has one — and `explain` would be the copy that drifts.
+#[derive(Debug, Clone, serde::Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct ExplainResult {
+    pub finding: Finding,
+    /// `None` when the finding's subject is not a graph node: a directory rollup, or a path
+    /// the graph never saw. The finding still explains itself; what is missing is the node
+    /// context, and saying so beats inventing a node to describe.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub subject: Option<Box<DescribeResult>>,
+    /// The selector the subject was looked up under — what a reader types to keep navigating
+    /// (`kndo used-by <selector>`), and, when `subject` is `None`, what failed to resolve.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub subject_selector: Option<String>,
+}
+
+/// A finding's subject as a selector, in the same grammar `describe` accepts. `None` for a
+/// subject that has no single node to name — a directory rollup stands in for many.
+fn finding_selector(finding: &Finding) -> Option<String> {
+    if finding.subject_kind == crate::vocab::SubjectKind::DIRECTORY {
+        return None;
+    }
+    if finding.subject_kind == crate::vocab::SubjectKind::DEPENDENCY {
+        // A dependency finding's `symbol` IS the coordinate — the manifest path in `location`
+        // is where it was declared, not what the verdict is about.
+        return finding.location.symbol.as_ref().map(|d| format!("dep:{d}"));
+    }
+    let path = finding.location.path.as_ref()?.0.as_str();
+    Some(match &finding.location.symbol {
+        Some(symbol) => format!("{path}#{symbol}"),
+        None => path.to_string(),
+    })
+}
+
+pub(crate) fn explain(
+    graph: &ProjectGraph,
+    reach: &ReachabilityMap,
+    finding: &Finding,
+    finding_locations: &[FindingLocation<'_>],
+    coverage: &crate::coverage::CoverageMap,
+    nav: &GraphIndex,
+) -> ExplainResult {
+    let subject_selector = finding_selector(finding);
+    let subject = subject_selector
+        .as_deref()
+        .and_then(|raw| parse_selector(raw).ok())
+        .and_then(|sel| resolve(graph, &sel).ok())
+        .map(|resolved| {
+            Box::new(describe(
+                graph,
+                reach,
+                &resolved,
+                finding_locations,
+                coverage,
+                nav,
+            ))
+        });
+    ExplainResult {
+        finding: finding.clone(),
+        subject,
+        subject_selector,
+    }
+}
+
 const DECLARE_SYMBOLS_CAP: usize = 50;
 const REACHED_BY_ROOTS_CAP: usize = 10;
 
@@ -906,6 +987,12 @@ pub(crate) fn describe(
                     },
                     exported: sym.exported,
                     visibility: sym.visibility.0,
+                    visibility_label: graph.files[sym.file.0 as usize]
+                        .language
+                        .as_deref()
+                        .and_then(|lang| graph.ladder_for(lang))
+                        .and_then(|ladder| ladder.get(sym.visibility.0 as usize))
+                        .map(|rung| rung.label.to_string()),
                 }),
                 None,
                 None,

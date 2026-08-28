@@ -28,6 +28,11 @@ pub enum Verb {
     UsedBy,
     Trace,
     Impact,
+    /// `kndo explain <finding-id>` — RFC 0006 §2. A verb over a *finding* rather than a
+    /// selector, which is why its "selector" is an id; everything else about it (the envelope,
+    /// the `not-found` status, the exit code, batching through `kndo query`) is the same
+    /// machinery every other verb uses, and deliberately not a second one.
+    Explain,
 }
 
 impl Verb {
@@ -39,6 +44,7 @@ impl Verb {
             Verb::UsedBy => "used-by",
             Verb::Trace => "trace",
             Verb::Impact => "impact",
+            Verb::Explain => "explain",
         }
     }
 
@@ -50,6 +56,7 @@ impl Verb {
             "used-by" => Some(Verb::UsedBy),
             "trace" => Some(Verb::Trace),
             "impact" => Some(Verb::Impact),
+            "explain" => Some(Verb::Explain),
             _ => None,
         }
     }
@@ -125,6 +132,7 @@ pub enum ResultEntry {
     Neighbors(query::NeighborsResult),
     Trace(query::TraceResult),
     Impact(Box<query::ImpactResult>),
+    Explain(Box<query::ExplainResult>),
     Failed {
         status: &'static str,
         selector: String,
@@ -250,62 +258,107 @@ pub fn json_schema() -> schemars::Schema {
     schemars::schema_for!(QueryJsonEnvelope)
 }
 
+/// One assembled snapshot, borrowed read-only by every request in a batch — the amortization
+/// batching exists for. A struct rather than eight positional borrows because they always
+/// travel together and are always identical across a batch; the argument list had already
+/// earned a `too_many_arguments` waiver before `explain` needed to add the finding set to it.
+pub(crate) struct QuerySnapshot<'a> {
+    pub graph: &'a ProjectGraph,
+    pub reach: &'a ReachabilityMap,
+    pub nav: &'a query::GraphIndex,
+    /// The full findings, which only `explain` needs — every other verb reads the cheap
+    /// [`FindingLocation`] view below.
+    pub findings: &'a [Finding],
+    pub finding_locations: &'a [FindingLocation<'a>],
+    pub coverage: &'a crate::coverage::CoverageMap,
+    pub cache: &'static str,
+    pub duration_ms: u64,
+}
+
 /// Resolves and dispatches one [`QueryRequest`] against an already-assembled graph — the shared
 /// entry point `Engine::query` (single request) and `Engine::query_batch` (`kndo query`'s JSONL
 /// loop, one shared graph load) both call, so cache revalidation happens exactly once per
 /// process regardless of how many requests are answered (the batching tenet).
-#[allow(clippy::too_many_arguments)] // one shared snapshot's worth of borrows, all read-only
-pub(crate) fn run(
-    graph: &ProjectGraph,
-    reach: &ReachabilityMap,
-    nav: &query::GraphIndex,
-    finding_locations: &[FindingLocation<'_>],
-    coverage: &crate::coverage::CoverageMap,
-    req: QueryRequest,
-    cache: &'static str,
-    duration_ms: u64,
-) -> QueryResult {
+pub(crate) fn run(snap: &QuerySnapshot<'_>, req: QueryRequest) -> QueryResult {
     let limit = req.flags.limit.unwrap_or(DEFAULT_LIMIT);
     let results = match req.verb {
-        Verb::Find => find_entries(graph, reach, &req.selectors, &req.flags, limit),
+        Verb::Find => find_entries(snap.graph, snap.reach, &req.selectors, &req.flags, limit),
         Verb::Describe => describe_entries(
-            graph,
-            reach,
-            nav,
-            finding_locations,
-            coverage,
+            snap.graph,
+            snap.reach,
+            snap.nav,
+            snap.finding_locations,
+            snap.coverage,
             &req.selectors,
         ),
         Verb::Uses => neighbor_entries(
-            graph,
-            reach,
-            nav,
+            snap.graph,
+            snap.reach,
+            snap.nav,
             &req.selectors,
             &req.flags,
             Direction::Uses,
             limit,
         ),
         Verb::UsedBy => neighbor_entries(
-            graph,
-            reach,
-            nav,
+            snap.graph,
+            snap.reach,
+            snap.nav,
             &req.selectors,
             &req.flags,
             Direction::UsedBy,
             limit,
         ),
-        Verb::Trace => trace_entries(graph, reach, nav, &req.selectors, &req.flags),
-        Verb::Impact => impact_entries(graph, reach, nav, &req.selectors, &req.flags, limit),
+        Verb::Trace => trace_entries(snap.graph, snap.reach, snap.nav, &req.selectors, &req.flags),
+        Verb::Impact => impact_entries(
+            snap.graph,
+            snap.reach,
+            snap.nav,
+            &req.selectors,
+            &req.flags,
+            limit,
+        ),
+        Verb::Explain => explain_entries(snap, &req.selectors),
     };
     QueryResult {
         verb: req.verb,
         selectors: req.selectors,
         id: req.id,
-        cache,
-        duration_ms,
+        cache: snap.cache,
+        duration_ms: snap.duration_ms,
         results,
         diagnostics: Vec::new(),
     }
+}
+
+/// `explain`'s "selector" is a finding id, so it resolves against this run's finding set
+/// rather than against the graph — an id nothing reported is `not-found`, exactly as an
+/// unresolvable selector is for every other verb.
+fn explain_entries(snap: &QuerySnapshot<'_>, ids: &[String]) -> Vec<ResultEntry> {
+    ids.iter()
+        .map(|id| match snap.findings.iter().find(|f| f.id == *id) {
+            Some(finding) => ResultEntry::Explain(Box::new(query::explain(
+                snap.graph,
+                snap.reach,
+                finding,
+                snap.finding_locations,
+                snap.coverage,
+                snap.nav,
+            ))),
+            // Deliberately not "no such finding": an id can be absent because it never
+            // existed, because the finding was fixed, or because it is suppressed or
+            // baselined out of this run — and a reader who ran `kndo check` a week ago needs
+            // to be told which of those is possible rather than that they typed it wrong.
+            None => ResultEntry::Failed {
+                status: "not-found",
+                selector: id.clone(),
+                message: format!(
+                    "no finding with id `{id}` in this run — it may have been fixed, \
+                     suppressed, or acknowledged in the baseline since you saw it"
+                ),
+            },
+        })
+        .collect()
 }
 
 fn find_entries(

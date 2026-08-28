@@ -162,6 +162,29 @@ across thread counts and cache states. A malformed `KNDO_THREADS` fails `check` 
 the flag) with a clear message; subcommands without their own `--threads` flag quietly fall
 back to the default rather than fail on an env var they never asked about.
 
+## kndo explain
+
+`kndo explain <finding-id>` answers the question a finding's one line cannot: what the verdict
+rests on, and what else is true about the thing it landed on.
+
+```sh
+kndo check --format agent | head           # ids are the first column
+kndo explain kndo-a3f81c92e5d4
+```
+
+It prints the finding exactly as `check` does — same glyph, same category, same id — then its
+evidence chain, then the same block `kndo describe` gives for the finding's subject: color,
+declaration, metrics, which roots reach it, what else was reported there. In `--format agent`
+its `next:` line hands you the two follow-ups worth running (`used-by`, `trace`) already
+pointed at that subject.
+
+Findings whose subject is not a single node — a directory rollup standing in for fifty files —
+report the finding without a subject block rather than picking one of the fifty.
+
+Exit codes follow the navigation verbs: `0` when the id resolved, `1` when nothing in this run
+carries it. That second case is ordinary, not an error: the finding may have been fixed,
+suppressed, or acknowledged in a baseline since you saw the id.
+
 ## kndo health
 
 Runs a full analysis and presents it health-first: the 0–100 score, grade, trend versus the
