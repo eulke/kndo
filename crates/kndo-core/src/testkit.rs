@@ -66,6 +66,30 @@ fn split_type_args(inner: &str) -> Vec<&str> {
     out
 }
 
+/// A comma-separated binding token list, as `import`/`reexport`/`import-visible`/
+/// `import-reconstructed` directives all write it. `allow_alias` distinguishes the two
+/// spellings a token can have: `import`-family directives accept `local=imported` (an empty
+/// `imported` half means "namespace-opaque, no name to settle a miss with"), while
+/// `import-reconstructed`'s bindings are always plain — the adapter synthesized them from a
+/// use site, so there is no `as`-alias to spell.
+fn parse_binding_list(tokens: &str, allow_alias: bool) -> Vec<ImportBinding> {
+    tokens
+        .split(',')
+        .map(
+            |tok| match allow_alias.then(|| tok.split_once('=')).flatten() {
+                Some((local, imported)) => ImportBinding {
+                    local: SmolStr::new(local),
+                    imported: (!imported.is_empty()).then(|| SmolStr::new(imported)),
+                },
+                None => ImportBinding {
+                    local: SmolStr::new(tok),
+                    imported: Some(SmolStr::new(tok)),
+                },
+            },
+        )
+        .collect()
+}
+
 pub struct MockAdapter;
 
 impl LanguageAdapter for MockAdapter {
@@ -330,22 +354,7 @@ impl LanguageAdapter for MockAdapter {
                 let spec = parts.next().unwrap_or("");
                 let bindings = parts
                     .next()
-                    .map(|tokens| {
-                        tokens
-                            .split(',')
-                            .map(|tok| match tok.split_once('=') {
-                                Some((local, imported)) => ImportBinding {
-                                    local: SmolStr::new(local),
-                                    imported: (!imported.is_empty())
-                                        .then(|| SmolStr::new(imported)),
-                                },
-                                None => ImportBinding {
-                                    local: SmolStr::new(tok),
-                                    imported: Some(SmolStr::new(tok)),
-                                },
-                            })
-                            .collect()
-                    })
+                    .map(|tokens| parse_binding_list(tokens, true))
                     .unwrap_or_default();
                 facts.imports.push(RawImport {
                     specifier: SmolStr::new(spec),
@@ -370,15 +379,7 @@ impl LanguageAdapter for MockAdapter {
                 let spec = parts.next().unwrap_or("");
                 let bindings = parts
                     .next()
-                    .map(|tokens| {
-                        tokens
-                            .split(',')
-                            .map(|tok| ImportBinding {
-                                local: SmolStr::new(tok),
-                                imported: Some(SmolStr::new(tok)),
-                            })
-                            .collect()
-                    })
+                    .map(|tokens| parse_binding_list(tokens, false))
                     .unwrap_or_default();
                 facts.imports.push(RawImport {
                     specifier: SmolStr::new(spec),
