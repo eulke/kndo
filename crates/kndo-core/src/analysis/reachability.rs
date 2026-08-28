@@ -524,15 +524,39 @@ pub fn compute_with_roots(graph: &ProjectGraph, extra_roots: &[SymbolId]) -> Rea
             .push((node_index(NodeRef::Symbol(s)) as u32, Confidence::Certain));
     }
 
-    // R(kind, tau) for every (kind, tau), literally: BFS seeded only by roots whose own
-    // confidence is >= tau, traversing only edges with confidence >= tau. The module-load
-    // rule needs no special-case here any more — it's the implicit CSR edge above.
+    let reached = bfs_all_tiers(n, &offsets, &targets, &confs, &seeds);
+    let colors = resolve_colors(n, &reached);
+
+    let reached_possible = [reached[2].clone(), reached[5].clone(), reached[8].clone()];
+    ReachabilityMap {
+        files_len,
+        colors,
+        reached_possible,
+    }
+}
+
+/// R(kind, tau) for every (kind, tau), literally: BFS seeded only by roots whose own
+/// confidence is >= tau, traversing only edges with confidence >= tau. The module-load
+/// rule needs no special-case here — it's an implicit CSR edge, not a seed. Returns the 9
+/// bitsets in `kind_index*3 + tier_index` order (`ROOT_KINDS.len() * TIERS.len()`).
+///
+/// Operates purely on the finished CSR adjacency and per-kind seed lists — nothing about
+/// `ProjectGraph`'s symbol/file tables is needed once the graph has been flattened this far.
+/// The `queue.pop()` LIFO order is scheduling only; membership is a set, so a stack-based
+/// visit order changes nothing observable.
+fn bfs_all_tiers(
+    n: usize,
+    offsets: &[u32],
+    targets: &[u32],
+    confs: &[Confidence],
+    seeds: &[Vec<(u32, Confidence)>; 3],
+) -> Vec<BitSet> {
     let mut reached: Vec<BitSet> = Vec::with_capacity(9);
-    for (k, _) in ROOT_KINDS.iter().enumerate().map(|(i, _)| (i, ())) {
+    for seeds_for_kind in seeds {
         for &tau in &TIERS {
             let mut visited = BitSet::new(n);
             let mut queue: Vec<u32> = Vec::new();
-            for &(node, conf) in &seeds[k] {
+            for &(node, conf) in seeds_for_kind {
                 if conf >= tau && visited.insert(node as usize) {
                     queue.push(node);
                 }
@@ -554,10 +578,14 @@ pub fn compute_with_roots(graph: &ProjectGraph, extra_roots: &[SymbolId]) -> Rea
             reached.push(visited);
         }
     }
+    reached
+}
 
-    // First-match precedence over every node: Production > TestOnly > ToolingOnly; within a
-    // color, the strongest tau achieved. (Traversal order above is scheduling; membership is
-    // a set — so a stack-based visit order changes nothing observable.)
+/// First-match precedence over every node: Production > TestOnly > ToolingOnly; within a
+/// color, the strongest tau achieved. Given the 9 already-computed per-(root-kind,tier)
+/// reachable sets, this is a caller-independent ranking rule that needs nothing about the
+/// graph, the CSR arrays, or symbols — only the bitsets themselves.
+fn resolve_colors(n: usize, reached: &[BitSet]) -> Vec<(Reachability, Confidence)> {
     let mut colors: Vec<(Reachability, Confidence)> =
         vec![(Reachability::Unreachable, Confidence::Certain); n];
     for (idx, color) in colors.iter_mut().enumerate() {
@@ -570,13 +598,7 @@ pub fn compute_with_roots(graph: &ProjectGraph, extra_roots: &[SymbolId]) -> Rea
             }
         }
     }
-
-    let reached_possible = [reached[2].clone(), reached[5].clone(), reached[8].clone()];
-    ReachabilityMap {
-        files_len,
-        colors,
-        reached_possible,
-    }
+    colors
 }
 
 #[cfg(test)]
@@ -1179,5 +1201,76 @@ mod tests {
             reach.get(NodeRef::File(FileId(0))).0,
             Reachability::Unreachable
         );
+    }
+
+    // ---------------------------------------------------------------- resolve_colors, bfs_all_tiers
+    //
+    // These two exist to be testable exactly like this: hand-built bitsets/CSR arrays, no
+    // ProjectGraph or MockAdapter fixture required — the payoff the extraction promised.
+
+    #[test]
+    fn resolve_colors_prefers_production_over_a_stronger_test_confidence() {
+        // Node 0 is production-reachable only at `probable` (kind 0, tier 1) and
+        // test-reachable at `certain` (kind 1, tier 0). Production must still win, at its own
+        // (weaker) tier — the worked example the function's own doc comment names.
+        let mut reached = vec![BitSet::new(1); 9];
+        reached[1].insert(0); // kind 0 (Production), tier 1 (Probable)
+        reached[3].insert(0); // kind 1 (Test), tier 0 (Certain)
+        let colors = resolve_colors(1, &reached);
+        assert_eq!(colors[0], (Reachability::Production, Confidence::Probable));
+    }
+
+    #[test]
+    fn resolve_colors_defaults_a_node_no_tier_reaches_to_unreachable_certain() {
+        let reached = vec![BitSet::new(2); 9];
+        let colors = resolve_colors(2, &reached);
+        assert_eq!(
+            colors,
+            vec![
+                (Reachability::Unreachable, Confidence::Certain),
+                (Reachability::Unreachable, Confidence::Certain),
+            ]
+        );
+    }
+
+    #[test]
+    fn bfs_all_tiers_stops_at_an_edge_below_the_requested_tier() {
+        // 0 -certain-> 1 -possible-> 2. At tier `probable`, the second edge doesn't qualify,
+        // so node 2 is unreached; at tier `possible`, both do, so node 2 is reached.
+        let offsets = vec![0, 1, 2, 2];
+        let targets = vec![1, 2];
+        let confs = vec![Confidence::Certain, Confidence::Possible];
+        let mut seeds: [Vec<(u32, Confidence)>; 3] = [Vec::new(), Vec::new(), Vec::new()];
+        seeds[0].push((0, Confidence::Certain));
+        let reached = bfs_all_tiers(3, &offsets, &targets, &confs, &seeds);
+        // kind 0, tier order [Certain, Probable, Possible] -> indices 0, 1, 2.
+        assert!(
+            reached[0].contains(1),
+            "certain edge reached at tier certain"
+        );
+        assert!(
+            !reached[0].contains(2),
+            "possible edge must not qualify at tier certain"
+        );
+        assert!(
+            !reached[1].contains(2),
+            "possible edge must not qualify at tier probable either"
+        );
+        assert!(
+            reached[2].contains(2),
+            "possible edge qualifies at tier possible"
+        );
+    }
+
+    #[test]
+    fn bfs_all_tiers_seeds_only_the_kind_they_belong_to() {
+        let offsets = vec![0, 0];
+        let targets: Vec<u32> = Vec::new();
+        let confs: Vec<Confidence> = Vec::new();
+        let mut seeds: [Vec<(u32, Confidence)>; 3] = [Vec::new(), Vec::new(), Vec::new()];
+        seeds[1].push((0, Confidence::Certain)); // kind 1 (Test) only
+        let reached = bfs_all_tiers(1, &offsets, &targets, &confs, &seeds);
+        assert!(!reached[0].contains(0), "kind 0 (Production) never seeded");
+        assert!(reached[3].contains(0), "kind 1 (Test), tier certain");
     }
 }
