@@ -134,6 +134,22 @@ actually reads; `kndo init`'s template is checked against it. A commented-out ke
 promise — `[project]`'s `roots`/`exclude` were written into every new project and documented key
 by key, wired to nothing. Wire it or leave it out.
 
+## Verify on the toolchain CI uses, and with the targets CI installs
+
+"clippy is clean locally" is a claim about one toolchain. CI installs `stable`, which moves;
+a container can sit several releases behind. Six jobs went red on a `useless_conversion` that
+1.98 reports and 1.94 does not, in code nobody had touched — the lint was new, the code was old,
+and the local run could not have seen it. If a CI job disagrees with a local run, compare
+`rustc --version` **before** looking for anything subtler; `cargo +<version>` reproduces it.
+
+The same holds for targets. The workspace suite builds real WASM components at run time, so a
+job that runs it needs `targets: wasm32-unknown-unknown` on its toolchain step — without it the
+build dies with "can't find crate for `core`". The `gates` job lacked it, which meant
+`plugin_dependency_implication` — a named gate on the list below — had **never once passed in
+CI**, while appearing in the job list as a step that ran. A step that always fails and a step
+that never runs look the same from a distance; both are worse than no step, because the list
+says the invariant is covered.
+
 ## Gates that must never regress
 
 These are checked by name in CI — the `gates` job in `.github/workflows/ci.yml` runs one step

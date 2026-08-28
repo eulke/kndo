@@ -101,6 +101,13 @@ jobs:
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          # The workspace suite builds real WASM components (the adapter/plugin ABI tests
+          # componentize a guest at run time), so this target is not optional here. Without it
+          # the build fails with "can't find crate for `core`" — which is exactly how
+          # `plugin_dependency_implication`, a CLAUDE.md named gate, had never once passed in
+          # CI while appearing in the job list as a step that ran.
+          targets: wasm32-unknown-unknown
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -346,8 +353,14 @@ jobs:
           # And it is genuinely static: a musl release binary that needs a dynamic loader would
           # fail on exactly the distributions this target exists to serve.
           file "$HOME/.kndo-install-test/kndo"
-          ldd "$HOME/.kndo-install-test/kndo" 2>&1 | grep -q "not a dynamic executable" \
-            || { echo "the musl release binary is dynamically linked"; exit 1; }
+          # Asserted on `file`, not `ldd`. This build produces a **static-PIE**, and the
+          # previous check accepted only ldd's "not a dynamic executable" — the phrasing for a
+          # classic non-PIE static binary — so it rejected a perfectly good artifact. The
+          # binary was always fine; the assertion was wrong. `file` names the linkage
+          # unambiguously and identically on every runner, and covers both static forms.
+          file "$HOME/.kndo-install-test/kndo" \
+            | grep -qE "static-pie linked|statically linked" \
+            || { echo "the musl release binary is not statically linked"; exit 1; }
 
       # A checksum mismatch must stop the install, not warn past it. Asserted here because the
       # only other way to find out is a corrupted download on a user's machine.
@@ -475,6 +488,13 @@ jobs:
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          # The workspace suite builds real WASM components (the adapter/plugin ABI tests
+          # componentize a guest at run time), so this target is not optional here. Without it
+          # the build fails with "can't find crate for `core`" — which is exactly how
+          # `plugin_dependency_implication`, a CLAUDE.md named gate, had never once passed in
+          # CI while appearing in the job list as a step that ran.
+          targets: wasm32-unknown-unknown
 
       - uses: Swatinem/rust-cache@v2
         with:

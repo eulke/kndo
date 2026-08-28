@@ -3580,7 +3580,7 @@ pub fn assemble_from_source(
         .collect();
     // Merged per FILE, imports before references — the order the single pass emitted them in,
     // and the order `DependencyId` assignment depends on (first appearance in file order).
-    for (imports, resolved) in imports_per_file.into_iter().zip(resolved_files.into_iter()) {
+    for (imports, resolved) in imports_per_file.into_iter().zip(resolved_files) {
         edges.extend(imports.edges);
         for (name, confidence, span, from, source) in imports.dep_imports {
             let to = *dep_index.entry(name.clone()).or_insert_with(|| {
