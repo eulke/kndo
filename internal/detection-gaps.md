@@ -587,3 +587,85 @@ neither was checked before the design was written down. The actual change is one
 capability on the manifest-extraction `ResolveCtx` (`read_manifest`), with every Maven rule
 staying in the adapter. Measuring the constraint before designing around it would have saved the
 whole detour.
+
+## 19. `kndo:guava-testlib` — the plugin measurement closed without building
+
+W6/E5 planned a `kndo:guava-testlib` plugin for "`MapTestSuiteBuilder` discovers methods at
+runtime", blocked on the Java adapter emitting `string_call_args`. Java emits them now (commit
+`48f0728`), so the block is gone — and with it gone, three measurements say there is nothing to
+build. Recorded here rather than left as a to-do, because an unbuilt item with no reason attached
+is one somebody rediscovers and builds.
+
+**1. The stated mechanism was not the mechanism.** guava's suite builders register testers with
+**class literals** (`MapTestSuiteBuilder.using(...).named(...)` taking `Class<?>`), not strings;
+the method discovery underneath is **JUnit 3**'s `testXxx` convention, not anything
+guava-testlib invents. `string_call_args` — the fact E5 was waiting on — is irrelevant to it.
+
+**2. The volume was the Maven gap.** The 1,174 findings that motivated E5 were part of the 9,576
+`unused` produced by root promotion ignoring an inherited `<sourceDirectory>` (§15-ter). Fixing
+that removed **11,444** findings from guava; `unused` inside the testlib modules fell from that
+class to **247**.
+
+**3. What is left is one class's private detail, and config already covers it.** 213 of those 247
+are `FreshValueGenerator.generate*` methods, invoked through
+`getDeclaredMethods()` + `isAnnotationPresent(Generates.class)`. `Generates` is declared
+`private @interface Generates {}` — a private nested annotation, usable by exactly one class,
+appearing in exactly two files in the repository (the same file, duplicated for the android
+flavor). §0.2 puts "knowledge specific to one concrete **tool**" in that tool's plugin; a private
+member of one class is not that, and a shipped plugin for it would serve one repository on Earth.
+
+Measured directly: three lines of `kndo.toml` —
+
+```toml
+[[externally-invoked]]
+markers = ["Generates", "Empty"]
+```
+
+— take testlib's `unused` from **247 to 34**, and the `FreshValueGenerator` methods from **213 to
+0**. The project-declared-marker mechanism is exactly the right layer for a reflection registry
+whose marker only its own project knows, and it already exists and already works.
+
+**So: not built, and not pending.** The residual 34 are unrelated to the pattern and are ordinary
+findings on their own merits.
+
+## 20. `kndo:vite` and `kndo:rollup` — measured, not built, and what they were pointing at
+
+W6/E3 and E4 planned two plugins: `kndo:vite` reading `build.lib.entry` and
+`build.rollupOptions.input` from `vite.config.*`, `kndo:rollup` reading `input`/`output` from
+`rollup.config.*`. Measured against the two repositories, neither survives — and the measurement
+names the real gap, which is neither of them.
+
+**`kndo:rollup` has no case at all.** rollup's own repository: 2,269 findings, of which 219 are
+`unused` — 140 of those inside `rust/` (its Rust-based parser) and 33 on `package.json` files.
+Nothing points at `rollup.config`. There is no measured defect for this plugin to close.
+
+**`kndo:vite` was aimed at the wrong declaration.** Of vite's 61 `playground/*` config files,
+**11** declare an `input`/`entry`/`lib` at all, and those name **`.html` files** through
+`path.resolve(dirname, './index.html')` — computed expressions, not literals, the same "the
+config is a program" problem Gradle has.
+
+**What actually costs vite 831 findings** is one directory up from the config. 36 of 76 playground
+apps have an `index.html` carrying `<script type="module" src="./main.js">` — vite's real entry,
+and the web's, used identically by webpack, parcel, esbuild and a plain static site. **83 module
+scripts are named that way and 65 of them are reported `unused`**, each the root of a subtree
+that reads as dead behind it. Nothing claims `.html`: not the JS adapter, not CSS, not any other.
+
+By §0.2 that is an **adapter** question and not a plugin one — `<script src>` is HTML's own
+mechanism for naming a module, no more vite's property than `import` is webpack's. A `kndo:vite`
+plugin reading `vite.config.js` would close a small minority of the cases while leaving the
+mechanism that produces them unmodelled.
+
+**Why it is not a small change, which is why it is recorded here rather than done in passing.**
+The obvious cheap shape — have the JS adapter `claim_manifest` `*.html` and emit its scripts as
+`ManifestRoot`s — is wrong: **assembly creates one `PackageNode` per claimed manifest**
+(`assemble.rs`, "one `Package` per manifest found", ownership by nearest-manifest-ancestor), so
+every directory holding an HTML file would become its own package and take package-scoped unit
+keys, dependency ownership and surface with it.
+
+The shape that fits is `claim` rather than `claim_manifest`: an HTML document is an **entry
+point**, not a module — nothing imports a page, a browser loads it — so the adapter would claim
+it, root it, and emit its `<script src>`/`<link href>` as imports. That is a change to *file
+classification* with repo-wide reach, not a plugin: it would also claim the `.html` templates in
+Java projects that `kndo:thymeleaf` reads today, changing their language attribution. It needs
+its own before/after across vite, spring-petclinic and the JS corpus before it lands, on the
+same measurement discipline as everything else here.
