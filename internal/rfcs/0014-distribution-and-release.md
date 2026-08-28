@@ -114,8 +114,20 @@ there is no release.
 
 musl for Linux because it produces a real static binary independent of the host's glibc; macOS
 and Windows build on their own runners because cross-compiling to them costs more than it saves.
-Each job packages `kndo-<version>-<target>.tar.gz` (`.zip` on Windows) with the binary,
-`LICENSE`, and `README.md`.
+Each job packages `kndo-<tag>-<target>.tar.gz` (`.zip` on Windows) with the binary, `LICENSE`,
+and `README.md`, all nested under a single directory named for the archive — so every consumer
+strips exactly one component.
+
+**The table above is `xtask::package::TARGETS`, and the artifact's name and layout are
+`xtask::package::artifact`.** This is not a description of what the workflow does; the workflow
+calls `cargo xtask package`, and `xtask/tests/release_channels.rs` checks the workflow matrix,
+the installer, the Action, the Homebrew template and the install docs against that one
+definition. The arrangement it replaced had five independent spellings, of which three were
+wrong at the same time — the Action asked for `-unknown-linux-gnu` triples no release has ever
+built and dropped the tag's leading `v`; the installer extracted correctly and then took the
+binary from the extraction root, where the staged directory means it is not; the docs'
+copy-pasteable one-liner had both faults. `<tag>` is the git tag verbatim, `v` included: that is
+what the producer writes, so a consumer that strips it names a file that does not exist.
 
 **`release`** (depends on all 5 builds): collects artifacts, computes SHA-256 into
 `checksums.txt`, generates notes via [git-cliff](https://git-cliff.org/) (confirmed: the tool
@@ -156,9 +168,16 @@ One versioned POSIX script, served from GitHub raw or a project domain:
    `aarch64-apple-darwin`, `Linux/x86_64` → `x86_64-unknown-linux-musl`, …). An unsupported
    platform errors with the supported list.
 2. Resolve version: `latest` from the releases API, or `KNDO_VERSION` for a pinned install.
-3. Download the artifact and `checksums.txt`.
+3. Download the artifact and `checksums.txt` from the project's releases, or from
+   `KNDO_BASE_URL` — an internal mirror or a staging directory served over HTTP. That override
+   is also the seam CI installs through: the `install-from-artifact` job builds the musl binary,
+   packages it with the same `xtask package` a release runs, serves the result over localhost
+   and installs from it, so the layout contract is exercised end to end on every push instead of
+   for the first time on a tag. It asserts the corrupt case too — a tampered archive must abort
+   and leave nothing behind.
 4. **Verify SHA-256 before extracting** — a mismatch aborts without writing anything.
-5. Extract to `~/.local/bin` (or `KNDO_INSTALL_DIR`) — no sudo, nothing under a system directory.
+5. Extract to `~/.local/bin` (or `KNDO_INSTALL_DIR`), stripping the archive's staged directory —
+   no sudo, nothing under a system directory.
 6. If that directory isn't on `PATH`, print the exact line to add to the shell profile.
 7. Close with `kndo --version`, suggesting `kndo doctor` as the next command — which already
    exists and already answers "what did it detect and why" (ADR 0006's own mandatory companion).

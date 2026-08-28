@@ -518,3 +518,48 @@ perform cannot produce a `certain` finding — while a real disagreement among t
 DID state a requirement still fires. Measured: spring-petclinic 5 → 0, kotlinx.coroutines 4 → 0,
 Exposed 9 → 4, and the four that remain are genuine (`com.h2database:h2` at `2.4.240` in three
 manifests against `2.3.232` in a sample).
+
+## 18. A file two roots reach, coloured by the one that loses (FIXED)
+
+**The claim `test_only.rs` made and did not implement.** Its own module doc read "fires on nodes
+coloured `TestOnly` — reachable, just never from a production **or tooling** root". Reading the
+colour is not that test. Colours resolve by first-match precedence
+(`Production > TestOnly > ToolingOnly`, `reachability.rs`), so a node reached from a test root
+*and* a tooling root wins `TestOnly` — and was accused of being code "production never came" for,
+while an xtask, a build script or a `module-info.java` was using it the whole time.
+
+`ReachabilityMap` already keeps `reached_possible` per root kind for exactly this — its own doc
+says the winning colour "is exactly wrong" for a query that needs the kind that lost, and
+`untested` already consults `reachable_from` that way. `test_only` now does too, in both the file
+and the symbol loop.
+
+**How it surfaced.** kndo's own `dogfood` gate, the moment `xtask` grew a `src/lib.rs` and became
+the workspace's first lib+bin package: 11 findings, all of them `xtask/src/package.rs` and its
+symbols, reached from `xtask/src/main.rs` (tooling) *and* `xtask/tests/release_channels.rs`
+(test). Import resolution was never at fault — `resolve_bare`'s `same_package` path resolved
+`use xtask::package` correctly, at `Certain`. The graph was right; the analysis read it wrong.
+
+**Measured**, one binary per cause, diffed by `(category, path, symbol)` over the five corpus
+repos holding 98% of its baseline `test-only` findings (760 total: tokio 350,
+kotlinx.coroutines 296, RxSwift 82, alacritty 12, Exposed 12):
+
+| repo | before | after | removed | added |
+|---|---|---|---|---|
+| tokio | 2946 | 2946 | 0 | 0 |
+| kotlinx.coroutines | 2577 | 2576 | **1** | 0 |
+| RxSwift | 2175 | 2175 | 0 | 0 |
+| alacritty | 906 | 906 | 0 | 0 |
+| Exposed | 783 | 783 | 0 | 0 |
+
+**−1 / +0.** The one removal is `reactive/kotlinx-coroutines-reactor/src/Convert.kt`, whose only
+consumer is `module-info.java` — `by_color: {production: 0, test-only: 0, tooling-only: 1}`. A
+file with zero test reach was being reported as test-only; that is the defect, not a suppression
+of a true positive. Narrow in the field and one-directional by construction (the fix is an added
+`continue`, so it can only ever remove), which is why the eleven findings on kndo itself are the
+bulk of what it closes.
+
+Pinned by `a_file_a_tool_and_a_test_both_use_is_not_test_only` and
+`a_symbol_a_tool_and_a_test_both_use_is_not_test_only`. The symbol fixture keeps its file
+`Production`-coloured on purpose: with a `TestOnly` file the rollup skip ("the file-level finding
+already covers every symbol in it") exempts the symbol before the colour is read, and the test
+would pass without the guard it exists to pin — verified by removing each guard in turn.

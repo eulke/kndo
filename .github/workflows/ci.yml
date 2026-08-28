@@ -274,3 +274,101 @@ jobs:
           assert unused == ['dead'], f'expected only dead to be unused, got {unused}'
           print('shell build smoke check passed')
           "
+
+  install-from-artifact:
+    name: install from its own artifact
+    runs-on: ubuntu-latest
+    # The one thing nothing checked before a tag was pushed: that an artifact this repository
+    # produces can actually be installed. The artifact's name and layout are a contract four
+    # channels depend on, and `xtask/tests/release_channels.rs` checks that they *agree* — but
+    # agreement on a wrong shape is still wrong. This job closes the loop by running the real
+    # producer and the real installer against each other. It is also the only place the musl
+    # build is exercised at all outside a release.
+    env:
+      # Same reasoning as shell-build: this binary is never distributed, so drop the release
+      # profile's LTO to keep the job's build time honest. release.yml doesn't inherit this.
+      CARGO_PROFILE_RELEASE_LTO: "false"
+      CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-musl
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: install-from-artifact
+          cache-on-failure: true
+
+      # musl-gcc is the linker `cargo build --target …-musl` needs. Cheaper here than `cross`,
+      # which would pull a container image for a build this job already has a toolchain for.
+      - name: Install the musl linker
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      - name: Build the release binary (musl, as a release does)
+        run: cargo build --release --locked -p kndo-cli --target x86_64-unknown-linux-musl
+
+      # The same command release.yml runs, so the artifact under test is the artifact that
+      # ships — not a re-creation of one.
+      - name: Package it, exactly as a release would
+        run: |
+          set -eu
+          cargo run -p xtask --quiet -- package \
+            --target x86_64-unknown-linux-musl --tag v0.0.0-ci --out-dir dist
+          cd dist && sha256sum -- * > checksums.txt
+          ls -l
+
+      # Served over HTTP rather than read from disk so `install.sh` runs every line it runs for
+      # a real user: resolve, download, verify the checksum, extract, place, report.
+      - name: Install from it with the real installer
+        run: |
+          set -eu
+          python3 -m http.server 8000 --directory dist &
+          server=$!
+          trap 'kill $server' EXIT
+          for _ in $(seq 1 50); do
+            curl -fsS http://127.0.0.1:8000/checksums.txt >/dev/null 2>&1 && break
+            sleep 0.2
+          done
+
+          KNDO_VERSION=v0.0.0-ci \
+          KNDO_BASE_URL=http://127.0.0.1:8000 \
+          KNDO_INSTALL_DIR="$HOME/.kndo-install-test" \
+            sh install.sh
+
+          # It installed, it runs, and it is the binary we just built.
+          "$HOME/.kndo-install-test/kndo" --version
+          "$HOME/.kndo-install-test/kndo" --version | grep -q '^kndo ' \
+            || { echo "the installed binary did not report a kndo version"; exit 1; }
+
+          # And it is genuinely static: a musl release binary that needs a dynamic loader would
+          # fail on exactly the distributions this target exists to serve.
+          file "$HOME/.kndo-install-test/kndo"
+          ldd "$HOME/.kndo-install-test/kndo" 2>&1 | grep -q "not a dynamic executable" \
+            || { echo "the musl release binary is dynamically linked"; exit 1; }
+
+      # A checksum mismatch must stop the install, not warn past it. Asserted here because the
+      # only other way to find out is a corrupted download on a user's machine.
+      - name: A corrupted archive aborts the install
+        run: |
+          set -eu
+          python3 -m http.server 8001 --directory dist &
+          server=$!
+          trap 'kill $server' EXIT
+          for _ in $(seq 1 50); do
+            curl -fsS http://127.0.0.1:8001/checksums.txt >/dev/null 2>&1 && break
+            sleep 0.2
+          done
+          printf 'not the archive you are looking for\n' \
+            > dist/kndo-v0.0.0-ci-x86_64-unknown-linux-musl.tar.gz
+
+          if KNDO_VERSION=v0.0.0-ci \
+             KNDO_BASE_URL=http://127.0.0.1:8001 \
+             KNDO_INSTALL_DIR="$HOME/.kndo-corrupt-test" \
+               sh install.sh; then
+            echo "install.sh accepted an archive whose checksum did not match"; exit 1
+          fi
+          [ ! -e "$HOME/.kndo-corrupt-test/kndo" ] \
+            || { echo "install.sh left a binary behind after refusing the download"; exit 1; }

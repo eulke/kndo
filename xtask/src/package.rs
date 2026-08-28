@@ -1,0 +1,222 @@
+//! `cargo xtask package` — the one place that knows what a kndo release artifact is called
+//! and what is inside it.
+//!
+//! Four channels consume those artifacts and none of them can call Rust: the installer shell
+//! script, the GitHub Action, the Homebrew formula template, and the published install docs.
+//! Before this module each of them spelled the name and assumed the layout on its own, and a
+//! measurement of that arrangement found three of the four broken — the Action asked for
+//! `-gnu` triples the release never builds *and* dropped the tag's leading `v`; the installer
+//! copied `kndo` from the extraction root, where the staged directory means it never is; the
+//! docs' copy-pasteable one-liner had both faults. None of it could be noticed before a tag was
+//! pushed, because nothing in CI ever produced an artifact and then consumed one.
+//!
+//! So: this module is the producer (`release.yml` calls it instead of hand-rolling `tar` and
+//! `Compress-Archive` per platform), and `tests/release_channels.rs` reads the four consumers
+//! and asserts each one spells exactly what [`artifact`] produces. A channel that drifts fails
+//! a test on the PR that drifts it, not on the release that ships it.
+
+use std::path::{Path, PathBuf};
+
+/// How a target's archive is packed. macOS and Linux get `.tar.gz`, Windows `.zip` — the
+/// conventional expectation on each platform, and what every consumer already assumes.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Archive {
+    TarGz,
+    Zip,
+}
+
+impl Archive {
+    pub fn extension(self) -> &'static str {
+        match self {
+            Archive::TarGz => "tar.gz",
+            Archive::Zip => "zip",
+        }
+    }
+}
+
+/// One released platform: everything the release pipeline and its consumers need to agree on.
+pub struct Target {
+    /// The Rust target triple. Also the last field of every artifact name.
+    pub triple: &'static str,
+    /// The GitHub runner that builds it.
+    pub runner: &'static str,
+    /// Built through `cross` rather than natively. musl needs it (a real static binary,
+    /// independent of the host's glibc); macOS and Windows build on their own runners.
+    pub cross: bool,
+    /// `(uname -s, uname -m)` pairs that must resolve to this triple. Empty for Windows, which
+    /// no `uname`-based installer serves. This is what makes the installer's and the Action's
+    /// platform detection checkable: a triple nothing maps to is a triple nobody can install.
+    pub uname: &'static [(&'static str, &'static str)],
+    pub archive: Archive,
+}
+
+impl Target {
+    /// The binary's file name inside the archive.
+    pub fn binary(&self) -> &'static str {
+        if self.triple.contains("windows") {
+            "kndo.exe"
+        } else {
+            "kndo"
+        }
+    }
+}
+
+/// Every platform a release publishes. `release.yml`'s build matrix is checked against this
+/// list, not written beside it.
+///
+/// Linux is **musl**, deliberately: a static binary that runs on any distribution regardless of
+/// its glibc. Anything asking for `-gnu` is asking for an asset that does not exist.
+pub const TARGETS: &[Target] = &[
+    Target {
+        triple: "x86_64-unknown-linux-musl",
+        runner: "ubuntu-latest",
+        cross: true,
+        uname: &[("Linux", "x86_64")],
+        archive: Archive::TarGz,
+    },
+    Target {
+        triple: "aarch64-unknown-linux-musl",
+        runner: "ubuntu-latest",
+        cross: true,
+        uname: &[("Linux", "aarch64"), ("Linux", "arm64")],
+        archive: Archive::TarGz,
+    },
+    Target {
+        triple: "x86_64-apple-darwin",
+        runner: "macos-latest",
+        cross: false,
+        uname: &[("Darwin", "x86_64")],
+        archive: Archive::TarGz,
+    },
+    Target {
+        triple: "aarch64-apple-darwin",
+        runner: "macos-latest",
+        cross: false,
+        uname: &[("Darwin", "arm64")],
+        archive: Archive::TarGz,
+    },
+    Target {
+        triple: "x86_64-pc-windows-msvc",
+        runner: "windows-latest",
+        cross: false,
+        uname: &[],
+        archive: Archive::Zip,
+    },
+];
+
+pub fn target(triple: &str) -> Option<&'static Target> {
+    TARGETS.iter().find(|t| t.triple == triple)
+}
+
+/// Files that accompany the binary in every archive, relative to the workspace root.
+pub const EXTRA_FILES: &[&str] = &["LICENSE", "README.md"];
+
+/// The name and shape of one release artifact.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Artifact {
+    /// The single directory the archive contains, and the archive's own base name:
+    /// `kndo-v1.2.0-aarch64-apple-darwin`.
+    pub stem: String,
+    /// The archive file name: the stem plus `.tar.gz` or `.zip`.
+    pub file_name: String,
+    /// The binary's path *inside* the archive. Every archive nests its contents under `stem`,
+    /// which is why every consumer must strip exactly one leading component.
+    pub binary_in_archive: String,
+}
+
+/// **The name and layout of a release artifact.** `tag` is the git tag verbatim, leading `v`
+/// included (`v1.2.0`) — that is what `GITHUB_REF_NAME` holds and therefore what the producer
+/// has always written; a consumer that strips it asks for a file that was never uploaded.
+pub fn artifact(tag: &str, target: &Target) -> Artifact {
+    let stem = format!("kndo-{tag}-{}", target.triple);
+    Artifact {
+        file_name: format!("{stem}.{}", target.archive.extension()),
+        binary_in_archive: format!("{stem}/{}", target.binary()),
+        stem,
+    }
+}
+
+/// Stage and archive one release artifact. Returns the archive's path.
+pub fn package(
+    workspace: &Path,
+    tag: &str,
+    target: &Target,
+    binary: &Path,
+    out_dir: &Path,
+) -> Result<PathBuf, String> {
+    let art = artifact(tag, target);
+    if !binary.is_file() {
+        return Err(format!(
+            "no binary at {} — build it first (cargo build --release --locked -p kndo-cli \
+             --target {})",
+            binary.display(),
+            target.triple
+        ));
+    }
+    std::fs::create_dir_all(out_dir)
+        .map_err(|e| format!("cannot create {}: {e}", out_dir.display()))?;
+    let archive_path = out_dir.join(&art.file_name);
+    // A stale archive from a previous run must not survive into this one: `zip` appends
+    // nothing but `tar` writing over a shorter file would leave the tail of the old one.
+    let _ = std::fs::remove_file(&archive_path);
+
+    let mut entries: Vec<(String, PathBuf)> =
+        vec![(art.binary_in_archive.clone(), binary.to_path_buf())];
+    for extra in EXTRA_FILES {
+        let src = workspace.join(extra);
+        if !src.is_file() {
+            return Err(format!(
+                "{} is missing from the workspace root",
+                src.display()
+            ));
+        }
+        entries.push((format!("{}/{extra}", art.stem), src));
+    }
+
+    match target.archive {
+        Archive::TarGz => write_tar_gz(&archive_path, &entries)?,
+        Archive::Zip => write_zip(&archive_path, &entries)?,
+    }
+    Ok(archive_path)
+}
+
+fn write_tar_gz(path: &Path, entries: &[(String, PathBuf)]) -> Result<(), String> {
+    let file = std::fs::File::create(path)
+        .map_err(|e| format!("cannot create {}: {e}", path.display()))?;
+    let encoder = flate2::write::GzEncoder::new(file, flate2::Compression::default());
+    let mut builder = tar::Builder::new(encoder);
+    for (name, src) in entries {
+        builder
+            .append_path_with_name(src, name)
+            .map_err(|e| format!("cannot add {} as {name}: {e}", src.display()))?;
+    }
+    builder
+        .into_inner()
+        .map_err(|e| format!("cannot finish {}: {e}", path.display()))?
+        .finish()
+        .map_err(|e| format!("cannot finish {}: {e}", path.display()))?;
+    Ok(())
+}
+
+fn write_zip(path: &Path, entries: &[(String, PathBuf)]) -> Result<(), String> {
+    use std::io::Write;
+    let file = std::fs::File::create(path)
+        .map_err(|e| format!("cannot create {}: {e}", path.display()))?;
+    let mut zip = zip::ZipWriter::new(file);
+    for (name, src) in entries {
+        // 0o755 on every entry: the binary must stay executable for anyone who unpacks the
+        // Windows archive on a Unix host, and the two text files being executable is harmless.
+        let options: zip::write::FileOptions<'_, ()> = zip::write::FileOptions::default()
+            .compression_method(zip::CompressionMethod::Deflated)
+            .unix_permissions(0o755);
+        zip.start_file(name.clone(), options)
+            .map_err(|e| format!("cannot add {name}: {e}"))?;
+        let bytes =
+            std::fs::read(src).map_err(|e| format!("cannot read {}: {e}", src.display()))?;
+        zip.write_all(&bytes)
+            .map_err(|e| format!("cannot write {name}: {e}"))?;
+    }
+    zip.finish()
+        .map_err(|e| format!("cannot finish {}: {e}", path.display()))?;
+    Ok(())
+}

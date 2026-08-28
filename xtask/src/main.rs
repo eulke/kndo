@@ -19,6 +19,8 @@
 
 use std::process::{Command, ExitCode};
 
+use xtask::package;
+
 mod bench;
 
 /// Everything language-specific about stdlib generation, as data.
@@ -75,6 +77,7 @@ fn main() -> ExitCode {
             args.get(1).map(String::as_str),
             args.get(2).map(String::as_str),
         ),
+        Some("package") => package_cmd(&args[1..]),
         _ => {
             eprintln!("usage: cargo xtask gen-stdlib <language>|--all");
             eprintln!(
@@ -88,9 +91,96 @@ fn main() -> ExitCode {
             eprintln!("usage: cargo xtask gen-schema");
             eprintln!("usage: cargo xtask bench [--sizes 1k,5k,50k] [--update-baseline] [--gate]");
             eprintln!("usage: cargo xtask componentize <core.wasm> <out.wasm>");
+            eprintln!(
+                "usage: cargo xtask package --target <triple> [--tag vX.Y.Z] [--bin <path>] \
+                 [--out-dir <dir>]"
+            );
+            eprintln!(
+                "  targets: {}",
+                package::TARGETS
+                    .iter()
+                    .map(|t| t.triple)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
             ExitCode::from(2)
         }
     }
+}
+
+/// `cargo xtask package --target <triple>` — build the release artifact for one platform.
+///
+/// `release.yml` calls this instead of carrying a `tar` line for Unix and a `Compress-Archive`
+/// line for Windows: the artifact's name and layout are a contract four consumers depend on
+/// (see [`xtask::package`]), and a contract with two producers is not one.
+///
+/// Prints the archive's path on stdout so the caller can capture it without re-deriving the
+/// name it just asked for.
+fn package_cmd(args: &[String]) -> ExitCode {
+    match package_inner(args) {
+        Ok(path) => {
+            println!("{}", path.display());
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("xtask: package failed: {e}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn package_inner(args: &[String]) -> Result<std::path::PathBuf, String> {
+    let flag = |name: &str| -> Option<&str> {
+        args.iter()
+            .position(|a| a == name)
+            .and_then(|i| args.get(i + 1))
+            .map(String::as_str)
+    };
+    let triple = flag("--target").ok_or("--target <triple> is required")?;
+    let target = package::target(triple).ok_or_else(|| {
+        format!(
+            "unknown target {triple} — releases build: {}",
+            package::TARGETS
+                .iter()
+                .map(|t| t.triple)
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
+    })?;
+    let root = workspace_root()?;
+    // Default to the workspace version with the `v` the git tag carries, so a local
+    // `cargo xtask package` produces exactly the name a release would.
+    let owned_tag;
+    let tag = match flag("--tag") {
+        Some(t) => t,
+        None => {
+            owned_tag = format!("v{}", workspace_version(&root)?);
+            &owned_tag
+        }
+    };
+    let bin = flag("--bin")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| {
+            root.join("target")
+                .join(triple)
+                .join("release")
+                .join(target.binary())
+        });
+    let out_dir = root.join(flag("--out-dir").unwrap_or("dist"));
+    package::package(&root, tag, target, &bin, &out_dir)
+}
+
+/// The workspace's own `version`, read from the root manifest — the same string
+/// `kndo --version` prints, so a locally packaged artifact is named like its release.
+fn workspace_version(root: &std::path::Path) -> Result<String, String> {
+    let manifest = std::fs::read_to_string(root.join("Cargo.toml"))
+        .map_err(|e| format!("cannot read the workspace manifest: {e}"))?;
+    manifest
+        .lines()
+        .skip_while(|l| l.trim() != "[workspace.package]")
+        .find_map(|l| l.strip_prefix("version = "))
+        .map(|v| v.trim().trim_matches('"').to_string())
+        .ok_or_else(|| "no [workspace.package] version in the workspace manifest".to_string())
 }
 
 /// Wraps a `wasm32-unknown-unknown` core module into a WASM component — the same

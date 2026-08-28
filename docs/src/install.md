@@ -4,15 +4,25 @@ kndo is a single static binary with no runtime dependencies.
 
 ## Prebuilt binaries
 
-Each release publishes prebuilt archives per platform
-(`kndo-<version>-<target>.tar.gz` for Linux x86_64/aarch64 and macOS x86_64/arm64) on the
-project's GitHub releases page. Download, extract, and put `kndo` on your `PATH`:
+Each release publishes prebuilt archives per platform on the project's GitHub releases page:
+`kndo-<tag>-<target>.tar.gz` for Linux x86_64/aarch64 (musl — static, distribution-independent)
+and macOS x86_64/arm64, and `kndo-<tag>-x86_64-pc-windows-msvc.zip` for Windows. The `<tag>`
+is the release tag verbatim, leading `v` included.
+
+Every archive holds a single directory named for itself, so extraction strips one component.
+Download, extract, and put `kndo` on your `PATH`:
 
 ```console
-$ curl -fsSL https://github.com/eulke/kondo/releases/latest/download/kndo-0.1.0-aarch64-apple-darwin.tar.gz \
-    | tar -xz
+$ curl -fsSL https://github.com/eulke/kondo/releases/latest/download/kndo-v0.1.0-aarch64-apple-darwin.tar.gz \
+    | tar -xz --strip-components=1
 $ ./kndo --version
 kndo 0.1.0 (schema 1.3.0)
+```
+
+Or let the installer pick the right one for your platform and verify its checksum:
+
+```console
+$ curl -fsSL https://raw.githubusercontent.com/eulke/kondo/main/install.sh | sh
 ```
 
 In GitHub Actions you do not need to install anything by hand — the
