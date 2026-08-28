@@ -336,54 +336,7 @@ impl KndoConfig {
         };
 
         if let Some(analysis) = table.get("analysis").and_then(|v| v.as_table()) {
-            if let Some(value) = analysis.get("skip") {
-                config.skip = parse_skip_list(value, "[analysis] skip", &mut problems);
-            }
-            if let Some(value) = analysis.get("min-confidence") {
-                config.min_confidence = parse_confidence(value, &mut problems);
-            }
-            if let Some(threshold) = analysis
-                .get("crap")
-                .and_then(|c| c.as_table())
-                .and_then(|c| c.get("threshold"))
-            {
-                match threshold
-                    .as_float()
-                    .or(threshold.as_integer().map(|i| i as f64))
-                {
-                    Some(t) if t > 0.0 => config.crap_threshold = Some(t),
-                    _ => problems.push(format!(
-                        "kndo.toml [analysis.crap] threshold = {threshold}: expected a \
-                         positive number — ignored"
-                    )),
-                }
-            }
-            if let Some(min_tokens) = analysis
-                .get("duplicate")
-                .and_then(|d| d.as_table())
-                .and_then(|d| d.get("min-tokens"))
-            {
-                match min_tokens.as_integer() {
-                    Some(t) if t > 0 => {
-                        let t = t as u32;
-                        if t < DUPLICATE_MIN_TOKENS_FLOOR {
-                            problems.push(format!(
-                                "kndo.toml [analysis.duplicate] min-tokens = {t}: below the \
-                                 extraction floor of {DUPLICATE_MIN_TOKENS_FLOOR} (smaller \
-                                 functions carry no fingerprints) — clamped to \
-                                 {DUPLICATE_MIN_TOKENS_FLOOR}"
-                            ));
-                            config.duplicate_min_tokens = Some(DUPLICATE_MIN_TOKENS_FLOOR);
-                        } else {
-                            config.duplicate_min_tokens = Some(t);
-                        }
-                    }
-                    _ => problems.push(format!(
-                        "kndo.toml [analysis.duplicate] min-tokens = {min_tokens}: expected \
-                         a positive integer — ignored"
-                    )),
-                }
-            }
+            parse_analysis_table(analysis, &mut config, &mut problems);
         }
 
         if let Some(threads) = table
@@ -391,114 +344,17 @@ impl KndoConfig {
             .and_then(|p| p.as_table())
             .and_then(|p| p.get("threads"))
         {
-            match threads.as_integer() {
-                Some(0) => {} // 0 = the default (physical cores) — same as unset
-                Some(n) if n > 0 => config.threads = Some(n as usize),
-                _ => problems.push(format!(
-                    "kndo.toml [performance] threads = {threads}: expected a non-negative \
-                     integer — ignored"
-                )),
-            }
+            config.threads = parse_threads(threads, &mut problems);
         }
 
-        if let Some(rules) = table.get("rule").and_then(|r| r.as_array()) {
-            for rule in rules {
-                let Some(rule) = rule.as_table() else {
-                    problems.push("kndo.toml [[rule]]: expected a table — ignored".to_string());
-                    continue;
-                };
-                let mut paths = Vec::new();
-                for raw in rule
-                    .get("paths")
-                    .and_then(|p| p.as_array())
-                    .into_iter()
-                    .flatten()
-                {
-                    match raw.as_str().map(glob::Pattern::new) {
-                        Some(Ok(pattern)) => paths.push(pattern),
-                        Some(Err(e)) => problems.push(format!(
-                            "kndo.toml [[rule]] paths entry {raw}: invalid glob ({e}) — \
-                             entry ignored"
-                        )),
-                        None => problems.push(format!(
-                            "kndo.toml [[rule]] paths entry {raw}: expected a string — \
-                             entry ignored"
-                        )),
-                    }
-                }
-                let skip = rule
-                    .get("skip")
-                    .map(|value| parse_skip_list(value, "[[rule]] skip", &mut problems))
-                    .unwrap_or_default();
-                if paths.is_empty() || skip.is_empty() {
-                    problems.push(
-                        "kndo.toml [[rule]]: needs both non-empty `paths` and `skip` — \
-                         rule ignored"
-                            .to_string(),
-                    );
-                    continue;
-                }
-                config.rules.push(PathRule { paths, skip });
-            }
-        }
+        let (rules, rule_problems) = parse_rules(table.get("rule"));
+        config.rules = rules;
+        problems.extend(rule_problems);
 
-        if let Some(rules) = table.get("externally-invoked").and_then(|r| r.as_array()) {
-            for rule in rules {
-                let Some(rule) = rule.as_table() else {
-                    problems.push(
-                        "kndo.toml [[externally-invoked]]: expected a table — ignored".to_string(),
-                    );
-                    continue;
-                };
-                let mut markers = Vec::new();
-                for raw in rule
-                    .get("markers")
-                    .and_then(|m| m.as_array())
-                    .into_iter()
-                    .flatten()
-                {
-                    match raw.as_str() {
-                        Some(name) if !name.trim().is_empty() => {
-                            markers.push(SmolStr::new(name.trim()))
-                        }
-                        _ => problems.push(format!(
-                            "kndo.toml [[externally-invoked]] markers entry {raw}: expected a \
-                             non-empty string — entry ignored"
-                        )),
-                    }
-                }
-                let mut paths = Vec::new();
-                for raw in rule
-                    .get("paths")
-                    .and_then(|p| p.as_array())
-                    .into_iter()
-                    .flatten()
-                {
-                    match raw.as_str().map(glob::Pattern::new) {
-                        Some(Ok(pattern)) => paths.push(pattern),
-                        Some(Err(e)) => problems.push(format!(
-                            "kndo.toml [[externally-invoked]] paths entry {raw}: invalid glob \
-                             ({e}) — entry ignored"
-                        )),
-                        None => problems.push(format!(
-                            "kndo.toml [[externally-invoked]] paths entry {raw}: expected a \
-                             string — entry ignored"
-                        )),
-                    }
-                }
-                if markers.is_empty() {
-                    problems.push(
-                        "kndo.toml [[externally-invoked]]: needs a non-empty `markers` list — \
-                         rule ignored"
-                            .to_string(),
-                    );
-                    continue;
-                }
-                config
-                    .externally_invoked
-                    .push(ExternallyInvokedRule { markers, paths });
-            }
-        }
+        let (externally_invoked, externally_invoked_problems) =
+            parse_externally_invoked_rules(table.get("externally-invoked"));
+        config.externally_invoked = externally_invoked;
+        problems.extend(externally_invoked_problems);
 
         let (gate, gate_problems) = crate::plugin_gate::PluginsGate::from_table(
             table.get("plugins").and_then(|p| p.get("gate")),
@@ -527,6 +383,190 @@ impl KndoConfig {
             .find(|(key, _)| *key == id || id.strip_prefix("kndo:") == Some(key.as_str()))
             .map(|(_, options)| options)
     }
+}
+
+/// `[analysis]`: `skip`, `min-confidence`, `[analysis.crap] threshold`, and
+/// `[analysis.duplicate] min-tokens` — four independent scalars living under one table, none
+/// read back by another. `min-tokens` clamps to the extraction floor rather than rejecting: a
+/// value below it is still a valid *request*, just not a decidable one (smaller functions carry
+/// no fingerprints), so the honest answer is the floor plus a problem, not a hard failure.
+fn parse_analysis_table(
+    analysis: &toml::Table,
+    config: &mut KndoConfig,
+    problems: &mut Vec<String>,
+) {
+    if let Some(value) = analysis.get("skip") {
+        config.skip = parse_skip_list(value, "[analysis] skip", problems);
+    }
+    if let Some(value) = analysis.get("min-confidence") {
+        config.min_confidence = parse_confidence(value, problems);
+    }
+    if let Some(threshold) = analysis
+        .get("crap")
+        .and_then(|c| c.as_table())
+        .and_then(|c| c.get("threshold"))
+    {
+        match threshold
+            .as_float()
+            .or(threshold.as_integer().map(|i| i as f64))
+        {
+            Some(t) if t > 0.0 => config.crap_threshold = Some(t),
+            _ => problems.push(format!(
+                "kndo.toml [analysis.crap] threshold = {threshold}: expected a \
+                 positive number — ignored"
+            )),
+        }
+    }
+    if let Some(min_tokens) = analysis
+        .get("duplicate")
+        .and_then(|d| d.as_table())
+        .and_then(|d| d.get("min-tokens"))
+    {
+        match min_tokens.as_integer() {
+            Some(t) if t > 0 => {
+                let t = t as u32;
+                if t < DUPLICATE_MIN_TOKENS_FLOOR {
+                    problems.push(format!(
+                        "kndo.toml [analysis.duplicate] min-tokens = {t}: below the \
+                         extraction floor of {DUPLICATE_MIN_TOKENS_FLOOR} (smaller \
+                         functions carry no fingerprints) — clamped to \
+                         {DUPLICATE_MIN_TOKENS_FLOOR}"
+                    ));
+                    config.duplicate_min_tokens = Some(DUPLICATE_MIN_TOKENS_FLOOR);
+                } else {
+                    config.duplicate_min_tokens = Some(t);
+                }
+            }
+            _ => problems.push(format!(
+                "kndo.toml [analysis.duplicate] min-tokens = {min_tokens}: expected \
+                 a positive integer — ignored"
+            )),
+        }
+    }
+}
+
+/// `[performance] threads`: `0` means the default (physical cores), same as the key being
+/// absent entirely — so it maps to `None`, never `Some(0)`.
+fn parse_threads(value: &toml::Value, problems: &mut Vec<String>) -> Option<usize> {
+    match value.as_integer() {
+        Some(0) => None,
+        Some(n) if n > 0 => Some(n as usize),
+        _ => {
+            problems.push(format!(
+                "kndo.toml [performance] threads = {value}: expected a non-negative \
+                 integer — ignored"
+            ));
+            None
+        }
+    }
+}
+
+/// `[[rule]]`: per-path `skip` overrides. A rule needs both a non-empty `paths` and a
+/// non-empty `skip` to mean anything — either half missing drops the whole rule with a
+/// problem, rather than silently keeping a rule that would never match or never do anything.
+fn parse_rules(raw: Option<&toml::Value>) -> (Vec<PathRule>, Vec<String>) {
+    let mut rules = Vec::new();
+    let mut problems = Vec::new();
+    for rule in raw.and_then(|r| r.as_array()).into_iter().flatten() {
+        let Some(rule) = rule.as_table() else {
+            problems.push("kndo.toml [[rule]]: expected a table — ignored".to_string());
+            continue;
+        };
+        let mut paths = Vec::new();
+        for raw in rule
+            .get("paths")
+            .and_then(|p| p.as_array())
+            .into_iter()
+            .flatten()
+        {
+            match raw.as_str().map(glob::Pattern::new) {
+                Some(Ok(pattern)) => paths.push(pattern),
+                Some(Err(e)) => problems.push(format!(
+                    "kndo.toml [[rule]] paths entry {raw}: invalid glob ({e}) — \
+                     entry ignored"
+                )),
+                None => problems.push(format!(
+                    "kndo.toml [[rule]] paths entry {raw}: expected a string — \
+                     entry ignored"
+                )),
+            }
+        }
+        let skip = rule
+            .get("skip")
+            .map(|value| parse_skip_list(value, "[[rule]] skip", &mut problems))
+            .unwrap_or_default();
+        if paths.is_empty() || skip.is_empty() {
+            problems.push(
+                "kndo.toml [[rule]]: needs both non-empty `paths` and `skip` — \
+                 rule ignored"
+                    .to_string(),
+            );
+            continue;
+        }
+        rules.push(PathRule { paths, skip });
+    }
+    (rules, problems)
+}
+
+/// `[[externally-invoked]]`: markers a build/test tool names a file by, optionally narrowed by
+/// `paths`. `markers` empty means the rule names nothing to look for, so it's dropped with a
+/// problem; `paths` empty is fine — it means "everywhere," not "nowhere."
+fn parse_externally_invoked_rules(
+    raw: Option<&toml::Value>,
+) -> (Vec<ExternallyInvokedRule>, Vec<String>) {
+    let mut rules = Vec::new();
+    let mut problems = Vec::new();
+    for rule in raw.and_then(|r| r.as_array()).into_iter().flatten() {
+        let Some(rule) = rule.as_table() else {
+            problems
+                .push("kndo.toml [[externally-invoked]]: expected a table — ignored".to_string());
+            continue;
+        };
+        let mut markers = Vec::new();
+        for raw in rule
+            .get("markers")
+            .and_then(|m| m.as_array())
+            .into_iter()
+            .flatten()
+        {
+            match raw.as_str() {
+                Some(name) if !name.trim().is_empty() => markers.push(SmolStr::new(name.trim())),
+                _ => problems.push(format!(
+                    "kndo.toml [[externally-invoked]] markers entry {raw}: expected a \
+                     non-empty string — entry ignored"
+                )),
+            }
+        }
+        let mut paths = Vec::new();
+        for raw in rule
+            .get("paths")
+            .and_then(|p| p.as_array())
+            .into_iter()
+            .flatten()
+        {
+            match raw.as_str().map(glob::Pattern::new) {
+                Some(Ok(pattern)) => paths.push(pattern),
+                Some(Err(e)) => problems.push(format!(
+                    "kndo.toml [[externally-invoked]] paths entry {raw}: invalid glob \
+                     ({e}) — entry ignored"
+                )),
+                None => problems.push(format!(
+                    "kndo.toml [[externally-invoked]] paths entry {raw}: expected a \
+                     string — entry ignored"
+                )),
+            }
+        }
+        if markers.is_empty() {
+            problems.push(
+                "kndo.toml [[externally-invoked]]: needs a non-empty `markers` list — \
+                 rule ignored"
+                    .to_string(),
+            );
+            continue;
+        }
+        rules.push(ExternallyInvokedRule { markers, paths });
+    }
+    (rules, problems)
 }
 
 /// Every `[plugins.<id>]` options table under `[plugins]`. `gate` is the tier policy,
