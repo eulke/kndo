@@ -2195,7 +2195,7 @@ pub(crate) fn promote_package_relative_test_roles<'a>(
 /// an assembly-algorithm change that could produce a different graph from the same facts. Feeds
 /// [`compute_graph_key`] (the "core graph-schema version"); a bump here invalidates
 /// every project's cached `graph.bin` on the next run, same as any other key-input change.
-pub const GRAPH_SCHEMA_VERSION: u32 = 39; // bump whenever the persisted snapshot shape (rkyv layouts included) or the assembly semantics that derive a graph from the same facts change
+pub const GRAPH_SCHEMA_VERSION: u32 = 40; // bump whenever the persisted snapshot shape (rkyv layouts included) or the assembly semantics that derive a graph from the same facts change
 
 /// The graph snapshot's cache key (`cache.rs`'s `graph.bin`): a single digest
 /// folding in the *whole* discovered file set (every path + content hash — this already
@@ -3056,6 +3056,8 @@ pub fn assemble_from_source(
         std::collections::BTreeMap::new();
     let mut cycle_policies: std::collections::BTreeMap<SmolStr, crate::adapter::CyclePolicy> =
         std::collections::BTreeMap::new();
+    let mut testable_languages: std::collections::BTreeMap<SmolStr, bool> =
+        std::collections::BTreeMap::new();
     // The language's own facts about the types it PROVIDES, indexed the same way its
     // per-file facts are, so `chain_hop` consults one shape from two places.
     let mut builtin_member_types: std::collections::BTreeMap<SmolStr, MemberTypeIndex> =
@@ -3068,6 +3070,9 @@ pub fn assemble_from_source(
         cycle_policies
             .entry(slot.claim.language.clone())
             .or_insert(descriptor.cycle_policy);
+        testable_languages
+            .entry(slot.claim.language.clone())
+            .or_insert(descriptor.declares_units_of_testing);
         builtin_member_types
             .entry(slot.claim.language.clone())
             .or_insert_with(|| index_member_types(&descriptor.builtin_member_types));
@@ -3663,6 +3668,7 @@ pub fn assemble_from_source(
         suppressions,
         visibility_ladders: ladders.into_iter().collect(),
         cycle_policies: cycle_policies.into_iter().collect(),
+        testable_languages: testable_languages.into_iter().collect(),
         function_metrics,
         patch_meta,
         externally_consumed,

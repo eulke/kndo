@@ -95,6 +95,8 @@ impl LanguageAdapter for MockAdapter {
                 package_cycles: crate::adapter::CycleTolerance::Hazard,
             },
             resolves_dependency_usage: true,
+            // The mock language is code: its files can hold a unit of testing like any other's.
+            declares_units_of_testing: true,
             package_test_dirs: Vec::new(),
             // The mock's "standard library": a container that iterates to its own element,
             // and a wrapper whose `unwrap` gives it back. Enough to exercise the tier and the

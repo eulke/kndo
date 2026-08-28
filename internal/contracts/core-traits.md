@@ -131,6 +131,21 @@ pub trait LanguageAdapter: Send + Sync {
     // exist). version-skew is unaffected — it compares declared versions across manifests
     // directly, no usage edge needed.
     //
+    // declares_units_of_testing: whether a file of this language can hold a unit of testing at
+    // all. true for every language whose files can carry a function; false for a document
+    // language — HTML, JSON, CSS — where "is this tested" has no answer. Same
+    // data-on-the-descriptor pattern as the ladder, carried onto
+    // ProjectGraph::testable_languages, and consulted by `untested` for ONE case: a file that
+    // declares nothing. A file that declares symbols is judged on them
+    // (`files_declaring_only_values`), so a `.scss` carrying a `@function` stays in scope and no
+    // blanket "stylesheets aren't testable" rule can silence it. The conjunction is the point:
+    // an absence of symbols alone cannot tell "nothing here is testable" from "extraction
+    // failed", so the adapter has to say which — and a language the graph never recorded
+    // answers true, because silence must never be an exemption. No default (like
+    // Plugin::mutates_graph): wrong in either direction is a real defect — false silences a
+    // language's blind spots, true on a document language buries the report under one finding
+    // per page.
+    //
     // Beside it on the PackageNode, and asked of the adapters rather than derived from the
     // claim: manifest_claim_languages — EVERY registered adapter's claim language whose
     // claim_manifest accepts this manifest, not just the one that won the claim (Java and

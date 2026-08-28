@@ -78,7 +78,7 @@ fn is_untested_node(
 
 fn find_untested_files(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<Finding> {
     let mut findings = Vec::new();
-    let values_only = files_declaring_only_values(graph);
+    let (values_only, declares_anything) = files_declaring_only_values(graph);
     let mut untested: HashMap<&str, (FileId, PackageId, Confidence)> = HashMap::default();
     for (index, file) in graph.files.iter().enumerate() {
         let Some(class) = file.class else {
@@ -89,11 +89,26 @@ fn find_untested_files(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<Fin
             continue;
         }
         // A file that declares only values is not an untested file — it is a file the question
-        // does not apply to. Derived from what the file DECLARES, so it needs no per-language
-        // opt-out and stays right per file: a `.scss` carrying a `@function` (Sass has
-        // unit-testing tooling) is still in scope, which a "SCSS is not testable" flag would
-        // have silenced.
+        // does not apply to. Derived from what the file DECLARES, so it stays right per file: a
+        // `.scss` carrying a `@function` (Sass has unit-testing tooling) is still in scope,
+        // which a blanket "SCSS is not testable" rule would have silenced.
         if values_only.contains(&file_id) {
+            continue;
+        }
+        // …and a file that declares NOTHING is the case that rule cannot reach, because it
+        // requires symbols to reason from. Silence alone must not exempt anything — an adapter
+        // that simply failed looks identical from here, which is why the rule above insists on
+        // evidence. So the language has to say it: `declares_units_of_testing` is the adapter
+        // asserting that a file of its language cannot hold a unit of testing at all.
+        //
+        // Both halves are load-bearing, and the conjunction is what keeps this narrow. An HTML
+        // document declares nothing and its adapter says nothing is declarable → exempt. A
+        // `.scss` with a `@function` declares something → the values-only rule decides, and this
+        // one never sees it. A `.ts` file the parser choked on declares nothing, but TypeScript
+        // says units are declarable → still reported, which is correct: that is a blind spot.
+        if !declares_anything.contains(&file_id)
+            && !graph.language_declares_units_of_testing(file.language.as_ref())
+        {
             continue;
         }
         let confidence = reach.get(NodeRef::File(file_id)).1;
@@ -211,16 +226,21 @@ fn symbol_skipped(
 }
 
 /// Files that declare symbols and NOT ONE of them is a unit of testing — a declarative
-/// stylesheet, a JSON document, a Markdown page.
+/// stylesheet with only selectors, a data document with only values.
+///
+/// The companion case — a file that declares *nothing* — is handled at the call site by the
+/// adapter's own `declares_units_of_testing`, because an absence of symbols cannot distinguish
+/// "there is nothing here to test" from "extraction found nothing".
 ///
 /// "Declares symbols" is required, not incidental: a file the adapter extracted nothing from
 /// says nothing about what it contains, and concluding "nothing to test" from an absence of
 /// evidence would silence it for a reason nobody could see. Only a file that demonstrably
 /// declares values and only values is exempt.
 ///
-/// One pass over the symbol table rather than a scan per file — `find_untested_files` asks this
-/// for every file, and the two together would be quadratic.
-fn files_declaring_only_values(graph: &ProjectGraph) -> HashSet<FileId> {
+/// Returns `(declares only values, declares anything at all)` — the caller needs both, and one
+/// pass over the symbol table answers them together. A scan per file would be quadratic:
+/// `find_untested_files` asks for every file.
+fn files_declaring_only_values(graph: &ProjectGraph) -> (HashSet<FileId>, HashSet<FileId>) {
     let mut declares_anything: HashSet<FileId> = HashSet::default();
     let mut declares_a_unit: HashSet<FileId> = HashSet::default();
     for symbol in &graph.symbols {
@@ -229,10 +249,12 @@ fn files_declaring_only_values(graph: &ProjectGraph) -> HashSet<FileId> {
             declares_a_unit.insert(symbol.file);
         }
     }
-    declares_anything
-        .into_iter()
+    let values_only = declares_anything
+        .iter()
+        .copied()
         .filter(|f| !declares_a_unit.contains(f))
-        .collect()
+        .collect();
+    (values_only, declares_anything)
 }
 
 fn find_untested_symbols(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<Finding> {
@@ -330,6 +352,126 @@ mod tests {
             implements: None,
             markers: Vec::new(),
         }
+    }
+
+    /// A file in a language whose adapter says nothing is declarable, declaring nothing.
+    fn document(path: &str) -> FileNode {
+        let mut f = file(path, FileRole::Production);
+        f.language = Some(SmolStr::new("doc"));
+        f
+    }
+
+    /// A graph with a test root (so `untested` judges rather than abstains) and one production
+    /// file reached by nobody.
+    fn graph_with(
+        files: Vec<FileNode>,
+        symbols: Vec<SymbolNode>,
+        testable_doc: bool,
+    ) -> ProjectGraph {
+        let edges = vec![
+            edge(
+                EdgeKind::Root {
+                    kind: RootKind::Test,
+                    target: NodeRef::File(FileId(0)),
+                },
+                Confidence::Certain,
+            ),
+            // The subject is production-reachable and reached by no test — which is what
+            // `untested` judges. It is also exactly the HTML case: a document roots itself.
+            edge(
+                EdgeKind::Root {
+                    kind: RootKind::Production,
+                    target: NodeRef::File(FileId(1)),
+                },
+                Confidence::Certain,
+            ),
+        ];
+        let mut g = ProjectGraph::for_test(files, symbols, vec![], edges);
+        g.testable_languages = vec![
+            (SmolStr::new("mock"), true),
+            (SmolStr::new("doc"), testable_doc),
+        ];
+        g
+    }
+
+    /// **A file that declares nothing, in a language that declares nothing, is not a blind
+    /// spot.** An HTML document is the case: it is a production entry point by nature, so
+    /// without this every page in every web project would be reported forever.
+    #[test]
+    fn a_file_of_a_language_with_no_testable_units_is_exempt() {
+        let g = graph_with(
+            vec![
+                file("tests/spec.test.mock", FileRole::Test),
+                document("app/index.html"),
+            ],
+            vec![],
+            false,
+        );
+        let reach = reachability::compute(&g);
+        assert!(
+            find_untested_files(&g, &reach).is_empty(),
+            "the adapter said its files hold no unit of testing"
+        );
+    }
+
+    /// The other half of the conjunction. Silence alone exempts nothing: a file that declares
+    /// nothing in a language that CAN declare units is still a blind spot — an adapter that
+    /// merely failed on it looks identical from here, and guessing would hide real gaps.
+    #[test]
+    fn a_file_that_declares_nothing_in_a_testable_language_is_still_reported() {
+        let g = graph_with(
+            vec![
+                file("tests/spec.test.mock", FileRole::Test),
+                document("src/parse-failed.doc"),
+            ],
+            vec![],
+            true,
+        );
+        let reach = reachability::compute(&g);
+        assert_eq!(
+            find_untested_files(&g, &reach).len(),
+            1,
+            "a testable language's file stays in scope even with nothing extracted"
+        );
+    }
+
+    /// And the case the values-only rule already protected, unchanged: a file that DOES declare
+    /// a unit is judged on its declarations, whatever its language says. This is why the flag
+    /// only ever decides files with no symbols — a `.scss` carrying a `@function` must not be
+    /// silenced by a blanket "stylesheets are not testable".
+    #[test]
+    fn a_declared_unit_is_judged_even_in_a_language_marked_untestable() {
+        let g = graph_with(
+            vec![
+                file("tests/spec.test.mock", FileRole::Test),
+                document("src/lib.scss"),
+            ],
+            vec![symbol(FileId(1), "mixin")],
+            false,
+        );
+        let reach = reachability::compute(&g);
+        assert_eq!(
+            find_untested_files(&g, &reach).len(),
+            1,
+            "declaring a unit puts the file back in scope regardless of the language flag"
+        );
+    }
+
+    /// A language the graph never recorded answers `true` — silence is not an exemption.
+    #[test]
+    fn an_unrecorded_language_is_treated_as_testable() {
+        let g = graph_with(
+            vec![
+                file("tests/spec.test.mock", FileRole::Test),
+                document("src/unknown.doc"),
+            ],
+            vec![],
+            true,
+        );
+        let mut g = g;
+        g.testable_languages = vec![(SmolStr::new("mock"), true)]; // "doc" absent entirely
+        let reach = reachability::compute(&g);
+        assert_eq!(find_untested_files(&g, &reach).len(), 1);
     }
 
     fn edge(kind: EdgeKind, confidence: Confidence) -> Edge {

@@ -2281,6 +2281,7 @@ mod tests {
                     package_cycles: crate::adapter::CycleTolerance::Hazard,
                 },
                 resolves_dependency_usage: true,
+                declares_units_of_testing: true,
                 package_test_dirs: Vec::new(),
                 builtin_member_types: Vec::new(),
             }
@@ -2349,6 +2350,7 @@ mod tests {
                     package_cycles: crate::adapter::CycleTolerance::Hazard,
                 },
                 resolves_dependency_usage: true,
+                declares_units_of_testing: true,
                 package_test_dirs: Vec::new(),
                 builtin_member_types: Vec::new(),
             }

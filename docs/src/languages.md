@@ -17,6 +17,7 @@ Mixed repositories are the point: one graph, cross-language edges, one report.
 | Swift | `.swift` | `Package.swift` |
 | JSON | `.json` | — |
 | CSS / SCSS | `.css .scss` | — |
+| HTML | `.html .htm` | — |
 
 Adapters are held to a shared **conformance harness** — fixture projects with
 expected-finding JSON every adapter must reproduce exactly — so "the same verdict means the
@@ -129,6 +130,28 @@ A non-source language, deliberately narrow: claims `.json` files so they exist i
 at all — letting other languages' imports resolve *to* them, `unused` see orphaned config
 files, and byte-identical [`duplicate`](rules.md#duplicate) detection cover them. Extracts
 no symbols and declares no ladder, so symbol-level analyses skip it by construction.
+
+## HTML
+
+**A document is an entry point, not a module.** Nothing imports a page — a browser loads it, a
+server renders it, a bundler is handed it — so every `.html` file is a production root, and the
+modules and stylesheets it names become reachable through it.
+
+That one rule is the whole adapter, and it is what makes a front-end project analyzable at all:
+an app whose entry is `<script type="module" src="./main.js">` in `index.html` has no other
+declaration of where it starts. Without it, `main.js` and everything it imports read as
+unreachable — measured on vite's playground suite, 65 of 83 entry modules were reported
+`unused` for exactly this reason.
+
+Read: `<script src>`, `<link href>`, `<img src>`, `<source src>`, `<iframe src>`. Skipped, and
+deliberately not reported as unresolved: anything that leaves the project — an absolute URL, a
+protocol-relative `//cdn/...`, a `data:` payload, a bare `#anchor`, a `${...}`/`{{...}}`
+template placeholder, and a root-relative `/assets/app.js` (what it names depends on the
+server's document root, which kndo cannot know).
+
+Extracts no symbols and declares no ladder, so symbol-level analyses skip it. It is also
+exempt from [`untested`](rules.md#untested): a document holds nothing a test could call, and
+reporting every page as a test blind spot would bury the report.
 
 ## CSS / SCSS
 

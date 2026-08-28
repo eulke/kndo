@@ -655,17 +655,58 @@ mechanism for naming a module, no more vite's property than `import` is webpack'
 plugin reading `vite.config.js` would close a small minority of the cases while leaving the
 mechanism that produces them unmodelled.
 
-**Why it is not a small change, which is why it is recorded here rather than done in passing.**
-The obvious cheap shape — have the JS adapter `claim_manifest` `*.html` and emit its scripts as
-`ManifestRoot`s — is wrong: **assembly creates one `PackageNode` per claimed manifest**
-(`assemble.rs`, "one `Package` per manifest found", ownership by nearest-manifest-ancestor), so
-every directory holding an HTML file would become its own package and take package-scoped unit
-keys, dependency ownership and surface with it.
+**Built as `kndo-adapter-html` (§20-bis).** The shape that fits is `claim`, not
+`claim_manifest`: an HTML document is an **entry point**, not a module — nothing imports a page,
+a browser loads it — so the adapter claims it, roots it, and emits its `<script src>`/
+`<link href>` as imports.
 
-The shape that fits is `claim` rather than `claim_manifest`: an HTML document is an **entry
-point**, not a module — nothing imports a page, a browser loads it — so the adapter would claim
-it, root it, and emit its `<script src>`/`<link href>` as imports. That is a change to *file
-classification* with repo-wide reach, not a plugin: it would also claim the `.html` templates in
-Java projects that `kndo:thymeleaf` reads today, changing their language attribution. It needs
-its own before/after across vite, spring-petclinic and the JS corpus before it lands, on the
-same measurement discipline as everything else here.
+`claim_manifest` was measured and rejected first: **assembly creates one `PackageNode` per
+claimed manifest** (`assemble.rs`, ownership by nearest-manifest-ancestor), so every directory
+holding an HTML file would have become its own package and taken package-scoped unit keys,
+dependency ownership and surface with it.
+
+## 20-bis. The HTML adapter, and the `untested` flood it exposed
+
+The adapter is ~250 lines: claim `*.html`/`*.htm`, root the document, tag-scan `<script src>`,
+`<link href>`, `<img src>`, `<source src>`, `<iframe src>` for local paths. No grammar — every
+reference lives in one attribute of one tag, and HTML's error recovery means a "malformed"
+document is still one a browser renders. References that leave the project (a CDN URL, `data:`,
+`#anchor`, a root-relative `/assets/app.js` whose meaning depends on the server's document root,
+a `${...}`/`{{...}}` placeholder) are skipped rather than reported unresolved.
+
+**First measurement said do not ship it.** On vite: −237 `unused` (the recall it exists for) but
+**+418** additions, net **+181** findings. 145 of the additions were `untested` **on the `.html`
+files themselves** — a page is a production entry by nature, so every document in every web
+project would be reported as a test blind spot, forever.
+
+**The flood was a pre-existing gap the adapter would have multiplied ~35×.** `untested` already
+reported 1 `.json`, 10 `.css` and 3 `.scss` files across the corpus for the same reason. Its
+existing exemption (`files_declaring_only_values`) cannot reach these: it *requires* a file to
+declare symbols, deliberately — concluding "nothing to test" from an absence of extracted facts
+would silence files for a reason nobody could see, and an adapter that simply failed looks
+identical from here.
+
+So the adapter states it positively: `AdapterDescriptor::declares_units_of_testing`, carried onto
+`ProjectGraph::testable_languages` like the visibility ladders. `untested` consults it for
+exactly one case — **a file that declares nothing, in a language that says nothing is
+declarable**. Both halves are load-bearing, and the conjunction is what keeps the existing rule
+intact: a `.scss` with a `@function` declares something, so the values-only rule still decides it
+and no blanket "stylesheets aren't testable" can silence it. A language the graph never recorded
+answers `true` — silence is never an exemption.
+
+**Measured with the exemption**, release binaries, `--no-cache`, by `(category, path, symbol)`:
+
+| repo | before | after | removed | added |
+|---|---|---|---|---|
+| vite | 1886 | **1848** | 248 | 210 |
+| spring-petclinic | 44 | **41** | 3 | 0 |
+| axios | 68 | **68** | 0 | 0 |
+
+vite's removals are 237 `unused` (the unrooted entry modules) plus 11 `untested`. Its 210
+additions carry **no HTML at all**: 133 `untested` and 60 `unused` on `.js`/`.ts`, 97 of them in
+files that used to be reported `unused` — the same dead-to-judged category shift the Maven fix
+produced on guava. spring-petclinic's −3 are declaration-less `.scss` files: the pre-existing
+class, fixed in a Java project that has no HTML entry at all. axios is untouched.
+
+`GRAPH_SCHEMA_VERSION` 39 → 40 (a new persisted field on the snapshot), not an adapter's
+`facts_schema_version`: the graph's own shape changed.

@@ -42,6 +42,8 @@ impl LanguageAdapter for CssAdapter {
             // Moot: this adapter never contributes a manifest/PackageNode, so
             // `dependency_hygiene` never consults this flag for it.
             resolves_dependency_usage: false,
+            // A stylesheet is declarative: selectors and properties, nothing to invoke.
+            declares_units_of_testing: false,
             package_test_dirs: Vec::new(),
             // No builtin type facts yet: this adapter declares none, and an empty table
             // simply means the chain resolver has no second tier to consult for it.

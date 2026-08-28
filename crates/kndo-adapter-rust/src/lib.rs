@@ -90,6 +90,7 @@ impl LanguageAdapter for RustAdapter {
             // The crate name IS the `use` specifier's root segment — resolve() structurally
             // identifies the declared dependency every time.
             resolves_dependency_usage: true,
+            declares_units_of_testing: true,
             // Cargo's target-dir conventions, anchored at the owning Cargo.toml (see
             // PATH_PATTERNS above). An example consumes the API from outside exactly like a
             // test — a symbol alive only through its own demo is the `test-only` verdict.

@@ -13,6 +13,7 @@ members = [
     "crates/kndo-adapter-swift",
     "crates/kndo-adapter-json",
     "crates/kndo-adapter-css",
+    "crates/kndo-adapter-html",
     "crates/kndo-plugin-api",
     "crates/kndo-plugin-nextjs",
     "crates/kndo-plugin-express",

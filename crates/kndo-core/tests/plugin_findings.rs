@@ -38,6 +38,7 @@ impl LanguageAdapter for MiniAdapter {
                 package_cycles: kndo_core::adapter::CycleTolerance::Idiomatic,
             },
             resolves_dependency_usage: false,
+            declares_units_of_testing: true,
             package_test_dirs: Vec::new(),
             builtin_member_types: Vec::new(),
         }

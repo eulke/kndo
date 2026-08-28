@@ -77,6 +77,7 @@ impl LanguageAdapter for JsTsAdapter {
             // npm's flat package name IS the import specifier's root segment — resolve()
             // structurally identifies the declared dependency every time.
             resolves_dependency_usage: true,
+            declares_units_of_testing: true,
             package_test_dirs: Vec::new(),
             // No builtin type facts yet: this adapter declares none, and an empty table
             // simply means the chain resolver has no second tier to consult for it.

@@ -173,6 +173,11 @@ fn native_descriptor(raw: w::AdapterDescriptor) -> AdapterDescriptor {
             package_cycles: CycleTolerance::Idiomatic,
         },
         resolves_dependency_usage: false,
+        // `true`, and fixed: the v1 adapter world has no way to say otherwise, and `true` is the
+        // direction that cannot silence anything. A WASM adapter whose files declare symbols is
+        // judged like any other's; one that declares nothing stays reportable, which is the
+        // honest reading of "this world never told us". A later world can carry the real answer.
+        declares_units_of_testing: true,
         // Not on the wire: the WIT descriptor record predates the field, and a WASM
         // adapter without it just forgoes package-relative test-dir promotion. Additive
         // whenever the ABI next revs.

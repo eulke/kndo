@@ -82,6 +82,7 @@ impl LanguageAdapter for KotlinAdapter {
             // Identical root cause to Java's — Kotlin rides
             // Maven/Gradle coordinates with no structural import→coordinate mapping.
             resolves_dependency_usage: false,
+            declares_units_of_testing: true,
             package_test_dirs: Vec::new(),
             // No builtin type facts yet: this adapter declares none, and an empty table
             // simply means the chain resolver has no second tier to consult for it.

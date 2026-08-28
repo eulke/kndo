@@ -347,6 +347,7 @@ pub(crate) struct GraphSnapshotParts {
     pub suppressions: Vec<(FileId, crate::adapter::RawSuppression)>,
     pub visibility_ladders: Vec<(SmolStr, Vec<crate::adapter::VisibilityRung>)>,
     pub cycle_policies: Vec<(SmolStr, crate::adapter::CyclePolicy)>,
+    pub testable_languages: Vec<(SmolStr, bool)>,
     pub function_metrics: Vec<(SymbolId, SymbolMetrics)>,
     pub patch_meta: Vec<FilePatchMeta>,
     pub externally_consumed: Vec<SymbolId>,
@@ -380,6 +381,11 @@ pub struct ProjectGraph {
     /// symbol's `VisibilityLevel` index into a checkable [`crate::adapter::VisibilityScope`]
     /// plus the language's own remediation label. Sorted by language for determinism.
     pub visibility_ladders: Vec<(SmolStr, Vec<crate::adapter::VisibilityRung>)>,
+    /// Each claimed language's answer to "can a file of mine hold a unit of testing", collected
+    /// exactly like the ladders — adapter-declared data, carried here so `untested` stays a pure
+    /// graph function. Absent language ⇒ `true`: a language nothing recorded is not one to
+    /// silence. Sorted by language for determinism.
+    pub testable_languages: Vec<(SmolStr, bool)>,
     /// Each claimed language's cycle tolerance, collected exactly like the
     /// ladders — adapter-declared data, carried here so `cyclic` stays a pure graph function.
     pub cycle_policies: Vec<(SmolStr, crate::adapter::CyclePolicy)>,
@@ -407,6 +413,23 @@ pub struct ProjectGraph {
 }
 
 impl ProjectGraph {
+    /// Whether a file of `language` can contain a unit of testing at all — the adapter's own
+    /// answer (see `AdapterDescriptor::declares_units_of_testing`).
+    ///
+    /// A language this graph never recorded answers `true`. That direction is deliberate: an
+    /// absent entry means "nothing was declared", and treating silence as an exemption is how a
+    /// whole language's blind spots would disappear from the report without anyone choosing it.
+    pub fn language_declares_units_of_testing(&self, language: Option<&SmolStr>) -> bool {
+        let Some(language) = language else {
+            return true;
+        };
+        self.testable_languages
+            .iter()
+            .find(|(l, _)| l == language)
+            .map(|(_, testable)| *testable)
+            .unwrap_or(true)
+    }
+
     pub fn file_id(&self, path: &ProjectPath) -> Option<FileId> {
         self.file_index.get(path).copied()
     }
@@ -475,6 +498,7 @@ impl ProjectGraph {
             suppressions: parts.suppressions,
             visibility_ladders: parts.visibility_ladders,
             cycle_policies: parts.cycle_policies,
+            testable_languages: parts.testable_languages,
             function_metrics: parts.function_metrics,
             patch_meta: parts.patch_meta,
             // Snapshots are written even with graph-mutating plugins registered, so this
@@ -552,6 +576,9 @@ impl ProjectGraph {
                     package_cycles: crate::adapter::CycleTolerance::Hazard,
                 },
             )],
+            // The mock language is code: `untested` judges its files like any other's, which is
+            // what every core test that builds a graph here expects.
+            testable_languages: vec![(SmolStr::new("mock"), true)],
             function_metrics: Vec::new(),
             patch_meta: vec![FilePatchMeta::default(); files_len],
             externally_consumed: Vec::new(),

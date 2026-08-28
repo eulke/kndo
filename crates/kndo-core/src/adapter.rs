@@ -67,6 +67,24 @@ pub struct AdapterDescriptor {
     /// `true` in spirit (every adapter sets it explicitly; there is no `Default` impl here so a
     /// new adapter must make the call, not inherit a silent default).
     pub resolves_dependency_usage: bool,
+    /// **Can a file of this language contain a unit of testing at all?**
+    ///
+    /// `untested` asks "is this production code a test blind spot". For a language that
+    /// declares no callable units — an HTML document, a stylesheet, a data file — the question
+    /// has no answer, and every such file would be reported forever.
+    ///
+    /// The analysis cannot reach that conclusion on its own. Its existing exemption
+    /// (`files_declaring_only_values`) requires a file to *declare symbols and only values*,
+    /// deliberately: concluding "nothing to test" from an absence of extracted facts would
+    /// silence files for a reason nobody could see, and an adapter that simply failed would be
+    /// indistinguishable from one with nothing to say. An adapter, though, can state it
+    /// positively about its own language — and that is what this field is.
+    ///
+    /// `true` for every language whose files can hold a function. No default: like
+    /// `Plugin::mutates_graph`, answering it wrong in either direction is a real defect
+    /// (`false` silences a language's blind spots; `true` on a document language buries the
+    /// report), so it is answered per adapter rather than inherited from a constructor.
+    pub declares_units_of_testing: bool,
     /// What gates a *globally installed* adapter for a project — same rules and semantics as
     /// `PluginDescriptor::activation`, evaluated by the distribution layer's composition pass
     /// (RFC 0016 §4). Compiled-in and project-local adapters ignore it: the first are

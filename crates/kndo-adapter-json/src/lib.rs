@@ -47,6 +47,8 @@ impl LanguageAdapter for JsonAdapter {
             // Moot: this adapter never contributes a manifest/PackageNode, so
             // `dependency_hygiene` never consults this flag for it.
             resolves_dependency_usage: false,
+            // A data file holds no callable unit; "is it tested" has no answer for it.
+            declares_units_of_testing: false,
             package_test_dirs: Vec::new(),
             // No builtin type facts yet: this adapter declares none, and an empty table
             // simply means the chain resolver has no second tier to consult for it.

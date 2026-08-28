@@ -1238,6 +1238,7 @@ dependencies = [
  "jsonschema",
  "kndo-adapter-css",
  "kndo-adapter-go",
+ "kndo-adapter-html",
  "kndo-adapter-java",
  "kndo-adapter-js",
  "kndo-adapter-json",
@@ -1292,6 +1293,16 @@ dependencies = [
  "tempfile",
  "tree-sitter",
  "tree-sitter-go",
+]
+
+[[package]]
+name = "kndo-adapter-html"
+version = "0.1.0"
+dependencies = [
+ "kndo-adapter-toolkit",
+ "kndo-core",
+ "rustc-hash",
+ "smol_str",
 ]
 
 [[package]]

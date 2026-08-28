@@ -2174,6 +2174,7 @@ fn simulate_deletion(
         suppressions: graph.suppressions.clone(),
         visibility_ladders: graph.visibility_ladders.clone(),
         cycle_policies: graph.cycle_policies.clone(),
+        testable_languages: graph.testable_languages.clone(),
         function_metrics: graph.function_metrics.clone(),
         patch_meta: graph.patch_meta.clone(),
         externally_consumed: graph.externally_consumed.clone(),

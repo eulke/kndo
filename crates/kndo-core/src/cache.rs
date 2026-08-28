@@ -128,6 +128,14 @@ struct CyclePolicySnap {
     policy: crate::adapter::CyclePolicy,
 }
 
+/// And again, for `ProjectGraph::testable_languages`.
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+struct TestableLanguageSnap {
+    #[rkyv(with = crate::rkyv_support::SmolStrAsString)]
+    language: SmolStr,
+    testable: bool,
+}
+
 /// The archived payload (everything after the header) — deliberately a standalone type rather
 /// than deriving `Archive` on [`ProjectGraph`] itself: `ProjectGraph::file_index` is a derived
 /// index (rebuilt on load — no reason to pay to persist it), and `diagnostics`
@@ -149,6 +157,7 @@ struct GraphSnapshot {
     suppressions: Vec<(FileId, RawSuppression)>,
     visibility_ladders: Vec<LadderSnap>,
     cycle_policies: Vec<CyclePolicySnap>,
+    testable_languages: Vec<TestableLanguageSnap>,
     function_metrics: Vec<(SymbolId, crate::graph::SymbolMetrics)>,
     patch_meta: Vec<crate::graph::FilePatchMeta>,
     diagnostics: Vec<Diagnostic>,
@@ -659,6 +668,11 @@ impl ProjectCache {
                 .into_iter()
                 .map(|p| (p.language, p.policy))
                 .collect(),
+            testable_languages: snapshot
+                .testable_languages
+                .into_iter()
+                .map(|t| (t.language, t.testable))
+                .collect(),
             function_metrics: snapshot.function_metrics,
             patch_meta: snapshot.patch_meta,
             externally_consumed: snapshot.externally_consumed,
@@ -804,6 +818,14 @@ impl GraphSnapshotWriter {
                 .map(|(language, policy)| CyclePolicySnap {
                     language: language.clone(),
                     policy: *policy,
+                })
+                .collect(),
+            testable_languages: graph
+                .testable_languages
+                .iter()
+                .map(|(language, testable)| TestableLanguageSnap {
+                    language: language.clone(),
+                    testable: *testable,
                 })
                 .collect(),
             function_metrics: graph.function_metrics.clone(),

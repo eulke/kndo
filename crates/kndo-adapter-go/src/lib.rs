@@ -75,6 +75,7 @@ impl LanguageAdapter for GoAdapter {
             // The module path IS the import specifier's prefix — resolve() structurally
             // identifies the declared dependency every time.
             resolves_dependency_usage: true,
+            declares_units_of_testing: true,
             package_test_dirs: Vec::new(),
             // No builtin type facts yet: this adapter declares none, and an empty table
             // simply means the chain resolver has no second tier to consult for it.

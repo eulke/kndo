@@ -76,6 +76,8 @@ pub fn default_adapters() -> Vec<Box<dyn LanguageAdapter>> {
         adapters.push(Box::new(kndo_adapter_json::JsonAdapter));
         #[cfg(feature = "css")]
         adapters.push(Box::new(kndo_adapter_css::CssAdapter));
+        #[cfg(feature = "html")]
+        adapters.push(Box::new(kndo_adapter_html::HtmlAdapter));
         adapters
     }
 }
