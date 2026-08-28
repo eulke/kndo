@@ -220,3 +220,67 @@ fn write_zip(path: &Path, entries: &[(String, PathBuf)]) -> Result<(), String> {
         .map_err(|e| format!("cannot finish {}: {e}", path.display()))?;
     Ok(())
 }
+
+/// The `cargo xtask package` command line, resolved into a call to [`package`].
+///
+/// Lives here rather than in `main.rs` for the reason `lib.rs` states outright — "anything a
+/// test needs to assert about a task lives here". It did not, and the proof was mechanical:
+/// kndo's own `crap` analysis put this function at **0% coverage** on this repository. Argument
+/// handling is where a release command goes wrong quietly (a defaulted tag, a target that is
+/// not in the table, a binary path assembled from the wrong triple), so it is exactly the part
+/// that should be callable from a test.
+///
+/// `root` is passed in rather than discovered so a test can point it at a fixture.
+pub fn from_args(args: &[String], root: Result<PathBuf, String>) -> Result<PathBuf, String> {
+    let flag = |name: &str| -> Option<&str> {
+        args.iter()
+            .position(|a| a == name)
+            .and_then(|i| args.get(i + 1))
+            .map(String::as_str)
+    };
+    let triple = flag("--target").ok_or("--target <triple> is required")?;
+    let target = target(triple).ok_or_else(|| {
+        format!(
+            "unknown target {triple} — releases build: {}",
+            TARGETS
+                .iter()
+                .map(|t| t.triple)
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
+    })?;
+    let root = root?;
+    // Default to the workspace version with the `v` the git tag carries, so a local
+    // `cargo xtask package` produces exactly the name a release would.
+    let owned_tag;
+    let tag = match flag("--tag") {
+        Some(t) => t,
+        None => {
+            owned_tag = format!("v{}", workspace_version(&root)?);
+            &owned_tag
+        }
+    };
+    let bin = flag("--bin")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| {
+            root.join("target")
+                .join(triple)
+                .join("release")
+                .join(target.binary())
+        });
+    let out_dir = root.join(flag("--out-dir").unwrap_or("dist"));
+    package(&root, tag, target, &bin, &out_dir)
+}
+
+/// The workspace's own `version`, read from the root manifest — the same string
+/// `kndo --version` prints, so a locally packaged artifact is named like its release.
+pub(crate) fn workspace_version(root: &std::path::Path) -> Result<String, String> {
+    let manifest = std::fs::read_to_string(root.join("Cargo.toml"))
+        .map_err(|e| format!("cannot read the workspace manifest: {e}"))?;
+    manifest
+        .lines()
+        .skip_while(|l| l.trim() != "[workspace.package]")
+        .find_map(|l| l.strip_prefix("version = "))
+        .map(|v| v.trim().trim_matches('"').to_string())
+        .ok_or_else(|| "no [workspace.package] version in the workspace manifest".to_string())
+}

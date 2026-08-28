@@ -451,6 +451,155 @@ fn the_windows_target_is_the_only_zip_and_the_only_exe() {
 /// A real archive, produced and read back: the name, the nesting and the contents are what the
 /// consumers are checked against above. Without this the rest of the file could agree perfectly
 /// with a producer that writes something else.
+/// **The packaging command line resolves the way a release depends on.**
+///
+/// `from_args` used to be `package_inner` in `main.rs`, where no test could reach it — kndo's
+/// own `crap` analysis reported it at 0% coverage on this repository. Argument handling is
+/// where a release command goes wrong quietly, so each rule it applies is asserted here.
+#[test]
+fn the_package_command_line_resolves_target_tag_and_paths() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = root();
+    let args = |v: &[&str]| -> Vec<String> { v.iter().map(|s| s.to_string()).collect() };
+
+    // A target that is not in the table is refused, and the error names what IS built rather
+    // than leaving the caller to guess.
+    let err = package::from_args(
+        &args(&["--target", "x86_64-unknown-linux-gnu"]),
+        Ok(root.clone()),
+    )
+    .expect_err("gnu is not a released target");
+    assert!(err.contains("unknown target"), "{err}");
+    assert!(
+        err.contains("x86_64-unknown-linux-musl"),
+        "the message lists the real table: {err}"
+    );
+
+    // `--target` is required: there is no sensible default for what to build.
+    let err = package::from_args(&args(&[]), Ok(root.clone())).expect_err("no target");
+    assert!(err.contains("--target"), "{err}");
+
+    // With an explicit binary, tag and out-dir, the artifact lands where it was asked to and
+    // carries the name every consumer resolves.
+    let bin = dir.path().join("kndo");
+    std::fs::write(&bin, b"stand-in").expect("write");
+    let out = package::from_args(
+        &args(&[
+            "--target",
+            "x86_64-unknown-linux-musl",
+            "--tag",
+            TAG,
+            "--bin",
+            bin.to_str().expect("utf-8"),
+            "--out-dir",
+            dir.path().to_str().expect("utf-8"),
+        ]),
+        Ok(root.clone()),
+    )
+    .expect("package");
+    let target = package::target("x86_64-unknown-linux-musl").expect("target");
+    assert_eq!(
+        out.file_name().and_then(|n| n.to_str()),
+        Some(&*package::artifact(TAG, target).file_name)
+    );
+
+    // A failure finding the workspace root is reported, not papered over with a default.
+    let err = package::from_args(
+        &args(&["--target", "x86_64-unknown-linux-musl"]),
+        Err("no workspace here".to_string()),
+    )
+    .expect_err("the root error propagates");
+    assert_eq!(err, "no workspace here");
+}
+
+/// Omitting `--tag` defaults to the workspace version with the `v` a git tag carries, so a
+/// local `cargo xtask package` produces exactly the name a release would — the property the
+/// four consumers are checked against everywhere else in this file.
+#[test]
+fn an_omitted_tag_defaults_to_the_workspace_version_with_its_v() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let bin = dir.path().join("kndo");
+    std::fs::write(&bin, b"stand-in").expect("write");
+    let args: Vec<String> = [
+        "--target",
+        "x86_64-unknown-linux-musl",
+        "--bin",
+        bin.to_str().expect("utf-8"),
+        "--out-dir",
+        dir.path().to_str().expect("utf-8"),
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect();
+
+    let out = package::from_args(&args, Ok(root())).expect("package");
+    let name = out
+        .file_name()
+        .and_then(|n| n.to_str())
+        .expect("a file name");
+    assert!(
+        name.starts_with("kndo-v"),
+        "the default tag carries the leading v: {name}"
+    );
+}
+
+/// **The Windows archive is produced and read back, not just described.**
+///
+/// The sibling test above asserts that `x86_64-pc-windows-msvc` is the one zip target — from
+/// the table. That is a statement about a constant, and it left `write_zip` at **0% coverage**:
+/// the release path every Windows user downloads had never once executed, on any machine, in
+/// any test. kndo's own `crap` analysis is what noticed, on this repository.
+///
+/// Runs on every platform: `write_zip` takes a path and a list of entries, so producing a
+/// Windows artifact from Linux is exactly what a release does anyway (the archive is built on
+/// a Windows runner, but the code is the same and the shape it must have is not host-dependent).
+#[test]
+fn packaging_the_windows_target_produces_a_readable_zip() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let target = package::target("x86_64-pc-windows-msvc").expect("a released target");
+    let bin = dir.path().join("kndo.exe");
+    std::fs::write(&bin, b"MZ stand-in").expect("write the stand-in binary");
+
+    let out = package::package(&root(), TAG, target, &bin, dir.path()).expect("package");
+    let art = package::artifact(TAG, target);
+    assert_eq!(
+        out.file_name().and_then(|n| n.to_str()),
+        Some(&*art.file_name),
+        "the zip is named exactly what the four consumers ask for"
+    );
+    assert!(
+        art.file_name.ends_with(".zip"),
+        "the Windows artifact is a zip: {}",
+        art.file_name
+    );
+
+    let file = std::fs::File::open(&out).expect("open the archive");
+    let mut zip = zip::ZipArchive::new(file).expect("the archive is a readable zip");
+    let mut names: Vec<String> = (0..zip.len())
+        .map(|i| zip.by_index(i).expect("entry").name().to_string())
+        .collect();
+    names.sort();
+
+    let mut expected = vec![art.binary_in_archive.clone()];
+    for extra in package::EXTRA_FILES {
+        expected.push(format!("{}/{extra}", art.stem));
+    }
+    expected.sort();
+    assert_eq!(
+        names, expected,
+        "the zip nests under one directory named for itself, exactly as the tar does"
+    );
+
+    // The binary is really in there, under the staged directory the installer strips — the
+    // layout mistake that shipped broken in two consumers before `xtask::package` owned it.
+    let mut entry = zip
+        .by_name(&art.binary_in_archive)
+        .expect("the binary is in the archive under its staged path");
+    let mut bytes = Vec::new();
+    std::io::Read::read_to_end(&mut entry, &mut bytes).expect("read the entry");
+    assert_eq!(bytes, b"MZ stand-in");
+}
+
 #[test]
 fn packaging_produces_the_archive_the_consumers_expect() {
     let dir = tempfile::tempdir().expect("tempdir");

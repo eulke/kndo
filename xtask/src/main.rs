@@ -117,7 +117,7 @@ fn main() -> ExitCode {
 /// Prints the archive's path on stdout so the caller can capture it without re-deriving the
 /// name it just asked for.
 fn package_cmd(args: &[String]) -> ExitCode {
-    match package_inner(args) {
+    match package::from_args(args, workspace_root()) {
         Ok(path) => {
             println!("{}", path.display());
             ExitCode::SUCCESS
@@ -127,60 +127,6 @@ fn package_cmd(args: &[String]) -> ExitCode {
             ExitCode::FAILURE
         }
     }
-}
-
-fn package_inner(args: &[String]) -> Result<std::path::PathBuf, String> {
-    let flag = |name: &str| -> Option<&str> {
-        args.iter()
-            .position(|a| a == name)
-            .and_then(|i| args.get(i + 1))
-            .map(String::as_str)
-    };
-    let triple = flag("--target").ok_or("--target <triple> is required")?;
-    let target = package::target(triple).ok_or_else(|| {
-        format!(
-            "unknown target {triple} — releases build: {}",
-            package::TARGETS
-                .iter()
-                .map(|t| t.triple)
-                .collect::<Vec<_>>()
-                .join(", ")
-        )
-    })?;
-    let root = workspace_root()?;
-    // Default to the workspace version with the `v` the git tag carries, so a local
-    // `cargo xtask package` produces exactly the name a release would.
-    let owned_tag;
-    let tag = match flag("--tag") {
-        Some(t) => t,
-        None => {
-            owned_tag = format!("v{}", workspace_version(&root)?);
-            &owned_tag
-        }
-    };
-    let bin = flag("--bin")
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|| {
-            root.join("target")
-                .join(triple)
-                .join("release")
-                .join(target.binary())
-        });
-    let out_dir = root.join(flag("--out-dir").unwrap_or("dist"));
-    package::package(&root, tag, target, &bin, &out_dir)
-}
-
-/// The workspace's own `version`, read from the root manifest — the same string
-/// `kndo --version` prints, so a locally packaged artifact is named like its release.
-fn workspace_version(root: &std::path::Path) -> Result<String, String> {
-    let manifest = std::fs::read_to_string(root.join("Cargo.toml"))
-        .map_err(|e| format!("cannot read the workspace manifest: {e}"))?;
-    manifest
-        .lines()
-        .skip_while(|l| l.trim() != "[workspace.package]")
-        .find_map(|l| l.strip_prefix("version = "))
-        .map(|v| v.trim().trim_matches('"').to_string())
-        .ok_or_else(|| "no [workspace.package] version in the workspace manifest".to_string())
 }
 
 /// Wraps a `wasm32-unknown-unknown` core module into a WASM component — the same
