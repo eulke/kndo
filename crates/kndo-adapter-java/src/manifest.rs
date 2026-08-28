@@ -111,6 +111,48 @@ mod tests {
     }
 
     #[test]
+    fn a_declared_source_directory_wins_over_the_convention() {
+        // guava's shape: `<sourceDirectory>src</sourceDirectory>`, tests in a sibling `test`.
+        // Against the hardcoded `src/main/java` this module promoted nothing, so every public
+        // class in a publishable library read as `unused` — 9,576 of them on guava.
+        let f = maven_facts(
+            "<project><build><sourceDirectory>src</sourceDirectory></build></project>",
+            &["src/com/foo/A.java", "test/com/foo/ATest.java"],
+        );
+        let roots: Vec<&str> = f.roots.iter().map(|r| r.target.0.as_str()).collect();
+        assert_eq!(roots, vec!["src/com/foo/A.java"]);
+    }
+
+    #[test]
+    fn a_declared_source_directory_resolves_basedir_and_properties() {
+        let f = maven_facts(
+            "<project><properties><lay>sources</lay></properties>\
+             <build><sourceDirectory>${basedir}/${lay}</sourceDirectory></build></project>",
+            &[
+                "sources/com/foo/A.java",
+                "src/main/java/com/foo/Ignored.java",
+            ],
+        );
+        let roots: Vec<&str> = f.roots.iter().map(|r| r.target.0.as_str()).collect();
+        // The declaration replaces the convention rather than adding to it: a module that
+        // says where its code is is not also keeping the default.
+        assert_eq!(roots, vec!["sources/com/foo/A.java"]);
+    }
+
+    #[test]
+    fn an_unresolvable_source_directory_falls_back_to_the_convention() {
+        // `${project.build.directory}` depends on a build kndo never runs. Falling back to the
+        // convention is the honest outcome; guessing a path is not.
+        let f = maven_facts(
+            "<project><build><sourceDirectory>${project.build.directory}/gen</sourceDirectory>\
+             </build></project>",
+            &["src/main/java/com/foo/A.java"],
+        );
+        let roots: Vec<&str> = f.roots.iter().map(|r| r.target.0.as_str()).collect();
+        assert_eq!(roots, vec!["src/main/java/com/foo/A.java"]);
+    }
+
+    #[test]
     fn private_module_gets_no_source_roots() {
         let f = maven_facts(
             "<project><packaging>war</packaging></project>",

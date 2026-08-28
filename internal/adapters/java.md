@@ -351,13 +351,24 @@ library-surface fixpoint (phase 2.7) for its `pub mod` re-export chains. **Java 
 Go), and a Java library has no single entry file the way Rust's `lib.rs` does — every public
 class in the module is independently part of the API. The adapter therefore emits one
 `ManifestRoot{Production, target: <file>, Certain}` **per non-test `.java` file under the
-module's source root** (`src/main/java` — the Standard Directory Layout default; a custom
-`<sourceDirectory>`/`sourceSets` override is a stretch goal, §7) for every **publishable**
+module's source root** for every **publishable**
 module, reusing `graph::assemble`'s existing per-file declaration-promotion path
 (`library_root_files`) with **zero new core mechanism**: each of those files already being a
 manifest-declared production root makes every `public` declaration in it promote automatically,
 exactly as JS's `main`-file promotion already works — just applied to every source file instead
-of one. `ManifestFacts.declares_surface` stays `false` (no `exports`-map equivalent — same
+of one. **Which directory that is comes from the pom when the pom says so.** Maven's
+`<build><sourceDirectory>` wins over the Standard Directory Layout default, replacing it rather
+than adding to it: a module that declares where its code lives is not also keeping `src/main/java`.
+`${basedir}` and the pom's own `<properties>` are interpolated; anything else unresolved
+(`${project.build.directory}`), an absolute path, or one escaping the module falls back to the
+convention rather than guessing at a path that depends on a build kndo never runs. This is not
+cosmetic — guava declares `<sourceDirectory>src</sourceDirectory>` with tests in a sibling
+`test`, and against the hardcoded default its modules promoted *nothing*, so every public class
+in a publishable library read as `unused`. Two remaining shapes are §7.2: a declaration
+**inherited from a parent pom** (guava's own case — the adapter sees one manifest's text at a
+time and `ResolveCtx` exposes paths, not contents), and Gradle's `sourceSets`.
+
+`ManifestFacts.declares_surface` stays `false` (no `exports`-map equivalent — same
 `deep-import`-stays-closed reasoning as Go).
 
 ## 5. Known hard cases & stances
@@ -374,7 +385,7 @@ of one. `ManifestFacts.declares_surface` stays `false` (no `exports`-map equival
 | Annotation processors / Lombok-generated members (`@Data`, `@Getter`, …) | not modeled — a generated `getFoo()` method has no textual declaration for extraction to see (same class of gap as record accessors); a *use* of it (`obj.getFoo()`) is a normal member-fallback reference that simply never resolves, harmlessly |
 | Text blocks (`"""…"""`, Java 15+), switch expressions (`yield`), pattern matching (`instanceof Foo f`) | parsed by tree-sitter-java's grammar as ordinary expression/statement shapes; no adapter-specific handling needed — their contained references/type positions fall through the same generic walkers as everything else |
 | `module-info.java` (JPMS) | claimed, yields zero declarations (§0's last bullet) — the `exports`/`requires`/`opens` module directives are not parsed; a real, parked gap (§7) |
-| Non-standard source roots (no `src/main/java` — flat layouts, Bazel) | `unit` (declared package) still resolves correctly regardless of directory shape (§0); role-by-path (`src/test/java`) degrades to the Surefire-filename fallback (§1); manifest root-promotion (§4) specifically assumes the Standard Directory Layout and undercounts on a genuinely nonstandard one — documented, not silently wrong (fewer roots promoted, never phantom ones) |
+| Non-standard source roots (no `src/main/java` — flat layouts, Bazel) | `unit` (declared package) still resolves correctly regardless of directory shape (§0); role-by-path (`src/test/java`) degrades to the Surefire-filename fallback (§1); manifest root-promotion (§4) reads a pom's own `<sourceDirectory>` and otherwise assumes the Standard Directory Layout, undercounting on a layout that is neither declared here nor conventional (inherited declarations and Gradle `sourceSets`, §7.2) — documented, not silently wrong (fewer roots promoted, never phantom ones) |
 
 ## 6. Conformance fixtures (shared harness, RFC 0002 §8)
 
@@ -440,9 +451,15 @@ for an external import, so there is no code path that could produce one.
 1. `<mainClass>`/`exec.mainClass` manifest-declared entry points, resolved to a concrete file —
    parked; needs a known-files-by-declared-package-and-class lookup `ResolveCtx` doesn't cheaply
    expose today (§4).
-2. Custom source roots (`<sourceDirectory>`, Gradle `sourceSets.main.java.srcDirs`) — root
-   promotion (§4) assumes the Standard Directory Layout default; reading the override is a
-   contained follow-up, not attempted in v1.
+2. Custom source roots, the half that remains. A pom's **own** `<sourceDirectory>` is read
+   (§4). Two shapes are not: a declaration **inherited from a parent pom**, and Gradle's
+   `sourceSets.main.java.srcDirs`. The first is the one with a measured case — guava declares
+   it once in `guava-parent` and every module inherits — and it is not a contained follow-up:
+   the adapter is handed one manifest's text at a time and `ResolveCtx` exposes paths, not
+   contents, so resolving it needs the assembly-side pattern `ManifestDependency::inherited`
+   already uses (record what is declared, resolve against a pool during assembly), which means
+   a `ManifestFacts` field and moving root promotion off the adapter. The second is worse:
+   Gradle's build script is a program, not a declaration, and the line-scan cannot execute it.
 3. JPMS (`module-info.java`'s `exports`/`requires`/`opens`) — real Java 9+ module boundaries
    with their own visibility semantics, entirely unmodeled (§0, §5).
 4. Gradle version catalogs (`libs.versions.toml` + `libs.foo` references in `build.gradle.kts`)

@@ -122,12 +122,80 @@ fn extract_maven(
     // `<packaging>pom</packaging>` with no source tree contributes topology only.
     if !out.private {
         let dir = crate::paths::dirname(path);
-        for root in layout.source_roots {
-            let source_root = join(dir, root);
-            promote_source_roots(&source_root, ctx, &mut out, layout);
+        // A DECLARED source directory wins over the convention. Maven's `<sourceDirectory>` is
+        // the module saying where its code is, and a module that says so is not guessing —
+        // guava declares `src` (with tests in a sibling `test`), and against the hardcoded
+        // `src/main/java` its entire publishable surface was promoted from nothing, so every
+        // public class in it read as `unused`. The convention is the fallback, not the rule.
+        match maven_declared_source_root(project, &properties) {
+            Some(declared) => {
+                promote_source_roots(&join(dir, &declared), ctx, &mut out, layout);
+            }
+            None => {
+                for root in layout.source_roots {
+                    let source_root = join(dir, root);
+                    promote_source_roots(&source_root, ctx, &mut out, layout);
+                }
+            }
         }
     }
     out
+}
+
+/// `<build><sourceDirectory>`, module-relative, or `None` when the pom does not declare one.
+///
+/// `${basedir}`/`${project.basedir}` is the pom's own directory and is stripped — the result is
+/// joined onto that directory anyway. Any other unresolved placeholder yields `None` rather
+/// than a guess: it depends on a build kndo never runs, and falling back to the convention is
+/// the honest outcome. An absolute path likewise names something outside the project.
+///
+/// `<testSourceDirectory>` is deliberately not consulted. Promotion is about the *production*
+/// surface, and a declared source directory that happens to contain tests is a shape no
+/// observed project has — guava puts them in a sibling.
+fn maven_declared_source_root(
+    project: roxmltree::Node<'_, '_>,
+    properties: &std::collections::HashMap<String, String>,
+) -> Option<String> {
+    let declared = xml_child(project, "build")
+        .and_then(|b| xml_child_text(b, "sourceDirectory"))?
+        .trim();
+    let resolved = interpolate_maven(declared, properties)?;
+    let resolved = resolved
+        .strip_prefix("${basedir}")
+        .or_else(|| resolved.strip_prefix("${project.basedir}"))
+        .unwrap_or(&resolved)
+        .trim_start_matches('/')
+        .trim_end_matches('/')
+        .to_string();
+    // Absolute, empty, or escaping the module: nothing this can point at inside the project.
+    (!resolved.is_empty() && !resolved.starts_with('/') && !resolved.starts_with(".."))
+        .then_some(resolved)
+}
+
+/// `value` with `${key}` placeholders substituted from the manifest's own `<properties>`.
+/// `${basedir}` is left in place for the caller, which knows what it means; anything else
+/// still unresolved yields `None`.
+fn interpolate_maven(
+    value: &str,
+    properties: &std::collections::HashMap<String, String>,
+) -> Option<String> {
+    let mut out = String::new();
+    let mut rest = value;
+    while let Some(at) = rest.find("${") {
+        out.push_str(&rest[..at]);
+        let tail = &rest[at..];
+        let close = tail.find('}')?;
+        let key = &tail[2..close];
+        match properties.get(key) {
+            Some(v) => out.push_str(v),
+            // `basedir` is the caller's to strip; every other unknown is a build-time value.
+            None if key == "basedir" || key == "project.basedir" => out.push_str(&tail[..=close]),
+            None => return None,
+        }
+        rest = &tail[close + 1..];
+    }
+    out.push_str(rest);
+    Some(out)
 }
 
 fn join(dir: &str, rel: &str) -> ProjectPath {

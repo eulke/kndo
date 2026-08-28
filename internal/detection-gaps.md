@@ -427,6 +427,37 @@ findings anywhere in that crate — the promotion reaches declarations across th
 tree, not just the root file. What remains under this entry is the policy statement itself, for
 the shapes where promotion genuinely has nothing to key off.
 
+## 15-bis. A publishable Maven module whose layout it declares (FIXED for a module's own pom)
+
+§15 says a published library's public surface is rooted by library-mode promotion, and records
+the Rust instance as gone. The JVM half had a hole underneath it: promotion walked a hardcoded
+`src/main/java`, and Maven lets a module *declare* where its code lives. A module that declares
+a different one promoted **nothing**, so every public class in it read as `unused` — the
+promotion did not fail loudly, it simply found no files.
+
+**Measured.** Two Maven modules, identical code and identical publishability, differing only in
+that one declares `<sourceDirectory>src</sourceDirectory>`: the declaring one reported `unused`
+on its public API, the conventional one reported nothing. On guava — which declares exactly
+that, with tests in a sibling `test` — kndo reports 9,576 `unused` and 14,877 `internal-only`,
+including 1,174 `testXxx` methods in `guava-testlib`'s testers.
+
+**Fixed for a pom's own declaration**: `<build><sourceDirectory>` now replaces the convention,
+with `${basedir}` and the pom's `<properties>` interpolated and any build-time placeholder
+falling back rather than guessing (adapters/java.md §4).
+
+**Not fixed, with its own evidence: inheritance.** guava declares it once in `guava-parent` and
+every module inherits, so this fix does not move guava at all. The adapter is handed one
+manifest's text at a time and `ResolveCtx` exposes paths, not contents — resolving an inherited
+declaration needs the assembly-side pattern `ManifestDependency::inherited` already uses, which
+means a `ManifestFacts` field and moving root promotion off the adapter. That is a contract
+change and is written up as adapters/java.md §7.2 rather than approximated here.
+
+**Note for whoever picks that up**: the plan's `kndo:guava-testlib` plugin was scoped against
+guava's `unused` numbers. Those numbers are this entry's, not a plugin's. Re-measure after the
+inheritance fix before writing the plugin — the mechanism it would encode is JUnit 3's
+reflective `TestSuite(Class)` (guava-testlib's testers descend from `TestCase`), not anything
+guava-testlib knows, and it may have nothing left to do.
+
 ## 16. Multi-release variants of one class (WAS a gap — already covered, now fixtured)
 
 retrofit ships `DefaultMethodSupport` three times — `main/java`, `java14`, `java16` — for the
