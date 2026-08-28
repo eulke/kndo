@@ -898,4 +898,177 @@ mod tests {
             "{out}"
         );
     }
+
+    /// **Every section `describe` can render, rendered.**
+    ///
+    /// The test above populates two of the ten optional parts, which is why kndo's own `crap`
+    /// analysis reported this renderer at 51% coverage on this repository: half the contract in
+    /// RFC 0007 §4.2 had no assertion behind it. A node carrying all of them at once is not a
+    /// contrived shape — a public function in a duplicated group, in a package, with metrics and
+    /// findings, is an ordinary answer to `kndo describe`.
+    #[test]
+    fn describe_renders_every_section_it_declares() {
+        use crate::query::QNodeRef;
+        use crate::query::{
+            DeclarationInfo, Degree, DependencyInfo, DescribeResult, DuplicationInfo, FileInfo,
+            NodeSpan, PackageInfo, ShapeMetrics,
+        };
+        use crate::query_envelope::{QueryResult, ResultEntry, Verb};
+        let node = |selector: &str, kind: &str| QNodeRef {
+            selector: selector.to_string(),
+            kind: kind.to_string(),
+            color: Some("production".to_string()),
+            span: None,
+        };
+        let query_result = |entry: ResultEntry| QueryResult {
+            verb: Verb::Describe,
+            selectors: vec!["x".to_string()],
+            id: None,
+            cache: "warm",
+            duration_ms: 3,
+            results: vec![entry],
+            diagnostics: vec![],
+        };
+
+        let mut in_by_kind = rustc_hash::FxHashMap::default();
+        in_by_kind.insert("calls".to_string(), 3usize);
+        let mut out_by_kind = rustc_hash::FxHashMap::default();
+        out_by_kind.insert("imports".to_string(), 2usize);
+        let mut elided = rustc_hash::FxHashMap::default();
+        elided.insert("reached_by_roots".to_string(), 7usize);
+
+        let full = query_result(ResultEntry::Describe(Box::new(DescribeResult {
+            node: node("src/billing.js#computeTotal", "function"),
+            declaration: Some(DeclarationInfo {
+                kind: "function".to_string(),
+                span: NodeSpan {
+                    path: "src/billing.js".to_string(),
+                    start: (1, 1),
+                    end: (9, 2),
+                },
+                exported: true,
+                // The label wins over the ordinal when the adapter supplies one — the branch
+                // the sibling test leaves as `None`.
+                visibility: 2,
+                visibility_label: Some("pub(crate)".to_string()),
+            }),
+            file: Some(FileInfo {
+                role: "production".to_string(),
+                origin: "authored".to_string(),
+            }),
+            dependency: None,
+            package: Some(PackageInfo {
+                mode: "library".to_string(),
+                files: 12,
+                dependents: 4,
+            }),
+            metrics: vec![ShapeMetrics {
+                shape_ordinal: 0,
+                span: NodeSpan {
+                    path: "src/billing.js".to_string(),
+                    start: (1, 1),
+                    end: (9, 2),
+                },
+                cyclomatic: 7,
+                loc: 40,
+                token_count: 120,
+                coverage: Some(0.5),
+                crap: Some(19.5),
+            }],
+            duplication: vec![DuplicationInfo {
+                finding: "duplicate:callable:abc".to_string(),
+                members: vec!["src/other.js#alsoComputes".to_string()],
+            }],
+            degree: Degree {
+                in_by_kind,
+                out_by_kind,
+            },
+            reached_by_roots: vec![node("src/index.js", "file")],
+            findings: vec!["untested:callable:def".to_string()],
+            sources: vec!["adapter:js-ts".to_string()],
+            declared_symbols: vec![node("src/billing.js#helper", "function")],
+            elided,
+        })));
+
+        let out = render_query(&full);
+        for expected in [
+            "node: [src/billing.js#computeTotal] function",
+            // The LABEL, not the bare ordinal — a reader cannot see the adapter's ladder.
+            "declaration: function visibility=pub(crate) exported",
+            "file: role=production origin=authored",
+            "package: mode=library files=12 dependents=4",
+            // Metrics render their own numbers rather than a summary nobody can act on.
+            "metrics: shape=0 line=1 cyclomatic=7 loc=40 tokens=120 coverage=0.50 crap=19.5",
+            "duplication: finding=duplicate:callable:abc members=1",
+            "  1. src/other.js#alsoComputes",
+            "degree: in=3 out=2",
+            "reached_by_roots:",
+            "  1. [src/index.js] file",
+            "declared_symbols:",
+            "  1. [src/billing.js#helper] function",
+            "findings: untested:callable:def",
+            "sources: adapter:js-ts",
+        ] {
+            assert!(out.contains(expected), "missing {expected:?} in:\n{out}");
+        }
+    }
+
+    /// A node with nothing optional renders its identity and stops — no empty headings, which
+    /// is what an agent parsing this output has to be able to rely on.
+    #[test]
+    fn describe_omits_the_sections_a_node_does_not_have() {
+        use crate::query::QNodeRef;
+        use crate::query::{
+            DeclarationInfo, Degree, DependencyInfo, DescribeResult, DuplicationInfo, FileInfo,
+            NodeSpan, PackageInfo, ShapeMetrics,
+        };
+        use crate::query_envelope::{QueryResult, ResultEntry, Verb};
+        let node = |selector: &str, kind: &str| QNodeRef {
+            selector: selector.to_string(),
+            kind: kind.to_string(),
+            color: Some("production".to_string()),
+            span: None,
+        };
+        let query_result = |entry: ResultEntry| QueryResult {
+            verb: Verb::Describe,
+            selectors: vec!["x".to_string()],
+            id: None,
+            cache: "warm",
+            duration_ms: 3,
+            results: vec![entry],
+            diagnostics: vec![],
+        };
+
+        let bare = query_result(ResultEntry::Describe(Box::new(DescribeResult {
+            node: node("src/data.json", "file"),
+            declaration: None,
+            file: None,
+            dependency: None,
+            package: None,
+            metrics: Vec::new(),
+            duplication: Vec::new(),
+            degree: Degree::default(),
+            reached_by_roots: vec![],
+            findings: vec![],
+            sources: vec![],
+            declared_symbols: vec![],
+            elided: Default::default(),
+        })));
+        let out = render_query(&bare);
+        assert!(out.contains("node: [src/data.json] file"), "{out}");
+        for absent in [
+            "declaration:",
+            "file: role=",
+            "dependency:",
+            "package:",
+            "metrics:",
+            "duplication:",
+            "reached_by_roots:",
+            "declared_symbols:",
+            "findings:",
+            "sources:",
+        ] {
+            assert!(!out.contains(absent), "unexpected {absent:?} in:\n{out}");
+        }
+    }
 }

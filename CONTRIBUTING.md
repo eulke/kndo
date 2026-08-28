@@ -110,7 +110,14 @@ and `[plugins.<id>] report` in kndo.toml points at custom locations), picked up 
 `kndo check`. Reports older than 7 days are ignored with a diagnostic (stale certainty is
 worse than absence) — just regenerate. `lcov.info` and `coverage/` are gitignored; CI
 generates its own report in the test job, so the self-check there always runs
-coverage-aware. The WASM guest builds some integration tests spawn strip
+coverage-aware.
+
+**Delete `lcov.info` before running the suite again.** `crap` activates when a report is
+present, and the `dogfood` gate asserts kndo reports *nothing* on this repository — so a stale
+report from your last coverage run makes `dogfood` fail on findings that are real but are not
+what that gate measures. `cargo llvm-cov` hits this on its own second run, because the file it
+wrote last time is still there while it runs the tests. The CI job never sees it (a fresh
+checkout has no report until the step that writes one), which is why this only bites locally. The WASM guest builds some integration tests spawn strip
 `RUSTFLAGS`/`CARGO_ENCODED_RUSTFLAGS` themselves, so the instrumented run works end to end.
 
 ## Benchmarks

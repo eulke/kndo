@@ -777,6 +777,64 @@ fn neighbor_line(e: &NeighborEntry) -> String {
 
 #[cfg(test)]
 mod tests {
+
+    /// **Every group has a glyph in both modes, and the rich ones match `action/render.mjs`.**
+    ///
+    /// `glyph` is a ten-arm table whose own comment says it mirrors the Action's `GLYPH`, and
+    /// nothing checked that — kndo's `crap` analysis reported the function at 31% coverage on
+    /// this repository, which is the same fact stated numerically: seven arms had never been
+    /// evaluated. Two copies of one table, one of them unexercised, is the drift this repo
+    /// removes everywhere else; here it is asserted instead, because the Action is JavaScript
+    /// and cannot import the Rust one.
+    #[test]
+    fn every_group_has_a_glyph_and_the_rich_table_matches_the_action() {
+        let js = std::fs::read_to_string(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../action/render.mjs"),
+        )
+        .expect("action/render.mjs is in the repository");
+        let line = js
+            .lines()
+            .find(|l| l.contains("const GLYPH"))
+            .expect("render.mjs declares GLYPH");
+
+        for group in Group::DISPLAY_ORDER {
+            let rich = glyph(group, true);
+            let plain = glyph(group, false);
+            assert!(!rich.is_empty() && !plain.is_empty(), "{group:?}");
+            assert_ne!(
+                rich, plain,
+                "{group:?}: the plain fallback exists so a non-UTF-8 terminal reads differently"
+            );
+            assert!(
+                plain.is_ascii(),
+                "{group:?}: the plain glyph {plain:?} is the one for terminals that cannot \
+                 render the rich set, so it has to be ASCII"
+            );
+            assert!(
+                line.contains(&format!("{}: \"{rich}\"", group.as_str())),
+                "action/render.mjs has a different glyph for {}: {line}",
+                group.as_str()
+            );
+        }
+    }
+
+    /// The plain glyphs are distinct from each other, which is the only reason a reader can tell
+    /// the groups apart without colour or Unicode.
+    #[test]
+    fn the_plain_glyphs_are_all_different() {
+        let mut seen: Vec<&str> = Group::DISPLAY_ORDER
+            .iter()
+            .map(|g| glyph(*g, false))
+            .collect();
+        let count = seen.len();
+        seen.sort_unstable();
+        seen.dedup();
+        assert_eq!(
+            seen.len(),
+            count,
+            "two groups share a plain glyph: {seen:?}"
+        );
+    }
     use super::*;
     use kndo::ProjectPath;
     use kndo::{Delta, DeltaOrigin, Location, Severity};
@@ -1150,6 +1208,93 @@ mod tests {
         let out = render_query(&dep, &opts());
         assert!(
             out.contains("dependency: prod · 1 importing file · used"),
+            "{out}"
+        );
+    }
+
+    /// **Every section the human renderer can emit, emitted.**
+    ///
+    /// Its sibling above populates three of the ten optional parts; kndo's own `crap` analysis
+    /// put this renderer at 51% coverage on this repository, which says the same thing in a
+    /// number. This is the CLI half of the pair `agent_format` also owns — the facade rule means
+    /// they read the same `DescribeResult`, so both need the whole shape exercised, not one
+    /// corner each.
+    #[test]
+    fn describe_human_output_renders_every_section_it_declares() {
+        use kndo::query::{
+            DeclarationInfo, Degree, DescribeResult, DuplicationInfo, FileInfo, NodeSpan,
+            PackageInfo, ShapeMetrics,
+        };
+
+        let full = query_result(ResultEntry::Describe(Box::new(DescribeResult {
+            node: qnode("src/billing.js#computeTotal", "function"),
+            declaration: Some(DeclarationInfo {
+                kind: "function".to_string(),
+                span: NodeSpan {
+                    path: "src/billing.js".to_string(),
+                    start: (1, 1),
+                    end: (9, 2),
+                },
+                exported: true,
+                visibility: 2,
+                visibility_label: Some("pub(crate)".to_string()),
+            }),
+            file: Some(FileInfo {
+                role: "production".to_string(),
+                origin: "authored".to_string(),
+            }),
+            dependency: None,
+            package: Some(PackageInfo {
+                mode: "library".to_string(),
+                files: 12,
+                dependents: 4,
+            }),
+            metrics: vec![ShapeMetrics {
+                shape_ordinal: 0,
+                span: NodeSpan {
+                    path: "src/billing.js".to_string(),
+                    start: (1, 1),
+                    end: (9, 2),
+                },
+                cyclomatic: 7,
+                loc: 40,
+                token_count: 120,
+                coverage: Some(0.5),
+                crap: Some(19.5),
+            }],
+            duplication: vec![DuplicationInfo {
+                finding: "duplicate:callable:abc".to_string(),
+                members: vec!["src/other.js#alsoComputes".to_string()],
+            }],
+            // The degree line renders from the maps' totals and is exercised by the sibling
+            // test; populating them here would mean a `rustc-hash` dependency in a crate that
+            // imports only through the `kndo::` facade, which is not worth a test's convenience.
+            degree: Degree::default(),
+            reached_by_roots: vec![qnode("src/index.js", "file")],
+            findings: vec!["untested:callable:def".to_string()],
+            sources: vec!["adapter:js-ts".to_string()],
+            declared_symbols: vec![qnode("src/billing.js#helper", "function")],
+            elided: Default::default(),
+        })));
+
+        let out = render_query(&full, &opts());
+        for expected in [
+            // The label wins over the ordinal — the branch the sibling test leaves `None`.
+            "visibility pub(crate)",
+            "production",
+            "authored",
+            "library",
+            "src/other.js#alsoComputes",
+            "src/index.js",
+            "src/billing.js#helper",
+            "untested:callable:def",
+            "adapter:js-ts",
+        ] {
+            assert!(out.contains(expected), "missing {expected:?} in:\n{out}");
+        }
+        // The metrics numbers themselves, not a rounded summary.
+        assert!(
+            out.contains('7') && out.contains("40") && out.contains("120"),
             "{out}"
         );
     }
