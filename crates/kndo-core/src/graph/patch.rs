@@ -39,22 +39,41 @@ pub(crate) type PatchOutcome = (
     Vec<crate::plugin::PluginContribution>,
 );
 
-pub(crate) fn try_patch(
+/// One changed file: its index into `graph.files`/`discovered.files`, and its freshly
+/// re-extracted claim (`None` when the file no longer claims — a real, admissible outcome,
+/// distinct from "unreadable," which declines the patch instead).
+struct ChangedFile {
+    index: usize,
+    claimed: Option<Claimed>,
+}
+
+/// [`plan_patch`]'s admissible result: the exact changed-file set (fresh facts included) and
+/// each file's verified symbol range, ready for the mutation phase to consume.
+struct PlannedPatch {
+    changed_files: Vec<ChangedFile>,
+    symbol_range: Vec<(u32, u32)>,
+}
+
+/// Every guard, cheapest-first, deciding whether an incremental patch is admissible against
+/// `graph`'s previous snapshot for `discovered`'s current tree — same schema/plugin digest,
+/// same file set, no manifest change, a small dirty set, and (once re-extracted) every
+/// changed file's surface signature and symbol run unchanged. `None` on the first guard that
+/// fails; the caller then full-rebuilds — one fallback, always correct. Every guard runs
+/// BEFORE any mutation, which is exactly why this is its own function: nothing downstream of
+/// it may touch `graph` until it returns `Some`.
+///
+/// Not a pure predicate despite deciding via `Option`: [`claim_and_extract`] inside the guard
+/// loop has a real, idempotent cache-write side effect (it warms the facts cache) that runs
+/// even on a path that ultimately declines the patch.
+fn plan_patch(
+    graph: &ProjectGraph,
     discovered: &discovery::DiscoveredTree,
     adapters: &[Box<dyn LanguageAdapter>],
-    sorted_plugins: &[&dyn crate::plugin::Plugin],
     current_plugin_digest: [u8; 32],
+    snapshot_plugin_digest: [u8; 32],
+    snapshot_schema_version: u32,
     cache: &crate::cache::ProjectCache,
-) -> Option<PatchOutcome> {
-    let crate::cache::LoadedSnapshot {
-        mut graph,
-        mut extraction_diagnostics,
-        plugin_diagnostics: _, // stale — the plugin round below re-derives its diagnostics whole
-        plugin_set_digest: snapshot_plugin_digest,
-        graph_schema_version: snapshot_schema_version,
-    } = cache.latest_graph()?;
-
-    // ---- guards, in cheapest-first order ----
+) -> Option<PlannedPatch> {
     // A snapshot assembled under different semantics cannot be patched: unchanged files'
     // edges ride the patch verbatim, so old-semantics edges would survive into a graph the
     // new binary claims as its own. The keyed warm path folds the schema version into the
@@ -107,10 +126,6 @@ pub(crate) fn try_patch(
 
     // Re-extract every changed claimed file and check its surface signature. Still no
     // mutation: any failure here must leave nothing behind.
-    struct ChangedFile {
-        index: usize,
-        claimed: Option<Claimed>,
-    }
     let mut changed_files: Vec<ChangedFile> = Vec::with_capacity(changed.len());
     for &c in &changed {
         match claim_and_extract(&discovered.files[c], adapters, Some(cache), discovered) {
@@ -179,65 +194,50 @@ pub(crate) fn try_patch(
         }
     }
 
-    // ---- every guard passed: mutation begins ----
-    // First: discard every plugin contribution — provenance-tagged edges and the
-    // wholly plugin-derived `externally_consumed` set — before anything below reads the edge
-    // list. Order matters beyond hygiene: the library-root scan further down derives roots
-    // from KEPT edges, and in the full build it runs on adapter data only (plugins haven't
-    // run yet at that point); a surviving plugin Root edge here could masquerade as a library
-    // root and break byte-identity. The round re-runs at the end, on the patched graph.
-    graph
-        .edges
-        .retain(|e| !matches!(e.source, crate::vocab::Provenance::Plugin(_)));
-    graph.externally_consumed.clear();
-    graph.plugin_implicitly_invoked.clear();
+    Some(PlannedPatch {
+        changed_files,
+        symbol_range,
+    })
+}
 
-    let changed_set: HashSet<u32> = changed.iter().map(|&c| c as u32).collect();
-    let changed_paths: HashSet<ProjectPath> = changed
-        .iter()
-        .map(|&c| graph.files[c].path.clone())
-        .collect();
+/// Every name/unit/member-type lookup table the regenerate pass below needs, derived fresh
+/// from the graph's current state — the same derivation the full build itself uses
+/// (`build_unit_indexes`, `unit_parent_index`, `index_member_types`), which is what keeps the
+/// patch path from drifting out of sync with a full rebuild.
+///
+/// Owned tables only — deliberately never a [`ResolveCtx`] built from them. `ResolveCtx`
+/// borrows BY REFERENCE from several of these maps (`known_files`,
+/// `declared_dependency_names`, `workspace_member_index`, `units`), so a struct holding both
+/// the maps and a `ctx` derived from them would be self-referential, which safe Rust cannot
+/// express. The caller builds `ctx` one line after calling this, from the returned struct's
+/// own fields.
+struct ResolutionEnvironment {
+    known_files: HashSet<ProjectPath>,
+    declared_dependency_names: HashSet<SmolStr>,
+    workspace_member_index: HashMap<SmolStr, crate::adapter::WorkspaceMember>,
+    units: UnitIndexes,
+    symbol_by_name_per_file: Vec<HashMap<SmolStr, SymbolId>>,
+    symbol_by_qualified_per_file: Vec<HashMap<String, SymbolId>>,
+    qualified_twins_per_file: Vec<HashMap<String, Vec<SymbolId>>>,
+    symbol_by_name_per_unit: HashMap<SmolStr, HashMap<SmolStr, SymbolId>>,
+    symbol_twins_per_unit: HashMap<SmolStr, HashMap<SmolStr, Vec<SymbolId>>>,
+    member_by_name: HashMap<SmolStr, Vec<SymbolId>>,
+    file_unit: Vec<Option<SmolStr>>,
+    unit_parents: HashMap<SmolStr, SmolStr>,
+    unit_name_by_file: Vec<Option<SmolStr>>,
+    member_types_per_file: Vec<MemberTypeIndex>,
+    ladders: std::collections::BTreeMap<SmolStr, Vec<crate::adapter::VisibilityRung>>,
+    builtin_member_types: std::collections::BTreeMap<SmolStr, MemberTypeIndex>,
+    library_root_files: HashMap<FileId, Confidence>,
+    role_root_files: HashMap<FileId, crate::vocab::RootKind>,
+}
 
-    for cf in &changed_files {
-        let c = cf.index;
-        graph.files[c].content_hash = discovered.files[c].content_hash;
-        if let Some(claimed) = &cf.claimed {
-            let (start, _) = symbol_range[c];
-            for (d, decl) in claimed.facts.declarations.iter().enumerate() {
-                let sym = &mut graph.symbols[start as usize + d];
-                sym.span = decl.span;
-                sym.signature_span = decl.signature_span;
-            }
-            // Test-region extents move with every edit, same as symbol spans; the *gating*
-            // of imports (the only cross-file consequence) is surface-signature-guarded, so
-            // refreshing the extents here keeps crap/health/hygiene containment exact while
-            // `FileNode::class` (phase 2.55's demotion included) stays valid untouched.
-            let mut spans = claimed.facts.test_spans.clone();
-            spans.sort_unstable();
-            graph.files[c].test_spans = spans;
-            // Same body-level refresh for string call sites: a changed
-            // literal or a new call flows through the patch, and the plugin round below
-            // reads the current values off the FileNode.
-            let mut sites = claimed.facts.string_call_args.clone();
-            sites.sort_unstable();
-            graph.files[c].string_call_sites = sites;
-            let mut attrs = claimed.facts.string_attr_args.clone();
-            attrs.sort_unstable();
-            graph.files[c].string_attr_args = attrs;
-            graph.patch_meta[c].surface_sig = Some(claimed.surface_sig);
-        }
-    }
-
-    // Remove everything the changed files own — exact, thanks to Edge.owner.
-    graph.edges.retain(|e| !changed_set.contains(&e.owner.0));
-    let mut function_metrics = std::mem::take(&mut graph.function_metrics);
-    function_metrics.retain(|(id, _)| !changed_set.contains(&graph.symbols[id.0 as usize].file.0));
-    graph
-        .suppressions
-        .retain(|(f, _)| !changed_set.contains(&f.0));
-    extraction_diagnostics.retain(|d| d.path.as_ref().is_none_or(|p| !changed_paths.contains(p)));
-
-    // ---- rebuild the resolution environment from the snapshot (everything derivable) ----
+fn rebuild_resolution_environment(
+    graph: &ProjectGraph,
+    changed_set: &HashSet<u32>,
+    changed_files: &[ChangedFile],
+    adapters: &[Box<dyn LanguageAdapter>],
+) -> ResolutionEnvironment {
     let known_files: HashSet<ProjectPath> = graph.files.iter().map(|f| f.path.clone()).collect();
     let declared_dependency_names: HashSet<SmolStr> = graph
         .declared_dependencies
@@ -264,11 +264,6 @@ pub(crate) fn try_patch(
     // ensures a changed file's `unit` never silently drifts under the patch, so
     // reading `graph.files`' current state here stays byte-identical to a full rebuild.
     let units = build_unit_indexes(&graph.files);
-    let ctx = ResolveCtx::new(&known_files)
-        .with_declared_dependencies(&declared_dependency_names)
-        .with_workspace_members(&workspace_member_index)
-        .with_units(&units.by_unit)
-        .with_package_units(&units.by_package, &units.file_package);
 
     let files_len = graph.files.len();
     let mut symbol_by_name_per_file: Vec<HashMap<SmolStr, SymbolId>> =
@@ -374,7 +369,7 @@ pub(crate) fn try_patch(
         }
     }
     let mut role_root_files: HashMap<FileId, crate::vocab::RootKind> = HashMap::default();
-    for cf in &changed_files {
+    for cf in changed_files {
         if cf.claimed.is_some() {
             if let Some(class) = graph.files[cf.index].class {
                 if let Some(kind) = crate::vocab::role_root_kind(class.role) {
@@ -383,6 +378,142 @@ pub(crate) fn try_patch(
             }
         }
     }
+
+    ResolutionEnvironment {
+        known_files,
+        declared_dependency_names,
+        workspace_member_index,
+        units,
+        symbol_by_name_per_file,
+        symbol_by_qualified_per_file,
+        qualified_twins_per_file,
+        symbol_by_name_per_unit,
+        symbol_twins_per_unit,
+        member_by_name,
+        file_unit,
+        unit_parents,
+        unit_name_by_file,
+        member_types_per_file,
+        ladders,
+        builtin_member_types,
+        library_root_files,
+        role_root_files,
+    }
+}
+
+pub(crate) fn try_patch(
+    discovered: &discovery::DiscoveredTree,
+    adapters: &[Box<dyn LanguageAdapter>],
+    sorted_plugins: &[&dyn crate::plugin::Plugin],
+    current_plugin_digest: [u8; 32],
+    cache: &crate::cache::ProjectCache,
+) -> Option<PatchOutcome> {
+    let crate::cache::LoadedSnapshot {
+        mut graph,
+        mut extraction_diagnostics,
+        plugin_diagnostics: _, // stale — the plugin round below re-derives its diagnostics whole
+        plugin_set_digest: snapshot_plugin_digest,
+        graph_schema_version: snapshot_schema_version,
+    } = cache.latest_graph()?;
+
+    // ---- guards, in cheapest-first order; see plan_patch ----
+    let PlannedPatch {
+        changed_files,
+        symbol_range,
+    } = plan_patch(
+        &graph,
+        discovered,
+        adapters,
+        current_plugin_digest,
+        snapshot_plugin_digest,
+        snapshot_schema_version,
+        cache,
+    )?;
+
+    // ---- every guard passed: mutation begins ----
+    // First: discard every plugin contribution — provenance-tagged edges and the
+    // wholly plugin-derived `externally_consumed` set — before anything below reads the edge
+    // list. Order matters beyond hygiene: the library-root scan further down derives roots
+    // from KEPT edges, and in the full build it runs on adapter data only (plugins haven't
+    // run yet at that point); a surviving plugin Root edge here could masquerade as a library
+    // root and break byte-identity. The round re-runs at the end, on the patched graph.
+    graph
+        .edges
+        .retain(|e| !matches!(e.source, crate::vocab::Provenance::Plugin(_)));
+    graph.externally_consumed.clear();
+    graph.plugin_implicitly_invoked.clear();
+
+    let changed_set: HashSet<u32> = changed_files.iter().map(|cf| cf.index as u32).collect();
+    let changed_paths: HashSet<ProjectPath> = changed_files
+        .iter()
+        .map(|cf| graph.files[cf.index].path.clone())
+        .collect();
+
+    for cf in &changed_files {
+        let c = cf.index;
+        graph.files[c].content_hash = discovered.files[c].content_hash;
+        if let Some(claimed) = &cf.claimed {
+            let (start, _) = symbol_range[c];
+            for (d, decl) in claimed.facts.declarations.iter().enumerate() {
+                let sym = &mut graph.symbols[start as usize + d];
+                sym.span = decl.span;
+                sym.signature_span = decl.signature_span;
+            }
+            // Test-region extents move with every edit, same as symbol spans; the *gating*
+            // of imports (the only cross-file consequence) is surface-signature-guarded, so
+            // refreshing the extents here keeps crap/health/hygiene containment exact while
+            // `FileNode::class` (phase 2.55's demotion included) stays valid untouched.
+            let mut spans = claimed.facts.test_spans.clone();
+            spans.sort_unstable();
+            graph.files[c].test_spans = spans;
+            // Same body-level refresh for string call sites: a changed
+            // literal or a new call flows through the patch, and the plugin round below
+            // reads the current values off the FileNode.
+            let mut sites = claimed.facts.string_call_args.clone();
+            sites.sort_unstable();
+            graph.files[c].string_call_sites = sites;
+            let mut attrs = claimed.facts.string_attr_args.clone();
+            attrs.sort_unstable();
+            graph.files[c].string_attr_args = attrs;
+            graph.patch_meta[c].surface_sig = Some(claimed.surface_sig);
+        }
+    }
+
+    // Remove everything the changed files own — exact, thanks to Edge.owner.
+    graph.edges.retain(|e| !changed_set.contains(&e.owner.0));
+    let mut function_metrics = std::mem::take(&mut graph.function_metrics);
+    function_metrics.retain(|(id, _)| !changed_set.contains(&graph.symbols[id.0 as usize].file.0));
+    graph
+        .suppressions
+        .retain(|(f, _)| !changed_set.contains(&f.0));
+    extraction_diagnostics.retain(|d| d.path.as_ref().is_none_or(|p| !changed_paths.contains(p)));
+
+    // ---- rebuild the resolution environment from the snapshot (everything derivable) ----
+    let ResolutionEnvironment {
+        known_files,
+        declared_dependency_names,
+        workspace_member_index,
+        units,
+        symbol_by_name_per_file,
+        symbol_by_qualified_per_file,
+        qualified_twins_per_file,
+        symbol_by_name_per_unit,
+        symbol_twins_per_unit,
+        member_by_name,
+        file_unit,
+        unit_parents,
+        unit_name_by_file,
+        member_types_per_file,
+        ladders,
+        builtin_member_types,
+        library_root_files,
+        role_root_files,
+    } = rebuild_resolution_environment(&graph, &changed_set, &changed_files, adapters);
+    let ctx = ResolveCtx::new(&known_files)
+        .with_declared_dependencies(&declared_dependency_names)
+        .with_workspace_members(&workspace_member_index)
+        .with_units(&units.by_unit)
+        .with_package_units(&units.by_package, &units.file_package);
 
     // ---- regenerate the changed files' contributions, via the SAME machinery as the full
     // build (emit_file_declarations + resolve_imports/link_module_bindings/resolve_references) ----
