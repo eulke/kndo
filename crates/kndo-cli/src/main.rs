@@ -105,10 +105,6 @@ fn main() -> ExitCode {
 const KNDO_TOML_TEMPLATE: &str = r#"# kndo.toml — everything here is optional; every setting already has the default shown.
 # Written by `kndo init`. Full reference: docs/ in the repository.
 
-# [project]
-# roots = ["src", "packages/*"]          # default: auto (git ls-files minus ignores)
-# exclude = ["**/generated/**"]
-
 # [analysis]
 # skip = []                              # categories or category:subject, e.g. ["unused:enum-member"]
 # min-confidence = "possible"            # report floor; raise to "probable" to hide the
@@ -1108,6 +1104,49 @@ fn check(args: &[String]) -> ExitCode {
 mod tests {
     use super::*;
     use kndo::Finding;
+
+    /// **The template offers no section the engine does not read.**
+    ///
+    /// Parsing cleanly is not the same as doing anything: `kndo.toml`'s parser skips unknown
+    /// tables silently, by design, so an unwired section passes the test below while promising
+    /// a capability that does not exist. One did, for a long time — `[project]`, with `roots`
+    /// and `exclude`, written by `kndo init` and documented key by key in the user guide, wired
+    /// to nothing. A commented-out key is still a promise.
+    ///
+    /// `config::LIVE_TABLES` is what `parse` actually reads, exported for exactly this check.
+    #[test]
+    fn the_init_template_offers_no_section_the_engine_ignores() {
+        let named: Vec<String> = KNDO_TOML_TEMPLATE
+            .lines()
+            .filter_map(|l| {
+                l.trim_start()
+                    .trim_start_matches("# ")
+                    .trim()
+                    .strip_prefix('[')
+            })
+            .map(|rest| {
+                // `[[rule]]` and `[analysis.crap]` both belong to their top-level table.
+                rest.trim_start_matches('[')
+                    .split([']', '.'])
+                    .next()
+                    .unwrap_or_default()
+                    .to_string()
+            })
+            .filter(|t| !t.is_empty())
+            .collect();
+        assert!(
+            named.len() > 5,
+            "only {named:?} — this test stopped reading the template"
+        );
+        for table in &named {
+            assert!(
+                kndo::config::LIVE_TABLES.contains(&table.as_str()),
+                "the template offers [{table}], which the engine never reads — either wire it \
+                 up or take it out; do not ship it commented. Live: {:?}",
+                kndo::config::LIVE_TABLES
+            );
+        }
+    }
 
     /// Every key the template offers, uncommented — what a user gets the moment they delete a
     /// `# `. A template line the parser rejects would hand every new project a diagnostic on

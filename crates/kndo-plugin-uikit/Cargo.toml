@@ -3,6 +3,7 @@ name = "kndo-plugin-uikit"
 description = "Built-in kndo:uikit plugin — the UIKit classes, outlets and actions an Interface Builder document wires up, which no line of Swift ever names"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 publish.workspace = true

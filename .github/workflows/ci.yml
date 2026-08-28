@@ -372,3 +372,69 @@ jobs:
           fi
           [ ! -e "$HOME/.kndo-corrupt-test/kndo" ] \
             || { echo "install.sh left a binary behind after refusing the download"; exit 1; }
+
+  msrv:
+    name: builds on the declared MSRV
+    runs-on: ubuntu-latest
+    # `rust-version` in Cargo.toml is a promise to anyone on an older toolchain, and an unbuilt
+    # promise decays: the first use of a newer language feature turns it into a number that
+    # merely used to be true. This job builds the workspace on exactly that version.
+    # `xtask/tests/release_channels.rs` checks that the two stay the same version, and that
+    # every member crate actually inherits it — inheritance is per-field, so a new crate that
+    # forgets `rust-version.workspace = true` carries no MSRV at all.
+    #
+    # `cargo check`, not `test`: this asks whether the code *compiles* on the floor. What it
+    # does at runtime is the full suite's job on stable, and running it twice buys nothing.
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the MSRV toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.89
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: msrv
+          cache-on-failure: true
+
+      - name: cargo check on the MSRV
+        run: cargo check --workspace --all-features --locked
+
+  release-notes:
+    name: release notes generate
+    runs-on: ubuntu-latest
+    # `release.yml` builds the GitHub Release body with `git-cliff --latest`, and before this
+    # job the first tag would have been the first time that command ever ran. A broken
+    # `cliff.toml`, a template typo, or a commit-parser regex that matches nothing fails there —
+    # after the five-target build matrix has already succeeded, on the one workflow run that is
+    # hard to redo. Running it on every push moves that failure to the PR that causes it.
+    #
+    # Deliberately NOT a committed CHANGELOG.md: the commit log is the source, `cliff.toml` the
+    # renderer, and the GitHub Release the artifact. A file maintained beside them would be a
+    # second spelling of the same facts, which is the thing this repository keeps removing.
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # git-cliff reads history; a shallow clone yields empty notes
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: git-cliff
+
+      - name: Generate release notes the way a release does
+        run: |
+          set -eu
+          # `--unreleased` rather than `--latest`: there are no tags yet, and `--latest` has
+          # nothing to describe until there are. Both read the same config and template, so this
+          # exercises what a release exercises.
+          git-cliff --unreleased --strip header -o NOTES.md
+          cat NOTES.md
+
+          # Non-empty, and actually grouped — an unparsed history renders headings and no
+          # entries, which looks like success to a naive check.
+          [ -s NOTES.md ] || { echo "git-cliff produced empty release notes"; exit 1; }
+          grep -qE '^- ' NOTES.md \
+            || { echo "release notes contain no commit entries — check cliff.toml's commit_parsers"; exit 1; }
+          grep -qE '^### ' NOTES.md \
+            || { echo "release notes contain no groups — check cliff.toml's body template"; exit 1; }

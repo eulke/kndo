@@ -178,11 +178,16 @@ adoption in a legacy repo non-punitive while ratcheting health monotonically.
 
 Optional, at project root; discovered upward like `.gitignore`. Everything has a default.
 
-```toml
-[project]
-roots = ["src", "packages/*"]          # default: auto (git ls-files minus ignores)
-exclude = ["**/generated/**"]
+`[project]` (`roots`, `exclude`) was in this section'"'"'s original sketch and is **not implemented,
+and no longer proposed**. `kndo init` wrote it commented-out for a while and the engine never
+read it; a commented key is still a promise, so it was removed rather than carried. Both things
+it offered have working answers with sharper semantics: `.ignore` keeps files out of discovery
+(gitignore syntax, read by the discovery layer, invisible to git), and `[[rule]]` with `paths`
+keeps *verdicts* off files that stay in the graph — which is the one you usually want, since
+dropping a file from discovery also drops every edge through it and can turn one silenced
+finding into several new false ones elsewhere.
 
+```toml
 [analysis]
 skip = []                              # categories or category:subject, e.g. ["unused:enum-member"]
 min-confidence = "probable"            # report floor; "possible" only with --verbose

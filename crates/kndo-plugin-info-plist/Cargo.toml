@@ -3,6 +3,7 @@ name = "kndo-plugin-info-plist"
 description = "Built-in kndo:info-plist plugin — classes an Apple bundle names by string and the runtime instantiates"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 publish.workspace = true

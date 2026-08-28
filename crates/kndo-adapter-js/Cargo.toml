@@ -3,6 +3,7 @@ name = "kndo-adapter-js"
 description = "JavaScript/TypeScript language adapter for kndo."
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 publish.workspace = true

@@ -3,6 +3,7 @@ name = "kndo-cli"
 description = "The kndo command-line frontend: terminal UI, exit codes, human rendering. Zero analysis logic."
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 publish.workspace = true

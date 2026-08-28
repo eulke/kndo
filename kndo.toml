@@ -1,10 +1,6 @@
 # kndo.toml — everything here is optional; every setting already has the default shown.
 # Written by `kndo init`. Full reference: docs/src/configuration.md.
 
-# [project]
-# roots = ["src", "packages/*"]          # default: auto (git ls-files minus ignores)
-# exclude = ["**/generated/**"]
-
 # [analysis]
 # skip = []                              # categories or category:subject, e.g. ["unused:enum-member"]
 # min-confidence = "possible"            # report floor; raise to "probable" to hide the

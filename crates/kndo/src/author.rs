@@ -287,7 +287,7 @@ lto = true
 const PLUGIN_LIB_TEMPLATE: &str = r#"//! __NAME__ — a kndo plugin (kndo:plugin ABI).
 //!
 //! Authoring guide: the plugin authoring docs in the kndo repository
-//! (https://github.com/eulke/kndo).
+//! (https://github.com/eulke/kondo).
 //! Inner loop: `kndo plugin build` then `kndo plugin verify __NAME__.wasm`.
 
 // Marks the dependency used — the macro below is a fully-qualified path with no `use`.
@@ -401,7 +401,7 @@ export!(Component);
 const ADAPTER_LIB_TEMPLATE: &str = r#"//! __NAME__ — a kndo language adapter (kndo:adapter ABI).
 //!
 //! Authoring guide: the plugin authoring docs in the kndo repository
-//! (https://github.com/eulke/kndo) — they explain when to write an adapter vs a plugin.
+//! (https://github.com/eulke/kondo) — they explain when to write an adapter vs a plugin.
 //! Inner loop: `kndo plugin build` then `kndo plugin verify __NAME__.wasm`.
 
 // Marks the dependency used — the macro below is a fully-qualified path with no `use`.

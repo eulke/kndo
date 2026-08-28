@@ -12,10 +12,6 @@ configuration.
 ```toml
 # kndo.toml — everything here is optional; every setting already has the default shown.
 
-# [project]
-# roots = ["src", "packages/*"]          # default: auto (git ls-files minus ignores)
-# exclude = ["**/generated/**"]
-
 # [analysis]
 # skip = []                              # categories or category:subject, e.g. ["unused:enum-member"]
 # min-confidence = "possible"            # report floor; raise to "probable" to hide the
@@ -56,19 +52,32 @@ configuration.
 > **`[performance]`** (`threads`), **`[[rule]]`**, **`[[externally-invoked]]`**,
 > **`[plugins.gate]`**, **`[plugins.<id>]`** (`report`, `max-age`), and
 > **`[delta]`**/**`[delta.budget]`** are all live.
-> Still documented-but-unwired: **`[project]`** (discovery is gitignore-aware
-> automatically; scoping it from config doesn't exist yet) — kndo prefers an honestly
-> inert commented section over half-applied configuration. This page will always state
-> exactly which keys are live.
+> Nothing here is documented-but-unwired. `kndo init` used to write a commented `[project]`
+> section (`roots`, `exclude`) that the engine never read; it has been removed rather than
+> carried, because a commented-out key still reads as a promise, and the two things it promised
+> already have working answers — see below. This page will always state exactly which keys are
+> live.
+
+## Choosing what gets analyzed
+
+There is no `[project]` section, and none is needed: both things one would reach for it are
+already available, with sharper semantics than a single key could have.
+
+- **Keeping files out of the graph entirely.** Discovery is `.gitignore`-aware by default, so
+  `node_modules/`, `target/` and build output never enter it. To exclude something git *does*
+  track, add it to a `.ignore` file — the same syntax as `.gitignore`, read by the discovery
+  layer and ignored by git, which is exactly the split you want for "analyze less" without
+  touching what the repository tracks. kndo's own repository uses one.
+- **Keeping verdicts off files you still want in the graph.** Use `[[rule]]` with `paths` and
+  `skip` (below). This is the better answer for generated or vendored trees: the files stay in
+  the graph, so code that reaches into them still resolves and nothing downstream reads as
+  unreachable — you just stop being told about the files themselves.
+
+The distinction matters, and it is why one `exclude` key would have been the wrong shape:
+dropping a file from discovery also drops every edge through it, which can turn one silenced
+finding into several new false ones elsewhere.
 
 ## Key by key
-
-### `[project]`
-
-- **`roots`** — directories to analyze. Default: automatic discovery of the whole project
-  tree, honoring `.gitignore` (so `node_modules/`, `target/`, build output never enter the
-  graph).
-- **`exclude`** — glob patterns to drop from discovery on top of the ignore rules.
 
 ### `[analysis]`
 

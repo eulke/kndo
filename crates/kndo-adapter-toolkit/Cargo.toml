@@ -3,6 +3,7 @@ name = "kndo-adapter-toolkit"
 description = "Shared adapter machinery: tree-sitter query helpers, token normalization, complexity walker — the paved road for first-party adapters."
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 publish.workspace = true

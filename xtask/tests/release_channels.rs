@@ -273,6 +273,116 @@ fn the_install_docs_match_the_artifact() {
     }
 }
 
+/// **Every published link names the repository that exists.**
+///
+/// ADR 0007 proposes renaming `eulke/kondo` to `eulke/kndo`, and three places had already
+/// adopted the new name: `Cargo.toml`'s `repository` — the one piece of metadata crates.io
+/// publishes as the project's home — and the two links `kndo plugin new` writes into every
+/// scaffolded plugin's docs. All three 404 for anyone who follows them, and would keep doing so
+/// until an administrative action nobody scheduled.
+///
+/// The direction of the rename is not in question; the spelling to publish is. RFC 0014 §3
+/// settles it: write the *current* name, because GitHub's post-rename redirect makes it resolve
+/// forever once the rename lands, while the new name resolves only after. So the old name is
+/// right before and after, and the new name is right only after — which makes this a one-way
+/// check rather than a preference.
+///
+/// Scanned as text across everything the project ships, `internal/` excluded: that is design
+/// record, and it discusses both names by necessity. Container image names are excluded too,
+/// for the reason given at the check itself.
+#[test]
+fn every_published_url_names_the_repository_that_exists() {
+    const SHIPPED: &[&str] = &[
+        "Cargo.toml",
+        "README.md",
+        "SECURITY.md",
+        "CODE_OF_CONDUCT.md",
+        "install.sh",
+        "action/action.yml",
+        "packaging/homebrew/kndo.rb.tmpl",
+        "docs/book.toml",
+        "docs/src/install.md",
+        "crates/kndo/src/author.rs",
+        "crates/kndo-core/src/sarif.rs",
+        ".github/workflows/release.yml",
+    ];
+    let mut checked = 0;
+    for rel in SHIPPED {
+        let text = read(rel);
+        for (n, line) in text.lines().enumerate() {
+            // A container image is not a repository. `ghcr.io/eulke/kndo` is the *product* name
+            // under the `eulke` registry namespace — an image is named whatever is pushed, no
+            // redirect and no rename involved — so it is correct as it stands and stays.
+            if line.contains("ghcr.io") {
+                continue;
+            }
+            // `homebrew-tap` and any other `eulke/<something>` repo are their own names; only
+            // this project's own two spellings are at issue.
+            if line.contains("eulke/kndo") && !line.contains("eulke/kondo") {
+                panic!(
+                    "{rel}:{} names eulke/kndo, which does not exist until the ADR 0007 rename \
+                     happens — publish eulke/kondo, which resolves before it and (through \
+                     GitHub's redirect) after it too:\n  {}",
+                    n + 1,
+                    line.trim()
+                );
+            }
+            if line.contains("eulke/kondo") {
+                checked += 1;
+            }
+        }
+    }
+    assert!(
+        checked > 10,
+        "only {checked} references found — this test stopped looking at the real files"
+    );
+}
+
+/// **The declared MSRV covers every package, and CI builds on exactly it.**
+///
+/// `rust-version` in `[workspace.package]` applies to nothing on its own: members inherit
+/// package fields one by one (`version.workspace = true`, `edition.workspace = true`, …), so a
+/// crate that does not opt in carries no MSRV at all and a new crate silently opts out by
+/// default. And a declared MSRV nothing builds against is a number that drifts the first time
+/// someone uses a newer feature — so the `msrv` CI job pins the same version, and this test ties
+/// the two together.
+///
+/// The number itself was measured, not chosen: `cargo check --workspace --all-features` fails
+/// on 1.85 and 1.82, and cargo names the binding constraint out of the locked graph
+/// (`smol_str@0.3.6 requires rustc 1.89`).
+#[test]
+fn the_declared_msrv_is_inherited_everywhere_and_built_in_ci() {
+    let manifest = read("Cargo.toml");
+    let msrv = manifest
+        .lines()
+        .find_map(|l| l.trim().strip_prefix("rust-version = "))
+        .map(|v| v.trim().trim_matches('"').to_string())
+        .expect("[workspace.package] declares a rust-version");
+
+    let mut members = 0;
+    for entry in std::fs::read_dir(root().join("crates")).expect("crates/") {
+        let dir = entry.expect("dir entry").path();
+        let cargo = dir.join("Cargo.toml");
+        if !cargo.is_file() {
+            continue;
+        }
+        members += 1;
+        let text = std::fs::read_to_string(&cargo).expect("member manifest");
+        assert!(
+            text.contains("rust-version.workspace = true"),
+            "{} does not inherit rust-version, so the workspace MSRV does not cover it",
+            cargo.display()
+        );
+    }
+    assert!(members > 15, "only {members} member crates found");
+
+    let ci = read(".github/workflows/ci.yml");
+    assert!(
+        ci.contains(&format!("toolchain: {msrv}")),
+        "no CI job builds on the declared MSRV {msrv} — an unbuilt MSRV is a number, not a claim"
+    );
+}
+
 /// No channel may name a target triple the release does not build. This is the check that
 /// would have caught the Action asking for `-unknown-linux-gnu`: the name was well-formed and
 /// plausible, and no asset by it has ever existed.

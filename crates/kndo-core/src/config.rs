@@ -1,9 +1,12 @@
 //! `kndo.toml` — one tolerant parse feeding every knob the core reads. Reading follows the
 //! `[plugins.gate]` posture throughout: a missing file is empty config, a malformed file or
 //! value is reported as a problem string (surfaced as a run diagnostic) and otherwise
-//! ignored, and unknown tables/keys are skipped silently — both forward compatibility and
-//! honesty about `[project]`, still documented-but-unwired, which parses as unknown keys
-//! until its subsystem exists.
+//! ignored, and unknown tables/keys are skipped silently — forward compatibility, so a file
+//! written for a later kndo still works on this one. There is no longer a documented-but-unwired
+//! section trading on that tolerance: `[project]` (`roots`, `exclude`) was written by
+//! `kndo init` and read by nothing, and has been removed from the template and the docs rather
+//! than left inert. Discovery exclusion is `.ignore`'"'"'s job and verdict scoping is `[[rule]]`'"'"'s;
+//! `docs/src/configuration.md` says so where the section used to be.
 //!
 //! What is live: `[analysis]` (`skip`, `min-confidence`), `[analysis.crap]` (`threshold`),
 //! `[analysis.duplicate]` (`min-tokens`), `[performance]` (`threads`), `[[rule]]`
@@ -20,6 +23,26 @@
 //! dead" signal from config would defeat its purpose. None of this feeds
 //! `compute_graph_key` — every knob acts strictly post-assembly, so cached graphs stay
 //! valid across config edits.
+
+/// Every top-level table `parse` actually reads.
+///
+/// Exported because two things outside this file describe kndo's configuration surface — the
+/// template `kndo init` writes and `docs/src/configuration.md` — and both used to be free to
+/// describe a table nothing here reads. One did: `[project]`, with `roots` and `exclude`,
+/// documented key by key and wired to nothing. This is the list they are checked against
+/// (`kndo-cli`'s `the_init_template_offers_no_section_the_engine_ignores`), so the next unwired section fails a test instead
+/// of shipping as a promise.
+///
+/// `[plugins.<id>]` is covered by `plugins`: the table is read, its per-plugin sub-tables are
+/// open by design (a plugin's own options are its own).
+pub const LIVE_TABLES: &[&str] = &[
+    "analysis",
+    "performance",
+    "rule",
+    "externally-invoked",
+    "plugins",
+    "delta",
+];
 
 use std::path::Path;
 
@@ -753,7 +776,8 @@ mod tests {
 
     #[test]
     fn unknown_tables_are_silently_ignored_for_forward_compat() {
-        // `[project]` is written by `kndo init` but not yet read (G3); `[future]` stands in for
+        // `[project]` is no longer written by `kndo init` and was never read; kept here as a
+        // realistic unknown table (someone'"'"'s older kndo.toml still has one). `[future]` stands in for
         // a table a newer kndo will understand. Neither may become a diagnostic — a config a
         // newer version writes has to stay readable by an older one.
         let (config, problems) = parsed("[project]\nroots = [\"src\"]\n[future]\nx = 1\n");
