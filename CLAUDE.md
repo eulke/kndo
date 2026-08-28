@@ -132,7 +132,7 @@ graph/cache/analysis:
   hid four of `PluginDescriptor`'s six fields made the field invisible in every built-in, and
   nothing failed.
 - `builtin_plugin_proofs` (`crates/kndo/tests/builtin_plugin_proofs.rs`) — **every built-in
-  plugin has a baseline-then-plugin proof**, the standard `plugins/authoring.md` §8 already
+  plugin has a baseline-then-plugin proof**, the standard `docs/src/plugins/authoring.md` already
   demands of anyone writing one: the fixture's findings fire without the plugin, exactly those
   disappear with it, unrelated dead code stays reported, and `PluginContribution` matches down
   to `dropped`. `every_built_in_plugin_is_proven_here` closes the file against

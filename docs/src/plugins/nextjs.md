@@ -160,7 +160,7 @@ conventions are module-level.
 
 Pure path classifiers (`app roots`, per-tier matching, special-name sets) are unit-tested
 in the crate. End-to-end, the fixture pattern is baseline-then-plugin
-(docs/plugins/authoring.md §8) through `kndo::open`: a fixture Next project whose page
+(authoring.md, "the baseline-then-plugin standard") through `kndo::open`: a fixture Next project whose page
 nothing imports yields `unused` findings for the page file/exports with the plugin
 inactive (no `next` in the manifest) and none with it active — proving both the activation
 gate and the contributed facts in one pair of runs.

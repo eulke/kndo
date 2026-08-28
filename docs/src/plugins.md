@@ -17,19 +17,19 @@ the reserved `kndo:` namespace and are gated by the same activation rules.
 
 | Plugin | Activates when | What it does |
 |---|---|---|
-| `kndo:coverage-lcov` | always on (reads `coverage/lcov.info` / `lcov.info`, or `[plugins.<id>] report`) | ingests lcov line coverage for [`crap`](rules.md#crap) and [health](health.md#coverage-ingestion) |
-| `kndo:coverage-cobertura` | always on (reads `coverage.xml` / `cobertura.xml` / `coverage/cobertura-coverage.xml`) | ingests Cobertura XML line coverage |
-| `kndo:coverage-jacoco` | always on (reads the Gradle/Maven JaCoCo XML report paths) | ingests JaCoCo XML line coverage |
-| `kndo:coverage-go` | always on (reads `coverage.out` / `cover.out`) | ingests Go coverprofile line coverage |
-| `kndo:nextjs` | any manifest in the project declares `next` | roots `pages/**`/`app/**` convention files and their framework-consumed exports; reads `next.config.*` for custom page extensions; marks framework-visible exports externally consumed |
-| `kndo:express` | any manifest declares `express` | roots the conventional server entry files (from `main`/`scripts` and entry-name conventions) that are *launched*, never imported |
-| `kndo:serde` | any `Cargo.toml` declares `serde` | marks hand-written `Serialize`/`Deserialize` impls as implicitly invoked, so a serialized type's impl doesn't read as a test blind spot |
-| `kndo:rkyv` | any `Cargo.toml` declares `rkyv` | marks hand-written `Archive`/`Serialize`/`Deserialize` impls — and the `*With` adapters `#[rkyv(with = …)]` reaches through generated code — as implicitly invoked |
-| `kndo:wasmtime` | any `Cargo.toml` declares `wasmtime` | marks the members of the host traits `wasmtime::component::bindgen!` generates, whose only caller is the guest |
-| `kndo:thymeleaf` | any manifest declares `spring-boot-starter-thymeleaf` | roots the templates a Spring view resolver loads by logical name, and links each to the static assets its `th:href`/`th:src` (or plain `href`/`src`) name — resolved through Spring Boot's static locations and only where a file is actually there |
-| `kndo:libsass-maven-plugin` | any `*.scss` exists under the project root | reads the pom's `libsass-maven-plugin` configuration: marks the CSS under its `outputPath` as generated (build output committed into the source tree), and links each output back to the `.scss` it was compiled from |
-| `kndo:uikit` | any `*.storyboard` or `*.xib` exists under the project root | reads the UIKit Interface Builder documents (`targetRuntime="iOS.CocoaTouch"` — AppKit and WatchKit are siblings, not this one): roots the classes `customClass` names and UIKit instantiates, and links each `@IBOutlet` / `@IBAction` the document connects, so a wired property doesn't read as file-private |
-| `kndo:info-plist` | an `Info.plist` exists anywhere under the project root | roots the classes an Apple bundle names by string and the system instantiates — `NSPrincipalClass`, `WKExtensionDelegateClassName`, a scene manifest's delegate |
+| [`kndo:coverage-lcov`](plugins/coverage.md) | always on (reads `coverage/lcov.info` / `lcov.info`, or `[plugins.<id>] report`) | ingests lcov line coverage for [`crap`](rules.md#crap) and [health](health.md#coverage-ingestion) |
+| [`kndo:coverage-cobertura`](plugins/coverage.md) | always on (reads `coverage.xml` / `cobertura.xml` / `coverage/cobertura-coverage.xml`) | ingests Cobertura XML line coverage |
+| [`kndo:coverage-jacoco`](plugins/coverage.md) | always on (reads the Gradle/Maven JaCoCo XML report paths) | ingests JaCoCo XML line coverage |
+| [`kndo:coverage-go`](plugins/coverage.md) | always on (reads `coverage.out` / `cover.out`) | ingests Go coverprofile line coverage |
+| [`kndo:nextjs`](plugins/nextjs.md) | any manifest in the project declares `next` | roots `pages/**`/`app/**` convention files and their framework-consumed exports; reads `next.config.*` for custom page extensions; marks framework-visible exports externally consumed |
+| [`kndo:express`](plugins/express.md) | any manifest declares `express` | roots the conventional server entry files (from `main`/`scripts` and entry-name conventions) that are *launched*, never imported |
+| [`kndo:serde`](plugins/serde.md) | any `Cargo.toml` declares `serde` | marks hand-written `Serialize`/`Deserialize` impls as implicitly invoked, so a serialized type's impl doesn't read as a test blind spot |
+| [`kndo:rkyv`](plugins/rkyv.md) | any `Cargo.toml` declares `rkyv` | marks hand-written `Archive`/`Serialize`/`Deserialize` impls — and the `*With` adapters `#[rkyv(with = …)]` reaches through generated code — as implicitly invoked |
+| [`kndo:wasmtime`](plugins/wasmtime.md) | any `Cargo.toml` declares `wasmtime` | marks the members of the host traits `wasmtime::component::bindgen!` generates, whose only caller is the guest |
+| [`kndo:thymeleaf`](plugins/thymeleaf.md) | any manifest declares `spring-boot-starter-thymeleaf` | roots the templates a Spring view resolver loads by logical name, and links each to the static assets its `th:href`/`th:src` (or plain `href`/`src`) name — resolved through Spring Boot's static locations and only where a file is actually there |
+| [`kndo:libsass-maven-plugin`](plugins/libsass-maven-plugin.md) | any `*.scss` exists under the project root | reads the pom's `libsass-maven-plugin` configuration: marks the CSS under its `outputPath` as generated (build output committed into the source tree), and links each output back to the `.scss` it was compiled from |
+| [`kndo:uikit`](plugins/uikit.md) | any `*.storyboard` or `*.xib` exists under the project root | reads the UIKit Interface Builder documents (`targetRuntime="iOS.CocoaTouch"` — AppKit and WatchKit are siblings, not this one): roots the classes `customClass` names and UIKit instantiates, and links each `@IBOutlet` / `@IBAction` the document connects, so a wired property doesn't read as file-private |
+| [`kndo:info-plist`](plugins/info-plist.md) | an `Info.plist` exists anywhere under the project root | roots the classes an Apple bundle names by string and the system instantiates — `NSPrincipalClass`, `WKExtensionDelegateClassName`, a scene manifest's delegate |
 
 `kndo doctor` shows each with its activation state and reason.
 
@@ -139,4 +139,4 @@ provenance-tagged, and `kndo doctor` reports each plugin's last-run contribution
 roots, edges, annotations, dropped targets — so "this plugin exempted 400 symbols" is a line
 in a report, not an invisible bias.
 
-Want to build one? See [Writing a plugin](plugin-authoring.md).
+Want to build one? See [Writing a plugin](plugins/authoring.md).

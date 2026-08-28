@@ -150,11 +150,11 @@ made at implementation time and recorded here rather than left as silent drift:
   `<Link href="...">` and `res.render("name")` → template edges both require parsing `.tsx`/
   `.jsx` *source*, which the JS/TS adapter already claims; second-guessing it through the
   content-channel side door is exactly RFC 0002's boundary this RFC promised not to erode
-  (docs/plugins/nextjs.md §5 records the final call). What *did* land as real consumers:
+  (docs/src/plugins/nextjs.md §5 records the final call). What *did* land as real consumers:
   `kndo:express` reading `package.json` `main`/`scripts` instead of guessing entry files by
-  name (docs/plugins/express.md §3/§4), and `kndo:nextjs` statically reading a literal
+  name (docs/src/plugins/express.md §3/§4), and `kndo:nextjs` statically reading a literal
   `pageExtensions: [...]` array out of `next.config.*` to narrow which extensions count as
-  routed (docs/plugins/nextjs.md §5) — both bounded, both degrade to the pre-channel behavior
+  routed (docs/src/plugins/nextjs.md §5) — both bounded, both degrade to the pre-channel behavior
   on anything they can't statically read.
 - **Shape, as built.** Glob matching runs in memory against paths this run already discovered
   (no second disk walk; source-blind — identical behavior for a directory or an in-memory git

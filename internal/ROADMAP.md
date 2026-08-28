@@ -879,7 +879,7 @@ coordinate-based ids — `github.com/owner/repo` external, reserved `kndo:` for 
 `dependencies` field whose fixpoint co-activates wrapper chains like company-framework → nextjs
 → express, and `kndo plugin install` with lockfile + checksums; phased in §6: phases 1
 (`Plugin::mutates_graph()`), 2 (identity + dependencies fixpoint) and 4 — the **first ecosystem
-plugins**, `kndo:nextjs` and `kndo:express`, spec'd in `docs/plugins/{nextjs,express}.md` and
+plugins**, `kndo:nextjs` and `kndo:express`, spec'd in `docs/src/plugins/{nextjs,express}.md` and
 shipped as gated built-ins (`crates/kndo-plugin-{nextjs,express}`, feature-gated in the `kndo`
 crate, proven end to end by `crates/kndo/tests/builtin_plugin_proofs.rs`'s
 baseline-then-plugin fixtures) — and phase 3, `kndo plugin install/list/remove`
@@ -1153,7 +1153,7 @@ member ever named at a call site kndo could see):
   fans out to the implementor's same-named member at `Probable`. Derived entirely from
   facts already in the graph; no trait lists in core. One test exercising a `&dyn Flag`
   site now test-reaches all 112 flag impls.
-- **`kndo:serde`** (plugin, docs/plugins/serde.md): serde's traits are third-party, so the
+- **`kndo:serde`** (plugin, docs/src/plugins/serde.md): serde's traits are third-party, so the
   adapter's machinery list and the fan-out both deliberately stop short of them — the gap
   closes as a plugin fact instead: `AnnotationSink::mark_implicitly_invoked`, the framework
   counterpart of `Declaration::implicitly_invoked`, landing in a new graph plugin partition

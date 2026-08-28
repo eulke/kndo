@@ -96,7 +96,7 @@ flagging every CLI dev-dependency.
   dynamically constructed paths, an entry point referenced only from infrastructure kndo
   doesn't read — has no edge for kndo to see. Built-in conventions (manifest `scripts`,
   framework plugins) cover the common cases; for the rest, use a
-  [suppression](suppressions.md) or a [plugin](plugin-authoring.md) that contributes the root.
+  [suppression](suppressions.md) or a [plugin](plugins/authoring.md) that contributes the root.
 - Reflection with computed names (`Class.forName(prefix + name)`) cannot be resolved
   statically. Known reflective *contracts* are modeled explicitly per language (test
   discovery, serialization hooks, dispatch through implemented interfaces); arbitrary

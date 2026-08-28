@@ -402,7 +402,7 @@ only mechanism; `kndo plugin list` shows such files as hand-installed rather tha
 ## 6. Producing a component
 
 (The full author-facing walkthrough — project setup, descriptor fields, testing shape,
-versioning/maintenance — is [docs/plugins/authoring.md](../plugins/authoring.md); this section
+versioning/maintenance — is [docs/src/plugins/authoring.md](../../docs/src/plugins/authoring.md); this section
 is only the componentization mechanics.)
 
 A third-party author needs a real component-model `.wasm` binary, not a plain core module.

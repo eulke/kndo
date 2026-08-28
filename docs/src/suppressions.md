@@ -128,5 +128,5 @@ now on is reported (and gated) normally.
   [`[[externally-invoked]]`](configuration.md#externally-invoked) and every declaration
   carrying it becomes a real entry point, with its reachable tree alive behind it and every
   analysis still judging all of it. When it doesn't — a convention-based route directory, an
-  entry named only in a config file — a [plugin](plugin-authoring.md) contributes the root.
+  entry named only in a config file — a [plugin](plugins/authoring.md) contributes the root.
   Either way nobody needs the pragma, and no genuine finding is lost along with the false one.

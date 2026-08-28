@@ -21,7 +21,7 @@ Mixed repositories are the point: one graph, cross-language edges, one report.
 Adapters are held to a shared **conformance harness** — fixture projects with
 expected-finding JSON every adapter must reproduce exactly — so "the same verdict means the
 same thing" is tested, not aspirational. New languages can also arrive as
-[WebAssembly adapter components](plugin-authoring.md#writing-an-adapter) without rebuilding
+[WebAssembly adapter components](plugins/authoring.md#writing-an-adapter) without rebuilding
 kndo.
 
 ## JavaScript / TypeScript
@@ -39,7 +39,7 @@ warning-level — initialization-order bugs are real).
 **Limits:** dynamic `import(expr)` and `require(variable)` with computed specifiers can't be
 resolved to a file — such references keep candidates *live-possible* (lowered confidence),
 never dead. Code invoked only via string lookups in configuration kndo doesn't model needs a
-[plugin](plugin-authoring.md) root (the built-in [Next.js and Express
+[plugin](plugins/authoring.md) root (the built-in [Next.js and Express
 plugins](plugins.md#built-in-plugins) cover those frameworks' conventions).
 
 ## Go

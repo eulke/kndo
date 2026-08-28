@@ -260,7 +260,7 @@ nothing here precludes it.
   examples, packaged for an author's inner loop; no wasm toolchain knowledge beyond "build a
   component" required.
 - **A starting template**: an authoring skeleton (manifest, WIT bindings, one hook, one
-  test) documented in `docs/plugins/authoring.md` — the distance from "idea" to "component
+  test) documented in `docs/src/plugins/authoring.md` — the distance from "idea" to "component
   that passes `verify`" is the ecosystem's activation energy.
 - **The compat matrix**: wasm-abi §8 promises a v1 component works against every
   v1-compatible host *indefinitely*. That becomes a CI job: committed, pinned, pre-built v1

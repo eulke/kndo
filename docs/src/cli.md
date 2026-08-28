@@ -263,7 +263,7 @@ Two halves — using plugins and authoring them:
 | `wit [plugin\|adapter]` | print the WIT world this binary was built against |
 | `verify <component.wasm> [--project <dir>]` | load, lint the descriptor, and drive every hook against a fixture project |
 
-See [Plugins](plugins.md) and [Writing a plugin](plugin-authoring.md).
+See [Plugins](plugins.md) and [Writing a plugin](plugins/authoring.md).
 
 ## Navigation verbs and kndo query
 

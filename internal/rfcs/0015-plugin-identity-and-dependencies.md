@@ -21,7 +21,7 @@ framework in a private repo. Three things must work:
 RFC 0003 §4's `activation` rules answer "does *this* plugin apply to *this* project?" but say
 nothing about plugins composing. This RFC adds exactly that, and nothing else. The practical
 author-facing companion (toolchain, project setup, testing shape, maintenance checklist) is
-[docs/plugins/authoring.md](../plugins/authoring.md).
+[docs/src/plugins/authoring.md](../../docs/src/plugins/authoring.md).
 
 ## 2. Identity: the coordinate IS the id (the Go-modules move)
 
@@ -186,9 +186,9 @@ that case on the table — not before.
 3. **`kndo plugin install/list/remove`**: the fetch/verify/lockfile machinery of §4 —
    landed, see §4's implementation notes.
 4. **First real built-ins**: `kndo:nextjs` (file-system routing roots, special exports — the
-   flagship, spec: [docs/plugins/nextjs.md](../plugins/nextjs.md)) and `kndo:express`
+   flagship, spec: [docs/src/plugins/nextjs.md](../../docs/src/plugins/nextjs.md)) and `kndo:express`
    (script-launched entry files the import graph can't see — honest spec:
-   [docs/plugins/express.md](../plugins/express.md); express is imperative, so its convention
+   [docs/src/plugins/express.md](../../docs/src/plugins/express.md); express is imperative, so its convention
    surface is real but modest, and `views/**` templates turned out to be *unclaimed* files —
    invisible to the graph, hence producing no findings to suppress — so they're documented out
    of scope rather than covered). Both gated by their own `activation` rules — a built-in

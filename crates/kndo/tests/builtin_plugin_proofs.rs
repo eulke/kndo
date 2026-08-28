@@ -1,5 +1,5 @@
 //! End-to-end proof of **every built-in plugin**, in the baseline-then-plugin shape
-//! `plugins/authoring.md` §8 requires of anyone writing one:
+//! `docs/src/plugins/authoring.md` requires of anyone writing one:
 //!
 //! > make a fixture project exhibiting your conventions, run kndo *without* your plugin
 //! > (baseline — the findings your plugin should fix must actually fire, **or your test is
@@ -840,7 +840,7 @@ fn every_built_in_plugin_is_proven_here() {
     assert!(
         unproven.is_empty(),
         "built-in plugins with no baseline-then-plugin proof in this file: {unproven:?} — \
-         plugins/authoring.md §8 requires one, and a plugin nothing asserts is a plugin \
+         docs/src/plugins/authoring.md requires one, and a plugin nothing asserts is a plugin \
          nothing notices breaking. Add the proof, then the id to PROVEN."
     );
 
@@ -852,5 +852,54 @@ fn every_built_in_plugin_is_proven_here() {
         stale.is_empty(),
         "PROVEN names plugins this build does not ship: {stale:?} — either the feature is off \
          (run with --all-features) or the entry outlived its plugin"
+    );
+}
+
+/// Every built-in has a **published spec** and a row linking to it.
+///
+/// The proof above says the plugin works; this says a user can find out what it does and where
+/// its edges stop. `docs/src/plugins/` is the one place those specs live — the pointers across
+/// the RFCs and contracts all resolve there, and `docs/src/plugins.md`'s built-ins table is the
+/// index. A plugin that ships with neither is one nobody can evaluate before installing it, and
+/// the only reliable way to keep that from happening quietly is to fail here.
+///
+/// The four coverage ingesters share one document: they are one design decided once, and
+/// reading them apart is how their shared rules get re-litigated per format.
+#[test]
+fn every_built_in_plugin_has_a_published_spec() {
+    let docs = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(std::path::Path::parent)
+        .expect("crates/kndo has two ancestors up to the workspace root")
+        .join("docs/src");
+    let table = std::fs::read_to_string(docs.join("plugins.md")).expect("docs/src/plugins.md");
+
+    let mut undocumented: Vec<String> = Vec::new();
+    let mut unlinked: Vec<String> = Vec::new();
+    for plugin in kndo::default_plugins() {
+        let id = plugin.descriptor().id.to_string();
+        let name = id.strip_prefix("kndo:").unwrap_or(&id);
+        let spec = if name.starts_with("coverage-") {
+            "coverage".to_string()
+        } else {
+            name.to_string()
+        };
+        if !docs.join(format!("plugins/{spec}.md")).is_file() {
+            undocumented.push(format!("{id} → docs/src/plugins/{spec}.md"));
+        }
+        // The row must carry the link, not merely mention the id: an unlinked row leaves the
+        // spec written and unreachable, which reads to a user exactly like no spec at all.
+        if !table.contains(&format!("[`{id}`](plugins/{spec}.md)")) {
+            unlinked.push(id);
+        }
+    }
+    assert!(
+        undocumented.is_empty(),
+        "built-in plugins with no spec under docs/src/plugins/: {undocumented:?}"
+    );
+    assert!(
+        unlinked.is_empty(),
+        "built-in plugins whose row in docs/src/plugins.md does not link to their spec: \
+         {unlinked:?}"
     );
 }
