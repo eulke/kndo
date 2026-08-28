@@ -105,6 +105,7 @@ discovery diagnostics are always the fresh walk's. Hit, patch, and full paths al
 | per-file `surface_sig: [u8; 32]` | the §2.1 detector: blake3 over the file's span-normalized surface — adapter id + facts schema version + class(role, origin) + `unit` + `unit_name` + declarations `(name, kind, exported, visibility, member_of)` in order + imports `(specifier, bindings(local, imported), reexported, opaque_namespace_use, local_alias)` in order + in-source roots `(kind, target, confidence)` in order + dynamics `(narrowed_to)` in order. Spans excluded everywhere — bodies and positions move freely under the guard. Unclaimed files: no signature (nothing derived to guard) |
 | per-file `unit_name: Option<SmolStr>` | qualifier defaults (RFC 0012 §9) currently live only in facts; targets' facts must not be re-fetched |
 | per-file re-export alias table `Vec<(SmolStr, SymbolId)>` | the one table not derivable from `graph.symbols`; post-(b) it is order-independent state, safe to reuse |
+| per-file `module_bindings: Vec<ModuleBinding>` | the names a file's imports bind to in-repo FILES — the table RFC 0012 §9-bis's hop pass reads across *all* files, including unchanged ones the patch never re-extracts. Not a new guard: the surface signature already covers the imports it derives from |
 | `graphs/latest` pointer (last written key) | a miss must find the previous snapshot; content-keyed filenames can't |
 
 Everything else the patch needs is already derivable from the snapshot: bare/qualified/unit

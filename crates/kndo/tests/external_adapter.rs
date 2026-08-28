@@ -16,25 +16,11 @@ fn workspace_root() -> PathBuf {
         .to_path_buf()
 }
 
-/// A process-unique `--target-dir`, not the demo crate's own shared `target/` — this crate is
-/// built by half a dozen independent test binaries (`external_adapter.rs`,
-/// `global_adapter_activation.rs`, `plugin_install_probe.rs`, `kndo-plugin-api`'s compliance
-/// suites…), and `cargo test --workspace`'s default parallelism can run several of them at
-/// once. Cargo's own target-dir lock serializes concurrent *writers* correctly, but under
-/// enough concurrent builder processes a reader has still been observed to pick up a
-/// wrong-shaped artifact — isolating each build eliminates the shared file entirely rather
-/// than trying to out-argue the exact race.
-fn isolated_target_dir() -> PathBuf {
-    let nonce = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .expect("system clock before the epoch")
-        .as_nanos();
-    std::env::temp_dir().join(format!("kndo-wasm-target-{}-{nonce}", std::process::id()))
-}
-
 fn build_demo_component() -> Vec<u8> {
     let demo_dir = workspace_root().join("examples/kndo-plugin-demo");
-    let target_dir = isolated_target_dir();
+    // A `TempDir`: unique by construction and removed on drop, unwind included —
+    // the hand-rolled pid+nonce name it replaced leaked the whole build tree on panic.
+    let target_dir = tempfile::tempdir().expect("wasm target dir");
     let status = Command::new("cargo")
         .args(["build", "--release", "--target", "wasm32-unknown-unknown"])
         // Cross-target guest build: instrumentation flags from the host environment
@@ -43,16 +29,17 @@ fn build_demo_component() -> Vec<u8> {
         .env_remove("RUSTFLAGS")
         .env_remove("CARGO_ENCODED_RUSTFLAGS")
         .env_remove("LLVM_PROFILE_FILE")
-        .env("CARGO_TARGET_DIR", &target_dir)
+        .env("CARGO_TARGET_DIR", target_dir.path())
         .current_dir(&demo_dir)
         .status()
         .expect("failed to invoke cargo to build the demo adapter");
     assert!(status.success(), "demo adapter guest build failed");
 
-    let core_wasm_path = target_dir.join("wasm32-unknown-unknown/release/kndo_plugin_demo.wasm");
+    let core_wasm_path = target_dir
+        .path()
+        .join("wasm32-unknown-unknown/release/kndo_plugin_demo.wasm");
     let core_wasm = std::fs::read(&core_wasm_path)
         .unwrap_or_else(|e| panic!("reading {}: {e}", core_wasm_path.display()));
-    let _ = std::fs::remove_dir_all(&target_dir);
 
     wit_component::ComponentEncoder::default()
         .module(&core_wasm)
@@ -82,14 +69,12 @@ fn kndo_open_auto_discovers_a_kndo_plugins_wasm_adapter() {
         kndo_core::engine::ConfigOverrides {
             use_cache: false,
             threads: Some(1),
-            min_confidence: None,
+            ..kndo_core::engine::ConfigOverrides::default()
         },
     )
     .expect("kndo::open must succeed with a plugin present");
 
-    let result = engine.check(kndo_core::engine::CheckRequest {
-        mode: kndo_core::engine::RunMode::Full,
-    });
+    let result = engine.check(kndo_core::engine::RunMode::Full);
 
     assert_eq!(
         result.files_claimed, 1,

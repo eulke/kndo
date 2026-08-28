@@ -21,7 +21,7 @@ General rules that apply everywhere:
 - `kndo help`, `--help`, or `-h` anywhere on the line prints usage and exits `0` — asking for
   help never triggers an analysis run.
 - `kndo --version` / `-V` prints the binary version and the output schema version:
-  `kndo 0.1.0 (schema 1.0.0)`.
+  `kndo 0.1.0 (schema 1.3.0)`.
 - Bare flags with no subcommand (`kndo --format json`) are an implicit `check`.
 - Valued flags accept both spellings: `--diff main` and `--diff=main`.
 - **Unknown flags and missing values are hard errors (exit `2`)**, never silently ignored — a
@@ -38,12 +38,42 @@ General rules that apply everywhere:
 | `--staged` | analyze what `git commit` would commit (the index) vs `HEAD` |
 | `--diff <ref>` | analyze the working tree vs `merge-base(<ref>, HEAD)` |
 | `--fail-on <sev>` | exit `1` on findings at/above: `error` \| `warning` \| `info` \| `none` |
+| `--only <cats>` | report only these categories — comma-separated, repeatable |
+| `--skip <cats>` | report everything except these — same vocabulary, adds to `[analysis] skip` |
+| `--strict` | promote the severities RFC 0005 marks promotable (today: `undeclared` → `error`) |
 | `--format <f>` | `human` \| `json` \| `agent` \| `sarif` |
 | `--color <c>` | `auto` (default) \| `always` \| `never` |
 | `--quiet` | one-line summary |
 | `--verbose` | per-phase timing block and cache state |
 | `--no-cache` | disable the facts/graph cache for this run (never changes findings, only speed) |
 | `--threads <n>` | worker threads; `0` = physical cores (the default) |
+
+### `--only` and `--skip`
+
+Both take the vocabulary [suppressions](suppressions.md) use — a category (`unused`) or a
+category narrowed to a subject (`unused:enum-member`) — comma-separated, repeatable, and
+interchangeable between the two spellings:
+
+```sh
+kndo check --only unused,duplicate
+kndo check --only unused --only duplicate      # the same request
+kndo check --skip unused:enum-member
+```
+
+They are **not** two directions of one switch:
+
+- **`--skip` is suppression**, the same policy `[analysis] skip` expresses from another
+  source. It *adds* to what the project already skips (never replaces it), counts into the
+  same `suppressed` total, and — like the file — cannot silence `stale`: the "your
+  suppressions are dead" signal is never silenceable by the thing it audits.
+- **`--only` is a lens** over this one invocation. What it narrows away is counted and
+  reported (`· N outside --only` in the header, `more: N outside --only` in the agent format,
+  `"elided"` in JSON), so a narrowed run can never be mistaken for a clean one. Nothing is
+  exempt from it, including `stale` — that count is what keeps it honest.
+
+A category kndo doesn't know — neither a core category nor a `plugin:`-namespaced one — is
+a usage error (exit `2`), not an empty report: `--only unsued` silently
+matching nothing would print a clean report for a codebase nobody looked at.
 
 `--staged` and `--diff` are mutually exclusive. Both need `git` and a repository; a base ref
 that doesn't resolve is an error-level diagnostic and exit `2` — with a hint to
@@ -68,11 +98,16 @@ judges only the new findings.
 
 | Code | Meaning |
 |---|---|
-| `0` | clean — no findings at/above the `--fail-on` threshold |
-| `1` | findings at/above the threshold |
+| `0` | clean — no findings at/above the `--fail-on` threshold, and no budget exceeded |
+| `1` | findings at/above the threshold, **or** a `[delta]` budget exceeded |
 | `2` | kndo could not do what was asked: usage error, unresolvable ref, broken project root, or any error-level diagnostic during the run |
 
-Two details worth knowing:
+Three details worth knowing:
+
+- **Exit `1` has two independent causes**, composed with OR: severity (`--fail-on`) and
+  aggregate movement (`[delta]` budgets, diff modes only —
+  see [CI](ci.md#budgets-for-the-change)). A change that adds no finding severe enough to
+  trip `--fail-on` can still fail on a health drop, and the output says which rule broke.
 
 - **Advisory findings never move the exit code.** Plugin-contributed findings without a
   `[plugins.gate]` opt-in are advisory whatever their displayed severity — installing a
@@ -126,6 +161,29 @@ checks, debugging, noisy CI runners) and never changes the output — reports ar
 across thread counts and cache states. A malformed `KNDO_THREADS` fails `check` (which owns
 the flag) with a clear message; subcommands without their own `--threads` flag quietly fall
 back to the default rather than fail on an env var they never asked about.
+
+## kndo explain
+
+`kndo explain <finding-id>` answers the question a finding's one line cannot: what the verdict
+rests on, and what else is true about the thing it landed on.
+
+```sh
+kndo check --format agent | head           # ids are the first column
+kndo explain kndo-a3f81c92e5d4
+```
+
+It prints the finding exactly as `check` does — same glyph, same category, same id — then its
+evidence chain, then the same block `kndo describe` gives for the finding's subject: color,
+declaration, metrics, which roots reach it, what else was reported there. In `--format agent`
+its `next:` line hands you the two follow-ups worth running (`used-by`, `trace`) already
+pointed at that subject.
+
+Findings whose subject is not a single node — a directory rollup standing in for fifty files —
+report the finding without a subject block rather than picking one of the fifty.
+
+Exit codes follow the navigation verbs: `0` when the id resolved, `1` when nothing in this run
+carries it. That second case is ordinary, not an error: the finding may have been fixed,
+suppressed, or acknowledged in a baseline since you saw the id.
 
 ## kndo health
 
@@ -205,7 +263,7 @@ Two halves — using plugins and authoring them:
 | `wit [plugin\|adapter]` | print the WIT world this binary was built against |
 | `verify <component.wasm> [--project <dir>]` | load, lint the descriptor, and drive every hook against a fixture project |
 
-See [Plugins](plugins.md) and [Writing a plugin](plugin-authoring.md).
+See [Plugins](plugins.md) and [Writing a plugin](plugins/authoring.md).
 
 ## Navigation verbs and kndo query
 

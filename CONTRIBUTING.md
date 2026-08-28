@@ -1,5 +1,10 @@
 # Contributing
 
+See `CLAUDE.md` at the repo root for the architectural working rules (facade imports,
+error/config discipline, finding-identity stability, the toolkit-vs-adapter split, the
+non-negotiable equivalence gates) — it's written for coding agents but applies equally to
+human contributors.
+
 ## Commits
 
 [Conventional Commits](https://www.conventionalcommits.org/): `<type>(<scope>): <subject>`.
@@ -60,6 +65,33 @@ Install `mold` (Linux, via your package manager) or make sure `lld` is on `PATH`
 before adding this — an unresolvable `-fuse-ld` flag breaks every build on that machine. This
 is a per-contributor convenience, never a repo default.
 
+## Conformance fixtures
+
+Each adapter's `tests/fixtures/<name>/` holds a `project/` tree and an `expected.json`; the
+harness runs the real engine over the project and asserts the findings match exactly. They are
+deliberately-flawed corpora — dead code, phantom dependencies, cycles — so they must be
+excluded from kndo's analysis of its own repo, but they are ordinary tracked files as far as
+git is concerned.
+
+That exclusion lives in **`.ignore`**, not `.gitignore`. The `ignore` crate (and ripgrep, and
+fd) read `.ignore`; git does not. Putting it in `.gitignore` also governs `git add` for
+untracked files, which silently skips a newly added fixture — it passes locally and is simply
+absent from CI. If you add a fixture and `git status` doesn't show it, that is the bug to look
+for.
+
+A fixture change is never a way to make a failing test pass. `expected.json` is a contract:
+a diff there is either a bug in your change or a deliberate, documented contract change
+explained in the commit message.
+
+**Cross-language fixtures live in `crates/kndo/tests/fixtures/`**, same format, run through
+`kndo::default_adapters()` so every adapter is registered at once. An adapter's own suite
+structurally cannot cover what happens BETWEEN adapters: the jquery/Jazzy misattribution — a
+generated `.js` under `docs/` in a Swift repo charged its bare imports to `Package.swift`, and
+every Swift repo in the field audit reported a phantom dependency for it — was invisible to
+both the Swift suite (no JS adapter to claim the file) and the JS suite (no `Package.swift` to
+misattribute to). If your change touches file→package ownership, manifest claiming, or
+anything that reads `FileNode::language`, that is the suite to extend.
+
 ## Coverage
 
 kndo's own `crap` analysis (complexity × untestedness) runs only when a coverage report is
@@ -78,8 +110,39 @@ and `[plugins.<id>] report` in kndo.toml points at custom locations), picked up 
 `kndo check`. Reports older than 7 days are ignored with a diagnostic (stale certainty is
 worse than absence) — just regenerate. `lcov.info` and `coverage/` are gitignored; CI
 generates its own report in the test job, so the self-check there always runs
-coverage-aware. The WASM guest builds some integration tests spawn strip
+coverage-aware.
+
+**Delete `lcov.info` before running the suite again.** `crap` activates when a report is
+present, and the `dogfood` gate asserts kndo reports *nothing* on this repository — so a stale
+report from your last coverage run makes `dogfood` fail on findings that are real but are not
+what that gate measures. `cargo llvm-cov` hits this on its own second run, because the file it
+wrote last time is still there while it runs the tests. The CI job never sees it (a fresh
+checkout has no report until the step that writes one), which is why this only bites locally. The WASM guest builds some integration tests spawn strip
 `RUSTFLAGS`/`CARGO_ENCODED_RUSTFLAGS` themselves, so the instrumented run works end to end.
+
+## Benchmarks
+
+`cargo xtask bench` builds a release `kndo` and measures end-to-end wall time over generated
+fixtures at 1k / 5k / 50k files, five scenarios each, against the recorded baseline in
+`internal/perf-baseline.json`. Without `--gate` it reports and exits clean; with `--gate` a
+regression fails the build. `--sizes 1k` alone is the quick one.
+
+**Run it before and after a change you expect to cost time, on the same machine, and compare
+those two runs — not either one against the committed baseline.** That baseline records one
+machine, and it does not travel. Measured: on a container quite unlike the one it was recorded
+on, the same unmodified tree reported `1k/cold-full` **22% faster** and `1k/warm-noop` **108%
+slower** in a single run. Not noise, and not contradictory — cold time is dominated by parsing
+and analysis, warm time by process startup and cache reads, and different hardware moves those
+in opposite directions. `--update-baseline` re-records it for your machine; that is a local
+convenience, so leave the committed numbers alone unless the reference machine itself changed.
+
+**This is deliberately not a CI job**, and the measurement above is why: on ephemeral runners
+of varying hardware, the gate would compare numbers that were never comparable and fail for
+reasons unrelated to any change. Unlike the release-notes generation — which nothing ever
+exercised before a tag, unattended, which is why CI runs it now — the benchmark has a human
+present every time it runs, and a broken harness surfaces to that human in seconds. A perf gate
+worth having needs a dedicated, stable machine, which is a decision about infrastructure rather
+than about this workflow file.
 
 ## Branching — Gitflow
 

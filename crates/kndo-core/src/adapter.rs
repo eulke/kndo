@@ -10,111 +10,17 @@ use smol_str::SmolStr;
 use crate::vocab::{Confidence, DependencyScope, FileClass, RootKind, SymbolKind};
 
 // ---------------------------------------------------------------- shared primitives
-
-/// Project-relative path with `/` separators, the only path form that crosses the adapter
-/// boundary (case handling and symlink resolution are the core's discovery concern).
-#[derive(
-    Debug,
-    Clone,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    Hash,
-    serde::Serialize,
-    serde::Deserialize,
-    rkyv::Archive,
-    rkyv::Serialize,
-    rkyv::Deserialize,
-)]
-#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
-#[serde(transparent)]
-pub struct ProjectPath(#[rkyv(with = crate::rkyv_support::SmolStrAsString)] pub SmolStr);
-
-/// 1-indexed line/column span, `start` inclusive, `end` exclusive. Serializes as the
-/// `[line, col]` pair shape the output schema uses, not an
-/// object — tuples serialize as JSON arrays by default.
-#[derive(
-    Debug,
-    Clone,
-    Copy,
-    PartialEq,
-    PartialOrd,
-    Ord,
-    Eq,
-    Hash,
-    Default,
-    serde::Serialize,
-    serde::Deserialize,
-    rkyv::Archive,
-    rkyv::Serialize,
-    rkyv::Deserialize,
-)]
-#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
-pub struct Span {
-    pub start: (u32, u32),
-    pub end: (u32, u32),
-}
+//
+// `ProjectPath`/`Span`/`Diagnostic`/`DiagnosticLevel` live in `vocab.rs` now (they're not
+// adapter-specific — query/engine/plugin carry them too); re-exported here so existing
+// adapter code keeps compiling against `crate::adapter::{ProjectPath, Span, ...}` unchanged.
+pub use crate::vocab::{Diagnostic, DiagnosticLevel, ProjectPath, Span};
 
 /// A file's content as handed to an adapter by the core. Adapters never read the fs.
 #[derive(Debug)]
 pub struct SourceFile<'a> {
     pub path: &'a ProjectPath,
     pub content: &'a [u8],
-}
-
-#[derive(
-    Debug,
-    Clone,
-    Copy,
-    PartialEq,
-    PartialOrd,
-    Ord,
-    Eq,
-    serde::Serialize,
-    serde::Deserialize,
-    rkyv::Archive,
-    rkyv::Serialize,
-    rkyv::Deserialize,
-)]
-#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
-#[serde(rename_all = "lowercase")]
-pub enum DiagnosticLevel {
-    /// The run could not do what was asked (the exit-2 tier): a requested mode is
-    /// impossible (`--diff` base that doesn't resolve), not merely degraded. Frontends exit 2
-    /// when any error-level diagnostic is present — reporting zero findings because the
-    /// analysis never ran must never read as a clean pass (a Warn here
-    /// would let a typo'd base ref fail open in CI).
-    Error,
-    Warn,
-    Info,
-}
-
-#[derive(
-    Debug,
-    Clone,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    serde::Serialize,
-    serde::Deserialize,
-    rkyv::Archive,
-    rkyv::Serialize,
-    rkyv::Deserialize,
-)]
-#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
-pub struct Diagnostic {
-    pub level: DiagnosticLevel,
-    /// The file this diagnostic is about, when there is one — `None` for project-level
-    /// diagnostics (e.g. "cannot walk the project root"). A diagnostic merged from many
-    /// files without this field would be unattributable; adapters emit diagnostics scoped
-    /// to the file they're extracting, the core fills this in.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub path: Option<ProjectPath>,
-    pub message: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub span: Option<Span>,
 }
 
 // ---------------------------------------------------------------- descriptor & claiming
@@ -125,7 +31,14 @@ pub struct AdapterDescriptor {
     /// component coordinates (`kndo:js-ts`, `github.com/owner/repo`) —
     /// not done eagerly because renaming ids churns cache keys.
     pub id: SmolStr,
-    /// Bumping invalidates only this adapter's cached facts.
+    /// Bumping invalidates only this adapter's cached facts — for a change in what THIS
+    /// adapter emits (new roots, corrected spans, a different claim rule).
+    ///
+    /// **Not for a shape change in the facts contract itself.** [`FileFacts`] and the types
+    /// reachable from it are shared by every adapter; when one of those grows a field, the
+    /// answer is [`crate::cache::ENTRY_FORMAT_VERSION`] — one constant, covering both the facts
+    /// entries and the graph key — not this number repeated across every adapter in the
+    /// workspace.
     pub facts_schema_version: u32,
     pub file_globs: Vec<SmolStr>,
     pub manifest_globs: Vec<SmolStr>,
@@ -154,15 +67,36 @@ pub struct AdapterDescriptor {
     /// `true` in spirit (every adapter sets it explicitly; there is no `Default` impl here so a
     /// new adapter must make the call, not inherit a silent default).
     pub resolves_dependency_usage: bool,
-    /// Dormant reservation: the machine-checkable activation predicates
-    /// a *globally installed* adapter will be gated by when adapters componentize
-    /// (same rules and semantics as `PluginDescriptor::activation`). Nothing evaluates
-    /// this yet; compiled-in and project-local adapters are scoped by their file claims alone.
-    /// Reserved before the 1.0 freeze so componentization is additive, not breaking.
+    /// **Can a file of this language contain a unit of testing at all?**
+    ///
+    /// `untested` asks "is this production code a test blind spot". For a language that
+    /// declares no callable units — an HTML document, a stylesheet, a data file — the question
+    /// has no answer, and every such file would be reported forever.
+    ///
+    /// The analysis cannot reach that conclusion on its own. Its existing exemption
+    /// (`files_declaring_only_values`) requires a file to *declare symbols and only values*,
+    /// deliberately: concluding "nothing to test" from an absence of extracted facts would
+    /// silence files for a reason nobody could see, and an adapter that simply failed would be
+    /// indistinguishable from one with nothing to say. An adapter, though, can state it
+    /// positively about its own language — and that is what this field is.
+    ///
+    /// `true` for every language whose files can hold a function. No default: like
+    /// `Plugin::mutates_graph`, answering it wrong in either direction is a real defect
+    /// (`false` silences a language's blind spots; `true` on a document language buries the
+    /// report), so it is answered per adapter rather than inherited from a constructor.
+    pub declares_units_of_testing: bool,
+    /// What gates a *globally installed* adapter for a project — same rules and semantics as
+    /// `PluginDescriptor::activation`, evaluated by the distribution layer's composition pass
+    /// (RFC 0016 §4). Compiled-in and project-local adapters ignore it: the first are
+    /// unconditional, the second are opted in by their presence in `.kndo/plugins/`, and both
+    /// are scoped by their file claims. Empty means "no known structural signal", so a global
+    /// candidate with none never self-activates rather than guessing.
     pub activation: Vec<crate::plugin::ActivationRule>,
-    /// Dormant reservation: component dependencies by coordinate id,
-    /// with co-install/co-activate semantics once componentization exists. Unread
-    /// today, same reservation rationale as [`activation`](Self::activation).
+    /// Component dependencies by coordinate id, with the co-install/co-activate semantics
+    /// RFC 0017 §6 gave them: an *active* adapter activates every present adapter it names
+    /// here, transitively, as a fixpoint. The wrapper-adapter case is why it exists — a
+    /// `.vue`-style superset language whose extraction degrades without its base language's
+    /// adapter present. Pinned by `crates/kndo/tests/adapter_dependency_implication.rs`.
     pub dependencies: Vec<SmolStr>,
     /// Directory names that mark files as test-role only when the directory is an
     /// *immediate child of the owning package's manifest directory* — conventions that are
@@ -175,6 +109,28 @@ pub struct AdapterDescriptor {
     /// the toolkit's `PathPatterns::test_dirs`, which matches the segment anywhere in the
     /// path — right for conventions like `__tests__/` that hold at any depth.
     pub package_test_dirs: Vec<SmolStr>,
+    /// Member-type facts about types the LANGUAGE provides, which no file in the project
+    /// declares — the same `(owner, member, yields)` shape as [`FileFacts::member_types`],
+    /// declared once here because there is no home file to hang them on. `Result<T, E>`'s
+    /// `map_err` still yields a `Result` over the same `T`; a `Vec<T>` iterates to its `T`.
+    /// Without them a chain that crosses one stdlib call stops dead, and the type behind it
+    /// reads as consumed only where it is declared.
+    ///
+    /// Same data-on-the-descriptor pattern as the ladder and the cycle policy: the knowledge
+    /// is the adapter's (it is *its* language's standard library), the core just gets a
+    /// second lookup tier keyed by claim language, consulted after the owner's home file and
+    /// the only one that can apply when the owner name resolves to no symbol at all.
+    ///
+    /// Two conventions worth stating because the core is blind to both: a fact may use
+    /// [`TypeExpr::Param`] to say "the same argument the receiver had", and an adapter may
+    /// name an operation or an anonymous type with a string of its own choosing (Rust's
+    /// `@element` for iteration, `@slice` for `&[T]`) as long as it emits the same string on
+    /// the reference side. The core never interprets either — a member is a member.
+    ///
+    /// Keep it small and evidence-driven. This is a curated table like the machinery-trait
+    /// list, not a model of the standard library: a fact earns its place by closing a
+    /// measured case.
+    pub builtin_member_types: Vec<RawMemberType>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -229,7 +185,19 @@ pub enum VisibilityScope {
     File,
     /// Same `FileFacts::unit` key (Go package, Rust module) — contains `File`.
     Unit,
-    /// Same `PackageId` (manifest ownership) — contains `Unit`.
+    /// A unit and every unit BELOW it in the tree [`FileFacts::unit_parent`] builds —
+    /// contains `Unit`. Which unit is the anchor comes from the declaration
+    /// ([`Declaration::visible_in_unit`]); with none, the declaring file's own unit, which
+    /// makes this rung exactly `Unit` and a flat unit tree collapse it away.
+    ///
+    /// The rung the four-bucket ladder was missing: Rust's `pub(super)` and `pub(in path)`
+    /// name a region strictly between one file and one package, and adapters that had to
+    /// pick a bucket widened them to `Package` — which cannot tell a real leak (tokio's
+    /// `task::state::unset_waker` returning a `state.rs`-private alias its `task::harness`
+    /// caller cannot spell) from the far more common harmless inverse, and so kept
+    /// `private-type-leak` gated. `internal/detection-gaps.md` §7.
+    Module,
+    /// Same `PackageId` (manifest ownership) — contains `Module`.
     Package,
     /// Everywhere.
     Public,
@@ -353,11 +321,14 @@ pub struct Declaration {
     /// those. Default `false`.
     pub implicitly_invoked: bool,
     /// The declaration lives in a scope unit nested *inside* its file (an inline
-    /// module, a local namespace) rather than at the file's top level. The ladder's
-    /// file-scope rung means "visible to this file"; for a nested declaration the language's
-    /// tightest level means "visible to the enclosing scope" — strictly narrower — so
-    /// file-local usage evidence alone cannot justify recommending that rung
-    /// (`internal-only` advances past it). Default `false`.
+    /// module, a local namespace) rather than at the file's top level. For such a declaration
+    /// the language's tightest declarable level means "visible to the enclosing scope", which
+    /// is strictly narrower than anything the core can measure: every scope up to and
+    /// including [`VisibilityScope::Module`] is derived from file and unit co-location, and
+    /// none of it can see inside a file. So no usage evidence certifies those rungs and
+    /// `internal-only` advances past all of them — `Package` and wider still stand, because
+    /// nesting inside a file cannot change which package a declaration is in. Default
+    /// `false`.
     pub nested_scope: bool,
     /// The declaration has no declarable visibility of its own — the recorded level is
     /// inherited from its container (an enum's variants in Rust; any member the language
@@ -365,6 +336,57 @@ pub struct Declaration {
     /// itself — it belongs to the container, whose own declaration is measured separately —
     /// so visibility analyses skip it. Default `false`.
     pub visibility_inherited: bool,
+    /// For a declaration on a [`VisibilityScope::Module`] rung: WHICH unit anchors the
+    /// subtree it is visible in. Rust's `pub(super)` anchors on the parent module,
+    /// `pub(in crate::a::b)` on the named one — and only the adapter can say which unit key
+    /// that is, because only it knows the language's path syntax. `None` on a `Module` rung
+    /// means the declaring file's own unit, which degenerates to `Unit`. Ignored on every
+    /// other rung. Default `None`.
+    #[serde(default)]
+    pub visible_in_unit: Option<SmolStr>,
+    /// The trait/protocol/interface whose IMPLEMENTATION declares this member — Rust's
+    /// `impl Serialize for T`, Swift's `extension T: Codable`. A fact about where the member
+    /// is written, never a verdict about what invokes it: the adapter reports the name it
+    /// read and interprets nothing.
+    ///
+    /// `None` wherever the concept doesn't apply — a member declared in its type's own body,
+    /// a free function, and every language that declares members in the type body with the
+    /// interface as a separate declaration (Java, Kotlin, Go, JS). Like every optional fact
+    /// in this contract, a language that has no such grouping simply never fills it.
+    ///
+    /// The core never interprets it either, for the same reason it never interprets
+    /// [`Declaration::markers`]: it has no list of trait names and cannot acquire one without
+    /// breaking the ignorance rule. What it does is CARRY it, so a consumer that legitimately
+    /// holds one ecosystem's knowledge can match against it. That consumer is a plugin —
+    /// `kndo:serde` knows serde's traits drive `serialize`, `kndo:rkyv` knows rkyv's drive
+    /// `resolve_with` — and this field is what lets such a plugin be its curated table and
+    /// nothing else, instead of re-parsing a grammar the adapter already parsed.
+    ///
+    /// The adapter's OWN curated knowledge stays separate and stays a verdict:
+    /// [`Declaration::implicitly_invoked`] is where a language's own machinery traits are
+    /// decided, because those are facts about the language rather than about a tool.
+    pub implements: Option<SmolStr>,
+    /// Language-visible MARKERS attached to this declaration: annotation names in Java and
+    /// Kotlin (`@Controller`, `@AfterEach`), attribute paths in Rust, attributes in Swift,
+    /// decorators in JS/TS. Bare names, in source order, duplicates kept — the adapter
+    /// reports what is written, and never interprets it.
+    ///
+    /// The core never interprets them either: it has no list of framework names and cannot
+    /// acquire one without breaking the ignorance rule. What it does is MATCH them against a
+    /// list the project supplies (`kndo.toml`'s `[[externally-invoked]]`), because the
+    /// question these answer is one static analysis cannot decide on its own — "is this
+    /// declaration invoked from outside the analyzed source?" A Spring `@Controller` is
+    /// instantiated by classpath component scanning and called by a servlet dispatcher; a
+    /// JUnit `@AfterEach` method is called by the test runner; a `@Advice.OnMethodEnter`
+    /// body is inlined into instrumented bytecode; a Koin `@Scoped` annotation is read by an
+    /// annotation processor in a different repository. Every one of them reads `unused` or
+    /// `test-only` with perfect correctness from the graph alone, and every one is a false
+    /// accusation (see `internal/detection-gaps.md`).
+    ///
+    /// Markers are FACTS, not verdicts: an adapter emits them for every declaration that
+    /// carries them, whether or not any framework is involved, and whether or not the
+    /// project configures anything. Empty for languages with no such syntax (Go).
+    pub markers: Vec<SmolStr>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -462,7 +484,38 @@ pub struct RawImport {
     /// correct by construction where a "last specifier segment" guess would go wrong
     /// (dir≠package mismatches like `gopkg.in/yaml.v3` →
     /// `yaml`). Languages whose imports bind names, not namespaces (JS/TS), leave it `None`.
+    ///
+    /// An import the adapter RECONSTRUCTED from a use site sets it too, and must: Rust's
+    /// inline `kndo_core::discovery::find_files_named(..)` with no `use` in sight emits a
+    /// synthetic import for `kndo_core::discovery` and a reference qualified by
+    /// `discovery` — and the adapter, which knows what `::` joins, is the only side that
+    /// can name that segment. The core used to recover it by splitting the specifier on
+    /// `::`, its one piece of hardcoded language knowledge; saying it here is what let that
+    /// go. Such an import carries a non-`Certain` [`RawImport::confidence`], which is
+    /// exactly what stops it from closing the namespace: a miss under a reconstructed
+    /// import's qualifier falls through the in-scope/duck ladder, while a miss under a real
+    /// statement's alias settles.
     pub local_alias: Option<SmolStr>,
+    /// The file contains **no import statement for this**: the adapter synthesized it from a
+    /// use site (`crate::a::b::f()` with no `use` in sight) so resolution has something to
+    /// bind. Two things read it, and both are the difference between a statement the file
+    /// makes and the adapter's reading of a path:
+    ///
+    ///  * a qualifier registered by a reconstructed import does NOT settle a member miss — a
+    ///    misread path must fall through the ladder, not close a namespace (RFC 0012 §9-ter);
+    ///  * its BINDINGS rank below the file's own declarations. Every language kndo supports
+    ///    forbids a real import from shadowing a same-named local declaration (Rust E0255),
+    ///    so such a collision can only ever come from a synthetic one — and it must not win.
+    ///    tokio's `dump.rs` declares `pub struct Trace` and merely *mentions*
+    ///    `super::task::trace::Trace` in a field; the synthetic binding used to capture the
+    ///    file's own return type and fabricate a `private-type-leak`.
+    ///
+    /// `false` for every import the source actually contains, which is the default and the
+    /// case that keeps its precedence. Confidence is a different question — how sure the
+    /// adapter is that the import RESOLVES as stated — and cannot stand in for this: Rust's
+    /// `crate`/`self`/`super`-rooted synthetic imports are `Certain` about their target.
+    #[serde(default)]
+    pub reconstructed: bool,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -480,10 +533,41 @@ pub struct RawRoot {
     pub confidence: Confidence,
 }
 
+/// One **callable shape**: a declaration's own body, or one callable nested inside it.
+///
+/// A declaration emits one shape for itself plus one for every nested callable
+/// ([`crate::adapter`] does not name them; the adapter decides which node kinds qualify).
+/// Every shape of one declaration repeats that declaration's `span` — the resolution key —
+/// and is told apart by `shape_ordinal`. Consumers that report a LOCATION read `shape_span`.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct FunctionMetrics {
-    /// Declared name (symbol path within the file).
+    /// Declared name (symbol path within the file). The same for every shape of one
+    /// declaration: a nested callable is anonymous, and what a reader needs is the named thing
+    /// containing it.
     pub symbol: SmolStr,
+    /// The span of the [`Declaration`] these metrics describe — byte-for-byte the same
+    /// `Declaration::span`, which is what makes it an exact identity. Metrics resolve to their
+    /// symbol by span, never by name: a file may legitimately declare the same name twice
+    /// (cfg-alternated `impl` blocks each declaring `Data.from_path`, platform-gated
+    /// overloads), and a name lookup against the file's single-slot symbol table silently
+    /// resolved BOTH entries to whichever declaration was inserted last — which then read as a
+    /// structural clone of itself and double-counted its tokens into health's duplication
+    /// ratio. There is deliberately no default: an adapter that emits metrics must say which
+    /// declaration they belong to.
+    pub span: Span,
+    /// This shape's OWN extent: the declaration's span for the declaration's own shape, the
+    /// nested callable's own node span for a nested one. Every consumer that reports a
+    /// location — `crap`'s finding range, `duplicate`'s `related` entries, the line that
+    /// separates two otherwise identical clone labels — reads this, never the symbol's span,
+    /// which cannot tell two closures in one function apart.
+    pub shape_span: Span,
+    /// 0 for the declaration's own shape; 1..N for callables nested inside it, in pre-order.
+    ///
+    /// The stable identity of a nested shape, and deliberately NOT a line number: a line
+    /// churns a project's baseline whenever anything above the closure moves, which is why
+    /// finding ids carry no lines anywhere in this codebase. An ordinal churns only when
+    /// closures are added, removed or reordered inside this one declaration.
+    pub shape_ordinal: u16,
     pub cyclomatic: u32,
     pub loc: u32,
     /// Normalized-stream token count — `health`'s duplication ratio
@@ -491,6 +575,16 @@ pub struct FunctionMetrics {
     pub token_count: u32,
     /// Winnowing fingerprints over the normalized token stream.
     pub fingerprints: Vec<u64>,
+    /// This shape's body is a single value-construction expression — a struct/object literal
+    /// or a constructor call — and nothing else.
+    ///
+    /// A FACT about the body's shape, never a verdict. What consumes it is `duplicate`, and
+    /// the reason is that the fingerprint's own normalization inverts on such a body:
+    /// identifiers and literals canonicalize away, and for a construction that is the entire
+    /// authored content, leaving only the field list the TYPE dictates. Two constructions of
+    /// one type therefore fingerprint alike by definition of the type, not by evidence of
+    /// copying.
+    pub body_is_construction: bool,
 }
 
 /// A construct forcing a `Wildcard` edge (plausible-target-set expansion).
@@ -553,6 +647,19 @@ pub struct RawSuppression {
     pub scope: SuppressionScope,
 }
 
+/// An adapter-reported problem, minus [`Diagnostic::path`] — an adapter is always reporting
+/// about the one file or manifest it was just handed, so its own path is never adapter
+/// information; every ingestion site (`graph::assemble`'s phase 1 file merge, the manifest
+/// merge) fills it in from the file it was extracting, unconditionally. Adapters that used to
+/// write `path: None` at every call site (verified: never anything else) now simply don't
+/// have the field to set.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct AdapterDiagnostic {
+    pub level: DiagnosticLevel,
+    pub message: String,
+    pub span: Option<Span>,
+}
+
 /// Everything an adapter owes the core for one file. Must be deterministic for identical
 /// content (conformance harness). Round-trips through the facts cache
 /// (`cache.rs`) — `Deserialize` exists for that alone, never for adapters to read.
@@ -565,7 +672,7 @@ pub struct FileFacts {
     pub functions: Vec<FunctionMetrics>,
     pub dynamics: Vec<DynamicUse>,
     pub suppressions: Vec<RawSuppression>,
-    pub diagnostics: Vec<Diagnostic>,
+    pub diagnostics: Vec<AdapterDiagnostic>,
     /// Reference-resolution scope, when the language's isn't file-scoped (contract
     /// extension surfaced by the Go adapter): files sharing the same non-`None` key resolve
     /// each other's declarations for an unqualified [`RawReference`] with no import binding, in
@@ -577,6 +684,16 @@ pub struct FileFacts {
     /// safely-wrong. The adapter computes the key (for Go: the file's directory, from its own
     /// path — no extra input needed); the core only groups by it, staying language-blind.
     pub unit: Option<SmolStr>,
+    /// The key of the unit that CONTAINS this file's unit, turning the flat set of keys into
+    /// a **tree the core can walk without knowing any separator** — the adapter, which does
+    /// know its language's, provides the link. `None` at a root (a crate's top module, a
+    /// package with nothing above it) and for languages whose units do not nest at all,
+    /// where the tree is flat and [`VisibilityScope::Module`] collapses to `Unit`.
+    ///
+    /// Every file of one unit must report the same parent; the core takes the first it sees
+    /// and a disagreement is an adapter bug, not a merge.
+    #[serde(default)]
+    pub unit_parent: Option<SmolStr>,
     /// Content-derived correction of the claim-time origin axis: extraction may
     /// report what the *content* proves about origin — a `// Code generated … DO NOT EDIT.`
     /// banner, an `@generated` marker — which claim (path-only, by design fast and name-based)
@@ -625,6 +742,28 @@ pub struct FileFacts {
     /// convention-bearing position in every motivating pattern — and only for direct
     /// literals, never computed strings (determinism over coverage).
     pub string_call_args: Vec<StringCallArg>,
+    /// String literals written inside an **attribute or annotation** on a declaration:
+    /// `#[serde(skip_serializing_if = "usize_is_zero")]`, `@JsonDeserialize(using =
+    /// "FooDeserializer")`. The attribute sibling of [`Self::string_call_args`], and
+    /// ecosystem-blind for the same reason and to the same degree: the adapter records
+    /// *"this attribute wrote this string under this key"*, never that the string names a
+    /// function.
+    ///
+    /// It cannot record more than that, and the measurement says so. Over the attributes the
+    /// Rust adapter already scans, 482 key-value pairs in serde alone have a value shaped
+    /// like an identifier, 248 collide with a real declaration in the repo, and only 176 of
+    /// those sit under a key that names an item — leaving 72 pairs where `tag = "type"`,
+    /// `content = "content"` or `rename = "b"` happens to match something declared elsewhere.
+    /// An adapter that treated a collision as a reference would contribute 72 keep-alive
+    /// edges in one crate to resolve one real case, and each one silences a true finding.
+    /// Telling `skip_serializing_if = "foo"` from `rename = "foo"` requires knowing what
+    /// serde is, and knowing that is the plugin's job — which is exactly why the fact stops
+    /// at the key.
+    ///
+    /// Optional per adapter, default empty (same contract posture as
+    /// [`Self::string_call_args`]); Rust implements it first. Read by plugins through
+    /// `GraphView::attr_strings_in` (natively) or `attr-strings-in` (WASM).
+    pub string_attr_args: Vec<StringAttrArg>,
     /// Member type facts (the cross-file tier): what accessing a member of
     /// a type YIELDS, as declared in this file — a struct field's annotated type, a
     /// method's return type, an associated const's type. Pure resolution metadata (no
@@ -657,8 +796,77 @@ pub struct FileFacts {
     pub invoked_executables: Vec<SmolStr>,
 }
 
-/// One [`FileFacts::member_types`] entry: accessing `owner.member` yields a value of the
-/// (base) type named `yields`. Carries rkyv derives because the incremental patch persists
+/// What a value's type IS, as declared — a tree, because a type is one:
+/// `Result<Vec<TreeEntry>, GitError>` has a `TreeEntry` two levels down, and flattening it to
+/// a list of one-level parameter names threw that away irrecoverably. The chain resolver
+/// (RFC 0012 §3-bis) carries one of these rather than a bare name, so a projection selects a
+/// SUBTREE with its own arguments intact.
+///
+/// Adapters build it recursively from their own grammar; the archive format is not allowed to
+/// dictate the shape here (`crate::rkyv_support::TypeExprAsFlat` stores it flat, and nothing
+/// outside that module knows).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum TypeExpr {
+    /// A named type with its arguments, as written: `Vec<TreeEntry>` is
+    /// `Named { name: "Vec", args: [Named { name: "TreeEntry", args: [] }] }`. The name is
+    /// dispatch-reduced by the adapter (references stripped, auto-deref wrappers unwrapped,
+    /// `Self` already resolved), exactly as the flat form's base name was.
+    Named { name: SmolStr, args: Vec<TypeExpr> },
+    /// Argument N of the type this fact is ABOUT — how a fact states a relationship rather
+    /// than a concrete type: `Result<T, E>::map_err` still yields a `Result` over the same
+    /// `T`, so its fact is `Named { "Result", [Param(0), Unknown] }`. Substituted against the
+    /// receiver's own arguments at the hop; `Unknown` when the receiver has no argument there
+    /// (and always, for a free function — there is no receiver to substitute from).
+    Param(usize),
+    /// A type the fact cannot name: a closure's output, an opaque `impl Trait`, the error a
+    /// `map_err` produces. Explicit so a fact never has to lie about its arity to stay
+    /// silent — resolving it yields nothing, which is the honest answer.
+    Unknown,
+}
+
+impl TypeExpr {
+    /// The head name, when there is one. `None` for `Param`/`Unknown` — nothing to look up.
+    pub fn name(&self) -> Option<&SmolStr> {
+        match self {
+            TypeExpr::Named { name, .. } => Some(name),
+            _ => None,
+        }
+    }
+
+    /// Argument N, for a projection marker. Out of range — or not a named type at all — is a
+    /// miss, never a substitute.
+    pub fn arg(&self, index: usize) -> Option<&TypeExpr> {
+        match self {
+            TypeExpr::Named { args, .. } => args.get(index),
+            _ => None,
+        }
+    }
+
+    /// A leaf type: the common case, and what every depth-1 fact used to be.
+    pub fn named(name: impl Into<SmolStr>) -> TypeExpr {
+        TypeExpr::Named {
+            name: name.into(),
+            args: Vec::new(),
+        }
+    }
+
+    /// This expression with every [`TypeExpr::Param`] replaced by the receiver's argument at
+    /// that index — the substitution that makes a relationship fact concrete. A parameter the
+    /// receiver does not have becomes [`TypeExpr::Unknown`]: the hop stays silent instead of
+    /// binding to whatever happened to sit at that position.
+    pub fn substitute(&self, receiver: &TypeExpr) -> TypeExpr {
+        match self {
+            TypeExpr::Named { name, args } => TypeExpr::Named {
+                name: name.clone(),
+                args: args.iter().map(|a| a.substitute(receiver)).collect(),
+            },
+            TypeExpr::Param(n) => receiver.arg(*n).cloned().unwrap_or(TypeExpr::Unknown),
+            TypeExpr::Unknown => TypeExpr::Unknown,
+        }
+    }
+}
+
+/// One [`FileFacts::member_types`] entry: accessing `owner.member` evaluates to `yields`. Carries rkyv derives because the incremental patch persists
 /// these per file (`FilePatchMeta`) — resolution of changed files needs unchanged files'
 /// member types.
 #[derive(
@@ -673,22 +881,25 @@ pub struct FileFacts {
     rkyv::Deserialize,
 )]
 pub struct RawMemberType {
-    #[rkyv(with = crate::rkyv_support::SmolStrAsString)]
-    pub owner: SmolStr,
+    /// The type whose member this is — or `None` for a FREE FUNCTION, where the fact reads
+    /// "calling `member` evaluates to `yields`" rather than "accessing `owner.member`
+    /// does". The two are the same statement about a value's type, and the core walks them
+    /// with the same chain machinery: a `None`-owner fact simply applies where a pointer's
+    /// BASE names the function, before any member segment. Without it `let entry =
+    /// parse_entry(..); entry.path` types as nothing, and `path`'s owner reads as
+    /// file-local (`internal/detection-gaps.md` §3).
+    #[rkyv(with = rkyv::with::Map<crate::rkyv_support::SmolStrAsString>)]
+    pub owner: Option<SmolStr>,
     #[rkyv(with = crate::rkyv_support::SmolStrAsString)]
     pub member: SmolStr,
-    /// The BASE type name the access evaluates to, dispatch-reduced by the adapter
-    /// (references stripped, auto-deref wrappers unwrapped, `Self` already resolved).
-    #[rkyv(with = crate::rkyv_support::SmolStrAsString)]
-    pub yields: SmolStr,
-    /// The base names of EVERY type parameter, in declaration order, when `yields` is
-    /// parameterized (`Result<Config, Error>` → `["Config", "Error"]`,
-    /// `Map<Key, Value>` → `["Key", "Value"]`). A pointer segment marked `?N` projects
-    /// parameter N instead of `yields` itself (`?` alone is `?0`); WHICH parameter an
-    /// operation extracts is the adapter's knowledge (Rust's try operator → 0; a
-    /// map-index fact would be 1) — the core's selection is purely structural.
-    #[rkyv(with = rkyv::with::Map<crate::rkyv_support::SmolStrAsString>)]
-    pub yields_params: Vec<SmolStr>,
+    /// The type the access evaluates to, with its arguments — a [`TypeExpr`], not a name.
+    /// A pointer segment marked `?N` projects argument N of it (`?` alone is `?0`), and what
+    /// that yields is a whole subtree: `Result<Vec<TreeEntry>, E>` projected at 0 is
+    /// `Vec<TreeEntry>`, still carrying its own argument, which a one-level list could not
+    /// express. WHICH argument an operation extracts stays the adapter's knowledge (Rust's
+    /// try operator → 0) — the core's selection is purely structural.
+    #[rkyv(with = crate::rkyv_support::TypeExprAsFlat)]
+    pub yields: TypeExpr,
 }
 
 /// One [`FileFacts::string_call_args`] entry. Carries rkyv derives because assembly persists
@@ -719,19 +930,72 @@ pub struct StringCallArg {
     pub span: Span,
 }
 
+/// One [`FileFacts::string_attr_args`] entry — the same persistence posture as
+/// [`StringCallArg`], for the same reason.
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    serde::Serialize,
+    serde::Deserialize,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+)]
+pub struct StringAttrArg {
+    /// The attribute's own path as written, dotted form: `serde`, `config`, `clap`,
+    /// `JsonDeserialize`. No resolution and no import following — the *syntactic* head is
+    /// what a convention matches on, and a plugin that cares about `serde` cares about the
+    /// word the author typed.
+    #[rkyv(with = crate::rkyv_support::SmolStrAsString)]
+    pub attribute: SmolStr,
+    /// The key this literal was written under — `skip_serializing_if`, `rename`, `using`.
+    /// **Empty when the attribute takes a bare value** (`#[path = "…"]`, `#[doc = "…"]`), so
+    /// a plugin can still tell "no key" from a key it does not recognize.
+    #[rkyv(with = crate::rkyv_support::SmolStrAsString)]
+    pub key: SmolStr,
+    /// The literal's value, unescaped.
+    #[rkyv(with = crate::rkyv_support::SmolStrAsString)]
+    pub literal: SmolStr,
+    /// The declaration the attribute decorates, in the same `Owner.name` form targets use —
+    /// `None` when the attribute decorates something that is not a declaration (a module, a
+    /// statement, a crate root).
+    ///
+    /// This is what makes an edge possible at all: a plugin's contributed reference needs a
+    /// `from`, and "the item this was written on" is the only honest one. Without it the
+    /// best a plugin could do is root the target, which keeps it alive but says nothing about
+    /// who uses it.
+    #[rkyv(with = rkyv::with::Map<crate::rkyv_support::SmolStrAsString>)]
+    pub owner: Option<SmolStr>,
+    /// The attribute's extent.
+    pub span: Span,
+}
+
 // ---------------------------------------------------------------- manifests
 
 #[derive(Debug, Clone)]
 pub struct ManifestDependency {
     pub name: SmolStr,
-    pub version_req: SmolStr,
+    /// The declared version requirement, when the manifest declares one at all.
+    ///
+    /// `None` is not "any version" — it is **"this manifest states no comparable
+    /// requirement"**, which is a different fact and has to be representable as one. A
+    /// BOM/platform-managed JVM coordinate (`implementation 'io.insert-koin:koin-ktor'`) names
+    /// no version by design; a Cargo path/git dependency constrains nothing; a `go.mod`
+    /// `require` line can be truncated. Encoding all of those as `"*"` collided with npm's
+    /// `"*"`, which IS a real, declared requirement — and made `version-skew` compare a
+    /// sentinel against a version and call the difference a defect.
+    pub version_req: Option<SmolStr>,
     pub scope: DependencyScope,
-    /// True when `version_req` is a placeholder — the real requirement lives in a
+    /// True when the real requirement lives in a
     /// project-wide shared version pool instead of this manifest (Cargo's
     /// `{ workspace = true }` today; the mechanism generalizes to any adapter with an
     /// equivalent concept — pnpm/Gradle version catalogs, etc.). Resolved against
     /// [`ManifestFacts::workspace_dependencies`] during graph assembly, before any analysis
-    /// ever sees the value — `version_req` here is not meaningful to compare directly.
+    /// ever sees the value; `version_req` here is `None` until it is.
     pub inherited: bool,
 }
 
@@ -804,7 +1068,7 @@ pub struct ManifestFacts {
     /// unit to files under the prefix whose extraction left `unit` unset — the convention,
     /// where it fired, already told the truth. Longest prefix wins.
     pub unit_overrides: Vec<(ProjectPath, SmolStr)>,
-    pub diagnostics: Vec<Diagnostic>,
+    pub diagnostics: Vec<AdapterDiagnostic>,
 }
 
 /// One named executable target: invoking `name` as a subprocess executes `entry`. Carries
@@ -869,7 +1133,48 @@ pub struct ResolveCtx<'a> {
     /// no reliable specifier→directory mapping (the source root isn't visible to a bare
     /// dotted package name), so resolution needs the reverse lookup this index provides.
     units: Option<&'a rustc_hash::FxHashMap<SmolStr, Vec<ProjectPath>>>,
+    /// The same reverse index, partitioned by the owning package (nearest-manifest-ancestor).
+    /// A unit key is only unique *within* a package: Java and Kotlin key units on the declared
+    /// package name (RFC 0012 §8 — never directory-derived, deliberately, since a source root
+    /// is a build-tool convention a bare dotted name can't reveal), so two Gradle modules that
+    /// both declare `package retrofit2;` share one unit key across the whole repo. Swift keys
+    /// on the target name, and two packages may each declare a target `Core`. Left unset by
+    /// callers that have no ownership map; [`Self::unit_files_from`] then behaves exactly like
+    /// [`Self::unit_files`].
+    units_by_package:
+        Option<&'a rustc_hash::FxHashMap<u32, rustc_hash::FxHashMap<SmolStr, Vec<ProjectPath>>>>,
+    /// Which package owns each claimed file — the lookup that makes `units_by_package` usable
+    /// from a resolver, which knows only the importing file's path.
+    file_package: Option<&'a rustc_hash::FxHashMap<ProjectPath, u32>>,
+    /// Reads the text of another **manifest**, for the manifest-extraction pass only.
+    ///
+    /// Every other field here answers a question about paths. This one answers a question
+    /// about contents, and exists because some manifest formats let one manifest declare a
+    /// value that another one uses — Maven's `<parent>` being the case that forced it: guava
+    /// declares `<sourceDirectory>src</sourceDirectory>` once in `guava-parent` and every
+    /// module inherits it, so an adapter handed one pom's text at a time cannot see where that
+    /// module's sources are. Without this, kndo found **zero** production roots in guava and
+    /// read 88% of the repository as unreachable.
+    ///
+    /// The core stays ignorant of what any of that means: it offers "you may read a manifest",
+    /// never "poms have parents". Which manifests exist, how one names another, and what a
+    /// value in one means for the other are entirely the adapter's.
+    ///
+    /// **Why reading another file here is sound**, where it would not be during `extract`:
+    /// manifest extraction is not cached — [`crate::graph::assemble`] re-runs it on every
+    /// assembly, reading each manifest fresh — so no entry can go stale behind a parent's
+    /// edit. The incremental patch agrees by refusing outright: any changed manifest forces a
+    /// full rebuild (`graph::patch`), precisely because manifests feed global inputs. A
+    /// content channel on `extract` would have neither property, which is why this one is
+    /// deliberately narrow: `None` for import resolution, and answering only for paths in the
+    /// known-file set.
+    manifest_text: Option<&'a ManifestTextChannel<'a>>,
 }
+
+/// Reads one manifest's text by path — see [`ResolveCtx::read_manifest`]. `Sync` because
+/// manifest extraction runs across a rayon pool; the lifetime is explicit so the channel may
+/// borrow the discovered file set rather than having to own it.
+pub type ManifestTextChannel<'a> = dyn Fn(&ProjectPath) -> Option<String> + Sync + 'a;
 
 impl<'a> ResolveCtx<'a> {
     pub fn new(known_files: &'a rustc_hash::FxHashSet<ProjectPath>) -> Self {
@@ -878,7 +1183,30 @@ impl<'a> ResolveCtx<'a> {
             declared_dependencies: None,
             workspace_members: None,
             units: None,
+            units_by_package: None,
+            file_package: None,
+            manifest_text: None,
         }
+    }
+
+    /// Wire the manifest-text channel. Called only by the manifest-extraction pass — see the
+    /// field's own doc for why reading another file is sound there and nowhere else.
+    pub fn with_manifest_text(mut self, read: &'a ManifestTextChannel<'a>) -> Self {
+        self.manifest_text = Some(read);
+        self
+    }
+
+    /// The text of another manifest, when this context has the channel and `path` is a known
+    /// file. `None` otherwise — during import resolution it is *always* `None`, and an adapter
+    /// must treat that as "I cannot see it", never as "it is empty".
+    ///
+    /// Restricted to the known-file set on purpose: the same containment `files_under` and
+    /// every other query here obey, so a manifest cannot become a way to read arbitrary paths.
+    pub fn read_manifest(&self, path: &ProjectPath) -> Option<String> {
+        if !self.contains(path) {
+            return None;
+        }
+        self.manifest_text.and_then(|read| read(path))
     }
 
     pub fn with_declared_dependencies(mut self, deps: &'a rustc_hash::FxHashSet<SmolStr>) -> Self {
@@ -899,6 +1227,21 @@ impl<'a> ResolveCtx<'a> {
         units: &'a rustc_hash::FxHashMap<SmolStr, Vec<ProjectPath>>,
     ) -> Self {
         self.units = Some(units);
+        self
+    }
+
+    /// Package-partitioned units plus the file→package lookup they're keyed by. Optional: a
+    /// context without them resolves units repo-globally, exactly as before.
+    pub fn with_package_units(
+        mut self,
+        units_by_package: &'a rustc_hash::FxHashMap<
+            u32,
+            rustc_hash::FxHashMap<SmolStr, Vec<ProjectPath>>,
+        >,
+        file_package: &'a rustc_hash::FxHashMap<ProjectPath, u32>,
+    ) -> Self {
+        self.units_by_package = Some(units_by_package);
+        self.file_package = Some(file_package);
         self
     }
 
@@ -923,11 +1266,43 @@ impl<'a> ResolveCtx<'a> {
 
     /// Every known file declaring `unit` (empty when none do, or `with_units` was never
     /// called). Sorted by path — deterministic which entry a caller picking `.first()` gets.
+    ///
+    /// Repo-global, so it cannot tell two same-named units in different packages apart. Prefer
+    /// [`Self::unit_files_from`], which can.
     pub fn unit_files(&self, unit: &str) -> &'a [ProjectPath] {
         self.units
             .and_then(|u| u.get(unit))
             .map(Vec::as_slice)
             .unwrap_or(&[])
+    }
+
+    /// [`Self::unit_files`] resolved from the perspective of the importing file: candidates in
+    /// the importer's OWN package win, and only when it has none does the repo-global set
+    /// answer.
+    ///
+    /// Both halves are load-bearing. Preferring the importer's package is what stops a module
+    /// from binding an import to a same-named package in an unrelated sibling module — the
+    /// resolver picks `.first()` by path order, so `retrofit/` importing `retrofit2.X` could
+    /// land in `android-test/`, inventing a cross-module edge that `cyclic` then reports as a
+    /// package cycle neither module's source supports. Falling back is what keeps *genuine*
+    /// cross-module imports working: a package that genuinely lives only in a sibling module
+    /// (guava's modules really do import each other) has no local candidate, and the global
+    /// set is the right answer there. Reachability was always insulated from the choice —
+    /// same-unit fallback makes every file in a unit reachable whichever one an edge lands on
+    /// — but the literal edge is evidence, and cycle detection reads it as such.
+    pub fn unit_files_from(&self, unit: &str, from: &ProjectPath) -> &'a [ProjectPath] {
+        let local = self
+            .file_package
+            .and_then(|fp| fp.get(from))
+            .zip(self.units_by_package)
+            .and_then(|(pkg, by_pkg)| by_pkg.get(pkg))
+            .and_then(|units| units.get(unit))
+            .map(Vec::as_slice)
+            .unwrap_or(&[]);
+        if local.is_empty() {
+            return self.unit_files(unit);
+        }
+        local
     }
 
     /// Every known file whose *immediate* directory equals `dir` (`""` = project root) — one
@@ -994,6 +1369,24 @@ pub enum Resolution {
         same_package: bool,
     },
     Stdlib,
+    /// **The adapter understood this specifier as a path into the project and no file is
+    /// there.** A defect the `unresolved` analysis reports — a broken path, or a rename that
+    /// missed this call site.
+    ///
+    /// Say `Missing` only when the miss is a *complete* answer: every candidate this language's
+    /// resolution rules allow was tried and none exists. When the specifier's shape is one this
+    /// adapter does not model — a self-reference `imports` map, an inline module's `super::`,
+    /// an alias a build tool defines elsewhere — say [`Resolution::Unresolved`] instead. The
+    /// distinction cannot be made in the core, which sees only that no edge came back, and
+    /// getting it wrong here is an error-severity accusation about working code.
+    ///
+    /// Adopting it is per-adapter and optional: an adapter whose resolver cannot yet tell the
+    /// two apart keeps returning `Unresolved` and simply reports nothing, which is the safe
+    /// direction (RFC 0012 §2 — degrade toward keep-alive, never toward accusation).
+    Missing,
+    /// No answer. The specifier's shape is not one this adapter resolves, or the information it
+    /// would need lives somewhere the adapter does not read. Says nothing about the code, and
+    /// produces no finding.
     Unresolved,
 }
 
@@ -1009,8 +1402,13 @@ pub trait LanguageAdapter: Send + Sync {
 
     /// Is this path one of this adapter's manifest files (`package.json`, …)? Manifests are
     /// claimed separately from source (`claim`) — they never get a [`FileClaim`]/language of
-    /// their own ("manifests are not claimed"), only manifest facts.
-    fn claim_manifest(&self, path: &ProjectPath) -> bool;
+    /// their own ("manifests are not claimed"), only manifest facts. Defaults to `false` —
+    /// mirrors the WASM v1 ABI's own scope cut (no manifest extraction over that boundary
+    /// yet): a language with no manifest concept of its own (CSS, JSON) needs no override at
+    /// all, rather than a stub that only exists to satisfy the trait.
+    fn claim_manifest(&self, _path: &ProjectPath) -> bool {
+        false
+    }
 
     /// Parse one file and extract every language-defined fact. Must not fail on broken code:
     /// return partial facts + diagnostics.
@@ -1019,8 +1417,36 @@ pub trait LanguageAdapter: Send + Sync {
     /// Parse a manifest into declared dependencies, package identity/topology, and roots.
     /// `ctx` lets the adapter resolve entry-point specifiers (main/module/exports/bin) against
     /// the known-files index itself — the same Node-resolution knowledge `resolve()` already
-    /// owns, not something the core can generically guess at.
-    fn extract_manifest(&self, file: &SourceFile<'_>, ctx: &ResolveCtx<'_>) -> ManifestFacts;
+    /// owns, not something the core can generically guess at. Defaults to
+    /// `ManifestFacts::default()` (empty) — unreachable in practice whenever
+    /// [`claim_manifest`](Self::claim_manifest) keeps its own `false` default, kept only for
+    /// trait completeness (same posture the WASM bridge documents at its own call site).
+    fn extract_manifest(&self, _file: &SourceFile<'_>, _ctx: &ResolveCtx<'_>) -> ManifestFacts {
+        ManifestFacts::default()
+    }
+
+    /// Does this manifest declare a dependency that an activation rule naming `query` means?
+    ///
+    /// Plugin and adapter activation asks this — `ActivationRule::ManifestDependency` — and the
+    /// core cannot answer it, because how a coordinate is SPELLED is ecosystem knowledge. npm's
+    /// name is the literal key a plugin author would write. Cargo treats `-` and `_` as
+    /// interchangeable, so `serde-json` must find `serde_json`. A Maven or Gradle coordinate is
+    /// `groupId:artifactId`, while a plugin author naturally writes the artifact id alone —
+    /// nobody types `org.springframework.boot:spring-boot-starter-thymeleaf` into a rule.
+    ///
+    /// The default is exact equality over this manifest's own dependencies and the shared
+    /// version pool ([`ManifestFacts::workspace_dependencies`] — a virtual workspace root
+    /// declares its dependencies only there). It is correct wherever the spelling an author
+    /// writes IS the spelling the manifest carries, which is why most adapters need no
+    /// override: like every other rung of the authoring surface, this is a dynamic offered to
+    /// languages that need it, not an obligation on every one.
+    fn declares_dependency(&self, facts: &ManifestFacts, query: &str) -> bool {
+        facts
+            .dependencies
+            .iter()
+            .chain(&facts.workspace_dependencies)
+            .any(|d| d.name == query)
+    }
 
     /// Resolve an import specifier to a concrete target. Called by the core's resolution
     /// driver — including for specifiers emitted by *other* adapters.

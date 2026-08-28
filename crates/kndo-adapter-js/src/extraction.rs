@@ -1,7 +1,7 @@
 //! Declaration & import extraction.
 //!
 //! Field names below are verified against the real tree-sitter-typescript grammar (not
-//! assumed) — see `kndo_adapter_toolkit::parsing::introspect` for the verifying probe.
+//! assumed) — see `crate::parsing::introspect` for the verifying probe.
 //! Scope: top-level declarations (functions, classes, interfaces,
 //! type aliases, enums + members, const/let), ESM static imports, `export ... from`
 //! re-exports (barrels — `handle_reexport_statement`), and CJS (`require("literal")` at any
@@ -20,10 +20,10 @@
 //! the escape wildcard, only precision is lost), cyclomatic complexity, fingerprints,
 //! `export { a as b }` with no `from` clause (a local re-export, not a barrel pass-through).
 
-use kndo_adapter_toolkit::parsing::span;
+use kndo_adapter_toolkit::parsing::{span, text};
 use kndo_core::adapter::{
-    Declaration, Diagnostic, DiagnosticLevel, DynamicUse, FileFacts, ImportBinding, ImportKind,
-    RawImport, RawReference, Span, StringCallArg, VisibilityLevel,
+    AdapterDiagnostic, Declaration, DiagnosticLevel, DynamicUse, FileFacts, ImportBinding,
+    ImportKind, RawImport, RawReference, Span, StringCallArg, VisibilityLevel,
 };
 use kndo_core::vocab::{Confidence, RefKind, SymbolKind};
 use smol_str::SmolStr;
@@ -53,10 +53,9 @@ pub fn extract(path: &str, content: &[u8]) -> FileFacts {
         out.detected_origin = Some(kndo_core::vocab::FileOrigin::Generated);
     }
 
-    let Some(tree) = kndo_adapter_toolkit::parsing::parse(content, tsx) else {
-        out.diagnostics.push(Diagnostic {
+    let Some(tree) = crate::parsing::parse(content, tsx) else {
+        out.diagnostics.push(AdapterDiagnostic {
             level: DiagnosticLevel::Warn,
-            path: None, // filled in by the core when merging FileFacts into RunResult
             message: "failed to initialize the tree-sitter parser".into(),
             span: None,
         });
@@ -67,9 +66,8 @@ pub fn extract(path: &str, content: &[u8]) -> FileFacts {
     if root.has_error() {
         // Contract: adapters must not fail on broken code — tree-sitter still
         // produces a usable partial tree, so we keep walking and just flag it.
-        out.diagnostics.push(Diagnostic {
+        out.diagnostics.push(AdapterDiagnostic {
             level: DiagnosticLevel::Warn,
-            path: None,
             message: "syntax errors in file — extraction is best-effort".into(),
             span: None,
         });
@@ -128,10 +126,6 @@ pub fn extract(path: &str, content: &[u8]) -> FileFacts {
         &mut out.suppressions,
     );
     out
-}
-
-fn text<'a>(node: Node, src: &'a [u8]) -> &'a str {
-    std::str::from_utf8(&src[node.byte_range()]).unwrap_or("")
 }
 
 fn visibility(exported: bool) -> VisibilityLevel {
@@ -211,24 +205,42 @@ const METRICS_SYNTAX: kndo_adapter_toolkit::metrics::MetricsSyntax =
         ],
         literal_kinds: &["string", "template_string", "number", "regex"],
         skip_kinds: &["comment"],
+        // Each of these becomes its own shape when it is substantial enough to carry clone
+        // evidence by itself; a small one stays an expression inside its owner.
+        // A bare `function` is NOT here: in tree-sitter-typescript that name belongs to the
+        // unnamed keyword token, and only `function_expression` is the node.
+        nested_callable_kinds: &[
+            "arrow_function",
+            "function_expression",
+            "generator_function",
+        ],
+        // A body that ONLY constructs a value carries no clone evidence: normalization erases
+        // the field values (the whole authored content) and keeps the field list, which the
+        // type declaration dictates. `object` is the object literal; `new_expression` a
+        // constructor call.
+        construction_kinds: &["object", "new_expression"],
     };
 
-/// Default granularity gate for clone fingerprints (mirrors the Go adapter's constant).
-const MIN_CLONE_TOKENS: usize = 50;
-
-/// One callable's [`kndo_core::adapter::FunctionMetrics`], over its *body* — the part that
+/// One callable's `FunctionMetrics`, over its *body* — the part that
 /// gets copy-pasted. Used for named function declarations and for callables bound to a
 /// `const`/`let` (`const f = (x) => …`), JS's other ordinary function-definition shape.
-fn push_function_metrics(out: &mut FileFacts, symbol: &str, body: Node) {
-    let shape =
-        kndo_adapter_toolkit::metrics::function_shape(body, &METRICS_SYNTAX, MIN_CLONE_TOKENS);
-    out.functions.push(kndo_core::adapter::FunctionMetrics {
-        symbol: SmolStr::new(symbol),
-        cyclomatic: shape.cyclomatic,
-        loc: shape.loc,
-        token_count: shape.token_count as u32,
-        fingerprints: shape.fingerprints,
-    });
+fn push_function_metrics(out: &mut FileFacts, symbol: &str, decl_span: Span, body: Node) {
+    kndo_adapter_toolkit::metrics::push_function_metrics(
+        out,
+        symbol,
+        decl_span,
+        body,
+        &METRICS_SYNTAX,
+        kndo_adapter_toolkit::metrics::MIN_CLONE_TOKENS,
+    );
+}
+
+/// Whether an `export_statement` carries the `default` keyword — an anonymous token child,
+/// which is what separates `export default function f(){}` from `export function f(){}`.
+fn has_default_token(node: Node) -> bool {
+    let mut cursor = node.walk();
+    let found = node.children(&mut cursor).any(|c| c.kind() == "default");
+    found
 }
 
 /// Handles a declaration whose only shape variance is its `name` field falling back to
@@ -245,7 +257,7 @@ fn handle_named(node: Node, src: &[u8], exported: bool, out: &mut FileFacts, kin
     };
     if matches!(kind, SymbolKind::Function) {
         if let Some(body) = node.child_by_field_name("body") {
-            push_function_metrics(out, &name, body);
+            push_function_metrics(out, &name, span(node), body);
         }
     }
     out.declarations.push(Declaration {
@@ -258,6 +270,9 @@ fn handle_named(node: Node, src: &[u8], exported: bool, out: &mut FileFacts, kin
         implicitly_invoked: false,
         nested_scope: false,
         visibility_inherited: false,
+        visible_in_unit: None,
+        implements: None,
+        markers: Vec::new(),
         signature_span,
     });
 }
@@ -265,6 +280,21 @@ fn handle_named(node: Node, src: &[u8], exported: bool, out: &mut FileFacts, kin
 fn handle_export_statement(node: Node, src: &[u8], out: &mut FileFacts) {
     if let Some(decl) = node.child_by_field_name("declaration") {
         handle_statement(decl, src, true, out);
+        // `export default function foo() {}` / `export default class Foo {}`: the declaration
+        // keeps its OWN name, but a consumer writes `import foo from './x.js'`, whose binding
+        // asks the target for `default`. Without the alias that lookup finds nothing, the
+        // reference never binds, and the function reads `unused` however many files call it —
+        // axios's `mergeConfig`, called from five, is the shape. The `default` token is the
+        // structural discriminator (`export function other()` has no such child).
+        //
+        // Anonymous defaults need no alias: `handle_named` already names them `default`, which
+        // is exactly what the consumer looks up. The CJS half of this contract
+        // (`module.exports = local`) has always recorded it; ESM's named default did not.
+        if has_default_token(node) {
+            if let Some(name) = decl.child_by_field_name("name") {
+                out.default_export_alias = Some(SmolStr::new(text(name, src)));
+            }
+        }
         return;
     }
     if let Some(value) = node.child_by_field_name("value") {
@@ -286,6 +316,9 @@ fn handle_export_statement(node: Node, src: &[u8], out: &mut FileFacts) {
             implicitly_invoked: false,
             nested_scope: false,
             visibility_inherited: false,
+            visible_in_unit: None,
+            implements: None,
+            markers: Vec::new(),
         });
         return;
     }
@@ -307,7 +340,7 @@ fn handle_export_statement(node: Node, src: &[u8], out: &mut FileFacts) {
 /// access isn't reference-resolved here) — the import edge itself is still emitted, which
 /// is what establishes those targets' file-level reachability.
 ///
-/// Verified against the real grammar (`kndo_adapter_toolkit::parsing::introspect::
+/// Verified against the real grammar (`crate::parsing::introspect::
 /// dump_reexport_shapes`): `export type { a } from` (the named-clause form) parses cleanly, but
 /// `export type * from` is a grammar ERROR in tree-sitter-typescript 0.23.2 specifically around
 /// the `type` token in the bare-star form — the `source` field survives regardless, so the
@@ -352,6 +385,7 @@ fn handle_reexport_statement(node: Node, source_node: Node, src: &[u8], out: &mu
         opaque_namespace_use: false,
         module_names_visible: false,
         local_alias: None,
+        reconstructed: false,
     });
 }
 
@@ -399,6 +433,9 @@ fn handle_enum(node: Node, src: &[u8], exported: bool, out: &mut FileFacts) {
         implicitly_invoked: false,
         nested_scope: false,
         visibility_inherited: false,
+        visible_in_unit: None,
+        implements: None,
+        markers: Vec::new(),
     });
 
     let Some(body) = node.child_by_field_name("body") else {
@@ -425,6 +462,9 @@ fn handle_enum(node: Node, src: &[u8], exported: bool, out: &mut FileFacts) {
                 implicitly_invoked: false,
                 nested_scope: false,
                 visibility_inherited: false,
+                visible_in_unit: None,
+                implements: None,
+                markers: Vec::new(),
             });
         }
     }
@@ -467,7 +507,7 @@ fn handle_lexical(node: Node, src: &[u8], exported: bool, out: &mut FileFacts) {
                 "arrow_function" | "function_expression" | "generator_function"
             ) {
                 if let Some(body) = value.child_by_field_name("body") {
-                    push_function_metrics(out, text(name_node, src), body);
+                    push_function_metrics(out, text(name_node, src), span(declarator), body);
                 }
             }
         }
@@ -482,6 +522,9 @@ fn handle_lexical(node: Node, src: &[u8], exported: bool, out: &mut FileFacts) {
             implicitly_invoked: false,
             nested_scope: false,
             visibility_inherited: false,
+            visible_in_unit: None,
+            implements: None,
+            markers: Vec::new(),
         });
     }
 }
@@ -532,6 +575,7 @@ fn handle_import_statement(node: Node, src: &[u8], out: &mut FileFacts) {
         opaque_namespace_use: false,
         module_names_visible: false,
         local_alias: None,
+        reconstructed: false,
     });
 }
 
@@ -722,6 +766,7 @@ fn push_dynamic_import(
         opaque_namespace_use: false,
         module_names_visible: false,
         local_alias: None,
+        reconstructed: false,
     });
 }
 
@@ -883,6 +928,7 @@ fn handle_literal_require(node: Node, string_node: Node, src: &[u8], out: &mut F
         opaque_namespace_use: false,
         module_names_visible: false,
         local_alias: None,
+        reconstructed: false,
     });
 }
 
@@ -1144,6 +1190,9 @@ fn handle_cjs_module_exports(
         implicitly_invoked: false,
         nested_scope: false,
         visibility_inherited: false,
+        visible_in_unit: None,
+        implements: None,
+        markers: Vec::new(),
     });
 }
 
@@ -1193,6 +1242,9 @@ fn handle_cjs_named_export(
         implicitly_invoked: false,
         nested_scope: false,
         visibility_inherited: false,
+        visible_in_unit: None,
+        implements: None,
+        markers: Vec::new(),
     });
 }
 
@@ -1529,7 +1581,7 @@ fn runs_at_class_evaluation(node: Node) -> bool {
 }
 
 /// Every identifier/type-identifier usage in the tree, recursively — the shapes below are
-/// verified against the real grammar (`kndo_adapter_toolkit::parsing::introspect`, the
+/// verified against the real grammar (`crate::parsing::introspect`, the
 /// `dump_reference_shapes`/`dump_binding_shapes`/`dump_import_clause_shapes` probes), not
 /// assumed. Two things a naive "collect every identifier" walk gets wrong, handled explicitly:
 ///
@@ -1677,6 +1729,28 @@ mod tests {
     fn default_export_named_function_keeps_its_name() {
         let d = decls("export default function bar() {}");
         assert_eq!(d, vec![("bar".into(), SymbolKind::Function, true)]);
+    }
+
+    #[test]
+    fn a_named_default_export_records_its_alias() {
+        // `export default function foo(){}` keeps its own name, but a consumer writes
+        // `import foo from './x.js'` and that binding asks the target for `default`. Without
+        // the alias the lookup finds nothing, the reference never binds, and the function
+        // reads `unused` however many files call it — axios's `mergeConfig`, called from five,
+        // is the shape, and three more of its findings were downstream of the same miss.
+        for (src, expected) in [
+            ("export default function bar() {}", Some("bar")),
+            ("export default class Baz {}", Some("Baz")),
+            // Anonymous defaults need no alias: the declaration is already named `default`,
+            // which is exactly what a consumer looks up.
+            ("export default class {}", None),
+            // Not a default export at all — recording an alias here would make every named
+            // export answer a consumer's `default` binding.
+            ("export function other() {}", None),
+        ] {
+            let f = extract("a.js", src.as_bytes());
+            assert_eq!(f.default_export_alias.as_deref(), expected, "{src}");
+        }
     }
 
     #[test]
@@ -2059,7 +2133,7 @@ mod tests {
     fn typed_star_reexport_still_recovers_the_specifier_despite_the_grammar_gap() {
         // `export type *` is a tree-sitter-typescript 0.23.2 grammar ERROR around the `type`
         // token specifically for the bare-star form (verified via
-        // kndo_adapter_toolkit::parsing::introspect::dump_reexport_shapes) — the `source`
+        // crate::parsing::introspect::dump_reexport_shapes) — the `source`
         // field survives regardless, so extraction still recovers the specifier and still
         // flags `type_only`, just alongside the (accurate) syntax-error diagnostic.
         let facts = extract("f.ts", b"export type * from './all-types';");

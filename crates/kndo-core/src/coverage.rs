@@ -193,15 +193,18 @@ mod tests {
 
     #[test]
     fn rebase_strips_the_project_root_from_absolute_keys_only() {
-        let root = std::env::temp_dir().join("kndo-coverage-rebase-test");
-        let _ = std::fs::create_dir_all(&root);
-        let abs = format!("{}/src/a.ts", root.to_string_lossy().replace('\\', "/"));
+        let root = tempfile::tempdir().unwrap();
+        let _ = std::fs::create_dir_all(root.path());
+        let abs = format!(
+            "{}/src/a.ts",
+            root.path().to_string_lossy().replace('\\', "/")
+        );
         let mut sink = CoverageSink::default();
         sink.add_line(ProjectPath(SmolStr::new(&abs)), 2, 1);
         sink.add_line(ProjectPath(SmolStr::new("src/b.ts")), 3, 1); // already relative
         sink.add_line(ProjectPath(SmolStr::new("/elsewhere/c.ts")), 4, 1); // foreign root
         let mut map = sink.into_map();
-        map.rebase(&root);
+        map.rebase(root.path());
         assert!(map
             .function_coverage(&ProjectPath(SmolStr::new("src/a.ts")), span(1, 10))
             .is_some());
@@ -217,14 +220,17 @@ mod tests {
 
     #[test]
     fn rebase_merges_an_absolute_key_into_its_relative_twin() {
-        let root = std::env::temp_dir().join("kndo-coverage-rebase-merge-test");
-        let _ = std::fs::create_dir_all(&root);
-        let abs = format!("{}/src/a.ts", root.to_string_lossy().replace('\\', "/"));
+        let root = tempfile::tempdir().unwrap();
+        let _ = std::fs::create_dir_all(root.path());
+        let abs = format!(
+            "{}/src/a.ts",
+            root.path().to_string_lossy().replace('\\', "/")
+        );
         let mut sink = CoverageSink::default();
         sink.add_line(ProjectPath(SmolStr::new(&abs)), 2, 1);
         sink.add_line(ProjectPath(SmolStr::new("src/a.ts")), 3, 0);
         let mut map = sink.into_map();
-        map.rebase(&root);
+        map.rebase(root.path());
         let cov = map
             .function_coverage(&ProjectPath(SmolStr::new("src/a.ts")), span(1, 10))
             .unwrap();

@@ -21,7 +21,7 @@ framework in a private repo. Three things must work:
 RFC 0003 §4's `activation` rules answer "does *this* plugin apply to *this* project?" but say
 nothing about plugins composing. This RFC adds exactly that, and nothing else. The practical
 author-facing companion (toolchain, project setup, testing shape, maintenance checklist) is
-[docs/plugins/authoring.md](../plugins/authoring.md).
+[docs/src/plugins/authoring.md](../../docs/src/plugins/authoring.md).
 
 ## 2. Identity: the coordinate IS the id (the Go-modules move)
 
@@ -69,6 +69,18 @@ relationship. Declaring one has exactly two effects:
    only the company plugin's own rule. Cycles are harmless (set semantics — no ordering is
    implied, because plugins still never consume each other's output; execution order remains
    the existing sorted-by-id interim rule).
+
+   **This is not a convenience — for the wrapper case it is the only path there is.** A company
+   framework that uses Express internally does not put `express` in its users' manifests; it
+   puts `@company/framework` there. So `kndo:express`'s own
+   `ManifestDependency("express")` rule can *never* fire in such a project, no matter how much
+   Express is really running. Without the implication, that project's Express conventions are
+   unreachable — not degraded, unreachable. Pinned end-to-end, external component naming a
+   built-in, in `crates/kndo/tests/plugin_dependency_implication.rs`, with
+   `examples/kndo-plugin-wrapper-demo` as the real component; the adapter tier's mirror is
+   `adapter_dependency_implication.rs`. Both are named in CLAUDE.md's never-regress list,
+   because no plugin we ship exercises the field and an unused mechanism is the easy one to
+   delete.
 
 Deliberately **one field, not two** ("requires" vs "implies"): since plugins cannot read each
 other's contributions — structurally, `GraphView` exposes only adapter-built facts and sinks go
@@ -174,9 +186,9 @@ that case on the table — not before.
 3. **`kndo plugin install/list/remove`**: the fetch/verify/lockfile machinery of §4 —
    landed, see §4's implementation notes.
 4. **First real built-ins**: `kndo:nextjs` (file-system routing roots, special exports — the
-   flagship, spec: [docs/plugins/nextjs.md](../plugins/nextjs.md)) and `kndo:express`
+   flagship, spec: [docs/src/plugins/nextjs.md](../../docs/src/plugins/nextjs.md)) and `kndo:express`
    (script-launched entry files the import graph can't see — honest spec:
-   [docs/plugins/express.md](../plugins/express.md); express is imperative, so its convention
+   [docs/src/plugins/express.md](../../docs/src/plugins/express.md); express is imperative, so its convention
    surface is real but modest, and `views/**` templates turned out to be *unclaimed* files —
    invisible to the graph, hence producing no findings to suppress — so they're documented out
    of scope rather than covered). Both gated by their own `activation` rules — a built-in

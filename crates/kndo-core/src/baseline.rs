@@ -37,8 +37,8 @@ impl From<&Finding> for BaselineEntry {
     fn from(f: &Finding) -> Self {
         BaselineEntry {
             id: f.id.clone(),
-            category: f.category.clone(),
-            subject_kind: f.subject_kind.clone(),
+            category: f.category.to_string(),
+            subject_kind: f.subject_kind.to_string(),
             path: f.location.path.as_ref().map(|p| p.0.to_string()),
             symbol: f.location.symbol.clone(),
         }
@@ -82,13 +82,6 @@ pub(crate) fn save(root: &Path, entries: &[BaselineEntry]) -> std::io::Result<()
 mod tests {
     use super::*;
 
-    fn tmp(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("kndo-baseline-test-{name}"));
-        let _ = fs::remove_dir_all(&dir);
-        fs::create_dir_all(&dir).unwrap();
-        dir
-    }
-
     fn entry(id: &str) -> BaselineEntry {
         BaselineEntry {
             id: id.to_string(),
@@ -101,40 +94,40 @@ mod tests {
 
     #[test]
     fn missing_file_is_none_not_an_error() {
-        let dir = tmp("missing");
-        assert!(load(&dir).is_none());
-        assert!(!exists(&dir));
+        let dir = tempfile::tempdir().unwrap();
+        assert!(load(dir.path()).is_none());
+        assert!(!exists(dir.path()));
     }
 
     #[test]
     fn round_trips_entries() {
-        let dir = tmp("roundtrip");
-        save(&dir, &[entry("kndo-a"), entry("kndo-b")]).unwrap();
-        assert!(exists(&dir));
-        let loaded = load(&dir).unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        save(dir.path(), &[entry("kndo-a"), entry("kndo-b")]).unwrap();
+        assert!(exists(dir.path()));
+        let loaded = load(dir.path()).unwrap();
         assert_eq!(loaded, vec![entry("kndo-a"), entry("kndo-b")]);
     }
 
     #[test]
     fn empty_baseline_round_trips_as_some_empty_not_none() {
-        let dir = tmp("empty");
-        save(&dir, &[]).unwrap();
-        assert_eq!(load(&dir), Some(vec![]));
+        let dir = tempfile::tempdir().unwrap();
+        save(dir.path(), &[]).unwrap();
+        assert_eq!(load(dir.path()), Some(vec![]));
     }
 
     #[test]
     fn corrupt_file_degrades_to_none_not_a_panic() {
-        let dir = tmp("corrupt");
-        fs::create_dir_all(dir.join(".kndo")).unwrap();
-        fs::write(path(&dir), b"not json at all").unwrap();
-        assert!(load(&dir).is_none());
+        let dir = tempfile::tempdir().unwrap();
+        fs::create_dir_all(dir.path().join(".kndo")).unwrap();
+        fs::write(path(dir.path()), b"not json at all").unwrap();
+        assert!(load(dir.path()).is_none());
     }
 
     #[test]
     fn file_is_human_readable_pretty_json() {
-        let dir = tmp("pretty");
-        save(&dir, &[entry("kndo-a")]).unwrap();
-        let text = fs::read_to_string(path(&dir)).unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        save(dir.path(), &[entry("kndo-a")]).unwrap();
+        let text = fs::read_to_string(path(dir.path())).unwrap();
         assert!(text.contains('\n')); // pretty-printed, not a single minified line
         assert!(text.contains("\"kndo-a\""));
     }

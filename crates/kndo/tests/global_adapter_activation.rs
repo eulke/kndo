@@ -20,23 +20,11 @@ fn workspace_root() -> PathBuf {
         .to_path_buf()
 }
 
-/// A process-unique `--target-dir`, not the demo crate's own shared `target/` — this crate is
-/// built by half a dozen independent test binaries, and `cargo test --workspace`'s default
-/// parallelism can run several of them at once. Cargo's own target-dir lock serializes
-/// concurrent *writers* correctly, but under enough concurrent builder processes a reader has
-/// still been observed to pick up a wrong-shaped artifact — isolating each build eliminates
-/// the shared file entirely rather than trying to out-argue the exact race.
-fn isolated_target_dir() -> PathBuf {
-    let nonce = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .expect("system clock before the epoch")
-        .as_nanos();
-    std::env::temp_dir().join(format!("kndo-wasm-target-{}-{nonce}", std::process::id()))
-}
-
 fn build_adapter_demo_component() -> Vec<u8> {
     let demo_dir = workspace_root().join("examples/kndo-plugin-demo");
-    let target_dir = isolated_target_dir();
+    // A `TempDir`: unique by construction and removed on drop, unwind included —
+    // the hand-rolled pid+nonce name it replaced leaked the whole build tree on panic.
+    let target_dir = tempfile::tempdir().expect("wasm target dir");
     let status = Command::new("cargo")
         .args(["build", "--release", "--target", "wasm32-unknown-unknown"])
         // Cross-target guest build: instrumentation flags from the host environment
@@ -45,16 +33,17 @@ fn build_adapter_demo_component() -> Vec<u8> {
         .env_remove("RUSTFLAGS")
         .env_remove("CARGO_ENCODED_RUSTFLAGS")
         .env_remove("LLVM_PROFILE_FILE")
-        .env("CARGO_TARGET_DIR", &target_dir)
+        .env("CARGO_TARGET_DIR", target_dir.path())
         .current_dir(&demo_dir)
         .status()
         .expect("failed to invoke cargo for examples/kndo-plugin-demo");
     assert!(status.success(), "demo adapter guest build failed");
 
-    let core_wasm_path = target_dir.join("wasm32-unknown-unknown/release/kndo_plugin_demo.wasm");
+    let core_wasm_path = target_dir
+        .path()
+        .join("wasm32-unknown-unknown/release/kndo_plugin_demo.wasm");
     let core_wasm = std::fs::read(&core_wasm_path)
         .unwrap_or_else(|e| panic!("reading {}: {e}", core_wasm_path.display()));
-    let _ = std::fs::remove_dir_all(&target_dir);
 
     wit_component::ComponentEncoder::default()
         .module(&core_wasm)
@@ -84,7 +73,7 @@ fn a_globally_installed_adapter_only_activates_when_its_rule_matches() {
     let overrides = kndo_core::engine::ConfigOverrides {
         use_cache: false,
         threads: Some(1),
-        min_confidence: None,
+        ..kndo_core::engine::ConfigOverrides::default()
     };
 
     // Scenario 1: no `*.kdemo-enable` marker — the globally installed adapter's own activation
@@ -97,9 +86,7 @@ fn a_globally_installed_adapter_only_activates_when_its_rule_matches() {
     );
     let mut engine_without =
         kndo::open(project_without.path(), overrides.clone()).expect("kndo::open (inactive)");
-    let result_without = engine_without.check(kndo_core::engine::CheckRequest {
-        mode: kndo_core::engine::RunMode::Full,
-    });
+    let result_without = engine_without.check(kndo_core::engine::RunMode::Full);
     assert!(
         result_without.findings.is_empty(),
         "an unclaimed .kdemo file must produce no findings at all: {:?}",
@@ -124,9 +111,7 @@ fn a_globally_installed_adapter_only_activates_when_its_rule_matches() {
         "with the marker file present the globally installed adapter must activate"
     );
     let mut engine_with = kndo::open(project_with.path(), overrides).expect("kndo::open (active)");
-    let result_with = engine_with.check(kndo_core::engine::CheckRequest {
-        mode: kndo_core::engine::RunMode::Full,
-    });
+    let result_with = engine_with.check(kndo_core::engine::RunMode::Full);
     let unused_symbols: Vec<&str> = result_with
         .findings
         .iter()
@@ -141,7 +126,9 @@ fn a_globally_installed_adapter_only_activates_when_its_rule_matches() {
     assert_eq!(candidates_with.len(), 1);
     assert_eq!(
         candidates_with[0].active,
-        Some(kndo::ActivationReason::RuleMatched)
+        Some(kndo::ActivationReason::RuleMatched(
+            kndo::plugin::ActivationRule::FileExists("*.kdemo-enable".into())
+        ))
     );
 
     // Claim priority: project-local > global > compiled-in. Drop a second copy of the same

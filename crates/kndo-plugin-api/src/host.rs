@@ -11,9 +11,9 @@ use smol_str::SmolStr;
 use crate::engine::{shared_engine, FUEL_PER_CALL};
 
 use kndo_core::adapter::{
-    AdapterDescriptor, CyclePolicy, CycleTolerance, Declaration, Diagnostic, DiagnosticLevel,
-    FileClaim, FileFacts, ImportSpec, LanguageAdapter, ManifestFacts, ProjectPath, RawReference,
-    RawRoot, RawRootTarget, Resolution, ResolveCtx, SourceFile, Span,
+    AdapterDescriptor, AdapterDiagnostic, CyclePolicy, CycleTolerance, Declaration,
+    DiagnosticLevel, FileClaim, FileFacts, ImportSpec, LanguageAdapter, ManifestFacts, ProjectPath,
+    RawReference, RawRoot, RawRootTarget, Resolution, ResolveCtx, SourceFile, Span,
 };
 use kndo_core::vocab::{FileClass, FileOrigin, FileRole, RefKind, RootKind, SymbolKind};
 
@@ -45,7 +45,7 @@ impl fmt::Display for LoadError {
 impl std::error::Error for LoadError {}
 
 struct GuestState {
-    store: wasmtime::Store<()>,
+    store: wasmtime::Store<crate::engine::NoImports>,
     bindings: Adapter,
 }
 
@@ -92,7 +92,7 @@ impl WasmAdapter {
     /// component when every pooled instance is checked out by a concurrent call. The pool
     /// therefore grows to the actual concurrency level and no further.
     fn checkout(&self) -> Result<GuestState, LoadError> {
-        if let Some(state) = self.pool.lock().expect("wasm adapter pool poisoned").pop() {
+        if let Some(state) = crate::engine::lock_recovering(&self.pool).pop() {
             return Ok(state);
         }
         let state = instantiate_bindings(&self.component)?;
@@ -101,10 +101,7 @@ impl WasmAdapter {
     }
 
     fn checkin(&self, state: GuestState) {
-        self.pool
-            .lock()
-            .expect("wasm adapter pool poisoned")
-            .push(state);
+        crate::engine::lock_recovering(&self.pool).push(state);
     }
 
     /// How many guest instances this adapter has ever instantiated — 1 until concurrent
@@ -142,7 +139,8 @@ fn instantiate_bindings(
     component: &wasmtime::component::Component,
 ) -> Result<GuestState, LoadError> {
     let engine = shared_engine();
-    let mut store = wasmtime::Store::new(engine, ());
+    let mut store = wasmtime::Store::new(engine, crate::engine::NoImports::new());
+    store.limiter(|data| &mut data.limits);
     store
         .set_fuel(FUEL_PER_CALL)
         .map_err(|e| LoadError::Instantiate(e.to_string()))?;
@@ -175,23 +173,22 @@ fn native_descriptor(raw: w::AdapterDescriptor) -> AdapterDescriptor {
             package_cycles: CycleTolerance::Idiomatic,
         },
         resolves_dependency_usage: false,
+        // `true`, and fixed: the v1 adapter world has no way to say otherwise, and `true` is the
+        // direction that cannot silence anything. A WASM adapter whose files declare symbols is
+        // judged like any other's; one that declares nothing stays reportable, which is the
+        // honest reading of "this world never told us". A later world can carry the real answer.
+        declares_units_of_testing: true,
         // Not on the wire: the WIT descriptor record predates the field, and a WASM
         // adapter without it just forgoes package-relative test-dir promotion. Additive
         // whenever the ABI next revs.
         package_test_dirs: Vec::new(),
+        // No builtin type facts yet: this adapter declares none, and an empty table
+        // simply means the chain resolver has no second tier to consult for it.
+        builtin_member_types: Vec::new(),
     }
 }
 
-fn from_wit_activation_rule(rule: w::ActivationRule) -> kndo_core::plugin::ActivationRule {
-    match rule {
-        w::ActivationRule::FileExists(glob) => {
-            kndo_core::plugin::ActivationRule::FileExists(SmolStr::new(&glob))
-        }
-        w::ActivationRule::ManifestDependency(name) => {
-            kndo_core::plugin::ActivationRule::ManifestDependency(SmolStr::new(&name))
-        }
-    }
-}
+wit_activation_rule_conversion!(w);
 
 impl LanguageAdapter for WasmAdapter {
     fn descriptor(&self) -> AdapterDescriptor {
@@ -231,7 +228,7 @@ impl LanguageAdapter for WasmAdapter {
     fn extract(&self, file: &SourceFile<'_>) -> FileFacts {
         let mut state = match self.checkout() {
             Ok(state) => state,
-            Err(e) => return error_facts(&self.descriptor.id, file.path, &e.to_string()),
+            Err(e) => return error_facts(&self.descriptor.id, &e.to_string()),
         };
         let _ = state.store.set_fuel(FUEL_PER_CALL);
 
@@ -248,7 +245,6 @@ impl LanguageAdapter for WasmAdapter {
             // Trapped/exhausted instance dropped, not pooled (same reasoning as `claim`).
             Err(e) => error_facts(
                 &self.descriptor.id,
-                file.path,
                 &format!("exceeded its call budget or trapped: {e}"),
             ),
         }
@@ -269,12 +265,13 @@ impl LanguageAdapter for WasmAdapter {
 }
 
 /// The conservative empty result plus a diagnostic — one misbehaving external adapter must
-/// not take down `kndo check` for every other language in the project.
-fn error_facts(adapter_id: &str, path: &ProjectPath, detail: &str) -> FileFacts {
+/// not take down `kndo check` for every other language in the project. No path to attribute —
+/// same as every other adapter's own diagnostics, the core fills that in from the file being
+/// extracted when it ingests `FileFacts`.
+fn error_facts(adapter_id: &str, detail: &str) -> FileFacts {
     let mut facts = FileFacts::default();
-    facts.diagnostics.push(Diagnostic {
+    facts.diagnostics.push(AdapterDiagnostic {
         level: DiagnosticLevel::Warn,
-        path: Some(path.clone()),
         message: format!("external adapter '{adapter_id}' {detail}"),
         span: None,
     });
@@ -391,6 +388,13 @@ fn from_wit_facts(facts: w::FileFacts) -> FileFacts {
             implicitly_invoked: false,
             nested_scope: false,
             visibility_inherited: false,
+            visible_in_unit: None,
+            // A WASM adapter's v1 `declaration` record has no trait/protocol field, so a
+            // third-party adapter cannot report the fact yet. `None` is the same conservative
+            // v1 cut every optional field above takes, and it degrades exactly the right way:
+            // a convention plugin marks nothing rather than marking the wrong thing.
+            implements: None,
+            markers: Vec::new(),
         })
         .collect();
 
@@ -424,12 +428,11 @@ fn from_wit_facts(facts: w::FileFacts) -> FileFacts {
     let diagnostics = facts
         .diagnostics
         .into_iter()
-        .map(|d| Diagnostic {
+        .map(|d| AdapterDiagnostic {
             level: match d.level {
                 w::DiagnosticLevel::Warn => DiagnosticLevel::Warn,
                 w::DiagnosticLevel::Info => DiagnosticLevel::Info,
             },
-            path: None,
             message: d.message,
             span: d.span.map(from_wit_span),
         })

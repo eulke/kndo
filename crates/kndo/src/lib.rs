@@ -13,13 +13,25 @@
 //! (feature-gated builds).
 
 pub use kndo_core::{
-    adapter, analysis, cache, coverage, discovery, engine, graph, plugin, query, query_envelope,
-    vocab,
+    adapter, analysis, config, coverage, engine, plugin, query, query_envelope, vocab,
+};
+
+// The frontend facade, re-exported at this crate's root exactly as `kndo-core` exports it at
+// its own — `kndo::Engine`, not `kndo::engine::Engine`. `graph`/`cache`/`discovery` are
+// deliberately not re-exported here: nothing outside a handful of `kndo-core`-internal tests
+// and this crate's own patch-equivalence test needs them, and that test now depends on
+// `kndo-core` directly instead of routing through this crate's surface.
+pub use kndo_core::plugin::ActivationReason;
+pub use kndo_core::{
+    sort_findings_for_display, BaselineOp, BaselineResult, Budget, BudgetRule, BudgetVerdict,
+    Category, Confidence, ConfigOverrides, Delta, DeltaOrigin, Diagnostic, DiagnosticLevel,
+    DoctorReport, Engine, EngineError, Finding, Group, Location, ProjectPath, QueryFlags,
+    QueryRequest, QueryResult, ResultEntry, RunMode, RunResult, Severity, SkipSpec, SkipSpecError,
+    SubjectKind, SuppressedSummary, Verb, KNDO_VERSION, SCHEMA_VERSION,
 };
 
 use kndo_core::adapter::LanguageAdapter;
-use kndo_core::engine::{ConfigOverrides, Engine, EngineError};
-use kndo_core::plugin::Plugin;
+use kndo_core::plugin::{Plugin, RegisteredPlugin};
 use std::path::Path;
 
 /// `kndo plugin install/list/remove` — the registry-less installer over the
@@ -64,6 +76,8 @@ pub fn default_adapters() -> Vec<Box<dyn LanguageAdapter>> {
         adapters.push(Box::new(kndo_adapter_json::JsonAdapter));
         #[cfg(feature = "css")]
         adapters.push(Box::new(kndo_adapter_css::CssAdapter));
+        #[cfg(feature = "html")]
+        adapters.push(Box::new(kndo_adapter_html::HtmlAdapter));
         adapters
     }
 }
@@ -94,6 +108,18 @@ pub fn default_plugins() -> Vec<Box<dyn Plugin>> {
         plugins.push(Box::new(kndo_plugin_express::ExpressPlugin));
         #[cfg(feature = "plugin-serde")]
         plugins.push(Box::new(kndo_plugin_serde::SerdePlugin));
+        #[cfg(feature = "plugin-info-plist")]
+        plugins.push(Box::new(kndo_plugin_info_plist::InfoPlistPlugin));
+        #[cfg(feature = "plugin-thymeleaf")]
+        plugins.push(Box::new(kndo_plugin_thymeleaf::ThymeleafPlugin));
+        #[cfg(feature = "plugin-libsass")]
+        plugins.push(Box::new(kndo_plugin_libsass::LibsassMavenPlugin));
+        #[cfg(feature = "plugin-uikit")]
+        plugins.push(Box::new(kndo_plugin_uikit::UikitPlugin));
+        #[cfg(feature = "plugin-rkyv")]
+        plugins.push(Box::new(kndo_plugin_rkyv::RkyvPlugin));
+        #[cfg(feature = "plugin-wasmtime")]
+        plugins.push(Box::new(kndo_plugin_wasmtime::WasmtimePlugin));
         plugins
     }
 }
@@ -114,20 +140,6 @@ pub enum PluginSource {
     Builtin,
     ProjectLocal,
     Global,
-}
-
-/// Why a plugin is active for this project — the doctor-visible answer to "why is this
-/// running?", dependency implication chains included.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ActivationReason {
-    /// Dropped in `.kndo/plugins/` — presence is the opt-in.
-    ProjectLocal,
-    /// A built-in with no activation rules — always on.
-    BuiltinAlwaysOn,
-    /// One of its own `activation` rules matched the project.
-    RuleMatched,
-    /// Activated because the named (active) plugin lists it in `dependencies`.
-    ImpliedBy(String),
 }
 
 /// One plugin the composition layer considered — active or not — with everything `kndo doctor`
@@ -172,7 +184,7 @@ pub fn plugin_resolution(root: &Path) -> PluginResolution {
 /// closed over `dependencies` implication as a fixpoint. Built-ins with non-empty `activation`
 /// are gated exactly like global candidates — a built-in convention plugin must never run (or
 /// cost the cache bypass) on a project that doesn't match it.
-fn compose_plugins(root: &Path) -> (Vec<Box<dyn Plugin>>, PluginResolution) {
+fn compose_plugins(root: &Path) -> (Vec<RegisteredPlugin>, PluginResolution) {
     #[cfg(feature = "plugin-activation")]
     {
         let candidates = collect_candidates(root);
@@ -193,7 +205,12 @@ fn compose_plugins(root: &Path) -> (Vec<Box<dyn Plugin>>, PluginResolution) {
         let plugins = candidates
             .into_iter()
             .zip(active)
-            .filter_map(|((plugin, _), reason)| reason.map(|_| plugin))
+            .filter_map(|((plugin, _), reason)| {
+                reason.map(|activated_by| RegisteredPlugin {
+                    plugin,
+                    activated_by,
+                })
+            })
             .collect();
         (plugins, resolution)
     }
@@ -205,15 +222,23 @@ fn compose_plugins(root: &Path) -> (Vec<Box<dyn Plugin>>, PluginResolution) {
         // because every gated built-in's feature (`plugin-nextjs`/`plugin-express`) implies
         // `plugin-activation`, so the only built-ins that can appear here are the coverage
         // ingesters (always-on by contract, and they declare `mutates_graph() == false`).
-        let plugins = default_plugins();
+        let plugins: Vec<RegisteredPlugin> = default_plugins()
+            .into_iter()
+            .map(|plugin| RegisteredPlugin {
+                plugin,
+                activated_by: ActivationReason::AlwaysOn,
+            })
+            .collect();
+        // The report is derived from the registered set, not from a second `default_plugins()`
+        // call: what ran and what is reported as having run are one list.
         let resolution = PluginResolution {
             plugins: plugins
                 .iter()
                 .map(|p| {
                     resolved_plugin(
-                        &p.descriptor(),
+                        &p.plugin.descriptor(),
                         PluginSource::Builtin,
-                        Some(ActivationReason::BuiltinAlwaysOn),
+                        Some(p.activated_by.clone()),
                     )
                 })
                 .collect(),
@@ -366,14 +391,15 @@ fn compose_adapters(root: &Path) -> (Vec<Box<dyn LanguageAdapter>>, AdapterResol
                 dependencies: d.dependencies.iter().map(|c| c.to_string()).collect(),
             })
             .collect();
+        let activation_ctx = activation::ActivationCtx::new(root);
         let mut active: Vec<Option<ActivationReason>> = descriptors
             .iter()
             .zip(&sources)
             .map(|(d, source)| match source {
-                AdapterSource::ProjectLocal => Some(ActivationReason::ProjectLocal),
-                AdapterSource::Builtin => Some(ActivationReason::BuiltinAlwaysOn),
-                AdapterSource::Global => activation::activates(&d.activation, root)
-                    .then_some(ActivationReason::RuleMatched),
+                AdapterSource::ProjectLocal => Some(ActivationReason::Registered),
+                AdapterSource::Builtin => Some(ActivationReason::AlwaysOn),
+                AdapterSource::Global => activation::activates(&d.activation, &activation_ctx)
+                    .map(|rule| ActivationReason::RuleMatched(rule.clone())),
             })
             .collect();
         activation::imply_fixpoint(&identities, &mut active);
@@ -416,7 +442,7 @@ fn compose_adapters(root: &Path) -> (Vec<Box<dyn LanguageAdapter>>, AdapterResol
                 resolved_adapter(
                     &a.descriptor(),
                     AdapterSource::Builtin,
-                    Some(ActivationReason::BuiltinAlwaysOn),
+                    Some(ActivationReason::AlwaysOn),
                 )
             })
             .collect();
@@ -552,8 +578,11 @@ fn wasm_components(dir: &Path) -> Vec<std::path::PathBuf> {
 /// machinery, which is why it sits behind `plugin-activation` rather than `external-adapters`.
 #[cfg(feature = "plugin-activation")]
 mod activation {
+    use kndo_core::adapter::{LanguageAdapter, ManifestFacts, ProjectPath, ResolveCtx, SourceFile};
     use kndo_core::plugin::ActivationRule;
-    use std::path::Path;
+    use smol_str::SmolStr;
+    use std::path::{Path, PathBuf};
+    use std::sync::OnceLock;
 
     /// Overridable via `KNDO_PLUGIN_DIR` (tests, and any user who wants a non-default location);
     /// otherwise `<XDG data dir>/kndo/plugins` — `~/.local/share/kndo/plugins` on Linux,
@@ -569,11 +598,107 @@ mod activation {
         dirs::data_dir().map(|d| d.join("kndo").join("plugins"))
     }
 
-    /// A plugin with no activation rules never self-activates from the global directory — an
-    /// empty list means "no known structural signal," not "always on" (zero-false-positive
-    /// discipline: silence over a guess). Otherwise, any single matching rule is enough.
-    pub(crate) fn activates(rules: &[ActivationRule], root: &Path) -> bool {
-        !rules.is_empty() && rules.iter().any(|rule| matches(rule, root))
+    /// The first of `rules` that matches this project, or `None`. A component with no
+    /// activation rules never self-activates from the global directory — an empty list means
+    /// "no known structural signal," not "always on" (zero-false-positive discipline: silence
+    /// over a guess). Otherwise, any single matching rule is enough, and *which* one it was is
+    /// the answer `run.plugins[].activated_by` and `kndo doctor` report: returning the rule
+    /// rather than a bool is what keeps that answer from being re-derived later.
+    pub(crate) fn activates<'a>(
+        rules: &'a [ActivationRule],
+        ctx: &ActivationCtx,
+    ) -> Option<&'a ActivationRule> {
+        rules.iter().find(|rule| matches(rule, ctx))
+    }
+
+    /// Everything an activation rule may consult about a project, with the project's manifests
+    /// read and parsed **at most once** — previously every rule of every candidate re-walked
+    /// the tree and re-parsed every manifest it found.
+    ///
+    /// The adapters here are the compiled-in ones, deliberately. Activation decides which
+    /// OPTIONAL components run, so letting an optional component's own manifest knowledge
+    /// decide that would be a second chicken-and-egg on top of the one this already resolves;
+    /// the built-in set is unconditionally present and cannot depend on the answer.
+    pub(crate) struct ActivationCtx {
+        root: PathBuf,
+        adapters: Vec<Box<dyn LanguageAdapter>>,
+        manifests: OnceLock<Vec<(usize, ManifestFacts)>>,
+    }
+
+    impl ActivationCtx {
+        pub(crate) fn new(root: &Path) -> Self {
+            ActivationCtx {
+                root: root.to_path_buf(),
+                adapters: crate::default_adapters(),
+                manifests: OnceLock::new(),
+            }
+        }
+
+        fn root(&self) -> &Path {
+            &self.root
+        }
+
+        /// Every manifest under the project root, paired with the index of the adapter that
+        /// claims it. Parsed lazily: a project whose plugins all gate on `FileExists` never
+        /// reads a manifest at all.
+        fn manifests(&self) -> &[(usize, ManifestFacts)] {
+            self.manifests.get_or_init(|| self.parse_manifests())
+        }
+
+        fn parse_manifests(&self) -> Vec<(usize, ManifestFacts)> {
+            // The file names to look for come from the adapters themselves rather than a list
+            // here — the list here was `["package.json", "Cargo.toml"]`, which silently made
+            // every JVM, Go and Swift `ManifestDependency` rule unmatchable, and nothing
+            // objected because no shipped plugin gated on one.
+            let names: Vec<String> = self
+                .adapters
+                .iter()
+                .flat_map(|a| a.descriptor().manifest_globs)
+                .filter_map(|g| literal_basename(&g))
+                .collect();
+            let names: Vec<&str> = names.iter().map(String::as_str).collect();
+
+            // Same gitignore-aware walker every analysis uses: a transitive dependency's own
+            // manifest deep in `node_modules` must never activate a plugin the project itself
+            // does not use, and a second hand-rolled walker here would drift from that.
+            let known = rustc_hash::FxHashSet::default();
+            let ctx = ResolveCtx::new(&known);
+            let mut out = Vec::new();
+            for absolute in kndo_core::discovery::find_files_named(&self.root, &names) {
+                let Ok(relative) = absolute.strip_prefix(&self.root) else {
+                    continue;
+                };
+                let path = ProjectPath(SmolStr::new(relative.to_string_lossy().replace('\\', "/")));
+                let Some(index) = self.adapters.iter().position(|a| a.claim_manifest(&path)) else {
+                    continue; // a name some adapter globs but none claims (pnpm-workspace.yaml)
+                };
+                let Ok(content) = std::fs::read(&absolute) else {
+                    continue; // unreadable is silence, never an error: activation must not fail
+                };
+                let file = SourceFile {
+                    path: &path,
+                    content: &content,
+                };
+                out.push((index, self.adapters[index].extract_manifest(&file, &ctx)));
+            }
+            out
+        }
+
+        /// Does any manifest in this project declare `query`, as the adapter that owns that
+        /// manifest's ecosystem understands the name?
+        fn declares_dependency(&self, query: &str) -> bool {
+            self.manifests()
+                .iter()
+                .any(|(adapter, facts)| self.adapters[*adapter].declares_dependency(facts, query))
+        }
+    }
+
+    /// The concrete file name a manifest glob names, or `None` when it names a pattern.
+    /// Every adapter's manifest globs are `**/<literal>` today; a wildcard one would need a
+    /// glob walk rather than a name lookup, so it is skipped here instead of half-matched.
+    fn literal_basename(glob: &str) -> Option<String> {
+        let name = glob.strip_prefix("**/").unwrap_or(glob);
+        (!name.contains(['*', '?', '[', '/'])).then(|| name.to_string())
     }
 
     /// Activation resolution: seed each candidate from its source and its own
@@ -604,7 +729,10 @@ mod activation {
                 dependencies: d.dependencies.iter().map(|c| c.to_string()).collect(),
             })
             .collect();
-        let mut active = seed(descriptors, sources, root);
+        // One context for the whole resolution: the manifests are parsed at most once no
+        // matter how many candidates ask about them.
+        let ctx = ActivationCtx::new(root);
+        let mut active = seed(descriptors, sources, &ctx);
         imply_fixpoint(&identities, &mut active);
         let missing = collect_missing(&identities, &active);
         (active, missing)
@@ -622,20 +750,19 @@ mod activation {
     fn seed(
         descriptors: &[kndo_core::plugin::PluginDescriptor],
         sources: &[crate::PluginSource],
-        root: &Path,
+        ctx: &ActivationCtx,
     ) -> Vec<Option<crate::ActivationReason>> {
         use crate::{ActivationReason, PluginSource};
         descriptors
             .iter()
             .zip(sources)
             .map(|(d, source)| match source {
-                PluginSource::ProjectLocal => Some(ActivationReason::ProjectLocal),
+                PluginSource::ProjectLocal => Some(ActivationReason::Registered),
                 PluginSource::Builtin if d.activation.is_empty() => {
-                    Some(ActivationReason::BuiltinAlwaysOn)
+                    Some(ActivationReason::AlwaysOn)
                 }
-                PluginSource::Builtin | PluginSource::Global => {
-                    activates(&d.activation, root).then_some(ActivationReason::RuleMatched)
-                }
+                PluginSource::Builtin | PluginSource::Global => activates(&d.activation, ctx)
+                    .map(|rule| ActivationReason::RuleMatched(rule.clone())),
             })
             .collect()
     }
@@ -649,7 +776,9 @@ mod activation {
         while changed {
             changed = false;
             for (target, requirer_id) in pending_implications(descriptors, active) {
-                active[target] = Some(crate::ActivationReason::ImpliedBy(requirer_id));
+                active[target] = Some(crate::ActivationReason::ImpliedBy(
+                    requirer_id.as_str().into(),
+                ));
                 changed = true;
             }
         }
@@ -710,10 +839,10 @@ mod activation {
         missing
     }
 
-    fn matches(rule: &ActivationRule, root: &Path) -> bool {
+    fn matches(rule: &ActivationRule, ctx: &ActivationCtx) -> bool {
         match rule {
-            ActivationRule::FileExists(pattern) => file_exists(root, pattern),
-            ActivationRule::ManifestDependency(name) => manifest_declares(root, name),
+            ActivationRule::FileExists(pattern) => file_exists(ctx.root(), pattern),
+            ActivationRule::ManifestDependency(name) => ctx.declares_dependency(name),
         }
     }
 
@@ -725,68 +854,6 @@ mod activation {
         glob::glob(full_pattern).is_ok_and(|mut paths| paths.any(|p| p.is_ok()))
     }
 
-    /// Every `package.json`/`Cargo.toml` anywhere under the project root — not just the root's
-    /// own — using kndo-core's own gitignore-aware walker (`node_modules`, `.kndo/`, etc.
-    /// excluded exactly like every other analysis in this product; a second, hand-rolled walker
-    /// here would risk drifting from that). A monorepo where only one package depends on `react`
-    /// must still activate a `react` plugin — restricting this to the root manifest would
-    /// make every monorepo a false negative, and kndo's monorepo support is not speculative:
-    /// the product resolves per-package topology for real.
-    fn manifest_declares(root: &Path, name: &str) -> bool {
-        kndo_core::discovery::find_files_named(root, &["package.json", "Cargo.toml"])
-            .into_iter()
-            .any(|path| match path.file_name().and_then(|n| n.to_str()) {
-                Some("package.json") => package_json_declares(&path, name),
-                Some("Cargo.toml") => cargo_toml_declares(&path, name),
-                _ => false,
-            })
-    }
-
-    fn package_json_declares(manifest_path: &Path, name: &str) -> bool {
-        const SECTIONS: [&str; 4] = [
-            "dependencies",
-            "devDependencies",
-            "peerDependencies",
-            "optionalDependencies",
-        ];
-        let Ok(content) = std::fs::read_to_string(manifest_path) else {
-            return false;
-        };
-        let Ok(value) = serde_json::from_str::<serde_json::Value>(&content) else {
-            return false;
-        };
-        SECTIONS.iter().any(|section| {
-            value
-                .get(section)
-                .and_then(|v| v.as_object())
-                .is_some_and(|deps| deps.contains_key(name))
-        })
-    }
-
-    fn cargo_toml_declares(manifest_path: &Path, name: &str) -> bool {
-        const SECTIONS: [&str; 3] = ["dependencies", "dev-dependencies", "build-dependencies"];
-        let Ok(content) = std::fs::read_to_string(manifest_path) else {
-            return false;
-        };
-        let Ok(value) = content.parse::<toml::Table>() else {
-            return false;
-        };
-        // Cargo treats `-`/`_` as interchangeable in a crate name — a plugin author
-        // shouldn't have to guess which spelling a project used.
-        let hyphenated = name.replace('_', "-");
-        let underscored = name.replace('-', "_");
-        SECTIONS.iter().any(|section| {
-            value
-                .get(*section)
-                .and_then(|v| v.as_table())
-                .is_some_and(|deps| {
-                    deps.contains_key(name)
-                        || deps.contains_key(&hyphenated)
-                        || deps.contains_key(&underscored)
-                })
-        })
-    }
-
     #[cfg(test)]
     mod tests {
         use super::*;
@@ -795,7 +862,7 @@ mod activation {
         #[test]
         fn no_rules_never_activates() {
             let dir = tempfile::tempdir().unwrap();
-            assert!(!activates(&[], dir.path()));
+            assert!(activates(&[], &ActivationCtx::new(dir.path())).is_none());
         }
 
         #[test]
@@ -803,14 +870,14 @@ mod activation {
             let dir = tempfile::tempdir().unwrap();
             std::fs::write(dir.path().join("next.config.js"), "").unwrap();
             let rules = vec![ActivationRule::FileExists(SmolStr::new("next.config.*"))];
-            assert!(activates(&rules, dir.path()));
+            assert!(activates(&rules, &ActivationCtx::new(dir.path())).is_some());
         }
 
         #[test]
         fn file_glob_rule_does_not_match_when_absent() {
             let dir = tempfile::tempdir().unwrap();
             let rules = vec![ActivationRule::FileExists(SmolStr::new("next.config.*"))];
-            assert!(!activates(&rules, dir.path()));
+            assert!(activates(&rules, &ActivationCtx::new(dir.path())).is_none());
         }
 
         #[test]
@@ -822,7 +889,7 @@ mod activation {
             )
             .unwrap();
             let rules = vec![ActivationRule::ManifestDependency(SmolStr::new("react"))];
-            assert!(activates(&rules, dir.path()));
+            assert!(activates(&rules, &ActivationCtx::new(dir.path())).is_some());
         }
 
         #[test]
@@ -836,7 +903,69 @@ mod activation {
             let rules = vec![ActivationRule::ManifestDependency(SmolStr::new(
                 "serde-json",
             ))];
-            assert!(activates(&rules, dir.path()));
+            assert!(activates(&rules, &ActivationCtx::new(dir.path())).is_some());
+        }
+
+        #[test]
+        fn manifest_dependency_rule_matches_a_maven_artifact_id() {
+            // The hole this replaced: activation read `package.json` and `Cargo.toml` only, so
+            // NO `ManifestDependency` rule could ever fire on a JVM, Go or Swift project. It
+            // was invisible because no shipped plugin gated on one of those — the same
+            // "nothing failed" shape as the descriptor field that nearly went missing.
+            //
+            // The query is the artifact id alone, which is what a plugin author writes;
+            // the pom stores `org.springframework.boot:spring-boot-starter-thymeleaf`.
+            let dir = tempfile::tempdir().unwrap();
+            std::fs::write(
+                dir.path().join("pom.xml"),
+                r#"<project><artifactId>app</artifactId><dependencies>
+                     <dependency>
+                       <groupId>org.springframework.boot</groupId>
+                       <artifactId>spring-boot-starter-thymeleaf</artifactId>
+                     </dependency>
+                   </dependencies></project>"#,
+            )
+            .unwrap();
+            let rules = vec![ActivationRule::ManifestDependency(SmolStr::new(
+                "spring-boot-starter-thymeleaf",
+            ))];
+            assert!(activates(&rules, &ActivationCtx::new(dir.path())).is_some());
+
+            // …and the full coordinate works too, for an author who prefers to be explicit.
+            let full = vec![ActivationRule::ManifestDependency(SmolStr::new(
+                "org.springframework.boot:spring-boot-starter-thymeleaf",
+            ))];
+            assert!(activates(&full, &ActivationCtx::new(dir.path())).is_some());
+        }
+
+        #[test]
+        fn manifest_dependency_rule_matches_a_gradle_and_a_go_mod_dependency() {
+            let gradle = tempfile::tempdir().unwrap();
+            std::fs::write(
+                gradle.path().join("build.gradle"),
+                "dependencies {\n  implementation 'io.ktor:ktor-server-core:2.3.0'\n}\n",
+            )
+            .unwrap();
+            let rules = vec![ActivationRule::ManifestDependency(SmolStr::new(
+                "ktor-server-core",
+            ))];
+            assert!(activates(&rules, &ActivationCtx::new(gradle.path())).is_some());
+
+            let go = tempfile::tempdir().unwrap();
+            std::fs::write(
+                go.path().join("go.mod"),
+                "module example.com/app\n\nrequire github.com/gin-gonic/gin v1.9.1\n",
+            )
+            .unwrap();
+            // Go's coordinate IS the module path, which is also what an author would write —
+            // no per-ecosystem override needed, and the bare `gin` deliberately does NOT match
+            // (two modules may end in the same segment).
+            let module_path = vec![ActivationRule::ManifestDependency(SmolStr::new(
+                "github.com/gin-gonic/gin",
+            ))];
+            assert!(activates(&module_path, &ActivationCtx::new(go.path())).is_some());
+            let bare = vec![ActivationRule::ManifestDependency(SmolStr::new("gin"))];
+            assert!(activates(&bare, &ActivationCtx::new(go.path())).is_none());
         }
 
         #[test]
@@ -844,7 +973,7 @@ mod activation {
             let dir = tempfile::tempdir().unwrap();
             std::fs::write(dir.path().join("package.json"), r#"{"dependencies": {}}"#).unwrap();
             let rules = vec![ActivationRule::ManifestDependency(SmolStr::new("react"))];
-            assert!(!activates(&rules, dir.path()));
+            assert!(activates(&rules, &ActivationCtx::new(dir.path())).is_none());
         }
 
         #[test]
@@ -862,7 +991,7 @@ mod activation {
             )
             .unwrap();
             let rules = vec![ActivationRule::ManifestDependency(SmolStr::new("react"))];
-            assert!(activates(&rules, dir.path()));
+            assert!(activates(&rules, &ActivationCtx::new(dir.path())).is_some());
         }
 
         #[test]
@@ -881,7 +1010,7 @@ mod activation {
             )
             .unwrap();
             let rules = vec![ActivationRule::ManifestDependency(SmolStr::new("react"))];
-            assert!(!activates(&rules, dir.path()));
+            assert!(activates(&rules, &ActivationCtx::new(dir.path())).is_none());
         }
 
         fn descriptor(
@@ -934,18 +1063,21 @@ mod activation {
                 crate::PluginSource::Builtin,
             ];
             let (active, missing) = resolve(&descriptors, &sources, dir.path());
-            assert_eq!(active[0], Some(crate::ActivationReason::RuleMatched));
+            assert_eq!(
+                active[0],
+                Some(crate::ActivationReason::RuleMatched(
+                    ActivationRule::ManifestDependency(SmolStr::new("@company/framework"))
+                ))
+            );
             assert_eq!(
                 active[1],
                 Some(crate::ActivationReason::ImpliedBy(
-                    "github.com/company/framework-plugin".to_string()
+                    "github.com/company/framework-plugin".into()
                 ))
             );
             assert_eq!(
                 active[2],
-                Some(crate::ActivationReason::ImpliedBy(
-                    "kndo:nextjs".to_string()
-                ))
+                Some(crate::ActivationReason::ImpliedBy("kndo:nextjs".into()))
             );
             assert!(missing.is_empty());
         }
@@ -963,10 +1095,10 @@ mod activation {
                 crate::PluginSource::Global,
             ];
             let (active, missing) = resolve(&descriptors, &sources, dir.path());
-            assert_eq!(active[0], Some(crate::ActivationReason::ProjectLocal));
+            assert_eq!(active[0], Some(crate::ActivationReason::Registered));
             assert_eq!(
                 active[1],
-                Some(crate::ActivationReason::ImpliedBy("a".to_string()))
+                Some(crate::ActivationReason::ImpliedBy("a".into()))
             );
             assert!(missing.is_empty());
         }
@@ -1024,7 +1156,7 @@ mod activation {
             let sources = vec![crate::PluginSource::Builtin, crate::PluginSource::Builtin];
             let (active, _) = resolve(&descriptors, &sources, dir.path());
             assert!(active[0].is_none());
-            assert_eq!(active[1], Some(crate::ActivationReason::BuiltinAlwaysOn));
+            assert_eq!(active[1], Some(crate::ActivationReason::AlwaysOn));
         }
     }
 }
@@ -1032,7 +1164,7 @@ mod activation {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kndo_core::engine::{CheckRequest, RunMode};
+    use kndo_core::engine::RunMode;
 
     #[test]
     fn default_build_registers_at_least_one_language() {
@@ -1044,10 +1176,8 @@ mod tests {
         // A report-less project: FileExists gates would deactivate the ingesters here,
         // which is exactly wrong once kndo.toml can point `report` anywhere — always-on
         // (empty activation) is the contract.
-        let dir = std::env::temp_dir().join("kndo-dist-test-cov-alwayson");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        let (_plugins, resolution) = compose_plugins(&dir);
+        let dir = tempfile::tempdir().unwrap();
+        let (_plugins, resolution) = compose_plugins(dir.path());
         let ingesters: Vec<_> = resolution
             .plugins
             .iter()
@@ -1057,7 +1187,7 @@ mod tests {
         for ingester in ingesters {
             assert_eq!(
                 ingester.active,
-                Some(ActivationReason::BuiltinAlwaysOn),
+                Some(ActivationReason::AlwaysOn),
                 "{} must be always-on",
                 ingester.id
             );
@@ -1067,24 +1197,24 @@ mod tests {
 
     #[test]
     fn go_coverprofile_ingests_end_to_end_with_module_qualified_paths() {
-        let dir = std::env::temp_dir().join("kndo-dist-test-go-cov");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("go.mod"), "module github.com/x/y\n\ngo 1.22\n").unwrap();
+        let dir = tempfile::tempdir().unwrap();
         std::fs::write(
-            dir.join("main.go"),
+            dir.path().join("go.mod"),
+            "module github.com/x/y\n\ngo 1.22\n",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.path().join("main.go"),
             "package main\n\nfunc main() {\n\tprintln(1)\n}\n",
         )
         .unwrap();
         std::fs::write(
-            dir.join("coverage.out"),
+            dir.path().join("coverage.out"),
             "mode: set\ngithub.com/x/y/main.go:3.1,5.2 2 1\n",
         )
         .unwrap();
-        let mut engine = open(&dir, ConfigOverrides::default()).unwrap();
-        let result = engine.check(CheckRequest {
-            mode: RunMode::Full,
-        });
+        let mut engine = open(dir.path(), ConfigOverrides::default()).unwrap();
+        let result = engine.check(RunMode::Full);
         // The built-in Go ingester found the well-known coverage.out and the package-guided
         // rebase landed its module-qualified keys — crap runs instead of skipping.
         assert!(
@@ -1099,15 +1229,11 @@ mod tests {
 
     #[test]
     fn open_composes_the_full_product() {
-        let dir = std::env::temp_dir().join("kndo-dist-test");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("a.ts"), "export function f() { return 1; }").unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("a.ts"), "export function f() { return 1; }").unwrap();
 
-        let mut engine = open(&dir, ConfigOverrides::default()).unwrap();
-        let result = engine.check(CheckRequest {
-            mode: RunMode::Full,
-        });
+        let mut engine = open(dir.path(), ConfigOverrides::default()).unwrap();
+        let result = engine.check(RunMode::Full);
         // The js adapter came from the distribution layer, not from this test.
         assert_eq!(result.files_claimed, 1);
         assert_eq!(result.symbols, 1);

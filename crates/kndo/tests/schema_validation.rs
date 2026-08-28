@@ -10,7 +10,7 @@
 use std::fs;
 use std::path::PathBuf;
 
-use kndo_core::engine::{CheckRequest, ConfigOverrides, Engine, RunMode};
+use kndo_core::engine::{ConfigOverrides, Engine, RunMode};
 use kndo_core::query_envelope::{QueryFlags, QueryRequest, Verb};
 
 fn workspace_root() -> PathBuf {
@@ -46,30 +46,50 @@ fn committed_schema_matches_the_type_it_was_generated_from() {
     );
 }
 
+/// The version constant and the normative document are one fact in two files, and until now
+/// nothing compared them: the generated JSON Schema types `schema_version` as a plain string
+/// with no `const`, so a bump — or a missed bump — changed nothing any test could see. They
+/// had already drifted (the contract said 1.1.0 while two doc pages still printed 1.0.0).
+#[test]
+fn schema_version_matches_the_contract_document() {
+    let contract =
+        std::fs::read_to_string(workspace_root().join("internal/contracts/output-schema.md"))
+            .expect("the normative output-schema contract");
+    let needle = format!("\"schema_version\": \"{}\"", kndo::SCHEMA_VERSION);
+    assert!(
+        contract.contains(&needle),
+        "SCHEMA_VERSION is {} but internal/contracts/output-schema.md does not carry it — \
+         the contract is normative, so one of the two is wrong. Additive change? bump the \
+         minor in BOTH (RFC 0006 §4).",
+        kndo::SCHEMA_VERSION,
+    );
+}
+
 #[test]
 fn real_json_output_validates_against_the_committed_schema() {
-    let dir = std::env::temp_dir().join("kndo-schema-validation-test");
-    let _ = fs::remove_dir_all(&dir);
-    fs::create_dir_all(dir.join("src")).unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    fs::create_dir_all(dir.path().join("src")).unwrap();
     fs::write(
-        dir.join("package.json"),
+        dir.path().join("package.json"),
         r#"{"name": "schema-validation-fixture", "private": false, "main": "src/index.ts"}"#,
     )
     .unwrap();
-    fs::write(dir.join("src/index.ts"), "console.log(\"alive\");\n").unwrap();
+    fs::write(dir.path().join("src/index.ts"), "console.log(\"alive\");\n").unwrap();
     // Not `main`'s own exports (those are the package's public API, a production root in
     // their own right) — an orphan file nothing imports, genuinely dead.
     fs::write(
-        dir.join("src/orphan.ts"),
+        dir.path().join("src/orphan.ts"),
         "export function dead(): void {}\n",
     )
     .unwrap();
 
-    let mut engine = Engine::open(&dir, ConfigOverrides::default(), kndo::default_adapters())
-        .expect("engine opens on a real temp project");
-    let result = engine.check(CheckRequest {
-        mode: RunMode::Full,
-    });
+    let mut engine = Engine::open(
+        dir.path(),
+        ConfigOverrides::default(),
+        kndo::default_adapters(),
+    )
+    .expect("engine opens on a real temp project");
+    let result = engine.check(RunMode::Full);
     // A non-empty findings array exercises more of the schema than a clean run would.
     assert!(!result.findings.is_empty());
 
@@ -122,22 +142,25 @@ fn committed_query_schema_matches_the_type_it_was_generated_from() {
 
 #[test]
 fn real_query_output_validates_against_the_committed_schema() {
-    let dir = std::env::temp_dir().join("kndo-query-schema-validation-test");
-    let _ = fs::remove_dir_all(&dir);
-    fs::create_dir_all(dir.join("src")).unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    fs::create_dir_all(dir.path().join("src")).unwrap();
     fs::write(
-        dir.join("package.json"),
+        dir.path().join("package.json"),
         r#"{"name": "query-schema-validation-fixture", "private": false, "main": "src/index.ts"}"#,
     )
     .unwrap();
     fs::write(
-        dir.join("src/index.ts"),
+        dir.path().join("src/index.ts"),
         "export function alive(): number { return helper(); }\nfunction helper(): number { return 1; }\n",
     )
     .unwrap();
 
-    let mut engine = Engine::open(&dir, ConfigOverrides::default(), kndo::default_adapters())
-        .expect("engine opens on a real temp project");
+    let engine = Engine::open(
+        dir.path(),
+        ConfigOverrides::default(),
+        kndo::default_adapters(),
+    )
+    .expect("engine opens on a real temp project");
 
     let validator = jsonschema::validator_for(&query_schema_value())
         .expect("committed query schema itself compiles");

@@ -30,11 +30,16 @@
 
 use rustc_hash::FxHashMap as HashMap;
 
+use smol_str::SmolStr;
+
 use crate::adapter::Span;
-use crate::analysis::finding_id;
+use crate::analysis::{finding_id, FindingIdParts};
 use crate::engine::{Finding, Location, Severity};
 use crate::graph::ProjectGraph;
-use crate::vocab::{Confidence, EdgeKind, FileOrigin, FileRole, NodeRef, RefKind, SymbolId};
+use crate::vocab::{
+    Category, Confidence, EdgeKind, FileOrigin, FileRole, Group, NodeRef, RefKind, SubjectKind,
+    SymbolId,
+};
 
 fn contains(outer: &Span, inner: &Span) -> bool {
     outer.start <= inner.start && inner.end <= outer.end
@@ -49,6 +54,9 @@ fn contains(outer: &Span, inner: &Span) -> bool {
 struct EffectiveSurface {
     exported: bool,
     visibility: crate::adapter::VisibilityLevel,
+    /// The anchor belonging to whichever declaration in the container chain supplied
+    /// `visibility` — a level without its anchor names no region at all.
+    anchor: Option<SmolStr>,
 }
 
 fn effective_surface(
@@ -59,12 +67,14 @@ fn effective_surface(
     let decl = &graph.symbols[decl_id.0 as usize];
     let mut exported = decl.exported;
     let mut visibility = decl.visibility;
+    let mut anchor = decl.visible_in_unit.clone();
     let mut current = decl;
     for _ in 0..8 {
         let Some(container_name) = current.member_of.as_deref() else {
             return Some(EffectiveSurface {
                 exported,
                 visibility,
+                anchor,
             });
         };
         let candidates = by_file_name.get(&(current.file.0, container_name))?;
@@ -78,7 +88,10 @@ fn effective_surface(
             .or_else(|| candidates.first())?;
         let container = &graph.symbols[container_id.0 as usize];
         exported &= container.exported;
-        visibility = visibility.min(container.visibility);
+        if container.visibility < visibility {
+            visibility = container.visibility;
+            anchor = container.visible_in_unit.clone();
+        }
         current = container;
     }
     None // pathological nesting depth — vouch for nothing
@@ -95,6 +108,9 @@ pub fn find_private_type_leaks(graph: &ProjectGraph) -> Vec<Finding> {
             .or_default()
             .push(SymbolId(i as u32));
     }
+    // `scope_contains_site` reads units positionally, the same shape assembly hands it.
+    let file_units: Vec<Option<SmolStr>> = graph.files.iter().map(|f| f.unit.clone()).collect();
+    let unit_parents = crate::graph::unit_parent_index(&graph.files);
 
     for edge in &graph.edges {
         let EdgeKind::References {
@@ -155,22 +171,66 @@ pub fn find_private_type_leaks(graph: &ProjectGraph) -> Vec<Finding> {
         if decl_file.language != leaked_file.language {
             continue; // visibility levels only compare within one language (module doc)
         }
+        let ladder = decl_file
+            .language
+            .as_deref()
+            .and_then(|lang| graph.ladder_for(lang));
+
+        // This verdict's whole premise is its own message: "consumers can see the function yet
+        // cannot name that type". `exported` alone does not establish that there ARE consumers
+        // — it is true for `pub(crate)`, top-level `pub(super)`, Java package-private and Swift
+        // `internal`, none of which cross the package boundary. `surface_transitive` is the
+        // ladder rung that does establish it, and every other consumer of the ladder in the
+        // codebase already gates on it (`graph::assemble`'s library-mode promotion,
+        // `graph::surface`'s member closure); this analysis was the one that didn't, and
+        // accused intra-package items of lying to consumers they don't have.
+        //
+        // That narrowing used to be a blanket gate on `surface_transitive`, which cost a whole
+        // class of true finding: an item visible to a *sibling module* naming a type private
+        // to its own module is a real leak by the letter of the language's rules. Reporting it
+        // needed a scope finer than the four-bucket ladder, and now there is one —
+        // `VisibilityScope::Module`, a unit and its subtree (`internal/detection-gaps.md` §7).
+        // The containment test below decides the case exactly, so the gate is gone: an item on
+        // a Module rung is judged against the region it actually names, not against a bucket it
+        // was widened into.
+
         // "Lower visibility" via the language's ladder when it's declared:
         // comparing *scopes* — not raw indices — means two rungs sharing a scope (Java
         // `protected`/`public`, both `Public` by the conservative-mapping rule) never accuse
         // each other. Fall back to index comparison when no ladder covers the levels — the
         // pre-ladder behavior, still meaningful within one language.
-        let ladder = decl_file
-            .language
-            .as_deref()
-            .and_then(|lang| graph.ladder_for(lang));
+        //
+        // Equal scopes are NOT automatically safe: the buckets are relative to the symbol that
+        // owns them, so two `File`-scoped symbols in different files, or two `Unit`-scoped ones
+        // in different units, name disjoint regions. The type's region has to actually contain
+        // the declaration's, which is what `scope_contains_site` decides — asking whether the
+        // declaring file sits inside the region the leaked type is visible to.
+        // One question, asked once: does the region the TYPE is visible in reach everywhere the
+        // item promises itself to? A scope alone cannot answer it — two `File` scopes in
+        // different files, or two module subtrees anchored at different depths, are disjoint
+        // regions an enum comparison reads as equal — so the comparison is region against
+        // region (`graph::region_covers`).
         let leaks = match ladder.map(|l| {
             (
                 l.get(leaked.visibility.0 as usize),
                 l.get(surface.visibility.0 as usize),
             )
         }) {
-            Some((Some(leaked_rung), Some(decl_rung))) => leaked_rung.scope < decl_rung.scope,
+            Some((Some(leaked_rung), Some(decl_rung))) => !crate::graph::region_covers(
+                &crate::graph::VisibilityRegion {
+                    scope: leaked_rung.scope,
+                    anchor: leaked.visible_in_unit.as_ref(),
+                    file: leaked.file.0 as usize,
+                },
+                &crate::graph::VisibilityRegion {
+                    scope: decl_rung.scope,
+                    anchor: surface.anchor.as_ref(),
+                    file: decl.file.0 as usize,
+                },
+                &file_units,
+                &unit_parents,
+                &graph.files,
+            ),
             _ => leaked.visibility < surface.visibility,
         };
         if !leaks {
@@ -192,10 +252,16 @@ pub fn find_private_type_leaks(graph: &ProjectGraph) -> Vec<Finding> {
             .unwrap_or(false);
         findings.push(Finding {
             advisory: false,
-            id: finding_id("private-type-leak", facet, path, &qualified, &leaked_name),
-            category: "private-type-leak".to_string(),
-            group: "defect".to_string(),
-            subject_kind: facet.to_string(),
+            id: finding_id(FindingIdParts {
+                category: &Category::PRIVATE_TYPE_LEAK,
+                subject_kind: &SubjectKind::new(facet),
+                path,
+                symbol_path: &qualified,
+                discriminator: &leaked_name,
+            }),
+            category: Category::PRIVATE_TYPE_LEAK,
+            group: Group::Defect,
+            subject_kind: SubjectKind::new(facet),
             severity: if is_library {
                 Severity::Warning
             } else {
@@ -214,6 +280,8 @@ pub fn find_private_type_leaks(graph: &ProjectGraph) -> Vec<Finding> {
                 package: graph.package_name(decl_file.package).map(str::to_string),
             },
             related: Vec::new(),
+            rolled_up: None,
+            sources: Vec::new(),
             delta: None,
             delta_origin: None,
         });
@@ -241,8 +309,10 @@ mod tests {
             }),
             package: crate::vocab::PackageId(0),
             unit: None,
+            unit_parent: None,
             test_spans: Vec::new(),
             string_call_sites: Vec::new(),
+            string_attr_args: Vec::new(),
         }
     }
 
@@ -266,6 +336,9 @@ mod tests {
             implicitly_invoked: false,
             nested_scope: false,
             visibility_inherited: false,
+            visible_in_unit: None,
+            implements: None,
+            markers: Vec::new(),
         }
     }
 
@@ -282,6 +355,9 @@ mod tests {
             implicitly_invoked: false,
             nested_scope: false,
             visibility_inherited: false,
+            visible_in_unit: None,
+            implements: None,
+            markers: Vec::new(),
         }
     }
 
@@ -318,7 +394,7 @@ mod tests {
         let findings = find_private_type_leaks(&graph_with(symbols, edges));
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].category, "private-type-leak");
-        assert_eq!(findings[0].group, "defect");
+        assert_eq!(findings[0].group, crate::vocab::Group::Defect);
         assert!(findings[0].message.contains("secret"));
     }
 
@@ -483,6 +559,173 @@ mod tests {
             ],
         )]);
         assert!(find_private_type_leaks(&graph).is_empty());
+    }
+
+    #[test]
+    fn a_package_visible_item_naming_a_file_private_type_is_a_leak() {
+        // This used to be silent, behind a `surface_transitive` gate: an item that never
+        // leaves its package was held to have no consumers to mislead. That gate was standing
+        // in for a comparison the model could not make — it could not tell ripgrep's
+        // `flags::parse::lookup` (whose whole module subtree CAN name the private `Flag`) from
+        // tokio's `task::state::unset_waker` (whose sibling caller cannot name `UpdateResult`),
+        // because both had been widened into the same bucket.
+        //
+        // Now regions decide, so the gate is gone and this shape is judged on its merits: with
+        // a ladder where "private" really means the FILE, a package-visible item naming one is
+        // a genuine leak — every caller it promises itself to is outside that file.
+        use crate::adapter::{VisibilityRung, VisibilityScope};
+        let ladder = vec![
+            VisibilityRung {
+                scope: VisibilityScope::File,
+                label: SmolStr::new("private"),
+                surface_transitive: false,
+            },
+            VisibilityRung {
+                scope: VisibilityScope::Package,
+                label: SmolStr::new("pub(crate)"),
+                surface_transitive: false,
+            },
+            VisibilityRung {
+                scope: VisibilityScope::Public,
+                label: SmolStr::new("pub"),
+                surface_transitive: true,
+            },
+        ];
+        let edges = || {
+            vec![type_use(
+                SymbolId(0),
+                SymbolId(1),
+                span(1, 10, 1, 16),
+                Confidence::Certain,
+            )]
+        };
+
+        let contained = graph_with(
+            vec![
+                callable(FileId(0), "helper", 1, span(1, 1, 1, 40)),
+                ty(FileId(0), "Parameters", 0),
+            ],
+            edges(),
+        )
+        .with_visibility_ladders(vec![(SmolStr::new("mock"), ladder.clone())]);
+        assert_eq!(
+            find_private_type_leaks(&contained).len(),
+            1,
+            "the package can reach `helper` and cannot name `Parameters`"
+        );
+
+        // The published half of the same ladder still accuses: `pub` IS a promise.
+        let published = graph_with(
+            vec![
+                callable(FileId(0), "run", 2, span(1, 1, 1, 40)),
+                ty(FileId(0), "FnVisitor", 0),
+            ],
+            edges(),
+        )
+        .with_visibility_ladders(vec![(SmolStr::new("mock"), ladder)]);
+        assert_eq!(
+            find_private_type_leaks(&published).len(),
+            1,
+            "ripgrep's WalkParallel::run shape stays a finding"
+        );
+    }
+
+    #[test]
+    fn a_module_subtree_tells_the_two_pub_super_shapes_apart() {
+        // The whole point of the rung (`internal/detection-gaps.md` §7), as the two field cases
+        // that used to be indistinguishable:
+        //
+        //   tokio    `task::state::unset_waker` is pub(super) — visible in the `task` subtree —
+        //            and returns `UpdateResult`, private to `state.rs`. Its caller in
+        //            `task::harness` can reach the method and cannot name the type. LEAK.
+        //   ripgrep  `flags::parse::lookup` is pub(super) — visible in the `flags` subtree —
+        //            and returns `Flag`, private to `flags/mod.rs`. Private in Rust is the
+        //            module AND its descendants, so every caller that can reach `lookup` can
+        //            name `Flag` too. NOT a leak.
+        //
+        // Same rungs, same shape, opposite verdicts — decided by where each region is anchored.
+        use crate::adapter::{VisibilityRung, VisibilityScope};
+        let ladder = vec![
+            VisibilityRung {
+                scope: VisibilityScope::Module,
+                label: SmolStr::new("private"),
+                surface_transitive: false,
+            },
+            VisibilityRung {
+                scope: VisibilityScope::Module,
+                label: SmolStr::new("pub(super)"),
+                surface_transitive: false,
+            },
+        ];
+        let edges = || {
+            vec![type_use(
+                SymbolId(0),
+                SymbolId(1),
+                span(1, 10, 1, 16),
+                Confidence::Certain,
+            )]
+        };
+        // The item is `pub(super)`, anchored one module up; the type is `private`, anchored on
+        // its own module. Only the anchors differ between the two graphs.
+        let graph_for = |type_anchor: &str, item_anchor: &str| {
+            let mut symbols = vec![
+                callable(FileId(0), "subject", 1, span(1, 1, 1, 40)),
+                ty(FileId(0), "Leaked", 0),
+            ];
+            symbols[0].visible_in_unit = Some(SmolStr::new(item_anchor));
+            symbols[1].visible_in_unit = Some(SmolStr::new(type_anchor));
+            let mut graph = graph_with(symbols, edges())
+                .with_visibility_ladders(vec![(SmolStr::new("mock"), ladder.clone())]);
+            graph.files[0].unit = Some(SmolStr::new("a/b/c"));
+            graph.files[0].unit_parent = Some(SmolStr::new("a/b"));
+            graph
+        };
+        assert_eq!(
+            find_private_type_leaks(&graph_for("a/b/c", "a/b")).len(),
+            1,
+            "tokio: the parent subtree reaches wider than the type's own module"
+        );
+        assert!(
+            find_private_type_leaks(&graph_for("a/b", "a/b")).is_empty(),
+            "ripgrep: the type's module already covers everyone the item promises"
+        );
+    }
+
+    #[test]
+    fn equal_scopes_anchored_in_different_files_still_leak() {
+        // The scope buckets are relative to the symbol that owns them, so `File == File` does
+        // not mean "same region": a public callable in a.mock naming a file-private type
+        // declared in b.mock promises a type its consumers genuinely cannot name. Comparing
+        // the ordinals alone called this safe.
+        use crate::adapter::{VisibilityRung, VisibilityScope};
+        let ladder = vec![
+            VisibilityRung {
+                scope: VisibilityScope::File,
+                label: SmolStr::new("private"),
+                surface_transitive: false,
+            },
+            VisibilityRung {
+                scope: VisibilityScope::File,
+                label: SmolStr::new("file-public"),
+                surface_transitive: true,
+            },
+        ];
+        let graph = ProjectGraph::for_test(
+            vec![file("a.mock"), file("b.mock")],
+            vec![
+                callable(FileId(0), "F", 1, span(1, 1, 1, 40)),
+                ty(FileId(1), "Hidden", 0),
+            ],
+            vec![],
+            vec![type_use(
+                SymbolId(0),
+                SymbolId(1),
+                span(1, 10, 1, 16),
+                Confidence::Certain,
+            )],
+        )
+        .with_visibility_ladders(vec![(SmolStr::new("mock"), ladder)]);
+        assert_eq!(find_private_type_leaks(&graph).len(), 1);
     }
 
     #[test]

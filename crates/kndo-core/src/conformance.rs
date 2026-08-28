@@ -17,7 +17,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::adapter::LanguageAdapter;
-use crate::engine::{CheckRequest, ConfigOverrides, Engine, RunMode};
+use crate::engine::{ConfigOverrides, Engine, RunMode};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
 pub struct FixtureFinding {
@@ -62,13 +62,18 @@ impl fmt::Display for ConformanceMismatch {
 /// One fixture's setup/read failure — distinct from [`ConformanceMismatch`] (a fixture that
 /// ran and disagreed) because these mean the fixture itself is malformed, not that the adapter
 /// is wrong.
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
+#[error("{0}")]
 pub struct ConformanceError(pub String);
 
-impl fmt::Display for ConformanceError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
+/// [`run_fixture`]/[`run_fixture_with`]'s success outcome — a fixture that ran and either
+/// matched `expected.json` or didn't. Was a nested `Result<Result<(), ConformanceMismatch>,
+/// ConformanceError>`; the two failure modes (a malformed fixture vs. a fixture that ran and
+/// disagreed) are still distinct, just as one flat enum instead of Result-in-Result.
+#[derive(Debug)]
+pub enum ConformanceVerdict {
+    Pass,
+    Mismatch(ConformanceMismatch),
 }
 
 /// Every subdirectory of `root` that looks like a fixture (has `project/` and `expected.json`),
@@ -88,12 +93,51 @@ pub fn discover_fixtures(root: &Path) -> Vec<PathBuf> {
     out
 }
 
+/// The discover → run-each → collect → format shape every adapter's own conformance test
+/// repeats verbatim — the only thing that varies between adapters is which adapters/plugins
+/// `run` constructs per fixture. `run` typically closes over one `run_fixture(fixture, vec![Box::new(MyAdapter)])`
+/// call (or `run_fixture_with` when the fixture needs a plugin too). Returns `Err(message)`
+/// ready to hand to `panic!` at the call site, rather than panicking here, so a failure's
+/// backtrace still points at the adapter's own `#[test]` fn.
+pub fn run_fixture_dir(
+    root: &Path,
+    mut run: impl FnMut(&Path) -> Result<ConformanceVerdict, ConformanceError>,
+) -> Result<(), String> {
+    let fixtures = discover_fixtures(root);
+    if fixtures.is_empty() {
+        return Err(format!(
+            "no conformance fixtures found under {}",
+            root.display()
+        ));
+    }
+
+    let mut failures = Vec::new();
+    for fixture in &fixtures {
+        let name = fixture.file_name().unwrap().to_string_lossy().to_string();
+        match run(fixture) {
+            Ok(ConformanceVerdict::Pass) => {}
+            Ok(ConformanceVerdict::Mismatch(mismatch)) => {
+                failures.push(format!("{name}:\n{mismatch}"))
+            }
+            Err(err) => failures.push(format!("{name}: {err}")),
+        }
+    }
+    if failures.is_empty() {
+        Ok(())
+    } else {
+        Err(format!(
+            "conformance fixture failures:\n\n{}",
+            failures.join("\n")
+        ))
+    }
+}
+
 /// Runs one fixture end to end — real discovery, real adapters, the real `Engine` — and diffs
 /// the projected actual findings against `expected.json`.
 pub fn run_fixture(
     fixture_dir: &Path,
     adapters: Vec<Box<dyn LanguageAdapter>>,
-) -> Result<Result<(), ConformanceMismatch>, ConformanceError> {
+) -> Result<ConformanceVerdict, ConformanceError> {
     run_fixture_with(fixture_dir, adapters, vec![])
 }
 
@@ -105,7 +149,7 @@ pub fn run_fixture_with(
     fixture_dir: &Path,
     adapters: Vec<Box<dyn LanguageAdapter>>,
     plugins: Vec<Box<dyn crate::plugin::Plugin>>,
-) -> Result<Result<(), ConformanceMismatch>, ConformanceError> {
+) -> Result<ConformanceVerdict, ConformanceError> {
     let expected_path = fixture_dir.join("expected.json");
     let expected_text = fs::read_to_string(&expected_path)
         .map_err(|e| ConformanceError(format!("reading {}: {e}", expected_path.display())))?;
@@ -118,21 +162,18 @@ pub fn run_fixture_with(
     let project_dir = fixture_dir.join("project");
     let overrides = ConfigOverrides {
         use_cache: false,
-        threads: None,
-        min_confidence: None,
+        ..ConfigOverrides::default()
     };
     let mut engine = Engine::open_with_plugins(&project_dir, overrides, adapters, plugins)
         .map_err(|e| ConformanceError(format!("opening {}: {e}", project_dir.display())))?;
-    let result = engine.check(CheckRequest {
-        mode: RunMode::Full,
-    });
+    let result = engine.check(RunMode::Full);
 
     let actual: BTreeSet<FixtureFinding> = result
         .findings
         .iter()
         .map(|f| FixtureFinding {
-            category: f.category.clone(),
-            subject_kind: f.subject_kind.clone(),
+            category: f.category.to_string(),
+            subject_kind: f.subject_kind.to_string(),
             path: f.location.path.as_ref().map(|p| p.0.to_string()),
             symbol: f.location.symbol.clone(),
         })
@@ -142,9 +183,9 @@ pub fn run_fixture_with(
     let missing: Vec<_> = expected_set.difference(&actual).cloned().collect();
     let unexpected: Vec<_> = actual.difference(&expected_set).cloned().collect();
     if missing.is_empty() && unexpected.is_empty() {
-        Ok(Ok(()))
+        Ok(ConformanceVerdict::Pass)
     } else {
-        Ok(Err(ConformanceMismatch {
+        Ok(ConformanceVerdict::Mismatch(ConformanceMismatch {
             missing,
             unexpected,
         }))
@@ -157,58 +198,60 @@ mod tests {
 
     #[test]
     fn discover_fixtures_finds_only_well_formed_directories() {
-        let root = std::env::temp_dir().join("kndo-conformance-discover-test");
-        let _ = fs::remove_dir_all(&root);
-        fs::create_dir_all(root.join("good/project")).unwrap();
-        fs::write(root.join("good/expected.json"), r#"{"findings": []}"#).unwrap();
-        fs::create_dir_all(root.join("missing-expected/project")).unwrap();
-        fs::create_dir_all(root.join("missing-project")).unwrap();
+        let root = tempfile::tempdir().unwrap();
+        fs::create_dir_all(root.path().join("good/project")).unwrap();
         fs::write(
-            root.join("missing-project/expected.json"),
+            root.path().join("good/expected.json"),
             r#"{"findings": []}"#,
         )
         .unwrap();
-        fs::write(root.join("not-a-fixture.txt"), "").unwrap();
+        fs::create_dir_all(root.path().join("missing-expected/project")).unwrap();
+        fs::create_dir_all(root.path().join("missing-project")).unwrap();
+        fs::write(
+            root.path().join("missing-project/expected.json"),
+            r#"{"findings": []}"#,
+        )
+        .unwrap();
+        fs::write(root.path().join("not-a-fixture.txt"), "").unwrap();
 
-        let found = discover_fixtures(&root);
-        assert_eq!(found, vec![root.join("good")]);
+        let found = discover_fixtures(root.path());
+        assert_eq!(found, vec![root.path().join("good")]);
     }
 
     #[test]
     fn run_fixture_reports_clean_on_a_perfect_match() {
-        let dir = std::env::temp_dir().join("kndo-conformance-clean-test");
-        let _ = fs::remove_dir_all(&dir);
-        fs::create_dir_all(dir.join("project")).unwrap();
-        fs::write(dir.join("expected.json"), r#"{"findings": []}"#).unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        fs::create_dir_all(dir.path().join("project")).unwrap();
+        fs::write(dir.path().join("expected.json"), r#"{"findings": []}"#).unwrap();
 
-        let outcome = run_fixture(&dir, vec![]).unwrap();
-        assert!(outcome.is_ok());
+        let outcome = run_fixture(dir.path(), vec![]).unwrap();
+        assert!(matches!(outcome, ConformanceVerdict::Pass));
     }
 
     #[test]
     fn run_fixture_reports_a_mismatch_when_expected_findings_never_fire() {
-        let dir = std::env::temp_dir().join("kndo-conformance-mismatch-test");
-        let _ = fs::remove_dir_all(&dir);
-        fs::create_dir_all(dir.join("project")).unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        fs::create_dir_all(dir.path().join("project")).unwrap();
         fs::write(
-            dir.join("expected.json"),
+            dir.path().join("expected.json"),
             r#"{"findings": [{"category": "unused", "subject_kind": "file", "path": "ghost.ts"}]}"#,
         )
         .unwrap();
 
-        let outcome = run_fixture(&dir, vec![]).unwrap();
-        let mismatch = outcome.unwrap_err();
+        let outcome = run_fixture(dir.path(), vec![]).unwrap();
+        let ConformanceVerdict::Mismatch(mismatch) = outcome else {
+            panic!("expected a mismatch, got {outcome:?}");
+        };
         assert_eq!(mismatch.missing.len(), 1);
         assert!(mismatch.unexpected.is_empty());
     }
 
     #[test]
     fn run_fixture_errors_on_a_malformed_expected_file() {
-        let dir = std::env::temp_dir().join("kndo-conformance-malformed-test");
-        let _ = fs::remove_dir_all(&dir);
-        fs::create_dir_all(dir.join("project")).unwrap();
-        fs::write(dir.join("expected.json"), "not json").unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        fs::create_dir_all(dir.path().join("project")).unwrap();
+        fs::write(dir.path().join("expected.json"), "not json").unwrap();
 
-        assert!(run_fixture(&dir, vec![]).is_err());
+        assert!(run_fixture(dir.path(), vec![]).is_err());
     }
 }

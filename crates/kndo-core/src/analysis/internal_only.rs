@@ -38,11 +38,14 @@
 use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 
 use crate::adapter::VisibilityScope;
-use crate::analysis::finding_id;
 use crate::analysis::reachability::{Reachability, ReachabilityMap};
+use crate::analysis::{finding_id, FindingIdParts};
 use crate::engine::{Finding, Location, Severity};
 use crate::graph::ProjectGraph;
-use crate::vocab::{Confidence, EdgeKind, FileId, FileOrigin, NodeRef, SymbolId};
+use crate::vocab::{
+    Category, Confidence, EdgeKind, FileId, FileOrigin, Group, NodeRef, SubjectKind, SymbolId,
+};
+use smol_str::SmolStr;
 
 fn origin_file(graph: &ProjectGraph, node: NodeRef) -> FileId {
     match node {
@@ -53,8 +56,13 @@ fn origin_file(graph: &ProjectGraph, node: NodeRef) -> FileId {
 
 /// The narrowest scope that relates `origin` to the declaring file `decl` — what a reference
 /// from `origin` *requires* the declaration's visibility to at least be. Scopes nest
-/// (File ⊂ Unit ⊂ Package ⊂ Public), so this is a straight first-match walk.
-fn required_scope(graph: &ProjectGraph, decl: FileId, origin: FileId) -> VisibilityScope {
+/// (File ⊂ Unit ⊂ Module ⊂ Package ⊂ Public), so this is a straight first-match walk.
+fn required_scope(
+    graph: &ProjectGraph,
+    decl: FileId,
+    origin: FileId,
+    unit_parents: &HashMap<SmolStr, SmolStr>,
+) -> VisibilityScope {
     if decl == origin {
         return VisibilityScope::File;
     }
@@ -63,6 +71,12 @@ fn required_scope(graph: &ProjectGraph, decl: FileId, origin: FileId) -> Visibil
     if let (Some(a), Some(b)) = (&decl_file.unit, &origin_file.unit) {
         if a == b {
             return VisibilityScope::Unit;
+        }
+        // A use from somewhere BELOW the declaring unit needs the subtree, not the whole
+        // package — otherwise a `pub(super)` item used only where `pub(super)` reaches would
+        // read as needing `pub(crate)` and its available narrowing would go unsaid.
+        if crate::graph::unit_ancestry_contains(b, a, unit_parents) {
+            return VisibilityScope::Module;
         }
     }
     if decl_file.package == origin_file.package {
@@ -101,6 +115,7 @@ pub fn find_internal_only(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<
         }
     }
 
+    let unit_parents = crate::graph::unit_parent_index(&graph.files);
     let mut findings = Vec::new();
     for (index, symbol) in graph.symbols.iter().enumerate() {
         let file = &graph.files[symbol.file.0 as usize];
@@ -167,7 +182,7 @@ pub fn find_internal_only(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<
             if via_macro {
                 VisibilityScope::Public
             } else {
-                required_scope(graph, symbol.file, f)
+                required_scope(graph, symbol.file, f, &unit_parents)
             }
         };
         let required = refs
@@ -181,19 +196,27 @@ pub fn find_internal_only(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<
             .filter(|&&(_, c, _)| c < Confidence::Probable)
             .any(|&(f, _, m)| origin_scope(f, m) > required);
 
-        // A nested-scope declaration's tightest level means "visible to the enclosing
-        // scope", strictly narrower than the file-scope rung's "visible to this file" —
-        // file-local evidence cannot certify it, so the floor moves one scope wider
-        // (an inline-mod item used same-file can narrow to the crate rung, never to
-        // private). Scopes, not indices: whatever the ladder's rung layout, the rule is
-        // "strictly wider than File".
-        let floor = if symbol.nested_scope && required <= VisibilityScope::File {
+        // A nested-scope declaration lives in a scope unit INSIDE its file, and the core
+        // cannot see where that unit's subtree ends — `required_scope` reasons about files.
+        // Every scope up to and including `Module` is derived from file/unit co-location, so
+        // for such a declaration none of them is evidence: two references in one file can sit
+        // in different inner units, and a reference the file-level walk calls "inside the
+        // declaring module's subtree" may be outside the inner one. Only `Package` and wider
+        // survive, because nesting inside a file cannot change which package a declaration is
+        // in. So the floor moves to the first rung strictly wider than `Module`.
+        //
+        // Concretely, the false positive this prevents: an item inside `mod activation { … }`
+        // used from the enclosing file's top level and from a sibling module. File-derived
+        // evidence read that as "its own module subtree" and recommended making it private —
+        // which does not compile, because a parent module cannot see a child's private items.
+        // Scopes, not indices: whatever the ladder's rung layout, the rule is the same.
+        let floor = if symbol.nested_scope && required <= VisibilityScope::Module {
             let Some(wider) = ladder
                 .iter()
                 .map(|rung| rung.scope)
-                .find(|&s| s > VisibilityScope::File)
+                .find(|&s| s > VisibilityScope::Module)
             else {
-                continue; // single-scope ladder — nothing certifiable to suggest
+                continue; // no rung wider than the file's own module — nothing certifiable
             };
             wider
         } else {
@@ -219,6 +242,7 @@ pub fn find_internal_only(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<
         let usage = match required {
             VisibilityScope::File => "its own file",
             VisibilityScope::Unit => "its own unit",
+            VisibilityScope::Module => "its own module subtree",
             VisibilityScope::Package => "its own package",
             VisibilityScope::Public => "the project", // unreachable: Public rungs cover it
         };
@@ -227,16 +251,34 @@ pub fn find_internal_only(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<
         let qualified = symbol.qualified_name();
         findings.push(Finding {
             advisory: false,
-            id: finding_id("internal-only", facet, path, &qualified, ""),
-            category: "internal-only".to_string(),
-            group: "waste".to_string(),
-            subject_kind: facet.to_string(),
+            id: finding_id(FindingIdParts {
+                category: &Category::INTERNAL_ONLY,
+                subject_kind: &SubjectKind::new(facet),
+                path,
+                symbol_path: &qualified,
+                discriminator: "",
+            }),
+            category: Category::INTERNAL_ONLY,
+            group: Group::Waste,
+            subject_kind: SubjectKind::new(facet),
             severity: Severity::Info, // info by default
             confidence,
-            message: format!(
-                "{path}#{qualified} is declared {} but only used within {usage} — {} would suffice for this {facet}",
-                declared.label, tightest.label
-            ),
+            // Two sentences, because there are two evidence states and one of them used to
+            // borrow the other's words: with `weak_wider` the graph HOLDS matches pointing
+            // outside `usage`, just not confident ones, so "only used within its own file" is
+            // a claim this analysis knows to be contradicted. The `possible` tier was already
+            // honest; the prose was not.
+            message: if weak_wider {
+                format!(
+                    "{path}#{qualified} is declared {} and every confidently resolved use is within {usage}, but weaker matches point outside it — {} would suffice for this {facet} only if those are not real uses",
+                    declared.label, tightest.label
+                )
+            } else {
+                format!(
+                    "{path}#{qualified} is declared {} but only used within {usage} — {} would suffice for this {facet}",
+                    declared.label, tightest.label
+                )
+            },
             location: Location {
                 path: Some(file.path.clone()),
                 range: Some(symbol.span),
@@ -244,6 +286,8 @@ pub fn find_internal_only(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<
                 package: graph.package_name(file.package).map(str::to_string),
             },
             related: Vec::new(),
+            rolled_up: None,
+            sources: Vec::new(),
             delta: None,
             delta_origin: None,
         });
@@ -272,8 +316,10 @@ mod tests {
             }),
             package: crate::vocab::PackageId(0),
             unit: None,
+            unit_parent: None,
             test_spans: Vec::new(),
             string_call_sites: Vec::new(),
+            string_attr_args: Vec::new(),
         }
     }
 
@@ -290,6 +336,9 @@ mod tests {
             implicitly_invoked: false,
             nested_scope: false,
             visibility_inherited: false,
+            visible_in_unit: None,
+            implements: None,
+            markers: Vec::new(),
         }
     }
 
@@ -329,7 +378,7 @@ mod tests {
         let findings = find_internal_only(&graph, &reach);
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].category, "internal-only");
-        assert_eq!(findings[0].group, "waste");
+        assert_eq!(findings[0].group, crate::vocab::Group::Waste);
         assert_eq!(findings[0].confidence, Confidence::Certain);
         assert!(findings[0].message.contains("src/a.ts#helper"));
     }
@@ -468,6 +517,20 @@ mod tests {
         let findings = find_internal_only(&graph, &reach);
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].confidence, Confidence::Possible);
+        // The tier and the prose have to agree: a cross-file match EXISTS in the graph, so
+        // the message must not claim the symbol is used only in its own file.
+        assert!(
+            !findings[0].message.contains("only used within"),
+            "weak-evidence verdict still borrowed the certain tier's words: {}",
+            findings[0].message
+        );
+        assert!(
+            findings[0]
+                .message
+                .contains("weaker matches point outside it"),
+            "{}",
+            findings[0].message
+        );
     }
 
     #[test]
@@ -539,8 +602,10 @@ mod tests {
             }),
             package: crate::vocab::PackageId(0),
             unit: None,
+            unit_parent: None,
             test_spans: Vec::new(),
             string_call_sites: Vec::new(),
+            string_attr_args: Vec::new(),
         }];
         let symbols = vec![symbol(FileId(0), "helper", 1)];
         let edges = vec![edge(
@@ -657,6 +722,7 @@ mod tests {
                     declares_surface: false,
                     surface: Vec::new(),
                     resolves_dependency_usage: true,
+                    manifest_claim_languages: Vec::new(),
                 },
                 crate::graph::PackageNode {
                     workspace_entry: None,
@@ -668,6 +734,7 @@ mod tests {
                     declares_surface: false,
                     surface: Vec::new(),
                     resolves_dependency_usage: true,
+                    manifest_claim_languages: Vec::new(),
                 },
             ]);
         let reach = crate::analysis::reachability::compute(&graph);
@@ -851,6 +918,72 @@ mod tests {
         );
     }
 
+    /// Rust's own ladder, verbatim: `private` is a **Module** rung (a private item is visible
+    /// to its declaring module *and its descendants*), not a File one.
+    fn rust_ladder() -> Vec<crate::adapter::VisibilityRung> {
+        use crate::adapter::VisibilityScope::*;
+        vec![
+            rung(Module, "private"),
+            rung(Module, "pub(super)"),
+            rung(Package, "pub(crate)"),
+            rung(Public, "pub"),
+        ]
+    }
+
+    #[test]
+    fn a_nested_scope_symbol_is_never_narrowed_to_a_module_rung() {
+        // The regression kndo found on its own source. A `pub(crate) fn` inside an inline
+        // `mod activation { … }`, used from the enclosing file, was told "private would
+        // suffice" — because `private` is a Module rung and file-local evidence looked like
+        // it certified the module. It does not: the declaration's module is `activation`,
+        // strictly inside the file, and the use is in the file's own (parent) module, which
+        // cannot see a child module's private items. Applying the advice does not compile.
+        //
+        // Everything up to and including Module is derived from file/unit co-location, so for
+        // a declaration nested inside its file none of it is evidence. Package survives:
+        // nesting inside a file cannot change which package something is in.
+        let suggestion = |nested: bool| {
+            let files = vec![file("src/lib.rs")];
+            let mut s = symbol(FileId(0), "global_plugin_dir", 3);
+            s.nested_scope = nested;
+            let edges = root_and_ref(FileId(0), FileId(0), SymbolId(0));
+            let graph = ProjectGraph::for_test(files, vec![s], vec![], edges)
+                .with_visibility_ladders(vec![(SmolStr::new("mock"), rust_ladder())]);
+            let reach = crate::analysis::reachability::compute(&graph);
+            find_internal_only(&graph, &reach)
+                .first()
+                .map(|f| f.message.clone())
+        };
+        assert!(
+            suggestion(false)
+                .expect("a top-level pub item used only in its own file can go private")
+                .contains("private would suffice"),
+            "top-level: the Module rung is certifiable from file-local evidence"
+        );
+        assert!(
+            suggestion(true)
+                .expect("nested: pub is still narrowable, just not that far")
+                .contains("pub(crate) would suffice"),
+            "nested: the floor clears every Module rung, not just the File one"
+        );
+    }
+
+    #[test]
+    fn a_nested_scope_symbol_declared_at_the_package_rung_is_left_alone() {
+        // The exact shape of the false positive: already `pub(crate)`, nested, used only
+        // within its own file. The raised floor IS the declared rung, so there is nothing
+        // honest left to suggest — and kndo says nothing rather than something that would
+        // not compile.
+        let files = vec![file("src/lib.rs")];
+        let mut s = symbol(FileId(0), "global_plugin_dir", 2);
+        s.nested_scope = true;
+        let edges = root_and_ref(FileId(0), FileId(0), SymbolId(0));
+        let graph = ProjectGraph::for_test(files, vec![s], vec![], edges)
+            .with_visibility_ladders(vec![(SmolStr::new("mock"), rust_ladder())]);
+        let reach = crate::analysis::reachability::compute(&graph);
+        assert!(find_internal_only(&graph, &reach).is_empty());
+    }
+
     #[test]
     fn a_nested_scope_symbol_already_at_the_floor_is_not_accused() {
         // Declared pub(crate) (the first rung wider than File), used same-file, nested:
@@ -897,6 +1030,7 @@ mod tests {
                     declares_surface: false,
                     surface: Vec::new(),
                     resolves_dependency_usage: true,
+                    manifest_claim_languages: Vec::new(),
                 },
                 crate::graph::PackageNode {
                     workspace_entry: None,
@@ -908,6 +1042,7 @@ mod tests {
                     declares_surface: false,
                     surface: Vec::new(),
                     resolves_dependency_usage: true,
+                    manifest_claim_languages: Vec::new(),
                 },
             ])
             .with_visibility_ladders(vec![(

@@ -3,6 +3,7 @@ name = "kndo-adapter-json"
 description = "JSON adapter for kndo — non-source: claims files, extracts no symbols"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 publish.workspace = true

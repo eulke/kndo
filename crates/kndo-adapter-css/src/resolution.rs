@@ -14,6 +14,14 @@ pub(crate) fn resolve(spec: &ImportSpec, ctx: &ResolveCtx<'_>) -> Resolution {
     if specifier.starts_with("sass:") {
         return Resolution::Unresolved;
     }
+    // `@import url(…)` / `@import "https://fonts.googleapis.com/…"` — a stylesheet the browser
+    // fetches, not a path into this project. Nothing here can be missing.
+    if specifier.starts_with("http://")
+        || specifier.starts_with("https://")
+        || specifier.starts_with("//")
+    {
+        return Resolution::Unresolved;
+    }
     let base = kndo_adapter_toolkit::paths::join(
         kndo_adapter_toolkit::paths::dirname(spec.from.0.as_str()),
         specifier,
@@ -24,7 +32,17 @@ pub(crate) fn resolve(spec: &ImportSpec, ctx: &ResolveCtx<'_>) -> Resolution {
             return Resolution::File(path, Confidence::Certain);
         }
     }
-    Resolution::Unresolved
+    // Every candidate spelling `@use`/`@import` allows — partials, extensions, index files —
+    // was tried, so the miss is real. Whether it is a *defect* depends on what the specifier
+    // is: an explicitly relative one (`./x`, `../x`) can only ever have been a path next to
+    // this file, so a miss is a broken path. A bare one (`@import "bootstrap"`) is ambiguous —
+    // Sass also resolves those through load paths and `node_modules`, which this adapter does
+    // not read — so a miss there is no answer, not an accusation.
+    if specifier.starts_with("./") || specifier.starts_with("../") {
+        Resolution::Missing
+    } else {
+        Resolution::Unresolved
+    }
 }
 
 /// Candidate paths in resolution order: the literal path as given (covers plain
@@ -91,12 +109,22 @@ mod tests {
     }
 
     #[test]
-    fn a_specifier_matching_nothing_is_unresolved() {
+    fn a_specifier_matching_nothing_is_missing_not_merely_unresolved() {
+        // Every spelling `@use`/`@import` allows was tried, so the answer is complete: the
+        // path names no file. `Unresolved` would mean "I have no answer", and the `unresolved`
+        // analysis (correctly) reports nothing for that.
         let known: FxHashSet<ProjectPath> = FxHashSet::default();
         let ctx = ResolveCtx::new(&known);
+        assert_eq!(resolve(&spec("./missing.css"), &ctx), Resolution::Missing);
+        // A built-in Sass module is not a path at all — no answer, and no accusation.
+        assert_eq!(resolve(&spec("sass:math"), &ctx), Resolution::Unresolved);
+        // A stylesheet the browser fetches. Not this project's file, so never missing from it.
         assert_eq!(
-            resolve(&spec("./missing.css"), &ctx),
+            resolve(&spec("https://fonts.googleapis.com/css?family=X"), &ctx),
             Resolution::Unresolved
         );
+        // `@import "bootstrap"` — Sass also resolves bare names through load paths and
+        // `node_modules`, which this adapter does not read. Ambiguous, so no accusation.
+        assert_eq!(resolve(&spec("bootstrap"), &ctx), Resolution::Unresolved);
     }
 }

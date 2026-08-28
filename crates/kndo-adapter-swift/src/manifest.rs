@@ -4,9 +4,10 @@
 //! parse rather than Gradle's line-scan (every argument SwiftPM itself requires is labeled, so
 //! matching by label is exact, not a heuristic).
 
+use kndo_adapter_toolkit::parsing::{find_child, text};
 use kndo_core::adapter::{
-    Diagnostic, DiagnosticLevel, ManifestDependency, ManifestFacts, ManifestRoot, ProjectPath,
-    ResolveCtx,
+    AdapterDiagnostic, DiagnosticLevel, ManifestDependency, ManifestFacts, ManifestRoot,
+    ProjectPath, ResolveCtx,
 };
 use kndo_core::vocab::{Confidence, DependencyScope, RootKind};
 use smol_str::SmolStr;
@@ -164,14 +165,28 @@ fn string_array(node: Node, src: &[u8]) -> Vec<String> {
 
 const VERSION_ARG_LABELS: &[&str] = &["from", "exact", "branch", "revision"];
 
-fn collect_package_dependencies(deps: Option<Node>, src: &[u8]) -> Vec<ManifestDependency> {
-    let Some(deps) = deps else {
-        return Vec::new();
+/// Each `call_expression` element of an optional array-literal node, run through `pick`.
+/// `Package.swift` writes every list this way — `dependencies: [.package(…)]`,
+/// `targets: [.target(…)]` — so the absent-list-is-an-empty-list rule and the element walk are
+/// written once and each caller supplies only what it pulls out of an element. Generic in the
+/// collection so a caller can gather pairs into a map.
+fn collect_calls<T, C: FromIterator<T>>(
+    array: Option<Node>,
+    src: &[u8],
+    pick: impl Fn(Node, &[u8]) -> Option<T>,
+) -> C {
+    let Some(array) = array else {
+        return C::from_iter(std::iter::empty());
     };
-    deps.children(&mut deps.walk())
+    array
+        .children(&mut array.walk())
         .filter(|n| n.kind() == "call_expression")
-        .filter_map(|call| package_dependency(call, src))
+        .filter_map(|call| pick(call, src))
         .collect()
+}
+
+fn collect_package_dependencies(deps: Option<Node>, src: &[u8]) -> Vec<ManifestDependency> {
+    collect_calls(deps, src, package_dependency)
 }
 
 /// `.package(url: "...", from/exact/branch/revision: "...")` — `name` is a best-effort identity
@@ -185,7 +200,7 @@ fn package_dependency(call: Node, src: &[u8]) -> Option<ManifestDependency> {
     let url = string_literal_text(url_node, src)?;
     Some(ManifestDependency {
         name: SmolStr::new(dependency_name_from_url(&url)),
-        version_req: SmolStr::new(dependency_version_req(call, src)),
+        version_req: dependency_version_req(call, src).map(SmolStr::new),
         scope: DependencyScope::Prod,
         inherited: false,
     })
@@ -196,24 +211,20 @@ fn dependency_name_from_url(url: &str) -> String {
     last.strip_suffix(".git").unwrap_or(last).to_string()
 }
 
-fn dependency_version_req(call: Node, src: &[u8]) -> String {
+/// The declared requirement across SwiftPM's several spellings, or `None` when the call names
+/// none of them — a `.package(path:)` local dependency, or a branch/revision pin. That is not
+/// "any version": it is a manifest stating no comparable requirement, and `version-skew` has to
+/// be able to tell the two apart.
+fn dependency_version_req(call: Node, src: &[u8]) -> Option<String> {
     VERSION_ARG_LABELS
         .iter()
         .find_map(|label| labeled_arg(call, label, src).and_then(|v| string_literal_text(v, src)))
-        .unwrap_or_else(|| "*".to_string())
 }
 
 // ---------------------------------------------------------------- targets & root promotion
 
 fn collect_target_names(targets: Option<Node>, src: &[u8]) -> Vec<String> {
-    let Some(targets) = targets else {
-        return Vec::new();
-    };
-    targets
-        .children(&mut targets.walk())
-        .filter(|n| n.kind() == "call_expression")
-        .filter_map(|call| target_name(call, src))
-        .collect()
+    collect_calls(targets, src, target_name)
 }
 
 fn target_name(call: Node, src: &[u8]) -> Option<String> {
@@ -226,18 +237,11 @@ fn collect_target_paths(
     targets: Option<Node>,
     src: &[u8],
 ) -> std::collections::HashMap<String, String> {
-    let Some(targets) = targets else {
-        return Default::default();
-    };
-    targets
-        .children(&mut targets.walk())
-        .filter(|n| n.kind() == "call_expression")
-        .filter_map(|call| {
-            let name = target_name(call, src)?;
-            let path = labeled_arg(call, "path", src).and_then(|v| string_literal_text(v, src))?;
-            Some((name, path))
-        })
-        .collect()
+    collect_calls(targets, src, |call, src| {
+        let name = target_name(call, src)?;
+        let path = labeled_arg(call, "path", src).and_then(|v| string_literal_text(v, src))?;
+        Some((name, path))
+    })
 }
 
 /// One `ManifestRoot{Production, Certain}` per non-test `.swift` file under a publicly-
@@ -283,18 +287,9 @@ fn is_vendored(path: &str) -> bool {
 
 // ---------------------------------------------------------------- small tree helpers
 
-fn find_child<'a>(node: Node<'a>, kind: &str) -> Option<Node<'a>> {
-    node.children(&mut node.walk()).find(|n| n.kind() == kind)
-}
-
-fn text<'a>(node: Node, src: &'a [u8]) -> &'a str {
-    std::str::from_utf8(&src[node.byte_range()]).unwrap_or("")
-}
-
-fn diag(message: &str) -> Diagnostic {
-    Diagnostic {
+fn diag(message: &str) -> AdapterDiagnostic {
+    AdapterDiagnostic {
         level: DiagnosticLevel::Warn,
-        path: None,
         message: message.to_string(),
         span: None,
     }
@@ -357,7 +352,7 @@ let package = Package(
         assert!(!f.private, "a library product makes the package public");
         assert_eq!(f.workspace_members, vec!["MyLib", "MyLibTests"]);
         let dep = f.dependencies.iter().find(|d| d.name == "bar").unwrap();
-        assert_eq!(dep.version_req, "1.0.0");
+        assert_eq!(dep.version_req.as_deref(), Some("1.0.0"));
         assert_eq!(dep.scope, DependencyScope::Prod);
     }
 
@@ -402,6 +397,6 @@ let package = Package(
 "#;
         let f = facts(src, &[]);
         let dep = f.dependencies.iter().find(|d| d.name == "x").unwrap();
-        assert_eq!(dep.version_req, "main");
+        assert_eq!(dep.version_req.as_deref(), Some("main"));
     }
 }

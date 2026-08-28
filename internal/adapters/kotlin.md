@@ -172,7 +172,17 @@ receiver chain is walked recursively for its own references — this is what mak
 type's bare `identifier` (or the last segment when the reference names a qualified type).
 `delegation_specifier` entries (`class C : Base(), Interface1` — both the superclass
 constructor-invocation shape and a bare interface name) → `Extend`, matching Java's
-superclass+implements handling. Lambda bodies (`lambda_literal`) and `when_expression`/
+superclass+implements handling. The superclass invocation's **argument list** is walked as an
+ordinary expression on top of that `Extend`: `class MyMeta : Base(MyProvider)` references
+`MyProvider`, and dropping it left Exposed's `PostgreSQLTypeProvider` — passed to its
+superclass on the very next declaration in the same file — with no incoming reference at all.
+A primary constructor parameter's **default value** is walked for the same reason
+(`class Hasher(val cost: Int = DEFAULT_COST)` references `DEFAULT_COST`); only the parameter's
+type used to be. Both attribute `within` to the owning class, per RFC 0012 §4's rule that code
+running on instantiation belongs to the type. Pinned by the `ctor-arg-and-default-value`
+fixture, whose declarations are deliberately `internal`/`private` — public ones are library
+roots and stay alive without any reference, so a public version of the fixture passes even
+with the extraction gap reintroduced. Lambda bodies (`lambda_literal`) and `when_expression`/
 `when_entry` bodies are walked like any other expression — same safe-direction over-
 approximation as every other adapter's closure handling.
 
@@ -192,9 +202,41 @@ counting nested clauses), `&&`/`||` (leaf tokens inside `binary_expression`, exa
 Java's). The elvis operator (`?:`) and the not-null assertion (`!!`) are **not** counted as
 branches — `?:` is a value-producing fallback expression, not a control-flow fork the way
 `if`/`when` are (same reasoning JS's optional-chaining `?.` isn't counted either); this keeps
-the metric consistent across adapters rather than inventing a Kotlin-specific bump. Each
-`lambda_literal` body is counted as its own function-shape unit, same "each closure gets its
-own metrics" stance as Java/JS/Rust.
+the metric consistent across adapters rather than inventing a Kotlin-specific bump. Each `lambda_literal` or `anonymous_function` clearing the clone floor becomes its own callable **shape**
+(`MetricsSyntax::nested_callable_kinds` — its branches and tokens leave the enclosing shape's
+stream, which keeps one `FN` in their place, and `crap`/`duplicate` report it in its own
+right). A smaller one stays an expression inside its owner: promoting it would leave both
+halves under the floor and cost real clone findings — measured, that was 83 clone participants
+on the field corpus. The split's semantics are uniform across adapters; only the node kinds
+that trigger it are per-language.
+
+`MetricsSyntax::construction_kinds` is deliberately **empty** here: constructing a value in
+Kotlin is an ordinary `call_expression`, indistinguishable from any other call, so this adapter
+has nothing true to report and `duplicate`'s construction exemption simply never fires for
+Kotlin — today's behaviour, unchanged. Guessing (an uppercase callee, say) would be the adapter
+inventing a verdict, in the accusation direction RFC 0012 §2 forbids.
+
+**Properties**: a property with an accessor BODY is a callable, not a value — `Method` when it
+has an owner, `Function` at top level; a stored one stays `Field`/`Variable`. Kotlin compiles such
+a property to a getter, so this is the truthful kind, and the distinguishing node is a `getter`/`setter` with a `function_body`.
+A bodyless accessor (a `private set`, an annotated bare `get`)
+leaves the property stored: it changes the accessor, not what the property IS.
+
+Being a callable, it also gets a **shape**: `FileFacts::functions` carries one entry per accessor
+body, so `crap` and `duplicate` can see a getter the way they see a function. One symbol, one
+numbering — `get` is `shape_ordinal` 0 (reading the property runs it) and `set` continues from
+there, which is what keeps two accessors of one property from colliding on a nested shape's
+identity. `by lazy { … }` is an initializer, not an accessor: its lambda is walked for
+references and belongs to the property's own liveness, not to a shape of its own.
+
+Every child of a `property_declaration` that carries code is walked — the `= expr` initializer,
+the `by expr` delegate, and each accessor body — enumerated **by kind**, never by position. The
+positional "last child" rule this replaced returned the *getter* for `val x = compute()` followed
+by a `get()`, and `compute()`'s reference vanished with it.
+
+
+Naming both `Field` made the kind unable to separate a constant from real logic, which is what
+let `untested` accuse header-name constants and `MAX_VARCHAR_LENGTH` of not being tested.
 
 **Grammar ground truth**: pinned in `kndo-adapter-kotlin/src/parsing.rs`'s `#[ignore]`d probe
 tests, covering declarations/modifiers/visibility, imports, `when`/`if`/`for`/`while`/`try`,
@@ -210,7 +252,8 @@ Emitted import kinds:
 |------|----------|
 | `import com.foo.Bar` | specifier `com.foo`, binding `[Bar]` — same package/type split as Java, free from the grammar's own `qualified_identifier` nesting |
 | `import com.foo.Bar as Alias` | specifier `com.foo`, binding `[{local: Alias, imported: Bar}]` — Kotlin's own import-aliasing syntax (Java has none); the binding's `local`/`imported` split already exists in the contract for exactly this shape |
-| `import com.foo.*` | specifier `com.foo`, no bindings, `opaque_namespace_use: true` — same keep-alive-only mechanism and same gap as Java's wildcard import (§0, §5) |
+| annotations on a declaration | `Declaration::markers`, as written and in source order — `@Repository` (`annotation > user_type`) and `@Named("x")` (`annotation > constructor_invocation > user_type`) alike, plus the last segment of a qualified spelling. Same facts-not-verdicts contract as Java's, same consumer (`[[externally-invoked]]`) |
+| `import com.foo.*` | specifier `com.foo`, no bindings, **both** `opaque_namespace_use: true` (the wildcard over the target's exports — keeps it alive without naming what it took) and `module_names_visible: true` (the language's scoping rule: every top-level name of that package is legal here *unqualified*, so the core's bare-name fallback consults that unit's table). Emitting only the first meant a bare call to a wildcard-imported top-level function resolved to nothing at all — kotlinx.coroutines calls `recoverStackTrace(…)` that way from dozens of files in other packages, and every declaration of it read `unused`; landing the second took the repo from 3454 findings to 2909 and 69.8 C to 79.3 C |
 | `import com.foo::Bar` sentinel shape | **not applicable** — Kotlin has no `import static`; a top-level `const val`/function is imported the same way a class is (`import com.foo.CONST`), row 1 already covers it |
 
 `ImportKind::Package` throughout (no relative-path import shape), `Confidence::Certain` (an
@@ -271,6 +314,7 @@ manifest-driven root-promotion boost a `src/main/kotlin`-housed file gets.
 | Smart-cast / `is`/`as` type checks | the checked type is an ordinary `TypeUse` reference; the compiler-level flow-sensitive narrowing itself has no representation in kndo's model (nor does any other adapter's) |
 | Meta-annotated, parameterless `annotation class` | not extracted — a verified upstream grammar limitation, not an extraction bug (§0's last bullet) |
 | Kotlin Multiplatform source sets | files still claimed/extracted as ordinary `.kt` source; role classification and root promotion assume single-platform JVM layout and undercount on a real KMP tree (§0, §7) |
+| `expect` / `actual` declarations | ONE logical declaration with several bodies, and the unit key (the declared package name) is the same for all of them — so they are exactly the core's same-unit *twins*, and a reference to the name edges to every one of them. Nothing Kotlin-specific in the core: the same machinery covers Go's mutually exclusive build-tag files and Rust's `#[cfg]` alternates (RFC 0012 §8). Before it, the `expect` took every call and its `actual`s read `unused`, or the reverse |
 | `@JvmStatic`/`@JvmName`/`@JvmOverloads` JVM-interop annotations | not modeled specially — these affect bytecode-level dispatch shape (extra overloads, static vs. instance methods) that has no bearing on kndo's textual liveness model; a call site written in Kotlin always looks like an ordinary Kotlin call regardless of what the annotation generates for Java callers |
 
 ## 6. Conformance fixtures (shared harness, RFC 0002 §8)

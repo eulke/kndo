@@ -17,7 +17,14 @@
 //!
 //! Because staleness is judged against the *complete* pre-suppression finding set, an
 //! actively-suppressing pragma can never be `stale`, and deleting a stale pragma can never
-//! resurrect a finding (no allow/stale flicker). `stale` findings are appended
+//! resurrect a finding (no allow/stale flicker). Verdict 3 additionally requires that the
+//! category was *judged* this run: an analysis that abstained
+//! ([`crate::analysis::Verdict::Abstained`] — no coverage report, no test roots) produces an
+//! empty finding list that says nothing about the code, and reading that emptiness as "the
+//! issue is gone" is the flicker loop in disguise — delete the pragma on the advice, add the
+//! coverage report, and the finding returns. Verdicts 1 and 2 are unaffected: an unknown
+//! category and a pragma attached to nothing are structural errors, verifiable without running
+//! any analysis. `stale` findings are appended
 //! *after* pragma matching, so they are structurally not inline-suppressible ("`stale` itself is
 //! not inline-suppressible") — and a `kndo:allow stale` pragma is rejected up
 //! front as meta-suppression, itself stale. `plugin:`-prefixed categories are validated against
@@ -37,25 +44,6 @@ use crate::adapter::{RawSuppression, Span, SuppressionScope};
 use crate::engine::{Finding, Location, SuppressedSummary};
 use crate::graph::ProjectGraph;
 use crate::vocab::{Confidence, FileId};
-
-/// The 1.0 category registry — the closed set of core verdicts
-/// a suppression may name. `plugin:`-namespaced categories are validated dynamically against
-/// declared rules instead.
-const CATEGORY_REGISTRY: [&str; 13] = [
-    "unused",
-    "test-only",
-    "untested",
-    "undeclared",
-    "unresolved",
-    "version-skew",
-    "duplicate",
-    "internal-only",
-    "private-type-leak",
-    "cyclic",
-    "deep-import",
-    "crap",
-    "stale",
-];
 
 enum Scope {
     File,
@@ -100,6 +88,7 @@ pub(crate) fn apply(
     graph: &ProjectGraph,
     findings: Vec<Finding>,
     plugin_categories: &HashSet<String>,
+    abstained: &[crate::analysis::Abstention],
 ) -> (Vec<Finding>, SuppressedSummary) {
     if graph.suppressions.is_empty() {
         return (findings, SuppressedSummary::default());
@@ -113,7 +102,7 @@ pub(crate) fn apply(
     stale.extend(
         bindings
             .iter()
-            .filter(|b| !b.matched)
+            .filter(|b| !b.matched && !abstained.iter().any(|a| a.category.as_str() == b.category))
             .map(|b| (b.file, b.raw, StaleKind::MatchedNothing, b.anchor)),
     );
     append_stale_findings(graph, stale, &mut kept);
@@ -177,8 +166,13 @@ fn validate_category(
     if raw.category == "stale" {
         return Some(Classified::Stale(StaleKind::Meta));
     }
-    (!CATEGORY_REGISTRY.contains(&raw.category.as_str()))
-        .then_some(Classified::Stale(StaleKind::UnknownCategory))
+    // The closed set of core verdicts a suppression may name is [`Category::ALL`] itself —
+    // not a second list beside it. `plugin:`-namespaced categories are validated dynamically
+    // against the rules active plugins declare.
+    (!crate::vocab::Category::all()
+        .iter()
+        .any(|c| c.as_str() == raw.category.as_str()))
+    .then_some(Classified::Stale(StaleKind::UnknownCategory))
 }
 
 /// The marking pass: filters findings any binding covers out of the set —
@@ -270,16 +264,16 @@ fn stale_finding(
     let file_node = &graph.files[file.0 as usize];
     let path = file_node.path.clone();
     Finding {
-        id: crate::analysis::finding_id(
-            "stale",
-            "suppression",
-            path.0.as_str(),
-            anchor.unwrap_or(""),
-            &format!("{target}#{}#{ordinal}", kind.tag()),
-        ),
-        category: "stale".to_string(),
-        group: "hygiene".to_string(),
-        subject_kind: "suppression".to_string(),
+        id: crate::analysis::finding_id(crate::analysis::FindingIdParts {
+            category: &crate::vocab::Category::STALE,
+            subject_kind: &crate::vocab::SubjectKind::SUPPRESSION,
+            path: path.0.as_str(),
+            symbol_path: anchor.unwrap_or(""),
+            discriminator: &format!("{target}#{}#{ordinal}", kind.tag()),
+        }),
+        category: crate::vocab::Category::STALE,
+        group: crate::vocab::Group::Hygiene,
+        subject_kind: crate::vocab::SubjectKind::SUPPRESSION,
         severity: crate::engine::Severity::Info,
         confidence: Confidence::Certain,
         message: stale_message(kind, &path.0, raw, anchor, target),
@@ -297,6 +291,8 @@ fn stale_finding(
                 .map(|n| n.to_string()),
         },
         related: Vec::new(),
+        rolled_up: None,
+        sources: Vec::new(),
         delta: None,
         delta_origin: None,
         advisory: false,
@@ -350,9 +346,9 @@ fn typo_hint(cat: &str) -> String {
 
 /// Closest registry category within edit distance 2 — a typo hint, not a correction.
 fn nearest_category(cat: &str) -> Option<&'static str> {
-    CATEGORY_REGISTRY
+    crate::vocab::Category::all()
         .iter()
-        .map(|c| (edit_distance(cat, c), *c))
+        .map(|c| (edit_distance(cat, c.as_str()), c.as_str()))
         .min()
         .filter(|(d, _)| *d <= 2)
         .map(|(_, c)| c)
@@ -410,11 +406,11 @@ fn bind_one<'a>(
 }
 
 fn matches(binding: &Binding, file: FileId, finding: &Finding) -> bool {
-    if binding.file != file || binding.category != finding.category {
+    if binding.file != file || finding.category != binding.category {
         return false;
     }
     if let Some(subject) = binding.subject {
-        if subject != finding.subject_kind {
+        if finding.subject_kind != subject {
             return false;
         }
     }
@@ -451,8 +447,10 @@ mod tests {
                 class: None,
                 package: PackageId(0),
                 unit: None,
+                unit_parent: None,
                 test_spans: Vec::new(),
                 string_call_sites: Vec::new(),
+                string_attr_args: Vec::new(),
             }],
             symbols,
             vec![],
@@ -477,6 +475,9 @@ mod tests {
             implicitly_invoked: false,
             nested_scope: false,
             visibility_inherited: false,
+            visible_in_unit: None,
+            implements: None,
+            markers: Vec::new(),
         }
     }
 
@@ -503,9 +504,9 @@ mod tests {
         Finding {
             advisory: false,
             id: format!("kndo-{category}-{line}"),
-            category: category.to_string(),
-            group: "waste".to_string(),
-            subject_kind: subject_kind.to_string(),
+            category: crate::vocab::Category::new(category),
+            group: crate::vocab::Group::Waste,
+            subject_kind: crate::vocab::SubjectKind::new(subject_kind),
             severity: Severity::Warning,
             confidence: Confidence::Certain,
             message: "example".to_string(),
@@ -519,6 +520,8 @@ mod tests {
                 package: None,
             },
             related: Vec::new(),
+            rolled_up: None,
+            sources: Vec::new(),
             delta: None,
             delta_origin: None,
         }
@@ -528,7 +531,7 @@ mod tests {
         graph: &ProjectGraph,
         findings: Vec<Finding>,
     ) -> (Vec<Finding>, SuppressedSummary) {
-        apply(graph, findings, &HashSet::default())
+        apply(graph, findings, &HashSet::default(), &[])
     }
 
     fn stale_of(kept: &[Finding]) -> Vec<&Finding> {
@@ -641,7 +644,7 @@ mod tests {
         let stale = stale_of(&kept);
         assert_eq!(stale.len(), 1);
         assert!(stale[0].message.contains("attaches to no declaration"));
-        assert_eq!(stale[0].group, "hygiene");
+        assert_eq!(stale[0].group, crate::vocab::Group::Hygiene);
         assert_eq!(stale[0].subject_kind, "suppression");
         assert_eq!(stale[0].severity, Severity::Info);
         assert_eq!(
@@ -668,6 +671,77 @@ mod tests {
         assert!(stale[0].message.contains("a.ts#foo"));
         assert!(stale[0].message.contains("matches no finding"));
         assert_eq!(stale[0].location.symbol.as_deref(), Some("foo"));
+    }
+
+    fn abstained(category: &str) -> Vec<crate::analysis::Abstention> {
+        vec![crate::analysis::Abstention {
+            category: crate::vocab::Category::new(category),
+            reason: "test fixture: not measured".to_string(),
+        }]
+    }
+
+    #[test]
+    fn a_pragma_for_an_abstained_category_is_not_stale() {
+        // The accusation-direction bug: with no coverage report the `crap` analysis abstains
+        // and emits nothing, and reading that emptiness as "the issue is gone" told the user
+        // to delete a pragma that is doing its job — add the report and the finding returns.
+        let graph = graph_with(
+            vec![symbol("foo", 3, 3)],
+            vec![(
+                FileId(0),
+                suppression("crap", None, SuppressionScope::Declaration, 3, 3),
+            )],
+        );
+        let (kept, summary) = apply(&graph, vec![], &HashSet::default(), &abstained("crap"));
+        assert_eq!(summary.inline, 0);
+        assert!(
+            stale_of(&kept).is_empty(),
+            "an unjudged category cannot make a pragma stale: {:?}",
+            stale_of(&kept)
+        );
+    }
+
+    #[test]
+    fn a_pragma_for_a_judged_category_is_still_stale_when_it_matches_nothing() {
+        // The other half: abstention exempts only the category that abstained. `unused` was
+        // judged in this run, so its matchless pragma is genuinely dead.
+        let graph = graph_with(
+            vec![symbol("foo", 3, 3)],
+            vec![(
+                FileId(0),
+                suppression("unused", None, SuppressionScope::Declaration, 3, 3),
+            )],
+        );
+        let (kept, _) = apply(&graph, vec![], &HashSet::default(), &abstained("crap"));
+        let stale = stale_of(&kept);
+        assert_eq!(stale.len(), 1);
+        assert!(stale[0].message.contains("matches no finding"));
+    }
+
+    #[test]
+    fn abstention_never_excuses_an_unbound_or_misspelled_pragma() {
+        // Verdicts 1 and 2 are structural: an unknown category and a pragma attached to no
+        // declaration are wrong regardless of which analyses ran, so they stay reported.
+        let graph = graph_with(
+            vec![symbol("foo", 3, 3)],
+            vec![
+                (
+                    FileId(0),
+                    suppression("crapp", None, SuppressionScope::Declaration, 3, 3),
+                ),
+                (
+                    FileId(0),
+                    suppression("crap", None, SuppressionScope::Declaration, 40, 40),
+                ),
+            ],
+        );
+        let (kept, _) = apply(&graph, vec![], &HashSet::default(), &abstained("crap"));
+        let stale = stale_of(&kept);
+        assert_eq!(stale.len(), 2, "{stale:?}");
+        assert!(stale.iter().any(|f| f.message.contains("unknown category")));
+        assert!(stale
+            .iter()
+            .any(|f| f.message.contains("attaches to no declaration")));
     }
 
     #[test]
@@ -735,11 +809,12 @@ mod tests {
             &graph,
             vec![finding_at("plugin:kndo:express/route-shadowed", "call", 9)],
             &declared,
+            &[],
         );
         assert!(kept.is_empty());
         assert_eq!(summary.inline, 1);
         // …and a declared-but-matchless pragma is stale like any core one.
-        let (kept, _) = apply(&graph, vec![], &declared);
+        let (kept, _) = apply(&graph, vec![], &declared, &[]);
         assert_eq!(stale_of(&kept).len(), 1);
     }
 

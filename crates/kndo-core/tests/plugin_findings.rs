@@ -10,7 +10,7 @@ use kndo_core::adapter::{
     AdapterDescriptor, Declaration, FileClaim, FileFacts, LanguageAdapter, ManifestFacts,
     RawSuppression, ResolveCtx, SourceFile, Span, SuppressionScope,
 };
-use kndo_core::engine::{BaselineOp, CheckRequest, ConfigOverrides, Engine, RunMode, Severity};
+use kndo_core::engine::{BaselineOp, ConfigOverrides, Engine, RunMode, Severity};
 use kndo_core::plugin::{
     ContentView, FindingSink, GraphView, Plugin, PluginDescriptor, PluginSeverity, PluginTarget,
     RuleDescriptor,
@@ -38,7 +38,9 @@ impl LanguageAdapter for MiniAdapter {
                 package_cycles: kndo_core::adapter::CycleTolerance::Idiomatic,
             },
             resolves_dependency_usage: false,
+            declares_units_of_testing: true,
             package_test_dirs: Vec::new(),
+            builtin_member_types: Vec::new(),
         }
     }
 
@@ -73,6 +75,9 @@ impl LanguageAdapter for MiniAdapter {
                     implicitly_invoked: false,
                     nested_scope: false,
                     visibility_inherited: false,
+                    visible_in_unit: None,
+                    implements: None,
+                    markers: Vec::new(),
                 });
             } else if let Some(category) = line.strip_prefix("allow ") {
                 facts.suppressions.push(RawSuppression {
@@ -193,9 +198,7 @@ fn project(files: &[(&str, &str)]) -> tempfile::TempDir {
 }
 
 fn check(engine: &mut Engine) -> kndo_core::engine::RunResult {
-    engine.check(CheckRequest {
-        mode: RunMode::Full,
-    })
+    engine.check(RunMode::Full)
 }
 
 fn open(dir: &tempfile::TempDir, plugin: RulePlugin, use_cache: bool) -> Engine {
@@ -204,7 +207,7 @@ fn open(dir: &tempfile::TempDir, plugin: RulePlugin, use_cache: bool) -> Engine 
         ConfigOverrides {
             use_cache,
             threads: Some(1),
-            min_confidence: None,
+            ..ConfigOverrides::default()
         },
         vec![Box::new(MiniAdapter)],
         vec![Box::new(plugin)],
@@ -224,7 +227,7 @@ fn a_declared_rule_emits_namespaced_advisory_findings() {
         .find(|f| f.category.starts_with("plugin:"))
         .expect("the plugin finding must be in the output");
     assert_eq!(f.category, "plugin:test-plugin/no-flag-symbols");
-    assert_eq!(f.group, "convention");
+    assert_eq!(f.group, kndo_core::vocab::Group::Convention);
     assert_eq!(
         f.severity,
         Severity::Warning,

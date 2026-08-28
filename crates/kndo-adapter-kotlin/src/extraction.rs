@@ -9,10 +9,17 @@
 //! keeps the dispatcher itself at effectively zero branches regardless of how many shapes it
 //! covers — the same pattern `kndo_adapter_toolkit::jvm_manifest::gradle_scope` already uses.
 
-use kndo_adapter_toolkit::metrics::{function_shape, MetricsSyntax};
-use kndo_adapter_toolkit::parsing::span;
+use kndo_adapter_toolkit::metrics::{
+    push_accessor_metrics as toolkit_push_accessor_metrics,
+    push_function_metrics as toolkit_push_function_metrics, MetricsSyntax, MIN_CLONE_TOKENS,
+};
+use kndo_adapter_toolkit::parsing::{
+    find_child, handler_for, has_modifier_wrapper,
+    last_identifier_text as toolkit_last_identifier_text, span, text, visibility_level,
+};
+use kndo_adapter_toolkit::refs::{self, BodyHandler, BodySyntax};
 use kndo_core::adapter::{
-    Diagnostic, DiagnosticLevel, FileFacts, FunctionMetrics, ImportBinding, ImportKind, RawImport,
+    AdapterDiagnostic, DiagnosticLevel, FileFacts, ImportBinding, ImportKind, RawImport,
     RawReference, RawRoot, RawRootTarget, Span,
 };
 use kndo_core::vocab::{Confidence, RefKind, RootKind, SymbolKind};
@@ -56,9 +63,17 @@ const METRICS_SYNTAX: MetricsSyntax = MetricsSyntax {
         "null_literal",
     ],
     skip_kinds: &["line_comment", "multiline_comment"],
+    // Each of these becomes its own shape when it is substantial enough to carry clone
+    // evidence by itself; a small one stays an expression inside its owner.
+    // `annotated_lambda` is a wrapper AROUND `lambda_literal`, so naming the literal is
+    // enough; `object_literal` is an object expression whose members are real declarations
+    // the extractor already visits.
+    nested_callable_kinds: &["lambda_literal", "anonymous_function"],
+    // Nothing to declare, and that IS the answer: constructing a value in Kotlin is an
+    // ordinary `call_expression`, indistinguishable from any other call. Guessing (an
+    // uppercase callee, say) would be this adapter inventing a verdict.
+    construction_kinds: &[],
 };
-
-const MIN_CLONE_TOKENS: usize = 50;
 
 /// Item-walk context: the member owner (a class/object/companion's bare name), for `member_of`
 /// attribution. Companion-object members carry the ENCLOSING class's name here,
@@ -82,10 +97,9 @@ const DECL_HANDLERS: &[(&str, DeclHandler)] = &[
 ];
 
 fn dispatch_declaration(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
-    let Some((_, handler)) = DECL_HANDLERS.iter().find(|(k, _)| *k == item.kind()) else {
-        return;
-    };
-    handler(item, src, ctx, out);
+    if let Some(handler) = handler_for(item.kind(), DECL_HANDLERS) {
+        handler(item, src, ctx, out);
+    }
 }
 
 pub(crate) fn extract(_path: &str, content: &[u8]) -> FileFacts {
@@ -95,9 +109,8 @@ pub(crate) fn extract(_path: &str, content: &[u8]) -> FileFacts {
     }
 
     let Some(tree) = crate::parsing::parse(content) else {
-        out.diagnostics.push(Diagnostic {
+        out.diagnostics.push(AdapterDiagnostic {
             level: DiagnosticLevel::Warn,
-            path: None,
             message: "failed to initialize the Kotlin parser".to_string(),
             span: None,
         });
@@ -105,9 +118,8 @@ pub(crate) fn extract(_path: &str, content: &[u8]) -> FileFacts {
     };
     let root = tree.root_node();
     if root.has_error() {
-        out.diagnostics.push(Diagnostic {
+        out.diagnostics.push(AdapterDiagnostic {
             level: DiagnosticLevel::Warn,
-            path: None,
             message: "parse errors — extraction is partial for this file".to_string(),
             span: None,
         });
@@ -166,8 +178,17 @@ fn handle_import(item: Node, src: &[u8], out: &mut FileFacts) {
     let alias = import_alias(item, src);
 
     if is_wildcard {
-        out.imports
-            .push(make_import(&full, sp, Vec::new(), true, None));
+        // `import kotlinx.coroutines.internal.*` is BOTH facts at once: a wildcard over the
+        // target's exports (`opaque_namespace_use` — keeps the target alive without naming
+        // what it took), and the language's scoping rule that every top-level name of that
+        // package is now legal HERE, unqualified (`module_names_visible` — the bare-name
+        // fallback consults the unit's table at Certain). Only the first was emitted, so a
+        // bare call to a wildcard-imported top-level function resolved to nothing at all:
+        // kotlinx.coroutines calls `recoverStackTrace(…)` this way from dozens of files in
+        // other packages, and every declaration of it read `unused`.
+        let mut imp = make_import(&full, sp, Vec::new(), true, None);
+        imp.module_names_visible = true;
+        out.imports.push(imp);
         return;
     }
     let Some((pkg, ty)) = full.rsplit_once('.') else {
@@ -216,6 +237,7 @@ fn make_import(
         opaque_namespace_use,
         module_names_visible: false,
         local_alias,
+        reconstructed: false,
     }
 }
 
@@ -232,40 +254,8 @@ const VISIBILITY_LEVELS: &[(&str, u8)] = &[
 /// modifier at all defaults to `public` (3) — the OPPOSITE default from Java's package-private,
 /// a load-bearing difference.
 fn visibility(item: Node) -> (u8, bool) {
-    let level = visibility_keyword(item)
-        .and_then(|kw| VISIBILITY_LEVELS.iter().find(|(k, _)| *k == kw))
-        .map_or(3, |(_, l)| *l);
+    let level = visibility_level(item, VISIBILITY_LEVELS, 3);
     (level, level == 3)
-}
-
-fn visibility_keyword(item: Node) -> Option<&'static str> {
-    let modifiers = modifiers_node(item)?;
-    let vis = modifiers
-        .children(&mut modifiers.walk())
-        .find(|n| n.kind() == "visibility_modifier")?;
-    vis.children(&mut vis.walk())
-        .find_map(|c| VISIBILITY_LEVELS.iter().find(|(k, _)| *k == c.kind()))
-        .map(|(k, _)| *k)
-}
-
-fn modifiers_node(item: Node) -> Option<Node> {
-    item.children(&mut item.walk())
-        .find(|n| n.kind() == "modifiers")
-}
-
-fn has_modifier_wrapper(item: Node, wrapper: &str, keyword: &str) -> bool {
-    let Some(modifiers) = modifiers_node(item) else {
-        return false;
-    };
-    let Some(found) = modifiers
-        .children(&mut modifiers.walk())
-        .find(|n| n.kind() == wrapper)
-    else {
-        return false;
-    };
-    found
-        .children(&mut found.walk())
-        .any(|c| c.kind() == keyword)
 }
 
 fn has_keyword_child(item: Node, keyword: &str) -> bool {
@@ -294,7 +284,7 @@ fn handle_type(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
     let name = text(name_node, src);
     let vis = visibility(item);
     let kind = class_symbol_kind(item);
-    push_declaration(out, name, kind, item, None, ctx.owner, vis);
+    push_declaration(out, src, name, kind, item, None, ctx.owner, vis);
 
     if let Some(primary) = find_child(item, "primary_constructor") {
         handle_primary_constructor(primary, src, name, out);
@@ -330,6 +320,7 @@ fn handle_class_parameter(param: Node, src: &[u8], owner: &str, out: &mut FileFa
             let vis = visibility(param);
             push_declaration(
                 out,
+                src,
                 text(name_node, src),
                 SymbolKind::Field,
                 param,
@@ -342,6 +333,18 @@ fn handle_class_parameter(param: Node, src: &[u8], owner: &str, out: &mut FileFa
     if let Some(ty) = ty {
         walk_type_refs(ty, src, Some(owner), out);
     }
+    // `class Hasher(val cost: Int = DEFAULT_COST)` — the default value is an expression that
+    // runs when the constructor runs, and its references are real. Only the parameter's TYPE
+    // was walked, so a companion const used exactly this way (Exposed's
+    // `SCryptHasher.DEFAULT_CPU_COST`) had no incoming reference at all. Everything after the
+    // `=` is the initializer; the type and the name are separate children.
+    if let Some(default) = param
+        .children(&mut param.walk())
+        .skip_while(|c| c.kind() != "=")
+        .nth(1)
+    {
+        walk_body(default, src, Some(owner), out);
+    }
 }
 
 fn handle_object(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
@@ -352,6 +355,7 @@ fn handle_object(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
     let vis = visibility(item);
     push_declaration(
         out,
+        src,
         name,
         SymbolKind::Other(SmolStr::new("object")),
         item,
@@ -402,13 +406,13 @@ fn handle_function(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
         start: span(item).start,
         end: span(b).start,
     });
-    push_declaration(out, name, kind, item, signature_span, ctx.owner, vis);
+    push_declaration(out, src, name, kind, item, signature_span, ctx.owner, vis);
     root_function_if_entry_point(item, ctx.owner, name, &qualified, out);
 
     walk_function_signature(item, src, Some(&qualified), out);
     if let Some(body) = body {
         walk_body(body, src, Some(&qualified), out);
-        push_function_metrics(out, &qualified, body);
+        push_function_metrics(out, &qualified, span(item), body);
     }
 }
 
@@ -489,6 +493,7 @@ fn handle_secondary_constructor(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut
     });
     push_declaration(
         out,
+        src,
         "<init>",
         SymbolKind::Constructor,
         item,
@@ -504,19 +509,19 @@ fn handle_secondary_constructor(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut
     }
     if let Some(block) = block {
         walk_body(block, src, Some(&qualified), out);
-        push_function_metrics(out, &qualified, block);
+        push_function_metrics(out, &qualified, span(item), block);
     }
 }
 
-fn push_function_metrics(out: &mut FileFacts, qualified: &str, body: Node) {
-    let shape = function_shape(body, &METRICS_SYNTAX, MIN_CLONE_TOKENS);
-    out.functions.push(FunctionMetrics {
-        symbol: SmolStr::new(qualified),
-        cyclomatic: shape.cyclomatic,
-        loc: shape.loc,
-        token_count: shape.token_count as u32,
-        fingerprints: shape.fingerprints,
-    });
+fn push_function_metrics(out: &mut FileFacts, qualified: &str, decl_span: Span, body: Node) {
+    toolkit_push_function_metrics(
+        out,
+        qualified,
+        decl_span,
+        body,
+        &METRICS_SYNTAX,
+        MIN_CLONE_TOKENS,
+    );
 }
 
 // ---------------------------------------------------------------- properties, type aliases, init
@@ -540,34 +545,112 @@ fn handle_property(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
         return;
     };
     let vis = visibility(item);
-    let kind = if ctx.owner.is_some() {
-        SymbolKind::Field
-    } else {
-        SymbolKind::Variable
-    };
+    let kind = property_symbol_kind(item, ctx);
     let name = text(name_node, src);
-    push_declaration(out, name, kind, item, None, ctx.owner, vis);
+    push_declaration(out, src, name, kind, item, None, ctx.owner, vis);
     // `override val` is dispatch machinery exactly like `override fun` (see
     // root_function_if_entry_point): the supertype's accessor call never names this member.
     mark_override_implicit(item, name, out);
     if let Some(ty) = find_any_child(decl, &["user_type", "nullable_type"]) {
         walk_type_refs(ty, src, ctx.owner, out);
     }
-    if let Some(value) = property_initializer(item) {
-        walk_body(value, src, ctx.owner, out);
+    for code in property_code_children(item) {
+        walk_body(code, src, ctx.owner, out);
+    }
+    // A computed property is a callable and now says so in its kind — so it must have a shape
+    // too, or `crap` and `duplicate` cannot see a getter however gnarly it is. One symbol,
+    // one numbering: `get` is ordinal 0 (reading the property runs it) and `set` continues.
+    let accessors: Vec<Node> = ["getter", "setter"]
+        .iter()
+        .filter_map(|a| find_child(item, a).and_then(|n| find_child(n, "function_body")))
+        .collect();
+    if !accessors.is_empty() {
+        let (_, qualified) = qualify(ctx.owner, name);
+        toolkit_push_accessor_metrics(
+            out,
+            &qualified,
+            span(item),
+            accessors,
+            &METRICS_SYNTAX,
+            MIN_CLONE_TOKENS,
+        );
     }
 }
 
-/// The expression after `=` in a `property_declaration` — the last child when it isn't the
-/// `variable_declaration`/`val`/`var`/`modifiers`/`=` itself (positional, no field name).
-fn property_initializer(item: Node) -> Option<Node> {
+/// A property with an accessor BODY is computed: `val slug: String get() = name.lowercase()`
+/// compiles to a getter method and has code a test can exercise, where `val MAX = 255` has a
+/// value and nothing to exercise. Calling both `Field` made the kind unable to tell a constant
+/// from real logic — which is what let `untested` accuse Exposed's `MAX_VARCHAR_LENGTH` and
+/// vapor's header-name constants of not being tested.
+///
+/// A bodyless accessor (`private set`, an annotated bare `get`) leaves the property stored: it
+/// changes the accessor's visibility, not what the property is.
+fn property_symbol_kind(item: Node, ctx: &Ctx<'_>) -> SymbolKind {
+    let computed = ["getter", "setter"].iter().any(|a| {
+        find_child(item, a)
+            .and_then(|node| find_child(node, "function_body"))
+            .is_some()
+    });
+    match (computed, ctx.owner.is_some()) {
+        (true, true) => SymbolKind::Method,
+        (true, false) => SymbolKind::Function,
+        (false, true) => SymbolKind::Field,
+        (false, false) => SymbolKind::Variable,
+    }
+}
+
+/// Every child of a `property_declaration` that carries CODE: the `= expr` initializer, the
+/// `by expr` delegate, and each accessor's body.
+///
+/// Enumerated by kind, not by position. The previous rule took the LAST child and filtered a
+/// short list of kinds out, which is right only for a property whose initializer is the last
+/// thing written. `val x = foo()` followed by a `get()` returns the *getter*, and `foo()`'s
+/// references vanish; `var x = 1` with a `private set` the same. Verified against the vendored
+/// grammar's `node-types.json`: `property_declaration`'s children are `expression`, `getter`,
+/// `setter`, `property_delegate`, `variable_declaration` and the type/modifier nodes.
+fn property_code_children(item: Node) -> Vec<Node> {
     let mut c = item.walk();
-    item.children(&mut c).last().filter(|n| {
-        !matches!(
-            n.kind(),
-            "variable_declaration" | "val" | "var" | "modifiers" | "="
-        )
-    })
+    item.children(&mut c)
+        .filter_map(|n| match n.kind() {
+            // `= expr` — the initializer, which the grammar spells as a bare expression child.
+            k if k == "expression" || is_expression_kind(k) => Some(n),
+            // `by expr` — the delegate is real code (`by lazy { … }` runs its lambda).
+            "property_delegate" => Some(n),
+            // `get() = …` / `set(v) { … }` — a bodyless accessor contributes nothing.
+            "getter" | "setter" => find_child(n, "function_body"),
+            _ => None,
+        })
+        .collect()
+}
+
+/// Whether a node kind is an expression the grammar names concretely rather than as the
+/// abstract `expression` supertype (`call_expression`, `string_literal`, …). Everything a
+/// `property_declaration` can hold that is NOT one of its structural children is an
+/// initializer expression, so the test is by exclusion — new expression kinds in a grammar
+/// bump keep working without a list to maintain.
+fn is_expression_kind(kind: &str) -> bool {
+    !matches!(
+        kind,
+        "variable_declaration"
+            | "multi_variable_declaration"
+            | "val"
+            | "var"
+            | "="
+            | "by"
+            | "modifiers"
+            | "type_parameters"
+            | "type_constraints"
+            | "type_modifiers"
+            | "user_type"
+            | "nullable_type"
+            | "parenthesized_type"
+            | "getter"
+            | "setter"
+            | "property_delegate"
+            | "comment"
+            | "line_comment"
+            | "multiline_comment"
+    )
 }
 
 fn handle_type_alias(item: Node, src: &[u8], _ctx: &Ctx<'_>, out: &mut FileFacts) {
@@ -576,6 +659,7 @@ fn handle_type_alias(item: Node, src: &[u8], _ctx: &Ctx<'_>, out: &mut FileFacts
     };
     push_declaration(
         out,
+        src,
         text(name_node, src),
         SymbolKind::TypeAlias,
         item,
@@ -606,6 +690,7 @@ fn handle_enum_entry(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts)
     };
     push_declaration(
         out,
+        src,
         text(name_node, src),
         SymbolKind::EnumMember,
         item,
@@ -621,8 +706,12 @@ fn handle_enum_entry(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts)
     }
 }
 
+// The declaration funnel: one construction site for every Kotlin declaration shape, which
+// is exactly why it takes this many facts. Same shape and same allow as the Java adapter's.
+#[allow(clippy::too_many_arguments)]
 fn push_declaration(
     out: &mut FileFacts,
+    src: &[u8],
     name: &str,
     kind: SymbolKind,
     item: Node,
@@ -630,18 +719,47 @@ fn push_declaration(
     member_of: Option<&str>,
     (level, exported): (u8, bool),
 ) {
-    out.declarations.push(kndo_core::adapter::Declaration {
-        name: SmolStr::new(name),
+    kndo_adapter_toolkit::decls::push_declaration(
+        out,
+        name,
         kind,
-        span: span(item),
-        exported,
-        visibility: kndo_core::adapter::VisibilityLevel(level),
-        member_of: member_of.map(SmolStr::new),
-        implicitly_invoked: false,
-        nested_scope: false,
-        visibility_inherited: false,
+        item,
         signature_span,
-    });
+        member_of,
+        (level, exported),
+        markers(item, src),
+    );
+}
+
+/// The annotation names written on this declaration, in source order — `Declaration::markers`.
+/// Facts, never verdicts: every annotation is reported, and this adapter has no idea which
+/// ones a framework acts on. `@Named("x")` parses as `annotation > constructor_invocation >
+/// user_type`, the bare `@Repository` as `annotation > user_type` — both contribute the type's
+/// own name. A qualified spelling contributes its last segment as well, for the reason
+/// `kndo-adapter-java`'s twin of this function documents.
+fn markers(item: Node, src: &[u8]) -> Vec<SmolStr> {
+    let Some(modifiers) = find_child(item, "modifiers") else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    let mut c = modifiers.walk();
+    for annotation in modifiers.children(&mut c) {
+        if annotation.kind() != "annotation" {
+            continue;
+        }
+        let Some(user_type) = find_child(annotation, "user_type").or_else(|| {
+            find_child(annotation, "constructor_invocation")
+                .and_then(|call| find_child(call, "user_type"))
+        }) else {
+            continue;
+        };
+        let name = text(user_type, src);
+        if let Some((_, last)) = name.rsplit_once('.') {
+            out.push(SmolStr::new(last));
+        }
+        out.push(SmolStr::new(name));
+    }
+    out
 }
 
 // ---------------------------------------------------------------- type refs & extends
@@ -649,6 +767,18 @@ fn push_declaration(
 /// `user_type` positions → `TypeUse`; recurses into `type_arguments` for generics
 /// (`List<Foo>` → `Foo` too) but not into the base path's own segments (already captured by
 /// `last_identifier_text`).
+/// The body walk reaches type positions through a handler; every other caller here already
+/// knows it is looking at a type, so the walk itself keeps the shorter shape.
+fn walk_type_refs_handler(
+    node: Node,
+    src: &[u8],
+    within: Option<&str>,
+    out: &mut FileFacts,
+    _syntax: &BodySyntax,
+) {
+    walk_type_refs(node, src, within, out);
+}
+
 fn walk_type_refs(node: Node, src: &[u8], within: Option<&str>, out: &mut FileFacts) {
     if node.kind() != "user_type" {
         let mut c = node.walk();
@@ -674,21 +804,22 @@ fn walk_type_refs(node: Node, src: &[u8], within: Option<&str>, out: &mut FileFa
 /// The base path's own last `identifier` segment (`java.util.List` used as a type → `List`),
 /// recursing into nested `user_type` (qualified-path nesting) but not into `type_arguments`.
 fn last_identifier_text<'a>(node: Node, src: &'a [u8]) -> Option<&'a str> {
-    let mut result = None;
-    for child in node.children(&mut node.walk()) {
-        match child.kind() {
-            "identifier" => result = Some(text(child, src)),
-            "user_type" => result = last_identifier_text(child, src).or(result),
-            _ => {}
-        }
-    }
-    result
+    toolkit_last_identifier_text(node, src, "identifier", "user_type")
 }
 
 fn walk_extend_refs(node: Node, src: &[u8], owner: &str, out: &mut FileFacts) {
     match node.kind() {
         "constructor_invocation" => {
-            emit_extend_ref(find_child(node, "user_type"), node, src, owner, out)
+            emit_extend_ref(find_child(node, "user_type"), node, src, owner, out);
+            // `class MyMeta : Base(MyProvider)` — the supertype is an Extend, but the ARGUMENTS
+            // are ordinary expression references and were dropped on the floor. Whatever they
+            // name reads as dead unless something else happens to use it, which is how
+            // Exposed's `PostgreSQLTypeProvider` — passed to its superclass on the very next
+            // declaration in the same file — went unreferenced. RFC 0012 §4 puts code that runs
+            // on instantiation under the type itself, so `within` stays the owner.
+            if let Some(args) = find_child(node, "value_arguments") {
+                walk_body(args, src, Some(owner), out);
+            }
         }
         "user_type" => emit_extend_ref(Some(node), node, src, owner, out),
         _ => {
@@ -700,91 +831,57 @@ fn walk_extend_refs(node: Node, src: &[u8], owner: &str, out: &mut FileFacts) {
 }
 
 fn emit_extend_ref(ty: Option<Node>, site: Node, src: &[u8], owner: &str, out: &mut FileFacts) {
-    let Some(name) = ty.and_then(|t| last_identifier_text(t, src)) else {
-        return;
-    };
-    out.references.push(RawReference {
-        name: SmolStr::new(name),
-        scope_context: None,
-        span: span(site),
-        within: Some(SmolStr::new(owner)),
-        kind: RefKind::Extend,
-    });
+    refs::emit_extend_ref(ty, site, src, owner, out, &BODY_SYNTAX);
 }
 
 // ---------------------------------------------------------------- expression/body references
 
-type BodyHandler = fn(Node, &[u8], Option<&str>, &mut FileFacts);
-
 const BODY_HANDLERS: &[(&str, BodyHandler)] = &[
-    ("call_expression", handle_call),
+    ("call_expression", refs::handle_call),
     ("navigation_expression", handle_navigation),
-    ("user_type", walk_type_refs),
-    ("identifier", handle_identifier_ref),
+    ("user_type", walk_type_refs_handler),
+    ("identifier", refs::handle_identifier_ref),
 ];
 
+/// What this grammar spells things with — everything the shared body walk needs to know about
+/// Kotlin, and nothing it decides. The traversal itself lives in the toolkit
+/// (`refs::walk_body`), which Swift drives with its own table.
+static BODY_SYNTAX: BodySyntax = BodySyntax {
+    comment_kinds: &["line_comment", "multiline_comment"],
+    identifier_kind: "identifier",
+    type_nesting_kind: "user_type",
+    // Kotlin spells a type name with the same `identifier` leaf as a value name.
+    type_identifier_kind: "identifier",
+    navigation_kind: "navigation_expression",
+    emit_navigation_ref,
+    is_reference_position,
+    handlers: BODY_HANDLERS,
+};
+
 /// Expression/statement bodies: calls, navigation (field/property access), bare identifier
-/// reads, type positions inside expressions (`is`/`as` checks) — table-driven for the same
-/// CRAP-ceiling reason `DECL_HANDLERS` is (module doc comment).
+/// reads, type positions inside expressions (`is`/`as` checks). The walk itself is
+/// `refs::walk_body`; this binds it to Kotlin's own table so the twenty-odd call sites below
+/// stay one argument long.
 fn walk_body(node: Node, src: &[u8], within: Option<&str>, out: &mut FileFacts) {
-    if matches!(node.kind(), "line_comment" | "multiline_comment") {
-        return;
-    }
-    if let Some((_, handler)) = BODY_HANDLERS.iter().find(|(k, _)| *k == node.kind()) {
-        handler(node, src, within, out);
-        return;
-    }
-    for child in node.children(&mut node.walk()) {
-        walk_body(child, src, within, out);
-    }
+    refs::walk_body(node, src, within, out, &BODY_SYNTAX);
 }
 
-fn handle_identifier_ref(node: Node, src: &[u8], within: Option<&str>, out: &mut FileFacts) {
-    if !is_reference_position(node) {
-        return;
-    }
-    out.references.push(RawReference {
-        name: SmolStr::new(text(node, src)),
-        scope_context: None,
-        span: span(node),
-        within: within.map(SmolStr::new),
-        kind: RefKind::Read,
-    });
-}
-
-fn handle_call(node: Node, src: &[u8], within: Option<&str>, out: &mut FileFacts) {
-    let mut cursor = node.walk();
-    let mut children = node.children(&mut cursor);
-    let Some(callee) = children.next() else {
-        return;
-    };
-    emit_call_ref(callee, src, within, out);
-    for child in children {
-        walk_body(child, src, within, out);
-    }
-}
-
-fn emit_call_ref(callee: Node, src: &[u8], within: Option<&str>, out: &mut FileFacts) {
-    match callee.kind() {
-        "identifier" => out.references.push(RawReference {
-            name: SmolStr::new(text(callee, src)),
-            scope_context: None,
-            span: span(callee),
-            within: within.map(SmolStr::new),
-            kind: RefKind::Call,
-        }),
-        "navigation_expression" => emit_navigation_ref(callee, src, within, out, RefKind::Call),
-        _ => walk_body(callee, src, within, out),
-    }
-}
-
-fn handle_navigation(node: Node, src: &[u8], within: Option<&str>, out: &mut FileFacts) {
+fn handle_navigation(
+    node: Node,
+    src: &[u8],
+    within: Option<&str>,
+    out: &mut FileFacts,
+    _syntax: &BodySyntax,
+) {
     emit_navigation_ref(node, src, within, out, RefKind::Read);
 }
 
 /// `a.b`/`a.b.c()` — the terminal segment becomes the reference, `scope_context` is set when
 /// the immediately-preceding segment is a plain identifier/`this`; a complex receiver
 /// (a nested navigation/call) is walked for its own references instead.
+/// A dotted access chain, taken apart POSITIONALLY — Kotlin's grammar exposes the qualifier
+/// and the accessed name as ordered children rather than named fields, which is why this stays
+/// here rather than in the shared driver (Swift's is field-addressed).
 fn emit_navigation_ref(
     node: Node,
     src: &[u8],
@@ -851,17 +948,9 @@ fn is_reference_position(node: Node) -> bool {
 
 // ---------------------------------------------------------------- small tree helpers
 
-fn find_child<'a>(node: Node<'a>, kind: &str) -> Option<Node<'a>> {
-    node.children(&mut node.walk()).find(|n| n.kind() == kind)
-}
-
 fn find_any_child<'a>(node: Node<'a>, kinds: &[&str]) -> Option<Node<'a>> {
     node.children(&mut node.walk())
         .find(|n| kinds.contains(&n.kind()))
-}
-
-fn text<'a>(node: Node, src: &'a [u8]) -> &'a str {
-    std::str::from_utf8(&src[node.byte_range()]).unwrap_or("")
 }
 
 #[cfg(test)]
@@ -874,6 +963,99 @@ mod tests {
 
     fn decl<'a>(f: &'a FileFacts, name: &str) -> &'a kndo_core::adapter::Declaration {
         f.declarations.iter().find(|d| d.name == name).unwrap()
+    }
+
+    #[test]
+    fn a_property_with_both_an_initializer_and_an_accessor_keeps_both() {
+        // The positional "last child" rule returned the getter and lost `compute()` entirely,
+        // which made everything the initializer referenced read as unused. 78 findings on
+        // Exposed came from this shape.
+        let f = facts(
+            "fun compute(): Int = 1\n\
+             fun log(v: Int) {}\n\
+             class C {\n\
+             \x20   val cached: Int = compute()\n\
+             \x20       get() = field\n\
+             \x20   var tracked: Int = 0\n\
+             \x20       private set\n\
+             \x20   val lazyOne: Int by lazy { compute() }\n\
+             }\n",
+        );
+        let names: Vec<&str> = f.references.iter().map(|r| r.name.as_str()).collect();
+        assert!(
+            names.iter().filter(|n| **n == "compute").count() >= 2,
+            "both the initializer's and the delegate's calls must survive: {names:?}"
+        );
+    }
+
+    #[test]
+    fn an_accessor_body_is_walked_for_references() {
+        let f = facts(
+            "fun helper(): Int = 1\n\
+             class C {\n\
+             \x20   val computed: Int get() = helper()\n\
+             }\n",
+        );
+        assert!(f.references.iter().any(|r| r.name == "helper"));
+    }
+
+    #[test]
+    fn a_property_with_an_accessor_body_is_a_callable_and_a_constant_is_not() {
+        let f = facts(
+            "class Movie {\n\
+             \x20   val slug: String get() = title.lowercase()\n\
+             \x20   val title: String = \"x\"\n\
+             \x20   var guarded: Int = 0\n\
+             \x20       private set\n\
+             }\n\
+             const val MAX_VARCHAR_LENGTH = 255\n\
+             val topLevelComputed: Int get() = 1\n",
+        );
+        assert_eq!(decl(&f, "slug").kind, SymbolKind::Method);
+        assert_eq!(decl(&f, "title").kind, SymbolKind::Field);
+        assert_eq!(
+            decl(&f, "guarded").kind,
+            SymbolKind::Field,
+            "a bodyless accessor changes visibility, not what the property IS"
+        );
+        assert_eq!(decl(&f, "MAX_VARCHAR_LENGTH").kind, SymbolKind::Variable);
+        assert_eq!(decl(&f, "topLevelComputed").kind, SymbolKind::Function);
+    }
+
+    #[test]
+    fn a_superclass_constructor_argument_is_a_reference() {
+        // `class MyMeta : Base(MyProvider)` — the supertype is an Extend, but the ARGUMENTS are
+        // ordinary expression references and were dropped. Whatever they name read as dead
+        // unless something else happened to use it: Exposed's `PostgreSQLTypeProvider`, passed
+        // to its superclass on the very next declaration in the same file, had no reference at
+        // all.
+        let f = extract(
+            "a.kt",
+            b"package p\nopen class Base(val q: Q)\ninterface Q\ninternal object MyProvider : Q\ninternal class MyMeta : Base(MyProvider)\n",
+        );
+        let r = f
+            .references
+            .iter()
+            .find(|r| r.name == "MyProvider" && r.within.as_deref() == Some("MyMeta"))
+            .expect("the superclass argument must be referenced, attributed to the subclass");
+        assert_ne!(r.kind, RefKind::Extend, "the argument is not the supertype");
+    }
+
+    #[test]
+    fn a_default_parameter_value_is_a_reference() {
+        // `class Hasher(val cost: Int = DEFAULT_COST)` — only the parameter's TYPE was walked,
+        // so a companion const used exactly this way (Exposed's `SCryptHasher.DEFAULT_CPU_COST`)
+        // had no incoming reference.
+        let f = extract(
+            "a.kt",
+            b"package p\nclass Hasher(val cost: Int = DEFAULT_COST) {\n  private companion object { private const val DEFAULT_COST = 42 }\n}\n",
+        );
+        assert!(
+            f.references
+                .iter()
+                .any(|r| r.name == "DEFAULT_COST" && r.within.as_deref() == Some("Hasher")),
+            "the default value's references belong to the class that runs them"
+        );
     }
 
     #[test]
@@ -997,11 +1179,38 @@ mod tests {
     }
 
     #[test]
+    fn annotations_become_declaration_markers() {
+        let f = facts(
+            "package p\n\
+             @Repository\n\
+             @Named(\"x\")\n\
+             class Impl {\n\
+             \x20   @AfterEach\n\
+             \x20   fun cleanup() {}\n\
+             \x20   fun plain() {}\n\
+             }\n",
+        );
+        assert_eq!(
+            decl(&f, "Impl").markers,
+            vec![SmolStr::new("Repository"), SmolStr::new("Named")],
+            "the bare form and the argument form alike"
+        );
+        assert_eq!(decl(&f, "cleanup").markers, vec![SmolStr::new("AfterEach")]);
+        assert!(decl(&f, "plain").markers.is_empty());
+    }
+
+    #[test]
     fn wildcard_import_is_opaque_namespace_use() {
         let f = facts("package p\nimport com.foo.*\nclass C\n");
         let imp = f.imports.iter().find(|i| i.specifier == "com.foo").unwrap();
         assert!(imp.opaque_namespace_use);
         assert!(imp.bindings.is_empty());
+        assert!(
+            imp.module_names_visible,
+            "it is also the language's scoping rule: every top-level name of that package is \
+             legal here unqualified, which is what lets a bare call to a wildcard-imported \
+             top-level function resolve at all"
+        );
     }
 
     #[test]

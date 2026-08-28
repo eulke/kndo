@@ -35,7 +35,7 @@ impl LanguageAdapter for SwiftAdapter {
             activation: Vec::new(),
             dependencies: Vec::new(),
             id: SmolStr::new("swift"),
-            facts_schema_version: 3, // bump whenever the serialized facts shape or the emission semantics change
+            facts_schema_version: 9, // bump whenever the serialized facts shape or the emission semantics change
             file_globs: vec![SmolStr::new("**/*.swift")],
             manifest_globs: vec![SmolStr::new("**/Package.swift")],
             grammar_version: SmolStr::new("tree-sitter-swift 0.7.3"),
@@ -91,24 +91,29 @@ impl LanguageAdapter for SwiftAdapter {
             // repository's own manifest, which kndo structurally never reads. Local target-to-
             // target imports resolve precisely via the ordinary same-unit fallback instead.
             resolves_dependency_usage: false,
+            declares_units_of_testing: true,
             package_test_dirs: Vec::new(),
+            // No builtin type facts yet: this adapter declares none, and an empty table
+            // simply means the chain resolver has no second tier to consult for it.
+            builtin_member_types: Vec::new(),
         }
     }
 
     fn claim(&self, path: &ProjectPath) -> Option<FileClaim> {
-        let p = path.0.as_str();
         // `Package.swift` is real Swift source too — the one adapter in this codebase
         // where a manifest file also matches the source glob. "Manifests are not claimed"
         // is a load-bearing principle elsewhere in the engine (a manifest never
         // gets a `FileClaim` alongside its `ManifestFacts`), so it's excluded here explicitly
         // rather than accidentally satisfied the way every non-Swift manifest format is.
-        if !p.ends_with(".swift") || self.claim_manifest(path) {
+        if self.claim_manifest(path) {
             return None;
         }
-        Some(FileClaim {
-            language: SmolStr::new("swift"),
-            class: kndo_adapter_toolkit::classify::classify(p, &PATH_PATTERNS),
-        })
+        kndo_adapter_toolkit::classify::claim_by_extension(
+            path,
+            &["swift"],
+            "swift",
+            &PATH_PATTERNS,
+        )
     }
 
     fn claim_manifest(&self, path: &ProjectPath) -> bool {

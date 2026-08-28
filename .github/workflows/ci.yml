@@ -75,6 +75,106 @@ jobs:
           version: source
           fail-on: warning
 
+  # The named gates. `CLAUDE.md` lists seven invariants that "must stay green on every PR
+  # that touches graph/cache/analysis" and calls them checked BY NAME in CI — this job is what
+  # makes that sentence true. Each runs in `test` too (they are ordinary cargo tests); running
+  # them here as well buys two things the bulk run cannot:
+  #
+  #   * a break fails on its own line, naming the invariant rather than "cargo test failed" —
+  #     the same reasoning as `compat-matrix` below;
+  #   * a DELETED or renamed gate fails. A bulk `cargo test --workspace` is green when a test
+  #     disappears, which is precisely the failure mode a gate exists to prevent. A `--test
+  #     <target>` step below catches a deleted FILE (cargo errors on an unknown target), but a
+  #     name filter silently matches zero tests, so the first step checks the names against
+  #     `--list` — what the compiled harnesses actually contain, not what the source says.
+  #
+  # Adding an invariant to CLAUDE.md's list without adding it here leaves the claim false
+  # again; the two are meant to be edited together.
+  gates:
+    name: named gates (CLAUDE.md invariants)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # `dogfood` runs kndo over this very checkout; a shallow one changes what it sees.
+          fetch-depth: 0
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          # The workspace suite builds real WASM components (the adapter/plugin ABI tests
+          # componentize a guest at run time), so this target is not optional here. Without it
+          # the build fails with "can't find crate for `core`" — which is exactly how
+          # `plugin_dependency_implication`, a CLAUDE.md named gate, had never once passed in
+          # CI while appearing in the job list as a step that ran.
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: gates
+          cache-on-failure: true
+
+      - name: build the gate harnesses
+        run: cargo test --workspace --all-features --no-run
+
+      # A gate that was renamed or deleted must fail HERE rather than pass silently in the
+      # bulk run. `--list` enumerates what the harnesses actually contain, so this is a
+      # statement about the compiled binaries, not about the source text.
+      - name: every named gate still exists
+        run: |
+          set -eu
+          cargo test --workspace --all-features -- --list > /tmp/gate-list.txt
+          missing=""
+          for name in \
+            comment_appends_are_equivalent_and_exercise_the_patch \
+            warm_assemble_matches_a_cold_assemble_byte_for_byte \
+            threads_1_and_threads_4_produce_byte_identical_json \
+            kndo_is_clean_under_kndo \
+            every_relative_markdown_link_resolves \
+            zero_findings_means_measured_and_not_merely_unjudged \
+            every_built_in_plugin_is_proven_here
+          do
+            grep -q "$name" /tmp/gate-list.txt || missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "named gates missing from the compiled test harnesses:$missing"
+            echo "CLAUDE.md lists these as invariants; deleting or renaming one is a"
+            echo "deliberate contract change, not a refactor."
+            exit 1
+          fi
+          echo "all named gates present"
+
+      - name: gate — patch_equivalence (full assembly == incremental patch)
+        run: cargo test -p kndo --all-features --test patch_equivalence
+
+      - name: gate — cache equivalence (warm == cold, byte for byte)
+        run: cargo test -p kndo-core --all-features warm_assemble_matches_a_cold_assemble_byte_for_byte
+
+      - name: gate — --threads 1 == default thread count
+        run: cargo test -p kndo-cli --all-features --test threads_determinism
+
+      - name: gate — adapter conformance fixtures are byte-identical
+        run: |
+          set -eu
+          for adapter in css go java js json kotlin rust swift; do
+            cargo test -p "kndo-adapter-$adapter" --all-features --test conformance
+          done
+
+      - name: gate — dependency implication (a named plugin/adapter activates)
+        run: |
+          set -eu
+          cargo test -p kndo --all-features --test plugin_dependency_implication
+          cargo test -p kndo --all-features --test adapter_dependency_implication
+
+      - name: gate — every built-in plugin is proven (baseline-then-plugin)
+        run: cargo test -p kndo --all-features --test builtin_plugin_proofs
+
+      - name: gate — dogfood (kndo on kndo reports nothing)
+        run: cargo test -p kndo --all-features --test dogfood
+
+      - name: gate — every relative markdown link resolves
+        run: cargo test -p kndo --all-features --test doc_links
+
   # The ABI compatibility matrix: the two reference components, PRE-BUILT and committed
   # under crates/kndo-plugin-api/tests/compat/, run against the HEAD host. the ABI's
   # "a v1 component keeps working against every v1-compatible host" promise as a job that
@@ -181,3 +281,222 @@ jobs:
           assert unused == ['dead'], f'expected only dead to be unused, got {unused}'
           print('shell build smoke check passed')
           "
+
+  install-from-artifact:
+    name: install from its own artifact
+    runs-on: ubuntu-latest
+    # The one thing nothing checked before a tag was pushed: that an artifact this repository
+    # produces can actually be installed. The artifact's name and layout are a contract four
+    # channels depend on, and `xtask/tests/release_channels.rs` checks that they *agree* — but
+    # agreement on a wrong shape is still wrong. This job closes the loop by running the real
+    # producer and the real installer against each other. It is also the only place the musl
+    # build is exercised at all outside a release.
+    env:
+      # Same reasoning as shell-build: this binary is never distributed, so drop the release
+      # profile's LTO to keep the job's build time honest. release.yml doesn't inherit this.
+      CARGO_PROFILE_RELEASE_LTO: "false"
+      CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-musl
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: install-from-artifact
+          cache-on-failure: true
+
+      # musl-gcc is the linker `cargo build --target …-musl` needs. Cheaper here than `cross`,
+      # which would pull a container image for a build this job already has a toolchain for.
+      - name: Install the musl linker
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      - name: Build the release binary (musl, as a release does)
+        run: cargo build --release --locked -p kndo-cli --target x86_64-unknown-linux-musl
+
+      # The same command release.yml runs, so the artifact under test is the artifact that
+      # ships — not a re-creation of one.
+      - name: Package it, exactly as a release would
+        run: |
+          set -eu
+          cargo run -p xtask --quiet -- package \
+            --target x86_64-unknown-linux-musl --tag v0.0.0-ci --out-dir dist
+          cd dist && sha256sum -- * > checksums.txt
+          ls -l
+
+      # Served over HTTP rather than read from disk so `install.sh` runs every line it runs for
+      # a real user: resolve, download, verify the checksum, extract, place, report.
+      - name: Install from it with the real installer
+        run: |
+          set -eu
+          python3 -m http.server 8000 --directory dist &
+          server=$!
+          trap 'kill $server' EXIT
+          for _ in $(seq 1 50); do
+            curl -fsS http://127.0.0.1:8000/checksums.txt >/dev/null 2>&1 && break
+            sleep 0.2
+          done
+
+          KNDO_VERSION=v0.0.0-ci \
+          KNDO_BASE_URL=http://127.0.0.1:8000 \
+          KNDO_INSTALL_DIR="$HOME/.kndo-install-test" \
+            sh install.sh
+
+          # It installed, it runs, and it is the binary we just built.
+          "$HOME/.kndo-install-test/kndo" --version
+          "$HOME/.kndo-install-test/kndo" --version | grep -q '^kndo ' \
+            || { echo "the installed binary did not report a kndo version"; exit 1; }
+
+          # And it is genuinely static: a musl release binary that needs a dynamic loader would
+          # fail on exactly the distributions this target exists to serve.
+          file "$HOME/.kndo-install-test/kndo"
+          # Asserted on `file`, not `ldd`. This build produces a **static-PIE**, and the
+          # previous check accepted only ldd's "not a dynamic executable" — the phrasing for a
+          # classic non-PIE static binary — so it rejected a perfectly good artifact. The
+          # binary was always fine; the assertion was wrong. `file` names the linkage
+          # unambiguously and identically on every runner, and covers both static forms.
+          file "$HOME/.kndo-install-test/kndo" \
+            | grep -qE "static-pie linked|statically linked" \
+            || { echo "the musl release binary is not statically linked"; exit 1; }
+
+      # A checksum mismatch must stop the install, not warn past it. Asserted here because the
+      # only other way to find out is a corrupted download on a user's machine.
+      - name: A corrupted archive aborts the install
+        run: |
+          set -eu
+          python3 -m http.server 8001 --directory dist &
+          server=$!
+          trap 'kill $server' EXIT
+          for _ in $(seq 1 50); do
+            curl -fsS http://127.0.0.1:8001/checksums.txt >/dev/null 2>&1 && break
+            sleep 0.2
+          done
+          printf 'not the archive you are looking for\n' \
+            > dist/kndo-v0.0.0-ci-x86_64-unknown-linux-musl.tar.gz
+
+          if KNDO_VERSION=v0.0.0-ci \
+             KNDO_BASE_URL=http://127.0.0.1:8001 \
+             KNDO_INSTALL_DIR="$HOME/.kndo-corrupt-test" \
+               sh install.sh; then
+            echo "install.sh accepted an archive whose checksum did not match"; exit 1
+          fi
+          [ ! -e "$HOME/.kndo-corrupt-test/kndo" ] \
+            || { echo "install.sh left a binary behind after refusing the download"; exit 1; }
+
+  msrv:
+    name: builds on the declared MSRV
+    runs-on: ubuntu-latest
+    # `rust-version` in Cargo.toml is a promise to anyone on an older toolchain, and an unbuilt
+    # promise decays: the first use of a newer language feature turns it into a number that
+    # merely used to be true. This job builds the workspace on exactly that version.
+    # `xtask/tests/release_channels.rs` checks that the two stay the same version, and that
+    # every member crate actually inherits it — inheritance is per-field, so a new crate that
+    # forgets `rust-version.workspace = true` carries no MSRV at all.
+    #
+    # `cargo check`, not `test`: this asks whether the code *compiles* on the floor. What it
+    # does at runtime is the full suite's job on stable, and running it twice buys nothing.
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the MSRV toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.89
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: msrv
+          cache-on-failure: true
+
+      - name: cargo check on the MSRV
+        run: cargo check --workspace --all-features --locked
+
+  release-notes:
+    name: release notes generate
+    runs-on: ubuntu-latest
+    # `release.yml` builds the GitHub Release body with `git-cliff --latest`, and before this
+    # job the first tag would have been the first time that command ever ran. A broken
+    # `cliff.toml`, a template typo, or a commit-parser regex that matches nothing fails there —
+    # after the five-target build matrix has already succeeded, on the one workflow run that is
+    # hard to redo. Running it on every push moves that failure to the PR that causes it.
+    #
+    # Deliberately NOT a committed CHANGELOG.md: the commit log is the source, `cliff.toml` the
+    # renderer, and the GitHub Release the artifact. A file maintained beside them would be a
+    # second spelling of the same facts, which is the thing this repository keeps removing.
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # git-cliff reads history; a shallow clone yields empty notes
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: git-cliff
+
+      - name: Generate release notes the way a release does
+        run: |
+          set -eu
+          # `--unreleased` rather than `--latest`: there are no tags yet, and `--latest` has
+          # nothing to describe until there are. Both read the same config and template, so this
+          # exercises what a release exercises.
+          git-cliff --unreleased --strip header -o NOTES.md
+          cat NOTES.md
+
+          # Non-empty, and actually grouped — an unparsed history renders headings and no
+          # entries, which looks like success to a naive check.
+          [ -s NOTES.md ] || { echo "git-cliff produced empty release notes"; exit 1; }
+          grep -qE '^- ' NOTES.md \
+            || { echo "release notes contain no commit entries — check cliff.toml's commit_parsers"; exit 1; }
+          grep -qE '^### ' NOTES.md \
+            || { echo "release notes contain no groups — check cliff.toml's body template"; exit 1; }
+
+  cross-platform:
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest]
+    # Every other job in this file runs on ubuntu, and `release.yml` ships binaries for macOS
+    # (both architectures). Until this job existed, those targets were compiled for the first
+    # time by the release build itself — the suite had never run there, on a tool whose whole
+    # job is reading paths out of a filesystem.
+    #
+    # It ran once with `windows-latest` in the matrix, and that is how Windows stopped being a
+    # release target (RFC 0014 §3.3): `tree-sitter-scss`'s build script hands `cl.exe` a flag it
+    # refuses, so kndo's own code never compiled there at all. The matrix is kept as a matrix
+    # rather than flattened to `runs-on: macos-latest` — adding a platform back is a one-line
+    # change, and this job existing is what made the Windows problem visible before a tag did.
+    #
+    # The code is not naive about it: `libc` is behind `[target.'cfg(unix)'.dependencies]`, the
+    # SIGPIPE reset and the hook's `chmod` are `#[cfg(unix)]`, and discovery normalizes `\` to
+    # `/` when it builds a `ProjectPath`. That is a reason to expect this to pass, not evidence
+    # that it does — which is the distinction this job exists to remove.
+    #
+    # `fail-fast: false` so one platform's failure is never masked by another's.
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # kndo's diff modes and several fixtures use git.
+          fetch-depth: 0
+
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          # The workspace suite builds real WASM components (the adapter/plugin ABI tests
+          # componentize a guest at run time), so this target is not optional here. Without it
+          # the build fails with "can't find crate for `core`" — which is exactly how
+          # `plugin_dependency_implication`, a CLAUDE.md named gate, had never once passed in
+          # CI while appearing in the job list as a step that ran.
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.os }}
+          cache-on-failure: true
+
+      - name: cargo test --workspace
+        run: cargo test --workspace --all-features

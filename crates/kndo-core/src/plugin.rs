@@ -3,9 +3,11 @@
 //! Adapters describe what code *is*; plugins describe what an ecosystem *means* by it.
 //! All hooks are optional; the same trait serves built-ins (statically linked) and external
 //! WASM components (bridged via `kndo-plugin-api` — `kndo:plugin@0.1.0` for the four
-//! graph-mutation hooks below, `kndo:adapter@0.1.0` for
-//! `LanguageAdapter`, and the `coverage-ingester` world bridges `ingest_coverage`).
-//! `suppress` isn't bridged either way yet.
+//! graph-mutation hooks below, `kndo:adapter@0.1.0` for `LanguageAdapter`, `plugin-findings`
+//! for [`Plugin::rules`]/[`Plugin::contribute_findings`], and `coverage-ingester` for
+//! [`Plugin::ingest_coverage`]). There is no `suppress` hook: RFC 0016 §7 evaluated
+//! domain-specific suppression against the components actually shipping and cut it — a real
+//! use case reopens it as a new, additive hook rather than a deferred one.
 //! `GraphView` is read-only; mutation happens only through typed sinks the core validates and
 //! attributes (`Provenance::Plugin`). `contribute_roots`/`contribute_edges`/`annotate_symbols`
 //! additionally get [`ContentView`], the host-mediated content channel for files
@@ -42,14 +44,31 @@ pub struct PluginDescriptor {
     /// it to be addressable.
     pub id: SmolStr,
     pub version: SmolStr,
-    /// Auto-detection predicates, in prose ("package.json depends on react") — shown by
-    /// `kndo doctor`, never evaluated. [`activation`](Self::activation) is the machine-checkable
-    /// counterpart these describe.
+    /// Prose for a gate [`activation`](Self::activation) CANNOT express — shown by
+    /// `kndo doctor`, never evaluated. An always-on coverage ingester uses it to name the
+    /// report paths it looks for and the config key that overrides them; nothing in
+    /// [`ActivationRule`] can say that.
+    ///
+    /// A gate that IS a rule leaves this empty, because restating a rule the descriptor
+    /// already carries is one concept with two sources — and it had already drifted: every
+    /// built-in conventions plugin's prose named a single manifest kind ("a package.json
+    /// under the project root depends on next") while `ManifestDependency` matches any
+    /// manifest, `Cargo.toml` included.
     pub detection: Vec<SmolStr>,
     /// Globs whose content the host will provide; no ambient fs/net.
     pub requested_file_access: Vec<SmolStr>,
     /// Structured, machine-evaluable version of [`detection`](Self::detection) — what actually
     /// decides whether a *globally* installed plugin turns on for a given project.
+    ///
+    /// **One rule, deliberately**, for a conventions plugin: a project using a framework
+    /// declares it in a manifest somewhere, and the manifest scan is gitignore-aware and
+    /// monorepo-wide. The obvious alternative, a recursive
+    /// `FileExists("**/<tool>.config.*")`, raw-globs through `node_modules` on every run — cost
+    /// and hazard for a signal the manifest rule already carries. A plugin whose signal IS a
+    /// file (no dependency names it) has no such choice and pays the glob; `kndo:info-plist`
+    /// is the case.
+    ///
+    /// Rules are not the only way in: see [`dependencies`](Self::dependencies).
     /// A project-local `.kndo/plugins/*.wasm` file is unconditional (its presence there already
     /// is the opt-in); this only gates the XDG-wide install path, and only when non-empty — an
     /// empty list means "no known structural signal," so a globally installed plugin with none
@@ -93,6 +112,81 @@ impl ActivationRule {
         match self {
             ActivationRule::FileExists(glob) => format!("file-exists: {glob}"),
             ActivationRule::ManifestDependency(name) => format!("manifest-dependency: {name}"),
+        }
+    }
+}
+
+/// Why a component (plugin or adapter) is running for this project — the answer to "why is
+/// this active?", decided by whoever composed the run and carried, never re-derived.
+///
+/// Core owns the vocabulary because every term in it is core's own: [`ActivationRule`] and
+/// `dependencies` are descriptor fields this crate defines. What core does *not* own is the
+/// decision — which tier a candidate came from, which rules were evaluated, which
+/// implication fired. That belongs to the composition layer (the `kndo` crate), which reports
+/// its verdict in this shape. One enum for plugins and adapters alike: both descriptors carry
+/// the same `activation`/`dependencies` fields, and two parallel enums would be one concept
+/// with two spellings.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ActivationReason {
+    /// Registered unconditionally — presence *is* the opt-in. A `.kndo/plugins/*.wasm`
+    /// drop-in, or an embedder handing the engine a component directly.
+    Registered,
+    /// Ships with the product and declares no activation rules, so it is always on.
+    AlwaysOn,
+    /// One of its own [`ActivationRule`]s matched the project — this one, the first that did.
+    RuleMatched(ActivationRule),
+    /// Activated because the named (active) component lists it in `dependencies`, possibly
+    /// transitively. The only path for a component whose framework is an *indirect*
+    /// dependency.
+    ImpliedBy(SmolStr),
+}
+
+impl std::fmt::Display for ActivationReason {
+    /// The one rendering, shared by `kndo doctor` and the JSON envelope's
+    /// `run.plugins[].activated_by`: a rule match renders as the rule itself
+    /// (`manifest-dependency: react`), because [`ActivationRule::describe`] is already the
+    /// single source for how a rule reads.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ActivationReason::Registered => f.write_str("registered"),
+            ActivationReason::AlwaysOn => f.write_str("always-on"),
+            ActivationReason::RuleMatched(rule) => f.write_str(&rule.describe()),
+            ActivationReason::ImpliedBy(id) => write!(f, "dependency of {id}"),
+        }
+    }
+}
+
+/// A [`Plugin`] as handed to an [`Engine`](crate::Engine): the component plus the composition
+/// layer's own answer to why it is running.
+///
+/// The pairing exists because the engine has to *report* activation
+/// (`run.plugins[].activated_by`) and must not *decide* it: the tiers, the rule evaluation and
+/// the dependency fixpoint all live above core, and a second derivation down here would be the
+/// same fact spelled twice. Registering a bare plugin still works — `Box<dyn Plugin>` converts
+/// into this with [`ActivationReason::Registered`], which is the truth for an embedder that
+/// chose the set by hand.
+pub struct RegisteredPlugin {
+    pub plugin: Box<dyn Plugin>,
+    pub activated_by: ActivationReason,
+}
+
+impl From<Box<dyn Plugin>> for RegisteredPlugin {
+    fn from(plugin: Box<dyn Plugin>) -> Self {
+        RegisteredPlugin {
+            plugin,
+            activated_by: ActivationReason::Registered,
+        }
+    }
+}
+
+/// The same conversion for a boxed *concrete* plugin, so a caller composing a set by hand
+/// writes `vec![Box::new(MyPlugin)]` without spelling the trait object out. Disjoint from the
+/// impl above: `dyn Plugin` is unsized, so it can never be this `P`.
+impl<P: Plugin + 'static> From<Box<P>> for RegisteredPlugin {
+    fn from(plugin: Box<P>) -> Self {
+        RegisteredPlugin {
+            plugin: plugin as Box<dyn Plugin>,
+            activated_by: ActivationReason::Registered,
         }
     }
 }
@@ -211,34 +305,32 @@ impl<'a> GraphView<'a> {
     /// Files `path` imports (`ImportsFile` edges, adapter-derived only — rule R1), sorted by
     /// path. Empty for an unknown path or a file with no imports.
     pub fn imports_of(&self, path: &ProjectPath) -> Vec<&'a ProjectPath> {
-        let Some(&file) = self.file_index.get(path) else {
-            return Vec::new();
-        };
-        self.with_import_index(|idx| {
-            idx.imports_of
-                .get(&file)
-                .map(|targets| {
-                    targets
-                        .iter()
-                        .map(|t| &self.files[t.0 as usize].path)
-                        .collect()
-                })
-                .unwrap_or_default()
-        })
+        self.import_neighbors(path, |idx| &idx.imports_of)
     }
 
     /// Files importing `path` — [`Self::imports_of`]'s reverse, same rules.
     pub fn importers_of(&self, path: &ProjectPath) -> Vec<&'a ProjectPath> {
+        self.import_neighbors(path, |idx| &idx.importers_of)
+    }
+
+    /// One direction of the import adjacency as paths. The two public methods above ask the
+    /// same question about opposite arrows, so the unknown-path guard, the index lookup and
+    /// the file-id-to-path mapping are written once and `side` picks the arrow.
+    fn import_neighbors(
+        &self,
+        path: &ProjectPath,
+        side: impl Fn(&ImportIndex) -> &HashMap<FileId, Vec<FileId>>,
+    ) -> Vec<&'a ProjectPath> {
         let Some(&file) = self.file_index.get(path) else {
             return Vec::new();
         };
         self.with_import_index(|idx| {
-            idx.importers_of
+            side(idx)
                 .get(&file)
-                .map(|sources| {
-                    sources
+                .map(|neighbors| {
+                    neighbors
                         .iter()
-                        .map(|s| &self.files[s.0 as usize].path)
+                        .map(|f| &self.files[f.0 as usize].path)
                         .collect()
                 })
                 .unwrap_or_default()
@@ -302,6 +394,20 @@ impl<'a> GraphView<'a> {
         self.file_index
             .get(path)
             .map(|f| self.files[f.0 as usize].string_call_sites.as_slice())
+            .unwrap_or(&[])
+    }
+
+    /// `path`'s attribute string literals ([`crate::adapter::FileFacts::string_attr_args`]),
+    /// canonically sorted; empty for an unknown path or an adapter that doesn't extract them.
+    ///
+    /// The entries say what was written, not what it means. Deciding that
+    /// `skip_serializing_if = "foo"` names a function while `rename = "foo"` names a wire
+    /// label is the reading plugin's job, and the only place that knowledge can live without
+    /// teaching an adapter what serde is.
+    pub fn attr_strings_in(&self, path: &ProjectPath) -> &'a [crate::adapter::StringAttrArg] {
+        self.file_index
+            .get(path)
+            .map(|f| self.files[f.0 as usize].string_attr_args.as_slice())
             .unwrap_or(&[])
     }
 
@@ -582,7 +688,6 @@ impl PluginTarget {
 }
 
 #[derive(Debug, Clone)]
-// kndo:allow internal-only read through inferred-typed sink items in graph.rs, field accesses the graph cannot attribute (internal/detection-gaps.md §3)
 pub(crate) struct ContributedRoot {
     pub target: PluginTarget,
     pub kind: RootKind,
@@ -608,7 +713,6 @@ impl RootSink {
 }
 
 #[derive(Debug, Clone)]
-// kndo:allow internal-only read through inferred-typed sink items in graph.rs, field accesses the graph cannot attribute (internal/detection-gaps.md §3)
 pub(crate) struct ContributedEdge {
     pub from: PluginTarget,
     pub to: PluginTarget,
@@ -673,6 +777,42 @@ impl AnnotationSink {
     pub fn mark_implicitly_invoked(&mut self, path: ProjectPath, symbol: impl Into<SmolStr>) {
         self.implicitly_invoked
             .push(PluginTarget::symbol(path, symbol));
+    }
+
+    /// Mark every member the graph says was declared in an implementation of a trait
+    /// (`SymbolNode::implements`) that `drives(trait_name, member_name)` accepts — the whole
+    /// body of an ecosystem conventions plugin.
+    ///
+    /// This is the dynamic; the CURATED TABLE is what a plugin brings. `kndo:serde` passes a
+    /// closure that knows serde's traits drive `serialize`, `kndo:rkyv` one that knows rkyv's
+    /// drive `resolve_with`, `kndo:wasmtime` one that accepts every member of a `bindgen!`
+    /// host trait. None of that vocabulary can live here: the core has no list of trait names
+    /// and cannot acquire one without breaking the ignorance rule — and none of the WALK
+    /// belongs in a plugin, which is how three of them ended up re-parsing a grammar their
+    /// adapter had already parsed.
+    ///
+    /// Language-blind by construction: it matches a fact any adapter may fill and no adapter
+    /// must (`None` everywhere a language has no such grouping). Over-matching a same-named
+    /// local trait can only keep a member alive alongside its owner, never accuse it, which
+    /// is why a table may be as loose as its ecosystem requires.
+    pub fn mark_machinery_impls(
+        &mut self,
+        graph: &GraphView<'_>,
+        drives: impl Fn(&str, &str) -> bool,
+    ) {
+        for file in graph.files() {
+            for s in graph.symbols_in(&file.path) {
+                let (Some(owner), Some(t)) = (&s.member_of, &s.implements) else {
+                    continue;
+                };
+                if drives(t, &s.name) {
+                    self.mark_implicitly_invoked(
+                        file.path.clone(),
+                        format!("{owner}.{name}", name = s.name),
+                    );
+                }
+            }
+        }
     }
 }
 
@@ -805,11 +945,10 @@ pub trait Plugin: Send + Sync {
     /// The declaration is self-enforcing rather than trusted: assembly only *calls* the four
     /// hooks on plugins that return `true`, so returning `false` while implementing a hook
     /// means the hook never runs (identically on cold and cached runs) — never that a cached
-    /// graph silently misses its contributions. Default `true`: the conservative direction for
-    /// the common case of a plugin that exists precisely to contribute graph facts.
-    fn mutates_graph(&self) -> bool {
-        true
-    }
+    /// graph silently misses its contributions. No default: forgetting this on a
+    /// graph-mutating plugin used to silently disable incremental patching product-wide;
+    /// forgetting it now is a compile error instead.
+    fn mutates_graph(&self) -> bool;
 
     /// Content identity for the graph cache key. `None` for compiled-in
     /// plugins — `PluginDescriptor.version` is already the trust boundary there, the same
@@ -827,7 +966,19 @@ pub trait Plugin: Send + Sync {
     /// Runs once per claimed file, right after the content-derived origin correction
     /// and before role-derived roots (phase 2.6) — so a plugin's answer is what every downstream
     /// consumer (root promotion, `unused`/`test-only`'s per-file exemptions) sees.
-    fn classify_file(&self, _path: &ProjectPath, _current: FileClass) -> Option<FileClass> {
+    ///
+    /// `content` is the same host-mediated channel the other hooks get, scoped to this
+    /// plugin's own `requested_file_access` globs. It is here because a file is often generated
+    /// for a reason no path convention can express: a build tool's config SAYS SO — Maven's
+    /// `libsass-maven-plugin` naming an `outputPath`, a bundler config naming an output
+    /// directory. Reading it needs no graph, which is why this hook can have it even though it
+    /// runs before the graph exists.
+    fn classify_file(
+        &self,
+        _path: &ProjectPath,
+        _current: FileClass,
+        _content: &ContentView<'_>,
+    ) -> Option<FileClass> {
         None
     }
 
@@ -918,8 +1069,10 @@ mod tests {
             }),
             package: PackageId(0),
             unit: None,
+            unit_parent: None,
             test_spans: Vec::new(),
             string_call_sites: Vec::new(),
+            string_attr_args: Vec::new(),
         }
     }
 
@@ -936,6 +1089,9 @@ mod tests {
             implicitly_invoked: false,
             nested_scope: false,
             visibility_inherited: false,
+            visible_in_unit: None,
+            implements: None,
+            markers: Vec::new(),
         }
     }
 
@@ -1029,6 +1185,7 @@ mod tests {
             targets: Vec::new(),
             executables: Vec::new(),
             resolves_dependency_usage: true,
+            manifest_claim_languages: Vec::new(),
         };
         let mut real = implicit.clone();
         real.manifest = Some(ProjectPath(SmolStr::new("pkg/package.json")));
@@ -1165,32 +1322,26 @@ mod tests {
 
     // ------------------------------------------------------------ ContentView
 
+    /// Returns the `TempDir` alongside the tree, and callers must hold it: `ContentView` reads
+    /// the files back off disk, so the directory has to outlive the tree. The hand-rolled
+    /// directory this replaced was simply never deleted, which is the only reason returning
+    /// the tree alone used to work.
     fn content_tree_fixture(
-        name: &str,
         files: &[(&str, &str)],
-    ) -> crate::discovery::DiscoveredTree {
-        let dir = std::env::temp_dir().join(format!("kndo-plugin-content-test-{name}"));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        for (path, content) in files {
-            let full = dir.join(path);
-            std::fs::create_dir_all(full.parent().unwrap()).unwrap();
-            std::fs::write(full, content).unwrap();
-        }
-        crate::discovery::discover_source(
-            &crate::discovery::TreeSource::Directory(&dir),
+    ) -> (tempfile::TempDir, crate::discovery::DiscoveredTree) {
+        let dir = crate::testkit::fixture::project(files);
+        let tree = crate::discovery::discover_source(
+            &crate::discovery::TreeSource::Directory(dir.path()),
             &HashMap::default(),
             None,
         )
-        .unwrap()
+        .unwrap();
+        (dir, tree)
     }
 
     #[test]
     fn content_view_reads_a_path_matching_its_declared_glob() {
-        let tree = content_tree_fixture(
-            "reads-declared",
-            &[("package.json", "{\"main\":\"index.js\"}")],
-        );
+        let (_dir, tree) = content_tree_fixture(&[("package.json", "{\"main\":\"index.js\"}")]);
         let view = ContentView::new(
             &tree,
             SmolStr::new("test-plugin"),
@@ -1202,10 +1353,8 @@ mod tests {
 
     #[test]
     fn content_view_refuses_a_path_outside_its_declared_globs() {
-        let tree = content_tree_fixture(
-            "refuses-undeclared",
-            &[("package.json", "{}"), ("src/index.js", "code")],
-        );
+        let (_dir, tree) =
+            content_tree_fixture(&[("package.json", "{}"), ("src/index.js", "code")]);
         // Declares only package.json — src/index.js is source the language graph already
         // covers, and the point of scoping is that a plugin can't read it through this door
         // even though the file genuinely exists and is genuinely readable.
@@ -1219,14 +1368,11 @@ mod tests {
 
     #[test]
     fn content_view_matching_paths_reflects_the_glob_not_the_whole_tree() {
-        let tree = content_tree_fixture(
-            "matching-paths",
-            &[
-                ("views/index.ejs", "a"),
-                ("views/about.ejs", "b"),
-                ("package.json", "{}"),
-            ],
-        );
+        let (_dir, tree) = content_tree_fixture(&[
+            ("views/index.ejs", "a"),
+            ("views/about.ejs", "b"),
+            ("package.json", "{}"),
+        ]);
         let view = ContentView::new(
             &tree,
             SmolStr::new("test-plugin"),
@@ -1246,7 +1392,7 @@ mod tests {
             .iter()
             .map(|(p, c)| (p.as_str(), c.as_str()))
             .collect();
-        let tree = content_tree_fixture("budget-cutoff", &file_refs);
+        let (_dir, tree) = content_tree_fixture(&file_refs);
         let view = ContentView::new(
             &tree,
             SmolStr::new("greedy-plugin"),
@@ -1274,7 +1420,7 @@ mod tests {
 
     #[test]
     fn content_view_an_unparsable_glob_is_dropped_not_fatal() {
-        let tree = content_tree_fixture("bad-glob", &[("package.json", "{}")]);
+        let (_dir, tree) = content_tree_fixture(&[("package.json", "{}")]);
         // "[" is an unterminated character class — invalid glob syntax.
         let view = ContentView::new(
             &tree,

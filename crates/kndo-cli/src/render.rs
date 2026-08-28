@@ -23,19 +23,20 @@
 //!   unreadable, only less decorated than the richest tier could be.
 //! - Width-based column truncation and the below-60-columns two-line fallback — lines
 //!   are never truncated here.
-//! - The budget block — budgets need the config file's [delta] rules, which aren't
-//!   wired here; the health half IS rendered: a score/grade line plus per-category
-//!   penalty bars (non-zero categories only in `check` output; `kndo health` renders the full
-//!   table), and diff mode's header carries the before ──▶ after health line with the
-//!   grade-boundary distance on drops.
+//!
+//! Rendered in full, and listed because earlier drafts of this doc claimed otherwise:
+//! - The health block — a score/grade line plus per-category penalty bars (non-zero
+//!   categories only in `check` output; `kndo health` renders the full table), with diff
+//!   mode's before ──▶ after line carrying the grade-boundary distance on drops.
+//! - The `[delta]` budget block, beside it, whenever budgets are configured.
 //! - Findings that carry a `related` evidence chain (first populated by `cyclic`) render it as
 //!   indented `└` lines under the finding — role, location, note.
 
 use kndo::analysis::health::Health;
-use kndo::engine::{DeltaOrigin, Finding, RunResult};
-use kndo::query::{NeighborEntry, QNodeRef};
-use kndo::query_envelope::{QueryResult, ResultEntry};
-use kndo::vocab::Confidence;
+use kndo::query::NeighborEntry;
+use kndo::{
+    Confidence, DeltaOrigin, Diagnostic, Finding, Group, QueryResult, ResultEntry, RunResult,
+};
 
 pub(crate) struct RenderOptions {
     pub(crate) color: bool,
@@ -45,9 +46,22 @@ pub(crate) struct RenderOptions {
     /// `check` passes a `Possible` report floor override, so verbose shows every tier
     /// even when the project's `min-confidence` config raises the floor.
     pub(crate) verbose: bool,
+    /// `kndo health --by-package`: include the per-package breakdown table. Only
+    /// `render_health`'s `full_table` (`kndo health` itself) ever looks at this — `check`'s own
+    /// summary health line never shows packages regardless.
+    pub(crate) by_package: bool,
 }
 
-const GROUP_ORDER: [&str; 4] = ["defect", "waste", "risk", "hygiene"];
+/// Diagnostics print on stderr in every output format — a degraded run must never look silent.
+/// Shared by every command that runs a real analysis (`check`, `kndo health`).
+pub(crate) fn diagnostics(diagnostics: &[Diagnostic]) {
+    for d in diagnostics {
+        match &d.path {
+            Some(p) => eprintln!("kndo: {}: {}: {}", d.level, p.0, d.message),
+            None => eprintln!("kndo: {}: {}", d.level, d.message),
+        }
+    }
+}
 
 fn baseline_suffix(result: &RunResult) -> String {
     match &result.baseline {
@@ -67,10 +81,21 @@ fn suppressed_suffix(result: &RunResult) -> String {
     }
 }
 
+/// `--only`'s narrowing, and never omitted when non-zero — least of all on the clean line.
+/// A `kndo · clean` header printed over a report that quietly dropped forty findings is the
+/// worst sentence this program can write.
+fn elided_suffix(result: &RunResult) -> String {
+    match result.elided {
+        0 => String::new(),
+        n => format!(" · {n} outside --only"),
+    }
+}
+
 const RED: &str = "\x1b[31m";
 const YELLOW: &str = "\x1b[33m";
 const MAGENTA: &str = "\x1b[35m";
 const BLUE: &str = "\x1b[34m";
+const CYAN: &str = "\x1b[36m";
 const RESET: &str = "\x1b[0m";
 
 pub(crate) fn render(result: &RunResult, opts: &RenderOptions) -> String {
@@ -79,7 +104,7 @@ pub(crate) fn render(result: &RunResult, opts: &RenderOptions) -> String {
     }
 
     let baseline_suffix = baseline_suffix(result);
-    let suppressed_suffix = suppressed_suffix(result);
+    let suppressed_suffix = suppressed_suffix(result) + &elided_suffix(result);
 
     if result.findings.is_empty() {
         let mut out = format!(
@@ -117,21 +142,17 @@ pub(crate) fn render(result: &RunResult, opts: &RenderOptions) -> String {
             result.suppressed.inline, result.suppressed.config
         ));
     }
-    let mut groups: Vec<&str> = result
-        .findings
-        .iter()
-        .map(|f| f.group.as_str())
-        .collect::<std::collections::BTreeSet<_>>()
+    // The findings listing has no header line to hang a suffix on, and this is exactly the
+    // output a `--only` run produces — so the narrowing gets its own line rather than being
+    // the one branch where the lens goes unmentioned.
+    if result.elided > 0 {
+        out.push_str(&format!("{} outside --only\n\n", result.elided));
+    }
+    let present: std::collections::BTreeSet<Group> =
+        result.findings.iter().map(|f| f.group).collect();
+    let groups = Group::DISPLAY_ORDER
         .into_iter()
-        .collect();
-    // Fixed triage order first, then any group the taxonomy doesn't name
-    // — additive, so it must still render, just after the known ones.
-    groups.sort_by_key(|g| {
-        GROUP_ORDER
-            .iter()
-            .position(|k| k == g)
-            .unwrap_or(GROUP_ORDER.len())
-    });
+        .filter(|g| present.contains(g));
 
     for group in groups {
         let mut in_group: Vec<&Finding> = result
@@ -139,7 +160,7 @@ pub(crate) fn render(result: &RunResult, opts: &RenderOptions) -> String {
             .iter()
             .filter(|f| f.group == group)
             .collect();
-        kndo::engine::sort_findings_for_display(&mut in_group);
+        kndo::sort_findings_for_display(&mut in_group);
         render_section(&mut out, group, &in_group, opts);
     }
     if let Some(health) = &result.health {
@@ -213,7 +234,7 @@ pub(crate) fn render_health(health: &Health, opts: &RenderOptions, full_table: b
             c.penalty,
         ));
     }
-    if full_table && !health.packages.is_empty() {
+    if full_table && opts.by_package && !health.packages.is_empty() {
         out.push_str("\nby package:\n");
         for p in &health.packages {
             out.push_str(&format!(
@@ -274,24 +295,65 @@ fn health_diff_line(health: &Health) -> String {
     )
 }
 
+/// The budget block: the label on the first row only, then one row per configured rule —
+/// `<rule> ≤ <limit>   <measured>   ok|FAIL`, with the overrun spelled out on the rows that
+/// broke. Aligned into columns for the same reason the health table is: a reader scans the
+/// limit column to find the one that gave way, not the prose.
+///
+/// No color-conditional glyphs. `penalty_bar` branches on `opts.color` because it draws a
+/// *chart*; a verdict is a word, and the word is the same in both terminals — which is also
+/// what keeps this block diffable in a CI log.
+fn budget_block(budget: &kndo::Budget) -> String {
+    let width = budget
+        .rules
+        .iter()
+        .map(|r| r.rule.len())
+        .max()
+        .unwrap_or(0)
+        .max("max-net-findings".len());
+    let mut out = String::new();
+    for (i, rule) in budget.rules.iter().enumerate() {
+        // The label names the block once, like `health` does; repeating it on every row would
+        // read as several budgets rather than one budget with several rules.
+        let label = if i == 0 { "budget" } else { "" };
+        let verdict = match rule.over_by {
+            Some(over) => format!("FAIL   (over by {})", trim_num(over)),
+            None => "ok".to_string(),
+        };
+        out.push_str(&format!(
+            "{label:<8} {:<width$} ≤ {:<6} {:<8} {verdict}\n",
+            rule.rule,
+            trim_num(rule.limit),
+            trim_num(rule.measured),
+        ));
+    }
+    out
+}
+
+/// Whole numbers lose the decimal tail; a real fraction keeps one place. Same rule the agent
+/// format uses, so the two renderers describe one limit identically.
+fn trim_num(v: f64) -> String {
+    if v.fract() == 0.0 {
+        format!("{}", v as i64)
+    } else {
+        format!("{v:.1}")
+    }
+}
+
 fn grade_boundary_suffix(score: f64, grade: &str) -> String {
-    let (threshold, next) = match grade {
-        "A" => (90.0, "B"),
-        "B" => (80.0, "C"),
-        "C" => (65.0, "D"),
-        "D" => (50.0, "F"),
-        _ => return String::new(),
-    };
-    format!("  ({:.1} from {next})", score - threshold)
+    match kndo::analysis::health::grade_boundary(grade) {
+        Some((threshold, next)) => format!("  ({:.1} from {next})", score - threshold),
+        None => String::new(),
+    }
 }
 
 /// Diff modes' rendering: a one-line header (`N new · M fixed · net ±K`), then
 /// `NEW (introduced by this change)`, `NEW (derived, in untouched code)`, and `FIXED` sections
 /// — each present only when non-empty, in that fixed order.
 fn render_diff(result: &RunResult, opts: &RenderOptions) -> String {
-    let net = result.findings.len() as i64 - result.fixed.len() as i64;
+    let net = result.net_findings();
     let baseline_suffix = baseline_suffix(result);
-    let suppressed_suffix = suppressed_suffix(result);
+    let suppressed_suffix = suppressed_suffix(result) + &elided_suffix(result);
     let header = format!(
         "kndo · {} · {} new · {} fixed · net {net:+}{baseline_suffix}{suppressed_suffix}\n",
         result.mode,
@@ -305,11 +367,19 @@ fn render_diff(result: &RunResult, opts: &RenderOptions) -> String {
         .map(health_diff_line)
         .unwrap_or_default();
 
-    if opts.quiet || (result.findings.is_empty() && result.fixed.is_empty()) {
+    let budget_lines = result.budget.as_ref().map(budget_block).unwrap_or_default();
+
+    // `--quiet` is header + exit code by contract (RFC 0009 §6), so it stays bare. The clean
+    // branch is NOT: a change can move zero findings and still break `max-health-drop`, and
+    // that is precisely the case where a bare header would leave the exit code unexplained.
+    if opts.quiet {
         return format!("{header}{health_line}");
     }
+    if result.findings.is_empty() && result.fixed.is_empty() {
+        return format!("{header}{health_line}{budget_lines}");
+    }
 
-    let mut out = format!("{header}{health_line}");
+    let mut out = format!("{header}{health_line}{budget_lines}");
     out.push('\n');
 
     let introduced: Vec<&Finding> = result
@@ -345,7 +415,7 @@ fn render_diff(result: &RunResult, opts: &RenderOptions) -> String {
 /// `NEW`/`FIXED`, not the taxonomy groups.
 fn render_flat(out: &mut String, findings: &[&Finding], opts: &RenderOptions) {
     let mut sorted = findings.to_vec();
-    kndo::engine::sort_findings_for_display(&mut sorted);
+    kndo::sort_findings_for_display(&mut sorted);
     for f in sorted {
         out.push_str("  ");
         out.push_str(&render_finding_line(f, opts));
@@ -359,19 +429,17 @@ fn render_flat(out: &mut String, findings: &[&Finding], opts: &RenderOptions) {
 /// per entry: location, then the note that explains the hop.
 fn render_related(out: &mut String, f: &Finding) {
     for r in &f.related {
-        let location = match r.range {
-            Some(range) => format!("{}:{}", r.path.0, range.start.0),
-            None => r.path.0.to_string(),
-        };
-        match &r.note {
-            Some(note) => out.push_str(&format!("      └ {location} — {note}\n")),
-            None => out.push_str(&format!("      └ {location}\n")),
-        }
+        out.push_str(&r.render("      └ ", " — "));
+        out.push('\n');
     }
 }
 
-fn render_section(out: &mut String, group: &str, findings: &[&Finding], opts: &RenderOptions) {
-    out.push_str(&format!("{} ({})\n", group.to_uppercase(), findings.len()));
+fn render_section(out: &mut String, group: Group, findings: &[&Finding], opts: &RenderOptions) {
+    out.push_str(&format!(
+        "{} ({})\n",
+        group.as_str().to_uppercase(),
+        findings.len()
+    ));
     for f in findings {
         out.push_str("  ");
         out.push_str(&render_finding_line(f, opts));
@@ -383,7 +451,7 @@ fn render_section(out: &mut String, group: &str, findings: &[&Finding], opts: &R
 
 fn render_finding_line(f: &Finding, opts: &RenderOptions) -> String {
     let category = if f.subject_kind == "file" {
-        f.category.clone()
+        f.category.to_string()
     } else {
         format!("{}:{}", f.category, f.subject_kind)
     };
@@ -395,14 +463,14 @@ fn render_finding_line(f: &Finding, opts: &RenderOptions) -> String {
     let confidence = if f.confidence == Confidence::Certain {
         String::new()
     } else {
-        format!(" ({})", confidence_str(f.confidence))
+        format!(" ({})", f.confidence.as_str())
     };
 
-    let glyph = glyph(&f.group, opts.color);
+    let glyph = glyph(f.group, opts.color);
     if opts.color {
         format!(
             "{}{glyph}{RESET} {category} {location}  {}{confidence} [{}]",
-            color_code(&f.group),
+            color_code(f.group),
             f.message,
             f.id
         )
@@ -414,36 +482,29 @@ fn render_finding_line(f: &Finding, opts: &RenderOptions) -> String {
     }
 }
 
-fn glyph(group: &str, rich: bool) -> &'static str {
+fn glyph(group: Group, rich: bool) -> &'static str {
     match (group, rich) {
-        ("defect", true) => "✗",
-        ("defect", false) => "x",
-        ("waste", true) => "◦",
-        ("waste", false) => "o",
-        ("risk", true) => "▲",
-        ("risk", false) => "^",
-        ("hygiene", true) => "·",
-        ("hygiene", false) => ".",
-        (_, true) => "•",
-        (_, false) => "?",
+        (Group::Defect, true) => "✗",
+        (Group::Defect, false) => "x",
+        (Group::Waste, true) => "◦",
+        (Group::Waste, false) => "o",
+        (Group::Risk, true) => "▲",
+        (Group::Risk, false) => "^",
+        (Group::Hygiene, true) => "·",
+        (Group::Hygiene, false) => ".",
+        // Mirrors action/render.mjs's GLYPH table (the copy that was already correct).
+        (Group::Convention, true) => "•",
+        (Group::Convention, false) => "?",
     }
 }
 
-fn color_code(group: &str) -> &'static str {
+fn color_code(group: Group) -> &'static str {
     match group {
-        "defect" => RED,
-        "waste" => YELLOW,
-        "risk" => MAGENTA,
-        "hygiene" => BLUE,
-        _ => "",
-    }
-}
-
-fn confidence_str(c: Confidence) -> &'static str {
-    match c {
-        Confidence::Certain => "certain",
-        Confidence::Probable => "probable",
-        Confidence::Possible => "possible",
+        Group::Defect => RED,
+        Group::Waste => YELLOW,
+        Group::Risk => MAGENTA,
+        Group::Hygiene => BLUE,
+        Group::Convention => CYAN,
     }
 }
 
@@ -488,6 +549,99 @@ pub(crate) fn render_query(result: &QueryResult, opts: &RenderOptions) -> String
     out
 }
 
+/// The `describe` block — shared by `describe` and `explain`, which shows the same block over
+/// the subject a finding landed on. One renderer, so the two can never describe a node
+/// differently in the same terminal.
+fn render_describe(out: &mut String, d: &kndo::query::DescribeResult) {
+    out.push_str(&format!("  {}\n", d.node));
+    if let Some(decl) = &d.declaration {
+        out.push_str(&format!(
+            "  declaration: {} · visibility {}{}\n",
+            decl.kind,
+            // The label when the adapter has one, the ordinal when it does not — never
+            // the bare number as the only answer, which asks a reader to know a ladder
+            // they cannot see.
+            decl.visibility_label
+                .clone()
+                .unwrap_or_else(|| decl.visibility.to_string()),
+            if decl.exported { " · exported" } else { "" }
+        ));
+    }
+    if let Some(file) = &d.file {
+        out.push_str(&format!("  file: {} · {}\n", file.role, file.origin));
+    }
+    if let Some(dep) = &d.dependency {
+        out.push_str(&format!(
+            "  dependency: {} · {} importing file{} · {}\n",
+            dep.manifest_scopes.join(", "),
+            dep.importing_files,
+            if dep.importing_files == 1 { "" } else { "s" },
+            if dep.used { "used" } else { "unused" }
+        ));
+    }
+    if let Some(pkg) = &d.package {
+        out.push_str(&format!(
+            "  package: {} · {} files · {} dependent{}\n",
+            pkg.mode,
+            pkg.files,
+            pkg.dependents,
+            if pkg.dependents == 1 { "" } else { "s" }
+        ));
+    }
+    for m in &d.metrics {
+        let shape = match m.shape_ordinal {
+            0 => String::new(),
+            n => format!(" (nested shape {n} at line {})", m.span.start.0),
+        };
+        // "unmeasured", never "0%": no coverage report means unknown.
+        let covered = match m.coverage {
+            Some(c) => format!("{:.0}% covered", c * 100.0),
+            None => "coverage unmeasured".to_string(),
+        };
+        let crap = match m.crap {
+            Some(c) => format!(" · crap {c:.1}"),
+            None => String::new(),
+        };
+        out.push_str(&format!(
+            "  metrics{shape}: cyclomatic {} · {} loc · {} tokens · {covered}{crap}\n",
+            m.cyclomatic, m.loc, m.token_count
+        ));
+    }
+    for g in &d.duplication {
+        out.push_str(&format!(
+            "  duplication: {} clones ({})\n",
+            g.members.len(),
+            g.finding
+        ));
+        for m in &g.members {
+            out.push_str(&format!("    {m}\n"));
+        }
+    }
+    out.push_str(&format!(
+        "  degree: in={} out={}\n",
+        d.degree.in_by_kind.values().sum::<usize>(),
+        d.degree.out_by_kind.values().sum::<usize>()
+    ));
+    if !d.reached_by_roots.is_empty() {
+        out.push_str("  reached by roots:\n");
+        for r in &d.reached_by_roots {
+            out.push_str(&format!("    {}\n", r));
+        }
+    }
+    if !d.declared_symbols.is_empty() {
+        out.push_str("  declared symbols:\n");
+        for s in &d.declared_symbols {
+            out.push_str(&format!("    {}\n", s));
+        }
+    }
+    if !d.findings.is_empty() {
+        out.push_str(&format!("  findings: {}\n", d.findings.join(", ")));
+    }
+    if !d.sources.is_empty() {
+        out.push_str(&format!("  sources: {}\n", d.sources.join(", ")));
+    }
+}
+
 fn render_query_entry(out: &mut String, entry: &ResultEntry, opts: &RenderOptions) {
     match entry {
         ResultEntry::Failed {
@@ -509,69 +663,36 @@ fn render_query_entry(out: &mut String, entry: &ResultEntry, opts: &RenderOption
         }
         ResultEntry::Find(r) => {
             for (n, m) in r.matches.iter().enumerate() {
-                out.push_str(&format!("  {}. {}\n", n + 1, node_line(m)));
+                out.push_str(&format!("  {}. {}\n", n + 1, m));
             }
             if r.elided > 0 {
                 out.push_str(&format!("  … {} more (--limit)\n", r.elided));
             }
         }
-        ResultEntry::Describe(d) => {
-            out.push_str(&format!("  {}\n", node_line(&d.node)));
-            if let Some(decl) = &d.declaration {
-                out.push_str(&format!(
-                    "  declaration: {} · visibility {}{}\n",
-                    decl.kind,
-                    decl.visibility,
-                    if decl.exported { " · exported" } else { "" }
-                ));
+        ResultEntry::Describe(d) => render_describe(out, d),
+        ResultEntry::Explain(e) => {
+            // The finding exactly as `check` prints it — same glyph, same category, same id —
+            // then its evidence chain, then the same describe block over what it landed on.
+            out.push_str(&format!("  {}\n", render_finding_line(&e.finding, opts)));
+            render_related(out, &e.finding);
+            if !e.finding.sources.is_empty() {
+                out.push_str(&format!("  sources: {}\n", e.finding.sources.join(", ")));
             }
-            if let Some(file) = &d.file {
-                out.push_str(&format!("  file: {} · {}\n", file.role, file.origin));
-            }
-            if let Some(dep) = &d.dependency {
-                out.push_str(&format!(
-                    "  dependency: {} · {} importing file{} · {}\n",
-                    dep.manifest_scopes.join(", "),
-                    dep.importing_files,
-                    if dep.importing_files == 1 { "" } else { "s" },
-                    if dep.used { "used" } else { "unused" }
-                ));
-            }
-            if let Some(pkg) = &d.package {
-                out.push_str(&format!(
-                    "  package: {} · {} files · {} dependent{}\n",
-                    pkg.mode,
-                    pkg.files,
-                    pkg.dependents,
-                    if pkg.dependents == 1 { "" } else { "s" }
-                ));
-            }
-            out.push_str(&format!(
-                "  degree: in={} out={}\n",
-                d.degree.in_by_kind.values().sum::<usize>(),
-                d.degree.out_by_kind.values().sum::<usize>()
-            ));
-            if !d.reached_by_roots.is_empty() {
-                out.push_str("  reached by roots:\n");
-                for r in &d.reached_by_roots {
-                    out.push_str(&format!("    {}\n", node_line(r)));
+            match (&e.subject, &e.subject_selector) {
+                (Some(d), _) => {
+                    out.push('\n');
+                    render_describe(out, d);
                 }
-            }
-            if !d.declared_symbols.is_empty() {
-                out.push_str("  declared symbols:\n");
-                for s in &d.declared_symbols {
-                    out.push_str(&format!("    {}\n", node_line(s)));
+                // Stated, not omitted: a rollup has no single node, and a subject the graph
+                // never saw is itself worth reading.
+                (None, Some(selector)) => {
+                    out.push_str(&format!("  subject: {selector} (not a graph node)\n"))
                 }
-            }
-            if !d.findings.is_empty() {
-                out.push_str(&format!("  findings: {}\n", d.findings.join(", ")));
-            }
-            if !d.sources.is_empty() {
-                out.push_str(&format!("  sources: {}\n", d.sources.join(", ")));
+                (None, None) => out.push_str("  subject: not a single node (rollup)\n"),
             }
         }
         ResultEntry::Neighbors(r) => {
-            out.push_str(&format!("  {}\n", node_line(&r.node)));
+            out.push_str(&format!("  {}\n", r.node));
             for e in &r.entries {
                 out.push_str(&format!("    {}\n", neighbor_line(e)));
             }
@@ -580,7 +701,7 @@ fn render_query_entry(out: &mut String, entry: &ResultEntry, opts: &RenderOption
             }
         }
         ResultEntry::Impact(r) => {
-            out.push_str(&format!("  {}\n", node_line(&r.node)));
+            out.push_str(&format!("  {}\n", r.node));
             out.push_str(&format!(
                 "  affected: {} (production={} test-only={} tooling-only={} unreachable={})\n",
                 r.affected.len() + r.elided,
@@ -598,7 +719,7 @@ fn render_query_entry(out: &mut String, entry: &ResultEntry, opts: &RenderOption
             if !r.affected_roots.is_empty() {
                 out.push_str("  affected roots:\n");
                 for root in &r.affected_roots {
-                    out.push_str(&format!("    [{}] {}\n", root.kind, node_line(&root.node)));
+                    out.push_str(&format!("    [{}] {}\n", root.kind, root.node));
                 }
                 if r.affected_roots_elided > 0 {
                     out.push_str(&format!("    … {} more\n", r.affected_roots_elided));
@@ -611,14 +732,14 @@ fn render_query_entry(out: &mut String, entry: &ResultEntry, opts: &RenderOption
                     sim.newly_unreachable.len() + sim.newly_unreachable_elided
                 ));
                 for q in &sim.newly_unreachable {
-                    out.push_str(&format!("      {}\n", node_line(q)));
+                    out.push_str(&format!("      {}\n", q));
                 }
                 out.push_str(&format!(
                     "    newly test-only: {}\n",
                     sim.newly_test_only.len() + sim.newly_test_only_elided
                 ));
                 for q in &sim.newly_test_only {
-                    out.push_str(&format!("      {}\n", node_line(q)));
+                    out.push_str(&format!("      {}\n", q));
                 }
                 if !sim.freed_dependencies.is_empty() {
                     out.push_str(&format!(
@@ -630,16 +751,12 @@ fn render_query_entry(out: &mut String, entry: &ResultEntry, opts: &RenderOption
         }
         ResultEntry::Trace(r) => {
             if r.paths.is_empty() {
-                out.push_str(&format!(
-                    "  {} -/-> {}  (no path)\n",
-                    node_line(&r.from),
-                    node_line(&r.to)
-                ));
+                out.push_str(&format!("  {} -/-> {}  (no path)\n", r.from, r.to));
             }
             for path in &r.paths {
-                let mut line = format!("  {}", node_line(&r.from));
+                let mut line = format!("  {}", r.from);
                 for hop in &path.hops {
-                    line.push_str(&format!(" → [{}] {}", hop.via.edge, node_line(&hop.node)));
+                    line.push_str(&format!(" → [{}] {}", hop.via.edge, hop.node));
                 }
                 out.push_str(&line);
                 out.push('\n');
@@ -654,37 +771,93 @@ fn render_query_entry(out: &mut String, entry: &ResultEntry, opts: &RenderOption
     }
 }
 
-fn node_line(n: &QNodeRef) -> String {
-    let loc = match &n.span {
-        Some(s) => format!(" {}:{}", s.path, s.start.0),
-        None => String::new(),
-    };
-    format!("[{}] {}{loc}", n.selector, n.kind)
-}
-
 fn neighbor_line(e: &NeighborEntry) -> String {
-    format!(
-        "{} via {} (depth {})",
-        node_line(&e.node),
-        e.via.edge,
-        e.depth
-    )
+    format!("{} via {} (depth {})", e.node, e.via.edge, e.depth)
 }
 
 #[cfg(test)]
 mod tests {
+
+    /// **Every group has a glyph in both modes, and the rich ones match `action/render.mjs`.**
+    ///
+    /// `glyph` is a ten-arm table whose own comment says it mirrors the Action's `GLYPH`, and
+    /// nothing checked that — kndo's `crap` analysis reported the function at 31% coverage on
+    /// this repository, which is the same fact stated numerically: seven arms had never been
+    /// evaluated. Two copies of one table, one of them unexercised, is the drift this repo
+    /// removes everywhere else; here it is asserted instead, because the Action is JavaScript
+    /// and cannot import the Rust one.
+    #[test]
+    fn every_group_has_a_glyph_and_the_rich_table_matches_the_action() {
+        let js = std::fs::read_to_string(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../action/render.mjs"),
+        )
+        .expect("action/render.mjs is in the repository");
+        let line = js
+            .lines()
+            .find(|l| l.contains("const GLYPH"))
+            .expect("render.mjs declares GLYPH");
+
+        for group in Group::DISPLAY_ORDER {
+            let rich = glyph(group, true);
+            let plain = glyph(group, false);
+            assert!(!rich.is_empty() && !plain.is_empty(), "{group:?}");
+            assert_ne!(
+                rich, plain,
+                "{group:?}: the plain fallback exists so a non-UTF-8 terminal reads differently"
+            );
+            assert!(
+                plain.is_ascii(),
+                "{group:?}: the plain glyph {plain:?} is the one for terminals that cannot \
+                 render the rich set, so it has to be ASCII"
+            );
+            assert!(
+                line.contains(&format!("{}: \"{rich}\"", group.as_str())),
+                "action/render.mjs has a different glyph for {}: {line}",
+                group.as_str()
+            );
+        }
+    }
+
+    /// The plain glyphs are distinct from each other, which is the only reason a reader can tell
+    /// the groups apart without colour or Unicode.
+    #[test]
+    fn the_plain_glyphs_are_all_different() {
+        let mut seen: Vec<&str> = Group::DISPLAY_ORDER
+            .iter()
+            .map(|g| glyph(*g, false))
+            .collect();
+        let count = seen.len();
+        seen.sort_unstable();
+        seen.dedup();
+        assert_eq!(
+            seen.len(),
+            count,
+            "two groups share a plain glyph: {seen:?}"
+        );
+    }
     use super::*;
-    use kndo::adapter::ProjectPath;
-    use kndo::engine::{Delta, DeltaOrigin, Location, Severity};
+    use kndo::ProjectPath;
+    use kndo::{Delta, DeltaOrigin, Location, Severity};
     use smol_str::SmolStr;
+
+    fn parse_group(g: &str) -> Group {
+        match g {
+            "defect" => Group::Defect,
+            "waste" => Group::Waste,
+            "risk" => Group::Risk,
+            "hygiene" => Group::Hygiene,
+            "convention" => Group::Convention,
+            other => panic!("unknown test group {other}"),
+        }
+    }
 
     fn finding(category: &str, group: &str) -> Finding {
         Finding {
             advisory: false,
             id: format!("kndo-{category}"),
-            category: category.to_string(),
-            group: group.to_string(),
-            subject_kind: "function".to_string(),
+            category: category.into(),
+            group: parse_group(group),
+            subject_kind: "function".into(),
             severity: Severity::Warning,
             confidence: Confidence::Certain,
             message: "example".to_string(),
@@ -695,6 +868,8 @@ mod tests {
                 package: None,
             },
             related: Vec::new(),
+            rolled_up: None,
+            sources: Vec::new(),
             delta: None,
             delta_origin: None,
         }
@@ -705,6 +880,7 @@ mod tests {
             color: false,
             quiet: false,
             verbose: false,
+            by_package: false,
         }
     }
 
@@ -737,6 +913,38 @@ mod tests {
     }
 
     #[test]
+    fn a_clean_line_never_stands_alone_over_a_narrowed_run() {
+        // The worst sentence this program can write: `kndo · clean` over a report that
+        // dropped everything because the caller narrowed it. A `--only` that matches nothing
+        // is exactly how that happens.
+        let result = RunResult {
+            mode: "full".to_string(),
+            elided: 235,
+            files_discovered: 339,
+            ..RunResult::default()
+        };
+        let out = render(&result, &opts());
+        assert!(out.contains("clean"), "{out}");
+        assert!(out.contains("· 235 outside --only"), "{out}");
+    }
+
+    #[test]
+    fn the_findings_listing_says_what_the_lens_removed() {
+        // The listing has no header line to hang a suffix on — the one branch where a lens
+        // could have gone unmentioned.
+        let mut f = finding("unused", "waste");
+        f.delta = None;
+        let result = RunResult {
+            mode: "full".to_string(),
+            findings: vec![f],
+            elided: 47,
+            ..RunResult::default()
+        };
+        let out = render(&result, &opts());
+        assert!(out.starts_with("47 outside --only\n\n"), "{out}");
+    }
+
+    #[test]
     fn diff_mode_clean_result_is_just_the_header() {
         let result = RunResult {
             mode: "diff".to_string(),
@@ -744,6 +952,92 @@ mod tests {
             ..RunResult::default()
         };
         let out = render(&result, &opts());
+        assert_eq!(out, "kndo · diff · 0 new · 0 fixed · net +0\n");
+    }
+
+    fn budget(rules: Vec<kndo::BudgetRule>) -> kndo::Budget {
+        let verdict = if rules.iter().any(|r| r.verdict == kndo::BudgetVerdict::Fail) {
+            kndo::BudgetVerdict::Fail
+        } else {
+            kndo::BudgetVerdict::Pass
+        };
+        kndo::Budget { verdict, rules }
+    }
+
+    fn budget_rule(rule: &str, limit: f64, measured: f64) -> kndo::BudgetRule {
+        let over = measured - limit;
+        kndo::BudgetRule {
+            rule: rule.to_string(),
+            limit,
+            measured,
+            verdict: if over > 0.0 {
+                kndo::BudgetVerdict::Fail
+            } else {
+                kndo::BudgetVerdict::Pass
+            },
+            over_by: (over > 0.0).then_some(over),
+        }
+    }
+
+    #[test]
+    fn the_budget_block_names_itself_once_and_spells_out_every_overrun() {
+        let result = RunResult {
+            mode: "diff".to_string(),
+            base_ref: Some("main".to_string()),
+            budget: Some(budget(vec![
+                budget_rule("max-health-drop", 0.0, -1.7),
+                budget_rule("max-net-findings", 0.0, 1.0),
+                budget_rule("defect", 2.0, 0.0),
+            ])),
+            ..RunResult::default()
+        };
+        let out = render(&result, &opts());
+        // Exact, not `contains`: the columns ARE the feature — a reader scans the limit
+        // column to find the rule that gave way, and drifting alignment is how that stops
+        // working without any test noticing.
+        let expected = concat!(
+            "kndo · diff · 0 new · 0 fixed · net +0\n",
+            "budget   max-health-drop  ≤ 0      -1.7     ok\n",
+            "         max-net-findings ≤ 0      1        FAIL   (over by 1)\n",
+            "         defect           ≤ 2      0        ok\n",
+        );
+        assert_eq!(out, expected, "got:\n{out}");
+    }
+
+    #[test]
+    fn a_clean_diff_still_prints_a_budget_that_broke() {
+        // The case the old "no findings, no body" shortcut got wrong: a change can move zero
+        // findings and still break `max-health-drop` (a function got longer, coverage fell).
+        // Printing only the header there would leave the exit code with no stated reason.
+        let result = RunResult {
+            mode: "diff".to_string(),
+            base_ref: Some("main".to_string()),
+            budget: Some(budget(vec![budget_rule("max-health-drop", 0.0, 2.5)])),
+            ..RunResult::default()
+        };
+        let out = render(&result, &opts());
+        assert!(out.contains("FAIL   (over by 2.5)"), "{out}");
+    }
+
+    #[test]
+    fn quiet_stays_a_one_liner_even_when_a_budget_broke() {
+        // `--quiet` is header + exit code by contract (RFC 0009 §6). The budget is why the
+        // exit code is 1, and the caller asked not to be told.
+        let result = RunResult {
+            mode: "diff".to_string(),
+            base_ref: Some("main".to_string()),
+            budget: Some(budget(vec![budget_rule("max-net-findings", 0.0, 3.0)])),
+            ..RunResult::default()
+        };
+        let out = render(
+            &result,
+            &RenderOptions {
+                color: false,
+                quiet: true,
+                verbose: false,
+                by_package: false,
+            },
+        );
         assert_eq!(out, "kndo · diff · 0 new · 0 fixed · net +0\n");
     }
 
@@ -763,6 +1057,7 @@ mod tests {
                 color: false,
                 quiet: true,
                 verbose: false,
+                by_package: false,
             },
         );
         assert_eq!(out, "kndo · staged · 1 new · 0 fixed · net +1\n");
@@ -792,7 +1087,7 @@ mod tests {
     fn nonzero_suppressed_shows_in_the_clean_full_mode_header() {
         let result = RunResult {
             mode: "full".to_string(),
-            suppressed: kndo::engine::SuppressedSummary {
+            suppressed: kndo::SuppressedSummary {
                 inline: 3,
                 config: 1,
             },
@@ -808,7 +1103,7 @@ mod tests {
         let result = RunResult {
             mode: "full".to_string(),
             findings: vec![finding("unused", "waste")],
-            suppressed: kndo::engine::SuppressedSummary {
+            suppressed: kndo::SuppressedSummary {
                 inline: 2,
                 config: 0,
             },
@@ -822,7 +1117,7 @@ mod tests {
     fn nonzero_suppressed_shows_in_the_diff_mode_header() {
         let result = RunResult {
             mode: "staged".to_string(),
-            suppressed: kndo::engine::SuppressedSummary {
+            suppressed: kndo::SuppressedSummary {
                 inline: 1,
                 config: 0,
             },
@@ -844,9 +1139,9 @@ mod tests {
         }
     }
 
-    fn query_result(entry: kndo::query_envelope::ResultEntry) -> QueryResult {
+    fn query_result(entry: kndo::ResultEntry) -> QueryResult {
         QueryResult {
-            verb: kndo::query_envelope::Verb::Describe,
+            verb: kndo::Verb::Describe,
             selectors: vec!["dep:left-pad".to_string()],
             id: None,
             cache: "warm",
@@ -859,7 +1154,6 @@ mod tests {
     #[test]
     fn describe_human_output_shows_declaration_file_and_dependency_blocks() {
         use kndo::query::{DeclarationInfo, Degree, DependencyInfo, DescribeResult, NodeSpan};
-        use kndo::query_envelope::ResultEntry;
 
         let symbol = query_result(ResultEntry::Describe(Box::new(DescribeResult {
             node: qnode("src/billing.js#computeTotal", "function"),
@@ -872,10 +1166,13 @@ mod tests {
                 },
                 exported: true,
                 visibility: 1,
+                visibility_label: None,
             }),
             file: None,
             dependency: None,
             package: None,
+            metrics: Vec::new(),
+            duplication: Vec::new(),
             degree: Degree::default(),
             reached_by_roots: vec![],
             findings: vec![],
@@ -899,6 +1196,8 @@ mod tests {
                 used: true,
             }),
             package: None,
+            metrics: Vec::new(),
+            duplication: Vec::new(),
             degree: Degree::default(),
             reached_by_roots: vec![],
             findings: vec![],
@@ -909,6 +1208,93 @@ mod tests {
         let out = render_query(&dep, &opts());
         assert!(
             out.contains("dependency: prod · 1 importing file · used"),
+            "{out}"
+        );
+    }
+
+    /// **Every section the human renderer can emit, emitted.**
+    ///
+    /// Its sibling above populates three of the ten optional parts; kndo's own `crap` analysis
+    /// put this renderer at 51% coverage on this repository, which says the same thing in a
+    /// number. This is the CLI half of the pair `agent_format` also owns — the facade rule means
+    /// they read the same `DescribeResult`, so both need the whole shape exercised, not one
+    /// corner each.
+    #[test]
+    fn describe_human_output_renders_every_section_it_declares() {
+        use kndo::query::{
+            DeclarationInfo, Degree, DescribeResult, DuplicationInfo, FileInfo, NodeSpan,
+            PackageInfo, ShapeMetrics,
+        };
+
+        let full = query_result(ResultEntry::Describe(Box::new(DescribeResult {
+            node: qnode("src/billing.js#computeTotal", "function"),
+            declaration: Some(DeclarationInfo {
+                kind: "function".to_string(),
+                span: NodeSpan {
+                    path: "src/billing.js".to_string(),
+                    start: (1, 1),
+                    end: (9, 2),
+                },
+                exported: true,
+                visibility: 2,
+                visibility_label: Some("pub(crate)".to_string()),
+            }),
+            file: Some(FileInfo {
+                role: "production".to_string(),
+                origin: "authored".to_string(),
+            }),
+            dependency: None,
+            package: Some(PackageInfo {
+                mode: "library".to_string(),
+                files: 12,
+                dependents: 4,
+            }),
+            metrics: vec![ShapeMetrics {
+                shape_ordinal: 0,
+                span: NodeSpan {
+                    path: "src/billing.js".to_string(),
+                    start: (1, 1),
+                    end: (9, 2),
+                },
+                cyclomatic: 7,
+                loc: 40,
+                token_count: 120,
+                coverage: Some(0.5),
+                crap: Some(19.5),
+            }],
+            duplication: vec![DuplicationInfo {
+                finding: "duplicate:callable:abc".to_string(),
+                members: vec!["src/other.js#alsoComputes".to_string()],
+            }],
+            // The degree line renders from the maps' totals and is exercised by the sibling
+            // test; populating them here would mean a `rustc-hash` dependency in a crate that
+            // imports only through the `kndo::` facade, which is not worth a test's convenience.
+            degree: Degree::default(),
+            reached_by_roots: vec![qnode("src/index.js", "file")],
+            findings: vec!["untested:callable:def".to_string()],
+            sources: vec!["adapter:js-ts".to_string()],
+            declared_symbols: vec![qnode("src/billing.js#helper", "function")],
+            elided: Default::default(),
+        })));
+
+        let out = render_query(&full, &opts());
+        for expected in [
+            // The label wins over the ordinal — the branch the sibling test leaves `None`.
+            "visibility pub(crate)",
+            "production",
+            "authored",
+            "library",
+            "src/other.js#alsoComputes",
+            "src/index.js",
+            "src/billing.js#helper",
+            "untested:callable:def",
+            "adapter:js-ts",
+        ] {
+            assert!(out.contains(expected), "missing {expected:?} in:\n{out}");
+        }
+        // The metrics numbers themselves, not a rounded summary.
+        assert!(
+            out.contains('7') && out.contains("40") && out.contains("120"),
             "{out}"
         );
     }
@@ -927,6 +1313,7 @@ mod tests {
             color: false,
             quiet: false,
             verbose: false,
+            by_package: false,
         };
         assert!(!render(&result, &base).contains("phases"));
         let verbose = RenderOptions {
@@ -967,6 +1354,7 @@ mod tests {
             color: false,
             quiet: false,
             verbose: false,
+            by_package: false,
         }
     }
 

@@ -8,6 +8,11 @@
 # Env overrides:
 #   KNDO_VERSION      pin a specific release tag (e.g. "v1.2.0"); default: latest
 #   KNDO_INSTALL_DIR  install location; default: "$HOME/.local/bin"
+#   KNDO_BASE_URL     fetch the archive and checksums.txt from here instead of the project's
+#                     GitHub releases — an internal mirror, or a staging directory served over
+#                     HTTP. Requires KNDO_VERSION (there is no releases API to ask). CI uses it
+#                     to install from the artifact it just built: the layout this script assumes
+#                     is a contract, and until something ran it end to end, nothing checked it.
 set -eu
 
 REPO="eulke/kondo"
@@ -33,7 +38,7 @@ detect_target() {
         Darwin/arm64) echo "aarch64-apple-darwin" ;;
         *)
             die "unsupported platform: $os/$arch (supported: Linux x86_64/aarch64, macOS \
-x86_64/arm64 — Windows users, see https://github.com/$REPO#installation for the .zip release)"
+x86_64/arm64)"
             ;;
     esac
 }
@@ -54,7 +59,7 @@ VERSION=$(resolve_version)
 [ -n "$VERSION" ] || die "could not resolve a release version (network issue, or no releases published yet)"
 
 ARCHIVE="kndo-${VERSION}-${TARGET}.tar.gz"
-BASE_URL="https://github.com/$REPO/releases/download/$VERSION"
+BASE_URL="${KNDO_BASE_URL:-https://github.com/$REPO/releases/download/$VERSION}"
 
 WORK_DIR=$(mktemp -d)
 trap 'rm -rf "$WORK_DIR"' EXIT
@@ -85,7 +90,10 @@ log "kndo: verifying checksum…"
 verify_checksum
 
 mkdir -p "$INSTALL_DIR"
-tar -xzf "$WORK_DIR/$ARCHIVE" -C "$WORK_DIR"
+# The archive nests everything under a single directory named for itself
+# ("kndo-v1.2.0-x86_64-apple-darwin/kndo") — strip it, or the binary is not where we look.
+tar -xzf "$WORK_DIR/$ARCHIVE" -C "$WORK_DIR" --strip-components=1
+[ -f "$WORK_DIR/kndo" ] || die "$ARCHIVE did not contain a kndo binary where one was expected"
 cp "$WORK_DIR/kndo" "$INSTALL_DIR/kndo"
 chmod +x "$INSTALL_DIR/kndo"
 

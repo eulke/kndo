@@ -17,6 +17,7 @@
 //! `Dependency(name, Probable)` as the undeclared-crate fallback (what feeds the
 //! `undeclared` analysis; a real local name resolves in the earlier step and never gets here).
 
+use kndo_adapter_toolkit::paths::dirname;
 use kndo_core::adapter::{ImportSpec, ProjectPath, Resolution, ResolveCtx, WorkspaceMember};
 use kndo_core::vocab::Confidence;
 use smol_str::SmolStr;
@@ -276,10 +277,6 @@ fn resolve_into_member(
 }
 
 // ---------------------------------------------------------------- path arithmetic
-
-fn dirname(path: &str) -> &str {
-    path.rsplit_once('/').map(|(d, _)| d).unwrap_or("")
-}
 
 fn basename(path: &str) -> &str {
     path.rsplit('/').next().unwrap_or(path)

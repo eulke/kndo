@@ -24,21 +24,28 @@ impl Plugin for ExpressPlugin {
         PluginDescriptor {
             id: SmolStr::new("kndo:express"),
             version: SmolStr::new("1"),
-            detection: vec![SmolStr::new(
-                "a package.json under the project root depends on express",
-            )],
-            // Every app root's own package.json, read through the content
-            // channel to derive the true entry from "main"/"scripts" —
-            // in-memory glob against already-discovered, gitignore-filtered paths, not a disk
-            // walk, so (unlike a raw ActivationRule::FileExists glob) this never touches
-            // node_modules regardless of recursion.
+            // Empty: the gate below IS a rule, so prose beside it would be the same fact twice.
+            detection: vec![],
+            // Every app root's own package.json, read through the content channel to derive the
+            // true entry from "main"/"scripts" — an in-memory glob against already-discovered,
+            // gitignore-filtered paths, not a disk walk, so (unlike a raw
+            // ActivationRule::FileExists glob) this never touches node_modules regardless of
+            // recursion.
             requested_file_access: vec![SmolStr::new("**/package.json")],
-            // Single rule: express is always a declared runtime dependency, never
-            // an implicit peer; wrapper frameworks reach this plugin through the
-            // `dependencies` implication.
+            // Single rule: express is always a declared runtime dependency, never an implicit
+            // peer.
             activation: vec![ActivationRule::ManifestDependency(SmolStr::new("express"))],
+            // Empty here, and load-bearing that it is VISIBLE here. A company framework that
+            // uses express internally does not declare `express` in its own manifest, so this
+            // plugin's rule above can never fire for it — that project's wrapper plugin names
+            // `kndo:express` in ITS `dependencies`, and being active is what activates this one
+            // (RFC 0015 §3). Nothing else reaches a plugin whose framework is indirect.
             dependencies: vec![],
         }
+    }
+
+    fn mutates_graph(&self) -> bool {
+        true
     }
 
     fn contribute_roots(

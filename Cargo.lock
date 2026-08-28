@@ -56,6 +56,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "anstyle"
+version = "1.0.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "940b3a0ca603d1eade50a4846a2afffd5ef57a9feac2c0e2ec2e14f9ead76000"
+
+[[package]]
 name = "anyhow"
 version = "1.0.104"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -278,6 +284,44 @@ dependencies = [
  "num-traits",
  "windows-link",
 ]
+
+[[package]]
+name = "clap"
+version = "4.6.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "473c7e07f409a8d772161724aa8db6a765a2532a70f9667eeb7b49d3d02fbdca"
+dependencies = [
+ "clap_builder",
+ "clap_derive",
+]
+
+[[package]]
+name = "clap_builder"
+version = "4.6.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7b48fea5a88e9ae728a2dcbedbfc0e730f7d60da42e1cb049a83c9fb8b789889"
+dependencies = [
+ "anstyle",
+ "clap_lex",
+]
+
+[[package]]
+name = "clap_derive"
+version = "4.6.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d012d2b9d65aca7f18f4d9878a045bc17899bba951561ba5ec3c2ba1eed9a061"
+dependencies = [
+ "heck",
+ "proc-macro2",
+ "quote",
+ "syn 3.0.3",
+]
+
+[[package]]
+name = "clap_lex"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c8d4a3bb8b1e0c1050499d1815f5ab16d04f0959b233085fb31653fbfc9d98f9"
 
 [[package]]
 name = "cobs"
@@ -656,6 +700,16 @@ name = "fastrand"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "da7c62ceae207dd37ea5b845da6a0696c799f85e97da1ab5b7910be3c1c80223"
+
+[[package]]
+name = "filetime"
+version = "0.2.29"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5c287a33c7f0a620c38e641e7f60827713987b3c0f26e8ddc9462cc69cf75759"
+dependencies = [
+ "cfg-if",
+ "libc",
+]
 
 [[package]]
 name = "find-msvc-tools"
@@ -1214,6 +1268,7 @@ dependencies = [
  "jsonschema",
  "kndo-adapter-css",
  "kndo-adapter-go",
+ "kndo-adapter-html",
  "kndo-adapter-java",
  "kndo-adapter-js",
  "kndo-adapter-json",
@@ -1224,12 +1279,20 @@ dependencies = [
  "kndo-plugin-api",
  "kndo-plugin-coverage",
  "kndo-plugin-express",
+ "kndo-plugin-info-plist",
+ "kndo-plugin-libsass",
  "kndo-plugin-nextjs",
+ "kndo-plugin-rkyv",
  "kndo-plugin-serde",
+ "kndo-plugin-thymeleaf",
+ "kndo-plugin-uikit",
+ "kndo-plugin-wasmtime",
+ "rustc-hash",
  "serde_json",
  "sha2",
  "smol_str",
  "tempfile",
+ "thiserror 2.0.20",
  "toml",
  "ureq",
  "wit-component",
@@ -1257,8 +1320,19 @@ dependencies = [
  "kndo-core",
  "rustc-hash",
  "smol_str",
+ "tempfile",
  "tree-sitter",
  "tree-sitter-go",
+]
+
+[[package]]
+name = "kndo-adapter-html"
+version = "0.1.0"
+dependencies = [
+ "kndo-adapter-toolkit",
+ "kndo-core",
+ "rustc-hash",
+ "smol_str",
 ]
 
 [[package]]
@@ -1284,6 +1358,7 @@ dependencies = [
  "serde_json",
  "smol_str",
  "tree-sitter",
+ "tree-sitter-typescript",
 ]
 
 [[package]]
@@ -1351,12 +1426,14 @@ dependencies = [
 name = "kndo-cli"
 version = "0.1.0"
 dependencies = [
+ "clap",
  "kndo",
  "libc",
  "serde",
  "serde_json",
  "smol_str",
  "tempfile",
+ "toml",
 ]
 
 [[package]]
@@ -1378,6 +1455,7 @@ dependencies = [
  "serde_json",
  "smol_str",
  "tempfile",
+ "thiserror 2.0.20",
  "toml",
 ]
 
@@ -1413,6 +1491,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "kndo-plugin-info-plist"
+version = "0.1.0"
+dependencies = [
+ "kndo-core",
+ "roxmltree",
+ "smol_str",
+]
+
+[[package]]
+name = "kndo-plugin-libsass"
+version = "0.1.0"
+dependencies = [
+ "kndo-core",
+ "roxmltree",
+ "smol_str",
+]
+
+[[package]]
 name = "kndo-plugin-nextjs"
 version = "0.1.0"
 dependencies = [
@@ -1421,7 +1517,41 @@ dependencies = [
 ]
 
 [[package]]
+name = "kndo-plugin-rkyv"
+version = "0.1.0"
+dependencies = [
+ "kndo-core",
+ "smol_str",
+]
+
+[[package]]
 name = "kndo-plugin-serde"
+version = "0.1.0"
+dependencies = [
+ "kndo-core",
+ "smol_str",
+]
+
+[[package]]
+name = "kndo-plugin-thymeleaf"
+version = "0.1.0"
+dependencies = [
+ "kndo-core",
+ "rustc-hash",
+ "smol_str",
+]
+
+[[package]]
+name = "kndo-plugin-uikit"
+version = "0.1.0"
+dependencies = [
+ "kndo-core",
+ "roxmltree",
+ "smol_str",
+]
+
+[[package]]
+name = "kndo-plugin-wasmtime"
 version = "0.1.0"
 dependencies = [
  "kndo-core",
@@ -2471,6 +2601,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "tar"
+version = "0.4.46"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3f6221d9a6003c78398e3b239969f352578258df48c8eb051caadae0015bc840"
+dependencies = [
+ "filetime",
+ "libc",
+ "xattr",
+]
+
+[[package]]
 name = "target-lexicon"
 version = "0.12.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3496,13 +3637,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3ad82d2a33cdc9674dc7465672f271e096168fcdbe0f799d9e6db8c5892679dc"
 
 [[package]]
+name = "xattr"
+version = "1.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "32e45ad4206f6d2479085147f02bc2ef834ac85886624a23575ae137c8aa8156"
+dependencies = [
+ "libc",
+ "rustix 1.1.4",
+]
+
+[[package]]
 name = "xtask"
 version = "0.1.0"
 dependencies = [
+ "flate2",
  "kndo-adapter-toolkit",
  "kndo-core",
  "schemars",
  "serde_json",
+ "tar",
+ "tempfile",
  "wit-component",
 ]
 

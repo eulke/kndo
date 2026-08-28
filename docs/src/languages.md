@@ -17,11 +17,12 @@ Mixed repositories are the point: one graph, cross-language edges, one report.
 | Swift | `.swift` | `Package.swift` |
 | JSON | `.json` | — |
 | CSS / SCSS | `.css .scss` | — |
+| HTML | `.html .htm` | — |
 
 Adapters are held to a shared **conformance harness** — fixture projects with
 expected-finding JSON every adapter must reproduce exactly — so "the same verdict means the
 same thing" is tested, not aspirational. New languages can also arrive as
-[WebAssembly adapter components](plugin-authoring.md#writing-an-adapter) without rebuilding
+[WebAssembly adapter components](plugins/authoring.md#writing-an-adapter) without rebuilding
 kndo.
 
 ## JavaScript / TypeScript
@@ -39,7 +40,7 @@ warning-level — initialization-order bugs are real).
 **Limits:** dynamic `import(expr)` and `require(variable)` with computed specifiers can't be
 resolved to a file — such references keep candidates *live-possible* (lowered confidence),
 never dead. Code invoked only via string lookups in configuration kndo doesn't model needs a
-[plugin](plugin-authoring.md) root (the built-in [Next.js and Express
+[plugin](plugins/authoring.md) root (the built-in [Next.js and Express
 plugins](plugins.md#built-in-plugins) cover those frameworks' conventions).
 
 ## Go
@@ -76,8 +77,10 @@ definition.
 materialized — kndo reads source, it doesn't expand macros; token-tree scanning keeps
 macro-referenced symbols alive, but code generated wholesale by proc-macros is invisible.
 Trait impls dispatched only through external machinery (serialization being the classic
-case) are covered by the built-in [`kndo:serde` plugin](plugins.md#built-in-plugins);
-other such frameworks need their own plugin annotation.
+case) are covered by the built-in [`kndo:serde`, `kndo:rkyv` and `kndo:wasmtime`
+plugins](plugins.md#built-in-plugins) — kndo records which trait's `impl` declares each
+member, and each plugin matches its own ecosystem's traits against that. Another such
+framework needs its own plugin, which is that table and nothing more.
 
 ## Java
 
@@ -127,6 +130,28 @@ A non-source language, deliberately narrow: claims `.json` files so they exist i
 at all — letting other languages' imports resolve *to* them, `unused` see orphaned config
 files, and byte-identical [`duplicate`](rules.md#duplicate) detection cover them. Extracts
 no symbols and declares no ladder, so symbol-level analyses skip it by construction.
+
+## HTML
+
+**A document is an entry point, not a module.** Nothing imports a page — a browser loads it, a
+server renders it, a bundler is handed it — so every `.html` file is a production root, and the
+modules and stylesheets it names become reachable through it.
+
+That one rule is the whole adapter, and it is what makes a front-end project analyzable at all:
+an app whose entry is `<script type="module" src="./main.js">` in `index.html` has no other
+declaration of where it starts. Without it, `main.js` and everything it imports read as
+unreachable — measured on vite's playground suite, 65 of 83 entry modules were reported
+`unused` for exactly this reason.
+
+Read: `<script src>`, `<link href>`, `<img src>`, `<source src>`, `<iframe src>`. Skipped, and
+deliberately not reported as unresolved: anything that leaves the project — an absolute URL, a
+protocol-relative `//cdn/...`, a `data:` payload, a bare `#anchor`, a `${...}`/`{{...}}`
+template placeholder, and a root-relative `/assets/app.js` (what it names depends on the
+server's document root, which kndo cannot know).
+
+Extracts no symbols and declares no ladder, so symbol-level analyses skip it. It is also
+exempt from [`untested`](rules.md#untested): a document holds nothing a test could call, and
+reporting every page as a test blind spot would bury the report.
 
 ## CSS / SCSS
 

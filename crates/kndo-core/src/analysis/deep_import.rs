@@ -35,10 +35,12 @@
 use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 use std::collections::{BTreeMap, VecDeque};
 
-use crate::analysis::{finding_id, package_discriminator, package_label};
+use crate::analysis::{finding_id, package_discriminator, package_label, FindingIdParts};
 use crate::engine::{Finding, Location, Severity};
 use crate::graph::ProjectGraph;
-use crate::vocab::{Confidence, EdgeKind, FileId, FileOrigin, NodeRef, PackageId};
+use crate::vocab::{
+    Category, Confidence, EdgeKind, FileId, FileOrigin, Group, NodeRef, PackageId, SubjectKind,
+};
 
 struct PairEvidence {
     /// Deep sites, as (consumer file, provider target file) — deduped, sorted for output.
@@ -134,16 +136,16 @@ pub fn find_deep_imports(graph: &ProjectGraph) -> Vec<Finding> {
         let provider_disc = package_discriminator(graph, provider);
         findings.push(Finding {
             advisory: false,
-            id: finding_id(
-                "deep-import",
-                "package",
-                &consumer_disc,
-                &provider_disc,
-                "",
-            ),
-            category: "deep-import".to_string(),
-            group: "risk".to_string(),
-            subject_kind: "package".to_string(),
+            id: finding_id(FindingIdParts {
+                category: &Category::DEEP_IMPORT,
+                subject_kind: &SubjectKind::PACKAGE,
+                path: &consumer_disc,
+                symbol_path: &provider_disc,
+                discriminator: "",
+            }),
+            category: Category::DEEP_IMPORT,
+            group: Group::Risk,
+            subject_kind: SubjectKind::PACKAGE,
             severity: Severity::Warning,
             confidence: evidence.confidence,
             message: format!(
@@ -159,6 +161,8 @@ pub fn find_deep_imports(graph: &ProjectGraph) -> Vec<Finding> {
                 package: graph.package_name(consumer).map(str::to_string),
             },
             related: Vec::new(),
+            rolled_up: None,
+            sources: Vec::new(),
             delta: None,
             delta_origin: None,
         });
@@ -276,8 +280,10 @@ mod tests {
             }),
             package: PackageId(package),
             unit: None,
+            unit_parent: None,
             test_spans: Vec::new(),
             string_call_sites: Vec::new(),
+            string_attr_args: Vec::new(),
         }
     }
 
@@ -292,6 +298,7 @@ mod tests {
             declares_surface,
             surface,
             resolves_dependency_usage: true,
+            manifest_claim_languages: Vec::new(),
         }
     }
 
@@ -306,6 +313,7 @@ mod tests {
             declares_surface: false,
             surface: Vec::new(),
             resolves_dependency_usage: true,
+            manifest_claim_languages: Vec::new(),
         }
     }
 
@@ -347,7 +355,7 @@ mod tests {
         let findings = find_deep_imports(&graph);
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].category, "deep-import");
-        assert_eq!(findings[0].group, "risk");
+        assert_eq!(findings[0].group, crate::vocab::Group::Risk);
         assert_eq!(findings[0].subject_kind, "package");
         assert_eq!(findings[0].severity, Severity::Warning);
         assert!(findings[0].message.contains("app deep-imports ui"));
@@ -434,6 +442,9 @@ mod tests {
             implicitly_invoked: false,
             nested_scope: false,
             visibility_inherited: false,
+            visible_in_unit: None,
+            implements: None,
+            markers: Vec::new(),
         }];
         let mut edges = vec![imports(0, 2)];
         edges.push(Edge {

@@ -12,10 +12,6 @@ configuration.
 ```toml
 # kndo.toml — everything here is optional; every setting already has the default shown.
 
-# [project]
-# roots = ["src", "packages/*"]          # default: auto (git ls-files minus ignores)
-# exclude = ["**/generated/**"]
-
 # [analysis]
 # skip = []                              # categories or category:subject, e.g. ["unused:enum-member"]
 # min-confidence = "possible"            # report floor; raise to "probable" to hide the
@@ -31,12 +27,20 @@ configuration.
 # threads = 0                            # 0 = physical cores; --threads flag wins
 
 # [delta]                                # diff-mode gate budgets
-# max-health-drop = 0.0
-# max-net-findings = 0
+# max-health-drop = 0.0                  # the largest health DROP a change may cause
+# max-net-findings = 0                   # the largest allowed `new − fixed`
+
+# [delta.budget]                         # finer tolerances, by group or category
+# defect = 0                             # absolute: `fixed` never pays for these
+# duplicate = 2
 
 # [[rule]]                               # per-path overrides
 # paths = ["examples/**"]
 # skip = ["unused"]
+
+# [[externally-invoked]]                 # entry points only your framework knows about
+# markers = ["Controller", "Bean"]       # annotations/attributes/decorators, by name
+# paths = ["src/main/java/**"]           # optional scope; omit to apply project-wide
 
 # [plugins.gate]                         # opt plugin findings into the exit-code gate
 # "github.com/acme/some-plugin" = "warning"        # gate this plugin's rules, capped at warning
@@ -45,27 +49,42 @@ configuration.
 
 > **What the engine reads today:** **`[analysis]`** (`skip`, `min-confidence`),
 > **`[analysis.duplicate]`** (`min-tokens`), **`[analysis.crap]`** (`threshold`),
-> **`[performance]`** (`threads`), **`[[rule]]`**, **`[plugins.gate]`**, and
-> **`[plugins.<id>]`** (`report`, `max-age`) are all live.
-> Still documented-but-unwired: **`[project]`** (discovery is gitignore-aware
-> automatically; scoping it from config doesn't exist yet) and the **`[delta]`** budget
-> gate — kndo prefers an honestly inert commented section over half-applied
-> configuration. This page will always state exactly which keys are live.
+> **`[performance]`** (`threads`), **`[[rule]]`**, **`[[externally-invoked]]`**,
+> **`[plugins.gate]`**, **`[plugins.<id>]`** (`report`, `max-age`), and
+> **`[delta]`**/**`[delta.budget]`** are all live.
+> Nothing here is documented-but-unwired. `kndo init` used to write a commented `[project]`
+> section (`roots`, `exclude`) that the engine never read; it has been removed rather than
+> carried, because a commented-out key still reads as a promise, and the two things it promised
+> already have working answers — see below. This page will always state exactly which keys are
+> live.
+
+## Choosing what gets analyzed
+
+There is no `[project]` section, and none is needed: both things one would reach for it are
+already available, with sharper semantics than a single key could have.
+
+- **Keeping files out of the graph entirely.** Discovery is `.gitignore`-aware by default, so
+  `node_modules/`, `target/` and build output never enter it. To exclude something git *does*
+  track, add it to a `.ignore` file — the same syntax as `.gitignore`, read by the discovery
+  layer and ignored by git, which is exactly the split you want for "analyze less" without
+  touching what the repository tracks. kndo's own repository uses one.
+- **Keeping verdicts off files you still want in the graph.** Use `[[rule]]` with `paths` and
+  `skip` (below). This is the better answer for generated or vendored trees: the files stay in
+  the graph, so code that reaches into them still resolves and nothing downstream reads as
+  unreachable — you just stop being told about the files themselves.
+
+The distinction matters, and it is why one `exclude` key would have been the wrong shape:
+dropping a file from discovery also drops every edge through it, which can turn one silenced
+finding into several new false ones elsewhere.
 
 ## Key by key
-
-### `[project]`
-
-- **`roots`** — directories to analyze. Default: automatic discovery of the whole project
-  tree, honoring `.gitignore` (so `node_modules/`, `target/`, build output never enter the
-  graph).
-- **`exclude`** — glob patterns to drop from discovery on top of the ignore rules.
 
 ### `[analysis]`
 
 - **`skip`** — verdicts to disable outright, as categories (`"duplicate"`) or
   category-subject pairs (`"unused:enum-member"`) using the same vocabulary as
-  [suppressions](suppressions.md).
+  [suppressions](suppressions.md). `kndo check --skip` adds to this list from the command
+  line rather than replacing it; see [CLI](cli.md#--only-and---skip).
 - **`min-confidence`** — the report floor. Default `"possible"`: every tier is reported.
   Raise it to `"probable"` (or `"certain"`) to hide speculative findings by default;
   `--verbose` always shows every tier regardless of the floor, and `stale` findings (the
@@ -91,10 +110,41 @@ configuration.
 
 ### `[delta]`
 
-Budgets for diff modes (`--staged`, `--diff`), judging the *change*:
+Budgets for diff modes (`--staged`, `--diff`), judging the *change* rather than the debt.
+They compose with `--fail-on` by OR: a run exits 1 when findings reach the severity
+threshold **or** any budget is exceeded.
 
-- **`max-health-drop`** — the largest health-score decrease a change may cause.
+- **`max-health-drop`** — the largest health-score decrease a change may cause. Measured as
+  a drop, so a change that *improves* health measures negative and passes any limit.
 - **`max-net-findings`** — the largest allowed `new − fixed` count.
+
+Three things about the section as a whole:
+
+- **Writing `[delta]` at all is the opt-in.** With no section, nothing is evaluated and the
+  JSON envelope carries no `budget` block — which is how a consumer tells "every budget
+  held" from "nobody set one". A project that never opts in cannot change exit code because
+  budgets exist.
+- **Inside the section, the strict ratchet is the default.** Writing `[delta]` with only
+  `max-net-findings` leaves `max-health-drop` at `0.0`.
+- **Advisory findings never count.** A plugin finding without a `[plugins.gate]` opt-in is
+  excluded from every budget, exactly as it is from `--fail-on`: installing a
+  finding-emitting plugin must not move your gate.
+
+### `[delta.budget]`
+
+Finer tolerances, keyed by **group** (`defect`, `waste`, `risk`, `hygiene`, `convention`) or
+by **category** (`duplicate`, `unused`, …). Each value is the largest number of *new*
+findings of that kind a change may introduce:
+
+```toml
+[delta.budget]
+defect = 0        # never a new defect
+duplicate = 2     # up to two new clones
+```
+
+These are **absolute, not net**: `fixed` findings compensate only inside `max-net-findings`.
+`defect = 0` means zero new defects even if the same change fixes ten others — otherwise a
+change could trade a repaired typo for a fresh security defect and call it even.
 
 ### `[[rule]]`
 
@@ -104,6 +154,48 @@ findings are counted in the report's `suppressed.config`; a finding also covered
 inline pragma counts as `inline` instead (pragmas match first, so config can never make a
 working pragma look stale). `stale` itself can't be skipped — the audit of your
 suppressions stays visible by design.
+
+### `[[externally-invoked]]`
+
+Some code is called from outside your source entirely, and no amount of analysis will find
+the call. A Spring `@Controller` is instantiated by classpath component scanning and its
+methods are dispatched by URL; a JUnit `@AfterEach` is called by the runner; a ByteBuddy
+`@Advice.OnMethodEnter` body is inlined into instrumented bytecode; a Koin `@Scoped`
+annotation is read by an annotation processor that lives in a different repository. kndo is
+*right* that nothing in your code references them — and reporting them `unused` or
+`test-only` is still wrong.
+
+`[[externally-invoked]]` is how you say so, once, for a whole class of declarations:
+
+```toml
+[[externally-invoked]]
+# Spring wires these by component scan and calls them through the dispatcher.
+markers = ["Component", "Configuration", "Bean", "Controller", "RestController",
+           "Service", "Repository", "ControllerAdvice", "SpringBootApplication"]
+paths = ["src/main/java/**"]     # optional; omit and the rule applies project-wide
+
+[[externally-invoked]]
+# JUnit calls the lifecycle hooks; nothing in the source names them.
+markers = ["Test", "BeforeEach", "AfterEach", "BeforeAll", "AfterAll"]
+```
+
+- **`markers`** — annotation names (Java, Kotlin), attribute paths (Rust), attributes
+  (Swift), decorators (JS/TS), matched against what the adapter read off the declaration.
+  Write them the way your source writes them: for `@Advice.OnMethodEnter`, either
+  `"Advice.OnMethodEnter"` or `"OnMethodEnter"` matches. Required and non-empty.
+- **`paths`** — optional globs scoping the rule to some files. Omitted means project-wide.
+
+**This is not a skip.** A matched declaration becomes a real production entry point, so
+everything it reaches comes alive with it and every analysis keeps judging all of it
+normally — an untested controller still reports `untested`, a duplicated one still reports
+`duplicate`. That is the difference from `[[rule]] skip`, which would silence the genuine
+findings in those files along with the false ones. Nothing is counted as suppressed, because
+nothing was suppressed: the graph was simply told the truth about where execution enters.
+
+kndo never guesses these for you and ships no list of framework names: knowing that
+`@Controller` means Spring would mean learning frameworks, and the analysis core is built to
+stay ignorant of even the *languages* it analyzes. What it does is match the strings you
+supply. A marker you never configure is inert.
 
 ### `[plugins.gate]`
 

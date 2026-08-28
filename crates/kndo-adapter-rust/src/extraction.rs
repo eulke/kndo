@@ -16,10 +16,10 @@
 //!   `#[no_mangle]`/`#[export_name]` → FFI production root, `#[derive(X)]` → `TypeUse`
 //!   references (a derive-only dependency stays honestly used), `#[path]` → mod location.
 
-use kndo_adapter_toolkit::metrics::{function_shape, MetricsSyntax};
-use kndo_adapter_toolkit::parsing::span;
+use kndo_adapter_toolkit::metrics::{MetricsSyntax, MIN_CLONE_TOKENS};
+use kndo_adapter_toolkit::parsing::{span, text};
 use kndo_core::adapter::{
-    Diagnostic, DiagnosticLevel, FileFacts, FunctionMetrics, ImportBinding, ImportKind, RawImport,
+    AdapterDiagnostic, DiagnosticLevel, FileFacts, ImportBinding, ImportKind, RawImport,
     RawReference, RawRoot, RawRootTarget, Span,
 };
 use kndo_core::vocab::{Confidence, RefKind, RootKind, SymbolKind};
@@ -62,9 +62,14 @@ const METRICS_SYNTAX: MetricsSyntax = MetricsSyntax {
         "float_literal",
     ],
     skip_kinds: &["line_comment", "block_comment"],
+    // Each of these becomes its own shape when it is substantial enough to carry clone
+    // evidence by itself; a small one stays an expression inside its owner.
+    nested_callable_kinds: &["closure_expression"],
+    // A body that ONLY constructs a value carries no clone evidence: normalization erases the
+    // field values (the whole authored content) and keeps the field list, which the type
+    // declaration dictates.
+    construction_kinds: &["struct_expression"],
 };
-
-const MIN_CLONE_TOKENS: usize = 50;
 
 /// Primitive types with associated items (`u64::from`, `str::parse`) — path roots that are
 /// language, not modules or crates: never worth an import emission.
@@ -83,21 +88,33 @@ struct PendingAttrs {
     macro_use: bool,
     mod_path: Option<String>,
     derives: Vec<(SmolStr, Span)>,
+    /// `#[proc_macro_derive(Serialize, …)]` — the derive's *invocation* name and the span of
+    /// the identifier that declares it. The name a `#[derive(…)]` site writes is declared by
+    /// this attribute, not by the `fn` it decorates.
+    proc_macro_derive: Option<(SmolStr, Span)>,
     /// Start of the first attribute in this pending run — a test region's extent covers the
     /// attributes that gate it (`FileFacts::test_spans` records `#[cfg(test)]`'s own line).
     attr_start: Option<(u32, u32)>,
+    /// `(attribute head, key, literal, the literal's span)` for every string written in this
+    /// run's attributes — held here rather than emitted on sight because the fact carries the
+    /// declaration it decorates, and `collect_attr` runs before that declaration exists.
+    attr_strings: Vec<(SmolStr, SmolStr, SmolStr, Span)>,
 }
 
-pub(crate) fn extract(_path: &str, content: &[u8]) -> FileFacts {
-    let mut out = FileFacts::default();
+pub(crate) fn extract(path: &str, content: &[u8]) -> FileFacts {
+    let unit = module_unit(path);
+    let mut out = FileFacts {
+        unit_parent: unit.as_deref().and_then(module_parent),
+        unit,
+        ..FileFacts::default()
+    };
     if GENERATED_MARKERS.detect_generated(content) {
         out.detected_origin = Some(kndo_core::vocab::FileOrigin::Generated);
     }
 
     let Some(tree) = crate::parsing::parse(content) else {
-        out.diagnostics.push(Diagnostic {
+        out.diagnostics.push(AdapterDiagnostic {
             level: DiagnosticLevel::Warn,
-            path: None,
             message: "failed to initialize the Rust parser".to_string(),
             span: None,
         });
@@ -105,9 +122,8 @@ pub(crate) fn extract(_path: &str, content: &[u8]) -> FileFacts {
     };
     let root = tree.root_node();
     if root.has_error() {
-        out.diagnostics.push(Diagnostic {
+        out.diagnostics.push(AdapterDiagnostic {
             level: DiagnosticLevel::Warn,
-            path: None,
             message: "parse errors — extraction is partial for this file".to_string(),
             span: None,
         });
@@ -120,11 +136,10 @@ pub(crate) fn extract(_path: &str, content: &[u8]) -> FileFacts {
     let mut whole_file_test = false;
     let mut cursor = root.walk();
     for child in root.children(&mut cursor) {
-        if child.kind() == "inner_attribute_item" {
-            let t = text(child, content);
-            if t.starts_with("#![cfg") && t.contains("test") {
-                whole_file_test = true;
-            }
+        if child.kind() == "inner_attribute_item"
+            && cfg_predicate(text(child, content)).is_some_and(cfg_is_harness_only)
+        {
+            whole_file_test = true;
         }
     }
     drop(cursor);
@@ -134,6 +149,9 @@ pub(crate) fn extract(_path: &str, content: &[u8]) -> FileFacts {
 
     let local_qualifiers = collect_local_qualifiers(root, content);
     let inline_mod_names = collect_inline_mod_names(root, content);
+    let file_type_names = collect_file_type_names(root, content);
+    let crate_probe = crate_probe_allowed(root);
+    let use_bound = collect_use_bound_qualifiers(root, content);
     // Field facts pre-pass: the single source for struct/union field
     // types — the contract's member_types AND the TypeEnv's `self.field` resolution.
     let field_facts = collect_field_facts(root, content);
@@ -148,9 +166,26 @@ pub(crate) fn extract(_path: &str, content: &[u8]) -> FileFacts {
             local_qualifiers: &local_qualifiers,
             inline_mod_names: &inline_mod_names,
             field_types: &field_types,
+            file_type_names: &file_type_names,
+            crate_probe,
+            use_bound: &use_bound,
         },
         &mut out,
     );
+    // Every declaration on the `pub(super)` rung is visible in the PARENT module's subtree.
+    // Setting it here rather than at each `push_declaration` is deliberate: the anchor is a
+    // property of the rung, not of the call site, so one pass cannot drift from another.
+    // Both Module rungs anchor here rather than at each `push_declaration`: the anchor is a
+    // property of the RUNG, not of the call site, so one pass cannot drift from another.
+    // `private` is the declaring module and its descendants (Rust's real rule); `pub(super)`
+    // is the parent module's subtree.
+    for decl in &mut out.declarations {
+        decl.visible_in_unit = match decl.visibility.0 {
+            VIS_PRIVATE => out.unit.clone(),
+            VIS_SUPER => out.unit_parent.clone(),
+            _ => None,
+        };
+    }
     expand_pathed_mod_specifiers(&collect_pathed_mod_paths(root, content), &mut out);
     kndo_adapter_toolkit::suppression::collect_suppressions(
         root,
@@ -181,14 +216,18 @@ fn walk_pathed_mods(
     src: &[u8],
     out: &mut std::collections::HashMap<String, Vec<String>>,
 ) {
-    let mut pending_path: Option<String> = None;
+    // A Vec, not a single slot: ONE `mod` declaration can carry several relocations, one per
+    // configuration (`#[cfg_attr(from_git, path = "…")] #[cfg_attr(not(from_git), path = "…")]
+    // mod internals;` — serde_derive_internals). Every alternate exists in some configuration,
+    // which is the same reason the map's value is a Vec at all.
+    let mut pending_paths: Vec<String> = Vec::new();
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
         match child.kind() {
-            "attribute_item" => pending_path = path_attr_literal(child, src).or(pending_path),
+            "attribute_item" => pending_paths.extend(path_attr_literal(child, src)),
             "line_comment" | "block_comment" => {}
             _ => {
-                record_pathed_mod(child, src, pending_path.take(), out);
+                record_pathed_mod(child, src, std::mem::take(&mut pending_paths), out);
                 walk_pathed_mods(child, src, out);
             }
         }
@@ -201,25 +240,61 @@ fn walk_pathed_mods(
 fn record_pathed_mod(
     item: Node,
     src: &[u8],
-    pending_path: Option<String>,
+    pending_paths: Vec<String>,
     out: &mut std::collections::HashMap<String, Vec<String>>,
 ) {
     if item.kind() != "mod_item" || item.child_by_field_name("body").is_some() {
         return;
     }
-    if let (Some(name), Some(p)) = (item.child_by_field_name("name"), pending_path) {
-        out.entry(text(name, src).to_string()).or_default().push(p);
+    if pending_paths.is_empty() {
+        return;
+    }
+    if let Some(name) = item.child_by_field_name("name") {
+        out.entry(text(name, src).to_string())
+            .or_default()
+            .extend(pending_paths);
     }
 }
 
-/// The string literal of a `#[path = "…"]` attribute item, if that's what this is.
+/// The string literal of a `#[path = "…"]` attribute item, if that's what this is —
+/// `#[cfg_attr(cond, path = "…")]` included.
+///
+/// The conditional spelling is not exotic: serde_derive_internals declares its whole module
+/// as `#[cfg_attr(serde_build_from_git, path = "…")] #[cfg_attr(not(serde_build_from_git),
+/// path = "src/mod.rs")] mod internals;`. Reading only the bare form left the specifier at
+/// `self::internals`, which resolves by convention to an `internals.rs` that does not exist,
+/// so the module went dark and the `pub use internals::*;` next to it was accused of
+/// importing an undeclared crate. `#[cfg]` alternates are all kept, by the same whole-source
+/// policy the caller's doc states — the caller collects a `Vec` per name.
 fn path_attr_literal(item: Node, src: &[u8]) -> Option<String> {
     let attr = item.named_child(0)?;
-    if text(attr.child(0)?, src) != "path" {
-        return None;
+    match text(attr.child(0)?, src) {
+        "path" => {
+            let value = attr.child_by_field_name("value")?;
+            Some(text(value, src).trim_matches('"').to_string())
+        }
+        // `cfg_attr(cond, path = "…")`: the real attribute is nested inside the arguments,
+        // as one of possibly several — take the first `path`, the same "first wins" the bare
+        // form gets from its caller's `.or(pending_path)`.
+        "cfg_attr" => nested_path_attr_literal(attr.child_by_field_name("arguments")?, src),
+        _ => None,
     }
-    let value = attr.child_by_field_name("value")?;
-    Some(text(value, src).trim_matches('"').to_string())
+}
+
+/// The first `path = "…"` pair inside a `cfg_attr`'s argument token tree.
+fn nested_path_attr_literal(args: Node, src: &[u8]) -> Option<String> {
+    let mut cursor = args.walk();
+    let children: Vec<Node> = args.children(&mut cursor).collect();
+    for (i, child) in children.iter().enumerate() {
+        if text(*child, src) == "path" && children.get(i + 1).map(|n| text(*n, src)) == Some("=") {
+            let value = children.get(i + 2)?;
+            return Some(text(*value, src).trim_matches('"').to_string());
+        }
+        if let Some(found) = nested_path_attr_literal(*child, src) {
+            return Some(found);
+        }
+    }
+    None
 }
 
 /// Post-walk rewrite: a specifier that is exactly `self::<mod>` where `<mod>` is a
@@ -259,10 +334,17 @@ fn pathed_alternates<'a>(
     specifier: &str,
     pathed: &'a std::collections::HashMap<String, Vec<String>>,
 ) -> Option<&'a Vec<String>> {
-    specifier
-        .strip_prefix("self::")
-        .filter(|rest| !rest.contains("::"))
-        .and_then(|name| pathed.get(name))
+    // `self::<mod>` is what `mod name;` itself emits. A BARE `<mod>` is the 2015-edition
+    // spelling of the same thing (`pub use internals::*;` beside `mod internals;` in
+    // serde_derive_internals): crate-relative, and a local module with that name shadows any
+    // extern crate sharing it, so the local relocation is the only reading. Without this the
+    // glob resolved to nothing, the module went dark, and `internals` was accused of being an
+    // undeclared dependency.
+    let name = specifier.strip_prefix("self::").unwrap_or(specifier);
+    if name.contains("::") {
+        return None;
+    }
+    pathed.get(name)
 }
 
 /// Names that qualify paths locally — `use` tails/aliases and `mod` names, anywhere in the
@@ -337,6 +419,17 @@ struct PathEnv<'a> {
     /// Receiver-type environment of the enclosing function ([`TypeEnv`]) — empty outside
     /// function bodies (const initializers, macro templates).
     types: &'a TypeEnv<'a>,
+    /// Type-like names DECLARED in this file (pre-pass). A path rooted at one of these is
+    /// that type's associated item — a type in scope shadows an extern-prelude crate of the
+    /// same name — so it is never evidence of a dependency. The case test alone cannot tell
+    /// them apart: `r#type::r#struct` in serde's test suite reads as a lowercase root and
+    /// was accused of being an undeclared crate.
+    file_types: &'a std::collections::HashSet<String>,
+    /// Whether a bare unknown root HERE is evidence of an external crate — see
+    /// [`crate_probe_allowed`] for what turns it off, and `import_worthy` for what it gates.
+    crate_probe: bool,
+    /// Names this file's own imports bind — see [`collect_use_bound_qualifiers`].
+    use_bound: &'a std::collections::HashSet<String>,
 }
 
 /// Local receiver types, from language FACTS visible in this file: the
@@ -462,8 +555,68 @@ fn collect_typed_bindings(
                 record_typed_binding(child, src, init, bindings, conflicted);
                 collect_typed_bindings(child, src, init, bindings, conflicted);
             }
+            "for_expression" => {
+                record_loop_binding(child, src, init, bindings, conflicted);
+                collect_typed_bindings(child, src, init, bindings, conflicted);
+            }
             _ => collect_typed_bindings(child, src, init, bindings, conflicted),
         }
+    }
+}
+
+/// `for x in <iterable>` — the loop variable is the iterable's ELEMENT, which the existing
+/// projection marker already expresses: parameter 0 of the collection's declared type
+/// (`Vec<ContributedRoot>` → `ContributedRoot`). Only iterables whose type is a declared FACT
+/// contribute — a member access, chained as far as the pointer machinery reaches. A local
+/// annotated `Vec<T>` does not, because a binding stores only its base name and the `T` is
+/// already gone by then (`internal/detection-gaps.md` §3's residual).
+fn record_loop_binding(
+    item: Node,
+    src: &[u8],
+    init: &InitCtx<'_>,
+    bindings: &mut std::collections::HashMap<String, String>,
+    conflicted: &mut std::collections::HashSet<String>,
+) {
+    let Some(name) = item
+        .child_by_field_name("pattern")
+        .and_then(|pattern| simple_pattern_name(pattern, src))
+    else {
+        return; // destructuring binds parts of an element, not the element
+    };
+    let Some(value) = item.child_by_field_name("value") else {
+        return;
+    };
+    // `@element` is a member hop like any other: the adapter's builtin table declares, per
+    // container, which argument iterating it yields, so a container that declares none (a map,
+    // whose element is a tuple) simply does not type its loop variable instead of typing it
+    // wrong. The core never interprets the name — it appears on both sides, here and in the
+    // table, and that is all it needs to be.
+    if let Some(pointer) = iterable_pointer(value, init, bindings, src) {
+        bind_type(name, format!("{pointer}.@element"), bindings, conflicted);
+    }
+}
+
+/// The pointer naming an iterated expression's type: a member access chained through names
+/// already bound in this environment (`root_sink.items` → `RootSink.default.items`), looking
+/// through the borrow and parenthesis wrappers that mean nothing to a type.
+fn iterable_pointer(
+    value: Node,
+    init: &InitCtx<'_>,
+    bindings: &std::collections::HashMap<String, String>,
+    src: &[u8],
+) -> Option<String> {
+    match value.kind() {
+        "reference_expression" | "parenthesized_expression" => {
+            iterable_pointer(value.named_child(0)?, init, bindings, src)
+        }
+        "identifier" => bindings.get(text(value, src)).cloned(),
+        "self" => init.owner.map(str::to_string),
+        "field_expression" => {
+            let base = iterable_pointer(value.child_by_field_name("value")?, init, bindings, src)?;
+            let field = value.child_by_field_name("field")?;
+            Some(format!("{base}.{}", text(field, src)))
+        }
+        _ => None,
     }
 }
 
@@ -577,21 +730,66 @@ fn init_callee_pointer(function: Node, init: &InitCtx<'_>, src: &[u8]) -> Option
     match function.kind() {
         "scoped_identifier" | "generic_function" => init_scoped_pointer(function, init, src),
         "field_expression" => init_field_pointer(function, init, src),
+        // A bare callee (`let entry = parse_entry(..)`) binds the FUNCTION's name, not a
+        // type: the adapter cannot know what it returns when the function lives in another
+        // file, and should not guess when it lives in this one. The core reads the name as
+        // a pointer base and hops through the callee's own member-type fact — one rule for
+        // both, instead of a same-file special case that drifts from the cross-file one.
+        "identifier" => Some(text(function, src).to_string()),
         _ => None,
     }
 }
 
-/// `T::assoc` / `Self::assoc` scoped callee → `"T.assoc"` (owner-resolved).
+/// `T::assoc` / `Self::assoc` scoped callee → `"T.assoc"` (owner-resolved); a callee reached
+/// through a MODULE instead of a type → the pointer that names the free function it is
+/// ([`init_module_callee`]).
 fn init_scoped_pointer(function: Node, init: &InitCtx<'_>, src: &[u8]) -> Option<String> {
-    let root = scoped_call_type_root(function, src)?;
+    let path = scoped_callee_text(function, src)?;
+    let Some(root) = scoped_call_type_root(function, src) else {
+        return init_module_callee(path);
+    };
     let root = if root == "Self" {
         init.owner?.to_string()
     } else {
         root
     };
-    let path = scoped_callee_text(function, src)?;
     let assoc = path.rsplit("::").next().unwrap_or(path);
     Some(format!("{root}.{assoc}"))
+}
+
+/// A free function reached through its module (`rollup::directory_rollups(..)`,
+/// `crate::analysis::rollup::directory_rollups(..)`): the pointer that lets the core find the
+/// FUNCTION, so its declared return type can type the binding. Which pointer depends on what
+/// the path's own reconstructed import binds — the two shapes `emit_path` produces:
+///
+///  * ROOTED at `crate`/`self`/`super`: the import binds the trailing name itself, so the
+///    function is in scope and the pointer is just that name;
+///  * bare-rooted: the import binds the module under the last module segment, so the pointer
+///    is `module.function` and the core resolves the base as a qualifier.
+///
+/// Nothing here is a guess about what the function returns — only about how to name it. A
+/// pointer that resolves to nothing costs a duck-fallback miss, which is where the binding
+/// was anyway.
+fn init_module_callee(path: &str) -> Option<String> {
+    let segments: Vec<&str> = path.split("::").collect();
+    let [rest @ .., last] = segments.as_slice() else {
+        return None;
+    };
+    let module = rest.last()?;
+    // The path may cross into TYPE space before its last segment
+    // (`crate::plugin::RootSink::default`) — `emit_path` splits its synthetic import there
+    // for the same reason, and the name that ends up in scope is the type, not the module.
+    if let Some(ty) = rest
+        .iter()
+        .rev()
+        .find(|seg| seg.chars().next().is_some_and(char::is_uppercase))
+    {
+        return Some(format!("{ty}.{last}"));
+    }
+    if matches!(rest[0], "crate" | "self" | "super") {
+        return Some((*last).to_string());
+    }
+    Some(format!("{module}.{last}"))
 }
 
 /// `self.field.method` member callee → `"FieldType.method"`.
@@ -608,6 +806,14 @@ fn init_base_type(base: Node, init: &InitCtx<'_>, src: &[u8]) -> Option<String> 
     match base.kind() {
         "self" => init.owner.map(str::to_string),
         "field_expression" => init_field_base(base, init, src),
+        // A CALL as the base: `gitutil::ls_tree(..).map_err(..)`. The pointer it produces is
+        // the receiver of the method that follows, and the core walks the two hops in one
+        // chain. Without this the chain died at the first link and everything the final value
+        // is read through looked file-local (`internal/detection-gaps.md` §3).
+        "call_expression"
+        | "try_expression"
+        | "reference_expression"
+        | "parenthesized_expression" => init_qualifier(base, init, src),
         _ => None,
     }
 }
@@ -782,6 +988,112 @@ fn scoped_call_type_root(function: Node, src: &[u8]) -> Option<String> {
         .then(|| root.to_string())
 }
 
+/// Type-like names declared anywhere in this file. A path root naming one of them is that
+/// type's associated item, never a crate: a type in scope shadows an extern-prelude crate of
+/// the same name, and Rust's own raw identifiers (`enum r#type`) make the "lowercase root ⇒
+/// crate-shaped" test unreliable on its own.
+///
+/// Deliberately type-like ONLY — functions, consts and statics are excluded. `foo::bar()`
+/// beside a local `fn foo` really can mean the crate `foo` (a value and a crate live in
+/// different namespaces and do not shadow each other for a path root), so suppressing the
+/// probe there would hide genuine phantom dependencies.
+/// Names this file's own `use` statements bind to something ELSE — the tail of a multi-segment
+/// path, a brace member, an `as` alias, and the `self` member of a brace list.
+///
+/// A later `use <name>::…` rooted at one of them re-qualifies that binding, never an extern
+/// crate: an import binding shadows a crate of the same name. alacritty writes
+/// `use serde::de::{self, …};` at file level and `use de::Error;` inside a function forty
+/// lines down, and `de` was accused of being an undeclared dependency of the whole package.
+///
+/// Deliberately NOT every name in [`collect_local_qualifiers`]: a bare `use serde;` binds
+/// `serde` to the crate itself, so a sibling `use serde::Deserialize;` is a genuine crate
+/// import and must keep its full strength.
+fn collect_use_bound_qualifiers(root: Node, src: &[u8]) -> std::collections::HashSet<String> {
+    let mut out = std::collections::HashSet::new();
+    fn walk(node: Node, src: &[u8], out: &mut std::collections::HashSet<String>) {
+        match node.kind() {
+            "use_as_clause" => {
+                if let Some(alias) = node.child_by_field_name("alias") {
+                    out.insert(text(alias, src).to_string());
+                }
+            }
+            "scoped_use_list" => {
+                if let Some(path) = node.child_by_field_name("path") {
+                    // `use a::b::{self, X}` binds `b`; the brace members bind their own names.
+                    let t = text(path, src);
+                    let tail = t.rsplit("::").next().unwrap_or(t);
+                    if let Some(list) = node.child_by_field_name("list") {
+                        let mut c = list.walk();
+                        for el in list.children(&mut c) {
+                            match el.kind() {
+                                "self" => {
+                                    out.insert(tail.to_string());
+                                }
+                                "identifier" => {
+                                    out.insert(text(el, src).to_string());
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+            }
+            "scoped_identifier" if node.parent().is_some_and(|p| p.kind() == "use_declaration") => {
+                let t = text(node, src);
+                out.insert(t.rsplit("::").next().unwrap_or(t).to_string());
+            }
+            _ => {}
+        }
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            walk(child, src, out);
+        }
+    }
+    walk(root, src, &mut out);
+    out
+}
+
+fn collect_file_type_names(root: Node, src: &[u8]) -> std::collections::HashSet<String> {
+    let mut out = std::collections::HashSet::new();
+    fn walk(node: Node, src: &[u8], out: &mut std::collections::HashSet<String>) {
+        if matches!(
+            node.kind(),
+            "struct_item" | "enum_item" | "union_item" | "trait_item" | "type_item"
+        ) {
+            if let Some(name) = node.child_by_field_name("name") {
+                out.insert(text(name, src).to_string());
+            }
+        }
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            walk(child, src, out);
+        }
+    }
+    walk(root, src, &mut out);
+    out
+}
+
+/// Whether a bare unknown path root in this file is EVIDENCE of an external crate.
+///
+/// A glob import (`use crate::lib::*;`, `use super::*;`) binds an open set of names this
+/// adapter cannot enumerate without resolving the target — so after one, a root that matches
+/// nothing local is not evidence of anything. serde re-exports `mem`, `cmp`, `fmt`, `iter`,
+/// `net` and `slice` through exactly that shape and every one of them was accused of being a
+/// phantom dependency of `serde_core`. Turning the probe off for the file costs the
+/// `undeclared` analysis nothing it could have proven, and RFC 0012 §2 decides the direction
+/// when the model cannot prove the accusation.
+fn crate_probe_allowed(root: Node) -> bool {
+    fn has_glob(node: Node) -> bool {
+        if node.kind() == "use_wildcard" {
+            return true;
+        }
+        let mut cursor = node.walk();
+        let children: Vec<Node> = node.children(&mut cursor).collect();
+        children.into_iter().any(has_glob)
+    }
+    !has_glob(root)
+}
+
 fn collect_inline_mod_names(root: Node, src: &[u8]) -> std::collections::HashSet<String> {
     let mut out = std::collections::HashSet::new();
     fn walk(node: Node, src: &[u8], out: &mut std::collections::HashSet<String>) {
@@ -799,6 +1111,95 @@ fn collect_inline_mod_names(root: Node, src: &[u8]) -> std::collections::HashSet
     out
 }
 
+/// Cfg flags that only a test or verification harness ever sets — never `cargo build`, and
+/// never a user through Cargo's feature system. Curated adapter knowledge, like the
+/// machinery-dispatch trait list: the criterion is "no ordinary build of this crate compiles
+/// the item", which is what makes the item test infrastructure rather than production code.
+///
+/// `unix`, `debug_assertions`, `target_os = "…"` are deliberately absent: those ARE ordinary
+/// builds. So is `feature = "…"` — a Cargo feature is part of the crate's published surface,
+/// and a downstream crate turning it on is a real, supported configuration.
+const HARNESS_CFGS: [&str; 5] = ["test", "loom", "fuzzing", "miri", "kani"];
+
+/// Whether a `cfg` predicate is satisfiable **only** under a harness — the criterion for
+/// treating the item it gates as test infrastructure rather than production code.
+///
+/// A substring search for `"test"` was the previous rule, and it was wrong in both directions.
+/// `any(test, feature = "testkit")` also compiles with the feature on, so the item is
+/// production code a downstream crate can reach; marking its region as tests silences every
+/// finding inside it and makes the dependencies it imports look dev-only. `not(test)` is the
+/// exact opposite of a test region and matched too, as did anything merely spelling the
+/// substring — `feature = "fastest"`, `target_os = "latest"`.
+///
+/// Uncertainty resolves toward silence, never toward accusation (RFC 0012 §2): an unrecognized
+/// predicate is treated as an ordinary build, so its items stay production and kndo keeps
+/// measuring them, but a predicate every branch of which is harness-only stays quiet.
+fn cfg_is_harness_only(pred: &str) -> bool {
+    let pred = pred.trim();
+    if HARNESS_CFGS.contains(&pred) {
+        return true;
+    }
+    let Some((head, inner)) = pred
+        .find('(')
+        .filter(|_| pred.ends_with(')'))
+        .map(|i| (pred[..i].trim(), &pred[i + 1..pred.len() - 1]))
+    else {
+        return false;
+    };
+    match head {
+        // One harness conjunct is enough: `all(loom, unix)` never compiles without loom.
+        "all" => split_predicates(inner)
+            .iter()
+            .any(|p| cfg_is_harness_only(p)),
+        // Every branch must be, or some ordinary build satisfies it.
+        "any" => {
+            let parts = split_predicates(inner);
+            !parts.is_empty() && parts.iter().all(|p| cfg_is_harness_only(p))
+        }
+        // `not(test)` is production-only, and `not(anything else)` says nothing about harnesses.
+        _ => false,
+    }
+}
+
+/// Splits a `cfg` predicate list at the commas that sit at nesting depth zero, ignoring
+/// commas inside string literals (`feature = "a,b"` is one predicate).
+fn split_predicates(inner: &str) -> Vec<&str> {
+    let (mut out, mut depth, mut start, mut in_str) = (Vec::new(), 0usize, 0usize, false);
+    for (i, c) in inner.char_indices() {
+        match c {
+            '"' => in_str = !in_str,
+            '(' if !in_str => depth += 1,
+            ')' if !in_str => depth = depth.saturating_sub(1),
+            ',' if depth == 0 && !in_str => {
+                out.push(inner[start..i].trim());
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    let last = inner[start..].trim();
+    if !last.is_empty() {
+        out.push(last);
+    }
+    out
+}
+
+/// The predicate inside a `#[cfg(…)]`/`#![cfg(…)]` attribute's own text, if it is a `cfg` at
+/// all. `cfg_attr` is deliberately not accepted: `#[cfg_attr(test, derive(Debug))]` applies an
+/// attribute conditionally, it does not gate the item — an item carrying it is ordinary
+/// production code and used to be classified as test infrastructure.
+fn cfg_predicate(attr_text: &str) -> Option<&str> {
+    let t = attr_text.trim();
+    let t = t
+        .strip_prefix("#!")
+        .or_else(|| t.strip_prefix('#'))
+        .unwrap_or(t);
+    let t = t.trim().strip_prefix('[')?.strip_suffix(']')?.trim();
+    let rest = t.strip_prefix("cfg")?.trim_start();
+    let inner = rest.strip_prefix('(')?.strip_suffix(')')?;
+    Some(inner)
+}
+
 /// Item-walk context: the member owner, whether we're under a `#[cfg(test)]` module (its
 /// declarations become test roots — inline test infrastructure), and the file's
 /// local qualifier names.
@@ -810,6 +1211,13 @@ struct Ctx<'a> {
     /// The file's declared field types (pre-pass) — [`TypeEnv`]s resolve `self.field`
     /// through these.
     field_types: &'a FieldTypes,
+    /// The file's declared type-like names, and whether the undeclared-crate probe applies
+    /// to this file at all — both [`PathEnv`] fields of the same name, hoisted to the file.
+    file_type_names: &'a std::collections::HashSet<String>,
+    crate_probe: bool,
+    /// Names this file's own imports bind — see [`collect_use_bound_qualifiers`]. A `use`
+    /// rooted at one of these is re-qualifying a binding, not importing a crate.
+    use_bound: &'a std::collections::HashSet<String>,
 }
 
 impl<'a> Ctx<'a> {
@@ -822,12 +1230,11 @@ impl<'a> Ctx<'a> {
             local_qualifiers: self.local_qualifiers,
             inline_mod_names: self.inline_mod_names,
             field_types: self.field_types,
+            file_type_names: self.file_type_names,
+            crate_probe: self.crate_probe,
+            use_bound: self.use_bound,
         }
     }
-}
-
-fn text<'a>(node: Node, src: &'a [u8]) -> &'a str {
-    std::str::from_utf8(&src[node.byte_range()]).unwrap_or("")
 }
 
 /// `(level, exported)` per the ladder [File "private", Package "pub(crate)", Public "pub"].
@@ -847,23 +1254,40 @@ fn visibility(node: Node) -> (u8, bool) {
 }
 
 /// One `pub…` modifier mapped to the ladder: bare `pub` is the top rung; `pub(self)` is
-/// private everywhere; `pub(super)` is private only when `super` stays inside the file.
+/// private everywhere; `pub(super)` is private only when `super` stays inside the file, and
+/// otherwise names the PARENT MODULE's subtree — the rung this adapter's ladder gained so it
+/// no longer has to widen a real region into `pub(crate)`.
 fn visibility_of_modifier(modifier: Node, item: Node) -> (u8, bool) {
     if modifier.child_count() <= 1 {
-        return (2, true); // bare `pub`
+        return (VIS_PUBLIC, true); // bare `pub`
     }
     let mut cursor = modifier.walk();
     let level = modifier
         .children(&mut cursor)
         .find_map(|c| restriction_level(c, item))
-        .unwrap_or(1); // pub(crate), pub(in …), top-level pub(super)
+        .unwrap_or(VIS_CRATE); // pub(crate), pub(in …)
     (level, level > 0)
 }
 
+/// The ladder's rungs by name, so the numbering lives in one place and the descriptor and the
+/// mapping cannot drift apart.
+const VIS_PRIVATE: u8 = 0;
+const VIS_SUPER: u8 = 1;
+const VIS_CRATE: u8 = 2;
+const VIS_PUBLIC: u8 = 3;
+
 fn restriction_level(restriction: Node, item: Node) -> Option<u8> {
     match restriction.kind() {
-        "self" => Some(0),
-        "super" if inside_inline_mod(item) => Some(0),
+        "self" => Some(VIS_PRIVATE),
+        // `super` of an INLINE mod is a module within this same file, so under file ≈ module
+        // the item never leaves the file.
+        "super" if inside_inline_mod(item) => Some(VIS_PRIVATE),
+        // A top-level `pub(super)` names the parent module's subtree — a real region, and the
+        // one the four-bucket ladder had nowhere to put.
+        "super" => Some(VIS_SUPER),
+        // `pub(in path)` names an ancestor this adapter does not resolve to a unit key yet, so
+        // it keeps the old conservative widening: `pub(crate)`. Widening only ever silences an
+        // `internal-only`, never accuses (7 occurrences across tokio, for scale).
         _ => None,
     }
 }
@@ -878,6 +1302,48 @@ fn inside_inline_mod(node: Node) -> bool {
         cur = n.parent();
     }
     false
+}
+
+/// This file's MODULE, as a unit key. Rust's resolution unit is the module and — under the
+/// file ≈ module approximation this adapter is built on (§0) — a module is a file, so every
+/// key names exactly one file. That degeneracy is the point twice over: it leaves every
+/// unit-keyed table behaving exactly as it did when the key was absent (a file's own
+/// declarations are already the tier consulted before its unit's), and it gives the module
+/// TREE a name to hang on, which visibility needs and a per-file key alone cannot express.
+///
+/// The path IS the module path, so the key is the path with the conventional file names
+/// folded into the directory they stand for: `src/graph/mod.rs` and `src/graph/assemble.rs`
+/// are `…/src/graph` and `…/src/graph/assemble`, and `src/lib.rs` is `…/src` — the crate
+/// root, which the next module up. Keys stay project-relative, so two crates with the same
+/// internal layout do not collide (RFC 0012 §8's "unique only within a package" holds a
+/// fortiori).
+///
+/// `#[path = "…"]` breaks the convention, and inline `mod x {}` flattens into its file — both
+/// are the same standing approximation the rest of the adapter makes.
+fn module_unit(path: &str) -> Option<SmolStr> {
+    let stem = path.strip_suffix(".rs")?;
+    let (dir, name) = match stem.rsplit_once('/') {
+        Some((dir, name)) => (dir, name),
+        None => ("", stem),
+    };
+    let key = if matches!(name, "mod" | "lib" | "main") {
+        dir
+    } else {
+        stem
+    };
+    (!key.is_empty()).then(|| SmolStr::new(key))
+}
+
+/// The module CONTAINING a module key — the link that makes the keys a tree. It is the key's
+/// containing directory, and `None` at a crate root, which under Cargo's layout is the `src`
+/// directory itself: nothing above `src/lib.rs` is a module, and a top-level `pub(super)`
+/// there would not compile anyway.
+fn module_parent(unit: &str) -> Option<SmolStr> {
+    if unit.rsplit('/').next() == Some("src") {
+        return None;
+    }
+    let (parent, _) = unit.rsplit_once('/')?;
+    (!parent.is_empty()).then(|| SmolStr::new(parent))
 }
 
 /// Item-list walker (source_file, inline-mod bodies — flattened). Attributes are
@@ -960,10 +1426,36 @@ fn collect_attr(item: Node, src: &[u8], pending: &mut PendingAttrs, out: &mut Fi
                 scan_attr_idents(args, src, out);
             }
         }
-        "cfg" | "cfg_attr" => {
-            // Both branches kept, always — but `#[cfg(test)]` marks the next item
-            // (typically `mod tests`) as inline test infrastructure.
-            if text(attr, src).contains("test") {
+        // `#[proc_macro_derive(Serialize, attributes(serde))] pub fn derive_serialize` — the
+        // compiler invokes this function wherever `#[derive(Serialize)]` appears, under a name
+        // the `fn` never spells. Without the mapping, a proc-macro crate looks like production
+        // code no test ever reaches, however thoroughly its derive sites are tested: serde's
+        // `test_suite` derives `Serialize` several hundred times and none of it reached
+        // `serde_derive`. The FIRST identifier argument is the derive's name; the rest belong
+        // to `attributes(…)`.
+        "proc_macro_derive" => {
+            if let Some(args) = attr.child_by_field_name("arguments") {
+                let mut c = args.walk();
+                let first = args
+                    .children(&mut c)
+                    .find(|n| n.kind() == "identifier")
+                    .map(|tok| (SmolStr::new(text(tok, src)), span(tok)));
+                drop(c);
+                pending.proc_macro_derive = first;
+            }
+        }
+        "cfg" => {
+            // Both branches kept, always — but a test-exclusive `cfg` marks the next item
+            // (typically `mod tests`) as inline test infrastructure. `cfg_attr` is NOT this:
+            // it applies an attribute conditionally, it does not gate the item.
+            // Exactly one paren off each end: `trim_end_matches(')')` is greedy, and
+            // `(all(test, not(loom)))` would come back as `all(test, not(loom`.
+            if attr
+                .child_by_field_name("arguments")
+                .map(|args| text(args, src))
+                .and_then(|t| t.strip_prefix('(')?.strip_suffix(')'))
+                .is_some_and(cfg_is_harness_only)
+            {
                 pending.cfg_test = true;
             }
         }
@@ -973,6 +1465,79 @@ fn collect_attr(item: Node, src: &[u8], pending: &mut PendingAttrs, out: &mut Fi
             // a consumer referenced only from an attribute stays alive.
             scan_unknown_attr(attr, name, src, out);
         }
+    }
+    // Independent of the match above, and deliberately: what a string inside an attribute
+    // MEANS is not this adapter's question (`FileFacts::string_attr_args`). Every attribute
+    // that could name an item records its `key = "literal"` pairs; the same
+    // lint/doc/cfg exclusion applies, because those keys are prose and config, never paths.
+    if !NON_ITEM_ATTRS.contains(&name) {
+        let before = pending.attr_strings.len();
+        // The arguments, or a bare `#[x = "v"]`'s value — never the whole attribute node,
+        // whose own head identifier would otherwise read as the key of a bare value.
+        if let Some(args) = attr.child_by_field_name("arguments") {
+            collect_attr_strings(args, src, &mut pending.attr_strings);
+        } else if let Some(value) = attr.child_by_field_name("value") {
+            collect_attr_strings(value, src, &mut pending.attr_strings);
+        }
+        for entry in &mut pending.attr_strings[before..] {
+            entry.0 = SmolStr::new(name);
+        }
+    }
+}
+
+/// Every string literal in an attribute's arguments, with the key it was written under —
+/// `("skip_serializing_if", "usize_is_zero")`, or an empty key for a bare
+/// `#[my_attr = "value"]`. The attribute head is filled in by the caller, which knows it.
+///
+/// Nesting is walked (`#[rkyv(attr(serde(rename = "x")))]`), and the key is always the
+/// identifier immediately before the `=`, at the literal's own level: an attribute grammar is
+/// token soup, and "the name written next to this string" is the most this adapter can say
+/// without knowing whose attribute it is.
+fn collect_attr_strings(node: Node, src: &[u8], out: &mut Vec<(SmolStr, SmolStr, SmolStr, Span)>) {
+    let mut cursor = node.walk();
+    let children: Vec<Node> = node.children(&mut cursor).collect();
+    for (i, tok) in children.iter().enumerate() {
+        if matches!(tok.kind(), "string_literal" | "raw_string_literal") {
+            // The key is the identifier immediately before the `=`, at this level. Anything
+            // else — a positional string, a nested call's argument — has no key, and saying
+            // so is the honest answer rather than reaching for a plausible neighbour.
+            let keyed =
+                i >= 2 && children[i - 1].kind() == "=" && children[i - 2].kind() == "identifier";
+            let key = if keyed {
+                SmolStr::new(text(children[i - 2], src))
+            } else {
+                SmolStr::default()
+            };
+            out.push((
+                SmolStr::default(), // the head, filled in by the caller
+                key,
+                SmolStr::new(unquote(text(*tok, src))),
+                span(*tok),
+            ));
+        } else if tok.child_count() > 0 {
+            collect_attr_strings(*tok, src, out);
+        }
+    }
+}
+
+/// A Rust string literal's content, quotes removed. Escapes are left exactly as written: this
+/// adapter is recording what the author typed, and a plugin matching a declaration name never
+/// wants an escape resolved (a name cannot contain one).
+fn unquote(literal: &str) -> &str {
+    // A raw string carries `n` hashes on each side of the quotes: `r"…"`, `r##"…"##`.
+    let (body, hashes) = match literal.strip_prefix('r') {
+        Some(rest) => {
+            let trimmed = rest.trim_start_matches('#');
+            (trimmed, rest.len() - trimmed.len())
+        }
+        None => (literal, 0),
+    };
+    let Some(inner) = body.strip_prefix('"') else {
+        return literal; // not a shape this function understands: return it whole
+    };
+    match inner.len().checked_sub(hashes + 1) {
+        Some(end) if inner[end..].starts_with('"') => &inner[..end],
+        _ => literal,
     }
 }
 
@@ -1061,6 +1626,9 @@ fn emit_attr_path(segments: &[&str], at: Span, out: &mut FileFacts) {
             opaque_namespace_use: false,
             module_names_visible: false,
             local_alias: None,
+            // Synthesized from a use SITE: the file writes this path inline and no import
+            // statement for it exists, so its binding must not outrank the file's own declarations.
+            reconstructed: true,
         });
         out.references.push(RawReference {
             name: SmolStr::new(*last),
@@ -1087,11 +1655,18 @@ fn handle_item(item: Node, src: &[u8], ctx: &Ctx<'_>, pending: PendingAttrs, out
     }
 
     match item.kind() {
-        "function_item" => handle_function(item, src, ctx, owner, &pending, None, out),
+        "function_item" => {
+            handle_function(item, src, ctx, owner, &pending, None, out);
+            push_proc_macro_derive(item, src, &pending, out);
+        }
         "struct_item" | "union_item" => {
             handle_type_decl(item, src, ctx, SymbolKind::Struct, out);
+            push_derived_default_type(item, src, &pending, out);
         }
-        "enum_item" => handle_enum(item, src, ctx, out),
+        "enum_item" => {
+            handle_enum(item, src, ctx, out);
+            push_derived_default_type(item, src, &pending, out);
+        }
         // The container's own #[cfg(test)] folds into the member-walk context so member-level
         // regions stay outermost-only (the container's region, recorded by the item walk,
         // already covers every member).
@@ -1130,6 +1705,9 @@ fn handle_item(item: Node, src: &[u8], ctx: &Ctx<'_>, pending: PendingAttrs, out
                             PathEnv {
                                 locals: ctx.local_qualifiers,
                                 inline_mods: ctx.inline_mod_names,
+                                file_types: ctx.file_type_names,
+                                crate_probe: ctx.crate_probe,
+                                use_bound: ctx.use_bound,
                                 types: TypeEnv::empty(),
                             },
                             out,
@@ -1155,6 +1733,9 @@ fn handle_item(item: Node, src: &[u8], ctx: &Ctx<'_>, pending: PendingAttrs, out
                 PathEnv {
                     locals: ctx.local_qualifiers,
                     inline_mods: ctx.inline_mod_names,
+                    file_types: ctx.file_type_names,
+                    crate_probe: ctx.crate_probe,
+                    use_bound: ctx.use_bound,
                     types: TypeEnv::empty(),
                 },
                 out,
@@ -1173,6 +1754,9 @@ fn handle_item(item: Node, src: &[u8], ctx: &Ctx<'_>, pending: PendingAttrs, out
                         PathEnv {
                             locals: ctx.local_qualifiers,
                             inline_mods: ctx.inline_mod_names,
+                            file_types: ctx.file_type_names,
+                            crate_probe: ctx.crate_probe,
+                            use_bound: ctx.use_bound,
                             types: TypeEnv::empty(),
                         },
                         out,
@@ -1195,6 +1779,7 @@ fn handle_item(item: Node, src: &[u8], ctx: &Ctx<'_>, pending: PendingAttrs, out
                     opaque_namespace_use: false,
                     module_names_visible: false,
                     local_alias: None,
+                    reconstructed: false,
                 });
             }
         }
@@ -1208,10 +1793,139 @@ fn handle_item(item: Node, src: &[u8], ctx: &Ctx<'_>, pending: PendingAttrs, out
     // No per-declaration Test rooting here: `test_spans` (recorded by `walk_items`) is the
     // single producer-side declaration of test regions, and assembly derives the in-source
     // Test roots for span-contained declarations — one fact, one emitter.
-    let _ = decls_before;
+    flush_attr_strings(item, src, pending, decls_before, out);
+}
+
+/// Emits this item's [`kndo_core::adapter::StringAttrArg`]s, now that the declaration they
+/// decorate exists.
+///
+/// **The owner is the item's own declaration**, which is also the answer for an attribute
+/// written on a *field* or an enum variant: fields are not declarations in this adapter, and
+/// the struct is the honest owner of a field attribute anyway — serde's generated impl belongs
+/// to the type, so "if the struct is alive, that function runs" is exactly true. Blocks that
+/// declare nothing themselves (`impl`, `mod`, `trait`) get `None` rather than borrowing their
+/// first member's name.
+///
+/// Field and variant attributes are collected here rather than by the item walker because the
+/// walker only sees item-level attributes. Only the three body kinds that cannot contain a
+/// nested item are descended into — anything else would record a nested item's attributes
+/// twice, once here and once on its own pass.
+fn flush_attr_strings(
+    item: Node,
+    src: &[u8],
+    pending: PendingAttrs,
+    decls_before: usize,
+    out: &mut FileFacts,
+) {
+    let mut strings = pending.attr_strings;
+    if matches!(item.kind(), "struct_item" | "union_item" | "enum_item") {
+        if let Some(body) = item.child_by_field_name("body") {
+            let mut inner = Vec::new();
+            collect_inner_attr_strings(body, src, &mut inner);
+            strings.extend(inner);
+        }
+    }
+    if strings.is_empty() {
+        return;
+    }
+    let owner = match item.kind() {
+        "impl_item" | "mod_item" | "trait_item" => None,
+        _ => out
+            .declarations
+            .get(decls_before)
+            .map(|d| match &d.member_of {
+                Some(owner) => SmolStr::from(format!("{owner}.{}", d.name)),
+                None => d.name.clone(),
+            }),
+    };
+    for (attribute, key, literal, span) in strings {
+        out.string_attr_args
+            .push(kndo_core::adapter::StringAttrArg {
+                attribute,
+                key,
+                literal,
+                owner: owner.clone(),
+                span,
+            });
+    }
+}
+
+/// Every `attribute_item` inside a type body — field and variant attributes — with each
+/// attribute's own head as the recorded `attribute`.
+fn collect_inner_attr_strings(
+    node: Node,
+    src: &[u8],
+    out: &mut Vec<(SmolStr, SmolStr, SmolStr, Span)>,
+) {
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        if child.kind() == "attribute_item" {
+            let Some(attr) = child.named_child(0) else {
+                continue;
+            };
+            let Some(name) = attr.child(0).map(|n| text(n, src)) else {
+                continue;
+            };
+            if NON_ITEM_ATTRS.contains(&name) {
+                continue;
+            }
+            let before = out.len();
+            if let Some(args) = attr.child_by_field_name("arguments") {
+                collect_attr_strings(args, src, out);
+            } else if let Some(value) = attr.child_by_field_name("value") {
+                collect_attr_strings(value, src, out);
+            }
+            for entry in &mut out[before..] {
+                entry.0 = SmolStr::new(name);
+            }
+        } else if child.child_count() > 0 {
+            collect_inner_attr_strings(child, src, out);
+        }
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
+/// The macro a `#[proc_macro_derive(Name)]` function declares, plus the edge from it to the
+/// function that implements it.
+///
+/// Two symbols, because there are two: `Name` is what a `#[derive(Name)]` site references and
+/// the only thing the crate exports (a proc-macro crate has no value namespace to export), and
+/// the `fn` is where the code lives — its span, its complexity, its callees. `within` says
+/// which use triggers which code, exactly as the contract defines it: using `Name` runs the
+/// function. Reachability then flows from every derive site — including the test suite's —
+/// through the macro and into everything the implementation calls.
+fn push_proc_macro_derive(item: Node, src: &[u8], pending: &PendingAttrs, out: &mut FileFacts) {
+    let Some((macro_name, name_span)) = pending.proc_macro_derive.clone() else {
+        return;
+    };
+    let Some(fn_name) = item.child_by_field_name("name").map(|n| text(n, src)) else {
+        return;
+    };
+    out.declarations.push(kndo_core::adapter::Declaration {
+        name: macro_name.clone(),
+        kind: SymbolKind::Macro,
+        // The identifier inside the attribute — where the name is actually written.
+        span: name_span,
+        exported: true,
+        visibility: kndo_core::adapter::VisibilityLevel(3),
+        member_of: None,
+        implicitly_invoked: false,
+        nested_scope: false,
+        visibility_inherited: false,
+        visible_in_unit: None,
+        implements: None,
+        markers: Vec::new(),
+        signature_span: None,
+    });
+    out.references.push(RawReference {
+        name: SmolStr::new(fn_name),
+        scope_context: None,
+        span: name_span,
+        within: Some(macro_name),
+        kind: RefKind::Call,
+    });
+}
+
 fn push_declaration(
     out: &mut FileFacts,
     name: &str,
@@ -1221,18 +1935,18 @@ fn push_declaration(
     member_of: Option<&str>,
     (level, exported): (u8, bool),
 ) {
-    out.declarations.push(kndo_core::adapter::Declaration {
-        name: SmolStr::new(name),
+    kndo_adapter_toolkit::decls::push_declaration(
+        out,
+        name,
         kind,
-        span: span(item),
-        exported,
-        visibility: kndo_core::adapter::VisibilityLevel(level),
-        member_of: member_of.map(SmolStr::new),
-        implicitly_invoked: false,
-        nested_scope: false,
-        visibility_inherited: false,
+        item,
         signature_span,
-    });
+        member_of,
+        (level, exported),
+        // This grammar carries no declaration-site markers: annotations are the JVM shape,
+        // and an attribute here is not one (`Declaration::markers`' own contract).
+        Vec::new(),
+    );
 }
 
 fn handle_function(
@@ -1276,6 +1990,17 @@ fn handle_function(
     // Top-level `fn main`: the bin entry point (same unconditional stance as Go's main/init —
     // Probable because only bin targets actually run it; a library's stray `main` over-lives,
     // the safe direction).
+    // Member-type fact for a FREE function: what CALLING it yields. The mirror of the
+    // impl-method fact `handle_impl` pushes, minus an owner — `let entry = parse_entry(..);
+    // entry.path` has no receiver type to read off anything else, and without this the type
+    // `parse_entry` returns looks used only where it is declared
+    // (`internal/detection-gaps.md` §3). Only top-level functions: a nested `fn` is not
+    // callable from where the binding lives.
+    if owner.is_none() {
+        if let Some(ret) = item.child_by_field_name("return_type") {
+            push_member_type(&mut out.member_types, None, name, ret, src);
+        }
+    }
     if owner.is_none() && name == "main" {
         out.roots.push(RawRoot {
             kind: RootKind::Production,
@@ -1312,6 +2037,9 @@ fn handle_function(
             PathEnv {
                 locals: ctx.local_qualifiers,
                 inline_mods: ctx.inline_mod_names,
+                file_types: ctx.file_type_names,
+                crate_probe: ctx.crate_probe,
+                use_bound: ctx.use_bound,
                 types: TypeEnv::empty(),
             },
             out,
@@ -1328,18 +2056,21 @@ fn handle_function(
             PathEnv {
                 locals: ctx.local_qualifiers,
                 inline_mods: ctx.inline_mod_names,
+                file_types: ctx.file_type_names,
+                crate_probe: ctx.crate_probe,
+                use_bound: ctx.use_bound,
                 types: &types,
             },
             out,
         );
-        let shape = function_shape(body, &METRICS_SYNTAX, MIN_CLONE_TOKENS);
-        out.functions.push(FunctionMetrics {
-            symbol: SmolStr::new(&qualified),
-            cyclomatic: shape.cyclomatic,
-            loc: shape.loc,
-            token_count: shape.token_count as u32,
-            fingerprints: shape.fingerprints,
-        });
+        kndo_adapter_toolkit::metrics::push_function_metrics(
+            out,
+            &qualified,
+            span(item),
+            body,
+            &METRICS_SYNTAX,
+            MIN_CLONE_TOKENS,
+        );
     }
 }
 
@@ -1370,6 +2101,9 @@ fn handle_type_decl(item: Node, src: &[u8], ctx: &Ctx<'_>, kind: SymbolKind, out
             PathEnv {
                 locals: ctx.local_qualifiers,
                 inline_mods: ctx.inline_mod_names,
+                file_types: ctx.file_type_names,
+                crate_probe: ctx.crate_probe,
+                use_bound: ctx.use_bound,
                 types: TypeEnv::empty(),
             },
             out,
@@ -1402,7 +2136,7 @@ fn collect_field_member_types(
             field.child_by_field_name("name"),
             field.child_by_field_name("type"),
         ) {
-            push_member_type(sink, owner, text(n, src), t, src);
+            push_member_type(sink, Some(owner), text(n, src), t, src);
         }
     }
 }
@@ -1426,15 +2160,21 @@ fn collect_field_facts(root: Node, src: &[u8]) -> Vec<kndo_core::adapter::RawMem
     sink
 }
 
-/// The [`TypeEnv`] lookup view of the field facts: (owner, member) → base type.
+/// The [`TypeEnv`] lookup view of the field facts: (owner, member) → base type. Free-function
+/// facts (no owner) are not part of this view — a `self.field` chain never walks through one,
+/// and the core resolves them at the pointer's base instead.
 fn field_type_map(facts: &[kndo_core::adapter::RawMemberType]) -> FieldTypes {
     facts
         .iter()
-        .map(|m| {
-            (
-                (m.owner.to_string(), m.member.to_string()),
-                m.yields.to_string(),
-            )
+        .filter_map(|m| {
+            let owner = m.owner.as_ref()?;
+            // The TypeEnv keys receivers by NAME — it emits a qualifier, not a type tree —
+            // so this view keeps the head and drops the arguments. The arguments still live
+            // in the fact itself, which is what the core's chain walks.
+            Some((
+                (owner.to_string(), m.member.to_string()),
+                m.yields.name()?.to_string(),
+            ))
         })
         .collect()
 }
@@ -1454,7 +2194,7 @@ fn collect_tuple_member_types(
         })
         .enumerate()
     {
-        push_member_type(sink, owner, &position.to_string(), ty, src);
+        push_member_type(sink, Some(owner), &position.to_string(), ty, src);
     }
 }
 
@@ -1463,72 +2203,123 @@ fn collect_tuple_member_types(
 /// parameters (`Result<T, E>` → `[T, E]`) ride along for `?N`-marked pointer hops.
 fn push_member_type(
     sink: &mut Vec<kndo_core::adapter::RawMemberType>,
-    owner: &str,
+    owner: Option<&str>,
     member: &str,
     ty: Node,
     src: &[u8],
 ) {
-    let resolve_self = |name: String| {
-        if name == "Self" {
-            owner.to_string()
-        } else {
-            name
-        }
+    // `Self` in a free function's signature is not a thing to resolve — there is no impl
+    // around it — so with no owner the name stays as written and simply resolves to nothing.
+    let resolve_self = |name: String| match (&name[..], owner) {
+        ("Self", Some(owner)) => owner.to_string(),
+        _ => name,
     };
-    if let Some(yields) = base_type_name(ty, src).map(resolve_self) {
-        let yields_params = type_param_names(ty, src)
-            .into_iter()
-            .map(resolve_self)
-            .map(SmolStr::new)
-            .collect();
+    if let Some(yields) = type_expr(ty, src, &resolve_self) {
         sink.push(kndo_core::adapter::RawMemberType {
-            owner: SmolStr::new(owner),
+            owner: owner.map(SmolStr::new),
             member: SmolStr::new(member),
-            yields: SmolStr::new(yields),
-            yields_params,
+            yields,
         });
     }
 }
 
-/// The base names of a parameterized annotation's type arguments, in order —
-/// `Result<ConfiguredHIR, Error>` → `["ConfiguredHIR", "Error"]`; an argument with no
-/// single base (a lifetime, a fn type) contributes nothing at its position, so consumers
-/// see only nameable parameters. References and the auto-deref wrappers are looked
-/// through, matching [`base_type_name`]'s reduction.
-fn type_param_names(ty: Node, src: &[u8]) -> Vec<String> {
+/// An annotation as a TYPE EXPRESSION — the tree, not its base name. Applies the same
+/// dispatch reduction [`base_type_name`] always did (references and `impl`/`dyn` looked
+/// through, `Box`/`Rc`/`Arc` unwrapped to the pointee, `Self` resolved by the caller), and
+/// then keeps going into the arguments instead of stopping at one level. `Result<Vec<T>, E>`
+/// used to reduce to `Result` plus the names `["Vec", "E"]`, which lost the `T` for good.
+///
+/// A slice or array is anonymous in the grammar, so it is named `@slice` — a name only this
+/// adapter uses, on both the fact side and the reference side, which lets it carry an
+/// `@element` fact like any other container. The core never interprets either string.
+fn type_expr(
+    ty: Node,
+    src: &[u8],
+    resolve_self: &impl Fn(String) -> String,
+) -> Option<kndo_core::adapter::TypeExpr> {
+    use kndo_core::adapter::TypeExpr;
     match ty.kind() {
-        "reference_type" => ty
-            .child_by_field_name("type")
-            .map(|inner| type_param_names(inner, src))
-            .unwrap_or_default(),
-        "generic_type" => generic_param_names(ty, src),
-        _ => Vec::new(),
+        "generic_type" => generic_type_expr(ty, src, resolve_self),
+        "type_identifier" | "scoped_type_identifier" => {
+            let t = text(ty, src);
+            let base = t.rsplit("::").next().unwrap_or(t).to_string();
+            Some(TypeExpr::named(resolve_self(base)))
+        }
+        "array_type" | "slice_type" => {
+            let element = ty
+                .child_by_field_name("element")
+                .or_else(|| ty.named_child(0))
+                .and_then(|e| type_expr(e, src, resolve_self))?;
+            Some(TypeExpr::Named {
+                name: SmolStr::new("@slice"),
+                args: vec![element],
+            })
+        }
+        _ => unwrapped_type(ty).and_then(|inner| type_expr(inner, src, resolve_self)),
     }
 }
 
-/// A generic annotation's argument bases, looking through the auto-deref wrappers.
-fn generic_param_names(ty: Node, src: &[u8]) -> Vec<String> {
-    let base = ty.child_by_field_name("type").map(|b| text(b, src));
-    let Some(args) = ty.child_by_field_name("type_arguments") else {
-        return Vec::new();
-    };
-    if matches!(base, Some("Box" | "Rc" | "Arc")) {
+/// A generic annotation as a tree: the base plus every argument, recursively. The auto-deref
+/// pointer wrappers dispatch on the pointee, so they vanish into it — the same reduction
+/// [`generic_base_type`] makes, carried through to the arguments.
+fn generic_type_expr(
+    ty: Node,
+    src: &[u8],
+    resolve_self: &impl Fn(String) -> String,
+) -> Option<kndo_core::adapter::TypeExpr> {
+    use kndo_core::adapter::TypeExpr;
+    let base = ty.child_by_field_name("type")?;
+    let base_name = text(base, src);
+    let base_name = base_name.rsplit("::").next().unwrap_or(base_name);
+    let args = ty.child_by_field_name("type_arguments");
+    if matches!(base_name, "Box" | "Rc" | "Arc") {
         return args
-            .named_child(0)
-            .map(|inner| type_param_names(inner, src))
-            .unwrap_or_default();
+            .and_then(|a| a.named_child(0))
+            .and_then(|inner| type_expr(inner, src, resolve_self));
     }
-    let mut cursor = args.walk();
-    args.children(&mut cursor)
-        .filter(|n| n.is_named())
-        .filter_map(|arg| base_type_name(arg, src))
-        .collect()
+    let mut collected = Vec::new();
+    if let Some(args) = args {
+        let mut cursor = args.walk();
+        for arg in args.children(&mut cursor).filter(|n| n.is_named()) {
+            // A lifetime or a fn type has no expression of its own; `Unknown` holds its
+            // POSITION so a `?N` projection still indexes the arguments as written.
+            collected.push(type_expr(arg, src, resolve_self).unwrap_or(TypeExpr::Unknown));
+        }
+    }
+    Some(TypeExpr::Named {
+        name: SmolStr::new(resolve_self(base_name.to_string())),
+        args: collected,
+    })
+}
+
+/// `#[derive(Default)]` on a type is a DECLARED fact about it: `T::default()` evaluates to
+/// `T`. Nothing is inferred here — the derive says the impl exists and the trait's signature
+/// says what it returns, the same curated-stdlib knowledge `is_machinery_trait` already
+/// carries. Without it a `let sink = Sink::default()` binding points at a member no impl block
+/// declares, and every field read off that local resolves nowhere
+/// (`internal/detection-gaps.md` §3 — the plugin sinks are exactly this shape).
+fn push_derived_default_type(item: Node, src: &[u8], pending: &PendingAttrs, out: &mut FileFacts) {
+    let derives_default = pending
+        .derives
+        .iter()
+        .any(|(name, _)| name.rsplit("::").next() == Some("Default"));
+    if !derives_default {
+        return;
+    }
+    let Some(name) = item.child_by_field_name("name").map(|n| text(n, src)) else {
+        return;
+    };
+    out.member_types.push(kndo_core::adapter::RawMemberType {
+        owner: Some(SmolStr::new(name)),
+        member: SmolStr::new("default"),
+        yields: kndo_core::adapter::TypeExpr::named(name),
+    });
 }
 
 /// A member-type fact for an impl item that carries a name field (fn return, const type).
 fn push_owner_member_type(out: &mut FileFacts, owner: &str, item: Node, ty: Node, src: &[u8]) {
     if let Some(name) = item.child_by_field_name("name") {
-        push_member_type(&mut out.member_types, owner, text(name, src), ty, src);
+        push_member_type(&mut out.member_types, Some(owner), text(name, src), ty, src);
     }
 }
 
@@ -1566,6 +2357,9 @@ fn handle_enum(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
                     PathEnv {
                         locals: ctx.local_qualifiers,
                         inline_mods: ctx.inline_mod_names,
+                        file_types: ctx.file_type_names,
+                        crate_probe: ctx.crate_probe,
+                        use_bound: ctx.use_bound,
                         types: TypeEnv::empty(),
                     },
                     out,
@@ -1652,16 +2446,37 @@ fn is_machinery_trait(name: &str) -> bool {
     )
 }
 
-/// Flip [`kndo_core::adapter::Declaration::implicitly_invoked`] on the just-pushed member —
-/// searched from the end, where `handle_function` left it.
-fn mark_implicitly_invoked(out: &mut FileFacts, owner: &str, name: &str) {
-    if let Some(decl) = out
-        .declarations
+/// The member declaration `handle_function`/`push_declaration` just pushed — searched from
+/// the end, where they left it. Both facts an impl block knows about its members
+/// (`implicitly_invoked`, `implements`) are recorded through this one lookup.
+fn last_member_decl<'a>(
+    out: &'a mut FileFacts,
+    owner: &str,
+    name: &str,
+) -> Option<&'a mut kndo_core::adapter::Declaration> {
+    out.declarations
         .iter_mut()
         .rev()
         .find(|d| d.name == name && d.member_of.as_deref() == Some(owner))
-    {
+}
+
+/// Flip [`kndo_core::adapter::Declaration::implicitly_invoked`] on the just-pushed member —
+/// the language's OWN machinery traits, this adapter's curated verdict.
+fn mark_implicitly_invoked(out: &mut FileFacts, owner: &str, name: &str) {
+    if let Some(decl) = last_member_decl(out, owner, name) {
         decl.implicitly_invoked = true;
+    }
+}
+
+/// Record [`kndo_core::adapter::Declaration::implements`] on the just-pushed member: the
+/// trait whose `impl` block declares it. A FACT, recorded for every trait impl regardless of
+/// whether this adapter considers the trait machinery — because the consumer that knows a
+/// third-party trait's meaning is a plugin, and it can only know it if the fact survives
+/// extraction. Reducing it to `implicitly_invoked` alone is what once forced `kndo:serde` to
+/// re-parse Rust source the adapter had already parsed.
+fn record_implements(out: &mut FileFacts, owner: &str, name: &str, trait_name: &str) {
+    if let Some(decl) = last_member_decl(out, owner, name) {
+        decl.implements = Some(SmolStr::new(trait_name));
     }
 }
 
@@ -1708,11 +2523,11 @@ fn handle_impl(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
     let Some(type_node) = item.child_by_field_name("type") else {
         return;
     };
-    let self_type = last_type_identifier(type_node, src);
+    let self_type = impl_header_name(type_node, src);
     let Some(self_type) = self_type else { return };
     let trait_name = item
         .child_by_field_name("trait")
-        .and_then(|t| last_type_identifier(t, src).map(|n| n.to_string()));
+        .and_then(|t| impl_header_name(t, src).map(|n| n.to_string()));
 
     // Blanket forwarding (`impl<'a, M: Matcher> Matcher for &'a M`, `for &mut S`, `for
     // Box<S>`): Self is one of the impl's OWN type parameters behind a reference/Box —
@@ -1754,7 +2569,7 @@ fn handle_impl(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
     let is_machinery = is_forwarding
         || item
             .child_by_field_name("trait")
-            .and_then(|t| last_type_identifier(t, src))
+            .and_then(|t| impl_header_name(t, src))
             .is_some_and(|t| is_machinery_trait(&t));
     if let Some(body) = item.child_by_field_name("body") {
         let mut members = body.walk();
@@ -1786,6 +2601,9 @@ fn handle_impl(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
                                 ))),
                                 confidence: Confidence::Probable,
                             });
+                            if let Some(t) = trait_name.as_deref() {
+                                record_implements(out, &self_type, text(mname, src), t);
+                            }
                             if is_machinery {
                                 mark_implicitly_invoked(out, &self_type, text(mname, src));
                             }
@@ -1826,6 +2644,9 @@ fn handle_impl(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
                                 ))),
                                 confidence: Confidence::Probable,
                             });
+                            if let Some(t) = trait_name.as_deref() {
+                                record_implements(out, &self_type, text(mname, src), t);
+                            }
                         }
                     }
                 }
@@ -1836,14 +2657,30 @@ fn handle_impl(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
 }
 
 /// The rightmost `type_identifier` under a type node — `S`, `S<T>`, `a::b::S` all yield `S`.
-fn last_type_identifier(node: Node, src: &[u8]) -> Option<String> {
+/// The nominal name an impl header's type or trait position reduces to: `Serialize`,
+/// `serde::ser::Serialize`, `ArchiveWith<SmolStr>` and `&'a mut Wrapper<T>` all give the BASE
+/// name — the type being named, never one of its arguments.
+///
+/// The distinction is load-bearing in both positions. `impl Index<usize> for T` implements
+/// `Index`, not `usize`; `impl Serialize for Vec<Token>` owns its members under `Vec`, not
+/// `Token`. A walk that simply took the last identifier anywhere in the subtree answered with
+/// the argument, which pointed the `Implement` reference at the wrong name and cost every
+/// GENERIC machinery trait its members' marks (`Add`, `Index`, `PartialEq` — the non-generic
+/// ones, `Display` and `Drop`, worked by accident).
+fn impl_header_name(node: Node, src: &[u8]) -> Option<String> {
     if node.kind() == "type_identifier" {
         return Some(text(node, src).to_string());
+    }
+    // A generic application names its base; the arguments are other types entirely.
+    if node.kind() == "generic_type" {
+        return node
+            .child_by_field_name("type")
+            .and_then(|base| impl_header_name(base, src));
     }
     let mut found = None;
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
-        if let Some(name) = last_type_identifier(child, src) {
+        if let Some(name) = impl_header_name(child, src) {
             found = Some(name);
         }
     }
@@ -1882,6 +2719,9 @@ fn handle_simple_decl(
             PathEnv {
                 locals: ctx.local_qualifiers,
                 inline_mods: ctx.inline_mod_names,
+                file_types: ctx.file_type_names,
+                crate_probe: ctx.crate_probe,
+                use_bound: ctx.use_bound,
                 types: TypeEnv::empty(),
             },
             out,
@@ -1895,6 +2735,9 @@ fn handle_simple_decl(
             PathEnv {
                 locals: ctx.local_qualifiers,
                 inline_mods: ctx.inline_mod_names,
+                file_types: ctx.file_type_names,
+                crate_probe: ctx.crate_probe,
+                use_bound: ctx.use_bound,
                 types: TypeEnv::empty(),
             },
             out,
@@ -1919,6 +2762,9 @@ fn handle_mod(item: Node, src: &[u8], ctx: &Ctx<'_>, pending: &PendingAttrs, out
                     local_qualifiers: ctx.local_qualifiers,
                     inline_mod_names: ctx.inline_mod_names,
                     field_types: ctx.field_types,
+                    file_type_names: ctx.file_type_names,
+                    crate_probe: ctx.crate_probe,
+                    use_bound: ctx.use_bound,
                 },
                 out,
             );
@@ -1956,6 +2802,7 @@ fn handle_mod(item: Node, src: &[u8], ctx: &Ctx<'_>, pending: &PendingAttrs, out
                 opaque_namespace_use: pending.macro_use,
                 module_names_visible: false,
                 local_alias: Some(SmolStr::new(text(name, src))),
+                reconstructed: false,
             });
         }
     }
@@ -1981,7 +2828,28 @@ fn handle_use(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
     if ctx.inline_mod_names.contains(root) {
         return;
     }
+    let before = out.imports.len();
     collect_use(argument, src, "", reexported, span(item), out);
+    weaken_rebound_use(root, ctx.use_bound, before, out);
+}
+
+/// A `use` rooted at a name this file's own imports already bind re-qualifies that binding
+/// (`use serde::de::{self, …};` then `use de::Error;`) — it is not a crate import. The
+/// imports it produced are DOWNGRADED, not dropped: `undeclared` ignores the Possible tier so
+/// the accusation goes away, while the edges themselves survive, which is what keeps a
+/// declared dependency reached only through such a path from reading `unused`.
+fn weaken_rebound_use(
+    root: &str,
+    use_bound: &std::collections::HashSet<String>,
+    before: usize,
+    out: &mut FileFacts,
+) {
+    if !use_bound.contains(root) {
+        return;
+    }
+    for imp in &mut out.imports[before..] {
+        imp.confidence = imp.confidence.min(Confidence::Possible);
+    }
 }
 
 fn import_kind(path: &str) -> ImportKind {
@@ -2012,6 +2880,7 @@ fn push_entry_import(specifier: &str, at: Span, out: &mut FileFacts) {
         opaque_namespace_use: false,
         module_names_visible: false,
         local_alias: None,
+        reconstructed: false,
     });
 }
 
@@ -2028,6 +2897,7 @@ fn make_import(specifier: &str, kind_span: (ImportKind, Span), reexported: bool)
         opaque_namespace_use: false,
         module_names_visible: false,
         local_alias: None,
+        reconstructed: false,
     }
 }
 
@@ -2230,7 +3100,19 @@ fn walk_body(node: Node, src: &[u8], within: Option<&str>, env: PathEnv<'_>, out
             // package references from its intermediate path segments (`use std::{fs::File,
             // os::{fd::AsFd, unix::fs::FileTypeExt}}` → "fs"/"os"/"fd"/"unix" as packages).
             if let Some(argument) = node.child_by_field_name("argument") {
+                // Same inline-mod guard `handle_use` applies at item level: `mod desugared
+                // { … }` declared inside a function body, then `use desugared::Test as …`
+                // right below it, names nothing outside this file — routing it through
+                // package resolution invented a dependency named `desugared` (serde's
+                // test_annotations.rs). Body-scoped `use` reached `collect_use` directly and
+                // so skipped the check.
+                let root = text(argument, src).split("::").next().unwrap_or("").trim();
+                if env.inline_mods.contains(root) {
+                    return;
+                }
+                let before = out.imports.len();
                 collect_use(argument, src, "", false, span(node), out);
+                weaken_rebound_use(root, env.use_bound, before, out);
             }
             return;
         }
@@ -2436,6 +3318,9 @@ fn emit_path(
             opaque_namespace_use: false,
             module_names_visible: false,
             local_alias: None,
+            // Synthesized from a use SITE: the file writes this path inline and no import
+            // statement for it exists, so its binding must not outrank the file's own declarations.
+            reconstructed: true,
         });
         if bound != *last {
             // The type itself is used by the traversal, and the trailing item resolves as
@@ -2503,24 +3388,47 @@ fn emit_path(
         // crate's module tree from its entry, so the entry stays alive. For an
         // external crate the extra root import just duplicates the dependency edge.
         let import_worthy = !PRIMITIVES.contains(&root) && !env.locals.contains(root);
+        // Whether this root is EVIDENCE of an external crate, as opposed to merely importable
+        // as one. Two ways to lose it: the name is a type declared in this file, or the
+        // context does not support the probe at all (a glob import in scope, a macro
+        // template) — see `PathEnv`. Losing it downgrades the imports to Possible rather than
+        // dropping them: `undeclared` ignores that tier (it never accuses), while the
+        // dependency edge itself survives, so a DECLARED crate reached only through such a
+        // path still reads as used. Suppressing the import outright instead cost alacritty
+        // exactly that, turning `dirs` and `home` into false `unused` dependencies.
+        let probes_crate = env.crate_probe && !env.file_types.contains(root);
+        let probe_confidence = if probes_crate {
+            Confidence::Probable
+        } else {
+            Confidence::Possible
+        };
         if import_worthy && rest.len() == 1 && !root.chars().next().is_some_and(char::is_uppercase)
         {
             // Single-qualifier bare path (`helpers::run()`, `rand_chacha::x()`): the root
-            // alone imports at Probable — a local module resolves to its file (resolution's
-            // local-retry precedence), an unknown crate becomes the Dependency edge the
-            // `undeclared` analysis needs. The qualified reference stays for binding.
+            // alone imports — a local module resolves to its file (resolution's local-retry
+            // precedence), an unknown crate becomes the Dependency edge the `undeclared`
+            // analysis needs, at `probe_confidence` so it only accuses where the root really
+            // is evidence. The qualified reference stays for binding, and `local_alias`
+            // carries the name it qualifies BY: the reference this branch emits reads
+            // `scope_context: root`, and the adapter is the only side that can say so —
+            // splitting the specifier to recover it was the core's one hardcoded path
+            // separator. Non-settling by construction: the import is reconstructed, so its
+            // confidence is never Certain and a miss keeps falling through the ladder.
             out.imports.push(RawImport {
                 specifier: SmolStr::new(root),
                 kind: ImportKind::Package,
                 span: at,
                 side_effect_only: true,
                 type_only: false,
-                confidence: Confidence::Probable,
+                confidence: probe_confidence,
                 bindings: Vec::new(),
                 reexported: false,
                 opaque_namespace_use: false,
                 module_names_visible: false,
-                local_alias: None,
+                local_alias: Some(SmolStr::new(root)),
+                // Synthesized from a use SITE: the file writes this path inline and no import
+                // statement for it exists, so its binding must not outrank the file's own declarations.
+                reconstructed: true,
             });
         }
         // The parent-path MODULE import is emitted regardless of `locals`: that guard
@@ -2542,9 +3450,10 @@ fn emit_path(
                 // A locals-covered root (`io::x::y` after `use std::io`) reconstructs at
                 // Possible: the import exists for resolution keep-alive; it is NOT evidence
                 // of a crate named `io` (`undeclared` ignores the Possible tier —
-                // suppressing these entirely would kill real cross-crate paths).
+                // suppressing these entirely would kill real cross-crate paths). A root that
+                // IS import-worthy still only reaches Probable when it probes.
                 confidence: if import_worthy {
-                    Confidence::Probable
+                    probe_confidence
                 } else {
                     Confidence::Possible
                 },
@@ -2555,21 +3464,37 @@ fn emit_path(
                 reexported: false,
                 opaque_namespace_use: false,
                 module_names_visible: false,
-                local_alias: None,
+                // The segment the use site qualifies by: `kndo_core::discovery::find_files_named(..)`
+                // writes `discovery`, and this synthetic import is what reaches that file.
+                // Same reason as the shallow branch — the adapter knows the separator, the
+                // core must not. Reconstructed, hence never Certain, hence non-settling.
+                local_alias: Some(SmolStr::new(rest[rest.len() - 1])),
+                // Synthesized from a use SITE: the file writes this path inline and no import
+                // statement for it exists, so its binding must not outrank the file's own declarations.
+                reconstructed: true,
             });
             if import_worthy {
+                // The entry-liveness companion for a DEEP path — and it makes the same claim
+                // about the root that the single-qualifier branch does, so it carries the
+                // same `probe_confidence`. Hardcoding Probable here is what kept serde's
+                // `fmt`, `net`, `_serde` and `fragment` accused after the shallow branch
+                // stopped: `fmt::Write::write_fmt(…)` is three segments, so only this branch
+                // ever fired for it.
                 out.imports.push(RawImport {
                     specifier: SmolStr::new(root),
                     kind: ImportKind::Package,
                     span: at,
                     side_effect_only: true,
                     type_only: false,
-                    confidence: Confidence::Probable,
+                    confidence: probe_confidence,
                     bindings: Vec::new(),
                     reexported: false,
                     opaque_namespace_use: false,
                     module_names_visible: false,
                     local_alias: None,
+                    // Synthesized from a use SITE: the file writes this path inline and no import
+                    // statement for it exists, so its binding must not outrank the file's own declarations.
+                    reconstructed: true,
                 });
             }
             // The binding resolves the plain name — no qualifier needed for this one.
@@ -2632,6 +3557,7 @@ fn handle_macro(
                 opaque_namespace_use: false,
                 module_names_visible: false,
                 local_alias: None,
+                reconstructed: false,
             });
             return;
         }
@@ -2662,6 +3588,27 @@ fn scan_token_tree(
     env: PathEnv<'_>,
     out: &mut FileFacts,
 ) {
+    // A macro TEMPLATE describes code that does not exist yet, under names the expansion
+    // invents: serde_derive's `quote!` bodies alone name `_serde`, `__S`, `__D`, `__E`, `__A`,
+    // `__Field`, `__private` and `clippy::…`, and a `macro_rules!` right-hand side names
+    // `$crate::fragment::…` with the metavariable stripped by token reconstruction. None of
+    // those is a crate, and every one was reported as a phantom dependency. Identifier reads
+    // and module imports still go out — keep-alive is the whole reason this scan exists — but
+    // nothing inside a template is evidence for an ACCUSATION.
+    //
+    // The boundary is the token tree, not the call: `serde_json::json!(…)`'s own path is
+    // ordinary code at the call site and must keep probing (an undeclared `serde_json` is a
+    // real finding). It is a SIBLING of the token tree under `macro_invocation`, so flipping
+    // the flag here — where the node itself is the tree — leaves it alone, and the recursion
+    // carries the flag down to everything inside.
+    let env = if node.kind() == "token_tree" {
+        PathEnv {
+            crate_probe: false,
+            ..env
+        }
+    } else {
+        env
+    };
     // Rust 2021 inline format captures: `format!("v{VERSION}")` reads `VERSION` from inside
     // the string literal — invisible to the identifier-token scan below, so string content
     // in macro token trees is scanned for `{ident}` / `{ident:spec}` shapes (`{{` escapes
@@ -2711,6 +3658,9 @@ fn scan_token_tree(
                         opaque_namespace_use: false,
                         module_names_visible: false,
                         local_alias: None,
+                        // Synthesized from a use SITE: the file writes this path inline and no import
+                        // statement for it exists, so its binding must not outrank the file's own declarations.
+                        reconstructed: true,
                     });
                 }
             }
@@ -2835,17 +3785,21 @@ fn scan_member_chain(
     env: PathEnv<'_>,
     out: &mut FileFacts,
 ) -> Option<usize> {
-    let follows_dot_ident = |at: usize| {
-        children.get(at).is_some_and(|n| n.kind() == ".")
-            && children
-                .get(at + 1)
-                .is_some_and(|n| n.kind() == "identifier")
-    };
-    if !follows_dot_ident(j) {
+    if !follows_dot_ident(children, j) {
         return None;
     }
     let qualifier = chain_receiver_qualifier(receiver, src, within, env, out)?;
     Some(walk_chain(children, j, qualifier, src, within, env, out))
+}
+
+/// The next hop of a member chain: a `.` at `at` followed by an identifier. The chain walker
+/// and its entry check both ask it, so it is one function rather than the same closure written
+/// twice inside each.
+fn follows_dot_ident(children: &[Node], at: usize) -> bool {
+    children.get(at).is_some_and(|n| n.kind() == ".")
+        && children
+            .get(at + 1)
+            .is_some_and(|n| n.kind() == "identifier")
 }
 
 /// The chain's hops, one member reference each, the qualifier extending per hop; argument
@@ -2861,14 +3815,8 @@ fn walk_chain(
     env: PathEnv<'_>,
     out: &mut FileFacts,
 ) -> usize {
-    let follows_dot_ident = |at: usize| {
-        children.get(at).is_some_and(|n| n.kind() == ".")
-            && children
-                .get(at + 1)
-                .is_some_and(|n| n.kind() == "identifier")
-    };
     let mut at = j;
-    while follows_dot_ident(at) {
+    while follows_dot_ident(children, at) {
         let member = children[at + 1];
         let name = text(member, src);
         let args = children
@@ -2939,6 +3887,7 @@ fn format_captures(s: &str) -> Vec<&str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use kndo_core::adapter::TypeExpr;
 
     fn facts(src: &str) -> FileFacts {
         extract("src/lib.rs", src.as_bytes())
@@ -3064,6 +4013,156 @@ mod tests {
     }
 
     #[test]
+    fn a_type_annotation_becomes_a_tree_not_a_base_and_a_list() {
+        // `Result<Vec<TreeEntry>, GitError>` — the `TreeEntry` is two levels down, and a
+        // one-level parameter list lost it for good (`internal/detection-gaps.md` §3).
+        let f = facts("pub fn ls_tree(p: &str) -> Result<Vec<TreeEntry>, GitError> { todo!() }\n");
+        let fact = f
+            .member_types
+            .iter()
+            .find(|m| m.member == "ls_tree")
+            .expect("no fact");
+        assert_eq!(
+            fact.yields,
+            TypeExpr::Named {
+                name: SmolStr::new("Result"),
+                args: vec![
+                    TypeExpr::Named {
+                        name: SmolStr::new("Vec"),
+                        args: vec![TypeExpr::named("TreeEntry")],
+                    },
+                    TypeExpr::named("GitError"),
+                ],
+            }
+        );
+    }
+
+    #[test]
+    fn a_slice_is_named_so_it_can_carry_an_element_fact() {
+        // Slices and arrays are anonymous in the grammar. Naming one `@slice` — a string only
+        // this adapter uses, on both sides — lets it hold an `@element` like any container.
+        let f = facts("pub fn heads(x: u8) -> &[TreeEntry] { todo!() }\n");
+        let fact = f
+            .member_types
+            .iter()
+            .find(|m| m.member == "heads")
+            .expect("no fact");
+        assert_eq!(
+            fact.yields,
+            TypeExpr::Named {
+                name: SmolStr::new("@slice"),
+                args: vec![TypeExpr::named("TreeEntry")],
+            }
+        );
+    }
+
+    #[test]
+    fn a_chain_crosses_a_call_and_its_unwrap() {
+        // The shape §3's last case is made of: a module-qualified free call, a method on its
+        // result, the try operator, and then iteration. Every link is a declared fact, and
+        // the pointer names them in order.
+        let f = facts(
+            "fn run() {\n\
+             \x20   let entries = gitutil::ls_tree(root, tree).map_err(git_error)?;\n\
+             \x20   for entry in &entries { entry.path; }\n\
+             }\n",
+        );
+        assert_eq!(
+            f.references
+                .iter()
+                .find(|r| r.name == "path")
+                .and_then(|r| r.scope_context.as_deref()),
+            Some("gitutil.ls_tree.map_err?.@element")
+        );
+    }
+
+    #[test]
+    fn a_free_functions_return_type_is_a_member_type_fact() {
+        // "calling this evaluates to that" — the owner-less form. Without it a local bound
+        // to the call has no type and every field read off it lands nowhere.
+        let f = facts("pub fn parse_entry(p: &str) -> TreeEntry { todo!() }\n");
+        let fact = f
+            .member_types
+            .iter()
+            .find(|m| m.member == "parse_entry")
+            .expect("no fact for the free function");
+        assert_eq!(fact.owner, None, "a free function has no owner");
+        assert_eq!(fact.yields, TypeExpr::named("TreeEntry"));
+    }
+
+    #[test]
+    fn a_derived_default_is_a_declared_fact_about_the_type() {
+        // `#[derive(Default)]` states that the impl exists; the trait's signature states what
+        // it returns. Nothing inferred — and without it `let s = Sink::default()` points at a
+        // member no impl block declares.
+        let f = facts("#[derive(Debug, Default)]\npub struct Sink { items: Vec<u8> }\n");
+        let fact = f
+            .member_types
+            .iter()
+            .find(|m| m.member == "default")
+            .expect("no fact from the derive");
+        assert_eq!(fact.owner.as_deref(), Some("Sink"));
+        assert_eq!(fact.yields, TypeExpr::named("Sink"));
+        assert!(
+            !facts("pub struct Sink;\n")
+                .member_types
+                .iter()
+                .any(|m| m.member == "default"),
+            "no derive, no fact — the adapter never assumes an impl"
+        );
+    }
+
+    #[test]
+    fn a_call_through_a_module_types_its_binding_by_the_function() {
+        // Two shapes, two pointers, both matching what the path's own reconstructed import
+        // puts in scope: a bare-rooted path reaches the function through its MODULE
+        // qualifier, a `crate`-rooted one binds the trailing name itself.
+        let bare = facts(
+            "fn run() {\n             \x20   let rolled = rollup::directory_rollups(g);\n             \x20   rolled.dirs;\n             }\n",
+        );
+        assert_eq!(
+            bare.references
+                .iter()
+                .find(|r| r.name == "dirs")
+                .and_then(|r| r.scope_context.as_deref()),
+            Some("rollup.directory_rollups")
+        );
+        let rooted = facts(
+            "fn run() {\n             \x20   let rolled = crate::analysis::rollup::directory_rollups(g);\n             \x20   rolled.dirs;\n             }\n",
+        );
+        assert_eq!(
+            rooted
+                .references
+                .iter()
+                .find(|r| r.name == "dirs")
+                .and_then(|r| r.scope_context.as_deref()),
+            Some("directory_rollups")
+        );
+    }
+
+    #[test]
+    fn a_loop_variable_projects_the_iterables_element_type() {
+        // `for root in sink.items` — the element is parameter 0 of the collection's declared
+        // type, which the projection marker already expresses. Only a CHAIN qualifies: a
+        // local's own annotation kept just its base name, and `Vec` alone has no parameters.
+        let f = facts(
+            "fn run(sink: RootSink, plain: Vec<u8>) {\n             \x20   for root in sink.items { root.target; }\n             \x20   for x in plain { x.mystery(); }\n             }\n",
+        );
+        let ctx = |n: &str| {
+            f.references
+                .iter()
+                .find(|r| r.name == n)
+                .and_then(|r| r.scope_context.as_deref())
+        };
+        assert_eq!(ctx("target"), Some("RootSink.items.@element"));
+        // The un-parameterized case still says nothing USEFUL, but it says it as a hop rather
+        // than as silence: the binding for `plain` kept only the base name `Vec`, so the
+        // builtin `@element` fact projects an argument that is not there and the chain
+        // resolves to nothing — a miss into the duck fallback, exactly as before.
+        assert_eq!(ctx("mystery"), Some("Vec.@element"));
+    }
+
+    #[test]
     fn declarations_cover_the_item_zoo() {
         let f = facts(
             "pub fn free() {}\n\
@@ -3091,19 +4190,25 @@ mod tests {
     }
 
     #[test]
-    fn visibility_maps_to_the_three_rung_ladder() {
+    fn visibility_maps_to_the_four_rung_ladder() {
         let f = facts(
             "fn private_fn() {}\n\
              pub(crate) fn crate_fn() {}\n\
              pub(super) fn super_fn() {}\n\
+             pub(in crate::a) fn in_path_fn() {}\n\
              pub fn public_fn() {}\n",
         );
         let by_name = |n: &str| f.declarations.iter().find(|d| d.name == n).unwrap();
-        assert_eq!(by_name("private_fn").visibility.0, 0);
+        assert_eq!(by_name("private_fn").visibility.0, VIS_PRIVATE);
         assert!(!by_name("private_fn").exported);
-        assert_eq!(by_name("crate_fn").visibility.0, 1);
-        assert_eq!(by_name("super_fn").visibility.0, 1); // top-level: super leaves the file
-        assert_eq!(by_name("public_fn").visibility.0, 2);
+        assert_eq!(by_name("crate_fn").visibility.0, VIS_CRATE);
+        // Top-level `super` leaves the file and lands on its OWN rung, no longer widened into
+        // the crate one — the region `private-type-leak` needs to see (§7).
+        assert_eq!(by_name("super_fn").visibility.0, VIS_SUPER);
+        // `pub(in path)` still widens: the path is not resolved to a unit key, and widening
+        // only ever silences.
+        assert_eq!(by_name("in_path_fn").visibility.0, VIS_CRATE);
+        assert_eq!(by_name("public_fn").visibility.0, VIS_PUBLIC);
         assert!(by_name("public_fn").exported);
     }
 
@@ -3174,8 +4279,9 @@ mod tests {
         let fact = |owner: &str, member: &str| {
             f.member_types
                 .iter()
-                .find(|m| m.owner == owner && m.member == member)
-                .map(|m| m.yields.as_str())
+                .find(|m| m.owner.as_deref() == Some(owner) && m.member == member)
+                .and_then(|m| m.yields.name())
+                .map(SmolStr::as_str)
         };
         assert_eq!(
             fact("LowArgs", "context_separator"),
@@ -3203,10 +4309,17 @@ mod tests {
         let m = f
             .member_types
             .iter()
-            .find(|m| m.owner == "Config" && m.member == "build")
+            .find(|m| m.owner.as_deref() == Some("Config") && m.member == "build")
             .expect("return fact");
-        assert_eq!(m.yields, "Result");
-        assert_eq!(m.yields_params, ["ConfiguredHIR", "Error"]);
+        // The whole expression, not a base plus a flat list: an argument keeps its own
+        // arguments, which is what lets a projection land on a type that has more inside it.
+        assert_eq!(
+            m.yields,
+            TypeExpr::Named {
+                name: SmolStr::new("Result"),
+                args: vec![TypeExpr::named("ConfiguredHIR"), TypeExpr::named("Error"),],
+            }
+        );
     }
 
     #[test]
@@ -3238,12 +4351,13 @@ mod tests {
         assert_eq!(by_name("doc_short").kind, RefKind::Call);
         assert_eq!(
             by_name("mystery").scope_context.as_deref(),
-            Some("untyped"),
-            "untyped receiver keeps the raw name — the duck route, same as outside"
+            Some("Vec.@element"),
+            "an element hop off a base-name-only binding: it resolves to nothing (the \
+             argument was never kept), so the receiver still takes the duck route"
         );
         assert_eq!(
             by_name("deeper").scope_context.as_deref(),
-            Some("untyped.mystery"),
+            Some("Vec.@element.mystery"),
             "hops extend the dotted pointer"
         );
         assert!(
@@ -3282,6 +4396,113 @@ mod tests {
             "a non-machinery trait's methods dispatch by other means (roots cover them)"
         );
         assert!(!flagged("label"), "inherent methods are name-called");
+    }
+
+    #[test]
+    fn a_members_impl_block_names_the_trait_it_implements() {
+        // The fact a convention plugin matches its table against. Recorded for EVERY trait
+        // impl, machinery or not — `Serialize` is nothing to this adapter and everything to
+        // `kndo:serde`, and only the fact surviving extraction lets that plugin be a table
+        // instead of a second Rust parser.
+        let f = facts(
+            "use std::fmt;\n\
+             struct Token;\n\
+             impl fmt::Display for Token {\n\
+             \x20   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { todo!() }\n\
+             }\n\
+             impl serde::Serialize for Token {\n\
+             \x20   fn serialize<S>(&self, s: S) -> Result<S::Ok, S::Error> { todo!() }\n\
+             }\n\
+             impl Add for Token {\n\
+             \x20   type Output = Token;\n\
+             \x20   fn add(self, o: Token) -> Token { self }\n\
+             }\n\
+             impl Token {\n\
+             \x20   fn label(&self) -> u8 { 1 }\n\
+             }\n",
+        );
+        let implements = |name: &str| {
+            f.declarations
+                .iter()
+                .find(|d| d.name == name && d.member_of.as_deref() == Some("Token"))
+                .unwrap_or_else(|| panic!("no member {name}"))
+                .implements
+                .as_deref()
+                .map(str::to_string)
+        };
+        assert_eq!(implements("fmt").as_deref(), Some("Display"));
+        assert_eq!(
+            implements("serialize").as_deref(),
+            Some("Serialize"),
+            "a path-qualified trait reduces to its last segment, however the file spells it"
+        );
+        assert_eq!(
+            implements("Output").as_deref(),
+            Some("Add"),
+            "an associated type is declared in the block just like a method"
+        );
+        assert_eq!(
+            implements("label"),
+            None,
+            "an inherent impl names no trait, so there is nothing to report"
+        );
+
+        // A generic trait reduces to its base too, which is what the `*With` adapters rkyv
+        // projects hand-write look like.
+        let g = facts(
+            "impl ArchiveWith<SmolStr> for SmolStrAsString {\n\
+             \x20   fn resolve_with(f: &SmolStr) {}\n\
+             }\n",
+        );
+        assert_eq!(
+            g.declarations
+                .iter()
+                .find(|d| d.name == "resolve_with")
+                .unwrap()
+                .implements
+                .as_deref(),
+            Some("ArchiveWith")
+        );
+    }
+
+    #[test]
+    fn a_generic_impl_header_reduces_to_its_base_not_its_argument() {
+        // `impl Index<usize> for Table` implements `Index`, and a generic self type owns its
+        // members under its own name. Reading the last identifier in the subtree answered
+        // `usize` and the trait itself — a phantom owner no receiver unifies with, which is
+        // why serde's findings named `#E.into_deserializer`.
+        let f = facts(
+            "impl Index<usize> for Table {\n\
+             \x20   fn index(&self, i: usize) -> &u8 { todo!() }\n\
+             }\n\
+             impl<E> IntoDeserializer for StringDeserializer<E> {\n\
+             \x20   fn into_deserializer(self) -> Self { self }\n\
+             }\n",
+        );
+        let owners: Vec<_> = f
+            .declarations
+            .iter()
+            .filter_map(|d| d.member_of.as_deref().map(|o| (o, d.name.as_str())))
+            .collect();
+        assert_eq!(
+            owners,
+            vec![
+                ("Table", "index"),
+                ("StringDeserializer", "into_deserializer")
+            ]
+        );
+        assert!(
+            f.declarations
+                .iter()
+                .any(|d| d.name == "index" && d.implicitly_invoked),
+            "Index is a machinery trait; its generic argument was hiding that"
+        );
+        assert!(
+            f.references
+                .iter()
+                .any(|r| r.name == "Index" && r.kind == RefKind::Implement),
+            "the Implement reference names the trait, not its argument"
+        );
     }
 
     #[test]
@@ -3415,11 +4636,11 @@ mod tests {
              }\n",
         );
         let by_name = |n: &str| f.declarations.iter().find(|d| d.name == n).unwrap();
-        assert_eq!(by_name("reaches_file_only").visibility.0, 0);
+        assert_eq!(by_name("reaches_file_only").visibility.0, VIS_PRIVATE);
         assert!(!by_name("reaches_file_only").exported);
-        assert_eq!(by_name("mod_private").visibility.0, 0);
+        assert_eq!(by_name("mod_private").visibility.0, VIS_PRIVATE);
         assert!(!by_name("mod_private").exported);
-        assert_eq!(by_name("reaches_crate").visibility.0, 1);
+        assert_eq!(by_name("reaches_crate").visibility.0, VIS_CRATE);
         assert!(by_name("reaches_crate").exported);
     }
 
@@ -3464,6 +4685,97 @@ mod tests {
         assert!(by_name("m").visibility_inherited);
         assert!(by_name("C").visibility_inherited);
         assert!(!by_name("own_vis").visibility_inherited);
+    }
+
+    #[test]
+    fn a_proc_macro_derive_declares_the_name_the_derive_site_writes() {
+        // `#[derive(Serialize)]` elsewhere emits a reference to `Serialize`. Without a
+        // declaration under that name, it resolves to nothing and the whole proc-macro crate
+        // looks like production code no test ever reaches — serde_derive's exact shape.
+        let f = facts(
+            "#[proc_macro_derive(Serialize, attributes(serde))]\n             pub fn derive_serialize(input: TokenStream) -> TokenStream { expand(input) }\n",
+        );
+        let mac = f
+            .declarations
+            .iter()
+            .find(|d| d.name == "Serialize")
+            .expect("the derive's own name is declared");
+        assert_eq!(mac.kind, SymbolKind::Macro);
+        assert!(mac.exported, "it is the only thing the crate exports");
+        // The `attributes(serde)` list must not be mistaken for the derive's name.
+        assert!(!f.declarations.iter().any(|d| d.name == "serde"));
+        // The function keeps its own declaration — its span, its metrics, its callees.
+        assert!(f
+            .declarations
+            .iter()
+            .any(|d| d.name == "derive_serialize" && d.kind == SymbolKind::Function));
+        // …and using the macro is what runs it.
+        assert!(
+            f.references
+                .iter()
+                .any(|r| r.name == "derive_serialize" && r.within.as_deref() == Some("Serialize")),
+            "{:?}",
+            f.references
+        );
+    }
+
+    #[test]
+    fn a_plain_function_declares_no_macro() {
+        let f = facts("pub fn derive_serialize(input: TokenStream) -> TokenStream { input }\n");
+        assert!(!f.declarations.iter().any(|d| d.kind == SymbolKind::Macro));
+    }
+
+    #[test]
+    fn only_a_harness_only_cfg_marks_a_test_region() {
+        // `contains("test")` was the old rule. Every case below is one it got wrong.
+        assert!(cfg_is_harness_only("test"));
+        assert!(cfg_is_harness_only("all(test, unix)"));
+        assert!(cfg_is_harness_only("any(test, all(test, unix))"));
+        // Other harnesses count: tokio's `#[cfg(any(test, fuzzing))] mod tests` is not
+        // production code in any build a user can ask for.
+        assert!(cfg_is_harness_only("any(test, fuzzing)"));
+        assert!(cfg_is_harness_only("all(loom, test)"));
+        // …but an ordinary-build predicate does not, however unusual.
+        assert!(!cfg_is_harness_only("any(test, unix)"));
+        assert!(!cfg_is_harness_only("debug_assertions"));
+        // A nested predicate: the arguments node's own parens must come off one at a time,
+        // not with a greedy trim that would eat `not(loom)`'s closing paren too.
+        assert!(cfg_is_harness_only("all(test, not(loom))"));
+        // Also compiles without `test`, whenever the feature is on: production code a
+        // downstream crate reaches, not test infrastructure.
+        assert!(!cfg_is_harness_only("any(test, feature = \"testkit\")"));
+        // The exact opposite of a test region.
+        assert!(!cfg_is_harness_only("not(test)"));
+        // Merely spelling the substring.
+        assert!(!cfg_is_harness_only("feature = \"fastest\""));
+        assert!(!cfg_is_harness_only("feature = \"test-utils\""));
+        assert!(!cfg_is_harness_only("target_os = \"latest\""));
+        // A comma inside a string literal is not a predicate separator.
+        assert!(!cfg_is_harness_only("feature = \"a,test\""));
+    }
+
+    #[test]
+    fn a_feature_gated_helper_module_is_not_test_infrastructure() {
+        // kndo found this on its own source: `testkit` is `#[cfg(any(test, feature =
+        // "testkit"))]`, so the old rule swallowed the whole module as tests — which made the
+        // `tempfile` it imports look like a dev-dependency, and would have silenced every
+        // finding inside it.
+        let f = facts(
+            "#[cfg(any(test, feature = \"testkit\"))]\nmod testkit {\n    pub fn helper() {}\n}\n",
+        );
+        assert!(
+            f.test_spans.is_empty(),
+            "a feature-reachable module is production code: {:?}",
+            f.test_spans
+        );
+    }
+
+    #[test]
+    fn cfg_attr_does_not_gate_the_item_it_decorates() {
+        // `#[cfg_attr(test, derive(Debug))]` applies an attribute conditionally; the item
+        // itself compiles in every build. It used to be classified as test infrastructure.
+        let f = facts("#[cfg_attr(test, derive(Debug))]\npub struct Config {}\n");
+        assert!(f.test_spans.is_empty(), "{:?}", f.test_spans);
     }
 
     #[test]
@@ -3654,9 +4966,9 @@ mod tests {
              trait Private { fn hidden(&self); }\n",
         );
         let by_name = |n: &str| f.declarations.iter().find(|d| d.name == n).unwrap();
-        assert_eq!(by_name("claim").visibility.0, 2);
-        assert_eq!(by_name("helper").visibility.0, 1);
-        assert_eq!(by_name("hidden").visibility.0, 0);
+        assert_eq!(by_name("claim").visibility.0, VIS_PUBLIC);
+        assert_eq!(by_name("helper").visibility.0, VIS_CRATE);
+        assert_eq!(by_name("hidden").visibility.0, VIS_PRIVATE);
     }
 
     #[test]
@@ -3871,5 +5183,219 @@ mod tests {
             Some(kndo_core::vocab::FileOrigin::Generated)
         );
         let _ = decl_names(&f);
+    }
+}
+
+#[cfg(test)]
+mod undeclared_probe_tests {
+    use super::*;
+
+    fn facts(src: &str) -> FileFacts {
+        extract("src/lib.rs", src.as_bytes())
+    }
+
+    /// The strength of the claim "this file imports a crate named `<root>`". `Probable` (or
+    /// stronger) is what `undeclared` accuses on; `Possible` keeps the edge and stays silent.
+    fn root_claim(f: &FileFacts, root: &str) -> Option<Confidence> {
+        f.imports
+            .iter()
+            .filter(|i| i.specifier == root || i.specifier.starts_with(&format!("{root}::")))
+            .map(|i| i.confidence)
+            .max()
+    }
+
+    #[test]
+    fn a_glob_import_in_scope_disarms_the_crate_probe() {
+        // serde's shape: `crate::lib` re-exports `core::mem` & co, so `mem::size_of` has no
+        // local `use` to be covered by and read as a phantom dependency of serde_core.
+        let with_glob = facts(
+            "use crate::lib::*;\n\
+             pub fn f<T>() -> usize { mem::size_of::<T>() }\n",
+        );
+        assert_eq!(
+            root_claim(&with_glob, "mem"),
+            Some(Confidence::Possible),
+            "the edge survives for resolution; the accusation does not"
+        );
+
+        // Without a glob the same path is exactly the evidence `undeclared` exists for.
+        let without = facts("pub fn f<T>() -> usize { mem::size_of::<T>() }\n");
+        assert_eq!(root_claim(&without, "mem"), Some(Confidence::Probable));
+    }
+
+    #[test]
+    fn a_deep_path_root_is_gated_too() {
+        // `fmt::Write::write_fmt(…)` is three segments, so only the deep-path branch fires
+        // for it — hardcoding Probable there kept serde's `fmt` accused after the shallow
+        // branch had already been gated.
+        let f = facts(
+            "use crate::lib::*;\n\
+             pub fn f() { fmt::Write::write_fmt(x, y); }\n",
+        );
+        assert_eq!(root_claim(&f, "fmt"), Some(Confidence::Possible));
+    }
+
+    #[test]
+    fn a_macro_template_is_not_evidence_of_a_dependency() {
+        // Names a `quote!` body invents (`_serde`, `__S`) and lint paths inside it are not
+        // crates — but the macro's OWN path is ordinary code and keeps probing.
+        let f = facts(
+            "pub fn build() -> String {\n\
+             \x20   let q = quote::quote! {\n\
+             \x20       #[allow(clippy::useless_attribute)]\n\
+             \x20       fn generated<__S>(s: __S) -> _serde::Result<()> { _serde::helper(s) }\n\
+             \x20   };\n\
+             \x20   q.to_string()\n\
+             }\n",
+        );
+        assert_ne!(root_claim(&f, "_serde"), Some(Confidence::Probable));
+        assert_eq!(
+            root_claim(&f, "quote"),
+            Some(Confidence::Probable),
+            "the invoked macro's own path is real code at the call site"
+        );
+    }
+
+    #[test]
+    fn a_macro_rules_body_is_not_evidence_either() {
+        let f = facts(
+            "pub enum Fragment { Expr(String) }\n\
+             macro_rules! quote_expr {\n\
+             \x20   ($($tt:tt)*) => { $crate::fragment::Fragment::Expr(stringify!($($tt)*)) };\n\
+             }\n",
+        );
+        assert_ne!(root_claim(&f, "fragment"), Some(Confidence::Probable));
+    }
+
+    #[test]
+    fn a_type_declared_in_this_file_is_not_a_crate() {
+        // A raw identifier defeats the "lowercase root ⇒ crate-shaped" test outright:
+        // serde's test suite declares `enum r#type` and uses `r#type::r#struct`.
+        let f = facts(
+            "pub enum r#type { r#struct }\n\
+             pub fn use_it() -> r#type { r#type::r#struct }\n",
+        );
+        assert_ne!(root_claim(&f, "r#type"), Some(Confidence::Probable));
+
+        // A function of the same name does NOT disarm it: a value and a crate live in
+        // different namespaces, so `foo::bar()` beside `fn foo` really can be the crate.
+        let with_fn = facts(
+            "pub fn foo() {}\n\
+             pub fn use_it() { foo::bar(); }\n",
+        );
+        assert_eq!(root_claim(&with_fn, "foo"), Some(Confidence::Probable));
+    }
+
+    #[test]
+    fn a_use_rooted_at_an_imported_binding_is_not_a_crate_import() {
+        // alacritty: `use serde::de::{self, …};` at file level, `use de::Error;` in a body.
+        let f = facts(
+            "use serde::de::{self, Error as SerdeError};\n\
+             pub fn f() {\n\
+             \x20   use de::Error;\n\
+             \x20   let _ = SerdeError::custom;\n\
+             }\n",
+        );
+        assert_eq!(root_claim(&f, "de"), Some(Confidence::Possible));
+        assert_eq!(
+            root_claim(&f, "serde"),
+            Some(Confidence::Certain),
+            "the import that BINDS the name is untouched"
+        );
+
+        // A bare `use serde;` binds the crate to itself — a sibling crate import keeps its
+        // full strength.
+        let self_bound = facts("use serde;\nuse serde::Deserialize;\n");
+        assert_eq!(root_claim(&self_bound, "serde"), Some(Confidence::Certain));
+    }
+
+    #[test]
+    fn an_inline_mod_declared_in_a_function_body_is_not_a_crate() {
+        // serde's test_annotations.rs declares `mod desugared { … }` inside a `#[test]` fn
+        // and `use desugared::Test as …` right below it.
+        let f = facts(
+            "pub fn t() {\n\
+             \x20   mod desugared { pub struct Test; }\n\
+             \x20   use desugared::Test as Aliased;\n\
+             \x20   let _ = Aliased;\n\
+             }\n",
+        );
+        assert_eq!(
+            root_claim(&f, "desugared"),
+            None,
+            "an inline mod names nothing outside this file, at item level or in a body"
+        );
+    }
+
+    #[test]
+    fn a_path_attribute_inside_cfg_attr_relocates_the_mod() {
+        // serde_derive_internals declares its whole module this way; reading only the bare
+        // `#[path]` spelling left it resolving to a nonexistent `internals.rs`.
+        let f = facts(
+            "#[cfg_attr(from_git, path = \"../other/mod.rs\")]\n\
+             #[cfg_attr(not(from_git), path = \"src/mod.rs\")]\n\
+             mod internals;\n\
+             pub use internals::*;\n",
+        );
+        let specs: Vec<&str> = f.imports.iter().map(|i| i.specifier.as_str()).collect();
+        assert!(
+            specs.contains(&"file:../other/mod.rs") && specs.contains(&"file:src/mod.rs"),
+            "both cfg alternates count, per the whole-source policy: {specs:?}"
+        );
+        assert!(
+            !specs.contains(&"internals") && !specs.contains(&"self::internals"),
+            "the bare 2015-edition re-export expands to the same locations: {specs:?}"
+        );
+    }
+}
+
+#[cfg(test)]
+mod attr_string_tests {
+    use super::*;
+
+    #[test]
+    fn attribute_strings_are_recorded_with_their_key_and_owner() {
+        let facts = extract(
+            "src/lib.rs",
+            b"#[derive(serde::Serialize)]\n\
+              #[serde(rename_all = \"camelCase\")]\n\
+              pub struct Envelope {\n\
+              \x20   #[serde(skip_serializing_if = \"usize_is_zero\")]\n\
+              \x20   pub elided: usize,\n\
+              \x20   #[serde(rename = \"b\")]\n\
+              \x20   pub a: u32,\n\
+              }\n\
+              \n\
+              pub fn usize_is_zero(n: &usize) -> bool { *n == 0 }\n",
+        );
+        let seen: Vec<(&str, &str, &str, Option<&str>)> = facts
+            .string_attr_args
+            .iter()
+            .map(|a| {
+                (
+                    a.attribute.as_str(),
+                    a.key.as_str(),
+                    a.literal.as_str(),
+                    a.owner.as_deref(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            seen,
+            vec![
+                ("serde", "rename_all", "camelCase", Some("Envelope")),
+                (
+                    "serde",
+                    "skip_serializing_if",
+                    "usize_is_zero",
+                    Some("Envelope")
+                ),
+                ("serde", "rename", "b", Some("Envelope")),
+            ],
+            "the container attribute and both field attributes, each owned by the struct — the \
+             adapter records that a key carried a string and stops there: `rename` is a wire \
+             label and `skip_serializing_if` names a function, and telling them apart is serde's \
+             knowledge, not this grammar's"
+        );
     }
 }

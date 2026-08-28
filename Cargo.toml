@@ -13,10 +13,17 @@ members = [
     "crates/kndo-adapter-swift",
     "crates/kndo-adapter-json",
     "crates/kndo-adapter-css",
+    "crates/kndo-adapter-html",
     "crates/kndo-plugin-api",
     "crates/kndo-plugin-nextjs",
     "crates/kndo-plugin-express",
+    "crates/kndo-plugin-info-plist",
+    "crates/kndo-plugin-libsass",
+    "crates/kndo-plugin-uikit",
     "crates/kndo-plugin-serde",
+    "crates/kndo-plugin-thymeleaf",
+    "crates/kndo-plugin-rkyv",
+    "crates/kndo-plugin-wasmtime",
     "crates/kndo-plugin-coverage",
     "xtask",
 ]
@@ -24,6 +31,7 @@ exclude = [
     "spikes/perf",
     "examples/kndo-plugin-demo",
     "examples/kndo-plugin-hooks-demo",
+    "examples/kndo-plugin-wrapper-demo",
     "examples/kndo-coverage-demo",
     "examples/kndo-adapter-wrapper-demo",
 ]
@@ -31,8 +39,21 @@ exclude = [
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
+# MSRV, measured rather than chosen: `cargo check --workspace --all-features` fails on 1.88 and
+# below, and cargo names the reason itself from the locked graph — `smol_str@0.3.6 requires rustc
+# 1.89` (with `globset`/`ignore` at 1.88 just behind it). 1.89.0 builds and tests the whole
+# workspace clean. Declaring it makes a build on an older toolchain fail with that sentence
+# instead of an unrelated compile error, and CI's `msrv` job builds on exactly this version, so
+# the number stays true rather than becoming decoration.
+rust-version = "1.89"
 license = "Apache-2.0"
-repository = "https://github.com/eulke/kndo"
+# The repository's CURRENT name. ADR 0007 proposes renaming `eulke/kondo` -> `eulke/kndo`, and
+# this field used to point at the future name — a URL that 404s for anyone who follows it today,
+# in the one piece of metadata crates.io publishes as the project's home. The rename direction is
+# unchanged, but it is safe to write the old name either way: GitHub's post-rename redirect makes
+# it resolve forever once the rename happens, while the new name resolves only after. RFC 0014 §3
+# states this rule for every published link; `xtask/tests/release_channels.rs` enforces it.
+repository = "https://github.com/eulke/kondo"
 publish = false # pre-1.0: nothing is published; crate names are reserved regardless
 
 [workspace.dependencies]
@@ -59,6 +80,8 @@ memmap2 = "0.9"
 chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
 num_cpus = "1"
 rustc-hash = "2"
+thiserror = "2"
+tempfile = "3"
 
 [profile.dev]
 # Full DWARF isn't needed for the edit-compile-run loop this profile serves —

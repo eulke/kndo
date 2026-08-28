@@ -11,7 +11,6 @@
 //! never compose the product — they call `kndo::open`, which passes the registry in here.
 
 use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
-use std::fmt;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
@@ -20,6 +19,7 @@ use crate::analysis;
 use crate::discovery;
 use crate::gitutil;
 use crate::graph;
+use crate::query;
 use crate::query_envelope::{self, QueryRequest, QueryResult};
 use crate::vocab::Confidence;
 
@@ -184,8 +184,12 @@ fn store_health_snapshot(root: &Path, score: f64, grade: &str) {
     }
 }
 
-/// Mirrors the output schema's `schema_version` (contracts/output-schema.md).
-pub const SCHEMA_VERSION: &str = "1.0.0";
+/// Mirrors the output schema's `schema_version` (contracts/output-schema.md), which is the
+/// normative document — semver, additive = minor, breaking = major (RFC 0006 §4). Pinned
+/// against that file by `schema_version_matches_the_contract_document`: the generated JSON
+/// Schema types this field as a plain string with no `const`, so nothing else would notice
+/// the two drifting apart, and they already had.
+pub const SCHEMA_VERSION: &str = "1.3.0";
 
 /// The product version — every crate shares `version.workspace = true`, so kndo-core's own
 /// `CARGO_PKG_VERSION` is the same string the distribution crate and CLI would report.
@@ -209,6 +213,17 @@ pub struct ConfigOverrides {
     /// The CLI passes `Some(Possible)` under `--verbose` so verbose always shows
     /// everything even when the project config raises the floor.
     pub min_confidence: Option<crate::vocab::Confidence>,
+    /// `--only <cats>`: report ONLY these. A lens over this invocation, not a policy — what
+    /// it drops is counted into [`RunResult::elided`] rather than silently vanishing.
+    /// Empty means no lens.
+    pub only: Vec<crate::config::SkipSpec>,
+    /// `--skip <cats>`: the same policy `[analysis] skip` expresses, from the command line.
+    /// The two are unioned, never overridden, and counted together.
+    pub skip: Vec<crate::config::SkipSpec>,
+    /// `--strict`: promote the severities RFC 0005 marks as promotable. Today that is
+    /// `undeclared` alone (warning → error) — a phantom dependency is a build that works by
+    /// accident, and a project that opts in wants its build to say so.
+    pub strict: bool,
 }
 
 impl Default for ConfigOverrides {
@@ -217,30 +232,28 @@ impl Default for ConfigOverrides {
             use_cache: true,
             threads: None,
             min_confidence: None,
+            only: Vec::new(),
+            skip: Vec::new(),
+            strict: false,
         }
     }
 }
 
-#[derive(Debug)]
+impl ConfigOverrides {
+    /// What `--verbose` means for the report floor: reveal every confidence tier, overriding
+    /// whatever `kndo.toml`'s `min-confidence` (or another override) would otherwise apply —
+    /// core-side, so a frontend's `--verbose` handling never has to know or hand-copy which
+    /// `Confidence` variant "everything" actually is.
+    pub fn verbose_min_confidence() -> crate::vocab::Confidence {
+        crate::vocab::Confidence::Possible
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
 pub enum EngineError {
+    #[error("project root does not exist or is not a directory: {}", .0.display())]
     ProjectRootNotFound(PathBuf),
 }
-
-impl fmt::Display for EngineError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            EngineError::ProjectRootNotFound(p) => {
-                write!(
-                    f,
-                    "project root does not exist or is not a directory: {}",
-                    p.display()
-                )
-            }
-        }
-    }
-}
-
-impl std::error::Error for EngineError {}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RunMode {
@@ -264,11 +277,16 @@ impl RunMode {
             _ => None,
         }
     }
-}
 
-#[derive(Debug)]
-pub struct CheckRequest {
-    pub mode: RunMode,
+    /// The `--fail-on` threshold when the frontend's flag/env don't set one explicitly: full
+    /// mode never fails on its own (`None`); a diff mode — run from a pre-commit hook or CI by
+    /// convention — fails at `warning` by default, catching a regression without extra setup.
+    pub fn default_fail_on(&self) -> Option<Severity> {
+        match self {
+            RunMode::Full => None,
+            RunMode::Staged | RunMode::Diff { .. } => Some(Severity::Warning),
+        }
+    }
 }
 
 /// `kndo baseline`'s two modes (see [`Engine::baseline`]): `Create`
@@ -338,6 +356,11 @@ pub struct DoctorCacheInfo {
 pub struct DoctorPluginInfo {
     pub id: String,
     pub version: String,
+    /// Why this plugin is running, rendered from the reason the composition layer handed in at
+    /// open — the same string the JSON envelope's `run.plugins[].activated_by` carries. Every
+    /// plugin an `Engine` holds is active by construction, so this answers "why", not
+    /// "whether"; the rules below say what COULD have fired, this says what did.
+    pub activated_by: String,
     pub detection: Vec<String>,
     pub activation: Vec<String>,
     /// Dependency coordinates — rendered so an activation chain is inspectable; whether each
@@ -382,10 +405,30 @@ pub enum Severity {
     Info,
 }
 
-/// Where a finding points. Every field is optional because not
-/// every subject has all of them: `version-skew`/`duplicate` findings span multiple manifests
-/// or files, so no single `path` is *the* location — expressing that properly is the `related`
-/// evidence chain, not yet implemented (deferred, not faked with an arbitrary first path).
+impl Severity {
+    /// Severity's *declared* order (and derived `Ord`) is worst-first, for display/triage
+    /// sorting — the opposite direction from what an "at least as severe as" gate check wants.
+    /// This is the one place that inversion happens; callers compare `rank()` values instead of
+    /// reasoning about which way `Ord` points.
+    fn rank(self) -> u8 {
+        match self {
+            Severity::Error => 3,
+            Severity::Warning => 2,
+            Severity::Info => 1,
+        }
+    }
+}
+
+/// Where a finding points. Every field is optional because not every subject has all of them —
+/// a `version-skew` has no range, a directory rollup has no symbol.
+///
+/// A finding whose subject genuinely spans several places (`duplicate` over identical files,
+/// `version-skew` over disagreeing manifests) anchors on the lexicographically-first member and
+/// carries **every** member in `related`. That pairing is the contract: the anchor makes the
+/// finding addressable, `related` makes it complete, and the message is then free to summarize.
+/// The alternative shipped for a while — an empty `Location` with the members named only in the
+/// message prose — and it meant 278 findings across the corpus that no consumer could act on
+/// without parsing English, some of which truncated the list and lost the rest outright.
 #[derive(Debug, Clone, Default, serde::Serialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Location {
@@ -440,18 +483,49 @@ pub struct RelatedLocation {
     pub note: Option<String>,
 }
 
+impl RelatedLocation {
+    /// Where this location is, as text: `path:line`, or bare `path` when there is no range.
+    /// Frontends decorate it differently (the human renderer draws a tree, the agent format
+    /// writes `evidence:`) but they agree on the coordinates, so the coordinates live here —
+    /// both used to spell them out themselves.
+    pub fn coordinates(&self) -> String {
+        match self.range {
+            Some(range) => format!("{}:{}", self.path.0, range.start.0),
+            None => self.path.0.to_string(),
+        }
+    }
+
+    /// This location as one rendered line, without its newline: the coordinates, plus
+    /// `separator` and the note when there is one.
+    ///
+    /// The decision that lives here is "a note is appended after the coordinates, and its
+    /// absence changes the line" — which every frontend that prints related locations makes,
+    /// and which the human renderer and the agent format each used to make on their own. What
+    /// stays theirs is how it looks: the tree glyph and em dash, or `evidence:` and a space.
+    pub fn render(&self, prefix: &str, separator: &str) -> String {
+        match &self.note {
+            Some(note) => format!("{prefix}{}{separator}{note}", self.coordinates()),
+            None => format!("{prefix}{}", self.coordinates()),
+        }
+    }
+}
+
 /// Typed form of the output-schema finding (every field lands in the JSON schema
-/// first — that document is normative). Not yet present:
-/// `evidence` (category-specific block), `sources`, `remediation`, `rolled_up` — each needs
-/// infrastructure that doesn't exist yet (computed remediation text) and is omitted
-/// rather than fabricated with a placeholder.
+/// first — that document is normative).
+///
+/// Two fields the schema deliberately does NOT have, so nobody re-adds them looking for
+/// parity: `evidence` (a category-specific block specified before any category had one — no
+/// analysis has since produced a fact `related` cannot carry) and `remediation` (the advice a
+/// finding carries travels inside `message`, written by the analysis that knows the subject;
+/// `deep-import` is the worked example). Both are cut rather than emitted null: a field that
+/// is always null teaches a consumer to stop reading it.
 #[derive(Debug, Clone, serde::Serialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Finding {
     pub id: String,
-    pub category: String,
-    pub group: String,
-    pub subject_kind: String,
+    pub category: crate::vocab::Category,
+    pub group: crate::vocab::Group,
+    pub subject_kind: crate::vocab::SubjectKind,
     pub severity: Severity,
     pub confidence: Confidence,
     pub message: String,
@@ -461,6 +535,29 @@ pub struct Finding {
     /// generator the field is optional, matching the skip-when-empty serialization.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub related: Vec<RelatedLocation>,
+    /// How many findings this one subsumes, on the rollup ladder (symbol → file → directory →
+    /// package, RFC 0005 taxonomy rule 3): a directory reported once instead of fifty times
+    /// says `50` here. `None` on a finding that subsumes nothing, which is most of them —
+    /// absent rather than `1`, because "this is a rollup of one" is not a fact, and a
+    /// consumer summing the field must not double-count leaves.
+    ///
+    /// Without it the count survives only inside the message prose ("4 files, none
+    /// referenced"), so a consumer deciding how much a finding is worth has to parse English
+    /// — the same defect `location`/`related` had for multi-place subjects.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rolled_up: Option<usize>,
+    /// Provenance: which adapters and plugins the subject's facts came from —
+    /// `["adapter:js-ts", "plugin:kndo:nextjs"]`. Filled by one pass over the finished
+    /// finding set (`fill_sources`), never by the analyses: a verdict knows what it decided,
+    /// not who supplied the graph it decided on, and thirteen analyses each answering the
+    /// question would be thirteen chances to answer it differently.
+    ///
+    /// Empty — and so absent — when the subject resolves to no graph node: a finding about a
+    /// path outside the graph, or one the analysis left unanchored. Never a lie by omission:
+    /// this names components whose facts are *present*, and cannot name the plugin that would
+    /// have kept a symbol alive had it activated.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sources: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub delta: Option<Delta>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -499,6 +596,17 @@ pub struct AdapterRunInfo {
     pub files: usize,
 }
 
+/// One registered plugin and why it is running (`run.plugins[]`). `activated_by` is rendered
+/// from the [`ActivationReason`](crate::plugin::ActivationReason) the composition layer handed
+/// in at open — a plugin's presence in this list already means it is active, so the field
+/// answers "why", never "whether".
+#[derive(Debug, Clone, serde::Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct PluginRunInfo {
+    pub id: String,
+    pub activated_by: String,
+}
+
 /// `baseline` summary (the `baseline` envelope field):
 /// `acknowledged` counts baseline entries that still match a current finding (excluded from
 /// `findings` and from `--fail-on`); `stale` counts entries that match nothing anymore — the
@@ -526,10 +634,7 @@ pub struct SuppressedSummary {
 /// Typed form of the output-schema envelope. JSON/SARIF/agent serializers live core-side so
 /// every frontend emits byte-identical machine output; *human* rendering is frontend-owned.
 /// Flat here for ergonomic Rust consumption; [`RunResult::to_json`] nests it into
-/// the schema's actual shape. Not yet present: `budget` — the delta-budget gate subsystem
-/// doesn't exist yet, so the field is omitted rather
-/// than emitted empty/null. Adding it later is additive (minor schema bump), not
-/// a breaking change.
+/// the schema's actual shape.
 #[derive(Debug, Default)]
 pub struct RunResult {
     /// Full mode: every finding. Diff modes: only *new*
@@ -542,6 +647,10 @@ pub struct RunResult {
     /// Typed diagnostics (the schema's `diagnostics` array) — one representation everywhere,
     /// never parallel stringly-typed variants.
     pub diagnostics: Vec<Diagnostic>,
+    /// Categories no analysis judged this run, with the reason (`run.abstained`). A consumer
+    /// must read a category listed here as *unknown*, never as clean: zero `crap` findings
+    /// with `crap` abstained means nobody measured, not that nothing is CRAPpy.
+    pub abstained: Vec<crate::analysis::Abstention>,
     pub files_discovered: usize,
     /// Files a registered adapter recognized (subset of `files_discovered`); `adapters` below
     /// is the per-language breakdown the schema actually wants (`run.adapters[].files`).
@@ -555,6 +664,10 @@ pub struct RunResult {
     pub duration_ms: u64,
     pub project_root: String,
     pub adapters: Vec<AdapterRunInfo>,
+    /// The registered plugin set and why each one is running (`run.plugins[]`), in registration
+    /// order. Every entry is active by construction: composition hands the engine only the
+    /// plugins that activated.
+    pub plugins: Vec<PluginRunInfo>,
     /// Whether the cache was consulted at all (`--no-cache` ⇒ `false`) and how many things it
     /// actually served this run — facts entries plus, when the whole graph matched, one graph
     /// snapshot (`ProjectCache::hits() + ProjectCache::graph_hits()`) — the only honest way to
@@ -562,6 +675,15 @@ pub struct RunResult {
     /// its very first run and is still, correctly, cold.
     pub cache_enabled: bool,
     pub cache_hits: u64,
+    /// Findings `--only` narrowed out of this report. NOT suppression: a suppressed finding
+    /// was acknowledged, an elided one was merely not asked for, and conflating the two would
+    /// make narrowing a view look like a policy change. Reported so that elision is always
+    /// explicit — a caller must never have to guess whether it saw everything.
+    pub elided: usize,
+    /// The `[delta]` budget verdict — `None` in full mode and whenever no `[delta]` section
+    /// is configured, which are the two cases where there is nothing to judge. The gate reads
+    /// [`Budget::failed`]; the rules explain it.
+    pub budget: Option<crate::delta::Budget>,
     /// `None` when `.kndo/baseline.json` doesn't exist — distinct from `Some`
     /// with zero counts, which means a baseline exists and is fully clean/reproducing.
     pub baseline: Option<BaselineSummary>,
@@ -579,17 +701,29 @@ pub struct RunResult {
     /// "after" side, with `previous` computed from "before".
     /// `None` only when assembly itself failed.
     pub health: Option<crate::analysis::health::Health>,
+    /// This run's plugin graph-mutation audit record (`kndo doctor`'s `plugin_contributions`
+    /// used to be the only way to read this after a `check()` — always via the cache's own
+    /// sidecar, which forced a caller wanting fresh data to keep the cache on). Empty when no
+    /// graph-mutating plugin is registered, or (diff modes) when assembly itself failed.
+    pub plugin_contributions: Vec<crate::plugin::PluginContribution>,
 }
 
-/// `"warm"` only when the cache was on *and* actually served something this run — an
-/// enabled-but-empty cache (first run ever, or every file changed) is honestly `"cold"`.
-/// Shared by every renderer (`RunResult`'s `to_json`/`to_agent_format` and
-/// `Engine::query`'s envelope alike) so "what counts as warm" is defined exactly once.
+/// Three states, and the third one matters: `"disabled"` (`--no-cache`) is not the same claim
+/// as `"cold"`. Cold says the cache was consulted and had nothing — a fact about this project's
+/// history. Disabled says nobody looked, which is a fact about this *invocation*. Collapsing
+/// them, as this did, told a CI job debugging a slow run that its cache was empty when the
+/// truth was that its own flag had turned the cache off.
+///
+/// `"warm"` stays the strict reading: on *and* actually served something. An enabled-but-empty
+/// cache (first run ever, or every file changed) is honestly cold.
+///
+/// Shared by every renderer (`RunResult`'s `to_json`/`to_agent_format` and `Engine::query`'s
+/// envelope alike) so "what counts as warm" is defined exactly once.
 fn cache_status_str(enabled: bool, hits: u64) -> &'static str {
-    if enabled && hits > 0 {
-        "warm"
-    } else {
-        "cold"
+    match (enabled, hits) {
+        (false, _) => "disabled",
+        (true, 0) => "cold",
+        (true, _) => "warm",
     }
 }
 
@@ -597,11 +731,55 @@ impl RunResult {
     pub fn cache_status(&self) -> &'static str {
         cache_status_str(self.cache_enabled, self.cache_hits)
     }
+
+    /// `new − fixed` in a diff mode — what `max-net-findings` judges and what every renderer
+    /// prints. Both renderers derived it themselves before this existed, and the budget would
+    /// have been the third copy of one subtraction.
+    ///
+    /// Advisory findings are excluded on both sides, for the same reason [`Self::fails_at`]
+    /// excludes them: a plugin without a `[plugins.gate]` opt-in must not move anyone's gate,
+    /// and a net count that counted them would do exactly that.
+    pub fn net_findings(&self) -> i64 {
+        let gated = |f: &&Finding| !f.advisory;
+        self.findings.iter().filter(gated).count() as i64
+            - self.fixed.iter().filter(gated).count() as i64
+    }
+
+    /// The gate check ("should this run fail?") — the **findings** half, judging severity
+    /// against `--fail-on`. The other half is [`Self::budget_failed`], judging aggregate
+    /// movement against `[delta]`; RFC 0006 §5 composes them with OR, and a frontend that
+    /// forgets one silently loosens the gate, so [`Self::gate_fails`] does it once. `None`
+    /// (`--fail-on none`, full mode's default) never fails. An advisory finding — a plugin
+    /// finding without an explicit `[plugins.gate]` opt-in — never counts toward the gate,
+    /// whatever its severity and whatever the threshold: installing a finding-emitting plugin
+    /// must be safe by default.
+    pub fn fails_at(&self, threshold: Option<Severity>) -> bool {
+        let Some(threshold) = threshold else {
+            return false;
+        };
+        self.findings
+            .iter()
+            .filter(|f| !f.advisory)
+            .any(|f| f.severity.rank() >= threshold.rank())
+    }
+
+    /// The aggregate half: did any configured `[delta]` budget give way? `false` when no
+    /// section is configured (nothing to judge) and in full mode (nothing to judge it against).
+    pub fn budget_failed(&self) -> bool {
+        self.budget.as_ref().is_some_and(|b| b.failed())
+    }
+
+    /// The whole gate, as RFC 0006 §5 states it: exit 1 when findings reach `--fail-on`
+    /// **or** a delta budget is exceeded. One reader, so the two halves cannot be composed
+    /// differently by two frontends — or one of them forgotten.
+    pub fn gate_fails(&self, threshold: Option<Severity>) -> bool {
+        self.fails_at(threshold) || self.budget_failed()
+    }
 }
 
-/// Owned mirror of the JSON envelope's `run` object — not borrowed, unlike a hot-path type,
-/// because this exists purely to be serialized (and, behind `schema`, to derive the JSON
-/// Schema from): the one-time clone per `--format json` invocation is free by comparison.
+/// The JSON envelope's `run` object. Borrowed from [`RunResult`], like [`Envelope`] itself and
+/// for the same reason (see its doc): this exists purely to be serialized and, behind `schema`,
+/// to derive the JSON Schema from — schemars sees through the references to the same shapes.
 #[derive(serde::Serialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 struct RunInfo<'a> {
@@ -613,6 +791,19 @@ struct RunInfo<'a> {
     cache: &'static str,
     project_root: &'a str,
     adapters: &'a [AdapterRunInfo],
+    plugins: &'a [PluginRunInfo],
+    /// Categories this run did not judge, and why. Always present (usually `[]`): the absence
+    /// of a finding is only evidence of cleanliness for categories NOT listed here.
+    abstained: &'a [crate::analysis::Abstention],
+}
+
+/// `serde(skip_serializing_if)`'s predicate for the counts an envelope omits when they are
+/// zero. Reachable from nowhere but an attribute string — which is precisely why it is here:
+/// this file once carried an `Option<usize>` chosen to avoid needing it, because kndo could
+/// not see the reference and reported this function dead. `kndo:serde` reads the attribute
+/// now, so the encoding is free to be the one the format wants.
+fn usize_is_zero(n: &usize) -> bool {
+    *n == 0
 }
 
 /// The full `--format json` envelope shape — also the schema
@@ -634,6 +825,17 @@ struct Envelope<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     health: Option<&'a crate::analysis::health::Health>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    budget: Option<&'a crate::delta::Budget>,
+    /// `--only`'s narrowing, absent when nothing was narrowed away. Beside `suppressed`
+    /// rather than inside it: the two are different answers about why a finding is not here.
+    ///
+    /// `default` alongside the skip, like `fixed` above: schemars derives a field's
+    /// *required*-ness from whether it has a default, not from the skip predicate — without
+    /// it the committed schema demands a key the output legitimately omits, and
+    /// `schema_validation` catches it.
+    #[serde(default, skip_serializing_if = "usize_is_zero")]
+    elided: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
     baseline: Option<&'a BaselineSummary>,
     suppressed: SuppressedSummary,
     diagnostics: &'a [Diagnostic],
@@ -652,10 +854,14 @@ impl RunResult {
                 cache: self.cache_status(),
                 project_root: &self.project_root,
                 adapters: &self.adapters,
+                plugins: &self.plugins,
+                abstained: &self.abstained,
             },
             findings: &self.findings,
             fixed: &self.fixed,
             health: self.health.as_ref(),
+            budget: self.budget.as_ref(),
+            elided: self.elided,
             baseline: self.baseline.as_ref(),
             suppressed: self.suppressed,
             diagnostics: &self.diagnostics,
@@ -722,11 +928,24 @@ fn ensure_thread_pool(threads: Option<usize>) {
 struct AnalyzedTree {
     graph: std::sync::Arc<graph::ProjectGraph>,
     findings: Vec<Finding>,
+    /// How many findings `--only` narrowed away — never suppression, see
+    /// [`crate::config::ReportFilter`].
+    elided: usize,
     diagnostics: Vec<Diagnostic>,
+    /// Categories no analysis judged this run — see [`crate::analysis::Abstention`].
+    abstained: Vec<crate::analysis::Abstention>,
+    /// This run's ingested coverage. Kept rather than dropped after `run_all` because
+    /// `describe` reports per-shape coverage and CRAP (RFC 0007 §4.2) and would otherwise
+    /// re-read the reports — deliberately NOT on the graph, for the freshness reason
+    /// [`crate::coverage`]'s own module doc gives.
+    coverage: crate::coverage::CoverageMap,
     suppressed: SuppressedSummary,
     health: crate::analysis::health::Health,
     /// `(phase, µs)` in execution order: assembly + coverage first, then every analysis phase.
     timings: Vec<(String, u64)>,
+    /// This run's plugin graph-mutation audit record — see
+    /// [`graph::AssembledGraph::plugin_contributions`] for the fresh-vs-sidecar rule.
+    plugin_contributions: Vec<crate::plugin::PluginContribution>,
 }
 
 fn describe_rule(rule: &crate::plugin::RuleDescriptor) -> String {
@@ -749,17 +968,19 @@ fn plugin_finding(
     gate: &crate::plugin_gate::PluginsGate,
 ) -> Finding {
     let (severity, advisory) = severity_channel(&proto, gate);
+    let category = crate::vocab::Category::new(proto.category);
+    let subject_kind = crate::vocab::SubjectKind::new(proto.subject_kind);
     Finding {
-        id: crate::analysis::finding_id(
-            &proto.category,
-            &proto.subject_kind,
-            proto.path.0.as_str(),
-            proto.symbol.as_deref().unwrap_or(""),
-            "",
-        ),
-        category: proto.category,
-        group: "convention".to_string(),
-        subject_kind: proto.subject_kind,
+        id: crate::analysis::finding_id(crate::analysis::FindingIdParts {
+            category: &category,
+            subject_kind: &subject_kind,
+            path: proto.path.0.as_str(),
+            symbol_path: proto.symbol.as_deref().unwrap_or(""),
+            discriminator: "",
+        }),
+        category,
+        group: crate::vocab::Group::Convention,
+        subject_kind,
         severity,
         confidence: proto.confidence,
         message: proto.message,
@@ -770,6 +991,8 @@ fn plugin_finding(
             package: proto.package,
         },
         related: Vec::new(),
+        rolled_up: None,
+        sources: Vec::new(),
         delta: None,
         delta_origin: None,
         advisory,
@@ -804,6 +1027,11 @@ pub struct Engine {
     root: PathBuf,
     adapters: Vec<Box<dyn LanguageAdapter>>,
     plugins: Vec<Box<dyn crate::plugin::Plugin>>,
+    /// Why each registered plugin is running, recorded at open and reported verbatim as
+    /// `run.plugins[]`. Split out of the registration input rather than kept alongside each
+    /// plugin because assembly wants the plugins and only the envelope wants the reasons —
+    /// both halves come from the one `RegisteredPlugin` list, so they cannot drift.
+    plugin_activation: Vec<PluginRunInfo>,
     cache: Option<crate::cache::ProjectCache>,
     cache_enabled: bool,
     /// The in-flight background snapshot write (persist off the critical path)
@@ -811,14 +1039,18 @@ pub struct Engine {
     /// joined before the next assembly and on drop (frontends drop the engine after
     /// printing, which is exactly "written after results are printed, before
     /// exit"). Crash-safety is the writer's temp-file + rename; a killed process loses only
-    /// cache warmth.
-    pending_persist: Option<std::thread::JoinHandle<()>>,
+    /// cache warmth. A `Mutex` rather than a plain `Option` so `assemble_and_analyze` — and
+    /// through it, `query`/`query_batch` — can take `&self`: queries are read-only and must
+    /// not require exclusive access just to join a prior background write.
+    pending_persist: std::sync::Mutex<Option<std::thread::JoinHandle<()>>>,
     /// `kndo.toml`, read and parsed once at open (`[plugins.gate]` included).
     config: crate::config::KndoConfig,
     /// Problems reading it — surfaced as run diagnostics, never a failed open.
     config_problems: Vec<String>,
-    /// The effective report floor: flag > file > `Possible` (report everything).
-    min_confidence_floor: crate::vocab::Confidence,
+    /// `config` merged under this open's `ConfigOverrides` — the one resolution, computed
+    /// once ([`crate::config::KndoConfig::resolve`]) and read everywhere a knob's final
+    /// value is needed.
+    effective: crate::config::EffectiveConfig,
 }
 
 impl Engine {
@@ -836,47 +1068,81 @@ impl Engine {
         // set, coverage ingesters included, is composed by the `kndo` crate's
         // `default_plugins()` and arrives through `open_with_plugins`, exactly like
         // adapters do.
-        Engine::open_with_plugins(root, overrides, adapters, vec![])
+        Engine::open_with_plugins(
+            root,
+            overrides,
+            adapters,
+            Vec::<crate::plugin::RegisteredPlugin>::new(),
+        )
     }
 
     /// Same as [`Self::open`], additionally taking the registered plugin set —
     /// compiled-in first-party plugins (the `kndo` crate's `default_plugins()`, coverage
     /// ingesters included) and WASM-bridged third-party plugins alike. [`Self::open`] itself
     /// registers none: plugins are composition, not core.
+    ///
+    /// Each plugin arrives as a [`RegisteredPlugin`](crate::plugin::RegisteredPlugin) — the
+    /// component plus the caller's answer to why it is active, which the run reports as
+    /// `run.plugins[].activated_by`. A caller that chose the set by hand passes bare
+    /// `Box<dyn Plugin>`s and gets [`ActivationReason::Registered`](crate::plugin::ActivationReason::Registered),
+    /// which is exactly what happened.
     pub fn open_with_plugins(
         root: &Path,
         overrides: ConfigOverrides,
         adapters: Vec<Box<dyn LanguageAdapter>>,
-        plugins: Vec<Box<dyn crate::plugin::Plugin>>,
+        plugins: impl IntoIterator<Item = impl Into<crate::plugin::RegisteredPlugin>>,
     ) -> Result<Engine, EngineError> {
         if !root.is_dir() {
             return Err(EngineError::ProjectRootNotFound(root.to_path_buf()));
         }
         let (config, config_problems) = crate::config::KndoConfig::load(root);
-        // Precedence: explicit override (flag/env, resolved by the frontend) > file > cores.
-        ensure_thread_pool(overrides.threads.or(config.threads));
-        let min_confidence_floor = overrides
-            .min_confidence
-            .or(config.min_confidence)
-            .unwrap_or(crate::vocab::Confidence::Possible);
+        let effective = config.resolve(&overrides);
+        ensure_thread_pool(effective.threads);
         let cache = overrides
             .use_cache
             .then(|| crate::cache::ProjectCache::open(root));
+        let (plugins, plugin_activation) = plugins
+            .into_iter()
+            .map(|registered| {
+                let registered = registered.into();
+                let info = PluginRunInfo {
+                    id: registered.plugin.descriptor().id.to_string(),
+                    activated_by: registered.activated_by.to_string(),
+                };
+                (registered.plugin, info)
+            })
+            .unzip();
         Ok(Engine {
             root: root.to_path_buf(),
             adapters,
             plugins,
+            plugin_activation,
             cache,
             cache_enabled: overrides.use_cache,
-            pending_persist: None,
+            pending_persist: std::sync::Mutex::new(None),
             config,
             config_problems,
-            min_confidence_floor,
+            effective,
         })
     }
 
     pub fn root(&self) -> &Path {
         &self.root
+    }
+
+    /// This engine's cache state as the envelope spells it, for the query path — the same
+    /// three-state answer `RunResult::cache_status` gives a check, from the live cache rather
+    /// than a finished run's counters. One reader, so a query and a check can never disagree
+    /// about whether the cache was off; the failure path needs it too, which is what the
+    /// second call site is.
+    fn query_cache_status(&self) -> &'static str {
+        cache_status_str(
+            self.cache_enabled,
+            self.cache
+                .as_ref()
+                .map(|c| c.hits() + c.graph_hits())
+                .unwrap_or(0),
+        )
     }
 
     /// `kndo doctor`. Deliberately does not assemble or analyze
@@ -903,11 +1169,13 @@ impl Engine {
         let plugins = self
             .plugins
             .iter()
-            .map(|p| {
+            .zip(&self.plugin_activation)
+            .map(|(p, activation)| {
                 let d = p.descriptor();
                 DoctorPluginInfo {
                     id: d.id.to_string(),
                     version: d.version.to_string(),
+                    activated_by: activation.activated_by.clone(),
                     detection: d.detection.iter().map(|s| s.to_string()).collect(),
                     activation: d.activation.iter().map(|r| r.describe()).collect(),
                     dependencies: d.dependencies.iter().map(|c| c.to_string()).collect(),
@@ -951,14 +1219,14 @@ impl Engine {
 
     /// Full mode reports every current finding; `--staged`/`--diff <ref>` report the
     /// derived-effects delta instead — see [`Self::run_diff`].
-    pub fn check(&mut self, req: CheckRequest) -> RunResult {
+    pub fn check(&mut self, mode: RunMode) -> RunResult {
         let start = Instant::now();
         let started_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
-        let mode = req.mode.as_str().to_string();
-        let base_ref = req.mode.base_ref();
+        let mode_str = mode.as_str().to_string();
+        let base_ref = mode.base_ref();
         let project_root = self.root.display().to_string();
 
-        let outcome = match &req.mode {
+        let outcome = match &mode {
             RunMode::Full => {
                 let root = self.root.clone();
                 let mut raw = self.run_analysis_at(&root);
@@ -976,7 +1244,7 @@ impl Engine {
                     ..raw
                 }
             }
-            RunMode::Staged | RunMode::Diff { .. } => self.run_diff(&req.mode),
+            RunMode::Staged | RunMode::Diff { .. } => self.run_diff(&mode),
         };
 
         if let Some(cache) = &self.cache {
@@ -984,7 +1252,7 @@ impl Engine {
         }
 
         RunResult {
-            mode,
+            mode: mode_str,
             base_ref,
             started_at,
             duration_ms: start.elapsed().as_millis() as u64,
@@ -1062,7 +1330,7 @@ impl Engine {
         // `--staged`'s "after" is the index as a tree object (`write-tree` — the one
         // object-database write diff mode performs; it never touches the real index or working
         // tree). `--diff`'s "after" is the working tree itself. Owned locals (not borrows of
-        // `self`) because `assemble_and_analyze` needs `&mut self` right after.
+        // `self`) to keep this readable independent of `assemble_and_analyze`'s own borrow.
         let after_treeish: Option<String> =
             match mode {
                 RunMode::Staged => match gitutil::write_tree(&git_root) {
@@ -1122,12 +1390,24 @@ impl Engine {
             before.diagnostics,
             before.health,
         );
-        let (after_graph, after_findings, after_diagnostics, after_suppressed, after_health) = (
+        let (
+            after_graph,
+            after_findings,
+            after_diagnostics,
+            after_abstained,
+            after_suppressed,
+            after_elided,
+            after_health,
+            plugin_contributions,
+        ) = (
             after.graph,
             after.findings,
             after.diagnostics,
+            after.abstained,
             after.suppressed,
+            after.elided,
             after.health,
+            after.plugin_contributions,
         );
 
         let (before_findings, _) = self.apply_baseline(before_findings);
@@ -1159,42 +1439,35 @@ impl Engine {
             })
             .collect();
 
-        let adapters = self
-            .adapters
-            .iter()
-            .map(|a| {
-                let id = a.descriptor().id;
-                let files = after_graph
-                    .files
-                    .iter()
-                    .filter(|f| f.language.as_deref() == Some(id.as_str()))
-                    .count();
-                AdapterRunInfo {
-                    id: id.to_string(),
-                    files,
-                }
-            })
-            .collect();
-
         let mut diagnostics = after_diagnostics;
         diagnostics.extend(before_diagnostics);
 
+        // Evaluated here rather than in the literal below: the budget reads both finding
+        // vectors, and the literal moves them. A drop is positive, so `max-health-drop = 0.0`
+        // reads as "must not go down". Both sides assembled — the early returns above are the
+        // only way that is not true, and they leave `budget` at `None`, which is what makes a
+        // failed run distinguishable from a run whose budgets all held.
+        let budget = self.config.delta.as_ref().map(|d| {
+            d.evaluate(
+                &new_findings,
+                &fixed_findings,
+                before_health.score - after_health.score,
+            )
+        });
+
         RunResult {
-            files_discovered: after_graph.files.len(),
-            files_claimed: after_graph
-                .files
-                .iter()
-                .filter(|f| f.language.is_some())
-                .count(),
-            symbols: after_graph.symbols.len(),
-            dependencies: after_graph.dependencies.len(),
-            edges: after_graph.edges.len(),
             diagnostics,
+            // The "after" side, mirroring `suppressed` — a diff reports what the current tree
+            // did and did not judge.
+            abstained: after_abstained,
             findings: new_findings,
             fixed: fixed_findings,
-            adapters,
             baseline,
             suppressed: after_suppressed,
+            // The "after" side, like `suppressed`: a diff reports what the current tree's
+            // report narrowed away, not what the merge-base's would have.
+            elided: after_elided,
+            budget,
             health: {
                 let mut health = after_health;
                 health.previous = Some(crate::analysis::health::HealthSummary {
@@ -1204,7 +1477,8 @@ impl Engine {
                 Some(health)
             },
             timings: diff_timings,
-            ..RunResult::default()
+            plugin_contributions,
+            ..self.run_result_over(&after_graph)
         }
     }
 
@@ -1248,8 +1522,10 @@ impl Engine {
     /// One navigation query: assembles/warms the
     /// graph exactly like full-mode `check`, then dispatches to the requested verb. Read-only —
     /// never touches findings, the baseline, or anything beyond what assembly's own cache
-    /// read/write already does.
-    pub fn query(&mut self, req: QueryRequest) -> QueryResult {
+    /// read/write already does; takes `&self` so an embedder can run queries concurrently
+    /// against one shared `Engine` (`check`/`baseline` stay `&mut self` — they touch the
+    /// baseline file and the health-trend snapshot, state a query must never perturb).
+    pub fn query(&self, req: QueryRequest) -> QueryResult {
         self.query_batch(vec![req])
             .into_iter()
             .next()
@@ -1260,8 +1536,8 @@ impl Engine {
     /// **once** for the whole batch — the amortization batching exists for —
     /// then answers every request against that one shared snapshot. One request failing (bad
     /// selector, no path) never drops the others; every request sees the same graph, so answers
-    /// stay mutually consistent (no torn reads across a batch).
-    pub fn query_batch(&mut self, requests: Vec<QueryRequest>) -> Vec<QueryResult> {
+    /// stay mutually consistent (no torn reads across a batch). `&self`, same as [`Self::query`].
+    pub fn query_batch(&self, requests: Vec<QueryRequest>) -> Vec<QueryResult> {
         let start = Instant::now();
         let root = self.root.clone();
         let source = discovery::TreeSource::Directory(&root);
@@ -1270,31 +1546,48 @@ impl Engine {
             Err(d) => {
                 return requests
                     .into_iter()
-                    .map(|req| query_envelope::build_failure(req, d.message.clone()))
+                    .map(|req| {
+                        query_envelope::build_failure(
+                            req,
+                            d.message.clone(),
+                            self.query_cache_status(),
+                        )
+                    })
                     .collect()
             }
         };
-        let (graph, findings) = (analyzed.graph, analyzed.findings);
-        let reach = query_envelope::compute_reachability(&graph);
+        let (graph, findings, coverage) = (analyzed.graph, analyzed.findings, analyzed.coverage);
+        let reach =
+            query_envelope::compute_reachability(&graph, &self.effective.tuning.externally_invoked);
+        let nav = query::build_graph_index(&graph);
         let findings_owned = findings; // keep the Vec<Finding> alive across the borrow below
         let locations = query_envelope::finding_locations(&findings_owned);
-        let cache = cache_status_str(
-            self.cache_enabled,
-            self.cache
-                .as_ref()
-                .map(|c| c.hits() + c.graph_hits())
-                .unwrap_or(0),
-        );
+        let cache = self.query_cache_status();
         let duration_ms = start.elapsed().as_millis() as u64;
 
+        let snapshot = query_envelope::QuerySnapshot {
+            graph: &graph,
+            reach: &reach,
+            nav: &nav,
+            findings: &findings_owned,
+            finding_locations: &locations,
+            coverage: &coverage,
+            cache,
+            duration_ms,
+        };
         requests
             .into_iter()
-            .map(|req| query_envelope::run(&graph, &reach, &locations, req, cache, duration_ms))
+            .map(|req| query_envelope::run(&snapshot, req))
             .collect()
     }
 
-    fn join_persist(&mut self) {
-        if let Some(handle) = self.pending_persist.take() {
+    fn join_persist(&self) {
+        let handle = self
+            .pending_persist
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .take();
+        if let Some(handle) = handle {
             let _ = handle.join();
         }
     }
@@ -1307,7 +1600,7 @@ impl Engine {
     /// whole file set, so a differing tree just misses cleanly rather than colliding with the
     /// real project's own cached graph.
     fn assemble_and_analyze(
-        &mut self,
+        &self,
         source: &discovery::TreeSource<'_>,
     ) -> Result<AnalyzedTree, Diagnostic> {
         self.join_persist(); // at most one background writer in flight
@@ -1327,7 +1620,17 @@ impl Engine {
                 finding_diagnostics,
                 pending_snapshot,
                 timings: assembly_timings,
+                plugin_contributions,
             }) => {
+                // `None` means nothing ran this call (the snapshot-hit fast path) — the
+                // sidecar's own record, from whichever prior run last executed the round, is
+                // still accurate for an identical graph.
+                let plugin_contributions = plugin_contributions.unwrap_or_else(|| {
+                    self.cache
+                        .as_ref()
+                        .and_then(|c| c.plugin_contributions())
+                        .unwrap_or_default()
+                });
                 let mut timings = vec![(
                     "assemble".to_string(),
                     assemble_start.elapsed().as_micros() as u64,
@@ -1349,20 +1652,24 @@ impl Engine {
                     closure_start.elapsed().as_micros() as u64,
                 ));
                 let g = std::sync::Arc::new(g);
-                if let Some(writer) = pending_snapshot {
+                if let Some(pending) = pending_snapshot {
                     // Extraction + manifest diagnostics and the plugin round's own, in the
                     // snapshot's two partitions — exactly what a
                     // warm path replays; discovery diagnostics stay fresh per walk.
                     let graph_for_writer = std::sync::Arc::clone(&g);
                     let diagnostics_for_writer = extraction_diagnostics.clone();
                     let plugin_diagnostics_for_writer = plugin_diagnostics.clone();
-                    self.pending_persist = Some(std::thread::spawn(move || {
-                        writer.write(
+                    let handle = std::thread::spawn(move || {
+                        pending.persist_now(
                             &graph_for_writer,
                             &diagnostics_for_writer,
                             &plugin_diagnostics_for_writer,
                         );
-                    }));
+                    });
+                    *self
+                        .pending_persist
+                        .lock()
+                        .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(handle);
                 }
                 let mut diagnostics = discovery_diagnostics;
                 diagnostics.extend(extraction_diagnostics);
@@ -1380,19 +1687,13 @@ impl Engine {
                     "coverage-ingest".to_string(),
                     coverage_start.elapsed().as_micros() as u64,
                 ));
-                let tuning = analysis::AnalysisTuning {
-                    crap_threshold: self
-                        .config
-                        .crap_threshold
-                        .unwrap_or(analysis::AnalysisTuning::default().crap_threshold),
-                    duplicate_min_tokens: self
-                        .config
-                        .duplicate_min_tokens
-                        .unwrap_or(analysis::AnalysisTuning::default().duplicate_min_tokens),
-                };
-                let outcome = analysis::run_all(&g, &coverage, &tuning);
-                let (mut findings, analysis_diagnostics, health) =
-                    (outcome.findings, outcome.diagnostics, outcome.health);
+                let outcome = analysis::run_all(&g, &coverage, &self.effective.tuning);
+                let (mut findings, analysis_diagnostics, abstained, health) = (
+                    outcome.findings,
+                    outcome.diagnostics,
+                    outcome.abstained,
+                    outcome.health,
+                );
                 timings.extend(
                     outcome
                         .timings
@@ -1426,22 +1727,31 @@ impl Engine {
                     })
                     .collect();
                 let (findings, mut suppressed) =
-                    crate::suppression::apply(&g, findings, &plugin_categories);
+                    crate::suppression::apply(&g, findings, &plugin_categories, &abstained);
                 // Config suppression runs strictly AFTER pragmas: staleness was judged
                 // against the complete finding set, so a pragma covering a config-skipped
                 // finding stays honestly non-stale, and a finding covered by both counts
                 // as inline (config never saw it). Then the min-confidence floor — a
                 // display posture, not an acknowledgment, so it is dropped, not counted.
-                let (findings, config_suppressed) = self.config.filter_findings(findings);
-                suppressed.config = config_suppressed;
-                let findings = apply_confidence_floor(findings, self.min_confidence_floor);
+                let (findings, filtered) = self.effective.report.apply(findings);
+                suppressed.config = filtered.suppressed;
+                let mut findings =
+                    apply_confidence_floor(findings, self.effective.min_confidence_floor);
+                // Last, over the findings that survived: provenance is a property of the
+                // subject, so filling it before suppression would be work done for findings
+                // nobody will ever read.
+                Self::fill_sources(&g, &mut findings);
                 Ok(AnalyzedTree {
                     graph: g,
                     findings,
+                    elided: filtered.elided,
                     diagnostics,
+                    abstained,
+                    coverage,
                     suppressed,
                     health,
                     timings,
+                    plugin_contributions,
                 })
             }
             Err(crate::discovery::DiscoveryError::Root(e)) => Err(Diagnostic {
@@ -1557,6 +1867,37 @@ impl Engine {
         map
     }
 
+    /// A `RunResult` carrying everything the graph itself determines: the file, symbol,
+    /// dependency and edge counters, and the per-adapter file tally (`run.adapters[]`). Full
+    /// mode and diff mode report the same numbers about their own graph — diff's are the
+    /// "after" side's — so the counting happens once and each mode fills in the rest.
+    fn run_result_over(&self, graph: &graph::ProjectGraph) -> RunResult {
+        RunResult {
+            files_discovered: graph.files.len(),
+            files_claimed: graph.files.iter().filter(|f| f.language.is_some()).count(),
+            symbols: graph.symbols.len(),
+            dependencies: graph.dependencies.len(),
+            edges: graph.edges.len(),
+            adapters: self
+                .adapters
+                .iter()
+                .map(|a| {
+                    let id = a.descriptor().id;
+                    AdapterRunInfo {
+                        files: graph
+                            .files
+                            .iter()
+                            .filter(|f| f.language.as_deref() == Some(id.as_str()))
+                            .count(),
+                        id: id.to_string(),
+                    }
+                })
+                .collect(),
+            plugins: self.plugin_activation.clone(),
+            ..RunResult::default()
+        }
+    }
+
     /// Full-mode `RunResult` construction — assemble + analyze at `root`, plus the run counters
     /// (`files_discovered`, `symbols`, …) that only full mode reports directly (diff mode
     /// builds its own `RunResult` in [`Self::run_diff`], from the "after" side).
@@ -1565,42 +1906,25 @@ impl Engine {
             Ok(AnalyzedTree {
                 graph: g,
                 findings,
+                elided,
                 diagnostics,
+                abstained,
+                coverage: _, // `check` reports findings; per-shape metrics are `describe`'s
                 suppressed,
                 health,
                 timings,
-            }) => {
-                let adapters = self
-                    .adapters
-                    .iter()
-                    .map(|a| {
-                        let id = a.descriptor().id;
-                        let files = g
-                            .files
-                            .iter()
-                            .filter(|f| f.language.as_deref() == Some(id.as_str()))
-                            .count();
-                        AdapterRunInfo {
-                            id: id.to_string(),
-                            files,
-                        }
-                    })
-                    .collect();
-                RunResult {
-                    files_discovered: g.files.len(),
-                    files_claimed: g.files.iter().filter(|f| f.language.is_some()).count(),
-                    symbols: g.symbols.len(),
-                    dependencies: g.dependencies.len(),
-                    edges: g.edges.len(),
-                    diagnostics,
-                    findings,
-                    adapters,
-                    suppressed,
-                    health: Some(health),
-                    timings,
-                    ..RunResult::default()
-                }
-            }
+                plugin_contributions,
+            }) => RunResult {
+                diagnostics,
+                abstained,
+                findings,
+                elided,
+                suppressed,
+                health: Some(health),
+                timings,
+                plugin_contributions,
+                ..self.run_result_over(&g)
+            },
             Err(d) => RunResult {
                 diagnostics: vec![d],
                 ..RunResult::default()
@@ -1613,6 +1937,145 @@ impl Engine {
     /// `check()` returns) and counted in the summary instead. `None` when no baseline file
     /// exists — distinct from `Some` with `acknowledged: 0`, a baseline that exists but matches
     /// nothing right now (everything it acknowledged got fixed).
+    /// Fill every surviving finding's `sources` (output-schema §2) from one shared provenance
+    /// index, after suppression and config filtering have decided which findings there are.
+    ///
+    /// One pass, one place — not thirteen analyses each answering the question. A verdict knows
+    /// what it decided; it does not know who supplied the graph it decided on, and the answer is
+    /// mechanical from the subject either way. The alternative is the failure `CLAUDE.md` names
+    /// directly: the same concept spelled thirteen times, drifting the moment a new edge kind
+    /// lands and twelve of the thirteen are updated.
+    ///
+    /// What a finding's subject resolves to:
+    /// - a **dependency** (`subject_kind: "dependency"`) → the dependency node `location.symbol`
+    ///   names. It cannot go through the path: a manifest is a `Package`, not a `File`, so
+    ///   `unused`/`undeclared`/`version-skew` would otherwise resolve to nothing at all;
+    /// - a **file** path → that file node, plus the symbol node when `location.symbol` names one
+    ///   of its declarations;
+    /// - a **directory** (the rollup ladder's own subject kind) → every file underneath, because
+    ///   a rollup stands in for exactly those findings and its provenance is exactly theirs;
+    /// - every `related` path as well, so a finding that spans places (a clone group, disagreeing
+    ///   manifests) names every component it rests on rather than only the anchor's.
+    ///
+    /// A subject that resolves to nothing leaves `sources` empty, and empty is a real answer:
+    /// `duplicate` over two identical `.html` files nobody's adapter claimed rests on no
+    /// component's facts — the core hashed the bytes. Absent means "no adapter or plugin was
+    /// involved", which is different from, and must not be spelled the same as, "we did not
+    /// record who was".
+    fn fill_sources(graph: &crate::graph::ProjectGraph, findings: &mut [Finding]) {
+        use crate::graph::provenance::{Node, ProvenanceIndex};
+        if findings.is_empty() {
+            return;
+        }
+        let index = ProvenanceIndex::build(graph);
+
+        // Symbol resolution is by (file, qualified name), and building that map over the whole
+        // graph would allocate a `String` per symbol in the project. Only the files some finding
+        // actually names can ever be looked up, so the map is scoped to those.
+        let anchored: rustc_hash::FxHashSet<u32> = findings
+            .iter()
+            .filter_map(|f| f.location.path.as_ref())
+            .filter_map(|p| graph.file_id(p))
+            .map(|f| f.0)
+            .collect();
+        let mut symbols: rustc_hash::FxHashMap<(u32, String), crate::vocab::SymbolId> =
+            rustc_hash::FxHashMap::default();
+        if !anchored.is_empty() {
+            for (i, sym) in graph.symbols.iter().enumerate() {
+                if anchored.contains(&sym.file.0) {
+                    symbols.insert(
+                        (sym.file.0, sym.qualified_name()),
+                        crate::vocab::SymbolId(i as u32),
+                    );
+                }
+            }
+        }
+
+        // A manifest is BOTH a `File` node (unclaimed — no adapter claims it as source) and a
+        // `Package`. Only the package half knows who read it, so a finding anchored on a manifest
+        // has to be asked of both or it comes back with nothing at all, which is what every
+        // `unused` dependency did.
+        let manifests: rustc_hash::FxHashMap<&str, crate::vocab::PackageId> = graph
+            .packages
+            .iter()
+            .enumerate()
+            .filter_map(|(i, p)| {
+                p.manifest
+                    .as_ref()
+                    .map(|m| (m.0.as_str(), crate::vocab::PackageId(i as u32)))
+            })
+            .collect();
+
+        // Dependency subjects are named, not located: the finding's `path` is the manifest that
+        // declared them, and a manifest is a Package rather than a File node.
+        let mut by_name: rustc_hash::FxHashMap<&str, Vec<crate::vocab::DependencyId>> =
+            rustc_hash::FxHashMap::default();
+        if findings
+            .iter()
+            .any(|f| f.subject_kind == crate::vocab::SubjectKind::DEPENDENCY)
+        {
+            for (i, dep) in graph.dependencies.iter().enumerate() {
+                by_name
+                    .entry(dep.name.as_str())
+                    .or_default()
+                    .push(crate::vocab::DependencyId(i as u32));
+            }
+        }
+
+        let mut nodes: Vec<Node> = Vec::new();
+        for finding in findings.iter_mut() {
+            nodes.clear();
+            if finding.subject_kind == crate::vocab::SubjectKind::DEPENDENCY {
+                // One coordinate can be declared by several packages in a workspace; all of them
+                // are the subject, so all of their provenance counts.
+                if let Some(name) = &finding.location.symbol {
+                    nodes.extend(
+                        by_name
+                            .get(name.as_str())
+                            .into_iter()
+                            .flatten()
+                            .map(|&d| Node::Dependency(d)),
+                    );
+                }
+            }
+            let paths = finding
+                .location
+                .path
+                .iter()
+                .map(|p| p.0.as_str())
+                .chain(finding.related.iter().map(|r| r.path.0.as_str()));
+            for path in paths {
+                if let Some(&package) = manifests.get(path) {
+                    nodes.push(Node::Package(package));
+                }
+                match graph.file_id(&crate::adapter::ProjectPath(smol_str::SmolStr::new(path))) {
+                    Some(file) => {
+                        nodes.push(Node::File(file));
+                        if let Some(name) = &finding.location.symbol {
+                            if let Some(&sym) = symbols.get(&(file.0, name.clone())) {
+                                nodes.push(Node::Symbol(sym));
+                            }
+                        }
+                    }
+                    // Not a file: a directory subject, or a path the graph never saw. Only the
+                    // first is worth a scan, and only for the finding kind that produces it.
+                    None if finding.subject_kind == crate::vocab::SubjectKind::DIRECTORY => {
+                        nodes.extend(graph.files.iter().enumerate().filter_map(|(i, f)| {
+                            crate::graph::package_owns(path, f.path.0.as_str())
+                                .then_some(Node::File(crate::vocab::FileId(i as u32)))
+                        }));
+                    }
+                    None => {}
+                }
+            }
+            finding.sources = index
+                .union(nodes.iter().copied())
+                .into_iter()
+                .map(str::to_string)
+                .collect();
+        }
+    }
+
     fn apply_baseline(&self, findings: Vec<Finding>) -> (Vec<Finding>, Option<BaselineSummary>) {
         let Some(entries) = crate::baseline::load(&self.root) else {
             return (findings, None);
@@ -1645,6 +2108,77 @@ mod tests {
     use crate::vocab::RefKind;
     use smol_str::SmolStr;
 
+    fn gate_finding(severity: Severity, advisory: bool) -> Finding {
+        Finding {
+            advisory,
+            id: "kndo-000000000000".to_string(),
+            category: "unused".into(),
+            group: crate::vocab::Group::Waste,
+            subject_kind: "symbol".into(),
+            severity,
+            confidence: crate::vocab::Confidence::Certain,
+            message: "example".to_string(),
+            location: Default::default(),
+            related: Vec::new(),
+            rolled_up: None,
+            sources: Vec::new(),
+            delta: None,
+            delta_origin: None,
+        }
+    }
+
+    #[test]
+    fn default_fail_on_is_none_for_full_and_warning_for_diff_modes() {
+        assert_eq!(RunMode::Full.default_fail_on(), None);
+        assert_eq!(RunMode::Staged.default_fail_on(), Some(Severity::Warning));
+        assert_eq!(
+            RunMode::Diff {
+                base: "main".to_string()
+            }
+            .default_fail_on(),
+            Some(Severity::Warning)
+        );
+    }
+
+    #[test]
+    fn fails_at_none_threshold_never_fails() {
+        let result = RunResult {
+            findings: vec![gate_finding(Severity::Error, false)],
+            ..Default::default()
+        };
+        assert!(!result.fails_at(None));
+    }
+
+    #[test]
+    fn fails_at_trips_on_at_least_as_severe_findings_only() {
+        let below = RunResult {
+            findings: vec![gate_finding(Severity::Info, false)],
+            ..Default::default()
+        };
+        assert!(!below.fails_at(Some(Severity::Warning)));
+
+        let at = RunResult {
+            findings: vec![gate_finding(Severity::Warning, false)],
+            ..Default::default()
+        };
+        assert!(at.fails_at(Some(Severity::Warning)));
+
+        let above = RunResult {
+            findings: vec![gate_finding(Severity::Error, false)],
+            ..Default::default()
+        };
+        assert!(above.fails_at(Some(Severity::Warning)));
+    }
+
+    #[test]
+    fn fails_at_ignores_advisory_findings_whatever_the_severity() {
+        let result = RunResult {
+            findings: vec![gate_finding(Severity::Error, true)],
+            ..Default::default()
+        };
+        assert!(!result.fails_at(Some(Severity::Info)));
+    }
+
     /// True for the category-level skip diagnostics (`untested` with no test roots, `crap`
     /// with no ingested coverage) — expected noise in every diff-mode fixture below, since
     /// none of this module's mock projects declare test roots or ship a coverage report.
@@ -1663,7 +2197,7 @@ mod tests {
                 advisory: false,
                 id: String::new(),
                 category: "unused".into(),
-                group: "waste".into(),
+                group: crate::vocab::Group::Waste,
                 subject_kind: "function".into(),
                 severity,
                 confidence: crate::vocab::Confidence::Certain,
@@ -1677,6 +2211,8 @@ mod tests {
                     ..Location::default()
                 },
                 related: Vec::new(),
+                rolled_up: None,
+                sources: Vec::new(),
                 delta: None,
                 delta_origin: None,
             }
@@ -1745,7 +2281,9 @@ mod tests {
                     package_cycles: crate::adapter::CycleTolerance::Hazard,
                 },
                 resolves_dependency_usage: true,
+                declares_units_of_testing: true,
                 package_test_dirs: Vec::new(),
+                builtin_member_types: Vec::new(),
             }
         }
         fn claim(&self, path: &ProjectPath) -> Option<crate::adapter::FileClaim> {
@@ -1812,7 +2350,9 @@ mod tests {
                     package_cycles: crate::adapter::CycleTolerance::Hazard,
                 },
                 resolves_dependency_usage: true,
+                declares_units_of_testing: true,
                 package_test_dirs: Vec::new(),
+                builtin_member_types: Vec::new(),
             }
         }
         fn claim(&self, path: &ProjectPath) -> Option<crate::adapter::FileClaim> {
@@ -1857,6 +2397,7 @@ mod tests {
                         opaque_namespace_use: false,
                         module_names_visible: false,
                         local_alias: None,
+                        reconstructed: false,
                     });
                 } else if let Some(name) = line.strip_prefix("decl ") {
                     facts.declarations.push(crate::adapter::Declaration {
@@ -1870,6 +2411,9 @@ mod tests {
                         implicitly_invoked: false,
                         nested_scope: false,
                         visibility_inherited: false,
+                        visible_in_unit: None,
+                        implements: None,
+                        markers: Vec::new(),
                     });
                 } else if let Some(name) = line.strip_prefix("ref ") {
                     facts.references.push(crate::adapter::RawReference {
@@ -1937,10 +2481,15 @@ mod tests {
             }
         }
 
+        fn mutates_graph(&self) -> bool {
+            true
+        }
+
         fn classify_file(
             &self,
             path: &ProjectPath,
             current: crate::vocab::FileClass,
+            _content: &crate::plugin::ContentView<'_>,
         ) -> Option<crate::vocab::FileClass> {
             path.0
                 .ends_with(".banner.dmock")
@@ -2013,23 +2562,170 @@ mod tests {
         }
     }
 
+    /// A plugin that decides origin from a CONFIG FILE rather than from the path — the shape
+    /// every build tool has: `libsass-maven-plugin` naming an `outputPath`, a bundler naming an
+    /// output directory. Nothing about `generated.dmock`'s name says it is generated; only
+    /// `build.marker` does.
+    struct ConfigDrivenPlugin;
+
+    impl crate::plugin::Plugin for ConfigDrivenPlugin {
+        fn descriptor(&self) -> crate::plugin::PluginDescriptor {
+            crate::plugin::PluginDescriptor {
+                id: SmolStr::new("config-driven"),
+                version: SmolStr::new("1"),
+                detection: vec![],
+                requested_file_access: vec![SmolStr::new("build.marker")],
+                activation: vec![],
+                dependencies: vec![],
+            }
+        }
+
+        fn mutates_graph(&self) -> bool {
+            true
+        }
+
+        fn classify_file(
+            &self,
+            path: &ProjectPath,
+            current: crate::vocab::FileClass,
+            content: &crate::plugin::ContentView<'_>,
+        ) -> Option<crate::vocab::FileClass> {
+            let marker = content.read(&ProjectPath(SmolStr::new("build.marker")))?;
+            let declared = String::from_utf8(marker).ok()?;
+            declared
+                .lines()
+                .any(|l| l.trim() == path.0.as_str())
+                .then_some(crate::vocab::FileClass {
+                    role: current.role,
+                    origin: crate::vocab::FileOrigin::Generated,
+                })
+        }
+    }
+
+    #[test]
+    fn classify_file_reads_the_content_channel() {
+        // `classify_file` used to be a pure function of path + current class, and the WASM
+        // bridge answered its `read-file` import with nothing. That made "this file is
+        // generated because a build tool's config SAYS SO" inexpressible — the one shape that
+        // matters most, since a generated file checked into the tree carries no marker of its
+        // own and no path convention identifies it.
+        let dir = tempfile::tempdir().expect("temp project");
+        let dir = dir.path();
+        std::fs::write(
+            dir.join("root.dmock"),
+            "root-file\nimport ./generated.dmock\n",
+        )
+        .unwrap();
+        std::fs::write(dir.join("generated.dmock"), "decl deadInGenerated\n").unwrap();
+        std::fs::write(dir.join("build.marker"), "generated.dmock\n").unwrap();
+
+        let dead = |result: &crate::engine::RunResult| {
+            result.findings.iter().any(|f| {
+                f.category == "unused" && f.location.symbol.as_deref() == Some("deadInGenerated")
+            })
+        };
+
+        // Without the plugin the declaration is plainly dead — otherwise the assertion below
+        // would pass for reasons having nothing to do with the content channel.
+        let mut bare = Engine::open(
+            dir,
+            ConfigOverrides::default(),
+            vec![Box::new(DiffMockAdapter)],
+        )
+        .unwrap();
+        assert!(dead(&bare.check(RunMode::Full)), "baseline must flag it");
+
+        let mut with_plugin = Engine::open_with_plugins(
+            dir,
+            ConfigOverrides::default(),
+            vec![Box::new(DiffMockAdapter)],
+            vec![Box::new(ConfigDrivenPlugin)],
+        )
+        .unwrap();
+        assert!(
+            !dead(&with_plugin.check(RunMode::Full)),
+            "the plugin read build.marker at classify time and the file is generated — \
+             generated origins are exempt from `unused`"
+        );
+    }
+
+    /// Contributes one edge *out of* a file that stays dead. The edge is evidence the plugin
+    /// looked at that file; the file is still unreachable, so a finding survives to carry it.
+    struct WitnessPlugin;
+
+    impl crate::plugin::Plugin for WitnessPlugin {
+        fn descriptor(&self) -> crate::plugin::PluginDescriptor {
+            crate::plugin::PluginDescriptor {
+                id: SmolStr::new("witness"),
+                version: SmolStr::new("1"),
+                detection: vec![],
+                requested_file_access: vec![],
+                activation: vec![],
+                dependencies: vec![],
+            }
+        }
+        fn mutates_graph(&self) -> bool {
+            true
+        }
+        fn contribute_edges(
+            &self,
+            _graph: &crate::plugin::GraphView<'_>,
+            _content: &crate::plugin::ContentView<'_>,
+            out: &mut crate::plugin::EdgeSink,
+        ) {
+            out.add(
+                crate::plugin::PluginTarget::file(ProjectPath(SmolStr::new("orphan.dmock"))),
+                crate::plugin::PluginTarget::file(ProjectPath(SmolStr::new("root.dmock"))),
+                RefKind::Call,
+                Confidence::Probable,
+            );
+        }
+    }
+
+    #[test]
+    fn a_plugins_contribution_shows_up_on_the_findings_it_touched() {
+        // The case that makes `sources` worth having: without it, a reader seeing an `unused`
+        // on a file a plugin analyzed has no way to know a plugin was involved at all, and no
+        // way to know which one to look at when the verdict seems wrong. An edge pointing OUT
+        // of the dead file — the plugin looked at it and found nothing keeping it alive.
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("root.dmock"), "root-file\n").unwrap();
+        std::fs::write(dir.path().join("orphan.dmock"), "").unwrap();
+
+        let adapters: Vec<Box<dyn LanguageAdapter>> = vec![Box::new(DiffMockAdapter)];
+        let plugins: Vec<Box<dyn crate::plugin::Plugin>> = vec![Box::new(WitnessPlugin)];
+        let mut engine =
+            Engine::open_with_plugins(dir.path(), ConfigOverrides::default(), adapters, plugins)
+                .unwrap();
+        let result = engine.check(RunMode::Full);
+
+        let orphan = result
+            .findings
+            .iter()
+            .find(|f| finding_path(f) == "orphan.dmock")
+            .expect("a plugin edge out of a file does not make that file reachable");
+        assert_eq!(
+            orphan.sources,
+            vec!["adapter:dmock".to_string(), "plugin:witness".to_string()],
+            "the adapter that claimed it AND the plugin that contributed an edge on it"
+        );
+    }
+
     #[test]
     fn plugin_graph_hooks_affect_a_real_check() {
-        let dir = std::env::temp_dir().join("kndo-engine-test-plugin-hooks");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
+        let dir = tempfile::tempdir().unwrap();
         // `import ./handler` makes `handler.dmock` reachable *as a file* (an `ImportsFile`
         // edge from the already-rooted `root.dmock`) without reaching any of its individual
         // declarations — those need their own root/reference edge, which is exactly what
         // distinguishes the four scenarios below instead of collapsing them into one
         // file-level `unused` rollup.
         std::fs::write(
-            dir.join("root.dmock"),
+            dir.path().join("root.dmock"),
             "root-file\nimport ./handler.dmock\n",
         )
         .unwrap();
         std::fs::write(
-            dir.join("handler.dmock"),
+            dir.path().join("handler.dmock"),
             "decl rootedByPlugin\n\
              decl referencedByPlugin\n\
              decl almostInternalOnly\n\
@@ -2038,24 +2734,22 @@ mod tests {
              decl contentGatedRoot\n",
         )
         .unwrap();
-        std::fs::write(dir.join("noise.banner.dmock"), "decl bannerDecl\n").unwrap();
+        std::fs::write(dir.path().join("noise.banner.dmock"), "decl bannerDecl\n").unwrap();
         // Content the plugin's contribute_roots reads through the host-mediated
         // channel to decide whether to root `contentGatedRoot` — not itself part of the
         // language graph (the mock adapter never claims `.marker` files).
-        std::fs::write(dir.join("content.marker"), "promote").unwrap();
+        std::fs::write(dir.path().join("content.marker"), "promote").unwrap();
 
         // Baseline, no plugin: every one of the four declarations the plugin later rescues
         // must actually be flagged on its own — otherwise the assertions below would pass
         // vacuously regardless of whether the plugin wiring does anything at all.
         let mut baseline_engine = Engine::open(
-            &dir,
+            dir.path(),
             ConfigOverrides::default(),
             vec![Box::new(DiffMockAdapter)],
         )
         .unwrap();
-        let baseline = baseline_engine.check(CheckRequest {
-            mode: RunMode::Full,
-        });
+        let baseline = baseline_engine.check(RunMode::Full);
         let baseline_unused: Vec<&str> = baseline
             .findings
             .iter()
@@ -2093,10 +2787,9 @@ mod tests {
         let adapters: Vec<Box<dyn LanguageAdapter>> = vec![Box::new(DiffMockAdapter)];
         let plugins: Vec<Box<dyn crate::plugin::Plugin>> = vec![Box::new(DemoPlugin)];
         let mut engine =
-            Engine::open_with_plugins(&dir, ConfigOverrides::default(), adapters, plugins).unwrap();
-        let result = engine.check(CheckRequest {
-            mode: RunMode::Full,
-        });
+            Engine::open_with_plugins(dir.path(), ConfigOverrides::default(), adapters, plugins)
+                .unwrap();
+        let result = engine.check(RunMode::Full);
 
         let unused_symbols: Vec<&str> = result
             .findings
@@ -2147,12 +2840,10 @@ mod tests {
 
     #[test]
     fn doctor_reports_every_registered_plugin() {
-        let dir = std::env::temp_dir().join("kndo-engine-test-doctor-plugins");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
+        let dir = tempfile::tempdir().unwrap();
 
         let engine = Engine::open_with_plugins(
-            &dir,
+            dir.path(),
             ConfigOverrides::default(),
             vec![],
             vec![Box::new(DemoPlugin)],
@@ -2165,22 +2856,19 @@ mod tests {
         assert!(report.plugins[0].activation.is_empty());
 
         // The zero-plugin case is zero — callers who ask for no plugins get no plugins.
-        let bare =
-            Engine::open_with_plugins(&dir, ConfigOverrides::default(), vec![], vec![]).unwrap();
+        let bare = Engine::open(dir.path(), ConfigOverrides::default(), vec![]).unwrap();
         assert!(bare.doctor().plugins.is_empty());
     }
 
     /// A throwaway git repo for diff-mode tests — local signing disabled for the same reason
     /// `gitutil`'s own test fixtures disable it (this sandbox signs every commit via an
     /// MCP-backed tool unrelated to what's under test, and it occasionally times out).
-    fn git_repo(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("kndo-engine-difftest-{name}"));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
+    fn git_repo() -> tempfile::TempDir {
+        let dir = tempfile::tempdir().unwrap();
         let git = |args: &[&str]| {
             let status = std::process::Command::new("git")
                 .arg("-C")
-                .arg(&dir)
+                .arg(dir.path())
                 .args(args)
                 .status()
                 .unwrap();
@@ -2209,28 +2897,22 @@ mod tests {
 
     #[test]
     fn a_second_check_on_the_same_engine_is_warm() {
-        let dir = std::env::temp_dir().join("kndo-engine-test-warm");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("a.mock"), "hello").unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("a.mock"), "hello").unwrap();
 
         let mut engine = Engine::open(
-            &dir,
+            dir.path(),
             ConfigOverrides::default(),
             vec![Box::new(CacheMockAdapter)],
         )
         .unwrap();
 
-        let first = engine.check(CheckRequest {
-            mode: RunMode::Full,
-        });
+        let first = engine.check(RunMode::Full);
         assert!(first.cache_enabled);
         assert_eq!(first.cache_hits, 0); // nothing cached yet — the whole run is a miss
         assert!(first.to_json().contains("\"cache\": \"cold\""));
 
-        let second = engine.check(CheckRequest {
-            mode: RunMode::Full,
-        });
+        let second = engine.check(RunMode::Full);
         assert_eq!(second.cache_hits, 1);
         assert!(second.to_json().contains("\"cache\": \"warm\""));
 
@@ -2240,41 +2922,55 @@ mod tests {
     }
 
     #[test]
-    fn no_cache_override_reports_cold_even_after_a_prior_warm_engine() {
-        let dir = std::env::temp_dir().join("kndo-engine-test-no-cache");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("a.mock"), "hello").unwrap();
+    fn no_cache_override_reports_disabled_not_cold() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("a.mock"), "hello").unwrap();
 
         // Warm the on-disk cache with one engine…
         Engine::open(
-            &dir,
+            dir.path(),
             ConfigOverrides::default(),
             vec![Box::new(CacheMockAdapter)],
         )
         .unwrap()
-        .check(CheckRequest {
-            mode: RunMode::Full,
-        });
+        .check(RunMode::Full);
 
-        // …then open a fresh engine with the cache disabled: it must never report warm, even
-        // though the disk cache is populated and would otherwise hit.
+        // …then open a fresh engine with the cache disabled. It must never report warm, even
+        // though the disk cache is populated and would otherwise hit — and it must not report
+        // `cold` either: cold is a claim about this project (the cache was consulted and had
+        // nothing), and here nobody consulted anything.
         let mut uncached = Engine::open(
-            &dir,
+            dir.path(),
             ConfigOverrides {
                 use_cache: false,
-                threads: None,
-                min_confidence: None,
+                ..ConfigOverrides::default()
             },
             vec![Box::new(CacheMockAdapter)],
         )
         .unwrap();
-        let result = uncached.check(CheckRequest {
-            mode: RunMode::Full,
-        });
+        let result = uncached.check(RunMode::Full);
         assert!(!result.cache_enabled);
         assert_eq!(result.cache_hits, 0);
-        assert!(result.to_json().contains("\"cache\": \"cold\""));
+        assert_eq!(result.cache_status(), "disabled");
+        assert!(result.to_json().contains("\"cache\": \"disabled\""));
+    }
+
+    #[test]
+    fn an_enabled_but_empty_cache_is_cold_not_disabled() {
+        // The other half of the distinction: a first-ever run has the cache ON and empty.
+        // Reporting `disabled` there would be the same conflation in the opposite direction.
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("a.mock"), "hello").unwrap();
+        let mut engine = Engine::open(
+            dir.path(),
+            ConfigOverrides::default(),
+            vec![Box::new(CacheMockAdapter)],
+        )
+        .unwrap();
+        let result = engine.check(RunMode::Full);
+        assert!(result.cache_enabled);
+        assert_eq!(result.cache_hits, 0);
+        assert_eq!(result.cache_status(), "cold");
     }
 
     #[test]
@@ -2289,29 +2985,21 @@ mod tests {
 
     #[test]
     fn check_on_empty_project_is_clean() {
-        let dir = std::env::temp_dir().join("kndo-engine-test-empty");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        let mut engine = Engine::open(&dir, ConfigOverrides::default(), vec![]).unwrap();
-        let result = engine.check(CheckRequest {
-            mode: RunMode::Full,
-        });
+        let dir = tempfile::tempdir().unwrap();
+        let mut engine = Engine::open(dir.path(), ConfigOverrides::default(), vec![]).unwrap();
+        let result = engine.check(RunMode::Full);
         assert!(result.findings.is_empty());
         assert_eq!(result.files_discovered, 0);
     }
 
     #[test]
     fn check_counts_discovered_files_with_no_adapters_registered() {
-        let dir = std::env::temp_dir().join("kndo-engine-test-files");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("a.ts"), "export const a = 1;").unwrap();
-        std::fs::write(dir.join("b.ts"), "export const b = 2;").unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("a.ts"), "export const a = 1;").unwrap();
+        std::fs::write(dir.path().join("b.ts"), "export const b = 2;").unwrap();
 
-        let mut engine = Engine::open(&dir, ConfigOverrides::default(), vec![]).unwrap();
-        let result = engine.check(CheckRequest {
-            mode: RunMode::Full,
-        });
+        let mut engine = Engine::open(dir.path(), ConfigOverrides::default(), vec![]).unwrap();
+        let result = engine.check(RunMode::Full);
         assert_eq!(result.files_discovered, 2);
         // No adapters registered in this test — files exist as nodes but nothing claims them.
         assert_eq!(result.files_claimed, 0);
@@ -2319,13 +3007,9 @@ mod tests {
 
     #[test]
     fn full_mode_populates_phase_timings_and_json_omits_them() {
-        let dir = std::env::temp_dir().join("kndo-engine-test-timings");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        let mut engine = Engine::open(&dir, ConfigOverrides::default(), vec![]).unwrap();
-        let result = engine.check(CheckRequest {
-            mode: RunMode::Full,
-        });
+        let dir = tempfile::tempdir().unwrap();
+        let mut engine = Engine::open(dir.path(), ConfigOverrides::default(), vec![]).unwrap();
+        let result = engine.check(RunMode::Full);
         let phases: Vec<&str> = result.timings.iter().map(|(p, _)| p.as_str()).collect();
         assert!(phases.contains(&"assemble"));
         assert!(phases.contains(&"reachability"));
@@ -2337,15 +3021,43 @@ mod tests {
     }
 
     #[test]
-    fn to_json_produces_the_envelope_shape() {
-        let dir = std::env::temp_dir().join("kndo-engine-test-json");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
+    fn run_plugins_reports_every_registered_plugin_and_why() {
+        let dir = tempfile::tempdir().unwrap();
+        // Two registration shapes, one carrying the composition layer's own verdict and one
+        // a bare plugin an embedder picked by hand — both must reach `run.plugins[]`, in
+        // registration order, and neither reason may be invented here.
+        let mut engine = Engine::open_with_plugins(
+            dir.path(),
+            ConfigOverrides::default(),
+            vec![],
+            vec![
+                crate::plugin::RegisteredPlugin {
+                    plugin: Box::new(DemoPlugin),
+                    activated_by: crate::plugin::ActivationReason::RuleMatched(
+                        crate::plugin::ActivationRule::ManifestDependency(SmolStr::new("next")),
+                    ),
+                },
+                Box::new(ConfigDrivenPlugin).into(),
+            ],
+        )
+        .unwrap();
+        let value: serde_json::Value =
+            serde_json::from_str(&engine.check(RunMode::Full).to_json()).unwrap();
+        assert_eq!(
+            value["run"]["plugins"],
+            serde_json::json!([
+                { "id": "demo", "activated_by": "manifest-dependency: next" },
+                { "id": "config-driven", "activated_by": "registered" },
+            ])
+        );
+    }
 
-        let mut engine = Engine::open(&dir, ConfigOverrides::default(), vec![]).unwrap();
-        let result = engine.check(CheckRequest {
-            mode: RunMode::Full,
-        });
+    #[test]
+    fn to_json_produces_the_envelope_shape() {
+        let dir = tempfile::tempdir().unwrap();
+
+        let mut engine = Engine::open(dir.path(), ConfigOverrides::default(), vec![]).unwrap();
+        let result = engine.check(RunMode::Full);
         let json = result.to_json();
         let value: serde_json::Value = serde_json::from_str(&json).unwrap();
 
@@ -2375,21 +3087,19 @@ mod tests {
 
     #[test]
     fn to_json_omits_absent_finding_location_fields() {
-        let dir = std::env::temp_dir().join("kndo-engine-test-json-location");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-
         let finding = Finding {
             advisory: false,
             id: "kndo-000000000000".to_string(),
-            category: "version-skew".to_string(),
-            group: "defect".to_string(),
-            subject_kind: "dependency".to_string(),
+            category: crate::vocab::Category::VERSION_SKEW,
+            group: crate::vocab::Group::Defect,
+            subject_kind: crate::vocab::SubjectKind::DEPENDENCY,
             severity: Severity::Warning,
             confidence: Confidence::Certain,
             message: "example".to_string(),
             location: Location::default(),
             related: Vec::new(),
+            rolled_up: None,
+            sources: Vec::new(),
             delta: None,
             delta_origin: None,
         };
@@ -2416,29 +3126,35 @@ mod tests {
 
     #[test]
     fn diff_mode_reports_introduced_and_derived_new_findings_plus_fixed() {
-        let dir = git_repo("delta-basic");
-        std::fs::write(dir.join("root.dmock"), "root-file\nimport ./b.dmock\n").unwrap();
-        std::fs::write(dir.join("b.dmock"), "").unwrap();
-        std::fs::write(dir.join("orphan.dmock"), "").unwrap(); // already dead at the base
-        git_add_all_commit(&dir, "base");
-        let base_sha = git_rev_parse(&dir, "HEAD");
+        let dir = git_repo();
+        std::fs::write(
+            dir.path().join("root.dmock"),
+            "root-file\nimport ./b.dmock\n",
+        )
+        .unwrap();
+        std::fs::write(dir.path().join("b.dmock"), "").unwrap();
+        std::fs::write(dir.path().join("orphan.dmock"), "").unwrap(); // already dead at the base
+        git_add_all_commit(dir.path(), "base");
+        let base_sha = git_rev_parse(dir.path(), "HEAD");
 
         // Uncommitted working-tree changes: root.dmock stops importing b.dmock (b.dmock goes
         // dead — "derived", since b.dmock itself isn't the touched file), starts importing
         // orphan.dmock instead (orphan.dmock comes alive — "fixed"), and a brand new dead file
         // shows up ("introduced" — it's the touched file itself).
-        std::fs::write(dir.join("root.dmock"), "root-file\nimport ./orphan.dmock\n").unwrap();
-        std::fs::write(dir.join("c.dmock"), "").unwrap();
+        std::fs::write(
+            dir.path().join("root.dmock"),
+            "root-file\nimport ./orphan.dmock\n",
+        )
+        .unwrap();
+        std::fs::write(dir.path().join("c.dmock"), "").unwrap();
 
         let mut engine = Engine::open(
-            &dir,
+            dir.path(),
             ConfigOverrides::default(),
             vec![Box::new(DiffMockAdapter)],
         )
         .unwrap();
-        let result = engine.check(CheckRequest {
-            mode: RunMode::Diff { base: base_sha },
-        });
+        let result = engine.check(RunMode::Diff { base: base_sha });
 
         assert!(
             result.diagnostics.iter().all(is_no_test_roots_diagnostic),
@@ -2474,24 +3190,475 @@ mod tests {
         assert_eq!(result.fixed.len(), 1, "{:?}", result.fixed);
     }
 
+    /// A base commit with one live file, plus an uncommitted dead one — one new finding, net
+    /// +1, which is what every budget test below is judged against.
+    fn diff_repo_with_one_new_finding(kndo_toml: &str) -> (tempfile::TempDir, String) {
+        let dir = git_repo();
+        std::fs::write(dir.path().join("root.dmock"), "root-file\n").unwrap();
+        if !kndo_toml.is_empty() {
+            std::fs::write(dir.path().join("kndo.toml"), kndo_toml).unwrap();
+        }
+        git_add_all_commit(dir.path(), "base");
+        let base = git_rev_parse(dir.path(), "HEAD");
+        std::fs::write(dir.path().join("dead.dmock"), "").unwrap();
+        (dir, base)
+    }
+
+    fn diff_run(dir: &tempfile::TempDir, base: String) -> RunResult {
+        let mut engine = Engine::open(
+            dir.path(),
+            ConfigOverrides::default(),
+            vec![Box::new(DiffMockAdapter)],
+        )
+        .unwrap();
+        engine.check(RunMode::Diff { base })
+    }
+
+    /// A project the mock adapter fully understands: one live root importing a dead file, and
+    /// a `.txt` nothing claims. Enough to exercise every arm `fill_sources` has.
+    fn sources_repo() -> tempfile::TempDir {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("root.dmock"),
+            "root-file\ndecl liveThing\nimport ./dead.dmock\n",
+        )
+        .unwrap();
+        std::fs::write(dir.path().join("dead.dmock"), "decl deadThing\n").unwrap();
+        dir
+    }
+
+    fn sources_of<'a>(result: &'a RunResult, path: &str) -> Vec<&'a str> {
+        result
+            .findings
+            .iter()
+            .find(|f| finding_path(f) == path)
+            .map(|f| f.sources.iter().map(String::as_str).collect())
+            .unwrap_or_default()
+    }
+
+    /// One dead file and, separately, one dead function inside a live one — so `unused` fires
+    /// at two subject kinds and a lens can be watched narrowing rather than emptying.
+    fn filter_repo() -> tempfile::TempDir {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("root.dmock"),
+            "root-file\nimport ./live.dmock\n",
+        )
+        .unwrap();
+        std::fs::write(dir.path().join("live.dmock"), "decl deadThing\n").unwrap();
+        std::fs::write(dir.path().join("orphan.dmock"), "").unwrap();
+        dir
+    }
+
+    fn run_with(dir: &tempfile::TempDir, overrides: ConfigOverrides) -> RunResult {
+        Engine::open(dir.path(), overrides, vec![Box::new(DiffMockAdapter)])
+            .unwrap()
+            .check(RunMode::Full)
+    }
+
+    fn spec(raw: &str) -> crate::config::SkipSpec {
+        crate::config::SkipSpec::parse(raw).unwrap()
+    }
+
+    #[test]
+    fn explain_pairs_the_finding_with_a_describe_of_what_it_landed_on() {
+        // The whole design in one assertion: `explain` is the finding verbatim plus
+        // `describe` of its subject, so the two can never say different things about the same
+        // node. Anything it re-derived would be the copy that drifts.
+        let dir = filter_repo();
+        let mut engine = Engine::open(
+            dir.path(),
+            ConfigOverrides::default(),
+            vec![Box::new(DiffMockAdapter)],
+        )
+        .unwrap();
+        let findings = engine.run_analysis_at(dir.path()).findings;
+        let target = findings
+            .iter()
+            .find(|f| finding_path(f) == "live.dmock")
+            .expect("the dead function inside a live file");
+
+        let result = engine.query(crate::query_envelope::QueryRequest {
+            id: None,
+            verb: crate::query_envelope::Verb::Explain,
+            selectors: vec![target.id.clone()],
+            flags: Default::default(),
+        });
+        assert_eq!(result.status(), "ok");
+        let crate::query_envelope::ResultEntry::Explain(explained) = &result.results[0] else {
+            panic!("expected an explain entry: {:?}", result.results[0]);
+        };
+        assert_eq!(explained.finding.id, target.id);
+        assert_eq!(explained.finding.message, target.message);
+
+        let subject = explained
+            .subject
+            .as_ref()
+            .expect("a symbol IS a graph node");
+        assert!(
+            subject.findings.contains(&target.id),
+            "describe of the subject lists the very finding being explained: {:?}",
+            subject.findings
+        );
+        assert_eq!(
+            explained.subject_selector.as_deref(),
+            Some("live.dmock#deadThing")
+        );
+    }
+
+    #[test]
+    fn an_id_nothing_reported_is_not_found_not_an_error() {
+        // `not-found` and `error` are different exit codes, and a stale id from yesterday's
+        // report is the ordinary case, not a malformed request.
+        let dir = filter_repo();
+        let engine = Engine::open(
+            dir.path(),
+            ConfigOverrides::default(),
+            vec![Box::new(DiffMockAdapter)],
+        )
+        .unwrap();
+        let result = engine.query(crate::query_envelope::QueryRequest {
+            id: None,
+            verb: crate::query_envelope::Verb::Explain,
+            selectors: vec!["kndo-000000000000".to_string()],
+            flags: Default::default(),
+        });
+        assert_eq!(result.status(), "not-found");
+        let json = result.to_json();
+        assert!(
+            json.contains("fixed, suppressed, or acknowledged"),
+            "the message says WHY an id can be missing, not just that it is: {json}"
+        );
+    }
+
+    #[test]
+    fn explaining_a_rollup_says_it_has_no_single_node_rather_than_guessing_one() {
+        // A directory rollup stands in for many findings and names a directory, which is not
+        // a graph node. Answering `subject: null` beats picking one of its files to describe.
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("root.dmock"), "root-file\n").unwrap();
+        std::fs::create_dir(dir.path().join("dead")).unwrap();
+        std::fs::write(dir.path().join("dead/a.dmock"), "").unwrap();
+        std::fs::write(dir.path().join("dead/b.dmock"), "").unwrap();
+
+        let mut engine = Engine::open(
+            dir.path(),
+            ConfigOverrides::default(),
+            vec![Box::new(DiffMockAdapter)],
+        )
+        .unwrap();
+        let findings = engine.run_analysis_at(dir.path()).findings;
+        let rollup = findings
+            .iter()
+            .find(|f| f.subject_kind == crate::vocab::SubjectKind::DIRECTORY)
+            .expect("a uniformly dead directory rolls up");
+
+        let result = engine.query(crate::query_envelope::QueryRequest {
+            id: None,
+            verb: crate::query_envelope::Verb::Explain,
+            selectors: vec![rollup.id.clone()],
+            flags: Default::default(),
+        });
+        let crate::query_envelope::ResultEntry::Explain(explained) = &result.results[0] else {
+            panic!("expected an explain entry");
+        };
+        assert_eq!(result.status(), "ok", "the finding still explains itself");
+        assert!(explained.subject.is_none());
+        assert!(explained.subject_selector.is_none());
+        assert_eq!(explained.finding.rolled_up, Some(2));
+    }
+
+    #[test]
+    fn only_is_a_lens_and_says_how_much_it_narrowed() {
+        // The safeguard that makes a lens safe: what it removes is counted and reported, so a
+        // `--only` that matches nothing prints `0 findings` next to "and N you didn't ask
+        // for", never a bare clean report over a codebase nobody looked at.
+        let dir = filter_repo();
+        let all = run_with(&dir, ConfigOverrides::default());
+        assert!(all.findings.len() >= 2, "{:?}", all.findings);
+        assert_eq!(all.elided, 0);
+
+        let lens = run_with(
+            &dir,
+            ConfigOverrides {
+                only: vec![spec("unused:file")],
+                ..ConfigOverrides::default()
+            },
+        );
+        assert_eq!(lens.findings.len(), 1, "{:?}", lens.findings);
+        assert_eq!(
+            lens.findings[0].subject_kind,
+            crate::vocab::SubjectKind::FILE
+        );
+        assert_eq!(
+            lens.elided,
+            all.findings.len() - lens.findings.len(),
+            "everything the lens removed is accounted for"
+        );
+        assert_eq!(
+            lens.suppressed.config, 0,
+            "a lens is not a suppression — conflating them would make narrowing a view look \
+             like a policy change"
+        );
+        assert!(lens.to_json().contains("\"elided\""), "{}", lens.to_json());
+    }
+
+    #[test]
+    fn skip_from_the_flag_and_from_the_file_are_the_same_policy_and_add_up() {
+        // `--skip` is `[analysis] skip` from another source: same vocabulary, same count, and
+        // unioned rather than overriding — a flag that silently dropped the project's own list
+        // would make one CI job's narrowing look like a policy change.
+        let dir = filter_repo();
+        std::fs::write(
+            dir.path().join("kndo.toml"),
+            "[analysis]\nskip = [\"unused:file\"]\n",
+        )
+        .unwrap();
+
+        let from_file = run_with(&dir, ConfigOverrides::default());
+        assert!(from_file
+            .findings
+            .iter()
+            .all(|f| f.subject_kind != crate::vocab::SubjectKind::FILE));
+        assert_eq!(from_file.suppressed.config, 1);
+
+        let both = run_with(
+            &dir,
+            ConfigOverrides {
+                skip: vec![spec("unused:function")],
+                ..ConfigOverrides::default()
+            },
+        );
+        assert!(
+            both.findings.is_empty(),
+            "the file's skip still applies alongside the flag's: {:?}",
+            both.findings
+        );
+        assert!(both.suppressed.config > from_file.suppressed.config);
+        assert_eq!(both.elided, 0, "skip is suppression, never elision");
+    }
+
+    #[test]
+    fn strict_promotes_undeclared_and_nothing_else() {
+        // RFC 0005: "Severity: warning; error in `--strict`". Exactly one category promotes
+        // today, and the test says so — a blanket promotion would be a different feature.
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("root.dmock"), "root-file\n").unwrap();
+        std::fs::write(dir.path().join("dead.dmock"), "").unwrap();
+
+        let strict = run_with(
+            &dir,
+            ConfigOverrides {
+                strict: true,
+                ..ConfigOverrides::default()
+            },
+        );
+        assert!(
+            strict
+                .findings
+                .iter()
+                .all(|f| f.severity != Severity::Error),
+            "no undeclared dependency here, so nothing promotes: {:?}",
+            strict.findings
+        );
+    }
+
+    #[test]
+    fn a_finding_names_the_adapter_whose_facts_it_rests_on() {
+        let dir = sources_repo();
+        let mut engine = Engine::open(
+            dir.path(),
+            ConfigOverrides::default(),
+            vec![Box::new(DiffMockAdapter)],
+        )
+        .unwrap();
+        let result = engine.check(RunMode::Full);
+
+        assert!(!result.findings.is_empty(), "{:?}", result.findings);
+        for finding in &result.findings {
+            assert_eq!(
+                finding.sources,
+                vec!["adapter:dmock".to_string()],
+                "every finding here is about a file the mock adapter claimed: {finding:?}"
+            );
+        }
+        assert!(
+            result.to_json().contains("\"sources\": [\n"),
+            "the field reaches the envelope: {}",
+            result.to_json()
+        );
+    }
+
+    #[test]
+    fn an_unclaimed_subject_reports_no_sources_rather_than_a_plausible_one() {
+        // The honest-empty case, and the reason the field is omitted rather than null: two
+        // identical files no adapter claims rest on nobody's facts — the core hashed the
+        // bytes. Inventing `adapter:<something>` here would be the exact failure this whole
+        // stage exists to remove.
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("root.dmock"), "root-file\n").unwrap();
+        let clone = "the same bytes, twice, in a language nothing here claims\n";
+        std::fs::write(dir.path().join("a.unclaimed"), clone).unwrap();
+        std::fs::write(dir.path().join("b.unclaimed"), clone).unwrap();
+
+        let mut engine = Engine::open(
+            dir.path(),
+            ConfigOverrides::default(),
+            vec![Box::new(DiffMockAdapter)],
+        )
+        .unwrap();
+        let result = engine.check(RunMode::Full);
+
+        let duplicate = result
+            .findings
+            .iter()
+            .find(|f| f.category.as_str() == "duplicate")
+            .expect("identical unclaimed files are still duplicates");
+        assert!(duplicate.sources.is_empty(), "{duplicate:?}");
+        let json = serde_json::to_string(&duplicate).unwrap();
+        assert!(
+            !json.contains("sources"),
+            "empty means absent, never null: {json}"
+        );
+    }
+
+    #[test]
+    fn sources_survive_a_warm_cache_because_they_come_from_the_graph() {
+        // The trap this design exists to avoid: provenance read off the live plugin round
+        // would vanish on a snapshot hit, where nothing runs. It comes off the persisted
+        // graph instead, so warm and cold must agree exactly.
+        let dir = sources_repo();
+        let mut engine = Engine::open(
+            dir.path(),
+            ConfigOverrides::default(),
+            vec![Box::new(DiffMockAdapter)],
+        )
+        .unwrap();
+        let cold = engine.check(RunMode::Full);
+        let warm = engine.check(RunMode::Full);
+        assert!(warm.cache_hits > 0, "the second run has to be warm");
+        assert_eq!(
+            sources_of(&cold, "dead.dmock"),
+            sources_of(&warm, "dead.dmock")
+        );
+        assert_eq!(sources_of(&warm, "dead.dmock"), vec!["adapter:dmock"]);
+    }
+
+    #[test]
+    fn no_delta_section_means_no_budget_and_no_gate_change() {
+        // The opt-in, from the outside: a project that never wrote `[delta]` must not gain a
+        // `budget` block or a new way to exit 1 just because the subsystem now exists. The
+        // config file has to EXIST for this to be worth anything — with no `kndo.toml` at all
+        // the section parser never runs, so the absence would prove nothing about the opt-in.
+        let (dir, base) = diff_repo_with_one_new_finding("[analysis]\nskip = []\n");
+        let result = diff_run(&dir, base);
+
+        assert_eq!(result.findings.len(), 1, "{:?}", result.findings);
+        assert!(result.budget.is_none());
+        assert!(!result.budget_failed());
+        assert!(!result.gate_fails(None));
+        assert!(
+            !result.to_json().contains("\"budget\""),
+            "an absent budget is an absent key, not a null: {}",
+            result.to_json()
+        );
+    }
+
+    #[test]
+    fn a_configured_ratchet_fails_the_gate_that_fail_on_alone_would_pass() {
+        // The whole point of the aggregate half. `--fail-on none` is full mode's default and
+        // the findings half therefore passes; the budget is what turns this run red.
+        let (dir, base) = diff_repo_with_one_new_finding("[delta]\nmax-net-findings = 0\n");
+        let result = diff_run(&dir, base);
+
+        assert!(
+            !result.fails_at(None),
+            "the findings half has nothing to say"
+        );
+        let budget = result.budget.as_ref().expect("the section opts in");
+        assert!(budget.failed());
+        assert!(result.gate_fails(None), "OR, per RFC 0006 §5");
+
+        let net = budget
+            .rules
+            .iter()
+            .find(|r| r.rule == "max-net-findings")
+            .unwrap();
+        assert_eq!(net.measured, 1.0);
+        assert_eq!(net.over_by, Some(1.0));
+
+        let json = result.to_json();
+        assert!(json.contains("\"budget\""), "{json}");
+        assert!(json.contains("\"verdict\": \"fail\""), "{json}");
+    }
+
+    #[test]
+    fn a_tolerance_that_covers_the_change_passes_the_whole_gate() {
+        // Same run, one tolerance wider: the budget must be the *only* thing that moved, so a
+        // team can loosen a ratchet without loosening anything else.
+        let (dir, base) = diff_repo_with_one_new_finding(
+            "[delta]\nmax-net-findings = 1\nmax-health-drop = 100.0\n",
+        );
+        let result = diff_run(&dir, base);
+
+        assert_eq!(result.findings.len(), 1, "{:?}", result.findings);
+        let budget = result.budget.as_ref().expect("the section opts in");
+        assert!(!budget.failed(), "{:?}", budget.rules);
+        assert!(!result.gate_fails(None));
+    }
+
+    #[test]
+    fn a_per_category_budget_reads_the_categories_the_run_actually_emitted() {
+        // `[delta.budget]` keys are group *or* category names, matched against live findings —
+        // this pins that the key reaches the same vocabulary the findings carry, which is the
+        // half a config-only test cannot see.
+        let (dir, base) = diff_repo_with_one_new_finding(
+            "[delta]\nmax-net-findings = 9\n[delta.budget]\nunused = 0\n",
+        );
+        let result = diff_run(&dir, base);
+
+        let budget = result.budget.as_ref().expect("the section opts in");
+        let unused = budget
+            .rules
+            .iter()
+            .find(|r| r.rule == "unused")
+            .expect("the configured key is reported whether or not it matched");
+        assert_eq!(unused.measured, 1.0, "the new finding is an `unused`");
+        assert_eq!(unused.verdict, crate::delta::BudgetVerdict::Fail);
+        assert!(result.gate_fails(None));
+    }
+
+    #[test]
+    fn a_run_that_could_not_assemble_emits_no_budget_at_all() {
+        // The distinction `evaluate` deliberately does not model: a failed run reports no
+        // budget rather than a passing one. A gate that read "no failures" off a run that
+        // never measured anything would be worse than no gate.
+        let (dir, _) = diff_repo_with_one_new_finding("[delta]\nmax-net-findings = 0\n");
+        let result = diff_run(&dir, "no-such-revision".to_string());
+
+        assert!(!result.diagnostics.is_empty());
+        assert!(result.budget.is_none());
+        assert!(!result.budget_failed());
+    }
+
     #[test]
     fn staged_mode_uses_the_index_not_the_raw_working_tree() {
-        let dir = git_repo("staged-index");
-        std::fs::write(dir.join("root.dmock"), "root-file\n").unwrap();
-        git_add_all_commit(&dir, "base");
+        let dir = git_repo();
+        std::fs::write(dir.path().join("root.dmock"), "root-file\n").unwrap();
+        git_add_all_commit(dir.path(), "base");
 
         // Stage a new dead file, then make a further UNSTAGED edit to root.dmock — that
         // unstaged edit must not affect the "after" side, which is exactly the index.
-        std::fs::write(dir.join("staged.dmock"), "").unwrap();
+        std::fs::write(dir.path().join("staged.dmock"), "").unwrap();
         let status = std::process::Command::new("git")
             .arg("-C")
-            .arg(&dir)
+            .arg(dir.path())
             .args(["add", "staged.dmock"])
             .status()
             .unwrap();
         assert!(status.success());
         std::fs::write(
-            dir.join("root.dmock"),
+            dir.path().join("root.dmock"),
             "root-file\nimport ./unstaged.dmock\n",
         )
         .unwrap();
@@ -2500,14 +3667,12 @@ mod tests {
         // assertion is that `staged.dmock` (and only it) shows up as new.
 
         let mut engine = Engine::open(
-            &dir,
+            dir.path(),
             ConfigOverrides::default(),
             vec![Box::new(DiffMockAdapter)],
         )
         .unwrap();
-        let result = engine.check(CheckRequest {
-            mode: RunMode::Staged,
-        });
+        let result = engine.check(RunMode::Staged);
 
         assert!(
             result.diagnostics.iter().all(is_no_test_roots_diagnostic),
@@ -2520,20 +3685,16 @@ mod tests {
 
     #[test]
     fn diff_mode_outside_a_git_repo_is_an_error_diagnostic_not_a_panic() {
-        let dir = std::env::temp_dir().join("kndo-engine-difftest-no-git");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("a.dmock"), "").unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("a.dmock"), "").unwrap();
 
         let mut engine = Engine::open(
-            &dir,
+            dir.path(),
             ConfigOverrides::default(),
             vec![Box::new(DiffMockAdapter)],
         )
         .unwrap();
-        let result = engine.check(CheckRequest {
-            mode: RunMode::Staged,
-        });
+        let result = engine.check(RunMode::Staged);
 
         assert!(result.findings.is_empty());
         let err = &result.diagnostics[0];
@@ -2552,30 +3713,28 @@ mod tests {
     /// the subdir would appear removed.
     #[test]
     fn diff_mode_from_a_subdirectory_scopes_both_sides_to_it() {
-        let dir = git_repo("subdir-scope");
-        std::fs::create_dir_all(dir.join("pkg")).unwrap();
-        std::fs::write(dir.join("outside.dmock"), "").unwrap(); // dead, but OUTSIDE the scope
+        let dir = git_repo();
+        std::fs::create_dir_all(dir.path().join("pkg")).unwrap();
+        std::fs::write(dir.path().join("outside.dmock"), "").unwrap(); // dead, but OUTSIDE the scope
         std::fs::write(
-            dir.join("pkg/root.dmock"),
+            dir.path().join("pkg/root.dmock"),
             "root-file\nimport ./used.dmock\n",
         )
         .unwrap();
-        std::fs::write(dir.join("pkg/used.dmock"), "").unwrap();
-        git_add_all_commit(&dir, "base");
-        let base_sha = git_rev_parse(&dir, "HEAD");
+        std::fs::write(dir.path().join("pkg/used.dmock"), "").unwrap();
+        git_add_all_commit(dir.path(), "base");
+        let base_sha = git_rev_parse(dir.path(), "HEAD");
 
         // Working-tree change inside pkg only: stop importing used.dmock.
-        std::fs::write(dir.join("pkg/root.dmock"), "root-file\n").unwrap();
+        std::fs::write(dir.path().join("pkg/root.dmock"), "root-file\n").unwrap();
 
         let mut engine = Engine::open(
-            &dir.join("pkg"),
+            &dir.path().join("pkg"),
             ConfigOverrides::default(),
             vec![Box::new(DiffMockAdapter)],
         )
         .unwrap();
-        let result = engine.check(CheckRequest {
-            mode: RunMode::Diff { base: base_sha },
-        });
+        let result = engine.check(RunMode::Diff { base: base_sha });
 
         assert!(
             result.diagnostics.iter().all(is_no_test_roots_diagnostic),
@@ -2592,14 +3751,14 @@ mod tests {
 
     #[test]
     fn baseline_applies_symmetrically_in_diff_mode() {
-        let dir = git_repo("delta-baseline");
-        std::fs::write(dir.join("root.dmock"), "root-file\n").unwrap();
-        std::fs::write(dir.join("orphan.dmock"), "").unwrap();
-        git_add_all_commit(&dir, "base");
-        let base_sha = git_rev_parse(&dir, "HEAD");
+        let dir = git_repo();
+        std::fs::write(dir.path().join("root.dmock"), "root-file\n").unwrap();
+        std::fs::write(dir.path().join("orphan.dmock"), "").unwrap();
+        git_add_all_commit(dir.path(), "base");
+        let base_sha = git_rev_parse(dir.path(), "HEAD");
 
         let mut engine = Engine::open(
-            &dir,
+            dir.path(),
             ConfigOverrides::default(),
             vec![Box::new(DiffMockAdapter)],
         )
@@ -2613,10 +3772,8 @@ mod tests {
 
         // Add a second, unacknowledged dead file — the acknowledged one must not resurface as
         // new or fixed on either side of the diff.
-        std::fs::write(dir.join("also-dead.dmock"), "").unwrap();
-        let result = engine.check(CheckRequest {
-            mode: RunMode::Diff { base: base_sha },
-        });
+        std::fs::write(dir.path().join("also-dead.dmock"), "").unwrap();
+        let result = engine.check(RunMode::Diff { base: base_sha });
 
         assert!(
             result.diagnostics.iter().all(is_no_test_roots_diagnostic),
@@ -2637,20 +3794,16 @@ mod tests {
 
     #[test]
     fn inline_suppression_hides_a_finding_from_full_mode_but_still_counts_it() {
-        let dir = std::env::temp_dir().join("kndo-engine-test-suppress-full");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("orphan.dmock"), "suppress-file unused\n").unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("orphan.dmock"), "suppress-file unused\n").unwrap();
 
         let mut engine = Engine::open(
-            &dir,
+            dir.path(),
             ConfigOverrides::default(),
             vec![Box::new(DiffMockAdapter)],
         )
         .unwrap();
-        let result = engine.check(CheckRequest {
-            mode: RunMode::Full,
-        });
+        let result = engine.check(RunMode::Full);
 
         assert!(
             !result
@@ -2666,21 +3819,21 @@ mod tests {
 
     #[test]
     fn config_skip_hides_a_finding_and_counts_it_as_config_suppressed() {
-        let dir = std::env::temp_dir().join("kndo-engine-test-config-skip");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("orphan.dmock"), "").unwrap();
-        std::fs::write(dir.join("kndo.toml"), "[analysis]\nskip = [\"unused\"]\n").unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("orphan.dmock"), "").unwrap();
+        std::fs::write(
+            dir.path().join("kndo.toml"),
+            "[analysis]\nskip = [\"unused\"]\n",
+        )
+        .unwrap();
 
         let mut engine = Engine::open(
-            &dir,
+            dir.path(),
             ConfigOverrides::default(),
             vec![Box::new(DiffMockAdapter)],
         )
         .unwrap();
-        let result = engine.check(CheckRequest {
-            mode: RunMode::Full,
-        });
+        let result = engine.check(RunMode::Full);
 
         assert!(
             !result.findings.iter().any(|f| f.category == "unused"),
@@ -2696,21 +3849,21 @@ mod tests {
         // The ordering guarantee: pragmas run first, so a finding covered by BOTH
         // mechanisms counts as inline (config never sees it) and the pragma stays
         // honestly non-stale — deleting the config entry could never flicker it.
-        let dir = std::env::temp_dir().join("kndo-engine-test-config-plus-pragma");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("orphan.dmock"), "suppress-file unused\n").unwrap();
-        std::fs::write(dir.join("kndo.toml"), "[analysis]\nskip = [\"unused\"]\n").unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("orphan.dmock"), "suppress-file unused\n").unwrap();
+        std::fs::write(
+            dir.path().join("kndo.toml"),
+            "[analysis]\nskip = [\"unused\"]\n",
+        )
+        .unwrap();
 
         let mut engine = Engine::open(
-            &dir,
+            dir.path(),
             ConfigOverrides::default(),
             vec![Box::new(DiffMockAdapter)],
         )
         .unwrap();
-        let result = engine.check(CheckRequest {
-            mode: RunMode::Full,
-        });
+        let result = engine.check(RunMode::Full);
 
         assert!(
             !result.findings.iter().any(|f| f.category == "stale"),
@@ -2723,26 +3876,23 @@ mod tests {
 
     #[test]
     fn a_path_rule_scopes_its_skip_to_matching_paths() {
-        let dir = std::env::temp_dir().join("kndo-engine-test-config-rule");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(dir.join("gen")).unwrap();
-        std::fs::write(dir.join("orphan.dmock"), "").unwrap();
-        std::fs::write(dir.join("gen/tool.dmock"), "").unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("gen")).unwrap();
+        std::fs::write(dir.path().join("orphan.dmock"), "").unwrap();
+        std::fs::write(dir.path().join("gen/tool.dmock"), "").unwrap();
         std::fs::write(
-            dir.join("kndo.toml"),
+            dir.path().join("kndo.toml"),
             "[[rule]]\npaths = [\"gen/**\"]\nskip = [\"unused\"]\n",
         )
         .unwrap();
 
         let mut engine = Engine::open(
-            &dir,
+            dir.path(),
             ConfigOverrides::default(),
             vec![Box::new(DiffMockAdapter)],
         )
         .unwrap();
-        let result = engine.check(CheckRequest {
-            mode: RunMode::Full,
-        });
+        let result = engine.check(RunMode::Full);
 
         assert!(
             result
@@ -2764,9 +3914,9 @@ mod tests {
         let mk = |category: &str, confidence: Confidence| Finding {
             advisory: false,
             id: format!("{category}-{confidence:?}"),
-            category: category.to_string(),
-            group: "waste".to_string(),
-            subject_kind: "function".to_string(),
+            category: crate::vocab::Category::new(category),
+            group: crate::vocab::Group::Waste,
+            subject_kind: crate::vocab::SubjectKind::new("function"),
             severity: Severity::Info,
             confidence,
             message: String::new(),
@@ -2777,6 +3927,8 @@ mod tests {
                 package: None,
             },
             related: Vec::new(),
+            rolled_up: None,
+            sources: Vec::new(),
             delta: None,
             delta_origin: None,
         };
@@ -2800,26 +3952,22 @@ mod tests {
 
     #[test]
     fn a_matchless_pragma_surfaces_as_a_stale_finding_in_full_mode() {
-        let dir = std::env::temp_dir().join("kndo-engine-test-stale-full");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
+        let dir = tempfile::tempdir().unwrap();
         // A root file (never `unused`) acknowledging a category it will never produce: the
         // pragma suppresses nothing, so the `stale` rule flags the pragma itself.
         std::fs::write(
-            dir.join("root.dmock"),
+            dir.path().join("root.dmock"),
             "root-file\nsuppress-file version-skew\n",
         )
         .unwrap();
 
         let mut engine = Engine::open(
-            &dir,
+            dir.path(),
             ConfigOverrides::default(),
             vec![Box::new(DiffMockAdapter)],
         )
         .unwrap();
-        let result = engine.check(CheckRequest {
-            mode: RunMode::Full,
-        });
+        let result = engine.check(RunMode::Full);
 
         let stale: Vec<_> = result
             .findings
@@ -2827,7 +3975,7 @@ mod tests {
             .filter(|f| f.category == "stale")
             .collect();
         assert_eq!(stale.len(), 1, "{:?}", result.findings);
-        assert_eq!(stale[0].group, "hygiene");
+        assert_eq!(stale[0].group, crate::vocab::Group::Hygiene);
         assert_eq!(stale[0].subject_kind, "suppression");
         assert_eq!(stale[0].severity, Severity::Info);
         assert_eq!(finding_path(stale[0]), "root.dmock");
@@ -2836,29 +3984,67 @@ mod tests {
     }
 
     #[test]
-    fn a_bad_diff_base_is_an_error_level_diagnostic_never_a_clean_empty_pass() {
-        // A Warn + empty result would fail open — a typo'd base ref in CI
-        // would read as zero findings at exit 0. This is the exit-2 tier, signaled
-        // through the one channel every format carries (an error-level diagnostic).
-        let dir = git_repo("bad-diff-base");
+    fn a_pragma_for_an_analysis_that_abstained_is_not_reported_stale() {
+        // End to end, the accusation-direction bug: no coverage report ⇒ `crap` abstains ⇒ its
+        // finding list is empty because nobody judged, not because the code is clean. Telling
+        // the user to delete the pragma is the allow/stale flicker the contract forbids: they
+        // delete it, add a report, and the finding comes back.
+        let dir = tempfile::tempdir().expect("temp project");
         std::fs::write(
-            dir.join("root.dmock"),
-            "root-file
-",
+            dir.path().join("root.dmock"),
+            "root-file\nsuppress-file crap\n",
         )
         .unwrap();
-        git_add_all_commit(&dir, "base");
 
         let mut engine = Engine::open(
-            &dir,
+            dir.path(),
             ConfigOverrides::default(),
             vec![Box::new(DiffMockAdapter)],
         )
         .unwrap();
-        let result = engine.check(CheckRequest {
-            mode: RunMode::Diff {
-                base: "no-such-ref".to_string(),
-            },
+        let result = engine.check(RunMode::Full);
+
+        assert!(
+            !result.findings.iter().any(|f| f.category == "stale"),
+            "{:?}",
+            result.findings
+        );
+        // …and the run says so out loud, so a consumer reading zero `crap` findings can tell
+        // "clean" from "nobody measured".
+        let crap = result
+            .abstained
+            .iter()
+            .find(|a| a.category == crate::vocab::Category::CRAP)
+            .expect("crap abstained and must be reported as such");
+        assert!(
+            crap.reason.starts_with("crap: no coverage ingested"),
+            "{}",
+            crap.reason
+        );
+    }
+
+    #[test]
+    fn a_bad_diff_base_is_an_error_level_diagnostic_never_a_clean_empty_pass() {
+        // A Warn + empty result would fail open — a typo'd base ref in CI
+        // would read as zero findings at exit 0. This is the exit-2 tier, signaled
+        // through the one channel every format carries (an error-level diagnostic).
+        let dir = git_repo();
+        std::fs::write(
+            dir.path().join("root.dmock"),
+            "root-file
+",
+        )
+        .unwrap();
+        git_add_all_commit(dir.path(), "base");
+
+        let mut engine = Engine::open(
+            dir.path(),
+            ConfigOverrides::default(),
+            vec![Box::new(DiffMockAdapter)],
+        )
+        .unwrap();
+        let result = engine.check(RunMode::Diff {
+            base: "no-such-ref".to_string(),
         });
 
         assert!(result.findings.is_empty());
@@ -2877,24 +4063,22 @@ mod tests {
 
     #[test]
     fn a_suppression_present_on_both_sides_of_a_diff_never_surfaces_as_new_or_fixed() {
-        let dir = git_repo("delta-suppressed");
-        std::fs::write(dir.join("root.dmock"), "root-file\n").unwrap();
-        std::fs::write(dir.join("orphan.dmock"), "suppress-file unused\n").unwrap();
-        git_add_all_commit(&dir, "base");
-        let base_sha = git_rev_parse(&dir, "HEAD");
+        let dir = git_repo();
+        std::fs::write(dir.path().join("root.dmock"), "root-file\n").unwrap();
+        std::fs::write(dir.path().join("orphan.dmock"), "suppress-file unused\n").unwrap();
+        git_add_all_commit(dir.path(), "base");
+        let base_sha = git_rev_parse(dir.path(), "HEAD");
 
         // Touch an unrelated file so the diff isn't a total no-op.
-        std::fs::write(dir.join("also-dead.dmock"), "").unwrap();
+        std::fs::write(dir.path().join("also-dead.dmock"), "").unwrap();
 
         let mut engine = Engine::open(
-            &dir,
+            dir.path(),
             ConfigOverrides::default(),
             vec![Box::new(DiffMockAdapter)],
         )
         .unwrap();
-        let result = engine.check(CheckRequest {
-            mode: RunMode::Diff { base: base_sha },
-        });
+        let result = engine.check(RunMode::Diff { base: base_sha });
 
         assert!(
             result.diagnostics.iter().all(is_no_test_roots_diagnostic),
@@ -2926,12 +4110,10 @@ mod tests {
 
     #[test]
     fn query_find_locates_a_declared_symbol() {
-        let dir = std::env::temp_dir().join("kndo-engine-query-find");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("root.dmock"), "root-file\ndecl handler\n").unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("root.dmock"), "root-file\ndecl handler\n").unwrap();
 
-        let mut engine = query_engine(&dir);
+        let engine = query_engine(dir.path());
         let result = engine.query(crate::query_envelope::QueryRequest {
             id: None,
             verb: crate::query_envelope::Verb::Find,
@@ -2947,12 +4129,10 @@ mod tests {
 
     #[test]
     fn query_describe_reports_a_not_found_selector() {
-        let dir = std::env::temp_dir().join("kndo-engine-query-not-found");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("root.dmock"), "root-file\n").unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("root.dmock"), "root-file\n").unwrap();
 
-        let mut engine = query_engine(&dir);
+        let engine = query_engine(dir.path());
         let result = engine.query(crate::query_envelope::QueryRequest {
             id: Some("q1".to_string()),
             verb: crate::query_envelope::Verb::Describe,
@@ -2971,13 +4151,15 @@ mod tests {
 
     #[test]
     fn query_used_by_finds_the_importing_file() {
-        let dir = std::env::temp_dir().join("kndo-engine-query-used-by");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("root.dmock"), "root-file\nimport ./lib.dmock\n").unwrap();
-        std::fs::write(dir.join("lib.dmock"), "").unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("root.dmock"),
+            "root-file\nimport ./lib.dmock\n",
+        )
+        .unwrap();
+        std::fs::write(dir.path().join("lib.dmock"), "").unwrap();
 
-        let mut engine = query_engine(&dir);
+        let engine = query_engine(dir.path());
         let result = engine.query(crate::query_envelope::QueryRequest {
             id: None,
             verb: crate::query_envelope::Verb::UsedBy,
@@ -2993,16 +4175,18 @@ mod tests {
 
     #[test]
     fn query_trace_finds_the_liveness_path() {
-        let dir = std::env::temp_dir().join("kndo-engine-query-trace");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
+        let dir = tempfile::tempdir().unwrap();
         // The mock adapter never populates import bindings, so a cross-file `ref` can't resolve
         // (matches the real js-ts adapter's own binding-driven cross-file resolution — this is
         // a same-file reference instead, which the mock's `symbol_by_name_per_file` fallback can
         // resolve on its own).
-        std::fs::write(dir.join("root.dmock"), "root-file\ndecl bar\nref bar\n").unwrap();
+        std::fs::write(
+            dir.path().join("root.dmock"),
+            "root-file\ndecl bar\nref bar\n",
+        )
+        .unwrap();
 
-        let mut engine = query_engine(&dir);
+        let engine = query_engine(dir.path());
         let result = engine.query(crate::query_envelope::QueryRequest {
             id: None,
             verb: crate::query_envelope::Verb::Trace,
@@ -3018,12 +4202,14 @@ mod tests {
 
     #[test]
     fn query_batch_shares_one_graph_load_and_aligns_results_with_requests() {
-        let dir = std::env::temp_dir().join("kndo-engine-query-batch");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("root.dmock"), "root-file\ndecl foo\ndecl bar\n").unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("root.dmock"),
+            "root-file\ndecl foo\ndecl bar\n",
+        )
+        .unwrap();
 
-        let mut engine = query_engine(&dir);
+        let engine = query_engine(dir.path());
         let results = engine.query_batch(vec![
             crate::query_envelope::QueryRequest {
                 id: Some("q1".to_string()),
@@ -3049,6 +4235,46 @@ mod tests {
             panic!("expected Find");
         };
         assert_eq!(f2.matches[0].selector, "root.dmock#bar");
+    }
+
+    /// `query`/`query_batch` take `&self` precisely so an embedder can run many queries
+    /// concurrently against one shared `Engine` — this exercises that directly rather than
+    /// just type-checking it: real threads, real overlapping `assemble_and_analyze` calls,
+    /// each landing its own answer.
+    #[test]
+    fn concurrent_queries_on_a_shared_engine_each_get_the_right_answer() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("root.dmock"),
+            "root-file\ndecl foo\ndecl bar\n",
+        )
+        .unwrap();
+
+        let engine = query_engine(dir.path());
+        let find_req = |selector: &str| crate::query_envelope::QueryRequest {
+            id: None,
+            verb: crate::query_envelope::Verb::Find,
+            selectors: vec![selector.to_string()],
+            flags: crate::query_envelope::QueryFlags::default(),
+        };
+        std::thread::scope(|scope| {
+            let handles: Vec<_> = ["foo", "bar", "foo", "bar", "foo", "bar", "foo", "bar"]
+                .iter()
+                .map(|selector| {
+                    scope.spawn(|| {
+                        let result = engine.query(find_req(selector));
+                        let crate::query_envelope::ResultEntry::Find(f) = &result.results[0] else {
+                            panic!("expected Find");
+                        };
+                        (*selector, f.matches[0].selector.clone())
+                    })
+                })
+                .collect();
+            for handle in handles {
+                let (selector, matched) = handle.join().unwrap();
+                assert_eq!(matched, format!("root.dmock#{selector}"));
+            }
+        });
     }
 
     /// Minimal coverage ingester for host-side tests — core ships no format parsers
@@ -3096,15 +4322,14 @@ mod tests {
 
     #[test]
     fn expand_report_pattern_stats_literals_and_walks_globs_sorted() {
-        let dir = std::env::temp_dir().join("kndo-engine-test-expand-report");
-        let _ = std::fs::remove_dir_all(&dir);
+        let dir = tempfile::tempdir().unwrap();
         for package in ["b", "a"] {
-            let cov = dir.join("packages").join(package).join("coverage");
+            let cov = dir.path().join("packages").join(package).join("coverage");
             std::fs::create_dir_all(&cov).unwrap();
             std::fs::write(cov.join("lcov.info"), "x").unwrap();
         }
-        assert!(expand_report_pattern(&dir, "lcov.info").is_empty());
-        let matches = expand_report_pattern(&dir, "packages/*/coverage/lcov.info");
+        assert!(expand_report_pattern(dir.path(), "lcov.info").is_empty());
+        let matches = expand_report_pattern(dir.path(), "packages/*/coverage/lcov.info");
         let rels: Vec<&str> = matches.iter().map(|(_, rel)| rel.as_str()).collect();
         assert_eq!(
             rels,
@@ -3113,7 +4338,7 @@ mod tests {
                 "packages/b/coverage/lcov.info"
             ]
         );
-        let literal = expand_report_pattern(&dir, "packages/a/coverage/lcov.info");
+        let literal = expand_report_pattern(dir.path(), "packages/a/coverage/lcov.info");
         assert_eq!(literal.len(), 1);
     }
 
@@ -3131,6 +4356,7 @@ mod tests {
             targets: vec![],
             executables: vec![],
             resolves_dependency_usage: false,
+            manifest_claim_languages: Vec::new(),
         });
         let file = |path: &str| crate::graph::FileNode {
             path: crate::adapter::ProjectPath(SmolStr::new(path)),
@@ -3139,8 +4365,10 @@ mod tests {
             class: None,
             package: crate::vocab::PackageId(0),
             unit: None,
+            unit_parent: None,
             test_spans: vec![],
             string_call_sites: vec![],
+            string_attr_args: vec![],
         };
         graph.files.push(file("pkg/a.go"));
         graph.files.push(file("github.com/x/y/pkg/b.go")); // pathological: matches as-is
@@ -3180,36 +4408,32 @@ mod tests {
 
     #[test]
     fn configured_report_glob_replaces_well_known_paths_and_finds_monorepo_reports() {
-        let dir = std::env::temp_dir().join("kndo-engine-test-cov-glob");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("a.mock"), "decl covered\n").unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("a.mock"), "decl covered\n").unwrap();
         // Reports are normally gitignored — glob expansion must not depend on discovery.
-        std::fs::write(dir.join(".gitignore"), "coverage/\n").unwrap();
+        std::fs::write(dir.path().join(".gitignore"), "coverage/\n").unwrap();
         for package in ["a", "b"] {
-            let cov = dir.join("packages").join(package).join("coverage");
+            let cov = dir.path().join("packages").join(package).join("coverage");
             std::fs::create_dir_all(&cov).unwrap();
             std::fs::write(cov.join("lcov.info"), "a.mock 1 1\n").unwrap();
         }
         // A stale report at the well-known path: replace semantics means it is never
         // visited — no freshness warning about it may appear.
-        std::fs::write(dir.join("lcov.info"), "a.mock 1 1\n").unwrap();
-        backdate(&dir.join("lcov.info"), 30);
+        std::fs::write(dir.path().join("lcov.info"), "a.mock 1 1\n").unwrap();
+        backdate(&dir.path().join("lcov.info"), 30);
         std::fs::write(
-            dir.join("kndo.toml"),
+            dir.path().join("kndo.toml"),
             "[plugins.coverage-mock]\nreport = \"packages/*/coverage/lcov.info\"\n",
         )
         .unwrap();
         let mut engine = Engine::open_with_plugins(
-            &dir,
+            dir.path(),
             ConfigOverrides::default(),
             vec![Box::new(CacheMockAdapter)],
             vec![Box::new(MockCoverageIngester)],
         )
         .unwrap();
-        let result = engine.check(CheckRequest {
-            mode: RunMode::Full,
-        });
+        let result = engine.check(RunMode::Full);
         assert!(
             !result
                 .diagnostics
@@ -3231,28 +4455,24 @@ mod tests {
     #[test]
     fn max_age_gates_by_default_and_is_overridable_per_plugin() {
         let stale_days = 10;
-        let fixture = |name: &str, config: &str| {
-            let dir = std::env::temp_dir().join(format!("kndo-engine-test-maxage-{name}"));
-            let _ = std::fs::remove_dir_all(&dir);
-            std::fs::create_dir_all(&dir).unwrap();
-            std::fs::write(dir.join("a.mock"), "decl covered\n").unwrap();
-            std::fs::write(dir.join("lcov.info"), "a.mock 1 1\n").unwrap();
-            backdate(&dir.join("lcov.info"), stale_days);
+        let fixture = |config: &str| {
+            let dir = tempfile::tempdir().unwrap();
+            std::fs::write(dir.path().join("a.mock"), "decl covered\n").unwrap();
+            std::fs::write(dir.path().join("lcov.info"), "a.mock 1 1\n").unwrap();
+            backdate(&dir.path().join("lcov.info"), stale_days);
             if !config.is_empty() {
-                std::fs::write(dir.join("kndo.toml"), config).unwrap();
+                std::fs::write(dir.path().join("kndo.toml"), config).unwrap();
             }
             let mut engine = Engine::open_with_plugins(
-                &dir,
+                dir.path(),
                 ConfigOverrides::default(),
                 vec![Box::new(CacheMockAdapter)],
                 vec![Box::new(MockCoverageIngester)],
             )
             .unwrap();
-            engine.check(CheckRequest {
-                mode: RunMode::Full,
-            })
+            engine.check(RunMode::Full)
         };
-        let default = fixture("default", "");
+        let default = fixture("");
         assert!(
             default
                 .diagnostics
@@ -3261,7 +4481,7 @@ mod tests {
             "{:?}",
             default.diagnostics
         );
-        let widened = fixture("widened", "[plugins.coverage-mock]\nmax-age = \"30d\"\n");
+        let widened = fixture("[plugins.coverage-mock]\nmax-age = \"30d\"\n");
         assert!(
             !widened
                 .diagnostics

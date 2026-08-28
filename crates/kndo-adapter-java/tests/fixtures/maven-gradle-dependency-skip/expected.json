@@ -3,13 +3,8 @@
     {
       "category": "version-skew",
       "subject_kind": "dependency",
+      "path": "module-gradle/build.gradle",
       "symbol": "com.other:lib"
-    },
-    {
-      "category": "unused",
-      "subject_kind": "class",
-      "path": "module-maven/src/main/java/com/a/A.java",
-      "symbol": "A"
     }
   ]
 }

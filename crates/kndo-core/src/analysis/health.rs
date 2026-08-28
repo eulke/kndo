@@ -26,7 +26,7 @@ use crate::coverage::CoverageMap;
 use crate::engine::Finding;
 use crate::graph::ProjectGraph;
 use crate::vocab::{
-    EdgeKind, FileId, FileOrigin, FileRole, NodeRef, PackageId, RootKind, SymbolId,
+    Category, FileId, FileOrigin, FileRole, NodeRef, PackageId, RootKind, SymbolId,
 };
 
 /// One category's weight and the ratio at which its full weight saturates (the
@@ -135,18 +135,38 @@ pub struct PackageHealth {
     pub grade: String,
 }
 
+/// The grade bands, best first: a grade and the score at or above which it is earned. RFC 0006
+/// fixes these four numbers, and they are written **once** — [`grade`] reads them forward and
+/// [`grade_boundary`] backward. The two used to carry their own copy of the same four literals,
+/// while `grade_boundary`'s doc claimed it existed so that nobody would have to duplicate them.
+const GRADE_BANDS: [(&str, f64); 5] = [
+    ("A", 90.0),
+    ("B", 80.0),
+    ("C", 65.0),
+    ("D", 50.0),
+    ("F", f64::NEG_INFINITY),
+];
+
 pub fn grade(score: f64) -> &'static str {
-    if score >= 90.0 {
-        "A"
-    } else if score >= 80.0 {
-        "B"
-    } else if score >= 65.0 {
-        "C"
-    } else if score >= 50.0 {
-        "D"
-    } else {
-        "F"
-    }
+    GRADE_BANDS
+        .iter()
+        .find(|(_, floor)| score >= *floor)
+        .map(|(grade, _)| *grade)
+        // Unreachable: the last band's floor is -inf, so every finite score matches. NaN would
+        // fall through, and "F" is the honest answer for a score that is not a number.
+        .unwrap_or("F")
+}
+
+/// The threshold `current_grade` sits above, and the grade one step worse — for a frontend
+/// reporting "how close to dropping a grade". Reads [`GRADE_BANDS`] backward, the same table
+/// [`grade`] reads forward, so a frontend never hand-copies the thresholds into a table of its
+/// own where they could silently drift. `None` for the worst grade (nothing below it) and for
+/// any string that is not a grade.
+pub fn grade_boundary(current_grade: &str) -> Option<(f64, &'static str)> {
+    let i = GRADE_BANDS.iter().position(|(g, _)| *g == current_grade)?;
+    let (_, floor) = GRADE_BANDS[i];
+    let (next, _) = *GRADE_BANDS.get(i + 1)?;
+    Some((floor, next))
 }
 
 /// Everything `run_all` hands over beyond the graph itself: aux stats individual analyses
@@ -160,6 +180,17 @@ pub struct HealthInputs<'a> {
     /// The effective CRAP threshold (`AnalysisTuning::crap_threshold`) — the same value the
     /// `crap` analysis judged with, so the axis and the findings can never disagree.
     pub crap_threshold: f64,
+    /// Categories no analysis judged this run (from `run_all`). The axes read this instead of
+    /// re-deriving each analysis's skip condition: health once recomputed `coverage.is_empty()`
+    /// and the test-root scan itself, so an axis could disagree with the very analysis it
+    /// summarizes. The analysis decides; health consults.
+    pub abstained: &'a [super::Abstention],
+}
+
+impl HealthInputs<'_> {
+    fn judged(&self, category: &Category) -> bool {
+        !self.abstained.iter().any(|a| &a.category == category)
+    }
 }
 
 pub fn compute(
@@ -235,15 +266,9 @@ fn tally(
     let mut production_symbols = 0usize;
     let mut untested_symbols = 0usize;
     let mut exported_symbols = 0usize;
-    let has_test_roots = graph.edges.iter().any(|e| {
-        matches!(
-            e.kind,
-            EdgeKind::Root {
-                kind: RootKind::Test,
-                ..
-            }
-        )
-    });
+    // Same source as the `untested` findings themselves: the analysis abstains exactly when
+    // the project has no test roots, so the axis and the findings cannot disagree.
+    let has_test_roots = inputs.judged(&Category::UNTESTED);
     for (index, symbol) in graph.symbols.iter().enumerate() {
         if !eligible_file(graph, symbol.file, scope) {
             continue;
@@ -336,10 +361,10 @@ fn tally(
         .sum();
 
     // CRAP axis: excess over the threshold, normalized by threshold-units per function.
-    // With no coverage ingested the crap analysis is skipped (its diagnostic says so), and
-    // the score must not silently punish what the check deliberately didn't measure — the
-    // axis contributes zero penalty and the category row reports the absence explicitly.
-    let crap_measured = !inputs.coverage.is_empty();
+    // When the crap analysis abstained, the score must not silently punish what the check
+    // deliberately didn't measure — the axis contributes zero penalty and the category row
+    // reports the absence explicitly.
+    let crap_measured = inputs.judged(&Category::CRAP);
     let mut crap_functions = 0usize;
     let mut crapload = 0.0f64;
     let mut crap_excess = 0.0f64;
@@ -474,7 +499,7 @@ mod tests {
     use crate::adapter::{ProjectPath, Span, VisibilityLevel};
     use crate::analysis::reachability;
     use crate::graph::{FileNode, SymbolMetrics, SymbolNode};
-    use crate::vocab::{Confidence, Edge, FileClass, Provenance, SymbolKind};
+    use crate::vocab::{Confidence, Edge, EdgeKind, FileClass, Provenance, SymbolKind};
     use smol_str::SmolStr;
 
     fn file(path: &str, package: u32) -> FileNode {
@@ -488,8 +513,10 @@ mod tests {
             }),
             package: PackageId(package),
             unit: None,
+            unit_parent: None,
             test_spans: Vec::new(),
             string_call_sites: Vec::new(),
+            string_attr_args: Vec::new(),
         }
     }
 
@@ -509,6 +536,9 @@ mod tests {
             implicitly_invoked: false,
             nested_scope: false,
             visibility_inherited: false,
+            visible_in_unit: None,
+            implements: None,
+            markers: Vec::new(),
         }
     }
 
@@ -529,13 +559,33 @@ mod tests {
         coverage: &'a CoverageMap,
         cycles: &'a HashSet<FileId>,
         duplicated: &'a [(SymbolId, u32)],
+        abstained: &'a [crate::analysis::Abstention],
     ) -> HealthInputs<'a> {
         HealthInputs {
             coverage,
             cycle_files: cycles,
             duplicated,
             crap_threshold: crate::analysis::crap::CRAP_THRESHOLD,
+            abstained,
         }
+    }
+
+    /// What `run_all` hands `compute` for these fixtures: none declares a `Test` root, so
+    /// `untested` always abstains, and `crap` abstains too whenever the fixture has no report.
+    /// Stated rather than re-derived here on purpose — a health test that computed its own
+    /// skip predicate is exactly the divergence this change removed from production code.
+    fn unmeasured(categories: &[Category]) -> Vec<crate::analysis::Abstention> {
+        categories
+            .iter()
+            .map(|category| crate::analysis::Abstention {
+                category: category.clone(),
+                reason: "test fixture: not measured".to_string(),
+            })
+            .collect()
+    }
+
+    fn nothing_measured() -> Vec<crate::analysis::Abstention> {
+        unmeasured(&[Category::UNTESTED, Category::CRAP])
     }
 
     #[test]
@@ -561,7 +611,12 @@ mod tests {
         );
         let reach = reachability::compute(&graph);
         let (cov, cyc, dup) = (CoverageMap::default(), HashSet::default(), vec![]);
-        let h = compute(&graph, &reach, &[], &inputs(&cov, &cyc, &dup));
+        let h = compute(
+            &graph,
+            &reach,
+            &[],
+            &inputs(&cov, &cyc, &dup, &nothing_measured()),
+        );
         assert_eq!(h.score, 100.0);
         assert_eq!(h.grade, "A");
         assert!(h.packages.is_empty(), "single package: no breakdown");
@@ -604,7 +659,12 @@ mod tests {
         );
         let reach = reachability::compute(&graph);
         let (cov, cyc, dup) = (CoverageMap::default(), HashSet::default(), vec![]);
-        let h = compute(&graph, &reach, &[], &inputs(&cov, &cyc, &dup));
+        let h = compute(
+            &graph,
+            &reach,
+            &[],
+            &inputs(&cov, &cyc, &dup, &nothing_measured()),
+        );
         assert_eq!(
             h.score, 100.0,
             "the unreferenced in-region symbol must not charge unused-symbols"
@@ -638,7 +698,12 @@ mod tests {
         );
         let reach = reachability::compute(&graph);
         let (cov, cyc, dup) = (CoverageMap::default(), HashSet::default(), vec![]);
-        let h = compute(&graph, &reach, &[], &inputs(&cov, &cyc, &dup));
+        let h = compute(
+            &graph,
+            &reach,
+            &[],
+            &inputs(&cov, &cyc, &dup, &nothing_measured()),
+        );
         let unused = h
             .categories
             .iter()
@@ -664,26 +729,43 @@ mod tests {
             (
                 SymbolId(0),
                 SymbolMetrics {
+                    shape_span: Span {
+                        start: (1, 1),
+                        end: (5, 1),
+                    },
+                    shape_ordinal: 0,
                     cyclomatic: 1,
                     loc: 5,
                     token_count: 100,
                     fingerprints: vec![1],
+                    body_is_construction: false,
                 },
             ),
             (
                 SymbolId(1),
                 SymbolMetrics {
+                    shape_span: Span {
+                        start: (1, 1),
+                        end: (5, 1),
+                    },
+                    shape_ordinal: 0,
                     cyclomatic: 1,
                     loc: 5,
                     token_count: 100,
                     fingerprints: vec![1],
+                    body_is_construction: false,
                 },
             ),
         ]);
         let reach = reachability::compute(&graph);
         let (cov, cyc) = (CoverageMap::default(), HashSet::default());
         let dup = vec![(SymbolId(1), 100u32)];
-        let h = compute(&graph, &reach, &[], &inputs(&cov, &cyc, &dup));
+        let h = compute(
+            &graph,
+            &reach,
+            &[],
+            &inputs(&cov, &cyc, &dup, &nothing_measured()),
+        );
         let d = h
             .categories
             .iter()
@@ -706,10 +788,16 @@ mod tests {
         .with_function_metrics(vec![(
             SymbolId(0),
             SymbolMetrics {
+                shape_span: Span {
+                    start: (1, 1),
+                    end: (5, 1),
+                },
+                shape_ordinal: 0,
                 cyclomatic: 8,
                 loc: 5,
                 token_count: 80,
                 fingerprints: vec![],
+                body_is_construction: false,
             },
         )]);
         let reach = reachability::compute(&graph);
@@ -723,7 +811,12 @@ mod tests {
         }
         let cov = sink.into_map();
         let (cyc, dup) = (HashSet::default(), vec![]);
-        let h = compute(&graph, &reach, &[], &inputs(&cov, &cyc, &dup));
+        let h = compute(
+            &graph,
+            &reach,
+            &[],
+            &inputs(&cov, &cyc, &dup, &unmeasured(&[Category::UNTESTED])),
+        );
         let c = h.categories.iter().find(|c| c.category == "crap").unwrap();
         assert_eq!(c.count, Some(1));
         assert_eq!(c.crapload, Some(72.0));
@@ -744,15 +837,26 @@ mod tests {
         .with_function_metrics(vec![(
             SymbolId(0),
             SymbolMetrics {
+                shape_span: Span {
+                    start: (1, 1),
+                    end: (5, 1),
+                },
+                shape_ordinal: 0,
                 cyclomatic: 8,
                 loc: 5,
                 token_count: 80,
                 fingerprints: vec![],
+                body_is_construction: false,
             },
         )]);
         let reach = reachability::compute(&graph);
         let (cov, cyc, dup) = (CoverageMap::default(), HashSet::default(), vec![]);
-        let h = compute(&graph, &reach, &[], &inputs(&cov, &cyc, &dup));
+        let h = compute(
+            &graph,
+            &reach,
+            &[],
+            &inputs(&cov, &cyc, &dup, &nothing_measured()),
+        );
         let c = h.categories.iter().find(|c| c.category == "crap").unwrap();
         assert_eq!(c.count, None);
         assert_eq!(c.crapload, None);
@@ -770,6 +874,30 @@ mod tests {
         assert_eq!(grade(64.9), "D");
         assert_eq!(grade(50.0), "D");
         assert_eq!(grade(49.9), "F");
+    }
+
+    #[test]
+    fn the_forward_and_backward_readings_of_the_grade_table_agree() {
+        // `grade_boundary` is what a frontend uses to say "3.2 points from a B". It named the
+        // same four thresholds `grade` did, in its own copy, under a doc comment claiming it
+        // existed precisely so nobody would keep a second copy. This is the test that would
+        // have caught the drift, and the reason `grade_boundary` had no test at all is that
+        // kndo reported it — `untested` on its own source.
+        for (g, _) in GRADE_BANDS {
+            match grade_boundary(g) {
+                Some((floor, next)) => {
+                    assert_eq!(grade(floor), g, "{g}'s own floor must grade back to {g}");
+                    assert_eq!(
+                        grade(floor - 0.1),
+                        next,
+                        "a hair below {g}'s floor must be {next}"
+                    );
+                }
+                // Only the worst grade has nothing below it.
+                None => assert_eq!(g, GRADE_BANDS[GRADE_BANDS.len() - 1].0),
+            }
+        }
+        assert_eq!(grade_boundary("not-a-grade"), None);
     }
 
     #[test]
@@ -806,6 +934,7 @@ mod tests {
                 declares_surface: false,
                 surface: Vec::new(),
                 resolves_dependency_usage: true,
+                manifest_claim_languages: Vec::new(),
             },
             PackageNode {
                 workspace_entry: None,
@@ -817,6 +946,7 @@ mod tests {
                 declares_surface: false,
                 surface: Vec::new(),
                 resolves_dependency_usage: true,
+                manifest_claim_languages: Vec::new(),
             },
             PackageNode {
                 workspace_entry: None,
@@ -828,11 +958,17 @@ mod tests {
                 declares_surface: false,
                 surface: Vec::new(),
                 resolves_dependency_usage: true,
+                manifest_claim_languages: Vec::new(),
             },
         ]);
         let reach = reachability::compute(&graph);
         let (cov, cyc, dup) = (CoverageMap::default(), HashSet::default(), vec![]);
-        let h = compute(&graph, &reach, &[], &inputs(&cov, &cyc, &dup));
+        let h = compute(
+            &graph,
+            &reach,
+            &[],
+            &inputs(&cov, &cyc, &dup, &nothing_measured()),
+        );
         assert_eq!(h.packages.len(), 2);
         let a = h.packages.iter().find(|p| p.package == "pkg-a").unwrap();
         let b = h.packages.iter().find(|p| p.package == "pkg-b").unwrap();

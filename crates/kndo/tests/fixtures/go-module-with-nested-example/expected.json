@@ -1,0 +1,15 @@
+{
+  "findings": [
+    {
+      "category": "internal-only",
+      "subject_kind": "struct",
+      "path": "internal/store/store.go",
+      "symbol": "Store"
+    },
+    {
+      "category": "unused",
+      "subject_kind": "file",
+      "path": "web/app.js"
+    }
+  ]
+}

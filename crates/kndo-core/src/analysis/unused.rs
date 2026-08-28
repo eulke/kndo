@@ -21,19 +21,50 @@
 //! `unused` (manifests are unclaimed, never eligible — see below), so rollup can never
 //! silently cross a package boundary either.
 
-use rustc_hash::FxHashMap as HashMap;
+use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 
-use crate::analysis::finding_id;
 use crate::analysis::reachability::{Reachability, ReachabilityMap};
-use crate::analysis::rollup::{self, DirGroup};
+use crate::analysis::rollup;
+use crate::analysis::{finding_id, FindingIdParts};
 use crate::engine::{Finding, Location, Severity};
 use crate::graph::ProjectGraph;
-use crate::vocab::{Confidence, FileId, FileOrigin, NodeRef, PackageId, SymbolId};
+use crate::vocab::{
+    Category, Confidence, EdgeKind, FileId, FileOrigin, Group, NodeRef, PackageId, SubjectKind,
+    SymbolId,
+};
 
 pub fn find_unused_files(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<Finding> {
     let mut findings = Vec::new();
     let mut unused: HashMap<&str, (FileId, PackageId)> = HashMap::default();
+
+    // A file that declares nothing cannot be independently dead when its COMPILATION UNIT is
+    // alive. Go's `doc.go` is the shape: a package doc comment and `package gin`, no
+    // declarations at all, compiled as part of the package by the language's own rules — there
+    // is nothing in it to delete, and deleting it would remove the package's documentation.
+    // The unit is what makes this precise rather than broad: an orphan file that declares
+    // nothing and belongs to no live unit is still real waste and still reported (a
+    // file-scoped language has no unit at all, so nothing here applies to it). Declarations,
+    // not reachability, are the test — a unit is alive if any file in it is.
+    let mut live_units: HashSet<&str> = HashSet::default();
+    for (index, f) in graph.files.iter().enumerate() {
+        let Some(unit) = f.unit.as_deref() else {
+            continue;
+        };
+        if reach.get(NodeRef::File(FileId(index as u32))).0 != Reachability::Unreachable {
+            live_units.insert(unit);
+        }
+    }
+    let mut declares: Vec<bool> = vec![false; graph.files.len()];
+    for symbol in &graph.symbols {
+        if let Some(slot) = declares.get_mut(symbol.file.0 as usize) {
+            *slot = true;
+        }
+    }
+
     for (index, file) in graph.files.iter().enumerate() {
+        if !declares[index] && file.unit.as_deref().is_some_and(|u| live_units.contains(u)) {
+            continue;
+        }
         // Unclaimed: no adapter recognized this file, so no adapter has an opinion on whether
         // it can be a root or a target — out of scope, not a verdict.
         let Some(class) = file.class else {
@@ -57,7 +88,22 @@ pub fn find_unused_files(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<F
 
     let rolled_up = rollup::directory_rollups(graph, &unused);
     for dir in &rolled_up.dirs {
-        findings.push(directory_finding(graph, dir));
+        findings.push(rollup::directory_finding(
+            graph,
+            dir,
+            rollup::DirVerdict {
+                category: Category::UNUSED,
+                group: Group::Waste,
+                severity: Severity::Warning,
+                confidence: Confidence::Certain,
+            },
+            format!(
+                "{} is unreachable: {} files, none referenced — safe to delete the whole \
+                 directory",
+                dir.display(),
+                dir.files.len()
+            ),
+        ));
     }
     for (&path, &(_, package)) in &unused {
         if rolled_up.covered.contains(path) {
@@ -65,10 +111,16 @@ pub fn find_unused_files(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<F
         }
         findings.push(Finding {
             advisory: false,
-            id: finding_id("unused", "file", path, "", ""),
-            category: "unused".to_string(),
-            group: "waste".to_string(),
-            subject_kind: "file".to_string(),
+            id: finding_id(FindingIdParts {
+                category: &Category::UNUSED,
+                subject_kind: &SubjectKind::FILE,
+                path,
+                symbol_path: "",
+                discriminator: "",
+            }),
+            category: Category::UNUSED,
+            group: Group::Waste,
+            subject_kind: SubjectKind::FILE,
             severity: Severity::Warning,
             confidence: Confidence::Certain,
             message: format!("{path} is unreachable: no root or import reaches it"),
@@ -79,6 +131,8 @@ pub fn find_unused_files(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<F
                 package: graph.package_name(package).map(str::to_string),
             },
             related: Vec::new(),
+            rolled_up: None,
+            sources: Vec::new(),
             delta: None,
             delta_origin: None,
         });
@@ -86,40 +140,71 @@ pub fn find_unused_files(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<F
     findings
 }
 
-fn directory_finding(graph: &ProjectGraph, dir: &DirGroup<'_>) -> Finding {
-    let display = if dir.path.is_empty() { "." } else { dir.path };
-    Finding {
-        advisory: false,
-        id: finding_id("unused", "directory", dir.path, "", ""),
-        category: "unused".to_string(),
-        group: "waste".to_string(),
-        subject_kind: "directory".to_string(),
-        severity: Severity::Warning,
-        confidence: Confidence::Certain,
-        message: format!(
-            "{display} is unreachable: {} files, none referenced — safe to delete the whole directory",
-            dir.files.len()
-        ),
-        location: Location {
-            path: Some(crate::adapter::ProjectPath(smol_str::SmolStr::new(dir.path))),
-            range: None,
-            symbol: None,
-            package: graph.package_name(dir.package).map(str::to_string),
-        },
-        related: Vec::new(),
-        delta: None,
-        delta_origin: None,
+/// Files alive ONLY through file-liveness evidence: a `<link href>` in a template, an asset a
+/// framework config names by path.
+///
+/// Such a file is **served, not used**. The evidence says its bytes ship; it says nothing about
+/// which of its symbols anyone consumes, because nothing in the project ever names one. Judging
+/// those symbols one by one on that basis reports a stylesheet's every unread custom property
+/// the moment a template links it — 48 of them on spring-petclinic, all `--bs-*` from a
+/// compiled Bootstrap bundle — which is an accusation the evidence cannot support (RFC 0012
+/// §2). The file-level verdict, which the evidence CAN support, is unaffected either way.
+///
+/// `EdgeKind::ReferencesFile` is the only kind carrying this meaning, by contract ("liveness
+/// evidence, never architecture evidence"). Every other inbound edge is symbol-level evidence
+/// and disqualifies the file: an `ImportsFile` means a consumer loaded this module and can name
+/// what is in it, an `InvokesFile` runs it, a `Root` declares it (or something in it) an entry
+/// point, a `References`/`Wildcard` names a symbol directly. The test is deliberately
+/// all-or-nothing in the *reporting* direction — any other evidence at all, and the file is
+/// judged normally.
+fn served_only(graph: &ProjectGraph) -> HashSet<FileId> {
+    let mut served: HashSet<FileId> = HashSet::default();
+    let mut used: HashSet<FileId> = HashSet::default();
+    let file_of = |node: NodeRef| match node {
+        NodeRef::File(f) => Some(f),
+        NodeRef::Symbol(s) => graph.symbols.get(s.0 as usize).map(|sym| sym.file),
+    };
+    for edge in &graph.edges {
+        match edge.kind {
+            EdgeKind::ReferencesFile { to, .. } => {
+                served.insert(to);
+            }
+            EdgeKind::ImportsFile { to, .. } | EdgeKind::InvokesFile { to, .. } => {
+                used.insert(to);
+            }
+            EdgeKind::Root { target, .. } => {
+                used.extend(file_of(target));
+            }
+            // A reference from OUTSIDE the file: someone else names this file's symbol, which
+            // is exactly the evidence a served-only file lacks. An intra-file one is not —
+            // a stylesheet's `var(--bs-primary)` naming its own custom property says nothing
+            // about whether any consumer does, and counting it disqualified every CSS file
+            // from this rule (which is how the 48 findings survived the first version).
+            EdgeKind::References { from, to, .. } => {
+                let target = graph.symbols.get(to.0 as usize).map(|s| s.file);
+                if target.is_some() && file_of(from) != target {
+                    used.extend(target);
+                }
+            }
+            EdgeKind::Wildcard { .. }
+            | EdgeKind::Declares { .. }
+            | EdgeKind::ImportsDependency { .. } => {}
+        }
     }
+    served.retain(|f| !used.contains(f));
+    served
 }
 
 /// The per-symbol scope gate: symbols in unclaimed/generated/vendored files are out of
-/// jurisdiction; symbols in unreachable files roll up to the file finding; constructors are
-/// never accused directly — instantiation references the *type*, so a constructor's
-/// unreachability is structurally unknowable and its liveness follows the class (whose own
-/// finding/rollup covers real death).
+/// jurisdiction; symbols in unreachable files roll up to the file finding; symbols in a file
+/// that is only *served* have no symbol-level evidence to be judged against ([`served_only`]);
+/// constructors are never accused directly — instantiation references the *type*, so a
+/// constructor's unreachability is structurally unknowable and its liveness follows the class
+/// (whose own finding/rollup covers real death).
 fn symbol_in_scope(
     graph: &ProjectGraph,
     reach: &ReachabilityMap,
+    served_only: &HashSet<FileId>,
     symbol: &crate::graph::SymbolNode,
 ) -> bool {
     let file = &graph.files[symbol.file.0 as usize];
@@ -128,14 +213,16 @@ fn symbol_in_scope(
     };
     !matches!(class.origin, FileOrigin::Generated | FileOrigin::Vendored)
         && reach.get(NodeRef::File(symbol.file)).0 != Reachability::Unreachable
+        && !served_only.contains(&symbol.file)
         && symbol.kind != crate::vocab::SymbolKind::Constructor
 }
 
 pub fn find_unused_symbols(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<Finding> {
+    let served_only = served_only(graph);
     let mut findings = Vec::new();
     for (index, symbol) in graph.symbols.iter().enumerate() {
         let file = &graph.files[symbol.file.0 as usize];
-        if !symbol_in_scope(graph, reach, symbol) {
+        if !symbol_in_scope(graph, reach, &served_only, symbol) {
             continue;
         }
 
@@ -151,10 +238,16 @@ pub fn find_unused_symbols(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec
         let qualified = symbol.qualified_name();
         findings.push(Finding {
             advisory: false,
-            id: finding_id("unused", facet, path, &qualified, ""),
-            category: "unused".to_string(),
-            group: "waste".to_string(),
-            subject_kind: facet.to_string(),
+            id: finding_id(FindingIdParts {
+                category: &Category::UNUSED,
+                subject_kind: &SubjectKind::new(facet),
+                path,
+                symbol_path: &qualified,
+                discriminator: "",
+            }),
+            category: Category::UNUSED,
+            group: Group::Waste,
+            subject_kind: SubjectKind::new(facet),
             severity: Severity::Warning,
             confidence: Confidence::Certain,
             message: format!("{path}#{qualified} is unreachable: nothing references this {facet}"),
@@ -165,6 +258,8 @@ pub fn find_unused_symbols(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec
                 package: graph.package_name(file.package).map(str::to_string),
             },
             related: Vec::new(),
+            rolled_up: None,
+            sources: Vec::new(),
             delta: None,
             delta_origin: None,
         });
@@ -189,8 +284,10 @@ mod tests {
             class,
             package: crate::vocab::PackageId(0),
             unit: None,
+            unit_parent: None,
             test_spans: Vec::new(),
             string_call_sites: Vec::new(),
+            string_attr_args: Vec::new(),
         }
     }
 
@@ -213,8 +310,58 @@ mod tests {
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].category, "unused");
         assert_eq!(findings[0].subject_kind, "file");
-        assert_eq!(findings[0].group, "waste");
+        assert_eq!(findings[0].group, crate::vocab::Group::Waste);
         assert!(findings[0].message.contains("orphan.ts"));
+    }
+
+    #[test]
+    fn a_declarationless_file_in_a_live_unit_is_not_dead_but_an_orphan_still_is() {
+        // Go's `doc.go`: a package doc comment and `package gin`, no declarations, compiled as
+        // part of the package by the language's own rules. There is nothing in it to delete,
+        // and it is never independently dead while the package is alive.
+        let mut doc = file("doc.go", Some(FileClass::default()));
+        doc.unit = Some(SmolStr::new("./#gin"));
+        let mut api = file("api.go", Some(FileClass::default()));
+        api.unit = Some(SmolStr::new("./#gin"));
+
+        let symbols = vec![SymbolNode {
+            file: FileId(1),
+            name: SmolStr::new("New"),
+            kind: crate::vocab::SymbolKind::Function,
+            span: crate::adapter::Span::default(),
+            exported: true,
+            visibility: crate::adapter::VisibilityLevel(1),
+            member_of: None,
+            signature_span: None,
+            implicitly_invoked: false,
+            nested_scope: false,
+            visibility_inherited: false,
+            visible_in_unit: None,
+            implements: None,
+            markers: Vec::new(),
+        }];
+        let edges = vec![edge(
+            EdgeKind::Root {
+                kind: RootKind::Production,
+                target: NodeRef::File(FileId(1)),
+            },
+            Confidence::Certain,
+        )];
+        let graph = ProjectGraph::for_test(vec![doc, api], symbols, vec![], edges);
+        let reach = reachability::compute(&graph);
+        let findings = find_unused_files(&graph, &reach);
+        assert!(
+            !findings.iter().any(|f| f.message.contains("doc.go")),
+            "a declarationless file in a live unit is not independently dead"
+        );
+
+        // The exemption is about belonging to a live unit, NOT about being empty. An orphan
+        // that declares nothing and belongs to no live unit is still real waste — the first
+        // version of this rule keyed on "has no content" and silenced that case too.
+        let orphan = file("stray.ts", Some(FileClass::default()));
+        let graph = ProjectGraph::for_test(vec![orphan], vec![], vec![], vec![]);
+        let reach = reachability::compute(&graph);
+        assert_eq!(find_unused_files(&graph, &reach).len(), 1);
     }
 
     #[test]
@@ -335,6 +482,22 @@ mod tests {
         assert_eq!(findings[0].subject_kind, "directory");
         assert_eq!(findings[0].location.path.as_ref().unwrap().0, "src/legacy");
         assert!(findings[0].message.contains("3 files"));
+        // The same number the prose carries, as a field a consumer can read without parsing
+        // English — that is the whole reason the field exists.
+        assert_eq!(findings[0].rolled_up, Some(3));
+    }
+
+    #[test]
+    fn a_finding_that_subsumes_nothing_has_no_rolled_up_count() {
+        // Absent, not `Some(1)`: "a rollup of one" is not a fact, and a consumer summing the
+        // field to weigh a report must not double-count leaves.
+        let (files, edges) = with_live_root(vec![file("src/dead.ts", Some(FileClass::default()))]);
+        let graph = ProjectGraph::for_test(files, vec![], vec![], edges);
+        let reach = reachability::compute(&graph);
+        let findings = find_unused_files(&graph, &reach);
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].subject_kind, "file");
+        assert_eq!(findings[0].rolled_up, None);
     }
 
     #[test]
@@ -439,6 +602,9 @@ mod tests {
             implicitly_invoked: false,
             nested_scope: false,
             visibility_inherited: false,
+            visible_in_unit: None,
+            implements: None,
+            markers: Vec::new(),
         }
     }
 
@@ -470,6 +636,124 @@ mod tests {
         assert_eq!(findings[0].category, "unused");
         assert_eq!(findings[0].subject_kind, "function");
         assert!(findings[0].message.contains("main.ts#dead"));
+    }
+
+    #[test]
+    fn symbols_of_a_file_that_is_only_served_are_not_judged() {
+        // spring-petclinic in miniature: a template is the root, and it LINKS a stylesheet.
+        // That link says the bytes ship; it names none of the stylesheet's 1185 custom
+        // properties, so judging them one by one on its strength reported 48 of them as dead
+        // the moment `kndo:thymeleaf` connected the two.
+        let files = vec![
+            file("templates/layout.html", Some(FileClass::default())),
+            file("static/app.css", Some(FileClass::default())),
+        ];
+        let symbols = vec![symbol(FileId(1), "--bs-gray-600")];
+        let edges = vec![
+            edge(
+                EdgeKind::Root {
+                    kind: RootKind::Production,
+                    target: NodeRef::File(FileId(0)),
+                },
+                Confidence::Certain,
+            ),
+            edge(
+                EdgeKind::ReferencesFile {
+                    from: NodeRef::File(FileId(0)),
+                    to: FileId(1),
+                },
+                Confidence::Certain,
+            ),
+        ];
+        let graph = ProjectGraph::for_test(files, symbols, vec![], edges);
+        let reach = reachability::compute(&graph);
+        assert!(
+            find_unused_symbols(&graph, &reach).is_empty(),
+            "a served file's symbols have no symbol-level evidence to be judged against"
+        );
+        // …and the file itself is alive, which is what the link DOES support.
+        assert!(find_unused_files(&graph, &reach).is_empty());
+    }
+
+    #[test]
+    fn a_served_files_own_internal_references_do_not_make_it_used() {
+        // The hole the first version had: a stylesheet's `var(--bs-primary)` names its own
+        // custom property, and counting that as symbol-level evidence disqualified every CSS
+        // file from the rule — the 48 findings survived unchanged.
+        let files = vec![
+            file("templates/layout.html", Some(FileClass::default())),
+            file("static/app.css", Some(FileClass::default())),
+        ];
+        let symbols = vec![
+            symbol(FileId(1), "--bs-primary"),
+            symbol(FileId(1), "--bs-gray"),
+        ];
+        let edges = vec![
+            edge(
+                EdgeKind::Root {
+                    kind: RootKind::Production,
+                    target: NodeRef::File(FileId(0)),
+                },
+                Confidence::Certain,
+            ),
+            edge(
+                EdgeKind::ReferencesFile {
+                    from: NodeRef::File(FileId(0)),
+                    to: FileId(1),
+                },
+                Confidence::Certain,
+            ),
+            edge(
+                EdgeKind::References {
+                    from: NodeRef::File(FileId(1)),
+                    to: crate::vocab::SymbolId(0),
+                    kind: crate::vocab::RefKind::Read,
+                },
+                Confidence::Certain,
+            ),
+        ];
+        let graph = ProjectGraph::for_test(files, symbols, vec![], edges);
+        let reach = reachability::compute(&graph);
+        assert!(find_unused_symbols(&graph, &reach).is_empty());
+    }
+
+    #[test]
+    fn any_symbol_level_evidence_puts_a_served_file_back_in_jurisdiction() {
+        // The exemption is only about what the evidence supports: the same stylesheet, also
+        // imported by another stylesheet, is a module whose consumer can name what is in it.
+        let files = vec![
+            file("templates/layout.html", Some(FileClass::default())),
+            file("static/app.css", Some(FileClass::default())),
+        ];
+        let symbols = vec![symbol(FileId(1), "--bs-gray-600")];
+        let edges = vec![
+            edge(
+                EdgeKind::Root {
+                    kind: RootKind::Production,
+                    target: NodeRef::File(FileId(0)),
+                },
+                Confidence::Certain,
+            ),
+            edge(
+                EdgeKind::ReferencesFile {
+                    from: NodeRef::File(FileId(0)),
+                    to: FileId(1),
+                },
+                Confidence::Certain,
+            ),
+            edge(
+                EdgeKind::ImportsFile {
+                    from: FileId(0),
+                    to: FileId(1),
+                },
+                Confidence::Certain,
+            ),
+        ];
+        let graph = ProjectGraph::for_test(files, symbols, vec![], edges);
+        let reach = reachability::compute(&graph);
+        let findings = find_unused_symbols(&graph, &reach);
+        assert_eq!(findings.len(), 1, "{findings:#?}");
+        assert!(findings[0].message.contains("--bs-gray-600"));
     }
 
     #[test]

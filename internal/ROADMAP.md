@@ -495,7 +495,7 @@ was structurally *invisible* to `unused`, not merely reachable, because nothing 
 `FileClass`. Claiming is the entire fix.
 
 That framing also settled two things the RFC's own prose left ambiguous: `resolve()` turned out
-to be genuinely unreachable in normal operation, not just trivial — `graph.rs`'s `resolve_file`
+to be genuinely unreachable in normal operation, not just trivial — `graph/assemble.rs`'s `resolve_imports`
 only ever calls the *claiming* adapter's own `resolve()` over *that file's own* `facts.imports`,
 never a fan-out to every registered adapter the trait doc comment's wording suggests. Since
 JSON's `extract()` never populates `imports` (JSON has no import syntax), its `resolve()` is
@@ -594,7 +594,7 @@ just asserted in prose.
 
 ### M5 progress — WASM plugin/adapter ABI ✅ (landed 2026-08-21)
 
-`kndo-plugin-api` per `docs/contracts/wasm-abi.md`: the WASM component-model tier ADR 0003
+`kndo-plugin-api` per `internal/contracts/wasm-abi.md`: the WASM component-model tier ADR 0003
 promised, shipped for `LanguageAdapter` — a deliberately scoped-down **v1** (adapter-only, no
 `Plugin` hooks; no manifest/resolve, `ResolveCtx` host-imports, visibility ladder, or byte
 content — the full list, and why each is a real cut rather than an oversight, is
@@ -879,9 +879,9 @@ coordinate-based ids — `github.com/owner/repo` external, reserved `kndo:` for 
 `dependencies` field whose fixpoint co-activates wrapper chains like company-framework → nextjs
 → express, and `kndo plugin install` with lockfile + checksums; phased in §6: phases 1
 (`Plugin::mutates_graph()`), 2 (identity + dependencies fixpoint) and 4 — the **first ecosystem
-plugins**, `kndo:nextjs` and `kndo:express`, spec'd in `docs/plugins/{nextjs,express}.md` and
+plugins**, `kndo:nextjs` and `kndo:express`, spec'd in `docs/src/plugins/{nextjs,express}.md` and
 shipped as gated built-ins (`crates/kndo-plugin-{nextjs,express}`, feature-gated in the `kndo`
-crate, proven end to end by `crates/kndo/tests/builtin_convention_plugins.rs`'s
+crate, proven end to end by `crates/kndo/tests/builtin_plugin_proofs.rs`'s
 baseline-then-plugin fixtures) — and phase 3, `kndo plugin install/list/remove`
 (`kndo::plugin_install`: GitHub-release fetch, checksum + identity-binding verification,
 transitive dependency closure, `plugins.lock`, stage-then-commit atomicity; policies unit-
@@ -1081,7 +1081,7 @@ regressions. Still deliberately unmodeled: `.unwrap()`/`.expect()` (stdlib metho
 semantics — a curated fact table is the legitimate future source), `match` payloads,
 untyped closures, multi-bound generics.
 
-### M6 progress — `yields_params` list + indexed `?N` projection ✅ (landed 2026-08-23)
+### M6 progress — type-argument list + indexed `?N` projection ✅ (landed 2026-08-23; the list became a `TypeExpr` tree, RFC 0012 §3-quater)
 
 The singular-first-parameter shortcut generalized before anyone builds on it (task #87):
 `RawMemberType.yields_param: Option` → `yields_params: Vec` — every type argument of a
@@ -1153,7 +1153,7 @@ member ever named at a call site kndo could see):
   fans out to the implementor's same-named member at `Probable`. Derived entirely from
   facts already in the graph; no trait lists in core. One test exercising a `&dyn Flag`
   site now test-reaches all 112 flag impls.
-- **`kndo:serde`** (plugin, docs/plugins/serde.md): serde's traits are third-party, so the
+- **`kndo:serde`** (plugin, docs/src/plugins/serde.md): serde's traits are third-party, so the
   adapter's machinery list and the fan-out both deliberately stop short of them — the gap
   closes as a plugin fact instead: `AnnotationSink::mark_implicitly_invoked`, the framework
   counterpart of `Declaration::implicitly_invoked`, landing in a new graph plugin partition

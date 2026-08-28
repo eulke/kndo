@@ -102,7 +102,7 @@ report = "packages/*/coverage/lcov.info"
 ```
 
 Formats kndo doesn't ship can be ingested by an external WASM plugin (the
-`coverage-ingester` world — see [plugin authoring](plugin-authoring.md)). Every ingester
+`coverage-ingester` world — see [plugin authoring](plugins/authoring.md)). Every ingester
 feeds per-file, line-granular hit counts into the same analysis. Rules:
 
 - **Freshness**: a report modified more than **7 days** ago (override per plugin:

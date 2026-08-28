@@ -9,33 +9,70 @@ round-trip these examples in CI.
 
 ```jsonc
 {
-  "schema_version": "1.0.0",
+  "schema_version": "1.3.0",
   "kndo_version": "0.3.1",
   "run": {
     "mode": "staged",                    // "full" | "staged" | "diff"
     "base_ref": null,                    // set for "diff"
     "started_at": "2026-08-18T12:00:00Z",
     "duration_ms": 312,
-    "cache": "warm",                     // "warm" | "cold" | "partial" | "disabled"
+    "cache": "warm",                     // "warm" | "cold" | "disabled" (--no-cache)
     "project_root": ".",
     "adapters": [ { "id": "js-ts", "files": 1240 } ],
-    "plugins":  [ { "id": "nextjs", "activated_by": "detected: dependency react" } ]
+    "plugins":  [ { "id": "kndo:nextjs", "activated_by": "manifest-dependency: next" } ],
+    "abstained": [                       // categories NO analysis judged this run
+      { "category": "crap", "reason": "crap: no coverage ingested — skipped (…)" }
+    ]
   },
   "health": { /* §4 */ },
   "budget": {                            // diff modes, only when [delta] rules are configured (RFC 0006 §5)
     "verdict": "fail",                   // "pass" | "fail"
-    "rules": [
-      { "rule": "max-health-drop", "limit": 0.0, "measured": 1.7, "verdict": "pass" },
-      { "rule": "max-net-findings", "limit": 0, "measured": 1, "verdict": "fail", "over_by": 1 }
+    "rules": [                           // in evaluation order: the two ratchets, then [delta.budget] keys sorted
+      // limit/measured/over_by are always JSON numbers, counts included — a count is a
+      // measurement against the same scale as a health drop, and one type keeps a consumer
+      // from having to branch on the rule name to know what it is reading.
+      { "rule": "max-health-drop", "limit": 0.0, "measured": -1.7, "verdict": "pass" },
+      { "rule": "max-net-findings", "limit": 0.0, "measured": 1.0, "verdict": "fail", "over_by": 1.0 },
+      { "rule": "defect", "limit": 0.0, "measured": 0.0, "verdict": "pass" }
     ]
   },
   "findings": [ /* §2 — in diff modes: only new findings */ ],
   "fixed": [ /* §3 — diff modes only */ ],
   "baseline": { "acknowledged": 412, "stale": 3 },
   "suppressed": { "inline": 9, "config": 2 },
+  "elided": 47,                          // `--only` narrowed these away; ABSENT when nothing was narrowed
   "diagnostics": [ { "level": "warn", "message": "coverage report older than 7d — ignored" } ]
 }
 ```
+
+**`run.plugins` (normative).** The plugins that actually ran, in registration order — a
+plugin appears here **only if it was active**, so `activated_by` answers *why*, never
+*whether*. Its value is the composition layer's own verdict, rendered once
+(`ActivationReason`'s `Display`) and reported unchanged: `"manifest-dependency: next"` /
+`"file-exists: next.config.*"` for a plugin whose own activation rule fired (the rule itself,
+because "a rule matched" does not answer the question), `"dependency of <id>"` for one another active
+plugin implied through `dependencies`, `"always-on"` for a built-in that declares no
+rules, `"registered"` for one whose presence *is* the opt-in (a `.kndo/plugins/` drop-in, or an
+embedder's explicit set). The engine never derives these: whoever activated a plugin says why,
+which is what keeps this field and `kndo doctor` from disagreeing. New reason spellings are
+additive; consumers must not exhaustively match on the string.
+
+**`run.abstained` (normative).** A category listed here was **not judged** this run: the analysis
+that owns it could not (no ingested coverage report for `crap`, no test roots for `untested`) and
+emitted nothing. Consumers must read a listed category as *unknown*, never as clean — zero
+findings in an abstained category is the absence of a measurement, not a passing verdict. Absent
+categories were judged, so their emptiness does mean clean. Usually `[]`. The same value drives
+the `stale` rule (a pragma naming an abstained category is never reported matched-nothing) and
+the health axes, so the three can never disagree.
+
+**`elided` vs `suppressed` (normative).** Both say a finding is not in `findings`, and they
+are not interchangeable. `suppressed` counts findings *acknowledged* — an inline pragma or a
+configured/flagged skip; a consumer may treat them as known and accepted. `elided` counts
+findings the caller's `--only` lens did not ask for; they are neither acknowledged nor clean,
+merely out of view, and a consumer that read a narrowed run as a clean one would be wrong.
+Absent (never `0`) when nothing was narrowed. `--only` narrows every category alike, `stale`
+included — the lens is one invocation's scope, not a stored policy, and this count is what
+keeps it from hiding anything silently.
 
 Diagnostic levels: `info` · `warn` (the run degraded but ran) · `error` (M6, additive) — the
 run could not do what was asked (a `--diff` base that doesn't resolve): frontends exit 2 when
@@ -48,29 +85,76 @@ pass. Consumers must treat unknown levels as at least `warn`.
 {
   "id": "kndo-a3f81c92e5d4",            // stable content-anchored id, §5
   "category": "unused",                 // verdict; registry in §6
-  "group": "waste",                     // the verdict's nature: defect | waste | risk | hygiene (fixed mapping, §6)
+  "group": "waste",                     // the verdict's nature: defect | waste | risk | hygiene | convention
+                                         // (fixed mapping, §6) — convention is reserved for plugin-contributed
+                                         // findings (RFC 0018 §2.1); a core analysis never emits it
   "subject_kind": "function",           // what the verdict landed on: symbol kind | file | directory | dependency | import | suppression
   "severity": "warning",                // "error" | "warning" | "info"
   "confidence": "certain",              // "certain" | "probable" | "possible"
   "message": "calcLegacyTax() is unreachable from any production or test root",
   "location": { "path": "src/billing/tax.ts", "range": { "start": [41,1], "end": [78,2] },
                 "symbol": "calcLegacyTax", "package": "@org/billing" },   // owning workspace package (RFC 0011)
-  "rolled_up": null,                    // file/directory rollups: count of subsumed findings
+  "rolled_up": 50,                      // rollup ladder: how many findings this one subsumes; ABSENT when it subsumes nothing
   "related": [                           // evidence chain (also what `kndo explain` renders)
     { "role": "cause", "path": "src/billing/index.ts", "range": { "start": [12,1], "end": [12,42] },
       "note": "last production reference removed by this change" }
   ],
-  "evidence": {                          // category-specific block, keyed by category
-    "test_roots": [],                    // e.g. for test-only
-    "kept_alive_by": []
-  },
-  "sources": ["adapter:js-ts"],          // provenance: adapters/plugins whose facts contributed
-  "remediation": "Delete calcLegacyTax() (and its export in src/billing/index.ts).",
+  "sources": ["adapter:js-ts", "plugin:kndo:nextjs"],  // §2.1 — ABSENT when nothing claimed the subject
   "delta": "new",                        // diff modes: "new"; absent in full mode
   "delta_origin": "derived",             // diff modes: "introduced" (inside the change set — dead on arrival) | "derived" (flipped by it); RFC 0004 §6
   "advisory": true                       // RFC 0018 §2.2: never influences exit codes/budgets; only ever present (as true) on plugin: findings without a [plugins.gate] opt-in
 }
 ```
+
+**A finding whose subject spans several places** (`duplicate` over identical files,
+`version-skew` over disagreeing manifests) **anchors on the lexicographically-first member and
+carries every member — that one included — in `related`.** Normative: `location` makes the
+finding addressable, `related` makes it complete, and only then may `message` summarize
+("… and 3 more"). A consumer must never have to read the prose to learn which places a finding
+covers. The anchor is presentation, not identity: `id` for those categories stays keyed on the
+content hash or the coordinate, so renaming one member while the group survives is the same
+finding, not a new one.
+
+### 2.1 `sources` (normative)
+
+The adapters and plugins whose **facts** the finding's subject rests on, sorted, deduplicated,
+spelled `adapter:<adapter-id>` · `plugin:<coordinate>` · `core:surface`. Same values and same
+derivation as a `describe` envelope's `sources` — one index answers both, so the two can never
+disagree about a node.
+
+A subject contributes:
+
+- the adapter that **claimed** its file, whether or not any edge touches it (a claimed file's
+  declarations, spans and metrics are that adapter's facts);
+- every adapter or plugin that contributed an **edge touching** it, in either direction — an
+  incoming reference is as load-bearing as an outgoing one, which is what puts a plugin's name
+  on the symbol it keeps alive;
+- for a **dependency** subject, the adapters that read the manifest declaring it. A dependency
+  declared and never imported has no edge anywhere, and the manifest's readers are the only
+  honest answer;
+- for a **directory** subject (the rollup ladder), every file underneath — a rollup stands in
+  for exactly those findings, so its provenance is exactly theirs;
+- every `related` path as well as the anchor, so a finding that spans places names every
+  component it rests on.
+
+**Absent means no component was involved, and is a real answer.** `duplicate` over two
+identical files no adapter claims rests on nobody's facts: the core hashed the bytes. Consumers
+must read absence as "no adapter or plugin contributed", never as "not recorded".
+
+**What `sources` cannot say.** It names components whose facts are *present*. It can never name
+the plugin that would have kept a symbol alive had it activated — a verdict of absence
+(`unused` is the whole category) rests on the silence of every component that ran, and silence
+has no provenance. `run.plugins` (§1) is the field that says who ran.
+
+**Two fields this object deliberately does NOT have.** `evidence` — a category-specific block —
+was specified before any category had one, and no analysis has since produced a fact that
+`related` cannot carry; a per-category schema invented ahead of its first consumer is a shape
+every consumer would have to tolerate and none could rely on. `remediation` — the advice a
+finding carries travels *inside* `message`, where it is written by the analysis that knows the
+subject (`deep-import` is the worked example); lifting it into its own field means committing to
+computed remediation prose for every category, which is a product decision, not a serialization
+one. Both stay cut rather than emitted null: a field that is always `null` teaches a consumer to
+stop reading it.
 
 ## 3. Fixed finding (diff modes)
 
@@ -151,7 +235,7 @@ more", never as "that's all".
 
 ```jsonc
 {
-  "schema_version": "1.0.0",
+  "schema_version": "1.3.0",
   "query": { "verb": "used-by", "selectors": ["src/billing/tax.ts#calcLegacyTax"],
              "flags": { "depth": 1, "split_by_color": true }, "id": "q1" },   // id: query-mode echo, optional
   "run": { "cache": "warm", "duration_ms": 74 },
@@ -204,6 +288,35 @@ Verb result shapes (fields beyond these are additive/minor):
 
 Query exit codes are defined in RFC 0007 §6 and are part of this contract.
 
+### 8.1 `explain` (normative)
+
+`kndo explain <finding-id>` answers in the §8 query envelope with `verb: "explain"` and the
+id in `selectors`. Each result is:
+
+```jsonc
+{
+  "finding": { /* §2, verbatim — the same object `check` reported */ },
+  "subject": { /* §8 describe result for what the finding landed on */ },
+  "subject_selector": "src/billing/tax.ts#calcLegacyTax"
+}
+```
+
+Normative points:
+
+- **It is a pair, never a derivation.** The finding's own message, `related` chain, `sources`
+  and `rolled_up` are the explanation the analysis already wrote; the subject block is
+  `describe`'s answer about the node. A consumer comparing `kndo explain <id>` with
+  `kndo describe <subject_selector>` must see the same node facts.
+- **`subject` is absent when the subject is not one graph node** — a directory rollup stands
+  in for many files, and a path the graph never saw has none. `subject_selector` is absent
+  with it in the rollup case, and present-without-`subject` when a selector was formed but
+  did not resolve. The finding is still returned: an explanation with less context beats an
+  invented node.
+- **An id nothing reported is `not-found`, not `error`** — the exit-code tier every other
+  verb's unresolvable selector uses. A finding can be missing because it was fixed,
+  suppressed, or acknowledged in a baseline since the reader saw it, and the message says so
+  rather than implying a typo.
+
 ## 9. Agent format (`--format agent`)
 
 A line-oriented plain-text rendering of the same data, optimized for LLM context windows:
@@ -214,7 +327,7 @@ version stays available for one release cycle, like JSON majors.
 ```
 kndo 0.3.1 agent-format 1 | mode staged | cache warm | 312ms
 result: 3 new, 2 fixed, net +1 | health 82.4 -> 84.1 (B) | baseline 412 acknowledged
-budget: fail (2/3) | health-drop<=0.0 ok +1.7 | defects=0 ok 0 | net<=0 FAIL +1 over-by 1
+budget: fail (2/3) | health-drop<=0 ok -1.7 | net<=0 FAIL 1 over-by 1 | defect<=0 ok 0
 new:
 1. [kndo-a3f81c92e5d4] unused function src/billing/tax.ts:41 calcLegacyTax
    cause: last production reference removed by src/billing/index.ts:12 (this change)
@@ -232,8 +345,9 @@ Grammar rules (normative):
 - **Header + result lines always first**, fixed field order, `|`-separated. An agent reads two
   lines and knows the outcome.
 - **`budget:` line** appears only when `[delta]` rules are configured (RFC 0006 §5): overall
-  verdict + one `rule op limit ok|FAIL measured [over-by N]` segment per rule — a failing agent
-  reads `over-by` and knows exactly how much work remains, without interpretation.
+  verdict + one `rule<=limit ok|FAIL measured [over-by N]` segment per rule — a failing agent
+  reads `over-by` and knows exactly how much work remains, without interpretation. Absence is
+  itself information: it says no budget was configured, never that every budget held.
 - **One finding = one numbered line**: `N. [id] <category> <subject_kind> <path:line> <name>`,
   followed by optional indented `cause:` / `fix:` / `evidence:` lines. Numbers let a model refer
   to findings cheaply ("fix 1 and 3"); ids are the durable anchors.

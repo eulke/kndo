@@ -9,10 +9,10 @@
 
 use rustc_hash::FxHashSet as HashSet;
 
-use kndo_adapter_toolkit::parsing::span;
+use kndo_adapter_toolkit::parsing::{span, text};
 use kndo_core::adapter::{
-    Declaration, Diagnostic, DiagnosticLevel, FileFacts, ImportKind, RawImport, RawReference,
-    RawRoot, RawRootTarget, Span, VisibilityLevel,
+    AdapterDiagnostic, Declaration, DiagnosticLevel, FileFacts, ImportKind, RawImport,
+    RawReference, RawRoot, RawRootTarget, Span, VisibilityLevel,
 };
 use kndo_core::vocab::{Confidence, RefKind, RootKind, SymbolKind};
 use smol_str::SmolStr;
@@ -43,9 +43,8 @@ pub(crate) fn extract(path: &str, content: &[u8]) -> FileFacts {
         // No tree means no `package` clause either — a bare-directory unit key is the honest
         // degenerate (still groups with nothing wrongly: real Go files always carry a clause).
         out.unit = Some(SmolStr::new(kndo_adapter_toolkit::paths::dirname(path)));
-        out.diagnostics.push(Diagnostic {
+        out.diagnostics.push(AdapterDiagnostic {
             level: DiagnosticLevel::Warn,
-            path: None,
             message: "failed to initialize the Go parser".to_string(),
             span: None,
         });
@@ -53,9 +52,8 @@ pub(crate) fn extract(path: &str, content: &[u8]) -> FileFacts {
     };
     let root = tree.root_node();
     if root.has_error() {
-        out.diagnostics.push(Diagnostic {
+        out.diagnostics.push(AdapterDiagnostic {
             level: DiagnosticLevel::Warn,
-            path: None,
             message: "syntax errors in this file — extraction is best-effort".to_string(),
             span: None,
         });
@@ -142,10 +140,6 @@ pub(crate) fn extract(path: &str, content: &[u8]) -> FileFacts {
 
 // ---------------------------------------------------------------- shared helpers
 
-fn text<'a>(node: Node, src: &'a [u8]) -> &'a str {
-    std::str::from_utf8(&src[node.byte_range()]).unwrap_or("")
-}
-
 /// Exported iff the first rune is uppercase — Go's entire visibility rule, no keyword
 /// involved.
 fn is_exported(name: &str) -> bool {
@@ -208,6 +202,9 @@ fn push_declaration(
         implicitly_invoked: false,
         nested_scope: false,
         visibility_inherited: false,
+        visible_in_unit: None,
+        implements: None,
+        markers: Vec::new(),
         signature_span,
     });
     if exported && flags.promote_exports {
@@ -263,13 +260,16 @@ const METRICS_SYNTAX: kndo_adapter_toolkit::metrics::MetricsSyntax =
             "imaginary_literal",
         ],
         skip_kinds: &["comment"],
+        // Each of these becomes its own shape when it is substantial enough to carry clone
+        // evidence by itself; a small one stays an expression inside its owner.
+        nested_callable_kinds: &["func_literal"],
+        // A body that ONLY constructs a value carries no clone evidence: normalization erases the
+        // field values (the whole authored content) and keeps the field list, which the type
+        // declaration dictates.
+        construction_kinds: &["composite_literal"],
     };
 
-/// Default granularity gate: bodies under 50 normalized tokens don't
-/// fingerprint (their metrics are still emitted, for `crap`).
-const MIN_CLONE_TOKENS: usize = 50;
-
-/// One callable's [`FunctionMetrics`], computed over its *body* (signatures are promises,
+/// One callable's `FunctionMetrics`, computed over its *body* (signatures are promises,
 /// bodies are the thing that gets copy-pasted). `symbol` uses the
 /// same naming convention as roots/`within`: bare for free functions, qualified `T.Method`
 /// for members, so assembly's lookup lands in the right table.
@@ -277,15 +277,16 @@ fn push_function_metrics(out: &mut FileFacts, symbol: &str, node: Node) {
     let Some(body) = node.child_by_field_name("body") else {
         return;
     };
-    let shape =
-        kndo_adapter_toolkit::metrics::function_shape(body, &METRICS_SYNTAX, MIN_CLONE_TOKENS);
-    out.functions.push(kndo_core::adapter::FunctionMetrics {
-        symbol: SmolStr::new(symbol),
-        cyclomatic: shape.cyclomatic,
-        loc: shape.loc,
-        token_count: shape.token_count as u32,
-        fingerprints: shape.fingerprints,
-    });
+    kndo_adapter_toolkit::metrics::push_function_metrics(
+        out,
+        symbol,
+        // `node` is the declaration node — the same span `push_declaration` recorded, which
+        // is what assembly matches metrics against.
+        span(node),
+        body,
+        &METRICS_SYNTAX,
+        kndo_adapter_toolkit::metrics::MIN_CLONE_TOKENS,
+    );
 }
 
 /// `func Name(...) ...` or `func init() {}` / `func main() {}` (roots —
@@ -366,6 +367,9 @@ fn handle_method(node: Node, src: &[u8], flags: Flags, out: &mut FileFacts) {
         ),
         nested_scope: false,
         visibility_inherited: false,
+        visible_in_unit: None,
+        implements: None,
+        markers: Vec::new(),
     });
     push_function_metrics(out, &format!("{receiver_type}.{method_name}"), node);
     if exported && flags.promote_exports {
@@ -441,14 +445,15 @@ fn handle_value_declaration(
         // `const A, B = 1, 2` / `var X, Y int` — a spec can name more than one identifier.
         let mut name_cursor = spec.walk();
         for name_node in spec.children_by_field_name("name", &mut name_cursor) {
-            push_declaration(
-                out,
-                text(name_node, src),
-                symbol_kind.clone(),
-                span(name_node),
-                None,
-                flags,
-            );
+            let name = text(name_node, src);
+            // The blank identifier declares nothing referenceable — `var _ T = …` exists for
+            // its side effect (the compile-time assertion below), and no source can ever name
+            // it. Extracting it as a symbol is a guaranteed false `unused`, one per assertion,
+            // and the idiom is everywhere: gin, hugo and go-redis all carry several.
+            if name == "_" {
+                continue;
+            }
+            push_declaration(out, name, symbol_kind.clone(), span(name_node), None, flags);
         }
         emit_explicit_witness(spec, src, out);
     }
@@ -460,6 +465,28 @@ fn handle_value_declaration(
 /// structural satisfaction is nameable without a typechecker).
 /// Emits an Implement reference from the literal's type to the declared type; either name
 /// failing to resolve drops the edge silently.
+/// The single name inside a parenthesized conversion target — `defaultValidator` in
+/// `(*defaultValidator)`. Returns `None` when the parens hold anything more complex than one
+/// name, which keeps the witness to the shapes it can read honestly.
+fn innermost_identifier<'a>(node: Node, src: &'a [u8]) -> Option<&'a str> {
+    let mut found = None;
+    let mut stack = vec![node];
+    while let Some(n) = stack.pop() {
+        if matches!(n.kind(), "identifier" | "type_identifier") {
+            if found.is_some() {
+                return None; // more than one name — not a plain conversion
+            }
+            found = Some(text(n, src));
+            continue;
+        }
+        let mut c = n.walk();
+        for child in n.children(&mut c) {
+            stack.push(child);
+        }
+    }
+    found
+}
+
 fn emit_explicit_witness(spec: Node, src: &[u8], out: &mut FileFacts) {
     let Some(declared) = spec
         .child_by_field_name("type")
@@ -472,6 +499,28 @@ fn emit_explicit_witness(spec: Node, src: &[u8], out: &mut FileFacts) {
     };
     let mut stack = vec![value];
     while let Some(n) = stack.pop() {
+        // `var _ Iface = (*T)(nil)` — the conversion form, and by far the most common way to
+        // write the assertion (the composite-literal form below is the other). Tree shape is
+        // `call_expression(parenthesized_expression(… T …), argument_list(nil))`, and `T` sits
+        // there as a plain `identifier` because `*T` in expression position is not a type node.
+        // Without this the idiom contributed nothing at all: the blank name is not extracted
+        // and the assertion it exists to make was invisible.
+        if n.kind() == "call_expression" {
+            if let Some(witness) = n
+                .child_by_field_name("function")
+                .filter(|f| f.kind() == "parenthesized_expression")
+                .and_then(|f| innermost_identifier(f, src))
+            {
+                out.references.push(RawReference {
+                    name: SmolStr::new(text(declared, src)),
+                    scope_context: None,
+                    span: span(declared),
+                    within: Some(SmolStr::new(witness)),
+                    kind: RefKind::Implement,
+                });
+                continue;
+            }
+        }
         if n.kind() == "composite_literal" {
             if let Some(lit_ty) = n
                 .child_by_field_name("type")
@@ -548,6 +597,7 @@ fn handle_import_spec(node: Node, src: &[u8], out: &mut FileFacts) {
         opaque_namespace_use,
         module_names_visible: false,
         local_alias,
+        reconstructed: false,
     });
 }
 
@@ -744,6 +794,38 @@ mod tests {
             .iter()
             .find(|d| d.name.as_str() == name)
             .unwrap_or_else(|| panic!("no declaration named {name:?} in {:?}", facts.declarations))
+    }
+
+    #[test]
+    fn a_blank_var_declares_nothing_but_asserts_an_interface() {
+        // `var _ StructValidator = (*defaultValidator)(nil)` is Go's compile-time interface
+        // assertion, and it appears several times per repo in gin, hugo and go-redis. The
+        // blank name is unreferenceable by definition, so extracting it as a symbol is a
+        // guaranteed false `unused`; the assertion it exists to make was meanwhile invisible,
+        // because the witness only read the composite-literal form.
+        let f = extract(
+            "a.go",
+            b"package p\nvar _ StructValidator = (*defaultValidator)(nil)\n",
+        );
+        assert!(
+            !f.declarations.iter().any(|d| d.name == "_"),
+            "the blank identifier is not a declaration"
+        );
+        let witness = f
+            .references
+            .iter()
+            .find(|r| r.kind == RefKind::Implement)
+            .expect("the assertion must still contribute its Implement edge");
+        assert_eq!(witness.name, "StructValidator");
+        assert_eq!(witness.within.as_deref(), Some("defaultValidator"));
+
+        // The composite-literal form keeps working — it is the other half of the same idiom.
+        let f = extract("a.go", b"package p\nvar API Core = jsonApi{}\n");
+        assert!(f.declarations.iter().any(|d| d.name == "API"));
+        assert!(f
+            .references
+            .iter()
+            .any(|r| r.kind == RefKind::Implement && r.within.as_deref() == Some("jsonApi")));
     }
 
     #[test]

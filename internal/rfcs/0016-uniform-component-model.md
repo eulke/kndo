@@ -150,11 +150,11 @@ made at implementation time and recorded here rather than left as silent drift:
   `<Link href="...">` and `res.render("name")` → template edges both require parsing `.tsx`/
   `.jsx` *source*, which the JS/TS adapter already claims; second-guessing it through the
   content-channel side door is exactly RFC 0002's boundary this RFC promised not to erode
-  (docs/plugins/nextjs.md §5 records the final call). What *did* land as real consumers:
+  (docs/src/plugins/nextjs.md §5 records the final call). What *did* land as real consumers:
   `kndo:express` reading `package.json` `main`/`scripts` instead of guessing entry files by
-  name (docs/plugins/express.md §3/§4), and `kndo:nextjs` statically reading a literal
+  name (docs/src/plugins/express.md §3/§4), and `kndo:nextjs` statically reading a literal
   `pageExtensions: [...]` array out of `next.config.*` to narrow which extensions count as
-  routed (docs/plugins/nextjs.md §5) — both bounded, both degrade to the pre-channel behavior
+  routed (docs/src/plugins/nextjs.md §5) — both bounded, both degrade to the pre-channel behavior
   on anything they can't statically read.
 - **Shape, as built.** Glob matching runs in memory against paths this run already discovered
   (no second disk walk; source-blind — identical behavior for a directory or an in-memory git
@@ -290,7 +290,7 @@ new one; the mechanism, not the fixture composition, is what determines the cost
 1. **Content channel (§5) — Landed.** Highest value per unit of new surface; upgrades
    `kndo:express` and `kndo:nextjs` from their documented approximations, which also made it
    the phase with built-in dogfood — both plugins' own baseline-then-plugin fixture suites
-   (`crates/kndo/tests/builtin_convention_plugins.rs`) grew a scenario apiece proving the
+   (`crates/kndo/tests/builtin_plugin_proofs.rs`) grew a scenario apiece proving the
    content-derived rescue actually fires, plus native (`kndo-core`) and WASM
    (`kndo-plugin-api`'s compliance suite, `examples/kndo-plugin-hooks-demo`) round-trip tests
    for the channel mechanism itself.

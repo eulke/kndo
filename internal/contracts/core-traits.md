@@ -82,11 +82,24 @@ filesystem: all content arrives via parameters (determinism, sandboxing, testing
 pub trait LanguageAdapter: Send + Sync {
     fn descriptor(&self) -> AdapterDescriptor;
     // { id: "js-ts", facts_schema_version: u32, file_globs, manifest_globs, grammar_version,
+    //   ... } — `facts_schema_version` is for a change in what THIS adapter emits. A shape
+    //   change in the facts contract ITSELF (`FileFacts` and everything reachable from it —
+    //   `Declaration`, `FunctionMetrics`, …) is `cache::ENTRY_FORMAT_VERSION`: ONE constant,
+    //   folded into both the facts entries and the graph key. Spelling that as a bump in every
+    //   adapter is the same fact six-plus times, and silently under-invalidates when someone
+    //   bumps five of six.
     //   visibility_ladder: Vec<VisibilityRung> }
     // visibility_ladder (RFC 0012 §6): what VisibilityLevel indexes into — each rung a
-    // { scope: File|Unit|Package|Public, label, surface_transitive } triple; the scope is what the core can check
-    // (same file / same FileFacts::unit / same PackageId / anywhere — nested, narrowest to
-    // widest), the label is the language's own word, used verbatim in remediation text.
+    // { scope: File|Unit|Module|Package|Public, label, surface_transitive } triple; the scope is
+    // what the core can check (same file / same FileFacts::unit / a unit AND ITS SUBTREE /
+    // same PackageId / anywhere — nested, narrowest to widest), the label is the language's own
+    // word, used verbatim in remediation text. Module is anchored per DECLARATION
+    // (Declaration::visible_in_unit) and walks FileFacts::unit_parent: it is the rung a
+    // four-bucket ladder had nowhere to put, so adapters widened Rust's pub(super) into
+    // pub(crate) and mapped its `private` — which is really module-and-descendants — down to a
+    // file, and private-type-leak had to stay gated behind surface_transitive as a result
+    // (internal/detection-gaps.md §7). Two rungs may share the Module scope and differ only by
+    // anchor; comparing them is a REGION question (graph::region_covers), not an enum one.
     // Empty ladder = no visibility semantics (CSS, JSON): visibility analyses skip the
     // language. surface_transitive (M6): whether a re-export chain can carry this rung
     // outside its package — relative rungs (Rust pub, JS export, Java public/protected)
@@ -117,6 +130,35 @@ pub trait LanguageAdapter: Send + Sync {
     // "zero usage evidence" isn't a meaningful unused claim when usage evidence can never
     // exist). version-skew is unaffected — it compares declared versions across manifests
     // directly, no usage edge needed.
+    //
+    // declares_units_of_testing: whether a file of this language can hold a unit of testing at
+    // all. true for every language whose files can carry a function; false for a document
+    // language — HTML, JSON, CSS — where "is this tested" has no answer. Same
+    // data-on-the-descriptor pattern as the ladder, carried onto
+    // ProjectGraph::testable_languages, and consulted by `untested` for ONE case: a file that
+    // declares nothing. A file that declares symbols is judged on them
+    // (`files_declaring_only_values`), so a `.scss` carrying a `@function` stays in scope and no
+    // blanket "stylesheets aren't testable" rule can silence it. The conjunction is the point:
+    // an absence of symbols alone cannot tell "nothing here is testable" from "extraction
+    // failed", so the adapter has to say which — and a language the graph never recorded
+    // answers true, because silence must never be an exemption. No default (like
+    // Plugin::mutates_graph): wrong in either direction is a real defect — false silences a
+    // language's blind spots, true on a document language buries the report under one finding
+    // per page.
+    //
+    // Beside it on the PackageNode, and asked of the adapters rather than derived from the
+    // claim: manifest_claim_languages — EVERY registered adapter's claim language whose
+    // claim_manifest accepts this manifest, not just the one that won the claim (Java and
+    // Kotlin both claim pom.xml, so a .kt file's Maven declarations must keep counting no
+    // matter which got there first). File→package ownership is nearest-ancestor by DIRECTORY,
+    // which is right for everything it feeds except one question — whose dependency
+    // declarations does this file answer to? A Jazzy-generated .js under docs/ in a Swift
+    // repo, or a web/app.js beside a go.mod, owes nothing to Package.swift or go.mod, and
+    // charged its bare imports against them anyway (every Swift repo's phantom `jquery`, and
+    // the whole of hugo's undeclared column). PackageNode::governs_dependencies_of is the test
+    // both undeclared and dependency_hygiene apply, symmetrically: such a file is evidence
+    // neither that a declaration is missing nor that one is used. The implicit no-manifest
+    // package declares nothing, so nothing can contradict it and every file answers to it.
     // package_test_dirs: directory names that mark files test-role only when the directory
     // is an immediate child of the owning package's manifest directory (Cargo's tests/,
     // benches/, examples/ — conventions bound to the manifest beside them, unlike
@@ -126,6 +168,20 @@ pub trait LanguageAdapter: Send + Sync {
     // package anchor at the project root. Promotion only — a file already test- or
     // tooling-role is never demoted, so a nested package whose sources live under an
     // ancestor's tests/ tree keeps its own classification.
+    // builtin_member_types: member-type facts about the types the LANGUAGE provides, which no
+    // file in the project declares — the same (owner, member, yields) shape as
+    // FileFacts::member_types, declared once here because there is no home file to hang them
+    // on. Result<T,E>::map_err still yields a Result over the same T; a Vec<T> iterates to its
+    // T. Same data-on-the-descriptor pattern as the ladder and the cycle policy: the knowledge
+    // is the adapter's (it is ITS language's standard library), the core gets a second lookup
+    // tier keyed by claim language, consulted after the owner's home file and the only one
+    // that can apply when the owner name resolves to no declaration at all. Two conventions
+    // the core is blind to: TypeExpr::Param says "the same argument the receiver had", and an
+    // adapter may name an operation or an anonymous type with a string of its own choosing
+    // (Rust's @element for iteration, @slice for &[T]) as long as it emits that same string on
+    // the reference side — a member is a member, the core never interprets the name. Keep the
+    // table small and evidence-driven, like the machinery-trait list: a fact earns its place
+    // by closing a measured case, not by completing an API surface.
 
     /// Claim & classify a path (fast; name-based, content peeking only when unavoidable).
     fn claim(&self, path: &ProjectPath) -> Option<FileClaim>;   // { language, class: FileClass }
@@ -136,6 +192,15 @@ pub trait LanguageAdapter: Send + Sync {
 
     /// Parse one file and extract every language-defined fact. Must not fail on broken code:
     /// return partial facts + diagnostics.
+    ///
+    /// The core *enforces* that obligation rather than trusting it: extraction runs inside
+    /// `catch_unwind` (`graph::assemble::claim_and_extract`), so an adapter that panics on one
+    /// pathological file costs that file's facts and a `Warn` diagnostic naming the adapter,
+    /// not the whole run. Extraction is the one place adapter code meets arbitrary bytes and it
+    /// runs across a rayon pool, where an unwinding worker takes every other file's answer with
+    /// it. This is containment, not permission: a panic here is still an adapter defect, and
+    /// the diagnostic says so. The facts of a panicking file are deliberately **not** cached —
+    /// caching an absence would make the defect survive the next run.
     fn extract(&self, file: &SourceFile) -> FileFacts;
 
     /// Parse a manifest into declared dependencies, package identity/topology (RFC 0011 §3),
@@ -144,7 +209,30 @@ pub trait LanguageAdapter: Send + Sync {
     /// file than the one being extracted, so (unlike `FileFacts::roots`) it must already be a
     /// concrete `ProjectPath` by the time the core sees it; the core has no language-specific
     /// resolution rules to guess one with.
+    ///
+    /// This `ctx` — and only this one — also carries `read_manifest`, the single point in the
+    /// adapter contract where one file's facts may depend on another file's *contents*. Some
+    /// manifest formats let one manifest declare a value another one uses (Maven's `<parent>`),
+    /// and an adapter handed one manifest's text at a time cannot follow that on its own. The
+    /// core stays ignorant of what any of it means: it offers "you may read a manifest", never
+    /// "poms have parents".
+    ///
+    /// Sound here and nowhere else, for two reasons that both have to hold: manifest extraction
+    /// is **not cached** (assembly re-runs it every time, reading each manifest fresh, so no
+    /// entry can go stale behind an ancestor's edit), and the incremental patch **refuses**
+    /// outright on any changed manifest. `resolve`'s ctx has no such channel, and an adapter
+    /// must read the resulting `None` as "I cannot see it", never as "there is none".
     fn extract_manifest(&self, file: &SourceFile, ctx: &ResolveCtx) -> ManifestFacts;
+
+    /// Does this manifest declare a dependency that an `ActivationRule::ManifestDependency`
+    /// naming `query` means? How a coordinate is SPELLED is ecosystem knowledge the core has
+    /// no way to hold: npm's name is the literal key an author would write, Cargo treats `-`
+    /// and `_` as interchangeable, and a Maven/Gradle coordinate is `groupId:artifactId` while
+    /// an author writes the artifact id alone. Defaults to exact equality over `dependencies`
+    /// plus `workspace_dependencies` (a virtual workspace root declares only the latter) — so
+    /// an adapter whose spelling needs no translation overrides nothing, the same
+    /// dynamic-not-obligation posture as `visibility_ladder` and `claim_manifest`.
+    fn declares_dependency(&self, facts: &ManifestFacts, query: &str) -> bool;
 
     /// Resolve an import specifier to a concrete target, given an index of claimable paths.
     /// Called by the core's resolution driver — including for specifiers emitted by *other*
@@ -158,7 +246,17 @@ pub trait LanguageAdapter: Send + Sync {
     /// no self-declaration contract exists to validate, so assembly derives ImportsFile
     /// only (no phantom `undeclared`, no dependency-usage credit).
     /// ResolveCtx carries the workspace-member index
-    /// (name → { dir, resolved entry }) the core builds from every named manifest's facts.
+    /// (name → { dir, resolved entry }) the core builds from every named manifest's facts,
+    /// and the unit reverse-index in two forms. `unit_files(unit)` is repo-global;
+    /// `unit_files_from(unit, &spec.from)` prefers candidates in the IMPORTER's own package and
+    /// falls back to the global set only when it has none. Prefer the latter: a unit key is
+    /// unique only within a package (§8 of RFC 0012 keys Java/Kotlin units on the declared
+    /// package name and Swift's on the target name), so sibling modules that share a package
+    /// name share a key, and a resolver picking `.first()` by path order could bind an import
+    /// to an unrelated module — a phantom edge `cyclic` reports as a package cycle neither
+    /// module's source supports. Reachability is insulated from the choice (same-unit fallback
+    /// keeps every file in the unit reachable); the literal edge is not, because it is
+    /// evidence. The fallback is what keeps genuine cross-module imports resolving.
     /// When no concrete in-repo file matches (a source checkout whose published entries are
     /// build artifacts), the specifier falls through to the external ladder as a plain
     /// Dependency — the package is still consumed, and dropping to Unresolved would silently
@@ -166,16 +264,44 @@ pub trait LanguageAdapter: Send + Sync {
     fn resolve(&self, spec: &ImportSpec, ctx: &ResolveCtx) -> Resolution;
     // Resolution = File(ProjectPath, Confidence) | Dependency(DependencyName, Confidence)
     //            | WorkspaceMember { name, target: ProjectPath, confidence, same_package }
-    //            | Stdlib | Unresolved
+    //            | Stdlib | Missing | Unresolved
+    //
+    // Missing vs Unresolved is a normative distinction and only the adapter can make it.
+    // MISSING = "I understood this specifier as a path into the project, tried every candidate
+    // my language's rules allow, and no file is there" — a complete answer, and the fact the
+    // `unresolved` analysis reports at severity error. UNRESOLVED = "no answer": the shape is
+    // one I do not model (a self-reference imports map, an inline module's `super::`, a Sass
+    // load-path name, a URL), or the information lives somewhere I do not read. The core sees
+    // only that no edge came back and cannot tell them apart, so a resolver that says Missing
+    // where it means Unresolved makes kndo accuse working code of being broken.
+    //
+    // Adoption is per-adapter and optional, like the visibility ladder: an adapter that cannot
+    // yet separate the two keeps returning Unresolved and simply reports nothing. Degrading
+    // toward silence is always available; degrading toward accusation never is.
 }
 ```
 
 ```rust
 pub struct FileFacts {
-    pub member_types: Vec<RawMemberType>,   // { owner, member, yields, yields_params } — what accessing
-                                            // owner.member evaluates to (field types, method returns);
-                                            // yields_params: the annotation's type arguments in order,
-                                            // projected by `?N` pointer markers; RFC 0012 §3-bis
+    pub member_types: Vec<RawMemberType>,   // { owner: Option<Name>, member, yields: TypeExpr }
+                                            // — what accessing owner.member evaluates to (field
+                                            // types, method returns). owner NONE = a free
+                                            // FUNCTION: "calling this evaluates to yields", the
+                                            // same statement about a value's type, walked by the
+                                            // same chain machinery — it just applies where a
+                                            // pointer's BASE names the function, before any member
+                                            // segment (`let e = parse_entry(..); e.path`).
+                                            // yields is a TREE, because a type is one:
+                                            // Named { name, args } | Param(N) | Unknown.
+                                            // `?N` projects argument N and lands on a SUBTREE
+                                            // with its own arguments intact — Result<Vec<T>, E>
+                                            // at 0 is Vec<T>, which a flat list could not say.
+                                            // Param(N) states a RELATIONSHIP rather than a type
+                                            // ("still a Result over the same T"), substituted
+                                            // against the receiver's own arguments at the hop;
+                                            // Unknown is a type the fact cannot name, explicit so
+                                            // no fact has to lie about its arity to stay silent.
+                                            // RFC 0012 §3-bis
     pub invoked_executables: Vec<SmolStr>,  // workspace executable targets this file runs as a
                                             // subprocess (Rust: env!("CARGO_BIN_EXE_<name>")) —
                                             // resolved against ManifestFacts::executables into
@@ -192,14 +318,50 @@ pub struct FileFacts {
                                              //   nested_scope: bool — declared inside a scope
                                              //   unit nested within the file (an inline module):
                                              //   the tightest declarable level there means "this
-                                             //   scope", strictly narrower than the ladder's
-                                             //   file rung, so file-local evidence can't certify
-                                             //   that rung and internal-only advances past it,
+                                             //   scope", strictly narrower than any scope the
+                                             //   core can compute, since every scope up to and
+                                             //   including Module is derived from file/unit
+                                             //   co-location and none of it sees inside a file;
+                                             //   internal-only therefore certifies only rungs
+                                             //   strictly wider than Module for such a
+                                             //   declaration (Package and Public are unaffected:
+                                             //   nesting cannot change a package),
                                              //   visibility_inherited: bool — no declarable
                                              //   visibility of its own (enum variants, trait
                                              //   items): the level belongs to the container,
                                              //   which is measured separately; visibility
-                                             //   analyses skip the member }
+                                             //   analyses skip the member,
+                                             //   implements: Option<Name> — the trait /
+                                             //   protocol / interface whose IMPLEMENTATION
+                                             //   declares this member (Rust's `impl Serialize
+                                             //   for T`, Swift's `extension T: Codable`).
+                                             //   A FACT about where the member is written,
+                                             //   never a verdict about what invokes it, and
+                                             //   None wherever a language declares members in
+                                             //   the type body with the interface separate
+                                             //   (Java, Kotlin, Go, JS) — an optional fact a
+                                             //   language may simply never fill. The core
+                                             //   carries it and interprets nothing; its
+                                             //   consumer is a PLUGIN that legitimately holds
+                                             //   one ecosystem's knowledge, matching a curated
+                                             //   trait table through
+                                             //   AnnotationSink::mark_machinery_impls. That is
+                                             //   what lets kndo:serde / kndo:rkyv /
+                                             //   kndo:wasmtime be their tables and nothing
+                                             //   else, instead of re-parsing a grammar the
+                                             //   adapter already parsed,
+                                             //   markers: Vec<Name> — the language-visible
+                                             //   annotations/attributes/decorators written on
+                                             //   this declaration, verbatim and in source
+                                             //   order. FACTS, never verdicts: the adapter
+                                             //   never interprets them and the core never
+                                             //   learns what any of them mean. Their consumer
+                                             //   is kndo.toml's [[externally-invoked]], which
+                                             //   matches its own marker list against these to
+                                             //   seed production roots — the one question
+                                             //   source alone cannot answer ("is this called
+                                             //   from outside the analyzed source?"), answered
+                                             //   by the project instead of guessed }
                                              // signature_span (RFC 0012 §5): the declaration's
                                              // *promise* — everything before the body block
                                              // (name, parameters, return/result types).
@@ -260,9 +422,15 @@ pub struct FileFacts {
                                              // Assembly matches it against the file's imports —
                                              // explicit local_alias, or the resolved target's
                                              // unit_name — and resolves the name INSIDE that
-                                             // target at Certain (hit or miss, a matched
-                                             // qualifier settles resolution; the local tables
-                                             // are never candidates). An unmatched qualifier is
+                                             // target at Certain. A matched qualifier settles
+                                             // resolution hit or miss — the local tables are
+                                             // never candidates — WHEN the import that
+                                             // registered it is Certain: a statement the file
+                                             // makes names a closed namespace. An import the
+                                             // adapter reconstructed from a use site
+                                             // (non-Certain) does not settle; its miss keeps
+                                             // falling through (RFC 0012 §9-ter).
+                                             // An unmatched qualifier is
                                              // a receiver expression: member access by
                                              // construction — skips free-name tables, goes
                                              // straight to the §3 member fallback.
@@ -278,7 +446,22 @@ pub struct FileFacts {
                                              // qualifier from the resolved target's own
                                              // unit_name, fixing dir≠package specifiers
                                              // (gopkg.in/yaml.v3 binds as `yaml`). JS/TS
-                                             // (name-binding imports) always None.
+                                             // (name-binding imports) always None. An import
+                                             // RECONSTRUCTED from a use site sets it too — the
+                                             // segment that site qualifies by, which only the
+                                             // adapter can identify; the core does not split
+                                             // specifiers on any separator (RFC 0012 §9-ter).
+                                             // reconstructed: the file contains NO import
+                                             // statement for this — the adapter synthesized it
+                                             // from a use site so resolution has something to
+                                             // bind. Two rules read it: such an import's
+                                             // qualifier does not SETTLE a member miss, and its
+                                             // bindings rank BELOW the file's own declarations
+                                             // (no language lets a written import shadow one,
+                                             // so a collision can only come from a synthetic).
+                                             // Confidence cannot stand in for it — Rust's
+                                             // crate/self/super-rooted synthetic imports are
+                                             // Certain about where they resolve.
                                              // kind is syntactic shape only — Stdlib is a
                                              // resolve()-time fact, never claimed here.
                                              // ImportBinding { local, imported: Option<Name> } —
@@ -296,17 +479,59 @@ pub struct FileFacts {
                                              // wildcards over the resolved target's symbols.
     pub roots:        Vec<RawRoot>,         // language-defined only (main, pub API…), target is
                                              // *within this file* — WholeFile | Declaration(name)
-    pub functions:    Vec<FunctionMetrics>, // { symbol, cyclomatic: u32, loc, fingerprints }
-                                             // (RFC 0005 §6): one entry per callable, over its
-                                             // BODY. symbol uses the roots/within naming
-                                             // convention (bare, or qualified Owner.name for
-                                             // members); assembly resolves it to a SymbolId
-                                             // onto ProjectGraph::function_metrics.
+    pub functions:    Vec<FunctionMetrics>, // { symbol, span, shape_span, shape_ordinal,
+                                             // cyclomatic: u32, loc, token_count,
+                                             // fingerprints, body_is_construction } (RFC 0005
+                                             // §6): one entry per
+                                             // callable SHAPE — a declaration's own body plus
+                                             // one for every callable nested inside it that is
+                                             // big enough to carry clone evidence by itself
+                                             // (MetricsSyntax::nested_callable_kinds names the
+                                             // node kinds; below the clone floor a nested
+                                             // callable stays an expression inside its owner).
+                                             // A promoted shape's branches and tokens LEAVE the
+                                             // enclosing stream, which keeps one `FN` in their
+                                             // place, so summing over shapes counts every token
+                                             // once. Every shape of one declaration repeats that
+                                             // declaration's `span`; `shape_ordinal` (0 = the
+                                             // declaration's own, 1..N nested in pre-order)
+                                             // separates them in a finding id and `shape_span`
+                                             // (== `span` for ordinal 0) is what every consumer
+                                             // reports as the LOCATION. An ordinal, not a line:
+                                             // a line churns a baseline whenever anything above
+                                             // the closure moves. `span` is the
+                                             // paired Declaration's OWN span, and is what
+                                             // assembly resolves to a SymbolId onto
+                                             // ProjectGraph::function_metrics — NOT `symbol`,
+                                             // which stays the roots/within naming convention
+                                             // (bare, or qualified Owner.name for members) for
+                                             // display only. Name resolution was wrong here: a
+                                             // file may declare one name twice (cfg-alternated
+                                             // impls, platform-gated overloads) and the
+                                             // per-file name tables are single-slot, so both
+                                             // entries collapsed onto one symbol — read back as
+                                             // a structural clone of itself, with its tokens
+                                             // double-counted into health. There is no default:
+                                             // an adapter emitting metrics must say which
+                                             // declaration they belong to.
                                              // fingerprints = winnowing over the normalized
                                              // token stream (toolkit metrics module: IDs/
                                              // literals canonicalized, comments skipped), empty
                                              // under the 50-token granularity gate — cyclomatic
-                                             // and loc always real (crap's inputs, M4).
+                                             // and loc always real. cyclomatic is crap's
+                                             // complexity input; loc is reported by
+                                             // `describe`'s metrics block (RFC 0007 §4.2) and
+                                             // is NOT a term of the crap score.
+                                             // body_is_construction: this shape's body is a
+                                             // single value-construction expression and
+                                             // nothing else (MetricsSyntax::construction_kinds
+                                             // names the node kinds; empty is valid and means
+                                             // "this language cannot tell"). A FACT, never a
+                                             // verdict — `duplicate` is what consumes it, and
+                                             // exempts such a body because normalization
+                                             // INVERTS there: it erases the field values (the
+                                             // whole authored content) and keeps the field
+                                             // list the type declaration dictates.
     pub dynamics:     Vec<DynamicUse>,      // constructs forcing Wildcard edges (span + reason +
                                             // optional narrowed_to: a *project-relative* dir the
                                             // adapter already resolved — the core only prefix-
@@ -315,6 +540,15 @@ pub struct FileFacts {
     pub diagnostics:  Vec<Diagnostic>,
     pub unit:         Option<SmolStr>,      // reference-resolution scope beyond "this file" —
                                              // see below; `None` for file-scoped languages
+    pub unit_parent:  Option<SmolStr>,      // the unit CONTAINING this file's unit — the link
+                                             // that turns the flat key set into a TREE the core
+                                             // walks without knowing any separator (the adapter,
+                                             // which knows its language's, supplies it). None at
+                                             // a root and for languages whose units do not nest,
+                                             // where VisibilityScope::Module collapses to Unit.
+                                             // Every file of one unit must report the same
+                                             // parent: first writer wins, a disagreement is an
+                                             // adapter bug rather than something to merge
     pub unit_name:    Option<SmolStr>,      // the name IMPORTERS bind this unit by (RFC 0012
                                              // §9): Go's `package` clause name. Distinct from
                                              // `unit` (the opaque grouping key, dir#package):
@@ -345,8 +579,41 @@ pub struct FileFacts {
                                              // extents only; regions never overlap. Empty
                                              // for per-file test detection (JS/TS, Go).
                                              // Consumers — see below.
+    pub string_call_args:                    // PLUGIN FUEL, ecosystem-blind. `(callee dotted
+        Vec<StringCallArg>,                  // path, first string-literal argument, span)`:
+                                             // `res.render("index")`, `app.get("/users", …)`.
+                                             // The adapter records that a call carried a
+                                             // literal, never what a framework means by it.
+                                             // First literal argument only, direct literals
+                                             // only. Optional per adapter, default empty;
+                                             // JS/TS first.
+    pub string_attr_args:                    // Its ATTRIBUTE sibling. `(attribute head, key,
+        Vec<StringAttrArg>,                  // literal, decorated declaration, span)`:
+                                             // `#[serde(skip_serializing_if = "is_zero")]`.
+                                             // Key empty for a bare `#[x = "v"]`; owner None
+                                             // when the attribute decorates a block rather
+                                             // than a declaration. Optional per adapter,
+                                             // default empty; Rust first.
 }
 ```
+
+**`string_call_args` / `string_attr_args` — the two ecosystem-blind literal facts.** Both
+exist so a plugin can build a framework convention on what the adapter already parsed instead
+of re-parsing claimed source through the content channel, and both stop at the same line: the
+adapter records *what was written*, never what it means. That line is not stylistic. Over the
+attributes the Rust adapter scans, serde alone writes 482 `key = "literal"` pairs whose value
+is identifier-shaped; 248 of those values collide with a real declaration in the crate, and
+only 176 sit under a key whose value serde actually resolves as a path. An adapter that
+treated a collision as a reference would contribute 72 keep-alive edges in one crate to close
+one real case — and a keep-alive edge silences a true finding. Telling
+`skip_serializing_if = "f"` from `rename = "f"` requires knowing what serde is, and an adapter
+that knew would be the adapter/plugin coupling §0.2 exists to prevent.
+
+Both travel the same road: `FileFacts` → `FileNode` (canonically sorted, so the graph snapshot
+round-trips them) → `GraphView::string_call_sites_in` / `attr_strings_in` natively, or
+`call-sites-in` / `attr-strings-in` over the WASM ABI. **No analysis consumes either.** A
+change to their shape is a change to the facts contract: bump `cache::ENTRY_FORMAT_VERSION`,
+not a per-adapter `facts_schema_version`. An adapter beginning to *emit* one bumps its own.
 
 **`test_spans` (added M5, surfaced by the Rust adapter):** the file's *role* stays a per-path,
 claim-time axis; this field is the extraction-side truth that a *region* of a production file
@@ -398,7 +665,22 @@ pub struct ManifestFacts {
     pub package_name:       Option<SmolStr>,
     pub private:            bool,                    // publish signal: true → app mode (RFC 0011 §5)
     pub workspace_members:  Vec<SmolStr>,             // workspace globs (RFC 0011 §3)
-    pub dependencies:       Vec<ManifestDependency>,  // { name, version_req, scope: DependencyScope }
+    pub dependencies:       Vec<ManifestDependency>,  // { name, version_req: Option<Name>,
+                                             //   scope: DependencyScope, inherited: bool }
+                                             // version_req None = this manifest states no
+                                             // COMPARABLE requirement, which is a different
+                                             // fact from "any version" and has to be
+                                             // representable as one: a BOM/platform-managed
+                                             // JVM coordinate names no version by design, a
+                                             // Cargo path/git dep constrains nothing, a
+                                             // SwiftPM branch pin is not a range, an
+                                             // unresolved `${property}` is not a value.
+                                             // Encoding all of those as "*" collided with
+                                             // npm's "*", which IS a declared requirement,
+                                             // and made version-skew compare a sentinel
+                                             // against a version and call it a defect.
+                                             // `inherited` deps arrive None and are resolved
+                                             // against workspace_dependencies at assembly.
     pub entry_points:       Vec<SmolStr>,             // main/module/exports/bin/types, raw and
                                                        // unresolved — future self-import resolution
                                                        // input; NOT the root-worthiness signal
@@ -471,10 +753,25 @@ pub enum SuppressionScope { Declaration, File }
 - **Evaluation order (no-flicker guarantee):** analyses run as if no pragmas existed and compute
   the full finding set; suppression then *marks* matched findings (hidden from report and
   `--fail-on`, still counted) — it never deletes them. A pragma is `stale` only when it binds to
-  nothing, names an unknown category, or matches nothing in that **pre-suppression** set. Thus
-  "actively suppressing" and "stale" are mutually exclusive by construction: deleting a stale
-  pragma cannot resurrect a finding (it was stale precisely because the finding no longer
-  exists), and deleting an active one correctly un-hides its finding.
+  nothing, names an unknown category, or matches nothing in that **pre-suppression** set *for a
+  category some analysis judged*. Thus "actively suppressing" and "stale" are mutually exclusive
+  by construction: deleting a stale pragma cannot resurrect a finding (it was stale precisely
+  because the finding no longer exists), and deleting an active one correctly un-hides its
+  finding.
+- **Abstention.** An analysis returns a `Verdict`: `Judged`, or `Abstained(Diagnostic)` when the
+  input its verdict needs is absent this run (`crap` without an ingested coverage report,
+  `untested` in a project with no test roots). An abstained analysis emits no findings, so its
+  categories carry **no information** — and an empty finding list read as "clean" is what breaks
+  the guarantee above: the user deletes the pragma on kndo's advice, drops in a coverage report,
+  and the finding returns. A category is unknown only when *every* analysis that can emit it
+  (`Analysis::categories`) abstained. Consequences, all from that one value:
+  - the matched-nothing verdict skips pragmas naming an unknown category (the binds-to-nothing
+    and unknown-category verdicts do not: both are structural errors, verifiable without
+    running any analysis);
+  - `health` leaves the corresponding axis unmeasured rather than scoring zero penalty against
+    a re-derived skip predicate of its own;
+  - the run reports `run.abstained: [{category, reason}]`, so a consumer can tell "clean" from
+    "not measured" and knows what would make it measurable.
 - `stale` findings are not inline-suppressible (`kndo:allow stale` is rejected as unknown-target
   meta-suppression); acknowledge them via baseline or config if needed.
 - Adapters do **not** interpret pragmas — extraction only. Validation, binding, counting, and
@@ -486,35 +783,78 @@ Compliance: every adapter must pass the shared conformance harness with its fixt
 ## 3. `Plugin`
 
 All hooks optional; a plugin implements what it needs (RFC 0003 §2). Same trait for built-ins
-(statically linked) and external WASM components — both the four graph-mutation hooks
-(`kndo:plugin@0.1.0`) and `LanguageAdapter` (`kndo:adapter@0.1.0`) are bridged
-(`kndo-plugin-api`, docs/contracts/wasm-abi.md §5). `ingest_coverage`/`suppress` aren't bridged
-either way yet.
+(statically linked) and external WASM components. Four WIT worlds carry it
+(`kndo-plugin-api`, [wasm-abi.md](wasm-abi.md) §5): `adapter` (`kndo:adapter@0.1.0`) for
+`LanguageAdapter`, `plugin` (`kndo:plugin@0.1.0`) for the four graph-mutation hooks,
+`plugin-findings` for `rules`/`contribute_findings` (RFC 0018), and `coverage-ingester` for
+`ingest_coverage`. A component declares the world it implements; the host accepts each
+separately, which is what lets a coverage ingester ship without a graph-mutation surface.
 
 ```rust
 pub trait Plugin: Send + Sync {
     fn descriptor(&self) -> PluginDescriptor;
     // { id, version, detection: Vec<SmolStr>, requested_file_access: Vec<SmolStr>,
-    //   activation: Vec<ActivationRule>, dependencies: Vec<SmolStr> } — `detection` is prose
-    // for `kndo doctor`; `activation` (RFC 0003 §4) is what gates a plugin that isn't
-    // unconditionally present (globally installed, or a built-in with rules); `id` is a
+    //   activation: Vec<ActivationRule>, dependencies: Vec<SmolStr> } — `activation`
+    // (RFC 0003 §4) is what gates a plugin that isn't unconditionally present (globally
+    // installed, or a built-in with rules). `ManifestDependency` is evaluated against EVERY
+    // manifest the compiled-in adapters claim, parsed by those adapters' own
+    // `extract_manifest` and matched by their own `declares_dependency` — the frontend holds
+    // no manifest parser of its own. It once held two (`package.json` and `Cargo.toml`), which
+    // silently made the rule unmatchable for every JVM, Go and Swift project; and `detection` is prose for `kndo doctor`
+    // describing a gate `activation` CANNOT express (an always-on coverage ingester naming
+    // its report paths). A gate that IS a rule leaves `detection` empty rather than restating
+    // it — one concept, one source. Every descriptor is written as a full struct literal, in
+    // built-ins included: the field list is documentation that cannot drift, and a
+    // constructor hiding four of the six is how `dependencies` stopped being visible to the
+    // one author who needed it. `id` is a
     // coordinate (`kndo:` reserved for built-ins, source coordinates for external — RFC 0015
     // §2) and `dependencies` names coordinates whose conventions are part of this plugin's
-    // own (co-install + co-activate fixpoint, RFC 0015 §3).
+    // own (co-install + co-activate fixpoint, RFC 0015 §3). Co-activation is not a
+    // convenience: it is the ONLY path to a plugin whose framework is an indirect
+    // dependency. A company framework that uses Express internally is never `express` in its
+    // users' manifests, so `kndo:express`'s own rule can never fire there; the framework's
+    // plugin names `kndo:express` here, and being active is what activates it. Pinned by
+    // `crates/kndo/tests/plugin_dependency_implication.rs` — external component, built-in
+    // dependency, both halves.
     // No ordering-constraints field yet (RFC 0003 §5's open item) — plugins run sorted by `id`,
     // a real but interim determinism rule.
 
-    fn classify_file(&self, path: &ProjectPath, current: FileClass) -> Option<FileClass> { None }
+    fn mutates_graph(&self) -> bool; // REQUIRED, no default — see the bullet below
+    fn classify_file(&self, path: &ProjectPath, current: FileClass,
+                     content: &ContentView) -> Option<FileClass> { None }
     fn contribute_roots(&self, graph: &GraphView<'_>, out: &mut RootSink) {}
     fn contribute_edges(&self, graph: &GraphView<'_>, out: &mut EdgeSink) {}
     fn annotate_symbols(&self, graph: &GraphView<'_>, out: &mut AnnotationSink) {}
     fn ingest_coverage(&self, path: &ProjectPath, content: &[u8], out: &mut CoverageSink) {}
-    fn suppress(&self, finding: &Finding) -> Option<SuppressReason> { None } // not wired yet
+    // RFC 0018, landed: what a plugin MAY assert, declared before any hook runs, and the
+    // hook that asserts it. `contribute_findings` is NOT a graph-mutation hook — it runs
+    // after assembly on every path (cold, patch, warm snapshot hit) and its output lands
+    // under `plugin:<coordinate>/<rule>` on the advisory channel.
+    fn rules(&self) -> Vec<RuleDescriptor> { Vec::new() }
+    fn contribute_findings(&self, graph: &GraphView<'_>, content: &ContentView<'_>,
+                           out: &mut FindingSink) {}
 }
 ```
 
+- **No `suppress` hook, and this is a decision rather than a gap.** RFC 0016 §7 evaluated
+  domain-specific suppression against the components actually shipping and **cut** it — not
+  deferred it. It is on no trait, in no WIT world (wasm-abi.md §5.2), and this listing is the
+  whole surface. A real use case reopens it as a new, additive hook; none exists.
+
+- **`ActivationReason` (landed).** Core owns the *vocabulary* of why a component is active —
+  `Registered` (presence is the opt-in) · `AlwaysOn` (ships with the product, declares no
+  rules) · `RuleMatched(ActivationRule)` (this rule, not merely "a rule") · `ImpliedBy(id)` —
+  because every term in it is a field core already defines. Core does NOT own the *decision*:
+  the tiers, the rule evaluation and the `dependencies` fixpoint live in the distribution layer,
+  which reports its verdict in this shape and passes it to `open_with_plugins` inside a
+  `RegisteredPlugin`. One enum serves plugins and adapters alike (both descriptors carry
+  `activation`/`dependencies`), and its `Display` is the single rendering behind both
+  `kndo doctor`'s `active (…)` line and the envelope's `run.plugins[].activated_by` — two
+  spellings is how those two would come to disagree about the same run.
+
 - **Landed (M5).** `GraphView<'a>` borrows the graph's own `files`/`symbols` (built, never
-  copied) and exposes `files()` plus `symbols_in(path)` — the latter backed by a one-time
+  copied) and exposes `files()` plus `symbols_in(path)` (and the two literal readers above,
+  `string_call_sites_in(path)` / `attr_strings_in(path)`) — `symbols_in` backed by a one-time
   `FileId -> [symbol index]` map built when the view is constructed, so a plugin walking every
   file's symbols costs `O(files + symbols)`, not `O(files * symbols)`. `RootSink`/`EdgeSink`/
   `AnnotationSink` are **write-only and id-free**: every call takes a `PluginTarget { path:
@@ -527,20 +867,35 @@ pub trait Plugin: Send + Sync {
   `Edge`/root/annotation is attributed `Provenance::Plugin(id)` and folds into that one sort, no
   second pass. `annotate_symbols`' marks land in `ProjectGraph::externally_consumed:
   Vec<SymbolId>` (sorted, deduplicated — `is_externally_consumed` binary-searches it), consumed
-  by `internal-only`/`private-type-leak` (RFC 0005 §7's exemption). `classify_file` runs earlier,
+  by `internal-only`/`private-type-leak` (RFC 0005 §7's exemption). `AnnotationSink` also offers
+  **`mark_machinery_impls(graph, drives)`** — the whole body of an ecosystem conventions
+  plugin: it walks the graph's members and marks every one whose `implements` fact and name the
+  caller's `drives(trait_name, member_name)` closure accepts. The walk lives here and the
+  CURATED TABLE is what a plugin brings, which is the split the layer demands: the core has no
+  list of trait names and cannot acquire one without breaking the ignorance rule, while a
+  plugin has no business re-parsing a grammar its adapter already parsed (which is exactly what
+  `kndo:serde` did before `Declaration::implements` existed). `classify_file` runs earlier,
   inline in phase 2's file-node build, right after RFC 0012 §7's content-derived origin
-  correction — its answer is what every downstream role/origin exemption sees.
-- Any registered plugin whose `mutates_graph()` returns `true` (the trait default) makes
-  `assemble_from_source` skip both the graph-snapshot cache hit and the incremental patch,
-  full-rebuilding every run: neither reuse path re-invokes plugin hooks, and RFC 0003 §5's
-  plugin-identity-in-the-cache-key mechanism isn't built yet. A plugin that only implements
-  `ingest_coverage`/`suppress` (like `LcovPlugin`) declares `mutates_graph() == false` and is
-  invisible to both fast paths — and the declaration is self-enforcing, not trusted: assembly
-  only ever *calls* the four graph-mutation hooks on plugins that claim `true`, so a false
-  claim means the hooks never run (identically cold or cached), never a stale cached graph.
-  (History note: this predicate originally checked raw-registry emptiness, which — with
-  `LcovPlugin` unconditionally registered — silently disabled both fast paths on every real
-  run; `mutates_graph` is the fix.)
+  correction — its answer is what every downstream role/origin exemption sees. It gets the same
+  content channel the other hooks do, scoped to its own globs: a file is often generated for a
+  reason no path convention can express — a build tool's config SAYS SO (Maven's
+  `libsass-maven-plugin` naming an `outputPath`) — and reading that needs no graph, which is why
+  the hook can have it despite running before the graph exists. The WASM side needed no ABI
+  change: `read-file` was already an import in both plugin worlds, and the host was simply
+  answering it with an empty view here.
+- Any registered plugin whose `mutates_graph()` returns `true` makes `assemble_from_source`
+  skip both the graph-snapshot cache hit and the incremental patch, full-rebuilding every run:
+  neither reuse path re-invokes plugin hooks, and RFC 0003 §5's plugin-identity-in-the-cache-key
+  mechanism isn't built yet. A plugin that only implements `ingest_coverage`/`suppress` (like
+  `LcovPlugin`) declares `mutates_graph() == false` and is invisible to both fast paths — and
+  the declaration is self-enforcing, not trusted: assembly only ever *calls* the four
+  graph-mutation hooks on plugins that claim `true`, so a false claim means the hooks never run
+  (identically cold or cached), never a stale cached graph. `mutates_graph` has **no default** —
+  every implementor states it explicitly; forgetting it is a compile error, not a silently
+  disabled incremental patch. (History note: the method used to default to `true`, and before
+  that this predicate checked raw-registry emptiness, which — with `LcovPlugin` unconditionally
+  registered — silently disabled both fast paths on every real run; the required method with no
+  default is the fix that can't regress the same way again.)
 - Host-mediated file access: content for `requested_file_access` globs is provided by the core;
   no ambient fs/net (enforced natively by convention, in WASM by the sandbox).
 - `ingest_coverage` (ADR 0005: coverage is *ingested, never measured*) follows the same sink
@@ -559,19 +914,53 @@ pub trait Plugin: Send + Sync {
 
 ## 4. `Analysis`
 
-Internal trait (not pluggable in 1.0 — RFC 0003 §6), listed here because its shape constrains
-the graph API:
+Internal trait (not pluggable in 1.0 — RFC 0003 §6; §6 below also marks it "Internal — may
+change any release"), listed here because its shape constrains the graph API. What's landed
+(`analysis/mod.rs`) is the uniform-output seam this section originally speculated a
+dirty-region incremental subsystem into, without building that subsystem before anything
+needs it:
 
 ```rust
-pub trait Analysis: Send + Sync {
-    fn id(&self) -> AnalysisId;                       // "unused", "crap", …
-    fn run_full(&self, graph: &GraphView, enrich: &Enrichments) -> Vec<Finding>;
-    /// Incremental entry point; default = run_full (correct, slower). Implementations override
-    /// with dirty-region logic (RFC 0004 §5). CI enforces full ≡ incremental on fixtures.
-    fn run_incremental(&self, graph: &GraphView, dirty: &DirtyRegion, prev: &FindingsView,
-                       enrich: &Enrichments) -> Vec<Finding> { ... }
+pub(crate) struct AnalysisCtx<'a> {
+    graph: &'a ProjectGraph, reach: &'a ReachabilityMap,
+    coverage: &'a CoverageMap, tuning: &'a AnalysisTuning,
+}
+#[derive(Default)]
+pub(crate) struct AnalysisOutput {
+    findings: Vec<Finding>, diagnostics: Vec<Diagnostic>,
+    cycle_files: HashSet<FileId>,        // populated by `cyclic` only
+    duplicated: Vec<(SymbolId, u32)>,    // populated by `duplicate-functions` only
+}
+pub(crate) trait Analysis: Send + Sync {
+    fn id(&self) -> &'static str;                        // "unused", "crap", … — also the
+                                                           // `--verbose` timings label
+    fn run(&self, ctx: &AnalysisCtx<'_>) -> AnalysisOutput;
 }
 ```
+
+`AnalysisTuning` carries `[analysis.crap] threshold`, `[analysis.duplicate] min-tokens`, and
+`[[externally-invoked]]` — every knob that acts strictly POST-assembly, which is why none of
+them belongs in the graph or its cache key. `run_all` resolves the last of these into symbol
+ids (`reachability::externally_invoked_symbols`: a declaration whose `Declaration::markers`
+include one of a rule's `markers`, scoped by its `paths`) and seeds
+`reachability::compute_with_roots` with them, at `Production`/`Certain` — the standing a
+manifest-declared entry point has, because the project asserted the fact. `compute(graph)`
+remains as the no-extra-roots form; the navigation verbs go through
+`query_envelope::compute_reachability`, which takes the same rules so `kndo used-by` and
+`kndo check` can never disagree about a symbol's color.
+
+`run_all` holds a fixed-order `Vec<Box<dyn Analysis>>` registry, runs it via
+`par_iter().map(...).collect()` (order-preserving regardless of completion order — no
+explicit join tree to hand-maintain per analysis added), then reduces deterministically:
+findings concatenate in registry order and are id-sorted after: `cycle_files`/`duplicated`
+merge from whichever single analysis populates them; diagnostics keep their pre-refactor
+fixed order (`crap`, `untested`, `dependencies`-hygiene — the only three that ever emit one)
+rather than falling out of registry position.
+
+**Not built, and not what this landed as:** `GraphView`/`Enrichments`/`DirtyRegion`/
+`FindingsView` and a `run_incremental` entry point. RFC 0004 §5's dirty-region analysis
+incrementality doesn't exist yet (§5 below); when it lands, the registry above is the seam
+it plugs into — an `Analysis` impl gaining a second method, not a new dispatch mechanism.
 
 ## 5. `Engine` — the frontend boundary
 
@@ -584,27 +973,67 @@ pub struct Engine { /* opaque: graph, cache, adapters, plugins */ }
 impl Engine {
     /// `adapters` is composed by the DISTRIBUTION layer (the `kndo` crate, RFC 0001 §2) —
     /// frontends call `kndo::open(root, overrides)` and never touch this parameter; only
-    /// embedders and tests pass a custom set. Plugins default to just the built-in lcov
-    /// ingester (RFC 0003) — see `open_with_plugins` for a custom plugin set.
+    /// embedders and tests pass a custom set. `open` registers NO plugins — not even the
+    /// coverage ingesters: plugins are composition, not core (the ignorance rule covers
+    /// report formats too). The product's built-in set arrives through `open_with_plugins`
+    /// from the `kndo` crate's `default_plugins()`, exactly like adapters do.
     pub fn open(root: &Path, overrides: ConfigOverrides,
                 adapters: Vec<Box<dyn LanguageAdapter>>) -> Result<Engine, EngineError>;
-    /// Same as `open`, additionally taking the registered `Plugin` set explicitly (landed M5) —
-    /// `open` is a thin wrapper defaulting it to `vec![Box::new(LcovPlugin)]`, the same plugin
-    /// that list held implicitly before this existed.
+    /// Same as `open`, additionally taking the registered `Plugin` set explicitly (landed M5).
+    /// Each plugin arrives as a `RegisteredPlugin { plugin, activated_by: ActivationReason }`
+    /// — the component plus the CALLER's answer to why it is active, which the run reports
+    /// verbatim as `run.plugins[].activated_by`. The engine never derives that answer: the
+    /// tiers, the rule evaluation and the `dependencies` fixpoint all live in the distribution
+    /// layer, and a second derivation in core would be one fact with two sources (the failure
+    /// mode that left this field specified-but-unemitted for three milestones). A bare
+    /// `Box<dyn Plugin>` — or a boxed concrete plugin — converts in, yielding
+    /// `ActivationReason::Registered`, which is exactly what an embedder choosing the set by
+    /// hand did.
     pub fn open_with_plugins(root: &Path, overrides: ConfigOverrides,
                 adapters: Vec<Box<dyn LanguageAdapter>>,
-                plugins: Vec<Box<dyn Plugin>>) -> Result<Engine, EngineError>;
-    pub fn check(&mut self, req: CheckRequest) -> RunResult;    // full | staged | diff
-    pub fn query(&mut self, req: QueryRequest) -> QueryResult;  // RFC 0007 verbs, incl. batches
-    pub fn explain(&self, id: FindingId) -> Option<Explanation>;
+                plugins: impl IntoIterator<Item = impl Into<RegisteredPlugin>>)
+                -> Result<Engine, EngineError>;
+    pub fn check(&mut self, mode: RunMode) -> RunResult;    // full | staged | diff
+    pub fn query(&self, req: QueryRequest) -> QueryResult;  // RFC 0007 verbs, incl. batches
+    pub fn query_batch(&self, requests: Vec<QueryRequest>) -> Vec<QueryResult>;  // one shared graph load
     pub fn baseline(&mut self, op: BaselineOp) -> BaselineResult;
     pub fn doctor(&self) -> DoctorReport;
 }
+// `kndo explain <finding-id>` (RFC 0006 §2) is NOT a method here: it is `Verb::Explain`,
+// answered through `query`/`query_batch` like every other verb. Its "selector" is a finding
+// id rather than a node selector, and that is the only thing about it that differs — the
+// envelope, the `not-found` status, the exit-code mapping and `kndo query` batching all come
+// from the machinery the navigation verbs already use, rather than from a second copy of it.
+// What it returns is deliberately a pair, not a derivation: the finding verbatim plus
+// `describe` of its subject (`ExplainResult { finding, subject: Option<DescribeResult>,
+// subject_selector }`). `subject` is `None` for a subject that is not one graph node — a
+// directory rollup stands in for many — and the finding still explains itself there. The
+// per-finding remediation prose an earlier draft imagined stays cut for the reason
+// output-schema §2 gives about `remediation`.
+//
+// Gate policy lives here too, as data rather than an exit code (the core-never-prints rule
+// covers exit codes as much as ANSI). It has TWO halves, and a frontend must call the reader
+// that composes them, never one half:
+//   RunMode::default_fail_on() -> Option<Severity>   // full: None; a diff mode: Some(Warning)
+//   RunResult::fails_at(Option<Severity>) -> bool    // severity + the advisory exemption
+//   RunResult::budget_failed() -> bool               // the [delta] budgets (see below)
+//   RunResult::gate_fails(Option<Severity>) -> bool  // fails_at OR budget_failed — CALL THIS
+// RFC 0006 §5 composes them with OR; two frontends each reimplementing that composition is how
+// one of them silently honors half a gate. A frontend's own job shrinks to parsing `--fail-on`
+// and mapping one bool to its own exit-code convention.
+//
+// `RunResult::net_findings() -> i64` is `new − fixed` under the same advisory exemption — what
+// `max-net-findings` judges and what every renderer prints as `net ±N`.
+// `RunResult::plugin_contributions: Vec<PluginContribution>` carries this run's own
+// graph-mutation audit record — `Some` whenever `run_plugin_round` actually ran this call
+// (full build, patch), falling back to the cache's sidecar record only on a pure
+// snapshot-hit, where nothing ran this call but the graph (and so the record) is unchanged.
 
 // Distribution layer (crate `kndo`) — what frontends actually call:
 // pub fn kndo::open(root: &Path, overrides: ConfigOverrides) -> Result<Engine, EngineError>
 // pub fn kndo::default_adapters() -> Vec<Box<dyn LanguageAdapter>>
-// pub fn kndo::default_plugins() -> Vec<Box<dyn Plugin>>  // just LcovPlugin today (RFC 0003 §3)
+// pub fn kndo::default_plugins() -> Vec<Box<dyn Plugin>>  // the built-in coverage ingesters
+//     (lcov, Cobertura, JaCoCo, go cover — RFC 0003 §3), plus any activated convention plugin
 ```
 
 - `RunResult`/`QueryResult` are the **typed forms of the output schema**
@@ -616,7 +1045,26 @@ impl Engine {
   except through `Engine`. A frontend that needs a new fact is a core PR adding it to
   `RunResult`, never a core import.
 - `Engine` is synchronous and single-instance-per-project (the cache lock, RFC 0004 §7); a
-  serving frontend wraps it in its own concurrency model.
+  serving frontend wraps it in its own concurrency model. `query`/`query_batch` take `&self`
+  specifically so that model can run many read-only queries concurrently against one shared
+  `Engine` without external synchronization — `check`/`baseline` stay `&mut self` (they touch
+  the baseline file and the health-trend snapshot, state a concurrent query must never
+  perturb). The graph-snapshot write after assembly runs on a background thread so
+  serialization overlaps with analysis and rendering; the in-flight handle is joined before the
+  next assembly and on `Drop` (a frontend drops `Engine` after printing, which is exactly
+  "written after results are printed, before exit" — a killed process loses only cache warmth,
+  never correctness). That handle now lives behind a `Mutex` rather than a plain field
+  precisely so joining it — from `query`/`query_batch`'s next call, or from `Drop` — never
+  needs `&mut Engine`.
+- **Facade re-exports.** `kndo-core`'s crate root re-exports the frontend-facing surface
+  directly (`kndo_core::Engine`, `RunResult`, `Finding`, `Severity`, `Confidence`, `Group`,
+  `Category`, `Diagnostic`, `QueryRequest`, `QueryResult`, `sort_findings_for_display`, …) so
+  a frontend never needs to know which internal module (`engine`, `vocab`, `query_envelope`)
+  actually defines a type; the `kndo` distribution crate re-exports the same names at its own
+  root in turn (`kndo::Engine`, not `kndo::engine::Engine`). Adapter/plugin authoring types
+  (`LanguageAdapter`, `Plugin`, `GraphView`, …) are a different surface — component authors,
+  not frontends — and stay reached through their own modules (`kndo_core::adapter`,
+  `kndo_core::plugin`, …), unchanged.
 - `ConfigOverrides.use_cache` (default `true`) is the `--no-cache` switch (RFC 0004 §4), gating
   two cache layers (`cache.rs`, ADR 0004): the facts layer (`.kndo/cache/facts/`) skips
   re-parsing any file whose content hash already has a current entry; the graph layer
@@ -631,11 +1079,43 @@ impl Engine {
   one file or the whole graph; an enabled-but-empty cache (first run, or a change big enough that
   nothing hit) is honestly `"cold"`. Correctness never depends on this: `--no-cache` must produce
   byte-identical findings (verified on the fixture matrix and the 5k-file benchmark; not yet
-  wired into a CI workflow — RFC 0004 §4). The findings snapshot, the warm-run *patch* algorithm
-  (reusing part of a stale graph), and dirty-region incrementality (RFC 0004 §2, §4–6) aren't
-  implemented yet — a changed file forces a full rebuild, not a targeted patch; measured
-  sufficient for the M2 budget at benchmark scale (ROADMAP M2 close-out note), revisit if a
-  larger real repo's rebuild cost grows past budget.
+  wired into a CI workflow — RFC 0004 §4). On a graph-snapshot key miss, the warm-run *patch*
+  algorithm (`graph.rs`'s `try_patch`) reuses the previous snapshot when its guards all hold —
+  same graph-schema version and plugin digest, identical file set (any add/remove/rename bails),
+  no changed manifest, at most ~5% of files changed, unchanged surface signatures — otherwise it
+  falls through to full assembly (itself facts-cache-warm for unchanged files). Patched ≡
+  fully-rebuilt output is test-enforced (`patch_equivalence`). Still unimplemented from RFC 0004:
+  the findings snapshot and dirty-region *analysis* incrementality (§5) — analyses always re-run
+  over the (possibly patched) graph.
+
+- **Provenance (`graph::provenance::ProvenanceIndex`)** answers "whose facts is this resting
+  on" for one graph, once. [`Provenance`](#1-graph-vocabulary) lives on **edges**; both
+  consumers that need it per *node* — a `describe` envelope's `sources` and every
+  `Finding.sources` ([output-schema.md](output-schema.md) §2.1) — read this index rather than
+  deriving their own, so the two cannot answer differently about the same node, and a new
+  `EdgeKind` teaches both at once. `Engine` fills findings in one pass after suppression and
+  config filtering: a verdict knows what it decided, not who supplied the graph it decided on,
+  and thirteen analyses each answering would be thirteen chances to answer differently. It is
+  read off the **persisted graph**, never off the live plugin round — a snapshot-hit run runs
+  no plugins, and provenance sourced from that round would silently vanish exactly when the
+  cache is warm.
+
+- **Delta budgets (`crate::delta`)** are the gate's aggregate half. `RunResult.budget:
+  Option<Budget>` is `Some` exactly when the run is a diff mode *and* `kndo.toml` has a
+  `[delta]` section; `Budget { verdict, rules: Vec<BudgetRule { rule, limit, measured,
+  verdict, over_by }> }` serializes straight into the envelope's top-level `budget`
+  ([output-schema.md](output-schema.md) §1) — a sibling of `health`, not a member of `run`.
+  Three rule kinds, in this evaluation order: `max-health-drop` (a **drop**, so an improving
+  change measures negative), `max-net-findings` (`new − fixed`), and one rule per
+  `[delta.budget]` key sorted, each an **absolute** count of new findings whose group *or*
+  category matches — `fixed` compensates only inside `max-net-findings` (RFC 0006 §5).
+  Advisory findings are excluded throughout, as they are from `fails_at`. A rule passes when
+  `measured <= limit`, so a measurement landing exactly on its own stated maximum is not a
+  failure. **`None` is load-bearing and never means "everything passed":** no `[delta]`
+  section, full mode, and a run that could not assemble either side all report no budget at
+  all, which is how a consumer tells "nobody set one" from "every budget held". The section's
+  presence is the entire opt-in; inside it the strict ratchet (0.0 / 0) is the default, so no
+  existing project changes exit code because the subsystem exists.
 
 ## 6. Stability tiers
 

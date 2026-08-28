@@ -36,9 +36,10 @@ pub struct DiscoveredFile {
     pub stat: Option<StatEntry>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum DiscoveryError {
-    Root(std::io::Error),
+    #[error("cannot read the project tree: {0}")]
+    Root(#[source] std::io::Error),
 }
 
 /// Discovery result: the files plus everything that could NOT be read — a file silently
@@ -554,22 +555,15 @@ mod tests {
     use super::*;
     use std::fs;
 
-    fn tmp(name: &str) -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join(format!("kndo-discovery-test-{name}"));
-        let _ = fs::remove_dir_all(&dir);
-        fs::create_dir_all(&dir).unwrap();
-        dir
-    }
-
     #[test]
     fn discovers_files_sorted_and_respects_gitignore() {
-        let dir = tmp("basic");
-        fs::write(dir.join(".gitignore"), "ignored.txt\n").unwrap();
-        fs::write(dir.join("b.ts"), "export const b = 1;").unwrap();
-        fs::write(dir.join("a.ts"), "export const a = 1;").unwrap();
-        fs::write(dir.join("ignored.txt"), "should not appear").unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join(".gitignore"), "ignored.txt\n").unwrap();
+        fs::write(dir.path().join("b.ts"), "export const b = 1;").unwrap();
+        fs::write(dir.path().join("a.ts"), "export const a = 1;").unwrap();
+        fs::write(dir.path().join("ignored.txt"), "should not appear").unwrap();
 
-        let files = discover(&dir).unwrap().files;
+        let files = discover(dir.path()).unwrap().files;
         let paths: Vec<&str> = files.iter().map(|f| f.path.0.as_str()).collect();
 
         assert_eq!(paths, vec!["a.ts", "b.ts"]);
@@ -577,28 +571,28 @@ mod tests {
 
     #[test]
     fn identical_content_hashes_identically() {
-        let dir = tmp("hash");
-        fs::write(dir.join("x.ts"), "same").unwrap();
-        fs::write(dir.join("y.ts"), "same").unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("x.ts"), "same").unwrap();
+        fs::write(dir.path().join("y.ts"), "same").unwrap();
 
-        let files = discover(&dir).unwrap().files;
+        let files = discover(dir.path()).unwrap().files;
         assert_eq!(files[0].content_hash, files[1].content_hash);
         assert_ne!(files[0].content_hash, [0u8; 32]);
     }
 
     #[test]
     fn order_is_deterministic_across_runs() {
-        let dir = tmp("determinism");
+        let dir = tempfile::tempdir().unwrap();
         for i in 0..20 {
-            fs::write(dir.join(format!("f{i:02}.ts")), format!("{i}")).unwrap();
+            fs::write(dir.path().join(format!("f{i:02}.ts")), format!("{i}")).unwrap();
         }
-        let run1: Vec<_> = discover(&dir)
+        let run1: Vec<_> = discover(dir.path())
             .unwrap()
             .files
             .into_iter()
             .map(|f| f.path.0)
             .collect();
-        let run2: Vec<_> = discover(&dir)
+        let run2: Vec<_> = discover(dir.path())
             .unwrap()
             .files
             .into_iter()
@@ -609,8 +603,8 @@ mod tests {
 
     #[test]
     fn rejects_non_directory_root() {
-        let dir = tmp("not-a-dir");
-        let file = dir.join("f.ts");
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("f.ts");
         fs::write(&file, "x").unwrap();
         assert!(discover(&file).is_err());
     }
@@ -647,27 +641,31 @@ mod tests {
     /// `.gitignore`s, whitelists, hidden entries, and `.kndo/`.
     #[test]
     fn git_tree_discovery_matches_directory_discovery() {
-        let dir = tmp("git-parity");
-        fs::create_dir_all(dir.join("sub")).unwrap();
-        fs::create_dir_all(dir.join("gen")).unwrap();
-        fs::create_dir_all(dir.join(".hidden-dir")).unwrap();
-        fs::create_dir_all(dir.join(".kndo/cache")).unwrap();
-        fs::write(dir.join(".gitignore"), "gen/*\n!gen/keep.ts\n").unwrap();
-        fs::write(dir.join("a.ts"), "export const a = 1;").unwrap();
-        fs::write(dir.join("b.ts"), "export const b = 2;").unwrap();
-        fs::write(dir.join("sub/.gitignore"), "local-ignored.ts\n").unwrap();
-        fs::write(dir.join("sub/kept.ts"), "export const kept = 3;").unwrap();
-        fs::write(dir.join("sub/local-ignored.ts"), "tracked but ignored").unwrap();
-        fs::write(dir.join("gen/drop.ts"), "generated, ignored").unwrap();
-        fs::write(dir.join("gen/keep.ts"), "whitelisted back in").unwrap();
-        fs::write(dir.join(".hidden-dir/h.ts"), "hidden dir content").unwrap();
-        fs::write(dir.join(".dotfile.ts"), "hidden file").unwrap();
-        fs::write(dir.join(".kndo/cache/junk"), "never analyzed").unwrap();
-        init_and_commit_all(&dir);
+        let dir = tempfile::tempdir().unwrap();
+        fs::create_dir_all(dir.path().join("sub")).unwrap();
+        fs::create_dir_all(dir.path().join("gen")).unwrap();
+        fs::create_dir_all(dir.path().join(".hidden-dir")).unwrap();
+        fs::create_dir_all(dir.path().join(".kndo/cache")).unwrap();
+        fs::write(dir.path().join(".gitignore"), "gen/*\n!gen/keep.ts\n").unwrap();
+        fs::write(dir.path().join("a.ts"), "export const a = 1;").unwrap();
+        fs::write(dir.path().join("b.ts"), "export const b = 2;").unwrap();
+        fs::write(dir.path().join("sub/.gitignore"), "local-ignored.ts\n").unwrap();
+        fs::write(dir.path().join("sub/kept.ts"), "export const kept = 3;").unwrap();
+        fs::write(
+            dir.path().join("sub/local-ignored.ts"),
+            "tracked but ignored",
+        )
+        .unwrap();
+        fs::write(dir.path().join("gen/drop.ts"), "generated, ignored").unwrap();
+        fs::write(dir.path().join("gen/keep.ts"), "whitelisted back in").unwrap();
+        fs::write(dir.path().join(".hidden-dir/h.ts"), "hidden dir content").unwrap();
+        fs::write(dir.path().join(".dotfile.ts"), "hidden file").unwrap();
+        fs::write(dir.path().join(".kndo/cache/junk"), "never analyzed").unwrap();
+        init_and_commit_all(dir.path());
 
-        let from_walk = tree_files(&TreeSource::Directory(&dir));
+        let from_walk = tree_files(&TreeSource::Directory(dir.path()));
         let from_tree = tree_files(&TreeSource::GitTree {
-            repo_root: &dir,
+            repo_root: dir.path(),
             treeish: "HEAD",
             prefix: "",
         });
@@ -695,9 +693,9 @@ mod tests {
     /// hash that could only come from the index.
     #[test]
     fn matching_stat_signature_skips_hashing_entirely() {
-        let dir = tmp("stat-hit");
-        fs::write(dir.join("a.ts"), "export const x = 1;").unwrap();
-        let first = discover(&dir).unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("a.ts"), "export const x = 1;").unwrap();
+        let first = discover(dir.path()).unwrap();
         let mut entries: std::collections::HashMap<ProjectPath, StatEntry> =
             first.stat_entries.iter().cloned().collect();
         let poisoned = [7u8; 32];
@@ -707,7 +705,7 @@ mod tests {
             // Horizon far in the future: every entry predates it — pure hit path.
             written_at_ns: u128::MAX,
         };
-        let second = discover_with_stat(&dir, Some(&index)).unwrap();
+        let second = discover_with_stat(dir.path(), Some(&index)).unwrap();
         assert_eq!(
             second.files[0].content_hash, poisoned,
             "the recorded hash must be served verbatim — the file was never read"
@@ -716,9 +714,9 @@ mod tests {
 
     #[test]
     fn changed_mtime_or_racy_entry_rehashes() {
-        let dir = tmp("stat-miss");
-        fs::write(dir.join("a.ts"), "export const x = 1;").unwrap();
-        let first = discover(&dir).unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("a.ts"), "export const x = 1;").unwrap();
+        let first = discover(dir.path()).unwrap();
         let real_hash = first.files[0].content_hash;
         let mut entries: std::collections::HashMap<ProjectPath, StatEntry> =
             first.stat_entries.iter().cloned().collect();
@@ -730,7 +728,7 @@ mod tests {
             entries: entries.clone(),
             written_at_ns: 0,
         };
-        let out = discover_with_stat(&dir, Some(&racy)).unwrap();
+        let out = discover_with_stat(dir.path(), Some(&racy)).unwrap();
         assert_eq!(out.files[0].content_hash, real_hash);
 
         // Signature mismatch: mtime moved — re-hash regardless of horizon.
@@ -741,27 +739,27 @@ mod tests {
             entries,
             written_at_ns: u128::MAX,
         };
-        let out = discover_with_stat(&dir, Some(&stale)).unwrap();
+        let out = discover_with_stat(dir.path(), Some(&stale)).unwrap();
         assert_eq!(out.files[0].content_hash, real_hash);
     }
 
     #[test]
     fn git_tree_prefix_scopes_and_relativizes_paths() {
-        let dir = tmp("git-prefix");
-        fs::create_dir_all(dir.join("pkg/src")).unwrap();
-        fs::write(dir.join("outside.ts"), "export const o = 1;").unwrap();
-        fs::write(dir.join("pkg/src/inner.ts"), "export const i = 2;").unwrap();
-        init_and_commit_all(&dir);
+        let dir = tempfile::tempdir().unwrap();
+        fs::create_dir_all(dir.path().join("pkg/src")).unwrap();
+        fs::write(dir.path().join("outside.ts"), "export const o = 1;").unwrap();
+        fs::write(dir.path().join("pkg/src/inner.ts"), "export const i = 2;").unwrap();
+        init_and_commit_all(dir.path());
 
         let files = tree_files(&TreeSource::GitTree {
-            repo_root: &dir,
+            repo_root: dir.path(),
             treeish: "HEAD",
             prefix: "pkg",
         });
         let paths: Vec<&str> = files.iter().map(|f| f.path.0.as_str()).collect();
         assert_eq!(paths, vec!["src/inner.ts"]);
         // …and those paths line up with a walk rooted at the same subdirectory.
-        let from_walk = tree_files(&TreeSource::Directory(&dir.join("pkg")));
+        let from_walk = tree_files(&TreeSource::Directory(&dir.path().join("pkg")));
         assert_eq!(strip_stat(files), strip_stat(from_walk));
     }
 
@@ -769,15 +767,15 @@ mod tests {
     fn git_tree_root_gitignore_applies_to_prefixed_subdirectory_files() {
         // A repo-root .gitignore ignoring something under the prefix must still apply after
         // scoping — the walk's `parents(true)` default does the same from a subdir root.
-        let dir = tmp("git-prefix-parent-ignore");
-        fs::create_dir_all(dir.join("pkg")).unwrap();
-        fs::write(dir.join(".gitignore"), "pkg/generated.ts\n").unwrap();
-        fs::write(dir.join("pkg/real.ts"), "export const r = 1;").unwrap();
-        fs::write(dir.join("pkg/generated.ts"), "tracked but ignored").unwrap();
-        init_and_commit_all(&dir);
+        let dir = tempfile::tempdir().unwrap();
+        fs::create_dir_all(dir.path().join("pkg")).unwrap();
+        fs::write(dir.path().join(".gitignore"), "pkg/generated.ts\n").unwrap();
+        fs::write(dir.path().join("pkg/real.ts"), "export const r = 1;").unwrap();
+        fs::write(dir.path().join("pkg/generated.ts"), "tracked but ignored").unwrap();
+        init_and_commit_all(dir.path());
 
         let files = tree_files(&TreeSource::GitTree {
-            repo_root: &dir,
+            repo_root: dir.path(),
             treeish: "HEAD",
             prefix: "pkg",
         });
@@ -787,15 +785,15 @@ mod tests {
 
     #[test]
     fn git_tree_content_reads_serve_the_blob_bytes() {
-        let dir = tmp("git-content");
-        fs::write(dir.join("f.ts"), "export const x = 42;").unwrap();
-        init_and_commit_all(&dir);
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("f.ts"), "export const x = 42;").unwrap();
+        init_and_commit_all(dir.path());
         // Change the working tree AFTER committing — reads must come from the tree, not disk.
-        fs::write(dir.join("f.ts"), "changed on disk").unwrap();
+        fs::write(dir.path().join("f.ts"), "changed on disk").unwrap();
 
         let tree = discover_source(
             &TreeSource::GitTree {
-                repo_root: &dir,
+                repo_root: dir.path(),
                 treeish: "HEAD",
                 prefix: "",
             },
@@ -809,12 +807,12 @@ mod tests {
 
     #[test]
     fn git_tree_unknown_treeish_is_an_error_not_a_panic() {
-        let dir = tmp("git-bad-treeish");
-        fs::write(dir.join("f.ts"), "x").unwrap();
-        init_and_commit_all(&dir);
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("f.ts"), "x").unwrap();
+        init_and_commit_all(dir.path());
         assert!(discover_source(
             &TreeSource::GitTree {
-                repo_root: &dir,
+                repo_root: dir.path(),
                 treeish: "no-such-ref",
                 prefix: "",
             },
@@ -829,13 +827,13 @@ mod tests {
     /// reads for those skipped blobs still work via the lazy fallback fetcher.
     #[test]
     fn known_blob_hashes_skip_fetching_but_reads_still_work() {
-        let dir = tmp("git-sidecar");
-        fs::write(dir.join("a.ts"), "export const a = 1;").unwrap();
-        fs::write(dir.join("b.ts"), "export const b = 2;").unwrap();
-        init_and_commit_all(&dir);
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("a.ts"), "export const a = 1;").unwrap();
+        fs::write(dir.path().join("b.ts"), "export const b = 2;").unwrap();
+        init_and_commit_all(dir.path());
 
         let source = TreeSource::GitTree {
-            repo_root: &dir,
+            repo_root: dir.path(),
             treeish: "HEAD",
             prefix: "",
         };

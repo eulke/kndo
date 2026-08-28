@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use kndo_core::adapter::LanguageAdapter;
-use kndo_core::engine::{CheckRequest, ConfigOverrides, Engine, RunMode};
+use kndo_core::engine::{ConfigOverrides, Engine, RunMode};
 use kndo_plugin_api::WasmAdapter;
 
 fn workspace_root() -> PathBuf {
@@ -25,23 +25,13 @@ fn workspace_root() -> PathBuf {
         .to_path_buf()
 }
 
-/// A process-unique `--target-dir` (not the demo crate's own shared `target/`) — several
-/// independent test binaries build these same demo crates, and under `cargo test --workspace`'s
-/// default parallelism a reader has been observed to pick up a wrong-shaped artifact from a
-/// concurrent writer despite cargo's own target-dir lock.
-fn isolated_target_dir() -> PathBuf {
-    let nonce = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .expect("system clock before the epoch")
-        .as_nanos();
-    std::env::temp_dir().join(format!("kndo-wasm-target-{}-{nonce}", std::process::id()))
-}
-
 /// Builds `examples/kndo-plugin-demo` to a core WASM module and componentizes it in-process.
 /// Returns the component bytes — no files touched outside a fresh temp dir the caller owns.
 fn build_demo_component() -> Vec<u8> {
     let demo_dir = workspace_root().join("examples/kndo-plugin-demo");
-    let target_dir = isolated_target_dir();
+    // A `TempDir`: unique by construction and removed on drop, unwind included —
+    // the hand-rolled pid+nonce name it replaced leaked the whole build tree on panic.
+    let target_dir = tempfile::tempdir().expect("wasm target dir");
     let status = Command::new("cargo")
         .args(["build", "--release", "--target", "wasm32-unknown-unknown"])
         // Cross-target guest build: instrumentation flags from the host environment
@@ -50,16 +40,17 @@ fn build_demo_component() -> Vec<u8> {
         .env_remove("RUSTFLAGS")
         .env_remove("CARGO_ENCODED_RUSTFLAGS")
         .env_remove("LLVM_PROFILE_FILE")
-        .env("CARGO_TARGET_DIR", &target_dir)
+        .env("CARGO_TARGET_DIR", target_dir.path())
         .current_dir(&demo_dir)
         .status()
         .expect("failed to invoke cargo to build the demo adapter");
     assert!(status.success(), "demo adapter guest build failed");
 
-    let core_wasm_path = target_dir.join("wasm32-unknown-unknown/release/kndo_plugin_demo.wasm");
+    let core_wasm_path = target_dir
+        .path()
+        .join("wasm32-unknown-unknown/release/kndo_plugin_demo.wasm");
     let core_wasm = std::fs::read(&core_wasm_path)
         .unwrap_or_else(|e| panic!("reading {}: {e}", core_wasm_path.display()));
-    let _ = std::fs::remove_dir_all(&target_dir);
 
     wit_component::ComponentEncoder::default()
         .module(&core_wasm)
@@ -91,15 +82,13 @@ fn external_wasm_adapter_runs_a_real_engine_check_end_to_end() {
         ConfigOverrides {
             use_cache: false,
             threads: Some(1),
-            min_confidence: None,
+            ..ConfigOverrides::default()
         },
         vec![Box::new(adapter)],
     )
     .expect("opening the engine over the fixture project");
 
-    let result = engine.check(CheckRequest {
-        mode: RunMode::Full,
-    });
+    let result = engine.check(RunMode::Full);
 
     assert_eq!(result.files_claimed, 1, "the .kdemo file must be claimed");
     assert_eq!(

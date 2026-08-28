@@ -47,10 +47,13 @@
 use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 
 use crate::adapter::{Diagnostic, DiagnosticLevel};
-use crate::analysis::{finding_id, package_discriminator, package_label};
+use crate::analysis::{finding_id, package_discriminator, package_label, FindingIdParts};
 use crate::engine::{Finding, Location, Severity};
 use crate::graph::{DeclaredDependency, ProjectGraph};
-use crate::vocab::{Confidence, DependencyId, DependencyScope, EdgeKind, FileRole, PackageId};
+use crate::vocab::{
+    Category, Confidence, DependencyId, DependencyScope, EdgeKind, FileRole, Group, PackageId,
+    SubjectKind,
+};
 
 /// Findings plus, when at least one declared dependency belongs to a package whose language
 /// can't produce usage edges, the one diagnostic naming how many were skipped instead of a
@@ -78,6 +81,15 @@ pub fn find_dependency_hygiene(graph: &ProjectGraph) -> (Vec<Finding>, Option<Di
                     .is_some_and(|s| crate::graph::span_in_test_region(&file.test_spans, s))
             {
                 role = FileRole::Test;
+            }
+            // The same ownership question `undeclared` asks, from the other side: a file whose
+            // own adapter would never claim this manifest is not evidence about its
+            // declarations — neither that one is missing, nor that one is used. Without the
+            // symmetry a `web/app.js` beside a `go.mod` could keep a Go dependency "used".
+            if !graph.packages[file.package.0 as usize]
+                .governs_dependencies_of(file.language.as_deref())
+            {
+                continue;
             }
             importer_roles
                 .entry((to, file.package))
@@ -147,35 +159,60 @@ pub fn find_dependency_hygiene(graph: &ProjectGraph) -> (Vec<Finding>, Option<Di
     (findings, diagnostic)
 }
 
+/// A finding about a declared dependency. Its identity, group, subject, location and the
+/// fields a fresh finding leaves empty are the same whatever the verdict is — only the
+/// category, the severity and the sentence differ, which is exactly what the two callers below
+/// pass. Both verdicts are `Waste`: a dependency you declare and do not need is waste whether
+/// nothing imports it or only tests do.
+fn dependency_finding(
+    graph: &ProjectGraph,
+    dep: &DeclaredDependency,
+    category: Category,
+    severity: Severity,
+    confidence: Confidence,
+    message: String,
+) -> Finding {
+    Finding {
+        advisory: false,
+        id: finding_id(FindingIdParts {
+            category: &category,
+            subject_kind: &SubjectKind::DEPENDENCY,
+            path: dep.name.as_str(),
+            symbol_path: "",
+            discriminator: &package_discriminator(graph, dep.package),
+        }),
+        category,
+        group: Group::Waste,
+        subject_kind: SubjectKind::DEPENDENCY,
+        severity,
+        confidence,
+        message,
+        location: dependency_location(graph, dep),
+        related: Vec::new(),
+        rolled_up: None,
+        sources: Vec::new(),
+        delta: None,
+        delta_origin: None,
+    }
+}
+
 fn unused_finding(
     graph: &ProjectGraph,
     dep: &DeclaredDependency,
     confidence: Confidence,
 ) -> Finding {
-    let name = dep.name.as_str();
-    Finding {
-        advisory: false,
-        id: finding_id(
-            "unused",
-            "dependency",
-            name,
-            "",
-            &package_discriminator(graph, dep.package),
-        ),
-        category: "unused".to_string(),
-        group: "waste".to_string(),
-        subject_kind: "dependency".to_string(),
-        severity: Severity::Warning,
+    dependency_finding(
+        graph,
+        dep,
+        Category::UNUSED,
+        Severity::Warning,
         confidence,
-        message: format!(
-            "{name} is declared in {}'s manifest but never imported",
+        format!(
+            "{} is declared in {}'s manifest but never imported",
+            dep.name.as_str(),
             package_label(graph, dep.package)
         ),
-        location: dependency_location(graph, dep),
-        related: Vec::new(),
-        delta: None,
-        delta_origin: None,
-    }
+    )
 }
 
 fn test_only_finding(
@@ -183,30 +220,20 @@ fn test_only_finding(
     dep: &DeclaredDependency,
     confidence: Confidence,
 ) -> Finding {
-    let name = dep.name.as_str();
-    Finding {
-        advisory: false,
-        id: finding_id(
-            "test-only",
-            "dependency",
-            name,
-            "",
-            &package_discriminator(graph, dep.package),
-        ),
-        category: "test-only".to_string(),
-        group: "waste".to_string(),
-        subject_kind: "dependency".to_string(),
-        severity: Severity::Info, // info by default
+    dependency_finding(
+        graph,
+        dep,
+        Category::TEST_ONLY,
+        // Info by default: the dependency IS needed, just declared in the wrong section.
+        Severity::Info,
         confidence,
-        message: format!(
-            "{name} is declared in {}'s manifest but only imported by test files — belongs in devDependencies",
+        format!(
+            "{} is declared in {}'s manifest but only imported by test files — belongs in \
+             devDependencies",
+            dep.name.as_str(),
             package_label(graph, dep.package)
         ),
-        location: dependency_location(graph, dep),
-        related: Vec::new(),
-        delta: None,
-        delta_origin: None,
-    }
+    )
 }
 
 fn dependency_location(graph: &ProjectGraph, dep: &DeclaredDependency) -> Location {
@@ -237,8 +264,10 @@ mod tests {
             }),
             package: PackageId(0),
             unit: None,
+            unit_parent: None,
             test_spans: Vec::new(),
             string_call_sites: Vec::new(),
+            string_attr_args: Vec::new(),
         }
     }
 
@@ -257,7 +286,7 @@ mod tests {
             package: PackageId(0),
             manifest: ProjectPath(SmolStr::new("package.json")),
             name: SmolStr::new(name),
-            version_req: SmolStr::new("^1.0.0"),
+            version_req: Some(SmolStr::new("^1.0.0")),
             scope,
         }
     }
@@ -279,6 +308,10 @@ mod tests {
                 declares_surface: false,
                 surface: Vec::new(),
                 resolves_dependency_usage: true,
+                // The manifest these files' own adapter claims — without it the
+                // cross-language ownership gate would (correctly) refuse to read any of
+                // them as evidence about this package's declarations.
+                manifest_claim_languages: vec![SmolStr::new("mock")],
             }])
             .with_declared_dependencies(declared_deps)
     }
@@ -348,6 +381,7 @@ mod tests {
                 declares_surface: false,
                 surface: Vec::new(),
                 resolves_dependency_usage: false,
+                manifest_claim_languages: Vec::new(),
             }])
             .with_declared_dependencies(vec![declared("guava", DependencyScope::Prod)]);
         let (findings, diagnostic) = find_dependency_hygiene(&graph);
@@ -368,7 +402,7 @@ mod tests {
         let findings = find_dependency_hygiene(&graph).0;
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].category, "unused");
-        assert_eq!(findings[0].group, "waste");
+        assert_eq!(findings[0].group, crate::vocab::Group::Waste);
         assert_eq!(findings[0].subject_kind, "dependency");
         assert_eq!(findings[0].confidence, Confidence::Certain);
         assert!(findings[0].message.contains("lodash"));
@@ -406,7 +440,7 @@ mod tests {
         let findings = find_dependency_hygiene(&graph).0;
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].category, "test-only");
-        assert_eq!(findings[0].group, "waste");
+        assert_eq!(findings[0].group, crate::vocab::Group::Waste);
         assert_eq!(findings[0].severity, Severity::Info);
     }
 

@@ -45,11 +45,21 @@ use crate::graph::{
 use crate::vocab::{Edge, FileId, PackageId, SymbolId};
 use smol_str::SmolStr;
 
-/// Facts-entry envelope header: bumped whenever the serialized shape changes, independent of
-/// any adapter's own `facts_schema_version` (which already keys the entry's path) — this is
-/// the belt to that suspenders, guarding against a kndo binary upgrade whose `FileFacts` type
-/// changed shape while an adapter's declared version didn't move.
-const ENTRY_FORMAT_VERSION: u32 = 3; // bump whenever the serialized FileFacts shape changes (bincode has no field defaults, so any layout change invalidates all entries once)
+/// **The one knob for "a type in the facts contract changed shape".**
+///
+/// [`crate::adapter::FileFacts`] and everything reachable from it — `Declaration`,
+/// `FunctionMetrics`, `RawRoot`, … — are emitted by every adapter and serialized with bincode,
+/// which has no field defaults: any layout change makes every existing entry decode to garbage,
+/// so [`decode`] treats a mismatch here as a silent miss. Folded into the graph key too
+/// (`graph::assemble::compute_graph_key`), so ONE bump invalidates both layers and nobody has
+/// to reason about whether a facts change reached the graph.
+///
+/// **This is not `AdapterDescriptor::facts_schema_version`.** That one is per adapter, for an
+/// adapter changing what it emits. This one is for the shared shape they all emit INTO. Getting
+/// it backwards costs six-plus identical edits for one fact, and silently under-invalidates
+/// when someone bumps five of six — which is exactly what happened when `FunctionMetrics` grew
+/// `shape_span`/`shape_ordinal`.
+pub const ENTRY_FORMAT_VERSION: u32 = 4;
 const FACTS_MAGIC: [u8; 4] = *b"KNF1";
 const HEADER_LEN: usize = FACTS_MAGIC.len() + 4;
 
@@ -118,6 +128,14 @@ struct CyclePolicySnap {
     policy: crate::adapter::CyclePolicy,
 }
 
+/// And again, for `ProjectGraph::testable_languages`.
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+struct TestableLanguageSnap {
+    #[rkyv(with = crate::rkyv_support::SmolStrAsString)]
+    language: SmolStr,
+    testable: bool,
+}
+
 /// The archived payload (everything after the header) — deliberately a standalone type rather
 /// than deriving `Archive` on [`ProjectGraph`] itself: `ProjectGraph::file_index` is a derived
 /// index (rebuilt on load — no reason to pay to persist it), and `diagnostics`
@@ -139,6 +157,7 @@ struct GraphSnapshot {
     suppressions: Vec<(FileId, RawSuppression)>,
     visibility_ladders: Vec<LadderSnap>,
     cycle_policies: Vec<CyclePolicySnap>,
+    testable_languages: Vec<TestableLanguageSnap>,
     function_metrics: Vec<(SymbolId, crate::graph::SymbolMetrics)>,
     patch_meta: Vec<crate::graph::FilePatchMeta>,
     diagnostics: Vec<Diagnostic>,
@@ -150,6 +169,9 @@ struct GraphSnapshot {
     /// `mark_implicitly_invoked` output — same plugin-derived, no-per-item-provenance
     /// round-trip rationale as `externally_consumed` above.
     plugin_implicitly_invoked: Vec<SymbolId>,
+    /// Relative imports that resolved to nothing — adapter-derived like the edges, and a
+    /// finding on the next run, so a warm hit must not drop them.
+    unresolved_imports: Vec<(FileId, crate::graph::UnresolvedImport)>,
     /// Plugin-round diagnostics (content-budget cutoffs), stored apart from the extraction
     /// `diagnostics` above because the two have different patch-time fates: the
     /// incremental patch keeps extraction diagnostics for unchanged files but discards and
@@ -646,10 +668,16 @@ impl ProjectCache {
                 .into_iter()
                 .map(|p| (p.language, p.policy))
                 .collect(),
+            testable_languages: snapshot
+                .testable_languages
+                .into_iter()
+                .map(|t| (t.language, t.testable))
+                .collect(),
             function_metrics: snapshot.function_metrics,
             patch_meta: snapshot.patch_meta,
             externally_consumed: snapshot.externally_consumed,
             plugin_implicitly_invoked: snapshot.plugin_implicitly_invoked,
+            unresolved_imports: snapshot.unresolved_imports,
         });
         Some(LoadedSnapshot {
             graph,
@@ -792,11 +820,20 @@ impl GraphSnapshotWriter {
                     policy: *policy,
                 })
                 .collect(),
+            testable_languages: graph
+                .testable_languages
+                .iter()
+                .map(|(language, testable)| TestableLanguageSnap {
+                    language: language.clone(),
+                    testable: *testable,
+                })
+                .collect(),
             function_metrics: graph.function_metrics.clone(),
             patch_meta: graph.patch_meta.clone(),
             diagnostics: diagnostics.to_vec(),
             externally_consumed: graph.externally_consumed.clone(),
             plugin_implicitly_invoked: graph.plugin_implicitly_invoked.clone(),
+            unresolved_imports: graph.unresolved_imports.clone(),
             plugin_diagnostics: plugin_diagnostics.to_vec(),
             plugin_set_digest: self.plugin_set_digest,
             graph_schema_version: crate::graph::GRAPH_SCHEMA_VERSION,
@@ -854,13 +891,6 @@ mod tests {
     use crate::adapter::Declaration;
     use crate::vocab::SymbolKind;
 
-    fn tmp(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("kndo-cache-test-{name}"));
-        let _ = fs::remove_dir_all(&dir);
-        fs::create_dir_all(&dir).unwrap();
-        dir
-    }
-
     fn sample_facts() -> FileFacts {
         FileFacts {
             declarations: vec![Declaration {
@@ -874,6 +904,9 @@ mod tests {
                 implicitly_invoked: false,
                 nested_scope: false,
                 visibility_inherited: false,
+                visible_in_unit: None,
+                implements: None,
+                markers: Vec::new(),
             }],
             ..Default::default()
         }
@@ -881,8 +914,8 @@ mod tests {
 
     #[test]
     fn miss_on_empty_cache_then_hit_after_put() {
-        let dir = tmp("hit-miss");
-        let cache = ProjectCache::open(&dir);
+        let dir = tempfile::tempdir().unwrap();
+        let cache = ProjectCache::open(dir.path());
         let hash = [1u8; 32];
         assert!(cache.get("js-ts", 1, &hash).is_none());
         assert_eq!(cache.hits(), 0);
@@ -896,8 +929,8 @@ mod tests {
 
     #[test]
     fn distinct_hashes_and_adapters_never_collide() {
-        let dir = tmp("distinct-keys");
-        let cache = ProjectCache::open(&dir);
+        let dir = tempfile::tempdir().unwrap();
+        let cache = ProjectCache::open(dir.path());
         let a = [1u8; 32];
         let b = [2u8; 32];
         cache.put("js-ts", 1, &a, &sample_facts());
@@ -908,10 +941,10 @@ mod tests {
 
     #[test]
     fn a_second_writer_degrades_to_read_only() {
-        let dir = tmp("second-writer");
-        let first = ProjectCache::open(&dir);
+        let dir = tempfile::tempdir().unwrap();
+        let first = ProjectCache::open(dir.path());
         assert!(first.writable);
-        let second = ProjectCache::open(&dir);
+        let second = ProjectCache::open(dir.path());
         assert!(!second.writable);
 
         let hash = [7u8; 32];
@@ -925,19 +958,19 @@ mod tests {
 
     #[test]
     fn dropping_the_writer_releases_the_lock_for_the_next_open() {
-        let dir = tmp("lock-release");
+        let dir = tempfile::tempdir().unwrap();
         {
-            let first = ProjectCache::open(&dir);
+            let first = ProjectCache::open(dir.path());
             assert!(first.writable);
         } // dropped — lock file removed
-        let second = ProjectCache::open(&dir);
+        let second = ProjectCache::open(dir.path());
         assert!(second.writable);
     }
 
     #[test]
     fn corrupt_entry_is_a_silent_miss_not_an_error() {
-        let dir = tmp("corrupt");
-        let cache = ProjectCache::open(&dir);
+        let dir = tempfile::tempdir().unwrap();
+        let cache = ProjectCache::open(dir.path());
         let hash = [3u8; 32];
         cache.put("js-ts", 1, &hash, &sample_facts());
         let path = cache.entry_path("js-ts", 1, &hash);
@@ -947,8 +980,8 @@ mod tests {
 
     #[test]
     fn stale_format_version_is_a_silent_miss() {
-        let dir = tmp("stale-version");
-        let cache = ProjectCache::open(&dir);
+        let dir = tempfile::tempdir().unwrap();
+        let cache = ProjectCache::open(dir.path());
         let hash = [4u8; 32];
         let mut bytes = encode(&sample_facts()).unwrap();
         // Corrupt just the format-version field to simulate a future kndo build's layout.
@@ -961,16 +994,16 @@ mod tests {
 
     #[test]
     fn gitignore_makes_the_cache_disposable_regardless_of_the_project_gitignore() {
-        let dir = tmp("gitignore");
-        let _cache = ProjectCache::open(&dir);
-        let contents = fs::read_to_string(dir.join(".kndo/.gitignore")).unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let _cache = ProjectCache::open(dir.path());
+        let contents = fs::read_to_string(dir.path().join(".kndo/.gitignore")).unwrap();
         assert!(contents.contains("cache/"));
     }
 
     #[test]
     fn prune_evicts_oldest_entries_first_down_to_the_cap() {
-        let dir = tmp("prune");
-        let cache = ProjectCache::open(&dir);
+        let dir = tempfile::tempdir().unwrap();
+        let cache = ProjectCache::open(dir.path());
         // Distinct content per entry so sizes differ enough to matter, and put() calls stagger
         // mtimes in insertion order (filesystem mtime resolution is coarse but monotonic here).
         for i in 0..5u8 {
@@ -1007,8 +1040,8 @@ mod tests {
 
     #[test]
     fn prune_is_a_noop_under_the_cap() {
-        let dir = tmp("prune-noop");
-        let cache = ProjectCache::open(&dir);
+        let dir = tempfile::tempdir().unwrap();
+        let cache = ProjectCache::open(dir.path());
         let hash = [9u8; 32];
         cache.put("js-ts", 1, &hash, &sample_facts());
         cache.prune(DEFAULT_CAP_BYTES);
@@ -1017,8 +1050,8 @@ mod tests {
 
     #[test]
     fn blob_hash_sidecar_round_trips_and_merges_across_saves() {
-        let dir = tmp("blob-sidecar");
-        let cache = ProjectCache::open(&dir);
+        let dir = tempfile::tempdir().unwrap();
+        let cache = ProjectCache::open(dir.path());
         assert!(cache.load_blob_hashes().is_empty());
 
         cache.save_blob_hashes(&[("aaaa".to_string(), [1u8; 32])]);
@@ -1032,17 +1065,17 @@ mod tests {
 
     #[test]
     fn corrupt_blob_hash_sidecar_is_an_empty_map_not_an_error() {
-        let dir = tmp("blob-sidecar-corrupt");
-        let cache = ProjectCache::open(&dir);
+        let dir = tempfile::tempdir().unwrap();
+        let cache = ProjectCache::open(dir.path());
         cache.save_blob_hashes(&[("aaaa".to_string(), [1u8; 32])]);
-        fs::write(dir.join(".kndo/cache/blob-hashes.bin"), b"garbage").unwrap();
+        fs::write(dir.path().join(".kndo/cache/blob-hashes.bin"), b"garbage").unwrap();
         assert!(cache.load_blob_hashes().is_empty());
     }
 
     #[test]
     fn stats_reflect_facts_and_graph_state() {
-        let dir = tmp("stats");
-        let cache = ProjectCache::open(&dir);
+        let dir = tempfile::tempdir().unwrap();
+        let cache = ProjectCache::open(dir.path());
         let empty = cache.stats();
         assert!(empty.writable);
         assert_eq!(empty.facts_entries, 0);
@@ -1065,9 +1098,9 @@ mod tests {
 
     #[test]
     fn stats_on_a_read_only_handle_still_reports_writable_false() {
-        let dir = tmp("stats-readonly");
-        let _first = ProjectCache::open(&dir);
-        let second = ProjectCache::open(&dir);
+        let dir = tempfile::tempdir().unwrap();
+        let _first = ProjectCache::open(dir.path());
+        let second = ProjectCache::open(dir.path());
         assert!(!second.stats().writable);
     }
 
@@ -1083,8 +1116,10 @@ mod tests {
                 class: None,
                 package: PackageId(0),
                 unit: None,
+                unit_parent: None,
                 test_spans: Vec::new(),
                 string_call_sites: Vec::new(),
+                string_attr_args: Vec::new(),
             }],
             vec![SymbolNode {
                 file: FileId(0),
@@ -1098,6 +1133,9 @@ mod tests {
                 implicitly_invoked: false,
                 nested_scope: false,
                 visibility_inherited: false,
+                visible_in_unit: None,
+                implements: None,
+                markers: Vec::new(),
             }],
             vec![DependencyNode {
                 name: "lodash".into(),
@@ -1121,7 +1159,7 @@ mod tests {
             package: PackageId(0),
             manifest: ProjectPath("package.json".into()),
             name: "lodash".into(),
-            version_req: "^4".into(),
+            version_req: Some("^4".into()),
             scope: crate::vocab::DependencyScope::Prod,
         }])
         .with_suppressions(vec![(
@@ -1134,12 +1172,48 @@ mod tests {
                 scope: crate::adapter::SuppressionScope::Declaration,
             },
         )])
+        // TWO shapes on ONE symbol — a declaration and a callable nested inside it. The pair
+        // is deliberate: this vec is not a map, and a snapshot that silently kept only one
+        // entry per symbol would lose closures' metrics on every cached run without any other
+        // assertion here noticing.
+        .with_function_metrics(vec![
+            (
+                SymbolId(0),
+                crate::graph::SymbolMetrics {
+                    shape_span: crate::adapter::Span {
+                        start: (3, 1),
+                        end: (9, 2),
+                    },
+                    shape_ordinal: 0,
+                    cyclomatic: 4,
+                    loc: 7,
+                    token_count: 80,
+                    fingerprints: vec![11, 22],
+                    body_is_construction: false,
+                },
+            ),
+            (
+                SymbolId(0),
+                crate::graph::SymbolMetrics {
+                    shape_span: crate::adapter::Span {
+                        start: (5, 9),
+                        end: (8, 6),
+                    },
+                    shape_ordinal: 1,
+                    cyclomatic: 2,
+                    loc: 4,
+                    token_count: 30,
+                    fingerprints: vec![33],
+                    body_is_construction: false,
+                },
+            ),
+        ])
     }
 
     #[test]
     fn graph_round_trips_including_diagnostics_and_misses_on_key_mismatch() {
-        let dir = tmp("graph-roundtrip");
-        let cache = ProjectCache::open(&dir);
+        let dir = tempfile::tempdir().unwrap();
+        let cache = ProjectCache::open(dir.path());
         let key = [5u8; GRAPH_KEY_LEN];
         let graph = sample_graph();
         let diagnostics = vec![Diagnostic {
@@ -1179,6 +1253,11 @@ mod tests {
         assert_eq!(
             restored.patch_meta, graph.patch_meta,
             "the patch layer's per-file metadata must round-trip"
+        );
+        assert_eq!(
+            restored.function_metrics, graph.function_metrics,
+            "both shapes of the one symbol must survive the snapshot — spans, ordinals and \
+             fingerprints included"
         );
         assert_eq!(
             restored.file_id(&crate::adapter::ProjectPath("a.mock".into())),
@@ -1226,9 +1305,9 @@ mod tests {
 
     #[test]
     fn a_second_writer_never_writes_a_graph_snapshot() {
-        let dir = tmp("graph-read-only");
-        let first = ProjectCache::open(&dir);
-        let second = ProjectCache::open(&dir);
+        let dir = tempfile::tempdir().unwrap();
+        let first = ProjectCache::open(dir.path());
+        let second = ProjectCache::open(dir.path());
         assert!(!second.writable);
 
         let key = [1u8; GRAPH_KEY_LEN];
@@ -1241,8 +1320,8 @@ mod tests {
 
     #[test]
     fn corrupt_graph_snapshot_is_a_silent_miss() {
-        let dir = tmp("graph-corrupt");
-        let cache = ProjectCache::open(&dir);
+        let dir = tempfile::tempdir().unwrap();
+        let cache = ProjectCache::open(dir.path());
         let key = [2u8; GRAPH_KEY_LEN];
         cache.put_graph(&key, &sample_graph(), &[]);
         fs::write(cache.graph_snapshot_path(&key), b"not a valid snapshot").unwrap();
@@ -1253,8 +1332,8 @@ mod tests {
     fn two_graph_snapshots_coexist_and_hit_independently() {
         // The diff-mode property: before/after keys must never evict each other — a single
         // mutable slot ping-ponged between them with a 0% hit rate on every warm diff run.
-        let dir = tmp("graph-coexist");
-        let cache = ProjectCache::open(&dir);
+        let dir = tempfile::tempdir().unwrap();
+        let cache = ProjectCache::open(dir.path());
         let key_a = [7u8; GRAPH_KEY_LEN];
         let key_b = [8u8; GRAPH_KEY_LEN];
         cache.put_graph(&key_a, &sample_graph(), &[]);
@@ -1266,8 +1345,8 @@ mod tests {
 
     #[test]
     fn prune_covers_graph_snapshots_too() {
-        let dir = tmp("graph-prune");
-        let cache = ProjectCache::open(&dir);
+        let dir = tempfile::tempdir().unwrap();
+        let cache = ProjectCache::open(dir.path());
         for i in 0..4u8 {
             cache.put_graph(&[i; GRAPH_KEY_LEN], &sample_graph(), &[]);
         }

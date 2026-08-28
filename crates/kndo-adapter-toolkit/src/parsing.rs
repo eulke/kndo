@@ -1,8 +1,10 @@
-//! Shared tree-sitter machinery — the paved road for first-party adapters: parser setup for
-//! the JS/TS grammar, and the node-to-span mapping every adapter shares.
+//! Shared tree-sitter machinery — the paved road for first-party adapters: the node-to-span
+//! mapping every adapter shares, written once. Grammar-specific parser setup (TS/TSX, JVM XML
+//! manifests, …) belongs to the one adapter that needs that grammar, not here — this module
+//! stays usable by every language, tree-sitter grammar or not.
 
 use kndo_core::adapter::Span;
-use tree_sitter::{Language, Node, Parser, Tree};
+use tree_sitter::Node;
 
 /// A tree-sitter node's extent as kndo's 1-based (line, column) `Span` — the one mapping
 /// every adapter shares, written once.
@@ -19,233 +21,91 @@ pub fn span(node: Node) -> Span {
     }
 }
 
-pub fn typescript_language() -> Language {
-    tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into()
+/// A node's source text, grammar-independent (any tree-sitter tree, any node) — was
+/// copy-pasted identically into eight adapters before this moved here.
+pub fn text<'a>(node: Node, src: &'a [u8]) -> &'a str {
+    std::str::from_utf8(&src[node.byte_range()]).unwrap_or("")
 }
 
-pub fn tsx_language() -> Language {
-    tree_sitter_typescript::LANGUAGE_TSX.into()
+/// The first direct child of `node` with the given grammar `kind` — grammar-independent (any
+/// tree-sitter tree, any node kind name), unlike parsing itself.
+pub fn find_child<'a>(node: Node<'a>, kind: &str) -> Option<Node<'a>> {
+    node.children(&mut node.walk()).find(|n| n.kind() == kind)
 }
 
-/// Parse source with the TSX grammar (JSX-aware) when `tsx` is true, else plain TypeScript —
-/// which also parses ordinary JS/CJS (one grammar, two module systems).
-pub fn parse(source: &[u8], tsx: bool) -> Option<Tree> {
-    let mut parser = Parser::new();
-    let lang = if tsx {
-        tsx_language()
-    } else {
-        typescript_language()
+/// The `modifiers` container child a declaration carries, if any — the node every
+/// modifier-bearing grammar in this workspace hangs `visibility_modifier`, `member_modifier`
+/// and friends off, under that exact name.
+pub fn modifiers_node(item: Node) -> Option<Node> {
+    find_child(item, "modifiers")
+}
+
+/// `item`'s rung on the adapter's own visibility ladder: the level of whichever keyword in
+/// `levels` it is written with, or `default` when it writes none.
+///
+/// `default` is a parameter and not a table entry because writing nothing means something
+/// different in every language — Kotlin `public` (3), Swift `internal` (2), Java
+/// package-private — and that difference is load-bearing. Silence is not a rung; only the
+/// adapter knows what its language reads into it, so only the adapter may state it.
+pub fn visibility_level(item: Node, levels: &[(&str, u8)], default: u8) -> u8 {
+    let Some(modifiers) = modifiers_node(item) else {
+        return default;
     };
-    parser.set_language(&lang).ok()?;
-    parser.parse(source, None)
+    let Some(vis) = find_child(modifiers, "visibility_modifier") else {
+        return default;
+    };
+    vis.children(&mut vis.walk())
+        .find_map(|c| levels.iter().find(|(k, _)| *k == c.kind()))
+        .map_or(default, |(_, level)| *level)
 }
 
-#[cfg(test)]
-mod introspect {
-    //! Not adapter tests — a ground-truth probe of the grammar's real field names: the
-    //! extraction code in kndo-adapter-js is written against verified facts instead of
-    //! assumptions. `cargo test -p kndo-adapter-toolkit introspect -- --nocapture --ignored`.
+/// Whether `item`'s modifiers contain `keyword` inside a `wrapper` node — the shape a grammar
+/// uses when it groups modifiers by family (`member_modifier > override`,
+/// `inheritance_modifier > open`) instead of listing them flat.
+pub fn has_modifier_wrapper(item: Node, wrapper: &str, keyword: &str) -> bool {
+    let Some(modifiers) = modifiers_node(item) else {
+        return false;
+    };
+    let Some(found) = find_child(modifiers, wrapper) else {
+        return false;
+    };
+    found
+        .children(&mut found.walk())
+        .any(|c| c.kind() == keyword)
+}
 
-    use super::*;
-
-    fn dump(node: tree_sitter::Node, src: &[u8], depth: usize) {
-        let field = node
-            .parent()
-            .and_then(|p| {
-                (0..p.child_count()).find_map(|i| {
-                    if p.child(i)? == node {
-                        p.field_name_for_child(i as u32)
-                    } else {
-                        None
-                    }
-                })
-            })
-            .unwrap_or("-");
-        let text = if node.child_count() == 0 {
-            std::str::from_utf8(&src[node.byte_range()]).unwrap_or("?")
-        } else {
-            ""
-        };
-        println!(
-            "{}{} field={} '{}'",
-            "  ".repeat(depth),
-            node.kind(),
-            field,
-            text
-        );
-        for i in 0..node.child_count() {
-            if let Some(c) = node.child(i) {
-                dump(c, src, depth + 1);
-            }
+/// The LAST identifier in a (possibly qualified, possibly generic) type expression:
+/// `com.foo.Bar<Baz>` yields `Bar`. Recurses through the grammar's own nested type node
+/// (`nested_kind`, `user_type` in every grammar here) so a qualified name resolves to its
+/// final segment rather than its package root.
+///
+/// `identifier_kind` is the leaf a type name is spelled with — `identifier` in Kotlin,
+/// `type_identifier` in Swift. Naming it is the whole grammar-specific part.
+pub fn last_identifier_text<'a>(
+    node: Node,
+    src: &'a [u8],
+    identifier_kind: &str,
+    nested_kind: &str,
+) -> Option<&'a str> {
+    let mut result = None;
+    for child in node.children(&mut node.walk()) {
+        let kind = child.kind();
+        if kind == identifier_kind {
+            result = Some(text(child, src));
+        } else if kind == nested_kind {
+            result = last_identifier_text(child, src, identifier_kind, nested_kind).or(result);
         }
     }
-
-    #[test]
-    #[ignore]
-    fn dump_declaration_shapes() {
-        let src = br#"
-export function foo(x: number): number { return x; }
-export default function bar() {}
-export class Baz {}
-export default class {}
-export interface Quux { id: number; }
-export type Alias = string;
-export const a = 1, b = 2;
-export enum Color { Red, Green = "g" }
-export { a as c };
-export * from "./other";
-import { x, y as z } from "./mod";
-import type { T } from "./types";
-import def, { named } from "./mixed";
-"#;
-        let tree = parse(src, false).unwrap();
-        dump(tree.root_node(), src, 0);
-    }
-
-    #[test]
-    #[ignore]
-    fn dump_reference_shapes() {
-        let src = br#"
-function outer() {
-    foo();
-    obj.method();
-    const { a, b: renamed } = obj;
-    const literal = { key: 1, shorthand, [computed]: 2 };
-    return <Foo bar={baz} />;
+    result
 }
-class C extends Base implements IFace {
-    field: SomeType = value;
-    method(): ReturnType { return new Ctor(); }
-}
-"#;
-        let tree = parse(src, true).unwrap();
-        dump(tree.root_node(), src, 0);
-    }
 
-    #[test]
-    #[ignore]
-    fn dump_binding_shapes() {
-        let src = br#"
-function f(x, y = defaultVal, { z }: Opts): void {
-    const arrow = (a, b = other) => a + b + y + z;
-    for (const item of items) { use(item); }
-    try {} catch (e) { log(e); }
-    let arr: Array<Item> = [];
-    const template = `${value} and ${other.thing}`;
-    counter = counter + 1;
-}
-"#;
-        let tree = parse(src, false).unwrap();
-        dump(tree.root_node(), src, 0);
-    }
-
-    #[test]
-    #[ignore]
-    fn dump_reexport_shapes() {
-        let src = br#"
-export * from "./barrel-all";
-export type * from "./barrel-all-type";
-export * as ns from "./barrel-ns";
-export { a, b as c } from "./barrel-named";
-export type { a, b as c } from "./barrel-named-type";
-"#;
-        let tree = parse(src, false).unwrap();
-        dump(tree.root_node(), src, 0);
-    }
-
-    #[test]
-    #[ignore]
-    fn dump_cjs_shapes() {
-        let src = br#"
-const whole = require("./whole");
-const { a, b: renamed } = require("./named");
-let lazy = require("lodash");
-require("./side-effect");
-if (cond) { const nested = require("./nested"); }
-const dynamic = require(someVariable);
-module.exports = { f, g: localG, computed: 1 };
-module.exports = function main() {};
-module.exports = someExpression;
-exports.foo = function () {};
-exports.bar = localBar;
-module.exports.baz = 42;
-"#;
-        let tree = parse(src, false).unwrap();
-        dump(tree.root_node(), src, 0);
-    }
-
-    #[test]
-    #[ignore]
-    fn dump_dynamic_shapes() {
-        let src = br#"
-const a = await import("./literal");
-import("./side-effect-dyn");
-const b = await import(someVar);
-const c = await import(`./locales/${lang}.json`);
-const d = require("./prefix/" + name);
-const e = require(`no-prefix-${x}`);
-eval("code");
-const f = new Function("return 1");
-const g = require.resolve("./resolved");
-window.eval("indirect");
-"#;
-        let tree = parse(src, false).unwrap();
-        dump(tree.root_node(), src, 0);
-    }
-
-    #[test]
-    #[ignore]
-    fn dump_namespace_member_shapes() {
-        let src = br#"
-import * as ns from "./mod";
-ns.used();
-const v = ns.value;
-ns[dynamicKey]();
-callback(ns);
-const alias = ns;
-exports.storage.setItem("k", "v");
-const r = exports.reader;
-register(exports);
-module.exports.humanize(x);
-sink(module.exports);
-exports.written = 1;
-module.exports = whole;
-"#;
-        let tree = parse(src, false).unwrap();
-        dump(tree.root_node(), src, 0);
-    }
-
-    #[test]
-    #[ignore]
-    fn dump_comment_shapes() {
-        let src = br#"
-// kndo:allow unused reason text
-function a() {}
-
-/* kndo:allow-file version-skew */
-
-/**
- * kndo:allow unused:enum-member
- */
-function b() {}
-
-function c() {} // kndo:allow unused trailing comment
-"#;
-        let tree = parse(src, false).unwrap();
-        dump(tree.root_node(), src, 0);
-    }
-
-    #[test]
-    #[ignore]
-    fn dump_import_clause_shapes() {
-        let src = br#"
-import def from "./a";
-import { x, y as z } from "./b";
-import def2, { named } from "./c";
-import * as ns from "./d";
-import type { T } from "./e";
-"#;
-        let tree = parse(src, false).unwrap();
-        dump(tree.root_node(), src, 0);
-    }
+/// The handler a `(kind, handler)` dispatch table assigns to `kind`, or `None`. Generic over
+/// the handler type on purpose: the declaration walk and the body walk carry different handler
+/// signatures (one takes the adapter's own extraction context), and the LOOKUP is the only
+/// thing they share.
+pub fn handler_for<'t, H>(kind: &str, table: &'t [(&'static str, H)]) -> Option<&'t H> {
+    table
+        .iter()
+        .find(|(k, _)| *k == kind)
+        .map(|(_, handler)| handler)
 }

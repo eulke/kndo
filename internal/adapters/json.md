@@ -12,11 +12,11 @@ reads. RFC 0002 §3, verbatim: "JSON participates as import *targets* so file-le
 findings cover config/data files."
 
 That one sentence is the whole adapter. A concrete illustration of why it's needed at all,
-traced through the actual resolution code (`kndo-core/src/graph.rs::resolve_file`): when JS-TS's
+traced through the actual resolution code (`kndo-core/src/graph/assemble.rs::resolve_imports`): when JS-TS's
 own `resolve()` resolves `import data from './data.json'`, it checks `ctx.contains(path)` —
 membership in the **discovered** file set, not the **claimed** one. That check already succeeds
 today, with *zero* JSON adapter in existence, because `ResolveCtx`'s known-files index is built
-from every file discovery finds, claimed or not (`graph.rs`'s `known_files` construction).
+from every file discovery finds, claimed or not (`graph/assemble.rs`'s `known_files` construction).
 So a JSON import already resolves to a real graph edge without this adapter. What's missing is
 the other half: every analysis in `kndo-core/src/analysis/*.rs` opens with `let Some(class) =
 file.class else { continue; }` — a `FileNode` with no `FileClass` (nobody claimed it) is
@@ -38,7 +38,7 @@ Consequences that follow directly:
   `Diagnostic` when the content isn't valid JSON (RFC 0002 §2's "surviving broken code" still
   applies — a malformed `.json` file committed by accident is real, reportable signal). No
   declarations, no imports, no references, no roots, no functions, no `unit`.
-- **`resolve()` is unreachable in normal operation, not merely trivial.** `resolve_file` (graph.rs)
+- **`resolve()` is unreachable in normal operation, not merely trivial.** `resolve_imports` (`graph/assemble.rs`, phase 3b's first pass)
   calls `adapter.resolve()` only for the adapter that *claimed the importing file*, once per
   entry in that file's own `facts.imports` — never "ask every adapter." Since JSON's `extract()`
   never populates `imports` (JSON has no import syntax), JSON's `resolve()` is never invoked by

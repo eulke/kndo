@@ -8,13 +8,20 @@
 //! algorithm): nodes get dense indices (files first, then symbols), the traversable edges are
 //! built once into CSR-style columnar adjacency (offsets + targets + confidences — BFS walks
 //! contiguous `u32` columns, not hash buckets), and each of the nine per-`(kind, tier)`
-//! reached sets is a bitset. The module-load rule (reaching a symbol reaches its owning
-//! file) becomes an ordinary implicit CSR edge `symbol → owner` at `Certain` — the
-//! same semantics the special-cased visit had, since a certain edge passes every tier's
-//! filter exactly like the unconditional visit did. Its counterpart, the execution rule,
-//! still needs no code: symbol-attributed references hang off the symbol node and traverse
-//! only once it's reached. (Without the symbol→owner edge, a rooted Go `func main()`
-//! would never enqueue `main.go`.)
+//! reached sets is a bitset.
+//!
+//! Four rules have no edge in the graph and become implicit CSR edges here. Two are
+//! **containment**, both `Certain`, and they are one rule at two levels: the *module-load
+//! rule* (`symbol → its file` — without it a rooted Go `func main()` would never enqueue
+//! `main.go`) and the *containment rule* (`member → its owning declaration` — without it a
+//! class whose only live member is container-invoked reads as dead while its own methods
+//! read as production). A `Certain` edge passes every tier's filter, so both carry whatever
+//! tier reached the source, exactly as the special-cased visits they replaced did. Two are
+//! **dispatch**, both `Probable`, both pointing down into members a call site can never name:
+//! the *machinery-dispatch rule* (`owner → implicitly-invoked member`) and the
+//! *implement-dispatch rule* (`trait member → impl member`). The execution rule needs no code
+//! at all: symbol-attributed references hang off the symbol node and traverse only once it is
+//! reached.
 
 use rustc_hash::FxHashMap as HashMap;
 
@@ -190,6 +197,51 @@ fn link_owners_to_hooks(
     edges
 }
 
+/// The containment rule's implicit `(member, owner)` edges: a member cannot execute without
+/// the declaration that owns it, so reaching `Foo.bar` reaches `Foo` — you cannot delete the
+/// type and keep the method.
+///
+/// It is the module-load rule one level down. That one says reaching a symbol reaches its
+/// FILE; this one says reaching a member reaches its OWNING DECLARATION, and the two together
+/// are what make "alive" transitive all the way up. Without it, a class whose only live member
+/// is invoked by a container reads as dead while its own methods read as production —
+/// spring-petclinic's `CacheConfiguration` was reported `unreachable` and
+/// `production-reachable` in the same run, which is not a false positive so much as two
+/// answers to one question.
+///
+/// Owner resolution is the `member_of` convention [`machinery_dispatch_edges`] already uses,
+/// read in the other direction: the owner is a declaration in the member's own file carrying
+/// the member's `member_of` name and no owner of its own. Every same-name candidate links,
+/// twins included — the same answer that rule gives, for the same reason (the convention
+/// cannot tell them apart, and linking both degrades toward keep-alive).
+///
+/// Traversed at `Certain`, unlike the two dispatch rules: containment is structural rather
+/// than inferred. That does not make the owner *certainly* alive — a `Certain` edge passes
+/// every tier's filter unchanged, so the owner simply inherits whichever tier reached the
+/// member.
+fn containment_edges(graph: &ProjectGraph, files_len: usize) -> Vec<(u32, u32)> {
+    let mut owners: HashMap<(u32, &smol_str::SmolStr), Vec<u32>> = HashMap::default();
+    for (i, s) in graph.symbols.iter().enumerate() {
+        if s.member_of.is_none() {
+            owners
+                .entry((s.file.0, &s.name))
+                .or_default()
+                .push((files_len + i) as u32);
+        }
+    }
+    let mut edges: Vec<(u32, u32)> = Vec::new();
+    for (i, s) in graph.symbols.iter().enumerate() {
+        let Some(owner_name) = &s.member_of else {
+            continue;
+        };
+        if let Some(candidates) = owners.get(&(s.file.0, owner_name)) {
+            let member = (files_len + i) as u32;
+            edges.extend(candidates.iter().map(|&owner| (member, owner)));
+        }
+    }
+    edges
+}
+
 /// The implement-dispatch rule's implicit `(trait member, impl member)`
 /// edges: calling through a trait IS plausibly executing every implementation — the vtable,
 /// as declared. Derived entirely from `RefKind::Implement`/`RefKind::Extend` edges (`impl
@@ -254,7 +306,54 @@ fn fan_out_trait_members(
     }
 }
 
+/// Symbols the PROJECT declared reachable from outside the analyzed source, via
+/// `kndo.toml`'s `[[externally-invoked]]` — a declaration whose
+/// [`crate::adapter::Declaration::markers`] include one of a rule's `markers`, and whose file
+/// matches its `paths` when it scopes any.
+///
+/// The core matches strings and learns nothing: it has no idea that `Controller` means Spring
+/// will instantiate the class and a servlet dispatcher will call its methods, only that this
+/// project said declarations marked so are entry points. That is the ignorance rule applied to
+/// the one question source alone cannot answer.
+pub fn externally_invoked_symbols(
+    graph: &ProjectGraph,
+    rules: &[crate::config::ExternallyInvokedRule],
+) -> Vec<SymbolId> {
+    if rules.is_empty() {
+        return Vec::new();
+    }
+    let mut out: Vec<SymbolId> = Vec::new();
+    for (i, symbol) in graph.symbols.iter().enumerate() {
+        if symbol.markers.is_empty() {
+            continue;
+        }
+        let path = &graph.files[symbol.file.0 as usize].path.0;
+        let matched = rules.iter().any(|rule| {
+            (rule.paths.is_empty() || rule.paths.iter().any(|g| g.matches(path)))
+                && symbol
+                    .markers
+                    .iter()
+                    .any(|m| rule.markers.iter().any(|want| want == m))
+        });
+        if matched {
+            out.push(SymbolId(i as u32));
+        }
+    }
+    out
+}
+
+/// [`compute_with_roots`] with no project-declared entry points — the shape every caller that
+/// has no configuration to apply wants.
 pub fn compute(graph: &ProjectGraph) -> ReachabilityMap {
+    compute_with_roots(graph, &[])
+}
+
+/// `extra_roots` are seeded exactly like a `Root { kind: Production }` edge at `Certain`:
+/// the project asserted the fact, which is the same standing a manifest-declared entry point
+/// has. They are NOT a suppression — everything the symbol reaches comes alive with it, and
+/// every analysis keeps judging all of it normally.
+// kndo:allow crap the policy pass (resolve_colors) and the BFS subpass (bfs_all_tiers) are already extracted; the residual is the CSR degree-count/offset/fill core, a two-pass technique whose count and fill loops must mirror the same EdgeKind match to stay in sync — splitting them would not remove a branch, only widen the distance between two passes that must agree.
+pub fn compute_with_roots(graph: &ProjectGraph, extra_roots: &[SymbolId]) -> ReachabilityMap {
     let files_len = graph.files.len();
     let n = files_len + graph.symbols.len();
     let node_index = |node: NodeRef| -> usize {
@@ -274,12 +373,20 @@ pub fn compute(graph: &ProjectGraph) -> ReachabilityMap {
         }
     }
 
-    let prod_roots_by_file = production_root_symbols_per_file(graph, files_len);
+    let mut prod_roots_by_file = production_root_symbols_per_file(graph, files_len);
+    for &s in extra_roots {
+        let owner = graph.symbols[s.0 as usize].file.0 as usize;
+        prod_roots_by_file[owner].push(((files_len + s.0 as usize) as u32, Confidence::Certain));
+    }
     // The two member-inheritance rules share one edge shape: implicit `Probable` edges into
     // members the source can never name (machinery hooks) or never statically pick
     // (dispatch through a trait).
     let mut machinery_edges = machinery_dispatch_edges(graph, files_len);
     machinery_edges.extend(implement_dispatch_edges(graph, files_len));
+    // The containment rule points the other way — up from a member to its owner — and at a
+    // different strength, so it is its own edge set rather than another entry in the two
+    // dispatch rules' shared shape.
+    let containment_edges = containment_edges(graph, files_len);
 
     let mut degree: Vec<u32> = vec![0; n];
     let count = |degree: &mut Vec<u32>, from: usize, extra: usize| degree[from] += extra as u32;
@@ -311,6 +418,10 @@ pub fn compute(graph: &ProjectGraph) -> ReachabilityMap {
     // The machinery-dispatch rule's implicit owner → member edges.
     for &(owner, _) in &machinery_edges {
         degree[owner as usize] += 1;
+    }
+    // The containment rule's implicit member → owner edges.
+    for &(member, _) in &containment_edges {
+        degree[member as usize] += 1;
     }
 
     let mut offsets: Vec<u32> = Vec::with_capacity(n + 1);
@@ -394,6 +505,14 @@ pub fn compute(graph: &ProjectGraph) -> ReachabilityMap {
             Confidence::Probable,
         );
     }
+    for &(member, owner) in &containment_edges {
+        push_edge(
+            &mut cursor,
+            member as usize,
+            owner as usize,
+            Confidence::Certain,
+        );
+    }
 
     let mut seeds: [Vec<(u32, Confidence)>; 3] = [Vec::new(), Vec::new(), Vec::new()];
     for edge in &graph.edges {
@@ -401,16 +520,44 @@ pub fn compute(graph: &ProjectGraph) -> ReachabilityMap {
             seeds[kind_index(kind)].push((node_index(target) as u32, edge.confidence));
         }
     }
+    for &s in extra_roots {
+        seeds[kind_index(RootKind::Production)]
+            .push((node_index(NodeRef::Symbol(s)) as u32, Confidence::Certain));
+    }
 
-    // R(kind, tau) for every (kind, tau), literally: BFS seeded only by roots whose own
-    // confidence is >= tau, traversing only edges with confidence >= tau. The module-load
-    // rule needs no special-case here any more — it's the implicit CSR edge above.
+    let reached = bfs_all_tiers(n, &offsets, &targets, &confs, &seeds);
+    let colors = resolve_colors(n, &reached);
+
+    let reached_possible = [reached[2].clone(), reached[5].clone(), reached[8].clone()];
+    ReachabilityMap {
+        files_len,
+        colors,
+        reached_possible,
+    }
+}
+
+/// R(kind, tau) for every (kind, tau), literally: BFS seeded only by roots whose own
+/// confidence is >= tau, traversing only edges with confidence >= tau. The module-load
+/// rule needs no special-case here — it's an implicit CSR edge, not a seed. Returns the 9
+/// bitsets in `kind_index*3 + tier_index` order (`ROOT_KINDS.len() * TIERS.len()`).
+///
+/// Operates purely on the finished CSR adjacency and per-kind seed lists — nothing about
+/// `ProjectGraph`'s symbol/file tables is needed once the graph has been flattened this far.
+/// The `queue.pop()` LIFO order is scheduling only; membership is a set, so a stack-based
+/// visit order changes nothing observable.
+fn bfs_all_tiers(
+    n: usize,
+    offsets: &[u32],
+    targets: &[u32],
+    confs: &[Confidence],
+    seeds: &[Vec<(u32, Confidence)>; 3],
+) -> Vec<BitSet> {
     let mut reached: Vec<BitSet> = Vec::with_capacity(9);
-    for (k, _) in ROOT_KINDS.iter().enumerate().map(|(i, _)| (i, ())) {
+    for seeds_for_kind in seeds {
         for &tau in &TIERS {
             let mut visited = BitSet::new(n);
             let mut queue: Vec<u32> = Vec::new();
-            for &(node, conf) in &seeds[k] {
+            for &(node, conf) in seeds_for_kind {
                 if conf >= tau && visited.insert(node as usize) {
                     queue.push(node);
                 }
@@ -432,10 +579,14 @@ pub fn compute(graph: &ProjectGraph) -> ReachabilityMap {
             reached.push(visited);
         }
     }
+    reached
+}
 
-    // First-match precedence over every node: Production > TestOnly > ToolingOnly; within a
-    // color, the strongest tau achieved. (Traversal order above is scheduling; membership is
-    // a set — so a stack-based visit order changes nothing observable.)
+/// First-match precedence over every node: Production > TestOnly > ToolingOnly; within a
+/// color, the strongest tau achieved. Given the 9 already-computed per-(root-kind,tier)
+/// reachable sets, this is a caller-independent ranking rule that needs nothing about the
+/// graph, the CSR arrays, or symbols — only the bitsets themselves.
+fn resolve_colors(n: usize, reached: &[BitSet]) -> Vec<(Reachability, Confidence)> {
     let mut colors: Vec<(Reachability, Confidence)> =
         vec![(Reachability::Unreachable, Confidence::Certain); n];
     for (idx, color) in colors.iter_mut().enumerate() {
@@ -448,13 +599,7 @@ pub fn compute(graph: &ProjectGraph) -> ReachabilityMap {
             }
         }
     }
-
-    let reached_possible = [reached[2].clone(), reached[5].clone(), reached[8].clone()];
-    ReachabilityMap {
-        files_len,
-        colors,
-        reached_possible,
-    }
+    colors
 }
 
 #[cfg(test)]
@@ -478,8 +623,10 @@ mod tests {
             }),
             package: crate::vocab::PackageId(0),
             unit: None,
+            unit_parent: None,
             test_spans: Vec::new(),
             string_call_sites: Vec::new(),
+            string_attr_args: Vec::new(),
         }
     }
 
@@ -496,6 +643,9 @@ mod tests {
             implicitly_invoked: false,
             nested_scope: false,
             visibility_inherited: false,
+            visible_in_unit: None,
+            implements: None,
+            markers: Vec::new(),
         }
     }
 
@@ -865,6 +1015,9 @@ mod tests {
                 implicitly_invoked: true,
                 nested_scope: false,
                 visibility_inherited: false,
+                visible_in_unit: None,
+                implements: None,
+                markers: Vec::new(),
                 ..symbol(FileId(0), "fmt")
             },
             symbol(FileId(0), "Orphan"),
@@ -873,6 +1026,9 @@ mod tests {
                 implicitly_invoked: true,
                 nested_scope: false,
                 visibility_inherited: false,
+                visible_in_unit: None,
+                implements: None,
+                markers: Vec::new(),
                 ..symbol(FileId(0), "drop")
             },
         ];
@@ -894,6 +1050,74 @@ mod tests {
             reach.get(NodeRef::Symbol(SymbolId(3))).0,
             Reachability::Unreachable,
             "an unreached owner propagates nothing"
+        );
+    }
+
+    #[test]
+    fn a_reached_member_brings_its_owning_declaration_with_it() {
+        // spring-petclinic's shape exactly: a container roots the `@Bean` METHOD, never the
+        // `@Configuration` class that declares it. Before the containment rule the run said
+        // both "CacheConfiguration is unreachable" and "CacheConfiguration.java is
+        // production-reachable" — two answers to one question. You cannot invoke the method
+        // without the type, so reaching one reaches the other.
+        let files = vec![file("CacheConfiguration.java")];
+        let symbols = vec![
+            symbol(FileId(0), "CacheConfiguration"),
+            SymbolNode {
+                member_of: Some(SmolStr::new("CacheConfiguration")),
+                ..symbol(FileId(0), "cacheConfiguration")
+            },
+            // An unrelated top-level declaration must stay dead: containment lifts owners,
+            // not neighbours.
+            symbol(FileId(0), "Unrelated"),
+        ];
+        let edges = vec![edge(
+            EdgeKind::Root {
+                kind: RootKind::Production,
+                target: NodeRef::Symbol(SymbolId(1)), // the bean method, not the class
+            },
+            Confidence::Certain,
+        )];
+        let graph = ProjectGraph::for_test(files, symbols, vec![], edges);
+        let reach = compute(&graph);
+
+        assert_eq!(
+            reach.get(NodeRef::Symbol(SymbolId(0))).0,
+            Reachability::Production,
+            "the owning declaration must come alive with its member"
+        );
+        assert_eq!(
+            reach.get(NodeRef::Symbol(SymbolId(2))).0,
+            Reachability::Unreachable,
+            "containment lifts the owner, not every declaration in the file"
+        );
+    }
+
+    #[test]
+    fn containment_carries_the_tier_that_reached_the_member() {
+        // The edge is `Certain`, which is not the same as making the owner certainly alive:
+        // a `Certain` edge passes every tier's filter, so the owner inherits the member's own
+        // strength. A test-only member yields a test-only owner, never a production one.
+        let files = vec![file("Widget.ts")];
+        let symbols = vec![
+            symbol(FileId(0), "Widget"),
+            SymbolNode {
+                member_of: Some(SmolStr::new("Widget")),
+                ..symbol(FileId(0), "render")
+            },
+        ];
+        let edges = vec![edge(
+            EdgeKind::Root {
+                kind: RootKind::Test,
+                target: NodeRef::Symbol(SymbolId(1)),
+            },
+            Confidence::Certain,
+        )];
+        let graph = ProjectGraph::for_test(files, symbols, vec![], edges);
+        let reach = compute(&graph);
+        assert_eq!(
+            reach.get(NodeRef::Symbol(SymbolId(0))).0,
+            Reachability::TestOnly
         );
     }
 
@@ -978,5 +1202,76 @@ mod tests {
             reach.get(NodeRef::File(FileId(0))).0,
             Reachability::Unreachable
         );
+    }
+
+    // ---------------------------------------------------------------- resolve_colors, bfs_all_tiers
+    //
+    // These two exist to be testable exactly like this: hand-built bitsets/CSR arrays, no
+    // ProjectGraph or MockAdapter fixture required — the payoff the extraction promised.
+
+    #[test]
+    fn resolve_colors_prefers_production_over_a_stronger_test_confidence() {
+        // Node 0 is production-reachable only at `probable` (kind 0, tier 1) and
+        // test-reachable at `certain` (kind 1, tier 0). Production must still win, at its own
+        // (weaker) tier — the worked example the function's own doc comment names.
+        let mut reached = vec![BitSet::new(1); 9];
+        reached[1].insert(0); // kind 0 (Production), tier 1 (Probable)
+        reached[3].insert(0); // kind 1 (Test), tier 0 (Certain)
+        let colors = resolve_colors(1, &reached);
+        assert_eq!(colors[0], (Reachability::Production, Confidence::Probable));
+    }
+
+    #[test]
+    fn resolve_colors_defaults_a_node_no_tier_reaches_to_unreachable_certain() {
+        let reached = vec![BitSet::new(2); 9];
+        let colors = resolve_colors(2, &reached);
+        assert_eq!(
+            colors,
+            vec![
+                (Reachability::Unreachable, Confidence::Certain),
+                (Reachability::Unreachable, Confidence::Certain),
+            ]
+        );
+    }
+
+    #[test]
+    fn bfs_all_tiers_stops_at_an_edge_below_the_requested_tier() {
+        // 0 -certain-> 1 -possible-> 2. At tier `probable`, the second edge doesn't qualify,
+        // so node 2 is unreached; at tier `possible`, both do, so node 2 is reached.
+        let offsets = vec![0, 1, 2, 2];
+        let targets = vec![1, 2];
+        let confs = vec![Confidence::Certain, Confidence::Possible];
+        let mut seeds: [Vec<(u32, Confidence)>; 3] = [Vec::new(), Vec::new(), Vec::new()];
+        seeds[0].push((0, Confidence::Certain));
+        let reached = bfs_all_tiers(3, &offsets, &targets, &confs, &seeds);
+        // kind 0, tier order [Certain, Probable, Possible] -> indices 0, 1, 2.
+        assert!(
+            reached[0].contains(1),
+            "certain edge reached at tier certain"
+        );
+        assert!(
+            !reached[0].contains(2),
+            "possible edge must not qualify at tier certain"
+        );
+        assert!(
+            !reached[1].contains(2),
+            "possible edge must not qualify at tier probable either"
+        );
+        assert!(
+            reached[2].contains(2),
+            "possible edge qualifies at tier possible"
+        );
+    }
+
+    #[test]
+    fn bfs_all_tiers_seeds_only_the_kind_they_belong_to() {
+        let offsets = vec![0, 0];
+        let targets: Vec<u32> = Vec::new();
+        let confs: Vec<Confidence> = Vec::new();
+        let mut seeds: [Vec<(u32, Confidence)>; 3] = [Vec::new(), Vec::new(), Vec::new()];
+        seeds[1].push((0, Confidence::Certain)); // kind 1 (Test) only
+        let reached = bfs_all_tiers(1, &offsets, &targets, &confs, &seeds);
+        assert!(!reached[0].contains(0), "kind 0 (Production) never seeded");
+        assert!(reached[3].contains(0), "kind 1 (Test), tier certain");
     }
 }

@@ -7,6 +7,13 @@
 //! in adapter — the distribution layer (`kndo` crate) can push a `WasmAdapter` onto the same
 //! `Vec<Box<dyn LanguageAdapter>>` `default_adapters()` returns.
 
+/// Conversions from the generated WIT types to kndo's own. Written once as a macro because
+/// both worlds declare the same records and `wit-bindgen` generates a *distinct* Rust type per
+/// world — same shape, unrelated types, so a plain function cannot be shared and a hand-copied
+/// one drifts the moment a world gains a variant.
+#[macro_use]
+mod wit_convert;
+
 mod coverage_host;
 mod engine;
 mod host;

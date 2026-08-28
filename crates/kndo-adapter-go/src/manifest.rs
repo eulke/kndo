@@ -11,7 +11,7 @@
 //! declaration) are source-file facts, extracted in `extraction.rs`, not manifest ones.
 
 use kndo_core::adapter::{
-    Diagnostic, DiagnosticLevel, ManifestDependency, ManifestFacts, ResolveCtx,
+    AdapterDiagnostic, DiagnosticLevel, ManifestDependency, ManifestFacts, ResolveCtx,
 };
 use kndo_core::vocab::DependencyScope;
 use smol_str::SmolStr;
@@ -19,9 +19,8 @@ use smol_str::SmolStr;
 pub(crate) fn extract(path: &str, content: &[u8], _ctx: &ResolveCtx<'_>) -> ManifestFacts {
     let mut out = ManifestFacts::default();
     let Ok(text) = std::str::from_utf8(content) else {
-        out.diagnostics.push(Diagnostic {
+        out.diagnostics.push(AdapterDiagnostic {
             level: DiagnosticLevel::Warn,
-            path: None,
             message: "go manifest is not valid UTF-8".to_string(),
             span: None,
         });
@@ -132,10 +131,10 @@ fn strip_line_comment(line: &str) -> &str {
 fn parse_require_entry(entry: &str) -> Option<ManifestDependency> {
     let mut parts = entry.split_whitespace();
     let name = parts.next()?;
-    let version = parts.next().unwrap_or("");
     Some(ManifestDependency {
         name: SmolStr::new(name),
-        version_req: SmolStr::new(version),
+        // A `require` line always carries a version; a truncated one states none.
+        version_req: parts.next().map(SmolStr::new),
         scope: DependencyScope::Prod,
         inherited: false,
     })
@@ -168,7 +167,10 @@ mod tests {
         );
         assert_eq!(facts.dependencies.len(), 1);
         assert_eq!(facts.dependencies[0].name.as_str(), "golang.org/x/net");
-        assert_eq!(facts.dependencies[0].version_req.as_str(), "v0.10.0");
+        assert_eq!(
+            facts.dependencies[0].version_req.as_deref(),
+            Some("v0.10.0")
+        );
         assert_eq!(facts.dependencies[0].scope, DependencyScope::Prod);
     }
 

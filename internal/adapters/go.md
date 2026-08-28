@@ -108,6 +108,21 @@ block), and `init` (Go's special no-args, unexported-by-construction, called-imp
 runtime function — always a root, §4, regardless of the capitalization rule, and there can be
 more than one per file).
 
+The **blank identifier declares nothing**: `var _ T = …` cannot be named by any source, so
+extracting it as a symbol is a guaranteed false `unused`. It is not silence, though — the
+statement exists to make a compile-time interface assertion, and that assertion is emitted as an
+`Implement` reference from the concrete type to the interface. Both spellings are read: the
+conversion form `var _ StructValidator = (*defaultValidator)(nil)`, which is by far the more
+common (gin, hugo and go-redis each carry several), and the composite-literal form
+`var API Core = jsonApi{}`.
+
+A file that declares nothing at all — `doc.go`, a package doc comment plus `package gin` — is
+handled in the core rather than here, and on a language-blind rule: a declarationless file whose
+compilation **unit** is alive is never independently dead. Go's own rules compile it as part of
+the package, so there is nothing in it to delete. The rule keys on the unit, not on emptiness:
+an orphan that declares nothing and belongs to no live unit is still real waste and still
+reported.
+
 **References**: identifier uses (calls, reads, writes), each tagged with its `RefKind`
 (RFC 0012 §5): `type_identifier` positions are `TypeUse` (the grammar itself is the
 type-position signal), embedded struct/interface fields (a `field_declaration` with no name —
@@ -129,12 +144,26 @@ becomes a root too — see §4 for why this is the right per-package analogue of
 `private` check, computed here in extraction rather than there because Go's root-worthiness is a
 **per-file, path-derived fact** (is this file under `internal/`?), not a manifest-level one.
 
-**Metrics** (`FunctionMetrics` — cyclomatic complexity, token fingerprints): **not populated**,
-matching JS/TS's actual current state exactly (verified before writing this doc: `extraction.rs`'s
-own header lists these as "deferred to later commits," and nothing in the codebase populates
-`FunctionMetrics` for any language yet). Not a Go-specific gap — CRAP/duplicate-detection support
-lands with M4 regardless of language, so there is no toolkit-shared complexity walker to call into
-yet either.
+**Metrics** (`FunctionMetrics` — cyclomatic complexity, token fingerprints): populated for every
+function and method, via the shared toolkit walker (`kndo_adapter_toolkit::metrics`), feeding
+`crap` and structural `duplicate`. Each entry carries the **declaration's own span**, which is what
+assembly resolves to a `SymbolId`; the entry's `symbol` name is display only. Passing the body's
+span instead of the declaration's silently drops the metrics for that callable — assembly matches
+spans exactly and does not fall back to a name lookup, deliberately: name lookup is what let
+build-tag-alternated files declaring one name collapse onto a single symbol.
+
+Each `func_literal` clearing the clone floor becomes its own callable **shape**
+(`MetricsSyntax::nested_callable_kinds`): its branches and tokens leave the enclosing shape's
+stream, which keeps one `FN` in their place, and `crap`/`duplicate` report it in its own right.
+A smaller one stays an expression inside its owner — promoting it would leave both halves under
+the floor and cost real clone findings (measured: 83 clone participants on the field corpus).
+The split's semantics are uniform across adapters; only the kinds that trigger it are
+per-language.
+
+A body that is **only** a value construction (`composite_literal`) is not clone-eligible
+(`MetricsSyntax::construction_kinds`): normalization erases the field values — the whole
+authored content — and keeps the field list the type declaration dictates, so two constructions
+of one type match by definition of the type rather than by evidence of copying.
 
 **Suppressions**: `// kndo:allow …` on its own line or trailing a declaration — same syntax and
 scope rules as JS/TS (RFC 0005 §12 is language-neutral; only comment *syntax* is adapter-owned,
@@ -256,7 +285,7 @@ consumed by definition," an `internal/` package's is not.
 | Struct/interface embedding | recorded as a plain reference to the embedded type's name (§2) — not a `RefKind::Extend`, matching the codebase-wide state that no adapter differentiates `RefKind` yet (§2, §7 open question) |
 | `go:generate` directive comments | not parsed — the directive names a command line to run, not a file reference kndo could statically resolve without executing it |
 | `reflect`/`plugin`-based dynamic dispatch | not modeled as a `DynamicUse` wildcard in this slice (§0) — genuinely rare in application code; revisit if dogfooding surfaces false `unused` positives traceable to it |
-| Build-tag-gated files (`//go:build linux`, `_linux.go` suffix files) | claimed and extracted like any other `.go` file, unconditionally — kndo analyzes the union of all build configurations, the same "any-feature-is-live" stance RFC 0002 §7's table already states for Rust's `#[cfg]` features; a symbol used only under one build tag is still "used," not dead |
+| Build-tag-gated files (`//go:build linux`, `_linux.go` suffix files) | claimed and extracted like any other `.go` file, unconditionally — kndo analyzes the union of all build configurations, the same "any-feature-is-live" stance RFC 0002 §7's table already states for Rust's `#[cfg]` features; a symbol used only under one build tag is still "used," not dead. Two mutually exclusive files declaring **one name** in one package (gin's `binding.go` under `!nomsgpack` and `binding_nomsgpack.go` under `nomsgpack`, both `func validate`) are not a collision to break either: under the union policy both declarations are live, so core keeps the displaced ones as same-unit *twins* and every reference to that name edges to all of them (`symbol_twins_per_unit` in `graph::assemble`; the single-slot table alone gave one twin all 16 of gin's references and the other a false `unused`). Same treatment covers `#[cfg]` alternatives in Rust |
 | Multi-module workspace (`go.work`) | claimed and parsed (RFC 0012 §10, fixtures `go-work-multi-module/` + `go-work-phantom-dep/`): `use` directives → `workspace_members`, sibling-module imports resolve as `WorkspaceMember` (reachability + the `require` contract, which go.work does not waive). A path-renaming `replace` directive remains the one recorded divergence — not modeled |
 
 ## 6. Conformance fixtures (shared harness, RFC 0002 §8)

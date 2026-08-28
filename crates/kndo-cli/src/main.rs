@@ -8,9 +8,8 @@
 use std::io::IsTerminal;
 use std::process::ExitCode;
 
-use kndo::engine::{
-    BaselineOp, BaselineResult, CheckRequest, ConfigOverrides, Finding, RunMode, Severity,
-    SCHEMA_VERSION,
+use kndo::{
+    BaselineOp, BaselineResult, ConfigOverrides, Engine, RunMode, Severity, SCHEMA_VERSION,
 };
 
 mod nav;
@@ -27,6 +26,7 @@ commands
   doctor           what kndo sees: adapters, cache, plugins, config
   plugin           install | list | remove | new | build | wit | verify
   init             write kndo.toml (--hook also installs the pre-commit hook)
+  explain <id>     everything behind one finding: evidence chain + its subject
   find|describe|uses|used-by|trace|impact   graph navigation verbs (JSON envelopes)
   query            batched navigation requests from stdin (one JSON per line)
 
@@ -34,6 +34,9 @@ check flags
   --staged         analyze what `git commit` would commit, vs HEAD
   --diff <ref>     analyze the change vs merge-base(<ref>, HEAD)
   --fail-on <sev>  exit 1 at/above: error | warning (diff default) | info | none (full default)
+  --only <cats>    report only these categories (comma-separated, repeatable)
+  --skip <cats>    report everything except these
+  --strict         promote what RFC 0005 marks promotable (today: undeclared → error)
   --format <f>     human (tty default) | json (piped default) | agent | sarif
   --quiet | --verbose | --no-cache | --threads <n> | --color <auto|always|never>
 
@@ -80,6 +83,7 @@ fn main() -> ExitCode {
         Some("init") => init_cmd(&args[1..]),
         Some("find") => nav::find_cmd(&args[1..]),
         Some("describe") => nav::describe_cmd(&args[1..]),
+        Some("explain") => nav::explain_cmd(&args[1..]),
         Some("uses") => nav::uses_cmd(&args[1..]),
         Some("used-by") => nav::used_by_cmd(&args[1..]),
         Some("trace") => nav::trace_cmd(&args[1..]),
@@ -101,10 +105,6 @@ fn main() -> ExitCode {
 const KNDO_TOML_TEMPLATE: &str = r#"# kndo.toml — everything here is optional; every setting already has the default shown.
 # Written by `kndo init`. Full reference: docs/ in the repository.
 
-# [project]
-# roots = ["src", "packages/*"]          # default: auto (git ls-files minus ignores)
-# exclude = ["**/generated/**"]
-
 # [analysis]
 # skip = []                              # categories or category:subject, e.g. ["unused:enum-member"]
 # min-confidence = "possible"            # report floor; raise to "probable" to hide the
@@ -119,9 +119,13 @@ const KNDO_TOML_TEMPLATE: &str = r#"# kndo.toml — everything here is optional;
 # [performance]
 # threads = 0                            # 0 = physical cores; --threads flag wins
 
-# [delta]                                # diff-mode gate budgets
-# max-health-drop = 0.0
-# max-net-findings = 0
+# [delta]                                # diff-mode gate budgets; writing the section IS the opt-in
+# max-health-drop = 0.0                  # the largest health DROP a change may cause
+# max-net-findings = 0                   # new − fixed; `fixed` compensates only here
+
+# [delta.budget]                         # finer tolerances, by group or category
+# defect = 0                             # absolute: zero new defects, whatever else is fixed
+# duplicate = 2
 
 # [[rule]]                               # per-path overrides
 # paths = ["examples/**"]
@@ -148,8 +152,23 @@ const PRE_COMMIT_HOOK: &str = "#!/bin/sh\nexec kndo check --staged --fail-on war
 /// surprising action for a tool to take on its own. Default behavior only *prints* the
 /// recommended hook and how to install it; `--hook` opts into actually writing it, and even
 /// then only when `.git/hooks/pre-commit` doesn't already exist.
+#[derive(clap::Parser)]
+struct InitArgs {
+    #[arg(long)]
+    hook: bool,
+}
+
 fn init_cmd(args: &[String]) -> ExitCode {
-    let install_hook = args.iter().any(|a| a == "--hook");
+    use clap::Parser;
+    let install_hook = match InitArgs::try_parse_from(
+        std::iter::once("kndo".to_string()).chain(args.iter().cloned()),
+    ) {
+        Ok(a) => a.hook,
+        Err(e) => {
+            eprintln!("kndo: {e}");
+            return ExitCode::from(2);
+        }
+    };
     let cwd = match std::env::current_dir() {
         Ok(d) => d,
         Err(e) => {
@@ -245,21 +264,11 @@ fn ensure_gitignore_entry(root: &std::path::Path) -> std::io::Result<GitignoreOu
 
 /// `kndo doctor`: plain-text only — the output schema specifies no
 /// JSON shape for this command, so `--format` isn't wired here (a deliberate scoping choice,
-/// not an oversight; `check`/`explain`/navigation verbs are where the JSON contract matters).
+/// not an oversight; `check`/navigation verbs are where the JSON contract matters).
 fn doctor_cmd() -> ExitCode {
-    let cwd = match std::env::current_dir() {
-        Ok(d) => d,
-        Err(e) => {
-            eprintln!("kndo: cannot determine working directory: {e}");
-            return ExitCode::from(2);
-        }
-    };
-    let engine = match kndo::open(&cwd, base_config_overrides()) {
-        Ok(e) => e,
-        Err(e) => {
-            eprintln!("kndo: {e}");
-            return ExitCode::from(2);
-        }
+    let (cwd, engine) = match open_engine(base_config_overrides()) {
+        Ok(t) => t,
+        Err(code) => return code,
     };
     let report = engine.doctor();
 
@@ -312,10 +321,14 @@ fn doctor_cmd() -> ExitCode {
     }
     for p in &report.plugins {
         println!("  {} v{}", p.id, p.version);
+        // Every plugin in this section is active, so the rule that FIRED is the answer.
+        println!("    active:       {}", p.activated_by);
         if !p.detection.is_empty() {
             println!("    detection:    {}", p.detection.join(", "));
         }
-        if !p.activation.is_empty() {
+        // The full gate, only where it says something the line above doesn't: with a single
+        // declared rule the two are the same string, and printing it twice reads as two facts.
+        if p.activation.len() > 1 {
             println!("    activation:   {}", p.activation.join(", "));
         }
         if !p.dependencies.is_empty() {
@@ -418,10 +431,11 @@ fn doctor_cmd() -> ExitCode {
 /// One line of doctor status for a global candidate (adapter or plugin — the
 /// vocabulary is shared): why it's running, or the plain fact that it isn't.
 fn activation_status(active: &Option<kndo::ActivationReason>) -> String {
+    // The reason renders itself (`ActivationReason`'s `Display`) — the same text the JSON
+    // envelope's `run.plugins[].activated_by` carries. A second spelling here is how doctor
+    // and the envelope would come to disagree about why the same plugin is running.
     match active {
-        Some(kndo::ActivationReason::RuleMatched) => "active (rule matched)".to_string(),
-        Some(kndo::ActivationReason::ImpliedBy(by)) => format!("active (dependency of {by})"),
-        Some(_) => "active".to_string(),
+        Some(reason) => format!("active ({reason})"),
         None => "inactive".to_string(),
     }
 }
@@ -561,7 +575,10 @@ fn parse_verify_args(rest: &[String]) -> Option<(&str, Option<&str>)> {
     }
 }
 
-fn run_verify(path: &str, project: Option<&str>) -> Result<kndo::verify::VerifyReport, String> {
+fn run_verify(
+    path: &str,
+    project: Option<&str>,
+) -> Result<kndo::verify::VerifyReport, kndo::verify::VerifyError> {
     match project {
         Some(dir) => {
             kndo::verify::verify_in_project(std::path::Path::new(path), std::path::Path::new(dir))
@@ -669,26 +686,28 @@ fn plugin_remove(spec: &str) -> ExitCode {
 /// identically (a full snapshot replace), and fixed entries are auto-dropped by it.
 /// All the actual file I/O lives behind `Engine::baseline` — this is
 /// purely argument parsing and rendering the outcome, like every other command here.
-fn baseline_cmd(args: &[String]) -> ExitCode {
-    let op = if args.iter().any(|a| a == "--update") {
-        BaselineOp::Update
-    } else {
-        BaselineOp::Create
-    };
+#[derive(clap::Parser)]
+struct BaselineArgs {
+    #[arg(long)]
+    update: bool,
+}
 
-    let cwd = match std::env::current_dir() {
-        Ok(d) => d,
-        Err(e) => {
-            eprintln!("kndo: cannot determine working directory: {e}");
-            return ExitCode::from(2);
-        }
-    };
-    let mut engine = match kndo::open(&cwd, base_config_overrides()) {
-        Ok(e) => e,
+fn baseline_cmd(args: &[String]) -> ExitCode {
+    use clap::Parser;
+    let op = match BaselineArgs::try_parse_from(
+        std::iter::once("kndo".to_string()).chain(args.iter().cloned()),
+    ) {
+        Ok(a) if a.update => BaselineOp::Update,
+        Ok(_) => BaselineOp::Create,
         Err(e) => {
             eprintln!("kndo: {e}");
             return ExitCode::from(2);
         }
+    };
+
+    let (_, mut engine) = match open_engine(base_config_overrides()) {
+        Ok(t) => t,
+        Err(code) => return code,
     };
 
     match engine.baseline(op) {
@@ -711,73 +730,79 @@ fn baseline_cmd(args: &[String]) -> ExitCode {
     }
 }
 
-#[derive(Debug)]
+/// `check` and `health` share one flag surface — `health` silently ignores the filtering flags
+/// (`--only`/`--skip`/`--strict`/`--staged`/`--diff`/`--fail-on`) it has no use for, the same way
+/// `parse_flags` always has; splitting the two out into narrower structs would change what
+/// `kndo health --staged` currently does (parses, does nothing) into a hard error, which is a
+/// real behavior change nobody asked for here.
+#[derive(Debug, clap::Parser)]
 struct Flags {
+    #[arg(long)]
     format: Option<String>,
+    #[arg(long)]
     color: Option<String>,
+    #[arg(long)]
     quiet: bool,
+    #[arg(long)]
     verbose: bool,
+    #[arg(long = "no-cache")]
     no_cache: bool,
+    #[arg(long)]
     staged: bool,
+    #[arg(long)]
     diff: Option<String>,
+    #[arg(long = "fail-on")]
     fail_on: Option<String>,
+    #[arg(long)]
     threads: Option<String>,
+    #[arg(long = "by-package")]
     by_package: bool,
+    /// `--only`/`--skip`, raw. Repeatable and comma-separated both work — a shell loop that
+    /// appends one flag per category and a hand-typed list should not be different features.
+    #[arg(long, value_delimiter = ',')]
+    only: Vec<String>,
+    #[arg(long, value_delimiter = ',')]
+    skip: Vec<String>,
+    #[arg(long)]
+    strict: bool,
 }
 
+/// A typo'd `--fail-onn warning` silently un-gating CI, or any token kndo doesn't know, must be
+/// a hard error — clap's own `unexpected argument`/`a value is required for` messages already
+/// name the offending flag, which is what every caller of this actually depends on.
 fn parse_flags(args: &[String]) -> Result<Flags, String> {
-    let mut flags = Flags {
-        format: None,
-        color: None,
-        quiet: false,
-        verbose: false,
-        no_cache: false,
-        staged: false,
-        diff: None,
-        fail_on: None,
-        threads: None,
-        by_package: false,
-    };
-    // A valued flag with no value, and any token kndo doesn't know, are hard errors:
-    // a typo'd `--fail-onn warning` silently un-gating CI is
-    // worse than any friction rejecting it costs.
-    let value = |it: &mut std::slice::Iter<'_, String>, flag: &str| {
-        it.next()
-            .cloned()
-            .ok_or_else(|| format!("{flag} needs a value — see `kndo --help`"))
-    };
-    let mut it = args.iter();
-    while let Some(arg) = it.next() {
-        match arg.as_str() {
-            "--format" => flags.format = Some(value(&mut it, "--format")?),
-            "--color" => flags.color = Some(value(&mut it, "--color")?),
-            "--quiet" => flags.quiet = true,
-            "--verbose" => flags.verbose = true,
-            "--no-cache" => flags.no_cache = true,
-            "--staged" => flags.staged = true,
-            "--diff" => flags.diff = Some(value(&mut it, "--diff")?),
-            "--fail-on" => flags.fail_on = Some(value(&mut it, "--fail-on")?),
-            "--threads" => flags.threads = Some(value(&mut it, "--threads")?),
-            "--by-package" => flags.by_package = true,
-            s if s.starts_with("--format=") => {
-                flags.format = Some(s["--format=".len()..].to_string())
-            }
-            s if s.starts_with("--color=") => flags.color = Some(s["--color=".len()..].to_string()),
-            s if s.starts_with("--diff=") => flags.diff = Some(s["--diff=".len()..].to_string()),
-            s if s.starts_with("--fail-on=") => {
-                flags.fail_on = Some(s["--fail-on=".len()..].to_string())
-            }
-            s if s.starts_with("--threads=") => {
-                flags.threads = Some(s["--threads=".len()..].to_string())
-            }
-            other => {
-                return Err(format!(
-                    "unknown argument `{other}` — see `kndo --help` for flags"
-                ))
-            }
+    use clap::Parser;
+    Flags::try_parse_from(std::iter::once("kndo".to_string()).chain(args.iter().cloned()))
+        .map_err(|e| e.to_string())
+}
+
+/// `--only`/`--skip` values into core's own skip vocabulary. Comma-separated within one flag,
+/// repeatable across flags; both spellings mean the same list, because a shell loop appending
+/// `--skip $c` and a hand-typed `--skip a,b` should not be two different features.
+///
+/// A category neither the core registry nor the `plugin:` namespace knows is a **hard error**,
+/// not a silent no-op: `--only unsued` matching nothing would print a clean report for a
+/// codebase nobody looked at, which is the single worst thing this tool can do. `--skip unsued`
+/// is rejected on the same principle the parser already applies to `--fail-onn`.
+fn parse_category_filters(raws: &[String], flag: &str) -> Result<Vec<kndo::SkipSpec>, String> {
+    let mut specs = Vec::new();
+    for raw in raws.iter().flat_map(|r| r.split(',')) {
+        let raw = raw.trim();
+        if raw.is_empty() {
+            continue;
         }
+        let spec = kndo::SkipSpec::parse(raw).map_err(|e| format!("{flag} `{raw}`: {e}"))?;
+        if !spec.category.is_plugin() && !kndo::Category::all().contains(&spec.category) {
+            let known: Vec<&str> = kndo::Category::all().iter().map(|c| c.as_str()).collect();
+            return Err(format!(
+                "{flag} `{raw}`: unknown category `{}` — one of: {}",
+                spec.category,
+                known.join(", ")
+            ));
+        }
+        specs.push(spec);
     }
-    Ok(flags)
+    Ok(specs)
 }
 
 /// `--threads N` > `KNDO_THREADS` env > default physical cores — resolved to a
@@ -804,7 +829,7 @@ fn resolve_threads(explicit: Option<&str>, env: Option<&str>) -> Result<Option<u
 /// A malformed `KNDO_THREADS` degrades to the default (physical cores) rather than failing the
 /// command — surfacing a parse error for an env var on every unrelated subcommand would be more
 /// surprising than just falling back.
-pub(crate) fn base_config_overrides() -> ConfigOverrides {
+fn base_config_overrides() -> ConfigOverrides {
     let env_threads = std::env::var("KNDO_THREADS").ok();
     let threads = resolve_threads(None, env_threads.as_deref()).unwrap_or(None);
     ConfigOverrides {
@@ -813,13 +838,29 @@ pub(crate) fn base_config_overrides() -> ConfigOverrides {
     }
 }
 
+/// The open-engine ritual every command repeats: find the project root, open an `Engine` with
+/// the given overrides, and turn either failure into the same `kndo: <msg>` + exit-2 shape.
+/// Returns the resolved cwd alongside the engine for the one caller (`doctor_cmd`) that still
+/// needs it afterward — every other caller just discards it.
+fn open_engine(overrides: ConfigOverrides) -> Result<(std::path::PathBuf, Engine), ExitCode> {
+    let cwd = std::env::current_dir().map_err(|e| {
+        eprintln!("kndo: cannot determine working directory: {e}");
+        ExitCode::from(2)
+    })?;
+    let engine = kndo::open(&cwd, overrides).map_err(|e| {
+        eprintln!("kndo: {e}");
+        ExitCode::from(2)
+    })?;
+    Ok((cwd, engine))
+}
+
 /// `--staged` and `--diff <ref>` select `RunMode`; mutually exclusive, checked
 /// here rather than left for the engine since "which mode" is entirely a frontend argument-
-/// parsing concern. **Known gap:**
-/// neither mode scopes the report to the change's effects (derived-effects
-/// diffing is not implemented) — every mode walks and reports the full
-/// tree; only `run.mode`/`run.base_ref` and the `--fail-on` default (below) react to the
-/// selected mode.
+/// parsing concern. Both trees are fully analyzed and the engine reports the *difference*
+/// (`Engine::run_diff`): `findings` carries what the change introduced — each tagged
+/// `introduced` when it lands inside a touched file, `derived` when the change flipped it
+/// elsewhere — and `fixed` carries what it removed. The `--fail-on` default (below) also
+/// reacts to the mode.
 fn resolve_mode(flags: &Flags) -> Result<RunMode, String> {
     match (flags.staged, &flags.diff) {
         (true, Some(_)) => Err("--staged and --diff are mutually exclusive".to_string()),
@@ -835,10 +876,9 @@ fn resolve_mode(flags: &Flags) -> Result<RunMode, String> {
 /// `kndo check`; day-one adoption must be safe). `None` return means "never fail on
 /// findings"; `Some(sev)` means "fail if any finding is at least as severe as `sev`".
 fn resolve_fail_on(explicit: Option<&str>, mode: &RunMode) -> Result<Option<Severity>, String> {
-    let raw = explicit.unwrap_or(match mode {
-        RunMode::Full => "none",
-        RunMode::Staged | RunMode::Diff { .. } => "warning",
-    });
+    let Some(raw) = explicit else {
+        return Ok(mode.default_fail_on());
+    };
     match raw.to_ascii_lowercase().as_str() {
         "none" => Ok(None),
         "error" => Ok(Some(Severity::Error)),
@@ -850,42 +890,8 @@ fn resolve_fail_on(explicit: Option<&str>, mode: &RunMode) -> Result<Option<Seve
     }
 }
 
-/// Severity's declared enum order is worst-first for *display* sorting (engine.rs's own doc:
-/// "declaration order doubles as sort/triage order"), which is the opposite direction from what
-/// an "at least as severe as" threshold check wants — spelling out the rank explicitly here
-/// avoids relying on readers (or future editors) inferring the right comparison direction from
-/// derived `Ord`.
-fn severity_rank(s: Severity) -> u8 {
-    match s {
-        Severity::Error => 3,
-        Severity::Warning => 2,
-        Severity::Info => 1,
-    }
-}
-
-/// The findings half of the exit-code decision: delta budgets (the
-/// other half, "or a delta budget exceeded") are not wired here — `--fail-on` is the whole
-/// gate.
-fn exit_code_for_findings(findings: &[Finding], fail_on: Option<Severity>) -> ExitCode {
-    let Some(threshold) = fail_on else {
-        return ExitCode::SUCCESS;
-    };
-    // An advisory finding (a plugin finding without a [plugins.gate] opt-in)
-    // never moves the exit code, whatever its displayed severity and whatever the threshold —
-    // installing a finding-emitting plugin must be safe by default.
-    if findings
-        .iter()
-        .filter(|f| !f.advisory)
-        .any(|f| severity_rank(f.severity) >= severity_rank(threshold))
-    {
-        ExitCode::from(1)
-    } else {
-        ExitCode::SUCCESS
-    }
-}
-
 /// `--format` flag > `KNDO_FORMAT` env > TTY auto-detect (human on TTY, json when piped).
-pub(crate) fn resolve_format(explicit: Option<&str>) -> String {
+fn resolve_format(explicit: Option<&str>) -> String {
     if let Some(f) = explicit {
         return f.to_string();
     }
@@ -902,7 +908,7 @@ pub(crate) fn resolve_format(explicit: Option<&str>) -> String {
 }
 
 /// `NO_COLOR` always wins over `auto`; `--color always|never` overrides the TTY auto-detect.
-pub(crate) fn resolve_color(explicit: Option<&str>) -> bool {
+fn resolve_color(explicit: Option<&str>) -> bool {
     if std::env::var_os("NO_COLOR").is_some() {
         return false;
     }
@@ -935,39 +941,17 @@ fn health_cmd(args: &[String]) -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    let cwd = match std::env::current_dir() {
-        Ok(d) => d,
-        Err(e) => {
-            eprintln!("kndo: cannot determine working directory: {e}");
-            return ExitCode::from(2);
-        }
-    };
     let overrides = ConfigOverrides {
         use_cache: !flags.no_cache,
         threads,
-        min_confidence: None,
+        ..ConfigOverrides::default()
     };
-    let mut engine = match kndo::open(&cwd, overrides) {
-        Ok(e) => e,
-        Err(e) => {
-            eprintln!("kndo: {e}");
-            return ExitCode::from(2);
-        }
+    let (_, mut engine) = match open_engine(overrides) {
+        Ok(t) => t,
+        Err(code) => return code,
     };
-    let result = engine.check(CheckRequest {
-        mode: kndo::engine::RunMode::Full,
-    });
-    for d in &result.diagnostics {
-        let level = match d.level {
-            kndo::adapter::DiagnosticLevel::Error => "error",
-            kndo::adapter::DiagnosticLevel::Warn => "warning",
-            kndo::adapter::DiagnosticLevel::Info => "info",
-        };
-        match &d.path {
-            Some(p) => eprintln!("kndo: {level}: {}: {}", p.0, d.message),
-            None => eprintln!("kndo: {level}: {}", d.message),
-        }
-    }
+    let result = engine.check(RunMode::Full);
+    render::diagnostics(&result.diagnostics);
     let Some(health) = &result.health else {
         eprintln!(
             "kndo: health unavailable - the project tree could not be analyzed (see diagnostics above)"
@@ -989,12 +973,9 @@ fn health_cmd(args: &[String]) -> ExitCode {
                 color: resolve_color(flags.color.as_deref()),
                 quiet: flags.quiet,
                 verbose: flags.verbose,
+                by_package: flags.by_package,
             };
-            let mut health = health.clone();
-            if !flags.by_package {
-                health.packages.clear();
-            }
-            print!("{}", render::render_health(&health, &opts, true));
+            print!("{}", render::render_health(health, &opts, true));
         }
         other => {
             eprintln!("kndo: unknown --format `{other}` (human, json, agent)");
@@ -1036,44 +1017,41 @@ fn check(args: &[String]) -> ExitCode {
         }
     };
 
-    let cwd = match std::env::current_dir() {
-        Ok(d) => d,
-        Err(e) => {
-            eprintln!("kndo: cannot determine working directory: {e}");
+    // Category filters are `check`'s alone. `health` scores the whole project by construction
+    // — a score computed over a narrowed view would be a different number wearing the same
+    // name — so it neither offers them nor silently ignores them.
+    let (only, skip) = match (
+        parse_category_filters(&flags.only, "--only"),
+        parse_category_filters(&flags.skip, "--skip"),
+    ) {
+        (Ok(only), Ok(skip)) => (only, skip),
+        (Err(e), _) | (_, Err(e)) => {
+            eprintln!("kndo: {e}");
             return ExitCode::from(2);
         }
     };
+
     let overrides = ConfigOverrides {
         use_cache: !flags.no_cache,
         threads,
         // `--verbose` reveals every tier even when the project config raises the
         // `min-confidence` floor; otherwise the file (or the report-everything default)
         // decides.
-        min_confidence: flags.verbose.then_some(kndo::vocab::Confidence::Possible),
+        min_confidence: flags.verbose.then(ConfigOverrides::verbose_min_confidence),
+        only,
+        skip,
+        strict: flags.strict,
     };
-    let mut engine = match kndo::open(&cwd, overrides) {
-        Ok(e) => e,
-        Err(e) => {
-            eprintln!("kndo: {e}");
-            return ExitCode::from(2);
-        }
+    let (_, mut engine) = match open_engine(overrides) {
+        Ok(t) => t,
+        Err(code) => return code,
     };
-    let result = engine.check(CheckRequest { mode });
+    let result = engine.check(mode);
 
     // Diagnostics degrade the run, they don't kill it: report on stderr and
     // continue — findings and diagnostics are not the same thing. stderr carries diagnostics
     // in every format; stdout stays the pure report, JSON included.
-    for d in &result.diagnostics {
-        let level = match d.level {
-            kndo::adapter::DiagnosticLevel::Error => "error",
-            kndo::adapter::DiagnosticLevel::Warn => "warning",
-            kndo::adapter::DiagnosticLevel::Info => "info",
-        };
-        match &d.path {
-            Some(p) => eprintln!("kndo: {level}: {}: {}", p.0, d.message),
-            None => eprintln!("kndo: {level}: {}", d.message),
-        }
-    }
+    render::diagnostics(&result.diagnostics);
 
     match format.as_str() {
         "json" => println!("{}", result.to_json()),
@@ -1082,6 +1060,7 @@ fn check(args: &[String]) -> ExitCode {
                 color: resolve_color(flags.color.as_deref()),
                 quiet: flags.quiet,
                 verbose: flags.verbose,
+                by_package: flags.by_package,
             };
             print!("{}", render::render(&result, &opts));
         }
@@ -1096,58 +1075,138 @@ fn check(args: &[String]) -> ExitCode {
     if result
         .diagnostics
         .iter()
-        .any(|d| d.level == kndo::adapter::DiagnosticLevel::Error)
+        .any(|d| d.level == kndo::DiagnosticLevel::Error)
     {
         // The run could not do what was asked (an error-level diagnostic): the
         // exit-2 tier — never let an analysis that didn't run read as a clean pass.
         return ExitCode::from(2);
     }
-    exit_code_for_findings(&result.findings, fail_on)
+    // Both halves of the gate, through core's single reader: findings at/above `--fail-on`
+    // OR a `[delta]` budget exceeded (RFC 0006 §5). Composing them here by hand is how a
+    // frontend ends up honoring one and forgetting the other.
+    if result.gate_fails(fail_on) {
+        ExitCode::from(1)
+    } else {
+        ExitCode::SUCCESS
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use kndo::Finding;
 
-    fn tmp_dir(name: &str) -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join(format!("kndo-cli-test-{name}"));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        dir
+    /// **The template offers no section the engine does not read.**
+    ///
+    /// Parsing cleanly is not the same as doing anything: `kndo.toml`'s parser skips unknown
+    /// tables silently, by design, so an unwired section passes the test below while promising
+    /// a capability that does not exist. One did, for a long time — `[project]`, with `roots`
+    /// and `exclude`, written by `kndo init` and documented key by key in the user guide, wired
+    /// to nothing. A commented-out key is still a promise.
+    ///
+    /// `config::LIVE_TABLES` is what `parse` actually reads, exported for exactly this check.
+    #[test]
+    fn the_init_template_offers_no_section_the_engine_ignores() {
+        let named: Vec<String> = KNDO_TOML_TEMPLATE
+            .lines()
+            .filter_map(|l| {
+                l.trim_start()
+                    .trim_start_matches("# ")
+                    .trim()
+                    .strip_prefix('[')
+            })
+            .map(|rest| {
+                // `[[rule]]` and `[analysis.crap]` both belong to their top-level table.
+                rest.trim_start_matches('[')
+                    .split([']', '.'])
+                    .next()
+                    .unwrap_or_default()
+                    .to_string()
+            })
+            .filter(|t| !t.is_empty())
+            .collect();
+        assert!(
+            named.len() > 5,
+            "only {named:?} — this test stopped reading the template"
+        );
+        for table in &named {
+            assert!(
+                kndo::config::LIVE_TABLES.contains(&table.as_str()),
+                "the template offers [{table}], which the engine never reads — either wire it \
+                 up or take it out; do not ship it commented. Live: {:?}",
+                kndo::config::LIVE_TABLES
+            );
+        }
+    }
+
+    /// Every key the template offers, uncommented — what a user gets the moment they delete a
+    /// `# `. A template line the parser rejects would hand every new project a diagnostic on
+    /// its first run, and nothing else in the tree reads this string.
+    #[test]
+    fn every_line_of_the_init_template_parses_once_uncommented() {
+        let live: String = KNDO_TOML_TEMPLATE
+            .lines()
+            .filter_map(|line| match line.strip_prefix("# ") {
+                // The first two lines are prose about the file, not commented-out config.
+                Some(rest) if rest.starts_with("kndo.toml —") || rest.starts_with("Written by") => {
+                    None
+                }
+                Some(rest) => Some(rest.to_string()),
+                None => Some(line.to_string()),
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("kndo.toml"), &live).unwrap();
+        let mut engine = kndo::open(dir.path(), kndo::ConfigOverrides::default()).unwrap();
+        let result = engine.check(kndo::RunMode::Full);
+
+        let config_complaints: Vec<&str> = result
+            .diagnostics
+            .iter()
+            .map(|d| d.message.as_str())
+            .filter(|m| m.contains("kndo.toml"))
+            .collect();
+        assert!(
+            config_complaints.is_empty(),
+            "the template we hand every new project does not parse cleanly: \
+             {config_complaints:?}\n--- rendered ---\n{live}"
+        );
     }
 
     #[test]
     fn gitignore_created_when_absent() {
-        let dir = tmp_dir("gitignore-create");
+        let dir = tempfile::tempdir().unwrap();
         assert!(matches!(
-            ensure_gitignore_entry(&dir).unwrap(),
+            ensure_gitignore_entry(dir.path()).unwrap(),
             GitignoreOutcome::Appended
         ));
-        let text = std::fs::read_to_string(dir.join(".gitignore")).unwrap();
+        let text = std::fs::read_to_string(dir.path().join(".gitignore")).unwrap();
         assert_eq!(text, ".kndo/\n");
     }
 
     #[test]
     fn gitignore_entry_appended_to_existing_content() {
-        let dir = tmp_dir("gitignore-append");
-        std::fs::write(dir.join(".gitignore"), "target/").unwrap(); // no trailing newline
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join(".gitignore"), "target/").unwrap(); // no trailing newline
         assert!(matches!(
-            ensure_gitignore_entry(&dir).unwrap(),
+            ensure_gitignore_entry(dir.path()).unwrap(),
             GitignoreOutcome::Appended
         ));
-        let text = std::fs::read_to_string(dir.join(".gitignore")).unwrap();
+        let text = std::fs::read_to_string(dir.path().join(".gitignore")).unwrap();
         assert_eq!(text, "target/\n.kndo/\n");
     }
 
     #[test]
     fn gitignore_entry_is_idempotent() {
-        let dir = tmp_dir("gitignore-idempotent");
-        std::fs::write(dir.join(".gitignore"), "target/\n.kndo/\n").unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join(".gitignore"), "target/\n.kndo/\n").unwrap();
         assert!(matches!(
-            ensure_gitignore_entry(&dir).unwrap(),
+            ensure_gitignore_entry(dir.path()).unwrap(),
             GitignoreOutcome::AlreadyPresent
         ));
-        let text = std::fs::read_to_string(dir.join(".gitignore")).unwrap();
+        let text = std::fs::read_to_string(dir.path().join(".gitignore")).unwrap();
         assert_eq!(text, "target/\n.kndo/\n"); // unchanged, not duplicated
     }
 
@@ -1163,7 +1222,45 @@ mod tests {
             fail_on: fail_on.map(str::to_string),
             threads: None,
             by_package: false,
+            only: Vec::new(),
+            skip: Vec::new(),
+            strict: false,
         }
+    }
+
+    #[test]
+    fn category_filters_accept_both_spellings_and_the_subject_vocabulary() {
+        // A shell loop appending `--skip $c` and a hand-typed `--skip a,b` are the same list,
+        // and both speak the vocabulary suppressions already use.
+        let repeated =
+            parse_category_filters(&["unused".to_string(), "duplicate".to_string()], "--skip")
+                .unwrap();
+        let comma = parse_category_filters(&["unused, duplicate".to_string()], "--skip").unwrap();
+        assert_eq!(repeated, comma);
+        assert_eq!(repeated.len(), 2);
+
+        let narrowed =
+            parse_category_filters(&["unused:enum-member".to_string()], "--only").unwrap();
+        assert_eq!(
+            narrowed[0].subject.as_ref().unwrap().as_str(),
+            "enum-member"
+        );
+    }
+
+    #[test]
+    fn an_unknown_category_is_a_hard_error_not_an_empty_report() {
+        // `--only unsued` matching nothing would print a clean report for a codebase nobody
+        // looked at. Same principle the parser already applies to `--fail-onn`.
+        let e = parse_category_filters(&["unsued".to_string()], "--only").unwrap_err();
+        assert!(e.contains("unknown category"), "{e}");
+        assert!(e.contains("unused"), "the message lists the real ones: {e}");
+
+        // A plugin category is an open namespace and must still be accepted.
+        assert!(parse_category_filters(&["plugin:acme/x".to_string()], "--skip").is_ok());
+
+        // And the meta-suppression rule reaches the flag, not just the file.
+        let e = parse_category_filters(&["stale".to_string()], "--skip").unwrap_err();
+        assert!(e.contains("cannot itself be skipped"), "{e}");
     }
 
     #[test]
@@ -1195,11 +1292,13 @@ mod tests {
 
     #[test]
     fn unknown_arguments_and_missing_values_are_rejected() {
-        // A typo'd flag silently un-gating CI is worse than any friction.
+        // A typo'd flag silently un-gating CI is worse than any friction. clap's own wording
+        // ("unexpected argument", "a value is required for") replaces the hand-written phrasing;
+        // what every caller actually depends on is the flag name appearing in the error.
         let args: Vec<String> = vec!["--fail-onn".into(), "warning".into()];
         assert!(parse_flags(&args).unwrap_err().contains("--fail-onn"));
         let args: Vec<String> = vec!["--diff".into()];
-        assert!(parse_flags(&args).unwrap_err().contains("needs a value"));
+        assert!(parse_flags(&args).unwrap_err().contains("--diff"));
         let args: Vec<String> = vec!["stray".into()];
         assert!(parse_flags(&args).unwrap_err().contains("stray"));
     }
@@ -1279,51 +1378,36 @@ mod tests {
         Finding {
             advisory: false,
             id: "kndo-000000000000".to_string(),
-            category: "unused".to_string(),
-            group: "waste".to_string(),
-            subject_kind: "symbol".to_string(),
+            category: "unused".into(),
+            group: kndo::Group::Waste,
+            subject_kind: "symbol".into(),
             severity,
-            confidence: kndo::vocab::Confidence::Certain,
+            confidence: kndo::Confidence::Certain,
             message: "example".to_string(),
             location: Default::default(),
             related: Vec::new(),
+            rolled_up: None,
+            sources: Vec::new(),
             delta: None,
             delta_origin: None,
         }
     }
 
-    #[test]
-    fn fail_on_none_never_fails_regardless_of_findings() {
-        let findings = vec![finding(Severity::Error)];
-        assert_eq!(exit_code_for_findings(&findings, None), ExitCode::SUCCESS);
+    fn result_with(findings: Vec<Finding>) -> kndo::RunResult {
+        kndo::RunResult {
+            findings,
+            ..Default::default()
+        }
     }
 
+    /// The gate's actual threshold logic (severity ranking, the advisory exemption) lives —
+    /// and is unit-tested — core-side on `RunResult::fails_at`; this is the CLI's own half of
+    /// the gate: turning that bool into the process exit code.
     #[test]
-    fn threshold_trips_on_at_least_as_severe_findings_only() {
-        let findings = vec![finding(Severity::Info)];
-        assert_eq!(
-            exit_code_for_findings(&findings, Some(Severity::Warning)),
-            ExitCode::SUCCESS
-        );
-
-        let findings = vec![finding(Severity::Warning)];
-        assert_eq!(
-            exit_code_for_findings(&findings, Some(Severity::Warning)),
-            ExitCode::from(1)
-        );
-
-        let findings = vec![finding(Severity::Error)];
-        assert_eq!(
-            exit_code_for_findings(&findings, Some(Severity::Warning)),
-            ExitCode::from(1)
-        );
-    }
-
-    #[test]
-    fn empty_findings_never_trip_any_threshold() {
-        assert_eq!(
-            exit_code_for_findings(&[], Some(Severity::Info)),
-            ExitCode::SUCCESS
-        );
+    fn fails_at_maps_to_the_exit_code() {
+        let result = result_with(vec![finding(Severity::Warning)]);
+        assert!(!result.fails_at(None));
+        assert!(result.fails_at(Some(Severity::Warning)));
+        assert!(!result_with(vec![]).fails_at(Some(Severity::Info)));
     }
 }

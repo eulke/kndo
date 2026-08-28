@@ -114,7 +114,19 @@ convention), so `within` resolution reuses the same tables.
 **Core mechanism.** Phase 3b resolves `within` against the file's own symbol table and emits
 `References { from: NodeRef::Symbol(enclosing), .. }` when it resolves; **any miss falls back
 to `NodeRef::File` — today's behavior, the safe direction** (this fallback is the load-bearing
-safety property; it gets its own regression test). The reachability algorithm needs *zero
+safety property; it gets its own regression test).
+
+**Twins: the name is not enough, the span is.** `within` is a NAME, and same-name overloads
+are legitimate twins sharing one `Owner.name` selector — Swift's `get(at:)` beside
+`get(path:)`, Java's arity overloads. The qualified table is single-slot, so a name lookup
+attributed every reference in EITHER body to whichever twin was inserted last; the other had
+no outgoing references at all and read as dead unless something else named it (vapor's private
+`get`, called from its public sibling one line above). Resolution therefore disambiguates among
+`insert_qualified`'s twin set by **span containment** — a reference lies physically inside
+exactly one declaration, so the containing one is its author. Exact, language-blind, and it
+falls back to the single-slot answer when no candidate contains the span, so an adapter
+reporting `within` without a matching span is no worse off than before. `graph::assemble`'s
+`within_owner` is the one implementation. The reachability algorithm needs *zero
 changes*: adjacency is already `NodeRef`-keyed, `Symbol → Symbol` edges already traverse, and
 the symbol-reaches-its-owning-file propagation (added in M3, RFC 0005 §1) is the second half
 of this model — formally:
@@ -272,12 +284,57 @@ js-ts gap, unsolved by this RFC rather than half-solved.
 adapters encode their language's *real* resolution unit in it without the core learning
 anything. Conventions per language, recorded so adapters stay mutually consistent in spirit:
 
+**A unit key is unique only within a package.** Java/Kotlin key on the declared package name
+and Swift on the target name, so two Gradle modules declaring `package retrofit2;`, or two
+Swift packages each declaring a target `Core`, share one key repo-wide. The core therefore
+keeps the reverse index in two forms — repo-global, and partitioned by owning package
+(`graph::assemble::build_unit_indexes`, shared with the patch path) — and
+`ResolveCtx::unit_files_from` prefers the importer's own package, falling back to global only
+when it has no candidate. Without the preference a resolver picking `.first()` by path order
+binds intra-module imports to unrelated siblings; without the fallback genuine cross-module
+imports stop resolving. Reachability never depended on which file an edge landed on (same-unit
+fallback), but `cyclic` reads the literal edge as evidence, and read phantom package cycles out
+of it in four of the six languages a field audit covered.
+
+**And a NAME is not unique within a unit.** The mirror of the §4 twins case, on the incoming
+side: two files of one unit may legitimately declare one name when the language makes them
+mutually exclusive — Go's `//go:build` alternates (gin's `binding.go` under `!nomsgpack` and
+`binding_nomsgpack.go` under `nomsgpack`, both `func validate`), Rust's `#[cfg]` alternates.
+Span containment cannot disambiguate here (the twins sit in *different* files and the
+reference is inside neither), and nothing should: kndo analyzes the union of build
+configurations, so both declarations are live and a reference under either configuration
+reaches its own. The single-slot unit table gave the last-inserted twin every reference — 16
+of them in gin — and left the other at zero incoming edges, falsely `unused`. Core therefore
+keeps the displaced declarations (`symbol_twins_per_unit`, built beside the name table in
+both `graph::assemble` and `graph::patch`) and emits the edge to **every** twin. Twins are
+consulted only when the winner came from the unit table: a name bound by an import, or
+declared in the referencing file itself, is one specific symbol and not a member of a twin
+set. Same keep-alive direction as everywhere else — an extra edge to a twin that some build
+configuration excludes costs recall under that configuration, never a false accusation.
+
+**Which tier resolved decides which twins apply.** The bare-name ladder is: names bound by
+this file's imports, then its own declarations, then its unit's, then units a wildcard import
+makes visible. Kotlin multiplatform is the case that exercises every rung — `expect` in
+`common` beside one `actual` per platform, all under one declared package, hence all twins of
+each other — and the callers reach them from all four positions: an explicit import (the
+binding's own twin set, recorded when the binding resolved through the TARGET's unit table),
+the declaring file itself (`expect inline fun yieldThread()` sits in the file that calls it),
+a sibling file of the unit, and a wildcard-imported package. Each tier therefore carries the
+unit's full twin set for the name, minus whichever member of it that tier returned.
+
+**Wildcard-visible names rank BELOW members in scope.** The last rung is consulted only after
+the §3 duck-typed member fallback comes up empty, which is where every language with this tier
+puts it: Kotlin resolves an unqualified call against local names, then implicit receivers, and
+only then imported top-level names. Ranked above the fallback instead, an unrelated top-level
+`updateState` in a wildcard-imported package took both call sites of kotlinx.coroutines'
+`StateFlowImpl.updateState` — a method calling its own type's member — and left it `unused`.
+
 | Language | unit key |
 |----------|----------|
 | Go | `dir#declared-package-name` — splits external test packages (`foo_test`) from `foo` in the same directory, closing the documented §1.1 imprecision of docs/adapters/go.md with zero core changes |
 | Java | declared package name (dotted string from the `package` statement) — never directory-derived, sidestepping source-root detection (`src/main/java` is a build-tool convention, not language-visible from a bare file path); docs/adapters/java.md §0 |
 | Kotlin | same as Java (declared dotted package name) — but note this key carries *zero* visibility meaning for Kotlin (§6), only resolution meaning (same-package unqualified reference, wildcard import enumeration) |
-| Rust | module path (crate-root-relative; inline `mod` appends a segment) |
+| Rust | the file's own module, keyed by path with `mod.rs`/`lib.rs`/`main.rs` folded into their directory — so **one file per key**. Rust files still resolve nothing implicitly across files (a one-file unit table IS the file's own, already the earlier tier), which is exactly why turning the key on moves no resolution; what it buys is twin tracking, which is per-unit and which a keyless language therefore had none of. `internal/adapters/rust.md` §2 |
 | Swift | target/module name |
 | JS/TS, CSS, JSON | `None` — file-scoped languages |
 
@@ -334,14 +391,171 @@ scope, and the final member resolves in the yielded type's home — twins includ
 a declared fact, Certain on hit, duck fallback on any miss (never a settle). The resolved
 chain also credits the yielded TYPE with a Read from the site. Facts are part of the
 RFC 0013 §4 surface signature (an annotation change re-resolves dependents) and persist in
-`FilePatchMeta` for the patch path. `RawMemberType.yields_params` carries every type
-parameter's base, in order (`Result<ConfiguredHIR, Error>` → `[ConfiguredHIR, Error]`); a
-pointer segment marked `?N` projects parameter N instead of the wrapper (`?` is shorthand
-for `?0`). The marker is structural — WHICH parameter an operation extracts is the
-adapter's knowledge (Rust's try operator → 0), the core just indexes. Pointers compose to
+`FilePatchMeta` for the patch path. `RawMemberType.yields` carries the annotation's arguments
+as written (`Result<ConfiguredHIR, Error>`); a pointer segment marked `?N` projects argument N
+instead of the wrapper (`?` is shorthand for `?0`). The marker is structural — WHICH argument an
+operation extracts is the adapter's knowledge (Rust's try operator → 0), the core just indexes.
+**As landed, `yields` is a tree and a projection lands on a subtree** (§3-quater below): the
+one-level list this paragraph originally described could not hold `Result<Vec<T>, E>`'s `T`. Pointers compose to
 N hops (each hop a declared fact, each resolved hop's type credited with a Read from the
 site); a projection index with no parameter at that position is a miss — duck fallback,
 never a settle.
+
+**§3-ter, a value's type from the call that produced it (M6).** `let entry = parse_entry(..);
+entry.path` — the receiver's type is the callee's declared RETURN, which lives in the callee's
+file. `RawMemberType::owner` is therefore `Option`: `None` reads "calling `member` evaluates to
+`yields`", the same statement about a value's type that `Some(owner)` makes about a member
+access, so the core walks it with the same chain machinery — a `None`-owner fact simply applies
+where a pointer's BASE names the function, one step before `chain_hop` acts on a member segment
+(`call_yield`). The projection marker composes there too: `let cfg = build(..)?` takes parameter 0.
+
+A pointer's base also stopped having to be a symbol. Rust reaches free functions through their
+module constantly (`rollup::directory_rollups(..)`), and there the file binds only the MODULE —
+so `pointer_base` resolves a base that matches no name in scope against the qualifier table,
+consuming the next segment as the symbol inside that target (its bare table, then its unit
+siblings, the same pair every other tier uses). Without that arm the pointer died at its first
+segment and every field the caller read looked file-local.
+
+The adapter side of the same tier is language knowledge, and stays in the adapter: a member-type
+fact for every top-level function's declared return; a fact from `#[derive(Default)]` (the derive
+states the impl exists, the trait's signature states what it returns — curated stdlib knowledge
+like `is_machinery_trait`, not inference); a bare or module-qualified callee typing its binding by
+naming the FUNCTION rather than guessing its return; and a `for` variable projecting the
+iterable's parameter 0, only where the iterable is a chain whose last hop is a declared fact — a
+local's own annotation kept just its base name, so `Vec` alone has no parameter to project.
+
+Measured on this repo: three types that carried an acknowledgement pragma
+(`internal/detection-gaps.md` §3 — `DirRollup`, `ContributedRoot`, `ContributedEdge`) stopped
+needing one, with the finding count and health unchanged and no movement in either direction on
+six other codebases (§4's symmetry requirement).
+
+**§3-quater, the chain carries a TYPE (M6).** `RawMemberType::yields` was a base name plus a
+one-level list of parameter names, and the chain walked `SymbolId → SymbolId`. Both halves of
+that lose the same thing: `Result<Vec<TreeEntry>, GitError>` reduced to `Result` +
+`["Vec", "GitError"]`, and the `TreeEntry` was gone from the facts entirely — no projection
+could recover what was never stored. Flattening was not a representation detail; it was the
+reason `internal/detection-gaps.md` §3's last case could not be fixed.
+
+`yields` is now a `TypeExpr` — `Named { name, args }` | `Param(N)` | `Unknown` — and the chain's
+state is one of those plus, when the head name resolves to something this project declares, the
+symbol whose home file holds its member table. The two are separate because they genuinely are:
+`Vec<TreeEntry>` is a type no file here declares, so it has no symbol, and the chain still has to
+walk *through* it to reach the `TreeEntry` inside. A `?N` marker means exactly what it meant, and
+now lands on a SUBTREE with its own arguments intact.
+
+Three pieces follow from that, all language-blind:
+
+- **`Param(N)` and substitution.** A fact may state a relationship rather than a type — "`map_err`
+  still yields a `Result` over the same argument 0" — and the receiver's own arguments make it
+  concrete at the hop. A parameter the receiver does not have becomes `Unknown`: silence, not the
+  type that happened to sit at that position. `Unknown` is a variant rather than a short argument
+  list so a fact never has to lie about its arity to admit it cannot name something.
+- **`AdapterDescriptor::builtin_member_types`**, a second lookup tier keyed by claim language,
+  consulted after the owner's home file. It is the only tier that can apply when the head resolves
+  to no declaration at all, which is every type the language itself provides. Same
+  data-on-the-descriptor path as the ladder and the cycle policy; the knowledge stays the
+  adapter's, the core just gets another table.
+- **The chain carries the file its type was WRITTEN in.** A builtin hop introduces no home of its
+  own: `Vec<TreeEntry>`'s `TreeEntry` was written wherever the receiver's fact was, and resolving
+  it against the reference site instead finds nothing — the site imports the container's owner,
+  not every type inside it.
+
+Iteration needed no new syntax and got none. A `for` variable's pointer ends in an ordinary
+member segment whose name the adapter chooses on both sides (Rust uses `@element`), and the
+adapter's builtin table declares, per container, which argument iterating one yields. A container
+that declares none simply does not type its loop variable — a map iterates to a tuple, which this
+model has no way to name, and silence beats a confident wrong element. The same trick names
+anonymous types: Rust calls a slice `@slice` so it can carry an `@element` like any container. The
+core never interprets either string.
+
+Persistence stayed out of the contract's way. rkyv 0.8 cannot derive `Archive` for a type that
+recurses through `Vec<Self>`, so `crate::rkyv_support::TypeExprAsFlat` archives the tree as a
+preorder walk with arity — each atom carries its own, its children are the next `arity` subtrees,
+and a cursor rebuilds it with no indices to dangle. That module exists for exactly this: the
+archive format does not get to dictate the shape adapters write.
+
+Measured: `gitutil::TreeEntry`, read through `ls_tree(..).map_err(..)?` and then iterated, was the
+last of §3's four acknowledged types. All four pragmas are gone, kndo's own finding count and
+health are unchanged, and six other codebases moved in neither direction.
+
+**§9-quater, what a synthesized import may and may not do (M6).** An adapter may reconstruct an
+import from a use site — Rust writes `crate::a::b::f()` with no `use` in sight, and resolution
+needs something to bind. `RawImport::reconstructed` says so outright. It replaced a proxy that was
+wrong: §9-ter derived "does a qualifier miss settle" from the import's CONFIDENCE, and Rust's
+`crate`/`self`/`super`-rooted synthetic imports are `Certain` about where they resolve while being
+no statement at all. Confidence answers "does this resolve as stated"; this answers "did the file
+state it". Two rules follow.
+
+**A synthesized binding ranks below the file's own declarations.** The bare-name ladder is five
+tiers now — a STATED import, the file's own declarations, a RECONSTRUCTED import, the unit, the
+units a wildcard makes visible — and the middle move is the fix. No language kndo supports lets a
+written import shadow a same-named local declaration (Rust E0255), so a collision there can only
+ever come from a synthetic one, claiming a precedence the language never grants it. tokio's
+`dump.rs` declares `pub struct Trace` and merely *mentions* `super::task::trace::Trace` in a
+field; the synthetic binding captured the file's own `-> &Trace` and `private-type-leak` reported
+a leak that was not there. Every site that asks what a bare name refers to shares one function
+(`graph::assemble::name_in_scope`) so the order cannot drift between them.
+
+**A qualifier names every file bound to it, not the first.** Rust's platform modules are
+`#[cfg(windows)] #[path = "windows/sys.rs"] mod imp;` beside a `not(windows)` twin, so
+`imp::ctrl_break()` names two live functions and the union-of-configurations rule (§8) says both
+are real. `qualifier_targets` holds a LIST; a hit emits to all of them. Keeping the first left
+every alternate but one with no incoming edge and a false `unused` — the same shape
+`symbol_twins_per_unit` fixes for declarations, one level up at the module binding. A hop (§9-bis)
+still fills only a qualifier nothing else claimed: a direct alias is stronger provenance.
+
+**§9-bis, the one hop through a module file (M6).** `use crate::internals::{attr, check, Ctxt};`
+followed by `check::check(cx, …)` registered ONE qualifier — the specifier's own target — and
+left `check` a mere binding that resolved to no symbol, because `internals/mod.rs` declares
+nothing by that name: it only re-links the file with its own `mod check;`. The chain is *a
+binding on the target's own import table*, and no single pass can follow it (the target's table
+does not exist when its consumer is resolved). Phase 3b is therefore three passes, shared by
+`graph::assemble` and `graph::patch` alike — one resolution semantics, two data sources:
+
+1. `resolve_imports` — per file, no cross-file dependency. Alongside the bindings, qualifiers,
+   visible units and edges it already produced, it records `module_bindings`: every name this
+   file's imports put in scope that points at an in-repo FILE (`graph::ModuleBinding`). Both
+   shapes count and the pair is the point — a brace member kept even though it bound no symbol
+   (the consumer side), and an import's `local_alias`, which is where a file-linking `mod x;`
+   carries its name when it has no bindings at all (the producer side).
+2. `link_module_bindings` — per file, reading every file's table. A name bound to file F that
+   F's own table binds again registers the qualifier F sends it to. **One hop, never a
+   fixpoint** (chasing further needs a cycle guard for evidence nobody has produced);
+   **non-settling**, like every derived qualifier, so a miss takes the in-scope/duck ladder
+   rather than binding the access to the wrong file and killing a live method; and an existing
+   qualifier **always wins** — a direct alias is stronger provenance than a hop.
+3. `resolve_references` — per file, the reference/dynamic/diagnostic body, against its own
+   (now hop-extended) import resolution.
+
+Language-blind by construction: no separator, no path arithmetic, nothing but "this name binds
+to that file, and that file binds this name to another file." The alternative — extend the
+specifier and re-resolve `crate::internals::check` — would teach the core that `::` joins path
+segments, which the ignorance rule forbids.
+
+No RFC 0013 §4 signature change was needed: `surface_signature` already hashes a file's complete
+import list, so any change to F's imports moves F's surface and forces a full rebuild — a stale
+hop is unrepresentable. `FilePatchMeta` carries each file's `module_bindings` so an unchanged
+file contributes its table without re-extraction; `patch_equivalence` is the harness.
+
+**§9-ter, the last hardcoded separator (M6).** With §9-bis's hop in place, the core stopped
+deriving a qualifier from the specifier's last `::`-separated segment — the one place it knew a
+language's path syntax. Two Rust shapes depended on that guess and now state the name
+themselves, in `local_alias`: the single-qualifier bare path (`helpers::run()`) and the deep
+one (`kndo_core::discovery::find_files_named(..)`), both of which the adapter reconstructs as
+synthetic imports and both of which it qualifies by a segment only it can identify. What the
+guess also did — registering `b` for `use a::b::{X, Y}`, where Rust does **not** bring `b` into
+scope — is simply gone; the adapter already declines to set `local_alias` there, and did before
+this change.
+
+The alias's *strength* is no longer uniform, and it is the import's own confidence that decides
+it: a qualifier miss settles iff the import is `Certain`. A real `use`/`import` statement names
+a closed namespace — the member is in there or nowhere — while a reconstructed import is the
+adapter's reading of a path, and closing a namespace on a misread path would kill a live method.
+That is the same asymmetry §9 already stated between an alias (settles) and a binding (does
+not), now derived from a fact the contract already carried instead of from which code path
+produced the qualifier. Measured across serde, alacritty, axios, Exposed, kotlinx.coroutines,
+vapor and kndo itself: byte-identical findings, so the adapter-side alias reproduces the split
+exactly and the dropped over-approximation cost nothing.
 
 ## 10. Multi-module topology (`go.work` et al) — adapter work, one recorded divergence
 

@@ -59,9 +59,11 @@ The entry point of every agent workflow: name → selector.
 ### 4.2 `kndo describe <selector>`
 Everything the graph knows about one node, in one call:
 declaration (span, kind, visibility, exported), file role/origin & reachability color, direct degree
-(in/out, by edge kind), roots that reach it (nearest first), metrics (cyclomatic, CRAP, coverage
-if ingested), duplication group membership, open findings attached to it, provenance
-(adapter/plugins that produced its facts). For a `dep:` selector: manifest scope, importing files
+(in/out, by edge kind), roots that reach it (nearest first), metrics (cyclomatic, LOC, tokens,
+plus CRAP and coverage **only when a report was ingested** — an absent measurement is reported
+absent, never as zero), one entry per callable *shape* rather than per symbol; duplication group
+membership (the `duplicate` findings this node is a member of, with every member's selector);
+open findings attached to it, provenance (adapter/plugins that produced its facts). For a `dep:` selector: manifest scope, importing files
 count, usage status. For a `pkg:` selector: mode (library/app), member counts, dependents.
 For files: declared symbols (capped).
 
@@ -183,8 +185,11 @@ status (0 < 1 < 2), so single-question scripting semantics survive batching unch
 
 1. Flat verbs (`kndo uses`) vs. namespaced (`kndo graph uses`) — flat reads better and the verb
    set is small and closed; namespacing frees verb names for future features. Current draft: flat.
-2. Should `describe` inline the first level of `uses`/`used-by` (saves a round-trip, grows
-   payload)? Current draft: yes, capped at 10 per direction with `elided` counts.
+2. ~~Should `describe` inline the first level of `uses`/`used-by`?~~ **Resolved: no.** `describe`
+   answers "everything about *this* node"; the neighbourhood is a different question and `uses`
+   is one round-trip away, with its own `--depth`, `--edges` and `--limit` that an inlined,
+   fixed-cap copy could not offer. `reached_by_roots` stays because it is a property of the node
+   (what keeps it alive), not a listing of its neighbours.
 3. `trace --all` path explosion policy: cap by `--max-paths` only, or also by path length?
 4. How much composition does `kndo query` grow before it *is* the deferred query language —
    1.0 draft: independent requests only (no joins/set operations/piping between lines);

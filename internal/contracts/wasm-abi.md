@@ -54,19 +54,32 @@ that's fully correct, rather than a bigger thing with a hidden gap.
   roots is exactly what reachability consumes), but `cyclic`, `deep-import`, and dependency
   hygiene see nothing.
 - **No `ResolveCtx` host-import callbacks.** `resolve()`'s real job needs `ResolveCtx`'s
-  querying API (`contains`, `workspace_member`, `unit_files`, `files_in_dir`, `files_under` —
-  contracts/core-traits.md §2), which only makes sense as **host-import** functions a
-  component calls back into — the opposite data-flow direction from everything else in v1.
-  Adding it is what a v2 needs to make `resolve()` real; deliberately deferred until an
-  external adapter actually wants cross-file resolution (the same "don't build the
+  querying API (`contains`, `workspace_member`, `unit_files_from`, `files_in_dir`,
+  `files_under` — contracts/core-traits.md §2), which only makes sense as **host-import**
+  functions a component calls back into — the opposite data-flow direction from everything
+  else in v1. Adding it is what a v2 needs to make `resolve()` real; deliberately deferred
+  until an external adapter actually wants cross-file resolution (the same "don't build the
   mechanism before the demand" call RFC 0003 §6 makes for custom analyses).
+
+  When that v2 lands, the unit query it exposes must be `unit_files_from(unit, from)` — the
+  importer-relative one — and **not** the repo-global `unit_files`. A unit key is unique only
+  within a package, so the global form hands a resolver candidates from unrelated modules that
+  merely share a package or target name; picking among them by path order invents cross-module
+  edges that `cyclic` reports as package cycles no source supports. Every compiled-in adapter
+  that resolves by unit hit this (see RFC 0012 §8). Exposing the global form across the ABI
+  would rebuild that footgun at the boundary where it is most expensive to change later.
 - **No visibility ladder, no cycle policy, no `resolves_dependency_usage`.** The host fills
   in the same safe defaults CSS/JSON already use for a language with no such semantics: an
   empty visibility ladder (every declaration reports the widest level — the ladder's own
   conservative-mapping rule, contracts/core-traits.md §2), `Idiomatic` cycle tolerance at
   both levels, `resolves_dependency_usage: false`. A v1 external adapter is exempt from
-  `internal-only`/`private-type-leak` (empty ladder ⇒ those analyses skip its files
-  entirely, same rule as CSS/JSON) rather than risk a wrong ladder guess.
+  `internal-only`/`private-type-leak` rather than risk a wrong ladder guess. The mechanism is
+  worth stating precisely, since it is uniformity rather than an explicit skip: the bridge
+  assigns every declaration `VisibilityLevel(0)`, so the "is the referenced type narrower than
+  the declaration?" comparison is always `0 < 0` and never fires. `private-type-leak`'s
+  `surface_transitive` gate reaches the same answer independently — an empty ladder has no rung
+  at any level, and the check treats a missing rung as surface-transitive (degrade toward
+  keep-alive), so the gate passes and the comparison below it stays the deciding step.
 - **UTF-8 text content, not raw bytes.** `extract`'s `content` parameter is a WIT `string`
   (valid UTF-8 by construction), not `list<u8>` — simpler for v1, at the cost of an adapter
   for a language with non-UTF-8-safe source files not being expressible yet. Every launch
@@ -93,9 +106,28 @@ is a generated bridge over [the native traits]") — it goes on the very same
 conservative empty result — `None` from `claim`, or `FileFacts::default()` plus a `Warn`
 diagnostic from `extract` — never a crashed `kndo check`. One misbehaving external adapter
 degrades to silence for its own files, not a broken run for every other language in the
-project. There is no wall-clock timeout in v1 (fuel is a deterministic proxy for it, same
-spirit, cheaper to implement soundly); a real wall-clock epoch-deadline layer is future work
-if fuel alone proves an insufficient proxy in practice.
+project.
+
+**Memory ceiling (`MAX_GUEST_MEMORY_BYTES` in `engine.rs`, 256 MiB).** Fuel bounds *work*, not
+*bytes*: `memory.grow` costs a handful of fuel units and commits megabytes, so fuel alone lets
+a guest exhaust the host long before it exhausts its allowance — and that failure arrives as an
+OOM kill, which no `catch` converts to silence. Every store therefore installs a
+`wasmtime::StoreLimits` capping guest memory; exceeding it fails the `memory.grow` inside the
+guest, which reaches the host as an ordinary trap and takes the same degrade-to-silence path as
+fuel exhaustion. Deliberately memory-only: table and instance counts are bounded by the
+component's own type section, which the host validates at load.
+
+Note for implementors: `StoreLimits::default()` is *unlimited*, and every store's data type in
+this crate derives `Default`. A limiter that is merely a field of that data is decorative — the
+value must be assigned explicitly before `Store::limiter` is installed.
+
+**No wall-clock deadline — and this is a rejection, not a deferral.** `epoch_deadline` bounds
+elapsed time, and kndo guarantees byte-identical output across thread counts and machines
+(`threads_determinism`, `patch_equivalence` in the named gates). A guest cut off by elapsed
+time contributes different facts on a loaded machine than on an idle one, which is precisely
+the property those gates exist to forbid. Fuel is instruction-counted and therefore
+deterministic; it is not a cheaper stand-in for a deadline, it is the correct instrument, and
+the memory ceiling above closes the one hole fuel genuinely had.
 
 **Sandbox.** No WASI is linked into the host's `Linker` at all — v1's world has no imports to
 satisfy, so there is nothing to grant. This is stronger than a policy promise: a component
@@ -261,10 +293,23 @@ shape every other host-mediated lookup in this ABI already has.
   §5).** `wasm-file-info` (path/role/origin) and `wasm-symbol-info`
   (name/kind/exported/member-of) never gain fields — growing a record is a breaking change in
   the component model. Everything else the graph stably holds arrives through the additive
-  imports `packages`/`package-of`, `file-details`/`symbol-details`,
-  `imports-of`/`importers-of`/`references-to`, and `call-sites-in` (each with its own new
-  record type — `wasm-package-info`, `wasm-file-details`, `wasm-symbol-details`,
-  `wasm-ref-site`, `wasm-call-site`, `wasm-span`). All answer from the same
+  imports `packages`/`package-of`, `file-details`/`symbol-details`, `symbol-implements`,
+  `imports-of`/`importers-of`/`references-to`, `call-sites-in`, and `attr-strings-in` (each
+  with its own new record type — `wasm-package-info`, `wasm-file-details`,
+  `wasm-symbol-details`, `wasm-ref-site`, `wasm-call-site`, `wasm-attr-string`, `wasm-span`;
+  `symbol-implements` needs none, it answers `option<string>`). `symbol-implements` is the rule applied to itself: the trait/protocol
+  whose implementation declares a member is a new fact, and it arrived as its own import
+  rather than a field on `wasm-symbol-details`, which is just as frozen in practice as the v1
+  records once a component is built against it. It is what lets a THIRD-PARTY conventions
+  plugin be its curated table, exactly like the built-in `kndo:serde`/`kndo:rkyv`/
+  `kndo:wasmtime`, instead of asking for source access and re-parsing a grammar.
+  `attr-strings-in` is the same rule applied a second time, and the pair it completes says
+  what the rule is *for*: `call-sites-in` carries string literals written in a call,
+  `attr-strings-in` carries them written in an attribute or annotation, and neither says what
+  the string means. `#[serde(skip_serializing_if = "is_zero")]` names a function and
+  `#[serde(rename = "is_zero")]` names a wire label; only a plugin that knows serde can tell
+  them apart, and putting that knowledge in the record — or in an adapter — is the coupling
+  the split exists to prevent. All answer from the same
   pre-instantiation snapshot as `list-files`/`symbols-in`, sorted and deterministic, and from
   **adapter-derived data only** (RFC 0017 §2's rule R1): no plugin ever observes another
   plugin's contributions, which is what keeps runs identical across plugin compositions. The
@@ -383,7 +428,7 @@ only mechanism; `kndo plugin list` shows such files as hand-installed rather tha
 ## 6. Producing a component
 
 (The full author-facing walkthrough — project setup, descriptor fields, testing shape,
-versioning/maintenance — is [docs/plugins/authoring.md](../plugins/authoring.md); this section
+versioning/maintenance — is [docs/src/plugins/authoring.md](../../docs/src/plugins/authoring.md); this section
 is only the componentization mechanics.)
 
 A third-party author needs a real component-model `.wasm` binary, not a plain core module.
@@ -498,8 +543,10 @@ anywhere. What a malicious or buggy component **cannot** do, by construction:
   graph*, applied by the host under the sink vocabulary (§5.1) — no new node/edge kinds, no
   finding creation, no file mutation.
 - **Hang or exhaust the host.** Every hook call runs under a wasmtime fuel budget, re-armed
-  per call (RFC 0017 §4); an exhausted or trapping call is dropped like any other component
-  error — skipped, never fatal to the run.
+  per call (RFC 0017 §4), *and* every store under a 256 MiB memory ceiling (§3) — fuel alone
+  bounds work, not bytes, and an OOM kill is the one failure no `catch` can degrade. An
+  exhausted, over-committed or trapping call is dropped like any other component error —
+  skipped, never fatal to the run.
 - **Impersonate.** Reserved-namespace ids fail the load (§4.1/§5.5); the installer's identity
   binding refuses a component whose descriptor id differs from the coordinate it was fetched
   from, and the lockfile pins the checksum (RFC 0015 §4).

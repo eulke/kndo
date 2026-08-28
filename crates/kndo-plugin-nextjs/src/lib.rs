@@ -25,22 +25,21 @@ impl Plugin for NextjsPlugin {
         PluginDescriptor {
             id: SmolStr::new("kndo:nextjs"),
             version: SmolStr::new("1"),
-            detection: vec![SmolStr::new(
-                "a package.json under the project root depends on next",
-            )],
+            // Empty: the gate below IS a rule, so prose beside it would be the same fact twice.
+            detection: vec![],
             // Every app root's own next.config.* is read through the content channel, to
-            // statically read `pageExtensions`. This is a distinct mechanism
-            // from `activation` below — content-channel globs match only already-discovered,
-            // gitignore-filtered paths (no disk walk of their own), so unlike an
-            // ActivationRule::FileExists glob, recursion here never touches node_modules.
+            // statically read `pageExtensions`. This is a distinct mechanism from `activation`
+            // below — content-channel globs match only already-discovered, gitignore-filtered
+            // paths (no disk walk of their own), so unlike an ActivationRule::FileExists glob,
+            // recursion here never touches node_modules.
             requested_file_access: vec![SmolStr::new("**/next.config.*")],
-            // One rule, deliberately: every real Next project declares `next`
-            // somewhere, and the manifest scan is gitignore-aware and monorepo-wide. A
-            // recursive FileExists("**/next.config.*") would raw-glob through node_modules on
-            // every run — cost and hazard for a signal the manifest rule already carries.
             activation: vec![ActivationRule::ManifestDependency(SmolStr::new("next"))],
             dependencies: vec![],
         }
+    }
+
+    fn mutates_graph(&self) -> bool {
+        true
     }
 
     fn contribute_roots(

@@ -3,6 +3,7 @@ name = "xtask"
 description = "Development-time tasks (cargo xtask …). Never ships; never runs at analysis time."
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 publish.workspace = true
@@ -16,3 +17,12 @@ schemars = { version = "1", features = ["smol_str03"] }
 # `crates/kndo/tests/external_adapter.rs` and kndo-plugin-api's compliance suites already do
 # in-process, exposed as a CLI step so CI doesn't need a separate `wasm-tools` install.
 wit-component = "0.219"
+# `package`: the release artifact is built here rather than by a `tar` line in one workflow and
+# a `Compress-Archive` line in another — one producer, so the four consumers have one thing to
+# agree with. xtask never ships (see `description`), so these cost only dev build time.
+flate2 = "1"
+tar = "0.4"
+
+[dev-dependencies]
+# `tests/release_channels.rs` reads a produced archive back to prove its shape.
+tempfile = { workspace = true }

@@ -5,7 +5,121 @@
 
 use smol_str::SmolStr;
 
-use crate::adapter::Span;
+// ---------------------------------------------------------------- shared primitives
+//
+// `ProjectPath`/`Span`/`Diagnostic`/`DiagnosticLevel` live here rather than in `adapter.rs`
+// because they're not adapter-specific — the query/engine/plugin layers carry them too, and
+// vocab.rs is the crate's one shared-vocabulary module. `adapter.rs` re-exports all four so
+// existing adapter code (`crate::adapter::ProjectPath`, ...) keeps compiling unchanged.
+
+/// Project-relative path with `/` separators, the only path form that crosses the adapter
+/// boundary (case handling and symlink resolution are the core's discovery concern).
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    serde::Serialize,
+    serde::Deserialize,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(transparent)]
+pub struct ProjectPath(#[rkyv(with = crate::rkyv_support::SmolStrAsString)] pub SmolStr);
+
+/// 1-indexed line/column span, `start` inclusive, `end` exclusive. Serializes as the
+/// `[line, col]` pair shape the output schema uses, not an
+/// object — tuples serialize as JSON arrays by default.
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    PartialOrd,
+    Ord,
+    Eq,
+    Hash,
+    Default,
+    serde::Serialize,
+    serde::Deserialize,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct Span {
+    pub start: (u32, u32),
+    pub end: (u32, u32),
+}
+
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    PartialOrd,
+    Ord,
+    Eq,
+    serde::Serialize,
+    serde::Deserialize,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "lowercase")]
+pub enum DiagnosticLevel {
+    /// The run could not do what was asked (the exit-2 tier): a requested mode is
+    /// impossible (`--diff` base that doesn't resolve), not merely degraded. Frontends exit 2
+    /// when any error-level diagnostic is present — reporting zero findings because the
+    /// analysis never ran must never read as a clean pass (a Warn here
+    /// would let a typo'd base ref fail open in CI).
+    Error,
+    Warn,
+    Info,
+}
+
+impl std::fmt::Display for DiagnosticLevel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            DiagnosticLevel::Error => "error",
+            DiagnosticLevel::Warn => "warning",
+            DiagnosticLevel::Info => "info",
+        })
+    }
+}
+
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    serde::Serialize,
+    serde::Deserialize,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct Diagnostic {
+    pub level: DiagnosticLevel,
+    /// The file this diagnostic is about, when there is one — `None` for project-level
+    /// diagnostics (e.g. "cannot walk the project root"). A diagnostic merged from many
+    /// files without this field would be unattributable; adapters emit diagnostics scoped
+    /// to the file they're extracting, the core fills this in.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub path: Option<ProjectPath>,
+    pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub span: Option<Span>,
+}
 
 // ---------------------------------------------------------------- interned ids
 
@@ -236,6 +350,19 @@ pub enum RootKind {
     Tooling,
 }
 
+/// The role-derived root kind a file's classification implies — "Test roots are test
+/// files, Tooling roots are build/config scripts" — or `None` for `Production`, which stays
+/// manifest/API-driven and is never role-derived. One mapping, read by both the full
+/// assembly's role-derived-roots pass and the incremental patch's equivalent regeneration —
+/// they used to each carry their own copy of the same match.
+pub fn role_root_kind(role: FileRole) -> Option<RootKind> {
+    match role {
+        FileRole::Test => Some(RootKind::Test),
+        FileRole::Tooling => Some(RootKind::Tooling),
+        FileRole::Production => None,
+    }
+}
+
 /// Analysis semantics per scope: peer is exempt from `unused`; optional demotes
 /// findings to `possible`.
 #[derive(
@@ -303,6 +430,22 @@ pub enum Confidence {
     Possible,
     Probable,
     Certain,
+}
+
+impl Confidence {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Confidence::Possible => "possible",
+            Confidence::Probable => "probable",
+            Confidence::Certain => "certain",
+        }
+    }
+}
+
+impl std::fmt::Display for Confidence {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
 }
 
 #[derive(
@@ -456,6 +599,263 @@ pub struct Edge {
     /// set (`owner ∈ changed set`), and the invalidation hook plugin contributions will use.
     /// Last in declaration order deliberately: the canonical sort keys on semantics first.
     pub owner: FileId,
+}
+
+// ---------------------------------------------------------------- finding taxonomy
+
+/// A finding's section — the taxonomy RFC 0018 §"reserved" closes: exactly these five, plus
+/// `Convention` reserved for plugin-contributed findings (`category` stays an open
+/// `plugin:<coordinate>/<rule>` namespace — RFC 0018 §2.1 — but no finding may claim a group
+/// outside this set). [`Group::DISPLAY_ORDER`] is the single source of section ordering —
+/// every renderer reads it instead of keeping its own copy (a duplicated 4-entry copy of this
+/// list, missing `Convention`, is exactly how `agent_format.rs` and the CLI's `render.rs`
+/// used to missort every plugin finding under an unnamed fallback section).
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "kebab-case")]
+pub enum Group {
+    Defect,
+    Waste,
+    Risk,
+    Hygiene,
+    /// Reserved for plugin-contributed findings — a core analysis never emits it.
+    Convention,
+}
+
+impl Group {
+    pub const DISPLAY_ORDER: [Group; 5] = [
+        Group::Defect,
+        Group::Waste,
+        Group::Risk,
+        Group::Hygiene,
+        Group::Convention,
+    ];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Group::Defect => "defect",
+            Group::Waste => "waste",
+            Group::Risk => "risk",
+            Group::Hygiene => "hygiene",
+            Group::Convention => "convention",
+        }
+    }
+}
+
+impl std::fmt::Display for Group {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+/// A finding's category — an open namespace (RFC 0018 §2.1: a plugin's own category is
+/// `plugin:<coordinate>/<rule>`, never a bare or off-namespace name), so unlike [`Group`] this
+/// is a validated string newtype rather than a closed enum. The core categories are
+/// associated consts; [`Category::plugin`] builds the namespaced form; [`Category::is_plugin`]
+/// tells the two apart without a string-prefix check at every call site.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(transparent)]
+pub struct Category(SmolStr);
+
+/// See [`Category::all`].
+static ALL_CATEGORIES: [Category; 13] = [
+    Category::CRAP,
+    Category::CYCLIC,
+    Category::DEEP_IMPORT,
+    Category::DUPLICATE,
+    Category::INTERNAL_ONLY,
+    Category::PRIVATE_TYPE_LEAK,
+    Category::STALE,
+    Category::TEST_ONLY,
+    Category::UNDECLARED,
+    Category::UNRESOLVED,
+    Category::UNTESTED,
+    Category::UNUSED,
+    Category::VERSION_SKEW,
+];
+
+impl Category {
+    pub const CRAP: Category = Category(SmolStr::new_static("crap"));
+    pub const CYCLIC: Category = Category(SmolStr::new_static("cyclic"));
+    pub const DEEP_IMPORT: Category = Category(SmolStr::new_static("deep-import"));
+    pub const DUPLICATE: Category = Category(SmolStr::new_static("duplicate"));
+    pub const INTERNAL_ONLY: Category = Category(SmolStr::new_static("internal-only"));
+    pub const PRIVATE_TYPE_LEAK: Category = Category(SmolStr::new_static("private-type-leak"));
+    pub const STALE: Category = Category(SmolStr::new_static("stale"));
+    pub const TEST_ONLY: Category = Category(SmolStr::new_static("test-only"));
+    pub const UNDECLARED: Category = Category(SmolStr::new_static("undeclared"));
+    pub const UNTESTED: Category = Category(SmolStr::new_static("untested"));
+    pub const UNRESOLVED: Category = Category(SmolStr::new_static("unresolved"));
+    pub const UNUSED: Category = Category(SmolStr::new_static("unused"));
+    pub const VERSION_SKEW: Category = Category(SmolStr::new_static("version-skew"));
+
+    /// **The** closed set of core categories — the registry `docs/src/rules.md` publishes and
+    /// suppression validates a pragma's category against. One list, so a category cannot exist
+    /// in the vocabulary and be unspellable in a pragma, or the reverse: `unresolved` spent a
+    /// long time in the suppression registry with no `Category` const and no analysis emitting
+    /// it, which made `kndo:allow unresolved` a pragma that was valid, matched nothing by
+    /// construction, and was reported stale forever.
+    ///
+    /// A `static` behind a function, not an associated `const`: [`Category`] wraps a `SmolStr`,
+    /// so a borrowed const array is a temporary and nothing could hold a `&'static str` from it.
+    pub fn all() -> &'static [Category] {
+        &ALL_CATEGORIES
+    }
+
+    pub fn new(raw: impl Into<SmolStr>) -> Category {
+        Category(raw.into())
+    }
+
+    /// RFC 0018 §2.1's namespaced form for a plugin-contributed finding.
+    pub fn plugin(coordinate: &str, rule: &str) -> Category {
+        Category(SmolStr::new(format!("plugin:{coordinate}/{rule}")))
+    }
+
+    /// Whether this category is in the reserved `plugin:` namespace — the one axis
+    /// [`Category`] doesn't close: everything *else* is core, by construction (adapters and
+    /// analyses never emit a `plugin:`-prefixed category; the host enforces the prefix on the
+    /// plugin side, RFC 0018 §2.1).
+    pub fn is_plugin(&self) -> bool {
+        self.0.starts_with("plugin:")
+    }
+
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
+impl std::fmt::Display for Category {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+/// Every `&str` method (`.starts_with()`, `.contains()`, …) works directly on a `Category` —
+/// it's a validated string, not an opaque token.
+impl std::ops::Deref for Category {
+    type Target = str;
+    fn deref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl PartialEq<str> for Category {
+    fn eq(&self, other: &str) -> bool {
+        self.0 == other
+    }
+}
+
+impl PartialEq<&str> for Category {
+    fn eq(&self, other: &&str) -> bool {
+        self.0 == *other
+    }
+}
+
+impl From<&str> for Category {
+    fn from(raw: &str) -> Category {
+        Category::new(raw)
+    }
+}
+
+impl From<String> for Category {
+    fn from(raw: String) -> Category {
+        Category::new(raw)
+    }
+}
+
+/// A finding's subject facet (`category:subject` targeting, RFC 0005) — open like
+/// [`Category`]: most values are the fixed `file | directory | dependency | package |
+/// suppression` set, but a symbol-subject finding's facet is [`SymbolKind::facet`], which
+/// itself carries an open [`SymbolKind::Other`] tail for languages the closed variants don't
+/// cover — so this can never be a closed enum either.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(transparent)]
+pub struct SubjectKind(SmolStr);
+
+impl SubjectKind {
+    pub const DEPENDENCY: SubjectKind = SubjectKind(SmolStr::new_static("dependency"));
+    pub const DIRECTORY: SubjectKind = SubjectKind(SmolStr::new_static("directory"));
+    pub const FILE: SubjectKind = SubjectKind(SmolStr::new_static("file"));
+    pub const PACKAGE: SubjectKind = SubjectKind(SmolStr::new_static("package"));
+    pub const IMPORT: SubjectKind = SubjectKind(SmolStr::new_static("import"));
+    pub const SUPPRESSION: SubjectKind = SubjectKind(SmolStr::new_static("suppression"));
+
+    pub fn new(raw: impl Into<SmolStr>) -> SubjectKind {
+        SubjectKind(raw.into())
+    }
+
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
+#[cfg(test)]
+mod category_registry_tests {
+    use super::Category;
+
+    /// `docs/src/rules.md` publishes the closed registry, and `internal/contracts/
+    /// output-schema.md` restates it. They were hand-maintained beside a third copy in
+    /// `suppression.rs` and a fourth in this file's consts, and they had already diverged:
+    /// `unresolved` was in the registry with no `Category` const and nothing emitting it.
+    #[test]
+    fn the_published_registry_matches_the_vocabulary() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(std::path::Path::parent)
+            .expect("workspace root");
+        for doc in ["docs/src/rules.md", "internal/contracts/output-schema.md"] {
+            let text = std::fs::read_to_string(root.join(doc))
+                .unwrap_or_else(|e| panic!("reading {doc}: {e}"));
+            for c in Category::all() {
+                assert!(
+                    text.contains(&format!("`{}`", c.as_str())),
+                    "{doc} never mentions the `{}` category",
+                    c.as_str()
+                );
+            }
+        }
+    }
+}
+
+impl std::fmt::Display for SubjectKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl std::ops::Deref for SubjectKind {
+    type Target = str;
+    fn deref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl PartialEq<str> for SubjectKind {
+    fn eq(&self, other: &str) -> bool {
+        self.0 == other
+    }
+}
+
+impl PartialEq<&str> for SubjectKind {
+    fn eq(&self, other: &&str) -> bool {
+        self.0 == *other
+    }
+}
+
+impl From<&str> for SubjectKind {
+    fn from(raw: &str) -> SubjectKind {
+        SubjectKind::new(raw)
+    }
+}
+
+impl From<String> for SubjectKind {
+    fn from(raw: String) -> SubjectKind {
+        SubjectKind::new(raw)
+    }
 }
 
 #[cfg(test)]

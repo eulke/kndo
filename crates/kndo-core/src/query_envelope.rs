@@ -28,6 +28,11 @@ pub enum Verb {
     UsedBy,
     Trace,
     Impact,
+    /// `kndo explain <finding-id>` — RFC 0006 §2. A verb over a *finding* rather than a
+    /// selector, which is why its "selector" is an id; everything else about it (the envelope,
+    /// the `not-found` status, the exit code, batching through `kndo query`) is the same
+    /// machinery every other verb uses, and deliberately not a second one.
+    Explain,
 }
 
 impl Verb {
@@ -39,6 +44,7 @@ impl Verb {
             Verb::UsedBy => "used-by",
             Verb::Trace => "trace",
             Verb::Impact => "impact",
+            Verb::Explain => "explain",
         }
     }
 
@@ -50,6 +56,7 @@ impl Verb {
             "used-by" => Some(Verb::UsedBy),
             "trace" => Some(Verb::Trace),
             "impact" => Some(Verb::Impact),
+            "explain" => Some(Verb::Explain),
             _ => None,
         }
     }
@@ -57,23 +64,29 @@ impl Verb {
 
 /// Every verb-specific `--flag` in one place — irrelevant flags for a given verb
 /// are simply ignored rather than rejected, so a `kndo query` request can carry a superset
-/// without per-verb validation ceremony.
-#[derive(Debug, Clone, Default)]
+/// without per-verb validation ceremony. `Deserialize` doubles as `kndo query`'s JSONL
+/// per-line flags shape — a frontend parsing a `flags` object from stdin deserializes straight
+/// into this type instead of maintaining a mirrored struct + a field-by-field `From` impl.
+#[derive(Debug, Clone, Default, serde::Deserialize)]
 pub struct QueryFlags {
     pub kind: Option<String>,
     pub color: Option<String>,
     pub lang: Option<String>,
     pub depth: Option<u32>,
+    #[serde(default)]
     pub transitive: bool,
     pub edges: Option<String>,
+    #[serde(default)]
     pub all: bool,
     pub max_paths: Option<usize>,
     pub roots: Option<String>,
     /// `trace`'s batched form (the own example): independent directed traces, one
     /// per pair, `results` aligning with this list instead of `selectors` when non-empty.
+    #[serde(default)]
     pub pairs: Vec<(String, String)>,
     pub limit: Option<usize>,
     /// `impact --if-deleted`: simulate removal, report the finding flips.
+    #[serde(default)]
     pub if_deleted: bool,
 }
 
@@ -119,6 +132,7 @@ pub enum ResultEntry {
     Neighbors(query::NeighborsResult),
     Trace(query::TraceResult),
     Impact(Box<query::ImpactResult>),
+    Explain(Box<query::ExplainResult>),
     Failed {
         status: &'static str,
         selector: String,
@@ -244,50 +258,107 @@ pub fn json_schema() -> schemars::Schema {
     schemars::schema_for!(QueryJsonEnvelope)
 }
 
+/// One assembled snapshot, borrowed read-only by every request in a batch — the amortization
+/// batching exists for. A struct rather than eight positional borrows because they always
+/// travel together and are always identical across a batch; the argument list had already
+/// earned a `too_many_arguments` waiver before `explain` needed to add the finding set to it.
+pub(crate) struct QuerySnapshot<'a> {
+    pub graph: &'a ProjectGraph,
+    pub reach: &'a ReachabilityMap,
+    pub nav: &'a query::GraphIndex,
+    /// The full findings, which only `explain` needs — every other verb reads the cheap
+    /// [`FindingLocation`] view below.
+    pub findings: &'a [Finding],
+    pub finding_locations: &'a [FindingLocation<'a>],
+    pub coverage: &'a crate::coverage::CoverageMap,
+    pub cache: &'static str,
+    pub duration_ms: u64,
+}
+
 /// Resolves and dispatches one [`QueryRequest`] against an already-assembled graph — the shared
 /// entry point `Engine::query` (single request) and `Engine::query_batch` (`kndo query`'s JSONL
 /// loop, one shared graph load) both call, so cache revalidation happens exactly once per
 /// process regardless of how many requests are answered (the batching tenet).
-pub(crate) fn run(
-    graph: &ProjectGraph,
-    reach: &ReachabilityMap,
-    finding_locations: &[FindingLocation<'_>],
-    req: QueryRequest,
-    cache: &'static str,
-    duration_ms: u64,
-) -> QueryResult {
+pub(crate) fn run(snap: &QuerySnapshot<'_>, req: QueryRequest) -> QueryResult {
     let limit = req.flags.limit.unwrap_or(DEFAULT_LIMIT);
     let results = match req.verb {
-        Verb::Find => find_entries(graph, reach, &req.selectors, &req.flags, limit),
-        Verb::Describe => describe_entries(graph, reach, finding_locations, &req.selectors),
+        Verb::Find => find_entries(snap.graph, snap.reach, &req.selectors, &req.flags, limit),
+        Verb::Describe => describe_entries(
+            snap.graph,
+            snap.reach,
+            snap.nav,
+            snap.finding_locations,
+            snap.coverage,
+            &req.selectors,
+        ),
         Verb::Uses => neighbor_entries(
-            graph,
-            reach,
+            snap.graph,
+            snap.reach,
+            snap.nav,
             &req.selectors,
             &req.flags,
             Direction::Uses,
             limit,
         ),
         Verb::UsedBy => neighbor_entries(
-            graph,
-            reach,
+            snap.graph,
+            snap.reach,
+            snap.nav,
             &req.selectors,
             &req.flags,
             Direction::UsedBy,
             limit,
         ),
-        Verb::Trace => trace_entries(graph, reach, &req.selectors, &req.flags),
-        Verb::Impact => impact_entries(graph, reach, &req.selectors, &req.flags, limit),
+        Verb::Trace => trace_entries(snap.graph, snap.reach, snap.nav, &req.selectors, &req.flags),
+        Verb::Impact => impact_entries(
+            snap.graph,
+            snap.reach,
+            snap.nav,
+            &req.selectors,
+            &req.flags,
+            limit,
+        ),
+        Verb::Explain => explain_entries(snap, &req.selectors),
     };
     QueryResult {
         verb: req.verb,
         selectors: req.selectors,
         id: req.id,
-        cache,
-        duration_ms,
+        cache: snap.cache,
+        duration_ms: snap.duration_ms,
         results,
         diagnostics: Vec::new(),
     }
+}
+
+/// `explain`'s "selector" is a finding id, so it resolves against this run's finding set
+/// rather than against the graph — an id nothing reported is `not-found`, exactly as an
+/// unresolvable selector is for every other verb.
+fn explain_entries(snap: &QuerySnapshot<'_>, ids: &[String]) -> Vec<ResultEntry> {
+    ids.iter()
+        .map(|id| match snap.findings.iter().find(|f| f.id == *id) {
+            Some(finding) => ResultEntry::Explain(Box::new(query::explain(
+                snap.graph,
+                snap.reach,
+                finding,
+                snap.finding_locations,
+                snap.coverage,
+                snap.nav,
+            ))),
+            // Deliberately not "no such finding": an id can be absent because it never
+            // existed, because the finding was fixed, or because it is suppressed or
+            // baselined out of this run — and a reader who ran `kndo check` a week ago needs
+            // to be told which of those is possible rather than that they typed it wrong.
+            None => ResultEntry::Failed {
+                status: "not-found",
+                selector: id.clone(),
+                message: format!(
+                    "no finding with id `{id}` in this run — it may have been fixed, \
+                     suppressed, or acknowledged in the baseline since you saw it"
+                ),
+            },
+        })
+        .collect()
 }
 
 fn find_entries(
@@ -348,29 +419,61 @@ fn resolve_selector(graph: &ProjectGraph, raw: &str) -> Result<Resolved, QueryFa
 }
 
 fn parse_selector_entry(raw: &str) -> Result<Selector, QueryFailure> {
-    query::parse_selector(raw).map_err(|message| QueryFailure {
+    query::parse_selector(raw).map_err(|e| QueryFailure {
         status: "error",
         selector: raw.to_string(),
-        message,
+        message: e.to_string(),
     })
 }
 
 fn describe_entries(
     graph: &ProjectGraph,
     reach: &ReachabilityMap,
+    nav: &query::GraphIndex,
     finding_locations: &[FindingLocation<'_>],
+    coverage: &crate::coverage::CoverageMap,
     selectors: &[String],
+) -> Vec<ResultEntry> {
+    resolved_entries(graph, selectors, |_, resolved| {
+        ResultEntry::Describe(Box::new(query::describe(
+            graph,
+            reach,
+            resolved,
+            finding_locations,
+            coverage,
+            nav,
+        )))
+    })
+}
+
+/// One entry per selector, in argument order: resolve it and hand the resolution to `entry`,
+/// or turn a resolution failure into that selector's own `Failed` entry. The envelope's
+/// `status` is per-result, so one unresolvable selector never sinks the batch — a rule every
+/// verb follows, and one each of them used to spell out.
+fn resolved_entries(
+    graph: &ProjectGraph,
+    selectors: &[String],
+    entry: impl Fn(&str, &query::Resolved) -> ResultEntry,
 ) -> Vec<ResultEntry> {
     selectors
         .iter()
         .map(|raw| match resolve_selector(graph, raw) {
-            Ok(resolved) => ResultEntry::Describe(Box::new(query::describe(
-                graph,
-                reach,
-                &resolved,
-                finding_locations,
-            ))),
+            Ok(resolved) => entry(raw, &resolved),
             Err(failed) => failed.into(),
+        })
+        .collect()
+}
+
+/// Every selector in the batch failed the same way. A malformed `--edges` filter is an error
+/// about the *request*, not about any one selector, so each entry carries the identical
+/// message rather than the batch failing as a whole — the envelope's `status` is per-result.
+fn failed_batch(selectors: &[String], message: &str) -> Vec<ResultEntry> {
+    selectors
+        .iter()
+        .map(|s| ResultEntry::Failed {
+            status: "error",
+            selector: s.clone(),
+            message: message.to_string(),
         })
         .collect()
 }
@@ -378,6 +481,7 @@ fn describe_entries(
 fn neighbor_entries(
     graph: &ProjectGraph,
     reach: &ReachabilityMap,
+    nav: &query::GraphIndex,
     selectors: &[String],
     flags: &QueryFlags,
     direction: Direction,
@@ -385,86 +489,72 @@ fn neighbor_entries(
 ) -> Vec<ResultEntry> {
     let edges = match EdgeFilter::parse(flags.edges.as_deref()) {
         Ok(e) => e,
-        Err(message) => {
-            return selectors
-                .iter()
-                .map(|s| ResultEntry::Failed {
-                    status: "error",
-                    selector: s.clone(),
-                    message: message.clone(),
-                })
-                .collect()
-        }
+        Err(err) => return failed_batch(selectors, &err.to_string()),
     };
-    selectors
-        .iter()
-        .map(|raw| match resolve_selector(graph, raw) {
-            Ok(resolved) => ResultEntry::Neighbors(query::neighbors(
-                graph,
-                reach,
-                &resolved,
-                NeighborsOpts {
-                    direction,
-                    edges,
-                    depth: flags.depth.unwrap_or(1),
-                    transitive: flags.transitive,
-                    limit,
-                },
-            )),
-            Err(failed) => failed.into(),
-        })
-        .collect()
+    resolved_entries(graph, selectors, |_, resolved| {
+        ResultEntry::Neighbors(query::neighbors(
+            graph,
+            reach,
+            resolved,
+            NeighborsOpts {
+                direction,
+                edges,
+                depth: flags.depth.unwrap_or(1),
+                transitive: flags.transitive,
+                limit,
+            },
+            nav,
+        ))
+    })
 }
 
+// What `impact_entries` and `neighbor_entries` share is now `failed_batch` and
+// `resolved_entries`. What is left is each verb's own options struct and result variant —
+// plus `impact`'s extra failure arm, which no other verb has. Sharing further would mean one
+// verb's entry builder knowing the other's options.
+// kndo:allow duplicate the shared halves are failed_batch and resolved_entries
 fn impact_entries(
     graph: &ProjectGraph,
     reach: &ReachabilityMap,
+    nav: &query::GraphIndex,
     selectors: &[String],
     flags: &QueryFlags,
     limit: usize,
 ) -> Vec<ResultEntry> {
     let edges = match EdgeFilter::parse(flags.edges.as_deref()) {
         Ok(e) => e,
-        Err(message) => {
-            return selectors
-                .iter()
-                .map(|s| ResultEntry::Failed {
-                    status: "error",
-                    selector: s.clone(),
-                    message: message.clone(),
-                })
-                .collect()
-        }
+        Err(err) => return failed_batch(selectors, &err.to_string()),
     };
-    selectors
-        .iter()
-        .map(|raw| match resolve_selector(graph, raw) {
-            Ok(resolved) => match query::impact(
-                graph,
-                reach,
-                &resolved,
-                ImpactOpts {
-                    edges,
-                    depth: flags.depth,
-                    limit,
-                    if_deleted: flags.if_deleted,
-                },
-            ) {
-                Ok(result) => ResultEntry::Impact(Box::new(result)),
-                Err(message) => ResultEntry::Failed {
-                    status: "error",
-                    selector: raw.clone(),
-                    message,
-                },
+    resolved_entries(graph, selectors, |raw, resolved| {
+        // `impact` is the one verb that can refuse a selector it resolved fine — `--if-deleted`
+        // on a dependency, `impact` on a root set — so it needs the raw text for its own
+        // failure entry.
+        match query::impact(
+            graph,
+            reach,
+            resolved,
+            ImpactOpts {
+                edges,
+                depth: flags.depth,
+                limit,
+                if_deleted: flags.if_deleted,
             },
-            Err(failed) => failed.into(),
-        })
-        .collect()
+            nav,
+        ) {
+            Ok(result) => ResultEntry::Impact(Box::new(result)),
+            Err(err) => ResultEntry::Failed {
+                status: "error",
+                selector: raw.to_string(),
+                message: err.to_string(),
+            },
+        }
+    })
 }
 
 fn trace_entries(
     graph: &ProjectGraph,
     reach: &ReachabilityMap,
+    nav: &query::GraphIndex,
     selectors: &[String],
     flags: &QueryFlags,
 ) -> Vec<ResultEntry> {
@@ -473,12 +563,17 @@ fn trace_entries(
         Err(_) => unreachable!("EdgeFilter::parse(None) always succeeds"),
     };
     let max_paths = flags.max_paths.unwrap_or(DEFAULT_MAX_PATHS);
+    let opts = query::TraceOpts {
+        edges,
+        all: flags.all,
+        max_paths,
+    };
 
     if !flags.pairs.is_empty() {
         return flags
             .pairs
             .iter()
-            .map(|(a, b)| trace_pair(graph, reach, a, b, edges, flags.all, max_paths))
+            .map(|(a, b)| trace_pair(graph, reach, nav, a, b, opts))
             .collect();
     }
 
@@ -498,7 +593,7 @@ fn trace_entries(
             };
             match resolve_selector(graph, &selectors[0]) {
                 Ok(target) => vec![ResultEntry::Trace(query::trace_liveness(
-                    graph, reach, &target, roots_kind,
+                    graph, reach, &target, roots_kind, nav,
                 ))],
                 Err(failed) => vec![failed.into()],
             }
@@ -506,11 +601,10 @@ fn trace_entries(
         2 => vec![trace_pair(
             graph,
             reach,
+            nav,
             &selectors[0],
             &selectors[1],
-            edges,
-            flags.all,
-            max_paths,
+            opts,
         )],
         n => vec![ResultEntry::Failed {
             status: "error",
@@ -523,11 +617,10 @@ fn trace_entries(
 fn trace_pair(
     graph: &ProjectGraph,
     reach: &ReachabilityMap,
+    nav: &query::GraphIndex,
     from_raw: &str,
     to_raw: &str,
-    edges: EdgeFilter,
-    all: bool,
-    max_paths: usize,
+    opts: query::TraceOpts,
 ) -> ResultEntry {
     let from = match resolve_selector(graph, from_raw) {
         Ok(r) => r,
@@ -537,9 +630,7 @@ fn trace_pair(
         Ok(r) => r,
         Err(failed) => return failed.into(),
     };
-    ResultEntry::Trace(query::trace_between(
-        graph, reach, &from, &to, edges, all, max_paths,
-    ))
+    ResultEntry::Trace(query::trace_between(graph, reach, &from, &to, opts, nav))
 }
 
 /// Builds the `describe`-time finding-attachment view from a plain finding list — always the
@@ -553,22 +644,39 @@ pub(crate) fn finding_locations(findings: &[Finding]) -> Vec<FindingLocation<'_>
             id: f.id.as_str(),
             path: f.location.path.as_ref().map(|p| p.0.as_str()),
             symbol: f.location.symbol.as_deref(),
+            category: f.category.as_str(),
+            related: &f.related,
         })
         .collect()
 }
 
-pub(crate) fn compute_reachability(graph: &ProjectGraph) -> ReachabilityMap {
-    reachability::compute(graph)
+/// The navigation verbs' reachability — seeded with the same project-declared entry points
+/// `check` uses, so `kndo used-by` and `kndo check` can never disagree about a symbol's color
+/// (one source per concept: the rules live in config, the derivation in `reachability`).
+pub(crate) fn compute_reachability(
+    graph: &ProjectGraph,
+    rules: &[crate::config::ExternallyInvokedRule],
+) -> ReachabilityMap {
+    let declared = reachability::externally_invoked_symbols(graph, rules);
+    reachability::compute_with_roots(graph, &declared)
 }
 
-/// A cold-build failure (no cache, project root broken) degrades to a single `error` result
+/// A build failure (project root broken, unreadable tree) degrades to a single `error` result
 /// entry plus a diagnostic — never a panic (same contract as `check`'s `RunMode` dispatch).
-pub(crate) fn build_failure(req: QueryRequest, message: String) -> QueryResult {
+///
+/// `cache` is passed in rather than assumed: the failure says nothing about whether the cache
+/// was consulted, and hardcoding `"cold"` here would report an empty cache to a caller who had
+/// switched the cache off — the same conflation `cache_status_str` exists to prevent.
+pub(crate) fn build_failure(
+    req: QueryRequest,
+    message: String,
+    cache: &'static str,
+) -> QueryResult {
     QueryResult {
         verb: req.verb,
         selectors: req.selectors.clone(),
         id: req.id,
-        cache: "cold",
+        cache,
         duration_ms: 0,
         results: req
             .selectors

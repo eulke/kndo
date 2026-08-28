@@ -13,6 +13,62 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+/// Everything the author kit can fail at, typed.
+///
+/// `Result<_, String>` is what this module used to return, and `CLAUDE.md` forbids introducing
+/// another: a message assembled with `format!` at the failure site is a message no caller can
+/// branch on, no test can match without matching prose, and no JSON envelope can carry as
+/// anything but a blob. The `Display` impls below are the *only* place the wording lives, so a
+/// reworded error is one edit rather than a search.
+#[derive(Debug, thiserror::Error)]
+pub enum AuthorError {
+    #[error("{0} already exists and is not empty — scaffold into a fresh directory")]
+    DirNotEmpty(PathBuf),
+
+    #[error("{path} has no usable final path segment")]
+    NoFinalSegment { path: PathBuf },
+
+    #[error("`{name}` is not a valid crate name (ascii letters, digits, `-`, `_`)")]
+    InvalidCrateName { name: String },
+
+    #[error("{path} has no [package].name")]
+    NoPackageName { path: PathBuf },
+
+    #[error("parsing {path}: {source}")]
+    ManifestSyntax {
+        path: PathBuf,
+        #[source]
+        source: toml::de::Error,
+    },
+
+    /// Every filesystem failure, with the operation that was attempted. `while` rather than a
+    /// bare path because "permission denied" on its own has never helped anyone.
+    #[error("{while_}: {source}")]
+    Io {
+        while_: String,
+        #[source]
+        source: std::io::Error,
+    },
+
+    #[error("cargo build failed (is the wasm target installed? `rustup target add wasm32-unknown-unknown`)")]
+    CargoBuildFailed,
+
+    #[error("invoking cargo: {0}")]
+    CargoSpawn(#[source] std::io::Error),
+
+    /// `wit_component` rejected the module. Its error is `anyhow`-shaped and carries the
+    /// detail; the variant names the step so the message says which half failed.
+    #[error("{step}: {detail}")]
+    Componentize { step: &'static str, detail: String },
+}
+
+impl AuthorError {
+    fn io(while_: impl Into<String>) -> impl FnOnce(std::io::Error) -> AuthorError {
+        let while_ = while_.into();
+        move |source| AuthorError::Io { while_, source }
+    }
+}
+
 /// Which WIT world to scaffold or print.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ComponentKind {
@@ -47,27 +103,32 @@ impl ComponentKind {
 
 /// Scaffold a new component crate at `dir` (created; must not already contain files). The
 /// crate name is `dir`'s final path segment. Returns the created files, project-relative.
-pub fn scaffold(dir: &Path, kind: ComponentKind) -> Result<Vec<String>, String> {
+pub fn scaffold(dir: &Path, kind: ComponentKind) -> Result<Vec<String>, AuthorError> {
     let name = crate_name(dir)?;
     ensure_fresh_dir(dir)?;
     let mut created = Vec::new();
     for (rel, content) in scaffold_files(kind, &name) {
-        std::fs::write(dir.join(&rel), content).map_err(|e| format!("writing {rel}: {e}"))?;
+        std::fs::write(dir.join(&rel), content)
+            .map_err(AuthorError::io(format!("writing {rel}")))?;
         created.push(rel);
     }
     Ok(created)
 }
 
 /// Refuse to scaffold over anything that already exists; create the crate's subdirectories.
-fn ensure_fresh_dir(dir: &Path) -> Result<(), String> {
-    if dir.exists() && std::fs::read_dir(dir).map_err(|e| e.to_string())?.count() > 0 {
-        return Err(format!(
-            "{} already exists and is not empty — scaffold into a fresh directory",
-            dir.display()
-        ));
+fn ensure_fresh_dir(dir: &Path) -> Result<(), AuthorError> {
+    if dir.exists()
+        && std::fs::read_dir(dir)
+            .map_err(AuthorError::io(format!("reading {}", dir.display())))?
+            .count()
+            > 0
+    {
+        return Err(AuthorError::DirNotEmpty(dir.to_path_buf()));
     }
-    std::fs::create_dir_all(dir.join("src")).map_err(|e| e.to_string())?;
-    std::fs::create_dir_all(dir.join("wit")).map_err(|e| e.to_string())
+    std::fs::create_dir_all(dir.join("src"))
+        .map_err(AuthorError::io(format!("creating {}/src", dir.display())))?;
+    std::fs::create_dir_all(dir.join("wit"))
+        .map_err(AuthorError::io(format!("creating {}/wit", dir.display())))
 }
 
 /// Every file the scaffold writes, as `(relative path, content)`. The WIT is vendored from
@@ -99,38 +160,49 @@ fn scaffold_files(kind: ComponentKind, name: &str) -> Vec<(String, String)> {
 /// `wit_component::ComponentEncoder` call kndo's own compliance suites make. Writes
 /// `<crate-name>.wasm` (the release-asset shape the installer expects) into
 /// `crate_dir` and returns its path.
-pub fn build(crate_dir: &Path) -> Result<PathBuf, String> {
+pub fn build(crate_dir: &Path) -> Result<PathBuf, AuthorError> {
     let name = package_name(crate_dir)?;
     run_cargo_build(crate_dir)?;
     let component = componentize(crate_dir, &name)?;
     let out = crate_dir.join(format!("{name}.wasm"));
-    std::fs::write(&out, component).map_err(|e| format!("writing {}: {e}", out.display()))?;
+    std::fs::write(&out, component)
+        .map_err(AuthorError::io(format!("writing {}", out.display())))?;
     Ok(out)
 }
 
 /// Read cargo's core module output and encode it as a component.
-fn componentize(crate_dir: &Path, name: &str) -> Result<Vec<u8>, String> {
+fn componentize(crate_dir: &Path, name: &str) -> Result<Vec<u8>, AuthorError> {
     let artifact = wasm_target_dir(crate_dir)
         .join("wasm32-unknown-unknown/release")
         .join(format!("{}.wasm", name.replace('-', "_")));
-    let core_wasm = std::fs::read(&artifact)
-        .map_err(|e| format!("reading the built module {}: {e}", artifact.display()))?;
+    let core_wasm = std::fs::read(&artifact).map_err(AuthorError::io(format!(
+        "reading the built module {}",
+        artifact.display()
+    )))?;
     wit_component::ComponentEncoder::default()
         .module(&core_wasm)
-        .map_err(|e| format!("attaching the module to the component encoder: {e}"))?
+        .map_err(|e| AuthorError::Componentize {
+            step: "attaching the module to the component encoder",
+            detail: e.to_string(),
+        })?
         .encode()
-        .map_err(|e| format!("encoding the component: {e}"))
+        .map_err(|e| AuthorError::Componentize {
+            step: "encoding the component",
+            detail: e.to_string(),
+        })
 }
 
-fn crate_name(dir: &Path) -> Result<String, String> {
-    let name = dir
-        .file_name()
-        .and_then(|n| n.to_str())
-        .ok_or_else(|| format!("{} has no usable final path segment", dir.display()))?;
+fn crate_name(dir: &Path) -> Result<String, AuthorError> {
+    let name =
+        dir.file_name()
+            .and_then(|n| n.to_str())
+            .ok_or_else(|| AuthorError::NoFinalSegment {
+                path: dir.to_path_buf(),
+            })?;
     if !is_valid_crate_name(name) {
-        return Err(format!(
-            "`{name}` is not a valid crate name (ascii letters, digits, `-`, `_`)"
-        ));
+        return Err(AuthorError::InvalidCrateName {
+            name: name.to_string(),
+        });
     }
     Ok(name.to_string())
 }
@@ -143,22 +215,29 @@ fn is_valid_crate_name(name: &str) -> bool {
 }
 
 /// The `package.name` from the crate's own manifest — the one fact `build` needs from it.
-fn package_name(crate_dir: &Path) -> Result<String, String> {
+fn package_name(crate_dir: &Path) -> Result<String, AuthorError> {
     let manifest_path = crate_dir.join("Cargo.toml");
-    let manifest = std::fs::read_to_string(&manifest_path)
-        .map_err(|e| format!("reading {}: {e}", manifest_path.display()))?;
+    let manifest = std::fs::read_to_string(&manifest_path).map_err(AuthorError::io(format!(
+        "reading {}",
+        manifest_path.display()
+    )))?;
     let table: toml::Table = manifest
         .parse()
-        .map_err(|e| format!("parsing {}: {e}", manifest_path.display()))?;
+        .map_err(|source| AuthorError::ManifestSyntax {
+            path: manifest_path.clone(),
+            source,
+        })?;
     table
         .get("package")
         .and_then(|p| p.get("name"))
         .and_then(|n| n.as_str())
         .map(str::to_string)
-        .ok_or_else(|| format!("{} has no [package].name", manifest_path.display()))
+        .ok_or_else(|| AuthorError::NoPackageName {
+            path: manifest_path.clone(),
+        })
 }
 
-fn run_cargo_build(crate_dir: &Path) -> Result<(), String> {
+fn run_cargo_build(crate_dir: &Path) -> Result<(), AuthorError> {
     let status = Command::new("cargo")
         .args(["build", "--release", "--target", "wasm32-unknown-unknown"])
         // Cross-target guest build: instrumentation flags from the host environment
@@ -169,11 +248,9 @@ fn run_cargo_build(crate_dir: &Path) -> Result<(), String> {
         .env_remove("LLVM_PROFILE_FILE")
         .current_dir(crate_dir)
         .status()
-        .map_err(|e| format!("invoking cargo: {e}"))?;
+        .map_err(AuthorError::CargoSpawn)?;
     if !status.success() {
-        return Err("cargo build failed (is the wasm target installed? \
-             `rustup target add wasm32-unknown-unknown`)"
-            .to_string());
+        return Err(AuthorError::CargoBuildFailed);
     }
     Ok(())
 }
@@ -210,7 +287,7 @@ lto = true
 const PLUGIN_LIB_TEMPLATE: &str = r#"//! __NAME__ — a kndo plugin (kndo:plugin ABI).
 //!
 //! Authoring guide: the plugin authoring docs in the kndo repository
-//! (https://github.com/eulke/kndo).
+//! (https://github.com/eulke/kondo).
 //! Inner loop: `kndo plugin build` then `kndo plugin verify __NAME__.wasm`.
 
 // Marks the dependency used — the macro below is a fully-qualified path with no `use`.
@@ -237,7 +314,11 @@ impl Guest for Component {
             // but can never be installed or depended on.
             id: "github.com/you/__NAME__".to_string(),
             version: "0.1.0".to_string(),
-            detection: vec!["TODO: one line on when this plugin applies".to_string()],
+            // Prose only for a gate `activation` below cannot express (an always-on
+            // plugin naming the files it looks for). Yours is a rule, so leave this
+            // empty — `kndo doctor` shows the rule, and prose beside it is the same
+            // fact twice, free to drift.
+            detection: Vec::new(),
             // Files outside the language graph you need to read (configs, templates) —
             // globs, served through the host's content channel. Empty = no reads.
             requested_file_access: Vec::new(),
@@ -246,6 +327,11 @@ impl Guest for Component {
             activation: vec![ActivationRule::ManifestDependency(
                 "TODO-your-framework-package".to_string(),
             )],
+            // Coordinates of plugins whose conventions are part of yours — installing you
+            // installs them, and you being ACTIVE activates them. This is the only way to
+            // reach a plugin whose own rules cannot fire: a framework that uses Express
+            // internally is not `express` in anyone's manifest, so `kndo:express` never
+            // self-activates for its users — name it here and it does.
             dependencies: Vec::new(),
         }
     }
@@ -315,7 +401,7 @@ export!(Component);
 const ADAPTER_LIB_TEMPLATE: &str = r#"//! __NAME__ — a kndo language adapter (kndo:adapter ABI).
 //!
 //! Authoring guide: the plugin authoring docs in the kndo repository
-//! (https://github.com/eulke/kndo) — they explain when to write an adapter vs a plugin.
+//! (https://github.com/eulke/kondo) — they explain when to write an adapter vs a plugin.
 //! Inner loop: `kndo plugin build` then `kndo plugin verify __NAME__.wasm`.
 
 // Marks the dependency used — the macro below is a fully-qualified path with no `use`.

@@ -20,7 +20,7 @@ kndo check [PATHS…]           # full analysis (default command: `kndo` = `kndo
     --format human|json|sarif|agent  # default: human on TTY, json when piped; KNDO_FORMAT env overrides the default
     --fail-on <severity>       # exit-code threshold (default: warning in diff modes, none in full)
     --only <cats> / --skip <cats>
-    --strict                   # promote severities (see RFC 0005), stricter confidence floor
+    --strict                   # promote severities (see RFC 0005) — see the note below
     --no-cache                 # bypass cache (CI correctness check, debugging)
 kndo explain <finding-id>     # full evidence chain for one finding, human or --format json
 kndo health                   # health score + category breakdown + trend vs previous snapshots
@@ -41,6 +41,20 @@ kndo plugin install <coord>   # install a plugin (+ deps) into the global direct
 kndo plugin list              # installed plugins (plugins.lock) + hand-dropped files
 kndo plugin remove <coord>    # remove a managed plugin; doctor reports any dependency gap left
 ```
+
+**`--strict`, as landed:** severity promotion only, and today exactly one category promotes —
+`undeclared` warning → error, which is the only promotion RFC 0005 actually specifies. The
+"stricter confidence floor" half of the line above was cut when the flag was implemented: the
+confidence floor already has two knobs pointing in both directions (`[analysis]
+min-confidence` raises it, `--verbose` drops it to `possible`), and a third that moves it
+again would be a second way to say what one of those already says. Which direction "stricter"
+even meant was never settled — fewer findings you are surer of, or every tier including the
+speculative one — and a flag whose meaning has two defensible readings is worse than no flag.
+
+`--only`/`--skip` landed with a distinction this section did not draw: `--skip` is suppression
+(the `[analysis] skip` policy from another source — it unions with the file, counts as
+suppressed, and cannot silence `stale`), while `--only` is a lens whose narrowing is *counted
+and reported* rather than exempted. See [cli.md](../../docs/src/cli.md#--only-and---skip).
 
 `--staged`/`--diff` report the **findings delta** (new + fixed, including derived effects far from
 the touched files — RFC 0004 §6), not "findings inside touched files".
@@ -164,11 +178,16 @@ adoption in a legacy repo non-punitive while ratcheting health monotonically.
 
 Optional, at project root; discovered upward like `.gitignore`. Everything has a default.
 
-```toml
-[project]
-roots = ["src", "packages/*"]          # default: auto (git ls-files minus ignores)
-exclude = ["**/generated/**"]
+`[project]` (`roots`, `exclude`) was in this section'"'"'s original sketch and is **not implemented,
+and no longer proposed**. `kndo init` wrote it commented-out for a while and the engine never
+read it; a commented key is still a promise, so it was removed rather than carried. Both things
+it offered have working answers with sharper semantics: `.ignore` keeps files out of discovery
+(gitignore syntax, read by the discovery layer, invisible to git), and `[[rule]]` with `paths`
+keeps *verdicts* off files that stay in the graph — which is the one you usually want, since
+dropping a file from discovery also drops every edge through it and can turn one silenced
+finding into several new false ones elsewhere.
 
+```toml
 [analysis]
 skip = []                              # categories or category:subject, e.g. ["unused:enum-member"]
 min-confidence = "probable"            # report floor; "possible" only with --verbose

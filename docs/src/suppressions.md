@@ -73,13 +73,21 @@ targeting `stale` itself, or simply matching nothing anymore because the issue i
 acknowledged is gone. The fix is always the same: delete the pragma. Suppressions are
 self-cleaning by construction — they cannot silently accumulate.
 
-Two edge rules:
+Three edge rules:
 
 - `kndo:allow stale` is rejected as meta-suppression (and is itself stale): stale findings
   are not inline-suppressible. If you must, acknowledge them via the baseline.
 - A `plugin:` pragma whose category no **active** plugin declares this run is skipped
   entirely — neither suppressing nor stale. The plugin may simply not be activated in this
   checkout, and flagging the pragma would flicker with activation state.
+- A pragma naming a category **nobody judged this run** is never reported as matching nothing.
+  Some analyses need an input that may be absent: `crap` needs an ingested coverage report,
+  `untested` needs the project to have test roots. Without it the analysis *abstains* — it
+  emits one diagnostic and no findings, and the run lists the category under `run.abstained`
+  in the JSON envelope. Its emptiness says nothing about your code, so calling the pragma dead
+  would be wrong in the worst way: you would delete it, add a coverage report next week, and
+  the finding you had acknowledged would come back. A misspelled category or a pragma attached
+  to no declaration is still reported — those are wrong whatever ran.
 
 ## The baseline
 
@@ -115,5 +123,10 @@ now on is reported (and gated) normally.
   itself via `stale`.
 - Prefer the **baseline** for bulk adoption and for findings without a source location.
 - If the same suppression keeps recurring for a *framework* reason ("this is a route handler,
-  it is not unused"), the right fix is a [plugin](plugin-authoring.md) that contributes the
-  root or annotation — then nobody needs the pragma.
+  it is not unused"), don't suppress at all — say where execution actually enters. When the
+  code carries a marker (`@Controller`, `@AfterEach`, a decorator), list it under
+  [`[[externally-invoked]]`](configuration.md#externally-invoked) and every declaration
+  carrying it becomes a real entry point, with its reachable tree alive behind it and every
+  analysis still judging all of it. When it doesn't — a convention-based route directory, an
+  entry named only in a config file — a [plugin](plugins/authoring.md) contributes the root.
+  Either way nobody needs the pragma, and no genuine finding is lost along with the false one.

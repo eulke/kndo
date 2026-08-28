@@ -1,0 +1,16 @@
+{
+  "findings": [
+    {
+      "category": "internal-only",
+      "subject_kind": "method",
+      "path": "src/main/java/retro/DefaultMethodSupport.java",
+      "symbol": "DefaultMethodSupport.invoke"
+    },
+    {
+      "category": "internal-only",
+      "subject_kind": "method",
+      "path": "src/main/java16/retro/DefaultMethodSupport.java",
+      "symbol": "DefaultMethodSupport.invoke"
+    }
+  ]
+}

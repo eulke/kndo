@@ -3,13 +3,14 @@ name = "kndo-adapter-kotlin"
 description = "Kotlin language adapter for kndo"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 publish.workspace = true
 
 [dependencies]
 kndo-core = { path = "../kndo-core" }
-kndo-adapter-toolkit = { path = "../kndo-adapter-toolkit" }
+kndo-adapter-toolkit = { path = "../kndo-adapter-toolkit", features = ["jvm-xml"] }
 smol_str = { workspace = true }
 tree-sitter = { workspace = true }
 tree-sitter-kotlin-ng = { workspace = true }

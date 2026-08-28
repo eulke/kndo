@@ -19,6 +19,8 @@
 
 use std::process::{Command, ExitCode};
 
+use xtask::package;
+
 mod bench;
 
 /// Everything language-specific about stdlib generation, as data.
@@ -75,6 +77,7 @@ fn main() -> ExitCode {
             args.get(1).map(String::as_str),
             args.get(2).map(String::as_str),
         ),
+        Some("package") => package_cmd(&args[1..]),
         _ => {
             eprintln!("usage: cargo xtask gen-stdlib <language>|--all");
             eprintln!(
@@ -88,7 +91,40 @@ fn main() -> ExitCode {
             eprintln!("usage: cargo xtask gen-schema");
             eprintln!("usage: cargo xtask bench [--sizes 1k,5k,50k] [--update-baseline] [--gate]");
             eprintln!("usage: cargo xtask componentize <core.wasm> <out.wasm>");
+            eprintln!(
+                "usage: cargo xtask package --target <triple> [--tag vX.Y.Z] [--bin <path>] \
+                 [--out-dir <dir>]"
+            );
+            eprintln!(
+                "  targets: {}",
+                package::TARGETS
+                    .iter()
+                    .map(|t| t.triple)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
             ExitCode::from(2)
+        }
+    }
+}
+
+/// `cargo xtask package --target <triple>` — build the release artifact for one platform.
+///
+/// `release.yml` calls this instead of carrying a `tar` line for Unix and a `Compress-Archive`
+/// line for Windows: the artifact's name and layout are a contract four consumers depend on
+/// (see [`xtask::package`]), and a contract with two producers is not one.
+///
+/// Prints the archive's path on stdout so the caller can capture it without re-deriving the
+/// name it just asked for.
+fn package_cmd(args: &[String]) -> ExitCode {
+    match package::from_args(args, workspace_root()) {
+        Ok(path) => {
+            println!("{}", path.display());
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("xtask: package failed: {e}");
+            ExitCode::FAILURE
         }
     }
 }

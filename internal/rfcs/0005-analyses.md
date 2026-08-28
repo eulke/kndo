@@ -109,6 +109,15 @@ field). Two rules govern the traversal:
   main`/`init`/exported-declaration promotion, docs/adapters/go.md §0, §2 — no manifest-level
   entry file to root alongside them): `R(κ, τ)`'s traversal enqueues a reached symbol's owning
   file alongside the symbol.
+- **Containment rule:** reaching a member also reaches its owning declaration, at the same τ —
+  a method cannot execute without the type that declares it, so if the member is alive the
+  owner is too, and a class whose only live member is invoked by a container or dispatched
+  through a vtable is not deletable. The owner resolves by the `member_of` convention in the
+  member's own file (same lookup the machinery-dispatch rule uses, read upward); every
+  same-name candidate links. Without it a run could assert both halves of a contradiction:
+  spring-petclinic's `@Configuration` class was reported `unreachable` while the same run
+  called its own `@Bean` methods production-reachable, and three Java conformance fixtures had
+  codified the same shape by expecting `unused` on the class holding `public static void main`.
 - **Invoked-program rule:** an `InvokesFile` edge — a file executing another file **as a
   program**, the process boundary no import crosses (a test running its own workspace binary
   via `env!("CARGO_BIN_EXE_…")`, resolved through the manifest's named executable targets,
@@ -137,8 +146,12 @@ field). Two rules govern the traversal:
   calling a formatting hook a test-blind spot when its type is test-covered. The rule reads
   TWO sources of the same fact: the adapter's `Declaration::implicitly_invoked` (the
   language's own machinery) and a plugin's `mark_implicitly_invoked` annotation (a
-  *framework's* machinery — serde calling `serialize`; `kndo:serde`, docs/plugins/serde.md
-  — third-party dispatch the language adapter must never learn about).
+  *framework's* machinery — serde calling `serialize`; `kndo:serde`, docs/src/plugins/serde.md
+  — third-party dispatch the language adapter must never learn about). A plugin normally
+  reaches that annotation through `AnnotationSink::mark_machinery_impls`, which matches its
+  curated trait table against `SymbolNode::implements` — the trait whose implementation
+  declares the member, an adapter-supplied fact the core carries and never interprets
+  (core-traits.md). Same rule, same two sources; the plugin brings only the table.
 - **Implement-dispatch rule:** calling through a trait IS plausibly executing every
   implementation — the vtable, as declared. For each `RefKind::Implement` edge
   (`impl Trait for T` emits one from the implementing type's symbol to the trait's), every
@@ -222,6 +235,18 @@ per-symbol findings it summarizes, and a directory whose every file carries the 
 rolls up once more (subject `directory`) — "you can delete this whole folder" is one finding,
 not fifty. Generated and vendored origins are exempt by default.
 
+**Served is not used.** A file whose ONLY inbound evidence is `EdgeKind::ReferencesFile` — the
+file-liveness edge, "if `from` is alive, that file is in use", what a template's `<link href>`
+or a framework config naming an asset by path contributes — is *served*, not *used*, and its
+symbols are not judged one by one. The evidence says the bytes ship and names none of them, so
+reporting each unread symbol is an accusation it cannot support: connecting spring-petclinic's
+layout to its stylesheet turned one file-level verdict into 48 dead `--bs-*` custom properties
+from a compiled Bootstrap bundle. The FILE is judged normally (the link is exactly the evidence
+that keeps it alive), and any other inbound edge at all — an `ImportsFile`, an `InvokesFile`, a
+`Root`, a `References` naming one of its symbols — is symbol-level evidence and restores
+ordinary jurisdiction. This is the same asymmetry `ReferencesFile` already carries by contract:
+liveness evidence, never architecture evidence.
+
 ## 5. Dependency & import hygiene
 
 For each `ManifestDependency` with scope `prod`, classify by its importers:
@@ -262,16 +287,38 @@ Two further import-side findings:
 - `unresolved` (subject `import`) — a relative/internal import specifier that resolves to no file
   (`Resolution::Unresolved` after all adapters decline): almost always a broken path or a missed
   rename. Failed *package* resolution surfaces as `undeclared` instead, never twice.
-  Severity: error (it is a defect, not waste) — but confidence-gated: dynamic specifiers demote
-  to `possible` and drop below the default report floor.
+  Severity: error (it is a defect, not waste) — but confidence-gated: the finding inherits the
+  import's own confidence, so a dynamic specifier the adapter could only partly read demotes and
+  drops below the default report floor. **Which specifiers are relative is the adapter's call**
+  (`ImportKind`), never a shape the core guesses at; assembly records the failed resolutions and
+  the analysis decides what follows. Generated and vendored files are exempt, like everywhere.
 
 ## 6. `duplicate` — structural clones
 
 Token-based fingerprinting over adapter-normalized token streams (identifiers/literals
 canonicalized ⇒ catches Type-1 and Type-2 clones; Type-3/semantic clones are out of scope for 1.0):
 
-- Granularity: function/method bodies and top-level blocks ≥ `min-tokens` (default 50).
+- Granularity: callable **shapes** ≥ `min-tokens` (default 50). A declaration contributes its
+  own body plus one shape per callable nested inside it that clears the same floor
+  (`MetricsSyntax::nested_callable_kinds` names the node kinds per language); a promoted
+  shape's tokens leave the enclosing stream, which keeps one `FN` in their place. This is what
+  makes N call sites passing the same callback report on the callback, where the duplication
+  is, instead of on N otherwise-different callers. A nested callable *below* the floor stays
+  part of its owner's body — promoting it would leave both halves under the floor and delete
+  real findings (measured on the field corpus: 83 clone participants).
 - Winnowing fingerprints into a global index; matches only within the same language.
+- **A body that only constructs a value is not clone-eligible.** There the normalization
+  inverts: a construction expression has no control flow, its structure IS the field list the
+  type declaration dictates, and the only authored content is the field values — exactly what
+  `ID`/`LIT` erases. Two constructions of one type therefore fingerprint alike by definition of
+  the type, not by evidence of copying, and the false family grows with how *central* the type
+  is. `MAX_POSTING` already concedes the same belief using popularity as the proxy; this names
+  the cause. All-or-nothing (a function that constructs *and* does work has authored
+  structure), not configurable (`min-tokens` is a floor on size, and this is not about size),
+  and needing no carve-out for a construction carrying a callback — that callback is its own
+  shape and is not exempt. `MetricsSyntax::construction_kinds` is empty for languages where
+  construction is an ordinary call (Kotlin, Swift), which keeps today's behaviour there rather
+  than having the adapter guess.
 - Finding groups all instances, largest group first; evidence shows the shared shape.
 - **Structural clones target production code**: test-role files and sub-file test regions
   (`FileFacts::test_spans`) are exempt, unconditionally — the same two-level exemption `crap`
@@ -339,10 +386,24 @@ coverage" (dynamic, needs a report) but "no test even *imports* this, transitive
 you complex code is poorly covered *if* you feed it coverage; `untested` finds the blind spots
 statically, zero-config, day one.
 
-- Active only when the project has test roots at all — a repo without tests gets one diagnostic,
-  not a thousand findings.
+- Active only when the project has test roots at all — a repo without tests **abstains** (§12):
+  one diagnostic, not a thousand findings, and the category is reported as unjudged rather than
+  as clean.
 - Severity: info. Subject granularity and rollup as usual (an entire untested file or package
   rolls up). Confidence demotes through wildcard edges like every reachability verdict.
+- **Only units of testing.** A value is not one: `EnumMember`, `Const`, `Static`, `Variable`,
+  `Field`, `CssRule`, `CssVariable` join `TypeAlias`, which was already excluded here with this
+  exact reasoning ("no runtime footprint — can never be 'covered'"). Callables and types stay,
+  and it is a DENYLIST so an adapter-defined kind (Kotlin's `object` arrives as `Other`) is not
+  silenced by a guess. Measured before adopting: 422 of 2621 findings across the field corpus,
+  56% of one project's, were values. This is only sound because a computed property is no longer
+  a `Field` — while a stored constant and a getter-with-a-body shared one kind, excluding
+  `Field` would have taken real logic with it.
+- A file that declares symbols and not one of them is a unit of testing is out of scope, which
+  is what answers "a `.scss`/`.json`/`.md` cannot be tested" without any per-language opt-out —
+  and keeps a `.scss` carrying a `@function` in scope, which such a flag would have silenced. A
+  file the adapter extracted NOTHING from stays in scope deliberately: dropping that guard
+  silenced 14 real source files across the corpus whose adapters simply saw no declarations.
 - Evidence: the production roots that reach the symbol (proof it matters) and the nearest tested
   neighbor (where a test could start).
 
@@ -356,13 +417,22 @@ CRAP(m) = comp(m)² × (1 − cov(m))³ + comp(m)
 ```
 
 - Coverage comes from ingested reports (plugins, ADR 0005). No report at all ⇒ the analysis
-  is **skipped with one diagnostic** — the coverage factor would be a guess for every function
-  at once, not a measurement, and a category-wide guess is noise, not risk (the same posture
-  `untested` takes for a project with no test roots); the health score's crap axis contributes
-  zero penalty with the absence reported explicitly. A report that doesn't instrument a
+  **abstains with one diagnostic** (§12) — the coverage factor would be a guess for every
+  function at once, not a measurement, and a category-wide guess is noise, not risk (the same
+  posture `untested` takes for a project with no test roots); the health score's crap axis
+  contributes zero penalty with the absence reported explicitly. Coverage is *ingested, never
+  measured*, so the absence of a report is routine (fresh clone, a CI job separate from the test
+  job, a project with no coverage tooling) — which is exactly why it must be reported as
+  unknown, not silently as clean. A report that doesn't instrument a
   particular function ⇒ **cov = 0**, flagged "coverage: none" — pessimistic per function, and
   the message says why.
 - Threshold: findings for `CRAP > 30` (standard), configurable. Test code is exempt.
+- Scored per callable **shape** (§6): a substantial closure carries its own complexity and its
+  own coverage rather than its enclosing function's, and the finding points at the closure.
+  Reporting nested shapes is not optional once they exist — a 40-branch closure inside a
+  two-branch function scores 40 on the closure and 2 on the function, so skipping them would
+  delete the risk from the report entirely. Identity: the closure's ordinal within its
+  declaration, never its line, so a baseline survives edits above it.
 - Output ranks the CRAP hotspot list — the refactor-next queue.
 
 ## 11. `health` — project health score
@@ -428,6 +498,14 @@ The score floors at 0 (weights sum to 115).
   against it, so an actively-suppressing pragma can never be `stale` and deleting a stale pragma
   can never resurrect a finding (no allow/stale flicker loop; contracts §2.1). `stale` itself is
   not inline-suppressible.
+- **Abstention.** An analysis that could not judge (`crap` with no ingested report, `untested`
+  with no test roots) emits no findings and returns `Verdict::Abstained`; its categories are
+  *unknown* this run, not clean. A pragma naming such a category is **never** matched-nothing
+  stale — reading that emptiness as "the issue is gone" is the flicker loop by another route:
+  delete the pragma on the advice, add the coverage report, and the finding returns. The
+  unknown-category and attaches-to-nothing verdicts still apply: both are structural errors that
+  no analysis needs to run to establish. A category is unknown only when every analysis able to
+  emit it abstained, and the run reports the set as `run.abstained` with each reason.
 - Baseline: `.kndo/baseline.json` acknowledges existing findings at adoption time (RFC 0006 §6).
 - Config: per-glob disables of categories or `category:subject` pairs (e.g. `examples/**` exempt
   from `unused`; `unused:enum-member` off globally for codebases with wire-format enums).

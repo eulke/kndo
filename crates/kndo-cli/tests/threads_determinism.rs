@@ -4,7 +4,7 @@
 //! calling `Engine::open` twice in one test process, only by two real invocations) and diffs
 //! stdout exactly.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
 
 fn kndo_bin() -> &'static str {
@@ -79,12 +79,11 @@ fn run_check(dir: &Path, threads: &str) -> serde_json::Value {
 
 #[test]
 fn threads_1_and_threads_4_produce_byte_identical_json() {
-    let dir: PathBuf = std::env::temp_dir().join("kndo-threads-determinism-fixture");
-    let _ = std::fs::remove_dir_all(&dir);
-    write_fixture(&dir);
+    let dir = tempfile::tempdir().unwrap();
+    write_fixture(dir.path());
 
-    let single = run_check(&dir, "1");
-    let multi = run_check(&dir, "4");
+    let single = run_check(dir.path(), "1");
+    let multi = run_check(dir.path(), "4");
 
     assert_eq!(
         single, multi,
@@ -99,6 +98,4 @@ fn threads_1_and_threads_4_produce_byte_identical_json() {
         findings.iter().any(|f| f["category"] == "unused"),
         "fixture should report unused findings: {single}"
     );
-
-    let _ = std::fs::remove_dir_all(&dir);
 }

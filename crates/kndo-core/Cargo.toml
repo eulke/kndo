@@ -3,6 +3,7 @@ name = "kndo-core"
 description = "The system: graph model, analysis engine, cache, orchestration, plugin host. Language-blind by contract."
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 publish.workspace = true
@@ -25,12 +26,23 @@ rkyv = { workspace = true }
 memmap2 = { workspace = true }
 chrono = { workspace = true }
 num_cpus = { workspace = true }
+thiserror = { workspace = true }
 schemars = { version = "1", features = ["smol_str03"], optional = true }
+# `testkit` only — see the feature's comment below.
+tempfile = { workspace = true, optional = true }
 
 [features]
 # Dev-time only (`cargo xtask gen-schema`, schema-validation tests) — never needed at analysis
 # time, so it's not in any shipped binary's default feature set.
 schema = ["dep:schemars"]
+# Exposes `testkit` (the in-memory `MockAdapter` + graph-building helpers this crate's own
+# tests use) to other crates' dev-dependencies, so a downstream test suite driving a real
+# `LanguageAdapter` end-to-end (kndo-plugin-api's WASM compliance tests) can reuse the
+# canonical mock instead of reimplementing its grammar because the canonical one was private.
+# `dep:tempfile`: the shared fixture helpers `testkit` exposes hand out `TempDir`s, so a
+# downstream test suite gets the same unique-by-construction, deleted-on-drop directory this
+# crate's own tests use instead of re-deriving a name under the system temp dir.
+testkit = ["dep:tempfile"]
 
 [dev-dependencies]
-tempfile = "3"
+tempfile = { workspace = true }

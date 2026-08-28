@@ -250,6 +250,16 @@ Unresolved` when no candidate matches — honestly incomplete, no Sass "manifest
 convention is modeled (§4), same stance as JS-TS's own bare-specifier handling minus the
 dependency-manifest half.
 
+**`Missing` vs `Unresolved` (contracts §2.1).** Only an *explicitly* relative specifier
+(`./x`, `../x`) resolves to `Resolution::Missing` on a miss: nothing else it could have been,
+so the answer is complete and the `unresolved` analysis reports a broken path. A **bare**
+specifier stays `Unresolved` however thoroughly the candidate ladder missed — Sass resolves
+those through load paths and `node_modules` too, which this adapter does not read, and
+`@import "bootstrap"` in a real Spring PetClinic stylesheet is exactly that shape. A `sass:`
+module and an `http(s)://`/`//` URL are not paths into the project at all and are checked
+first. The rule cost nothing in recall and removed 27 false accusations from the corpus the
+first measurement produced.
+
 ## 4. Manifests & packages (RFC 0011)
 
 Not applicable — neither CSS nor SCSS has a manifest format of its own (`manifest_globs:

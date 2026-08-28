@@ -39,17 +39,33 @@ impl LanguageAdapter for RustAdapter {
             dependencies: Vec::new(),
             id: SmolStr::new("rust"),
             // Bump whenever the serialized facts shape or the emission semantics change.
-            facts_schema_version: 12,
+            facts_schema_version: 26,
             file_globs: vec![SmolStr::new("**/*.rs")],
             manifest_globs: vec![SmolStr::new("**/Cargo.toml")],
             grammar_version: SmolStr::new("tree-sitter-rust 0.24"),
-            // [File "private", Package "pub(crate)", Public "pub"].
-            // pub(super)/pub(in …) are widened to the crate rung — widening only ever
-            // silences; narrowing would fabricate internal-only accusations.
+            // [File "private", Module "pub(super)", Package "pub(crate)", Public "pub"].
+            // `pub(super)` names the parent module's SUBTREE — a region strictly between one
+            // file and one package, which the four-bucket ladder had nowhere to put and so
+            // widened into `pub(crate)`. That approximation is what kept `private-type-leak`
+            // gated (`internal/detection-gaps.md` §7). `pub(in path)` still widens: this
+            // adapter does not resolve its path to a unit key yet, and widening only ever
+            // silences an accusation, never fabricates one.
             visibility_ladder: vec![
                 VisibilityRung {
-                    scope: VisibilityScope::File,
+                    // Rust's "private" is NOT the file: it is the declaring module AND its
+                    // descendants, which is exactly what a Module rung anchored on the file's
+                    // own unit says. The adapter used to approximate it as `File` because the
+                    // ladder had nowhere else to put it — and that approximation is what made
+                    // `private-type-leak` accuse ripgrep's `flags::parse::lookup` for naming
+                    // `flags::mod`'s private `Flag`, which every module under `flags` can spell
+                    // perfectly well (`internal/detection-gaps.md` §7).
+                    scope: VisibilityScope::Module,
                     label: SmolStr::new("private"),
+                    surface_transitive: false,
+                },
+                VisibilityRung {
+                    scope: VisibilityScope::Module,
+                    label: SmolStr::new("pub(super)"),
                     surface_transitive: false,
                 },
                 VisibilityRung {
@@ -74,6 +90,7 @@ impl LanguageAdapter for RustAdapter {
             // The crate name IS the `use` specifier's root segment — resolve() structurally
             // identifies the declared dependency every time.
             resolves_dependency_usage: true,
+            declares_units_of_testing: true,
             // Cargo's target-dir conventions, anchored at the owning Cargo.toml (see
             // PATH_PATTERNS above). An example consumes the API from outside exactly like a
             // test — a symbol alive only through its own demo is the `test-only` verdict.
@@ -82,18 +99,12 @@ impl LanguageAdapter for RustAdapter {
                 SmolStr::new("benches"),
                 SmolStr::new("examples"),
             ],
+            builtin_member_types: builtin_member_types(),
         }
     }
 
     fn claim(&self, path: &ProjectPath) -> Option<FileClaim> {
-        let p = path.0.as_str();
-        if !p.ends_with(".rs") {
-            return None;
-        }
-        Some(FileClaim {
-            language: SmolStr::new("rust"),
-            class: kndo_adapter_toolkit::classify::classify(p, &PATH_PATTERNS),
-        })
+        kndo_adapter_toolkit::classify::claim_by_extension(path, &["rs"], "rust", &PATH_PATTERNS)
     }
 
     fn claim_manifest(&self, path: &ProjectPath) -> bool {
@@ -108,9 +119,80 @@ impl LanguageAdapter for RustAdapter {
         manifest::extract(file.path.0.as_str(), file.content, ctx)
     }
 
+    /// Cargo treats `-` and `_` as interchangeable in a crate name, so a plugin author should
+    /// not have to guess which spelling a project used: `serde-json` finds `serde_json`.
+    fn declares_dependency(&self, facts: &ManifestFacts, query: &str) -> bool {
+        let normalize = |n: &str| n.replace('_', "-");
+        let query = normalize(query);
+        facts
+            .dependencies
+            .iter()
+            .chain(&facts.workspace_dependencies)
+            .any(|d| normalize(&d.name) == query)
+    }
+
     fn resolve(&self, spec: &ImportSpec, ctx: &ResolveCtx<'_>) -> Resolution {
         resolution::resolve(spec, ctx)
     }
+}
+
+/// What Rust's own generics do to their arguments — the facts no file in a project declares
+/// because the declaration lives in the standard library.
+///
+/// A chain that crosses one of these used to stop dead: `ls_tree(..).map_err(..)?` then
+/// iterated is four hops through `Result` and `Vec` before it reaches the element type, and
+/// without them the type behind it read as consumed only where it was declared
+/// (`internal/detection-gaps.md` §3).
+///
+/// Two conventions, both this adapter's own choice and invisible to the core: `@element` is
+/// the member an iteration hops through (a container that does not declare one simply does
+/// not type its loop variable — `HashMap` iterates to a tuple, which this model has no way to
+/// name, and silence is the right answer), and `@slice` names the anonymous slice/array type
+/// so it can carry an `@element` like any other container.
+///
+/// Deliberately small and evidence-driven, the same discipline as the machinery-trait list: a
+/// fact earns its place by closing a measured case, not by completing an API surface.
+fn builtin_member_types() -> Vec<kndo_core::adapter::RawMemberType> {
+    use kndo_core::adapter::{RawMemberType, TypeExpr};
+    // "yields the same argument the receiver had" — the whole reason `Param` exists.
+    let passthrough = |owner: &str, member: &str| RawMemberType {
+        owner: Some(SmolStr::new(owner)),
+        member: SmolStr::new(member),
+        yields: TypeExpr::Param(0),
+    };
+    let mut facts = Vec::new();
+    // The success value survives all of these; only the error side changes, and what it
+    // changes INTO is a closure's output this adapter cannot name — hence `Unknown`, stated
+    // outright rather than implied by a short argument list.
+    for member in ["map_err", "inspect", "inspect_err"] {
+        facts.push(RawMemberType {
+            owner: Some(SmolStr::new("Result")),
+            member: SmolStr::new(member),
+            yields: TypeExpr::Named {
+                name: SmolStr::new("Result"),
+                args: vec![TypeExpr::Param(0), TypeExpr::Unknown],
+            },
+        });
+    }
+    facts.push(RawMemberType {
+        owner: Some(SmolStr::new("Result")),
+        member: SmolStr::new("ok"),
+        yields: TypeExpr::Named {
+            name: SmolStr::new("Option"),
+            args: vec![TypeExpr::Param(0)],
+        },
+    });
+    for owner in ["Result", "Option"] {
+        for member in ["unwrap", "expect", "unwrap_or_default", "as_ref", "as_mut"] {
+            facts.push(passthrough(owner, member));
+        }
+    }
+    // Iteration, declared per container — only the ones that yield a single element. A map is
+    // absent on purpose.
+    for owner in ["Vec", "VecDeque", "HashSet", "BTreeSet", "Option", "@slice"] {
+        facts.push(passthrough(owner, "@element"));
+    }
+    facts
 }
 
 #[cfg(test)]
@@ -120,6 +202,49 @@ mod tests {
 
     fn path(p: &str) -> ProjectPath {
         ProjectPath(SmolStr::new(p))
+    }
+
+    #[test]
+    fn the_builtin_table_declares_iteration_only_where_the_element_is_one_type() {
+        // A map iterates to a TUPLE, which this model has no way to name, so `HashMap`
+        // deliberately declares no `@element` and its loop variable simply does not type.
+        // Silence beats a confident wrong type — RFC 0012 §2's direction, made concrete.
+        let d = RustAdapter.descriptor();
+        let has = |owner: &str, member: &str| {
+            d.builtin_member_types
+                .iter()
+                .any(|m| m.owner.as_deref() == Some(owner) && m.member == member)
+        };
+        assert!(has("Vec", "@element"));
+        assert!(has("@slice", "@element"));
+        assert!(!has("HashMap", "@element"), "a map's element is not a type");
+        assert!(
+            !has("BTreeMap", "@element"),
+            "a map's element is not a type"
+        );
+    }
+
+    #[test]
+    fn a_result_operation_keeps_the_success_type_and_admits_it_lost_the_error() {
+        // `map_err` is the hop §3's last case has to cross. The fact says "still a `Result`
+        // over the SAME argument 0" — a relationship, not a concrete type — and states
+        // outright that it cannot name what the error became.
+        let d = RustAdapter.descriptor();
+        let fact = d
+            .builtin_member_types
+            .iter()
+            .find(|m| m.owner.as_deref() == Some("Result") && m.member == "map_err")
+            .expect("no map_err fact");
+        assert_eq!(
+            fact.yields,
+            kndo_core::adapter::TypeExpr::Named {
+                name: SmolStr::new("Result"),
+                args: vec![
+                    kndo_core::adapter::TypeExpr::Param(0),
+                    kndo_core::adapter::TypeExpr::Unknown,
+                ],
+            }
+        );
     }
 
     #[test]
@@ -181,7 +306,7 @@ mod tests {
         let a = RustAdapter;
         let d = a.descriptor();
         assert_eq!(d.id, "rust");
-        assert_eq!(d.visibility_ladder.len(), 3);
+        assert_eq!(d.visibility_ladder.len(), 4);
 
         let src_path = path("src/lib.rs");
         let facts = a.extract(&SourceFile {

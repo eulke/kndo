@@ -86,34 +86,71 @@ as expansion-site-wide, core-traits.md §1). Inline modules
 is this adapter's standing approximation, stated once here and leaned on everywhere.
 `mod foo;` (the file-declaring form) is an import, not a declaration (§0).
 
+A member declared inside a trait `impl` records **`Declaration::implements`** — the trait's
+base name — for *every* trait impl, machinery or not. `Serialize` means nothing to this
+adapter and everything to `kndo:serde`; the fact is what lets that plugin be a curated table
+rather than a second Rust parser, and reducing it to `implicitly_invoked` alone (this
+adapter's own verdict about the language's stdlib machinery traits, §2's `is_machinery_trait`
+list) is what forced the plugin to re-read source before.
+
+Both positions of an `impl` header reduce to a **base name**: the type or trait being named,
+never one of its arguments. `impl Index<usize> for Table` implements `Index` and owns `index`
+under `Table`; `impl<E> Deserializer<'de> for StringDeserializer<E>` owns its members under
+`StringDeserializer`. Reading the last identifier in the header's subtree instead — which is
+what this adapter did until the reduction got its own function — answers with the *argument*:
+every generic type's members were filed under a phantom owner (often the impl's own type
+parameter, a name no receiver can ever unify with), the `Implement` reference pointed at an
+argument, and every generic machinery trait (`Add`, `Index`, `PartialEq`) silently lost its
+members' `implicitly_invoked` marks while the non-generic ones worked by accident. serde's
+`#E.into_deserializer` findings were the visible symptom; correcting it removed 123 findings
+from serde, 334 from tokio and 87 from ripgrep, and left the five non-Rust field targets
+byte-identical.
+
 **Visibility ladder** (RFC 0012 §6), declared on the descriptor:
 
 ```
-[ File "private", Package "pub(crate)", Public "pub" ]
+[ Module@own "private", Module@parent "pub(super)", Package "pub(crate)", Public "pub" ]
 ```
 
-- no `pub` → level 0. True Rust privacy is module-and-descendants; under file ≈ module that
-  is `File` scope. Descendant files reaching a parent's private item is real Rust and will
-  read as a `possible`-confidence resolution miss, not a false `unused` — accepted, rare.
-- `pub(crate)` → level 1 (`Package` scope — crate = kndo package, exactly).
+- no `pub` → level 0, on the **`Module` rung anchored at the file's own unit**. Rust privacy is
+  module-and-descendants, and that is now sayable: it used to be approximated as `File` scope
+  because the ladder had no rung for a subtree, and the approximation is what made
+  `private-type-leak` accuse `flags::parse::lookup` for naming `flags/mod.rs`'s private `Flag`
+  — a type every module under `flags` can spell perfectly well.
+- `pub(crate)` → level 2 (`Package` scope — crate = kndo package, exactly).
 - `pub(self)` → level 0 — it IS `private`, spelled long.
 - `pub(super)` on an item **inside an inline mod** → level 0, not exported: `super` of an
   inline mod is a module within this same file, so under file ≈ module the item never
   leaves the file (widening it to the crate rung fabricated `internal-only` on ripgrep's
   `mod convert { pub(super) fn … }` — M6 residuals).
-- Top-level `pub(super)` / `pub(in path)` → level 1, deliberately **widened**: `super` of
-  the file's own module leaves the file, and mapping these down to `File` would fabricate
-  `internal-only`/leak findings; widening to the crate rung only ever silences an
-  `internal-only`, never accuses. Recorded as the conservative direction — with one known
-  residual on the other side: `private-type-leak` can pair a widened `pub(super)` subject
-  with a genuinely narrower type from the *parent* module (ripgrep's
-  `parse.rs#lookup(… dyn Flag)`) and accuse where real Rust visibility is coherent.
-  Accepted until rungs are module-relative rather than file-relative.
+- Top-level `pub(super)` → level 1, its own rung: the **`Module` rung anchored at the PARENT
+  unit**. It used to be widened into `pub(crate)` because nothing sat between one file and one
+  package, and that widening was what kept `private-type-leak` gated — the model could not tell
+  tokio's `task::state::unset_waker` (whose sibling caller genuinely cannot name the
+  `state.rs`-private `UpdateResult`) from the harmless inverse. Both rungs are `Module` and
+  differ only by ANCHOR, which is the honest shape: in Rust every visibility but `pub` is a
+  module subtree, and what distinguishes them is how high the subtree is rooted.
+- `pub(in path)` → level 2, still widened to `pub(crate)`: this adapter does not resolve the
+  path to a unit key yet. Widening only ever silences an `internal-only`, never accuses (7
+  occurrences across the whole of tokio, for scale).
 - `pub` → level 2. `exported` = any `pub*` form except `pub(self)` and
   inline-mod `pub(super)`.
 
-**Unit:** `None`. Rust files never resolve each other's names implicitly — everything
-travels through `use` or a qualified path — so Go's `unit` machinery stays off.
+**Unit:** the file's own MODULE, keyed by its path with the conventional file names folded
+into the directory they stand for — `src/graph/mod.rs` and `src/graph/assemble.rs` are
+`…/src/graph` and `…/src/graph/assemble`, and `src/lib.rs` is `…/src`. Rust's resolution unit
+IS the module, and under file ≈ module (§0) a module is a file, so **every key names exactly
+one file**.
+
+That degeneracy is why this is not the Go machinery in disguise. Rust files still never resolve
+each other's names implicitly — a one-file unit table is the file's own table, which the ladder
+already consults first, so no name resolves anywhere it did not before. What the key buys is
+the one thing a per-file table cannot express: **twins**. `#[cfg(target_os = "macos")] fn
+socket_dir` beside `#[cfg(not(…))] fn socket_dir` is two declarations of one name, and the
+single-slot bare table kept one and silently dropped the other, leaving it with no incoming
+edge and a false `unused` on code every other build compiles. Twins are tracked per unit
+(RFC 0012 §8), so a language with no unit key had none. `#[path]` and inline `mod x {}` break
+the path convention, the same standing approximation the rest of the adapter makes.
 `unit_name`: also `None` (qualified references resolve through import aliases instead).
 
 **References** — identifiers with `within` (enclosing fn/method, `Owner.name` form for
@@ -131,7 +168,23 @@ body paths (`#[rkyv(with = crate::rkyv_support::SmolStrAsString)]` imports the m
 level and field/variant level alike — a struct alive only through a field attribute stays
 alive. Lint-control and non-item attributes (`allow`/`warn`/`deny`/`forbid`/`expect`,
 `doc`, `cfg`/`cfg_attr`) are excluded: their arguments are lint paths and config keys, and
-`#[allow(clippy::x)]` must never invent a `clippy` dependency. **Trait items inherit the
+`#[allow(clippy::x)]` must never invent a `clippy` dependency.
+
+**Attribute STRINGS are a different fact, and stop short of being references.** Alongside the
+ident scan, every attribute outside that exclusion list records its `key = "literal"` pairs
+into `FileFacts::string_attr_args` — attribute head, key, literal, and the declaration it
+decorates (a field or variant attribute is attributed to its enclosing type, which is where
+the generated impl lives). The adapter emits no reference for these, and the measurement is
+why: over the same attributes, serde alone writes 482 identifier-shaped pairs, 248 of whose
+values collide with a real declaration in the crate, and only 176 sit under a key that names
+an item. Treating a collision as a reference would contribute 72 keep-alive edges in one crate
+to close one real case, and a keep-alive edge silences a true finding. `skip_serializing_if =
+"f"` names a function and `rename = "f"` names a wire label; telling them apart is knowing what
+serde is, so the interpretation lives in `kndo:serde` and the fact stops at the key. Bump the
+adapter's `facts_schema_version` when what it emits changes; the shape of the fact itself is
+`cache::ENTRY_FORMAT_VERSION`'s.
+
+**Trait items inherit the
 trait's visibility** (the same language rule as enum variants): a `pub trait`'s methods sit
 on the public rung, which is what lets the member fallback see their cross-file call sites
 and what places them on a published crate's API surface.
@@ -145,11 +198,42 @@ and what places them on a published crate's API surface.
 | `use p::*` | specifier `p`, no bindings, `opaque_namespace_use: true` → the core's `Wildcard` over the target's exports, which is the truth of a glob |
 | `use p as q` | specifier `p`, `local_alias: q` (qualifier alias for `q::…` references) |
 | `pub use …` | same as above + `reexported: true` — Rust re-export facades ride the same barrel machinery as JS, fixpoint-resolved (RFC 0013 §3b), multi-hop included |
-| `mod foo;` | specifier `self::foo`, `side_effect_only: true` — the file-linking edge (§0); `#[path = "…"]` on the `mod` overrides the conventional location with the literal path |
+| `mod foo;` | specifier `self::foo`, `side_effect_only: true`, `local_alias: foo` — the file-linking edge (§0); `#[path = "…"]` on the `mod` overrides the conventional location with the literal path. The alias is not decoration: it is how this file states "the name `foo` binds to that file", which is the producer side of the core's module hop (below) |
 | `extern crate name;` | specifier `name` (resolves as a dependency/stdlib like any bare first segment) |
 
 `ImportKind::Relative` for `crate::`/`self::`/`super::` paths, `Package` for bare-first-
 segment paths. All `use` edges are `certain` — Rust has no bundler ambiguity.
+
+**A brace member may be a submodule, and the core hops for it.** `use crate::internals::{attr,
+check, Ctxt};` emits bindings for all three, but `check` names a *module*, not an item — nothing
+in `internals/mod.rs` declares it, so the binding resolves to no symbol and `check::check(cx, …)`
+used to bind nothing (`internal/detection-gaps.md` §8: this killed serde's whole `check_*`
+family). The adapter emits nothing special for it; the resolution is core-side and
+language-blind (RFC 0012 §9-bis): a name bound to a file that the *target's own* import table
+binds again follows that one hop, and `internals/mod.rs`'s `mod check;` — with its
+`local_alias` — is exactly that second binding. This is why the alias on `mod foo;` is
+load-bearing, and why extending the specifier to `crate::internals::check` was the wrong fix: it
+would teach the core that `::` joins path segments.
+
+**Which imports are reconstructed.** Every import the adapter synthesizes from a use site —
+attribute paths, body paths (both the rooted and bare-rooted branches), the root probes, and paths
+inside macro token trees — carries `reconstructed: true`. A `use`, a `mod foo;` and an
+`extern crate` do not: the file contains those. The flag is what stops a synthesized binding from
+shadowing the file's own declaration and what keeps its qualifier from settling a miss
+(RFC 0012 §9-quater); confidence cannot stand in for it, since a `crate`/`self`/`super`-rooted
+synthetic import is `Certain` about where it resolves.
+
+**And the adapter names every qualifier the core used to guess.** A body path with no `use`
+behind it (`helpers::run()`, `kndo_core::discovery::find_files_named(..)`) reconstructs as a
+synthetic module import, and that import carries `local_alias` — the segment the use site
+actually qualifies by, which only something that knows what `::` joins can identify. The core
+previously recovered it by splitting the specifier, its single piece of hardcoded language
+syntax; that fallback is gone (RFC 0012 §9-ter). These imports are reconstructions, so they
+carry `probable`/`possible` confidence, and the core reads that as "does not close the
+namespace": a miss under such a qualifier keeps falling through to the in-scope/duck ladder,
+where a real `use` statement's alias would settle. The braced form without `self`
+(`use a::b::{X, Y}`) deliberately sets no alias — Rust does not bring `b` into scope, and the
+extraction table above has always said so.
 
 **Dynamic constructs** — macros, with a deliberately bounded stance:
 
@@ -161,7 +245,8 @@ segment paths. All `use` edges are `certain` — Rust has no bundler ambiguity.
 | `#[no_mangle]` / `#[export_name]` / `pub extern "C" fn` | in-source `Production` root at `probable` — an FFI consumer exists outside the graph |
 | `#[test]` / `#[bench]` | a recorded test region (§1) — assembly derives the `certain` `Test` root from span containment; extraction emits no root of its own |
 | `impl MachineryTrait for T` members | `implicitly_invoked` (RFC 0005 §1's machinery-dispatch rule) — the curated criterion is "the call site never writes the method's name": the fmt hooks (`Display`/`Debug`/numeric formats), `Drop`, `Default`, comparison + `Hash`, the operator-overload traits, `Index`/`Deref` sugar, `Iterator`/`IntoIterator`, `Future`, `FromStr`, `Error`. Composes with the trait-impl `Probable` Production root (which keeps hooks alive with zero owner usage): the flag lets them *inherit the owner's colors*, so a `Display` impl on a test-covered type stops reading as untested. Name-called trait methods (`.clone()`, `.into()`) and third-party traits (serde et al.) deliberately stay out — the duck fallback covers the former; a curated fact table beyond the stdlib is the recorded future source for the latter |
-| `#[cfg(…)]` | **both branches kept**, always: kndo analyzes the source, not one compilation; over-approximating alive is the safe direction. Two cfg-gated same-name items collapse to last-wins in the symbol table (documented artifact, harmless for liveness) |
+| `#[proc_macro_derive(Name, …)]` | **two declarations**, because there are two: `Name` (kind `Macro`, exported, spanned at the identifier inside the attribute) is what a `#[derive(Name)]` site references and the only thing a proc-macro crate can export, and the `fn` keeps its own declaration for its span, metrics and callees. A `Call` reference from the function, `within` the macro, carries the contract's rule "`within` = the symbol whose use triggers this code": using `Name` runs the function. Reachability then flows from every derive site — the test suite's included — into the implementation. Without it a proc-macro crate reads as production code no test reaches, however thoroughly its derive sites are tested. `#[proc_macro]` and `#[proc_macro_attribute]` need nothing: there the invocation name IS the function's |
+| `#[cfg(…)]` | **both branches kept**, always: kndo analyzes the source, not one compilation; over-approximating alive is the safe direction. Two cfg-gated same-name items collapse to last-wins in the symbol table (documented artifact, harmless for liveness). A cfg satisfiable **only under a harness** (`test`, `loom`, `fuzzing`, `miri`, `kani` — never `feature = "…"`, which is published surface) marks a test region instead; conjunctions need one harness branch, disjunctions need all, and a negation or an unrecognized predicate is an ordinary build |
 
 **Metrics** (`MetricsSyntax` as data): branches `if_expression`, `match_arm` (n-way match ≈
 n−1 branches plus the base — counted per arm past the tree shape), `while_expression`,
@@ -169,6 +254,19 @@ n−1 branches plus the base — counted per arm past the tree shape), `while_ex
 identifiers → `identifier`, `field_identifier`, `type_identifier`,
 `shorthand_field_identifier`; literals → string/raw-string/char/byte/integer/float
 literals; skipped → `line_comment`, `block_comment`. Winnowing parameters shared (toolkit).
+
+Each `closure_expression` clearing the clone floor becomes its own callable **shape**
+(`MetricsSyntax::nested_callable_kinds`): its branches and tokens leave the enclosing shape's
+stream, which keeps one `FN` in their place, and `crap`/`duplicate` report it in its own right.
+A smaller one stays an expression inside its owner — promoting it would leave both halves under
+the floor and cost real clone findings (measured: 83 clone participants on the field corpus).
+The split's semantics are uniform across adapters; only the kinds that trigger it are
+per-language.
+
+A body that is **only** a value construction (`struct_expression`) is not clone-eligible
+(`MetricsSyntax::construction_kinds`): normalization erases the field values — the whole
+authored content — and keeps the field list the type declaration dictates, so two constructions
+of one type match by definition of the type rather than by evidence of copying.
 
 **Suppressions** — `// kndo:allow …` via the toolkit scanner, like every language.
 
@@ -191,6 +289,30 @@ literals; skipped → `line_comment`, `block_comment`. Winnowing parameters shar
   with no import for a binding to express, which is precisely RFC 0005 §1's wildcard truth.
   The per-macro no-wildcard stance (§2's table) is untouched; this is one edge per
   `#[macro_use]`, not one per invocation.
+
+**When a bare path root is EVIDENCE of a crate (the field-audit pass, serde/alacritty
+corpus).** A bare path (`mem::size_of`, `fmt::Write::write_fmt`) emits a root import so that
+an unknown crate becomes the `Dependency` edge `undeclared` judges. That claim is only as good
+as the file it came from, and five shapes make it worthless — in each the import is
+**downgraded to `Possible`, never dropped**: `undeclared` ignores that tier so the accusation
+disappears, while the edge survives so a *declared* crate reached only through such a path
+still reads as used. (Suppressing them outright instead turned alacritty's `dirs` and `home`
+into false `unused` dependencies — the downgrade is load-bearing, not cosmetic.)
+
+| Shape | Why the root proves nothing | Field case |
+|-------|----------------------------|------------|
+| A glob import anywhere in the file (`use crate::lib::*;`) | a glob binds an open set of names extraction cannot enumerate without resolving the target | serde re-exports `mem`, `cmp`, `fmt`, `iter`, `net`, `slice` this way — all six accused of being phantom deps of `serde_core` |
+| Inside a macro token tree (`quote!` body, `macro_rules!` right-hand side) | a template describes code that does not exist yet, under names the expansion invents | serde_derive's `_serde`, `__S`, `__D`, `__E`, `__A`, `__Field`, `__private`, `private2`, and `clippy::…` lint paths |
+| The root names a **type** declared in this file | a type in scope shadows an extern-prelude crate; raw identifiers (`enum r#type`) defeat the "lowercase root ⇒ crate-shaped" test outright | serde's test suite, `r#type::r#struct` |
+| The root is a name this file's own `use` statements bind to something else | `use serde::de::{self, …};` then `use de::Error;` re-qualifies that binding — an import binding shadows a crate of the same name | alacritty `alacritty/src/config/bindings.rs` |
+| An inline `mod` declared in a **function body**, then `use`d below it | the flatten model puts inline-mod contents in this same file; nothing outside it is named | serde `test_annotations.rs`'s `mod desugared` |
+
+The boundary for the macro rule is the token TREE, not the invocation: `serde_json::json!(…)`'s
+own path is ordinary code at the call site and keeps probing, because it is a sibling of the
+tree rather than inside it. Both emitters carry the gate — the single-qualifier root and the
+deep-path root (`fmt::Write::write_fmt` is three segments, so only the deep one ever fires for
+it; hardcoding `Probable` there kept serde's `fmt` accused after the shallow branch was fixed).
+
 - Member chains inside macro token trees get the same receiver typing as body code:
   `write!(col2, "{}", flag.doc_short())` arrives as token soup, but the receiver's type is
   a declared fact — the reference carries qualifier `Flag` exactly as outside the macro
@@ -241,7 +363,28 @@ today's behavior — the core never settles on a receiver-typed qualifier) or hi
 the named type genuinely declares — both degrade toward silence, never toward accusation.
 **Member-type facts (the cross-file tier, `FileFacts::member_types`)** — every struct
 field (named and tuple-positional), impl method return type, and associated const emits an
-`(owner, member, yields)` fact, dispatch-reduced, `Self` resolved to the owner. Member
+`(owner, member, yields)` fact, dispatch-reduced, `Self` resolved to the owner. Three more
+producers, all of them *declared* facts rather than inference (RFC 0012 §3-ter):
+
+- **Every top-level `fn`'s return type**, as an OWNER-LESS fact — "calling this evaluates to
+  that". `let entry = parse_entry(..); entry.path` has no receiver to read a type off anything
+  else, and without the fact the type `parse_entry` returns looks used only where it is declared.
+  `Self` is left alone there: a free function has no impl around it, so the name simply resolves
+  to nothing.
+- **`#[derive(Default)]`** → `(T, default) → T`. The derive states that the impl exists and the
+  trait's signature states what it returns — the same curated-stdlib knowledge
+  `is_machinery_trait` carries, and no derive means no fact.
+- **A `for` variable** binds `{iterable}?0` — the element is parameter 0 of the collection's
+  declared type, which the projection marker below already expresses. Only a CHAIN qualifies:
+  a local's own annotation kept just its base name, and `Vec` alone has no parameters to project.
+
+A CALL initializer types its binding by naming the FUNCTION, never by guessing its return: a bare
+callee binds its own name, and a module-qualified one binds the pointer that matches what the
+path's reconstructed import puts in scope — the trailing name for a `crate`/`self`/`super`-rooted
+path (the import binds it), `module.function` for a bare-rooted one (the import binds the module,
+and the core resolves that base through the qualifier table). Where the path crosses into type
+space first (`crate::plugin::RootSink::default`), the type is what ends up in scope, so the
+pointer is `RootSink.default` — the same split `emit_path` makes for the import itself. Member
 accesses whose base is typed but whose own type is not locally knowable emit a one-hop
 dotted POINTER qualifier — `low.context_separator.into_bytes()` → `LowArgs.context_separator`,
 `Builder::new().opt(x)` → `Builder.new` — which the core resolves hop by hop through the
@@ -249,10 +392,23 @@ facts (and also credits the *yielded type* with a Read from the site: consuming 
 through a field IS a use of its type). Fact-first ordering: pointer, then the TypeEnv's
 direct type, then the opaque receiver (duck fallback).
 
-**Payload unwrapping (`yields_params`)**: a parameterized annotation also records its type
-arguments, in order (`Result<ConfiguredHIR, Error>` → params `[ConfiguredHIR, Error]`;
-`Box`/`Rc`/`Arc` are looked through), and an unwrapping operation marks its pointer hop
-with `?N` — the index of the parameter it extracts. The try operator extracts the success
+**The language's own generics (`builtin_member_types`)** — `Result<T, E>::map_err` still yields a
+`Result` over the same `T`; a `Vec<T>` iterates to its `T`. Those are facts about types whose
+declaration lives in the standard library, so no file here can emit them and they are declared on
+the descriptor instead. Two names in that table are this adapter's own choice and mean nothing to
+the core, which sees them as ordinary members: `@element` is the hop an iteration takes (a
+container that declares none simply does not type its loop variable — a map iterates to a tuple,
+which the model cannot name, and silence beats a confident wrong element), and `@slice` names the
+anonymous slice/array type so it can carry an `@element` like any other container. The table is
+deliberately small and grows only on measured evidence, the same discipline as the machinery-trait
+list — it is a curated set of facts, not a model of the standard library.
+
+**Payload unwrapping (`yields`'s arguments)**: an annotation is recorded as a TREE, not a base
+name plus a flat list — `Result<Vec<TreeEntry>, GitError>` keeps the `TreeEntry` two levels down,
+which is what a one-level list threw away and could never give back (`Box`/`Rc`/`Arc` are still
+looked through, and a lifetime or fn type holds its POSITION as `Unknown` so `?N` keeps indexing
+the arguments as written). An unwrapping operation marks its pointer hop
+with `?N` — the index of the argument it extracts, landing on a whole subtree. The try operator extracts the success
 payload, parameter 0 (`?` is shorthand for `?0`): `let chir = self.config.build_many(x)?`
 binds `chir` to `Config.build_many?`, resolved by the core through that parameter instead
 of the wrapper. WHICH index an operation projects is this adapter's knowledge — the core
@@ -358,7 +514,8 @@ is real and legal, not an artifact); `Idiomatic` states the honest stance — an
 | Trait-object / generic dispatch (`dyn Trait`, `T: Trait`) | `Implement` references from impls + the member fallback keep implementations alive when the trait is used — the RFC 0012 §3 dispatch rule, unchanged |
 | `Deref` coercion method calls | member fallback (`probable`/`possible`), by construction |
 | Re-exports of foreign crates (`pub use serde::…`) | dependency stays used; no file alias (nothing in-repo to alias) |
-| `#[path]` on `mod` | honored, literal |
+| `#[path]` on `mod` | honored, literal — `#[cfg_attr(cond, path = "…")]` included, and **every** alternate on one declaration is recorded (serde_derive_internals relocates its whole module with two `cfg_attr`s; reading only the bare spelling left the mod resolving to a nonexistent `internals.rs`, which took the module dark and made the `pub use internals::*;` beside it read as an undeclared crate) |
+| Bare `use <mod>::…` beside a `#[path]`-relocated `mod <mod>;` | the 2015-edition spelling of `self::<mod>`, expanded to the same declared locations — a local module shadows any extern crate sharing its name, so the relocation is the only reading |
 | Same name, `mod x;` and `fn x` | legal Rust; the two-step resolver prefers the module file — accepted approximation |
 | Editions | 2018+ path semantics assumed; edition 2015's bare crate-relative paths would read as dependencies → `Unresolved`, degrading to silence, never to a wrong accusation |
 | `no_std` crates | nothing special — `core`/`alloc` are in the stdlib list |

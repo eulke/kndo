@@ -36,7 +36,7 @@ impl LanguageAdapter for GoAdapter {
             activation: Vec::new(),
             dependencies: Vec::new(),
             id: SmolStr::new("go"),
-            facts_schema_version: 10, // bump whenever the serialized facts shape or the emission semantics change
+            facts_schema_version: 15, // bump whenever the serialized facts shape or the emission semantics change
             file_globs: vec![SmolStr::new("**/*.go")],
             manifest_globs: vec![SmolStr::new("**/go.mod"), SmolStr::new("**/go.work")],
             grammar_version: SmolStr::new("tree-sitter-go 0.25"),
@@ -75,19 +75,16 @@ impl LanguageAdapter for GoAdapter {
             // The module path IS the import specifier's prefix — resolve() structurally
             // identifies the declared dependency every time.
             resolves_dependency_usage: true,
+            declares_units_of_testing: true,
             package_test_dirs: Vec::new(),
+            // No builtin type facts yet: this adapter declares none, and an empty table
+            // simply means the chain resolver has no second tier to consult for it.
+            builtin_member_types: Vec::new(),
         }
     }
 
     fn claim(&self, path: &ProjectPath) -> Option<FileClaim> {
-        let p = path.0.as_str();
-        if !p.ends_with(".go") {
-            return None;
-        }
-        Some(FileClaim {
-            language: SmolStr::new("go"),
-            class: kndo_adapter_toolkit::classify::classify(p, &PATH_PATTERNS),
-        })
+        kndo_adapter_toolkit::classify::claim_by_extension(path, &["go"], "go", &PATH_PATTERNS)
     }
 
     fn claim_manifest(&self, path: &ProjectPath) -> bool {

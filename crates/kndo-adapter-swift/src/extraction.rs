@@ -7,10 +7,18 @@
 //! under zero coverage, and this adapter has more declaration shapes than that ceiling allows
 //! in one dispatcher).
 
-use kndo_adapter_toolkit::metrics::{function_shape, MetricsSyntax};
-use kndo_adapter_toolkit::parsing::span;
+use kndo_adapter_toolkit::metrics::{
+    push_accessor_metrics as toolkit_push_accessor_metrics,
+    push_function_metrics as toolkit_push_function_metrics, MetricsSyntax, MIN_CLONE_TOKENS,
+};
+use kndo_adapter_toolkit::parsing::{
+    find_child, handler_for, has_modifier_wrapper,
+    last_identifier_text as toolkit_last_identifier_text, modifiers_node, span, text,
+    visibility_level,
+};
+use kndo_adapter_toolkit::refs::{self, BodyHandler, BodySyntax};
 use kndo_core::adapter::{
-    Diagnostic, DiagnosticLevel, FileFacts, FunctionMetrics, ImportBinding, ImportKind, RawImport,
+    AdapterDiagnostic, DiagnosticLevel, FileFacts, ImportBinding, ImportKind, RawImport,
     RawReference, RawRoot, RawRootTarget, Span,
 };
 use kndo_core::vocab::{Confidence, RefKind, RootKind, SymbolKind};
@@ -57,9 +65,14 @@ const METRICS_SYNTAX: MetricsSyntax = MetricsSyntax {
         "nil",
     ],
     skip_kinds: &["comment", "multiline_comment"],
+    // Each of these becomes its own shape when it is substantial enough to carry clone
+    // evidence by itself; a small one stays an expression inside its owner.
+    // NOT `lambda_function_type`: that is a closure TYPE annotation, not a body.
+    nested_callable_kinds: &["lambda_literal"],
+    // Empty for the same reason as Kotlin: Swift construction is a plain
+    // `call_expression`, so there is no node kind that means "construction" to report.
+    construction_kinds: &[],
 };
-
-const MIN_CLONE_TOKENS: usize = 50;
 
 /// Item-walk context: the member owner (a struct/class/enum/protocol/extension's bare name),
 /// for `member_of` attribution — an `extension`'s members carry the EXTENDED
@@ -97,10 +110,9 @@ const DECL_HANDLERS: &[(&str, DeclHandler)] = &[
 ];
 
 fn dispatch_declaration(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
-    let Some((_, handler)) = DECL_HANDLERS.iter().find(|(k, _)| *k == item.kind()) else {
-        return;
-    };
-    handler(item, src, ctx, out);
+    if let Some(handler) = handler_for(item.kind(), DECL_HANDLERS) {
+        handler(item, src, ctx, out);
+    }
 }
 
 pub(crate) fn extract(path: &str, content: &[u8]) -> FileFacts {
@@ -110,9 +122,8 @@ pub(crate) fn extract(path: &str, content: &[u8]) -> FileFacts {
     }
 
     let Some(tree) = crate::parsing::parse(content) else {
-        out.diagnostics.push(Diagnostic {
+        out.diagnostics.push(AdapterDiagnostic {
             level: DiagnosticLevel::Warn,
-            path: None,
             message: "failed to initialize the Swift parser".to_string(),
             span: None,
         });
@@ -120,9 +131,8 @@ pub(crate) fn extract(path: &str, content: &[u8]) -> FileFacts {
     };
     let root = tree.root_node();
     if root.has_error() {
-        out.diagnostics.push(Diagnostic {
+        out.diagnostics.push(AdapterDiagnostic {
             level: DiagnosticLevel::Warn,
-            path: None,
             message: "parse errors — extraction is partial for this file".to_string(),
             span: None,
         });
@@ -203,6 +213,7 @@ fn handle_import(item: Node, src: &[u8], out: &mut FileFacts) {
         // resolved target's whole unit for imports carrying this.
         module_names_visible: true,
         local_alias: None,
+        reconstructed: false,
     });
 }
 
@@ -221,25 +232,8 @@ const VISIBILITY_LEVELS: &[(&str, u8)] = &[
 /// uniformly at top-level and member position alike (no restricted subset the way Java/
 /// Kotlin's ladders have).
 fn visibility(item: Node) -> (u8, bool) {
-    let level = visibility_keyword(item)
-        .and_then(|kw| VISIBILITY_LEVELS.iter().find(|(k, _)| *k == kw))
-        .map_or(2, |(_, l)| *l);
+    let level = visibility_level(item, VISIBILITY_LEVELS, 2);
     (level, level >= 3)
-}
-
-fn visibility_keyword(item: Node) -> Option<&'static str> {
-    let modifiers = modifiers_node(item)?;
-    let vis = modifiers
-        .children(&mut modifiers.walk())
-        .find(|n| n.kind() == "visibility_modifier")?;
-    vis.children(&mut vis.walk())
-        .find_map(|c| VISIBILITY_LEVELS.iter().find(|(k, _)| *k == c.kind()))
-        .map(|(k, _)| *k)
-}
-
-fn modifiers_node(item: Node) -> Option<Node> {
-    item.children(&mut item.walk())
-        .find(|n| n.kind() == "modifiers")
 }
 
 /// `@main`: an independent, `Certain`-confidence root trigger alongside `main.swift`'s
@@ -253,21 +247,6 @@ fn has_main_attribute(item: Node, src: &[u8]) -> bool {
         .children(&mut modifiers.walk())
         .filter(|n| n.kind() == "attribute")
         .any(|attr| last_identifier_text(attr, src) == Some("main"))
-}
-
-fn has_modifier_wrapper(item: Node, wrapper: &str, keyword: &str) -> bool {
-    let Some(modifiers) = modifiers_node(item) else {
-        return false;
-    };
-    let Some(found) = modifiers
-        .children(&mut modifiers.walk())
-        .find(|n| n.kind() == wrapper)
-    else {
-        return false;
-    };
-    found
-        .children(&mut found.walk())
-        .any(|c| c.kind() == keyword)
 }
 
 // ---------------------------------------------------------------- struct/class/enum/extension
@@ -402,7 +381,7 @@ fn handle_function(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
     walk_function_signature(item, src, Some(&qualified), out);
     if let Some(body) = body {
         walk_body(body, src, Some(&qualified), out);
-        push_function_metrics(out, &qualified, body);
+        push_function_metrics(out, &qualified, span(item), body);
     }
 }
 
@@ -570,19 +549,19 @@ fn handle_init(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
     walk_function_signature(item, src, Some(&qualified), out);
     if let Some(body) = body {
         walk_body(body, src, Some(&qualified), out);
-        push_function_metrics(out, &qualified, body);
+        push_function_metrics(out, &qualified, span(item), body);
     }
 }
 
-fn push_function_metrics(out: &mut FileFacts, qualified: &str, body: Node) {
-    let shape = function_shape(body, &METRICS_SYNTAX, MIN_CLONE_TOKENS);
-    out.functions.push(FunctionMetrics {
-        symbol: SmolStr::new(qualified),
-        cyclomatic: shape.cyclomatic,
-        loc: shape.loc,
-        token_count: shape.token_count as u32,
-        fingerprints: shape.fingerprints,
-    });
+fn push_function_metrics(out: &mut FileFacts, qualified: &str, decl_span: Span, body: Node) {
+    toolkit_push_function_metrics(
+        out,
+        qualified,
+        decl_span,
+        body,
+        &METRICS_SYNTAX,
+        MIN_CLONE_TOKENS,
+    );
 }
 
 // ---------------------------------------------------------------- properties, type aliases, enum entries
@@ -599,7 +578,7 @@ fn handle_property(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
     push_declaration(
         out,
         name,
-        property_symbol_kind(ctx),
+        property_symbol_kind(item, ctx),
         item,
         None,
         ctx.owner,
@@ -609,13 +588,60 @@ fn handle_property(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
         walk_type_refs(annotation, src, ctx.owner, out);
     }
     walk_property_bodies(item, src, property_value_within(ctx, name), out);
+    // A computed property is a callable and now says so in its kind — so it must have a shape
+    // too, or `crap` and `duplicate` cannot see a getter however gnarly it is. Observers are
+    // deliberately excluded: `willSet`/`didSet` run around a store, they are not the property.
+    let accessors = computed_accessor_bodies(item);
+    if !accessors.is_empty() {
+        let (_, qualified) = qualify(ctx.owner, name);
+        toolkit_push_accessor_metrics(
+            out,
+            &qualified,
+            span(item),
+            accessors,
+            &METRICS_SYNTAX,
+            MIN_CLONE_TOKENS,
+        );
+    }
 }
 
-fn property_symbol_kind(ctx: &Ctx<'_>) -> SymbolKind {
-    if ctx.owner.is_some() {
-        SymbolKind::Field
-    } else {
-        SymbolKind::Variable
+/// Every accessor body of a computed property, in source order. Verified against
+/// tree-sitter-swift 0.7.3's `node-types.json`: a `computed_property` holds either a bare
+/// `statements` child (the implicit-getter shorthand `var x: Int { 1 + 2 }`) or one
+/// `computed_getter`/`computed_setter`/`computed_modify` per accessor, each with its own
+/// `statements`. Source order, so the numbering is faithful and deterministic together.
+fn computed_accessor_bodies(item: Node) -> Vec<Node> {
+    let Some(computed) = find_child(item, "computed_property") else {
+        return Vec::new();
+    };
+    let mut c = computed.walk();
+    computed
+        .children(&mut c)
+        .filter_map(|n| match n.kind() {
+            "statements" => Some(n),
+            "computed_getter" | "computed_setter" | "computed_modify" => {
+                find_child(n, "statements")
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+/// A **computed** property is a getter, not a value: `var isValid: Bool { … }` compiles to a
+/// method and has a body a test can exercise, where `static let https = Scheme("https")` has a
+/// value and nothing to exercise. Calling both `Field` made the kind unable to tell a header-name
+/// constant from real logic, which is what let `untested` accuse 185 of vapor's stored constants
+/// of not being tested.
+///
+/// `willSet`/`didSet` observers do NOT make a property computed — the property still stores its
+/// value, and the observers run around the store rather than instead of it.
+fn property_symbol_kind(item: Node, ctx: &Ctx<'_>) -> SymbolKind {
+    let computed = find_child(item, "computed_property").is_some();
+    match (computed, ctx.owner.is_some()) {
+        (true, true) => SymbolKind::Method,
+        (true, false) => SymbolKind::Function,
+        (false, true) => SymbolKind::Field,
+        (false, false) => SymbolKind::Variable,
     }
 }
 
@@ -690,18 +716,18 @@ fn push_declaration(
     member_of: Option<&str>,
     (level, exported): (u8, bool),
 ) {
-    out.declarations.push(kndo_core::adapter::Declaration {
-        name: SmolStr::new(name),
+    kndo_adapter_toolkit::decls::push_declaration(
+        out,
+        name,
         kind,
-        span: span(item),
-        exported,
-        visibility: kndo_core::adapter::VisibilityLevel(level),
-        member_of: member_of.map(SmolStr::new),
-        implicitly_invoked: false,
-        nested_scope: false,
-        visibility_inherited: false,
+        item,
         signature_span,
-    });
+        member_of,
+        (level, exported),
+        // This grammar carries no declaration-site markers: annotations are the JVM shape,
+        // and an attribute here is not one (`Declaration::markers`' own contract).
+        Vec::new(),
+    );
 }
 
 // ---------------------------------------------------------------- type refs & inheritance
@@ -743,15 +769,7 @@ fn emit_type_use_ref(node: Node, src: &[u8], within: Option<&str>, out: &mut Fil
 /// The base path's own last `type_identifier` segment, recursing into a nested `user_type`
 /// (qualified-path nesting) but not into `type_arguments`.
 fn last_identifier_text<'a>(node: Node, src: &'a [u8]) -> Option<&'a str> {
-    let mut result = None;
-    for child in node.children(&mut node.walk()) {
-        match child.kind() {
-            "type_identifier" => result = Some(text(child, src)),
-            "user_type" => result = last_identifier_text(child, src).or(result),
-            _ => {}
-        }
-    }
-    result
+    toolkit_last_identifier_text(node, src, "type_identifier", "user_type")
 }
 
 fn walk_extend_refs(node: Node, src: &[u8], owner: &str, out: &mut FileFacts) {
@@ -775,91 +793,68 @@ fn walk_extend_refs(node: Node, src: &[u8], owner: &str, out: &mut FileFacts) {
 }
 
 fn emit_extend_ref(ty: Option<Node>, site: Node, src: &[u8], owner: &str, out: &mut FileFacts) {
-    let Some(name) = ty.and_then(|t| last_identifier_text(t, src)) else {
-        return;
-    };
-    out.references.push(RawReference {
-        name: SmolStr::new(name),
-        scope_context: None,
-        span: span(site),
-        within: Some(SmolStr::new(owner)),
-        kind: RefKind::Extend,
-    });
+    refs::emit_extend_ref(ty, site, src, owner, out, &BODY_SYNTAX);
 }
 
 // ---------------------------------------------------------------- expression/body references
 
-type BodyHandler = fn(Node, &[u8], Option<&str>, &mut FileFacts);
-
 const BODY_HANDLERS: &[(&str, BodyHandler)] = &[
-    ("call_expression", handle_call),
+    ("call_expression", refs::handle_call),
     ("navigation_expression", handle_navigation),
-    ("user_type", walk_type_refs),
-    ("simple_identifier", handle_identifier_ref),
+    ("user_type", walk_type_refs_handler),
+    ("simple_identifier", refs::handle_identifier_ref),
 ];
+
+/// What this grammar spells things with — everything the shared body walk needs to know about
+/// Swift, and nothing it decides. The traversal itself lives in the toolkit
+/// (`refs::walk_body`), which Kotlin drives with its own table.
+static BODY_SYNTAX: BodySyntax = BodySyntax {
+    comment_kinds: &["comment", "multiline_comment"],
+    identifier_kind: "simple_identifier",
+    type_nesting_kind: "user_type",
+    // Swift spells a type name with its own leaf, distinct from a value name's.
+    type_identifier_kind: "type_identifier",
+    navigation_kind: "navigation_expression",
+    emit_navigation_ref,
+    is_reference_position,
+    handlers: BODY_HANDLERS,
+};
 
 /// Expression/statement bodies: calls, navigation (member/property access), bare identifier
 /// reads, type positions inside expressions — table-driven for the same CRAP-ceiling reason
 /// `DECL_HANDLERS` is.
 fn walk_body(node: Node, src: &[u8], within: Option<&str>, out: &mut FileFacts) {
-    if matches!(node.kind(), "comment" | "multiline_comment") {
-        return;
-    }
-    if let Some((_, handler)) = BODY_HANDLERS.iter().find(|(k, _)| *k == node.kind()) {
-        handler(node, src, within, out);
-        return;
-    }
-    for child in node.children(&mut node.walk()) {
-        walk_body(child, src, within, out);
-    }
+    refs::walk_body(node, src, within, out, &BODY_SYNTAX);
 }
 
-fn handle_identifier_ref(node: Node, src: &[u8], within: Option<&str>, out: &mut FileFacts) {
-    if !is_reference_position(node) {
-        return;
-    }
-    out.references.push(RawReference {
-        name: SmolStr::new(text(node, src)),
-        scope_context: None,
-        span: span(node),
-        within: within.map(SmolStr::new),
-        kind: RefKind::Read,
-    });
+/// The body walk reaches type positions through a handler; every other caller here already
+/// knows it is looking at a type, so the walk itself keeps the shorter shape.
+fn walk_type_refs_handler(
+    node: Node,
+    src: &[u8],
+    within: Option<&str>,
+    out: &mut FileFacts,
+    _syntax: &BodySyntax,
+) {
+    walk_type_refs(node, src, within, out);
 }
 
-fn handle_call(node: Node, src: &[u8], within: Option<&str>, out: &mut FileFacts) {
-    let mut cursor = node.walk();
-    let mut children = node.children(&mut cursor);
-    let Some(callee) = children.next() else {
-        return;
-    };
-    emit_call_ref(callee, src, within, out);
-    for child in children {
-        walk_body(child, src, within, out);
-    }
-}
-
-fn emit_call_ref(callee: Node, src: &[u8], within: Option<&str>, out: &mut FileFacts) {
-    match callee.kind() {
-        "simple_identifier" => out.references.push(RawReference {
-            name: SmolStr::new(text(callee, src)),
-            scope_context: None,
-            span: span(callee),
-            within: within.map(SmolStr::new),
-            kind: RefKind::Call,
-        }),
-        "navigation_expression" => emit_navigation_ref(callee, src, within, out, RefKind::Call),
-        _ => walk_body(callee, src, within, out),
-    }
-}
-
-fn handle_navigation(node: Node, src: &[u8], within: Option<&str>, out: &mut FileFacts) {
+fn handle_navigation(
+    node: Node,
+    src: &[u8],
+    within: Option<&str>,
+    out: &mut FileFacts,
+    _syntax: &BodySyntax,
+) {
     emit_navigation_ref(node, src, within, out, RefKind::Read);
 }
 
 /// `a.b`/`a.b.c()` — the terminal segment becomes the reference, `scope_context` is set when
 /// the target is a plain identifier/`self`; a complex target (a nested navigation/
 /// call) is walked for its own references instead.
+/// A dotted access chain, taken apart BY FIELD NAME — Swift's grammar names the target and the
+/// suffix, which is why this stays here rather than in the shared driver (Kotlin's is
+/// positional).
 fn emit_navigation_ref(
     node: Node,
     src: &[u8],
@@ -917,17 +912,9 @@ fn is_reference_position(node: Node) -> bool {
 
 // ---------------------------------------------------------------- small tree helpers
 
-fn find_child<'a>(node: Node<'a>, kind: &str) -> Option<Node<'a>> {
-    node.children(&mut node.walk()).find(|n| n.kind() == kind)
-}
-
 fn find_any_child<'a>(node: Node<'a>, kinds: &[&str]) -> Option<Node<'a>> {
     node.children(&mut node.walk())
         .find(|n| kinds.contains(&n.kind()))
-}
-
-fn text<'a>(node: Node, src: &'a [u8]) -> &'a str {
-    std::str::from_utf8(&src[node.byte_range()]).unwrap_or("")
 }
 
 #[cfg(test)]
@@ -943,6 +930,55 @@ mod tests {
     }
 
     #[test]
+    fn a_computed_property_gets_a_shape_and_a_stored_one_does_not() {
+        // Reclassifying computed properties to `Method` without giving them a shape left a
+        // callable `crap` and `duplicate` could not see. One symbol, one numbering: the getter
+        // is ordinal 0 (reading the property runs it) and the setter continues, so the two
+        // cannot collide on a nested shape's identity.
+        let f = facts(
+            "struct S {\n\
+             \x20   var stored: Int = 0\n\
+             \x20   var computed: Int { return stored + 1 }\n\
+             \x20   var both: Int {\n\
+             \x20       get { return stored }\n\
+             \x20       set { stored = newValue }\n\
+             \x20   }\n\
+             \x20   var observed: Int = 0 {\n\
+             \x20       didSet { print(observed) }\n\
+             \x20   }\n\
+             }\n",
+        );
+        let shapes = |name: &str| -> Vec<u16> {
+            let mut o: Vec<u16> = f
+                .functions
+                .iter()
+                .filter(|m| m.symbol == name)
+                .map(|m| m.shape_ordinal)
+                .collect();
+            o.sort();
+            o
+        };
+        assert_eq!(
+            shapes("S.computed"),
+            vec![0],
+            "the implicit getter is one shape"
+        );
+        assert_eq!(
+            shapes("S.both"),
+            vec![0, 1],
+            "get and set are two, numbered once"
+        );
+        assert!(
+            shapes("S.stored").is_empty(),
+            "a stored property is a value"
+        );
+        assert!(
+            shapes("S.observed").is_empty(),
+            "observers run around a store; the property is still stored"
+        );
+    }
+
+    #[test]
     fn unit_is_derived_from_the_sources_path_convention() {
         let f = facts("class Widget {}\n");
         assert_eq!(f.unit.as_deref(), Some("MyLib"));
@@ -953,6 +989,38 @@ mod tests {
     fn a_loose_path_leaves_unit_none() {
         let f = extract("scripts/loose.swift", b"class Widget {}\n");
         assert_eq!(f.unit, None);
+    }
+
+    #[test]
+    fn a_computed_property_is_a_callable_and_a_stored_one_is_not() {
+        // The kind has to separate `static let https = Scheme("https")` — a value with nothing
+        // to exercise — from `var isValid: Bool { … }`, which is a getter with a body. Both
+        // used to be `Field`, so nothing downstream could tell a header-name constant from
+        // real logic.
+        let f = facts(
+            "struct Scheme {\n\
+             \x20   static let https = Scheme()\n\
+             \x20   var isValid: Bool { return true }\n\
+             \x20   var stored: Int = 0 {\n\
+             \x20       didSet { print(stored) }\n\
+             \x20   }\n\
+             }\n\
+             var topLevelComputed: Int { return 1 }\n\
+             let topLevelStored = 2\n",
+        );
+        assert_eq!(decl(&f, "https").kind, SymbolKind::Field);
+        assert_eq!(decl(&f, "isValid").kind, SymbolKind::Method);
+        assert_eq!(
+            decl(&f, "stored").kind,
+            SymbolKind::Field,
+            "willSet/didSet observers run AROUND the store — the property still stores a value"
+        );
+        assert_eq!(
+            decl(&f, "topLevelComputed").kind,
+            SymbolKind::Function,
+            "a computed global is a getter function, not a method of anything"
+        );
+        assert_eq!(decl(&f, "topLevelStored").kind, SymbolKind::Variable);
     }
 
     #[test]

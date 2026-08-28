@@ -4,13 +4,16 @@
 //!
 //! Implemented verbs: `find`, `describe`, `uses`/`used-by` (one shared implementation —
 //! direction is just "forward" vs "reverse" adjacency), `trace` (both the two-argument directed
-//! form and the single-argument liveness form). `impact` isn't implemented —
-//! the navigation-verb set is find/describe/uses/used-by/trace + `kndo query` only.
+//! form and the single-argument liveness form), and `impact` (the reverse closure, with
+//! `--if-deleted` simulating the deletion).
 //!
-//! Deliberately absent from `describe`, honestly rather than fabricated: `metrics` (cyclomatic/
-//! CRAP/coverage — no such data exists anywhere in the graph) and duplication
-//! group membership. `findings` (open findings attached to a node) IS implemented — it
-//! reruns the same suppression-aware finding computation `check` uses and filters by node.
+//! `describe` reports everything RFC 0007 §4.2 asks for. Two of them are worth naming because
+//! this doc claimed for a long time that they could not exist: **metrics** come from
+//! `graph.function_metrics`, one entry per callable *shape* rather than one per symbol, with
+//! coverage and CRAP filled in only when a report was ingested — absent means unmeasured, never
+//! zero; **duplication group membership** is read off the `duplicate` findings the run already
+//! computed, whose `related` list is the group. `findings` (open findings attached to a node)
+//! reruns the same suppression-aware computation `check` uses and filters by node.
 //!
 //! `trace --all`'s path-enumeration policy is an open design question —
 //! this implementation takes a direct, bounded reading: BFS for the shortest path,
@@ -24,6 +27,7 @@ use smol_str::SmolStr;
 
 use crate::adapter::{ProjectPath, Span};
 use crate::analysis::reachability::{Reachability, ReachabilityMap};
+use crate::engine::Finding;
 use crate::graph::ProjectGraph;
 use crate::vocab::{Confidence, DependencyId, FileId, NodeRef, PackageId, RootKind, SymbolId};
 
@@ -48,17 +52,44 @@ pub enum Selector {
 
 /// Parses raw CLI/query text into a [`Selector`] — never touches the graph, so it can't fail on
 /// "not found," only on malformed syntax.
-pub fn parse_selector(raw: &str) -> Result<Selector, String> {
+/// Everything a query verb's parsing/resolution can reject with a message, unified so
+/// `parse_selector`, [`EdgeFilter::parse`], and [`impact`] share one error discipline instead
+/// of each returning a bare `Result<_, String>`. Every variant's `Display` is the exact string
+/// the query envelope has always surfaced — callers that used to build a `String` by hand now
+/// call `.to_string()` on this instead, byte-identical.
+#[derive(Debug, thiserror::Error)]
+pub enum QueryError {
+    #[error("`dep:` selector is missing a name")]
+    EmptyDependencySelector,
+    #[error("`pkg:` selector is missing a name")]
+    EmptyPackageSelector,
+    #[error("unknown root set `roots:{0}` (production, test, tooling)")]
+    UnknownRootSet(String),
+    #[error("malformed symbol selector `{0}`")]
+    MalformedSymbolSelector(String),
+    #[error("unknown --edges `{0}` (imports, references, all)")]
+    UnknownEdgeFilter(String),
+    #[error(
+        "--if-deleted does not apply to dep:{0} — removing a declared dependency breaks its \
+         importers outright rather than flipping reachability; use `used-by dep:{0}` to list \
+         them"
+    )]
+    IfDeletedOnDependency(String),
+    #[error("impact does not apply to a root set — trace individual roots")]
+    ImpactOnRootSet,
+}
+
+pub fn parse_selector(raw: &str) -> Result<Selector, QueryError> {
     if let Some(name) = raw.strip_prefix("dep:") {
         return if name.is_empty() {
-            Err("`dep:` selector is missing a name".to_string())
+            Err(QueryError::EmptyDependencySelector)
         } else {
             Ok(Selector::Dependency(SmolStr::new(name)))
         };
     }
     if let Some(name) = raw.strip_prefix("pkg:") {
         return if name.is_empty() {
-            Err("`pkg:` selector is missing a name".to_string())
+            Err(QueryError::EmptyPackageSelector)
         } else {
             Ok(Selector::Package(SmolStr::new(name)))
         };
@@ -68,14 +99,12 @@ pub fn parse_selector(raw: &str) -> Result<Selector, String> {
             "production" => Ok(Selector::RootSet(RootKind::Production)),
             "test" => Ok(Selector::RootSet(RootKind::Test)),
             "tooling" => Ok(Selector::RootSet(RootKind::Tooling)),
-            other => Err(format!(
-                "unknown root set `roots:{other}` (production, test, tooling)"
-            )),
+            other => Err(QueryError::UnknownRootSet(other.to_string())),
         };
     }
     if let Some((path, name)) = raw.split_once('#') {
         return if path.is_empty() || name.is_empty() {
-            Err(format!("malformed symbol selector `{raw}`"))
+            Err(QueryError::MalformedSymbolSelector(raw.to_string()))
         } else {
             Ok(Selector::Symbol(
                 ProjectPath(SmolStr::new(path)),
@@ -111,11 +140,13 @@ pub enum Resolved {
     Dependency(ResolvedDependency),
 }
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum ResolveError {
+    #[error("no node matches the selector")]
     NotFound,
     /// Rendered selector strings for every concrete candidate ("an error listing
     /// the concrete candidates — never a guess").
+    #[error("ambiguous selector — candidates: {}", .0.join(", "))]
     Ambiguous(Vec<String>),
 }
 
@@ -286,6 +317,21 @@ pub struct QNodeRef {
     pub span: Option<NodeSpan>,
 }
 
+/// One node's one-line spelling: `[selector] kind path:line`, with the coordinates dropped for
+/// a node that has no span. Lives with the type rather than in a frontend, because it is the
+/// same line in every frontend that prints one — the human renderer and the agent format each
+/// carried a byte-identical copy of it, which is exactly the drift the facade rule exists to
+/// prevent.
+impl std::fmt::Display for QNodeRef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "[{}] {}", self.selector, self.kind)?;
+        match &self.span {
+            Some(s) => write!(f, " {}:{}", s.path, s.start.0),
+            None => Ok(()),
+        }
+    }
+}
+
 pub fn qnode_ref(graph: &ProjectGraph, reach: &ReachabilityMap, node: &Resolved) -> QNodeRef {
     QNodeRef {
         selector: selector_string(graph, node),
@@ -374,7 +420,7 @@ pub struct EdgeFilter {
 }
 
 impl EdgeFilter {
-    pub fn parse(raw: Option<&str>) -> Result<EdgeFilter, String> {
+    pub fn parse(raw: Option<&str>) -> Result<EdgeFilter, QueryError> {
         match raw.unwrap_or("all") {
             "imports" => Ok(EdgeFilter {
                 imports: true,
@@ -391,9 +437,7 @@ impl EdgeFilter {
                 references: true,
                 wildcard: false,
             }),
-            other => Err(format!(
-                "unknown --edges `{other}` (imports, references, all)"
-            )),
+            other => Err(QueryError::UnknownEdgeFilter(other.to_string())),
         }
     }
 
@@ -437,10 +481,14 @@ struct NavEdge {
     site_file: FileId,
 }
 
-struct NavGraph {
+pub(crate) struct GraphIndex {
     forward: HashMap<NavNode, Vec<NavEdge>>,
     reverse: HashMap<NavNode, Vec<NavEdge>>,
     roots: HashMap<RootKind, Vec<(NavNode, Confidence)>>,
+    /// Who contributed what, for `describe`'s `sources`. Built here rather than per described
+    /// node: the previous shape scanned the whole edge list once *per node*, so a `query`
+    /// batch of sixty describes scanned it sixty times.
+    provenance: crate::graph::provenance::ProvenanceIndex,
 }
 
 /// Every edge kind we build a [`NavEdge`] from has a `from` that's either a file or a symbol
@@ -456,7 +504,7 @@ fn nav_node_owning_file(graph: &ProjectGraph, node: NavNode) -> FileId {
     }
 }
 
-fn build_nav_graph(graph: &ProjectGraph) -> NavGraph {
+pub(crate) fn build_graph_index(graph: &ProjectGraph) -> GraphIndex {
     let mut declared_in: HashMap<FileId, Vec<SymbolId>> = HashMap::default();
     for edge in &graph.edges {
         if let crate::vocab::EdgeKind::Declares { file, symbol } = edge.kind {
@@ -579,10 +627,11 @@ fn build_nav_graph(graph: &ProjectGraph) -> NavGraph {
         }
     }
 
-    NavGraph {
+    GraphIndex {
         forward,
         reverse,
         roots,
+        provenance: crate::graph::provenance::ProvenanceIndex::build(graph),
     }
 }
 
@@ -727,7 +776,16 @@ pub struct DeclarationInfo {
     pub kind: String,
     pub span: NodeSpan,
     pub exported: bool,
+    /// The rung's ordinal on the claiming adapter's visibility ladder — comparable
+    /// (`>` means "more visible") and meaningless on its own, which is what
+    /// `visibility_label` is for.
     pub visibility: u8,
+    /// The rung's own name, as the adapter spells it (`private`, `pub(crate)`, `internal`,
+    /// `exported`). The ordinal alone rendered as `visibility 3`, which asks a reader to
+    /// know a ladder they cannot see; the core still names no language, because the label
+    /// comes from the adapter's own ladder rather than from a table here.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub visibility_label: Option<String>,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -760,6 +818,48 @@ pub struct Degree {
     pub out_by_kind: HashMap<String, usize>,
 }
 
+/// One callable **shape**'s measurements — a declaration's own body, or one callable nested
+/// inside it. A symbol can own several ([`crate::graph::SymbolMetrics`]'s doc), so `describe`
+/// reports a list ordered by `shape_ordinal` rather than one set of numbers that would
+/// silently be the first shape's.
+#[derive(Debug, Clone, serde::Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct ShapeMetrics {
+    /// 0 for the declaration's own body, 1..N for nested callables in pre-order.
+    pub shape_ordinal: u16,
+    /// This shape's own extent, not the symbol's.
+    pub span: NodeSpan,
+    pub cyclomatic: u32,
+    pub loc: u32,
+    /// Normalized-stream token count — the basis of the duplication ratio.
+    pub token_count: u32,
+    /// Covered fraction of this shape's instrumented lines, when a report was ingested and
+    /// instruments them. **Absent means unknown, never zero**: `crap` scores an uninstrumented
+    /// function pessimistically at 0, but reporting that 0 here would be a fabricated
+    /// measurement — the rule [`crate::coverage::CoverageMap::function_coverage`] states.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub coverage: Option<f64>,
+    /// `cyclomatic² × (1 - coverage)³ + cyclomatic`, from the same function `crap` scores
+    /// with. Absent for the same reason `coverage` is.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub crap: Option<f64>,
+}
+
+/// One duplication group this node belongs to: the `duplicate` finding that named it, and
+/// every member including this node.
+///
+/// Read off the findings the run already computed, not a second index on the graph — a
+/// cross-file fingerprint index would need its own invalidation semantics in the incremental
+/// patch, for an answer the analysis has already produced.
+#[derive(Debug, Clone, serde::Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct DuplicationInfo {
+    /// The `duplicate` finding's id — the group's stable identity.
+    pub finding: String,
+    /// Every member's selector, in the finding's own order.
+    pub members: Vec<String>,
+}
+
 #[derive(Debug, Clone, serde::Serialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct DescribeResult {
@@ -772,6 +872,14 @@ pub struct DescribeResult {
     pub dependency: Option<DependencyInfo>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub package: Option<PackageInfo>,
+    /// Per-shape measurements, ordered by `shape_ordinal`. Empty for a node that owns no
+    /// callable shape — a type, a file, a dependency (RFC 0007 §4.2).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub metrics: Vec<ShapeMetrics>,
+    /// Duplication groups this node belongs to. Plural because a symbol with two substantial
+    /// closures can be in two different groups.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub duplication: Vec<DuplicationInfo>,
     pub degree: Degree,
     pub reached_by_roots: Vec<QNodeRef>,
     pub findings: Vec<String>,
@@ -781,19 +889,92 @@ pub struct DescribeResult {
     pub elided: HashMap<String, usize>,
 }
 
+/// `kndo explain <finding-id>` — one finding, and everything the graph knows about what it
+/// landed on.
+///
+/// Deliberately a *pair*, not a new derivation: the finding verbatim (its own message,
+/// evidence chain, provenance and rollup count are the explanation the analysis already
+/// wrote) plus `describe` of its subject (color, roots that reach it, degree, the other
+/// findings on the same node). Re-deriving either half here would be a second answer to a
+/// question that already has one — and `explain` would be the copy that drifts.
+#[derive(Debug, Clone, serde::Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct ExplainResult {
+    pub finding: Finding,
+    /// `None` when the finding's subject is not a graph node: a directory rollup, or a path
+    /// the graph never saw. The finding still explains itself; what is missing is the node
+    /// context, and saying so beats inventing a node to describe.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub subject: Option<Box<DescribeResult>>,
+    /// The selector the subject was looked up under — what a reader types to keep navigating
+    /// (`kndo used-by <selector>`), and, when `subject` is `None`, what failed to resolve.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub subject_selector: Option<String>,
+}
+
+/// A finding's subject as a selector, in the same grammar `describe` accepts. `None` for a
+/// subject that has no single node to name — a directory rollup stands in for many.
+fn finding_selector(finding: &Finding) -> Option<String> {
+    if finding.subject_kind == crate::vocab::SubjectKind::DIRECTORY {
+        return None;
+    }
+    if finding.subject_kind == crate::vocab::SubjectKind::DEPENDENCY {
+        // A dependency finding's `symbol` IS the coordinate — the manifest path in `location`
+        // is where it was declared, not what the verdict is about.
+        return finding.location.symbol.as_ref().map(|d| format!("dep:{d}"));
+    }
+    let path = finding.location.path.as_ref()?.0.as_str();
+    Some(match &finding.location.symbol {
+        Some(symbol) => format!("{path}#{symbol}"),
+        None => path.to_string(),
+    })
+}
+
+pub(crate) fn explain(
+    graph: &ProjectGraph,
+    reach: &ReachabilityMap,
+    finding: &Finding,
+    finding_locations: &[FindingLocation<'_>],
+    coverage: &crate::coverage::CoverageMap,
+    nav: &GraphIndex,
+) -> ExplainResult {
+    let subject_selector = finding_selector(finding);
+    let subject = subject_selector
+        .as_deref()
+        .and_then(|raw| parse_selector(raw).ok())
+        .and_then(|sel| resolve(graph, &sel).ok())
+        .map(|resolved| {
+            Box::new(describe(
+                graph,
+                reach,
+                &resolved,
+                finding_locations,
+                coverage,
+                nav,
+            ))
+        });
+    ExplainResult {
+        finding: finding.clone(),
+        subject,
+        subject_selector,
+    }
+}
+
 const DECLARE_SYMBOLS_CAP: usize = 50;
 const REACHED_BY_ROOTS_CAP: usize = 10;
 
-pub fn describe(
+pub(crate) fn describe(
     graph: &ProjectGraph,
     reach: &ReachabilityMap,
     resolved: &Resolved,
     finding_locations: &[FindingLocation<'_>],
+    coverage: &crate::coverage::CoverageMap,
+    nav: &GraphIndex,
 ) -> DescribeResult {
     let node_ref = qnode_ref(graph, reach, resolved);
-    let nav = build_nav_graph(graph);
 
-    let (declaration, file, dependency, package, declared_symbols) = match resolved {
+    let (declaration, file, dependency, package, declared_symbols, symbols_elided) = match resolved
+    {
         Resolved::Node(ResolvedNode::Symbol(s)) => {
             let sym = &graph.symbols[s.0 as usize];
             (
@@ -806,11 +987,18 @@ pub fn describe(
                     },
                     exported: sym.exported,
                     visibility: sym.visibility.0,
+                    visibility_label: graph.files[sym.file.0 as usize]
+                        .language
+                        .as_deref()
+                        .and_then(|lang| graph.ladder_for(lang))
+                        .and_then(|ladder| ladder.get(sym.visibility.0 as usize))
+                        .map(|rung| rung.label.to_string()),
                 }),
                 None,
                 None,
                 None,
                 Vec::new(),
+                0,
             )
         }
         Resolved::Node(ResolvedNode::File(f)) => {
@@ -842,8 +1030,9 @@ pub fn describe(
                     )
                 })
                 .collect();
+            let elided = symbols.len().saturating_sub(DECLARE_SYMBOLS_CAP);
             symbols.truncate(DECLARE_SYMBOLS_CAP);
-            (None, info, None, None, symbols)
+            (None, info, None, None, symbols, elided)
         }
         Resolved::Node(ResolvedNode::Package(p)) => {
             let files = graph.files.iter().filter(|f| f.package == *p).count();
@@ -863,6 +1052,7 @@ pub fn describe(
                     dependents,
                 }),
                 Vec::new(),
+                0,
             )
         }
         Resolved::Dependency(name) => {
@@ -908,13 +1098,14 @@ pub fn describe(
                 }),
                 None,
                 Vec::new(),
+                0,
             )
         }
-        Resolved::Node(ResolvedNode::RootSet(_)) => (None, None, None, None, Vec::new()),
+        Resolved::Node(ResolvedNode::RootSet(_)) => (None, None, None, None, Vec::new(), 0),
     };
 
-    let degree = describe_degree(&nav, resolved);
-    let mut reached_by_roots = reached_by_roots(&nav, resolved);
+    let degree = describe_degree(nav, resolved);
+    let mut reached_by_roots = reached_by_roots(nav, resolved);
     let roots_elided = reached_by_roots.len().saturating_sub(REACHED_BY_ROOTS_CAP);
     reached_by_roots.truncate(REACHED_BY_ROOTS_CAP);
     let reached_by_roots = reached_by_roots
@@ -929,11 +1120,16 @@ pub fn describe(
         .map(|f| f.id.to_string())
         .collect();
 
-    let sources = describe_sources(graph, resolved);
+    let sources = describe_sources(graph, nav, resolved);
+    let metrics = shape_metrics(graph, coverage, resolved);
+    let duplication = duplication_groups(finding_locations, &selector);
 
     let mut elided = HashMap::default();
     if roots_elided > 0 {
         elided.insert("reached_by_roots".to_string(), roots_elided);
+    }
+    if symbols_elided > 0 {
+        elided.insert("declared_symbols".to_string(), symbols_elided);
     }
 
     DescribeResult {
@@ -942,6 +1138,8 @@ pub fn describe(
         file,
         dependency,
         package,
+        metrics,
+        duplication,
         degree,
         reached_by_roots,
         findings,
@@ -949,6 +1147,72 @@ pub fn describe(
         declared_symbols,
         elided,
     }
+}
+
+/// Every shape this node owns, ordered by `shape_ordinal`, with coverage and CRAP filled in
+/// when a report was ingested. Only a symbol owns shapes; everything else gets an empty list.
+fn shape_metrics(
+    graph: &ProjectGraph,
+    coverage: &crate::coverage::CoverageMap,
+    resolved: &Resolved,
+) -> Vec<ShapeMetrics> {
+    let Resolved::Node(ResolvedNode::Symbol(s)) = resolved else {
+        return Vec::new();
+    };
+    let path = &graph.files[graph.symbols[s.0 as usize].file.0 as usize].path;
+    let mut out: Vec<ShapeMetrics> = graph
+        .function_metrics
+        .iter()
+        .filter(|(id, _)| id == s)
+        .map(|(_, m)| {
+            // The SHAPE's own extent, the same sub-range lookup `crap` scores with — a closure
+            // has its own lines, so it has its own coverage.
+            let cov = coverage.function_coverage(path, m.shape_span);
+            ShapeMetrics {
+                shape_ordinal: m.shape_ordinal,
+                span: NodeSpan {
+                    path: path.0.to_string(),
+                    start: m.shape_span.start,
+                    end: m.shape_span.end,
+                },
+                cyclomatic: m.cyclomatic,
+                loc: m.loc,
+                token_count: m.token_count,
+                coverage: cov,
+                // Scored only against a real measurement. `crap` itself substitutes 0 for an
+                // uninstrumented function, which is the right pessimism for a verdict and the
+                // wrong number to publish as one.
+                crap: cov.map(|c| crate::analysis::crap::crap_score(m.cyclomatic, c)),
+            }
+        })
+        .collect();
+    out.sort_by_key(|m| m.shape_ordinal);
+    out
+}
+
+/// The duplication groups `selector` belongs to. A `duplicate` finding's `related` list IS its
+/// group — one entry per member, `path` and `note` spelling the member exactly as a selector
+/// does — so membership is a lookup, not a second fingerprint pass.
+fn duplication_groups(
+    finding_locations: &[FindingLocation<'_>],
+    selector: &str,
+) -> Vec<DuplicationInfo> {
+    let member_selector =
+        |r: &crate::engine::RelatedLocation| Some(format!("{}#{}", r.path.0, r.note.as_deref()?));
+    finding_locations
+        .iter()
+        .filter(|f| f.category == crate::vocab::Category::DUPLICATE.as_str())
+        .filter_map(|f| {
+            let members: Vec<String> = f.related.iter().filter_map(member_selector).collect();
+            members
+                .iter()
+                .any(|m| m == selector)
+                .then(|| DuplicationInfo {
+                    finding: f.id.to_string(),
+                    members,
+                })
+        })
+        .collect()
 }
 
 fn dependency_scope_str(scope: crate::vocab::DependencyScope) -> &'static str {
@@ -988,7 +1252,7 @@ fn nav_node_of(resolved: &Resolved) -> Option<NavNode> {
     }
 }
 
-fn describe_degree(nav: &NavGraph, resolved: &Resolved) -> Degree {
+fn describe_degree(nav: &GraphIndex, resolved: &Resolved) -> Degree {
     let Some(node) = nav_node_of(resolved) else {
         return Degree::default();
     };
@@ -1011,7 +1275,7 @@ fn describe_degree(nav: &NavGraph, resolved: &Resolved) -> Degree {
 /// Every root (of any kind) that reaches this node, nearest (fewest hops) first — a reverse BFS
 /// from the node over the same non-wildcard-excluded traversal `uses`/`used-by` use, seeded by
 /// nothing and instead stopped at any node that is itself a literal root target.
-fn reached_by_roots(nav: &NavGraph, resolved: &Resolved) -> Vec<NavNode> {
+fn reached_by_roots(nav: &GraphIndex, resolved: &Resolved) -> Vec<NavNode> {
     let Some(start) = nav_node_of(resolved) else {
         return Vec::new();
     };
@@ -1042,47 +1306,33 @@ fn reached_by_roots(nav: &NavGraph, resolved: &Resolved) -> Vec<NavNode> {
     found
 }
 
-fn provenance_label(p: &crate::vocab::Provenance) -> String {
-    match p {
-        crate::vocab::Provenance::Adapter(id) => format!("adapter:{id}"),
-        crate::vocab::Provenance::Plugin(id) => format!("plugin:{id}"),
-        crate::vocab::Provenance::Surface => "core:surface".to_string(),
-    }
-}
-
-fn describe_sources(graph: &ProjectGraph, resolved: &Resolved) -> Vec<String> {
-    let mut sources: HashSet<String> = HashSet::default();
-    let mark = |sources: &mut HashSet<String>, p: &crate::vocab::Provenance| {
-        sources.insert(provenance_label(p));
+/// A described node's `sources`. Delegates to the shared index so `describe` and every
+/// finding answer the provenance question the same way — the alternative is two derivations
+/// that agree until one of them learns about a new edge kind.
+fn describe_sources(graph: &ProjectGraph, nav: &GraphIndex, resolved: &Resolved) -> Vec<String> {
+    let node = match resolved {
+        Resolved::Node(ResolvedNode::File(f)) => crate::graph::provenance::Node::File(*f),
+        Resolved::Node(ResolvedNode::Symbol(s)) => crate::graph::provenance::Node::Symbol(*s),
+        // A dependency node resolves by name; the index is keyed by id. Unlike files and
+        // symbols this needs a scan, but it is one scan of the dependency list (hundreds),
+        // not of the edge list, and only for the one node being described. `describe` used to
+        // answer `[]` here — its node-kind match had no dependency arm at all.
+        Resolved::Dependency(ResolvedDependency(name)) => {
+            let Some(i) = graph.dependencies.iter().position(|d| &d.name == name) else {
+                return Vec::new();
+            };
+            crate::graph::provenance::Node::Dependency(crate::vocab::DependencyId(i as u32))
+        }
+        Resolved::Node(ResolvedNode::Package(p)) => crate::graph::provenance::Node::Package(*p),
+        // A root set is not a node — it is a query over edges, and "which components
+        // contributed" is answered per member, not for the set.
+        Resolved::Node(ResolvedNode::RootSet(_)) => return Vec::new(),
     };
-    for edge in &graph.edges {
-        if edge_touches(&edge.kind, resolved) {
-            mark(&mut sources, &edge.source);
-        }
-    }
-    let mut sources: Vec<String> = sources.into_iter().collect();
-    sources.sort();
-    sources
-}
-
-fn edge_touches(kind: &crate::vocab::EdgeKind, resolved: &Resolved) -> bool {
-    use crate::vocab::EdgeKind;
-    let node = nav_node_of(resolved);
-    match (kind, node) {
-        (EdgeKind::Declares { file, .. }, Some(NavNode::File(f))) => *file == f,
-        (EdgeKind::Declares { symbol, .. }, Some(NavNode::Symbol(s))) => *symbol == s,
-        (EdgeKind::ImportsFile { from, to }, Some(NavNode::File(f))) => *from == f || *to == f,
-        (EdgeKind::ImportsDependency { from, .. }, Some(NavNode::File(f))) => *from == f,
-        (EdgeKind::ImportsDependency { to, .. }, Some(NavNode::Dependency(d))) => *to == d,
-        (EdgeKind::References { from, to, .. }, Some(NavNode::Symbol(s))) => {
-            *to == s || *from == NodeRef::Symbol(s)
-        }
-        (EdgeKind::References { from, .. }, Some(NavNode::File(f))) => *from == NodeRef::File(f),
-        (EdgeKind::Root { target, .. }, Some(NavNode::File(f))) => *target == NodeRef::File(f),
-        (EdgeKind::Root { target, .. }, Some(NavNode::Symbol(s))) => *target == NodeRef::Symbol(s),
-        (EdgeKind::Wildcard { from }, Some(NavNode::File(f))) => *from == f,
-        _ => false,
-    }
+    nav.provenance
+        .union([node])
+        .into_iter()
+        .map(str::to_string)
+        .collect()
 }
 
 // ---------------------------------------------------------------- finding attachment (describe)
@@ -1094,6 +1344,12 @@ pub struct FindingLocation<'a> {
     pub id: &'a str,
     pub path: Option<&'a str>,
     pub symbol: Option<&'a str>,
+    /// The finding's category — `describe` picks the `duplicate` ones out to answer
+    /// "which duplication group is this node in".
+    pub category: &'a str,
+    /// The finding's related locations. For a `duplicate` finding this IS the group: one
+    /// entry per member, `note` carrying the member's qualified name.
+    pub related: &'a [crate::engine::RelatedLocation],
 }
 
 impl FindingLocation<'_> {
@@ -1152,6 +1408,108 @@ pub enum Direction {
     UsedBy,
 }
 
+/// Every node a navigation walk reached, paired with the edge that reached it *first* — the
+/// shallowest one, since the BFS never overwrites an existing entry. `(depth, label,
+/// confidence, span, site file)`.
+type Reached = HashMap<NavNode, (u32, EdgeLabel, Confidence, Option<Span>, FileId)>;
+
+/// Bounded breadth-first walk over one adjacency map from a seed set, honoring `edges` and
+/// stopping at `max_depth`. Seeds are removed from the result: a node is not its own neighbor.
+///
+/// One walk, two callers, because it is one question — "what does this reach, and by which
+/// edge" — asked forward by `uses`, backward by `used-by`, and backward from many seeds at
+/// once by `impact`. The `site_file`/`span` pair travels off the `NavEdge` that reached the
+/// node and is never re-derived from the node itself (see [`NavEdge::site_file`]).
+fn reach_from(
+    adjacency: &HashMap<NavNode, Vec<NavEdge>>,
+    seeds: &[NavNode],
+    edges: EdgeFilter,
+    max_depth: u32,
+) -> Reached {
+    let mut best: Reached = HashMap::default();
+    let mut queue: VecDeque<(NavNode, u32)> = VecDeque::new();
+    let mut queued: HashSet<NavNode> = HashSet::default();
+    for &seed in seeds {
+        queue.push_back((seed, 0));
+        queued.insert(seed);
+    }
+    while let Some((node, d)) = queue.pop_front() {
+        if d >= max_depth {
+            continue;
+        }
+        for e in adjacency.get(&node).map(Vec::as_slice).unwrap_or(&[]) {
+            if !edges.allows(e.label) {
+                continue;
+            }
+            let next_depth = d + 1;
+            best.entry(e.to)
+                .or_insert((next_depth, e.label, e.confidence, e.span, e.site_file));
+            if queued.insert(e.to) {
+                queue.push_back((e.to, next_depth));
+            }
+        }
+    }
+    for seed in seeds {
+        best.remove(seed);
+    }
+    best
+}
+
+/// A reached set as the envelope reports it: sorted by `(depth, selector)` so the order is
+/// deterministic and shallowest-first, tallied by reachability color over the WHOLE set, then
+/// capped at `limit`. Returns the capped entries, the tally, and how many were elided —
+/// `elided > 0` means "there is more", never "that's all" (RFC 0007 §2).
+fn reached_entries(
+    graph: &ProjectGraph,
+    reach: &ReachabilityMap,
+    best: Reached,
+    limit: usize,
+) -> (Vec<NeighborEntry>, ByColor, usize) {
+    let mut entries: Vec<(NavNode, u32, EdgeLabel, Confidence, Option<Span>, FileId)> = best
+        .into_iter()
+        .map(|(n, (d, l, c, s, sf))| (n, d, l, c, s, sf))
+        .collect();
+    entries.sort_by(|a, b| {
+        a.1.cmp(&b.1).then_with(|| {
+            selector_string(graph, &nav_to_resolved(graph, a.0))
+                .cmp(&selector_string(graph, &nav_to_resolved(graph, b.0)))
+        })
+    });
+
+    let mut by_color = ByColor::default();
+    for (n, ..) in &entries {
+        if let Some(color) = node_color(graph, reach, &nav_to_resolved(graph, *n)) {
+            match color.as_str() {
+                "production" => by_color.production += 1,
+                "test-only" => by_color.test_only += 1,
+                "tooling-only" => by_color.tooling_only += 1,
+                "unreachable" => by_color.unreachable += 1,
+                _ => {}
+            }
+        }
+    }
+
+    let total = entries.len();
+    let out = entries
+        .into_iter()
+        .take(limit)
+        .map(|(n, d, l, c, s, sf)| NeighborEntry {
+            node: qnode_ref(graph, reach, &nav_to_resolved(graph, n)),
+            via: QEdgeRef {
+                edge: l.as_str().to_string(),
+                confidence: c,
+                site: s.map(|sp| NodeSpan {
+                    path: graph.files[sf.0 as usize].path.0.to_string(),
+                    start: sp.start,
+                    end: sp.end,
+                }),
+            },
+            depth: d,
+        })
+        .collect();
+    (out, by_color, total.saturating_sub(limit))
+}
+
 /// [`neighbors`]'s flags, bundled into one struct purely to stay under clippy's argument-count
 /// lint — each field is exactly one CLI `--flag`.
 #[derive(Debug, Clone, Copy)]
@@ -1166,11 +1524,12 @@ pub struct NeighborsOpts {
 /// Shared implementation of `uses`/`used-by`: direction just picks forward
 /// vs. reverse adjacency. `--depth N` (default 1) or `--transitive` (fixpoint, deduplicated,
 /// depth-annotated — the *first*, shallowest depth at which a node is reached wins).
-pub fn neighbors(
+pub(crate) fn neighbors(
     graph: &ProjectGraph,
     reach: &ReachabilityMap,
     resolved: &Resolved,
     opts: NeighborsOpts,
+    nav: &GraphIndex,
 ) -> NeighborsResult {
     let NeighborsOpts {
         direction,
@@ -1190,91 +1549,20 @@ pub fn neighbors(
         };
     };
 
-    let nav = build_nav_graph(graph);
     let adjacency = match direction {
         Direction::Uses => &nav.forward,
         Direction::UsedBy => &nav.reverse,
     };
 
     let max_depth = if transitive { u32::MAX } else { depth.max(1) };
-    // `site_file`/`span` travel together from here on — both come straight off the `NavEdge`
-    // that reached this neighbor, never re-derived from the neighbor itself (see `NavEdge::
-    // site_file`'s doc: that derivation silently pairs the right line/column with the wrong
-    // file whenever traversing `uses`, where the neighbor is `to`, not the edge's `from`).
-    let mut best: HashMap<NavNode, (u32, EdgeLabel, Confidence, Option<Span>, FileId)> =
-        HashMap::default();
-    let mut queue: VecDeque<(NavNode, u32)> = VecDeque::new();
-    let mut queued: HashSet<NavNode> = HashSet::default();
-    queue.push_back((start, 0));
-    queued.insert(start);
-
-    while let Some((node, d)) = queue.pop_front() {
-        if d >= max_depth {
-            continue;
-        }
-        for e in adjacency.get(&node).map(Vec::as_slice).unwrap_or(&[]) {
-            if !edges.allows(e.label) {
-                continue;
-            }
-            let next_depth = d + 1;
-            best.entry(e.to)
-                .or_insert((next_depth, e.label, e.confidence, e.span, e.site_file));
-            if queued.insert(e.to) {
-                queue.push_back((e.to, next_depth));
-            }
-        }
-    }
-    best.remove(&start);
-
-    let mut entries: Vec<(NavNode, u32, EdgeLabel, Confidence, Option<Span>, FileId)> = best
-        .into_iter()
-        .map(|(n, (d, l, c, s, sf))| (n, d, l, c, s, sf))
-        .collect();
-    entries.sort_by(|a, b| {
-        a.1.cmp(&b.1).then_with(|| {
-            selector_string(graph, &nav_to_resolved(graph, a.0))
-                .cmp(&selector_string(graph, &nav_to_resolved(graph, b.0)))
-        })
-    });
-
-    let mut by_color = ByColor::default();
-    for (n, ..) in &entries {
-        let resolved_n = nav_to_resolved(graph, *n);
-        if let Some(color) = node_color(graph, reach, &resolved_n) {
-            match color.as_str() {
-                "production" => by_color.production += 1,
-                "test-only" => by_color.test_only += 1,
-                "tooling-only" => by_color.tooling_only += 1,
-                "unreachable" => by_color.unreachable += 1,
-                _ => {}
-            }
-        }
-    }
-
-    let total = entries.len();
-    let out_entries = entries
-        .into_iter()
-        .take(limit)
-        .map(|(n, d, l, c, s, sf)| NeighborEntry {
-            node: qnode_ref(graph, reach, &nav_to_resolved(graph, n)),
-            via: QEdgeRef {
-                edge: l.as_str().to_string(),
-                confidence: c,
-                site: s.map(|sp| NodeSpan {
-                    path: graph.files[sf.0 as usize].path.0.to_string(),
-                    start: sp.start,
-                    end: sp.end,
-                }),
-            },
-            depth: d,
-        })
-        .collect();
+    let best = reach_from(adjacency, &[start], edges, max_depth);
+    let (entries, by_color, elided) = reached_entries(graph, reach, best, limit);
 
     NeighborsResult {
         node: node_ref,
-        entries: out_entries,
+        entries,
         by_color,
-        elided: total.saturating_sub(limit),
+        elided,
     }
 }
 
@@ -1308,19 +1596,31 @@ pub struct TraceResult {
 /// node expansions, not just result count, so a highly-connected graph can't hang the query.
 const TRACE_EXPANSION_BUDGET: usize = 20_000;
 
+/// `trace_between`'s options — mirrors [`NeighborsOpts`]'s shape instead of two adjacent,
+/// trivially-transposable positional params (a bare `bool` next to a `usize`).
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct TraceOpts {
+    pub(crate) edges: EdgeFilter,
+    pub(crate) all: bool,
+    pub(crate) max_paths: usize,
+}
+
 /// Directed `trace <from> <to>` (two-argument form): path(s) over the same
 /// navigable edges `uses`/`used-by` traverse. `--all --max-paths K` enumerates simple-path
 /// alternatives near the shortest length; without `--all`, one shortest path only.
-pub fn trace_between(
+pub(crate) fn trace_between(
     graph: &ProjectGraph,
     reach: &ReachabilityMap,
     from: &Resolved,
     to: &Resolved,
-    edges: EdgeFilter,
-    all: bool,
-    max_paths: usize,
+    opts: TraceOpts,
+    nav: &GraphIndex,
 ) -> TraceResult {
-    let nav = build_nav_graph(graph);
+    let TraceOpts {
+        edges,
+        all,
+        max_paths,
+    } = opts;
     let from_ref = qnode_ref(graph, reach, from);
     let to_ref = qnode_ref(graph, reach, to);
 
@@ -1351,7 +1651,7 @@ pub fn trace_between(
     let paths_elided = 0; // enumerate_paths reports its own cap via the returned count vs. what exists — see its doc
     let rendered = paths
         .into_iter()
-        .map(|hops| render_path(graph, reach, &nav, hops))
+        .map(|hops| render_path(graph, reach, nav, hops))
         .collect();
 
     TraceResult {
@@ -1365,13 +1665,13 @@ pub fn trace_between(
 /// Liveness `trace <selector>` (single-argument form): shortest path from the
 /// nearest root of `roots_kind` to `target`, falling back from production to test when
 /// production reaches nothing (the documented fallback) unless a kind was explicit.
-pub fn trace_liveness(
+pub(crate) fn trace_liveness(
     graph: &ProjectGraph,
     reach: &ReachabilityMap,
     target: &Resolved,
     roots_kind: Option<RootKind>,
+    nav: &GraphIndex,
 ) -> TraceResult {
-    let nav = build_nav_graph(graph);
     let to_ref = qnode_ref(graph, reach, target);
     let Some(goal) = nav_node_of(target) else {
         return TraceResult {
@@ -1437,7 +1737,7 @@ pub fn trace_liveness(
                 span: None,
             },
             to: to_ref,
-            paths: vec![render_path(graph, reach, &nav, hops)],
+            paths: vec![render_path(graph, reach, nav, hops)],
             paths_elided: 0,
         },
     }
@@ -1568,7 +1868,7 @@ fn enumerate_paths(
 fn render_path(
     graph: &ProjectGraph,
     reach: &ReachabilityMap,
-    nav: &NavGraph,
+    nav: &GraphIndex,
     nodes: Vec<NavNode>,
 ) -> Path {
     let mut hops = Vec::new();
@@ -1668,12 +1968,13 @@ pub struct ImpactResult {
 /// importers — deleting a declared dependency breaks builds rather than flipping
 /// reachability, so `--if-deleted` is rejected with an explanation instead of an answer that
 /// would mean nothing).
-pub fn impact(
+pub(crate) fn impact(
     graph: &ProjectGraph,
     reach: &ReachabilityMap,
     resolved: &Resolved,
     opts: ImpactOpts,
-) -> Result<ImpactResult, String> {
+    nav: &GraphIndex,
+) -> Result<ImpactResult, QueryError> {
     let node_ref = qnode_ref(graph, reach, resolved);
 
     // Seeds: the graph nodes whose change/removal is being simulated.
@@ -1703,12 +2004,7 @@ pub fn impact(
         }
         Resolved::Dependency(d) => {
             if opts.if_deleted {
-                return Err(format!(
-                    "--if-deleted does not apply to dep:{} — removing a declared dependency \
-                     breaks its importers outright rather than flipping reachability; use \
-                     `used-by dep:{}` to list them",
-                    d.0, d.0
-                ));
+                return Err(QueryError::IfDeletedOnDependency(d.0.to_string()));
             }
             let Some(id) = graph
                 .dependencies
@@ -1730,7 +2026,7 @@ pub fn impact(
             vec![NavNode::Dependency(id)]
         }
         Resolved::Node(ResolvedNode::RootSet(_)) => {
-            return Err("impact does not apply to a root set — trace individual roots".into());
+            return Err(QueryError::ImpactOnRootSet);
         }
     };
     // Deleting a symbol deletes nothing else; deleting a file (or package) deletes every
@@ -1747,34 +2043,8 @@ pub fn impact(
         Resolved::Node(ResolvedNode::Package(p)) => Some(*p),
         _ => None,
     };
-    let nav = build_nav_graph(graph);
     let max_depth = opts.depth.unwrap_or(u32::MAX);
-    let mut best: HashMap<NavNode, (u32, EdgeLabel, Confidence, Option<Span>, FileId)> =
-        HashMap::default();
-    let mut queue: VecDeque<(NavNode, u32)> = VecDeque::new();
-    let mut queued: HashSet<NavNode> = HashSet::default();
-    for &seed in &seeds {
-        queue.push_back((seed, 0));
-        queued.insert(seed);
-    }
-    while let Some((node, d)) = queue.pop_front() {
-        if d >= max_depth {
-            continue;
-        }
-        for e in nav.reverse.get(&node).map(Vec::as_slice).unwrap_or(&[]) {
-            if !opts.edges.allows(e.label) {
-                continue;
-            }
-            best.entry(e.to)
-                .or_insert((d + 1, e.label, e.confidence, e.span, e.site_file));
-            if queued.insert(e.to) {
-                queue.push_back((e.to, d + 1));
-            }
-        }
-    }
-    for seed in &seeds {
-        best.remove(seed);
-    }
+    let mut best = reach_from(&nav.reverse, &seeds, opts.edges, max_depth);
     if let Some(p) = excluded_package {
         best.retain(|n, _| match n {
             NavNode::File(f) => graph.files[f.0 as usize].package != p,
@@ -1785,48 +2055,10 @@ pub fn impact(
         });
     }
 
+    // Captured before capping: the roots below are asked about the WHOLE closure, not the
+    // page of it the caller's `--limit` happens to show.
     let closure: HashSet<NavNode> = best.keys().copied().collect();
-    let mut entries: Vec<(NavNode, u32, EdgeLabel, Confidence, Option<Span>, FileId)> = best
-        .into_iter()
-        .map(|(n, (d, l, c, s, sf))| (n, d, l, c, s, sf))
-        .collect();
-    entries.sort_by(|a, b| {
-        a.1.cmp(&b.1).then_with(|| {
-            selector_string(graph, &nav_to_resolved(graph, a.0))
-                .cmp(&selector_string(graph, &nav_to_resolved(graph, b.0)))
-        })
-    });
-
-    let mut by_color = ByColor::default();
-    for (n, ..) in &entries {
-        if let Some(color) = node_color(graph, reach, &nav_to_resolved(graph, *n)) {
-            match color.as_str() {
-                "production" => by_color.production += 1,
-                "test-only" => by_color.test_only += 1,
-                "tooling-only" => by_color.tooling_only += 1,
-                "unreachable" => by_color.unreachable += 1,
-                _ => {}
-            }
-        }
-    }
-    let total = entries.len();
-    let affected: Vec<NeighborEntry> = entries
-        .into_iter()
-        .take(opts.limit)
-        .map(|(n, d, l, c, s, sf)| NeighborEntry {
-            node: qnode_ref(graph, reach, &nav_to_resolved(graph, n)),
-            via: QEdgeRef {
-                edge: l.as_str().to_string(),
-                confidence: c,
-                site: s.map(|sp| NodeSpan {
-                    path: graph.files[sf.0 as usize].path.0.to_string(),
-                    start: sp.start,
-                    end: sp.end,
-                }),
-            },
-            depth: d,
-        })
-        .collect();
+    let (affected, by_color, elided) = reached_entries(graph, reach, best, opts.limit);
 
     // Affected roots: every Root edge whose target sits in the closure (or IS a seed) — the
     // entry points whose behavior a change here can reach, i.e. where retesting starts.
@@ -1874,7 +2106,7 @@ pub fn impact(
         node: node_ref,
         affected,
         by_color,
-        elided: total.saturating_sub(opts.limit),
+        elided,
         affected_roots: roots,
         affected_roots_elided,
         if_deleted,
@@ -1942,10 +2174,12 @@ fn simulate_deletion(
         suppressions: graph.suppressions.clone(),
         visibility_ladders: graph.visibility_ladders.clone(),
         cycle_policies: graph.cycle_policies.clone(),
+        testable_languages: graph.testable_languages.clone(),
         function_metrics: graph.function_metrics.clone(),
         patch_meta: graph.patch_meta.clone(),
         externally_consumed: graph.externally_consumed.clone(),
         plugin_implicitly_invoked: graph.plugin_implicitly_invoked.clone(),
+        unresolved_imports: graph.unresolved_imports.clone(),
     });
     let after = crate::analysis::reachability::compute(&sim);
 
@@ -2044,8 +2278,10 @@ mod tests {
             }),
             package: PackageId(0),
             unit: None,
+            unit_parent: None,
             test_spans: Vec::new(),
             string_call_sites: Vec::new(),
+            string_attr_args: Vec::new(),
         }
     }
 
@@ -2062,6 +2298,9 @@ mod tests {
             implicitly_invoked: false,
             nested_scope: false,
             visibility_inherited: false,
+            visible_in_unit: None,
+            implements: None,
+            markers: Vec::new(),
         }
     }
 
@@ -2142,7 +2381,7 @@ mod tests {
                 package: PackageId(0),
                 manifest: ProjectPath(SmolStr::new("package.json")),
                 name: SmolStr::new("lodash"),
-                version_req: SmolStr::new("^4"),
+                version_req: Some(SmolStr::new("^4")),
                 scope: DependencyScope::Prod,
             }],
         )
@@ -2227,7 +2466,7 @@ mod tests {
                 package: PackageId(0),
                 manifest: ProjectPath("package.json".into()),
                 name: "never-imported".into(),
-                version_req: "^1".into(),
+                version_req: Some("^1".into()),
                 scope: DependencyScope::Dev,
             }]);
         let resolved = resolve(&graph, &Selector::Dependency("never-imported".into())).unwrap();
@@ -2251,6 +2490,7 @@ mod tests {
                 declares_surface: false,
                 surface: Vec::new(),
                 resolves_dependency_usage: true,
+                manifest_claim_languages: Vec::new(),
             },
             PackageNode {
                 workspace_entry: None,
@@ -2262,6 +2502,7 @@ mod tests {
                 declares_surface: false,
                 surface: Vec::new(),
                 resolves_dependency_usage: true,
+                manifest_claim_languages: Vec::new(),
             },
         ]);
         match resolve(&graph, &Selector::Package("dup".into())) {
@@ -2338,12 +2579,13 @@ mod tests {
     fn describe_symbol_reports_declaration_and_degree() {
         let graph = linear_graph();
         let reach = reachability::compute(&graph);
+        let nav = build_graph_index(&graph);
         let resolved = resolve(
             &graph,
             &Selector::Symbol(ProjectPath("b.ts".into()), "bar".to_string()),
         )
         .unwrap();
-        let result = describe(&graph, &reach, &resolved, &[]);
+        let result = describe(&graph, &reach, &resolved, &[], &Default::default(), &nav);
         let decl = result
             .declaration
             .expect("symbol should carry a declaration");
@@ -2352,12 +2594,189 @@ mod tests {
         assert_eq!(*result.degree.in_by_kind.get("references").unwrap(), 1);
     }
 
+    /// `linear_graph` with one shape on `b.ts#bar`: cyclomatic 8, 5 lines, 80 tokens.
+    fn graph_with_metrics() -> ProjectGraph {
+        linear_graph().with_function_metrics(vec![(
+            SymbolId(1),
+            crate::graph::SymbolMetrics {
+                shape_span: crate::adapter::Span {
+                    start: (5, 1),
+                    end: (9, 1),
+                },
+                shape_ordinal: 0,
+                cyclomatic: 8,
+                loc: 5,
+                token_count: 80,
+                fingerprints: vec![],
+                body_is_construction: false,
+            },
+        )])
+    }
+
+    fn describe_symbol(
+        graph: &ProjectGraph,
+        coverage: &crate::coverage::CoverageMap,
+        path: &str,
+        name: &str,
+    ) -> DescribeResult {
+        let reach = reachability::compute(graph);
+        let nav = build_graph_index(graph);
+        let resolved = resolve(
+            graph,
+            &Selector::Symbol(ProjectPath(path.into()), name.to_string()),
+        )
+        .unwrap();
+        describe(graph, &reach, &resolved, &[], coverage, &nav)
+    }
+
+    #[test]
+    fn a_capped_declared_symbols_list_says_how_many_it_dropped() {
+        // `reached_by_roots` has always reported its elision; `declared_symbols` truncated
+        // silently, which reads as "that's all" — the exact misreading RFC 0007 §2 forbids.
+        let files = vec![file("big.ts")];
+        let symbols: Vec<_> = (0..DECLARE_SYMBOLS_CAP + 3)
+            .map(|i| symbol(FileId(0), &format!("s{i}"), 1, 1))
+            .collect();
+        let edges: Vec<_> = (0..symbols.len())
+            .map(|i| {
+                edge(
+                    EdgeKind::Declares {
+                        file: FileId(0),
+                        symbol: SymbolId(i as u32),
+                    },
+                    Confidence::Certain,
+                    None,
+                )
+            })
+            .collect();
+        let graph = ProjectGraph::for_test(files, symbols, vec![], edges);
+        let reach = reachability::compute(&graph);
+        let nav = build_graph_index(&graph);
+        let resolved = resolve(&graph, &Selector::File(ProjectPath("big.ts".into()))).unwrap();
+        let d = describe(&graph, &reach, &resolved, &[], &Default::default(), &nav);
+        assert_eq!(d.declared_symbols.len(), DECLARE_SYMBOLS_CAP);
+        assert_eq!(d.elided.get("declared_symbols"), Some(&3));
+    }
+
+    #[test]
+    fn describe_reports_one_metrics_entry_per_shape() {
+        // RFC 0007 §4.2's metrics block. `loc` had no reader at all before this: it was
+        // computed by every adapter, carried through the facts contract and cached in the
+        // graph snapshot, and nothing ever read it back.
+        let graph = graph_with_metrics();
+        let d = describe_symbol(&graph, &Default::default(), "b.ts", "bar");
+        assert_eq!(d.metrics.len(), 1);
+        let m = &d.metrics[0];
+        assert_eq!(m.shape_ordinal, 0);
+        assert_eq!((m.cyclomatic, m.loc, m.token_count), (8, 5, 80));
+        assert_eq!(m.span.start, (5, 1), "the SHAPE's extent, not the symbol's");
+    }
+
+    #[test]
+    fn an_unmeasured_shape_reports_no_coverage_rather_than_zero() {
+        // `crap` scores an uninstrumented function at 0 coverage — the right pessimism for a
+        // verdict, and a fabricated measurement if published as one. With no report there is
+        // nothing to report.
+        let graph = graph_with_metrics();
+        let d = describe_symbol(&graph, &Default::default(), "b.ts", "bar");
+        assert_eq!(d.metrics[0].coverage, None);
+        assert_eq!(d.metrics[0].crap, None);
+
+        // With a report, both appear — and `crap` is the same function the analysis scores
+        // with, so `describe` and a `crap` finding can never disagree about a number.
+        let mut sink = crate::coverage::CoverageSink::default();
+        for line in 5..=9 {
+            sink.add_line(ProjectPath("b.ts".into()), line, 0);
+        }
+        let d = describe_symbol(&graph, &sink.into_map(), "b.ts", "bar");
+        assert_eq!(d.metrics[0].coverage, Some(0.0));
+        assert_eq!(
+            d.metrics[0].crap,
+            Some(crate::analysis::crap::crap_score(8, 0.0))
+        );
+    }
+
+    #[test]
+    fn describe_reports_the_duplication_group_a_node_belongs_to() {
+        // Membership is read off the `duplicate` finding the run already computed — its
+        // `related` list IS the group — rather than from a second fingerprint index that the
+        // incremental patch would then have to invalidate.
+        let graph = linear_graph();
+        let related = vec![
+            crate::engine::RelatedLocation {
+                role: "clone".to_string(),
+                path: ProjectPath("a.ts".into()),
+                range: None,
+                note: Some("foo".to_string()),
+            },
+            crate::engine::RelatedLocation {
+                role: "clone".to_string(),
+                path: ProjectPath("b.ts".into()),
+                range: None,
+                note: Some("bar".to_string()),
+            },
+        ];
+        let locations = vec![
+            FindingLocation {
+                id: "kndo-dup000000",
+                path: None,
+                symbol: None,
+                category: "duplicate",
+                related: &related,
+            },
+            // A finding of another category with the same related shape must not be read as a
+            // group.
+            FindingLocation {
+                id: "kndo-cyc000000",
+                path: None,
+                symbol: None,
+                category: "cyclic",
+                related: &related,
+            },
+        ];
+        let reach = reachability::compute(&graph);
+        let nav = build_graph_index(&graph);
+        let resolved = resolve(
+            &graph,
+            &Selector::Symbol(ProjectPath("b.ts".into()), "bar".to_string()),
+        )
+        .unwrap();
+        let d = describe(
+            &graph,
+            &reach,
+            &resolved,
+            &locations,
+            &Default::default(),
+            &nav,
+        );
+        assert_eq!(d.duplication.len(), 1);
+        assert_eq!(d.duplication[0].finding, "kndo-dup000000");
+        assert_eq!(d.duplication[0].members, vec!["a.ts#foo", "b.ts#bar"]);
+
+        // A node outside the group says nothing about it.
+        let resolved = resolve(
+            &graph,
+            &Selector::Symbol(ProjectPath("a.ts".into()), "foo".to_string()),
+        )
+        .unwrap();
+        let d = describe(
+            &graph,
+            &reach,
+            &resolved,
+            &locations,
+            &Default::default(),
+            &nav,
+        );
+        assert_eq!(d.duplication.len(), 1, "foo is the other member");
+    }
+
     #[test]
     fn describe_file_reports_role_origin_and_declared_symbols() {
         let graph = linear_graph();
         let reach = reachability::compute(&graph);
+        let nav = build_graph_index(&graph);
         let resolved = resolve(&graph, &Selector::File(ProjectPath("a.ts".into()))).unwrap();
-        let result = describe(&graph, &reach, &resolved, &[]);
+        let result = describe(&graph, &reach, &resolved, &[], &Default::default(), &nav);
         let file_info = result.file.expect("file node should carry file info");
         assert_eq!(file_info.role, "production");
         assert_eq!(file_info.origin, "authored");
@@ -2369,8 +2788,9 @@ mod tests {
     fn describe_dependency_reports_scope_and_usage() {
         let graph = linear_graph();
         let reach = reachability::compute(&graph);
+        let nav = build_graph_index(&graph);
         let resolved = resolve(&graph, &Selector::Dependency("lodash".into())).unwrap();
-        let result = describe(&graph, &reach, &resolved, &[]);
+        let result = describe(&graph, &reach, &resolved, &[], &Default::default(), &nav);
         let dep = result
             .dependency
             .expect("dep: selector should carry dependency info");
@@ -2383,6 +2803,7 @@ mod tests {
     fn describe_reports_findings_attached_to_a_symbol() {
         let graph = linear_graph();
         let reach = reachability::compute(&graph);
+        let nav = build_graph_index(&graph);
         let resolved = resolve(
             &graph,
             &Selector::Symbol(ProjectPath("b.ts".into()), "bar".to_string()),
@@ -2392,8 +2813,17 @@ mod tests {
             id: "kndo-abc123",
             path: Some("b.ts"),
             symbol: Some("bar"),
+            category: "unused",
+            related: &[],
         }];
-        let result = describe(&graph, &reach, &resolved, &locations);
+        let result = describe(
+            &graph,
+            &reach,
+            &resolved,
+            &locations,
+            &Default::default(),
+            &nav,
+        );
         assert_eq!(result.findings, vec!["kndo-abc123".to_string()]);
     }
 
@@ -2401,12 +2831,13 @@ mod tests {
     fn describe_reached_by_roots_finds_the_production_root() {
         let graph = linear_graph();
         let reach = reachability::compute(&graph);
+        let nav = build_graph_index(&graph);
         let resolved = resolve(
             &graph,
             &Selector::Symbol(ProjectPath("b.ts".into()), "bar".to_string()),
         )
         .unwrap();
-        let result = describe(&graph, &reach, &resolved, &[]);
+        let result = describe(&graph, &reach, &resolved, &[], &Default::default(), &nav);
         assert_eq!(result.reached_by_roots.len(), 1);
         assert_eq!(result.reached_by_roots[0].selector, "a.ts");
     }
@@ -2417,6 +2848,7 @@ mod tests {
     fn uses_from_a_file_includes_imports_and_references() {
         let graph = linear_graph();
         let reach = reachability::compute(&graph);
+        let nav = build_graph_index(&graph);
         let resolved = resolve(&graph, &Selector::File(ProjectPath("a.ts".into()))).unwrap();
         let result = neighbors(
             &graph,
@@ -2429,6 +2861,7 @@ mod tests {
                 transitive: false,
                 limit: 50,
             },
+            &nav,
         );
         let selectors: Vec<&str> = result
             .entries
@@ -2449,6 +2882,7 @@ mod tests {
     fn uses_site_is_attributed_to_the_importing_file_not_the_imported_one() {
         let graph = linear_graph();
         let reach = reachability::compute(&graph);
+        let nav = build_graph_index(&graph);
         let resolved = resolve(&graph, &Selector::File(ProjectPath("a.ts".into()))).unwrap();
         let result = neighbors(
             &graph,
@@ -2461,6 +2895,7 @@ mod tests {
                 transitive: false,
                 limit: 50,
             },
+            &nav,
         );
         let to_b = result
             .entries
@@ -2479,10 +2914,212 @@ mod tests {
         assert_eq!(site.start, (2, 1));
     }
 
+    /// The plugin-contributed file-liveness edge (`kndo:vite`'s `index.html` → its
+    /// bundled entry, a template → the asset it names) — navigable like a real import, but
+    /// labeled distinctly so `describe`'s `sources` can say *why* the target counts as in use.
+    #[test]
+    fn uses_from_a_file_includes_a_plugin_contributed_file_liveness_edge() {
+        let files = vec![file("index.html"), file("bundle.js")];
+        let edges = vec![edge(
+            EdgeKind::ReferencesFile {
+                from: NodeRef::File(FileId(0)),
+                to: FileId(1),
+            },
+            Confidence::Probable,
+            Some(span(1, 1)),
+        )];
+        let graph = ProjectGraph::for_test(files, vec![], vec![], edges);
+        let reach = reachability::compute(&graph);
+        let nav = build_graph_index(&graph);
+        let resolved = resolve(&graph, &Selector::File(ProjectPath("index.html".into()))).unwrap();
+        let result = neighbors(
+            &graph,
+            &reach,
+            &resolved,
+            NeighborsOpts {
+                direction: Direction::Uses,
+                edges: EdgeFilter::parse(None).unwrap(),
+                depth: 1,
+                transitive: false,
+                limit: 50,
+            },
+            &nav,
+        );
+        let to_bundle = result
+            .entries
+            .iter()
+            .find(|e| e.node.selector == "bundle.js")
+            .expect("bundle.js should be a uses neighbor via the liveness edge");
+        assert_eq!(to_bundle.via.edge, "references-file");
+    }
+
+    /// The invoked-program edge — a test executing its workspace binary as a subprocess.
+    #[test]
+    fn uses_from_a_file_includes_an_invoked_program_edge() {
+        let files = vec![file("run_test.sh"), file("bin/server")];
+        let edges = vec![edge(
+            EdgeKind::InvokesFile {
+                from: NodeRef::File(FileId(0)),
+                to: FileId(1),
+            },
+            Confidence::Probable,
+            Some(span(1, 1)),
+        )];
+        let graph = ProjectGraph::for_test(files, vec![], vec![], edges);
+        let reach = reachability::compute(&graph);
+        let nav = build_graph_index(&graph);
+        let resolved = resolve(&graph, &Selector::File(ProjectPath("run_test.sh".into()))).unwrap();
+        let result = neighbors(
+            &graph,
+            &reach,
+            &resolved,
+            NeighborsOpts {
+                direction: Direction::Uses,
+                edges: EdgeFilter::parse(None).unwrap(),
+                depth: 1,
+                transitive: false,
+                limit: 50,
+            },
+            &nav,
+        );
+        let to_bin = result
+            .entries
+            .iter()
+            .find(|e| e.node.selector == "bin/server")
+            .expect("bin/server should be a uses neighbor via the invoked-program edge");
+        assert_eq!(to_bin.via.edge, "invokes-file");
+    }
+
+    /// A file-liveness edge whose site is a *symbol*, not the whole file — the function that
+    /// calls `res.render("index")`, not `views/index.ejs` itself.
+    #[test]
+    fn uses_from_a_symbol_includes_a_file_liveness_edge() {
+        let files = vec![
+            file("routes.ts"),
+            file("views/index.ejs"),
+            file("bin/server"),
+        ];
+        let symbols = vec![symbol(FileId(0), "handler", 1, 3)];
+        let edges = vec![
+            edge(
+                EdgeKind::Declares {
+                    file: FileId(0),
+                    symbol: SymbolId(0),
+                },
+                Confidence::Certain,
+                Some(span(1, 3)),
+            ),
+            edge(
+                EdgeKind::ReferencesFile {
+                    from: NodeRef::Symbol(SymbolId(0)),
+                    to: FileId(1),
+                },
+                Confidence::Probable,
+                Some(span(2, 2)),
+            ),
+            // A symbol can also be the site of an invoked-program edge (the test function
+            // that runs the workspace binary as a subprocess), not just a file-liveness one.
+            edge(
+                EdgeKind::InvokesFile {
+                    from: NodeRef::Symbol(SymbolId(0)),
+                    to: FileId(2),
+                },
+                Confidence::Probable,
+                Some(span(2, 2)),
+            ),
+        ];
+        let graph = ProjectGraph::for_test(files, symbols, vec![], edges);
+        let reach = reachability::compute(&graph);
+        let nav = build_graph_index(&graph);
+        let resolved = resolve(
+            &graph,
+            &Selector::Symbol(ProjectPath("routes.ts".into()), "handler".to_string()),
+        )
+        .unwrap();
+        let result = neighbors(
+            &graph,
+            &reach,
+            &resolved,
+            NeighborsOpts {
+                direction: Direction::Uses,
+                edges: EdgeFilter::parse(None).unwrap(),
+                depth: 1,
+                transitive: false,
+                limit: 50,
+            },
+            &nav,
+        );
+        let to_view = result
+            .entries
+            .iter()
+            .find(|e| e.node.selector == "views/index.ejs")
+            .expect("the view should be a uses neighbor of the handler symbol");
+        assert_eq!(to_view.via.edge, "references-file");
+        let to_bin = result
+            .entries
+            .iter()
+            .find(|e| e.node.selector == "bin/server")
+            .expect("the invoked binary should be a uses neighbor of the handler symbol");
+        assert_eq!(to_bin.via.edge, "invokes-file");
+    }
+
+    /// A wildcard import of a file that declares no symbols of its own (a re-export-only
+    /// barrel, an empty module): the plausible target set is empty, so the edge contributes
+    /// nothing rather than panicking on a missing `declared_in` entry.
+    #[test]
+    fn liveness_trace_treats_a_wildcard_of_a_symbol_less_file_as_a_dead_end() {
+        let files = vec![file("a.ts"), file("empty.ts")];
+        let edges = vec![
+            edge(
+                EdgeKind::Root {
+                    kind: RootKind::Production,
+                    target: NodeRef::File(FileId(0)),
+                },
+                Confidence::Certain,
+                None,
+            ),
+            edge(
+                EdgeKind::ImportsFile {
+                    from: FileId(0),
+                    to: FileId(1),
+                },
+                Confidence::Certain,
+                Some(span(1, 1)),
+            ),
+            edge(
+                EdgeKind::Wildcard { from: FileId(1) },
+                Confidence::Possible,
+                Some(span(1, 1)),
+            ),
+        ];
+        let graph = ProjectGraph::for_test(files, vec![], vec![], edges);
+        let nav = build_graph_index(&graph);
+        let resolved = resolve(&graph, &Selector::File(ProjectPath("empty.ts".into()))).unwrap();
+        let reach = reachability::compute(&graph);
+        let result = neighbors(
+            &graph,
+            &reach,
+            &resolved,
+            NeighborsOpts {
+                direction: Direction::Uses,
+                edges: EdgeFilter::liveness(),
+                depth: 1,
+                transitive: false,
+                limit: 50,
+            },
+            &nav,
+        );
+        assert!(
+            result.entries.is_empty(),
+            "a symbol-less wildcard target has nothing to expand into"
+        );
+    }
+
     #[test]
     fn used_by_site_is_attributed_to_the_referencing_file() {
         let graph = linear_graph();
         let reach = reachability::compute(&graph);
+        let nav = build_graph_index(&graph);
         let resolved = resolve(&graph, &Selector::File(ProjectPath("b.ts".into()))).unwrap();
         let result = neighbors(
             &graph,
@@ -2495,6 +3132,7 @@ mod tests {
                 transitive: false,
                 limit: 50,
             },
+            &nav,
         );
         let from_a = &result.entries[0];
         assert_eq!(from_a.node.selector, "a.ts");
@@ -2513,6 +3151,7 @@ mod tests {
     fn trace_between_site_is_attributed_to_the_source_of_each_hop() {
         let graph = linear_graph();
         let reach = reachability::compute(&graph);
+        let nav = build_graph_index(&graph);
         let from = resolve(&graph, &Selector::File(ProjectPath("a.ts".into()))).unwrap();
         let to = resolve(
             &graph,
@@ -2524,9 +3163,12 @@ mod tests {
             &reach,
             &from,
             &to,
-            EdgeFilter::parse(None).unwrap(),
-            false,
-            5,
+            TraceOpts {
+                edges: EdgeFilter::parse(None).unwrap(),
+                all: false,
+                max_paths: 5,
+            },
+            &nav,
         );
         let hop = &result.paths[0].hops[0];
         let site = hop
@@ -2544,6 +3186,7 @@ mod tests {
     fn used_by_a_file_is_the_reverse_of_uses() {
         let graph = linear_graph();
         let reach = reachability::compute(&graph);
+        let nav = build_graph_index(&graph);
         let resolved = resolve(&graph, &Selector::File(ProjectPath("b.ts".into()))).unwrap();
         let result = neighbors(
             &graph,
@@ -2556,6 +3199,7 @@ mod tests {
                 transitive: false,
                 limit: 50,
             },
+            &nav,
         );
         assert_eq!(result.entries.len(), 1);
         assert_eq!(result.entries[0].node.selector, "a.ts");
@@ -2566,6 +3210,7 @@ mod tests {
     fn edges_filter_restricts_to_references_only() {
         let graph = linear_graph();
         let reach = reachability::compute(&graph);
+        let nav = build_graph_index(&graph);
         let resolved = resolve(&graph, &Selector::File(ProjectPath("a.ts".into()))).unwrap();
         let result = neighbors(
             &graph,
@@ -2578,6 +3223,7 @@ mod tests {
                 transitive: false,
                 limit: 50,
             },
+            &nav,
         );
         let selectors: Vec<&str> = result
             .entries
@@ -2591,6 +3237,7 @@ mod tests {
     fn depth_one_stops_before_transitive_neighbors() {
         let graph = linear_graph();
         let reach = reachability::compute(&graph);
+        let nav = build_graph_index(&graph);
         let resolved = resolve(&graph, &Selector::File(ProjectPath("a.ts".into()))).unwrap();
         let shallow = neighbors(
             &graph,
@@ -2603,6 +3250,7 @@ mod tests {
                 transitive: false,
                 limit: 50,
             },
+            &nav,
         );
         // b.ts imports nothing further in this fixture, so depth 1 vs transitive coincide —
         // the real assertion is that dependency-only reach at depth 1 is exactly {b.ts, dep:lodash}.
@@ -2621,6 +3269,7 @@ mod tests {
     fn dependency_selector_has_no_uses_but_can_be_used_by() {
         let graph = linear_graph();
         let reach = reachability::compute(&graph);
+        let nav = build_graph_index(&graph);
         let resolved = resolve(&graph, &Selector::Dependency("lodash".into())).unwrap();
         let result = neighbors(
             &graph,
@@ -2633,6 +3282,7 @@ mod tests {
                 transitive: false,
                 limit: 50,
             },
+            &nav,
         );
         assert!(result.entries.is_empty());
     }
@@ -2643,6 +3293,7 @@ mod tests {
     fn trace_between_finds_the_shortest_path() {
         let graph = linear_graph();
         let reach = reachability::compute(&graph);
+        let nav = build_graph_index(&graph);
         let from = resolve(&graph, &Selector::File(ProjectPath("a.ts".into()))).unwrap();
         let to = resolve(
             &graph,
@@ -2654,9 +3305,12 @@ mod tests {
             &reach,
             &from,
             &to,
-            EdgeFilter::parse(None).unwrap(),
-            false,
-            5,
+            TraceOpts {
+                edges: EdgeFilter::parse(None).unwrap(),
+                all: false,
+                max_paths: 5,
+            },
+            &nav,
         );
         assert_eq!(result.paths.len(), 1);
         assert_eq!(result.paths[0].hops.len(), 1);
@@ -2668,6 +3322,7 @@ mod tests {
     fn trace_between_reports_no_path_to_a_disconnected_file() {
         let graph = linear_graph();
         let reach = reachability::compute(&graph);
+        let nav = build_graph_index(&graph);
         let from = resolve(&graph, &Selector::File(ProjectPath("a.ts".into()))).unwrap();
         let to = resolve(&graph, &Selector::File(ProjectPath("c.ts".into()))).unwrap();
         let result = trace_between(
@@ -2675,9 +3330,12 @@ mod tests {
             &reach,
             &from,
             &to,
-            EdgeFilter::parse(None).unwrap(),
-            false,
-            5,
+            TraceOpts {
+                edges: EdgeFilter::parse(None).unwrap(),
+                all: false,
+                max_paths: 5,
+            },
+            &nav,
         );
         assert!(result.paths.is_empty());
     }
@@ -2686,12 +3344,13 @@ mod tests {
     fn liveness_trace_finds_the_path_from_the_production_root() {
         let graph = linear_graph();
         let reach = reachability::compute(&graph);
+        let nav = build_graph_index(&graph);
         let target = resolve(
             &graph,
             &Selector::Symbol(ProjectPath("b.ts".into()), "bar".to_string()),
         )
         .unwrap();
-        let result = trace_liveness(&graph, &reach, &target, None);
+        let result = trace_liveness(&graph, &reach, &target, None, &nav);
         assert_eq!(result.from.selector, "roots:production");
         assert_eq!(result.paths.len(), 1);
         // The root itself (a.ts) is `from`, not a hop — one hop reaches bar directly.
@@ -2699,12 +3358,72 @@ mod tests {
         assert_eq!(result.paths[0].hops[0].node.selector, "b.ts#bar");
     }
 
+    /// A `import * as ns from './b'` wildcard: not a fixed target, so `Wildcard`'s plausible
+    /// target set makes every symbol *b.ts itself declares* reachable once b.ts is. Root a.ts
+    /// reaches b.ts by a real import; the wildcard edge (`from: b.ts`) then reaches `bar`.
+    #[test]
+    fn liveness_trace_finds_the_path_through_a_wildcard_edge() {
+        let files = vec![file("a.ts"), file("b.ts")];
+        let symbols = vec![symbol(FileId(1), "bar", 5, 8)];
+        let edges = vec![
+            edge(
+                EdgeKind::Root {
+                    kind: RootKind::Production,
+                    target: NodeRef::File(FileId(0)),
+                },
+                Confidence::Certain,
+                None,
+            ),
+            edge(
+                EdgeKind::Declares {
+                    file: FileId(1),
+                    symbol: SymbolId(0),
+                },
+                Confidence::Certain,
+                Some(span(5, 8)),
+            ),
+            edge(
+                EdgeKind::ImportsFile {
+                    from: FileId(0),
+                    to: FileId(1),
+                },
+                Confidence::Certain,
+                Some(span(1, 1)),
+            ),
+            edge(
+                EdgeKind::Wildcard { from: FileId(1) },
+                Confidence::Possible,
+                Some(span(1, 1)),
+            ),
+        ];
+        let graph = ProjectGraph::for_test(files, symbols, vec![], edges);
+        let reach = reachability::compute(&graph);
+        let nav = build_graph_index(&graph);
+        let target = resolve(
+            &graph,
+            &Selector::Symbol(ProjectPath("b.ts".into()), "bar".to_string()),
+        )
+        .unwrap();
+        let result = trace_liveness(&graph, &reach, &target, None, &nav);
+        assert_eq!(result.paths.len(), 1);
+        let hops = &result.paths[0].hops;
+        assert_eq!(
+            hops.len(),
+            2,
+            "a.ts -> b.ts (import), b.ts -> bar (wildcard)"
+        );
+        assert_eq!(hops[0].node.selector, "b.ts");
+        assert_eq!(hops[1].node.selector, "b.ts#bar");
+        assert_eq!(hops[1].via.edge, "wildcard");
+    }
+
     #[test]
     fn liveness_trace_finds_nothing_for_a_disconnected_file() {
         let graph = linear_graph();
         let reach = reachability::compute(&graph);
+        let nav = build_graph_index(&graph);
         let target = resolve(&graph, &Selector::File(ProjectPath("c.ts".into()))).unwrap();
-        let result = trace_liveness(&graph, &reach, &target, None);
+        let result = trace_liveness(&graph, &reach, &target, None, &nav);
         assert!(result.paths.is_empty());
     }
 
@@ -2741,12 +3460,13 @@ mod tests {
         ];
         let graph = ProjectGraph::for_test(files, symbols, vec![], edges);
         let reach = reachability::compute(&graph);
+        let nav = build_graph_index(&graph);
         let target = resolve(
             &graph,
             &Selector::Symbol(ProjectPath("helper.ts".into()), "helper".to_string()),
         )
         .unwrap();
-        let result = trace_liveness(&graph, &reach, &target, None);
+        let result = trace_liveness(&graph, &reach, &target, None, &nav);
         assert_eq!(result.from.selector, "roots:test");
         assert_eq!(result.paths.len(), 1);
     }
@@ -2766,8 +3486,9 @@ mod tests {
     fn impact_default_is_the_reverse_closure_with_affected_roots() {
         let graph = linear_graph();
         let reach = reachability::compute(&graph);
+        let nav = build_graph_index(&graph);
         let target = resolve(&graph, &Selector::File(ProjectPath("b.ts".into()))).unwrap();
-        let result = impact(&graph, &reach, &target, impact_opts(false)).unwrap();
+        let result = impact(&graph, &reach, &target, impact_opts(false), &nav).unwrap();
         // a.ts imports b.ts — it's affected at depth 1, and it's the production root.
         assert!(result
             .affected
@@ -2825,7 +3546,7 @@ mod tests {
                 package: PackageId(0),
                 manifest: ProjectPath(SmolStr::new("package.json")),
                 name: SmolStr::new("lodash"),
-                version_req: SmolStr::new("*"),
+                version_req: Some(SmolStr::new("*")),
                 scope: DependencyScope::Prod,
             },
         ])
@@ -2835,8 +3556,9 @@ mod tests {
     fn if_deleted_reports_orphaned_files_and_freed_dependencies() {
         let graph = chain_graph();
         let reach = reachability::compute(&graph);
+        let nav = build_graph_index(&graph);
         let target = resolve(&graph, &Selector::File(ProjectPath("b.ts".into()))).unwrap();
-        let result = impact(&graph, &reach, &target, impact_opts(true)).unwrap();
+        let result = impact(&graph, &reach, &target, impact_opts(true), &nav).unwrap();
         let sim = result.if_deleted.expect("--if-deleted requested");
         // d.ts was only reachable through b.ts — deleting b orphans it.
         assert!(sim.newly_unreachable.iter().any(|q| q.selector == "d.ts"));
@@ -2912,12 +3634,13 @@ mod tests {
         ];
         let graph = ProjectGraph::for_test(files, symbols, vec![], edges);
         let reach = reachability::compute(&graph);
+        let nav = build_graph_index(&graph);
         let target = resolve(
             &graph,
             &Selector::Symbol(ProjectPath("b.ts".into()), "bar".to_string()),
         )
         .unwrap();
-        let result = impact(&graph, &reach, &target, impact_opts(true)).unwrap();
+        let result = impact(&graph, &reach, &target, impact_opts(true), &nav).unwrap();
         // Default direction: foo (the caller) is the blast radius, transitively to depth 2.
         assert!(result
             .affected
@@ -2978,8 +3701,9 @@ mod tests {
         ];
         let graph = ProjectGraph::for_test(files, vec![], vec![], edges);
         let reach = reachability::compute(&graph);
+        let nav = build_graph_index(&graph);
         let target = resolve(&graph, &Selector::File(ProjectPath("a.ts".into()))).unwrap();
-        let result = impact(&graph, &reach, &target, impact_opts(true)).unwrap();
+        let result = impact(&graph, &reach, &target, impact_opts(true), &nav).unwrap();
         let sim = result.if_deleted.unwrap();
         assert!(
             sim.newly_test_only.iter().any(|q| q.selector == "x.ts"),
@@ -2993,11 +3717,12 @@ mod tests {
     fn if_deleted_rejects_dependency_selectors_with_an_explanation() {
         let graph = linear_graph();
         let reach = reachability::compute(&graph);
+        let nav = build_graph_index(&graph);
         let target = resolve(&graph, &Selector::Dependency(SmolStr::new("lodash"))).unwrap();
-        let err = impact(&graph, &reach, &target, impact_opts(true)).unwrap_err();
-        assert!(err.contains("--if-deleted"), "{err}");
+        let err = impact(&graph, &reach, &target, impact_opts(true), &nav).unwrap_err();
+        assert!(matches!(err, QueryError::IfDeletedOnDependency(_)), "{err}");
         // The default mode still answers: importers are the blast radius.
-        let ok = impact(&graph, &reach, &target, impact_opts(false)).unwrap();
+        let ok = impact(&graph, &reach, &target, impact_opts(false), &nav).unwrap();
         assert!(ok.affected.iter().any(|e| e.node.selector == "a.ts"));
     }
 }

@@ -2,16 +2,17 @@
 //!
 //! Scope: identity (`name`, `private`), scoped dependencies, `exports`
 //! surface detection, and roots. Root detection covers `bin` (unconditional — an executable
-//! entry point is a root regardless of publish status), `main`/`module`/`exports` gated on
-//! `!private` (an unpublished app's exports are not roots on their own; something
-//! must actually import them), and `scripts` → tooling roots (path-looking tokens resolving
-//! to known files). `types`/`typings` are resolution
+//! entry point is a root regardless of publish status), `main`/`module`/`exports` and
+//! `browser` (both spellings: an alternate-`main` string, and the alias map whose values a
+//! bundler substitutes in) gated on `!private` (an unpublished app's exports are not roots on
+//! their own; something must actually import them), and `scripts` → tooling roots (path-looking
+//! tokens resolving to known files). `types`/`typings` are resolution
 //! inputs only — `.d.ts` carries no runtime edge. `pnpm-workspace.yaml` topology
 //! is not parsed (needs a YAML parser this crate doesn't otherwise need).
 
 use kndo_core::adapter::{
-    Diagnostic, DiagnosticLevel, ManifestDependency, ManifestFacts, ManifestRoot, ProjectPath,
-    ResolveCtx,
+    AdapterDiagnostic, DiagnosticLevel, ManifestDependency, ManifestFacts, ManifestRoot,
+    ProjectPath, ResolveCtx,
 };
 use kndo_core::vocab::{Confidence, DependencyScope, RootKind};
 use smol_str::SmolStr;
@@ -118,6 +119,80 @@ pub(crate) fn extract(path: &str, content: &[u8], ctx: &ResolveCtx<'_>) -> Manif
         }
     }
 
+    // `browser`: the bundler-side surface, in both spellings the field has. As a STRING it is
+    // an alternate `main` ("./dist/browser.js"). As an OBJECT it is an ALIAS MAP — axios ships
+    // `{"./lib/platform/node/index.js": "./lib/platform/browser/index.js"}` — whose *values*
+    // are the files a browser bundler substitutes in. Those values have no import edge
+    // anywhere: nothing in the source names them, the bundler rewrites the specifier. Before
+    // this, axios's entire `lib/platform/browser/` tree read `unused` while shipping in every
+    // browser build. A `false` value ("stub this module out") names no file and is skipped, as
+    // is a key: keys are the node-side files, already reachable through ordinary imports.
+    //
+    // Probable for the map's values, the same reasoning `exports` leaves get — a conditional
+    // build alternate, not unconditionally "the" entry. The string form is one declared entry
+    // and reads `Certain`, like `main`.
+    if let Some(browser) = obj.get("browser") {
+        let (specs, confidence) = match browser {
+            serde_json::Value::String(s) => (vec![s.clone()], Confidence::Certain),
+            serde_json::Value::Object(map) => (
+                map.values()
+                    .filter_map(|v| v.as_str().map(str::to_string))
+                    .collect(),
+                Confidence::Probable,
+            ),
+            _ => (Vec::new(), Confidence::Probable),
+        };
+        for spec in specs {
+            entry_points.push(SmolStr::new(&spec));
+            if let Some((target, confidence)) = resolve_entry(path, &spec, ctx, confidence) {
+                if is_source_entry(&target) {
+                    resolved_entries.push((target.clone(), confidence));
+                }
+                if !private {
+                    roots.push(ManifestRoot {
+                        kind: RootKind::Production,
+                        target,
+                        confidence,
+                    });
+                }
+            }
+        }
+    }
+
+    // Node's implicit entry point. A package that declares neither `main` nor `exports`
+    // resolves to `index.js` in its own directory — the oldest convention in the ecosystem and
+    // still the common case for a CommonJS package (express declares neither). Without it,
+    // `resolved_entries` and `roots` both stay empty: the package has no production root, so
+    // its entry file and everything only it reaches read `unused`/`test-only` — in express
+    // that is `index.js` plus the whole of `lib/`, reachable in reality from every consumer.
+    //
+    // Only as a FALLBACK, never alongside a declared entry: an explicit `main` or `exports`
+    // means the package has stated its surface, and a stray `index.js` beside it is not
+    // silently part of that promise. The candidate ladder already expands a directory base to
+    // `index.{ext}`, so the implicit entry is the manifest's own directory run through it.
+    if resolved_entries.is_empty() && roots.is_empty() {
+        // `resolve_entry` joins the manifest's dir with the spec and runs the extension ladder,
+        // so `"index"` becomes `<dir>/index.{js,ts,…}` — the name Node itself looks for. The
+        // ladder also offers `index.d.ts`, which must NOT answer: a declaration file carries no
+        // runtime edge and Node never resolves an entry to one. `is_source_entry` does not catch
+        // it (its final extension is `ts`), so the exclusion is explicit — the
+        // `types_field_never_becomes_a_root` test is what caught this.
+        if let Some((target, confidence)) = resolve_entry(path, "index", ctx, Confidence::Certain)
+            .filter(|(t, _)| !t.0.ends_with(".d.ts"))
+        {
+            if is_source_entry(&target) {
+                resolved_entries.push((target.clone(), confidence));
+            }
+            if !private {
+                roots.push(ManifestRoot {
+                    kind: RootKind::Production,
+                    target,
+                    confidence,
+                });
+            }
+        }
+    }
+
     // `types`/`typings`: resolution inputs only, never roots.
     for key in ["types", "typings"] {
         if let Some(v) = obj.get(key).and_then(|v| v.as_str()) {
@@ -197,9 +272,8 @@ pub(crate) fn extract(path: &str, content: &[u8], ctx: &ResolveCtx<'_>) -> Manif
 
 fn invalid(message: String) -> ManifestFacts {
     ManifestFacts {
-        diagnostics: vec![Diagnostic {
+        diagnostics: vec![AdapterDiagnostic {
             level: DiagnosticLevel::Warn,
-            path: None, // the core fills this in when merging, same as FileFacts diagnostics
             message,
             span: None,
         }],
@@ -242,7 +316,9 @@ fn collect_dependencies(
             for (name, version) in map {
                 deps.push(ManifestDependency {
                     name: SmolStr::new(name),
-                    version_req: SmolStr::new(version.as_str().unwrap_or("")),
+                    // npm's `"*"` is a REAL declared requirement and stays one; a non-string
+                    // value is the only shape that states nothing.
+                    version_req: version.as_str().map(SmolStr::new),
                     scope,
                     inherited: false,
                 });
@@ -306,6 +382,63 @@ mod tests {
 
     fn extract_at(path: &str, json: &str, known: &HashSet<ProjectPath>) -> ManifestFacts {
         extract(path, json.as_bytes(), &ResolveCtx::new(known))
+    }
+
+    #[test]
+    fn a_package_with_no_declared_entry_falls_back_to_node_s_implicit_index() {
+        use rustc_hash::FxHashSet;
+        let known: FxHashSet<ProjectPath> = ["package.json", "index.js", "lib/express.js"]
+            .into_iter()
+            .map(|p| ProjectPath(SmolStr::new(p)))
+            .collect();
+        let ctx = ResolveCtx::new(&known);
+
+        // Neither `main` nor `exports` — Node resolves `index.js`, and express really ships
+        // this way. Without the fallback the package has no production root at all, so its
+        // entry file and everything only it reaches read unused/test-only.
+        let m = extract("package.json", br#"{"name":"express"}"#, &ctx);
+        assert_eq!(
+            m.roots
+                .iter()
+                .map(|r| r.target.0.as_str())
+                .collect::<Vec<_>>(),
+            vec!["index.js"]
+        );
+        assert_eq!(
+            m.resolved_entries
+                .iter()
+                .map(|(p, _)| p.0.as_str())
+                .collect::<Vec<_>>(),
+            vec!["index.js"]
+        );
+
+        // A declaration file is never Node's runtime entry, and the candidate ladder offers
+        // `index.d.ts` — so a types-only package must still get no root from the fallback.
+        let typed = ctx_with(&["package.json", "index.d.ts"]);
+        let m = extract(
+            "package.json",
+            br#"{"name":"typings-only"}"#,
+            &ResolveCtx::new(&typed),
+        );
+        assert!(
+            m.roots.is_empty(),
+            "index.d.ts carries no runtime edge and must not root"
+        );
+
+        // A declared entry means the package has stated its surface: a stray index.js beside
+        // it is not silently part of that promise, so the fallback must not fire.
+        let m = extract(
+            "package.json",
+            br#"{"name":"express","main":"lib/express.js"}"#,
+            &ctx,
+        );
+        assert_eq!(
+            m.roots
+                .iter()
+                .map(|r| r.target.0.as_str())
+                .collect::<Vec<_>>(),
+            vec!["lib/express.js"]
+        );
     }
 
     #[test]
@@ -390,6 +523,89 @@ mod tests {
         let known = ctx_with(&["package.json"]);
         let facts = extract_at("package.json", r#"{ "main": "./dist/index.js" }"#, &known);
         assert!(facts.roots.is_empty());
+    }
+
+    #[test]
+    fn browser_alias_map_values_are_roots() {
+        // axios's shape: the node-side file is the KEY, the browser-side file the VALUE, and
+        // nothing in the source ever imports the value — the bundler rewrites the specifier.
+        let known = ctx_with(&[
+            "package.json",
+            "index.js",
+            "lib/platform/node/index.js",
+            "lib/platform/browser/index.js",
+        ]);
+        let facts = extract_at(
+            "package.json",
+            r#"{ "main": "./index.js", "browser": {
+                   "./lib/platform/node/index.js": "./lib/platform/browser/index.js",
+                   "./lib/nope.js": false } }"#,
+            &known,
+        );
+        let targets: Vec<&str> = facts.roots.iter().map(|r| r.target.0.as_str()).collect();
+        assert!(
+            targets.contains(&"lib/platform/browser/index.js"),
+            "the substituted-in file is a root: {targets:?}"
+        );
+        assert!(
+            !targets.contains(&"lib/platform/node/index.js"),
+            "the key is the node-side file, already reachable through ordinary imports"
+        );
+        assert_eq!(
+            targets.len(),
+            2,
+            "`main` plus the one string-valued alias; `false` names no file"
+        );
+        assert!(facts
+            .resolved_entries
+            .iter()
+            .any(|(t, _)| t.0 == "lib/platform/browser/index.js"));
+    }
+
+    #[test]
+    fn browser_string_is_an_alternate_main() {
+        let known = ctx_with(&["package.json", "index.js", "dist/browser.js"]);
+        let facts = extract_at(
+            "package.json",
+            r#"{ "main": "./index.js", "browser": "./dist/browser.js" }"#,
+            &known,
+        );
+        let browser = facts
+            .roots
+            .iter()
+            .find(|r| r.target.0 == "dist/browser.js")
+            .expect("the string form declares one entry");
+        assert_eq!(browser.confidence, Confidence::Certain);
+    }
+
+    #[test]
+    fn browser_is_not_a_root_for_a_private_package() {
+        let known = ctx_with(&["package.json", "dist/browser.js"]);
+        let facts = extract_at(
+            "package.json",
+            r#"{ "private": true, "browser": "./dist/browser.js" }"#,
+            &known,
+        );
+        assert!(facts.roots.is_empty(), "same library-mode gate `main` gets");
+        assert_eq!(
+            facts.resolved_entries.len(),
+            1,
+            "still an entry: a sibling importing this package by name resolves through it"
+        );
+    }
+
+    #[test]
+    fn browser_suppresses_the_implicit_index_fallback() {
+        // A package that states a browser surface has stated a surface: a stray index.js
+        // beside it is not silently part of that promise.
+        let known = ctx_with(&["package.json", "index.js", "dist/browser.js"]);
+        let facts = extract_at(
+            "package.json",
+            r#"{ "browser": "./dist/browser.js" }"#,
+            &known,
+        );
+        let targets: Vec<&str> = facts.roots.iter().map(|r| r.target.0.as_str()).collect();
+        assert_eq!(targets, vec!["dist/browser.js"]);
     }
 
     #[test]

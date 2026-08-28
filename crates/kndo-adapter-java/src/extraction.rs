@@ -17,10 +17,10 @@
 //!   not modeled — a documented recall gap, same class as JS's property-
 //!   assignment-callable limitation.
 
-use kndo_adapter_toolkit::metrics::{function_shape, MetricsSyntax};
-use kndo_adapter_toolkit::parsing::span;
+use kndo_adapter_toolkit::metrics::{MetricsSyntax, MIN_CLONE_TOKENS};
+use kndo_adapter_toolkit::parsing::{span, text};
 use kndo_core::adapter::{
-    Diagnostic, DiagnosticLevel, FileFacts, FunctionMetrics, ImportBinding, ImportKind, RawImport,
+    AdapterDiagnostic, DiagnosticLevel, FileFacts, ImportBinding, ImportKind, RawImport,
     RawReference, RawRoot, RawRootTarget, Span,
 };
 use kndo_core::vocab::{Confidence, RefKind, RootKind, SymbolKind};
@@ -69,9 +69,14 @@ const METRICS_SYNTAX: MetricsSyntax = MetricsSyntax {
         "null_literal",
     ],
     skip_kinds: &["line_comment", "block_comment"],
+    // Each of these becomes its own shape when it is substantial enough to carry clone
+    // evidence by itself; a small one stays an expression inside its owner.
+    nested_callable_kinds: &["lambda_expression"],
+    // A body that ONLY constructs a value carries no clone evidence: normalization erases the
+    // field values (the whole authored content) and keeps the field list, which the type
+    // declaration dictates.
+    construction_kinds: &["object_creation_expression"],
 };
-
-const MIN_CLONE_TOKENS: usize = 50;
 
 /// Item-walk context: the member owner (a class/interface/enum/record's bare name), for
 /// `member_of` attribution.
@@ -90,9 +95,8 @@ pub(crate) fn extract(_path: &str, content: &[u8]) -> FileFacts {
     }
 
     let Some(tree) = crate::parsing::parse(content) else {
-        out.diagnostics.push(Diagnostic {
+        out.diagnostics.push(AdapterDiagnostic {
             level: DiagnosticLevel::Warn,
-            path: None,
             message: "failed to initialize the Java parser".to_string(),
             span: None,
         });
@@ -100,9 +104,8 @@ pub(crate) fn extract(_path: &str, content: &[u8]) -> FileFacts {
     };
     let root = tree.root_node();
     if root.has_error() {
-        out.diagnostics.push(Diagnostic {
+        out.diagnostics.push(AdapterDiagnostic {
             level: DiagnosticLevel::Warn,
-            path: None,
             message: "parse errors — extraction is partial for this file".to_string(),
             span: None,
         });
@@ -211,9 +214,17 @@ fn handle_import(item: Node, src: &[u8], out: &mut FileFacts) {
     }
 
     if is_wildcard {
-        // `import com.foo.*;` — package-level wildcard, exactly enumerable.
-        out.imports
-            .push(make_import(&full, sp, false, Vec::new(), true));
+        // `import com.foo.*;` — a type-import-on-demand (JLS 7.5.2), which is BOTH facts: a
+        // wildcard over the package's exports (`opaque_namespace_use` — keeps them alive
+        // without naming which one was taken) and the language's scoping rule that every type
+        // in that package is now legal HERE unqualified (`module_names_visible` — the core's
+        // bare-name fallback consults that unit's table). Emitting only the first left a bare
+        // `Helper()` from a wildcard-imported package resolving to nothing at all. Only
+        // top-level declarations live in a unit's name table, so this brings in exactly what
+        // the JLS says it does: types, not static members.
+        let mut imp = make_import(&full, sp, false, Vec::new(), true);
+        imp.module_names_visible = true;
+        out.imports.push(imp);
         return;
     }
 
@@ -254,6 +265,7 @@ fn make_import(
         opaque_namespace_use,
         module_names_visible: false,
         local_alias: None,
+        reconstructed: false,
     }
 }
 
@@ -378,7 +390,7 @@ fn handle_type(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
         "annotation_type_declaration" => SymbolKind::Other(SmolStr::new("annotation")),
         _ => return,
     };
-    push_declaration(out, name, symbol_kind, item, None, ctx.owner, vis);
+    push_declaration(out, src, name, symbol_kind, item, None, ctx.owner, vis);
     walk_annotation_class_literals(item, src, Some(name), out);
 
     // superclass / implements / extends_interfaces → Extend; everything else in the header
@@ -423,7 +435,7 @@ fn walk_extend_refs(node: Node, src: &[u8], owner: &str, out: &mut FileFacts) {
             if let Some(last) = last_type_name(node, src) {
                 out.references.push(RawReference {
                     name: SmolStr::new(last),
-                    scope_context: None,
+                    scope_context: type_qualifier(node, src).map(SmolStr::new),
                     span: span(node),
                     within: Some(SmolStr::new(owner)),
                     kind: RefKind::Extend,
@@ -442,6 +454,39 @@ fn walk_extend_refs(node: Node, src: &[u8], owner: &str, out: &mut FileFacts) {
 /// The final segment of a dotted type path (`java.io.Closeable` → `Closeable`).
 fn last_type_name<'a>(node: Node, src: &'a [u8]) -> Option<&'a str> {
     text(node, src).rsplit('.').next()
+}
+
+/// The qualifier of a `scoped_type_identifier`, when it names a TYPE rather than a package —
+/// `Outer` in `Outer.Inner`, `None` for `java.util.List`.
+///
+/// Dropping it is not merely lossy, it mis-binds: a bare `Query` extracted from
+/// `new ParameterHandler.Query<>(…)` resolves through the file's import bindings first, and a
+/// file that also does `import retrofit2.http.Query` binds the reference to the **annotation**
+/// — the nested class gets no incoming edge and reads as dead, while an unrelated type gets a
+/// reference it never received. Carried as `scope_context`, the core resolves the member
+/// against the qualifier instead (RFC 0012 §9), and on a miss falls through to the duck-typed
+/// member fallback rather than settling.
+///
+/// Two discriminators, both required. Structural: tree-sitter nests a multi-segment path, so
+/// `java.util.List`'s qualifier is itself a `scoped_type_identifier` while `Outer.Inner`'s is a
+/// bare `type_identifier` — a nested `scoped_type_identifier` is a package path, never a
+/// receiver. Lexical: a single-segment qualifier is still ambiguous between a one-word package
+/// (`p.Foo`) and an enclosing type, and only Java's universal capitalization convention
+/// separates them. Guessing wrong on `p.Foo` would send a resolvable top-level name into the
+/// member-only fallback and lose the edge, so the convention check earns its place — an
+/// adapter may know its language's conventions; the core may not.
+fn type_qualifier<'a>(node: Node, src: &'a [u8]) -> Option<&'a str> {
+    let mut cursor = node.walk();
+    let children: Vec<Node> = node.children(&mut cursor).collect();
+    let qualifier = children.first()?;
+    if qualifier.kind() != "type_identifier" {
+        return None;
+    }
+    let name = text(*qualifier, src);
+    name.chars()
+        .next()
+        .is_some_and(char::is_uppercase)
+        .then_some(name)
 }
 
 /// Walks a type/interface/enum/annotation body, dispatching each member. One
@@ -469,6 +514,7 @@ fn handle_body(body: Node, src: &[u8], owner: &str, out: &mut FileFacts) {
                 if let Some(name_node) = member.child_by_field_name("name") {
                     push_declaration(
                         out,
+                        src,
                         text(name_node, src),
                         SymbolKind::EnumMember,
                         member,
@@ -498,6 +544,7 @@ fn handle_body(body: Node, src: &[u8], owner: &str, out: &mut FileFacts) {
                 if let Some(name_node) = member.child_by_field_name("name") {
                     push_declaration(
                         out,
+                        src,
                         text(name_node, src),
                         SymbolKind::Method,
                         member,
@@ -537,6 +584,7 @@ fn handle_field(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
         let name = text(name_node, src);
         push_declaration(
             out,
+            src,
             name,
             SymbolKind::Field,
             declarator,
@@ -576,7 +624,7 @@ fn handle_method(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
         Some(owner) => (SymbolKind::Method, format!("{owner}.{name}")),
         None => (SymbolKind::Function, name.to_string()),
     };
-    push_declaration(out, name, kind, item, signature_span, ctx.owner, vis);
+    push_declaration(out, src, name, kind, item, signature_span, ctx.owner, vis);
 
     // `public static void main(String[] args)` — the JVM entry point, any class.
     if ctx.owner.is_some() && name == "main" && vis.1 && has_modifier(item, "static") {
@@ -630,14 +678,14 @@ fn handle_method(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
     }
     if let Some(body) = body {
         walk_body(body, src, Some(&qualified), out);
-        let shape = function_shape(body, &METRICS_SYNTAX, MIN_CLONE_TOKENS);
-        out.functions.push(FunctionMetrics {
-            symbol: SmolStr::new(&qualified),
-            cyclomatic: shape.cyclomatic,
-            loc: shape.loc,
-            token_count: shape.token_count as u32,
-            fingerprints: shape.fingerprints,
-        });
+        kndo_adapter_toolkit::metrics::push_function_metrics(
+            out,
+            &qualified,
+            span(item),
+            body,
+            &METRICS_SYNTAX,
+            MIN_CLONE_TOKENS,
+        );
     }
 }
 
@@ -652,6 +700,7 @@ fn handle_constructor(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts
     });
     push_declaration(
         out,
+        src,
         "<init>",
         SymbolKind::Constructor,
         item,
@@ -664,20 +713,21 @@ fn handle_constructor(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts
     }
     if let Some(body) = item.child_by_field_name("body").or(body) {
         walk_body(body, src, Some(&qualified), out);
-        let shape = function_shape(body, &METRICS_SYNTAX, MIN_CLONE_TOKENS);
-        out.functions.push(FunctionMetrics {
-            symbol: SmolStr::new(&qualified),
-            cyclomatic: shape.cyclomatic,
-            loc: shape.loc,
-            token_count: shape.token_count as u32,
-            fingerprints: shape.fingerprints,
-        });
+        kndo_adapter_toolkit::metrics::push_function_metrics(
+            out,
+            &qualified,
+            span(item),
+            body,
+            &METRICS_SYNTAX,
+            MIN_CLONE_TOKENS,
+        );
     }
 }
 
 #[allow(clippy::too_many_arguments)]
 fn push_declaration(
     out: &mut FileFacts,
+    src: &[u8],
     name: &str,
     kind: SymbolKind,
     item: Node,
@@ -685,18 +735,55 @@ fn push_declaration(
     member_of: Option<&str>,
     (level, exported): (u8, bool),
 ) {
-    out.declarations.push(kndo_core::adapter::Declaration {
-        name: SmolStr::new(name),
+    kndo_adapter_toolkit::decls::push_declaration(
+        out,
+        name,
         kind,
-        span: span(item),
-        exported,
-        visibility: kndo_core::adapter::VisibilityLevel(level),
-        member_of: member_of.map(SmolStr::new),
-        implicitly_invoked: false,
-        nested_scope: false,
-        visibility_inherited: false,
+        item,
         signature_span,
-    });
+        member_of,
+        (level, exported),
+        markers(item, src),
+    );
+}
+
+/// The annotation names written on this declaration, in source order — `Declaration::markers`.
+/// Facts, never verdicts: every annotation is reported, and this adapter has no idea which
+/// ones a framework acts on.
+///
+/// A qualified annotation (`@Advice.OnMethodEnter`) contributes BOTH its written text and its
+/// last segment, because either is a legitimate way to name it in `kndo.toml` and the adapter
+/// cannot know which the project will pick. The same reasoning covers a fully-qualified
+/// `@org.springframework.stereotype.Controller`, which is legal Java and would otherwise never
+/// match a `Controller` entry.
+fn markers(item: Node, src: &[u8]) -> Vec<SmolStr> {
+    let Some(modifiers) = modifiers_node(item) else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    let mut c = modifiers.walk();
+    for child in modifiers.children(&mut c) {
+        if !matches!(child.kind(), "marker_annotation" | "annotation") {
+            continue;
+        }
+        let mut cc = child.walk();
+        let Some(name) = child
+            .child_by_field_name("name")
+            .or_else(|| {
+                child
+                    .children(&mut cc)
+                    .find(|n| matches!(n.kind(), "identifier" | "scoped_identifier"))
+            })
+            .map(|n| dotted_text(n, src))
+        else {
+            continue;
+        };
+        if let Some((_, last)) = name.rsplit_once('.') {
+            out.push(SmolStr::new(last));
+        }
+        out.push(SmolStr::new(name));
+    }
+    out
 }
 
 /// Type-position walk (field/param/return/throws/generic-bound types) → `TypeUse`.
@@ -714,7 +801,7 @@ fn walk_type_refs(node: Node, src: &[u8], within: Option<&str>, out: &mut FileFa
             if let Some(last) = last_type_name(node, src) {
                 out.references.push(RawReference {
                     name: SmolStr::new(last),
-                    scope_context: None,
+                    scope_context: type_qualifier(node, src).map(SmolStr::new),
                     span: span(node),
                     within: within.map(SmolStr::new),
                     kind: RefKind::TypeUse,
@@ -728,6 +815,88 @@ fn walk_type_refs(node: Node, src: &[u8], within: Option<&str>, out: &mut FileFa
             }
         }
     }
+}
+
+/// The generic call-site fact: any invocation whose callee is a plain dotted path — `t`,
+/// `res.render`, `a.b.c` — and whose arguments include a string literal is recorded as callee
+/// + first string literal + span.
+///
+/// The adapter stays framework-blind: it records "a call passed this literal", never what any
+/// ecosystem means by it. Interpretation is plugin territory, through
+/// `GraphView::string_call_sites_in` natively or `call-sites-in` over the ABI — which is what
+/// lets a plugin build a convention on a fact the adapter already parsed instead of asking for
+/// source access and re-parsing this grammar itself. No callee filtering, deliberately: a
+/// name-based exclusion list would be exactly the ecosystem knowledge this layer must not
+/// carry.
+fn record_string_call_arg(node: Node, src: &[u8], out: &mut FileFacts) {
+    let Some(callee) = dotted_callee(node, src) else {
+        return;
+    };
+    let Some(args) = node.child_by_field_name("arguments") else {
+        return;
+    };
+    let mut cursor = args.walk();
+    let literal = args
+        .named_children(&mut cursor)
+        .filter(|a| a.kind() == "string_literal")
+        .find_map(|a| string_literal_value(a, src));
+    if let Some(literal) = literal {
+        out.string_call_args
+            .push(kndo_core::adapter::StringCallArg {
+                callee,
+                literal,
+                span: span(node),
+            });
+    }
+}
+
+/// A `method_invocation`'s callee as a dotted path — `None` when the receiver is anything
+/// without a stable written name (a call result, an array access, a parenthesized
+/// expression). Those exist and are common; a convention cannot match on them, and inventing
+/// a spelling for them would put a name in the fact that no source line contains.
+///
+/// No resolution: `a.b.c` is recorded exactly as written, whether `a.b` is a package
+/// qualifier, a static field or a local. Which one it is depends on the classpath, and the
+/// syntactic form is what a convention matches on anyway.
+fn dotted_callee(invocation: Node, src: &[u8]) -> Option<SmolStr> {
+    let name = invocation.child_by_field_name("name")?;
+    let name = text(name, src);
+    match invocation.child_by_field_name("object") {
+        None => Some(SmolStr::new(name)),
+        Some(object) => {
+            let base = dotted_receiver(object, src)?;
+            Some(SmolStr::new(format!("{base}.{name}")))
+        }
+    }
+}
+
+fn dotted_receiver(node: Node, src: &[u8]) -> Option<String> {
+    match node.kind() {
+        "identifier" => Some(text(node, src).to_string()),
+        "this" => Some("this".to_string()),
+        "field_access" => {
+            let object = node.child_by_field_name("object")?;
+            let field = node.child_by_field_name("field")?;
+            Some(format!(
+                "{}.{}",
+                dotted_receiver(object, src)?,
+                text(field, src)
+            ))
+        }
+        _ => None,
+    }
+}
+
+/// A string literal's content. `string_fragment` is the ordinary form and
+/// `multiline_string_fragment` a text block (Java 15+) — both carry the text without its
+/// delimiters. An empty literal has neither child and yields nothing, which is correct: `""`
+/// names nothing a convention could resolve.
+fn string_literal_value(node: Node, src: &[u8]) -> Option<SmolStr> {
+    let mut cursor = node.walk();
+    let found = node
+        .children(&mut cursor)
+        .find(|c| matches!(c.kind(), "string_fragment" | "multiline_string_fragment"));
+    found.map(|c| SmolStr::new(text(c, src)))
 }
 
 /// Expression/statement bodies: calls, field access, identifier reads, method references,
@@ -775,6 +944,7 @@ fn walk_body(node: Node, src: &[u8], within: Option<&str>, out: &mut FileFacts) 
                     kind: RefKind::Call,
                 });
             }
+            record_string_call_arg(node, src, out);
             if let Some(args) = node.child_by_field_name("arguments") {
                 walk_body(args, src, within, out);
             }
@@ -860,7 +1030,7 @@ fn walk_body(node: Node, src: &[u8], within: Option<&str>, out: &mut FileFacts) 
             if let Some(last) = last_type_name(node, src) {
                 out.references.push(RawReference {
                     name: SmolStr::new(last),
-                    scope_context: None,
+                    scope_context: type_qualifier(node, src).map(SmolStr::new),
                     span: span(node),
                     within: within.map(SmolStr::new),
                     kind: RefKind::TypeUse,
@@ -921,10 +1091,6 @@ fn is_reference_position(node: Node) -> bool {
             .is_none_or(|n| n.id() != node.id()),
         _ => true,
     }
-}
-
-fn text<'a>(node: Node, src: &'a [u8]) -> &'a str {
-    std::str::from_utf8(&src[node.byte_range()]).unwrap_or("")
 }
 
 #[cfg(test)]
@@ -1030,11 +1196,48 @@ mod tests {
     }
 
     #[test]
+    fn annotations_become_declaration_markers() {
+        let f = facts(
+            "package p;\n\
+             @Controller\n\
+             @RequestMapping(\"/x\")\n\
+             class C {\n\
+             \x20 @Advice.OnMethodEnter\n\
+             \x20 static void enter() {}\n\
+             \x20 void plain() {}\n\
+             }\n",
+        );
+        assert_eq!(
+            decl(&f, "C").markers,
+            vec![SmolStr::new("Controller"), SmolStr::new("RequestMapping")],
+            "source order, the marker form and the argument form alike"
+        );
+        assert_eq!(
+            decl(&f, "enter").markers,
+            vec![
+                SmolStr::new("OnMethodEnter"),
+                SmolStr::new("Advice.OnMethodEnter")
+            ],
+            "a qualified annotation contributes both spellings — either is a legitimate \
+             kndo.toml entry and the adapter cannot know which the project will pick"
+        );
+        assert!(
+            decl(&f, "plain").markers.is_empty(),
+            "markers are facts: nothing is invented for an unannotated declaration"
+        );
+    }
+
+    #[test]
     fn wildcard_type_import_is_opaque_namespace_use() {
         let f = facts("package p;\nimport com.foo.*;\nclass C {}\n");
         let imp = f.imports.iter().find(|i| i.specifier == "com.foo").unwrap();
         assert!(imp.opaque_namespace_use);
         assert!(imp.bindings.is_empty());
+        assert!(
+            imp.module_names_visible,
+            "and the JLS 7.5.2 scoping rule with it: every type in that package is legal here \
+             unqualified, which is what makes a bare `Bar` reference resolve"
+        );
     }
 
     #[test]
@@ -1116,6 +1319,39 @@ mod tests {
             .find(|r| r.name == "staticCall")
             .unwrap();
         assert_eq!(call.scope_context.as_deref(), Some("Other"));
+    }
+
+    #[test]
+    fn a_nested_type_reference_keeps_its_qualifier() {
+        // `new Outer.Inner<>(…)` must carry `Outer`. Dropping it does not merely lose an edge:
+        // a bare `Inner` resolves through the file's import bindings first, so a file that also
+        // imports an unrelated type of the same name binds the reference to THAT one — the
+        // nested type reads as dead and the import target collects a reference it never
+        // received. retrofit's `new ParameterHandler.Query<>(…)` beside
+        // `import retrofit2.http.Query` is the shape.
+        let f = facts(
+            "package p;\nclass C {\n             \x20   Object make() { return new Outer.Inner<>(1); }\n             }\n",
+        );
+        let inner = f.references.iter().find(|r| r.name == "Inner").unwrap();
+        assert_eq!(inner.scope_context.as_deref(), Some("Outer"));
+        assert_eq!(inner.kind, RefKind::TypeUse);
+    }
+
+    #[test]
+    fn a_package_qualified_type_carries_no_qualifier() {
+        // The other half: `java.util.List`'s `util` is a package segment, not a receiver.
+        // Emitting it would push a name the free-name tables resolve today into the
+        // member-only fallback, which top-level types never reach — losing the edge.
+        // Structurally the qualifier is a nested `scoped_type_identifier`; `p.Foo`'s is a bare
+        // one, and only capitalization separates that from a real enclosing type.
+        let f = facts("package p;\nclass C { java.util.List<String> f; com.example.Foo g; }\n");
+        for name in ["List", "Foo"] {
+            let r = f.references.iter().find(|r| r.name == name).unwrap();
+            assert_eq!(
+                r.scope_context, None,
+                "{name} is package-qualified, not a nested type"
+            );
+        }
     }
 
     #[test]
@@ -1213,5 +1449,86 @@ mod tests {
         );
         let fm = f.functions.iter().find(|f| f.symbol == "C.m").unwrap();
         assert_eq!(fm.cyclomatic, 3); // base 1 + if + for
+    }
+}
+
+#[cfg(test)]
+mod string_call_arg_tests {
+    use super::*;
+
+    fn sites(src: &str) -> Vec<(String, String)> {
+        extract("A.java", src.as_bytes())
+            .string_call_args
+            .into_iter()
+            .map(|c| (c.callee.to_string(), c.literal.to_string()))
+            .collect()
+    }
+
+    #[test]
+    fn dotted_callees_and_the_first_string_literal_are_recorded() {
+        // The generic call-site fact — framework-blind, direct literals only. The same
+        // contract the JS adapter already implements, so a plugin reading `call-sites-in`
+        // sees one shape regardless of which grammar produced it.
+        assert_eq!(
+            sites(
+                "class A {\n\
+                 \x20 void m() {\n\
+                 \x20   res.render(\"index\");\n\
+                 \x20   t(\"bare-callee\");\n\
+                 \x20   this.log(\"receiver-is-this\");\n\
+                 \x20   a.b.c(\"nested-field-access\");\n\
+                 \x20   flags.isEnabled(\"first-only\", \"second\");\n\
+                 \x20   describe(\"\"\"\n\
+                 text block\n\
+                 \"\"\");\n\
+                 \x20 }\n\
+                 }\n"
+            ),
+            vec![
+                ("res.render".to_string(), "index".to_string()),
+                ("t".to_string(), "bare-callee".to_string()),
+                ("this.log".to_string(), "receiver-is-this".to_string()),
+                ("a.b.c".to_string(), "nested-field-access".to_string()),
+                ("flags.isEnabled".to_string(), "first-only".to_string()),
+                ("describe".to_string(), "\ntext block\n".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_receiver_with_no_written_name_records_nothing() {
+        // A call result, an array element, a parenthesized expression: each is a real
+        // receiver and none has a spelling a convention could match. Recording an invented
+        // one would put a name in the fact that no source line contains — silence instead.
+        assert_eq!(
+            sites(
+                "class A {\n\
+                 \x20 void m() {\n\
+                 \x20   build().render(\"call-result-receiver\");\n\
+                 \x20   items[0].render(\"array-receiver\");\n\
+                 \x20   (cond ? a : b).render(\"ternary-receiver\");\n\
+                 \x20 }\n\
+                 }\n"
+            ),
+            Vec::<(String, String)>::new()
+        );
+    }
+
+    #[test]
+    fn a_call_with_no_string_argument_records_nothing() {
+        assert_eq!(
+            sites(
+                "class A {\n\
+                 \x20 void m() {\n\
+                 \x20   compute(key);\n\
+                 \x20   concat(\"a\" + suffix);\n\
+                 \x20   empty(\"\");\n\
+                 \x20 }\n\
+                 }\n"
+            ),
+            // `"a" + suffix` is a binary expression, not a literal argument; `""` has no
+            // fragment child and names nothing. Determinism over coverage.
+            Vec::<(String, String)>::new()
+        );
     }
 }

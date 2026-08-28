@@ -23,6 +23,12 @@
       "subject_kind": "method",
       "path": "src/main/kotlin/com/util/Helper.kt",
       "symbol": "Helper.assist"
+    },
+    {
+      "category": "internal-only",
+      "subject_kind": "class",
+      "path": "src/main/kotlin/com/util/Helper.kt",
+      "symbol": "Helper"
     }
   ]
 }

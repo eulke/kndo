@@ -25,7 +25,7 @@ kondo · 312 files · 6 packages · health 87
 ## Highlights
 
 - **One graph, eight languages** — JavaScript/TypeScript, Rust, Go, Java, Kotlin,
-  Swift, JSON, and CSS/SCSS analyzed together, monorepos included.
+  Swift, JSON, CSS/SCSS, and HTML analyzed together, monorepos included.
 - **Reachability, not regex** — findings come from resolving imports, references,
   visibility, and dispatch across files and packages. Dynamic dispatch, framework
   callbacks, and serialization machinery are modeled, so the noise stays low.

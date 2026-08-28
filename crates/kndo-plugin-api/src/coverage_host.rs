@@ -68,7 +68,7 @@ fn native_rule(rule: cw::ActivationRule) -> kndo_core::plugin::ActivationRule {
 pub struct WasmCoverageIngester {
     engine: wasmtime::Engine,
     component: wasmtime::component::Component,
-    linker: wasmtime::component::Linker<()>,
+    linker: wasmtime::component::Linker<crate::engine::NoImports>,
     descriptor: PluginDescriptor,
     // Same role as `WasmPlugin::content_hash`: proof of *this exact* `.wasm` file for the
     // graph-cache key machinery, which treats every plugin uniformly.
@@ -104,9 +104,16 @@ impl WasmCoverageIngester {
 fn instantiate(
     engine: &wasmtime::Engine,
     component: &wasmtime::component::Component,
-    linker: &wasmtime::component::Linker<()>,
-) -> Result<(wasmtime::Store<()>, WitCoverageBindings), LoadError> {
-    let mut store = wasmtime::Store::new(engine, ());
+    linker: &wasmtime::component::Linker<crate::engine::NoImports>,
+) -> Result<
+    (
+        wasmtime::Store<crate::engine::NoImports>,
+        WitCoverageBindings,
+    ),
+    LoadError,
+> {
+    let mut store = wasmtime::Store::new(engine, crate::engine::NoImports::new());
+    store.limiter(|data| &mut data.limits);
     store
         .set_fuel(FUEL_PER_CALL)
         .map_err(|e| LoadError::Instantiate(e.to_string()))?;

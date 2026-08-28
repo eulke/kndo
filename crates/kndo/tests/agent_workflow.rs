@@ -9,7 +9,7 @@
 use std::fs;
 use std::path::Path;
 
-use kndo::engine::{CheckRequest, ConfigOverrides, RunMode};
+use kndo::engine::{ConfigOverrides, RunMode};
 use kndo::query_envelope::{QueryFlags, QueryRequest, ResultEntry, Verb};
 
 fn write(root: &Path, rel: &str, content: &str) {
@@ -57,8 +57,7 @@ fn engine(root: &Path) -> kndo::engine::Engine {
         root,
         ConfigOverrides {
             use_cache: false,
-            threads: None,
-            min_confidence: None,
+            ..ConfigOverrides::default()
         },
     )
     .unwrap()
@@ -82,13 +81,11 @@ fn query(
 
 #[test]
 fn find_used_by_impact_check_closes_the_loop() {
-    let root = std::env::temp_dir().join("kndo-agent-workflow-e2e");
-    let _ = fs::remove_dir_all(&root);
-    fs::create_dir_all(&root).unwrap();
-    project(&root);
+    let root = tempfile::tempdir().unwrap();
+    project(root.path());
 
     // 1. find calcLegacyTax → the selector, no path knowledge needed up front.
-    let mut e = engine(&root);
+    let mut e = engine(root.path());
     let found = query(&mut e, Verb::Find, "calcLegacyTax", QueryFlags::default());
     let ResultEntry::Find(found) = found else {
         panic!("find failed: {found:?}");
@@ -135,9 +132,7 @@ fn find_used_by_impact_check_closes_the_loop() {
     // Pre-edit check: the legacy path shows up as test-only debt (the finding the cleanup
     // will fix), and decimal.js — imported only by test-reachable code — as a
     // dependency verdict too.
-    let before = e.check(CheckRequest {
-        mode: RunMode::Full,
-    });
+    let before = e.check(RunMode::Full);
     assert!(
         before.findings.iter().any(|f| f.category == "test-only"
             && f.location
@@ -154,10 +149,10 @@ fn find_used_by_impact_check_closes_the_loop() {
 
     // 4. The agent edits: delete function, tests, table, dependency — exactly the plan the
     //    three queries computed.
-    fs::remove_file(root.join("src/legacy.ts")).unwrap();
-    fs::remove_file(root.join("src/legacy.test.ts")).unwrap();
+    fs::remove_file(root.path().join("src/legacy.ts")).unwrap();
+    fs::remove_file(root.path().join("src/legacy.test.ts")).unwrap();
     write(
-        &root,
+        root.path(),
         "package.json",
         r#"{
   "name": "tax-demo",
@@ -169,10 +164,8 @@ fn find_used_by_impact_check_closes_the_loop() {
 
     // 5. check → the machine-verifiable proof: every finding the cleanup targeted is gone
     //    and the edit introduced nothing new.
-    let mut e = engine(&root);
-    let after = e.check(CheckRequest {
-        mode: RunMode::Full,
-    });
+    let mut e = engine(root.path());
+    let after = e.check(RunMode::Full);
     assert!(
         after.findings.is_empty(),
         "cleanup must be complete and introduce nothing: {:?}",
@@ -183,5 +176,5 @@ fn find_used_by_impact_check_closes_the_loop() {
             .collect::<Vec<_>>()
     );
 
-    let _ = fs::remove_dir_all(&root);
+    let _ = fs::remove_dir_all(root.path());
 }

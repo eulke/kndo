@@ -3,14 +3,13 @@
 //! diagnostic when the content isn't valid JSON ("surviving broken code, but saying so"
 //! applies even to a format with nothing else to extract).
 
-use kndo_core::adapter::{Diagnostic, DiagnosticLevel, FileFacts};
+use kndo_core::adapter::{AdapterDiagnostic, DiagnosticLevel, FileFacts};
 
 pub(crate) fn extract(content: &[u8]) -> FileFacts {
     let mut out = FileFacts::default();
     if let Err(e) = serde_json::from_slice::<serde_json::Value>(content) {
-        out.diagnostics.push(Diagnostic {
+        out.diagnostics.push(AdapterDiagnostic {
             level: DiagnosticLevel::Warn,
-            path: None,
             message: format!("invalid JSON: {e}"),
             span: None,
         });

@@ -95,6 +95,10 @@
         "unreachable"
       ]
     },
+    "Category": {
+      "description": "A finding's category — an open namespace (RFC 0018 §2.1: a plugin's own category is\n`plugin:<coordinate>/<rule>`, never a bare or off-namespace name), so unlike [`Group`] this\nis a validated string newtype rather than a closed enum. The core categories are\nassociated consts; [`Category::plugin`] builds the namespaced form; [`Category::is_plugin`]\ntells the two apart without a string-prefix check at every call site.",
+      "type": "string"
+    },
     "Confidence": {
       "description": "Per-edge strength. Ordered by strength: `Possible < Probable < Certain`, so `max()` yields\nthe strongest evidence and \"edges at least as strong as τ\" is a simple `>=`.",
       "type": "string",
@@ -117,10 +121,18 @@
           "$ref": "#/$defs/NodeSpan"
         },
         "visibility": {
+          "description": "The rung's ordinal on the claiming adapter's visibility ladder — comparable\n(`>` means \"more visible\") and meaningless on its own, which is what\n`visibility_label` is for.",
           "type": "integer",
           "format": "uint8",
           "maximum": 255,
           "minimum": 0
+        },
+        "visibility_label": {
+          "description": "The rung's own name, as the adapter spells it (`private`, `pub(crate)`, `internal`,\n`exported`). The ordinal alone rendered as `visibility 3`, which asks a reader to\nknow a ladder they cannot see; the core still names no language, because the label\ncomes from the adapter's own ladder rather than from a table here.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
@@ -153,6 +165,22 @@
       "required": [
         "in_by_kind",
         "out_by_kind"
+      ]
+    },
+    "Delta": {
+      "description": "A finding's place in a diff-mode delta. `None`\nin full mode — there is no \"before\" to compare against, so the concept doesn't apply, and\nthe field is omitted rather than forced to some default.",
+      "type": "string",
+      "enum": [
+        "new",
+        "fixed"
+      ]
+    },
+    "DeltaOrigin": {
+      "description": "Only set on `Delta::New` findings: does this finding sit *inside* the change set itself\n(`Introduced` — dead on arrival, an agent or author can self-correct before committing) or\ndoes it live in untouched code that flipped because of the change at a distance (`Derived`)?",
+      "type": "string",
+      "enum": [
+        "introduced",
+        "derived"
       ]
     },
     "DependencyInfo": {
@@ -211,6 +239,13 @@
             }
           ]
         },
+        "duplication": {
+          "description": "Duplication groups this node belongs to. Plural because a symbol with two substantial\nclosures can be in two different groups.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DuplicationInfo"
+          }
+        },
         "elided": {
           "type": "object",
           "additionalProperties": {
@@ -233,6 +268,13 @@
           "type": "array",
           "items": {
             "type": "string"
+          }
+        },
+        "metrics": {
+          "description": "Per-shape measurements, ordered by `shape_ordinal`. Empty for a node that owns no\ncallable shape — a type, a file, a dependency (RFC 0007 §4.2).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ShapeMetrics"
           }
         },
         "node": {
@@ -322,6 +364,57 @@
         }
       ]
     },
+    "DuplicationInfo": {
+      "description": "One duplication group this node belongs to: the `duplicate` finding that named it, and\nevery member including this node.\n\nRead off the findings the run already computed, not a second index on the graph — a\ncross-file fingerprint index would need its own invalidation semantics in the incremental\npatch, for an answer the analysis has already produced.",
+      "type": "object",
+      "properties": {
+        "finding": {
+          "description": "The `duplicate` finding's id — the group's stable identity.",
+          "type": "string"
+        },
+        "members": {
+          "description": "Every member's selector, in the finding's own order.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "finding",
+        "members"
+      ]
+    },
+    "ExplainResult": {
+      "description": "`kndo explain <finding-id>` — one finding, and everything the graph knows about what it\nlanded on.\n\nDeliberately a *pair*, not a new derivation: the finding verbatim (its own message,\nevidence chain, provenance and rollup count are the explanation the analysis already\nwrote) plus `describe` of its subject (color, roots that reach it, degree, the other\nfindings on the same node). Re-deriving either half here would be a second answer to a\nquestion that already has one — and `explain` would be the copy that drifts.",
+      "type": "object",
+      "properties": {
+        "finding": {
+          "$ref": "#/$defs/Finding"
+        },
+        "subject": {
+          "description": "`None` when the finding's subject is not a graph node: a directory rollup, or a path\nthe graph never saw. The finding still explains itself; what is missing is the node\ncontext, and saying so beats inventing a node to describe.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DescribeResult"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "subject_selector": {
+          "description": "The selector the subject was looked up under — what a reader types to keep navigating\n(`kndo used-by <selector>`), and, when `subject` is `None`, what failed to resolve.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "finding"
+      ]
+    },
     "FileInfo": {
       "type": "object",
       "properties": {
@@ -355,6 +448,112 @@
       "required": [
         "matches",
         "elided"
+      ]
+    },
+    "Finding": {
+      "description": "Typed form of the output-schema finding (every field lands in the JSON schema\nfirst — that document is normative).\n\nTwo fields the schema deliberately does NOT have, so nobody re-adds them looking for\nparity: `evidence` (a category-specific block specified before any category had one — no\nanalysis has since produced a fact `related` cannot carry) and `remediation` (the advice a\nfinding carries travels inside `message`, written by the analysis that knows the subject;\n`deep-import` is the worked example). Both are cut rather than emitted null: a field that\nis always null teaches a consumer to stop reading it.",
+      "type": "object",
+      "properties": {
+        "advisory": {
+          "description": "The severity channel: `true` = this finding never influences exit codes or\nbudgets, whatever its `severity` says — the state of every plugin-contributed finding\n(`plugin:` categories) without an explicit `[plugins.gate]` opt-in. Always `false` for\ncore findings; serialized only when true (additive).",
+          "type": "boolean"
+        },
+        "category": {
+          "$ref": "#/$defs/Category"
+        },
+        "confidence": {
+          "$ref": "#/$defs/Confidence"
+        },
+        "delta": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Delta"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "delta_origin": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DeltaOrigin"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "group": {
+          "$ref": "#/$defs/Group"
+        },
+        "id": {
+          "type": "string"
+        },
+        "location": {
+          "$ref": "#/$defs/Location"
+        },
+        "message": {
+          "type": "string"
+        },
+        "related": {
+          "description": "Evidence chain — empty for analyses that haven't adopted it yet.\n`default` isn't for deserialization (Finding is serialize-only) — it tells the schema\ngenerator the field is optional, matching the skip-when-empty serialization.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RelatedLocation"
+          }
+        },
+        "rolled_up": {
+          "description": "How many findings this one subsumes, on the rollup ladder (symbol → file → directory →\npackage, RFC 0005 taxonomy rule 3): a directory reported once instead of fifty times\nsays `50` here. `None` on a finding that subsumes nothing, which is most of them —\nabsent rather than `1`, because \"this is a rollup of one\" is not a fact, and a\nconsumer summing the field must not double-count leaves.\n\nWithout it the count survives only inside the message prose (\"4 files, none\nreferenced\"), so a consumer deciding how much a finding is worth has to parse English\n— the same defect `location`/`related` had for multi-place subjects.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0
+        },
+        "severity": {
+          "$ref": "#/$defs/Severity"
+        },
+        "sources": {
+          "description": "Provenance: which adapters and plugins the subject's facts came from —\n`[\"adapter:js-ts\", \"plugin:kndo:nextjs\"]`. Filled by one pass over the finished\nfinding set (`fill_sources`), never by the analyses: a verdict knows what it decided,\nnot who supplied the graph it decided on, and thirteen analyses each answering the\nquestion would be thirteen chances to answer it differently.\n\nEmpty — and so absent — when the subject resolves to no graph node: a finding about a\npath outside the graph, or one the analysis left unanchored. Never a lie by omission:\nthis names components whose facts are *present*, and cannot name the plugin that would\nhave kept a symbol alive had it activated.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "subject_kind": {
+          "$ref": "#/$defs/SubjectKind"
+        }
+      },
+      "required": [
+        "id",
+        "category",
+        "group",
+        "subject_kind",
+        "severity",
+        "confidence",
+        "message",
+        "location"
+      ]
+    },
+    "Group": {
+      "description": "A finding's section — the taxonomy RFC 0018 §\"reserved\" closes: exactly these five, plus\n`Convention` reserved for plugin-contributed findings (`category` stays an open\n`plugin:<coordinate>/<rule>` namespace — RFC 0018 §2.1 — but no finding may claim a group\noutside this set). [`Group::DISPLAY_ORDER`] is the single source of section ordering —\nevery renderer reads it instead of keeping its own copy (a duplicated 4-entry copy of this\nlist, missing `Convention`, is exactly how `agent_format.rs` and the CLI's `render.rs`\nused to missort every plugin finding under an unnamed fallback section).",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "defect",
+            "waste",
+            "risk",
+            "hygiene"
+          ]
+        },
+        {
+          "description": "Reserved for plugin-contributed findings — a core analysis never emits it.",
+          "type": "string",
+          "const": "convention"
+        }
       ]
     },
     "Hop": {
@@ -467,6 +666,45 @@
         "affected_roots",
         "affected_roots_elided"
       ]
+    },
+    "Location": {
+      "description": "Where a finding points. Every field is optional because not every subject has all of them —\na `version-skew` has no range, a directory rollup has no symbol.\n\nA finding whose subject genuinely spans several places (`duplicate` over identical files,\n`version-skew` over disagreeing manifests) anchors on the lexicographically-first member and\ncarries **every** member in `related`. That pairing is the contract: the anchor makes the\nfinding addressable, `related` makes it complete, and the message is then free to summarize.\nThe alternative shipped for a while — an empty `Location` with the members named only in the\nmessage prose — and it meant 278 findings across the corpus that no consumer could act on\nwithout parsing English, some of which truncated the list and lost the rest outright.",
+      "type": "object",
+      "properties": {
+        "package": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "path": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProjectPath"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "range": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Span"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "symbol": {
+          "description": "The finding's primary named subject — a code symbol's name for symbol-kind findings,\nbut also a dependency's name for `undeclared`/`version-skew` (which have no code symbol\nat all): whatever single name a reader or the agent-format renderer would point at.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
     },
     "NeighborEntry": {
       "type": "object",
@@ -692,6 +930,39 @@
         "selectors"
       ]
     },
+    "RelatedLocation": {
+      "description": "One entry of a finding's evidence chain (the schema's `related` — what `kndo\nexplain` renders): a concrete location plus its role in the story. Populated by\n`cyclic` (\"a shortest cycle path in `related` as the evidence chain\"); other\nanalyses adopt it as they gain evidence models — never fabricated as a placeholder.",
+      "type": "object",
+      "properties": {
+        "note": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "path": {
+          "$ref": "#/$defs/ProjectPath"
+        },
+        "range": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Span"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "role": {
+          "description": "What this location contributes: \"cycle-hop\", \"cause\", …",
+          "type": "string"
+        }
+      },
+      "required": [
+        "role",
+        "path"
+      ]
+    },
     "ResultEntry": {
       "description": "One `results[]` entry — either a verb-specific success shape or an inline per-selector\nfailure (\"a failed selector yields an inline `{status, …}` entry without\nfailing its siblings\").",
       "anyOf": [
@@ -709,6 +980,9 @@
         },
         {
           "$ref": "#/$defs/ImpactResult"
+        },
+        {
+          "$ref": "#/$defs/ExplainResult"
         },
         {
           "type": "object",
@@ -746,6 +1020,71 @@
       "required": [
         "cache",
         "duration_ms"
+      ]
+    },
+    "Severity": {
+      "description": "A finding's severity — each category carries one as\na fixed default; `--strict` promotion isn't implemented yet, so this is always the default.\nDeclaration order doubles as sort/triage order: worst first.",
+      "type": "string",
+      "enum": [
+        "error",
+        "warning",
+        "info"
+      ]
+    },
+    "ShapeMetrics": {
+      "description": "One callable **shape**'s measurements — a declaration's own body, or one callable nested\ninside it. A symbol can own several ([`crate::graph::SymbolMetrics`]'s doc), so `describe`\nreports a list ordered by `shape_ordinal` rather than one set of numbers that would\nsilently be the first shape's.",
+      "type": "object",
+      "properties": {
+        "coverage": {
+          "description": "Covered fraction of this shape's instrumented lines, when a report was ingested and\ninstruments them. **Absent means unknown, never zero**: `crap` scores an uninstrumented\nfunction pessimistically at 0, but reporting that 0 here would be a fabricated\nmeasurement — the rule [`crate::coverage::CoverageMap::function_coverage`] states.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "crap": {
+          "description": "`cyclomatic² × (1 - coverage)³ + cyclomatic`, from the same function `crap` scores\nwith. Absent for the same reason `coverage` is.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "cyclomatic": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "loc": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "shape_ordinal": {
+          "description": "0 for the declaration's own body, 1..N for nested callables in pre-order.",
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "span": {
+          "description": "This shape's own extent, not the symbol's.",
+          "$ref": "#/$defs/NodeSpan"
+        },
+        "token_count": {
+          "description": "Normalized-stream token count — the basis of the duplication ratio.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "shape_ordinal",
+        "span",
+        "cyclomatic",
+        "loc",
+        "token_count"
       ]
     },
     "Span": {
@@ -791,6 +1130,10 @@
         "start",
         "end"
       ]
+    },
+    "SubjectKind": {
+      "description": "A finding's subject facet (`category:subject` targeting, RFC 0005) — open like\n[`Category`]: most values are the fixed `file | directory | dependency | package |\nsuppression` set, but a symbol-subject finding's facet is [`SymbolKind::facet`], which\nitself carries an open [`SymbolKind::Other`] tail for languages the closed variants don't\ncover — so this can never be a closed enum either.",
+      "type": "string"
     },
     "TraceResult": {
       "type": "object",

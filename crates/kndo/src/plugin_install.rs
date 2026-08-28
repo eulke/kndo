@@ -727,8 +727,8 @@ fn sha256_hex(bytes: &[u8]) -> String {
 /// `facts_schema_version` is the closest existing adapter concept, populated in the adapter
 /// arm only because `ProbedDescriptor` needs *something* in that slot.
 pub fn wasm_probe(bytes: &[u8]) -> Result<ProbedDescriptor, String> {
-    let dir = tempfile_dir().map_err(|e| e.to_string())?;
-    let path = dir.join("probe.wasm");
+    let dir = tempfile::tempdir().map_err(|e| e.to_string())?;
+    let path = dir.path().join("probe.wasm");
     std::fs::write(&path, bytes).map_err(|e| e.to_string())?;
     let result =
         probed(kndo_plugin_api::WasmPlugin::load(&path), plugin_probe).or_else(|plugin_err| {
@@ -753,7 +753,6 @@ pub fn wasm_probe(bytes: &[u8]) -> Result<ProbedDescriptor, String> {
                 })
             })
         });
-    let _ = std::fs::remove_dir_all(&dir);
     result
 }
 
@@ -776,23 +775,6 @@ fn plugin_probe<P: kndo_core::plugin::Plugin>(plugin: &P) -> ProbedDescriptor {
         version: d.version.to_string(),
         dependencies: d.dependencies.iter().map(|s| s.to_string()).collect(),
     }
-}
-
-/// Per-*call* unique, not just per-process: `wasm_probe` is a plain function a caller can (and
-/// the test suite does) invoke concurrently within one process — Rust's own test harness runs
-/// `#[test]`s on a thread pool by default. A PID-only directory name made two concurrent probes
-/// share the exact same `probe.wasm` path, so one call's `remove_dir_all` cleanup could delete
-/// the file out from under a still-reading sibling call — a real, if narrow, correctness bug in
-/// production code, not just a test-timing inconvenience (this function backs `kndo plugin
-/// install`, and nothing here ever assumed single-threaded use).
-fn tempfile_dir() -> std::io::Result<PathBuf> {
-    let nonce = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_nanos())
-        .unwrap_or(0);
-    let base = std::env::temp_dir().join(format!("kndo-install-{}-{nonce}", std::process::id()));
-    std::fs::create_dir_all(&base)?;
-    Ok(base)
 }
 
 /// GitHub's release API, honoring the ambient environment: `GITHUB_TOKEN`/`GH_TOKEN` for

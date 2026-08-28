@@ -164,7 +164,23 @@ reference to the method-name segment, with `scope_context` = the qualifier when 
 `identifier`/`this`, mirroring the plain-call qualifier shape in §3). `type_identifier` and
 `scoped_type_identifier` positions (`extends`/`implements`/`throws`/field & parameter types/
 generic bounds/`new` targets) → `TypeUse`; `superclass`'s type and each entry of
-`super_interfaces`'/`extends_interfaces`' `type_list` → `Extend`. Lambda bodies
+`super_interfaces`'/`extends_interfaces`' `type_list` → `Extend`.
+
+A `scoped_type_identifier` emits the LAST segment as the reference name, plus `scope_context`
+= the qualifier **when the qualifier names a type** (`Outer` in `Outer.Inner`) and nothing when
+it is a package path (`java.util.List`). Both discriminators are needed. Structural:
+tree-sitter nests multi-segment paths, so a package path's qualifier is itself a
+`scoped_type_identifier` while a nested type's is a bare `type_identifier`. Lexical: a
+single-segment qualifier is still ambiguous between a one-word package (`p.Foo`) and an
+enclosing type, and only the capitalization convention separates them — guessing wrong on
+`p.Foo` sends a name the free-name tables resolve today into the member-only fallback, which
+top-level types never reach, and loses the edge.
+
+Dropping the qualifier is not merely lossy, it **mis-binds**. Resolution consults the file's
+import bindings before anything else, so a bare `Query` extracted from
+`new ParameterHandler.Query<>(…)` in a file that also does `import retrofit2.http.Query` binds
+to the annotation: the nested type reads as dead and an unrelated type collects a reference it
+never received. Pinned by the `nested-type-qualifier` fixture. Lambda bodies
 (`lambda_expression`) are walked like any other expression — their parameter names shadow
 outer bindings for extraction's purposes exactly the same safe-direction way locals already do
 everywhere else (over-approximating ALIVE, never under).
@@ -188,10 +204,35 @@ identical to JS/Go/Rust's).
 **Metrics**: cyclomatic complexity +1 per `if_statement`, `for_statement`/`enhanced_for_
 statement`, `while_statement`/`do_statement`, `catch_clause`, `case`-arm (switch — one per
 label past the first, matching JS's n-way-match rule), `? :` (ternary), `&&`/`||`, and each
-`lambda_expression` body counted as its own function-shape unit (same "each closure gets its
-own metrics" stance the JS/Rust extractors already take for arrow functions/closures — a
-lambda passed to `.forEach` is a callable shape in its own right). Fingerprints: normalized
-token stream per method/lambda body, same `$n`-renaming scheme as every other adapter.
+Each `lambda_expression` clearing the clone floor becomes its own callable **shape**
+(`MetricsSyntax::nested_callable_kinds` — its branches and tokens leave the enclosing shape's
+stream, which keeps one `FN` in their place, and `crap`/`duplicate` report it in its own
+right). A smaller one stays an expression inside its owner: promoting it would leave both
+halves under the floor and cost real clone findings — measured, that was 83 clone participants
+on the field corpus. The split's semantics are uniform across adapters; only the node kinds
+that trigger it are per-language.
+
+A body that is **only** a value construction (`object_creation_expression`) is not clone-eligible
+(`MetricsSyntax::construction_kinds`): normalization erases the field values — the whole
+authored content — and keeps the field list the type declaration dictates, so two constructions
+of one type match by definition of the type rather than by evidence of copying.
+
+Fingerprints: normalized token stream per shape, same `$n`-renaming scheme as every other
+adapter.
+
+**String call arguments → `FileFacts::string_call_args`** (plugin fuel, ecosystem-blind).
+Every `method_invocation` whose callee is a plain dotted path — `t`, `res.render`, `a.b.c`,
+`this.log` — and whose arguments include a string literal records `(callee as written, first
+string literal, span)`. Text blocks count; `""` does not (it names nothing). A receiver with no
+written name is skipped rather than given an invented spelling: `build().render("x")`,
+`items[0].render("x")` and `(cond ? a : b).render("x")` are real receivers a convention cannot
+match on. No resolution and no callee filtering — `a.b` is recorded whether it is a package
+qualifier, a static field or a local, because which one it is depends on the classpath and the
+syntactic form is what a convention matches anyway; a name-based exclusion list would be the
+ecosystem knowledge this layer must not carry. No analysis consumes these: plugins read them
+through `GraphView::string_call_sites_in` or the ABI's `call-sites-in`, which is what lets a
+framework plugin build on a fact this adapter already parsed instead of re-parsing the grammar.
+Same contract the JS/TS adapter implements, so a plugin sees one shape regardless of grammar.
 
 **Dynamic constructs → `DynamicUse`**: none emitted in this slice. `Class.forName(String)`
 reflection exists but is rare in application code and — like Go's `reflect`/`plugin` stance
@@ -205,7 +246,8 @@ Emitted import kinds:
 | Form | Emission |
 |------|----------|
 | `import com.foo.Bar;` | specifier `com.foo`, binding `[Bar]` — this is the ONE shape whose specifier is the *package*, not the full dotted path (unlike Go/Rust, whose two-step tail rule needs the ambiguity; Java's grammar already hands the package/type split via the `scoped_identifier`'s own nesting, so no guessing is needed) |
-| `import com.foo.*;` | specifier `com.foo`, no bindings, `opaque_namespace_use: true` — the resolved target file's own declared symbols stay `Possible`-reachable via the same `Wildcard` keep-alive mechanism Go's dot-import and JS's `export *` already use (contracts §2), at the SAME single-representative-file granularity Go's own package resolution already accepts (§3 point 2). This is a keep-alive mechanism only, **not** a name-resolution one — see §5/§7 for the real gap it doesn't cover (a bare unqualified reference to a wildcard-imported type name) |
+| annotations on a declaration | `Declaration::markers`, the names as written and in source order — `@Controller`, `@RequestMapping("/x")` and `@Advice.OnMethodEnter` all contribute. A qualified spelling contributes its last segment too (`OnMethodEnter` beside `Advice.OnMethodEnter`), because either is a legitimate `kndo.toml` entry and the adapter cannot know which the project will pick. FACTS, never verdicts: this adapter has no idea which annotations a framework acts on, and emits every one. Their consumer is `[[externally-invoked]]` — Spring's component scan, JUnit's lifecycle and ByteBuddy's `@Advice` are all invocations no source reference can ever record |
+| `import com.foo.*;` | specifier `com.foo`, no bindings, and **two** facts: `opaque_namespace_use: true` — the resolved target file's own declared symbols stay `Possible`-reachable via the same `Wildcard` keep-alive mechanism Go's dot-import and JS's `export *` already use (contracts §2), at the SAME single-representative-file granularity Go's own package resolution already accepts (§3 point 2) — and `module_names_visible: true`, the JLS 7.5.2 type-import-on-demand rule itself: every type in that package is legal here *unqualified*, so the core's bare-name fallback consults that unit's table at Certain. Only top-level declarations live in a unit's name table, so this brings in exactly what the JLS says it does — types, not static members |
 | `import static com.foo.Bar.CONST;` | specifier `com.foo::Bar` (§3.1), binding `[CONST]`, `type_only: false` |
 | `import static com.foo.Bar.*;` | specifier `com.foo::Bar`, `opaque_namespace_use: true` — every static member of `Bar` in scope unqualified |
 | `import com.foo.Bar;` used only in `extends`/`implements`/type positions | same as row 1 — Java has no `import type` keyword; whether a binding is type-only isn't visible at the import site, only at each reference site (`RefKind::TypeUse` there already carries that distinction) |
@@ -262,6 +304,7 @@ computed is silently invisible, not misparsed).
 | `package.json` concept | Maven equivalent | notes |
 |---|---|---|
 | `name` | `groupId:artifactId` (from `<groupId>`/`<artifactId>`, `<groupId>` falling back to `<parent><groupId>` when omitted — the common parent-inherits pattern) | the two-part coordinate IS the module's cross-module identity; `<version>` similarly falls back to `<parent><version>` |
+| a dependency's `<version>` | `ManifestDependency::version_req`, with `<properties>` substituted | **absent is `None`**, not `"*"` — a `<dependency>` with no `<version>` is the BOM-managed shape, and `dependencyManagement` in a parent POM is out of reach by construction (kndo never resolves the classpath) |
 | `private: true` | `<packaging>` ≠ `jar` (default) | Maven has no `private` flag at all — every `jar`-packaging module is nominally publishable by omission, matching npm's own asymmetric default; `pom` (aggregator, no code) and `war` (deployable app, not an importable dependency) are the two packagings this adapter treats as `private: true` |
 | `workspaces` | `<modules>`/`<module>` (aggregator POM) | `ManifestFacts::workspace_members`, one entry per `<module>` text — RFC 0011 §3 |
 | dependency scopes | `<dependency><scope>` | `compile`/omitted → `Prod`; `test` → `Dev`; `provided` → `Peer` (supplied by the runtime environment, not bundled — same "contract with the consumer" semantics as npm peerDependencies); `runtime` → `Prod` (a documented approximation — genuinely used at runtime, just not compile-visible; kndo's taxonomy has no runtime-only scope); `system` → `Prod` (rare, deprecated); entries inside `<dependencyManagement>` are version pins for *children*, not real dependencies of *this* module — never collected |
@@ -269,10 +312,24 @@ computed is silently invisible, not misparsed).
 | `scripts` | *(no equivalent)* | no script-runner convention in Maven itself |
 
 **Gradle (`build.gradle`/`.kts`)**: line-scanned for the `dependencies { … }` block's literal-
-string entries only (`implementation "com.foo:bar:1.0"`, `testImplementation("com.foo:bar:1.0")`,
-version catalogs' `libs.foo` references and any computed/variable-interpolated coordinate are
-invisible — not misparsed, simply not seen, same honesty as go.mod's `exclude`-globs-not-
-expanded stance). Configuration → scope: `implementation`/`api`/`compile` (legacy) → `Prod`;
+string entries only (version catalogs' `libs.foo` references are invisible — not misparsed,
+simply not seen, same honesty as go.mod's `exclude`-globs-not-expanded stance).
+
+A coordinate is split **by segment count, never by the last colon**. Three segments
+(`com.foo:bar:1.0`) is `name = com.foo:bar`, `version = 1.0`. **Two segments
+(`org.springframework.boot:spring-boot-starter-actuator`) is a complete coordinate whose
+version an imported BOM supplies — the name is the whole thing and there is no version.**
+Splitting on the last colon read that as version `spring-boot-starter-actuator` of a
+dependency named `org.springframework.boot`, which is why `version-skew` reported *artifact
+ids* as diverging versions on every JVM repository the field audit covered
+(`internal/detection-gaps.md` §17).
+
+`$var` / `${var}` version placeholders resolve against the manifest's own pool — Gradle's
+`val`/`def`/`var x = "1.2.3"`, Maven's `<properties>`. What the file itself cannot answer
+(`gradle.properties`, a version catalog, a parent POM's properties) stays **unknown**, never
+the literal: koin declares `val jmhVersion = "1.36"` two lines above its use, and
+kotlinx.coroutines spells one `gradle.properties` key `$junit5Version` in one module and
+`$junit5_version` in another — comparing those strings was pure noise. Configuration → scope: `implementation`/`api`/`compile` (legacy) → `Prod`;
 `testImplementation`/`testCompile`(legacy)/`testRuntimeOnly` → `Dev`; `compileOnly` → `Peer`
 (provided-equivalent); `runtimeOnly`/`runtime`(legacy) → `Prod`; `annotationProcessor`/
 `testAnnotationProcessor` → `Build` (a build-time-only tool, Cargo's build-dependencies
@@ -294,13 +351,24 @@ library-surface fixpoint (phase 2.7) for its `pub mod` re-export chains. **Java 
 Go), and a Java library has no single entry file the way Rust's `lib.rs` does — every public
 class in the module is independently part of the API. The adapter therefore emits one
 `ManifestRoot{Production, target: <file>, Certain}` **per non-test `.java` file under the
-module's source root** (`src/main/java` — the Standard Directory Layout default; a custom
-`<sourceDirectory>`/`sourceSets` override is a stretch goal, §7) for every **publishable**
+module's source root** for every **publishable**
 module, reusing `graph::assemble`'s existing per-file declaration-promotion path
 (`library_root_files`) with **zero new core mechanism**: each of those files already being a
 manifest-declared production root makes every `public` declaration in it promote automatically,
 exactly as JS's `main`-file promotion already works — just applied to every source file instead
-of one. `ManifestFacts.declares_surface` stays `false` (no `exports`-map equivalent — same
+of one. **Which directory that is comes from the pom when the pom says so.** Maven's
+`<build><sourceDirectory>` wins over the Standard Directory Layout default, replacing it rather
+than adding to it: a module that declares where its code lives is not also keeping `src/main/java`.
+`${basedir}` and the pom's own `<properties>` are interpolated; anything else unresolved
+(`${project.build.directory}`), an absolute path, or one escaping the module falls back to the
+convention rather than guessing at a path that depends on a build kndo never runs. This is not
+cosmetic — guava declares `<sourceDirectory>src</sourceDirectory>` with tests in a sibling
+`test`, and against the hardcoded default its modules promoted *nothing*, so every public class
+in a publishable library read as `unused`. Two remaining shapes are §7.2: a declaration
+**inherited from a parent pom** (guava's own case — the adapter sees one manifest's text at a
+time and `ResolveCtx` exposes paths, not contents), and Gradle's `sourceSets`.
+
+`ManifestFacts.declares_surface` stays `false` (no `exports`-map equivalent — same
 `deep-import`-stays-closed reasoning as Go).
 
 ## 5. Known hard cases & stances
@@ -317,7 +385,7 @@ of one. `ManifestFacts.declares_surface` stays `false` (no `exports`-map equival
 | Annotation processors / Lombok-generated members (`@Data`, `@Getter`, …) | not modeled — a generated `getFoo()` method has no textual declaration for extraction to see (same class of gap as record accessors); a *use* of it (`obj.getFoo()`) is a normal member-fallback reference that simply never resolves, harmlessly |
 | Text blocks (`"""…"""`, Java 15+), switch expressions (`yield`), pattern matching (`instanceof Foo f`) | parsed by tree-sitter-java's grammar as ordinary expression/statement shapes; no adapter-specific handling needed — their contained references/type positions fall through the same generic walkers as everything else |
 | `module-info.java` (JPMS) | claimed, yields zero declarations (§0's last bullet) — the `exports`/`requires`/`opens` module directives are not parsed; a real, parked gap (§7) |
-| Non-standard source roots (no `src/main/java` — flat layouts, Bazel) | `unit` (declared package) still resolves correctly regardless of directory shape (§0); role-by-path (`src/test/java`) degrades to the Surefire-filename fallback (§1); manifest root-promotion (§4) specifically assumes the Standard Directory Layout and undercounts on a genuinely nonstandard one — documented, not silently wrong (fewer roots promoted, never phantom ones) |
+| Non-standard source roots (no `src/main/java` — flat layouts, Bazel) | `unit` (declared package) still resolves correctly regardless of directory shape (§0); role-by-path (`src/test/java`) degrades to the Surefire-filename fallback (§1); manifest root-promotion (§4) reads a pom's own `<sourceDirectory>` and otherwise assumes the Standard Directory Layout, undercounting on a layout that is neither declared here nor conventional (inherited declarations and Gradle `sourceSets`, §7.2) — documented, not silently wrong (fewer roots promoted, never phantom ones) |
 
 ## 6. Conformance fixtures (shared harness, RFC 0002 §8)
 
@@ -344,6 +412,16 @@ Four fixtures, each a real Maven/Gradle module tree run through the real `Engine
   downgrade-recommend to `package-private`, and the outer class itself downgrades too (never
   referenced from outside its own package in this fixture) — six `internal-only` findings in
   one file, each pinned to a distinct rung interaction.
+- **`nested-type-qualifier`** — the two-bug shape a field audit on retrofit surfaced, in the
+  smallest form that reproduces both, and it expects **zero findings**. `Handler.Query` is a
+  nested type (a member, so absent from the file's bare-name table) whose constructor calls a
+  private static on the enclosing class; `Main` constructs it as `new Handler.Query(…)` while
+  also doing `import com.foo.http.Query`, binding that bare name to an unrelated annotation.
+  Before the fixes both `Handler.Query` and `Handler.checkArgument` read `unused`: the
+  constructor found no container to inherit liveness from, and the reference that should have
+  named the nested type was captured by the import binding instead. Neither of the two existing
+  nested-type fixtures caught it — `visibility-ladder-and-nested-members` has no constructor
+  and no name collision — which is why it exists as its own case.
 - **`maven-gradle-dependency-skip`** — a Maven module (`pom.xml`, dependency `com.other:lib`
   `1.0`) beside a Gradle module (`build.gradle`, same coordinate at `2.0`): `version-skew`
   fires (pure manifest-fact comparison, unaffected by `resolves_dependency_usage`); neither
@@ -351,18 +429,18 @@ Four fixtures, each a real Maven/Gradle module tree run through the real `Engine
   dependency finding — verified end-to-end through the real engine (plus the diagnostic
   message), not just the unit-level `find_dependency_hygiene` test in `dependency_hygiene.rs`.
 
-**A real gap the fixtures surfaced, left honestly unfixed for v1**: a *wildcard* type import
-(`import com.foo.*;`) does not bind the target package's type names the way a plain
-`import com.foo.Bar;` binds `Bar` — extraction has no cross-file knowledge of what a package
-*declares*, and (unlike Go's dot-import, whose target is exactly one file) enumerating a
-Java package's top-level types would need the same core-side, post-extraction step Rust's
-phase 2.7 library-surface fixpoint uses, applied to name *resolution* rather than surface
-*expansion*. Consequence: a **bare, unqualified** reference to a wildcard-imported type name
-(`Helper` used as a bare type, not through `Helper.member()`) does not resolve — the
-`dispatch-and-cross-package` fixture works only because its usage is the qualified-access
-shape (`Helper.assist()`, which resolves the *member* through the duck-typed fallback
-regardless of whether the *type* name itself independently resolved). Parked as an open
-question (§7) rather than silently claimed working.
+**A gap the fixtures surfaced, and how it closed.** A *wildcard* type import
+(`import com.foo.*;`) used not to bind the target package's type names the way a plain
+`import com.foo.Bar;` binds `Bar`, so a **bare, unqualified** reference to a wildcard-imported
+type (`Helper` as a bare type, not through `Helper.member()`) did not resolve at all; the
+`dispatch-and-cross-package` fixture passed only because its usage is the qualified-access
+shape, which the duck-typed member fallback covers regardless of whether the type name itself
+resolved. The core-side, post-extraction enumeration this was thought to need already existed:
+`symbol_by_name_per_unit` is exactly "every top-level declaration of a unit, by name", and
+`unit` for Java is the declared package. All the adapter was missing was
+`module_names_visible` — the contract field Swift's `import SomeKit` already used to say the
+same thing. Kotlin's `import p.*` had the identical gap and closed with the identical one-line
+fact.
 
 **No `undeclared`-dependency fixture, deliberately** — same shape as Go's own stance (§6 there),
 for the different reason §0/§3 document: Java's `resolve()` never emits `Resolution::Dependency`
@@ -373,9 +451,10 @@ for an external import, so there is no code path that could produce one.
 1. `<mainClass>`/`exec.mainClass` manifest-declared entry points, resolved to a concrete file —
    parked; needs a known-files-by-declared-package-and-class lookup `ResolveCtx` doesn't cheaply
    expose today (§4).
-2. Custom source roots (`<sourceDirectory>`, Gradle `sourceSets.main.java.srcDirs`) — root
-   promotion (§4) assumes the Standard Directory Layout default; reading the override is a
-   contained follow-up, not attempted in v1.
+2. ~~Custom source roots inherited from a parent pom~~ — **resolved** (§7.3). What remains of
+   this item is Gradle's `sourceSets.main.java.srcDirs`, and it is the harder half by a wide
+   margin: Gradle's build script is a *program*, not a declaration, and the line-scan cannot
+   execute it.
 3. JPMS (`module-info.java`'s `exports`/`requires`/`opens`) — real Java 9+ module boundaries
    with their own visibility semantics, entirely unmodeled (§0, §5).
 4. Gradle version catalogs (`libs.versions.toml` + `libs.foo` references in `build.gradle.kts`)
@@ -387,9 +466,75 @@ for an external import, so there is no code path that could produce one.
    bullet) — deliberately not attempted (a hand-maintained or generated database, `kndo-stdlib`-
    style, is the only sound path here; parked pending real signal that the skip's precision
    cost is worth the ongoing-maintenance cost of such a database).
-6. Wildcard type import name resolution (`import com.foo.*;` making a bare `Bar` reference
-   resolve, not just `Bar.member()`) — needs a core-side, post-extraction step enumerating a
-   package's declared top-level types, analogous to Rust's phase 2.7 library-surface fixpoint
-   but for name resolution rather than surface expansion (§3, §6's conformance-fixture note).
-   Not attempted in v1; qualified access through the same wildcard already works via the
-   duck-typed member fallback, which covers the overwhelmingly common real-world shape.
+6. ~~Wildcard type import name resolution~~ — **resolved.** `import com.foo.*;` now declares
+   `module_names_visible`, and the core's bare-name fallback consults the target unit's table
+   (§3, §5). The post-extraction enumeration this question assumed was missing turned out to be
+   `symbol_by_name_per_unit`, which already existed.
+
+
+## 7.3 Inherited source directories — resolved
+
+**The gap.** A pom's own `<sourceDirectory>` was read; one declared by an **ancestor** was not.
+Maven's inheritance makes that the common shape rather than a corner: guava declares
+`<sourceDirectory>src</sourceDirectory>` exactly once, in `guava-parent`, and all ten modules
+inherit it. Against the hardcoded `src/main/java` — a directory guava does not have — kndo found
+**zero production roots in the entire repository** and read 88% of its findings off that.
+
+**Why it looked like a contract change and was not.** §7.2 recorded this as blocked: the adapter
+is handed one manifest's text at a time and `ResolveCtx` exposed paths, not contents, so
+resolving it seemed to need the assembly-side `ManifestDependency::inherited` pattern — a
+`ManifestFacts` field, a shared pool, and moving root promotion off the adapter. That plan
+existed to protect a caching invariant, and the invariant turned out not to be at risk:
+
+- **Manifest extraction is not cached.** `graph::assemble` re-runs it on every assembly, reading
+  each manifest fresh (`discovered.read`), so no entry can go stale behind an ancestor's edit —
+  which is precisely the hazard a content channel on `extract` *would* create.
+- **The incremental patch refuses on any changed manifest** (`graph::patch`: "manifests feed
+  global inputs — full rebuild"), so the patch path cannot observe a partially-updated chain.
+
+So the whole thing is one optional capability on the manifest-extraction `ResolveCtx`:
+`read_manifest`. The core offers "you may read a manifest"; every Maven rule below stays in the
+adapter, and root promotion never moves.
+
+**What the adapter does with it.** From a pom that declares no `<sourceDirectory>`, walk
+`<parent>` upward:
+
+- `<relativePath>` decides where to look, defaulting to `../pom.xml`; a value naming a directory
+  means that directory's `pom.xml`.
+- An **empty** `<relativePath/>` is Maven's explicit "resolve from the repository", and must not
+  fall back to the default. (`xml_child_text` cannot see the difference — an empty element has
+  no text node — so presence and text are read separately.)
+- The pom found there is accepted only if its `groupId:artifactId` is what the child declared.
+  Maven checks this and falls back to the repository otherwise; so does kndo, which never
+  fetches. Not hypothetical: guava's `futures/*` modules name `guava-parent` with no
+  `<relativePath>`, no `futures/pom.xml` beside them, and versions (`26.0-android`) the in-repo
+  parent has not carried for years. `<version>` is deliberately *not* compared — kndo is
+  locating a source directory, not building, and a version-skewed but coordinate-matching parent
+  on disk is still the file the author edits.
+- Each hop interpolates against **that** pom's own `<properties>`, which is Maven's rule: the
+  declaration and the properties it names live in one document.
+- The value is joined onto the **child's** directory, also Maven's rule — and the reason one
+  declaration in a parent serves ten modules with ten different source trees.
+- Bounded at 16 hops with cycle detection: a `<relativePath>` loop is malformed input, not a
+  shape to follow.
+
+**Measured** — release binaries before/after, `--no-cache`, diffed by `(category, path, symbol)`:
+
+| repo | before | after | removed | added |
+|---|---|---|---|---|
+| **guava** | 28802 | 19793 | **11444** | 2435 |
+| retrofit | 304 | 304 | 0 | 0 |
+| spring-petclinic | 44 | 44 | 0 | 0 |
+| Exposed | 783 | 783 | 0 | 0 |
+| kotlinx.coroutines | 2576 | 2576 | 0 | 0 |
+
+Net **−9,009** unique findings on guava, and **no change anywhere else** — the other four either
+follow the convention or declare their own. The 2,435 additions are a category shift, not new
+noise: 2,419 of them (99.3%) land in files that were previously reported `unused`, and 2,344 are
+`untested` — a file that becomes production-reachable stops being "dead, nothing more to say"
+and starts being a testable subject. The removals are 6,410 `internal-only`, 3,078 `unused` and
+1,956 `test-only`.
+
+`facts_schema_version` for the Java adapter, not `ENTRY_FORMAT_VERSION` and not
+`GRAPH_SCHEMA_VERSION`: one adapter changed what it emits (new roots), which is the case
+CLAUDE.md names for that knob literally.

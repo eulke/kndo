@@ -8,10 +8,11 @@
 
 use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 
+use crate::analysis::{finding_id, FindingIdParts};
+use crate::engine::{Finding, Location, Severity};
 use crate::graph::{self, ProjectGraph};
-use crate::vocab::{FileId, PackageId};
+use crate::vocab::{Category, Confidence, FileId, Group, PackageId, SubjectKind};
 
-// kndo:allow internal-only read through inferred-typed locals at the call sites, field accesses the graph cannot attribute (internal/detection-gaps.md §3)
 pub(crate) struct DirRollup<'a> {
     /// The widest directories where every file underneath is eligible, deepest-independent
     /// (never both a directory and one of its own ancestors).
@@ -24,6 +25,69 @@ pub(crate) struct DirGroup<'a> {
     pub path: &'a str,
     pub files: Vec<&'a str>,
     pub package: PackageId,
+}
+
+impl DirGroup<'_> {
+    /// How the directory reads in a message. The project root's path is the empty string,
+    /// which would render as nothing at the start of a sentence.
+    pub fn display(&self) -> &str {
+        if self.path.is_empty() {
+            "."
+        } else {
+            self.path
+        }
+    }
+}
+
+/// What a rolled-up directory finding *says* — everything a verdict decides, and nothing a
+/// directory does. The rest of the finding is the same for every verdict that rolls up.
+pub(crate) struct DirVerdict {
+    pub category: Category,
+    pub group: Group,
+    pub severity: Severity,
+    pub confidence: Confidence,
+}
+
+/// A finding about a whole directory, as [`directory_rollups`] groups them. Identity, subject,
+/// location and the fields a fresh finding leaves empty are identical across `unused`,
+/// `test-only` and `untested` — each of which carried its own copy, which is one copy past the
+/// promotion threshold. What differs is `verdict` and the sentence.
+pub(crate) fn directory_finding(
+    graph: &ProjectGraph,
+    dir: &DirGroup<'_>,
+    verdict: DirVerdict,
+    message: String,
+) -> Finding {
+    Finding {
+        advisory: false,
+        id: finding_id(FindingIdParts {
+            category: &verdict.category,
+            subject_kind: &SubjectKind::DIRECTORY,
+            path: dir.path,
+            symbol_path: "",
+            discriminator: "",
+        }),
+        category: verdict.category,
+        group: verdict.group,
+        subject_kind: SubjectKind::DIRECTORY,
+        severity: verdict.severity,
+        confidence: verdict.confidence,
+        message,
+        location: Location {
+            path: Some(crate::adapter::ProjectPath(smol_str::SmolStr::new(
+                dir.path,
+            ))),
+            range: None,
+            symbol: None,
+            package: graph.package_name(dir.package).map(str::to_string),
+        },
+        related: Vec::new(),
+        // The whole point of a rollup: this one finding stands in for `files.len()` of them.
+        rolled_up: Some(dir.files.len()),
+        sources: Vec::new(),
+        delta: None,
+        delta_origin: None,
+    }
 }
 
 /// `eligible` maps a file's project-relative path to `(FileId, PackageId)` for every file the

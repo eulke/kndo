@@ -29,32 +29,29 @@ use kndo_core::coverage::CoverageSink;
 use kndo_core::plugin::{Plugin, PluginDescriptor};
 use smol_str::SmolStr;
 
-fn descriptor(id: &str, detection: &str, paths: &[&str]) -> PluginDescriptor {
-    PluginDescriptor {
-        // Built-ins live in the reserved `kndo:` namespace.
-        id: SmolStr::new(id),
-        version: SmolStr::new("1"),
-        detection: vec![SmolStr::new(detection)],
-        // Well-known locations ("located by config or well-known paths") — overridden,
-        // not extended, by a `[plugins.<id>] report` entry in kndo.toml.
-        requested_file_access: paths.iter().map(SmolStr::new).collect(),
-        // Always-on: see the module doc. `detection` still names the files for doctor.
-        activation: vec![],
-        dependencies: vec![],
-    }
-}
-
 /// The built-in lcov ingester (lcov is the coverage lingua franca:
 /// jest/vitest/nyc, llvm-cov, gcov, Go via converters).
 pub struct LcovPlugin;
 
 impl Plugin for LcovPlugin {
     fn descriptor(&self) -> PluginDescriptor {
-        descriptor(
-            "kndo:coverage-lcov",
-            "an lcov.info file at a well-known path",
-            &["coverage/lcov.info", "lcov.info"],
-        )
+        PluginDescriptor {
+            // Built-ins live in the reserved `kndo:` namespace.
+            id: SmolStr::new("kndo:coverage-lcov"),
+            version: SmolStr::new("1"),
+            // Prose because `activation` below cannot express this gate: the plugin is
+            // always-on and what it actually looks for is a set of report paths.
+            detection: vec![SmolStr::new("an lcov.info file at a well-known path")],
+            // Well-known locations — overridden, NOT extended, by a `[plugins.<id>] report`
+            // entry in kndo.toml.
+            requested_file_access: vec![
+                SmolStr::new("coverage/lcov.info"),
+                SmolStr::new("lcov.info"),
+            ],
+            // Always-on: see the module doc.
+            activation: vec![],
+            dependencies: vec![],
+        }
     }
 
     /// Coverage ingestion only — no graph-mutation hooks. Without this override, this plugin's
@@ -103,15 +100,23 @@ pub struct CoberturaPlugin;
 
 impl Plugin for CoberturaPlugin {
     fn descriptor(&self) -> PluginDescriptor {
-        descriptor(
-            "kndo:coverage-cobertura",
-            "a Cobertura XML report at a well-known path",
-            &[
-                "coverage.xml",
-                "cobertura.xml",
-                "coverage/cobertura-coverage.xml",
+        PluginDescriptor {
+            id: SmolStr::new("kndo:coverage-cobertura"),
+            version: SmolStr::new("1"),
+            // Prose because `activation` below cannot express this gate: the plugin is
+            // always-on and what it actually looks for is a set of report paths.
+            detection: vec![SmolStr::new("a Cobertura XML report at a well-known path")],
+            // Well-known locations — overridden, NOT extended, by a `[plugins.<id>] report`
+            // entry in kndo.toml.
+            requested_file_access: vec![
+                SmolStr::new("coverage.xml"),
+                SmolStr::new("cobertura.xml"),
+                SmolStr::new("coverage/cobertura-coverage.xml"),
             ],
-        )
+            // Always-on: see the module doc.
+            activation: vec![],
+            dependencies: vec![],
+        }
     }
 
     /// See [`LcovPlugin::mutates_graph`] — same reasoning for every ingester here.
@@ -129,7 +134,7 @@ impl Plugin for CoberturaPlugin {
         let Ok(text) = std::str::from_utf8(content) else {
             return;
         };
-        let Ok(doc) = roxmltree::Document::parse(text) else {
+        let Ok(doc) = roxmltree::Document::parse_with_options(text, xml_options()) else {
             return;
         };
         let sources: Vec<String> = doc
@@ -162,20 +167,43 @@ impl Plugin for CoberturaPlugin {
     }
 }
 
+/// Every XML kndo reads is written by a real tool, and real tools emit a DOCTYPE: JaCoCo
+/// declares `report PUBLIC "-//JACOCO//DTD Report 1.1//EN"` on every report it writes,
+/// Cobertura a SYSTEM identifier, an Apple `Info.plist` the PropertyList DTD. `roxmltree`
+/// refuses those outright by default (`XML with DTD detected`), so parsing without this
+/// option means every real report silently ingests NOTHING while a DOCTYPE-less fixture
+/// passes — which is exactly how it went unnoticed. Safe to allow: roxmltree never resolves
+/// external entities and caps internal expansion, so no document can reach the network or
+/// the filesystem through this.
+fn xml_options() -> roxmltree::ParsingOptions {
+    roxmltree::ParsingOptions {
+        allow_dtd: true,
+        ..Default::default()
+    }
+}
+
 /// The built-in JaCoCo XML ingester (Gradle's `jacocoTestReport`, Maven's `jacoco:report`).
 pub struct JacocoPlugin;
 
 impl Plugin for JacocoPlugin {
     fn descriptor(&self) -> PluginDescriptor {
-        descriptor(
-            "kndo:coverage-jacoco",
-            "a JaCoCo XML report at a well-known path",
-            &[
-                "build/reports/jacoco/test/jacocoTestReport.xml",
-                "target/site/jacoco/jacoco.xml",
-                "jacoco.xml",
+        PluginDescriptor {
+            id: SmolStr::new("kndo:coverage-jacoco"),
+            version: SmolStr::new("1"),
+            // Prose because `activation` below cannot express this gate: the plugin is
+            // always-on and what it actually looks for is a set of report paths.
+            detection: vec![SmolStr::new("a JaCoCo XML report at a well-known path")],
+            // Well-known locations — overridden, NOT extended, by a `[plugins.<id>] report`
+            // entry in kndo.toml.
+            requested_file_access: vec![
+                SmolStr::new("build/reports/jacoco/test/jacocoTestReport.xml"),
+                SmolStr::new("target/site/jacoco/jacoco.xml"),
+                SmolStr::new("jacoco.xml"),
             ],
-        )
+            // Always-on: see the module doc.
+            activation: vec![],
+            dependencies: vec![],
+        }
     }
 
     /// See [`LcovPlugin::mutates_graph`].
@@ -195,7 +223,7 @@ impl Plugin for JacocoPlugin {
         let Ok(text) = std::str::from_utf8(content) else {
             return;
         };
-        let Ok(doc) = roxmltree::Document::parse(text) else {
+        let Ok(doc) = roxmltree::Document::parse_with_options(text, xml_options()) else {
             return;
         };
         let module = module_prefix(path.0.as_str());
@@ -248,11 +276,19 @@ pub struct GoCoverPlugin;
 
 impl Plugin for GoCoverPlugin {
     fn descriptor(&self) -> PluginDescriptor {
-        descriptor(
-            "kndo:coverage-go",
-            "a Go coverprofile at a well-known path",
-            &["coverage.out", "cover.out"],
-        )
+        PluginDescriptor {
+            id: SmolStr::new("kndo:coverage-go"),
+            version: SmolStr::new("1"),
+            // Prose because `activation` below cannot express this gate: the plugin is
+            // always-on and what it actually looks for is a set of report paths.
+            detection: vec![SmolStr::new("a Go coverprofile at a well-known path")],
+            // Well-known locations — overridden, NOT extended, by a `[plugins.<id>] report`
+            // entry in kndo.toml.
+            requested_file_access: vec![SmolStr::new("coverage.out"), SmolStr::new("cover.out")],
+            // Always-on: see the module doc.
+            activation: vec![],
+            dependencies: vec![],
+        }
     }
 
     /// See [`LcovPlugin::mutates_graph`].
@@ -378,6 +414,41 @@ mod tests {
         // Verbatim key and source-joined candidate both carry the same facts.
         assert!((cov(&map, "src/a.py", (1, 9)).unwrap() - 0.5).abs() < 1e-9);
         assert!((cov(&map, "/abs/proj/src/a.py", (1, 9)).unwrap() - 0.5).abs() < 1e-9);
+    }
+
+    #[test]
+    fn the_doctype_every_real_report_carries_is_read_not_refused() {
+        // The bug this test exists for: both ingesters parsed with roxmltree's default
+        // options, which REFUSE a document declaring a DTD. Every JaCoCo report declares one
+        // and Cobertura's writer emits a SYSTEM identifier, so both silently ingested nothing
+        // in the field while these tests — whose fixtures had no DOCTYPE — passed.
+        let jacoco = ingest(
+            &JacocoPlugin,
+            "build/reports/jacoco/test/jacocoTestReport.xml",
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!DOCTYPE report PUBLIC "-//JACOCO//DTD Report 1.1//EN" "report.dtd">
+<report name="app"><package name="com/acme">
+  <sourcefile name="Thing.java"><line nr="3" mi="0" ci="2"/><line nr="4" mi="1" ci="0"/></sourcefile>
+</package></report>"#,
+        );
+        assert!(
+            !jacoco.is_empty(),
+            "a JaCoCo report's DOCTYPE must not make the whole report invisible"
+        );
+
+        let cobertura = ingest(
+            &CoberturaPlugin,
+            "coverage.xml",
+            r#"<?xml version="1.0" ?>
+<!DOCTYPE coverage SYSTEM "http://cobertura.sourceforge.net/xml/coverage-04.dtd">
+<coverage><packages><package name="p"><classes>
+    <class name="a" filename="src/a.py"><lines><line number="3" hits="2"/></lines></class>
+</classes></package></packages></coverage>"#,
+        );
+        assert!(
+            !cobertura.is_empty(),
+            "same for Cobertura's SYSTEM identifier"
+        );
     }
 
     #[test]

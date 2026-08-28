@@ -10,6 +10,7 @@ use smol_str::SmolStr;
 
 mod extraction;
 mod manifest;
+mod parsing;
 mod resolution;
 
 pub struct JsTsAdapter;
@@ -36,7 +37,7 @@ impl LanguageAdapter for JsTsAdapter {
             activation: Vec::new(),
             dependencies: Vec::new(),
             id: SmolStr::new("js-ts"),
-            facts_schema_version: 10, // bump whenever the serialized facts shape or the emission semantics change
+            facts_schema_version: 16, // bump whenever the serialized facts shape or the emission semantics change
             file_globs: EXTENSIONS
                 .iter()
                 .map(|e| SmolStr::new(format!("**/*.{e}")))
@@ -76,22 +77,21 @@ impl LanguageAdapter for JsTsAdapter {
             // npm's flat package name IS the import specifier's root segment — resolve()
             // structurally identifies the declared dependency every time.
             resolves_dependency_usage: true,
+            declares_units_of_testing: true,
             package_test_dirs: Vec::new(),
+            // No builtin type facts yet: this adapter declares none, and an empty table
+            // simply means the chain resolver has no second tier to consult for it.
+            builtin_member_types: Vec::new(),
         }
     }
 
     fn claim(&self, path: &ProjectPath) -> Option<FileClaim> {
-        let p = path.0.as_str();
-        // Extension match covers `.d.ts` too (its final extension is `ts`); the
-        // declarations-only handling of `.d.ts` is extraction's concern, not claiming's.
-        let ext = p.rsplit('.').next()?;
-        if !EXTENSIONS.contains(&ext) {
-            return None;
-        }
-        Some(FileClaim {
-            language: SmolStr::new("js-ts"),
-            class: kndo_adapter_toolkit::classify::classify(p, &PATH_PATTERNS),
-        })
+        kndo_adapter_toolkit::classify::claim_by_extension(
+            path,
+            EXTENSIONS,
+            "js-ts",
+            &PATH_PATTERNS,
+        )
     }
 
     fn claim_manifest(&self, path: &ProjectPath) -> bool {

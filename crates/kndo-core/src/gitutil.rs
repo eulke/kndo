@@ -85,7 +85,6 @@ pub(crate) fn write_tree(repo_root: &Path) -> Result<String, GitError> {
 /// guaranteed UTF-8; the caller decides how to degrade), blob id, and file mode (`100644`
 /// regular, `100755` executable, `120000` symlink, `160000` submodule).
 #[derive(Debug, Clone, PartialEq, Eq)]
-// kndo:allow internal-only read through inferred-typed locals in discovery.rs, field accesses the graph cannot attribute (internal/detection-gaps.md §3)
 pub(crate) struct TreeEntry {
     pub(crate) path: Vec<u8>,
     pub(crate) sha: String,
@@ -285,13 +284,6 @@ mod tests {
     use std::fs;
     use std::process::Command as StdCommand;
 
-    fn tmp(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("kndo-gitutil-test-{name}"));
-        let _ = fs::remove_dir_all(&dir);
-        fs::create_dir_all(&dir).unwrap();
-        dir
-    }
-
     fn git(dir: &Path, args: &[&str]) {
         let status = StdCommand::new("git")
             .arg("-C")
@@ -315,19 +307,22 @@ mod tests {
 
     #[test]
     fn repo_root_finds_the_toplevel_from_a_subdirectory() {
-        let dir = tmp("repo-root");
-        init_repo(&dir);
-        fs::create_dir_all(dir.join("src/nested")).unwrap();
-        let found = repo_root(&dir.join("src/nested")).unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        init_repo(dir.path());
+        fs::create_dir_all(dir.path().join("src/nested")).unwrap();
+        let found = repo_root(&dir.path().join("src/nested")).unwrap();
         // Canonicalize both sides: on macOS /tmp is a symlink to /private/tmp, and git
         // resolves it while our own join()ed path doesn't.
-        assert_eq!(found.canonicalize().unwrap(), dir.canonicalize().unwrap());
+        assert_eq!(
+            found.canonicalize().unwrap(),
+            dir.path().canonicalize().unwrap()
+        );
     }
 
     #[test]
     fn repo_root_errors_outside_any_repository() {
-        let dir = tmp("no-repo");
-        assert!(repo_root(&dir).is_err());
+        let dir = tempfile::tempdir().unwrap();
+        assert!(repo_root(dir.path()).is_err());
     }
 
     /// Reads one path's content out of a tree via ls_tree + cat_blobs — the composed operation
@@ -343,46 +338,49 @@ mod tests {
 
     #[test]
     fn head_tree_ignores_unstaged_and_staged_changes() {
-        let dir = tmp("tree-head");
-        init_repo(&dir);
-        fs::write(dir.join("a.txt"), "committed\n").unwrap();
-        git(&dir, &["add", "-A"]);
-        git(&dir, &["commit", "-q", "-m", "init"]);
+        let dir = tempfile::tempdir().unwrap();
+        init_repo(dir.path());
+        fs::write(dir.path().join("a.txt"), "committed\n").unwrap();
+        git(dir.path(), &["add", "-A"]);
+        git(dir.path(), &["commit", "-q", "-m", "init"]);
 
-        fs::write(dir.join("b.txt"), "staged\n").unwrap();
-        git(&dir, &["add", "b.txt"]);
-        fs::write(dir.join("a.txt"), "unstaged edit\n").unwrap();
+        fs::write(dir.path().join("b.txt"), "staged\n").unwrap();
+        git(dir.path(), &["add", "b.txt"]);
+        fs::write(dir.path().join("a.txt"), "unstaged edit\n").unwrap();
 
-        assert_eq!(tree_content(&dir, "HEAD", "a.txt").unwrap(), b"committed\n");
-        assert_eq!(tree_content(&dir, "HEAD", "b.txt"), None);
+        assert_eq!(
+            tree_content(dir.path(), "HEAD", "a.txt").unwrap(),
+            b"committed\n"
+        );
+        assert_eq!(tree_content(dir.path(), "HEAD", "b.txt"), None);
     }
 
     #[test]
     fn index_tree_reflects_exactly_what_is_staged() {
-        let dir = tmp("tree-index");
-        init_repo(&dir);
-        fs::write(dir.join("a.txt"), "committed\n").unwrap();
-        git(&dir, &["add", "-A"]);
-        git(&dir, &["commit", "-q", "-m", "init"]);
+        let dir = tempfile::tempdir().unwrap();
+        init_repo(dir.path());
+        fs::write(dir.path().join("a.txt"), "committed\n").unwrap();
+        git(dir.path(), &["add", "-A"]);
+        git(dir.path(), &["commit", "-q", "-m", "init"]);
 
-        fs::write(dir.join("b.txt"), "staged\n").unwrap();
-        git(&dir, &["add", "b.txt"]);
-        fs::write(dir.join("a.txt"), "unstaged edit\n").unwrap(); // must NOT appear below
+        fs::write(dir.path().join("b.txt"), "staged\n").unwrap();
+        git(dir.path(), &["add", "b.txt"]);
+        fs::write(dir.path().join("a.txt"), "unstaged edit\n").unwrap(); // must NOT appear below
 
-        let index_tree = write_tree(&dir).unwrap();
+        let index_tree = write_tree(dir.path()).unwrap();
         assert_eq!(
-            tree_content(&dir, &index_tree, "a.txt").unwrap(),
+            tree_content(dir.path(), &index_tree, "a.txt").unwrap(),
             b"committed\n"
         );
         assert_eq!(
-            tree_content(&dir, &index_tree, "b.txt").unwrap(),
+            tree_content(dir.path(), &index_tree, "b.txt").unwrap(),
             b"staged\n"
         );
 
         // The real repo's own index/working tree must be untouched by any of this.
         let status = StdCommand::new("git")
             .arg("-C")
-            .arg(&dir)
+            .arg(dir.path())
             .args(["status", "--porcelain"])
             .output()
             .unwrap();
@@ -393,16 +391,16 @@ mod tests {
 
     #[test]
     fn ls_tree_reports_modes_and_recurses_into_subdirectories() {
-        let dir = tmp("ls-tree-modes");
-        init_repo(&dir);
-        fs::create_dir_all(dir.join("sub")).unwrap();
-        fs::write(dir.join("plain.txt"), "x\n").unwrap();
-        fs::write(dir.join("sub/nested.txt"), "y\n").unwrap();
-        git(&dir, &["add", "-A"]);
-        git(&dir, &["update-index", "--chmod=+x", "plain.txt"]);
-        git(&dir, &["commit", "-q", "-m", "init"]);
+        let dir = tempfile::tempdir().unwrap();
+        init_repo(dir.path());
+        fs::create_dir_all(dir.path().join("sub")).unwrap();
+        fs::write(dir.path().join("plain.txt"), "x\n").unwrap();
+        fs::write(dir.path().join("sub/nested.txt"), "y\n").unwrap();
+        git(dir.path(), &["add", "-A"]);
+        git(dir.path(), &["update-index", "--chmod=+x", "plain.txt"]);
+        git(dir.path(), &["commit", "-q", "-m", "init"]);
 
-        let entries = ls_tree(&dir, "HEAD").unwrap();
+        let entries = ls_tree(dir.path(), "HEAD").unwrap();
         let by_path = |p: &str| entries.iter().find(|e| e.path == p.as_bytes()).unwrap();
         assert_eq!(by_path("plain.txt").mode, 100755);
         assert_eq!(by_path("sub/nested.txt").mode, 100644);
@@ -410,14 +408,14 @@ mod tests {
 
     #[test]
     fn cat_blobs_returns_contents_in_request_order_and_none_for_missing() {
-        let dir = tmp("cat-blobs");
-        init_repo(&dir);
-        fs::write(dir.join("a.txt"), "alpha\n").unwrap();
-        fs::write(dir.join("b.txt"), "beta\n").unwrap();
-        git(&dir, &["add", "-A"]);
-        git(&dir, &["commit", "-q", "-m", "init"]);
+        let dir = tempfile::tempdir().unwrap();
+        init_repo(dir.path());
+        fs::write(dir.path().join("a.txt"), "alpha\n").unwrap();
+        fs::write(dir.path().join("b.txt"), "beta\n").unwrap();
+        git(dir.path(), &["add", "-A"]);
+        git(dir.path(), &["commit", "-q", "-m", "init"]);
 
-        let entries = ls_tree(&dir, "HEAD").unwrap();
+        let entries = ls_tree(dir.path(), "HEAD").unwrap();
         let sha = |p: &str| {
             entries
                 .iter()
@@ -427,7 +425,7 @@ mod tests {
                 .clone()
         };
         let bogus = "0000000000000000000000000000000000000000".to_string();
-        let got = cat_blobs(&dir, &[sha("b.txt"), bogus, sha("a.txt")]).unwrap();
+        let got = cat_blobs(dir.path(), &[sha("b.txt"), bogus, sha("a.txt")]).unwrap();
         assert_eq!(got[0].as_deref(), Some(b"beta\n".as_slice()));
         assert_eq!(got[1], None);
         assert_eq!(got[2].as_deref(), Some(b"alpha\n".as_slice()));
@@ -435,29 +433,29 @@ mod tests {
 
     #[test]
     fn merge_base_finds_the_common_ancestor() {
-        let dir = tmp("merge-base");
-        init_repo(&dir);
-        fs::write(dir.join("a.txt"), "1\n").unwrap();
-        git(&dir, &["add", "-A"]);
-        git(&dir, &["commit", "-q", "-m", "base"]);
-        let base_sha = rev_parse(&dir, "HEAD").unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        init_repo(dir.path());
+        fs::write(dir.path().join("a.txt"), "1\n").unwrap();
+        git(dir.path(), &["add", "-A"]);
+        git(dir.path(), &["commit", "-q", "-m", "base"]);
+        let base_sha = rev_parse(dir.path(), "HEAD").unwrap();
 
-        git(&dir, &["checkout", "-q", "-b", "feature"]);
-        fs::write(dir.join("b.txt"), "2\n").unwrap();
-        git(&dir, &["add", "-A"]);
-        git(&dir, &["commit", "-q", "-m", "feature"]);
+        git(dir.path(), &["checkout", "-q", "-b", "feature"]);
+        fs::write(dir.path().join("b.txt"), "2\n").unwrap();
+        git(dir.path(), &["add", "-A"]);
+        git(dir.path(), &["commit", "-q", "-m", "feature"]);
 
-        let mb = merge_base(&dir, "feature", &base_sha).unwrap();
+        let mb = merge_base(dir.path(), "feature", &base_sha).unwrap();
         assert_eq!(mb, base_sha);
     }
 
     #[test]
     fn merge_base_errors_on_an_unknown_ref() {
-        let dir = tmp("merge-base-bad-ref");
-        init_repo(&dir);
-        fs::write(dir.join("a.txt"), "1\n").unwrap();
-        git(&dir, &["add", "-A"]);
-        git(&dir, &["commit", "-q", "-m", "init"]);
-        assert!(merge_base(&dir, "no-such-ref", "HEAD").is_err());
+        let dir = tempfile::tempdir().unwrap();
+        init_repo(dir.path());
+        fs::write(dir.path().join("a.txt"), "1\n").unwrap();
+        git(dir.path(), &["add", "-A"]);
+        git(dir.path(), &["commit", "-q", "-m", "init"]);
+        assert!(merge_base(dir.path(), "no-such-ref", "HEAD").is_err());
     }
 }

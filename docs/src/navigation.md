@@ -40,7 +40,7 @@ order:
 
 ```json
 {
-  "schema_version": "1.0.0",
+  "schema_version": "1.3.0",
   "kndo_version": "0.1.0",
   "query": { "verb": "used-by", "selectors": ["src/billing/tax.ts#calcLegacyTax"] },
   "run": { "cache": "warm", "duration_ms": 74 },

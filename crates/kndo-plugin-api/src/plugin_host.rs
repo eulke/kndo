@@ -3,10 +3,6 @@
 //! (`host.rs`), this world is bidirectional: the guest calls back into two host-provided query
 //! functions (`list-files`, `symbols-in`) while computing its contributions.
 
-// kndo:allow-file untested every host function here is exercised through the WASM boundary
-// (plugin_compliance.rs builds and runs a real guest against this bridge); the caller is
-// generated wasmtime code no reference edge can see — internal/detection-gaps.md §1.
-
 use std::fmt;
 use std::path::Path;
 use std::sync::Mutex;
@@ -87,10 +83,17 @@ struct HostViewData {
     packages: Vec<w::WasmPackageInfo>,
     file_details: rustc_hash::FxHashMap<String, w::WasmFileDetails>,
     symbol_details: rustc_hash::FxHashMap<String, Vec<(String, w::WasmSymbolDetails)>>,
+    /// `SymbolNode::implements` per file, in `symbols-in` order — only the members that
+    /// have one, so a project with no trait impls carries nothing.
+    symbol_implements: rustc_hash::FxHashMap<String, Vec<(String, String)>>,
     imports_of: rustc_hash::FxHashMap<String, Vec<String>>,
     importers_of: rustc_hash::FxHashMap<String, Vec<String>>,
     ref_sites: rustc_hash::FxHashMap<(String, String), Vec<w::WasmRefSite>>,
     call_sites: rustc_hash::FxHashMap<String, Vec<w::WasmCallSite>>,
+    attr_strings: rustc_hash::FxHashMap<String, Vec<w::WasmAttrString>>,
+    /// The memory ceiling for this instance (`engine::MAX_GUEST_MEMORY_BYTES`). Lives on the
+    /// store data because that is where wasmtime resolves a limiter from.
+    limits: wasmtime::StoreLimits,
 }
 
 fn to_wit_span(span: kndo_core::adapter::Span) -> w::WasmSpan {
@@ -113,6 +116,20 @@ fn to_wit_package(p: &kndo_core::plugin::PackageView<'_>) -> w::WasmPackageInfo 
 impl HostViewData {
     fn empty() -> Self {
         HostViewData::default()
+    }
+
+    /// Content only — no graph projections at all. `classify_file` runs in phase 2, before the
+    /// graph exists, and by contract sees just the one file it is asked about; what it DOES
+    /// need is its own declared content, because a file is often generated for a reason only a
+    /// build tool's config states.
+    fn content_only(content: &ContentView<'_>) -> Self {
+        let mut data = HostViewData::default();
+        for path in content.matching_paths() {
+            if let Some(bytes) = content.read(path) {
+                data.content_by_path.insert(path.0.to_string(), bytes);
+            }
+        }
+        data
     }
 
     fn from_view(graph: &GraphView<'_>, content: &ContentView<'_>) -> Self {
@@ -180,7 +197,21 @@ fn collect_file_projections(
         })
         .collect();
     if !call_sites.is_empty() {
-        data.call_sites.insert(path, call_sites);
+        data.call_sites.insert(path.clone(), call_sites);
+    }
+    let attr_strings: Vec<w::WasmAttrString> = graph
+        .attr_strings_in(&file.path)
+        .iter()
+        .map(|a| w::WasmAttrString {
+            attribute: a.attribute.to_string(),
+            key: a.key.to_string(),
+            literal: a.literal.to_string(),
+            owner: a.owner.as_ref().map(|o| o.to_string()),
+            span: to_wit_span(a.span),
+        })
+        .collect();
+    if !attr_strings.is_empty() {
+        data.attr_strings.insert(path, attr_strings);
     }
 }
 
@@ -201,6 +232,7 @@ fn collect_symbol_projections(
     });
     let mut symbols = Vec::new();
     let mut details = Vec::new();
+    let mut implements = Vec::new();
     for s in graph.symbols_in(&file.path) {
         symbols.push(w::WasmSymbolInfo {
             name: s.name.to_string(),
@@ -215,9 +247,14 @@ fn collect_symbol_projections(
                 span: to_wit_span(s.span),
             },
         ));
+        if let Some(t) = &s.implements {
+            implements.push((s.name.to_string(), t.to_string()));
+        }
     }
     data.symbols_by_file.insert(file.path.0.clone(), symbols);
     data.symbol_details.insert(file.path.0.to_string(), details);
+    data.symbol_implements
+        .insert(file.path.0.to_string(), implements);
 }
 
 /// The `references-to` projection, keyed by (target path, target bare name), sites sorted.
@@ -275,6 +312,14 @@ impl bindings::PluginImports for HostViewData {
             .map(|(_, d)| *d)
     }
 
+    fn symbol_implements(&mut self, path: String, symbol: String) -> Option<String> {
+        self.symbol_implements
+            .get(path.as_str())?
+            .iter()
+            .find(|(name, _)| *name == symbol)
+            .map(|(_, t)| t.clone())
+    }
+
     fn imports_of(&mut self, path: String) -> Vec<String> {
         self.imports_of
             .get(path.as_str())
@@ -298,6 +343,13 @@ impl bindings::PluginImports for HostViewData {
 
     fn call_sites_in(&mut self, path: String) -> Vec<w::WasmCallSite> {
         self.call_sites
+            .get(path.as_str())
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    fn attr_strings_in(&mut self, path: String) -> Vec<w::WasmAttrString> {
+        self.attr_strings
             .get(path.as_str())
             .cloned()
             .unwrap_or_default()
@@ -329,6 +381,9 @@ impl findings_bindings::PluginFindingsImports for HostViewData {
     fn symbol_details(&mut self, path: String, symbol: String) -> Option<w::WasmSymbolDetails> {
         bindings::PluginImports::symbol_details(self, path, symbol)
     }
+    fn symbol_implements(&mut self, path: String, symbol: String) -> Option<String> {
+        bindings::PluginImports::symbol_implements(self, path, symbol)
+    }
     fn imports_of(&mut self, path: String) -> Vec<String> {
         bindings::PluginImports::imports_of(self, path)
     }
@@ -340,6 +395,9 @@ impl findings_bindings::PluginFindingsImports for HostViewData {
     }
     fn call_sites_in(&mut self, path: String) -> Vec<w::WasmCallSite> {
         bindings::PluginImports::call_sites_in(self, path)
+    }
+    fn attr_strings_in(&mut self, path: String) -> Vec<w::WasmAttrString> {
+        bindings::PluginImports::attr_strings_in(self, path)
     }
     fn read_file(&mut self, path: String) -> Option<Vec<u8>> {
         bindings::PluginImports::read_file(self, path)
@@ -430,6 +488,14 @@ impl AnyBindings {
     }
 }
 
+/// Whether a hook must start from a new guest instance or may run on the one a previous hook
+/// of the same round left behind. The first hook of a round is always `Fresh` — guest state
+/// must not survive across rounds.
+enum RoundInstance {
+    Fresh,
+    Reused,
+}
+
 struct GuestState {
     store: WStore,
     bindings: AnyBindings,
@@ -491,10 +557,8 @@ impl WasmPlugin {
             self.flavor,
         )
         .ok()?;
-        *self
-            .round_instance
-            .lock()
-            .expect("wasm plugin store poisoned") = Some(GuestState { store, bindings });
+        *crate::engine::lock_recovering(&self.round_instance) =
+            Some(GuestState { store, bindings });
         Some(())
     }
 
@@ -503,15 +567,43 @@ impl WasmPlugin {
     /// driving the trait out of the core's roots → edges → annotate order) instantiates
     /// defensively against ITS OWN view rather than ever touching another round's state.
     fn ensure_instance(&self, graph: &GraphView<'_>, content: &ContentView<'_>) -> bool {
-        if self
-            .round_instance
-            .lock()
-            .expect("wasm plugin store poisoned")
-            .is_some()
-        {
+        if crate::engine::lock_recovering(&self.round_instance).is_some() {
             return true;
         }
         self.refresh_instance(graph, content).is_some()
+    }
+
+    /// Runs one guest export on this round's instance and returns what it produced, or `None`
+    /// if anything along the way said no.
+    ///
+    /// Every graph hook is the same five steps — get an instance (`reuse` picks whether an
+    /// existing one counts), take the store lock, refuel, call, use the result — and every
+    /// failure degrades to "this plugin contributes nothing this round", never a panic in the
+    /// middle of assembly. Three hooks each wrote those steps out; the shape is the contract,
+    /// so it belongs in one place and the export call is what the caller supplies.
+    fn on_round_instance<T>(
+        &self,
+        graph: &GraphView<'_>,
+        content: &ContentView<'_>,
+        instance: RoundInstance,
+        call: impl FnOnce(&mut WStore, &AnyBindings) -> Option<T>,
+    ) -> Option<T> {
+        match instance {
+            RoundInstance::Fresh => {
+                self.refresh_instance(graph, content)?;
+            }
+            RoundInstance::Reused => {
+                if !self.ensure_instance(graph, content) {
+                    return None;
+                }
+            }
+        }
+        let mut guard = crate::engine::lock_recovering(&self.round_instance);
+        let GuestState { store, bindings } = guard.as_mut()?;
+        if store.set_fuel(FUEL_PER_CALL).is_err() {
+            return None;
+        }
+        call(store, bindings)
     }
 }
 
@@ -579,6 +671,11 @@ fn instantiate_with(
     flavor: WorldFlavor,
 ) -> Result<(WStore, AnyBindings), LoadError> {
     let mut store = wasmtime::Store::new(engine, view);
+    // Set here rather than relying on the field's default: `StoreLimits::default()` is
+    // *unlimited*, and `HostViewData` is built with `..Default::default()`, so a limiter left
+    // to the derive would install a ceiling of infinity and read exactly like a working one.
+    store.data_mut().limits = crate::engine::guest_limits();
+    store.limiter(|data| &mut data.limits);
     store
         .set_fuel(FUEL_PER_CALL)
         .map_err(|e| LoadError::Instantiate(e.to_string()))?;
@@ -701,16 +798,7 @@ fn from_wit_rule(raw: w::RuleDescriptor) -> kndo_core::plugin::RuleDescriptor {
     }
 }
 
-fn from_wit_activation_rule(rule: w::ActivationRule) -> kndo_core::plugin::ActivationRule {
-    match rule {
-        w::ActivationRule::FileExists(glob) => {
-            kndo_core::plugin::ActivationRule::FileExists(SmolStr::new(&glob))
-        }
-        w::ActivationRule::ManifestDependency(name) => {
-            kndo_core::plugin::ActivationRule::ManifestDependency(SmolStr::new(&name))
-        }
-    }
-}
+wit_activation_rule_conversion!(w);
 
 impl Plugin for WasmPlugin {
     fn descriptor(&self) -> PluginDescriptor {
@@ -721,17 +809,36 @@ impl Plugin for WasmPlugin {
         Some(self.content_hash)
     }
 
-    fn classify_file(&self, path: &ProjectPath, current: FileClass) -> Option<FileClass> {
+    /// The general WASM plugin bridge exposes the full graph-mutation hook surface
+    /// (`classify_file`/`contribute_roots`/`contribute_edges`/`annotate_symbols`) to every
+    /// component it hosts — unlike [`crate::coverage_host::WasmCoverageIngester`], which is a
+    /// separate, narrower host for the coverage-only WIT world. Always `true`, matching the
+    /// conservative posture the old trait default used to encode.
+    fn mutates_graph(&self) -> bool {
+        true
+    }
+
+    fn classify_file(
+        &self,
+        path: &ProjectPath,
+        current: FileClass,
+        content: &ContentView<'_>,
+    ) -> Option<FileClass> {
         // classify_file runs before contribute_roots/contribute_edges/annotate_symbols in the
-        // assembly pipeline (phase 2 vs. after phase 3b) and needs no graph queries of its own
-        // (the hook contract: it only ever sees the one file it's asked about),
-        // so it gets a lightweight, view-less instance rather than forcing a premature
-        // `refresh_instance` — the graph isn't even fully built yet at this point.
+        // assembly pipeline (phase 2 vs. after phase 3b) and needs no GRAPH queries of its own
+        // (the hook contract: it only ever sees the one file it's asked about), so it gets a
+        // lightweight graph-less instance rather than forcing a premature `refresh_instance` —
+        // the graph isn't even fully built yet at this point.
+        //
+        // It does carry the component's own content, though: the `read-file` import already
+        // exists in both worlds, and answering it with nothing here was the only thing
+        // stopping a guest from classifying by what a build tool's config declares. No WIT
+        // change was needed — the exported signature is unchanged.
         let (mut store, bindings) = instantiate_with(
             &self.engine,
             &self.component,
             &self.linker,
-            HostViewData::empty(),
+            HostViewData::content_only(content),
             self.flavor,
         )
         .ok()?;
@@ -762,20 +869,13 @@ impl Plugin for WasmPlugin {
         content: &ContentView<'_>,
         out: &mut RootSink,
     ) {
-        if self.refresh_instance(graph, content).is_none() {
-            return;
-        }
-        let mut guard = self
-            .round_instance
-            .lock()
-            .expect("wasm plugin store poisoned");
-        let Some(GuestState { store, bindings }) = guard.as_mut() else {
-            return;
-        };
-        if store.set_fuel(FUEL_PER_CALL).is_err() {
-            return;
-        }
-        let Ok(roots) = bindings.call_contribute_roots(&mut *store) else {
+        // The FIRST hook of a round: a fresh instance, never a reused one — guest state must
+        // not survive from the previous round.
+        let Some(roots) =
+            self.on_round_instance(graph, content, RoundInstance::Fresh, |store, bindings| {
+                bindings.call_contribute_roots(&mut *store).ok()
+            })
+        else {
             return;
         };
         for r in roots {
@@ -787,26 +887,22 @@ impl Plugin for WasmPlugin {
         }
     }
 
+    // Everything this shares with `contribute_roots` — instance, lock, fuel, call,
+    // give-up-on-failure — is `on_round_instance`. What is left in each is a drain loop over a
+    // different guest record into a different sink, and a generic over sink and record types
+    // would name nothing the two WIT worlds don't already say themselves.
+    // kndo:allow duplicate the shared half is on_round_instance; the rest is per-sink draining
     fn contribute_edges(
         &self,
         graph: &GraphView<'_>,
         content: &ContentView<'_>,
         out: &mut EdgeSink,
     ) {
-        if !self.ensure_instance(graph, content) {
-            return;
-        }
-        let mut guard = self
-            .round_instance
-            .lock()
-            .expect("wasm plugin store poisoned");
-        let Some(GuestState { store, bindings }) = guard.as_mut() else {
-            return;
-        };
-        if store.set_fuel(FUEL_PER_CALL).is_err() {
-            return;
-        }
-        let Ok(edges) = bindings.call_contribute_edges(&mut *store) else {
+        let Some(edges) =
+            self.on_round_instance(graph, content, RoundInstance::Reused, |store, bindings| {
+                bindings.call_contribute_edges(&mut *store).ok()
+            })
+        else {
             return;
         };
         for e in edges {
@@ -825,23 +921,12 @@ impl Plugin for WasmPlugin {
         content: &ContentView<'_>,
         out: &mut AnnotationSink,
     ) {
-        if !self.ensure_instance(graph, content) {
-            return;
-        }
-        let mut guard = self
-            .round_instance
-            .lock()
-            .expect("wasm plugin store poisoned");
-        let Some(GuestState { store, bindings }) = guard.as_mut() else {
-            return;
-        };
-        if store.set_fuel(FUEL_PER_CALL).is_err() {
-            return;
-        }
-        let result = bindings.call_annotate_symbols(&mut *store);
+        let result = self.on_round_instance(graph, content, RoundInstance::Reused, |store, b| {
+            b.call_annotate_symbols(&mut *store).ok()
+        });
         // End of round, success or not: the instance never survives into the next one.
-        *guard = None;
-        let Ok(targets) = result else {
+        *crate::engine::lock_recovering(&self.round_instance) = None;
+        let Some(targets) = result else {
             return;
         };
         for t in targets {
@@ -965,19 +1050,6 @@ fn from_wit_root_kind(kind: w::RootKind) -> RootKind {
     }
 }
 
-const REF_KIND_TABLE: &[(w::RefKind, RefKind)] = &[
-    (w::RefKind::Call, RefKind::Call),
-    (w::RefKind::Read, RefKind::Read),
-    (w::RefKind::Write, RefKind::Write),
-    (w::RefKind::Extend, RefKind::Extend),
-    (w::RefKind::Implement, RefKind::Implement),
-    (w::RefKind::Override, RefKind::Override),
-    (w::RefKind::TypeUse, RefKind::TypeUse),
-];
-
-/// Every row above is exhaustive by construction (one per WIT enum variant) — a miss here can
-/// only mean this file and `wit/plugin.wit` have drifted, not something a well-formed
-/// component could trigger at runtime.
 /// [`from_wit_ref_kind`]'s inverse, derived from it rather than written as a second
 /// hand-maintained match: the wire enum below enumerates every variant once, and the round
 /// trip through the one authoritative mapping guarantees the two directions can never drift.
@@ -1006,14 +1078,22 @@ fn to_wit_confidence_out(confidence: kndo_core::vocab::Confidence) -> w::Confide
     }
 }
 
+/// An exhaustive `match`, not a table lookup, and that is the whole point: a WIT enum growing
+/// a variant stops this compiling until the arm exists. It used to be a table whose miss
+/// branch panicked, under a comment asserting the table was "exhaustive by construction" —
+/// which nothing checked. `host.rs` makes the same claim about its own tables and *does* check
+/// it (an exhaustive match per enum in its test module); this file asserted it and did not.
+/// A match needs no assertion because the compiler is the assertion.
 fn from_wit_ref_kind(kind: w::RefKind) -> RefKind {
-    REF_KIND_TABLE
-        .iter()
-        .find(|(wit, _)| *wit == kind)
-        .unwrap_or_else(|| {
-            panic!("kndo-plugin-api: missing RefKind table row for a WIT enum variant")
-        })
-        .1
+    match kind {
+        w::RefKind::Call => RefKind::Call,
+        w::RefKind::Read => RefKind::Read,
+        w::RefKind::Write => RefKind::Write,
+        w::RefKind::Extend => RefKind::Extend,
+        w::RefKind::Implement => RefKind::Implement,
+        w::RefKind::Override => RefKind::Override,
+        w::RefKind::TypeUse => RefKind::TypeUse,
+    }
 }
 
 fn from_wit_confidence(confidence: w::Confidence) -> kndo_core::vocab::Confidence {

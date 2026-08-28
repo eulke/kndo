@@ -14,11 +14,27 @@
         }
       ]
     },
+    "budget": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Budget"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "diagnostics": {
       "type": "array",
       "items": {
         "$ref": "#/$defs/Diagnostic"
       }
+    },
+    "elided": {
+      "description": "`--only`'s narrowing, absent when nothing was narrowed away. Beside `suppressed`\nrather than inside it: the two are different answers about why a finding is not here.\n\n`default` alongside the skip, like `fixed` above: schemars derives a field's\n*required*-ness from whether it has a default, not from the skip predicate — without\nit the committed schema demands a key the output legitimately omits, and\n`schema_validation` catches it.",
+      "type": "integer",
+      "format": "uint",
+      "minimum": 0
     },
     "findings": {
       "type": "array",
@@ -64,6 +80,23 @@
     "diagnostics"
   ],
   "$defs": {
+    "Abstention": {
+      "description": "One category nobody judged this run, and why — [`Verdict::Abstained`] crossed with the\nabstaining analysis's [`Analysis::categories`]. Reaches `RunResult` and the JSON envelope\nbecause a consumer seeing zero findings in a category otherwise cannot tell \"clean\" from\n\"not measured\", nor what would make it measurable.",
+      "type": "object",
+      "properties": {
+        "category": {
+          "$ref": "#/$defs/Category"
+        },
+        "reason": {
+          "description": "The abstaining diagnostic's message, verbatim.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "category",
+        "reason"
+      ]
+    },
     "AdapterRunInfo": {
       "description": "One registered adapter's contribution (`run.adapters[]`).",
       "type": "object",
@@ -101,6 +134,72 @@
         "acknowledged",
         "stale"
       ]
+    },
+    "Budget": {
+      "description": "The whole `[delta]` evaluation for one run — the `budget` block of the output schema.",
+      "type": "object",
+      "properties": {
+        "rules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/BudgetRule"
+          }
+        },
+        "verdict": {
+          "description": "`fail` when any rule failed. The gate reads this; `rules` explains it.",
+          "$ref": "#/$defs/BudgetVerdict"
+        }
+      },
+      "required": [
+        "verdict",
+        "rules"
+      ]
+    },
+    "BudgetRule": {
+      "description": "One configured limit and what the change measured against it.",
+      "type": "object",
+      "properties": {
+        "limit": {
+          "type": "number",
+          "format": "double"
+        },
+        "measured": {
+          "type": "number",
+          "format": "double"
+        },
+        "over_by": {
+          "description": "How far past `limit` the measurement landed — present only when this rule failed, so a\nconsumer reading it always has a number worth acting on.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "rule": {
+          "description": "Lower-kebab, as configured: `max-health-drop`, `max-net-findings`, or the\ngroup/category name under `[delta.budget]`.",
+          "type": "string"
+        },
+        "verdict": {
+          "$ref": "#/$defs/BudgetVerdict"
+        }
+      },
+      "required": [
+        "rule",
+        "limit",
+        "measured",
+        "verdict"
+      ]
+    },
+    "BudgetVerdict": {
+      "type": "string",
+      "enum": [
+        "pass",
+        "fail"
+      ]
+    },
+    "Category": {
+      "description": "A finding's category — an open namespace (RFC 0018 §2.1: a plugin's own category is\n`plugin:<coordinate>/<rule>`, never a bare or off-namespace name), so unlike [`Group`] this\nis a validated string newtype rather than a closed enum. The core categories are\nassociated consts; [`Category::plugin`] builds the namespaced form; [`Category::is_plugin`]\ntells the two apart without a string-prefix check at every call site.",
+      "type": "string"
     },
     "Confidence": {
       "description": "Per-edge strength. Ordered by strength: `Possible < Probable < Certain`, so `max()` yields\nthe strongest evidence and \"edges at least as strong as τ\" is a simple `>=`.",
@@ -180,7 +279,7 @@
       ]
     },
     "Finding": {
-      "description": "Typed form of the output-schema finding (every field lands in the JSON schema\nfirst — that document is normative). Not yet present:\n`evidence` (category-specific block), `sources`, `remediation`, `rolled_up` — each needs\ninfrastructure that doesn't exist yet (computed remediation text) and is omitted\nrather than fabricated with a placeholder.",
+      "description": "Typed form of the output-schema finding (every field lands in the JSON schema\nfirst — that document is normative).\n\nTwo fields the schema deliberately does NOT have, so nobody re-adds them looking for\nparity: `evidence` (a category-specific block specified before any category had one — no\nanalysis has since produced a fact `related` cannot carry) and `remediation` (the advice a\nfinding carries travels inside `message`, written by the analysis that knows the subject;\n`deep-import` is the worked example). Both are cut rather than emitted null: a field that\nis always null teaches a consumer to stop reading it.",
       "type": "object",
       "properties": {
         "advisory": {
@@ -188,7 +287,7 @@
           "type": "boolean"
         },
         "category": {
-          "type": "string"
+          "$ref": "#/$defs/Category"
         },
         "confidence": {
           "$ref": "#/$defs/Confidence"
@@ -214,7 +313,7 @@
           ]
         },
         "group": {
-          "type": "string"
+          "$ref": "#/$defs/Group"
         },
         "id": {
           "type": "string"
@@ -232,11 +331,27 @@
             "$ref": "#/$defs/RelatedLocation"
           }
         },
+        "rolled_up": {
+          "description": "How many findings this one subsumes, on the rollup ladder (symbol → file → directory →\npackage, RFC 0005 taxonomy rule 3): a directory reported once instead of fifty times\nsays `50` here. `None` on a finding that subsumes nothing, which is most of them —\nabsent rather than `1`, because \"this is a rollup of one\" is not a fact, and a\nconsumer summing the field must not double-count leaves.\n\nWithout it the count survives only inside the message prose (\"4 files, none\nreferenced\"), so a consumer deciding how much a finding is worth has to parse English\n— the same defect `location`/`related` had for multi-place subjects.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0
+        },
         "severity": {
           "$ref": "#/$defs/Severity"
         },
+        "sources": {
+          "description": "Provenance: which adapters and plugins the subject's facts came from —\n`[\"adapter:js-ts\", \"plugin:kndo:nextjs\"]`. Filled by one pass over the finished\nfinding set (`fill_sources`), never by the analyses: a verdict knows what it decided,\nnot who supplied the graph it decided on, and thirteen analyses each answering the\nquestion would be thirteen chances to answer it differently.\n\nEmpty — and so absent — when the subject resolves to no graph node: a finding about a\npath outside the graph, or one the analysis left unanchored. Never a lie by omission:\nthis names components whose facts are *present*, and cannot name the plugin that would\nhave kept a symbol alive had it activated.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "subject_kind": {
-          "type": "string"
+          "$ref": "#/$defs/SubjectKind"
         }
       },
       "required": [
@@ -248,6 +363,25 @@
         "confidence",
         "message",
         "location"
+      ]
+    },
+    "Group": {
+      "description": "A finding's section — the taxonomy RFC 0018 §\"reserved\" closes: exactly these five, plus\n`Convention` reserved for plugin-contributed findings (`category` stays an open\n`plugin:<coordinate>/<rule>` namespace — RFC 0018 §2.1 — but no finding may claim a group\noutside this set). [`Group::DISPLAY_ORDER`] is the single source of section ordering —\nevery renderer reads it instead of keeping its own copy (a duplicated 4-entry copy of this\nlist, missing `Convention`, is exactly how `agent_format.rs` and the CLI's `render.rs`\nused to missort every plugin finding under an unnamed fallback section).",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "defect",
+            "waste",
+            "risk",
+            "hygiene"
+          ]
+        },
+        {
+          "description": "Reserved for plugin-contributed findings — a core analysis never emits it.",
+          "type": "string",
+          "const": "convention"
+        }
       ]
     },
     "Health": {
@@ -363,7 +497,7 @@
       ]
     },
     "Location": {
-      "description": "Where a finding points. Every field is optional because not\nevery subject has all of them: `version-skew`/`duplicate` findings span multiple manifests\nor files, so no single `path` is *the* location — expressing that properly is the `related`\nevidence chain, not yet implemented (deferred, not faked with an arbitrary first path).",
+      "description": "Where a finding points. Every field is optional because not every subject has all of them —\na `version-skew` has no range, a directory rollup has no symbol.\n\nA finding whose subject genuinely spans several places (`duplicate` over identical files,\n`version-skew` over disagreeing manifests) anchors on the lexicographically-first member and\ncarries **every** member in `related`. That pairing is the contract: the anchor makes the\nfinding addressable, `related` makes it complete, and the message is then free to summarize.\nThe alternative shipped for a while — an empty `Location` with the members named only in the\nmessage prose — and it meant 278 findings across the corpus that no consumer could act on\nwithout parsing English, some of which truncated the list and lost the rest outright.",
       "type": "object",
       "properties": {
         "package": {
@@ -421,6 +555,22 @@
         "grade"
       ]
     },
+    "PluginRunInfo": {
+      "description": "One registered plugin and why it is running (`run.plugins[]`). `activated_by` is rendered\nfrom the [`ActivationReason`](crate::plugin::ActivationReason) the composition layer handed\nin at open — a plugin's presence in this list already means it is active, so the field\nanswers \"why\", never \"whether\".",
+      "type": "object",
+      "properties": {
+        "activated_by": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "activated_by"
+      ]
+    },
     "ProjectPath": {
       "description": "Project-relative path with `/` separators, the only path form that crosses the adapter\nboundary (case handling and symlink resolution are the core's discovery concern).",
       "type": "string"
@@ -459,9 +609,16 @@
       ]
     },
     "RunInfo": {
-      "description": "Owned mirror of the JSON envelope's `run` object — not borrowed, unlike a hot-path type,\nbecause this exists purely to be serialized (and, behind `schema`, to derive the JSON\nSchema from): the one-time clone per `--format json` invocation is free by comparison.",
+      "description": "The JSON envelope's `run` object. Borrowed from [`RunResult`], like [`Envelope`] itself and\nfor the same reason (see its doc): this exists purely to be serialized and, behind `schema`,\nto derive the JSON Schema from — schemars sees through the references to the same shapes.",
       "type": "object",
       "properties": {
+        "abstained": {
+          "description": "Categories this run did not judge, and why. Always present (usually `[]`): the absence\nof a finding is only evidence of cleanliness for categories NOT listed here.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Abstention"
+          }
+        },
         "adapters": {
           "type": "array",
           "items": {
@@ -485,6 +642,12 @@
         "mode": {
           "type": "string"
         },
+        "plugins": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PluginRunInfo"
+          }
+        },
         "project_root": {
           "type": "string"
         },
@@ -498,7 +661,9 @@
         "duration_ms",
         "cache",
         "project_root",
-        "adapters"
+        "adapters",
+        "plugins",
+        "abstained"
       ]
     },
     "Severity": {
@@ -553,6 +718,10 @@
         "start",
         "end"
       ]
+    },
+    "SubjectKind": {
+      "description": "A finding's subject facet (`category:subject` targeting, RFC 0005) — open like\n[`Category`]: most values are the fixed `file | directory | dependency | package |\nsuppression` set, but a symbol-subject finding's facet is [`SymbolKind::facet`], which\nitself carries an open [`SymbolKind::Other`] tail for languages the closed variants don't\ncover — so this can never be a closed enum either.",
+      "type": "string"
     },
     "SuppressedSummary": {
       "description": "`suppressed.inline`/`suppressed.config` — always present\n(unlike `baseline`, which is `None` when the feature isn't adopted at all): both\nmechanisms run on every check, so `{ inline: 0, config: 0 }` is a meaningful \"nothing\nsuppressed,\" not an absent subsystem. `inline` counts pragma-matched findings;\n`config` counts findings filtered by `kndo.toml`'s `[analysis].skip` and `[[rule]]`\nentries (a finding covered by both counts as `inline` — pragmas run first).",

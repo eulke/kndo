@@ -1,15 +1,19 @@
 //! `kndo.toml` — one tolerant parse feeding every knob the core reads. Reading follows the
 //! `[plugins.gate]` posture throughout: a missing file is empty config, a malformed file or
 //! value is reported as a problem string (surfaced as a run diagnostic) and otherwise
-//! ignored, and unknown tables/keys are skipped silently — both forward compatibility and
-//! honesty about the documented-but-unwired sections (`[project]`, `[delta]`), which parse
-//! as unknown keys until their subsystems exist.
+//! ignored, and unknown tables/keys are skipped silently — forward compatibility, so a file
+//! written for a later kndo still works on this one. There is no longer a documented-but-unwired
+//! section trading on that tolerance: `[project]` (`roots`, `exclude`) was written by
+//! `kndo init` and read by nothing, and has been removed from the template and the docs rather
+//! than left inert. Discovery exclusion is `.ignore`'"'"'s job and verdict scoping is `[[rule]]`'"'"'s;
+//! `docs/src/configuration.md` says so where the section used to be.
 //!
 //! What is live: `[analysis]` (`skip`, `min-confidence`), `[analysis.crap]` (`threshold`),
 //! `[analysis.duplicate]` (`min-tokens`), `[performance]` (`threads`), `[[rule]]`
 //! (path-scoped `skip`), `[plugins.gate]` (parsed by `plugin_gate`, carried here so the
-//! file is read exactly once), and `[plugins.<id>]` (`report`, `max-age` — per-plugin
-//! coverage-report location and freshness, RFC 0003's "Explicit config").
+//! file is read exactly once), `[delta]`/`[delta.budget]` (parsed by `delta`, same reason),
+//! and `[plugins.<id>]` (`report`, `max-age` — per-plugin coverage-report location and
+//! freshness, RFC 0003's "Explicit config").
 //!
 //! Config suppression runs *after* inline pragmas ([`crate::suppression::apply`]) — pragma
 //! staleness is judged against the complete pre-suppression finding set, so a pragma
@@ -20,20 +24,80 @@
 //! `compute_graph_key` — every knob acts strictly post-assembly, so cached graphs stay
 //! valid across config edits.
 
+/// Every top-level table `parse` actually reads.
+///
+/// Exported because two things outside this file describe kndo's configuration surface — the
+/// template `kndo init` writes and `docs/src/configuration.md` — and both used to be free to
+/// describe a table nothing here reads. One did: `[project]`, with `roots` and `exclude`,
+/// documented key by key and wired to nothing. This is the list they are checked against
+/// (`kndo-cli`'s `the_init_template_offers_no_section_the_engine_ignores`), so the next unwired section fails a test instead
+/// of shipping as a promise.
+///
+/// `[plugins.<id>]` is covered by `plugins`: the table is read, its per-plugin sub-tables are
+/// open by design (a plugin's own options are its own).
+pub const LIVE_TABLES: &[&str] = &[
+    "analysis",
+    "performance",
+    "rule",
+    "externally-invoked",
+    "plugins",
+    "delta",
+];
+
 use std::path::Path;
 
+use smol_str::SmolStr;
+
 use crate::engine::Finding;
-use crate::vocab::Confidence;
+use crate::vocab::{Category, Confidence, SubjectKind};
 
 /// One `skip` entry: a category, optionally narrowed to a subject facet
 /// (`"unused:enum-member"` skips only `unused` findings whose subject is an enum member).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SkipSpec {
-    pub category: String,
-    pub subject: Option<String>,
+    pub category: Category,
+    pub subject: Option<SubjectKind>,
+}
+
+/// Why a `category[:subject]` string is not a usable spec. Both sources of skip specs — the
+/// `[analysis] skip` array and the `--only`/`--skip` flags — reject the same two strings for
+/// the same two reasons, so the reasons live here rather than once per source.
+#[derive(Debug, thiserror::Error, PartialEq, Eq)]
+pub enum SkipSpecError {
+    #[error("`stale` audits suppressions and cannot itself be skipped")]
+    MetaSuppression,
+    #[error("empty category")]
+    EmptyCategory,
 }
 
 impl SkipSpec {
+    /// `"unused"` or `"unused:enum-member"` — the vocabulary [suppressions] use, and now the
+    /// vocabulary `--only`/`--skip` use, because they are the same policy from another source.
+    ///
+    /// Does not validate that the category exists: `plugin:<coordinate>/<rule>` is an open
+    /// namespace (RFC 0018 §2.1), so "unknown" is not a thing this layer can decide. A
+    /// frontend that wants to reject a typo checks against [`Category::ALL`] itself, where it
+    /// can also say what the valid ones are.
+    pub fn parse(raw: &str) -> Result<SkipSpec, SkipSpecError> {
+        let (category, subject) = match raw.split_once(':') {
+            // `plugin:acme/rule` is one category, not a category with a subject — the
+            // namespace separator and the subject separator are the same character.
+            Some(("plugin", _)) => (raw, None),
+            Some((c, s)) => (c, Some(SubjectKind::new(s))),
+            None => (raw, None),
+        };
+        if category == "stale" {
+            return Err(SkipSpecError::MetaSuppression);
+        }
+        if category.is_empty() {
+            return Err(SkipSpecError::EmptyCategory);
+        }
+        Ok(SkipSpec {
+            category: Category::new(category),
+            subject,
+        })
+    }
+
     fn covers(&self, finding: &Finding) -> bool {
         self.category == finding.category
             && self
@@ -46,10 +110,27 @@ impl SkipSpec {
 /// One `[[rule]]` table: `skip` entries that apply only to findings whose `location.path`
 /// matches one of `paths` (glob patterns, matched against the project-relative path).
 /// A finding with no path never matches a path rule.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PathRule {
     pub paths: Vec<glob::Pattern>,
     pub skip: Vec<SkipSpec>,
+}
+
+/// One `[[externally-invoked]]` table: declarations carrying one of `markers` are entry
+/// points reached from outside the analyzed source, so reachability seeds them as production
+/// roots. `paths`, when non-empty, scopes the rule to files whose project-relative path
+/// matches one of the globs.
+///
+/// This is the one question static analysis cannot answer from the source alone — a Spring
+/// `@Controller` is instantiated by classpath scanning and called by a servlet dispatcher, a
+/// JUnit `@AfterEach` by the runner, a Koin `@Scoped` by an annotation processor in another
+/// repository — and it is the project, not kndo, that knows which markers mean it. The core
+/// stays ignorant: it matches strings against
+/// [`crate::adapter::Declaration::markers`] and never learns what any of them are.
+#[derive(Debug, Clone)]
+pub struct ExternallyInvokedRule {
+    pub markers: Vec<SmolStr>,
+    pub paths: Vec<glob::Pattern>,
 }
 
 /// One `[plugins.<id>]` options table (RFC 0003 §"Explicit config"). Today's live keys are
@@ -85,9 +166,19 @@ pub struct KndoConfig {
     pub skip: Vec<SkipSpec>,
     /// `[[rule]]` — path-scoped skips, same counting.
     pub rules: Vec<PathRule>,
+    /// `[[externally-invoked]]` — marker-scoped entry-point declarations. Unlike `skip`, this
+    /// is not a suppression: the symbol becomes genuinely reachable, so everything it reaches
+    /// comes alive with it and the analyses keep judging all of it normally. A whole-path
+    /// `[[rule]] skip` would silence the real findings in those files too.
+    pub externally_invoked: Vec<ExternallyInvokedRule>,
     /// `[plugins.gate]` — owned by [`crate::plugin_gate`]; carried here so `kndo.toml` is
     /// parsed exactly once.
     pub(crate) plugins_gate: crate::plugin_gate::PluginsGate,
+    /// `[delta]` — owned by [`crate::delta`], carried here for the same reason. `None` when
+    /// the section is absent, which is NOT the same as a section of zeroes: absent evaluates
+    /// no budgets and emits no `budget` block, zeroes are the strict ratchet. That is what
+    /// keeps opting in a single deliberate act instead of a silent exit-code change.
+    pub(crate) delta: Option<crate::delta::DeltaBudget>,
     /// `[plugins.<id>]` — per-plugin option tables, keyed by the raw TOML key; resolved
     /// against descriptor ids by [`KndoConfig::plugin_options_for`].
     pub plugin_options: Vec<(String, PluginOptions)>,
@@ -97,6 +188,128 @@ pub struct KndoConfig {
 /// below it carry no fingerprints in their facts, so no analysis-side threshold can reach
 /// under it.
 pub const DUPLICATE_MIN_TOKENS_FLOOR: u32 = 50;
+
+/// Every knob's final value — `kndo.toml` merged under [`crate::engine::ConfigOverrides`]'s
+/// frontend-supplied precedence, resolved once by [`KndoConfig::resolve`]. Before this
+/// existed, `Engine::open_with_plugins` and `assemble_and_analyze` each re-derived their own
+/// slice of this precedence by hand (the latter constructing `AnalysisTuning::default()`
+/// twice just to pull two fallbacks) — a second merge site is how the two silently drift.
+#[derive(Debug, Clone)]
+pub struct EffectiveConfig {
+    /// `--threads` > `kndo.toml [performance] threads` > `None` ("physical cores").
+    pub threads: Option<usize>,
+    /// The report floor: `--verbose`/override > `kndo.toml [analysis] min-confidence` >
+    /// `Possible` (report every tier).
+    pub min_confidence_floor: Confidence,
+    /// `[analysis.crap]`/`[analysis.duplicate]`, each defended by `AnalysisTuning::default()`.
+    pub tuning: crate::analysis::AnalysisTuning,
+    /// Which findings reach the report: `--only`'s lens, then `--skip` unioned with
+    /// `[analysis] skip` and `[[rule]]`. Lived on `KndoConfig` before the flags existed,
+    /// which would have made the flags a second merge site — exactly what this type is for.
+    pub report: ReportFilter,
+}
+
+/// Everything that decides whether a finding is *reported*, merged from both sources.
+///
+/// Two mechanisms, deliberately not one:
+///
+/// - **`only` is a lens.** It narrows this invocation's view and nothing else. Findings it
+///   drops are counted and reported (`RunResult::elided`) so no one has to guess whether they
+///   saw everything — that count, not an exemption, is what keeps `--only` honest. It is the
+///   one filter `stale` is subject to: a lens the caller asked for this once is not a stored
+///   policy that could bury the audit signal.
+/// - **`skip` is suppression.** `--skip` and `[analysis] skip` mean the same thing from two
+///   sources, count the same way (`SuppressedSummary::config`), and share `stale`'s exemption
+///   — the "your suppressions are dead" signal must never be silenceable by the thing it
+///   audits, whichever source asks.
+#[derive(Debug, Default, Clone)]
+pub struct ReportFilter {
+    pub only: Vec<SkipSpec>,
+    pub skip: Vec<SkipSpec>,
+    pub rules: Vec<PathRule>,
+}
+
+/// What a report filter removed, split by mechanism because the two mean different things to
+/// a reader: a suppressed finding was acknowledged, an elided one was merely not asked for.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct FilterCounts {
+    pub suppressed: usize,
+    pub elided: usize,
+}
+
+impl ReportFilter {
+    pub(crate) fn apply(&self, findings: Vec<Finding>) -> (Vec<Finding>, FilterCounts) {
+        if self.only.is_empty() && self.skip.is_empty() && self.rules.is_empty() {
+            return (findings, FilterCounts::default());
+        }
+        let mut counts = FilterCounts::default();
+        let kept = findings
+            .into_iter()
+            .filter(|f| {
+                if !self.only.is_empty() && !self.only.iter().any(|s| s.covers(f)) {
+                    counts.elided += 1;
+                    return false;
+                }
+                // The pragma meta-rule: the "your suppressions are dead" signal must never be
+                // silenceable by the thing it audits.
+                if f.category == "stale" {
+                    return true;
+                }
+                let skipped = self.skip.iter().any(|s| s.covers(f))
+                    || self.rules.iter().any(|rule| {
+                        f.location
+                            .path
+                            .as_ref()
+                            .is_some_and(|p| rule.paths.iter().any(|g| g.matches(p.0.as_str())))
+                            && rule.skip.iter().any(|s| s.covers(f))
+                    });
+                if skipped {
+                    counts.suppressed += 1;
+                }
+                !skipped
+            })
+            .collect();
+        (kept, counts)
+    }
+}
+
+impl KndoConfig {
+    /// The one place `kndo.toml` and a frontend's [`crate::engine::ConfigOverrides`] merge.
+    /// Every default lives here or in the types resolved through it
+    /// (`AnalysisTuning::default()`) — nowhere else should fall back to a bare
+    /// `.unwrap_or(...)` for one of these knobs.
+    pub fn resolve(&self, overrides: &crate::engine::ConfigOverrides) -> EffectiveConfig {
+        let default_tuning = crate::analysis::AnalysisTuning::default();
+        EffectiveConfig {
+            threads: overrides.threads.or(self.threads),
+            min_confidence_floor: overrides
+                .min_confidence
+                .or(self.min_confidence)
+                .unwrap_or(Confidence::Possible),
+            tuning: crate::analysis::AnalysisTuning {
+                crap_threshold: self.crap_threshold.unwrap_or(default_tuning.crap_threshold),
+                duplicate_min_tokens: self
+                    .duplicate_min_tokens
+                    .unwrap_or(default_tuning.duplicate_min_tokens),
+                externally_invoked: self.externally_invoked.clone(),
+                strict: overrides.strict,
+            },
+            report: ReportFilter {
+                only: overrides.only.clone(),
+                // Union, not override: `--skip` adds to what the project already skips. A
+                // flag that silently dropped the project's own list would make one CI job's
+                // narrowing look like a policy change.
+                skip: self
+                    .skip
+                    .iter()
+                    .chain(overrides.skip.iter())
+                    .cloned()
+                    .collect(),
+                rules: self.rules.clone(),
+            },
+        }
+    }
+}
 
 impl KndoConfig {
     /// Read `<root>/kndo.toml`. Never fails: problems come back as strings for the caller
@@ -123,54 +336,7 @@ impl KndoConfig {
         };
 
         if let Some(analysis) = table.get("analysis").and_then(|v| v.as_table()) {
-            if let Some(value) = analysis.get("skip") {
-                config.skip = parse_skip_list(value, "[analysis] skip", &mut problems);
-            }
-            if let Some(value) = analysis.get("min-confidence") {
-                config.min_confidence = parse_confidence(value, &mut problems);
-            }
-            if let Some(threshold) = analysis
-                .get("crap")
-                .and_then(|c| c.as_table())
-                .and_then(|c| c.get("threshold"))
-            {
-                match threshold
-                    .as_float()
-                    .or(threshold.as_integer().map(|i| i as f64))
-                {
-                    Some(t) if t > 0.0 => config.crap_threshold = Some(t),
-                    _ => problems.push(format!(
-                        "kndo.toml [analysis.crap] threshold = {threshold}: expected a \
-                         positive number — ignored"
-                    )),
-                }
-            }
-            if let Some(min_tokens) = analysis
-                .get("duplicate")
-                .and_then(|d| d.as_table())
-                .and_then(|d| d.get("min-tokens"))
-            {
-                match min_tokens.as_integer() {
-                    Some(t) if t > 0 => {
-                        let t = t as u32;
-                        if t < DUPLICATE_MIN_TOKENS_FLOOR {
-                            problems.push(format!(
-                                "kndo.toml [analysis.duplicate] min-tokens = {t}: below the \
-                                 extraction floor of {DUPLICATE_MIN_TOKENS_FLOOR} (smaller \
-                                 functions carry no fingerprints) — clamped to \
-                                 {DUPLICATE_MIN_TOKENS_FLOOR}"
-                            ));
-                            config.duplicate_min_tokens = Some(DUPLICATE_MIN_TOKENS_FLOOR);
-                        } else {
-                            config.duplicate_min_tokens = Some(t);
-                        }
-                    }
-                    _ => problems.push(format!(
-                        "kndo.toml [analysis.duplicate] min-tokens = {min_tokens}: expected \
-                         a positive integer — ignored"
-                    )),
-                }
-            }
+            parse_analysis_table(analysis, &mut config, &mut problems);
         }
 
         if let Some(threads) = table
@@ -178,62 +344,27 @@ impl KndoConfig {
             .and_then(|p| p.as_table())
             .and_then(|p| p.get("threads"))
         {
-            match threads.as_integer() {
-                Some(0) => {} // 0 = the default (physical cores) — same as unset
-                Some(n) if n > 0 => config.threads = Some(n as usize),
-                _ => problems.push(format!(
-                    "kndo.toml [performance] threads = {threads}: expected a non-negative \
-                     integer — ignored"
-                )),
-            }
+            config.threads = parse_threads(threads, &mut problems);
         }
 
-        if let Some(rules) = table.get("rule").and_then(|r| r.as_array()) {
-            for rule in rules {
-                let Some(rule) = rule.as_table() else {
-                    problems.push("kndo.toml [[rule]]: expected a table — ignored".to_string());
-                    continue;
-                };
-                let mut paths = Vec::new();
-                for raw in rule
-                    .get("paths")
-                    .and_then(|p| p.as_array())
-                    .into_iter()
-                    .flatten()
-                {
-                    match raw.as_str().map(glob::Pattern::new) {
-                        Some(Ok(pattern)) => paths.push(pattern),
-                        Some(Err(e)) => problems.push(format!(
-                            "kndo.toml [[rule]] paths entry {raw}: invalid glob ({e}) — \
-                             entry ignored"
-                        )),
-                        None => problems.push(format!(
-                            "kndo.toml [[rule]] paths entry {raw}: expected a string — \
-                             entry ignored"
-                        )),
-                    }
-                }
-                let skip = rule
-                    .get("skip")
-                    .map(|value| parse_skip_list(value, "[[rule]] skip", &mut problems))
-                    .unwrap_or_default();
-                if paths.is_empty() || skip.is_empty() {
-                    problems.push(
-                        "kndo.toml [[rule]]: needs both non-empty `paths` and `skip` — \
-                         rule ignored"
-                            .to_string(),
-                    );
-                    continue;
-                }
-                config.rules.push(PathRule { paths, skip });
-            }
-        }
+        let (rules, rule_problems) = parse_rules(table.get("rule"));
+        config.rules = rules;
+        problems.extend(rule_problems);
+
+        let (externally_invoked, externally_invoked_problems) =
+            parse_externally_invoked_rules(table.get("externally-invoked"));
+        config.externally_invoked = externally_invoked;
+        problems.extend(externally_invoked_problems);
 
         let (gate, gate_problems) = crate::plugin_gate::PluginsGate::from_table(
             table.get("plugins").and_then(|p| p.get("gate")),
         );
         config.plugins_gate = gate;
         problems.extend(gate_problems);
+
+        let (delta, delta_problems) = crate::delta::DeltaBudget::from_table(table.get("delta"));
+        config.delta = delta;
+        problems.extend(delta_problems);
 
         if let Some(plugins) = table.get("plugins").and_then(|p| p.as_table()) {
             parse_plugin_options(plugins, &mut config, &mut problems);
@@ -252,40 +383,190 @@ impl KndoConfig {
             .find(|(key, _)| *key == id || id.strip_prefix("kndo:") == Some(key.as_str()))
             .map(|(_, options)| options)
     }
+}
 
-    /// Applies `[analysis].skip` and every matching `[[rule]]` to the post-pragma finding
-    /// set, returning the kept findings and how many were config-suppressed (the
-    /// `SuppressedSummary::config` count). Runs strictly after inline pragmas — see the
-    /// module docs for the ordering guarantee — and before the `min-confidence` floor.
-    pub(crate) fn filter_findings(&self, findings: Vec<Finding>) -> (Vec<Finding>, usize) {
-        if self.skip.is_empty() && self.rules.is_empty() {
-            return (findings, 0);
-        }
-        let mut config_suppressed = 0usize;
-        let kept = findings
-            .into_iter()
-            .filter(|f| {
-                // The pragma meta-rule, mirrored: the "your suppressions are dead" signal
-                // must never be silenceable by the thing it audits.
-                if f.category == "stale" {
-                    return true;
-                }
-                let skipped = self.skip.iter().any(|s| s.covers(f))
-                    || self.rules.iter().any(|rule| {
-                        f.location
-                            .path
-                            .as_ref()
-                            .is_some_and(|p| rule.paths.iter().any(|g| g.matches(p.0.as_str())))
-                            && rule.skip.iter().any(|s| s.covers(f))
-                    });
-                if skipped {
-                    config_suppressed += 1;
-                }
-                !skipped
-            })
-            .collect();
-        (kept, config_suppressed)
+/// `[analysis]`: `skip`, `min-confidence`, `[analysis.crap] threshold`, and
+/// `[analysis.duplicate] min-tokens` — four independent scalars living under one table, none
+/// read back by another. `min-tokens` clamps to the extraction floor rather than rejecting: a
+/// value below it is still a valid *request*, just not a decidable one (smaller functions carry
+/// no fingerprints), so the honest answer is the floor plus a problem, not a hard failure.
+fn parse_analysis_table(
+    analysis: &toml::Table,
+    config: &mut KndoConfig,
+    problems: &mut Vec<String>,
+) {
+    if let Some(value) = analysis.get("skip") {
+        config.skip = parse_skip_list(value, "[analysis] skip", problems);
     }
+    if let Some(value) = analysis.get("min-confidence") {
+        config.min_confidence = parse_confidence(value, problems);
+    }
+    if let Some(threshold) = analysis
+        .get("crap")
+        .and_then(|c| c.as_table())
+        .and_then(|c| c.get("threshold"))
+    {
+        match threshold
+            .as_float()
+            .or(threshold.as_integer().map(|i| i as f64))
+        {
+            Some(t) if t > 0.0 => config.crap_threshold = Some(t),
+            _ => problems.push(format!(
+                "kndo.toml [analysis.crap] threshold = {threshold}: expected a \
+                 positive number — ignored"
+            )),
+        }
+    }
+    if let Some(min_tokens) = analysis
+        .get("duplicate")
+        .and_then(|d| d.as_table())
+        .and_then(|d| d.get("min-tokens"))
+    {
+        match min_tokens.as_integer() {
+            Some(t) if t > 0 => {
+                let t = t as u32;
+                if t < DUPLICATE_MIN_TOKENS_FLOOR {
+                    problems.push(format!(
+                        "kndo.toml [analysis.duplicate] min-tokens = {t}: below the \
+                         extraction floor of {DUPLICATE_MIN_TOKENS_FLOOR} (smaller \
+                         functions carry no fingerprints) — clamped to \
+                         {DUPLICATE_MIN_TOKENS_FLOOR}"
+                    ));
+                    config.duplicate_min_tokens = Some(DUPLICATE_MIN_TOKENS_FLOOR);
+                } else {
+                    config.duplicate_min_tokens = Some(t);
+                }
+            }
+            _ => problems.push(format!(
+                "kndo.toml [analysis.duplicate] min-tokens = {min_tokens}: expected \
+                 a positive integer — ignored"
+            )),
+        }
+    }
+}
+
+/// `[performance] threads`: `0` means the default (physical cores), same as the key being
+/// absent entirely — so it maps to `None`, never `Some(0)`.
+fn parse_threads(value: &toml::Value, problems: &mut Vec<String>) -> Option<usize> {
+    match value.as_integer() {
+        Some(0) => None,
+        Some(n) if n > 0 => Some(n as usize),
+        _ => {
+            problems.push(format!(
+                "kndo.toml [performance] threads = {value}: expected a non-negative \
+                 integer — ignored"
+            ));
+            None
+        }
+    }
+}
+
+/// `[[rule]]`: per-path `skip` overrides. A rule needs both a non-empty `paths` and a
+/// non-empty `skip` to mean anything — either half missing drops the whole rule with a
+/// problem, rather than silently keeping a rule that would never match or never do anything.
+fn parse_rules(raw: Option<&toml::Value>) -> (Vec<PathRule>, Vec<String>) {
+    let mut rules = Vec::new();
+    let mut problems = Vec::new();
+    for rule in raw.and_then(|r| r.as_array()).into_iter().flatten() {
+        let Some(rule) = rule.as_table() else {
+            problems.push("kndo.toml [[rule]]: expected a table — ignored".to_string());
+            continue;
+        };
+        let mut paths = Vec::new();
+        for raw in rule
+            .get("paths")
+            .and_then(|p| p.as_array())
+            .into_iter()
+            .flatten()
+        {
+            match raw.as_str().map(glob::Pattern::new) {
+                Some(Ok(pattern)) => paths.push(pattern),
+                Some(Err(e)) => problems.push(format!(
+                    "kndo.toml [[rule]] paths entry {raw}: invalid glob ({e}) — \
+                     entry ignored"
+                )),
+                None => problems.push(format!(
+                    "kndo.toml [[rule]] paths entry {raw}: expected a string — \
+                     entry ignored"
+                )),
+            }
+        }
+        let skip = rule
+            .get("skip")
+            .map(|value| parse_skip_list(value, "[[rule]] skip", &mut problems))
+            .unwrap_or_default();
+        if paths.is_empty() || skip.is_empty() {
+            problems.push(
+                "kndo.toml [[rule]]: needs both non-empty `paths` and `skip` — \
+                 rule ignored"
+                    .to_string(),
+            );
+            continue;
+        }
+        rules.push(PathRule { paths, skip });
+    }
+    (rules, problems)
+}
+
+/// `[[externally-invoked]]`: markers a build/test tool names a file by, optionally narrowed by
+/// `paths`. `markers` empty means the rule names nothing to look for, so it's dropped with a
+/// problem; `paths` empty is fine — it means "everywhere," not "nowhere."
+fn parse_externally_invoked_rules(
+    raw: Option<&toml::Value>,
+) -> (Vec<ExternallyInvokedRule>, Vec<String>) {
+    let mut rules = Vec::new();
+    let mut problems = Vec::new();
+    for rule in raw.and_then(|r| r.as_array()).into_iter().flatten() {
+        let Some(rule) = rule.as_table() else {
+            problems
+                .push("kndo.toml [[externally-invoked]]: expected a table — ignored".to_string());
+            continue;
+        };
+        let mut markers = Vec::new();
+        for raw in rule
+            .get("markers")
+            .and_then(|m| m.as_array())
+            .into_iter()
+            .flatten()
+        {
+            match raw.as_str() {
+                Some(name) if !name.trim().is_empty() => markers.push(SmolStr::new(name.trim())),
+                _ => problems.push(format!(
+                    "kndo.toml [[externally-invoked]] markers entry {raw}: expected a \
+                     non-empty string — entry ignored"
+                )),
+            }
+        }
+        let mut paths = Vec::new();
+        for raw in rule
+            .get("paths")
+            .and_then(|p| p.as_array())
+            .into_iter()
+            .flatten()
+        {
+            match raw.as_str().map(glob::Pattern::new) {
+                Some(Ok(pattern)) => paths.push(pattern),
+                Some(Err(e)) => problems.push(format!(
+                    "kndo.toml [[externally-invoked]] paths entry {raw}: invalid glob \
+                     ({e}) — entry ignored"
+                )),
+                None => problems.push(format!(
+                    "kndo.toml [[externally-invoked]] paths entry {raw}: expected a \
+                     string — entry ignored"
+                )),
+            }
+        }
+        if markers.is_empty() {
+            problems.push(
+                "kndo.toml [[externally-invoked]]: needs a non-empty `markers` list — \
+                 rule ignored"
+                    .to_string(),
+            );
+            continue;
+        }
+        rules.push(ExternallyInvokedRule { markers, paths });
+    }
+    (rules, problems)
 }
 
 /// Every `[plugins.<id>]` options table under `[plugins]`. `gate` is the tier policy,
@@ -397,27 +678,12 @@ fn parse_skip_list(
             ));
             continue;
         };
-        let (category, subject) = match raw.split_once(':') {
-            Some((c, s)) => (c, Some(s.to_string())),
-            None => (raw, None),
-        };
-        if category == "stale" {
-            problems.push(format!(
-                "kndo.toml {context} entry \"{raw}\": `stale` audits suppressions and cannot \
-                 itself be skipped — entry ignored"
-            ));
-            continue;
+        match SkipSpec::parse(raw) {
+            Ok(spec) => specs.push(spec),
+            Err(e) => problems.push(format!(
+                "kndo.toml {context} entry \"{raw}\": {e} — entry ignored"
+            )),
         }
-        if category.is_empty() {
-            problems.push(format!(
-                "kndo.toml {context} entry \"{raw}\": empty category — entry ignored"
-            ));
-            continue;
-        }
-        specs.push(SkipSpec {
-            category: category.to_string(),
-            subject,
-        });
     }
     specs
 }
@@ -450,9 +716,9 @@ mod tests {
         Finding {
             advisory: false,
             id: format!("{category}:{subject}:{}", path.unwrap_or("")),
-            category: category.to_string(),
-            group: "waste".to_string(),
-            subject_kind: subject.to_string(),
+            category: Category::new(category),
+            group: crate::vocab::Group::Waste,
+            subject_kind: SubjectKind::new(subject),
             severity: Severity::Info,
             confidence: Confidence::Certain,
             message: String::new(),
@@ -463,6 +729,8 @@ mod tests {
                 package: None,
             },
             related: Vec::new(),
+            rolled_up: None,
+            sources: Vec::new(),
             delta: None,
             delta_origin: None,
         }
@@ -548,11 +816,25 @@ mod tests {
 
     #[test]
     fn unknown_tables_are_silently_ignored_for_forward_compat() {
-        let (config, problems) = parsed(
-            "[project]\nroots = [\"src\"]\n[delta]\nmax-net-findings = 0\n[future]\nx = 1\n",
-        );
+        // `[project]` is no longer written by `kndo init` and was never read; kept here as a
+        // realistic unknown table (someone'"'"'s older kndo.toml still has one). `[future]` stands in for
+        // a table a newer kndo will understand. Neither may become a diagnostic — a config a
+        // newer version writes has to stay readable by an older one.
+        let (config, problems) = parsed("[project]\nroots = [\"src\"]\n[future]\nx = 1\n");
         assert!(problems.is_empty(), "{problems:?}");
         assert!(config.skip.is_empty());
+        assert!(config.delta.is_none());
+    }
+
+    #[test]
+    fn the_delta_section_reaches_the_effective_config() {
+        // `[delta]` used to sit in the same test as the forward-compat tables, asserting it had
+        // no effect. It has one now: `crate::delta` owns the semantics, but the single file
+        // read is here, so this is the seam that has to be pinned.
+        let (config, problems) = parsed("[delta]\nmax-net-findings = 3\n");
+        assert!(problems.is_empty(), "{problems:?}");
+        let delta = config.delta.expect("the section opts in");
+        assert_eq!(delta.max_net_findings, 3);
     }
 
     #[test]
@@ -567,6 +849,49 @@ mod tests {
         );
         assert!(config.rules.is_empty());
         assert_eq!(problems.len(), 3, "{problems:?}");
+    }
+
+    #[test]
+    fn externally_invoked_parses_markers_and_optional_paths() {
+        let (config, problems) = parsed(
+            "[[externally-invoked]]\n\
+             markers = [\"Controller\", \"Bean\"]\n\
+             paths = [\"src/main/java/**\"]\n\
+             \n\
+             [[externally-invoked]]\n\
+             markers = [\"AfterEach\"]\n",
+        );
+        assert!(problems.is_empty(), "{problems:?}");
+        assert_eq!(config.externally_invoked.len(), 2);
+        assert_eq!(
+            config.externally_invoked[0].markers,
+            vec![SmolStr::new("Controller"), SmolStr::new("Bean")]
+        );
+        assert!(config.externally_invoked[0].paths[0].matches("src/main/java/p/C.java"));
+        assert!(
+            config.externally_invoked[1].paths.is_empty(),
+            "`paths` is optional — an unscoped rule applies project-wide"
+        );
+    }
+
+    #[test]
+    fn externally_invoked_without_markers_is_a_problem_and_is_dropped() {
+        let (config, problems) = parsed("[[externally-invoked]]\npaths = [\"src/**\"]\n");
+        assert!(config.externally_invoked.is_empty());
+        assert!(
+            problems.iter().any(|p| p.contains("non-empty `markers`")),
+            "{problems:?}"
+        );
+
+        // A bad glob drops that entry and says so; the rule itself survives on its markers.
+        let (config, problems) =
+            parsed("[[externally-invoked]]\nmarkers = [\"Bean\"]\npaths = [\"src/[\"]\n");
+        assert_eq!(config.externally_invoked.len(), 1);
+        assert!(config.externally_invoked[0].paths.is_empty());
+        assert!(
+            problems.iter().any(|p| p.contains("invalid glob")),
+            "{problems:?}"
+        );
     }
 
     #[test]
@@ -634,8 +959,12 @@ mod tests {
             finding("internal-only", "function", Some("src/a.rs")),
             finding("stale", "suppression", Some("src/a.rs")),
         ];
-        let (kept, config_suppressed) = config.filter_findings(findings);
-        assert_eq!(config_suppressed, 2);
+        let (kept, counts) = config
+            .resolve(&crate::engine::ConfigOverrides::default())
+            .report
+            .apply(findings);
+        assert_eq!(counts.suppressed, 2);
+        assert_eq!(counts.elided, 0, "no `--only` lens is in play");
         let categories: Vec<(&str, &str)> = kept
             .iter()
             .map(|f| (f.category.as_str(), f.subject_kind.as_str()))
@@ -658,8 +987,11 @@ mod tests {
             finding("untested", "file", Some("schemas/output.json")),
             finding("unused", "file", None),
         ];
-        let (kept, config_suppressed) = config.filter_findings(findings);
-        assert_eq!(config_suppressed, 2);
+        let (kept, counts) = config
+            .resolve(&crate::engine::ConfigOverrides::default())
+            .report
+            .apply(findings);
+        assert_eq!(counts.suppressed, 2);
         assert_eq!(kept.len(), 3);
         assert!(kept
             .iter()

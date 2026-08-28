@@ -2,12 +2,6 @@
   "findings": [
     {
       "category": "unused",
-      "subject_kind": "class",
-      "path": "src/main/java/com/foo/Main.java",
-      "symbol": "Main"
-    },
-    {
-      "category": "unused",
       "subject_kind": "method",
       "path": "src/main/java/com/foo/Helper.java",
       "symbol": "Helper.dead"

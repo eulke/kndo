@@ -87,11 +87,16 @@ flagging every CLI dev-dependency.
 - Generated and vendored files are exempt (they're not yours to delete); files no adapter
   claims (unknown extensions) can be part of the graph via other adapters' references but
   never accused on their own.
+- A file kept alive **only** because something links it as an asset — a template's
+  `<link href>`, a framework config naming it by path — is *served*, not *used*: the evidence
+  says its bytes ship and names none of its symbols, so its symbols are not judged one by one.
+  The file itself is judged normally, and any other evidence at all (an import, an invocation,
+  a root, a reference to one of its symbols) puts it back in ordinary jurisdiction.
 - Code invoked **out-of-band** — a binary run as a subprocess by tests or scripts with
   dynamically constructed paths, an entry point referenced only from infrastructure kndo
   doesn't read — has no edge for kndo to see. Built-in conventions (manifest `scripts`,
   framework plugins) cover the common cases; for the rest, use a
-  [suppression](suppressions.md) or a [plugin](plugin-authoring.md) that contributes the root.
+  [suppression](suppressions.md) or a [plugin](plugins/authoring.md) that contributes the root.
 - Reflection with computed names (`Class.forName(prefix + name)`) cannot be resolved
   statically. Known reflective *contracts* are modeled explicitly per language (test
   discovery, serialization hooks, dispatch through implemented interfaces); arbitrary
@@ -151,6 +156,13 @@ Details and limits:
 
 - Active **only when the project has test roots at all**: a repository without tests gets one
   diagnostic, not a thousand findings.
+- Reported only on **units you write a test for** — callables and types. A value has nothing to
+  exercise: `Scheme.https`, `Genre.HORROR`, `MAX_VARCHAR_LENGTH`, a CSS custom property. And a
+  file that declares values and *only* values — a declarative stylesheet, a JSON document —
+  isn't an untested file, it's a file the question doesn't apply to. That is derived from what
+  the file declares, so a stylesheet carrying a Sass `@function` stays in scope. A file the
+  language adapter extracted nothing from stays in scope too: an absence of evidence is not
+  evidence there is nothing to test.
 - "A test reaches it" is import/reference reachability, not execution: a test that reaches a
   module transitively silences `untested` for everything it reaches, even if assertions never
   touch it. For *executed*-line truth, ingest a coverage report and watch
@@ -334,6 +346,18 @@ Two halves:
   instance listed as evidence. Very small functions (under the token floor, 50 by default)
   don't participate — a three-line getter matching another three-line getter is not a copy.
 
+A callable whose body is **only a value construction** — one struct/object literal, one
+constructor call — does not participate. Such bodies match each other by definition of the
+type they build, not by evidence of copying: the comparison deliberately ignores identifiers
+and literals, and for a construction those *are* the authored content, leaving only the field
+list the type dictates. The more central the type, the louder the false group. A function that
+constructs *and* does something else is ordinary code and still participates.
+
+A **closure is measured in its own right**, not folded into the function that contains it, so
+five call sites passing the same callback are reported on the callback — where the duplication
+actually lives — rather than on five otherwise-different functions. The same token floor
+decides this: a closure too small to carry clone evidence stays part of its owner's body.
+
 ```text
 ◦ duplicate src/utils/retry.ts:10  parseRetryAfter duplicates 2 other functions (structural clone group)
    └ instance: src/http/backoff.ts:22
@@ -362,6 +386,12 @@ CRAP(m) = comp(m)² × (1 − cov(m))³ + comp(m)
 where `comp` is cyclomatic complexity and `cov` is the covered fraction of the function's
 instrumented lines from your **ingested** coverage reports. Findings fire above the score
 threshold of 30.
+
+A substantial closure is scored **as its own callable**: its complexity is its own and no
+longer its owner's, its coverage is read from its own lines, and the finding points at the
+closure. Such a finding names the enclosing function and the closure's position within it
+(`app.ts#configure (nested callable #2)`) — the position, not a line number, so acknowledging
+it in a baseline survives edits above it.
 
 ```text
 ▲ crap src/parser/expr.ts:120  parseExpression: complexity 24, coverage none — score 599.0, above the threshold of 30
@@ -400,6 +430,11 @@ specific of four verdicts:
 3. it attaches to no declaration — nothing starts on its line or the line after;
 4. it bound correctly but matched zero findings this run — the issue it acknowledged is gone.
 
+Verdict 4 requires that the category was actually judged. An analysis that could not judge —
+`crap` with no ingested coverage report, `untested` in a project with no test roots — abstains
+and emits nothing, and the run lists its categories under `run.abstained`. A pragma for such a
+category is left alone: its emptiness is a missing measurement, not a fixed issue.
+
 **Fix:** delete (or re-aim) the pragma. Because staleness is judged against the complete
 pre-suppression finding set, an actively-suppressing pragma can never be stale, and deleting
 a stale pragma can never resurrect a finding.
@@ -408,10 +443,19 @@ See [Suppressions & baseline](suppressions.md) for the pragma syntax and binding
 
 ## unresolved
 
-Registered in the category vocabulary (you may name it in suppressions and consumers must
-accept it in the schema) for imports that resolve to nothing — but **no current analysis
-emits it**: an import that fails to resolve today simply produces no edge. The name is
-reserved so its arrival is an additive change.
+**Group** defect · **severity** error · **confidence** the import's own ·
+**subject** import.
+
+A **relative** import specifier that resolves to no file — almost always a broken path, or a
+rename that missed this call site. Located at the import itself.
+
+A *package* specifier that resolves to nothing is a different question, and
+[`undeclared`](#undeclared) answers it; nothing is reported twice. Confidence is the adapter's
+own confidence in the import, so a dynamic specifier it could only partly read (`import(expr)`)
+arrives below `certain` and falls under the default report floor: a templated path is not
+evidence of a broken one.
+
+**Fix:** correct the path, or delete the import if what it pointed at is gone.
 
 ---
 

@@ -27,7 +27,16 @@ outside).
 **Declarations** — functions, classes (+ methods, fields, getters/setters as members),
 interfaces, type aliases, enums (+ members), top-level `const`/`let`/`var`, namespaces.
 Anonymous default exports (`export default () => {}`) declare a synthetic symbol named
-`default` (symbol path: `file#default`). Property-assignment callables
+`default` (symbol path: `file#default`). A **named** default export
+(`export default function mergeConfig() {}`) keeps its own name and additionally records
+`FileFacts::default_export_alias` — a consumer writes `import mergeConfig from './x.js'`,
+whose binding asks the target for `default`, so without the alias that lookup finds nothing
+and the function reads `unused` however many files call it. The CJS half of this contract
+(`module.exports = local`) always recorded it; ESM's named default did not, which cost axios
+four findings from one miss (`mergeConfig`, `bind`, `shouldBypassProxy`, and the file-local
+const only `shouldBypassProxy` read). Pinned by the `named-default-export` fixture, and
+`export function other() {}` must NOT record one — the `default` keyword token is the
+discriminator. Property-assignment callables
 (`obj.method = function () {}`, the pre-class prototype-extension idiom) are **not**
 declarations and are not extracted — a documented scope limit, not an oversight: it bounds
 recall for symbol-level analyses (`crap`, structural `duplicate`, symbol reachability) on
@@ -45,6 +54,17 @@ computed/spread members demote the file's export surface to `probable`.
 `<Button/>` is a `certain` reference to `Button`, which is what keeps React components alive
 without any framework plugin (framework *roots* remain plugin territory, RFC 0003).
 
+**String call arguments → `FileFacts::string_call_args`** (plugin fuel, ecosystem-blind).
+Every call whose callee is a plain identifier or member chain — `t`, `res.render`, `a.b.c` —
+and whose arguments include a string literal records `(callee as written, first string literal,
+span)`. Direct literals only, never computed strings (determinism over coverage); a callee that
+is not a written path (a call result, a subscript, an IIFE) is skipped rather than given an
+invented spelling. No callee filtering: an exclusion list by name would be exactly the
+ecosystem knowledge this layer must not carry. No analysis consumes these — plugins read them
+through `GraphView::string_call_sites_in` or the ABI's `call-sites-in`, which is how a route
+convention is built on a fact the adapter already parsed instead of re-parsing source through
+the content channel. The Java adapter implements the same contract.
+
 **Dynamic constructs → `DynamicUse`** (wildcard edges, RFC 0005 §1 expansion):
 
 | Construct | Effect |
@@ -59,9 +79,31 @@ without any framework plugin (framework *roots* remain plugin territory, RFC 000
 (consistent `$n` renaming per RFC 0005 §6; template-literal text canonicalized, string/number
 literals bucketed).
 
+Each `arrow_function`, `function_expression` or `generator_function` clearing the clone floor
+becomes its own callable **shape** (`MetricsSyntax::nested_callable_kinds`): its branches and
+tokens leave the enclosing shape's stream, which keeps one `FN` in their place, and
+`crap`/`duplicate` report it in its own right. A smaller one stays an expression inside its
+owner — promoting it would leave both halves under the floor and cost real clone findings
+(measured: 83 clone participants on the field corpus). A bare `function` is deliberately NOT in
+that list: in tree-sitter-typescript that name belongs to the unnamed keyword token, and only
+`function_expression` is the node. The split's semantics are uniform across adapters; only the
+kinds that trigger it are per-language.
+
+A body that is **only** a value construction (`object` and `new_expression`) is not clone-eligible
+(`MetricsSyntax::construction_kinds`): normalization erases the field values — the whole
+authored content — and keeps the field list the type declaration dictates, so two constructions
+of one type match by definition of the type rather than by evidence of copying.
+
 **Suppressions** — `// kndo:allow …`, `/* kndo:allow … */`, JSX `{/* kndo:allow … */}`.
 
 ## 3. Imports & resolution
+
+**`Missing` vs `Unresolved` (contracts §2.1).** A relative specifier (`./x`, `/x`) that
+survives the whole candidate ladder — the explicit path, the extension appends, `.d.ts`, the
+directory `index.*` — resolves to `Resolution::Missing`: every spelling the language allows was
+tried, so the path names no file and the `unresolved` analysis reports it at severity `error`.
+A `#`-prefixed self-reference stays `Unresolved`: it needs `package.json`'s `imports` map,
+which this adapter does not parse, so kndo has no answer rather than an accusation.
 
 Emitted import kinds and their confidence:
 
@@ -97,9 +139,30 @@ file edges when the file exists (RFC 0002 §4) — the CSS/JSON adapters claim t
 
 From `package.json`: name, `private`, `workspaces` globs (+ `pnpm-workspace.yaml` packages),
 dependency scopes mapped `dependencies→prod`, `devDependencies→dev`, `peerDependencies→peer`,
-`optionalDependencies→optional`; entry points (`main`, `module`, `exports`, `bin`, `types`) both
-as resolution inputs and as **roots**: `bin` targets and the export surface of non-`private`
-packages are production roots (library mode); `scripts` file references become tooling roots.
+`optionalDependencies→optional`; entry points (`main`, `module`, `exports`, `browser`, `bin`,
+`types`) both as resolution inputs and as **roots**: `bin` targets and the export surface of
+non-`private` packages are production roots (library mode); `scripts` file references become
+tooling roots.
+
+**`browser`, in both of its spellings.** As a string it is an alternate `main`
+(`"./dist/browser.js"`), read at `certain`. As an OBJECT it is an alias map a bundler applies —
+axios ships `{"./lib/platform/node/index.js": "./lib/platform/browser/index.js"}` — and its
+*values* are the files substituted in. Those values have no incoming import anywhere: nothing
+in the source names them, the bundler rewrites the specifier, so axios's entire
+`lib/platform/browser/` tree read `unused` while shipping in every browser build. The values
+become entries and (library mode) roots at `probable`, the same tier `exports` leaves get for
+the same reason — a conditional build alternate is not unconditionally "the" entry. Keys are
+skipped: they are the node-side files, already reachable through ordinary imports. A `false`
+value ("stub this module out") names no file.
+
+**Node's implicit `index`.** A package declaring neither `main` nor `exports` resolves to
+`index.js` in its own directory — express declares neither, and without the fallback its
+`index.js` plus the whole of `lib/` read `unused`/`test-only`. Synthesized only when nothing
+else was declared (`browser` counts): a package that has stated a surface has stated it, and a
+stray `index.js` beside it is not silently part of that promise. `.d.ts` is excluded
+explicitly — the candidate ladder offers `index.d.ts` and `is_source_entry` does not catch it
+(its final extension is `ts`), but a declaration file carries no runtime edge and Node never
+resolves an entry to one.
 
 **Visibility ladder** (for `internal-only`/`private-type-leak`, RFC 0005 §7):
 module-local < exported < **package-surface** (reachable through the package's `exports` map).

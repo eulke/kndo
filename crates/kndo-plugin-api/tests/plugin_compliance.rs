@@ -8,13 +8,11 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use kndo_core::engine::{CheckRequest, ConfigOverrides, Engine, RunMode};
+use kndo_core::engine::{ConfigOverrides, Engine, RunMode};
 use kndo_core::plugin::Plugin;
 use kndo_plugin_api::WasmPlugin;
 
-#[path = "harness/mini_adapter.rs"]
-mod mini_adapter;
-use self::mini_adapter::MiniAdapter;
+use kndo_core::testkit::MockAdapter;
 
 fn workspace_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -24,21 +22,11 @@ fn workspace_root() -> PathBuf {
         .to_path_buf()
 }
 
-/// A process-unique `--target-dir` (not the demo crate's own shared `target/`) — several
-/// independent test binaries build these same demo crates, and under `cargo test --workspace`'s
-/// default parallelism a reader has been observed to pick up a wrong-shaped artifact from a
-/// concurrent writer despite cargo's own target-dir lock.
-fn isolated_target_dir() -> PathBuf {
-    let nonce = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .expect("system clock before the epoch")
-        .as_nanos();
-    std::env::temp_dir().join(format!("kndo-wasm-target-{}-{nonce}", std::process::id()))
-}
-
 fn build_adapter_demo_component() -> Vec<u8> {
     let demo_dir = workspace_root().join("examples/kndo-plugin-demo");
-    let target_dir = isolated_target_dir();
+    // A `TempDir`: unique by construction and removed on drop, unwind included —
+    // the hand-rolled pid+nonce name it replaced leaked the whole build tree on panic.
+    let target_dir = tempfile::tempdir().expect("wasm target dir");
     let status = Command::new("cargo")
         .args(["build", "--release", "--target", "wasm32-unknown-unknown"])
         // Cross-target guest build: instrumentation flags from the host environment
@@ -47,16 +35,17 @@ fn build_adapter_demo_component() -> Vec<u8> {
         .env_remove("RUSTFLAGS")
         .env_remove("CARGO_ENCODED_RUSTFLAGS")
         .env_remove("LLVM_PROFILE_FILE")
-        .env("CARGO_TARGET_DIR", &target_dir)
+        .env("CARGO_TARGET_DIR", target_dir.path())
         .current_dir(&demo_dir)
         .status()
         .expect("failed to invoke cargo to build the demo adapter");
     assert!(status.success(), "demo adapter guest build failed");
 
-    let core_wasm_path = target_dir.join("wasm32-unknown-unknown/release/kndo_plugin_demo.wasm");
+    let core_wasm_path = target_dir
+        .path()
+        .join("wasm32-unknown-unknown/release/kndo_plugin_demo.wasm");
     let core_wasm = std::fs::read(&core_wasm_path)
         .unwrap_or_else(|e| panic!("reading {}: {e}", core_wasm_path.display()));
-    let _ = std::fs::remove_dir_all(&target_dir);
 
     wit_component::ComponentEncoder::default()
         .module(&core_wasm)
@@ -113,7 +102,9 @@ fn each_abi_rejects_a_component_built_for_the_other() {
 
 fn build_hooks_demo_component() -> Vec<u8> {
     let demo_dir = workspace_root().join("examples/kndo-plugin-hooks-demo");
-    let target_dir = isolated_target_dir();
+    // A `TempDir`: unique by construction and removed on drop, unwind included —
+    // the hand-rolled pid+nonce name it replaced leaked the whole build tree on panic.
+    let target_dir = tempfile::tempdir().expect("wasm target dir");
     let status = Command::new("cargo")
         .args(["build", "--release", "--target", "wasm32-unknown-unknown"])
         // Cross-target guest build: instrumentation flags from the host environment
@@ -122,17 +113,17 @@ fn build_hooks_demo_component() -> Vec<u8> {
         .env_remove("RUSTFLAGS")
         .env_remove("CARGO_ENCODED_RUSTFLAGS")
         .env_remove("LLVM_PROFILE_FILE")
-        .env("CARGO_TARGET_DIR", &target_dir)
+        .env("CARGO_TARGET_DIR", target_dir.path())
         .current_dir(&demo_dir)
         .status()
         .expect("failed to invoke cargo to build the demo plugin");
     assert!(status.success(), "demo plugin guest build failed");
 
-    let core_wasm_path =
-        target_dir.join("wasm32-unknown-unknown/release/kndo_plugin_hooks_demo.wasm");
+    let core_wasm_path = target_dir
+        .path()
+        .join("wasm32-unknown-unknown/release/kndo_plugin_hooks_demo.wasm");
     let core_wasm = std::fs::read(&core_wasm_path)
         .unwrap_or_else(|e| panic!("reading {}: {e}", core_wasm_path.display()));
-    let _ = std::fs::remove_dir_all(&target_dir);
 
     wit_component::ComponentEncoder::default()
         .module(&core_wasm)
@@ -212,14 +203,12 @@ fn external_wasm_plugin_hooks_affect_a_real_check() {
         ConfigOverrides {
             use_cache: false,
             threads: Some(1),
-            min_confidence: None,
+            ..ConfigOverrides::default()
         },
-        vec![Box::new(MiniAdapter)],
+        vec![Box::new(MockAdapter)],
     )
     .expect("opening the baseline engine");
-    let baseline_result = baseline.check(CheckRequest {
-        mode: RunMode::Full,
-    });
+    let baseline_result = baseline.check(RunMode::Full);
     let baseline_unused: Vec<&str> = baseline_result
         .findings
         .iter()
@@ -278,15 +267,13 @@ fn external_wasm_plugin_hooks_affect_a_real_check() {
         ConfigOverrides {
             use_cache: false,
             threads: Some(1),
-            min_confidence: None,
+            ..ConfigOverrides::default()
         },
-        vec![Box::new(MiniAdapter)],
+        vec![Box::new(MockAdapter)],
         vec![Box::new(plugin)],
     )
     .expect("opening the plugin-enabled engine");
-    let result = engine.check(CheckRequest {
-        mode: RunMode::Full,
-    });
+    let result = engine.check(RunMode::Full);
 
     let unused_symbols: Vec<&str> = result
         .findings
@@ -366,16 +353,14 @@ fn external_wasm_plugin_hooks_affect_a_real_check() {
         .find(|f| f.category.starts_with("plugin:"))
         .expect("the demo rule's finding must be in the output");
     assert_eq!(finding.category, "plugin:hooks-demo/flag-marked");
-    assert_eq!(finding.group, "convention");
+    assert_eq!(finding.group, kndo_core::vocab::Group::Convention);
     assert!(finding.advisory);
     assert_eq!(finding.location.symbol.as_deref(), Some("finding_probe"));
 
     // And the other half: a SECOND round on the same WasmPlugin must start from a fresh
     // instance. The guest roots `fresh_target` only on an instance's first contribute_roots
     // call — a leaked instance would skip it here and the symbol would go unused.
-    let second = engine.check(CheckRequest {
-        mode: RunMode::Full,
-    });
+    let second = engine.check(RunMode::Full);
     let second_unused: Vec<&str> = second
         .findings
         .iter()

@@ -59,15 +59,17 @@ runs:
               "${GITHUB_API_URL}/repos/${REPO}/releases/latest" | \
               node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>console.log(JSON.parse(d).tag_name))')"
           fi
+          # Linux releases are musl (a static binary that runs on any distribution), never
+          # gnu; the asset name keeps the tag's leading `v`. Both of those are checked against
+          # the producer by xtask's tests/release_channels.rs — this list is not free-form.
           case "$(uname -sm)" in
-            "Linux x86_64")   target="x86_64-unknown-linux-gnu" ;;
-            "Linux aarch64")  target="aarch64-unknown-linux-gnu" ;;
+            "Linux x86_64")   target="x86_64-unknown-linux-musl" ;;
+            "Linux aarch64" | "Linux arm64") target="aarch64-unknown-linux-musl" ;;
             "Darwin x86_64")  target="x86_64-apple-darwin" ;;
             "Darwin arm64")   target="aarch64-apple-darwin" ;;
             *) echo "::error::kndo-action: unsupported runner platform $(uname -sm)"; exit 2 ;;
           esac
-          version_no_v="${KNDO_VERSION#v}"
-          asset="kndo-${version_no_v}-${target}.tar.gz"
+          asset="kndo-${KNDO_VERSION}-${target}.tar.gz"
           url="https://github.com/${REPO}/releases/download/${KNDO_VERSION}/${asset}"
           dir="${RUNNER_TEMP}/kndo-bin"
           mkdir -p "$dir"

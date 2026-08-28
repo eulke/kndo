@@ -38,7 +38,7 @@ impl LanguageAdapter for JavaAdapter {
             activation: Vec::new(),
             dependencies: Vec::new(),
             id: SmolStr::new("java"),
-            facts_schema_version: 3, // bump whenever the serialized facts shape or the emission semantics change
+            facts_schema_version: 10, // bump whenever the serialized facts shape or the emission semantics change
             file_globs: vec![SmolStr::new("**/*.java")],
             manifest_globs: vec![
                 SmolStr::new("**/pom.xml"),
@@ -95,19 +95,16 @@ impl LanguageAdapter for JavaAdapter {
             // Resolution::Dependency for a third-party import, so dependency_hygiene's
             // unused/test-only verdicts would be a false-positive flood if attempted here.
             resolves_dependency_usage: false,
+            declares_units_of_testing: true,
             package_test_dirs: Vec::new(),
+            // No builtin type facts yet: this adapter declares none, and an empty table
+            // simply means the chain resolver has no second tier to consult for it.
+            builtin_member_types: Vec::new(),
         }
     }
 
     fn claim(&self, path: &ProjectPath) -> Option<FileClaim> {
-        let p = path.0.as_str();
-        if !p.ends_with(".java") {
-            return None;
-        }
-        Some(FileClaim {
-            language: SmolStr::new("java"),
-            class: kndo_adapter_toolkit::classify::classify(p, &PATH_PATTERNS),
-        })
+        kndo_adapter_toolkit::classify::claim_by_extension(path, &["java"], "java", &PATH_PATTERNS)
     }
 
     fn claim_manifest(&self, path: &ProjectPath) -> bool {
@@ -129,6 +126,13 @@ impl LanguageAdapter for JavaAdapter {
 
     fn extract_manifest(&self, file: &SourceFile<'_>, ctx: &ResolveCtx<'_>) -> ManifestFacts {
         manifest::extract(file.path.0.as_str(), file.content, ctx)
+    }
+
+    /// A Maven/Gradle coordinate is `groupId:artifactId`; an activation rule is written as the
+    /// artifact id alone. The shared JVM matcher accepts either — the same module that parses
+    /// these manifests in the first place owns the question of how one is spelled.
+    fn declares_dependency(&self, facts: &ManifestFacts, query: &str) -> bool {
+        kndo_adapter_toolkit::jvm_manifest::declares_dependency(facts, query)
     }
 
     fn resolve(&self, spec: &ImportSpec, ctx: &ResolveCtx<'_>) -> Resolution {
