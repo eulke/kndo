@@ -39,9 +39,6 @@ jobs:
           - target: aarch64-apple-darwin
             os: macos-latest
             cross: false
-          - target: x86_64-pc-windows-msvc
-            os: windows-latest
-            cross: false
     steps:
       - uses: actions/checkout@v4
 
@@ -56,7 +53,7 @@ jobs:
 
       # musl (Linux) needs `cross` — it produces a real static binary independent of the host's
       # glibc, and `cross` runs the build in a container with the musl toolchain preinstalled.
-      # macOS and Windows build natively on their own runners: cross-compiling to them from
+      # macOS builds natively on its own runner: cross-compiling to it from
       # Linux costs more than it saves. Both macOS targets build on the same
       # (Apple Silicon) runner — Xcode's linker targets either arch without a second runner.
       - name: Install cross

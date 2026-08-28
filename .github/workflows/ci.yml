@@ -458,33 +458,30 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, windows-latest]
+        os: [macos-latest]
     # Every other job in this file runs on ubuntu, and `release.yml` ships binaries for macOS
-    # (both architectures) and Windows. Until this job existed, those targets were compiled for
-    # the first time by the release build itself — the suite had never run on either, on a tool
-    # whose whole job is reading paths out of a filesystem.
+    # (both architectures). Until this job existed, those targets were compiled for the first
+    # time by the release build itself — the suite had never run there, on a tool whose whole
+    # job is reading paths out of a filesystem.
+    #
+    # It ran once with `windows-latest` in the matrix, and that is how Windows stopped being a
+    # release target (RFC 0014 §3.3): `tree-sitter-scss`'s build script hands `cl.exe` a flag it
+    # refuses, so kndo's own code never compiled there at all. The matrix is kept as a matrix
+    # rather than flattened to `runs-on: macos-latest` — adding a platform back is a one-line
+    # change, and this job existing is what made the Windows problem visible before a tag did.
     #
     # The code is not naive about it: `libc` is behind `[target.'cfg(unix)'.dependencies]`, the
     # SIGPIPE reset and the hook's `chmod` are `#[cfg(unix)]`, and discovery normalizes `\` to
     # `/` when it builds a `ProjectPath`. That is a reason to expect this to pass, not evidence
     # that it does — which is the distinction this job exists to remove.
     #
-    # `fail-fast: false` so a macOS-only or Windows-only failure is never masked by the other.
+    # `fail-fast: false` so one platform's failure is never masked by another's.
     steps:
       - uses: actions/checkout@v4
         with:
-          # kndo's diff modes and several fixtures use git; CRLF conversion on Windows would
-          # change file contents under the analyzer and make spans differ by platform for a
-          # reason that has nothing to do with kndo.
+          # kndo's diff modes and several fixtures use git.
           fetch-depth: 0
 
-      - name: Keep line endings as committed (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          git config --global core.autocrlf false
-          git config --global core.eol lf
-          git rm --cached -r -q .
-          git reset --hard -q
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable

@@ -38,7 +38,7 @@ detect_target() {
         Darwin/arm64) echo "aarch64-apple-darwin" ;;
         *)
             die "unsupported platform: $os/$arch (supported: Linux x86_64/aarch64, macOS \
-x86_64/arm64 — Windows users, see https://github.com/$REPO#installation for the .zip release)"
+x86_64/arm64)"
             ;;
     esac
 }

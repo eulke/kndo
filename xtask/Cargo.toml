@@ -22,11 +22,7 @@ wit-component = "0.219"
 # agree with. xtask never ships (see `description`), so these cost only dev build time.
 flate2 = "1"
 tar = "0.4"
-zip = { version = "2", default-features = false, features = ["deflate"] }
 
 [dev-dependencies]
 # `tests/release_channels.rs` reads a produced archive back to prove its shape.
 tempfile = { workspace = true }
-# Reading the produced zip back. Same crate the producer uses, so the test cannot pass by
-# agreeing with a different implementation of the format.
-zip = { version = "2", default-features = false, features = ["deflate"] }

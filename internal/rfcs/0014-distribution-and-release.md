@@ -260,3 +260,38 @@ its shellcheck pass over every `run:` block) clean.
   deliberate act by the author; the pipeline aborting or partially failing on that first real run
   is expected and fine — that's what the "one bad channel doesn't break the release" design is
   for (§3).
+
+## 3.3 Windows is not a release target — decided by attempting the build
+
+The target table shipped `x86_64-pc-windows-msvc` from the start, and **nothing had ever built
+it**. The `cross-platform` CI job added in this milestone did, and kndo's own code never got as
+far as compiling:
+
+```
+cl : Command line error D8021 : invalid numeric argument '/Wno-unused-parameter'
+error occurred in cc-rs: ... tree-sitter-scss ... scanner.c
+```
+
+`tree-sitter-scss` 1.0.0's build script is three lines of `cc::Build` with
+`c_config.flag("-Wno-unused-parameter")` — unconditional, not `flag_if_supported`, no MSVC
+branch. MSVC's `cl.exe` rejects it. Checked: it is the **only** grammar in the tree that does
+this (every other `tree-sitter-*` build script is clean under MSVC), and 1.0.0 is the only
+version published.
+
+So a tag push would have run the five-target matrix and failed on Windows, after the other four
+succeeded — the exact failure mode this RFC's "one producer, nothing that first runs at tag
+time" rule exists to prevent, caught by the job that rule asked for.
+
+**Decision: drop the target.** Vendoring the grammar with a corrected build script would work
+and was considered; it trades a permanent maintenance obligation (a C grammar copied into this
+repository, diverging from upstream forever) for a platform with no measured demand yet. WSL runs
+the Linux musl archive unchanged, which is what the install docs now say.
+
+What went with it, because none of it had a user left: the `Zip` archive variant, the `write_zip`
+producer, the `zip` dependency, and the `.exe` binary-name branch. `Archive` stays a type rather
+than collapsing into nothing — "a target declares how it is packed" is the shape the four
+consumers agree with, and it is where a second format slots back in.
+
+Restoring Windows is not a row in the table: it needs the grammar problem solved, an archive
+format back, and the installer's platform detection extended.
+`every_released_target_is_a_tar_gz_named_kndo` fails first and says so.

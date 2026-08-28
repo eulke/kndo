@@ -431,20 +431,35 @@ fn every_artifact_nests_under_one_directory_named_for_itself() {
 /// Windows gets `kndo.exe` in a `.zip`; everything else `kndo` in a `.tar.gz`. Stated as a test
 /// because two consumers hard-code the Unix answer and must keep being right to.
 #[test]
-fn the_windows_target_is_the_only_zip_and_the_only_exe() {
-    let zips: Vec<&str> = package::TARGETS
-        .iter()
-        .filter(|t| t.archive == Archive::Zip)
-        .map(|t| t.triple)
-        .collect();
-    assert_eq!(zips, vec!["x86_64-pc-windows-msvc"]);
+/// **Every released target is a `.tar.gz` holding a binary called `kndo`.**
+///
+/// This used to assert that `x86_64-pc-windows-msvc` was the one `.zip` with the one `.exe`.
+/// Windows is no longer a release target (RFC 0014 §3.3) — `tree-sitter-scss`'s build script
+/// hands `cl.exe` a flag it refuses, so the binary could never be built — and with it went the
+/// zip writer, which nothing then produced. What is asserted here is what the four consumers
+/// actually resolve today; if a second archive format ever returns, this is the test that has
+/// to change first.
+fn every_released_target_is_a_tar_gz_named_kndo() {
     for target in package::TARGETS {
-        let expected = if target.triple.contains("windows") {
-            "kndo.exe"
-        } else {
-            "kndo"
-        };
-        assert_eq!(target.binary(), expected, "{}", target.triple);
+        assert_eq!(
+            target.archive,
+            Archive::TarGz,
+            "{} is packed as something else",
+            target.triple
+        );
+        assert_eq!(target.binary(), "kndo", "{}", target.triple);
+        let art = package::artifact(TAG, target);
+        assert!(
+            art.file_name.ends_with(".tar.gz"),
+            "{} -> {}",
+            target.triple,
+            art.file_name
+        );
+        assert!(
+            !target.triple.contains("windows"),
+            "Windows is not a release target; adding one back means restoring an archive \
+             format and an installer path, not just a row in this table"
+        );
     }
 }
 
@@ -541,63 +556,6 @@ fn an_omitted_tag_defaults_to_the_workspace_version_with_its_v() {
         name.starts_with("kndo-v"),
         "the default tag carries the leading v: {name}"
     );
-}
-
-/// **The Windows archive is produced and read back, not just described.**
-///
-/// The sibling test above asserts that `x86_64-pc-windows-msvc` is the one zip target — from
-/// the table. That is a statement about a constant, and it left `write_zip` at **0% coverage**:
-/// the release path every Windows user downloads had never once executed, on any machine, in
-/// any test. kndo's own `crap` analysis is what noticed, on this repository.
-///
-/// Runs on every platform: `write_zip` takes a path and a list of entries, so producing a
-/// Windows artifact from Linux is exactly what a release does anyway (the archive is built on
-/// a Windows runner, but the code is the same and the shape it must have is not host-dependent).
-#[test]
-fn packaging_the_windows_target_produces_a_readable_zip() {
-    let dir = tempfile::tempdir().expect("tempdir");
-    let target = package::target("x86_64-pc-windows-msvc").expect("a released target");
-    let bin = dir.path().join("kndo.exe");
-    std::fs::write(&bin, b"MZ stand-in").expect("write the stand-in binary");
-
-    let out = package::package(&root(), TAG, target, &bin, dir.path()).expect("package");
-    let art = package::artifact(TAG, target);
-    assert_eq!(
-        out.file_name().and_then(|n| n.to_str()),
-        Some(&*art.file_name),
-        "the zip is named exactly what the four consumers ask for"
-    );
-    assert!(
-        art.file_name.ends_with(".zip"),
-        "the Windows artifact is a zip: {}",
-        art.file_name
-    );
-
-    let file = std::fs::File::open(&out).expect("open the archive");
-    let mut zip = zip::ZipArchive::new(file).expect("the archive is a readable zip");
-    let mut names: Vec<String> = (0..zip.len())
-        .map(|i| zip.by_index(i).expect("entry").name().to_string())
-        .collect();
-    names.sort();
-
-    let mut expected = vec![art.binary_in_archive.clone()];
-    for extra in package::EXTRA_FILES {
-        expected.push(format!("{}/{extra}", art.stem));
-    }
-    expected.sort();
-    assert_eq!(
-        names, expected,
-        "the zip nests under one directory named for itself, exactly as the tar does"
-    );
-
-    // The binary is really in there, under the staged directory the installer strips — the
-    // layout mistake that shipped broken in two consumers before `xtask::package` owned it.
-    let mut entry = zip
-        .by_name(&art.binary_in_archive)
-        .expect("the binary is in the archive under its staged path");
-    let mut bytes = Vec::new();
-    std::io::Read::read_to_end(&mut entry, &mut bytes).expect("read the entry");
-    assert_eq!(bytes, b"MZ stand-in");
 }
 
 #[test]

@@ -6,8 +6,12 @@ kndo is a single static binary with no runtime dependencies.
 
 Each release publishes prebuilt archives per platform on the project's GitHub releases page:
 `kndo-<tag>-<target>.tar.gz` for Linux x86_64/aarch64 (musl — static, distribution-independent)
-and macOS x86_64/arm64, and `kndo-<tag>-x86_64-pc-windows-msvc.zip` for Windows. The `<tag>`
-is the release tag verbatim, leading `v` included.
+and macOS x86_64/arm64. The `<tag>` is the release tag verbatim, leading `v` included.
+
+There is no Windows binary. It was a release target until the build was actually attempted: one
+of the tree-sitter grammars kndo compiles hands the MSVC compiler a flag it refuses, so the
+binary could not be produced at all. Building from source with `cargo install` hits the same
+wall. On Windows, use WSL — the Linux musl archive runs there unchanged.
 
 Every archive holds a single directory named for itself, so extraction strips one component.
 Download, extract, and put `kndo` on your `PATH`:
