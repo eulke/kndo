@@ -2914,6 +2914,207 @@ mod tests {
         assert_eq!(site.start, (2, 1));
     }
 
+    /// The plugin-contributed file-liveness edge (`kndo:vite`'s `index.html` → its
+    /// bundled entry, a template → the asset it names) — navigable like a real import, but
+    /// labeled distinctly so `describe`'s `sources` can say *why* the target counts as in use.
+    #[test]
+    fn uses_from_a_file_includes_a_plugin_contributed_file_liveness_edge() {
+        let files = vec![file("index.html"), file("bundle.js")];
+        let edges = vec![edge(
+            EdgeKind::ReferencesFile {
+                from: NodeRef::File(FileId(0)),
+                to: FileId(1),
+            },
+            Confidence::Probable,
+            Some(span(1, 1)),
+        )];
+        let graph = ProjectGraph::for_test(files, vec![], vec![], edges);
+        let reach = reachability::compute(&graph);
+        let nav = build_graph_index(&graph);
+        let resolved = resolve(&graph, &Selector::File(ProjectPath("index.html".into()))).unwrap();
+        let result = neighbors(
+            &graph,
+            &reach,
+            &resolved,
+            NeighborsOpts {
+                direction: Direction::Uses,
+                edges: EdgeFilter::parse(None).unwrap(),
+                depth: 1,
+                transitive: false,
+                limit: 50,
+            },
+            &nav,
+        );
+        let to_bundle = result
+            .entries
+            .iter()
+            .find(|e| e.node.selector == "bundle.js")
+            .expect("bundle.js should be a uses neighbor via the liveness edge");
+        assert_eq!(to_bundle.via.edge, "references-file");
+    }
+
+    /// The invoked-program edge — a test executing its workspace binary as a subprocess.
+    #[test]
+    fn uses_from_a_file_includes_an_invoked_program_edge() {
+        let files = vec![file("run_test.sh"), file("bin/server")];
+        let edges = vec![edge(
+            EdgeKind::InvokesFile {
+                from: NodeRef::File(FileId(0)),
+                to: FileId(1),
+            },
+            Confidence::Probable,
+            Some(span(1, 1)),
+        )];
+        let graph = ProjectGraph::for_test(files, vec![], vec![], edges);
+        let reach = reachability::compute(&graph);
+        let nav = build_graph_index(&graph);
+        let resolved = resolve(&graph, &Selector::File(ProjectPath("run_test.sh".into()))).unwrap();
+        let result = neighbors(
+            &graph,
+            &reach,
+            &resolved,
+            NeighborsOpts {
+                direction: Direction::Uses,
+                edges: EdgeFilter::parse(None).unwrap(),
+                depth: 1,
+                transitive: false,
+                limit: 50,
+            },
+            &nav,
+        );
+        let to_bin = result
+            .entries
+            .iter()
+            .find(|e| e.node.selector == "bin/server")
+            .expect("bin/server should be a uses neighbor via the invoked-program edge");
+        assert_eq!(to_bin.via.edge, "invokes-file");
+    }
+
+    /// A file-liveness edge whose site is a *symbol*, not the whole file — the function that
+    /// calls `res.render("index")`, not `views/index.ejs` itself.
+    #[test]
+    fn uses_from_a_symbol_includes_a_file_liveness_edge() {
+        let files = vec![
+            file("routes.ts"),
+            file("views/index.ejs"),
+            file("bin/server"),
+        ];
+        let symbols = vec![symbol(FileId(0), "handler", 1, 3)];
+        let edges = vec![
+            edge(
+                EdgeKind::Declares {
+                    file: FileId(0),
+                    symbol: SymbolId(0),
+                },
+                Confidence::Certain,
+                Some(span(1, 3)),
+            ),
+            edge(
+                EdgeKind::ReferencesFile {
+                    from: NodeRef::Symbol(SymbolId(0)),
+                    to: FileId(1),
+                },
+                Confidence::Probable,
+                Some(span(2, 2)),
+            ),
+            // A symbol can also be the site of an invoked-program edge (the test function
+            // that runs the workspace binary as a subprocess), not just a file-liveness one.
+            edge(
+                EdgeKind::InvokesFile {
+                    from: NodeRef::Symbol(SymbolId(0)),
+                    to: FileId(2),
+                },
+                Confidence::Probable,
+                Some(span(2, 2)),
+            ),
+        ];
+        let graph = ProjectGraph::for_test(files, symbols, vec![], edges);
+        let reach = reachability::compute(&graph);
+        let nav = build_graph_index(&graph);
+        let resolved = resolve(
+            &graph,
+            &Selector::Symbol(ProjectPath("routes.ts".into()), "handler".to_string()),
+        )
+        .unwrap();
+        let result = neighbors(
+            &graph,
+            &reach,
+            &resolved,
+            NeighborsOpts {
+                direction: Direction::Uses,
+                edges: EdgeFilter::parse(None).unwrap(),
+                depth: 1,
+                transitive: false,
+                limit: 50,
+            },
+            &nav,
+        );
+        let to_view = result
+            .entries
+            .iter()
+            .find(|e| e.node.selector == "views/index.ejs")
+            .expect("the view should be a uses neighbor of the handler symbol");
+        assert_eq!(to_view.via.edge, "references-file");
+        let to_bin = result
+            .entries
+            .iter()
+            .find(|e| e.node.selector == "bin/server")
+            .expect("the invoked binary should be a uses neighbor of the handler symbol");
+        assert_eq!(to_bin.via.edge, "invokes-file");
+    }
+
+    /// A wildcard import of a file that declares no symbols of its own (a re-export-only
+    /// barrel, an empty module): the plausible target set is empty, so the edge contributes
+    /// nothing rather than panicking on a missing `declared_in` entry.
+    #[test]
+    fn liveness_trace_treats_a_wildcard_of_a_symbol_less_file_as_a_dead_end() {
+        let files = vec![file("a.ts"), file("empty.ts")];
+        let edges = vec![
+            edge(
+                EdgeKind::Root {
+                    kind: RootKind::Production,
+                    target: NodeRef::File(FileId(0)),
+                },
+                Confidence::Certain,
+                None,
+            ),
+            edge(
+                EdgeKind::ImportsFile {
+                    from: FileId(0),
+                    to: FileId(1),
+                },
+                Confidence::Certain,
+                Some(span(1, 1)),
+            ),
+            edge(
+                EdgeKind::Wildcard { from: FileId(1) },
+                Confidence::Possible,
+                Some(span(1, 1)),
+            ),
+        ];
+        let graph = ProjectGraph::for_test(files, vec![], vec![], edges);
+        let nav = build_graph_index(&graph);
+        let resolved = resolve(&graph, &Selector::File(ProjectPath("empty.ts".into()))).unwrap();
+        let reach = reachability::compute(&graph);
+        let result = neighbors(
+            &graph,
+            &reach,
+            &resolved,
+            NeighborsOpts {
+                direction: Direction::Uses,
+                edges: EdgeFilter::liveness(),
+                depth: 1,
+                transitive: false,
+                limit: 50,
+            },
+            &nav,
+        );
+        assert!(
+            result.entries.is_empty(),
+            "a symbol-less wildcard target has nothing to expand into"
+        );
+    }
+
     #[test]
     fn used_by_site_is_attributed_to_the_referencing_file() {
         let graph = linear_graph();
@@ -3155,6 +3356,65 @@ mod tests {
         // The root itself (a.ts) is `from`, not a hop — one hop reaches bar directly.
         assert_eq!(result.paths[0].hops.len(), 1);
         assert_eq!(result.paths[0].hops[0].node.selector, "b.ts#bar");
+    }
+
+    /// A `import * as ns from './b'` wildcard: not a fixed target, so `Wildcard`'s plausible
+    /// target set makes every symbol *b.ts itself declares* reachable once b.ts is. Root a.ts
+    /// reaches b.ts by a real import; the wildcard edge (`from: b.ts`) then reaches `bar`.
+    #[test]
+    fn liveness_trace_finds_the_path_through_a_wildcard_edge() {
+        let files = vec![file("a.ts"), file("b.ts")];
+        let symbols = vec![symbol(FileId(1), "bar", 5, 8)];
+        let edges = vec![
+            edge(
+                EdgeKind::Root {
+                    kind: RootKind::Production,
+                    target: NodeRef::File(FileId(0)),
+                },
+                Confidence::Certain,
+                None,
+            ),
+            edge(
+                EdgeKind::Declares {
+                    file: FileId(1),
+                    symbol: SymbolId(0),
+                },
+                Confidence::Certain,
+                Some(span(5, 8)),
+            ),
+            edge(
+                EdgeKind::ImportsFile {
+                    from: FileId(0),
+                    to: FileId(1),
+                },
+                Confidence::Certain,
+                Some(span(1, 1)),
+            ),
+            edge(
+                EdgeKind::Wildcard { from: FileId(1) },
+                Confidence::Possible,
+                Some(span(1, 1)),
+            ),
+        ];
+        let graph = ProjectGraph::for_test(files, symbols, vec![], edges);
+        let reach = reachability::compute(&graph);
+        let nav = build_graph_index(&graph);
+        let target = resolve(
+            &graph,
+            &Selector::Symbol(ProjectPath("b.ts".into()), "bar".to_string()),
+        )
+        .unwrap();
+        let result = trace_liveness(&graph, &reach, &target, None, &nav);
+        assert_eq!(result.paths.len(), 1);
+        let hops = &result.paths[0].hops;
+        assert_eq!(
+            hops.len(),
+            2,
+            "a.ts -> b.ts (import), b.ts -> bar (wildcard)"
+        );
+        assert_eq!(hops[0].node.selector, "b.ts");
+        assert_eq!(hops[1].node.selector, "b.ts#bar");
+        assert_eq!(hops[1].via.edge, "wildcard");
     }
 
     #[test]
