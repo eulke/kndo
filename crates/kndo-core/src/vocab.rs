@@ -350,6 +350,19 @@ pub enum RootKind {
     Tooling,
 }
 
+/// The role-derived root kind a file's classification implies — "Test roots are test
+/// files, Tooling roots are build/config scripts" — or `None` for `Production`, which stays
+/// manifest/API-driven and is never role-derived. One mapping, read by both the full
+/// assembly's role-derived-roots pass and the incremental patch's equivalent regeneration —
+/// they used to each carry their own copy of the same match.
+pub fn role_root_kind(role: FileRole) -> Option<RootKind> {
+    match role {
+        FileRole::Test => Some(RootKind::Test),
+        FileRole::Tooling => Some(RootKind::Tooling),
+        FileRole::Production => None,
+    }
+}
+
 /// Analysis semantics per scope: peer is exempt from `unused`; optional demotes
 /// findings to `possible`.
 #[derive(

@@ -2190,6 +2190,229 @@ pub(crate) fn promote_package_relative_test_roles<'a>(
     }
 }
 
+/// Phase 2.55 — test-gated module demotion (the whole-file case of
+/// `FileFacts::test_spans`): `#[cfg(test)] mod tests;` puts an entire *file* behind a
+/// test gate, which the path-based claim cannot see. A claimed-production file becomes
+/// test-role when at least one module-linking import (side-effect import binding a module
+/// name — Rust's `mod foo;` / `#[path]`) reaches it from inside a test region and NO
+/// module link reaches it from production code. Must run before the role-derived-roots pass
+/// so the demoted file gets its Test root and every role consumer downstream sees the
+/// corrected value. Patch parity: the per-import "test-gated" bit is part of the surface
+/// signature, so any change to the gating declines the patch and the preserved
+/// `FileNode::class` stays truthful.
+pub(crate) fn demote_test_gated_module_links(
+    files: &mut [FileNode],
+    claimed_per_file: &[Option<Claimed>],
+    file_index: &HashMap<ProjectPath, FileId>,
+    known_files: &HashSet<ProjectPath>,
+    adapters: &[Box<dyn LanguageAdapter>],
+) {
+    // Gated on any-test-spans-present: corpora without sub-file tests skip the pass entirely.
+    if !claimed_per_file
+        .iter()
+        .flatten()
+        .any(|c| !c.facts.test_spans.is_empty())
+    {
+        return;
+    }
+    let ctx = ResolveCtx::new(known_files);
+    // Per target: (reached from a test region, reached from production).
+    let mut links: HashMap<FileId, (bool, bool)> = HashMap::default();
+    for (i, slot) in claimed_per_file.iter().enumerate() {
+        let Some(c) = slot else { continue };
+        for imp in c
+            .facts
+            .imports
+            .iter()
+            .filter(|imp| imp.side_effect_only && imp.local_alias.is_some())
+        {
+            let spec = crate::adapter::ImportSpec {
+                specifier: imp.specifier.clone(),
+                from: files[i].path.clone(),
+            };
+            let Resolution::File(path, _) = adapters[c.adapter_index].resolve(&spec, &ctx) else {
+                continue;
+            };
+            let Some(&target) = file_index.get(&path) else {
+                continue;
+            };
+            let entry = links.entry(target).or_insert((false, false));
+            if span_in_test_region(&c.facts.test_spans, imp.span) {
+                entry.0 = true;
+            } else {
+                entry.1 = true;
+            }
+        }
+    }
+    for (target, (from_test, from_production)) in links {
+        if from_test && !from_production {
+            if let Some(class) = &mut files[target.0 as usize].class {
+                if class.role == crate::vocab::FileRole::Production {
+                    class.role = crate::vocab::FileRole::Test;
+                }
+            }
+        }
+    }
+}
+
+/// Phase 2.58's manifest half — root-kind cap: a manifest-declared Production root whose
+/// target file the adapter classified Test/Tooling takes the role's kind. The manifest says
+/// "this is an entry point" — a language fact, kept; the role says WHO consumes it — the
+/// project fact that decides the KIND. A tooling bin (xtask) is a tooling entry point, not
+/// production surface; reporting its internals as "production-reachable but untested" would
+/// be a false statement. Must run after [`demote_test_gated_module_links`] so a
+/// content-demoted Test role is honored, and before the role-derived-roots pass and phase 3a
+/// so every downstream consumer — reachability, library-root promotion, untested — sees the
+/// capped kind. Deliberately exempt, by evidence hierarchy: plugin-contributed roots
+/// (targeted consumer knowledge, materialized after both cap sites — the in-source half is
+/// `emit_file_declarations`) and surface promotions ("production API re-exports this");
+/// instead the cap removes the demoted file from `library_root_files`, so no promotion chain
+/// ever *starts* from a tooling/test bin — one reached by a genuine production re-export
+/// chain legitimately re-enters later.
+pub(crate) fn cap_manifest_root_kind_by_role(
+    edges: &mut [Edge],
+    files: &[FileNode],
+    library_root_files: &mut HashMap<FileId, Confidence>,
+) {
+    for edge in edges.iter_mut() {
+        let EdgeKind::Root {
+            kind,
+            target: NodeRef::File(f),
+        } = &mut edge.kind
+        else {
+            continue;
+        };
+        if *kind != crate::vocab::RootKind::Production {
+            continue; // non-Production kinds are never touched (a Test root is real)
+        }
+        let capped = match files[f.0 as usize].class.map(|c| c.role) {
+            Some(crate::vocab::FileRole::Test) => crate::vocab::RootKind::Test,
+            Some(crate::vocab::FileRole::Tooling) => crate::vocab::RootKind::Tooling,
+            _ => continue,
+        };
+        *kind = capped;
+        library_root_files.remove(f);
+    }
+}
+
+/// Phase 2.6 — role-derived roots (literally): "Test roots — test functions/files (language
+/// role detection…)"; "Tooling roots — build/config scripts (webpack.config…)". The
+/// adapter's role classification *is* the seed for these two root kinds — the runner/tool
+/// that consumes the file lives outside the graph, so the file's existence under the
+/// convention is the whole evidence. `Probable`, not certain: a convention names the file,
+/// nothing declares it (same reasoning as `exports`-map leaves). Production roots stay
+/// manifest/API-driven (phase 2.5) — never role-derived. Reads the *node's* class, not the
+/// raw claim — [`demote_test_gated_module_links`]'s demotion and the origin override are
+/// already applied there. Returns the new edges to append plus the
+/// `role_root_files` index every downstream promotion consults; `patch.rs` derives the same
+/// index for changed files via the same [`crate::vocab::role_root_kind`] mapping.
+pub(crate) fn derive_role_roots(
+    files: &[FileNode],
+    claimed_per_file: &[Option<Claimed>],
+    adapters: &[Box<dyn LanguageAdapter>],
+) -> (Vec<Edge>, HashMap<FileId, crate::vocab::RootKind>) {
+    let mut new_edges = Vec::new();
+    let mut role_root_files: HashMap<FileId, crate::vocab::RootKind> = HashMap::default();
+    for (i, slot) in claimed_per_file.iter().enumerate() {
+        let Some(claimed) = slot else { continue };
+        let Some(class) = files[i].class else {
+            continue;
+        };
+        let Some(kind) = crate::vocab::role_root_kind(class.role) else {
+            continue;
+        };
+        let file_id = FileId(i as u32);
+        new_edges.push(Edge {
+            owner: file_id,
+            kind: EdgeKind::Root {
+                kind,
+                target: NodeRef::File(file_id),
+            },
+            confidence: Confidence::Probable,
+            source: Provenance::Adapter(adapters[claimed.adapter_index].descriptor().id.clone()),
+            span: None, // role-derived root: the convention names the file, nothing spans it
+        });
+        role_root_files.insert(file_id, kind);
+    }
+    (new_edges, role_root_files)
+}
+
+/// Phase 2.7 — library-surface expansion (completing the library mode): a package-surface
+/// file's *whole-surface* re-exports — `pub mod x;` in Rust, `export * from './x'` in a
+/// published JS package: `reexported` with no named bindings — extend the surface into the
+/// target file, transitively to a fixpoint. Each expansion emits a production Root edge for
+/// the target file, owned by the re-exporting file: reachability consumes it directly, pass
+/// B's export promotion picks the target up from `library_root_files` exactly like a
+/// manifest-named root, and the incremental patch re-derives membership from the kept edges.
+/// Without this, any library whose API lives behind a public module tree — every real Rust
+/// crate — reads as dead.
+///
+/// The worklist's pop order is determinism-sensitive (the canonical edge sort downstream
+/// relies on a stable assembly order) — seeded pre-sorted and mutated in place for exactly
+/// that reason, matching the original inline fixpoint's iteration order verbatim.
+pub(crate) fn expand_library_surface(
+    files: &[FileNode],
+    claimed_per_file: &[Option<Claimed>],
+    file_index: &HashMap<ProjectPath, FileId>,
+    adapters: &[Box<dyn LanguageAdapter>],
+    ctx: &ResolveCtx<'_>,
+    library_root_files: &mut HashMap<FileId, Confidence>,
+    edges: &mut Vec<Edge>,
+) {
+    let mut work: Vec<FileId> = {
+        let mut v: Vec<FileId> = library_root_files.keys().copied().collect();
+        v.sort();
+        v
+    };
+    while let Some(f) = work.pop() {
+        let Some(claimed) = &claimed_per_file[f.0 as usize] else {
+            continue;
+        };
+        let confidence = library_root_files[&f];
+        let adapter = &adapters[claimed.adapter_index];
+        for imp in claimed
+            .facts
+            .imports
+            .iter()
+            .filter(|i| i.reexported && i.bindings.is_empty())
+        {
+            let spec = ImportSpec {
+                specifier: imp.specifier.clone(),
+                from: files[f.0 as usize].path.clone(),
+            };
+            let target_path = match adapter.resolve(&spec, ctx) {
+                Resolution::File(path, _) => path,
+                Resolution::WorkspaceMember { target, .. } => target,
+                _ => continue,
+            };
+            let Some(&target) = file_index.get(&target_path) else {
+                continue;
+            };
+            edges.push(Edge {
+                kind: EdgeKind::Root {
+                    kind: crate::vocab::RootKind::Production,
+                    target: NodeRef::File(target),
+                },
+                confidence,
+                source: Provenance::Adapter(adapter.descriptor().id.clone()),
+                span: Some(imp.span),
+                owner: f,
+            });
+            use std::collections::hash_map::Entry;
+            match library_root_files.entry(target) {
+                Entry::Vacant(slot) => {
+                    slot.insert(confidence);
+                    work.push(target);
+                }
+                Entry::Occupied(mut slot) => {
+                    let merged = (*slot.get()).max(confidence);
+                    slot.insert(merged);
+                }
+            }
+        }
+    }
+}
+
 /// Bumped whenever the *persisted* shape of a graph snapshot changes in a way that isn't
 /// already covered by an adapter's own `facts_schema_version` — e.g. a new node/edge kind, or
 /// an assembly-algorithm change that could produce a different graph from the same facts. Feeds
@@ -2924,128 +3147,21 @@ pub fn assemble_from_source(
         }
     }
 
-    // Phase 2.55 — test-gated module demotion (the whole-file case of
-    // `FileFacts::test_spans`): `#[cfg(test)] mod tests;` puts an entire *file* behind a
-    // test gate, which the path-based claim cannot see. A claimed-production file becomes
-    // test-role when at least one module-linking import (side-effect import binding a module
-    // name — Rust's `mod foo;` / `#[path]`) reaches it from inside a test region and NO
-    // module link reaches it from production code. Runs before phase 2.6 so the demoted file
-    // gets its Test root and every role consumer downstream sees the corrected value. Patch
-    // parity: the per-import "test-gated" bit is part of the surface signature, so any change
-    // to the gating declines the patch and the preserved `FileNode::class` stays truthful.
-    // Gated on any-test-spans-present: corpora without sub-file tests skip the pass entirely.
-    if claimed_per_file
-        .iter()
-        .flatten()
-        .any(|c| !c.facts.test_spans.is_empty())
-    {
-        let ctx = ResolveCtx::new(&known_files);
-        // Per target: (reached from a test region, reached from production).
-        let mut links: HashMap<FileId, (bool, bool)> = HashMap::default();
-        for (i, slot) in claimed_per_file.iter().enumerate() {
-            let Some(c) = slot else { continue };
-            for imp in c
-                .facts
-                .imports
-                .iter()
-                .filter(|imp| imp.side_effect_only && imp.local_alias.is_some())
-            {
-                let spec = crate::adapter::ImportSpec {
-                    specifier: imp.specifier.clone(),
-                    from: files[i].path.clone(),
-                };
-                let Resolution::File(path, _) = adapters[c.adapter_index].resolve(&spec, &ctx)
-                else {
-                    continue;
-                };
-                let Some(&target) = file_index.get(&path) else {
-                    continue;
-                };
-                let entry = links.entry(target).or_insert((false, false));
-                if span_in_test_region(&c.facts.test_spans, imp.span) {
-                    entry.0 = true;
-                } else {
-                    entry.1 = true;
-                }
-            }
-        }
-        for (target, (from_test, from_production)) in links {
-            if from_test && !from_production {
-                if let Some(class) = &mut files[target.0 as usize].class {
-                    if class.role == crate::vocab::FileRole::Production {
-                        class.role = crate::vocab::FileRole::Test;
-                    }
-                }
-            }
-        }
-    }
+    // Phase 2.55 — test-gated module demotion; see demote_test_gated_module_links.
+    demote_test_gated_module_links(
+        &mut files,
+        &claimed_per_file,
+        &file_index,
+        &known_files,
+        adapters,
+    );
 
-    // Phase 2.58 — root-kind cap: a manifest-declared Production root whose target file the
-    // adapter classified Test/Tooling takes the role's kind. The manifest says "this is an
-    // entry point" — a language fact, kept; the role says WHO consumes it — the project
-    // fact that decides the KIND. A tooling bin (xtask) is a tooling entry point, not
-    // production surface; reporting its internals as "production-reachable but untested"
-    // would be a false statement. Runs after 2.55 so a content-demoted Test role is
-    // honored, and before 2.6/3a so every downstream consumer — reachability, library-root
-    // promotion, untested — sees the capped kind. Deliberately exempt, by evidence
-    // hierarchy: plugin-contributed roots (targeted consumer knowledge, materialized after
-    // both cap sites) and surface promotions ("production API re-exports this"); instead
-    // the cap removes the demoted file from `library_root_files`, so no promotion chain
-    // ever *starts* from a tooling/test bin — one reached by a genuine production
-    // re-export chain legitimately re-enters later.
-    for edge in &mut edges {
-        let EdgeKind::Root {
-            kind,
-            target: NodeRef::File(f),
-        } = &mut edge.kind
-        else {
-            continue;
-        };
-        if *kind != crate::vocab::RootKind::Production {
-            continue; // non-Production kinds are never touched (a Test root is real)
-        }
-        let capped = match files[f.0 as usize].class.map(|c| c.role) {
-            Some(crate::vocab::FileRole::Test) => crate::vocab::RootKind::Test,
-            Some(crate::vocab::FileRole::Tooling) => crate::vocab::RootKind::Tooling,
-            _ => continue,
-        };
-        *kind = capped;
-        library_root_files.remove(f);
-    }
+    // Phase 2.58's manifest half — root-kind cap; see cap_manifest_root_kind_by_role.
+    cap_manifest_root_kind_by_role(&mut edges, &files, &mut library_root_files);
 
-    // Phase 2.6 — role-derived roots (literally): "Test roots — test
-    // functions/files (language role detection…)"; "Tooling roots — build/config scripts
-    // (webpack.config…)". The adapter's role classification *is* the seed for these two root
-    // kinds — the runner/tool that consumes the file lives outside the graph, so the file's
-    // existence under the convention is the whole evidence. `Probable`, not certain: a
-    // convention names the file, nothing declares it (same reasoning as `exports`-map leaves).
-    // Production roots stay manifest/API-driven (phase 2.5) — never role-derived. Reads the
-    // *node's* class, not the raw claim — phase 2.55's demotion and the origin
-    // override are already applied there.
-    let mut role_root_files: HashMap<FileId, crate::vocab::RootKind> = HashMap::default();
-    for (i, slot) in claimed_per_file.iter().enumerate() {
-        let Some(claimed) = slot else { continue };
-        let Some(class) = files[i].class else {
-            continue;
-        };
-        let kind = match class.role {
-            crate::vocab::FileRole::Test => crate::vocab::RootKind::Test,
-            crate::vocab::FileRole::Tooling => crate::vocab::RootKind::Tooling,
-            crate::vocab::FileRole::Production => continue,
-        };
-        let file_id = FileId(i as u32);
-        edges.push(Edge {
-            owner: file_id,
-            kind: EdgeKind::Root {
-                kind,
-                target: NodeRef::File(file_id),
-            },
-            confidence: Confidence::Probable,
-            source: Provenance::Adapter(adapters[claimed.adapter_index].descriptor().id.clone()),
-            span: None, // role-derived root: the convention names the file, nothing spans it
-        });
-        role_root_files.insert(file_id, kind);
-    }
+    // Phase 2.6 — role-derived roots; see derive_role_roots.
+    let (role_root_edges, role_root_files) = derive_role_roots(&files, &claimed_per_file, adapters);
+    edges.extend(role_root_edges);
 
     // Each claimed language's visibility ladder, off its claiming adapter's
     // descriptor — keyed by claim language (what `FileNode::language` stores), BTreeMap for
@@ -3148,69 +3264,16 @@ pub fn assemble_from_source(
         .with_units(&units.by_unit)
         .with_package_units(&units.by_package, &units.file_package);
 
-    // Phase 2.7 — library-surface expansion (completing the library mode): a
-    // package-surface file's *whole-surface* re-exports — `pub mod x;` in Rust, `export *
-    // from './x'` in a published JS package: `reexported` with no named bindings — extend the
-    // surface into the target file, transitively to a fixpoint. Each expansion emits a
-    // production Root edge for the target file, owned by the re-exporting file: reachability
-    // consumes it directly, pass B's export promotion picks the target up from
-    // `library_root_files` exactly like a manifest-named root, and the incremental patch
-    // re-derives membership from the kept edges. Without this, any library whose
-    // API lives behind a public module tree — every real Rust crate — reads as dead.
-    {
-        let mut work: Vec<FileId> = {
-            let mut v: Vec<FileId> = library_root_files.keys().copied().collect();
-            v.sort();
-            v
-        };
-        while let Some(f) = work.pop() {
-            let Some(claimed) = &claimed_per_file[f.0 as usize] else {
-                continue;
-            };
-            let confidence = library_root_files[&f];
-            let adapter = &adapters[claimed.adapter_index];
-            for imp in claimed
-                .facts
-                .imports
-                .iter()
-                .filter(|i| i.reexported && i.bindings.is_empty())
-            {
-                let spec = ImportSpec {
-                    specifier: imp.specifier.clone(),
-                    from: files[f.0 as usize].path.clone(),
-                };
-                let target_path = match adapter.resolve(&spec, &ctx) {
-                    Resolution::File(path, _) => path,
-                    Resolution::WorkspaceMember { target, .. } => target,
-                    _ => continue,
-                };
-                let Some(&target) = file_index.get(&target_path) else {
-                    continue;
-                };
-                edges.push(Edge {
-                    kind: EdgeKind::Root {
-                        kind: crate::vocab::RootKind::Production,
-                        target: NodeRef::File(target),
-                    },
-                    confidence,
-                    source: Provenance::Adapter(adapter.descriptor().id.clone()),
-                    span: Some(imp.span),
-                    owner: f,
-                });
-                use std::collections::hash_map::Entry;
-                match library_root_files.entry(target) {
-                    Entry::Vacant(slot) => {
-                        slot.insert(confidence);
-                        work.push(target);
-                    }
-                    Entry::Occupied(mut slot) => {
-                        let merged = (*slot.get()).max(confidence);
-                        slot.insert(merged);
-                    }
-                }
-            }
-        }
-    }
+    // Phase 2.7 — library-surface expansion; see expand_library_surface.
+    expand_library_surface(
+        &files,
+        &claimed_per_file,
+        &file_index,
+        adapters,
+        &ctx,
+        &mut library_root_files,
+        &mut edges,
+    );
 
     // Pass A — tables + symbol nodes, sequentially in FileId order (SymbolId assignment is
     // order itself). Emissions (Declares edges, promotions, in-source roots, metrics) moved

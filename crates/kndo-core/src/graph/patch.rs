@@ -377,12 +377,7 @@ pub(crate) fn try_patch(
     for cf in &changed_files {
         if cf.claimed.is_some() {
             if let Some(class) = graph.files[cf.index].class {
-                let kind = match class.role {
-                    crate::vocab::FileRole::Test => Some(crate::vocab::RootKind::Test),
-                    crate::vocab::FileRole::Tooling => Some(crate::vocab::RootKind::Tooling),
-                    crate::vocab::FileRole::Production => None,
-                };
-                if let Some(kind) = kind {
+                if let Some(kind) = crate::vocab::role_root_kind(class.role) {
                     role_root_files.insert(FileId(cf.index as u32), kind);
                 }
             }
