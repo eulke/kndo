@@ -451,15 +451,10 @@ for an external import, so there is no code path that could produce one.
 1. `<mainClass>`/`exec.mainClass` manifest-declared entry points, resolved to a concrete file —
    parked; needs a known-files-by-declared-package-and-class lookup `ResolveCtx` doesn't cheaply
    expose today (§4).
-2. Custom source roots, the half that remains. A pom's **own** `<sourceDirectory>` is read
-   (§4). Two shapes are not: a declaration **inherited from a parent pom**, and Gradle's
-   `sourceSets.main.java.srcDirs`. The first is the one with a measured case — guava declares
-   it once in `guava-parent` and every module inherits — and it is not a contained follow-up:
-   the adapter is handed one manifest's text at a time and `ResolveCtx` exposes paths, not
-   contents, so resolving it needs the assembly-side pattern `ManifestDependency::inherited`
-   already uses (record what is declared, resolve against a pool during assembly), which means
-   a `ManifestFacts` field and moving root promotion off the adapter. The second is worse:
-   Gradle's build script is a program, not a declaration, and the line-scan cannot execute it.
+2. ~~Custom source roots inherited from a parent pom~~ — **resolved** (§7.3). What remains of
+   this item is Gradle's `sourceSets.main.java.srcDirs`, and it is the harder half by a wide
+   margin: Gradle's build script is a *program*, not a declaration, and the line-scan cannot
+   execute it.
 3. JPMS (`module-info.java`'s `exports`/`requires`/`opens`) — real Java 9+ module boundaries
    with their own visibility semantics, entirely unmodeled (§0, §5).
 4. Gradle version catalogs (`libs.versions.toml` + `libs.foo` references in `build.gradle.kts`)
@@ -475,3 +470,71 @@ for an external import, so there is no code path that could produce one.
    `module_names_visible`, and the core's bare-name fallback consults the target unit's table
    (§3, §5). The post-extraction enumeration this question assumed was missing turned out to be
    `symbol_by_name_per_unit`, which already existed.
+
+
+## 7.3 Inherited source directories — resolved
+
+**The gap.** A pom's own `<sourceDirectory>` was read; one declared by an **ancestor** was not.
+Maven's inheritance makes that the common shape rather than a corner: guava declares
+`<sourceDirectory>src</sourceDirectory>` exactly once, in `guava-parent`, and all ten modules
+inherit it. Against the hardcoded `src/main/java` — a directory guava does not have — kndo found
+**zero production roots in the entire repository** and read 88% of its findings off that.
+
+**Why it looked like a contract change and was not.** §7.2 recorded this as blocked: the adapter
+is handed one manifest's text at a time and `ResolveCtx` exposed paths, not contents, so
+resolving it seemed to need the assembly-side `ManifestDependency::inherited` pattern — a
+`ManifestFacts` field, a shared pool, and moving root promotion off the adapter. That plan
+existed to protect a caching invariant, and the invariant turned out not to be at risk:
+
+- **Manifest extraction is not cached.** `graph::assemble` re-runs it on every assembly, reading
+  each manifest fresh (`discovered.read`), so no entry can go stale behind an ancestor's edit —
+  which is precisely the hazard a content channel on `extract` *would* create.
+- **The incremental patch refuses on any changed manifest** (`graph::patch`: "manifests feed
+  global inputs — full rebuild"), so the patch path cannot observe a partially-updated chain.
+
+So the whole thing is one optional capability on the manifest-extraction `ResolveCtx`:
+`read_manifest`. The core offers "you may read a manifest"; every Maven rule below stays in the
+adapter, and root promotion never moves.
+
+**What the adapter does with it.** From a pom that declares no `<sourceDirectory>`, walk
+`<parent>` upward:
+
+- `<relativePath>` decides where to look, defaulting to `../pom.xml`; a value naming a directory
+  means that directory's `pom.xml`.
+- An **empty** `<relativePath/>` is Maven's explicit "resolve from the repository", and must not
+  fall back to the default. (`xml_child_text` cannot see the difference — an empty element has
+  no text node — so presence and text are read separately.)
+- The pom found there is accepted only if its `groupId:artifactId` is what the child declared.
+  Maven checks this and falls back to the repository otherwise; so does kndo, which never
+  fetches. Not hypothetical: guava's `futures/*` modules name `guava-parent` with no
+  `<relativePath>`, no `futures/pom.xml` beside them, and versions (`26.0-android`) the in-repo
+  parent has not carried for years. `<version>` is deliberately *not* compared — kndo is
+  locating a source directory, not building, and a version-skewed but coordinate-matching parent
+  on disk is still the file the author edits.
+- Each hop interpolates against **that** pom's own `<properties>`, which is Maven's rule: the
+  declaration and the properties it names live in one document.
+- The value is joined onto the **child's** directory, also Maven's rule — and the reason one
+  declaration in a parent serves ten modules with ten different source trees.
+- Bounded at 16 hops with cycle detection: a `<relativePath>` loop is malformed input, not a
+  shape to follow.
+
+**Measured** — release binaries before/after, `--no-cache`, diffed by `(category, path, symbol)`:
+
+| repo | before | after | removed | added |
+|---|---|---|---|---|
+| **guava** | 28802 | 19793 | **11444** | 2435 |
+| retrofit | 304 | 304 | 0 | 0 |
+| spring-petclinic | 44 | 44 | 0 | 0 |
+| Exposed | 783 | 783 | 0 | 0 |
+| kotlinx.coroutines | 2576 | 2576 | 0 | 0 |
+
+Net **−9,009** unique findings on guava, and **no change anywhere else** — the other four either
+follow the convention or declare their own. The 2,435 additions are a category shift, not new
+noise: 2,419 of them (99.3%) land in files that were previously reported `unused`, and 2,344 are
+`untested` — a file that becomes production-reachable stops being "dead, nothing more to say"
+and starts being a testable subject. The removals are 6,410 `internal-only`, 3,078 `unused` and
+1,956 `test-only`.
+
+`facts_schema_version` for the Java adapter, not `ENTRY_FORMAT_VERSION` and not
+`GRAPH_SCHEMA_VERSION`: one adapter changed what it emits (new roots), which is the case
+CLAUDE.md names for that knob literally.

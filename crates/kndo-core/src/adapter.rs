@@ -1128,7 +1128,35 @@ pub struct ResolveCtx<'a> {
     /// Which package owns each claimed file — the lookup that makes `units_by_package` usable
     /// from a resolver, which knows only the importing file's path.
     file_package: Option<&'a rustc_hash::FxHashMap<ProjectPath, u32>>,
+    /// Reads the text of another **manifest**, for the manifest-extraction pass only.
+    ///
+    /// Every other field here answers a question about paths. This one answers a question
+    /// about contents, and exists because some manifest formats let one manifest declare a
+    /// value that another one uses — Maven's `<parent>` being the case that forced it: guava
+    /// declares `<sourceDirectory>src</sourceDirectory>` once in `guava-parent` and every
+    /// module inherits it, so an adapter handed one pom's text at a time cannot see where that
+    /// module's sources are. Without this, kndo found **zero** production roots in guava and
+    /// read 88% of the repository as unreachable.
+    ///
+    /// The core stays ignorant of what any of that means: it offers "you may read a manifest",
+    /// never "poms have parents". Which manifests exist, how one names another, and what a
+    /// value in one means for the other are entirely the adapter's.
+    ///
+    /// **Why reading another file here is sound**, where it would not be during `extract`:
+    /// manifest extraction is not cached — [`crate::graph::assemble`] re-runs it on every
+    /// assembly, reading each manifest fresh — so no entry can go stale behind a parent's
+    /// edit. The incremental patch agrees by refusing outright: any changed manifest forces a
+    /// full rebuild (`graph::patch`), precisely because manifests feed global inputs. A
+    /// content channel on `extract` would have neither property, which is why this one is
+    /// deliberately narrow: `None` for import resolution, and answering only for paths in the
+    /// known-file set.
+    manifest_text: Option<&'a ManifestTextChannel<'a>>,
 }
+
+/// Reads one manifest's text by path — see [`ResolveCtx::read_manifest`]. `Sync` because
+/// manifest extraction runs across a rayon pool; the lifetime is explicit so the channel may
+/// borrow the discovered file set rather than having to own it.
+pub type ManifestTextChannel<'a> = dyn Fn(&ProjectPath) -> Option<String> + Sync + 'a;
 
 impl<'a> ResolveCtx<'a> {
     pub fn new(known_files: &'a rustc_hash::FxHashSet<ProjectPath>) -> Self {
@@ -1139,7 +1167,28 @@ impl<'a> ResolveCtx<'a> {
             units: None,
             units_by_package: None,
             file_package: None,
+            manifest_text: None,
         }
+    }
+
+    /// Wire the manifest-text channel. Called only by the manifest-extraction pass — see the
+    /// field's own doc for why reading another file is sound there and nowhere else.
+    pub fn with_manifest_text(mut self, read: &'a ManifestTextChannel<'a>) -> Self {
+        self.manifest_text = Some(read);
+        self
+    }
+
+    /// The text of another manifest, when this context has the channel and `path` is a known
+    /// file. `None` otherwise — during import resolution it is *always* `None`, and an adapter
+    /// must treat that as "I cannot see it", never as "it is empty".
+    ///
+    /// Restricted to the known-file set on purpose: the same containment `files_under` and
+    /// every other query here obey, so a manifest cannot become a way to read arbitrary paths.
+    pub fn read_manifest(&self, path: &ProjectPath) -> Option<String> {
+        if !self.contains(path) {
+            return None;
+        }
+        self.manifest_text.and_then(|read| read(path))
     }
 
     pub fn with_declared_dependencies(mut self, deps: &'a rustc_hash::FxHashSet<SmolStr>) -> Self {

@@ -194,6 +194,19 @@ pub trait LanguageAdapter: Send + Sync {
     /// file than the one being extracted, so (unlike `FileFacts::roots`) it must already be a
     /// concrete `ProjectPath` by the time the core sees it; the core has no language-specific
     /// resolution rules to guess one with.
+    ///
+    /// This `ctx` — and only this one — also carries `read_manifest`, the single point in the
+    /// adapter contract where one file's facts may depend on another file's *contents*. Some
+    /// manifest formats let one manifest declare a value another one uses (Maven's `<parent>`),
+    /// and an adapter handed one manifest's text at a time cannot follow that on its own. The
+    /// core stays ignorant of what any of it means: it offers "you may read a manifest", never
+    /// "poms have parents".
+    ///
+    /// Sound here and nowhere else, for two reasons that both have to hold: manifest extraction
+    /// is **not cached** (assembly re-runs it every time, reading each manifest fresh, so no
+    /// entry can go stale behind an ancestor's edit), and the incremental patch **refuses**
+    /// outright on any changed manifest. `resolve`'s ctx has no such channel, and an adapter
+    /// must read the resulting `None` as "I cannot see it", never as "there is none".
     fn extract_manifest(&self, file: &SourceFile, ctx: &ResolveCtx) -> ManifestFacts;
 
     /// Does this manifest declare a dependency that an `ActivationRule::ManifestDependency`

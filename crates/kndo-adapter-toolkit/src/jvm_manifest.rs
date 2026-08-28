@@ -127,7 +127,14 @@ fn extract_maven(
         // guava declares `src` (with tests in a sibling `test`), and against the hardcoded
         // `src/main/java` its entire publishable surface was promoted from nothing, so every
         // public class in it read as `unused`. The convention is the fallback, not the rule.
-        match maven_declared_source_root(project, &properties) {
+        let declared = maven_declared_source_root(project, &properties)
+            // …and a module that declares nothing may still be told where its code is by an
+            // ANCESTOR. Maven inheritance is not a corner: guava declares `<sourceDirectory>`
+            // exactly once, in `guava-parent`, and all ten modules inherit it. Reading only
+            // each pom's own text, kndo found *zero* production roots in guava and reported
+            // 88% of the repository as unreachable.
+            .or_else(|| maven_inherited_source_root(project, path, ctx));
+        match declared {
             Some(declared) => {
                 promote_source_roots(&join(dir, &declared), ctx, &mut out, layout);
             }
@@ -170,6 +177,176 @@ fn maven_declared_source_root(
     // Absolute, empty, or escaping the module: nothing this can point at inside the project.
     (!resolved.is_empty() && !resolved.starts_with('/') && !resolved.starts_with(".."))
         .then_some(resolved)
+}
+
+/// How many `<parent>` hops to follow before giving up.
+///
+/// Real hierarchies are two or three deep (guava is one). The bound is not a performance
+/// measure — it is what keeps a `<relativePath>` cycle, or a pom that names itself, from
+/// looping forever on input kndo does not control.
+const MAVEN_PARENT_DEPTH: usize = 16;
+
+/// `<build><sourceDirectory>` declared by an ANCESTOR pom, module-relative to *this* pom.
+///
+/// Maven resolves `<parent>` by `<relativePath>`, defaulting to `../pom.xml`; a `<parent>` with
+/// no resolvable file on disk is one that comes from a repository, which kndo never fetches —
+/// that chain simply ends. Each hop's value is interpolated against **that** pom's own
+/// `<properties>`, which is what Maven does: the declaration and the properties it mentions
+/// live in the same document. The result is then joined onto the *child's* directory by the
+/// caller, which is also Maven's rule — `<sourceDirectory>` is resolved per-module against each
+/// module's own basedir, which is exactly why one declaration in a parent serves ten modules
+/// with ten different source trees.
+///
+/// Returns `None` when no ancestor declares one, when the chain leaves the project, or when the
+/// context has no manifest-text channel (import resolution) — all of which mean "I cannot see
+/// a declaration", never "there is none", and the caller falls back to the convention either
+/// way.
+fn maven_inherited_source_root(
+    project: roxmltree::Node<'_, '_>,
+    path: &str,
+    ctx: &ResolveCtx<'_>,
+) -> Option<String> {
+    let mut current_dir = crate::paths::dirname(path).to_string();
+    // What this pom says about its parent, as owned data. Each hop reduces the pom it reads to
+    // the same shape and drops the document — a `roxmltree::Document` borrows its text, so
+    // carrying nodes up the chain would mean keeping every text alive with it.
+    let mut want = maven_parent_link(project)?;
+    let mut seen: Vec<String> = vec![path.to_string()];
+
+    for _ in 0..MAVEN_PARENT_DEPTH {
+        let parent_path = normalize_relative(&current_dir, &want.relative_path)?;
+        // A cycle (`<relativePath>` pointing back down the chain, or a pom naming itself) is
+        // malformed input, not a shape to follow.
+        if seen.contains(&parent_path) {
+            return None;
+        }
+        let text = ctx.read_manifest(&ProjectPath(SmolStr::new(&parent_path)))?;
+        let summary = maven_summarize(&text)?;
+
+        // Maven accepts the pom at `<relativePath>` only when its coordinates are the ones the
+        // child declared; otherwise the parent comes from the repository, which kndo never
+        // fetches. This is what keeps a `../pom.xml` that happens to be an unrelated module
+        // from being read as an ancestor — and it is not hypothetical: guava's `futures/*`
+        // modules name `guava-parent` with no `<relativePath>`, no `futures/pom.xml` beside
+        // them, and versions (`26.0-android`) the in-repo parent has not carried for years.
+        //
+        // `<version>` is deliberately not compared: kndo is locating a source directory, not
+        // building, and a version-skewed but coordinate-matching parent on disk is still the
+        // file the author edits.
+        if !summary.identifies_as(&want) {
+            return None;
+        }
+        if let Some(declared) = summary.source_directory {
+            return Some(declared);
+        }
+        seen.push(parent_path.clone());
+        current_dir = crate::paths::dirname(&parent_path).to_string();
+        want = summary.parent?;
+    }
+    None
+}
+
+/// A pom's `<parent>` reference: which module it names, and where on disk it says to look.
+struct MavenParentLink {
+    group_id: Option<String>,
+    artifact_id: String,
+    /// Relative to the declaring pom's own directory. Maven's default is `../pom.xml`.
+    relative_path: String,
+}
+
+/// Everything the inheritance walk needs from one pom, owned so its document can be dropped.
+struct MavenSummary {
+    group_id: Option<String>,
+    artifact_id: Option<String>,
+    /// `<build><sourceDirectory>`, already interpolated against this pom's own properties.
+    source_directory: Option<String>,
+    parent: Option<MavenParentLink>,
+}
+
+impl MavenSummary {
+    /// Whether this pom is the module `link` names. `groupId` may legitimately be absent on
+    /// either side — a pom inherits its own group from *its* parent — and an absent one cannot
+    /// disprove a match, so the artifact id decides.
+    fn identifies_as(&self, link: &MavenParentLink) -> bool {
+        if self.artifact_id.as_deref() != Some(link.artifact_id.as_str()) {
+            return false;
+        }
+        match (&link.group_id, &self.group_id) {
+            (Some(want), Some(found)) => want == found,
+            _ => true,
+        }
+    }
+}
+
+fn maven_summarize(text: &str) -> Option<MavenSummary> {
+    let options = roxmltree::ParsingOptions {
+        allow_dtd: true,
+        ..Default::default()
+    };
+    // A parent that does not parse ends the chain quietly: this is a fallback pass, and that
+    // pom's own extraction reports the parse error where it belongs.
+    let doc = roxmltree::Document::parse_with_options(text, options).ok()?;
+    let project = doc.root_element();
+    let properties = maven_properties(project);
+    Some(MavenSummary {
+        group_id: xml_child_text(project, "groupId").map(|s| s.trim().to_string()),
+        artifact_id: xml_child_text(project, "artifactId").map(|s| s.trim().to_string()),
+        source_directory: maven_declared_source_root(project, &properties),
+        parent: maven_parent_link(project),
+    })
+}
+
+/// This pom's `<parent>`: the module it names and the path it says to look at, relative to
+/// this pom's own directory. Maven's default is `../pom.xml`, and a `<relativePath>` naming a
+/// directory means that directory's `pom.xml`.
+fn maven_parent_link(project: roxmltree::Node<'_, '_>) -> Option<MavenParentLink> {
+    let parent = xml_child(project, "parent")?;
+    // A `<parent>` naming no artifact is malformed; nothing on disk can be it.
+    let artifact_id = xml_child_text(parent, "artifactId")?.trim().to_string();
+    // Presence and text are separate questions here, and `xml_child_text` answers only the
+    // second: `<relativePath/>` has no text node, so it and an absent element look identical
+    // through it. They mean opposite things — an EMPTY `<relativePath/>` is Maven's explicit
+    // "resolve this parent from the repository, not the filesystem", the one spelling that must
+    // NOT fall back to `../pom.xml`, while an absent element is exactly what does.
+    let relative_path = match xml_child(parent, "relativePath") {
+        Some(node) => {
+            let rel = node.text().unwrap_or_default().trim().to_string();
+            if rel.is_empty() {
+                return None;
+            }
+            if rel.ends_with(".xml") {
+                rel
+            } else {
+                format!("{}/pom.xml", rel.trim_end_matches('/'))
+            }
+        }
+        None => "../pom.xml".to_string(),
+    };
+    Some(MavenParentLink {
+        group_id: xml_child_text(parent, "groupId").map(|s| s.trim().to_string()),
+        artifact_id,
+        relative_path,
+    })
+}
+
+/// `dir` joined with a `../`-bearing relative path, as a project path. `None` when it escapes
+/// the project root — a parent outside the analyzed tree is one kndo cannot read anyway.
+fn normalize_relative(dir: &str, relative: &str) -> Option<String> {
+    let mut segments: Vec<&str> = if dir.is_empty() {
+        Vec::new()
+    } else {
+        dir.split('/').collect()
+    };
+    for segment in relative.split('/') {
+        match segment {
+            "" | "." => {}
+            ".." => {
+                segments.pop()?;
+            }
+            other => segments.push(other),
+        }
+    }
+    Some(segments.join("/"))
 }
 
 /// `value` with `${key}` placeholders substituted from the manifest's own `<properties>`.
@@ -621,5 +798,89 @@ fn diag(message: &str) -> AdapterDiagnostic {
         level: DiagnosticLevel::Warn,
         message: message.to_string(),
         span: None,
+    }
+}
+
+#[cfg(test)]
+mod parent_link_tests {
+    use super::*;
+
+    fn link(pom: &str) -> Option<MavenParentLink> {
+        let doc = roxmltree::Document::parse(pom).expect("test pom parses");
+        maven_parent_link(doc.root_element())
+    }
+
+    /// **An empty `<relativePath/>` means "from the repository", not "next door".**
+    ///
+    /// Pinned here rather than through `extract`, because there it is unobservable: every
+    /// spelling that reaches `normalize_relative` with an empty path resolves back to the
+    /// declaring pom itself, which the cycle guard rejects anyway. Two rules landing on the
+    /// same answer today is not one rule — a change to how `normalize_relative` reads a leading
+    /// `/` (project-root-relative is a perfectly plausible reading) would separate them, and
+    /// this pom would start inheriting from a parent Maven never consults.
+    #[test]
+    fn an_empty_relative_path_declines_the_filesystem() {
+        assert!(link(
+            "<project><parent><artifactId>p</artifactId><relativePath/></parent></project>"
+        )
+        .is_none());
+        assert!(link(
+            "<project><parent><artifactId>p</artifactId><relativePath>  </relativePath>\
+             </parent></project>"
+        )
+        .is_none());
+    }
+
+    /// An ABSENT `<relativePath>` is the opposite: Maven's documented default.
+    #[test]
+    fn an_absent_relative_path_is_the_pom_one_directory_up() {
+        let l = link("<project><parent><artifactId>p</artifactId></parent></project>")
+            .expect("a parent with no relativePath still links");
+        assert_eq!(l.relative_path, "../pom.xml");
+        assert_eq!(l.artifact_id, "p");
+        assert_eq!(l.group_id, None);
+    }
+
+    /// A `<relativePath>` naming a directory means that directory's `pom.xml`.
+    #[test]
+    fn a_directory_relative_path_gains_the_file_name() {
+        let l = link(
+            "<project><parent><artifactId>p</artifactId>\
+             <relativePath>../build/parent</relativePath></parent></project>",
+        )
+        .expect("linked");
+        assert_eq!(l.relative_path, "../build/parent/pom.xml");
+
+        let l = link(
+            "<project><parent><artifactId>p</artifactId>\
+             <relativePath>../parent/custom.xml</relativePath></parent></project>",
+        )
+        .expect("linked");
+        assert_eq!(l.relative_path, "../parent/custom.xml");
+    }
+
+    /// A `<parent>` naming no artifact is malformed — nothing on disk can be it.
+    #[test]
+    fn a_parent_without_an_artifact_id_links_to_nothing() {
+        assert!(link("<project><parent><groupId>g</groupId></parent></project>").is_none());
+        assert!(link("<project></project>").is_none());
+    }
+
+    #[test]
+    fn a_relative_path_is_resolved_against_the_declaring_directory() {
+        assert_eq!(
+            normalize_relative("mod", "../pom.xml").as_deref(),
+            Some("pom.xml")
+        );
+        assert_eq!(
+            normalize_relative("a/b", "../../pom.xml").as_deref(),
+            Some("pom.xml")
+        );
+        assert_eq!(
+            normalize_relative("a/b", "../c/pom.xml").as_deref(),
+            Some("a/c/pom.xml")
+        );
+        // Escaping the project root: a parent kndo cannot read anyway.
+        assert_eq!(normalize_relative("", "../pom.xml"), None);
     }
 }

@@ -2547,7 +2547,23 @@ pub fn assemble_from_source(
     // resolution only needs the known-files index, not declared dependencies (manifest
     // roots are always filesystem-relative, never a bare-package lookup), so a plain `ctx`
     // suffices here — the dependency-augmented one phase 3 needs is built after this collects.
-    let manifest_ctx = ResolveCtx::new(&known_files);
+    // Manifest extraction gets a channel to read *other manifests*' text — the one place in
+    // the adapter contract where a file's facts may depend on another file's contents. Some
+    // manifest formats declare a value in one file that another one uses (Maven's `<parent>`),
+    // and an adapter handed one manifest at a time cannot follow that on its own. Sound here
+    // and nowhere else: this pass is not cached (it re-runs on every assembly, reading each
+    // manifest fresh, so nothing can go stale behind a parent's edit), and the incremental
+    // patch refuses outright on any changed manifest. See `ResolveCtx::manifest_text`.
+    // Invalid UTF-8 reads as absent rather than lossy: a manifest that is not text is a
+    // manifest this adapter cannot have meant, and guessing at its bytes would be worse than
+    // saying "I cannot see it" — which is exactly what `None` means to a caller here.
+    let read_manifest_text = |path: &ProjectPath| -> Option<String> {
+        discovered
+            .read(path)
+            .ok()
+            .and_then(|bytes| String::from_utf8(bytes).ok())
+    };
+    let manifest_ctx = ResolveCtx::new(&known_files).with_manifest_text(&read_manifest_text);
     let manifest_outcomes: Vec<Result<Option<(usize, ManifestFacts)>, Diagnostic>> = discovered
         .files
         .par_iter()

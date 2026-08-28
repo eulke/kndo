@@ -427,7 +427,7 @@ findings anywhere in that crate — the promotion reaches declarations across th
 tree, not just the root file. What remains under this entry is the policy statement itself, for
 the shapes where promotion genuinely has nothing to key off.
 
-## 15-bis. A publishable Maven module whose layout it declares (FIXED for a module's own pom)
+## 15-bis. A publishable Maven module whose layout it declares (FIXED — own pom, and inherited)
 
 §15 says a published library's public surface is rooted by library-mode promotion, and records
 the Rust instance as gone. The JVM half had a hole underneath it: promotion walked a hardcoded
@@ -563,3 +563,27 @@ Pinned by `a_file_a_tool_and_a_test_both_use_is_not_test_only` and
 `Production`-coloured on purpose: with a `TestOnly` file the rollup skip ("the file-level finding
 already covers every symbol in it") exempts the symbol before the colour is read, and the test
 would pass without the guard it exists to pin — verified by removing each guard in turn.
+
+
+## 15-ter. …and the declaration was in the PARENT pom (FIXED)
+
+§15-bis closed the case where a module's own pom declares `<sourceDirectory>`. The other half —
+a declaration the module **inherits** — is the one guava actually has, and it was the larger of
+the two by an order of magnitude: `guava-parent` declares `<sourceDirectory>src</sourceDirectory>`
+once and all ten modules inherit it, so against the hardcoded `src/main/java` kndo found **zero
+production roots in guava** and 88% of its findings were downstream of that.
+
+`internal/adapters/java.md` §7.3 has the mechanism, the Maven fidelity rules (empty
+`<relativePath/>`, parent-coordinate matching, per-module joining) and the full measurement.
+The short version: **guava −11,444 / +2,435** unique findings, **0/0 on retrofit,
+spring-petclinic, Exposed and kotlinx.coroutines**, and 99.3% of the additions are files that
+used to be reported `unused` now being judged instead (2,344 of them `untested`).
+
+The part worth carrying forward is why §7.2 mis-sized it. It was recorded as a contract change —
+a `ManifestFacts` field, an assembly-side pool, root promotion moved off the adapter — to protect
+a caching invariant that was never at risk: **manifest extraction is not cached**, and the
+incremental patch **refuses on any changed manifest**. Both facts were already in the code and
+neither was checked before the design was written down. The actual change is one optional
+capability on the manifest-extraction `ResolveCtx` (`read_manifest`), with every Maven rule
+staying in the adapter. Measuring the constraint before designing around it would have saved the
+whole detour.
