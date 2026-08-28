@@ -151,28 +151,40 @@ fn plan_patch(
         }
     }
 
-    // Symbol runs must be contiguous per file (the full build constructs them that way) and
-    // each changed file's run must align 1:1 with its fresh declarations. The signature
-    // already implies alignment — but SymbolIds are load-bearing, so verify, never trust.
+    let symbol_range = verify_symbol_alignment(graph, &changed_files)?;
+
+    Some(PlannedPatch {
+        changed_files,
+        symbol_range,
+    })
+}
+
+/// The last guard: symbol runs must be contiguous per file (the full build constructs them
+/// that way) and each changed file's run must align 1:1 with its fresh declarations. The
+/// surface signature already implies alignment — but SymbolIds are load-bearing, so verify,
+/// never trust. Returns every file's `(start, end)` symbol range on success, `None` on the
+/// first contiguity or alignment failure — the honest fallback to a full rebuild.
+fn verify_symbol_alignment(
+    graph: &ProjectGraph,
+    changed_files: &[ChangedFile],
+) -> Option<Vec<(u32, u32)>> {
     let mut symbol_range: Vec<(u32, u32)> = vec![(0, 0); graph.files.len()];
-    {
-        let mut last_file: Option<u32> = None;
-        for (idx, sym) in graph.symbols.iter().enumerate() {
-            let f = sym.file.0;
-            match last_file {
-                Some(prev) if f == prev => symbol_range[f as usize].1 = idx as u32 + 1,
-                Some(prev) if f < prev => return None, // non-contiguous — stale/corrupt
-                _ => {
-                    if symbol_range[f as usize].1 != 0 {
-                        return None; // a second run for the same file — non-contiguous
-                    }
-                    symbol_range[f as usize] = (idx as u32, idx as u32 + 1);
+    let mut last_file: Option<u32> = None;
+    for (idx, sym) in graph.symbols.iter().enumerate() {
+        let f = sym.file.0;
+        match last_file {
+            Some(prev) if f == prev => symbol_range[f as usize].1 = idx as u32 + 1,
+            Some(prev) if f < prev => return None, // non-contiguous — stale/corrupt
+            _ => {
+                if symbol_range[f as usize].1 != 0 {
+                    return None; // a second run for the same file — non-contiguous
                 }
+                symbol_range[f as usize] = (idx as u32, idx as u32 + 1);
             }
-            last_file = Some(f);
         }
+        last_file = Some(f);
     }
-    for cf in &changed_files {
+    for cf in changed_files {
         let Some(claimed) = &cf.claimed else { continue };
         let (start, end) = symbol_range[cf.index];
         let decls = &claimed.facts.declarations;
@@ -193,11 +205,7 @@ fn plan_patch(
             }
         }
     }
-
-    Some(PlannedPatch {
-        changed_files,
-        symbol_range,
-    })
+    Some(symbol_range)
 }
 
 /// Every name/unit/member-type lookup table the regenerate pass below needs, derived fresh
