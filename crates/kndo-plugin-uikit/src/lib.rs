@@ -81,16 +81,9 @@ impl Plugin for UikitPlugin {
         content: &ContentView<'_>,
         out: &mut RootSink,
     ) {
-        let classes = declared_classes(graph);
-        for document in uikit_documents(content) {
-            for class in &document.classes {
-                for path in nearest_declarations(&classes, class, &document.path) {
-                    out.add(
-                        PluginTarget::symbol(path.clone(), class.as_str()),
-                        RootKind::Production,
-                        Confidence::Probable,
-                    );
-                }
+        for wiring in wiring(graph, content) {
+            for target in wiring.instantiated {
+                out.add(target, RootKind::Production, Confidence::Probable);
             }
         }
     }
@@ -105,38 +98,81 @@ impl Plugin for UikitPlugin {
         content: &ContentView<'_>,
         out: &mut EdgeSink,
     ) {
-        let classes = declared_classes(graph);
-        for document in uikit_documents(content) {
-            let from = PluginTarget::file(document.path.clone());
-            for class in &document.classes {
-                for path in nearest_declarations(&classes, class, &document.path) {
-                    out.add(
-                        from.clone(),
-                        PluginTarget::symbol(path.clone(), class.as_str()),
-                        RefKind::TypeUse,
-                        Confidence::Probable,
-                    );
-                }
+        for wiring in wiring(graph, content) {
+            let from = PluginTarget::file(wiring.document);
+            for target in wiring.instantiated {
+                out.add(from.clone(), target, RefKind::TypeUse, Confidence::Probable);
             }
-            for connection in &document.connections {
-                for path in nearest_declarations(&classes, &connection.owner, &document.path) {
-                    // `Owner.member` is the qualified spelling `PluginTarget` resolves against;
-                    // an unresolvable one is dropped core-side, which is what happens to every
-                    // `dataSource`/`delegate` outlet a document declares on a UIKit view
-                    // rather than on the app's own class.
-                    out.add(
-                        from.clone(),
-                        PluginTarget::symbol(
-                            path.clone(),
-                            format!("{}.{}", connection.owner, connection.member),
-                        ),
-                        connection.kind,
-                        Confidence::Probable,
-                    );
-                }
+            for (target, kind) in wiring.connected {
+                out.add(from.clone(), target, kind, Confidence::Probable);
             }
         }
     }
+}
+
+/// What one document wires, resolved against the graph — the plugin's whole answer, computed
+/// in one place and projected differently by each hook.
+///
+/// Both graph-mutation hooks need the same derivation (read every Interface Builder document,
+/// resolve every name against the declarations kndo found), and the `Plugin` trait offers no
+/// per-run scratch space to share it through. A **native** plugin cannot simply cache one in
+/// itself either: the trait is `Send + Sync` and every hook takes `&self`, so a cache is
+/// shared mutable state behind a lock, holding one run's answer on a value the engine reuses.
+/// (A WASM guest is a different case — RFC 0017 §4 gives it one instance per round and statics
+/// across the three hooks are contractual there. The native trait makes no such promise, and a
+/// built-in must not read as if it did.)
+///
+/// So: a pure function both hooks call. The derivation runs twice per run and that is the
+/// accepted cost, measured — Kingfisher's six documents are 215 KB of XML, and parsing them
+/// twice plus building the declaration index twice is a few milliseconds inside a 220 ms run.
+/// What the shared function buys is the thing that actually costs: **one description of the
+/// wiring**, so the two hooks cannot drift, and so `kndo:vite` and `kndo:rollup` — the same
+/// two-hooks-one-input shape — copy a structure rather than a duplication.
+///
+/// If a plugin ever appears whose derivation is expensive enough to matter, a `prepare` hook
+/// is the answer, and it is a deliberate contract change (the native trait AND the WIT world),
+/// not something to smuggle in behind a lock.
+struct Wiring {
+    document: ProjectPath,
+    /// The classes UIKit instantiates from this document, already resolved to declarations.
+    instantiated: Vec<PluginTarget>,
+    /// Each `@IBOutlet`/`@IBAction` the document connects, with the reference kind it implies.
+    connected: Vec<(PluginTarget, RefKind)>,
+}
+
+fn wiring(graph: &GraphView<'_>, content: &ContentView<'_>) -> Vec<Wiring> {
+    let classes = declared_classes(graph);
+    let mut out = Vec::new();
+    for document in uikit_documents(content) {
+        let mut instantiated = Vec::new();
+        for class in &document.classes {
+            for path in nearest_declarations(&classes, class, &document.path) {
+                instantiated.push(PluginTarget::symbol(path.clone(), class.as_str()));
+            }
+        }
+        let mut connected = Vec::new();
+        for connection in &document.connections {
+            for path in nearest_declarations(&classes, &connection.owner, &document.path) {
+                // `Owner.member` is the qualified spelling `PluginTarget` resolves against; an
+                // unresolvable one is dropped core-side, which is what happens to every
+                // `dataSource`/`delegate` outlet a document declares on a UIKit view rather
+                // than on the app's own class.
+                connected.push((
+                    PluginTarget::symbol(
+                        path.clone(),
+                        format!("{}.{}", connection.owner, connection.member),
+                    ),
+                    connection.kind,
+                ));
+            }
+        }
+        out.push(Wiring {
+            document: document.path,
+            instantiated,
+            connected,
+        });
+    }
+    out
 }
 
 /// One connection the document declares: a member of `owner`, bound by name.

@@ -527,6 +527,20 @@ nothing plugin-specific. Until then, hand your users the `.wasm` and let them dr
   built-in implements is identical to what a WASM guest implements, and each ships a spec
   beside it in this directory.
 
+## A note on sharing work between hooks
+
+`contribute_roots`, `contribute_edges` and `annotate_symbols` frequently need the same
+derivation. For a WASM guest, statics across the three are contractual (one instance per
+graph-mutation round). For a **native** built-in they are not: the `Plugin` trait is
+`Send + Sync` and every hook takes `&self`, so a cache is shared mutable state behind a lock,
+holding one run's answer on a value the engine reuses.
+
+The pattern to copy is `kndo:uikit`'s: one pure function computing the whole answer, each hook
+projecting the part it needs. The work runs more than once, and that is usually cheap — measure
+before assuming otherwise. What it buys is one description of the logic, so two hooks cannot
+drift apart. If the derivation is genuinely expensive, the answer is a `prepare` hook on the
+trait, which is a contract change worth proposing — not a lock inside one plugin.
+
 ## A note on helpers
 
 Before writing a path or text helper in a plugin crate, check whether one already exists.
