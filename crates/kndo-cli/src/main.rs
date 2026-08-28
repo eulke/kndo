@@ -564,7 +564,10 @@ fn parse_verify_args(rest: &[String]) -> Option<(&str, Option<&str>)> {
     }
 }
 
-fn run_verify(path: &str, project: Option<&str>) -> Result<kndo::verify::VerifyReport, String> {
+fn run_verify(
+    path: &str,
+    project: Option<&str>,
+) -> Result<kndo::verify::VerifyReport, kndo::verify::VerifyError> {
     match project {
         Some(dir) => {
             kndo::verify::verify_in_project(std::path::Path::new(path), std::path::Path::new(dir))

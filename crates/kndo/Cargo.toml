@@ -30,6 +30,8 @@ kndo-plugin-rkyv = { path = "../kndo-plugin-rkyv", optional = true }
 kndo-plugin-wasmtime = { path = "../kndo-plugin-wasmtime", optional = true }
 # `plugin install` (GitHub release JSON) and `kndo plugin new`/plugins.lock (TOML).
 serde_json = { workspace = true, optional = true }
+# Typed errors for the author kit and verify (CLAUDE.md: no new Result<_, String>).
+thiserror = { workspace = true }
 toml = { workspace = true, optional = true }
 # Plugin activation-rule evaluation: file-glob checks, plus the project paths and known-file
 # set the adapters' own manifest extractors take. No JSON or TOML parser here any more — which

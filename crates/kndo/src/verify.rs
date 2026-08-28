@@ -51,7 +51,45 @@ pub struct VerifyReport {
 /// Verify one component file against the synthesized generic fixture. `Err` = the component
 /// doesn't load under either world — the combined per-world errors, same shape
 /// `plugin_install`'s probe reports.
-pub fn verify(component: &Path) -> Result<VerifyReport, String> {
+/// Why a verification could not be *attempted*.
+///
+/// Distinct from the report itself, and that distinction is the reason this is typed: a
+/// component that loads and contributes nothing produces a `VerifyReport` full of notes, while
+/// a component that is not a kndo component at all produces no report. Collapsing both into a
+/// string made the two indistinguishable to anything but a human reading prose.
+#[derive(Debug, thiserror::Error)]
+pub enum VerifyError {
+    #[error("--project {0} is not a directory")]
+    ProjectNotADirectory(std::path::PathBuf),
+
+    /// All three worlds rejected the file. Every loader's reason is kept: which one the author
+    /// *meant* to build is unknowable here, so dropping two of the three would be guessing at
+    /// which error they need.
+    #[error(
+        "not a valid kndo:plugin ({plugin}), coverage-ingester ({coverage}), or kndo:adapter          ({adapter}) component"
+    )]
+    NotAComponent {
+        plugin: String,
+        coverage: String,
+        adapter: String,
+    },
+
+    #[error("{while_}: {source}")]
+    Io {
+        while_: String,
+        #[source]
+        source: std::io::Error,
+    },
+}
+
+impl VerifyError {
+    fn io(while_: impl Into<String>) -> impl FnOnce(std::io::Error) -> VerifyError {
+        let while_ = while_.into();
+        move |source| VerifyError::Io { while_, source }
+    }
+}
+
+pub fn verify(component: &Path) -> Result<VerifyReport, VerifyError> {
     verify_impl(component, None)
 }
 
@@ -59,27 +97,25 @@ pub fn verify(component: &Path) -> Result<VerifyReport, String> {
 /// is copied whole into a temp root (never mutated — `.git`/`.kndo`/`target`/`node_modules`
 /// excluded), the component staged project-local there, and the same full check runs. This is
 /// the assertion half of the baseline-then-plugin authoring loop as one command.
-pub fn verify_in_project(component: &Path, project: &Path) -> Result<VerifyReport, String> {
+pub fn verify_in_project(component: &Path, project: &Path) -> Result<VerifyReport, VerifyError> {
     if !project.is_dir() {
-        return Err(format!(
-            "--project {} is not a directory",
-            project.display()
-        ));
+        return Err(VerifyError::ProjectNotADirectory(project.to_path_buf()));
     }
     verify_impl(component, Some(project))
 }
 
-fn verify_impl(component: &Path, project: Option<&Path>) -> Result<VerifyReport, String> {
+fn verify_impl(component: &Path, project: Option<&Path>) -> Result<VerifyReport, VerifyError> {
     match kndo_plugin_api::WasmPlugin::load(component) {
         Ok(plugin) => Ok(verify_plugin(component, &plugin, project)),
         Err(plugin_err) => match kndo_plugin_api::WasmCoverageIngester::load(component) {
             Ok(ingester) => Ok(verify_coverage_ingester(&ingester)),
             Err(coverage_err) => match kndo_plugin_api::WasmAdapter::load(component) {
                 Ok(adapter) => Ok(verify_adapter(component, &adapter, project)),
-                Err(adapter_err) => Err(format!(
-                    "not a valid kndo:plugin ({plugin_err}), coverage-ingester \
-                     ({coverage_err}), or kndo:adapter ({adapter_err}) component"
-                )),
+                Err(adapter_err) => Err(VerifyError::NotAComponent {
+                    plugin: plugin_err.to_string(),
+                    coverage: coverage_err.to_string(),
+                    adapter: adapter_err.to_string(),
+                }),
             },
         },
     }
@@ -285,7 +321,7 @@ fn prepare_fixture(
     component: &Path,
     sample_files: &[String],
     project: Option<&Path>,
-) -> Result<(), String> {
+) -> Result<(), VerifyError> {
     match project {
         Some(source) => copy_tree(source, root)?,
         None => synthesize_fixture(root, sample_files)?,
@@ -294,17 +330,17 @@ fn prepare_fixture(
 }
 
 /// The component into `.kndo/plugins/` — the tier where activation is unconditional.
-fn stage_component(root: &Path, component: &Path) -> Result<(), String> {
+fn stage_component(root: &Path, component: &Path) -> Result<(), VerifyError> {
     let plugins_dir = root.join(".kndo").join("plugins");
     std::fs::create_dir_all(&plugins_dir)
         .and_then(|()| std::fs::copy(component, plugins_dir.join("verify.wasm")))
         .map(|_| ())
-        .map_err(|e| format!("staging the component failed ({e})"))
+        .map_err(VerifyError::io("staging the component"))
 }
 
 /// The generic fixture: a manifest (so manifest-driven activation and content reads have
 /// something real to see) plus the adapter's own glob-derived samples.
-fn synthesize_fixture(root: &Path, sample_files: &[String]) -> Result<(), String> {
+fn synthesize_fixture(root: &Path, sample_files: &[String]) -> Result<(), VerifyError> {
     let _ = std::fs::write(
         root.join("package.json"),
         "{\n  \"name\": \"kndo-verify-fixture\",\n  \"version\": \"0.0.0\"\n}\n",
@@ -322,17 +358,23 @@ fn synthesize_fixture(root: &Path, sample_files: &[String]) -> Result<(), String
 /// must be safe to point at a real project). Housekeeping trees are skipped: `.git`,
 /// `.kndo` (a stale cache or resident components would contaminate the drive), `target`,
 /// `node_modules`.
-fn copy_tree(source: &Path, dest: &Path) -> Result<(), String> {
-    let entries =
-        std::fs::read_dir(source).map_err(|e| format!("reading {}: {e}", source.display()))?;
+fn copy_tree(source: &Path, dest: &Path) -> Result<(), VerifyError> {
+    let entries = std::fs::read_dir(source)
+        .map_err(VerifyError::io(format!("reading {}", source.display())))?;
     for entry in entries {
         copy_dir_entry(entry, dest)?;
     }
     Ok(())
 }
 
-fn copy_dir_entry(entry: std::io::Result<std::fs::DirEntry>, dest: &Path) -> Result<(), String> {
-    let entry = entry.map_err(|e| e.to_string())?;
+fn copy_dir_entry(
+    entry: std::io::Result<std::fs::DirEntry>,
+    dest: &Path,
+) -> Result<(), VerifyError> {
+    let entry = entry.map_err(VerifyError::io(format!(
+        "reading an entry of {}",
+        dest.display()
+    )))?;
     if is_housekeeping(&entry.file_name()) {
         return Ok(());
     }
@@ -347,16 +389,19 @@ fn is_housekeeping(name: &std::ffi::OsStr) -> bool {
         .any(|s| name == std::ffi::OsStr::new(s))
 }
 
-fn copy_entry(entry: &std::fs::DirEntry, to: &Path) -> Result<(), String> {
+fn copy_entry(entry: &std::fs::DirEntry, to: &Path) -> Result<(), VerifyError> {
     let from = entry.path();
-    let file_type = entry.file_type().map_err(|e| e.to_string())?;
+    let file_type = entry
+        .file_type()
+        .map_err(VerifyError::io(format!("stat of {}", to.display())))?;
     if file_type.is_dir() {
-        std::fs::create_dir_all(to).map_err(|e| e.to_string())?;
+        std::fs::create_dir_all(to)
+            .map_err(VerifyError::io(format!("creating {}", to.display())))?;
         copy_tree(&from, to)
     } else if file_type.is_file() {
         std::fs::copy(&from, to)
             .map(|_| ())
-            .map_err(|e| format!("copying {}: {e}", from.display()))
+            .map_err(VerifyError::io(format!("copying {}", from.display())))
     } else {
         // Symlinks are skipped: a fixture project shouldn't need them, and following one
         // could escape the tree being copied.

@@ -81,7 +81,37 @@ pub(crate) fn claim_and_extract(
         path: &df.path,
         content: &content,
     };
-    let facts = adapters[adapter_index].extract(&source);
+    // Extraction is the one place third-party code (a tree-sitter grammar, a WASM bridge, an
+    // adapter's own walk) runs against arbitrary bytes, and it runs inside a rayon pool: an
+    // index slip on one pathological file aborts the worker, which aborts the run, which
+    // reports nothing about the other ten thousand files. A panic here is a real defect and
+    // says so — but it is one file's defect, and the honest cost is that file's facts, not the
+    // project's answer. Same posture as an unreadable file just above: a `Warn` naming what was
+    // lost, and the analysis continues without it.
+    //
+    // `AssertUnwindSafe` because the closure borrows the adapter and the file's bytes: nothing
+    // is mutated across the boundary, so there is no torn state for a caught unwind to observe.
+    // The cache is deliberately not written on this path — caching the absence of facts would
+    // make the defect survive the next run.
+    let extracted = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        adapters[adapter_index].extract(&source)
+    }));
+    let facts = match extracted {
+        Ok(facts) => facts,
+        Err(_) => {
+            return Err(Diagnostic {
+                level: DiagnosticLevel::Warn,
+                path: Some(df.path.clone()),
+                message: format!(
+                    "the {} adapter panicked extracting this file — it contributes no facts \
+                     to this run, so everything reaching only it will read as unreachable. \
+                     This is an adapter defect: please report the file that triggered it",
+                    claim.language
+                ),
+                span: None,
+            });
+        }
+    };
     if let Some(c) = cache {
         c.put(
             descriptor.id.as_str(),

@@ -3640,3 +3640,67 @@ fn a_project_declared_marker_makes_a_symbol_an_entry_point() {
         "an unconfigured marker is inert — this is not a blanket exemption for annotated code"
     );
 }
+
+/// A `MockAdapter` that panics on one file and behaves on every other — a stand-in for the
+/// real hazard: a grammar or an adapter walk that trips on one pathological input.
+struct PanickingAdapter;
+
+impl LanguageAdapter for PanickingAdapter {
+    fn descriptor(&self) -> AdapterDescriptor {
+        MockAdapter.descriptor()
+    }
+    fn claim(&self, path: &ProjectPath) -> Option<FileClaim> {
+        MockAdapter.claim(path)
+    }
+    fn resolve(&self, spec: &ImportSpec, ctx: &ResolveCtx<'_>) -> Resolution {
+        MockAdapter.resolve(spec, ctx)
+    }
+    fn extract(&self, source: &crate::adapter::SourceFile<'_>) -> FileFacts {
+        assert!(
+            !source.path.0.contains("landmine"),
+            "simulated adapter defect"
+        );
+        MockAdapter.extract(source)
+    }
+}
+
+/// **One file's adapter defect costs that file, not the run.**
+///
+/// Extraction is the one place third-party code meets arbitrary bytes, and it runs across a
+/// rayon pool: before this was contained, a panic on any single file aborted the worker and
+/// with it every other file's answer. The contract everywhere else in this codebase is to
+/// degrade to silence with a diagnostic naming what was lost; extraction was the hole in it.
+#[test]
+fn an_adapter_panic_costs_one_file_and_not_the_run() {
+    let dir = crate::testkit::fixture::project(&[
+        ("good.mock", "decl alive\nimport ./other.mock"),
+        ("other.mock", "decl reached"),
+        ("landmine.mock", "decl never_extracted"),
+    ]);
+    let adapters: Vec<Box<dyn LanguageAdapter>> = vec![Box::new(PanickingAdapter)];
+
+    let (graph, diagnostics) =
+        assemble(dir.path(), &adapters, &[]).expect("the run survives the panic");
+
+    // The other files were still extracted: their declarations are in the graph.
+    let names: Vec<&str> = graph.symbols.iter().map(|s| s.name.as_str()).collect();
+    assert!(names.contains(&"alive"), "{names:?}");
+    assert!(names.contains(&"reached"), "{names:?}");
+    assert!(
+        !names.contains(&"never_extracted"),
+        "the panicking file contributes no facts: {names:?}"
+    );
+
+    // And the loss is reported rather than silent — an adapter defect the user can act on.
+    let reported: Vec<&Diagnostic> = diagnostics
+        .iter()
+        .filter(|d| d.path.as_ref().is_some_and(|p| p.0.contains("landmine")))
+        .collect();
+    assert_eq!(reported.len(), 1, "{diagnostics:?}");
+    assert_eq!(reported[0].level, DiagnosticLevel::Warn);
+    assert!(
+        reported[0].message.contains("panicked"),
+        "the diagnostic must name what happened: {}",
+        reported[0].message
+    );
+}

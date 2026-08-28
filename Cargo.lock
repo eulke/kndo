@@ -1237,6 +1237,7 @@ dependencies = [
  "sha2",
  "smol_str",
  "tempfile",
+ "thiserror 2.0.20",
  "toml",
  "ureq",
  "wit-component",

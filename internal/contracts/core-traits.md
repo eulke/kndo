@@ -177,6 +177,15 @@ pub trait LanguageAdapter: Send + Sync {
 
     /// Parse one file and extract every language-defined fact. Must not fail on broken code:
     /// return partial facts + diagnostics.
+    ///
+    /// The core *enforces* that obligation rather than trusting it: extraction runs inside
+    /// `catch_unwind` (`graph::assemble::claim_and_extract`), so an adapter that panics on one
+    /// pathological file costs that file's facts and a `Warn` diagnostic naming the adapter,
+    /// not the whole run. Extraction is the one place adapter code meets arbitrary bytes and it
+    /// runs across a rayon pool, where an unwinding worker takes every other file's answer with
+    /// it. This is containment, not permission: a panic here is still an adapter defect, and
+    /// the diagnostic says so. The facts of a panicking file are deliberately **not** cached —
+    /// caching an absence would make the defect survive the next run.
     fn extract(&self, file: &SourceFile) -> FileFacts;
 
     /// Parse a manifest into declared dependencies, package identity/topology (RFC 0011 §3),

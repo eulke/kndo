@@ -106,9 +106,28 @@ is a generated bridge over [the native traits]") — it goes on the very same
 conservative empty result — `None` from `claim`, or `FileFacts::default()` plus a `Warn`
 diagnostic from `extract` — never a crashed `kndo check`. One misbehaving external adapter
 degrades to silence for its own files, not a broken run for every other language in the
-project. There is no wall-clock timeout in v1 (fuel is a deterministic proxy for it, same
-spirit, cheaper to implement soundly); a real wall-clock epoch-deadline layer is future work
-if fuel alone proves an insufficient proxy in practice.
+project.
+
+**Memory ceiling (`MAX_GUEST_MEMORY_BYTES` in `engine.rs`, 256 MiB).** Fuel bounds *work*, not
+*bytes*: `memory.grow` costs a handful of fuel units and commits megabytes, so fuel alone lets
+a guest exhaust the host long before it exhausts its allowance — and that failure arrives as an
+OOM kill, which no `catch` converts to silence. Every store therefore installs a
+`wasmtime::StoreLimits` capping guest memory; exceeding it fails the `memory.grow` inside the
+guest, which reaches the host as an ordinary trap and takes the same degrade-to-silence path as
+fuel exhaustion. Deliberately memory-only: table and instance counts are bounded by the
+component's own type section, which the host validates at load.
+
+Note for implementors: `StoreLimits::default()` is *unlimited*, and every store's data type in
+this crate derives `Default`. A limiter that is merely a field of that data is decorative — the
+value must be assigned explicitly before `Store::limiter` is installed.
+
+**No wall-clock deadline — and this is a rejection, not a deferral.** `epoch_deadline` bounds
+elapsed time, and kndo guarantees byte-identical output across thread counts and machines
+(`threads_determinism`, `patch_equivalence` in the named gates). A guest cut off by elapsed
+time contributes different facts on a loaded machine than on an idle one, which is precisely
+the property those gates exist to forbid. Fuel is instruction-counted and therefore
+deterministic; it is not a cheaper stand-in for a deadline, it is the correct instrument, and
+the memory ceiling above closes the one hole fuel genuinely had.
 
 **Sandbox.** No WASI is linked into the host's `Linker` at all — v1's world has no imports to
 satisfy, so there is nothing to grant. This is stronger than a policy promise: a component
@@ -524,8 +543,10 @@ anywhere. What a malicious or buggy component **cannot** do, by construction:
   graph*, applied by the host under the sink vocabulary (§5.1) — no new node/edge kinds, no
   finding creation, no file mutation.
 - **Hang or exhaust the host.** Every hook call runs under a wasmtime fuel budget, re-armed
-  per call (RFC 0017 §4); an exhausted or trapping call is dropped like any other component
-  error — skipped, never fatal to the run.
+  per call (RFC 0017 §4), *and* every store under a 256 MiB memory ceiling (§3) — fuel alone
+  bounds work, not bytes, and an OOM kill is the one failure no `catch` can degrade. An
+  exhausted, over-committed or trapping call is dropped like any other component error —
+  skipped, never fatal to the run.
 - **Impersonate.** Reserved-namespace ids fail the load (§4.1/§5.5); the installer's identity
   binding refuses a component whose descriptor id differs from the coordinate it was fetched
   from, and the lockfile pins the checksum (RFC 0015 §4).

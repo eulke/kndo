@@ -45,7 +45,7 @@ impl fmt::Display for LoadError {
 impl std::error::Error for LoadError {}
 
 struct GuestState {
-    store: wasmtime::Store<()>,
+    store: wasmtime::Store<crate::engine::NoImports>,
     bindings: Adapter,
 }
 
@@ -92,7 +92,7 @@ impl WasmAdapter {
     /// component when every pooled instance is checked out by a concurrent call. The pool
     /// therefore grows to the actual concurrency level and no further.
     fn checkout(&self) -> Result<GuestState, LoadError> {
-        if let Some(state) = self.pool.lock().expect("wasm adapter pool poisoned").pop() {
+        if let Some(state) = crate::engine::lock_recovering(&self.pool).pop() {
             return Ok(state);
         }
         let state = instantiate_bindings(&self.component)?;
@@ -101,10 +101,7 @@ impl WasmAdapter {
     }
 
     fn checkin(&self, state: GuestState) {
-        self.pool
-            .lock()
-            .expect("wasm adapter pool poisoned")
-            .push(state);
+        crate::engine::lock_recovering(&self.pool).push(state);
     }
 
     /// How many guest instances this adapter has ever instantiated — 1 until concurrent
@@ -142,7 +139,8 @@ fn instantiate_bindings(
     component: &wasmtime::component::Component,
 ) -> Result<GuestState, LoadError> {
     let engine = shared_engine();
-    let mut store = wasmtime::Store::new(engine, ());
+    let mut store = wasmtime::Store::new(engine, crate::engine::NoImports::new());
+    store.limiter(|data| &mut data.limits);
     store
         .set_fuel(FUEL_PER_CALL)
         .map_err(|e| LoadError::Instantiate(e.to_string()))?;

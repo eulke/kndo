@@ -91,6 +91,9 @@ struct HostViewData {
     ref_sites: rustc_hash::FxHashMap<(String, String), Vec<w::WasmRefSite>>,
     call_sites: rustc_hash::FxHashMap<String, Vec<w::WasmCallSite>>,
     attr_strings: rustc_hash::FxHashMap<String, Vec<w::WasmAttrString>>,
+    /// The memory ceiling for this instance (`engine::MAX_GUEST_MEMORY_BYTES`). Lives on the
+    /// store data because that is where wasmtime resolves a limiter from.
+    limits: wasmtime::StoreLimits,
 }
 
 fn to_wit_span(span: kndo_core::adapter::Span) -> w::WasmSpan {
@@ -554,10 +557,8 @@ impl WasmPlugin {
             self.flavor,
         )
         .ok()?;
-        *self
-            .round_instance
-            .lock()
-            .expect("wasm plugin store poisoned") = Some(GuestState { store, bindings });
+        *crate::engine::lock_recovering(&self.round_instance) =
+            Some(GuestState { store, bindings });
         Some(())
     }
 
@@ -566,12 +567,7 @@ impl WasmPlugin {
     /// driving the trait out of the core's roots → edges → annotate order) instantiates
     /// defensively against ITS OWN view rather than ever touching another round's state.
     fn ensure_instance(&self, graph: &GraphView<'_>, content: &ContentView<'_>) -> bool {
-        if self
-            .round_instance
-            .lock()
-            .expect("wasm plugin store poisoned")
-            .is_some()
-        {
+        if crate::engine::lock_recovering(&self.round_instance).is_some() {
             return true;
         }
         self.refresh_instance(graph, content).is_some()
@@ -602,10 +598,7 @@ impl WasmPlugin {
                 }
             }
         }
-        let mut guard = self
-            .round_instance
-            .lock()
-            .expect("wasm plugin store poisoned");
+        let mut guard = crate::engine::lock_recovering(&self.round_instance);
         let GuestState { store, bindings } = guard.as_mut()?;
         if store.set_fuel(FUEL_PER_CALL).is_err() {
             return None;
@@ -678,6 +671,11 @@ fn instantiate_with(
     flavor: WorldFlavor,
 ) -> Result<(WStore, AnyBindings), LoadError> {
     let mut store = wasmtime::Store::new(engine, view);
+    // Set here rather than relying on the field's default: `StoreLimits::default()` is
+    // *unlimited*, and `HostViewData` is built with `..Default::default()`, so a limiter left
+    // to the derive would install a ceiling of infinity and read exactly like a working one.
+    store.data_mut().limits = crate::engine::guest_limits();
+    store.limiter(|data| &mut data.limits);
     store
         .set_fuel(FUEL_PER_CALL)
         .map_err(|e| LoadError::Instantiate(e.to_string()))?;
@@ -927,10 +925,7 @@ impl Plugin for WasmPlugin {
             b.call_annotate_symbols(&mut *store).ok()
         });
         // End of round, success or not: the instance never survives into the next one.
-        *self
-            .round_instance
-            .lock()
-            .expect("wasm plugin store poisoned") = None;
+        *crate::engine::lock_recovering(&self.round_instance) = None;
         let Some(targets) = result else {
             return;
         };
@@ -1055,19 +1050,6 @@ fn from_wit_root_kind(kind: w::RootKind) -> RootKind {
     }
 }
 
-const REF_KIND_TABLE: &[(w::RefKind, RefKind)] = &[
-    (w::RefKind::Call, RefKind::Call),
-    (w::RefKind::Read, RefKind::Read),
-    (w::RefKind::Write, RefKind::Write),
-    (w::RefKind::Extend, RefKind::Extend),
-    (w::RefKind::Implement, RefKind::Implement),
-    (w::RefKind::Override, RefKind::Override),
-    (w::RefKind::TypeUse, RefKind::TypeUse),
-];
-
-/// Every row above is exhaustive by construction (one per WIT enum variant) — a miss here can
-/// only mean this file and `wit/plugin.wit` have drifted, not something a well-formed
-/// component could trigger at runtime.
 /// [`from_wit_ref_kind`]'s inverse, derived from it rather than written as a second
 /// hand-maintained match: the wire enum below enumerates every variant once, and the round
 /// trip through the one authoritative mapping guarantees the two directions can never drift.
@@ -1096,14 +1078,22 @@ fn to_wit_confidence_out(confidence: kndo_core::vocab::Confidence) -> w::Confide
     }
 }
 
+/// An exhaustive `match`, not a table lookup, and that is the whole point: a WIT enum growing
+/// a variant stops this compiling until the arm exists. It used to be a table whose miss
+/// branch panicked, under a comment asserting the table was "exhaustive by construction" —
+/// which nothing checked. `host.rs` makes the same claim about its own tables and *does* check
+/// it (an exhaustive match per enum in its test module); this file asserted it and did not.
+/// A match needs no assertion because the compiler is the assertion.
 fn from_wit_ref_kind(kind: w::RefKind) -> RefKind {
-    REF_KIND_TABLE
-        .iter()
-        .find(|(wit, _)| *wit == kind)
-        .unwrap_or_else(|| {
-            panic!("kndo-plugin-api: missing RefKind table row for a WIT enum variant")
-        })
-        .1
+    match kind {
+        w::RefKind::Call => RefKind::Call,
+        w::RefKind::Read => RefKind::Read,
+        w::RefKind::Write => RefKind::Write,
+        w::RefKind::Extend => RefKind::Extend,
+        w::RefKind::Implement => RefKind::Implement,
+        w::RefKind::Override => RefKind::Override,
+        w::RefKind::TypeUse => RefKind::TypeUse,
+    }
 }
 
 fn from_wit_confidence(confidence: w::Confidence) -> kndo_core::vocab::Confidence {
