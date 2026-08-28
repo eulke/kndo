@@ -910,8 +910,8 @@ mod tests {
     fn describe_renders_every_section_it_declares() {
         use crate::query::QNodeRef;
         use crate::query::{
-            DeclarationInfo, Degree, DependencyInfo, DescribeResult, DuplicationInfo, FileInfo,
-            NodeSpan, PackageInfo, ShapeMetrics,
+            DeclarationInfo, Degree, DescribeResult, DuplicationInfo, FileInfo, NodeSpan,
+            PackageInfo, ShapeMetrics,
         };
         use crate::query_envelope::{QueryResult, ResultEntry, Verb};
         let node = |selector: &str, kind: &str| QNodeRef {
@@ -1018,10 +1018,7 @@ mod tests {
     #[test]
     fn describe_omits_the_sections_a_node_does_not_have() {
         use crate::query::QNodeRef;
-        use crate::query::{
-            DeclarationInfo, Degree, DependencyInfo, DescribeResult, DuplicationInfo, FileInfo,
-            NodeSpan, PackageInfo, ShapeMetrics,
-        };
+        use crate::query::{Degree, DescribeResult};
         use crate::query_envelope::{QueryResult, ResultEntry, Verb};
         let node = |selector: &str, kind: &str| QNodeRef {
             selector: selector.to_string(),
