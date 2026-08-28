@@ -352,6 +352,7 @@ pub fn compute(graph: &ProjectGraph) -> ReachabilityMap {
 /// the project asserted the fact, which is the same standing a manifest-declared entry point
 /// has. They are NOT a suppression — everything the symbol reaches comes alive with it, and
 /// every analysis keeps judging all of it normally.
+// kndo:allow crap the policy pass (resolve_colors) and the BFS subpass (bfs_all_tiers) are already extracted; the residual is the CSR degree-count/offset/fill core, a two-pass technique whose count and fill loops must mirror the same EdgeKind match to stay in sync — splitting them would not remove a branch, only widen the distance between two passes that must agree.
 pub fn compute_with_roots(graph: &ProjectGraph, extra_roots: &[SymbolId]) -> ReachabilityMap {
     let files_len = graph.files.len();
     let n = files_len + graph.symbols.len();

@@ -2603,6 +2603,7 @@ pub fn assemble_with_cache(
 /// read in memory (diff modes). Everything past discovery is source-blind:
 /// identical content produces identical facts, hashes, ids, and findings whether the bytes came
 /// from disk or the object database.
+// kndo:allow crap the four self-contained policy passes (demote_test_gated_module_links, cap_manifest_root_kind_by_role, derive_role_roots, expand_library_surface) are already extracted; the residual is the linear construction pipeline itself — FileId/SymbolId are literal vector-insertion order, so every phase reads the exact prior phase's vector, not a summary, and the branching is domain complexity (CJS aliasing, Go same-unit twins, member-vs-bare symbol tables, glob re-exports), not accidental structure.
 pub fn assemble_from_source(
     source: &discovery::TreeSource<'_>,
     adapters: &[Box<dyn LanguageAdapter>],

@@ -173,6 +173,7 @@ impl LanguageAdapter for MockAdapter {
         path.0.rsplit('/').next() == Some("manifest.json")
     }
 
+    // kndo:allow crap ~30 independent, terminal directive arms of a line-oriented fixture-format interpreter — diagnosed essential (no cross-arm dependency, no policy pass hiding inside); splitting each arm into its own function would trade this cx for a same-size dispatcher delegating to ~30 trivial ones, not lower it. The one real duplication (binding-list parsing) is already extracted as parse_binding_list.
     fn extract(&self, file: &SourceFile<'_>) -> FileFacts {
         // Content format for the mock: one directive per line.
         //   decl <name>                 -> an exported Function declaration
