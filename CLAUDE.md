@@ -104,6 +104,36 @@ a plugin doesn't actually mutate the graph silently disables incremental patchin
 project that plugin runs on; returning `false` when it does mutate causes correctness bugs.
 Decide it, don't default it.
 
+## The release surface: one producer, and nothing that first runs at tag time
+
+Two rules, both codifying things that were wrong at once and could not have been noticed before
+a tag was pushed.
+
+**One producer for the release artifact.** `xtask::package` owns the target table, the artifact's
+name and its layout. `release.yml` calls `cargo xtask package`; it does not build an archive
+itself. The four consumers — `install.sh`, `action/action.yml`, the Homebrew template, the
+install docs — are checked against that definition by `xtask/tests/release_channels.rs`, never
+against each other and never by eye. When they each spelled it independently, three of the four
+were broken simultaneously: the Action asked for `-gnu` triples no release builds *and* dropped
+the tag's `v`, and both the installer and the docs took the binary from the archive root rather
+than the staged directory it actually lives in. If you change what a release produces, change it
+there; if you add a consumer, add it to that test.
+
+**A mechanism whose first run is the release is not verified.** `git-cliff` renders the release
+body and had never executed; `install.sh` had never installed anything; the musl build had never
+been built outside a tag; macOS and Windows had never run the suite though releases ship both.
+CI now does each of these on every push. Before adding a step that only runs during a release,
+ask what exercises it beforehand — and if the answer is nothing, that is the thing to build.
+Deliberate exceptions get written down with their measurement, not left silent: `cargo xtask
+bench` is not a CI gate because its baseline is machine-specific (CONTRIBUTING "Benchmarks" has
+the numbers), and `epoch_deadline` is not enabled because wall-clock cutoffs would break the
+determinism gates (`kndo-plugin-api`'s `engine.rs`).
+
+**Config the engine does not read is not shipped.** `config::LIVE_TABLES` is what `parse`
+actually reads; `kndo init`'s template is checked against it. A commented-out key is still a
+promise — `[project]`'s `roots`/`exclude` were written into every new project and documented key
+by key, wired to nothing. Wire it or leave it out.
+
 ## Gates that must never regress
 
 These are checked by name in CI — the `gates` job in `.github/workflows/ci.yml` runs one step

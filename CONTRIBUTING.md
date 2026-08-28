@@ -113,6 +113,30 @@ generates its own report in the test job, so the self-check there always runs
 coverage-aware. The WASM guest builds some integration tests spawn strip
 `RUSTFLAGS`/`CARGO_ENCODED_RUSTFLAGS` themselves, so the instrumented run works end to end.
 
+## Benchmarks
+
+`cargo xtask bench` builds a release `kndo` and measures end-to-end wall time over generated
+fixtures at 1k / 5k / 50k files, five scenarios each, against the recorded baseline in
+`internal/perf-baseline.json`. Without `--gate` it reports and exits clean; with `--gate` a
+regression fails the build. `--sizes 1k` alone is the quick one.
+
+**Run it before and after a change you expect to cost time, on the same machine, and compare
+those two runs — not either one against the committed baseline.** That baseline records one
+machine, and it does not travel. Measured: on a container quite unlike the one it was recorded
+on, the same unmodified tree reported `1k/cold-full` **22% faster** and `1k/warm-noop` **108%
+slower** in a single run. Not noise, and not contradictory — cold time is dominated by parsing
+and analysis, warm time by process startup and cache reads, and different hardware moves those
+in opposite directions. `--update-baseline` re-records it for your machine; that is a local
+convenience, so leave the committed numbers alone unless the reference machine itself changed.
+
+**This is deliberately not a CI job**, and the measurement above is why: on ephemeral runners
+of varying hardware, the gate would compare numbers that were never comparable and fail for
+reasons unrelated to any change. Unlike the release-notes generation — which nothing ever
+exercised before a tag, unattended, which is why CI runs it now — the benchmark has a human
+present every time it runs, and a broken harness surfaces to that human in seconds. A perf gate
+worth having needs a dedicated, stable machine, which is a decision about infrastructure rather
+than about this workflow file.
+
 ## Branching — Gitflow
 
 - `main` — always releasable; only tagged versions land here; merges only from `release/*` or
