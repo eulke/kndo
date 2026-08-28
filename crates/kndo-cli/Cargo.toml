@@ -22,7 +22,7 @@ libc = "0.2"
 
 [dev-dependencies]
 smol_str = { workspace = true }
-# `default_features_mirror_the_library` reads both crates' manifests.
+# `shell_configuration_is_buildable` reads this manifest.
 toml = { workspace = true }
 tempfile = { workspace = true }
 
@@ -30,35 +30,20 @@ tempfile = { workspace = true }
 libc = "0.2"
 
 [features]
-# Mirrors `kndo`'s own default set exactly (`default-features = false` above means this crate,
-# not the workspace default, now decides what ships) — plain `cargo build -p kndo-cli` is
-# unchanged. Named per-feature passthrough (rather than one opaque "full" flag) is what lets CI
-# build the "shell" configuration — `--no-default-features --features
-# external-adapters,plugin-install` — without touching this file again: a lean host binary that
-# knows how to load WASM components but ships with zero first-party language grammars compiled
-# in, real and CI-proven rather than only documented.
-default = [
-    "js",
-    "go",
-    "rust",
-    "java",
-    "kotlin",
-    "swift",
-    "json",
-    "css",
-    "external-adapters",
-    "plugin-nextjs",
-    "plugin-express",
-    "plugin-serde",
-    "plugin-info-plist",
-    "plugin-thymeleaf",
-    "plugin-libsass",
-    "plugin-uikit",
-    "plugin-rkyv",
-    "plugin-wasmtime",
-    "plugin-coverage",
-    "plugin-install",
-]
+# The product's default set lives in `kndo`'s manifest and is read from there:
+# `kndo/default` is one entry that cannot drift from what the library enables. It used to be
+# the twenty names spelled out again, and they did drift — `kndo:uikit` was registered in the
+# library and shipped in no binary at all, which looks exactly like a plugin that does not
+# work. A guard test caught that one and named the missing feature; the guard is gone with
+# this commit, because a list that cannot diverge needs no watching.
+#
+# The named passthroughs below stay: they are the public knob, and the reason `default-features
+# = false` is on the dependency at all. They let CI build the "shell" configuration —
+# `--no-default-features --features external-adapters,plugin-install`: a lean host that loads
+# WASM components and ships zero first-party grammars, real and CI-proven rather than only
+# documented. This crate has no `cfg(feature = ...)` of its own; every feature here forwards
+# and nothing else.
+default = ["kndo/default"]
 js = ["kndo/js"]
 go = ["kndo/go"]
 rust = ["kndo/rust"]
