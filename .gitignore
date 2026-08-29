@@ -20,5 +20,8 @@ coverage/
 dist/
 
 # Claude Code's own tooling state (session worktrees for parallel-agent workflows, etc.) —
-# local to the machine running the session, never repo content.
-.claude/
+# local to the machine running the session, never repo content. `skills/` is the one exception:
+# a project-local skill is repo content, meant to travel with a clone the same way CLAUDE.md
+# does, not to stay behind on the machine that authored it.
+.claude/*
+!.claude/skills/

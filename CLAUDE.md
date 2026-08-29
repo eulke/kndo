@@ -8,7 +8,24 @@ with that architecture.
 
 `internal/` holds design notes for maintainers. The code never depends on it: every public
 contract is legible from the code and its doc comments alone, with no citation to an external
-document required or expected.
+document required or expected. `internal_boundary` (see "Gates that must never regress") is what
+keeps this the only section that names the tree at all.
+
+Before finishing substantial work, consider whether the tree needs a durable update — a decision
+made, an architectural fact discovered, a gotcha worth remembering, not a narration of what was
+done (that belongs in the commit, not here). It lands in one of the ten documents the tree's own
+top-level index already lists — never a new file — updating whatever existing section already
+covers the topic rather than appending a restatement beside it.
+
+Decide at the same moment whether the fact is relevant to someone outside the team building
+kndo — an end user, a plugin or adapter author — rather than only to a maintainer. If so it
+belongs in `docs/`, written there instead, not in both: a fact lives in exactly one place. The
+tree may point at `docs/` for the public explanation of something it also touches; `docs/` never
+points back, and `internal_boundary` is what makes that direction impossible to get wrong by
+accident.
+
+The `docs-digest` skill runs this same discipline on demand, for a thorough pass after a long or
+complex session.
 
 ## Fachada: frontends import only the root re-exports
 
@@ -189,5 +206,15 @@ graph/cache/analysis, and `doc_links` (whose subject is Markdown) on every PR th
   repositories, invented illustrations, paths that exist in a *user's* project), so an analysis
   firing on those would be noise. The scanner blanks code spans first — a path inside backticks
   is quoted, not claimed.
+
+- `internal_boundary` (`crates/kndo/tests/internal_boundary.rs`) — **the internal design-doc tree
+  has exactly one point of contact with the rest of the codebase: this file, `CLAUDE.md`.**
+  Nothing outside that tree may cite it — no path into it, no retired `RFC 00NN`/`ADR 00NN`
+  number, no section-sign citation — except the one line above that tells an agent the tree
+  exists. A
+  handful of files are allowlisted in the test for a real, unrelated language convention (Go's
+  own package-visibility boundary, Node's internal-subpath-imports convention, Kotlin's
+  `internal` keyword); a new false positive there is fixed by extending that list, never by
+  weakening the gate.
 
 No PR should weaken or skip one of these to get green.
