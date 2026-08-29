@@ -129,6 +129,25 @@ en el mismo commit.
     [32](tickets/32-vision-html-and-plugin-findings.md) (vision): las 22 correcciones de
     vigencia de la auditoría, aplicadas — ver cada ticket para el detalle punto por punto.
 
+- **Fusión física a los 10 documentos fijos** (tickets 34a-34h + 35, resueltos en dos tandas
+  porque la primera se hizo con worktrees basados en un commit anterior a la sesión y pisaba las
+  22 correcciones de vigencia — detectado antes de commitear, revertido, y re-corrido sin
+  aislamiento de worktree):
+  - [34a](tickets/34a-merge-adrs-and-contracts.md) (ADRs+contratos → `ADRS.md`/`CONTRACTS.md`,
+    corrigiendo además dos tests reales de Rust que leían la ruta vieja en disco),
+    [34b](tickets/34b-merge-adapter-specs.md) (adapter specs + HTML nuevo → `ADAPTERS.md`),
+    [34c](tickets/34c-merge-rfc-architecture.md)–[34g](tickets/34g-merge-rfc-performance-workspaces-release.md)
+    (los 18 RFCs restantes → `ARCHITECTURE.md`/`PLUGINS.md`/`GRAPH-CACHE-AND-ANALYSES.md`/
+    `CLI-OUTPUT-AND-INTERFACE.md`/`PERFORMANCE-WORKSPACES-AND-RELEASE.md`).
+  - [34h](tickets/34h-rebuild-readme.md): `README.md` reconstruido, `product/vision.md` plegado
+    adentro y borrado.
+  - [35](tickets/35-doc-freshness-ci-gate.md): `cargo xtask check-doc-freshness` nuevo, gate de
+    CI (solo en `pull_request`, vía `GITHUB_BASE_REF`), agregado a "Gates that must never
+    regress" en `CLAUDE.md`. Corrida real contra `origin/main` sobre todo el diff de esta
+    sesión: clean.
+  - `internal/` queda en exactamente 10 documentos de diseño + `detection-gaps.md` aparte,
+    como decidió el ticket 33. `cargo test -p kndo --test doc_links` en verde de punta a punta.
+
 ## Not yet specified
 
 - Texto final exacto de cada regla reescrita de `CLAUDE.md` y de la sección de política de

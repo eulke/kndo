@@ -1,8 +1,8 @@
 # Fusionar: RFC 0001 + 0002 + 0016 → ARCHITECTURE.md
 
-- Status: open
+- Status: closed
 - Type: wayfinder:task (AFK)
-- Assignee: unassigned
+- Assignee: claude (sesión claude/wayfinder-cleanup-docs-9c4ic4)
 - Blocked by: 21-rfc-arch-adapters-plugins.md
 
 ## Question
@@ -18,4 +18,7 @@ al final.
 
 ## Resolution
 
-(completar al cerrar)
+`internal/ARCHITECTURE.md` creado con las 3 RFCs como secciones numeradas. Corregida además
+una frase que quedó desactualizada tras el merge (RFC 0002 §7 decía que el spec de HTML "no
+existe aún" — ya existe, en `ADAPTERS.md`, creado por el ticket 34b en paralelo).
+

@@ -1,8 +1,8 @@
 # Reconstruir internal/README.md con la estructura final de 10 documentos
 
-- Status: open
+- Status: closed
 - Type: wayfinder:task (AFK)
-- Assignee: unassigned
+- Assignee: claude (sesión claude/wayfinder-cleanup-docs-9c4ic4)
 - Blocked by: 32-vision-html-and-plugin-findings.md, 34a-merge-adrs-and-contracts.md, 34b-merge-adapter-specs.md, 34c-merge-rfc-architecture.md, 34d-merge-rfc-plugins.md, 34e-merge-rfc-graph-cache-analyses.md, 34f-merge-rfc-cli-output-interface.md, 34g-merge-rfc-performance-workspaces-release.md
 
 ## Question
@@ -21,4 +21,9 @@ atención particular acá.
 
 ## Resolution
 
-(completar al cerrar)
+`internal/README.md` reescrito: intro de producto fusionada desde `product/vision.md` (borrado),
+tabla de documentos apuntando a los 10 archivos reales, `detection-gaps.md` señalado aparte,
+Conventions/Open questions actualizadas. Corregí un link que el agente dejó apuntando a
+`.wayfinder/tickets/33-consolidation-decision.md` — ese tracker se borra al cerrar el mapa, así
+que un doc permanente no puede depender de él. `cargo test -p kndo --test doc_links` en verde.
+

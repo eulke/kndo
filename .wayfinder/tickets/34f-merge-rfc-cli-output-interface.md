@@ -1,8 +1,8 @@
 # Fusionar: RFC 0006 + 0007 + 0009 + 0010 → CLI-OUTPUT-AND-INTERFACE.md
 
-- Status: open
+- Status: closed
 - Type: wayfinder:task (AFK)
-- Assignee: unassigned
+- Assignee: claude (sesión claude/wayfinder-cleanup-docs-9c4ic4)
 - Blocked by: 22-rfc-cache-analyses-cli.md, 23-rfc-nav-perf-human.md, 24-rfc-ci-workspaces-release.md
 
 ## Question
@@ -15,4 +15,5 @@ Borrar los 4 archivos originales. Correr `cargo test -p kndo doc_links` al final
 
 ## Resolution
 
-(completar al cerrar)
+`internal/CLI-OUTPUT-AND-INTERFACE.md` creado con las 4 RFCs como secciones numeradas.
+

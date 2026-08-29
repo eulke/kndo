@@ -1,8 +1,8 @@
 # Fusionar: 8 specs de adapter + HTML nuevo → ADAPTERS.md
 
-- Status: open
+- Status: closed
 - Type: wayfinder:task (AFK)
-- Assignee: unassigned
+- Assignee: claude (sesión claude/wayfinder-cleanup-docs-9c4ic4)
 - Blocked by: 26-adapter-specs-status-headers.md, 27-adapter-specs-self-contradictions.md, 28-adapter-spec-java-fixtures.md, 29-adapter-spec-js-ts-tsconfig.md
 
 ## Question
@@ -17,4 +17,6 @@ vacía. Correr `cargo test -p kndo doc_links` al final.
 
 ## Resolution
 
-(completar al cerrar)
+`internal/ADAPTERS.md` creado con los 8 specs existentes más una sección nueva de HTML escrita
+desde el código real de `kndo-adapter-html`. 8 archivos originales borrados.
+

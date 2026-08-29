@@ -1,8 +1,8 @@
 # Gate de CI: ruta de crate → documento fijo que debe acompañarla
 
-- Status: open
+- Status: closed
 - Type: wayfinder:task (AFK)
-- Assignee: unassigned
+- Assignee: claude (sesión claude/wayfinder-cleanup-docs-9c4ic4)
 - Blocked by: 34h-rebuild-readme.md
 
 ## Question
@@ -20,4 +20,10 @@ que "Gates that must never regress".
 
 ## Resolution
 
-(completar al cerrar)
+`cargo xtask check-doc-freshness` nuevo: tabla `DOC_COVERAGE` (ruta → doc de `internal/`),
+deliberadamente chica; corre en el job `gates` de CI solo en eventos `pull_request` (necesita
+`GITHUB_BASE_REF`). Agregado a "Gates that must never regress" en `CLAUDE.md`. 8 tests nuevos,
+incluida una prueba con un repo git real para la semántica `base...HEAD`. Corrida real contra
+`origin/main` sobre todo el diff de esta sesión: "clean" — confirma que cada ticket anterior
+mantuvo su doc sincronizado.
+

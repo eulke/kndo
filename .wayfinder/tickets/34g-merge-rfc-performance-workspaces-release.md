@@ -1,8 +1,8 @@
 # Fusionar: RFC 0008 + 0011 + 0014 + spike de perf → PERFORMANCE-WORKSPACES-AND-RELEASE.md
 
-- Status: open
+- Status: closed
 - Type: wayfinder:task (AFK)
-- Assignee: unassigned
+- Assignee: claude (sesión claude/wayfinder-cleanup-docs-9c4ic4)
 - Blocked by: 23-rfc-nav-perf-human.md, 24-rfc-ci-workspaces-release.md
 
 ## Question
@@ -18,4 +18,7 @@ Correr `cargo test -p kndo doc_links` al final.
 
 ## Resolution
 
-(completar al cerrar)
+`internal/PERFORMANCE-WORKSPACES-AND-RELEASE.md` creado con las 3 RFCs más el spike de perf
+como apéndice. El link de `ROADMAP.md` al spike (fuera del alcance de este ticket) se corrigió
+aparte, directamente.
+

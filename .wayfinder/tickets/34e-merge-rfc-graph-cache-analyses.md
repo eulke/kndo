@@ -1,8 +1,8 @@
 # Fusionar: RFC 0004 + 0013 + 0005 + 0012 → GRAPH-CACHE-AND-ANALYSES.md
 
-- Status: open
+- Status: closed
 - Type: wayfinder:task (AFK)
-- Assignee: unassigned
+- Assignee: claude (sesión claude/wayfinder-cleanup-docs-9c4ic4)
 - Blocked by: 22-rfc-cache-analyses-cli.md
 
 ## Question
@@ -17,4 +17,5 @@ Correr `cargo test -p kndo doc_links` al final.
 
 ## Resolution
 
-(completar al cerrar)
+`internal/GRAPH-CACHE-AND-ANALYSES.md` creado con las 4 RFCs como secciones numeradas.
+

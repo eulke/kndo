@@ -1,8 +1,8 @@
 # Fusionar: RFC 0003 + 0015 + 0017 + 0018 → PLUGINS.md
 
-- Status: open
+- Status: closed
 - Type: wayfinder:task (AFK)
-- Assignee: unassigned
+- Assignee: claude (sesión claude/wayfinder-cleanup-docs-9c4ic4)
 - Blocked by: 21-rfc-arch-adapters-plugins.md
 
 ## Question
@@ -19,4 +19,6 @@ ve claramente mejor, pero no es obligatorio. Borrar los 4 archivos originales. C
 
 ## Resolution
 
-(completar al cerrar)
+`internal/PLUGINS.md` creado con las 4 RFCs como secciones numeradas, links a `CONTRACTS.md`
+corregidos.
+
