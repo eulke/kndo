@@ -51,9 +51,8 @@ fn committed_schema_matches_the_type_it_was_generated_from() {
 /// missed bump — changes nothing any test but this one can see.
 #[test]
 fn schema_version_matches_the_contract_document() {
-    let contract =
-        std::fs::read_to_string(workspace_root().join("internal/CONTRACTS.md"))
-            .expect("the normative output-schema contract");
+    let contract = std::fs::read_to_string(workspace_root().join("internal/CONTRACTS.md"))
+        .expect("the normative output-schema contract");
     let needle = format!("\"schema_version\": \"{}\"", kndo::SCHEMA_VERSION);
     assert!(
         contract.contains(&needle),

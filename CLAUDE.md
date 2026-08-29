@@ -164,8 +164,9 @@ These are checked by name in CI — the `gates` job in `.github/workflows/ci.yml
 per entry below, and its first step fails if any of them has been renamed or deleted, which a
 bulk `cargo test --workspace` cannot notice. Adding an entry here means adding its step there;
 the two lists are one list. All of them must stay green on every PR that touches
-graph/cache/analysis — and `doc_links`, whose subject is Markdown, on every PR that touches a
-`.md`:
+graph/cache/analysis — `doc_links`, whose subject is Markdown, on every PR that touches a
+`.md` — and `check-doc-freshness`, whose subject is `internal/`'s own coverage, on every PR
+whose diff touches a path in its table:
 
 - `patch_equivalence` — full assembly and incremental patch produce identical graphs.
 - cache equivalence — a cached run and `--no-cache` produce byte-identical output.
@@ -200,5 +201,16 @@ graph/cache/analysis — and `doc_links`, whose subject is Markdown, on every PR
   repositories, invented illustrations, paths that exist in a *user's* project), so an analysis
   firing on those would be noise. The scanner blanks code spans first — a path inside backticks
   is quoted, not claimed.
+
+- `check-doc-freshness` (`cargo xtask check-doc-freshness`, `xtask/src/doc_freshness.rs`) — **a
+  diff that touches a source path with real design-doc coverage also touches the `internal/`
+  document that covers it**, and a failure names the exact untouched document next to the path
+  that needed it, never just "docs are stale." The path → document table
+  (`doc_freshness::DOC_COVERAGE`) is deliberately small: a path absent from it carries no
+  obligation, rather than forcing every file in the workspace to justify its silence. Needs the
+  real base-vs-head diff to run, which a plain `cargo test` cannot discover without a git
+  command — the `gates` job fetches the PR's base branch and runs it via `GITHUB_BASE_REF`, the
+  environment variable GitHub Actions sets for a `pull_request` event; a push or non-PR run has
+  no base to diff against and the step does not run.
 
 No PR should weaken or skip one of these to get green.

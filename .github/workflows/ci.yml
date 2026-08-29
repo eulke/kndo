@@ -175,6 +175,20 @@ jobs:
       - name: gate — every relative markdown link resolves
         run: cargo test -p kndo --all-features --test doc_links
 
+      # GITHUB_BASE_REF is the env var GitHub Actions sets to the base branch name for a
+      # pull_request event (empty on push and on release.yml's workflow_call, which is why
+      # this step is scoped to pull_request: there is no PR base to diff against otherwise).
+      # actions/checkout's fetch-depth: 0 above brings in the base commit's objects but not a
+      # local ref for it, so it's fetched explicitly here — the same thing action/action.yml's
+      # own BASE_REF handling does for kndo's self-check step in the `test` job.
+      - name: gate — internal/ docs move with the source paths they document
+        if: github.event_name == 'pull_request'
+        run: |
+          set -eu
+          git fetch --no-tags --quiet origin \
+            "+refs/heads/${GITHUB_BASE_REF}:refs/remotes/origin/${GITHUB_BASE_REF}"
+          cargo run -p xtask --quiet -- check-doc-freshness --base "origin/${GITHUB_BASE_REF}"
+
   # The ABI compatibility matrix: the two reference components, PRE-BUILT and committed
   # under crates/kndo-plugin-api/tests/compat/, run against the HEAD host. the ABI's
   # "a v1 component keeps working against every v1-compatible host" promise as a job that
