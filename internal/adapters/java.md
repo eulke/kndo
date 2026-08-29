@@ -385,11 +385,12 @@ time and `ResolveCtx` exposes paths, not contents), and Gradle's `sourceSets`.
 | Annotation processors / Lombok-generated members (`@Data`, `@Getter`, …) | not modeled — a generated `getFoo()` method has no textual declaration for extraction to see (same class of gap as record accessors); a *use* of it (`obj.getFoo()`) is a normal member-fallback reference that simply never resolves, harmlessly |
 | Text blocks (`"""…"""`, Java 15+), switch expressions (`yield`), pattern matching (`instanceof Foo f`) | parsed by tree-sitter-java's grammar as ordinary expression/statement shapes; no adapter-specific handling needed — their contained references/type positions fall through the same generic walkers as everything else |
 | `module-info.java` (JPMS) | claimed, yields zero declarations (§0's last bullet) — the `exports`/`requires`/`opens` module directives are not parsed; a real, parked gap (§7) |
+| Multi-Release JAR source-set variants (`src/main/java`, `src/main/javaNN`) | not directory-special-cased — a `javaNN` source root is claimed like any other `.java` file (§1), so two variants declaring the same package and the same class/method name become same-unit *symbol twins*, the identical mechanism Go's `//go:build` alternates and Kotlin's `expect`/`actual` already use (RFC 0012 §8): a same-package caller's reference edges to every twin, so neither variant reads `unused`. The call resolves through the duck-typed member fallback at `Possible` confidence rather than a direct type reference, so both variants surface `internal-only` at that tier instead of a clean pass — pinned by the `multi-release-variants` fixture (§6) |
 | Non-standard source roots (no `src/main/java` — flat layouts, Bazel) | `unit` (declared package) still resolves correctly regardless of directory shape (§0); role-by-path (`src/test/java`) degrades to the Surefire-filename fallback (§1); manifest root-promotion (§4) reads a pom's own `<sourceDirectory>` and otherwise assumes the Standard Directory Layout, undercounting on a layout that is neither declared here nor conventional (inherited declarations and Gradle `sourceSets`, §7.2) — documented, not silently wrong (fewer roots promoted, never phantom ones) |
 
 ## 6. Conformance fixtures (shared harness, RFC 0002 §8)
 
-Four fixtures, each a real Maven/Gradle module tree run through the real `Engine` (no mock):
+Six fixtures, each a real Maven/Gradle module tree run through the real `Engine` (no mock):
 
 - **`dead-code-same-package`** — a private (`packaging=war`) module: `Main.main` calls
   `Helper.live()` with no import (same-package `unit` resolution) while `Helper.dead()` is
@@ -428,6 +429,11 @@ Four fixtures, each a real Maven/Gradle module tree run through the real `Engine
   module's genuinely-unused `com.other:lib` declaration produces an `unused`/`test-only`
   dependency finding — verified end-to-end through the real engine (plus the diagnostic
   message), not just the unit-level `find_dependency_hygiene` test in `dependency_hygiene.rs`.
+- **`multi-release-variants`** — a Multi-Release JAR layout: `retro.DefaultMethodSupport.invoke`
+  is declared twice, once under `src/main/java` and once under `src/main/java16`, both in the
+  same package. `Reflection.call`'s same-package call reaches both declarations as same-unit
+  symbol twins rather than reading either one `unused`; both correctly surface `internal-only`
+  instead, at `Possible` confidence — the mechanism and stance are §5's Multi-Release JAR row.
 
 **A gap the fixtures surfaced, and how it closed.** A *wildcard* type import
 (`import com.foo.*;`) used not to bind the target package's type names the way a plain
