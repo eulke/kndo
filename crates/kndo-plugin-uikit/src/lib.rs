@@ -7,11 +7,11 @@
 //! sees a class nothing constructs and members nothing touches outside their own file — and
 //! reports them.
 //!
-//! Measured before this existed: Kingfisher's demo app carries 27 outlets across 15 classes,
-//! and kndo called `GIFViewController.imageView`, `DetailImageViewController.infoLabel`,
+//! Kingfisher's demo app carries 27 outlets across 15 classes, and without this plugin kndo
+//! calls `GIFViewController.imageView`, `DetailImageViewController.infoLabel`,
 //! `TransitionViewController.transitionPickerView` and their siblings `internal-only`
-//! ("private would suffice"), which is exactly wrong — `private` breaks the connection. In
-//! Alamofire the same shape hit `MasterViewController.titleImageView`.
+//! ("private would suffice") — exactly wrong, since `private` breaks the connection. Alamofire
+//! hits the same shape at `MasterViewController.titleImageView`.
 //!
 //! This plugin reads the XML those documents already are and nothing else. It parses no
 //! Swift, resolves no module, and asserts nothing about a name it cannot point at a real

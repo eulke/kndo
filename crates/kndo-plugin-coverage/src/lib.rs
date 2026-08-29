@@ -418,10 +418,10 @@ mod tests {
 
     #[test]
     fn the_doctype_every_real_report_carries_is_read_not_refused() {
-        // The bug this test exists for: both ingesters parsed with roxmltree's default
-        // options, which REFUSE a document declaring a DTD. Every JaCoCo report declares one
-        // and Cobertura's writer emits a SYSTEM identifier, so both silently ingested nothing
-        // in the field while these tests — whose fixtures had no DOCTYPE — passed.
+        // roxmltree's default options REFUSE a document declaring a DTD. Every JaCoCo report
+        // declares one and Cobertura's writer emits a SYSTEM identifier, so both must parse
+        // with `xml_options()` or silently ingest nothing from a real report — a fixture
+        // without a DOCTYPE cannot catch that.
         let jacoco = ingest(
             &JacocoPlugin,
             "build/reports/jacoco/test/jacocoTestReport.xml",

@@ -134,9 +134,10 @@ fn compilations(content: &ContentView<'_>) -> Vec<Compilation> {
 /// deeper than the `<build>` a fixed lookup would try, and a project may well declare the same
 /// compilation in more than one profile.
 fn declared_in(pom: &str, module_dir: &str) -> Vec<Compilation> {
-    // Some poms carry a DOCTYPE; roxmltree refuses those unless told otherwise, and finding
-    // that out in the field rather than in a fixture is a mistake this codebase has made once
-    // already (`kndo:info-plist`). Safe: roxmltree never resolves external entities.
+    // Some poms carry a DOCTYPE; roxmltree refuses those unless told otherwise, and a
+    // DOCTYPE-less fixture cannot catch a real pom silently failing to parse — the same
+    // failure mode `kndo:info-plist` guards against. Safe: roxmltree never resolves external
+    // entities.
     let options = roxmltree::ParsingOptions {
         allow_dtd: true,
         ..Default::default()

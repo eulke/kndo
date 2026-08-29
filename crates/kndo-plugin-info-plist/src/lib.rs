@@ -181,9 +181,9 @@ mod tests {
     #[test]
     fn the_watchos_shape_that_motivated_this_yields_its_delegate() {
         // Alamofire's `watchOS Example WatchKit Extension/Info.plist`, verbatim in shape.
-        // The DOCTYPE is not decoration: every Apple plist carries it, and leaving it out of
-        // a fixture is what let the first version of this plugin pass its tests while finding
-        // nothing in the field.
+        // The DOCTYPE is not decoration: every Apple plist carries it, so a fixture without
+        // one cannot prove `class_names` handles a real plist — only that it handles an XML
+        // shape no real plist has.
         let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
