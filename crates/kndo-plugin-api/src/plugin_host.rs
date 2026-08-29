@@ -812,8 +812,8 @@ impl Plugin for WasmPlugin {
     /// The general WASM plugin bridge exposes the full graph-mutation hook surface
     /// (`classify_file`/`contribute_roots`/`contribute_edges`/`annotate_symbols`) to every
     /// component it hosts — unlike [`crate::coverage_host::WasmCoverageIngester`], which is a
-    /// separate, narrower host for the coverage-only WIT world. Always `true`, matching the
-    /// conservative posture the old trait default used to encode.
+    /// separate, narrower host for the coverage-only WIT world. Always `true`: a component
+    /// exposed to that full hook surface must be treated as capable of mutating the graph.
     fn mutates_graph(&self) -> bool {
         true
     }
@@ -1079,11 +1079,9 @@ fn to_wit_confidence_out(confidence: kndo_core::vocab::Confidence) -> w::Confide
 }
 
 /// An exhaustive `match`, not a table lookup, and that is the whole point: a WIT enum growing
-/// a variant stops this compiling until the arm exists. It used to be a table whose miss
-/// branch panicked, under a comment asserting the table was "exhaustive by construction" —
-/// which nothing checked. `host.rs` makes the same claim about its own tables and *does* check
-/// it (an exhaustive match per enum in its test module); this file asserted it and did not.
-/// A match needs no assertion because the compiler is the assertion.
+/// a variant stops this compiling until the arm exists. A match needs no separate check because
+/// the compiler is the check — unlike `host.rs`'s conversion tables, which need (and get) an
+/// exhaustive match per enum in their own test module to verify the same property.
 fn from_wit_ref_kind(kind: w::RefKind) -> RefKind {
     match kind {
         w::RefKind::Call => RefKind::Call,

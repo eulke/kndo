@@ -178,11 +178,11 @@ fn native_descriptor(raw: w::AdapterDescriptor) -> AdapterDescriptor {
         // judged like any other's; one that declares nothing stays reportable, which is the
         // honest reading of "this world never told us". A later world can carry the real answer.
         declares_units_of_testing: true,
-        // Not on the wire: the WIT descriptor record predates the field, and a WASM
-        // adapter without it just forgoes package-relative test-dir promotion. Additive
-        // whenever the ABI next revs.
+        // Not on the wire: the WIT descriptor record has no field for this, so a WASM
+        // adapter always forgoes package-relative test-dir promotion. Additive whenever
+        // the ABI next revs.
         package_test_dirs: Vec::new(),
-        // No builtin type facts yet: this adapter declares none, and an empty table
+        // No builtin type facts: this adapter declares none, and an empty table
         // simply means the chain resolver has no second tier to consult for it.
         builtin_member_types: Vec::new(),
     }
@@ -257,7 +257,7 @@ impl LanguageAdapter for WasmAdapter {
 
     fn resolve(&self, _spec: &ImportSpec, _ctx: &ResolveCtx<'_>) -> Resolution {
         // v1 never extracts imports (no `resolve()` guest export exists), so this is
-        // structurally unreachable in practice — kept `Unresolved` for trait completeness,
+        // structurally unreachable in practice — `Unresolved` satisfies trait completeness,
         // matching the JSON adapter's own "structurally unreachable in normal operation"
         // note.
         Resolution::Unresolved
@@ -390,7 +390,7 @@ fn from_wit_facts(facts: w::FileFacts) -> FileFacts {
             visibility_inherited: false,
             visible_in_unit: None,
             // A WASM adapter's v1 `declaration` record has no trait/protocol field, so a
-            // third-party adapter cannot report the fact yet. `None` is the same conservative
+            // third-party adapter cannot report the fact. `None` is the same conservative
             // v1 cut every optional field above takes, and it degrades exactly the right way:
             // a convention plugin marks nothing rather than marking the wrong thing.
             implements: None,
