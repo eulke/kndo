@@ -50,10 +50,10 @@ pub struct PluginDescriptor {
     /// [`ActivationRule`] can say that.
     ///
     /// A gate that IS a rule leaves this empty, because restating a rule the descriptor
-    /// already carries is one concept with two sources — and it had already drifted: every
-    /// built-in conventions plugin's prose named a single manifest kind ("a package.json
-    /// under the project root depends on next") while `ManifestDependency` matches any
-    /// manifest, `Cargo.toml` included.
+    /// already carries is one concept with two sources — and two sources drift: prose naming
+    /// a single manifest kind ("a package.json under the project root depends on next") while
+    /// the rule (`ManifestDependency`) matches any manifest, `Cargo.toml` included, is exactly
+    /// the kind of disagreement duplicating the rule in prose would invite.
     pub detection: Vec<SmolStr>,
     /// Globs whose content the host will provide; no ambient fs/net.
     pub requested_file_access: Vec<SmolStr>,
@@ -529,9 +529,7 @@ const CONTENT_MAX_BYTES: usize = 8 * 1024 * 1024;
 struct ContentBudget {
     // Keyed by path, not a call counter: a component's read scope shouldn't depend on how
     // many hooks look at the same file — charging by first-seen path makes the budget mean
-    // what its doc comment says, distinct paths. (Historically this also compensated the
-    // WASM bridge's instance-per-hook triple-fetch; the one-instance-per-round
-    // lifecycle removed that motivation, and the keying stays on its own merits.)
+    // what its doc comment says, distinct paths.
     seen: rustc_hash::FxHashSet<ProjectPath>,
     bytes_read: usize,
     cut_off: bool,
@@ -946,8 +944,8 @@ pub trait Plugin: Send + Sync {
     /// hooks on plugins that return `true`, so returning `false` while implementing a hook
     /// means the hook never runs (identically on cold and cached runs) — never that a cached
     /// graph silently misses its contributions. No default: forgetting this on a
-    /// graph-mutating plugin used to silently disable incremental patching product-wide;
-    /// forgetting it now is a compile error instead.
+    /// graph-mutating plugin is a compile error, not a silent, product-wide loss of
+    /// incremental patching.
     fn mutates_graph(&self) -> bool;
 
     /// Content identity for the graph cache key. `None` for compiled-in
@@ -1323,9 +1321,8 @@ mod tests {
     // ------------------------------------------------------------ ContentView
 
     /// Returns the `TempDir` alongside the tree, and callers must hold it: `ContentView` reads
-    /// the files back off disk, so the directory has to outlive the tree. The hand-rolled
-    /// directory this replaced was simply never deleted, which is the only reason returning
-    /// the tree alone used to work.
+    /// the files back off disk, so the directory has to outlive the tree, or its reads fail
+    /// once the directory is dropped and cleaned up.
     fn content_tree_fixture(
         files: &[(&str, &str)],
     ) -> (tempfile::TempDir, crate::discovery::DiscoveredTree) {

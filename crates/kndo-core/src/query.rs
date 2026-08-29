@@ -55,8 +55,7 @@ pub enum Selector {
 /// Everything a query verb's parsing/resolution can reject with a message, unified so
 /// `parse_selector`, [`EdgeFilter::parse`], and [`impact`] share one error discipline instead
 /// of each returning a bare `Result<_, String>`. Every variant's `Display` is the exact string
-/// the query envelope has always surfaced — callers that used to build a `String` by hand now
-/// call `.to_string()` on this instead, byte-identical.
+/// the query envelope surfaces, so a caller gets that byte-identical text via `.to_string()`.
 #[derive(Debug, thiserror::Error)]
 pub enum QueryError {
     #[error("`dep:` selector is missing a name")]
@@ -318,10 +317,9 @@ pub struct QNodeRef {
 }
 
 /// One node's one-line spelling: `[selector] kind path:line`, with the coordinates dropped for
-/// a node that has no span. Lives with the type rather than in a frontend, because it is the
-/// same line in every frontend that prints one — the human renderer and the agent format each
-/// carried a byte-identical copy of it, which is exactly the drift the facade rule exists to
-/// prevent.
+/// a node that has no span. Lives with the type rather than in a frontend, because every
+/// frontend that prints one needs the identical line — a copy kept per frontend (the human
+/// renderer, the agent format) is exactly the drift the facade rule exists to prevent.
 impl std::fmt::Display for QNodeRef {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "[{}] {}", self.selector, self.kind)?;
@@ -486,8 +484,8 @@ pub(crate) struct GraphIndex {
     reverse: HashMap<NavNode, Vec<NavEdge>>,
     roots: HashMap<RootKind, Vec<(NavNode, Confidence)>>,
     /// Who contributed what, for `describe`'s `sources`. Built here rather than per described
-    /// node: the previous shape scanned the whole edge list once *per node*, so a `query`
-    /// batch of sixty describes scanned it sixty times.
+    /// node, so a `query` batch of sixty describes scans the whole edge list once, not sixty
+    /// times.
     provenance: crate::graph::provenance::ProvenanceIndex,
 }
 
@@ -1315,8 +1313,7 @@ fn describe_sources(graph: &ProjectGraph, nav: &GraphIndex, resolved: &Resolved)
         Resolved::Node(ResolvedNode::Symbol(s)) => crate::graph::provenance::Node::Symbol(*s),
         // A dependency node resolves by name; the index is keyed by id. Unlike files and
         // symbols this needs a scan, but it is one scan of the dependency list (hundreds),
-        // not of the edge list, and only for the one node being described. `describe` used to
-        // answer `[]` here — its node-kind match had no dependency arm at all.
+        // not of the edge list, and only for the one node being described.
         Resolved::Dependency(ResolvedDependency(name)) => {
             let Some(i) = graph.dependencies.iter().position(|d| &d.name == name) else {
                 return Vec::new();
@@ -2631,8 +2628,9 @@ mod tests {
 
     #[test]
     fn a_capped_declared_symbols_list_says_how_many_it_dropped() {
-        // `reached_by_roots` has always reported its elision; `declared_symbols` truncated
-        // silently, which reads as "that's all" — the exact misreading RFC 0007 §2 forbids.
+        // Every capped list must report how many entries it dropped, the same as
+        // `reached_by_roots` — a silent truncation reads as "that's all," the exact
+        // misreading RFC 0007 §2 forbids.
         let files = vec![file("big.ts")];
         let symbols: Vec<_> = (0..DECLARE_SYMBOLS_CAP + 3)
             .map(|i| symbol(FileId(0), &format!("s{i}"), 1, 1))
@@ -2660,9 +2658,9 @@ mod tests {
 
     #[test]
     fn describe_reports_one_metrics_entry_per_shape() {
-        // RFC 0007 §4.2's metrics block. `loc` had no reader at all before this: it was
-        // computed by every adapter, carried through the facts contract and cached in the
-        // graph snapshot, and nothing ever read it back.
+        // RFC 0007 §4.2's metrics block: `loc` flows from every adapter's facts through the
+        // facts contract into the cached graph snapshot, and this is the one place it's read
+        // back.
         let graph = graph_with_metrics();
         let d = describe_symbol(&graph, &Default::default(), "b.ts", "bar");
         assert_eq!(d.metrics.len(), 1);
@@ -2873,11 +2871,11 @@ mod tests {
         assert!(selectors.contains(&"b.ts#bar"));
     }
 
-    /// Regression: the evidence `site` on a `uses` entry must point at the *origin's* file (the
-    /// file that wrote the import/reference), not the neighbor's — an earlier implementation
-    /// derived the site path from whichever node was "the neighbor," which is only correct for
-    /// `used-by` (reverse traversal); for `uses` (forward) it silently paired the right line/
-    /// column with the wrong file, actively misleading a reader instead of just omitting evidence.
+    /// Regression guard: the evidence `site` on a `uses` entry must point at the *origin's*
+    /// file (the file that wrote the import/reference), not the neighbor's. Deriving the site
+    /// path from whichever node is "the neighbor" is only correct for `used-by` (reverse
+    /// traversal); for `uses` (forward) it would silently pair the right line/column with the
+    /// wrong file, actively misleading a reader instead of just omitting evidence.
     #[test]
     fn uses_site_is_attributed_to_the_importing_file_not_the_imported_one() {
         let graph = linear_graph();

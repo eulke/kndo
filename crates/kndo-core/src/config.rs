@@ -2,11 +2,10 @@
 //! `[plugins.gate]` posture throughout: a missing file is empty config, a malformed file or
 //! value is reported as a problem string (surfaced as a run diagnostic) and otherwise
 //! ignored, and unknown tables/keys are skipped silently — forward compatibility, so a file
-//! written for a later kndo still works on this one. There is no longer a documented-but-unwired
-//! section trading on that tolerance: `[project]` (`roots`, `exclude`) was written by
-//! `kndo init` and read by nothing, and has been removed from the template and the docs rather
-//! than left inert. Discovery exclusion is `.ignore`'"'"'s job and verdict scoping is `[[rule]]`'"'"'s;
-//! `docs/src/configuration.md` says so where the section used to be.
+//! written for a later kndo still works on this one. No documented section trades on that
+//! tolerance while going unwired: every table `kndo init`'s template and
+//! `docs/src/configuration.md` describe is one `parse` actually reads. Discovery exclusion is
+//! `.ignore`'s job and verdict scoping is `[[rule]]`'s.
 //!
 //! What is live: `[analysis]` (`skip`, `min-confidence`), `[analysis.crap]` (`threshold`),
 //! `[analysis.duplicate]` (`min-tokens`), `[performance]` (`threads`), `[[rule]]`
@@ -27,9 +26,9 @@
 /// Every top-level table `parse` actually reads.
 ///
 /// Exported because two things outside this file describe kndo's configuration surface — the
-/// template `kndo init` writes and `docs/src/configuration.md` — and both used to be free to
-/// describe a table nothing here reads. One did: `[project]`, with `roots` and `exclude`,
-/// documented key by key and wired to nothing. This is the list they are checked against
+/// template `kndo init` writes and `docs/src/configuration.md` — and nothing else keeps either
+/// from describing a table nothing here reads (a `[project]`, say, with `roots` and `exclude`
+/// spelled out key by key and wired to nothing). This is the list they are checked against
 /// (`kndo-cli`'s `the_init_template_offers_no_section_the_engine_ignores`), so the next unwired section fails a test instead
 /// of shipping as a promise.
 ///
@@ -71,8 +70,9 @@ pub enum SkipSpecError {
 }
 
 impl SkipSpec {
-    /// `"unused"` or `"unused:enum-member"` — the vocabulary [suppressions] use, and now the
-    /// vocabulary `--only`/`--skip` use, because they are the same policy from another source.
+    /// `"unused"` or `"unused:enum-member"` — the vocabulary [suppressions] use, and the
+    /// vocabulary `--only`/`--skip` use too, because they are the same policy from another
+    /// source.
     ///
     /// Does not validate that the category exists: `plugin:<coordinate>/<rule>` is an open
     /// namespace (RFC 0018 §2.1), so "unknown" is not a thing this layer can decide. A
@@ -190,10 +190,10 @@ pub struct KndoConfig {
 pub const DUPLICATE_MIN_TOKENS_FLOOR: u32 = 50;
 
 /// Every knob's final value — `kndo.toml` merged under [`crate::engine::ConfigOverrides`]'s
-/// frontend-supplied precedence, resolved once by [`KndoConfig::resolve`]. Before this
-/// existed, `Engine::open_with_plugins` and `assemble_and_analyze` each re-derived their own
-/// slice of this precedence by hand (the latter constructing `AnalysisTuning::default()`
-/// twice just to pull two fallbacks) — a second merge site is how the two silently drift.
+/// frontend-supplied precedence, resolved once by [`KndoConfig::resolve`]. A second call site
+/// re-deriving its own slice of this precedence by hand (constructing
+/// `AnalysisTuning::default()` twice just to pull two fallbacks, say) is how call sites
+/// silently drift apart from each other.
 #[derive(Debug, Clone)]
 pub struct EffectiveConfig {
     /// `--threads` > `kndo.toml [performance] threads` > `None` ("physical cores").
@@ -204,8 +204,8 @@ pub struct EffectiveConfig {
     /// `[analysis.crap]`/`[analysis.duplicate]`, each defended by `AnalysisTuning::default()`.
     pub tuning: crate::analysis::AnalysisTuning,
     /// Which findings reach the report: `--only`'s lens, then `--skip` unioned with
-    /// `[analysis] skip` and `[[rule]]`. Lived on `KndoConfig` before the flags existed,
-    /// which would have made the flags a second merge site — exactly what this type is for.
+    /// `[analysis] skip` and `[[rule]]`. Lives here, not on `KndoConfig`, so the flags don't
+    /// become a second merge site — exactly what this type is for.
     pub report: ReportFilter,
 }
 
@@ -816,10 +816,10 @@ mod tests {
 
     #[test]
     fn unknown_tables_are_silently_ignored_for_forward_compat() {
-        // `[project]` is no longer written by `kndo init` and was never read; kept here as a
-        // realistic unknown table (someone'"'"'s older kndo.toml still has one). `[future]` stands in for
-        // a table a newer kndo will understand. Neither may become a diagnostic — a config a
-        // newer version writes has to stay readable by an older one.
+        // `[project]` is not written by `kndo init` and is not read by `parse`; kept here as a
+        // realistic unknown table (an older kndo.toml may still have one). `[future]` stands in
+        // for any table this version does not recognize. Neither may become a diagnostic — a
+        // config a newer version writes has to stay readable by an older one.
         let (config, problems) = parsed("[project]\nroots = [\"src\"]\n[future]\nx = 1\n");
         assert!(problems.is_empty(), "{problems:?}");
         assert!(config.skip.is_empty());
@@ -828,9 +828,8 @@ mod tests {
 
     #[test]
     fn the_delta_section_reaches_the_effective_config() {
-        // `[delta]` used to sit in the same test as the forward-compat tables, asserting it had
-        // no effect. It has one now: `crate::delta` owns the semantics, but the single file
-        // read is here, so this is the seam that has to be pinned.
+        // `crate::delta` owns `[delta]`'s semantics, but the single file read happens here, so
+        // this is the seam that has to be pinned.
         let (config, problems) = parsed("[delta]\nmax-net-findings = 3\n");
         assert!(problems.is_empty(), "{problems:?}");
         let delta = config.delta.expect("the section opts in");

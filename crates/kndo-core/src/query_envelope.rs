@@ -449,7 +449,7 @@ fn describe_entries(
 /// One entry per selector, in argument order: resolve it and hand the resolution to `entry`,
 /// or turn a resolution failure into that selector's own `Failed` entry. The envelope's
 /// `status` is per-result, so one unresolvable selector never sinks the batch — a rule every
-/// verb follows, and one each of them used to spell out.
+/// verb follows, enforced once here rather than spelled out per verb.
 fn resolved_entries(
     graph: &ProjectGraph,
     selectors: &[String],
@@ -508,7 +508,7 @@ fn neighbor_entries(
     })
 }
 
-// What `impact_entries` and `neighbor_entries` share is now `failed_batch` and
+// What `impact_entries` and `neighbor_entries` share is `failed_batch` and
 // `resolved_entries`. What is left is each verb's own options struct and result variant —
 // plus `impact`'s extra failure arm, which no other verb has. Sharing further would mean one
 // verb's entry builder knowing the other's options.
