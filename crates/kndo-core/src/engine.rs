@@ -209,7 +209,7 @@ pub struct ConfigOverrides {
     /// The report floor override: findings below this confidence tier are dropped from the
     /// report (never counted as suppressed — a floor is a display posture, not an
     /// acknowledgment). `None` defers to `kndo.toml [analysis] min-confidence`, and with
-    /// neither set the floor is `Possible` — every tier reported, the historical behavior.
+    /// neither set the floor is `Possible` — every tier reported by default.
     /// The CLI passes `Some(Possible)` under `--verbose` so verbose always shows
     /// everything even when the project config raises the floor.
     pub min_confidence: Option<crate::vocab::Confidence>,
@@ -394,7 +394,8 @@ pub struct DoctorReport {
 }
 
 /// A finding's severity — each category carries one as
-/// a fixed default; `--strict` promotion isn't implemented yet, so this is always the default.
+/// a fixed default. `--strict` promotion (RFC 0005) happens where the analysis assigns the
+/// severity directly (see `analysis::undeclared`), never through logic on this type.
 /// Declaration order doubles as sort/triage order: worst first.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
@@ -426,9 +427,9 @@ impl Severity {
 /// `version-skew` over disagreeing manifests) anchors on the lexicographically-first member and
 /// carries **every** member in `related`. That pairing is the contract: the anchor makes the
 /// finding addressable, `related` makes it complete, and the message is then free to summarize.
-/// The alternative shipped for a while — an empty `Location` with the members named only in the
-/// message prose — and it meant 278 findings across the corpus that no consumer could act on
-/// without parsing English, some of which truncated the list and lost the rest outright.
+/// Naming the members only in the message prose would leave every consumer but a human reader
+/// unable to act on them — and a renderer that truncates the message for length would silently
+/// drop the rest.
 #[derive(Debug, Clone, Default, serde::Serialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Location {
@@ -486,8 +487,8 @@ pub struct RelatedLocation {
 impl RelatedLocation {
     /// Where this location is, as text: `path:line`, or bare `path` when there is no range.
     /// Frontends decorate it differently (the human renderer draws a tree, the agent format
-    /// writes `evidence:`) but they agree on the coordinates, so the coordinates live here —
-    /// both used to spell them out themselves.
+    /// writes `evidence:`) but they agree on the coordinates, so the coordinates live here once
+    /// instead of duplicated in each.
     pub fn coordinates(&self) -> String {
         match self.range {
             Some(range) => format!("{}:{}", self.path.0, range.start.0),
@@ -499,9 +500,9 @@ impl RelatedLocation {
     /// `separator` and the note when there is one.
     ///
     /// The decision that lives here is "a note is appended after the coordinates, and its
-    /// absence changes the line" — which every frontend that prints related locations makes,
-    /// and which the human renderer and the agent format each used to make on their own. What
-    /// stays theirs is how it looks: the tree glyph and em dash, or `evidence:` and a space.
+    /// absence changes the line" — made once, so the human renderer and the agent format agree
+    /// on it by construction rather than by keeping their own copies in sync. What stays theirs
+    /// is how it looks: the tree glyph and em dash, or `evidence:` and a space.
     pub fn render(&self, prefix: &str, separator: &str) -> String {
         match &self.note {
             Some(note) => format!("{prefix}{}{separator}{note}", self.coordinates()),
@@ -530,7 +531,7 @@ pub struct Finding {
     pub confidence: Confidence,
     pub message: String,
     pub location: Location,
-    /// Evidence chain — empty for analyses that haven't adopted it yet.
+    /// Evidence chain — empty for analyses that don't populate one.
     /// `default` isn't for deserialization (Finding is serialize-only) — it tells the schema
     /// generator the field is optional, matching the skip-when-empty serialization.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -701,18 +702,18 @@ pub struct RunResult {
     /// "after" side, with `previous` computed from "before".
     /// `None` only when assembly itself failed.
     pub health: Option<crate::analysis::health::Health>,
-    /// This run's plugin graph-mutation audit record (`kndo doctor`'s `plugin_contributions`
-    /// used to be the only way to read this after a `check()` — always via the cache's own
-    /// sidecar, which forced a caller wanting fresh data to keep the cache on). Empty when no
-    /// graph-mutating plugin is registered, or (diff modes) when assembly itself failed.
+    /// This run's plugin graph-mutation audit record — read directly off this run rather than
+    /// through `kndo doctor`'s cache sidecar (`plugin_contributions()`), so a caller wanting
+    /// fresh data need not keep the cache on. Empty when no graph-mutating plugin is
+    /// registered, or (diff modes) when assembly itself failed.
     pub plugin_contributions: Vec<crate::plugin::PluginContribution>,
 }
 
 /// Three states, and the third one matters: `"disabled"` (`--no-cache`) is not the same claim
 /// as `"cold"`. Cold says the cache was consulted and had nothing — a fact about this project's
 /// history. Disabled says nobody looked, which is a fact about this *invocation*. Collapsing
-/// them, as this did, told a CI job debugging a slow run that its cache was empty when the
-/// truth was that its own flag had turned the cache off.
+/// them would tell a CI job debugging a slow run that its cache was empty when the truth is
+/// that its own flag turned the cache off.
 ///
 /// `"warm"` stays the strict reading: on *and* actually served something. An enabled-but-empty
 /// cache (first run ever, or every file changed) is honestly cold.
@@ -733,8 +734,8 @@ impl RunResult {
     }
 
     /// `new − fixed` in a diff mode — what `max-net-findings` judges and what every renderer
-    /// prints. Both renderers derived it themselves before this existed, and the budget would
-    /// have been the third copy of one subtraction.
+    /// prints. Defined once here so every renderer and the budget compute the same
+    /// subtraction rather than each keeping its own copy.
     ///
     /// Advisory findings are excluded on both sides, for the same reason [`Self::fails_at`]
     /// excludes them: a plugin without a `[plugins.gate]` opt-in must not move anyone's gate,
@@ -798,10 +799,9 @@ struct RunInfo<'a> {
 }
 
 /// `serde(skip_serializing_if)`'s predicate for the counts an envelope omits when they are
-/// zero. Reachable from nowhere but an attribute string — which is precisely why it is here:
-/// this file once carried an `Option<usize>` chosen to avoid needing it, because kndo could
-/// not see the reference and reported this function dead. `kndo:serde` reads the attribute
-/// now, so the encoding is free to be the one the format wants.
+/// zero. Reachable only through the attribute string naming it, never through a code
+/// reference — `kndo:serde`'s attribute-string matching is what keeps this from reading as
+/// dead code.
 fn usize_is_zero(n: &usize) -> bool {
     *n == 0
 }
@@ -2604,11 +2604,10 @@ mod tests {
 
     #[test]
     fn classify_file_reads_the_content_channel() {
-        // `classify_file` used to be a pure function of path + current class, and the WASM
-        // bridge answered its `read-file` import with nothing. That made "this file is
-        // generated because a build tool's config SAYS SO" inexpressible — the one shape that
-        // matters most, since a generated file checked into the tree carries no marker of its
-        // own and no path convention identifies it.
+        // "This file is generated because a build tool's config SAYS SO" is expressible only
+        // through the content channel `classify_file` reads alongside path + current class —
+        // the one shape that matters most, since a generated file checked into the tree
+        // carries no marker of its own and no path convention identifies it.
         let dir = tempfile::tempdir().expect("temp project");
         let dir = dir.path();
         std::fs::write(
@@ -3073,7 +3072,8 @@ mod tests {
         assert!(value["health"]["score"].is_number());
         assert!(value["health"]["grade"].is_string());
         assert!(value["health"]["categories"].is_array());
-        // Not yet implemented subsystems must be absent, not fabricated as empty/null.
+        // Budget and baseline are both opt-in (no `[delta]` section, no baseline file here) —
+        // an unconfigured subsystem must be absent, not fabricated as empty/null.
         assert!(value.get("budget").is_none());
         assert!(value.get("baseline").is_none());
         // Unlike baseline, suppressed is always present — inline pragma matching runs on

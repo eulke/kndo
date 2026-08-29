@@ -489,10 +489,9 @@ pub struct RawImport {
     /// inline `kndo_core::discovery::find_files_named(..)` with no `use` in sight emits a
     /// synthetic import for `kndo_core::discovery` and a reference qualified by
     /// `discovery` — and the adapter, which knows what `::` joins, is the only side that
-    /// can name that segment. The core used to recover it by splitting the specifier on
-    /// `::`, its one piece of hardcoded language knowledge; saying it here is what let that
-    /// go. Such an import carries a non-`Certain` [`RawImport::confidence`], which is
-    /// exactly what stops it from closing the namespace: a miss under a reconstructed
+    /// can name that segment; the core is language-blind and must not derive it by splitting
+    /// the specifier itself. Such an import carries a non-`Certain` [`RawImport::confidence`],
+    /// which is exactly what stops it from closing the namespace: a miss under a reconstructed
     /// import's qualifier falls through the in-scope/duck ladder, while a miss under a real
     /// statement's alias settles.
     pub local_alias: Option<SmolStr>,
@@ -506,9 +505,9 @@ pub struct RawImport {
     ///  * its BINDINGS rank below the file's own declarations. Every language kndo supports
     ///    forbids a real import from shadowing a same-named local declaration (Rust E0255),
     ///    so such a collision can only ever come from a synthetic one — and it must not win.
-    ///    tokio's `dump.rs` declares `pub struct Trace` and merely *mentions*
-    ///    `super::task::trace::Trace` in a field; the synthetic binding used to capture the
-    ///    file's own return type and fabricate a `private-type-leak`.
+    ///    Without this rule, tokio's `dump.rs` — which declares `pub struct Trace` and merely
+    ///    *mentions* `super::task::trace::Trace` in a field — would have its synthetic binding
+    ///    capture the file's own return type and fabricate a `private-type-leak`.
     ///
     /// `false` for every import the source actually contains, which is the default and the
     /// case that keeps its precedence. Confidence is a different question — how sure the
@@ -650,9 +649,8 @@ pub struct RawSuppression {
 /// An adapter-reported problem, minus [`Diagnostic::path`] — an adapter is always reporting
 /// about the one file or manifest it was just handed, so its own path is never adapter
 /// information; every ingestion site (`graph::assemble`'s phase 1 file merge, the manifest
-/// merge) fills it in from the file it was extracting, unconditionally. Adapters that used to
-/// write `path: None` at every call site (verified: never anything else) now simply don't
-/// have the field to set.
+/// merge) fills it in from the file it was extracting, unconditionally. The type carries no
+/// `path` field, so an adapter has nothing here to redundantly restate.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct AdapterDiagnostic {
     pub level: DiagnosticLevel,
@@ -842,7 +840,7 @@ impl TypeExpr {
         }
     }
 
-    /// A leaf type: the common case, and what every depth-1 fact used to be.
+    /// A leaf type: the common case, a named type with no arguments.
     pub fn named(name: impl Into<SmolStr>) -> TypeExpr {
         TypeExpr::Named {
             name: name.into(),
@@ -1024,10 +1022,10 @@ pub struct ManifestFacts {
     /// declares it.
     pub workspace_dependencies: Vec<ManifestDependency>,
     pub dependencies: Vec<ManifestDependency>,
-    /// Entry-point specifiers (main/module/exports/bin/types), raw and unresolved —
-    /// resolution input for self-referencing imports (a package importing its own name),
-    /// not yet consumed.
-    /// Root-worthiness is a separate, already-resolved fact: see `roots`.
+    /// Entry-point specifiers (main/module/exports/bin/types), raw and unresolved — the
+    /// resolution input a self-referencing import (a package importing its own name) would
+    /// need, collected but read by no resolver today. Root-worthiness is a separate,
+    /// already-resolved fact: see `roots`.
     pub entry_points: Vec<SmolStr>,
     /// Roots this manifest declares, already resolved to concrete files (the
     /// library-mode rule): `bin` targets unconditionally, plus `main`/`module`/`exports`
@@ -1380,7 +1378,7 @@ pub enum Resolution {
     /// distinction cannot be made in the core, which sees only that no edge came back, and
     /// getting it wrong here is an error-severity accusation about working code.
     ///
-    /// Adopting it is per-adapter and optional: an adapter whose resolver cannot yet tell the
+    /// Adopting it is per-adapter and optional: an adapter whose resolver cannot tell the
     /// two apart keeps returning `Unresolved` and simply reports nothing, which is the safe
     /// direction (RFC 0012 §2 — degrade toward keep-alive, never toward accusation).
     Missing,
@@ -1403,8 +1401,8 @@ pub trait LanguageAdapter: Send + Sync {
     /// Is this path one of this adapter's manifest files (`package.json`, …)? Manifests are
     /// claimed separately from source (`claim`) — they never get a [`FileClaim`]/language of
     /// their own ("manifests are not claimed"), only manifest facts. Defaults to `false` —
-    /// mirrors the WASM v1 ABI's own scope cut (no manifest extraction over that boundary
-    /// yet): a language with no manifest concept of its own (CSS, JSON) needs no override at
+    /// mirrors the WASM v1 ABI's own scope cut (no manifest extraction over that boundary):
+    /// a language with no manifest concept of its own (CSS, JSON) needs no override at
     /// all, rather than a stub that only exists to satisfy the trait.
     fn claim_manifest(&self, _path: &ProjectPath) -> bool {
         false
