@@ -175,3 +175,17 @@ the registry (v1: CLAUDE.md list ↔ ci.yml steps edited "together", plus a name
 that had never once passed in CI). `rust-toolchain.toml` pins local == CI (v1 paid the
 1.94-vs-1.98 gap twice, three pushes each). Foreign corpus nightly; dogfood from day 1;
 every promised target compiles in CI before it is promised.
+
+## 2026-08-29 — Fingerprint spike: VIABLE, with two measured findings
+
+The structural-fingerprint derive works from source text alone (no type_name/TypeId):
+baseline stable across separate compilations, all sensitivities confirmed by test
+(rename/retype/reorder/variant/generic/module — 14 tests). Finding 1: shape-level
+recursion needs a cycle guard (a fold-stack of derived-type tags emitting a
+back-reference), and the back-reference is itself shape. Finding 2, opposite of the
+hypothesis: a surviving `#[cfg]` field attribute IS visible to the derive on rustc
+1.94.1, so "contract fields are unconditional" is compile-time-enforced; the residue (a
+field cfg'd off on every platform) is covered by comparing the fingerprint across the
+CI matrix. Adoption note: the real derive must also fold serde/rkyv attribute tokens —
+they change wire/disk layout without changing field shapes. Full record:
+`v2/spikes/fingerprint/VERDICT.md`.

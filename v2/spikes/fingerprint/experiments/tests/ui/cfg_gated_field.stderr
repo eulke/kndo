@@ -1,0 +1,7 @@
+error: ContractFingerprint: cfg-gated fields make the shape platform-dependent; contract types must be unconditional
+ --> tests/ui/cfg_gated_field.rs:3:10
+  |
+3 | #[derive(ContractFingerprint)]
+  |          ^^^^^^^^^^^^^^^^^^^
+  |
+  = note: this error originates in the derive macro `ContractFingerprint` (in Nightly builds, run with -Z macro-backtrace for more info)

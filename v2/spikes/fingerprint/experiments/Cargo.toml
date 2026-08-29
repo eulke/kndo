@@ -1,0 +1,12 @@
+[package]
+name = "experiments"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+fingerprint = { path = "../fingerprint" }
+fingerprint-derive = { path = "../fingerprint-derive" }
+
+[dev-dependencies]
+trybuild = "1"
