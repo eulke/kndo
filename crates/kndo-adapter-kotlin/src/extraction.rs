@@ -181,11 +181,11 @@ fn handle_import(item: Node, src: &[u8], out: &mut FileFacts) {
         // `import kotlinx.coroutines.internal.*` is BOTH facts at once: a wildcard over the
         // target's exports (`opaque_namespace_use` — keeps the target alive without naming
         // what it took), and the language's scoping rule that every top-level name of that
-        // package is now legal HERE, unqualified (`module_names_visible` — the bare-name
-        // fallback consults the unit's table at Certain). Only the first was emitted, so a
-        // bare call to a wildcard-imported top-level function resolved to nothing at all:
+        // package is legal HERE, unqualified (`module_names_visible` — the bare-name
+        // fallback consults the unit's table at Certain). Emitting only the first would leave a
+        // bare call to a wildcard-imported top-level function resolving to nothing at all:
         // kotlinx.coroutines calls `recoverStackTrace(…)` this way from dozens of files in
-        // other packages, and every declaration of it read `unused`.
+        // other packages, so every declaration of it would read `unused`.
         let mut imp = make_import(&full, sp, Vec::new(), true, None);
         imp.module_names_visible = true;
         out.imports.push(imp);
@@ -334,9 +334,9 @@ fn handle_class_parameter(param: Node, src: &[u8], owner: &str, out: &mut FileFa
         walk_type_refs(ty, src, Some(owner), out);
     }
     // `class Hasher(val cost: Int = DEFAULT_COST)` — the default value is an expression that
-    // runs when the constructor runs, and its references are real. Only the parameter's TYPE
-    // was walked, so a companion const used exactly this way (Exposed's
-    // `SCryptHasher.DEFAULT_CPU_COST`) had no incoming reference at all. Everything after the
+    // runs when the constructor runs, and its references are real. Walking only the
+    // parameter's TYPE would leave a companion const used exactly this way (Exposed's
+    // `SCryptHasher.DEFAULT_CPU_COST`) with no incoming reference at all. Everything after the
     // `=` is the initializer; the type and the name are separate children.
     if let Some(default) = param
         .children(&mut param.walk())
@@ -557,7 +557,7 @@ fn handle_property(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
     for code in property_code_children(item) {
         walk_body(code, src, ctx.owner, out);
     }
-    // A computed property is a callable and now says so in its kind — so it must have a shape
+    // A computed property is a callable, and its kind says so — so it must have a shape
     // too, or `crap` and `duplicate` cannot see a getter however gnarly it is. One symbol,
     // one numbering: `get` is ordinal 0 (reading the property runs it) and `set` continues.
     let accessors: Vec<Node> = ["getter", "setter"]
@@ -579,9 +579,9 @@ fn handle_property(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
 
 /// A property with an accessor BODY is computed: `val slug: String get() = name.lowercase()`
 /// compiles to a getter method and has code a test can exercise, where `val MAX = 255` has a
-/// value and nothing to exercise. Calling both `Field` made the kind unable to tell a constant
-/// from real logic — which is what let `untested` accuse Exposed's `MAX_VARCHAR_LENGTH` and
-/// vapor's header-name constants of not being tested.
+/// value and nothing to exercise. Calling both `Field` would make the kind unable to tell a
+/// constant from real logic, leaving `untested` unable to distinguish a constant — Exposed's
+/// `MAX_VARCHAR_LENGTH`, vapor's header-name constants — from logic that genuinely needs a test.
 ///
 /// A bodyless accessor (`private set`, an annotated bare `get`) leaves the property stored: it
 /// changes the accessor's visibility, not what the property is.
@@ -602,10 +602,10 @@ fn property_symbol_kind(item: Node, ctx: &Ctx<'_>) -> SymbolKind {
 /// Every child of a `property_declaration` that carries CODE: the `= expr` initializer, the
 /// `by expr` delegate, and each accessor's body.
 ///
-/// Enumerated by kind, not by position. The previous rule took the LAST child and filtered a
-/// short list of kinds out, which is right only for a property whose initializer is the last
-/// thing written. `val x = foo()` followed by a `get()` returns the *getter*, and `foo()`'s
-/// references vanish; `var x = 1` with a `private set` the same. Verified against the vendored
+/// Enumerated by kind, not by position: taking the LAST child and filtering a short list of
+/// kinds out is right only for a property whose initializer is the last thing written.
+/// `val x = foo()` followed by a `get()` would return the *getter*, losing `foo()`'s
+/// references; `var x = 1` with a `private set` the same. Verified against the vendored
 /// grammar's `node-types.json`: `property_declaration`'s children are `expression`, `getter`,
 /// `setter`, `property_delegate`, `variable_declaration` and the type/modifier nodes.
 fn property_code_children(item: Node) -> Vec<Node> {
@@ -812,11 +812,11 @@ fn walk_extend_refs(node: Node, src: &[u8], owner: &str, out: &mut FileFacts) {
         "constructor_invocation" => {
             emit_extend_ref(find_child(node, "user_type"), node, src, owner, out);
             // `class MyMeta : Base(MyProvider)` — the supertype is an Extend, but the ARGUMENTS
-            // are ordinary expression references and were dropped on the floor. Whatever they
-            // name reads as dead unless something else happens to use it, which is how
-            // Exposed's `PostgreSQLTypeProvider` — passed to its superclass on the very next
-            // declaration in the same file — went unreferenced. RFC 0012 §4 puts code that runs
-            // on instantiation under the type itself, so `within` stays the owner.
+            // are ordinary expression references; dropping them would leave whatever they name
+            // reading as dead unless something else happens to use it — as with Exposed's
+            // `PostgreSQLTypeProvider`, passed to its superclass on the very next declaration in
+            // the same file. RFC 0012 §4 puts code that runs on instantiation under the type
+            // itself, so `within` stays the owner.
             if let Some(args) = find_child(node, "value_arguments") {
                 walk_body(args, src, Some(owner), out);
             }
@@ -967,9 +967,9 @@ mod tests {
 
     #[test]
     fn a_property_with_both_an_initializer_and_an_accessor_keeps_both() {
-        // The positional "last child" rule returned the getter and lost `compute()` entirely,
-        // which made everything the initializer referenced read as unused. 78 findings on
-        // Exposed came from this shape.
+        // A positional "last child" rule would return the getter and lose `compute()` entirely,
+        // leaving everything the initializer references read as unused — this exact shape
+        // accounts for 78 findings on Exposed.
         let f = facts(
             "fun compute(): Int = 1\n\
              fun log(v: Int) {}\n\
@@ -1025,10 +1025,10 @@ mod tests {
     #[test]
     fn a_superclass_constructor_argument_is_a_reference() {
         // `class MyMeta : Base(MyProvider)` — the supertype is an Extend, but the ARGUMENTS are
-        // ordinary expression references and were dropped. Whatever they name read as dead
-        // unless something else happened to use it: Exposed's `PostgreSQLTypeProvider`, passed
-        // to its superclass on the very next declaration in the same file, had no reference at
-        // all.
+        // ordinary expression references; dropping them would read whatever they name as dead
+        // unless something else happens to use it — Exposed's `PostgreSQLTypeProvider`, passed
+        // to its superclass on the very next declaration in the same file, would otherwise have
+        // no reference at all.
         let f = extract(
             "a.kt",
             b"package p\nopen class Base(val q: Q)\ninterface Q\ninternal object MyProvider : Q\ninternal class MyMeta : Base(MyProvider)\n",
@@ -1043,9 +1043,9 @@ mod tests {
 
     #[test]
     fn a_default_parameter_value_is_a_reference() {
-        // `class Hasher(val cost: Int = DEFAULT_COST)` — only the parameter's TYPE was walked,
-        // so a companion const used exactly this way (Exposed's `SCryptHasher.DEFAULT_CPU_COST`)
-        // had no incoming reference.
+        // `class Hasher(val cost: Int = DEFAULT_COST)` — walking only the parameter's TYPE would
+        // leave a companion const used exactly this way (Exposed's
+        // `SCryptHasher.DEFAULT_CPU_COST`) with no incoming reference.
         let f = extract(
             "a.kt",
             b"package p\nclass Hasher(val cost: Int = DEFAULT_COST) {\n  private companion object { private const val DEFAULT_COST = 42 }\n}\n",
