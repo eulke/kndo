@@ -27,7 +27,7 @@ The functions `crates/kndo-plugin-api/src/plugin_host.rs` hands to the component
 called only *through* the WASM boundary: the caller is generated bridge code inside wasmtime,
 not any source file the graph walks, so no reference edge can exist and the functions read as
 `untested` — while `plugin_compliance.rs` builds and runs a real guest against exactly these
-functions every CI run. The file carried a `kndo:allow-file untested` pragma. **Ya no.**
+functions every CI run. The file carried a `kndo:allow-file untested` pragma. **Not anymore.**
 
 The producer the entry asked for is `kndo:wasmtime` (plugins/wasmtime.md), and what made it
 writable is that the fact it needs now has a name. The Rust adapter knew which trait's `impl`
@@ -37,7 +37,7 @@ matches a plugin's curated table against it. The boundary is recognized *structu
 shape `wasmtime::component::bindgen!` gives its generated traits, which is what the original
 direction note asked for and could not express.
 
-**Sigue siendo un límite, no un gap, para un ecosistema sin plugin.** Nothing here generalizes
+**Still a limit, not a gap, for an ecosystem with no plugin.** Nothing here generalizes
 to "any code called through generated glue": each tool's convention is that tool's, which is
 why the answer is one plugin per tool rather than a mechanism in the core.
 
@@ -47,7 +47,7 @@ why the answer is one plugin per tool rather than a mechanism in the core.
 are invoked by code a derive macro generates (`#[rkyv(with = …)]`): the call sites exist only
 in the macro expansion, which extraction never sees. The attr-ident scan kept the *type* alive
 (an identifier inside an attribute is a read), but the impl *members* the generated code calls
-had no incoming edges. The file carried a `kndo:allow-file untested` pragma. **Ya no.**
+had no incoming edges. The file carried a `kndo:allow-file untested` pragma. **Not anymore.**
 
 Same root cause and same answer as §1 — `kndo:rkyv` (plugins/rkyv.md) is the curated ecosystem
 knowledge the entry's direction note described, and it is a table of six rows because the
@@ -68,48 +68,48 @@ A struct whose fields are only ever read through a local of *inferred* type neve
 usage: in `let entry = parse_entry(..); entry.path`, the receiver's type comes from the callee's
 return type, which the extraction-side `TypeEnv` didn't chase — so the field reference landed in
 the duck fallback (or nowhere), and `internal-only` saw "no use requires this visibility". Four
-live cases in this repo, each acknowledged with a declaration pragma. **Los cuatro pragmas ya no
-existen.**
+live cases in this repo, each acknowledged with a declaration pragma. **All four pragmas are
+gone.**
 
-**La primera mitad** (RFC 0012 §3-ter): `RawMemberType::owner` pasó a `Option`, donde `None`
-significa *función libre* — "llamar a esto evalúa a T", el mismo enunciado sobre el tipo de un
-valor que `Some(owner)` hace sobre un miembro, así que el core lo camina con la misma maquinaria
-de cadena, aplicada a la BASE del puntero. Con eso, más que la base de un puntero pueda ser un
-**qualifier** y no un símbolo (Rust llega a funciones libres por su módulo constantemente), y más
-`#[derive(Default)]` como hecho declarado y la variable de un `for` proyectando el elemento del
-iterable, cerraron `rollup::DirRollup`, `ContributedRoot` y `ContributedEdge`.
+**The first half** (RFC 0012 §3-ter): `RawMemberType::owner` became `Option`, where `None`
+means a *free function* — "calling this evaluates to T", the same statement about a value's
+type that `Some(owner)` makes about a member, so the core walks it with the same chain
+machinery, applied to the pointer's BASE. With that, plus a pointer's base being able to be a
+**qualifier** and not a symbol (Rust reaches free functions through its module constantly),
+plus `#[derive(Default)]` as a declared fact and a `for` loop's variable projecting the
+iterable's element, closed `rollup::DirRollup`, `ContributedRoot` and `ContributedEdge`.
 
-**La segunda mitad** (RFC 0012 §3-quater) cerró `gitutil::TreeEntry`, que necesitaba un cambio de
-contrato porque **el hecho no era representable**: se lee por `ls_tree(..).map_err(..)?` y después
-se itera, y el tipo del elemento es un parámetro de un parámetro
-(`Result<Vec<TreeEntry>, GitError>`). `yields` guardaba un nombre base más una lista de un nivel,
-así que el `TreeEntry` no estaba en los hechos — se había perdido al aplanar, y ninguna proyección
-puede recuperar lo que nunca se guardó. Aplanar no era un detalle de representación: era la causa.
+**The second half** (RFC 0012 §3-quater) closed `gitutil::TreeEntry`, which needed a contract
+change because **the fact was not representable**: it's read via `ls_tree(..).map_err(..)?` and
+then iterated, and the element's type is a parameter of a parameter
+(`Result<Vec<TreeEntry>, GitError>`). `yields` stored a base name plus a one-level list, so
+`TreeEntry` was never in the facts — it was lost at flattening, and no projection can recover
+what was never stored. Flattening wasn't a representation detail: it was the cause.
 
-Ahora `yields` es un `TypeExpr` (`Named { name, args }` | `Param(N)` | `Unknown`) y el estado de
-la cadena es un tipo, no un símbolo — porque `Vec<TreeEntry>` es un tipo que este proyecto no
-declara y la cadena igual tiene que caminar *a través* de él. Sobre eso, dos piezas más: los
-hechos sobre los genéricos que **provee el lenguaje** viven en el descriptor
-(`builtin_member_types`, el segundo tier — el único que puede aplicar cuando la cabeza no resuelve
-a ninguna declaración), y `Param(N)` deja que un hecho enuncie una *relación* ("sigue siendo un
-`Result` sobre el mismo argumento 0") que los argumentos del receptor vuelven concreta. Iterar no
-necesitó sintaxis nueva: es un segmento de miembro común cuyo nombre elige el adapter en los dos
-lados (`@element`), declarado por contenedor — un mapa no lo declara y su variable de loop
-simplemente no tipa, en vez de tipar mal.
+`yields` is now a `TypeExpr` (`Named { name, args }` | `Param(N)` | `Unknown`) and the chain's
+state is a type, not a symbol — because `Vec<TreeEntry>` is a type this project doesn't declare,
+and the chain still has to walk *through* it. On top of that, two more pieces: facts about
+generics **the language provides** live on the descriptor (`builtin_member_types`, the second
+tier — the only one that can apply when the head resolves to no declaration), and `Param(N)`
+lets a fact state a *relation* ("this is still a `Result` over the same argument 0") that the
+receiver's arguments make concrete. Iterating needed no new syntax: it's an ordinary member
+segment whose name the adapter picks on both sides (`@element`), declared per container — a map
+doesn't declare it, and its loop variable simply doesn't type, instead of typing wrong.
 
-**Medición.** kndo sobre sí mismo queda en 37 findings / health 96.6 — idéntico al baseline — con
-**cero pragmas de §3**. Que el número no se mueva es el punto: los cuatro tipos dejaron de
-necesitar supresión porque el grafo ahora ve a sus consumidores, no porque se haya silenciado
-nada. La única supresión que quedó en pie es de otra especie y lo dice: `FlatAtom`
-(`rkyv_support.rs`) es `pub(crate)` porque Rust lo exige para el tipo asociado de un impl
-`pub(crate)`, y el angostamiento que el finding aconseja no es expresable.
+**Measurement.** kndo on itself stays at 37 findings / health 96.6 — identical to baseline —
+with **zero §3 pragmas**. That the number doesn't move is the point: the four types stopped
+needing suppression because the graph now sees their consumers, not because anything was
+silenced. The one suppression left standing is of a different kind and says so: `FlatAtom`
+(`rkyv_support.rs`) is `pub(crate)` because Rust requires it for a `pub(crate)` impl's
+associated type, and the narrowing the finding suggests isn't expressible.
 
-**Lo que sigue fuera de alcance, dicho explícitamente.** Los genéricos declarados por el usuario
-(`struct Wrapper<T> { inner: T }`) necesitarían `Declaration::type_params` para sustituir `T`
-desde el receptor. El diseño es forward-compatible — la sustitución ya existe, sólo falta de dónde
-sacar los nombres — pero nada en el corpus lo pide, y agregarlo ahora sería adivinar. Y un local
-anotado `Vec<T>` no tipa su variable de loop: el binding del `TypeEnv` guarda sólo el nombre base
-(es lo que termina siendo un `scope_context`), así que el argumento ya se perdió antes.
+**What stays out of scope, said explicitly.** User-declared generics
+(`struct Wrapper<T> { inner: T }`) would need `Declaration::type_params` to substitute `T`
+from the receiver. The design is forward-compatible — the substitution already exists, only the
+names are missing — but nothing in the corpus asks for it, and adding it now would be guessing.
+And a local annotated `Vec<T>` doesn't type its loop variable: the `TypeEnv` binding stores only
+the base name (which is what ends up as a `scope_context`), so the argument was already lost
+earlier.
 
 ## 4. Recall asymmetry — the regression corpus
 
@@ -119,15 +119,15 @@ draws **no** finding today (its usage happens to resolve through a path the fall
 catches). Any change to reference recall should check both directions on these sites — the
 goal is symmetric behavior, not moving the false positives around.
 
-**Medido para §3, en sus dos mitades.** `BlobFetcher::spawn` sigue sin producir finding, y los
-otros seis targets del audit (serde 348, alacritty 994, axios 72, Exposed 1128,
-kotlinx.coroutines 2904, vapor 764) no se movieron en ninguna dirección — ni un finding nuevo ni
-uno perdido — ni cuando aterrizó `call_yield` ni cuando la cadena pasó a llevar un tipo. La
-simetría es el resultado, no una intención.
+**Measured for §3, on both halves.** `BlobFetcher::spawn` still produces no finding, and the
+audit's other six targets (serde 348, alacritty 994, axios 72, Exposed 1128,
+kotlinx.coroutines 2904, vapor 764) didn't move in either direction — not one finding gained or
+lost — neither when `call_yield` landed nor when the chain started carrying a type. The
+symmetry is the result, not an intention.
 
-Vale registrar lo que atrapó la segunda medición: la propia herramienta reportó `type_param_names`
-y `generic_param_names` como `unused` apenas `type_expr` los reemplazó. Eran código muerto que yo
-había dejado, y kndo lo encontró antes que la revisión — el dogfood haciendo su trabajo.
+Worth recording what the second measurement caught: the tool itself reported `type_param_names`
+and `generic_param_names` as `unused` as soon as `type_expr` replaced them. They were dead code
+left behind, and kndo found it before review did — dogfood doing its job.
 
 ## 5. Duplicate-group label ambiguity (RESUELTO)
 
@@ -186,9 +186,9 @@ analysis now asks one question — *does the region the TYPE is visible in reach
 item promises itself to?* — as `graph::region_covers`, region against region. That single test
 replaced the gate and the three-way scope comparison both.
 
-**Medición**, and it is the whole argument:
+**Measurement**, and it is the whole argument:
 
-| repo | antes | ahora | |
+| repo | before | after | |
 |---|---|---|---|
 | tokio | 0 | **6** | `unset_waker` and `set_join_waker` among them — the case this entry exists for |
 | ripgrep | 0 | 1 | `flags::parse::lookup` is **not** one: `WalkParallel::run` naming the private `FnVisitor` is, and it is real |
@@ -201,7 +201,7 @@ within its own module subtree really can be plain `private` in Rust, which the `
 approximation could never say. On kndo itself that is +17 true findings, four of them about
 constants this very commit introduced.
 
-**Lo que queda fuera.** `pub(in path)` still widens to `pub(crate)` — the adapter does not
+**What stays out.** `pub(in path)` still widens to `pub(crate)` — the adapter does not
 resolve the path to a unit key (7 occurrences in all of tokio). And `internal_only` compares
 rung scopes, so it can no longer suggest narrowing `pub(super)` to `private`: both are `Module`
 and differ only by anchor, which that comparison does not see. A silence, not an accusation, and
@@ -241,7 +241,7 @@ stale hop is unrepresentable. `patch_equivalence` remains the harness, and `File
 carries each file's `module_bindings` so an unchanged file contributes its table without being
 re-extracted.
 
-**Medido en campo.** serde 363 → 348 findings (`unused` 66 → 52), health 82.8 → 83.7 —
+**Measured in the field.** serde 363 → 348 findings (`unused` 66 → 52), health 82.8 → 83.7 —
 `internals::check` and the whole `check_*` family. alacritty 993 → 994 (`unused` 155 → 150):
 six *new* findings, all on code that only became reachable — exactly the shape of a recall fix.
 axios, vapor, Exposed and coroutines unchanged; the shape is Rust's. Regression:
@@ -249,7 +249,7 @@ axios, vapor, Exposed and coroutines unchanged; the shape is Rust's. Regression:
 `a_direct_qualifier_outranks_the_module_hop` in `graph::tests`, each verified failing without
 its half of the fix.
 
-**Y el `::` se fue con ello.** The `rsplit("::")` qualifier fallback in `resolve_imports` — the
+**And the `::` went with it.** The `rsplit("::")` qualifier fallback in `resolve_imports` — the
 core's one piece of hardcoded language syntax — is gone, in its own commit and measured on its
 own. Two Rust shapes leaned on it and now state the name themselves in `local_alias`: the
 single-qualifier bare path (`helpers::run()`) and the deep one
@@ -353,20 +353,33 @@ Swift repos, and hugo's `docs/` JS imports were checked against `go.mod` — its
 adapter at once — pins it. Neither an adapter's own fixture suite could have: the Swift suite
 has no JS adapter to claim the file, the JS suite has no `Package.swift` to misattribute to.
 
-## 14. Runtime-config string references (GAP)
+## 14. Runtime-config string references (RESOLVED — one plugin each, or no plugin at all)
 
-A file named only from a config or template — never from code — is invisible:
-- `WKExtensionDelegateClassName` in an `Info.plist` names Alamofire's `ExtensionDelegate` class
-  as a string; the WatchKit runtime instantiates it.
-- Thymeleaf's `th:href="@{/resources/css/petclinic.css}"` in `layout.html` is the only reference
-  to petclinic's stylesheet — the two `unused` findings left there after §10 is configured.
-- vite's `bin/vite.js` does `import('../dist/node/cli.js')`, a built artifact that maps back to
-  `src/node/cli.ts` only through vite's own rollup entry config.
+A file named only from a config or template — never from code — is invisible. Three cases
+motivated this entry, and each resolved differently:
 
-Direction: a plugin per ecosystem, which is what the plugin content channel exists for — it can
-read exactly the non-source files (`Info.plist`, `templates/**`, `rollup.config.*`) the language
-graph never sees, and contribute the root or the edge. Not `[[externally-invoked]]`: there is no
-marker on the declaration to match, the name lives in the other file.
+- **`WKExtensionDelegateClassName` in an `Info.plist`** names Alamofire's `ExtensionDelegate`
+  class as a string; the WatchKit runtime instantiates it. Closed by `kndo:info-plist`
+  (`crates/kndo-plugin-info-plist`, `docs/src/plugins/info-plist.md`): it reads the class-naming
+  keys Apple's bundle schema defines (`NSPrincipalClass`, `NSExtensionPrincipalClass`,
+  `WKExtensionDelegateClassName`, `UISceneDelegateClassName`, `UISceneClassName`,
+  `CLKComplicationPrincipalClass`) and roots the class each one names.
+- **Thymeleaf's `th:href="@{/resources/css/petclinic.css}"`** in `layout.html` was the only
+  reference to petclinic's stylesheet. Closed by `kndo:thymeleaf`
+  (`crates/kndo-plugin-thymeleaf`, `docs/src/plugins/thymeleaf.md`): it roots every file under
+  the template prefix and resolves `th:href`/`th:src`/`href`/`src` against Spring Boot's static
+  locations.
+- **vite's `bin/vite.js`** does `import('../dist/node/cli.js')`, a built artifact that maps back
+  to `src/node/cli.ts` only through vite's own rollup entry config. This one did **not** get a
+  plugin — measuring it found the real cost one directory up from the config, in `<script src>`
+  entries no adapter claimed. See §20 and §20-bis for the measurement and the
+  `kndo-adapter-html` it produced instead.
+
+The direction that held for the first two — a plugin per ecosystem, reading exactly the
+non-source file (`Info.plist`, `templates/**`) the language graph never sees and contributing
+the root or the edge — is not universal, as vite's case shows: the same shape of problem is
+sometimes an adapter question instead, once measurement shows the missing fact is
+language-general rather than tool-specific.
 
 ## 14-bis. A name written inside an ATTRIBUTE, not a config file (RESUELTO)
 

@@ -91,6 +91,11 @@ en el mismo commit.
   9 incidentes narrados reescritos en presente; agregadas "Keep internal/ current" (apunta al
   índice de `internal/README.md`, no a los 10 nombres todavía inexistentes) y "Comments"
   (presente, no pasado/futuro; solo comentar lo no obvio).
+- [Retirar internal/plan-detection-gap-fixes.md y limpiar el inglés de detection-gaps.md](tickets/02-internal-plan-sunset.md):
+  5 de los 6 candidatos "W6 remaining" del plan ya estaban resueltos y sin documentar
+  (info-plist/thymeleaf shippeados, vite/rollup/guava-testlib ya en §19-20 de
+  `detection-gaps.md`); reescribí la §14 (marcada "GAP" pese a estar resuelta) y traduje todo el
+  español mezclado. Plan borrado.
 
 ## Not yet specified
 
