@@ -3,31 +3,21 @@
 //!
 //! Four channels consume those artifacts and none of them can call Rust: the installer shell
 //! script, the GitHub Action, the Homebrew formula template, and the published install docs.
-//! Before this module each of them spelled the name and assumed the layout on its own, and a
-//! measurement of that arrangement found three of the four broken — the Action asked for
-//! `-gnu` triples the release never builds *and* dropped the tag's leading `v`; the installer
-//! copied `kndo` from the extraction root, where the staged directory means it never is; the
-//! docs' copy-pasteable one-liner had both faults. None of it could be noticed before a tag was
-//! pushed, because nothing in CI ever produced an artifact and then consumed one.
-//!
-//! So: this module is the producer (`release.yml` calls it instead of hand-rolling `tar` and
-//! one `tar` line per platform), and `tests/release_channels.rs` reads the four consumers
-//! and asserts each one spells exactly what [`artifact`] produces. A channel that drifts fails
-//! a test on the PR that drifts it, not on the release that ships it.
+//! Each necessarily spells the artifact's name and layout in its own syntax, which is why this
+//! module is the single producer (`release.yml` calls it instead of hand-rolling the archive
+//! step per platform) and `tests/release_channels.rs` reads all four consumers and asserts each
+//! one spells exactly what [`artifact`] produces. A channel that drifts fails a test on the PR
+//! that drifts it, not on the release that ships it.
 
 use std::path::{Path, PathBuf};
 
-/// How a target's archive is packed. Every released target gets `.tar.gz`.
+/// How a target's archive is packed. Every released target packs as `.tar.gz`.
 ///
-/// This was an enum with a `Zip` arm for `x86_64-pc-windows-msvc`, dropped along with the
-/// target (RFC 0014 §3.3): `tree-sitter-scss`'s build script passes `-Wno-unused-parameter` to
-/// the compiler unconditionally, which `cl.exe` refuses, so the Windows binary could not be
-/// built at all — a fact the `cross-platform` CI job surfaced before a tag ever ran the release
-/// matrix. Kept as a single-variant type rather than deleted outright: the *shape* of "a target
-/// declares how it is packed" is what the four consumers agree with, and it is what a second
-/// format would slot back into. The `zip` writer itself is gone — dead code is not kept against
-/// a maybe, which is the verdict kndo would report on it.
-/// conventional expectation on each platform, and what every consumer already assumes.
+/// Single-variant, not a constant, because a target's packing format is a fact the four release
+/// consumers (`install.sh`, the Action, the Homebrew template, the docs) must agree on
+/// structurally. Windows is absent from `TARGETS` for an unrelated reason: `tree-sitter-scss`'s
+/// build script passes `-Wno-unused-parameter` unconditionally, which `cl.exe` refuses, so the
+/// platform cannot build at all.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Archive {
     TarGz,
@@ -60,9 +50,9 @@ pub struct Target {
 impl Target {
     /// The binary's file name inside the archive.
     ///
-    /// One name for every target now that Windows is not published; it stays a method rather
-    /// than a constant because it is the per-target question the consumers ask, and a target
-    /// with a different convention would answer it differently.
+    /// Every target answers this the same way (`kndo`); it stays a method rather than a
+    /// constant because it is the per-target question the consumers ask, and a target with a
+    /// different naming convention would answer it differently.
     pub fn binary(&self) -> &'static str {
         "kndo"
     }
@@ -200,11 +190,10 @@ fn write_tar_gz(path: &Path, entries: &[(String, PathBuf)]) -> Result<(), String
 /// The `cargo xtask package` command line, resolved into a call to [`package`].
 ///
 /// Lives here rather than in `main.rs` for the reason `lib.rs` states outright — "anything a
-/// test needs to assert about a task lives here". It did not, and the proof was mechanical:
-/// kndo's own `crap` analysis put this function at **0% coverage** on this repository. Argument
-/// handling is where a release command goes wrong quietly (a defaulted tag, a target that is
-/// not in the table, a binary path assembled from the wrong triple), so it is exactly the part
-/// that should be callable from a test.
+/// test needs to assert about a task lives here." Argument handling is where a release command
+/// goes wrong quietly (a defaulted tag, a target that is not in the table, a binary path
+/// assembled from the wrong triple), so it is exactly the part that must be callable from a
+/// test.
 ///
 /// `root` is passed in rather than discovered so a test can point it at a fixture.
 pub fn from_args(args: &[String], root: Result<PathBuf, String>) -> Result<PathBuf, String> {

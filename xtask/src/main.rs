@@ -57,8 +57,8 @@ const SOURCES: &[StdlibSource] = &[
         // something the stdlib-classification list needs to carry.
         exclude_prefixes: &["internal/"],
     },
-    // Future entries — one line of data each, no new tooling:
-    //   java:  list `java --list-modules`,    version `java --version`
+    // Adding a language is one line of data, no new tooling — e.g. for java: list
+    // `java --list-modules`, version `java --version`.
 ];
 
 fn main() -> ExitCode {
