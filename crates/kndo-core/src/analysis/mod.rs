@@ -44,8 +44,8 @@ pub struct FindingIdParts<'a> {
 /// The stable finding id: `"kndo-" + blake3(category,
 /// subject_kind, path, symbol path, discriminator)[..12 hex]`. Line/column never participate,
 /// so reformatting never changes an id; a rename or move does, because it changes `path`/
-/// `symbol_path`. Hash input bytes are unchanged from before `FindingIdParts` existed —
-/// `Category`/`SubjectKind`'s `Display` is exactly the string each used to be.
+/// `symbol_path`. `Category`/`SubjectKind`'s `Display` supplies the hash input bytes directly
+/// — changing either `Display` impl changes every finding id downstream.
 pub fn finding_id(parts: FindingIdParts<'_>) -> String {
     let mut hasher = blake3::Hasher::new();
     for part in [
@@ -214,8 +214,8 @@ impl AnalysisOutput {
 /// functions still return; this trait is the seam between them and [`run_all`]'s registry,
 /// not a rewrite of the analyses themselves.
 trait Analysis: Send + Sync {
-    /// Also the `--verbose` timings label — matches the historical timing phase names. Not a
-    /// category: one analysis may own several (`dependencies` emits three).
+    /// Also the `--verbose` timings label. Not a category: one analysis may own several
+    /// (`dependencies` emits three).
     fn id(&self) -> &'static str;
     /// Every category this analysis can emit — what an abstention makes unknown. **No
     /// default**, deliberately, for the same reason [`crate::plugin::Plugin::mutates_graph`]
@@ -438,8 +438,8 @@ impl Analysis for UntestedAnalysis {
     }
 }
 
-/// Registry order fixes the `--verbose` timings order — matches the historical join-tree push
-/// order exactly, so `--verbose` output is unchanged even though the join tree is gone.
+/// Registry order fixes the `--verbose` timings order — reordering this list reorders that
+/// output.
 fn registry() -> Vec<Box<dyn Analysis>> {
     vec![
         Box::new(UnusedAnalysis),
@@ -478,11 +478,10 @@ pub fn run_all(
         tuning,
     };
 
-    // Independent analyses run concurrently — a registry, not a hand-built join tree: each
-    // entry's own elapsed time is real (they overlap under parallelism, so `--verbose`'s
-    // total exceeds the wall clock by design, same as before). `par_iter().map().collect()`
-    // preserves registry order regardless of completion order, so the reduce below stays
-    // deterministic without an explicit sort.
+    // Independent analyses run concurrently: each entry's own elapsed time is real, so they
+    // overlap under parallelism and `--verbose`'s total exceeds the wall clock by design.
+    // `par_iter().map().collect()` preserves registry order regardless of completion order, so
+    // the reduce below stays deterministic without an explicit sort.
     let registry = registry();
     let results: Vec<(&dyn Analysis, AnalysisOutput, u64)> = registry
         .par_iter()
@@ -497,8 +496,8 @@ pub fn run_all(
     let mut cycle_files: HashSet<FileId> = HashSet::default();
     let mut duplicated: Vec<(SymbolId, u32)> = Vec::new();
     // Registry order for both, so `--verbose` timings and the diagnostics stream read in the
-    // same order — and, unlike the hand-maintained order list this replaces, an analysis that
-    // starts emitting a diagnostic can no longer have it silently dropped for not being named.
+    // same order — every analysis's diagnostics stream through regardless of whether it is
+    // named in any separate list.
     let mut diagnostics: Vec<Diagnostic> = Vec::new();
     // A category is unknown only when EVERY analysis that can emit it abstained: `unused` and
     // `test-only` each have two owners (the symbol/file analysis and `dependencies`' hygiene

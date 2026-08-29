@@ -118,9 +118,9 @@ pub fn find_cycles(graph: &ProjectGraph) -> (Vec<Finding>, HashSet<FileId>) {
 
         // Anchor: most referenced within the cycle (in-degree from cycle members), ties to
         // the lexicographically-first path so ids and output stay deterministic. In-degree is
-        // precomputed in one pass over the SCC's own adjacency — the per-candidate scan over
-        // every edge this replaced was O(|SCC| × |edges|), a 13-second wall on a synthetic
-        // 5k-file component.
+        // precomputed in one pass over the SCC's own adjacency: a per-candidate scan over
+        // every edge is O(|SCC| × |edges|) — a 13-second wall on a synthetic 5k-file
+        // component — so the one-pass version is what keeps this affordable.
         let in_cycle: HashSet<u32> = scc.iter().copied().collect();
         let mut indegree: HashMap<u32, usize> = HashMap::default();
         for &from in &in_cycle {
@@ -613,8 +613,9 @@ mod tests {
 
     #[test]
     fn a_mixed_hazard_and_idiomatic_cycle_is_a_warning() {
-        // The case the old Severity::max fold got wrong (derived Ord is worst-first, so the
-        // least severe stance won): one hazard participant must keep the cycle reported.
+        // Any hazard participant must keep the cycle reported even alongside idiomatic ones:
+        // the verdict is "any hazard wins," not a fold over severities where the least severe
+        // participant could win instead (derived `Ord` on `Severity` is worst-first).
         let graph = one_package_graph(
             vec![file_lang("a.ts", 0, "haz"), file_lang("b.rs", 0, "idio")],
             vec![imports(0, 1), imports(1, 0)],

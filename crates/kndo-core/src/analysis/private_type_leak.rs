@@ -181,24 +181,21 @@ pub fn find_private_type_leaks(graph: &ProjectGraph) -> Vec<Finding> {
         // — it is true for `pub(crate)`, top-level `pub(super)`, Java package-private and Swift
         // `internal`, none of which cross the package boundary. `surface_transitive` is the
         // ladder rung that does establish it, and every other consumer of the ladder in the
-        // codebase already gates on it (`graph::assemble`'s library-mode promotion,
-        // `graph::surface`'s member closure); this analysis was the one that didn't, and
-        // accused intra-package items of lying to consumers they don't have.
+        // codebase gates on it too (`graph::assemble`'s library-mode promotion, `graph::surface`'s
+        // member closure) — an intra-package item has no consumers outside the package to lie
+        // to, so it must not be accused of leaking to them.
         //
-        // That narrowing used to be a blanket gate on `surface_transitive`, which cost a whole
-        // class of true finding: an item visible to a *sibling module* naming a type private
-        // to its own module is a real leak by the letter of the language's rules. Reporting it
-        // needed a scope finer than the four-bucket ladder, and now there is one —
-        // `VisibilityScope::Module`, a unit and its subtree (`internal/detection-gaps.md` §7).
-        // The containment test below decides the case exactly, so the gate is gone: an item on
-        // a Module rung is judged against the region it actually names, not against a bucket it
-        // was widened into.
+        // `VisibilityScope::Module` (a unit and its subtree, `internal/detection-gaps.md` §7)
+        // gives the containment test below a scope finer than the four-bucket ladder: an item
+        // visible to a *sibling module* that names a type private to its own module is judged
+        // against the region it actually names, so that shape is a genuine leak by the letter
+        // of the language's rules.
 
         // "Lower visibility" via the language's ladder when it's declared:
         // comparing *scopes* — not raw indices — means two rungs sharing a scope (Java
         // `protected`/`public`, both `Public` by the conservative-mapping rule) never accuse
-        // each other. Fall back to index comparison when no ladder covers the levels — the
-        // pre-ladder behavior, still meaningful within one language.
+        // each other. Fall back to index comparison when no ladder covers the levels — sound
+        // only because the language check above already confines the comparison to one language.
         //
         // Equal scopes are NOT automatically safe: the buckets are relative to the symbol that
         // owns them, so two `File`-scoped symbols in different files, or two `Unit`-scoped ones
@@ -563,16 +560,12 @@ mod tests {
 
     #[test]
     fn a_package_visible_item_naming_a_file_private_type_is_a_leak() {
-        // This used to be silent, behind a `surface_transitive` gate: an item that never
-        // leaves its package was held to have no consumers to mislead. That gate was standing
-        // in for a comparison the model could not make — it could not tell ripgrep's
-        // `flags::parse::lookup` (whose whole module subtree CAN name the private `Flag`) from
-        // tokio's `task::state::unset_waker` (whose sibling caller cannot name `UpdateResult`),
-        // because both had been widened into the same bucket.
-        //
-        // Now regions decide, so the gate is gone and this shape is judged on its merits: with
-        // a ladder where "private" really means the FILE, a package-visible item naming one is
-        // a genuine leak — every caller it promises itself to is outside that file.
+        // Regions decide this shape on its merits: with a ladder where "private" really means
+        // the FILE, a package-visible item naming one is a genuine leak — every caller it
+        // promises itself to is outside that file. A same-bucket comparison alone cannot tell
+        // ripgrep's `flags::parse::lookup` (whose whole module subtree CAN name the private
+        // `Flag`) apart from tokio's `task::state::unset_waker` (whose sibling caller cannot
+        // name `UpdateResult`); comparing the actual regions can.
         use crate::adapter::{VisibilityRung, VisibilityScope};
         let ladder = vec![
             VisibilityRung {
@@ -632,8 +625,8 @@ mod tests {
 
     #[test]
     fn a_module_subtree_tells_the_two_pub_super_shapes_apart() {
-        // The whole point of the rung (`internal/detection-gaps.md` §7), as the two field cases
-        // that used to be indistinguishable:
+        // The whole point of the rung (`internal/detection-gaps.md` §7) — the two field cases
+        // below:
         //
         //   tokio    `task::state::unset_waker` is pub(super) — visible in the `task` subtree —
         //            and returns `UpdateResult`, private to `state.rs`. Its caller in

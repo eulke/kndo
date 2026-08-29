@@ -1,10 +1,9 @@
 //! `unresolved` — a relative import specifier that points at no file.
 //!
-//! RFC 0005 §5 specified this category, `docs/src/rules.md` published it, and the suppression
-//! registry accepted it in a pragma — while nothing emitted it and `graph::assemble` dropped
-//! `Resolution::Unresolved` on the floor with a comment saying a future analysis would want it.
-//! A broken relative path was therefore invisible: no edge, no finding, and whatever the import
-//! would have kept alive silently reported `unused` instead.
+//! Without a dedicated finding here, a broken relative path is invisible: `graph::assemble`
+//! drops `Resolution::Unresolved` rather than turning it into an edge, so whatever the import
+//! would have kept alive silently reports `unused` instead — the wrong category, naming the
+//! wrong problem.
 //!
 //! What makes it reportable at all is that the *adapter* already classified the specifier
 //! ([`crate::adapter::ImportKind`]). A `Package` specifier resolving to nothing is the

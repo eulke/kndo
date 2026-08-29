@@ -178,8 +178,7 @@ fn served_only(graph: &ProjectGraph) -> HashSet<FileId> {
             // A reference from OUTSIDE the file: someone else names this file's symbol, which
             // is exactly the evidence a served-only file lacks. An intra-file one is not —
             // a stylesheet's `var(--bs-primary)` naming its own custom property says nothing
-            // about whether any consumer does, and counting it disqualified every CSS file
-            // from this rule (which is how the 48 findings survived the first version).
+            // about whether any consumer does, so counting it must not disqualify the file.
             EdgeKind::References { from, to, .. } => {
                 let target = graph.symbols.get(to.0 as usize).map(|s| s.file);
                 if target.is_some() && file_of(from) != target {
@@ -355,9 +354,9 @@ mod tests {
             "a declarationless file in a live unit is not independently dead"
         );
 
-        // The exemption is about belonging to a live unit, NOT about being empty. An orphan
-        // that declares nothing and belongs to no live unit is still real waste — the first
-        // version of this rule keyed on "has no content" and silenced that case too.
+        // The exemption is about belonging to a live unit, NOT about being empty: an orphan
+        // that declares nothing and belongs to no live unit is still real waste, so the check
+        // must key on unit liveness rather than on the file having no content.
         let orphan = file("stray.ts", Some(FileClass::default()));
         let graph = ProjectGraph::for_test(vec![orphan], vec![], vec![], vec![]);
         let reach = reachability::compute(&graph);
@@ -677,9 +676,9 @@ mod tests {
 
     #[test]
     fn a_served_files_own_internal_references_do_not_make_it_used() {
-        // The hole the first version had: a stylesheet's `var(--bs-primary)` names its own
-        // custom property, and counting that as symbol-level evidence disqualified every CSS
-        // file from the rule — the 48 findings survived unchanged.
+        // A stylesheet's `var(--bs-primary)` names its own custom property — that intra-file
+        // reference must not count as symbol-level evidence, or every CSS file with a
+        // self-referencing custom property would be disqualified from the rule.
         let files = vec![
             file("templates/layout.html", Some(FileClass::default())),
             file("static/app.css", Some(FileClass::default())),

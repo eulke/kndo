@@ -50,7 +50,7 @@ pub(crate) struct DirVerdict {
 
 /// A finding about a whole directory, as [`directory_rollups`] groups them. Identity, subject,
 /// location and the fields a fresh finding leaves empty are identical across `unused`,
-/// `test-only` and `untested` — each of which carried its own copy, which is one copy past the
+/// `test-only` and `untested` — duplicating this into all three would be one copy past the
 /// promotion threshold. What differs is `verdict` and the sentence.
 pub(crate) fn directory_finding(
     graph: &ProjectGraph,

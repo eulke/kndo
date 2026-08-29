@@ -263,11 +263,10 @@ pub fn find_internal_only(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<
             subject_kind: SubjectKind::new(facet),
             severity: Severity::Info, // info by default
             confidence,
-            // Two sentences, because there are two evidence states and one of them used to
-            // borrow the other's words: with `weak_wider` the graph HOLDS matches pointing
-            // outside `usage`, just not confident ones, so "only used within its own file" is
-            // a claim this analysis knows to be contradicted. The `possible` tier was already
-            // honest; the prose was not.
+            // Two sentences, because the two evidence states make different true claims: with
+            // `weak_wider` the graph HOLDS matches pointing outside `usage`, just not confident
+            // ones, so "only used within its own file" would be a claim this analysis knows to
+            // be contradicted — the message says so instead.
             message: if weak_wider {
                 format!(
                     "{path}#{qualified} is declared {} and every confidently resolved use is within {usage}, but weaker matches point outside it — {} would suffice for this {facet} only if those are not real uses",
@@ -932,12 +931,12 @@ mod tests {
 
     #[test]
     fn a_nested_scope_symbol_is_never_narrowed_to_a_module_rung() {
-        // The regression kndo found on its own source. A `pub(crate) fn` inside an inline
-        // `mod activation { … }`, used from the enclosing file, was told "private would
-        // suffice" — because `private` is a Module rung and file-local evidence looked like
-        // it certified the module. It does not: the declaration's module is `activation`,
-        // strictly inside the file, and the use is in the file's own (parent) module, which
-        // cannot see a child module's private items. Applying the advice does not compile.
+        // The regression kndo found on its own source: a `pub(crate) fn` inside an inline
+        // `mod activation { … }`, used from the enclosing file, is a case where file-local
+        // evidence alone would look like it certifies the Module rung ("private would
+        // suffice"). It does not: the declaration's module is `activation`, strictly inside
+        // the file, and the use is in the file's own (parent) module, which cannot see a
+        // child module's private items. That advice would not compile.
         //
         // Everything up to and including Module is derived from file/unit co-location, so for
         // a declaration nested inside its file none of it is evidence. Package survives:

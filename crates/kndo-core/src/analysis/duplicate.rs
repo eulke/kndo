@@ -195,7 +195,7 @@ pub fn find_duplicate_functions(
         // it erases the field VALUES — the entire authored content — and keeps the field list,
         // which the type declaration dictates. Every construction of one type therefore groups
         // with every other, a false family whose size grows with how CENTRAL the type is, and
-        // acting on that advice is what once produced a constructor hiding a contract struct's
+        // acting on that advice would produce a constructor that hides a contract struct's
         // field list. `MAX_POSTING` already concedes the same point for shapes shared 20+ ways,
         // using popularity as the proxy; this names the cause instead of counting.
         //
@@ -290,8 +290,8 @@ pub fn find_duplicate_functions(
             duplicated.push((instances[*i].symbol, instances[*i].token_count));
         }
         // The finding's IDENTITY. A nested shape appends its ordinal — stable under every edit
-        // above it, unlike the line — and ordinal 0 appends nothing, so every group that
-        // existed before closures were split keeps its id byte-for-byte.
+        // above it, unlike the line — and ordinal 0 appends nothing, so a group of plain,
+        // non-nested clones keeps an id with no ordinal component at all.
         let selectors: Vec<String> = named
             .iter()
             .map(|(p, q, _, i)| match instances[*i].shape_ordinal {
@@ -390,8 +390,8 @@ pub fn find_duplicate_functions(
 /// one") and that survives every edit above it. Where the graph has no trait to name, or
 /// where both instances share one (two `#[cfg]` alternates of the same impl), it falls back
 /// to `starts` — each shape's OWN start line, which always separates them. For a declaration's
-/// own shape that is its declaration line, exactly as before closures were split out; for a
-/// nested callable it is the only thing that can separate it from its siblings.
+/// own shape that is its declaration line; for a nested callable it is the only thing that can
+/// separate it from its siblings.
 fn disambiguated(
     selectors: &[String],
     symbols: &[&crate::graph::SymbolNode],
@@ -754,9 +754,9 @@ mod tests {
 
     #[test]
     fn two_identical_closures_in_different_functions_group_on_the_closures() {
-        // The case the split exists for: `Foo::new(|x| { …same forty tokens… })` at two sites.
-        // Before it, the closure's tokens belonged to whichever function enclosed them, and
-        // what grouped (if anything did) was the enclosing pair — never the thing copied.
+        // The shape this test targets: `Foo::new(|x| { …same forty tokens… })` at two sites —
+        // the closure's own tokens must group on the closure itself, not on whichever function
+        // encloses them (grouping the enclosing pair would name the wrong thing as duplicated).
         let graph = ProjectGraph::for_test(
             vec![claimed_file("a.mock"), claimed_file("b.mock")],
             vec![callable(0, "setup_a"), callable(1, "setup_b")],
@@ -814,8 +814,8 @@ mod tests {
 
     #[test]
     fn a_groups_id_is_unchanged_when_no_shape_is_nested() {
-        // Ordinal 0 appends nothing to the selector, so every clone group that existed before
-        // closures were split out keeps its id — no baseline churns on this change.
+        // Ordinal 0 appends nothing to the selector, so a group with no nested shapes keeps a
+        // plain, ordinal-free id.
         let graph = ProjectGraph::for_test(
             vec![claimed_file("a.mock"), claimed_file("b.mock")],
             vec![callable(0, "one"), callable(1, "two")],
@@ -843,8 +843,8 @@ mod tests {
     #[test]
     fn colliding_labels_name_the_impl_block_they_came_from() {
         // Gap §5: one type, one method name, two impl blocks — the generated-vs-hand-written
-        // split. Both instances used to print the same `path#Owner.name`, leaving the reader
-        // no way to tell them apart.
+        // split. Without a disambiguator, both instances print the same `path#Owner.name`,
+        // leaving the reader no way to tell them apart.
         let graph = ProjectGraph::for_test(
             vec![claimed_file("a.rs")],
             vec![

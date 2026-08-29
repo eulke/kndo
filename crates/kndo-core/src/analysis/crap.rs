@@ -86,13 +86,13 @@ pub fn find_crap(
         let facet = symbol.kind.facet();
         let qualified = symbol.qualified_name();
         // A nested callable is anonymous and has no `SymbolNode`, so it borrows its owner's
-        // name and facet and is told apart by its ordinal. Reporting it is not optional: after
-        // the split, a 40-branch closure inside a 2-branch function scores 40 on the CLOSURE
-        // and 2 on the function — skipping nested shapes would delete that finding outright.
+        // name and facet and is told apart by its ordinal. Reporting it is not optional: a
+        // 40-branch closure inside a 2-branch function scores 40 on the CLOSURE and 2 on the
+        // function — skipping nested shapes would delete that finding outright.
         //
         // The ordinal, never a line, is what enters the id: a line churns the baseline
         // whenever anything above the closure moves. Ordinal 0 keeps an empty discriminator,
-        // so every finding id that existed before the split is byte-identical after it.
+        // so a declaration's own finding id carries no ordinal component at all.
         let nested = metrics.shape_ordinal > 0;
         let discriminator = if nested {
             format!("nested#{}", metrics.shape_ordinal)
@@ -189,8 +189,8 @@ mod tests {
         }
     }
 
-    /// The declaration's own shape — `shape_span` matches `callable`'s span below, which is
-    /// what every pre-split test asserted against.
+    /// The declaration's own shape — `shape_span` matches `callable`'s span below, so a
+    /// fixture that doesn't care about nested shapes needs no separate span setup.
     fn metrics(cyclomatic: u32) -> SymbolMetrics {
         shape(cyclomatic, 0, (1, 1))
     }
@@ -239,9 +239,9 @@ mod tests {
 
     #[test]
     fn a_nested_callable_is_reported_in_its_own_right() {
-        // The reason skipping nested shapes is not an option: after the split, a complex
-        // closure's complexity is the CLOSURE's, and its owner keeps only its own. If `crap`
-        // only looked at ordinal 0 here, the risk would simply disappear from the report.
+        // The reason skipping nested shapes is not an option: a complex closure's complexity
+        // is the CLOSURE's, and its owner keeps only its own. If `crap` only looked at ordinal
+        // 0 here, the risk would simply disappear from the report.
         let graph = graph_with(
             vec![file(
                 "src/a.mock",
@@ -282,8 +282,8 @@ mod tests {
         assert_eq!(findings.len(), 2);
         assert_ne!(findings[0].id, findings[1].id, "ids must not collide");
 
-        // The declaration's own shape keeps the id it had before closures were split out —
-        // an empty discriminator — so no project's baseline churns on this change.
+        // The declaration's own shape keeps an empty discriminator regardless of how many
+        // nested shapes it has, so a symbol's own finding id never depends on its closures.
         let unsplit = graph_with(
             vec![file(
                 "src/a.mock",

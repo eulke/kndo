@@ -185,18 +185,16 @@ fn find_untested_files(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<Fin
 /// request titled "add a test for a header-name constant", and 457 of these — 17% of every
 /// `untested` finding across the field corpus, 56% of one project's — were exactly that.
 ///
-/// `TypeAlias` was already excluded here, with this same reasoning stated in place ("no runtime
-/// footprint — `type Output = Stats` can never be 'covered'"). This generalizes that one
-/// carve-out into the rule it always was.
+/// `TypeAlias` has no runtime footprint — `type Output = Stats` can never be "covered" — and
+/// the rest of the denylist follows the same reasoning.
 ///
 /// A DENYLIST, not an allowlist, and deliberately: `Other(name)` is adapter-defined vocabulary
 /// — Kotlin's `object` arrives that way, and an object is a type someone tests — so guessing
 /// about kinds that do not exist yet would silence them. Types (`Class`/`Interface`/`Struct`/
 /// `Enum`) stay too: a person does write a test for a type.
 ///
-/// This is only correct because a computed property is no longer a `Field`. While a stored
-/// constant and a getter-with-a-body shared one kind, excluding `Field` would have taken real
-/// logic with it.
+/// This is only correct because `Field` denotes stored data alone — a computed property with a
+/// body worth testing is a `Method`, so excluding `Field` here takes no real logic with it.
 fn is_a_unit_of_testing(kind: &crate::vocab::SymbolKind) -> bool {
     use crate::vocab::SymbolKind as K;
     !matches!(
@@ -582,8 +580,8 @@ mod tests {
     fn a_value_is_not_a_unit_of_testing() {
         // 457 findings across the field corpus — 17% of every `untested`, 56% of one project's
         // — were `Scheme.https`, `Genre.HORROR`, `MAX_VARCHAR_LENGTH`. Nobody writes a test for
-        // a constant. `TypeAlias` was already excluded here for exactly this reason; the rest
-        // of the values join it.
+        // a constant, and `TypeAlias` and the other value kinds are excluded for exactly this
+        // reason.
         let graph = untested_project(vec![
             kinded(FileId(2), "compute", SymbolKind::Function),
             kinded(FileId(2), "Widget", SymbolKind::Class),

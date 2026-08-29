@@ -18,11 +18,11 @@ pub fn find_version_skew(graph: &ProjectGraph) -> Vec<Finding> {
     for dep in &graph.declared_dependencies {
         // A manifest that states no comparable requirement — a BOM/platform-managed JVM
         // coordinate, a Cargo path dependency, a workspace inheritance no pool resolved — is
-        // not evidence of anything here. It used to arrive as `"*"` and diverge from every
-        // real version, which is how spring-petclinic, mockito, Exposed, koin and
-        // kotlinx.coroutines each drew skew findings over dependencies that agree perfectly.
-        // Silence is the only honest reading: a comparison the code knows it could not
-        // perform must not produce a `certain` finding.
+        // not evidence of anything here. Encoding it as `"*"` would diverge from every real
+        // version and draw a false skew finding wherever manifests otherwise agree perfectly —
+        // the shape behind spring-petclinic, mockito, Exposed, koin and kotlinx.coroutines.
+        // Silence is the only honest reading: a comparison the code knows it could not perform
+        // must not produce a `certain` finding.
         let Some(version) = &dep.version_req else {
             continue;
         };
@@ -118,8 +118,9 @@ mod tests {
     #[test]
     fn a_manifest_stating_no_requirement_is_not_evidence_of_skew() {
         // The BOM-managed shape: one module pins the version, the others take it from an
-        // imported BOM. They agree perfectly. Encoding "states nothing" as `"*"` made every
-        // real version diverge from it — a finding on every JVM repository in the field audit.
+        // imported BOM. They agree perfectly. Encoding "states nothing" as `"*"` would make
+        // every real version diverge from it — a false finding on every JVM repository with
+        // this shape.
         let graph = ProjectGraph::for_test(vec![], vec![], vec![], vec![])
             .with_declared_dependencies(vec![
                 declared(

@@ -15,8 +15,8 @@
 //! rule* (`symbol → its file` — without it a rooted Go `func main()` would never enqueue
 //! `main.go`) and the *containment rule* (`member → its owning declaration` — without it a
 //! class whose only live member is container-invoked reads as dead while its own methods
-//! read as production). A `Certain` edge passes every tier's filter, so both carry whatever
-//! tier reached the source, exactly as the special-cased visits they replaced did. Two are
+//! read as production). A `Certain` edge passes every tier's filter, so both simply carry
+//! whatever tier reached the source. Two are
 //! **dispatch**, both `Probable`, both pointing down into members a call site can never name:
 //! the *machinery-dispatch rule* (`owner → implicitly-invoked member`) and the
 //! *implement-dispatch rule* (`trait member → impl member`). The execution rule needs no code
@@ -1207,7 +1207,7 @@ mod tests {
     // ---------------------------------------------------------------- resolve_colors, bfs_all_tiers
     //
     // These two exist to be testable exactly like this: hand-built bitsets/CSR arrays, no
-    // ProjectGraph or MockAdapter fixture required — the payoff the extraction promised.
+    // ProjectGraph or MockAdapter fixture required.
 
     #[test]
     fn resolve_colors_prefers_production_over_a_stronger_test_confidence() {

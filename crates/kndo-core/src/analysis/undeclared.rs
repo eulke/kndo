@@ -44,7 +44,7 @@ pub fn find_undeclared_dependencies(graph: &ProjectGraph, strict: bool) -> Vec<F
             // then `io::x::y` — the reconstructed `io::x` import exists for resolution
             // keep-alive, not as evidence anyone imports a crate named `io`). Certain and
             // Probable — real `use`/`import` statements and uncovered path roots — keep
-            // accusing exactly as before.
+            // accusing.
             if edge.confidence < Confidence::Probable {
                 continue;
             }
@@ -53,8 +53,7 @@ pub fn find_undeclared_dependencies(graph: &ProjectGraph, strict: bool) -> Vec<F
             // (`crap`, `duplicate`, `internal_only`, `private_type_leak`, `test_only`,
             // `untested`, `unused`, `cyclic`): a generated or vendored file's imports are not
             // its package's authored intent — nobody is going to add a dependency declaration
-            // to satisfy a checked-in bundle. `undeclared` and `dependency_hygiene` were the
-            // only two analyses missing it.
+            // to satisfy a checked-in bundle.
             if file
                 .class
                 .is_some_and(|c| matches!(c.origin, FileOrigin::Generated | FileOrigin::Vendored))
@@ -85,9 +84,9 @@ pub fn find_undeclared_dependencies(graph: &ProjectGraph, strict: bool) -> Vec<F
         // adapter says its import specifiers don't structurally identify manifest coordinates
         // (Swift: `Package.swift` names a dependency's repository URL, never the module names
         // it exports — so `import Foo` can never be matched against a declaration), "not
-        // declared here" is not evidence of anything. `dependency_hygiene` has always gated on
-        // this; `undeclared` did not, so the two analyses disagreed about whether such a
-        // package could be judged by its declarations at all.
+        // declared here" is not evidence of anything. `dependency_hygiene` gates on this too,
+        // so the two analyses agree about which packages can be judged by their declarations
+        // at all.
         if !graph.packages[package.0 as usize].resolves_dependency_usage {
             continue;
         }
@@ -233,10 +232,10 @@ mod tests {
     fn a_package_whose_imports_cannot_name_declarations_is_never_accused() {
         // Swift's shape: `Package.swift` states a dependency's repository URL, never the module
         // names it exports, so `import Foo` can never be matched against a declaration and
-        // "not declared here" is evidence of nothing. `dependency_hygiene` has always gated on
-        // `resolves_dependency_usage`; `undeclared` did not, so the two analyses disagreed —
-        // and every Swift repo in the field audit reported a phantom `jquery` dependency
-        // against its `Package.swift` because a Jazzy-generated `.js` file under `docs/` is
+        // "not declared here" is evidence of nothing. `dependency_hygiene` gates on
+        // `resolves_dependency_usage` too, keeping the two analyses in agreement — without it,
+        // every Swift repo in the field audit would report a phantom `jquery` dependency
+        // against its `Package.swift`, because a Jazzy-generated `.js` file under `docs/` is
         // owned by the nearest manifest, which is the Swift one.
         let files = vec![file("docs/js/typeahead.jquery.js", PackageId(0))];
         let dependencies = vec![DependencyNode {
@@ -264,8 +263,7 @@ mod tests {
     fn a_generated_or_vendored_file_does_not_accuse_its_package() {
         // The same two-level origin exemption every sibling analysis applies: a checked-in
         // bundle's imports are not its package's authored intent — nobody adds a dependency
-        // declaration to satisfy generated code. `undeclared` and `dependency_hygiene` were
-        // the only analyses missing it.
+        // declaration to satisfy generated code.
         let dependencies = || {
             vec![DependencyNode {
                 name: SmolStr::new("jquery"),

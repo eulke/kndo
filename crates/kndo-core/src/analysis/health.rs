@@ -137,8 +137,7 @@ pub struct PackageHealth {
 
 /// The grade bands, best first: a grade and the score at or above which it is earned. RFC 0006
 /// fixes these four numbers, and they are written **once** — [`grade`] reads them forward and
-/// [`grade_boundary`] backward. The two used to carry their own copy of the same four literals,
-/// while `grade_boundary`'s doc claimed it existed so that nobody would have to duplicate them.
+/// [`grade_boundary`] backward, so the two can never drift apart into disagreeing copies.
 const GRADE_BANDS: [(&str, f64); 5] = [
     ("A", 90.0),
     ("B", 80.0),
@@ -181,8 +180,8 @@ pub struct HealthInputs<'a> {
     /// `crap` analysis judged with, so the axis and the findings can never disagree.
     pub crap_threshold: f64,
     /// Categories no analysis judged this run (from `run_all`). The axes read this instead of
-    /// re-deriving each analysis's skip condition: health once recomputed `coverage.is_empty()`
-    /// and the test-root scan itself, so an axis could disagree with the very analysis it
+    /// re-deriving each analysis's skip condition — recomputing `coverage.is_empty()` or the
+    /// test-root scan independently here risks an axis disagreeing with the very analysis it
     /// summarizes. The analysis decides; health consults.
     pub abstained: &'a [super::Abstention],
 }
@@ -573,7 +572,8 @@ mod tests {
     /// What `run_all` hands `compute` for these fixtures: none declares a `Test` root, so
     /// `untested` always abstains, and `crap` abstains too whenever the fixture has no report.
     /// Stated rather than re-derived here on purpose — a health test that computed its own
-    /// skip predicate is exactly the divergence this change removed from production code.
+    /// skip predicate would reproduce the exact divergence `HealthInputs::abstained` exists to
+    /// prevent.
     fn unmeasured(categories: &[Category]) -> Vec<crate::analysis::Abstention> {
         categories
             .iter()
@@ -878,11 +878,10 @@ mod tests {
 
     #[test]
     fn the_forward_and_backward_readings_of_the_grade_table_agree() {
-        // `grade_boundary` is what a frontend uses to say "3.2 points from a B". It named the
-        // same four thresholds `grade` did, in its own copy, under a doc comment claiming it
-        // existed precisely so nobody would keep a second copy. This is the test that would
-        // have caught the drift, and the reason `grade_boundary` had no test at all is that
-        // kndo reported it — `untested` on its own source.
+        // `grade_boundary` is what a frontend uses to say "3.2 points from a B" — reading
+        // `GRADE_BANDS` backward while `grade` reads it forward. This test holds the two
+        // readings to agreement for every band, which is exactly what would catch it if the
+        // table were ever forked into two copies.
         for (g, _) in GRADE_BANDS {
             match grade_boundary(g) {
                 Some((floor, next)) => {
