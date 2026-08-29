@@ -4,8 +4,7 @@
 //! the core's implement-dispatch fan-out never fires — an `Implement` reference to an
 //! out-of-repo trait resolves to nothing. Yet a hand-written `impl ArchiveWith<T> for W` is
 //! invoked exactly like a language hook: the code that calls `resolve_with` is what
-//! `#[rkyv(with = W)]` expands to, and no reference edge can see generated code
-//! (`internal/detection-gaps.md` §2).
+//! `#[rkyv(with = W)]` expands to, and no reference edge can see generated code.
 //!
 //! The `with` adapters are the whole reason this exists. A `#[derive(rkyv::Archive)]` needs no
 //! plugin — the derive writes the impl and there are no hand-written members to lose — but a

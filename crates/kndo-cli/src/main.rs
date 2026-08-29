@@ -1082,7 +1082,7 @@ fn check(args: &[String]) -> ExitCode {
         return ExitCode::from(2);
     }
     // Both halves of the gate, through core's single reader: findings at/above `--fail-on`
-    // OR a `[delta]` budget exceeded (RFC 0006 §5). Composing them here by hand is how a
+    // OR a `[delta]` budget exceeded. Composing them here by hand is how a
     // frontend ends up honoring one and forgetting the other.
     if result.gate_fails(fail_on) {
         ExitCode::from(1)

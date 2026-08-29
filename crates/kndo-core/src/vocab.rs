@@ -603,10 +603,10 @@ pub struct Edge {
 
 // ---------------------------------------------------------------- finding taxonomy
 
-/// A finding's section — the taxonomy RFC 0018 §"reserved" closes: exactly these five, plus
-/// `Convention` reserved for plugin-contributed findings (`category` stays an open
-/// `plugin:<coordinate>/<rule>` namespace — RFC 0018 §2.1 — but no finding may claim a group
-/// outside this set). [`Group::DISPLAY_ORDER`] is the single source of section ordering —
+/// A finding's section — a closed taxonomy of exactly these five, plus `Convention` reserved
+/// for plugin-contributed findings (`category` stays an open `plugin:<coordinate>/<rule>`
+/// namespace, but no finding may claim a group outside this set). [`Group::DISPLAY_ORDER`] is
+/// the single source of section ordering —
 /// every renderer reads it instead of keeping its own copy: a duplicated 4-entry copy of this
 /// list, missing `Convention`, would missort every plugin finding under an unnamed fallback
 /// section in any renderer that carried it (`agent_format.rs`, the CLI's `render.rs`).
@@ -650,7 +650,7 @@ impl std::fmt::Display for Group {
     }
 }
 
-/// A finding's category — an open namespace (RFC 0018 §2.1: a plugin's own category is
+/// A finding's category — an open namespace (a plugin's own category is
 /// `plugin:<coordinate>/<rule>`, never a bare or off-namespace name), so unlike [`Group`] this
 /// is a validated string newtype rather than a closed enum. The core categories are
 /// associated consts; [`Category::plugin`] builds the namespaced form; [`Category::is_plugin`]
@@ -709,7 +709,7 @@ impl Category {
         Category(raw.into())
     }
 
-    /// RFC 0018 §2.1's namespaced form for a plugin-contributed finding.
+    /// The namespaced form for a plugin-contributed finding.
     pub fn plugin(coordinate: &str, rule: &str) -> Category {
         Category(SmolStr::new(format!("plugin:{coordinate}/{rule}")))
     }
@@ -717,7 +717,7 @@ impl Category {
     /// Whether this category is in the reserved `plugin:` namespace — the one axis
     /// [`Category`] doesn't close: everything *else* is core, by construction (adapters and
     /// analyses never emit a `plugin:`-prefixed category; the host enforces the prefix on the
-    /// plugin side, RFC 0018 §2.1).
+    /// plugin side).
     pub fn is_plugin(&self) -> bool {
         self.0.starts_with("plugin:")
     }
@@ -766,7 +766,7 @@ impl From<String> for Category {
     }
 }
 
-/// A finding's subject facet (`category:subject` targeting, RFC 0005) — open like
+/// A finding's subject facet (`category:subject` targeting) — open like
 /// [`Category`]: most values are the fixed `file | directory | dependency | package |
 /// suppression` set, but a symbol-subject finding's facet is [`SymbolKind::facet`], which
 /// itself carries an open [`SymbolKind::Other`] tail for languages the closed variants don't
@@ -797,26 +797,24 @@ impl SubjectKind {
 mod category_registry_tests {
     use super::Category;
 
-    /// `docs/src/rules.md` publishes the closed registry, and `internal/contracts/
-    /// output-schema.md` restates it — both hand-maintained prose, alongside `suppression.rs`'s
-    /// validation and this file's consts, so nothing but this test keeps all four in sync with
-    /// `Category::all()`.
+    /// `docs/src/rules.md` publishes the closed registry — hand-maintained prose, alongside
+    /// `suppression.rs`'s validation and this file's consts, so nothing but this test keeps it
+    /// in sync with `Category::all()`.
     #[test]
     fn the_published_registry_matches_the_vocabulary() {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .and_then(std::path::Path::parent)
             .expect("workspace root");
-        for doc in ["docs/src/rules.md", "internal/CONTRACTS.md"] {
-            let text = std::fs::read_to_string(root.join(doc))
-                .unwrap_or_else(|e| panic!("reading {doc}: {e}"));
-            for c in Category::all() {
-                assert!(
-                    text.contains(&format!("`{}`", c.as_str())),
-                    "{doc} never mentions the `{}` category",
-                    c.as_str()
-                );
-            }
+        let doc = "docs/src/rules.md";
+        let text = std::fs::read_to_string(root.join(doc))
+            .unwrap_or_else(|e| panic!("reading {doc}: {e}"));
+        for c in Category::all() {
+            assert!(
+                text.contains(&format!("`{}`", c.as_str())),
+                "{doc} never mentions the `{}` category",
+                c.as_str()
+            );
         }
     }
 }

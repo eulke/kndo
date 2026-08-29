@@ -272,17 +272,16 @@ fn the_install_docs_match_the_artifact() {
 
 /// **Every published link names the repository that exists.**
 ///
-/// ADR 0007 proposes renaming `eulke/kondo` to `eulke/kndo`; the rename itself is an
-/// administrative action against the GitHub repository, outside this codebase's reach, so
-/// nothing here can make it happen and nothing here should assume it already has. Any shipped
-/// file that names `eulke/kndo` links to a repository that does not exist until that action
-/// runs — a 404 for anyone who follows it.
+/// Renaming `eulke/kondo` to `eulke/kndo` is an administrative action against the GitHub
+/// repository, outside this codebase's reach, so nothing here can make it happen and nothing
+/// here should assume it already has. Any shipped file that names `eulke/kndo` links to a
+/// repository that does not exist until that action runs — a 404 for anyone who follows it.
 ///
-/// The direction of the rename is not in question; the spelling to publish is. RFC 0014 §3
-/// settles it: write the *current* name, because GitHub's post-rename redirect makes it resolve
-/// forever once the rename lands, while the new name resolves only after. So the old name is
-/// right before and after, and the new name is right only after — which makes this a one-way
-/// check rather than a preference.
+/// The direction of the rename is not in question; the spelling to publish is: write the
+/// *current* name, because GitHub's post-rename redirect makes it resolve forever once the
+/// rename lands, while the new name resolves only after. So the old name is right before and
+/// after, and the new name is right only after — which makes this a one-way check rather than a
+/// preference.
 ///
 /// Scanned as text across everything the project ships, `internal/` excluded: that is design
 /// record, and it discusses both names by necessity. Container image names are excluded too,
@@ -430,7 +429,7 @@ fn every_artifact_nests_under_one_directory_named_for_itself() {
 #[test]
 /// **Every released target is a `.tar.gz` holding a binary called `kndo`.**
 ///
-/// Windows is not a release target (RFC 0014 §3.3): `tree-sitter-scss`'s build script hands
+/// Windows is not a release target: `tree-sitter-scss`'s build script hands
 /// `cl.exe` a flag it refuses, so the binary cannot be built there. What is asserted here is
 /// what the four consumers actually resolve; if a second archive format is ever added, this is
 /// the test that has to change first.

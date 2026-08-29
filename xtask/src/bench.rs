@@ -17,7 +17,7 @@
 //! a shared machine only ever adds time; the minimum is the closest observable to the true
 //! cost), cold takes the min of 2.
 //!
-//! The baseline (`internal/perf-baseline.json`) is machine-specific by nature — it records where
+//! The baseline (`xtask/perf-baseline.json`) is machine-specific by nature — it records where
 //! it was measured and is re-recorded with `--update-baseline` when hardware changes. A
 //! scenario counts as regressed when it is BOTH >10% and >10 ms over baseline (the absolute
 //! floor keeps micro-scenario jitter from tripping the relative gate). `--gate` turns
@@ -106,7 +106,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
         reset_fixture(&dir);
     }
 
-    let baseline_path = root.join("internal/perf-baseline.json");
+    let baseline_path = root.join("xtask/perf-baseline.json");
     let baseline = load_baseline(&baseline_path);
     let mut report = String::new();
     let _ = writeln!(

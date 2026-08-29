@@ -1603,7 +1603,7 @@ are both constants.
 language-neutral alternative for a file with no inline-suppression syntax — wired since the
 config subsystem landed (`kndo-core/src/config.rs`), and exactly what this repo's own
 `kndo.toml` uses for the `.json` files reachable only through a Rust
-`PathBuf::join("...")`-style runtime read (`internal/perf-baseline.json`, `schemas/*.json`),
+`PathBuf::join("...")`-style runtime read (`xtask/perf-baseline.json`, `schemas/*.json`),
 which static analysis cannot see by construction (`internal/detection-gaps.md`).
 
 **Metrics**: not applicable — no functions exist to measure (§0).

@@ -98,9 +98,9 @@ fn kndo_is_clean_under_kndo() {
 #[test]
 fn zero_findings_means_measured_and_not_merely_unjudged() {
     // Zero findings in a category NO analysis judged is the absence of a measurement, not a
-    // pass (`run.abstained`, output-schema §1). Without this, a change that quietly stopped an
-    // analysis from running would make the test above *more* likely to pass — the exact
-    // failure direction a dogfood gate must not have.
+    // pass — `run.abstained` records exactly that distinction. Without this, a change that
+    // quietly stopped an analysis from running would make the test above *more* likely to
+    // pass — the exact failure direction a dogfood gate must not have.
     //
     // `crap` is the one category allowed to abstain, and whether it does is not this repo's
     // content: kndo ingests coverage rather than measuring it, and `lcov.info` is a gitignored

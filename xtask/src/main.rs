@@ -19,7 +19,7 @@
 
 use std::process::{Command, ExitCode};
 
-use xtask::{doc_freshness, package};
+use xtask::package;
 
 mod bench;
 
@@ -78,7 +78,6 @@ fn main() -> ExitCode {
             args.get(2).map(String::as_str),
         ),
         Some("package") => package_cmd(&args[1..]),
-        Some("check-doc-freshness") => check_doc_freshness_cmd(&args[1..]),
         _ => {
             eprintln!("usage: cargo xtask gen-stdlib <language>|--all");
             eprintln!(
@@ -104,26 +103,7 @@ fn main() -> ExitCode {
                     .collect::<Vec<_>>()
                     .join(", ")
             );
-            eprintln!(
-                "usage: cargo xtask check-doc-freshness [--base <ref>]  (default: {})",
-                doc_freshness::DEFAULT_BASE
-            );
             ExitCode::from(2)
-        }
-    }
-}
-
-/// `cargo xtask check-doc-freshness --base <ref>` — fail when this diff touches a source path
-/// [`doc_freshness::DOC_COVERAGE`] maps to a document, without touching that document.
-fn check_doc_freshness_cmd(args: &[String]) -> ExitCode {
-    match doc_freshness::from_args(args, workspace_root()) {
-        Ok(()) => {
-            println!("xtask: doc freshness clean");
-            ExitCode::SUCCESS
-        }
-        Err(e) => {
-            eprintln!("xtask: check-doc-freshness failed:\n{e}");
-            ExitCode::FAILURE
         }
     }
 }

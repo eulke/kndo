@@ -2,8 +2,8 @@
 //! coverprofile, one plugin type per report format.
 //!
 //! These live in their own plugin crate, not in `kndo-core`, for the same reason
-//! `kndo-plugin-express` does: core knows no language *and no report format* (RFC 0001's
-//! ignorance rule) — it owns only the format-neutral model (`kndo_core::coverage`) and the
+//! `kndo-plugin-express` does: core knows no language *and no report format* — it owns only
+//! the format-neutral model (`kndo_core::coverage`) and the
 //! `ingest_coverage` hook. Every ingester here is a plain [`Plugin`] ("the same trait serves
 //! built-ins"), statically linked into the product by `kndo::default_plugins()`; formats kndo
 //! doesn't ship come in as external WASM components through the same hook.

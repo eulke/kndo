@@ -369,7 +369,7 @@ fn render_diff(result: &RunResult, opts: &RenderOptions) -> String {
 
     let budget_lines = result.budget.as_ref().map(budget_block).unwrap_or_default();
 
-    // `--quiet` is header + exit code by contract (RFC 0009 §6), so it stays bare. The clean
+    // `--quiet` is header + exit code by contract, so it stays bare. The clean
     // branch is NOT: a change can move zero findings and still break `max-health-drop`, and
     // that is precisely the case where a bare header would leave the exit code unexplained.
     if opts.quiet {
@@ -1018,7 +1018,7 @@ mod tests {
 
     #[test]
     fn quiet_stays_a_one_liner_even_when_a_budget_broke() {
-        // `--quiet` is header + exit code by contract (RFC 0009 §6). The budget is why the
+        // `--quiet` is header + exit code by contract. The budget is why the
         // exit code is 1, and the caller asked not to be told.
         let result = RunResult {
             mode: "diff".to_string(),

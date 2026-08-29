@@ -12,7 +12,7 @@
 //! (path-scoped `skip`), `[plugins.gate]` (parsed by `plugin_gate`, carried here so the
 //! file is read exactly once), `[delta]`/`[delta.budget]` (parsed by `delta`, same reason),
 //! and `[plugins.<id>]` (`report`, `max-age` — per-plugin coverage-report location and
-//! freshness, RFC 0003's "Explicit config").
+//! freshness).
 //!
 //! Config suppression runs *after* inline pragmas ([`crate::suppression::apply`]) — pragma
 //! staleness is judged against the complete pre-suppression finding set, so a pragma
@@ -75,7 +75,7 @@ impl SkipSpec {
     /// source.
     ///
     /// Does not validate that the category exists: `plugin:<coordinate>/<rule>` is an open
-    /// namespace (RFC 0018 §2.1), so "unknown" is not a thing this layer can decide. A
+    /// namespace, so "unknown" is not a thing this layer can decide. A
     /// frontend that wants to reject a typo checks against [`Category::ALL`] itself, where it
     /// can also say what the valid ones are.
     pub fn parse(raw: &str) -> Result<SkipSpec, SkipSpecError> {
@@ -133,9 +133,9 @@ pub struct ExternallyInvokedRule {
     pub paths: Vec<glob::Pattern>,
 }
 
-/// One `[plugins.<id>]` options table (RFC 0003 §"Explicit config"). Today's live keys are
-/// the coverage-ingestion pair; other plugins' options (`[plugins.nextjs] app-dir`) keep
-/// parsing as unknown keys until their subsystems exist — same posture as the module doc.
+/// One `[plugins.<id>]` options table. Today's live keys are the coverage-ingestion pair;
+/// other plugins' options (`[plugins.nextjs] app-dir`) keep parsing as unknown keys until
+/// their subsystems exist — same posture as the module doc.
 #[derive(Debug, Default, Clone)]
 pub struct PluginOptions {
     /// `report` — glob pattern(s) naming the plugin's report file(s). REPLACES the
@@ -374,7 +374,7 @@ impl KndoConfig {
     }
 
     /// The `[plugins.<id>]` table for a descriptor id, if any. A bare key names a built-in
-    /// without its reserved namespace (RFC 0003's promised spelling: `[plugins.coverage-lcov]`
+    /// without its reserved namespace (the accepted spelling: `[plugins.coverage-lcov]`
     /// for `kndo:coverage-lcov`); a quoted key matches an id verbatim (external coordinates
     /// contain `/` and need quoting anyway).
     pub fn plugin_options_for(&self, id: &str) -> Option<&PluginOptions> {
@@ -977,11 +977,11 @@ mod tests {
     #[test]
     fn path_rules_scope_their_skips_to_matching_paths_only() {
         let (config, problems) =
-            parsed("[[rule]]\npaths = [\"schemas/**\", \"internal/perf-baseline.json\"]\nskip = [\"unused\"]\n");
+            parsed("[[rule]]\npaths = [\"schemas/**\", \"xtask/perf-baseline.json\"]\nskip = [\"unused\"]\n");
         assert!(problems.is_empty(), "{problems:?}");
         let findings = vec![
             finding("unused", "file", Some("schemas/output.json")),
-            finding("unused", "file", Some("internal/perf-baseline.json")),
+            finding("unused", "file", Some("xtask/perf-baseline.json")),
             finding("unused", "file", Some("src/lib.rs")),
             finding("untested", "file", Some("schemas/output.json")),
             finding("unused", "file", None),

@@ -871,7 +871,7 @@ pub struct DescribeResult {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub package: Option<PackageInfo>,
     /// Per-shape measurements, ordered by `shape_ordinal`. Empty for a node that owns no
-    /// callable shape — a type, a file, a dependency (RFC 0007 §4.2).
+    /// callable shape — a type, a file, a dependency.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub metrics: Vec<ShapeMetrics>,
     /// Duplication groups this node belongs to. Plural because a symbol with two substantial
@@ -1455,7 +1455,7 @@ fn reach_from(
 /// A reached set as the envelope reports it: sorted by `(depth, selector)` so the order is
 /// deterministic and shallowest-first, tallied by reachability color over the WHOLE set, then
 /// capped at `limit`. Returns the capped entries, the tally, and how many were elided —
-/// `elided > 0` means "there is more", never "that's all" (RFC 0007 §2).
+/// `elided > 0` means "there is more", never "that's all".
 fn reached_entries(
     graph: &ProjectGraph,
     reach: &ReachabilityMap,
@@ -2629,8 +2629,8 @@ mod tests {
     #[test]
     fn a_capped_declared_symbols_list_says_how_many_it_dropped() {
         // Every capped list must report how many entries it dropped, the same as
-        // `reached_by_roots` — a silent truncation reads as "that's all," the exact
-        // misreading RFC 0007 §2 forbids.
+        // `reached_by_roots` — a silent truncation reads as "that's all," which a caller
+        // must never be able to conclude.
         let files = vec![file("big.ts")];
         let symbols: Vec<_> = (0..DECLARE_SYMBOLS_CAP + 3)
             .map(|i| symbol(FileId(0), &format!("s{i}"), 1, 1))
@@ -2658,7 +2658,7 @@ mod tests {
 
     #[test]
     fn describe_reports_one_metrics_entry_per_shape() {
-        // RFC 0007 §4.2's metrics block: `loc` flows from every adapter's facts through the
+        // The metrics block: `loc` flows from every adapter's facts through the
         // facts contract into the cached graph snapshot, and this is the one place it's read
         // back.
         let graph = graph_with_metrics();

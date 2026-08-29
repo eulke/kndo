@@ -1,12 +1,12 @@
 //! **Every relative link in the repository's Markdown resolves.**
 //!
 //! This gate is scoped to exactly what the evidence on this repository supports, not to the
-//! broader design `internal/detection-gaps.md` §9 sketches — treating a path-shaped token in
-//! prose as a `Possible` reference too. Measured here, that broader approach fails:
+//! broader approach of also treating a path-shaped token in prose as a `Possible` reference.
+//! Measured here, that broader approach fails:
 //!
-//! * The path §9 flags as moved appears in only two documents on this repository, and both
-//!   are the ones explaining the gap itself — not stale pointers a prose-path check would
-//!   need to catch.
+//! * A path that approach would flag as moved appears in only two documents on this
+//!   repository, and both are the ones explaining the gap itself — not stale pointers a
+//!   prose-path check would need to catch.
 //! * Backticked prose paths: **195 checked, 63 resolve to nothing, and essentially none is a
 //!   defect** — they are examples from other repositories (`crates/searcher/src/sink.rs` is
 //!   ripgrep's), invented illustrations (`com/foo/bar/Widget.java`), paths that exist in a
@@ -64,10 +64,11 @@ fn markdown_files(root: &Path) -> Vec<PathBuf> {
 /// `text` with every fenced block and inline code span blanked out, so what remains is prose
 /// and real links.
 ///
-/// Not cosmetic: `internal/adapters/go.md` documents Go generics as `` `func F[T any](x T)` ``,
-/// and a scan that does not blank code spans first reads `](x T)` inside it as a link to `x`.
-/// Code is quoted, not asserted — a path inside backticks is an illustration, and the whole
-/// point of this gate is to fire only on what an author actually claims resolves.
+/// Not cosmetic: a code span documenting a generic function signature like
+/// `` `func F[T any](x T)` `` contains `](x T)`, and a scan that does not blank code spans
+/// first reads that as a link to `x`. Code is quoted, not asserted — a path inside backticks
+/// is an illustration, and the whole point of this gate is to fire only on what an author
+/// actually claims resolves.
 ///
 /// Replaces with spaces rather than removing, so byte offsets stay put and a span cannot be
 /// joined to the text after it.

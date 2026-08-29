@@ -513,7 +513,7 @@ were rare. In the world §§4–5 create, matching projects would full-rebuild e
 Performance consequence: a plugin-bearing project's *first* run after a plugin changes still
 full-rebuilds (no different from before), but every unchanged repeat run now takes the snapshot
 path instead of forced-bypass — the same cost as a plugin-free project's warm run. The existing
-50k-fixture baseline (`internal/perf-baseline.json`) already measures that path: `50k/cold-full` is
+50k-fixture baseline (`xtask/perf-baseline.json`) already measures that path: `50k/cold-full` is
 7333.1ms, `50k/warm-noop` is 600.8ms. Those numbers weren't re-measured with a plugin attached
 because they don't need to be — the warm-run code path a plugin-bearing project now takes on a
 no-op re-run is the identical `cache.get_graph` hit already covered by `50k/warm-noop`, not a

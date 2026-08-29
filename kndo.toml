@@ -28,9 +28,9 @@
 # paths = ["src/main/java/**"]           # optional scope; omit to apply project-wide
 
 # Files consumed only through runtime path reads (Rust `PathBuf::join("…")` in xtask and
-# the test suite) — reads no static analysis can see by construction
-# (internal/detection-gaps.md). The schema files are additionally read by every consumer
-# of the published output schema, outside this repo entirely.
+# the test suite) — reads no static analysis can see by construction. The schema files are
+# additionally read by every consumer of the published output schema, outside this repo
+# entirely.
 [[rule]]
-paths = ["schemas", "schemas/**", "internal/perf-baseline.json"]
+paths = ["schemas", "schemas/**", "xtask/perf-baseline.json"]
 skip = ["unused"]

@@ -1,9 +1,8 @@
 // kndo:allow-file untested a measurement spike, run by hand (`cargo run` here) to produce
-// internal/perf-baseline.json — scratch tooling outside the workspace, not product code.
+// xtask/perf-baseline.json — scratch tooling outside the workspace, not product code.
 // kndo:allow-file crap same reason: no test will ever cover a hand-run measurement harness.
 
-// kndo performance spike — validates the warm-run performance budget.
-// Disposable by design; findings live in internal/spikes/0001-performance.md.
+// kndo performance spike — validates the warm-run performance budget. Disposable by design.
 //
 // Usage:
 //   kndo-perf-spike gen <dir> <n-files>     generate a synthetic TS repo

@@ -5,8 +5,8 @@
 //! The shape is real. A framework uses Express internally, so a project depending on that
 //! framework does not declare `express` in its own manifest, and `kndo:express`'s
 //! `ManifestDependency("express")` rule can never fire for it. The framework's own plugin names
-//! `kndo:express` in its `dependencies`, and being active is what activates the built-in
-//! (RFC 0015 §3). Nothing else reaches a plugin whose framework is an indirect dependency.
+//! `kndo:express` in its `dependencies`, and being active is what activates the built-in.
+//! Nothing else reaches a plugin whose framework is an indirect dependency.
 //!
 //! The adapter tier's own proof lives in `adapter_dependency_implication.rs`; this file is the
 //! plugin-tier counterpart — the half real users depend on — so a refactor of the descriptor

@@ -108,7 +108,7 @@ output; asserted by the §4 matrix).
   1k / 5k / 50k files; measured per scenario: cold full, warm no-op, warm 1-file change, warm
   100-file change, `--staged` on a realistic diff. Budgets: warm p95 < 500 ms @ 5k (the
   contract), cold < 10 s @ 5k; `--gate` fails the build on a >10% regression against the
-  recorded baseline (`internal/perf-baseline.json`). That baseline records one machine and does
+  recorded baseline (`xtask/perf-baseline.json`). That baseline records one machine and does
   not travel, so the gate is run by a human — before and after a change expected to cost time, on
   that same machine — never automatically: ephemeral CI runners of varying hardware would fail it
   for reasons unrelated to any real regression (CONTRIBUTING.md "Benchmarks").

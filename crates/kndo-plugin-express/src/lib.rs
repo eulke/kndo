@@ -38,8 +38,8 @@ impl Plugin for ExpressPlugin {
             // Empty here, and load-bearing that it is VISIBLE here. A company framework that
             // uses express internally does not declare `express` in its own manifest, so this
             // plugin's rule above can never fire for it — that project's wrapper plugin names
-            // `kndo:express` in ITS `dependencies`, and being active is what activates this one
-            // (RFC 0015 §3). Nothing else reaches a plugin whose framework is indirect.
+            // `kndo:express` in ITS `dependencies`, and being active is what activates this one.
+            // Nothing else reaches a plugin whose framework is indirect.
             dependencies: vec![],
         }
     }

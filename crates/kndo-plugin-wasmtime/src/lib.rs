@@ -3,7 +3,9 @@
 //! `wasmtime::component::bindgen!` generates a trait per WIT interface and one per world's
 //! imports, and the host implements them by hand. Nothing in the repo calls those methods: the
 //! caller is generated glue that runs when a GUEST calls out, so the whole host surface reads
-//! as unreachable — the producer side of `internal/detection-gaps.md` §1.
+//! as unreachable to static reference analysis even though every method fires at runtime —
+//! reachability through generated code is invisible by construction, not a hole in this
+//! plugin's rules.
 //!
 //! The traits are recognized by the SHAPE `bindgen!` gives them rather than by a list of
 //! names, because the names come from the project's own WIT: `Host` per interface, `Host<Res>`

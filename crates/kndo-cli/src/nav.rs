@@ -145,7 +145,7 @@ pub(crate) fn trace_cmd(args: &[String]) -> ExitCode {
     run_one(Verb::Trace, args)
 }
 
-/// `kndo explain <finding-id>` (RFC 0006 §2). Routed through the same `run_one` as every
+/// `kndo explain <finding-id>` routes through the same `run_one` as every
 /// navigation verb — the envelope, the `--format` handling, the `not-found` status and the
 /// exit code all come from there, so `explain` cannot end up with its own second convention
 /// for any of them. Its "selector" is a finding id rather than a node selector; that is the

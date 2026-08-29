@@ -4,22 +4,11 @@
 "ignorance rule" for language-agnosticism. The rules below keep code and contracts in sync
 with that architecture.
 
-## Contract first
+## Internal notes
 
-`internal/CONTRACTS.md` is normative. A PR that changes a contractual signature (a
-public trait, `Engine`'s public methods, a §-numbered type) without updating the doc in the
-same PR is incomplete — not "follow-up docs." The contract never describes code that doesn't
-exist, and code never implements contract-affecting behavior the contract doesn't mention.
-
-## Keep internal/ current
-
-Every document `internal/README.md` indexes is normative for the subsystem it covers, the same
-way `internal/CONTRACTS.md` is normative for the core traits. A PR that changes the
-behavior one of them describes updates that document in the same PR. A document never describes
-behavior the code doesn't have, and code never implements documented behavior the matching
-document doesn't mention. `internal/detection-gaps.md` is a live reference cited by
-`kndo.toml` and `kndo:allow` pragmas, not a design document, and isn't covered by this rule the
-same way.
+`internal/` holds design notes for maintainers. The code never depends on it: every public
+contract is legible from the code and its doc comments alone, with no citation to an external
+document required or expected.
 
 ## Fachada: frontends import only the root re-exports
 
@@ -164,9 +153,8 @@ These are checked by name in CI — the `gates` job in `.github/workflows/ci.yml
 per entry below, and its first step fails if any of them has been renamed or deleted, which a
 bulk `cargo test --workspace` cannot notice. Adding an entry here means adding its step there;
 the two lists are one list. All of them must stay green on every PR that touches
-graph/cache/analysis — `doc_links`, whose subject is Markdown, on every PR that touches a
-`.md` — and `check-doc-freshness`, whose subject is `internal/`'s own coverage, on every PR
-whose diff touches a path in its table:
+graph/cache/analysis, and `doc_links` (whose subject is Markdown) on every PR that touches a
+`.md`:
 
 - `patch_equivalence` — full assembly and incremental patch produce identical graphs.
 - cache equivalence — a cached run and `--no-cache` produce byte-identical output.
@@ -201,16 +189,5 @@ whose diff touches a path in its table:
   repositories, invented illustrations, paths that exist in a *user's* project), so an analysis
   firing on those would be noise. The scanner blanks code spans first — a path inside backticks
   is quoted, not claimed.
-
-- `check-doc-freshness` (`cargo xtask check-doc-freshness`, `xtask/src/doc_freshness.rs`) — **a
-  diff that touches a source path with real design-doc coverage also touches the `internal/`
-  document that covers it**, and a failure names the exact untouched document next to the path
-  that needed it, never just "docs are stale." The path → document table
-  (`doc_freshness::DOC_COVERAGE`) is deliberately small: a path absent from it carries no
-  obligation, rather than forcing every file in the workspace to justify its silence. Needs the
-  real base-vs-head diff to run, which a plain `cargo test` cannot discover without a git
-  command — the `gates` job fetches the PR's base branch and runs it via `GITHUB_BASE_REF`, the
-  environment variable GitHub Actions sets for a `pull_request` event; a push or non-PR run has
-  no base to diff against and the step does not run.
 
 No PR should weaken or skip one of these to get green.

@@ -124,7 +124,7 @@ checkout has no report until the step that writes one), which is why this only b
 
 `cargo xtask bench` builds a release `kndo` and measures end-to-end wall time over generated
 fixtures at 1k / 5k / 50k files, five scenarios each, against the recorded baseline in
-`internal/perf-baseline.json`. Without `--gate` it reports and exits clean; with `--gate` a
+`xtask/perf-baseline.json`. Without `--gate` it reports and exits clean; with `--gate` a
 regression fails the build. `--sizes 1k` alone is the quick one.
 
 **Run it before and after a change you expect to cost time, on the same machine, and compare

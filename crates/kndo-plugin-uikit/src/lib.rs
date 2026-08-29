@@ -118,7 +118,7 @@ impl Plugin for UikitPlugin {
 /// per-run scratch space to share it through. A **native** plugin cannot simply cache one in
 /// itself either: the trait is `Send + Sync` and every hook takes `&self`, so a cache is
 /// shared mutable state behind a lock, holding one run's answer on a value the engine reuses.
-/// (A WASM guest is a different case — RFC 0017 §4 gives it one instance per round and statics
+/// (A WASM guest is a different case — it gets one instance per round, and statics shared
 /// across the three hooks are contractual there. The native trait makes no such promise, and a
 /// built-in must not read as if it did.)
 ///
@@ -332,8 +332,8 @@ fn declared_classes<'a>(graph: &GraphView<'a>) -> HashMap<&'a str, Vec<&'a Proje
 /// see: the document itself carries `customModule="Kingfisher_Demo"`, but a module is not
 /// something kndo's graph knows for Swift, so a rule written on it would be unverifiable.
 ///
-/// The fallback is the keep-alive direction (RFC 0012 §2): with nothing to choose between
-/// candidates, contributing to all of them can only keep something alive, never accuse it.
+/// The fallback is the keep-alive direction: with nothing to choose between candidates,
+/// contributing to all of them can only keep something alive, never accuse it.
 fn nearest_declarations<'a>(
     classes: &HashMap<&str, Vec<&'a ProjectPath>>,
     class: &str,
@@ -532,8 +532,7 @@ mod tests {
     #[test]
     fn a_name_with_no_close_declaration_falls_back_to_every_match() {
         // With nothing to choose between candidates, contributing to all of them can only keep
-        // something alive — never accuse it (RFC 0012 §2). Silence would be the accusing
-        // direction.
+        // something alive — never accuse it. Silence would be the accusing direction.
         let a = ProjectPath(SmolStr::new("Sources/A/Thing.swift"));
         let b = ProjectPath(SmolStr::new("Sources/B/Thing.swift"));
         let mut classes = HashMap::new();

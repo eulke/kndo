@@ -46,23 +46,6 @@ fn committed_schema_matches_the_type_it_was_generated_from() {
     );
 }
 
-/// The version constant and the normative document are one fact in two files: the generated
-/// JSON Schema types `schema_version` as a plain string with no `const`, so a bump — or a
-/// missed bump — changes nothing any test but this one can see.
-#[test]
-fn schema_version_matches_the_contract_document() {
-    let contract = std::fs::read_to_string(workspace_root().join("internal/CONTRACTS.md"))
-        .expect("the normative output-schema contract");
-    let needle = format!("\"schema_version\": \"{}\"", kndo::SCHEMA_VERSION);
-    assert!(
-        contract.contains(&needle),
-        "SCHEMA_VERSION is {} but internal/CONTRACTS.md does not carry it — \
-         the contract is normative, so one of the two is wrong. Additive change? bump the \
-         minor in BOTH (RFC 0006 §4).",
-        kndo::SCHEMA_VERSION,
-    );
-}
-
 #[test]
 fn real_json_output_validates_against_the_committed_schema() {
     let dir = tempfile::tempdir().unwrap();

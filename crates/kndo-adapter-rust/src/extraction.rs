@@ -568,8 +568,8 @@ fn collect_typed_bindings(
 /// projection marker already expresses: parameter 0 of the collection's declared type
 /// (`Vec<ContributedRoot>` → `ContributedRoot`). Only iterables whose type is a declared FACT
 /// contribute — a member access, chained as far as the pointer machinery reaches. A local
-/// annotated `Vec<T>` does not, because a binding stores only its base name and the `T` is
-/// already gone by then (`internal/detection-gaps.md` §3's residual).
+/// annotated `Vec<T>` does not, because a binding stores only its base name, and the `T` is
+/// already gone by the time anything downstream could use it.
 fn record_loop_binding(
     item: Node,
     src: &[u8],
@@ -809,7 +809,7 @@ fn init_base_type(base: Node, init: &InitCtx<'_>, src: &[u8]) -> Option<String> 
         // A CALL as the base: `gitutil::ls_tree(..).map_err(..)`. The pointer it produces is
         // the receiver of the method that follows, and the core walks the two hops in one
         // chain. Without this the chain died at the first link and everything the final value
-        // is read through looked file-local (`internal/detection-gaps.md` §3).
+        // is read through looked file-local.
         "call_expression"
         | "try_expression"
         | "reference_expression"
@@ -1080,8 +1080,8 @@ fn collect_file_type_names(root: Node, src: &[u8]) -> std::collections::HashSet<
 /// nothing local is not evidence of anything. serde re-exports `mem`, `cmp`, `fmt`, `iter`,
 /// `net` and `slice` through exactly that shape and every one of them was accused of being a
 /// phantom dependency of `serde_core`. Turning the probe off for the file costs the
-/// `undeclared` analysis nothing it could have proven, and RFC 0012 §2 decides the direction
-/// when the model cannot prove the accusation.
+/// `undeclared` analysis nothing it could have proven — when the model cannot prove an
+/// accusation, uncertainty resolves toward silence rather than a false positive.
 fn crate_probe_allowed(root: Node) -> bool {
     fn has_glob(node: Node) -> bool {
         if node.kind() == "use_wildcard" {

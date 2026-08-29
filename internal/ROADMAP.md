@@ -256,7 +256,7 @@ E0b landed — `cargo xtask bench`: deterministic generated fixtures at 1k/5k/50
 chains from the manifest root, one dead file per decade, branchy function bodies, a clone
 family every 500 files, git-initialized so `--staged` runs the real diff path), the five
 RFC 0008 §7 scenarios measured end-to-end (wall time of the release binary, min-of-N),
-baseline recorded in `internal/perf-baseline.json`, >10%-and->10ms regression gate behind
+baseline recorded in `xtask/perf-baseline.json`, >10%-and->10ms regression gate behind
 `--gate`. First full reading (this machine): 1k warm-noop 20 ms / 1-file 37 ms; 5k
 warm-noop 86 ms / 1-file 217 ms; **50k warm-noop 903 ms / 1-file 1 962 ms** — at 50k even
 the no-change case is over the 500 ms mark and the one-file change is 4× over, which
@@ -489,7 +489,7 @@ nothing else worth walking a syntax tree for. Two conformance fixtures, run with
 a JSON-only fixture could never demonstrate the cross-language claim this adapter exists for.
 
 **Effect on kndo's own dogfood**: two `.json` files newly become claimed, hence newly visible
-to `unused` — `internal/perf-baseline.json` and `schemas/*.json`, both reached only through a Rust
+to `unused` — `xtask/perf-baseline.json` and `schemas/*.json`, both reached only through a Rust
 `PathBuf::join("...")` call at runtime (`xtask`/`kndo`'s own test suite), invisible to static
 analysis by construction (RFC 0002 §5). Real pre-existing debt, now visible, same as the
 Kotlin session's own `comment_openers` self-reference fix — not something this adapter set out

@@ -67,9 +67,9 @@ impl Plugin for ThymeleafPlugin {
     /// template prefix by logical name and the name is produced by a controller returning a
     /// bare string — which no plugin can follow to its template.
     ///
-    /// Deliberately over-rooting, in the only direction a root can err safely (RFC 0012 §2): a
-    /// template no controller ever names stays alive, where the alternative — rooting none of
-    /// them — kills every asset the whole view layer links. It costs nothing today either way,
+    /// Deliberately over-rooting, in the only direction a root can err safely: a template no
+    /// controller ever names stays alive, where the alternative — rooting none of them — kills
+    /// every asset the whole view layer links. It costs nothing today either way,
     /// since no adapter claims `.html` and an unclaimed file is never reported `unused`; what
     /// the root buys is a live `from` for the edges below.
     fn contribute_roots(
