@@ -359,41 +359,11 @@ ranges, medians favor the adapter build); warm scenarios are unchanged or better
 
 ### M5 progress — Java adapter ✅ (landed 2026-08-21)
 
-`kndo-adapter-java` per docs/adapters/java.md: package identity is declared *and* directory-
-checked by javac (a hybrid of Rust's declared-tree model and Go's directory model) — the
-adapter sidesteps source-root detection entirely by setting `FileFacts::unit` to the
-**declared** package name, never the directory. No dogfood corpus exists for this one (kndo is
-written in Rust) — precision rests entirely on four real Maven/Gradle conformance fixtures run
-through the real `Engine`, no mock.
-
-Two structural findings changed core, not just this adapter: **`ResolveCtx::files_under`**
-(the recursive counterpart to `files_in_dir` — a publishable Java module's root promotion needs
-every `.java` file under `src/main/java/**` at arbitrary package depth, not one representative
-file) and **`ResolveCtx::with_units`/`unit_files`** (a package-name → declaring-files reverse
-index, because a Java import specifier *is* a `unit` value directly — unlike Go, which turns a
-specifier into a directory and lists it). Root promotion itself is a new shape: neither Go's
-blanket per-file `RawRoot` emission (no manifest-visible privacy signal) nor Rust's single-
-entry-file mechanism (no single entry point — every public class is API) fit, so a publishable
-module's manifest emits one `ManifestRoot` per non-test source file, reusing the existing
-per-file declaration-promotion path with zero new mechanism beyond the two `ResolveCtx`
-additions above.
-
-**`resolves_dependency_usage: false`** (new `AdapterDescriptor` field, carried onto
-`PackageNode`): Java's import namespace has no reliable mapping to Maven/Gradle coordinates
-without resolving the classpath, which kndo — a static source analyzer — structurally never
-does. Rather than flood every declared dependency with a false `unused` verdict,
-`dependency_hygiene` skips languages where this is `false`, with one diagnostic instead of a
-finding per dependency; `version-skew` is unaffected (pure manifest-fact comparison, no usage
-edge needed) and stays fully precise for Java from day one.
-
-A real, load-bearing bug the conformance fixtures caught before it shipped: the four-rung
-visibility ladder's `package-private` rung was first mapped to kndo's `VisibilityScope::Package`
-— which means "same manifest/workspace-member" (RFC 0011's `PackageId`, JS's granularity), a
-**different thing** from a Java `package` (a `com.foo` namespace; one Maven module routinely
-holds several). The fix maps `package-private` to `VisibilityScope::Unit` instead — exactly
-mirroring Go's own choice, since `FileFacts::unit` already carries the declared Java package —
-caught by a fixture exercising genuine cross-Java-package, same-Maven-module visibility, which
-misfired as a false `internal-only` before the fix and passed clean after.
+`kndo-adapter-java` per internal/adapters/java.md — §0 has the declared-and-directory-checked
+package model (`FileFacts::unit` takes the declared package name directly, sidestepping
+source-root detection), §4 the Maven/Gradle manifest split and the root-promotion mechanism.
+Precision rests entirely on four conformance fixtures — no Rust dogfood corpus exists for a
+JVM language.
 
 ### M5 progress — Kotlin adapter ✅ (landed 2026-08-21)
 
@@ -530,67 +500,10 @@ paths explicitly.) The catalogue of self-check detection gaps of this kind lives
 
 ### M5 progress — CSS adapter ✅ (landed 2026-08-21)
 
-`kndo-adapter-css` per docs/adapters/css.md: RFC 0002 §3's other "non-source language," but a
-genuinely narrower slice of what that section's prose promises than JSON turned out to need —
-"symbols are selectors/mixins/variables... class-name usage from JS/TS/HTML... enables 'unused
-CSS rule' as a normal finding" describes a mechanism that structurally doesn't exist yet. Traced
-directly through `reachability.rs` before writing any extraction code: (1) no adapter extracts
-`className`/CSS-Modules references today (checked `kndo-adapter-js/src/extraction.rs`
-directly — that's plugin territory, RFC 0003, not this adapter's), so a class selector's real
-consumers are invisible; (2) the tempting compensation — root every selector, since kndo can't
-see its real usage — was checked against the CSR construction and rejected: every symbol
-carries an implicit symbol→file edge (the "module-load rule"), so rooting a selector would make
-its *owning file* permanently reachable, silently disabling the one CSS finding this adapter
-*can* deliver honestly (an orphaned `.css` file nothing imports). Selector/class extraction
-stays out of v1 entirely rather than shipping either a false-positive flood or a broken
-file-level check — recorded as the adapter's own central open question, not a gap discovered
-by a fixture and patched around.
-
-What v1 does cover, fully verified: file claiming (same mechanism as JSON — `ResolveCtx`'s
-known-files index already resolves a `.css`/`.scss` import without any adapter existing;
-claiming is what makes the resulting `FileNode` visible to `unused` at all), the `@import`
-graph between CSS files (entirely CSS-internal, no cross-language blindness), and custom
-properties/`var()` (`SymbolKind::CssVariable`, already present in the shared vocab — the one
-symbol kind whose real consumers are, in the common case, other CSS in the same project, not
-JS/HTML). Mid-spec, on request, SCSS support was folded in as a "flavor" rather than deferred to
-a separate crate: `tree-sitter-scss` turned out to be a strict grammar *superset* of
-`tree-sitter-css` (verified directly — `declaration`/`property_name`/`import_statement`/
-`call_expression` all parse identically in both), so one shared extraction walker, dispatched
-purely on node *kind*, handles both grammars — `$variable` declarations/references (same
-`SymbolKind::CssVariable`), `@mixin`/`@function` (`SymbolKind::Other("mixin")`/`SymbolKind::
-Function` — the latter's *invocations* resolve for free through the same generic
-`call_expression`-to-`Call`-reference handling `var()`/`url()` already needed, no SCSS-specific
-resolution code required), and `@use`/`@forward` (Sass's module system, alongside plain
-`@import`, resolved through one unified candidate-list algorithm rather than two — extraction
-never tags which at-rule produced a specifier, so resolution doesn't need to branch on it
-either).
-
-Two real bugs surfaced by writing the extraction tests, not by inspection — both variants of
-the same root cause: `tree-sitter`'s `Node::children()` walks *every* child, anonymous
-punctuation tokens included, not just named ones (`to_sexp()`'s dump hides anonymous nodes
-entirely, which is what made the ground-truth probes look deceptively simple). `var(--brand)`'s
-first-argument lookup grabbed the literal `(` token instead of the argument, silently emitting
-no reference at all — fixed by filtering for `.is_named()`. Separately, `tree-sitter-css`'s
-`string_value` wraps a `string_content` child excluding the quotes, but `tree-sitter-scss`'s
-`string_value` has *no* such child — its own text *is* the quoted string — so `@use`/`@forward`
-specifiers extracted as empty/missing until the string-value reader learned to fall back to
-trimming quotes off the node's own text when `string_content` is absent. Both caught by
-conformance-style unit tests failing loudly (empty reference/import lists), not silently wrong
-output. Two upstream `tree-sitter-scss` 1.0.0 grammar bugs were also found and documented rather
-than worked around, same posture as the Kotlin session's tree-sitter-kotlin-ng issues:
-`@use "x" as y;` and `@extend %placeholder;` both produce `ERROR` nodes (`has_error()` verified
-directly for each) — the former still recovers its specifier correctly from the surviving
-partial tree, the latter is moot since `@extend` was already out of scope alongside `composes`.
-
-Four conformance fixtures, one carrying the whole SCSS increment — every one of them needed a
-JS-TS `import` to root the graph at all, since CSS declares no roots of its own (RFC 0002 §7).
-Designing them surfaced the same-file-only resolution scope's real implication twice: an
-initial draft had `var(--used)`/`$brand`/`@include flex-center`/`double(4px)` referenced from a
-*different* file than their declaration (mirroring how a human would naturally write cross-file
-CSS), which — correctly, per the adapter's own documented scope — never resolves; both fixtures
-were redesigned to reference from within the declaring file itself, the same constraint the
-spec's §2/§7 already named as a documented non-goal, now confirmed by the harness rather than
-just asserted in prose.
+`kndo-adapter-css` per internal/adapters/css.md §0: file claiming, the `@import` graph, and
+custom-property/SCSS symbols (`$variable`, `@mixin`/`@function`, `@use`/`@forward`) ship in v1;
+selector/class extraction stays out by design — §0 has the full argument for why that's the
+safe direction, not a gap. Four conformance fixtures pin it, one carrying the SCSS increment.
 
 ### M5 progress — WASM plugin/adapter ABI ✅ (landed 2026-08-21)
 
@@ -720,9 +633,11 @@ suite (368 kndo-core tests plus every adapter/integration crate) and `clippy -D 
 clean.
 
 **Not this pass:** a first ecosystem plugin (React/Next.js or similar) exercising this wiring
-for a real framework — still parked, same reasoning as the note above. The `Plugin` trait's own
-WASM bridge, flagged here as the other missing piece toward that, landed the same day; see the
-next section.
+for a real framework — not built here, same reasoning as the note above. The `Plugin` trait's
+own WASM bridge, flagged here as the other missing piece toward that, landed the same day; see
+the next section. **Since landed:** RFC 0015 §6 phase 4 shipped `kndo:nextjs`/`kndo:express`
+(M6, below), and six more ecosystem plugins have shipped since — see "M6 progress — ecosystem
+plugins" further down.
 
 ### M5 progress — Plugin WASM bridge (`kndo:plugin`) ✅ (landed 2026-08-21)
 
@@ -785,9 +700,12 @@ goes through the *full* product composition (`kndo::open`, real `.kndo/plugins/`
 single-directory sort works end to end, not just at the loader level. Full workspace suite and
 `clippy -D warnings` both clean.
 
-**Still parked, unchanged by this:** a first real ecosystem plugin (React/Next.js) — the WASM
-bridge existing doesn't by itself give kndo react-specific knowledge, that's still its own
-design pass, same as always.
+**Unchanged by this:** a first real ecosystem plugin (React/Next.js) — the WASM bridge existing
+doesn't by itself give kndo react-specific knowledge, that's still its own design pass, same as
+always. **Since landed:** that design pass happened as RFC 0015 §6 phase 4
+(`kndo:nextjs`/`kndo:express`, M6 below); six more ecosystem plugins (`kndo:libsass`, `-uikit`,
+`-thymeleaf`, `-info-plist`, `-rkyv`, `-wasmtime`) shipped after that — see "M6 progress —
+ecosystem plugins" further down.
 
 ### M5 progress — Global plugin install + activation (RFC 0003 §4) ✅ (landed 2026-08-21)
 
@@ -1219,6 +1137,40 @@ Recorded, deliberate residuals: Kotlin↔Java cross-language receiver typing (mo
 member_types (the DownloadRequest case cleared via module scoping; chains through returns
 remain future precision), and the standing build-tag/`cfg`, subprocess-harness, and
 WASM-boundary divergences.
+
+### M6 progress — HTML adapter, the ninth language ✅ (landed 2026-08-28)
+
+`kndo-adapter-html` (default-on feature, alongside the other eight; docs/src/languages.md's
+HTML section is the spec): one rule — a document is an entry point, not a module, so every
+`.html` file promotes as a `Production` root and the `<script src>`/`<link href>`/`<img src>`/
+`<source src>`/`<iframe src>` targets it names become reachable through it. No symbols, no
+visibility ladder; also exempt from `untested` (a document holds nothing a test could call).
+Measured on vite's playground suite: without the root rule, 65 of 83 entry modules read as
+`unused` for want of anything declaring where the app starts.
+
+### M6 progress — ecosystem plugins: libsass, uikit, thymeleaf, info-plist, rkyv, wasmtime ✅ (landed 2026-08-27/28)
+
+Six more first-party conventions plugins shipped as gated built-ins — each spec'd in
+`docs/src/plugins/*.md`, each its own crate under `crates/kndo-plugin-*`, each an
+activation-gated `default_plugins()` candidate so it costs nothing on a project it doesn't
+match, same discipline RFC 0015 §6 phase 4 set for `kndo:nextjs`/`kndo:express`:
+
+- **`kndo:libsass-maven-plugin`** (activation: any `**/*.scss`) — a Maven build plugin that
+  compiles committed SCSS into a committed CSS bundle kndo would otherwise read as authored
+  dead weight plus an unreferenced source tree.
+- **`kndo:uikit`** (activation: any `**/*.storyboard`/`.xib`) — a storyboard names a view
+  controller class and wires `@IBOutlet`/`@IBAction` members by string, none of it a reference
+  the Swift adapter can see.
+- **`kndo:thymeleaf`** (activation: a manifest declares `spring-boot-starter-thymeleaf`) — a
+  Spring controller's logical view name and a template's own reference back into the
+  controller are each a hop the language graph doesn't model.
+- **`kndo:info-plist`** (`contribute_roots`) — an app bundle's `Info.plist` names classes as
+  strings the system instantiates at launch, invisible to source.
+- **`kndo:rkyv`** (`annotate_symbols`) — the `kndo:serde` shape applied to rkyv's own
+  third-party `Archive`/`Serialize`/`Deserialize` traits, plus its `with`-adapter bridge types.
+- **`kndo:wasmtime`** (`annotate_symbols`) — `wasmtime::component::bindgen!`-generated host
+  trait methods, called only by generated guest-call glue — the same shape kndo's own
+  `plugin_host.rs` hits.
 
 ## Post-1.0 parking lot
 **RFC 0016 — uniform component model** (the accepted plan, phased in its §8, **all four phases
