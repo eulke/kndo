@@ -120,10 +120,14 @@ Emitted import kinds and their confidence:
 relative/absolute paths with extension resolution order (explicit > `.ts .tsx .mts .cts` >
 `.js .jsx .mjs .cjs` > `.d.ts` > directory `index.*`), self-referencing package `imports`
 (`#internal/*`), package `exports` maps (conditions: `types`, `import`, `require`, `default` —
-evaluated in that order), `main`/`module`/`types` fallbacks, `tsconfig` `baseUrl` + `paths`
-(nearest `tsconfig.json` upward, `extends` chains followed), workspace packages (RFC 0011:
+evaluated in that order), `main`/`module`/`types` fallbacks, workspace packages (RFC 0011:
 `workspace:*` and name matches against sibling manifests resolve to internal files through the
 sibling's own `exports`), pnpm symlink layouts resolved to real paths before ownership checks.
+**`tsconfig` `baseUrl`/`paths` are not read.** `tsconfig.json` is not one of the adapter's
+`manifest_globs`, and there is no `compilerOptions`/`baseUrl`/`paths` parsing anywhere in
+`src/`. A non-relative specifier that only resolves through such a path alias gets the same
+bare-specifier treatment as any other unrecognized package name — it most often ends up
+`undeclared` rather than resolved to the intended in-repo file.
 Specifiers that resolve into `node_modules` yield `Dependency` targets via the subpath→package
 mapping (`lodash/fp` → `lodash`, `@scope/pkg/sub` → `@scope/pkg`). **Builtins** → `Stdlib` via
 the shared `kndo-stdlib v1` mechanism (RFC 0002 §6; toolkit owns format, loader, and the
@@ -186,14 +190,14 @@ now so the ladder is complete the day a symbol carries it.
 | Triple-slash `/// <reference path>` | file edge, certain |
 | UMD wrappers | detected by shape, treated as generated-style opaque exports at `probable` |
 | Re-export of a whole dep (`export * from "lib"`) | keeps the dep used; contributes a `probable` wildcard export surface |
-| `tsconfig` project references | not followed in 1.0 (parking lot); path aliases within one graph are |
+| `tsconfig` project references, `baseUrl`/`paths` aliases | not followed — the adapter does not parse `tsconfig.json` at all (parking lot) |
 | CLI-only dependency (`"lint": "xo"`, no `import`) | counts as used via `ManifestFacts.script_invoked_names` — the leading token of each `scripts` shell clause (`&&`/`||`/`;`/`\|`-split), cross-referenced against declared dependency names by `dependency_hygiene` (RFC 0005 §5) as a synthetic tooling-role importer. Never makes a dependency `test-only` (a CLI invocation isn't test-role) — only ever rules out `unused`. |
 
 ## 6. Conformance fixtures (shared harness, RFC 0002 §8)
 
 Minimum corpus, each a mini-project with expected `FileFacts` + findings: ESM app with dead
-symbol/file/dep · CJS interop pair · dual-mode package (`exports` conditions) · tsconfig-paths
-monorepo with workspace dep + phantom internal import (`undeclared`) + `version-skew` · JSX
+symbol/file/dep · CJS interop pair · dual-mode package (`exports` conditions) · npm workspace
+monorepo with cross-package dep + phantom internal import (`undeclared`) + `version-skew` · JSX
 component tree (component kept alive only by JSX usage) · dynamic-import directory scan
 (wildcard narrows, nothing false-positive) · test-only module + its tests (`test-only` +
 deletion set) · barrel with one consumed and one orphaned re-export · `.d.ts` ambient globals ·
