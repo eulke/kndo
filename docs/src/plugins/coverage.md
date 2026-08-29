@@ -16,7 +16,7 @@ each turns "unknown" into a measurement, and none of them puts a single fact in 
 
 ## Why they are plugins and not core
 
-RFC 0001's ignorance rule covers report formats as much as languages: core owns the
+The ignorance rule covers report formats as much as languages: core owns the
 format-neutral model (`kndo_core::coverage`) and the `ingest_coverage` hook, and knows lcov no
 better than it knows Go. Formats kndo does not ship arrive through the same hook as external
 WASM components — these four are simply the ones compiled in.

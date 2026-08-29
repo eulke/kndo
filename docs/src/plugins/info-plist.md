@@ -1,7 +1,7 @@
 # `kndo:info-plist` — Apple bundle conventions plugin
 
 **Status:** Normative for the built-in `kndo:info-plist` plugin ·
-**Implements:** `contribute_roots` (RFC 0003 §2), content-channel-aware (RFC 0016 §5) ·
+**Implements:** `contribute_roots`, content-channel-aware ·
 **Crate:** `crates/kndo-plugin-info-plist` · **Convention set versioned against:** Apple's
 bundle `Info.plist` schema
 
@@ -51,8 +51,7 @@ walks every element rather than a fixed path.
 **Root tier: `Certain`, `RootKind::Production`.** The plist *declares* this; it is a manifest
 entry point, not a naming convention someone might follow. What is soft is the name → symbol
 match: two targets in one repository may each declare a class of that name, and then both are
-rooted. That over-roots in the keep-alive direction, the only direction a root can err in safely
-(RFC 0012 §2).
+rooted. That over-roots in the keep-alive direction, the only direction a root can err in safely.
 
 ## 3. Mechanism & recorded limits
 

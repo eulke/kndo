@@ -37,7 +37,7 @@ answer (`LanguageAdapter::declares_dependency`), so the gate costs no new mechan
 ## The rules
 
 1. **Every file under the template prefix is a Production root.** Deliberately over-rooting,
-   in the only direction a root can err safely (RFC 0012 §2): Spring's resolver can load *any*
+   in the only direction a root can err safely: Spring's resolver can load *any*
    file under `templates/` by a logical name a controller produces as a bare string, and no
    plugin can follow that string. A template nothing names stays alive; the alternative —
    rooting none of them — kills every asset the view layer links. It costs nothing directly

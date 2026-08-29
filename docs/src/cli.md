@@ -40,7 +40,7 @@ General rules that apply everywhere:
 | `--fail-on <sev>` | exit `1` on findings at/above: `error` \| `warning` \| `info` \| `none` |
 | `--only <cats>` | report only these categories — comma-separated, repeatable |
 | `--skip <cats>` | report everything except these — same vocabulary, adds to `[analysis] skip` |
-| `--strict` | promote the severities RFC 0005 marks promotable (today: `undeclared` → `error`) |
+| `--strict` | promote severities (today, the only promotion is `undeclared` → `error`) |
 | `--format <f>` | `human` \| `json` \| `agent` \| `sarif` |
 | `--color <c>` | `auto` (default) \| `always` \| `never` |
 | `--quiet` | one-line summary |

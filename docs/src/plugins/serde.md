@@ -1,7 +1,7 @@
 # `kndo:serde` — serde conventions plugin
 
 **Status:** Normative for the built-in `kndo:serde` plugin ·
-**Implements:** `annotate_symbols`, `contribute_edges` (RFC 0003 §2) ·
+**Implements:** `annotate_symbols`, `contribute_edges` ·
 **Crate:** `crates/kndo-plugin-serde` · **Convention set versioned against:** serde 1.x
 
 ## 1. An honest scope statement
@@ -9,10 +9,10 @@
 serde's traits are third-party, so the two mechanisms that normally model nameless
 dispatch both stop short of them, deliberately:
 
-- The Rust adapter's machinery-trait list (docs/adapters/rust.md §2) covers the *stdlib*
+- The Rust adapter's machinery-trait list covers the *stdlib*
   only — teaching the language adapter about an ecosystem crate would be exactly the
   coupling the adapter/plugin split exists to prevent.
-- The core's implement-dispatch fan-out (RFC 0005 §1) is keyed off resolved `Implement`
+- The core's implement-dispatch fan-out is keyed off resolved `Implement`
   edges, and an `impl Serialize for T` names a trait declared outside the repo — the
   reference resolves to nothing, so no fan-out fires.
 
@@ -23,10 +23,10 @@ name from user code**. Without this plugin, every such member reads as productio
 false family (ripgrep: `jsont.rs`, `globset/serde_impl.rs`).
 
 The plugin closes the gap with the framework counterpart of the contract's
-`Declaration::implicitly_invoked` flag: `AnnotationSink::mark_implicitly_invoked`
-(RFC 0005 §1's machinery-dispatch rule). A marked member inherits its owner's reachability
-colors at `Probable` — a `Serialize` impl on a test-covered type stops reading as a test
-blind spot. Nothing serde-specific enters the core: the plugin contributes the *fact*, the
+`Declaration::implicitly_invoked` flag: `AnnotationSink::mark_implicitly_invoked`. A marked
+member inherits its owner's reachability colors at `Probable` — a `Serialize` impl on a
+test-covered type stops reading as a test blind spot. Nothing serde-specific enters the
+core: the plugin contributes the *fact*, the
 machinery-dispatch rule already knew what to do with it.
 
 `#[derive(Serialize)]` needs none of this — derived impls produce no declarations, so
@@ -40,7 +40,7 @@ runs the plugin (and never pays the graph-cache bypass).
 **No file access at all** (`requested_file_access: []`). The plugin is a curated table and a
 single call to `AnnotationSink::mark_machinery_impls`, which matches the table against
 `SymbolNode::implements` — the trait whose `impl` block declares each member, extracted by
-the Rust adapter (docs/adapters/rust.md §2). The trait reduces to its base name there, so
+the Rust adapter. The trait reduces to its base name there, so
 bare (`impl Serialize for Glob`), qualified (`impl<'a> serde::Serialize for Message<'a>`) and
 generic (`impl<'de> Visitor<'de> for GlobVisitor`) forms all land identically:
 
@@ -117,9 +117,9 @@ adapter's own declaration flags. Two sources, one rule.
 - **Native-only for now:** the WIT ABI `annotate-symbols` surface does not carry the
   mark — an ABI candidate. The attribute-string fact it now also reads is *not* in that
   position: `attr-strings-in` is an additive import like `symbol-implements`, so a
-  third-party plugin can build the same convention over its own framework's attributes. External WASM plugins cannot emit it yet, though they *can* read
-  the fact it keys off: `symbol-implements` is an additive import (contracts/wasm-abi.md
-  §5.2).
+  third-party plugin can build the same convention over its own framework's attributes.
+  External WASM plugins cannot emit it yet, though they *can* read
+  the fact it keys off: `symbol-implements` is an additive import.
 - **`Serializer`/`Deserializer` implementors** (the format-crate side of serde) are out of
   scope: format crates are the machinery, their methods are called by serde's *generated*
   code paths in ways this convention set doesn't model. Revisit against a real format-crate

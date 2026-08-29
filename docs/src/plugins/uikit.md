@@ -74,7 +74,7 @@ project root. The document's own `customModule` would be the exact answer, but a
 is not something kndo's graph models, so a rule written on it could not be verified. Proximity
 is what both sides of the question can see.
 
-The fallback is the keep-alive direction (RFC 0012 §2): with nothing to choose between
+The fallback is the keep-alive direction: with nothing to choose between
 candidates, contributing to all of them can only keep something alive, never accuse it.
 
 ## Two hooks, one input — and why the work runs twice
@@ -86,9 +86,9 @@ out immediately.
 
 **Not a cache inside the plugin.** The native `Plugin` trait is `Send + Sync` and every hook
 takes `&self`, so a cache is shared mutable state behind a lock, holding one run's answer on a
-value the engine reuses. A WASM guest is genuinely different — RFC 0017 §4 gives it one
-instance per graph-mutation round, and statics across the three hooks are contractual there —
-but the native trait makes no such promise, and a built-in must not read as if it did.
+value the engine reuses. A WASM guest is genuinely different — the plugin bridge gives it one
+instance per graph-mutation round, with state persisting across that round's three hooks by
+contract — but the native trait makes no such promise, and a built-in must not read as if it did.
 
 **A pure function both hooks call** is what shipped. `wiring()` computes the whole answer and
 each hook projects the part it needs. The derivation therefore runs twice per run, and that is

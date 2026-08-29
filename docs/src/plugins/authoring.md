@@ -171,7 +171,7 @@ PluginDescriptor {
 }
 ```
 
-### Identity: your id IS your coordinate (RFC 0015 §2)
+### Identity: your id IS your coordinate
 
 - **External plugins**: `id` must be the source coordinate the plugin can be fetched from —
   `github.com/<owner>/<repo>`. Identity = location: nothing to squat, no name collisions, and
@@ -185,7 +185,7 @@ PluginDescriptor {
 
 ### Activation: when does your plugin run?
 
-Three tiers (RFC 0003 §4 + RFC 0015 §3):
+Three tiers:
 
 1. **Project-local** (`.kndo/plugins/your.wasm` in a repo): always active. Presence is the
    opt-in; `activation` is ignored.
@@ -211,7 +211,7 @@ project and correctly contribute nothing there: `kndo:libsass-maven-plugin` acti
 project containing Sass and contributes only where a pom declares the compilation. Keep the two
 separate in your own tests, or a passing proof will be measuring the wrong thing.
 
-### Dependencies between plugins (RFC 0015 §3)
+### Dependencies between plugins
 
 If your plugin wraps another ecosystem — your company framework re-exports Next.js — declare
 it:
@@ -309,7 +309,7 @@ nothing this round", never a failed `kndo check`.
 Your plugin costs its hooks' own runtime, never a cache penalty. Both of kndo's fast paths
 work with plugins registered: the snapshot cache folds your identity — id, version, and your
 component's own content hash — into its key, and the incremental patch strips your previous
-contributions and re-runs your hooks against the patched graph (RFC 0017 §3). An unchanged
+contributions and re-runs your hooks against the patched graph. An unchanged
 re-run costs a project the same whether your plugin is installed or not.
 
 Your component is instantiated **once per graph-mutation round** — `contribute_roots` first,
@@ -355,7 +355,7 @@ fn contribute_findings() -> Vec<ContributedFinding> {
   plugin safe by default — earn the opt-in with precision.
 - **A noise ceiling**: 500 findings per rule per run; past it findings are dropped and the
   truncation is reported loudly. kndo's zero-false-positive statement covers only its own bare
-  categories (RFC 0005 §9) — but its *spirit* is your best distribution strategy: silence over
+  categories — but its *spirit* is your best distribution strategy: silence over
   a guess.
 
 ## Writing an adapter
