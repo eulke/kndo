@@ -1,6 +1,6 @@
 //! Full assembly: claim/extract (phase 1), file/package nodes (phase 2), reference
 //! resolution + linking (phase 3), the graph cache key, and the `assemble*` entry
-//! points. Split from the original `graph.rs` verbatim - pure code motion.
+//! points.
 
 use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 use std::path::Path;
@@ -323,11 +323,10 @@ pub(crate) struct VisibilityRegion<'a> {
 /// Whether `outer` reaches everywhere `inner` reaches.
 ///
 /// The question `private-type-leak` actually asks — "can everyone this item promises itself to
-/// also NAME the type in its signature?" — and the reason it used to need a blanket gate
-/// instead: a scope is meaningless without the thing it is relative to, so two `File` scopes in
-/// different files, or two module subtrees anchored at different depths, name disjoint regions
-/// that an enum comparison reads as equal. Comparing regions decides it exactly, which is what
-/// lets the gate go (`internal/detection-gaps.md` §7).
+/// also NAME the type in its signature?" A scope alone cannot answer it: a scope is meaningless
+/// without the thing it is relative to, so two `File` scopes in different files, or two module
+/// subtrees anchored at different depths, name disjoint regions that a bare enum comparison
+/// would read as equal. Comparing regions decides it exactly (`internal/detection-gaps.md` §7).
 pub(crate) fn region_covers(
     outer: &VisibilityRegion<'_>,
     inner: &VisibilityRegion<'_>,
@@ -388,10 +387,11 @@ pub(crate) fn unit_parent_index(files: &[FileNode]) -> HashMap<SmolStr, SmolStr>
 ///
 /// The name alone can be ambiguous: same-name overloads (Swift's `get(at:)` beside
 /// `get(path:)`, Java's arity overloads) are legitimate twins sharing one `Owner.name`
-/// selector, and the qualified table is single-slot, so every reference in EITHER body used to
-/// attribute to whichever twin was inserted last. The other twin then had no outgoing
-/// references and, if nothing else named it, read as dead — vapor's private `get` overload,
-/// called from its public sibling one line above, is the shape.
+/// selector, but the qualified table is single-slot — it holds only one candidate per name, so
+/// looking `within` up by name alone would attribute every reference in EITHER body to
+/// whichever twin the table holds, leaving the other with no outgoing references and, if
+/// nothing else named it, reading as dead — vapor's private `get` overload, called from its
+/// public sibling one line above, is the shape.
 ///
 /// The span settles it exactly and with no language knowledge: a reference lies physically
 /// inside exactly one declaration, so among twins the containing one is the author. Falls back
@@ -435,9 +435,10 @@ fn is_type_like(kind: &crate::vocab::SymbolKind) -> bool {
 /// constructor for this logic: the full build and the incremental patch both call it, so the
 /// two paths cannot drift (the same reason `emit_file_declarations` is shared).
 ///
-/// `by_unit` is the historical repo-global reverse index. `by_package` partitions it by owning
-/// package and `file_package` makes that partition reachable from a resolver, which knows only
-/// the importing file's path — together they let [`crate::adapter::ResolveCtx::unit_files_from`]
+/// `by_unit` is the repo-global reverse index, with no package scoping. `by_package` partitions
+/// it by owning package and `file_package` makes that partition reachable from a resolver,
+/// which knows only the importing file's path — together they let
+/// [`crate::adapter::ResolveCtx::unit_files_from`]
 /// prefer a candidate in the importer's own package. A unit key is only unique within a
 /// package: Java/Kotlin key units on the declared package name, so sibling Gradle modules
 /// sharing a package name share a key, and Swift keys on the target name.
@@ -729,11 +730,10 @@ pub(crate) fn resolve_imports(
                 }
                 // The name this import puts in scope as a qualifier — stated by the
                 // adapter (`local_alias`) or by the target itself (`unit_name`), never
-                // guessed from the specifier's text. The core used to take the specifier's
-                // last `::`-separated segment as a last resort, which was the one place it
-                // knew a language's path separator; the adapters that need the qualifier
-                // now say so, and `internal/detection-gaps.md` §8's hop covers the case
-                // that motivated the guess.
+                // guessed from the specifier's text: splitting a specifier on `::` would need
+                // knowledge of the language's own path separator, which the ignorance rule
+                // forbids core from having. `internal/detection-gaps.md` §8's hop covers the
+                // case where no adapter states a qualifier.
                 //
                 // Whether a MISS under that qualifier settles is the import's own
                 // confidence. An import the adapter states outright (a real `use`/`import`
@@ -912,10 +912,11 @@ pub(crate) fn resolve_references(
     for reference in &facts.references {
         // `within` names the symbol this reference executes inside. The name alone can be
         // ambiguous — same-name overloads (Swift's `get(at:)` beside `get(path:)`, Java's
-        // arity overloads) are legitimate twins that share one `Owner.name` selector, and the
-        // qualified table is single-slot, so every reference in EITHER body used to attribute
-        // to whichever twin was inserted last. The other twin then had no outgoing references
-        // and, if nothing else named it, read as dead: vapor's private `get` overload, called
+        // arity overloads) are legitimate twins that share one `Owner.name` selector, but the
+        // qualified table is single-slot — it holds only one candidate per name, so looking
+        // `within` up by name alone would attribute every reference in EITHER body to
+        // whichever twin the table holds, leaving the other with no outgoing references and,
+        // if nothing else named it, reading as dead: vapor's private `get` overload, called
         // from its public sibling one line above, is the shape.
         //
         // The span settles it exactly and without any language knowledge: a reference lies
@@ -1726,8 +1727,8 @@ pub(crate) fn call_yield(
 /// resolves to a declaration in this project — the symbol whose home file carries its member
 /// table. The two are separate because they genuinely can be: `Vec<TreeEntry>` is a type this
 /// project never declares, so it has no symbol, and yet the chain has to keep walking through
-/// it to reach the `TreeEntry` inside. A chain whose state was a `SymbolId` could not hold
-/// that, which is the whole reason the state is a type now.
+/// it to reach the `TreeEntry` inside — a state that holds only a `SymbolId` has nowhere to
+/// carry that, which is why the chain's state is a type.
 #[derive(Clone)]
 pub(crate) struct ChainStep {
     pub(crate) ty: crate::adapter::TypeExpr,
@@ -1838,7 +1839,8 @@ pub(crate) fn chain_hop(
     // The owner's own home file first — a fact written beside the declaration is the
     // authority on it. Then the language's builtin table, which is the ONLY tier that can
     // apply when the head resolves to no declaration at all: `Result` and `Vec` have no home
-    // file in this project, and a chain that crosses one used to stop dead there.
+    // file in this project, so the builtin table is what keeps a chain that crosses one from
+    // stopping dead there.
     let home = current
         .symbol
         .map(|s| t.symbols[s.0 as usize].file.0 as usize);
@@ -2348,8 +2350,8 @@ pub(crate) fn derive_role_roots(
 /// crate — reads as dead.
 ///
 /// The worklist's pop order is determinism-sensitive (the canonical edge sort downstream
-/// relies on a stable assembly order) — seeded pre-sorted and mutated in place for exactly
-/// that reason, matching the original inline fixpoint's iteration order verbatim.
+/// relies on a stable assembly order) — seeded pre-sorted and mutated in place to keep that
+/// order exact.
 pub(crate) fn expand_library_surface(
     files: &[FileNode],
     claimed_per_file: &[Option<Claimed>],
@@ -2500,12 +2502,12 @@ pub(crate) fn fold_adapter_versions(
 
 /// The shared facts-contract shape, folded in beside each adapter's own number.
 ///
-/// Without it, a change to a type EVERY adapter emits (`FunctionMetrics` growing a field) had
-/// to be spelled as a bump in every adapter's `facts_schema_version` for the graph key to
-/// move — the same fact repeated six-plus times, silently under-invalidating the moment
-/// someone bumps five of six. [`crate::cache::ENTRY_FORMAT_VERSION`] already guarded the facts
-/// entries against exactly this; folding it here extends that one bump to the graph snapshot,
-/// so nobody has to reason about whether a facts change reached the graph.
+/// Without it, a change to a type EVERY adapter emits (`FunctionMetrics` growing a field)
+/// would need a bump in every adapter's `facts_schema_version` for the graph key to move —
+/// the same fact repeated six-plus times, and silently under-invalidating the moment someone
+/// bumps five of six. [`crate::cache::ENTRY_FORMAT_VERSION`] already guards the facts entries
+/// against exactly this; folding it here extends that one bump to the graph snapshot, so
+/// nobody has to reason about whether a facts change reached the graph.
 ///
 /// Takes the version as a parameter rather than reading the constant directly so a test can
 /// vary it — a constant folded in silently is a fold nothing can prove.
@@ -3213,11 +3215,11 @@ pub fn assemble_from_source(
     // Same-name declarations across files of ONE unit are legitimate: Go's build tags make
     // `binding.go` (`//go:build !nomsgpack`) and `binding_nomsgpack.go` (`//go:build nomsgpack`)
     // mutually exclusive, and both declare `validate` in package `binding`. The table below is
-    // single-slot, so every reference used to land on whichever file was inserted last and the
-    // other read `unused` — in gin, one of the two `validate`s took all 16 references and its
-    // twin took none. kndo analyzes the UNION of build configurations by documented policy
-    // (`internal/adapters/go.md`), under which both are live, so the displaced ones are kept
-    // here and every twin gets the edge.
+    // single-slot, so it holds only one of them; a name-only lookup would send every reference
+    // to that one file and leave the other reading `unused` — in gin, one of the two
+    // `validate`s would take all 16 references and its twin none. kndo analyzes the UNION of
+    // build configurations by documented policy (`internal/adapters/go.md`), under which both
+    // are live, so the displaced ones are kept here and every twin gets the edge.
     let mut symbol_twins_per_unit: HashMap<SmolStr, HashMap<SmolStr, Vec<SymbolId>>> =
         HashMap::default();
     let mut symbol_by_name_per_unit: HashMap<SmolStr, HashMap<SmolStr, SymbolId>> =

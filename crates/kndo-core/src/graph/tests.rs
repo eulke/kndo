@@ -1,8 +1,7 @@
 use super::*;
-// The original `graph.rs` test module relied on a single flat top-of-file scope (every
-// `crate::adapter`/`crate::vocab` item used anywhere in `graph.rs`, whether or not the
-// split-off submodule the test now sits beside still imports it). Glob-importing both
-// vocabularies reproduces that scope without hand-tracking which symbol each test needs.
+// Tests across this module draw on items from both `crate::adapter` and `crate::vocab`, with
+// no single test needing all of either; glob-importing both vocabularies here covers every
+// test's needs without hand-tracking which symbol each one uses.
 #[allow(unused_imports)]
 use crate::adapter::*;
 use crate::discovery;
@@ -96,9 +95,7 @@ fn surface_closure_promotes_transitive_members_of_surface_types_only() {
 }
 
 /// The canonical fixture helper — see [`crate::testkit::fixture::project`] for why every
-/// temporary directory in this workspace comes from `tempfile`. The `name` parameter this
-/// helper used to take existed only to disambiguate hand-built directory names; the last
-/// thing still feeding it was the sibling `cache_dir`, which is a `TempDir` now too.
+/// temporary directory in this workspace comes from `tempfile`.
 fn project(files: &[(&str, &str)]) -> tempfile::TempDir {
     crate::testkit::fixture::project(files)
 }
@@ -949,17 +946,17 @@ fn a_matched_qualifier_settles_resolution_even_on_a_miss() {
 
 #[test]
 fn a_reconstructed_imports_qualifier_does_not_settle_on_a_miss() {
-    // The mirror of the test above, and the rule that let the core stop splitting
-    // specifiers on `::`. An import the adapter reconstructed from a use site names its
-    // qualifier like any other, but it is the adapter's reading of a path, not a statement
-    // the file makes — so it does not close the namespace: `j.Marshal` missing in the
-    // target falls through to the duck-typed member fallback exactly as an unregistered
+    // The mirror of the test above: this is the rule that keeps the core from ever needing to
+    // split a specifier on `::` itself. An import the adapter reconstructed from a use site
+    // names its qualifier like any other, but it is the adapter's reading of a path, not a
+    // statement the file makes — so it does not close the namespace: `j.Marshal` missing in
+    // the target falls through to the duck-typed member fallback exactly as an unregistered
     // qualifier would. Settling on it would let one misread path kill a live method.
     //
-    // The fixture states `reconstructed` outright. It used to lean on the import's
-    // CONFIDENCE as a proxy, which was wrong for a whole class: Rust's `crate`/`self`/`super`
-    // rooted synthetic imports are `Certain` about where they resolve while being no
-    // statement at all.
+    // The fixture states `reconstructed` outright — confidence alone cannot serve as this
+    // signal: Rust's `crate`/`self`/`super`-rooted synthetic imports are `Certain` about where
+    // they resolve while being no statement at all, so a confidence-based proxy would
+    // misclassify that whole class of import as one the file states outright.
     let dir = project(&[
         (
             "a.mock",
@@ -1048,10 +1045,11 @@ fn a_pointer_base_may_be_a_qualifier_rather_than_a_symbol() {
 
 #[test]
 fn a_hop_through_a_language_provided_type_reaches_the_element() {
-    // `Box<Item>` is a type no file declares — it has no home to hold a fact — so the chain
-    // used to stop dead on it and everything behind it read as unused. The adapter's builtin
-    // table says what iterating one yields, in terms of its own argument, and the argument
-    // comes from the receiver: the two halves of `internal/detection-gaps.md` §3's last case.
+    // `Box<Item>` is a type no file declares — it has no home to hold a fact — so the builtin
+    // table is the only place the chain can continue: without it, a chain crossing `Box<Item>`
+    // would stop dead and everything reachable only through it would read as unused. The table
+    // says what iterating one yields, in terms of its own argument, and the argument comes
+    // from the receiver: the two halves of `internal/detection-gaps.md` §3's last case.
     let dir = project(&[
         (
             "a.mock",
@@ -1106,9 +1104,9 @@ fn a_qualifier_bound_to_alternates_reaches_every_one() {
 fn a_synthesized_import_never_shadows_the_files_own_declaration() {
     // tokio's `dump.rs`: it declares `pub struct Trace` AND mentions `super::task::trace::Trace`
     // — a different type — in a field. The adapter synthesizes an import for that inline path so
-    // the mention resolves, and its binding used to outrank the file's own declaration, so the
-    // file's `-> &Trace` bound to the type it merely names in passing and `private-type-leak`
-    // reported a leak that is not there.
+    // the mention resolves; if that binding outranked the file's own declaration, the file's
+    // `-> &Trace` would bind to the type it merely names in passing, and `private-type-leak`
+    // would report a leak that is not there.
     //
     // No language kndo supports lets a WRITTEN import shadow a same-named local declaration
     // (Rust E0255), so a collision here can only ever come from a synthetic import.
@@ -1789,11 +1787,11 @@ fn patched_snapshot_serves_the_next_run_verbatim() {
 
 #[test]
 fn a_coverage_only_plugin_keeps_the_snapshot_fast_path() {
-    // Regression guard for a real shipped bug: the cache/patch bypass was keyed on
-    // `plugins.is_empty()`, and the lcov ingester is registered unconditionally by
-    // `default_plugins()` — so the graph-snapshot cache and the incremental patch were
-    // silently dead on every real `kndo` run from the day the graph hooks were wired.
-    // A plugin with `mutates_graph() == false` must be invisible to both fast paths.
+    // Regression guard: the cache/patch fast paths must not key off `plugins.is_empty()` —
+    // the lcov ingester is registered unconditionally by `default_plugins()`, so gating on an
+    // empty plugin list would leave the graph-snapshot cache and the incremental patch dead on
+    // every real `kndo` run. A plugin with `mutates_graph() == false` must be invisible to
+    // both fast paths.
     // (A local double stands in for the coverage ingesters, which live in their own
     // plugin crate now — core depends on none of them.)
     struct CoverageOnlyPlugin;
@@ -2197,9 +2195,9 @@ fn externally_consumed_round_trips_through_the_snapshot() {
 
 #[test]
 fn the_graph_key_folds_the_shared_facts_contract_shape() {
-    // A change to a type EVERY adapter emits — `FunctionMetrics` growing a field — used to
-    // need a bump in every adapter's `facts_schema_version` for this key to move: the same
-    // fact spelled six-plus times, and silently under-invalidating the moment someone bumps
+    // A change to a type EVERY adapter emits — `FunctionMetrics` growing a field — must move
+    // this key with ONE bump, not a bump in every adapter's `facts_schema_version`: spelling
+    // the same fact six-plus times invites silent under-invalidation the moment someone bumps
     // five of six. `cache::ENTRY_FORMAT_VERSION` is the one knob for that shape, and folding
     // it here is what makes ONE bump reach the graph snapshot too.
     //
@@ -3101,12 +3099,12 @@ fn a_changed_file_misses_the_graph_snapshot_but_still_warms_its_sibling_from_fac
 /// Regression: a file that declares the same name twice — cfg-alternated `impl` blocks, or
 /// platform-gated overloads — must map each declaration's metrics to its OWN symbol.
 ///
-/// The per-file name tables assembly hands the emitter are single-slot/last-wins, so when
-/// metrics resolved by NAME both entries landed on whichever declaration was inserted last.
-/// `duplicate` then saw two Instances sharing one SymbolId and reported the declaration as a
-/// structural clone of itself (both `related` entries pointing at the identical file+range),
-/// while health counted the symbol's tokens twice in its duplication numerator. Metrics now
-/// resolve by the declaration's own span, which is exact.
+/// The per-file name tables assembly hands the emitter are single-slot/last-wins, so resolving
+/// metrics by NAME would land both entries on whichever declaration was inserted last, handing
+/// `duplicate` two Instances sharing one SymbolId (reported as a structural clone of itself,
+/// both `related` entries pointing at the identical file+range) and double-counting the
+/// symbol's tokens in health's duplication numerator. Metrics resolve by the declaration's own
+/// span instead, which is exact.
 #[test]
 fn same_named_declarations_keep_their_own_metrics() {
     use crate::adapter::{Declaration, FileFacts, FunctionMetrics, Span};
@@ -3667,9 +3665,10 @@ impl LanguageAdapter for PanickingAdapter {
 /// **One file's adapter defect costs that file, not the run.**
 ///
 /// Extraction is the one place third-party code meets arbitrary bytes, and it runs across a
-/// rayon pool: before this was contained, a panic on any single file aborted the worker and
-/// with it every other file's answer. The contract everywhere else in this codebase is to
-/// degrade to silence with a diagnostic naming what was lost; extraction was the hole in it.
+/// rayon pool, where an uncaught panic on any single file would abort the worker and with it
+/// every other file's answer. The contract everywhere else in this codebase is to degrade to
+/// silence with a diagnostic naming what was lost — catching the panic is what extends that
+/// contract to this one place third-party code runs unchecked.
 #[test]
 fn an_adapter_panic_costs_one_file_and_not_the_run() {
     let dir = crate::testkit::fixture::project(&[

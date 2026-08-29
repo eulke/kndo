@@ -2,10 +2,10 @@
 //! envelopes (`describe`) and every finding (output-schema §2).
 //!
 //! [`crate::vocab::Provenance`] lives on graph *edges*, not on nodes and not on findings, so
-//! answering "who contributed this?" is a derivation, not a copy. Two consumers need the same
-//! derivation and used to have only one of them: `describe` scanned every edge in the graph
-//! per node described (so a `query` batch of sixty describes scanned the edge list sixty
-//! times), and findings had no answer at all. This is the one index both read.
+//! answering "who contributed this?" is a derivation, not a copy. `describe` and every
+//! finding's `sources` field both need that same derivation; a per-call scan of every edge in
+//! the graph would cost real time at scale (a `query` batch of sixty describes would scan the
+//! edge list sixty times). This is the one index both read.
 //!
 //! **What counts as a source of a node**, normatively:
 //!

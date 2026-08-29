@@ -138,8 +138,8 @@ pub(crate) fn propagate_surface_members(
 
 /// Whether a declaration's rung can travel through a re-export chain to outside its package
 /// (`VisibilityRung::surface_transitive`). No ladder (or an index the ladder
-/// doesn't cover) falls back to `true` — the `exported` bit alone governs, the pre-ladder
-/// behavior for binary-visibility languages.
+/// doesn't cover) falls back to `true`: for a binary-visibility language, the `exported` bit
+/// alone decides membership, since there is no ladder to consult.
 pub(crate) fn rung_surface_transitive(
     ladder: Option<&[crate::adapter::VisibilityRung]>,
     vis: crate::adapter::VisibilityLevel,
