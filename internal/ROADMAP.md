@@ -9,7 +9,7 @@ deferred with reasons of record.
 
 **Exit (met):** contracts signed off (`core-traits.md`, `output-schema.md`); candidate-rule
 table (RFC 0005 §13) fully triaged — no candidate left undecided; warm-budget feasibility
-validated by [spike 0001](spikes/0001-performance.md) (73 ms measured vs 500 ms budget);
+validated by [spike 0001](PERFORMANCE-WORKSPACES-AND-RELEASE.md#spike-0001-performance-validation) (73 ms measured vs 500 ms budget);
 product name decided (ADR 0007).
 
 ## M1 — Skeleton + first language (JS/TS), full-scan only
