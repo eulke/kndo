@@ -1,0 +1,12 @@
+# The v2 workspace. It grows here, beside the v1 it replaces, until the root swap;
+# nothing in it is a member of the v1 workspace and nothing in v1 depends on it.
+[workspace]
+resolver = "2"
+members = ["crates/kndo-cli", "crates/kndo-gates", "xtask"]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2024"
+license = "Apache-2.0"
+rust-version = "1.94"
+publish = false

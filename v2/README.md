@@ -31,6 +31,26 @@ plan M-1→M6) lives as a published page; the decisions extracted from it start 
 - [x] Fingerprint spike with a written verdict (`spikes/fingerprint/VERDICT.md`).
 - [x] Harness ready to activate before v2's first push (`harness/install.sh`).
 
+## M0 — skeleton status
+
+The v2 workspace lives at `v2/` (this directory) beside the v1 it replaces, until the
+root swap; `cargo` commands run from here, on the pinned toolchain
+(`rust-toolchain.toml`, 1.94.1 — local and CI identical by construction).
+
+- `crates/kndo-cli` — the `kndo` binary at hello-world size: enough artifact for the
+  release loop to be real before any analysis code can hide its failures.
+- `crates/kndo-gates` — the gate registry `.github/workflows/v2.yml` is **generated**
+  from (`cargo xtask gen-ci`); the `generated_ci_is_current` gate fails the build when
+  the committed workflow and the registry drift. One spelling of the invariant list.
+- `xtask` — `gen-ci`, `package` (build + tar.gz + sha256), `verify-artifact`
+  (checksum-verify, extract, run — in Rust, so linux/macos/windows run the identical
+  install check).
+- CI (`v2.yml`): lint (fmt, clippy, conventional-commit), test matrix on
+  linux/macos/windows, named gates, and package+verify-install on all three platforms.
+- Exit-criterion adaptation, recorded in `DECISIONS.md`: the ceremonial `v0.0.0-rc` tag
+  is deferred — v1's release.yml fires on any `v*` tag — and the package+install matrix
+  proves the same loop on every push instead.
+
 ## Name verification (2026-08-29)
 
 - npm: `kndo` still taken by an unrelated DeFi package (unchanged since the v1 check);

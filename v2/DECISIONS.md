@@ -189,3 +189,20 @@ field cfg'd off on every platform) is covered by comparing the fingerprint acros
 CI matrix. Adoption note: the real derive must also fold serde/rkyv attribute tokens —
 they change wire/disk layout without changing field shapes. Full record:
 `v2/spikes/fingerprint/VERDICT.md`.
+
+## 2026-08-29 — M0: the v2 workspace grows under v2/ until the root swap
+
+Greenfield in place means the root eventually belongs to v2; until then the v2
+workspace lives at `v2/` (its own Cargo workspace, pinned `rust-toolchain.toml`), v1
+stays intact as the quarry and oracle producer, and neither workspace depends on the
+other. The swap — v2 moved to the root, v1 retired — is a later mechanical step, not an
+M0 concern.
+
+## 2026-08-29 — CI is generated from the gate registry; the rc tag is deferred
+
+`.github/workflows/v2.yml` is rendered by `cargo xtask gen-ci` from kndo-gates'
+registry and guarded by the `generated_ci_is_current` gate — one spelling of the
+invariant list (v1 kept three hand-synced spellings, including a named gate that had
+never once run). The M0 exit criterion is proven by the package+verify-install matrix
+on every push; the ceremonial `v0.0.0-rc` tag is deferred because v1's release.yml
+triggers on any `v*` tag, and lands when that pipeline is retired.
