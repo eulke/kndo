@@ -30,7 +30,7 @@ kndo-cli           ── one frontend: terminal UI, exit codes, human rendering
 kndo               ── the DISTRIBUTION layer: the composed product (core + all first-party
                       adapters + built-in plugins), one `open()` for every frontend
 kndo-core          ── the system: graph model, analysis engine, cache, orchestration, plugin host
-kndo-adapter-*     ── one crate per language (js, go, java, kotlin, swift, rust, json, css)
+kndo-adapter-*     ── one crate per language (js, go, java, kotlin, swift, rust, json, css, html)
 kndo-plugin-api    ── stable API surface for third-party plugins (WASM)
 ```
 
@@ -117,12 +117,15 @@ Validated empirically by [spike 0001](../spikes/0001-performance.md): measured w
 | Reporting | 50 ms | |
 
 Cold full runs are allowed seconds (parallel across cores) — they build the cache that makes every
-subsequent run warm. The 500 ms contract is for the *warm* path, intended to be enforced by a
-benchmark suite in CI from milestone M2 (ROADMAP); as of M2's close-out the budget is measured
-manually (well under budget — see ROADMAP's M2 note) and the CI wiring itself is deferred. The
-phase breakdown above is the target allocation assuming the RFC 0004 §4-5 patch/dirty-region path;
-that path isn't built yet either (same M2 note) — today "Graph patch + analyses" is a full
-recompute, still fast enough at benchmark scale via the facts cache. The full parallelism model —
+subsequent run warm. The 500 ms contract is for the *warm* path. The phase breakdown above is the
+RFC 0004 §4-5 patch/dirty-region path, and it is built and landed: [RFC 0013](0013-incremental-graph-patch.md)
+(`crates/kndo-core/src/graph/patch.rs`) makes "Graph patch + analyses" a real dirty-region
+recomputation — changed nodes plus their forward/reverse closure — not a full recompute. A
+benchmark regression gate exists (`cargo xtask bench --gate`, CONTRIBUTING "Benchmarks"),
+comparing warm end-to-end wall time at 1k/5k/50k files against a recorded baseline; it is
+deliberately *not* wired into CI — the baseline is machine-specific, so ephemeral runners of
+varying hardware would fail it for reasons unrelated to any change — and instead runs locally,
+by hand, before and after a change expected to cost time. The full parallelism model —
 per-phase strategy,
 determinism under any thread count, adaptive sequential fallback, and the CI performance gates —
 is specified in [RFC 0008](0008-performance-and-parallelism.md).

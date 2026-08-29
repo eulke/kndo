@@ -23,6 +23,8 @@ A plugin implements one or more of these hooks (trait `Plugin`, normative in con
 | `annotate_symbols` | graph assembly, after phase 3b | mark symbols "externally consumed" (public SDK surface, FFI, serialization targets like `@JsonProperty`/serde fields) |
 | `ingest_coverage` | pre-analysis | parse a coverage format (lcov, cobertura, JaCoCo, llvm-cov) into per-function coverage (RFC 0005 §10) |
 | `suppress` | reporting | domain-specific suppression (e.g. migration files are exempt from dead-code) |
+| `rules` | declaration only, before any hook runs | declares the rule names/severities `contribute_findings` may emit under, so `kndo doctor`/`kndo plugin verify` can show them and gate config can validate against real names (RFC 0018) |
+| `contribute_findings` | after assembly, every path (cold, patch, warm snapshot hit) | third-party verdicts, not graph facts: findings namespaced `plugin:<coordinate>/<rule>` on the advisory severity channel (RFC 0018) |
 
 Plugins **cannot**: define new node/edge kinds, mutate other plugins' output, read arbitrary
 files (they request file access through the host, which enforces scope — landed for
@@ -62,12 +64,32 @@ Two tiers (decision in ADR 0003):
    config. The initial set targets the dominant ecosystems of the supported languages
    (examples, each its own doc before implementation): `react`, `nextjs`, `jest/vitest`,
    `spring`, `junit`, `gradle-conventions`, `swiftui`, `coverage-lcov`, `coverage-jacoco`.
-   **Landed so far**: `kndo:coverage-lcov` (in-core), and the first two convention plugins of
-   RFC 0015 §6 phase 4 — `kndo:nextjs` ([plugins/nextjs.md](../../docs/src/plugins/nextjs.md)) and
-   `kndo:express` ([plugins/express.md](../../docs/src/plugins/express.md)), each its own crate
-   (`crates/kndo-plugin-{nextjs,express}`), feature-gated in the `kndo` distribution crate
-   (`plugin-nextjs`/`plugin-express`, on by default) and gated at composition by their own
-   `activation` rules (§4).
+   **Landed so far**: ten built-in plugin crates under `crates/kndo-plugin-*`, each feature-gated
+   in the `kndo` distribution crate (`plugin-<name>`, on by default) and gated at composition by
+   their own `activation` rules (§4) — an ecosystem list driven by measured gaps (RFC 0015 §6
+   phase 4 onward) rather than the initial guess above, and already past it:
+   - `kndo:nextjs` ([plugins/nextjs.md](../../docs/src/plugins/nextjs.md)) — Next.js's
+     file-system router.
+   - `kndo:express` ([plugins/express.md](../../docs/src/plugins/express.md)) — Express's
+     imperative route registration.
+   - `kndo:serde` ([plugins/serde.md](../../docs/src/plugins/serde.md)) — serde's
+     (de)serialization traits as machinery dispatch.
+   - `kndo:rkyv` ([plugins/rkyv.md](../../docs/src/plugins/rkyv.md)) — rkyv's traits, the same
+     machinery-dispatch shape as serde.
+   - `kndo:info-plist` ([plugins/info-plist.md](../../docs/src/plugins/info-plist.md)) — an Apple
+     bundle's `Info.plist` naming classes as strings.
+   - `kndo:thymeleaf` ([plugins/thymeleaf.md](../../docs/src/plugins/thymeleaf.md)) — a Spring
+     Boot app's controller-to-template view layer.
+   - `kndo:libsass-maven-plugin`
+     ([plugins/libsass-maven-plugin.md](../../docs/src/plugins/libsass-maven-plugin.md)) — a
+     Maven Sass build's compiled-and-committed output.
+   - `kndo:uikit` ([plugins/uikit.md](../../docs/src/plugins/uikit.md)) — the classes, outlets
+     and actions an Interface Builder storyboard wires up.
+   - `kndo:wasmtime` ([plugins/wasmtime.md](../../docs/src/plugins/wasmtime.md)) —
+     `wasmtime::component::bindgen!`-generated trait dispatch.
+   - `kndo:coverage-lcov`/`kndo:coverage-cobertura`/`kndo:coverage-jacoco`/`kndo:coverage-go`
+     (one crate, `crates/kndo-plugin-coverage`, [plugins/coverage.md](../../docs/src/plugins/coverage.md))
+     — coverage ingesters, one per report format.
 2. **External plugins** — WASM components implementing the same hooks over a versioned ABI
    (`kndo-plugin-api`), loaded from `.kndo/plugins/` or a configured path. Sandboxed (no fs/net;
    host-mediated file access), with per-file fuel/time limits so a plugin cannot break the 500 ms
@@ -193,5 +215,13 @@ world (a third sibling world; see `plugin.wit`).
   converges the two kinds' *operational* surfaces (identity, activation, installation) into
   one component model without merging the traits — the semantic split stays.
 - Output formats — reporting stays in the core for schema stability; new formats are core PRs.
-- Custom *analyses* over the graph: deliberately post-1.0. First we stabilize the graph schema,
-  then we can expose a query/analysis API safely. Tracked as an open question in the ROADMAP.
+- A general query/analysis API against the graph schema itself: still open — the schema isn't
+  stabilized as a public query surface, and this remains tracked as an open question in the
+  ROADMAP. What *did* land, narrower and on purpose ([RFC 0018](0018-plugin-contributed-findings.md),
+  accepted): `Plugin::rules`/`contribute_findings` let a plugin emit its own verdicts — findings,
+  not graph facts — over the same read-only `GraphView`/`ContentView` the graph-mutation hooks
+  get, namespaced `plugin:<coordinate>/<rule>` on an advisory severity channel it can never
+  escalate into a core finding or (without explicit user opt-in) the exit code. A plugin still
+  cannot mutate the graph through this path, touch a core analysis's own output, or define new
+  node/edge kinds — "custom analyses, unrestricted" is not what shipped, and remains the open
+  item above.

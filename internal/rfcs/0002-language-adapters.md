@@ -40,7 +40,7 @@ beyond the standard library/dominant convention, coverage formats, org-specific 
 Rationale for the boundary: language specs are stable and versioned; ecosystems are fashion.
 Keeping fashion out of adapters keeps them small, testable, and slow-changing.
 
-## 3. Non-source languages (JSON, CSS)
+## 3. Non-source languages (JSON, CSS, HTML)
 
 The vocabulary must not assume "code". For data/style languages the mapping is:
 
@@ -51,6 +51,14 @@ The vocabulary must not assume "code". For data/style languages the mapping is:
 - **CSS/SCSS/LESS**: symbols are selectors/mixins/variables; references are `@import`/`@use`,
   `composes`, and — via the cross-language edge mechanism (§4) — class-name usage from JS/TS/HTML.
   This enables "unused CSS rule" as a normal unused-symbol finding.
+- **HTML**: no symbols, no visibility ladder, no metrics — a document declares nothing a caller
+  can name, the same non-source posture as JSON. Unlike JSON, a document is never an import
+  *target*: nothing imports a page, so every claimed `.html`/`.htm` file roots itself (a browser
+  loads it, a server renders it, a bundler is handed it), and the scripts/stylesheets/assets it
+  names via `<script src>`, `<link href>`, `<img src>`, `<source src>`, `<iframe src>` become
+  reachable through that root. A tag scan, not a grammar-backed parse: HTML's error recovery
+  means a "malformed" document is still one a browser renders, so the adapter reads attribute
+  values directly and under-reports (skips) anything it cannot read plainly rather than guessing.
 
 ## 4. Cross-language edges
 
@@ -118,9 +126,13 @@ report it (RFC 0006).
 | Rust | module tree from crate roots, `use`/paths, features (coarse: any-feature = live) | `main`, `lib.rs` `pub` API, `#[no_mangle]`/`export` | `#[cfg(test)]`, `tests/` |
 | JSON | n/a (target-only) | n/a | n/a |
 | CSS | `@import`/`@use` graph, CSS Modules | none (reachability comes from consumers) | n/a |
+| HTML | none — a tag scan (`<script src>`, `<link href>`, `<img src>`, `<source src>`, `<iframe src>`), not module resolution | the whole file (a document is an entry point, not a module) | n/a |
 
-Each adapter gets its own detailed spec document under `docs/adapters/<lang>.md` before its
-implementation milestone (ROADMAP), including the tricky cases above.
+Each adapter gets its own detailed spec document under `internal/adapters/<lang>.md` before its
+implementation milestone (ROADMAP), including the tricky cases above. That doc is still missing
+for HTML (`internal/adapters/html.md` doesn't exist yet) even though the adapter itself has
+shipped and is on by default — a gap to close, not a reflection of the adapter's real scope as
+described here.
 
 ## 8. Testing contract
 
