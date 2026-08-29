@@ -497,7 +497,7 @@
           "type": "string"
         },
         "related": {
-          "description": "Evidence chain — empty for analyses that haven't adopted it yet.\n`default` isn't for deserialization (Finding is serialize-only) — it tells the schema\ngenerator the field is optional, matching the skip-when-empty serialization.",
+          "description": "Evidence chain — empty for analyses that don't populate one.\n`default` isn't for deserialization (Finding is serialize-only) — it tells the schema\ngenerator the field is optional, matching the skip-when-empty serialization.",
           "type": "array",
           "items": {
             "$ref": "#/$defs/RelatedLocation"
@@ -538,7 +538,7 @@
       ]
     },
     "Group": {
-      "description": "A finding's section — the taxonomy RFC 0018 §\"reserved\" closes: exactly these five, plus\n`Convention` reserved for plugin-contributed findings (`category` stays an open\n`plugin:<coordinate>/<rule>` namespace — RFC 0018 §2.1 — but no finding may claim a group\noutside this set). [`Group::DISPLAY_ORDER`] is the single source of section ordering —\nevery renderer reads it instead of keeping its own copy (a duplicated 4-entry copy of this\nlist, missing `Convention`, is exactly how `agent_format.rs` and the CLI's `render.rs`\nused to missort every plugin finding under an unnamed fallback section).",
+      "description": "A finding's section — the taxonomy RFC 0018 §\"reserved\" closes: exactly these five, plus\n`Convention` reserved for plugin-contributed findings (`category` stays an open\n`plugin:<coordinate>/<rule>` namespace — RFC 0018 §2.1 — but no finding may claim a group\noutside this set). [`Group::DISPLAY_ORDER`] is the single source of section ordering —\nevery renderer reads it instead of keeping its own copy: a duplicated 4-entry copy of this\nlist, missing `Convention`, would missort every plugin finding under an unnamed fallback\nsection in any renderer that carried it (`agent_format.rs`, the CLI's `render.rs`).",
       "oneOf": [
         {
           "type": "string",
@@ -668,7 +668,7 @@
       ]
     },
     "Location": {
-      "description": "Where a finding points. Every field is optional because not every subject has all of them —\na `version-skew` has no range, a directory rollup has no symbol.\n\nA finding whose subject genuinely spans several places (`duplicate` over identical files,\n`version-skew` over disagreeing manifests) anchors on the lexicographically-first member and\ncarries **every** member in `related`. That pairing is the contract: the anchor makes the\nfinding addressable, `related` makes it complete, and the message is then free to summarize.\nThe alternative shipped for a while — an empty `Location` with the members named only in the\nmessage prose — and it meant 278 findings across the corpus that no consumer could act on\nwithout parsing English, some of which truncated the list and lost the rest outright.",
+      "description": "Where a finding points. Every field is optional because not every subject has all of them —\na `version-skew` has no range, a directory rollup has no symbol.\n\nA finding whose subject genuinely spans several places (`duplicate` over identical files,\n`version-skew` over disagreeing manifests) anchors on the lexicographically-first member and\ncarries **every** member in `related`. That pairing is the contract: the anchor makes the\nfinding addressable, `related` makes it complete, and the message is then free to summarize.\nNaming the members only in the message prose would leave every consumer but a human reader\nunable to act on them — and a renderer that truncates the message for length would silently\ndrop the rest.",
       "type": "object",
       "properties": {
         "package": {
@@ -1023,7 +1023,7 @@
       ]
     },
     "Severity": {
-      "description": "A finding's severity — each category carries one as\na fixed default; `--strict` promotion isn't implemented yet, so this is always the default.\nDeclaration order doubles as sort/triage order: worst first.",
+      "description": "A finding's severity — each category carries one as\na fixed default. `--strict` promotion (RFC 0005) happens where the analysis assigns the\nseverity directly (see `analysis::undeclared`), never through logic on this type.\nDeclaration order doubles as sort/triage order: worst first.",
       "type": "string",
       "enum": [
         "error",
