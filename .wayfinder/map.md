@@ -24,11 +24,13 @@ narración histórica: todo comentario que sobrevive describe solo lo que es cie
 no obvio, una invariante, una restricción — nunca contrasta con un estado pasado ("antes X, ahora
 Y", "ya no", "se agregó para") ni promete uno futuro, y no queda ninguna referencia a un incidente,
 branch, PR o sesión puntual. `CLAUDE.md` conserva cada regla y cada gate que ya tiene, reescritos
-en presente, más una sección nueva que fija esta misma política de comentarios. `internal/` y
-`docs/` no se recortan por volumen — una auditoría de los 39 documentos de `internal/` confirmó
-que ninguno es redundante ni está muerto — pero sí se corrigen donde quedaron desactualizados
-respecto al código (22 de 39 lo estaban), y `internal/plan-detection-gap-fixes.md` se retira.
-Al cerrar el último ticket de este mapa, el propio tracker (`.wayfinder/`) se borra del repo.
+en presente, más una sección nueva que fija esta misma política de comentarios y una regla que
+generaliza "Contract first" a los 10 documentos fijos en los que termina consolidado
+`internal/` (ver Notes). `internal/` se corrige primero donde quedó desactualizado (22 de 39
+documentos lo estaban) y luego se consolida a esos 10 documentos fijos más
+`detection-gaps.md` aparte — nada se pierde, se reorganiza para que se pueda mantener al día.
+`internal/plan-detection-gap-fixes.md` se retira. `docs/` no se toca. Al cerrar el último
+ticket de este mapa, el propio tracker (`.wayfinder/`) se borra del repo.
 
 ## Notes
 
@@ -79,7 +81,12 @@ en el mismo commit.
 
 ## Decisions so far
 
-(vacío — todavía no se cerró ningún ticket)
+- [Decisión: consolidar internal/ a 10 documentos fijos + mecanismo anti-desactualización](tickets/33-consolidation-decision.md):
+  10 documentos fijos (README, ROADMAP, ADRS, CONTRACTS, ADAPTERS, ARCHITECTURE, PLUGINS,
+  GRAPH-CACHE-AND-ANALYSES, CLI-OUTPUT-AND-INTERFACE, PERFORMANCE-WORKSPACES-AND-RELEASE) más
+  `detection-gaps.md` aparte; corregir contenido primero (tickets 21-32), fusionar después
+  (tickets 34a-34h); regla nueva en CLAUDE.md (ticket 01) + gate de CI (ticket 35) para que no
+  vuelva a desincronizarse.
 
 ## Not yet specified
 
@@ -88,6 +95,10 @@ en el mismo commit.
 - Si conviene además un gate de CI que impida que vuelva a acumularse narración histórica en
   comentarios nuevos (más allá de la convención escrita en `CLAUDE.md`) — no evaluado todavía;
   puede graduar en un ticket propio si alguna resolución lo deja lo bastante específico.
+- Productizar la auditoría profunda (11 agentes comparando cada afirmación de un doc contra el
+  código, la que corrió este mapa) como herramienta manual bajo demanda (`cargo xtask
+  audit-docs` o similar) para correr antes de cada release — mencionado como opcional en la
+  resolución del ticket 33, todavía no lo bastante concreto para ticketear.
 
 ## Out of scope
 

@@ -18,10 +18,22 @@ una sección nueva que fije la política de comentarios de `.wayfinder/map.md` (
 codebase Rust?
 
 Alcance: solo `CLAUDE.md`. No tocar `CONTRIBUTING.md` (referencia a CLAUDE.md, no repite su
-contenido) ni ningún doc de `internal/` (fuera de alcance, ver Out of scope del mapa).
-Verificar en particular la sección "Gates that must never regress": los nombres de gate deben
-seguir siendo exactamente los que `.github/workflows/ci.yml` verifica por nombre — no renombrar
-nada, solo su justificación.
+contenido). Verificar en particular la sección "Gates that must never regress": los nombres de
+gate deben seguir siendo exactamente los que `.github/workflows/ci.yml` verifica por nombre —
+no renombrar nada, solo su justificación.
+
+Además (decisión del ticket 33): agregar una regla nueva, generalizando "Contract first" a los
+10 documentos fijos de `internal/` que definió esa decisión — todo PR que cambia el
+comportamiento que uno de esos documentos describe, actualiza ese documento en el mismo PR.
+Mencionar el gate de CI que lo respalda (ticket 35) igual que se menciona `doc_links` en "Gates
+that must never regress", aunque ese gate todavía no exista al resolver este ticket (créalo con
+redacción presente — "el gate X verifica Y" — no lo condiciones a que 35 haya cerrado).
+
+Si el ticket 34a (fusión de contratos) ya cerró cuando se resuelva este, la referencia exacta a
+`internal/contracts/core-traits.md` debe apuntar a `internal/CONTRACTS.md` (sección "Core
+traits") en vez de al archivo viejo — si 34a todavía no cerró, dejar la referencia vieja y que
+34a la actualice él mismo al fusionar (evitar que los dos tickets se pisen: el que cierra
+segundo aplica el ajuste sobre el resultado del primero).
 
 ## Resolution
 
