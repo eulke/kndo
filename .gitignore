@@ -18,3 +18,7 @@ coverage/
 
 # `cargo xtask package` output — release artifacts are built by CI, never committed.
 dist/
+
+# Claude Code's own tooling state (session worktrees for parallel-agent workflows, etc.) —
+# local to the machine running the session, never repo content.
+.claude/
