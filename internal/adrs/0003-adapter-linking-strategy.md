@@ -31,14 +31,8 @@ extension can be developed natively and shipped as WASM without rewrites.
 isolation but per-file IPC overhead threatens the budget; kept as a fallback idea if WASM proves
 limiting); everything-WASM including first-party (pointless overhead on the default path).
 
-## Implementation status (M5, 2026-08-21)
+## Implementation status
 
-The WASM tier landed for **adapters** — v1 scope, normative spec
-[contracts/wasm-abi.md](../contracts/wasm-abi.md). `crates/kndo-plugin-api` is the host bridge
-(wasmtime component-model runtime, fuel-budgeted calls, no WASI linked at all — v1's world has
-no imports to satisfy, so there is nothing to sandbox away); `examples/kndo-plugin-demo` is the
-reference external adapter proving it end to end, excluded from the workspace on purpose so it
-stays structurally "not in-tree." `kndo::open` auto-discovers `.kndo/plugins/*.wasm` per RFC
-0003 §3's stated convention. The `Plugin` tier's WASM bridge (contribute/annotate hooks,
-sink-based rather than three flat functions — a materially different, larger ABI surface) is
-still native-only; it wasn't needed to prove the mechanism and nothing yet demands its shape.
+Both tiers' WASM bridges are implemented; see
+[contracts/wasm-abi.md](../contracts/wasm-abi.md) §5 for the current, normative ABI surface
+and compliance requirements. This ADR records the decision, not the implementation's state.

@@ -14,10 +14,12 @@ exactly its dependents (RFC 0004 §3).
   duplicate-asset detection so hashes are computed once).
 - **Serialization:** `rkyv` (zero-copy archival) for graph snapshots (`graphs/<key>.bin` —
   content-addressed like facts entries, so the several tree states diff modes assemble each run
-  coexist instead of evicting one another) and `findings.bin`, so loading is mmap + validate
-  rather than deserialize; `bincode` for small per-file facts entries where zero-copy buys
-  nothing. Every artifact carries `(magic, core schema version, writer version)`; any mismatch
-  ⇒ silently rebuild that layer (cold), never migrate in place.
+  coexist instead of evicting one another), so loading is mmap + validate rather than
+  deserialize; `bincode` for small per-file facts entries where zero-copy buys nothing.
+  Findings are not persisted — diff modes recompute both the before- and after-tree findings
+  from their (warm) graph snapshots each invocation, then diff in memory (RFC 0004 §6). Every
+  artifact carries `(magic, core schema version, writer version)`; any mismatch ⇒ silently
+  rebuild that layer (cold), never migrate in place.
 - **Blob-hash sidecar:** `blob-hashes.bin`, a `git blob id → blake3` map grown on every
   git-tree discovery. Sound because a git blob id is itself a content address (same id ⇒ same
   bytes ⇒ same blake3); a hit lets diff modes skip streaming a blob's content entirely — the
