@@ -4,15 +4,12 @@
 //! an HTML file roots itself, and the modules and stylesheets it names become reachable through
 //! it. That one rule is the adapter's whole reason to exist.
 //!
-//! It exists because measurement said so. `internal/detection-gaps.md` §20: 36 of vite's 76
-//! playground apps carry `<script type="module" src="./main.js">` in an `index.html`, **83
-//! module scripts are named that way and 65 of them were reported `unused`** — each the root of
-//! a subtree reading as dead behind it. Nothing claimed `.html`, so the entry was invisible and
-//! the whole app looked unreachable. W6's planned `kndo:vite` plugin would have read
-//! `vite.config.*` instead and closed a small minority of those: only 11 of 61 configs declare
-//! an entry at all, and they name `.html` files through computed `path.resolve(…)` calls.
-//! `<script src>` is HTML's own mechanism, no more vite's property than `import` is webpack's —
-//! which by the layering rule makes it an adapter's job, not a plugin's.
+//! `internal/detection-gaps.md` §20 has the measurement behind it: `<script type="module"
+//! src="./main.js">` inside an `index.html` is how a bundled app names its real entry module,
+//! and nothing else in the project imports that file. Without a root here, reachability has no
+//! edge into it and the whole subtree behind it would read as dead. `<script src>` is HTML's own
+//! mechanism, no more a bundler's property than `import` is webpack's — which by the layering
+//! rule makes resolving it an adapter's job, not a plugin's.
 //!
 //! **Non-source, like JSON.** No symbols, no visibility ladder, no metrics: a document declares
 //! nothing a caller can name. What it contributes is a root and a set of edges.
