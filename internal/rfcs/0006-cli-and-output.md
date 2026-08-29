@@ -187,6 +187,12 @@ keeps *verdicts* off files that stay in the graph — which is the one you usual
 dropping a file from discovery also drops every edge through it and can turn one silenced
 finding into several new false ones elsewhere.
 
+`[health.weights]` is the same kind of promise and is likewise **not implemented**:
+`config::LIVE_TABLES` has no `health` entry, `parse` never reads one, and `kndo init`'s template
+does not write one. RFC 0005 §11's weight table is fixed until a config surface for it ships —
+not shown in the example below, per the same "wire it or leave it out" rule that removed
+`[project]`.
+
 ```toml
 [analysis]
 skip = []                              # categories or category:subject, e.g. ["unused:enum-member"]
@@ -197,9 +203,6 @@ min-tokens = 50
 
 [analysis.crap]
 threshold = 30
-
-[health.weights]                       # override RFC 0005 defaults
-duplication = 25
 
 [performance]
 threads = 0                            # 0 = physical cores (RFC 0008 §5); --threads flag wins
@@ -214,7 +217,10 @@ skip = ["unused"]                      # one verdict covers symbols, files and d
 [plugins.<name>]                       # RFC 0003 §4
 ```
 
-Config hash participates in cache keys (RFC 0004 §3), so edits invalidate exactly what they affect.
+`kndo.toml` plays no part in the graph cache key (RFC 0004 §3, deliberately): every table listed
+above acts strictly post-assembly — filtering, thresholds, and suppression applied to an
+already-built graph, never a change to what gets extracted or resolved — so a config edit takes
+effect on the very next run without needing to invalidate anything cached.
 
 ## 8. Non-goals for 1.0
 

@@ -15,19 +15,28 @@ The cache lives in `.kndo/` at the project root (gitignored by default; `kndo in
 ```
 .kndo/
   cache/
-    facts/<adapter>/<file-hash>.bin   # FileFacts per (adapter, content) — content-addressed
-    graph.bin                         # last assembled Project Graph snapshot
-    findings.bin                      # last full findings snapshot (for diffing)
-  baseline.json                       # acknowledged legacy findings (RFC 0006 §6) — committed
+    facts/<adapter>/<schema-version>-<file-hash>.bin   # FileFacts per (adapter, schema, content) — content-addressed
+    graphs/<key>.bin     # content-addressed Project Graph snapshots — several coexist by design
+    graphs/latest        # pointer to the most recently written key (the RFC 0013 patch's entry point)
+    stat-index.bin        # (mtime, size) → blake3 sidecar — a fast-path hint, never a correctness input
+    blob-hashes.bin        # git blob id → blake3 sidecar
+    lock                    # single-writer advisory lock (§7)
+  baseline.json         # acknowledged legacy findings (RFC 0006 §6) — committed
 ```
 
 - **Facts cache** — keyed by `(adapter id, facts schema version, file content hash)`. Content-
   addressed: renames, branch switches, and `git stash` all hit the cache; a file reverted to an
-  old version re-hits its old entry. Pruned by LRU size cap (default 256 MB).
-- **Graph snapshot** — the assembled graph plus the resolution inputs that shaped it (config hash,
-  active plugin set, adapter versions). Loaded via zero-copy/mmap-friendly layout (ADR 0004).
-- **Findings snapshot** — full analysis results of the last run, used to compute *new/fixed*
-  findings and derived effects (§6).
+  old version re-hits its old entry. Pruned by LRU size cap (default 256 MB), sharing one pool
+  with graph snapshots (oldest-by-mtime evicted first, across both layers).
+- **Graph snapshots** — content-addressed under `graphs/<key>.bin`, keyed as in §3; several
+  coexist (the working tree's, plus diff modes' before/after tree states — a single mutable slot
+  would ping-pong between them at a 0% hit rate). `graphs/latest` names the most recently written
+  key, which is what the incremental patch (RFC 0013) loads on a key miss. Loaded via
+  zero-copy/mmap-friendly layout (ADR 0004).
+
+There is no findings cache: diff modes compute the new/fixed delta (§6) by assembling and
+analyzing both tree states directly on each run, not by diffing against a findings snapshot
+persisted from a previous one.
 
 Cache corruption or version mismatch is never an error: the affected layer is rebuilt from
 scratch (a cold run), with a diagnostic.
@@ -39,8 +48,12 @@ A cache entry's key is the hash of **all of its inputs**:
 | Layer | Key inputs |
 |-------|-----------|
 | FileFacts | file content hash · adapter id+facts-schema-version |
-| Graph | set of (path, content hash) · manifest hashes · kndo config hash · active plugins (id+version+wasm hash) · core graph-schema version |
-| Findings | graph hash · enabled analyses + their config · coverage report hash (if any) |
+| Graph | set of (path, content hash) for every discovered file — manifests need no separate entry, since a manifest is just one more discovered file · each registered adapter's id+facts-schema-version · each registered graph-mutating plugin's identity (id, declared version, and — WASM only — component content hash) · `GRAPH_SCHEMA_VERSION` |
+
+A kndo config hash is deliberately absent from the graph key, not an oversight: no config
+subsystem shapes the graph today (every live `kndo.toml` knob acts post-assembly — RFC 0006 §7),
+so folding one in would fake precision the cache doesn't have. Adding one is required before any
+future config surface *does* affect assembly.
 
 There is no time-based invalidation and no reliance on mtimes for correctness (mtime+size is used
 only as a fast-path hint to skip re-hashing unchanged files, à la git index).

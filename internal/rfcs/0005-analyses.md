@@ -222,8 +222,11 @@ Nodes colored `test-only`, excluding test-role files themselves and declared tes
 (`testkit`/`fixtures` conventions, configurable). This is the "you built it, tests enshrined it,
 production never came" detector — the finding explicitly lists the test roots that keep the node
 alive, so deleting code + its tests together becomes mechanical.
-Default severity: **info** (decided; revisit at M6 with dogfooding data before any raise to
-warning — changing it is a defaults-contract change, ADR 0006).
+Default severity: **info**. M6, the milestone this was gated on, has landed (ROADMAP.md) and the
+default has not moved: `analysis/test_only.rs` still emits `Severity::Info` for both the file and
+symbol findings. Raising it to warning remains available but has no decision behind it yet;
+changing it is a defaults-contract change (ADR 0006) and would need its own dogfooding case made,
+not just the passage of a milestone.
 
 ## 4. File & directory subjects (rollup, not new categories)
 
@@ -536,10 +539,17 @@ Second triage, 2026-08-18:
 
 | `deep-import` | ~~Deferred~~ → **Adopted** (superseding decision, same day): the contract-gate design removes the noise objection that motivated deferral — the finding fires only against a provider package that *declares* an explicit surface, so accepted-practice monorepos never see it. Full spec in RFC 0011 §4; group `risk`, pair-level rollup, computed remediation; lands M3 |
 
-No candidates remain open. Future proposals enter through this table with the §13 acceptance
-bar; every row above is a decision of record.
-| `hollow-test` | test root whose forward closure reaches zero production symbols | the anti-slop "this test tests nothing real" detector (mocks-only tests); **open** — needs a named exemption mechanism for every legitimate zero-production-reach case (pure-assertion/property tests, contract tests against an external service) before it can claim zero FP, not just a low rate |
-| `speculative-abstraction` | interface/trait with exactly one implementation and at most one consumer | YAGNI materialized; trivially derivable from `Implement` edges; `probable` confidence (DI/test seams exempt via plugin annotations, library-mode public abstractions exempt); group `waste` |
+Two candidates remain open — neither is implemented in code, and neither has a Decision of the
+kind the tables above record:
+
+| Candidate | Mechanism | Status |
+|-----------|-----------|--------|
+| `hollow-test` | test root whose forward closure reaches zero production symbols | **Open** — the anti-slop "this test tests nothing real" detector (mocks-only tests); needs a named exemption mechanism for every legitimate zero-production-reach case (pure-assertion/property tests, contract tests against an external service) before it can claim zero FP, not just a low rate |
+| `speculative-abstraction` | interface/trait with exactly one implementation and at most one consumer | **Open** — YAGNI materialized; trivially derivable from `Implement` edges; would take `probable` confidence (DI/test seams exempt via plugin annotations, library-mode public abstractions exempt) and land in group `waste` if adopted, but adoption itself has not been decided |
+
+Future proposals enter through this table with the §13 acceptance bar; every row carrying a
+Decision/Status above is settled, and the two rows immediately above are the exceptions — open
+until one is reached.
 
 **Deliberately out of core: stale TODOs.** Detecting aged/orphaned TODO comments requires comment
 extraction plus non-graph data (git blame age, issue-tracker state). That breaks the pure
