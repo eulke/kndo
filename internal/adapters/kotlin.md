@@ -319,7 +319,7 @@ manifest-driven root-promotion boost a `src/main/kotlin`-housed file gets.
 
 ## 6. Conformance fixtures (shared harness, RFC 0002 §8)
 
-Four fixtures, each a real Maven/Gradle module tree run through the real `Engine` (no mock),
+Five fixtures, each a real Maven/Gradle module tree run through the real `Engine` (no mock),
 directly mirroring the Java adapter's fixture set so the two adapters' precision is comparable
 apples-to-apples:
 
@@ -344,6 +344,15 @@ apples-to-apples:
   configuration included, proving the shared scope table's Kotlin-specific entries work) at
   skewed versions of the same coordinate: `version-skew` fires, neither module's genuinely-
   unused dependency produces an `unused`/`test-only` finding.
+- **`ctor-arg-and-default-value`** — `MyMeta`'s superclass constructor invocation
+  (`Base(MyProvider)`) references the `internal object MyProvider` only as an argument, and
+  `Hasher`'s primary-constructor default value (`= DEFAULT_COST`) references a `private`
+  companion constant only as a default — both stay alive solely because the superclass-
+  invocation argument list and the parameter default value are walked as ordinary references
+  (§2); dropping either walk would read the referenced declaration `unused`. Both declarations
+  are deliberately `internal`/`private` rather than public, so a library-root fallback can't
+  mask the gap, and both correctly fire `internal-only` (used only within the file, narrower
+  than declared).
 
 **Gaps the fixtures do NOT re-verify** (already covered by Java's fixtures against the shared
 `jvm_manifest` module, no value in duplicating): Maven `<dependencyManagement>` exclusion,

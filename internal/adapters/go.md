@@ -282,7 +282,7 @@ consumed by definition," an `internal/` package's is not.
 | External test package (`package foo_test` in a `_test.go` file) | treated as the same `unit` as `package foo` in the same directory (§1.1) — a documented, safe-direction imprecision, not a silent gap |
 | Generic type parameters (`func F[T any](x T)`, `type Container[T any] struct{...}`) | the type-parameter list's constraint identifiers are ordinary references (e.g. `any`, a stdlib/local interface name); no special generics handling attempted beyond that — a constraint referencing a not-yet-declared local type still resolves correctly since phase 3a builds the whole file's symbol table before phase 3b resolves any reference, same ordering JS's forward-reference case already relies on |
 | Method sets / interface satisfaction (does type `T` implement interface `I`?) | **not modeled** — Go's implicit (structural) interface satisfaction has no explicit `implements` syntax to hook a reference onto, unlike TS's `implements` clause. A type satisfying an interface produces no edge; this is a real expressiveness gap relative to TS, not an oversight — modeling it needs whole-program method-set computation, out of scope for extraction (a per-file, non-typechecking pass) |
-| Struct/interface embedding | recorded as a plain reference to the embedded type's name (§2) — not a `RefKind::Extend`, matching the codebase-wide state that no adapter differentiates `RefKind` yet (§2, §7 open question) |
+| Struct/interface embedding | recorded as `RefKind::Extend` (§2) — the type name doubling as the implicit member name (a nameless `field_declaration`) is the signal that distinguishes it from an ordinary `TypeUse` |
 | `go:generate` directive comments | not parsed — the directive names a command line to run, not a file reference kndo could statically resolve without executing it |
 | `reflect`/`plugin`-based dynamic dispatch | not modeled as a `DynamicUse` wildcard in this slice (§0) — genuinely rare in application code; revisit if dogfooding surfaces false `unused` positives traceable to it |
 | Build-tag-gated files (`//go:build linux`, `_linux.go` suffix files) | claimed and extracted like any other `.go` file, unconditionally — kndo analyzes the union of all build configurations, the same "any-feature-is-live" stance RFC 0002 §7's table already states for Rust's `#[cfg]` features; a symbol used only under one build tag is still "used," not dead. Two mutually exclusive files declaring **one name** in one package (gin's `binding.go` under `!nomsgpack` and `binding_nomsgpack.go` under `nomsgpack`, both `func validate`) are not a collision to break either: under the union policy both declarations are live, so core keeps the displaced ones as same-unit *twins* and every reference to that name edges to all of them (`symbol_twins_per_unit` in `graph::assemble`; the single-slot table alone gave one twin all 16 of gin's references and the other a false `unused`). Same treatment covers `#[cfg]` alternatives in Rust |
@@ -295,7 +295,10 @@ same-package, no-import cross-file call plus one genuinely dead sibling function
 mechanism's own reason for existing, and the exact shape that caught the reachability.rs
 propagation gap, §0) · `internal/` package whose exports are correctly *not* promoted to roots,
 alongside a sibling non-internal library file whose exports *are* (both directions of §4's
-promotion rule in one fixture).
+promotion rule in one fixture) · an exported function whose parameter and return type are both
+an unexported same-package type — the classic Go unexported-type-in-exported-signature leak,
+and the body's own use of that type is deliberately *not* a second finding since only the
+signature is a promise (fixture `private-type-leak/`, pinning the category for this adapter).
 
 **No `undeclared`-dependency fixture, deliberately.** Unlike JS/npm (where flat `node_modules`
 hoisting lets code import a package that compiles fine but isn't declared — the actual phantom-
@@ -319,10 +322,12 @@ which owns the cross-language design for each — this list now just points ther
 1. ~~`go.work` multi-module workspace support~~ — **fixed** (RFC 0012 §10, landed: go.work
    claimed and parsed, sibling-module imports resolve as `WorkspaceMember` with the full
    dependency contract; the path-renaming `replace` divergence stands recorded, not modeled).
-2. `RefKind` differentiation (`TypeUse`/`Extend`) → RFC 0012 §5. Go's mapping is nearly free
-   (`type_identifier` *is* the type-position signal; embeddings → `Extend`).
+2. ~~`RefKind` differentiation (`TypeUse`/`Extend`)~~ — **fixed** (RFC 0012 §5, landed:
+   `type_identifier` positions are `TypeUse`, embedded struct/interface fields are `Extend` —
+   §2, §5).
 3. Package-level `internal-only` boundary awareness → RFC 0012 §6 (the visibility ladder as
-   data; Go declares `[Unit "unexported", Public "exported"]`).
+   data; Go declares `[Unit "unexported", Package "exported (internal)", Public "exported"]`,
+   §1).
 4. Content-based origin classification (generated headers) → RFC 0012 §7
    (`FileFacts::detected_origin`).
 5. ~~Method-call resolution (`T.Method` declarations vs bare `Method` references)~~ —
