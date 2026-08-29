@@ -1,11 +1,13 @@
-# Contract — Core Traits & Graph Vocabulary
+# Contracts
+
+## Core traits
 
 **Status:** Accepted · Normative for RFC 0001/0002/0003. Code must match this document; changing
 either requires updating both in the same PR. Sketches are simplified Rust (lifetimes, error
 types and non-essential fields elided) — shape is normative, exact signatures may be refined
 during M1 with a PR to this file.
 
-## 1. Graph vocabulary
+### 1. Graph vocabulary
 
 ```rust
 pub struct FileId(u32);      // interned; stable within a snapshot
@@ -73,7 +75,7 @@ pub enum EdgeKind {
 // Provenance = Adapter(AdapterId) | Plugin(PluginId)  — for attribution in output
 ```
 
-## 2. `LanguageAdapter`
+### 2. `LanguageAdapter`
 
 One implementation per language, registered at startup. Adapters are pure with respect to the
 filesystem: all content arrives via parameters (determinism, sandboxing, testing — RFC 0002 §6).
@@ -728,7 +730,7 @@ per-package config override yet): `bin` targets are production roots uncondition
 app's exports are not roots on their own, something must actually import them. `types`/
 `typings` are never roots — a `.d.ts` target carries no runtime edge.
 
-### 2.1 Suppression extraction
+#### 2.1 Suppression extraction
 
 Comment syntax is language-defined, so **adapters extract suppression pragmas**; the core only
 validates and binds them (RFC 0005 §12):
@@ -780,11 +782,11 @@ pub enum SuppressionScope { Declaration, File }
 Compliance: every adapter must pass the shared conformance harness with its fixture corpus
 (RFC 0002 §8). `FileFacts` must be deterministic for identical content.
 
-## 3. `Plugin`
+### 3. `Plugin`
 
 All hooks optional; a plugin implements what it needs (RFC 0003 §2). Same trait for built-ins
 (statically linked) and external WASM components. Four WIT worlds carry it
-(`kndo-plugin-api`, [wasm-abi.md](wasm-abi.md) §5): `adapter` (`kndo:adapter@0.1.0`) for
+(`kndo-plugin-api`, [WASM ABI](#wasm-abi) §5): `adapter` (`kndo:adapter@0.1.0`) for
 `LanguageAdapter`, `plugin` (`kndo:plugin@0.1.0`) for the four graph-mutation hooks,
 `plugin-findings` for `rules`/`contribute_findings` (RFC 0018), and `coverage-ingester` for
 `ingest_coverage`. A component declares the world it implements; the host accepts each
@@ -912,7 +914,7 @@ pub trait Plugin: Send + Sync {
   nothing this round," never a crashed run. Native built-in plugins have no such budget (there
   is no untrusted call to limit for statically-linked code).
 
-## 4. `Analysis`
+### 4. `Analysis`
 
 Internal trait (not pluggable in 1.0 — RFC 0003 §6; §6 below also marks it "Internal — may
 change any release"), listed here because its shape constrains the graph API. What's landed
@@ -962,7 +964,7 @@ rather than falling out of registry position.
 incrementality doesn't exist yet (§5 below); when it lands, the registry above is the seam
 it plugs into — an `Analysis` impl gaining a second method, not a new dispatch mechanism.
 
-## 5. `Engine` — the frontend boundary
+### 5. `Engine` — the frontend boundary
 
 `kndo-core` is a **library**; every interface to it — today's CLI, tomorrow's `kndo serve`/MCP,
 an LSP, a GUI, a CI action — is a *frontend* consuming one facade. Nothing else is exported.
@@ -1037,7 +1039,7 @@ impl Engine {
 ```
 
 - `RunResult`/`QueryResult` are the **typed forms of the output schema**
-  ([output-schema.md](output-schema.md)); the JSON and SARIF serializers live core-side so every
+  ([Output schema (JSON)](#output-schema-json)); the JSON and SARIF serializers live core-side so every
   frontend emits byte-identical machine output. *Human* rendering lives frontend-side (RFC 0009).
 - **Separation rules, enforced by dependency direction:** the core contains no terminal concerns
   (no ANSI, no TTY detection, no exit codes, no stdout) — it returns data and never prints;
@@ -1091,7 +1093,7 @@ impl Engine {
 - **Provenance (`graph::provenance::ProvenanceIndex`)** answers "whose facts is this resting
   on" for one graph, once. [`Provenance`](#1-graph-vocabulary) lives on **edges**; both
   consumers that need it per *node* — a `describe` envelope's `sources` and every
-  `Finding.sources` ([output-schema.md](output-schema.md) §2.1) — read this index rather than
+  `Finding.sources` ([Output schema (JSON)](#output-schema-json) §2.1) — read this index rather than
   deriving their own, so the two cannot answer differently about the same node, and a new
   `EdgeKind` teaches both at once. `Engine` fills findings in one pass after suppression and
   config filtering: a verdict knows what it decided, not who supplied the graph it decided on,
@@ -1104,7 +1106,7 @@ impl Engine {
   Option<Budget>` is `Some` exactly when the run is a diff mode *and* `kndo.toml` has a
   `[delta]` section; `Budget { verdict, rules: Vec<BudgetRule { rule, limit, measured,
   verdict, over_by }> }` serializes straight into the envelope's top-level `budget`
-  ([output-schema.md](output-schema.md) §1) — a sibling of `health`, not a member of `run`.
+  ([Output schema (JSON)](#output-schema-json) §1) — a sibling of `health`, not a member of `run`.
   Three rule kinds, in this evaluation order: `max-health-drop` (a **drop**, so an improving
   change measures negative), `max-net-findings` (`new − fixed`), and one rule per
   `[delta.budget]` key sorted, each an **absolute** count of new findings whose group *or*
@@ -1117,11 +1119,951 @@ impl Engine {
   presence is the entire opt-in; inside it the strict ratchet (0.0 / 0) is the default, so no
   existing project changes exit code because the subsystem exists.
 
-## 6. Stability tiers
+### 6. Stability tiers
 
 | Surface | Tier |
 |---------|------|
 | Graph vocabulary (§1), `LanguageAdapter`, `Plugin` | **Contract** — semver'd from 1.0; WASM ABI versioned independently |
 | `Engine` facade (§5) | **Contract** — semver'd from 1.0; the only surface frontends may touch |
 | `Analysis`, cache layouts | Internal — may change any release (cache self-invalidates) |
-| Output schema | Contract — see [output-schema.md](output-schema.md) |
+| Output schema | Contract — see [Output schema (JSON)](#output-schema-json) |
+
+## Output schema (JSON)
+
+**Status:** Accepted · Normative for `--format json`. Versioned: `schema_version` uses semver;
+additive = minor, breaking = major (RFC 0006 §4). A machine-readable JSON Schema
+(`schemas/kndo-output.schema.json`) is generated from the Rust types at build time and must
+round-trip these examples in CI.
+
+### 1. Envelope
+
+```jsonc
+{
+  "schema_version": "1.3.0",
+  "kndo_version": "0.3.1",
+  "run": {
+    "mode": "staged",                    // "full" | "staged" | "diff"
+    "base_ref": null,                    // set for "diff"
+    "started_at": "2026-08-18T12:00:00Z",
+    "duration_ms": 312,
+    "cache": "warm",                     // "warm" | "cold" | "disabled" (--no-cache)
+    "project_root": ".",
+    "adapters": [ { "id": "js-ts", "files": 1240 } ],
+    "plugins":  [ { "id": "kndo:nextjs", "activated_by": "manifest-dependency: next" } ],
+    "abstained": [                       // categories NO analysis judged this run
+      { "category": "crap", "reason": "crap: no coverage ingested — skipped (…)" }
+    ]
+  },
+  "health": { /* §4 */ },
+  "budget": {                            // diff modes, only when [delta] rules are configured (RFC 0006 §5)
+    "verdict": "fail",                   // "pass" | "fail"
+    "rules": [                           // in evaluation order: the two ratchets, then [delta.budget] keys sorted
+      // limit/measured/over_by are always JSON numbers, counts included — a count is a
+      // measurement against the same scale as a health drop, and one type keeps a consumer
+      // from having to branch on the rule name to know what it is reading.
+      { "rule": "max-health-drop", "limit": 0.0, "measured": -1.7, "verdict": "pass" },
+      { "rule": "max-net-findings", "limit": 0.0, "measured": 1.0, "verdict": "fail", "over_by": 1.0 },
+      { "rule": "defect", "limit": 0.0, "measured": 0.0, "verdict": "pass" }
+    ]
+  },
+  "findings": [ /* §2 — in diff modes: only new findings */ ],
+  "fixed": [ /* §3 — diff modes only */ ],
+  "baseline": { "acknowledged": 412, "stale": 3 },
+  "suppressed": { "inline": 9, "config": 2 },
+  "elided": 47,                          // `--only` narrowed these away; ABSENT when nothing was narrowed
+  "diagnostics": [ { "level": "warn", "message": "coverage report older than 7d — ignored" } ]
+}
+```
+
+**`run.plugins` (normative).** The plugins that actually ran, in registration order — a
+plugin appears here **only if it was active**, so `activated_by` answers *why*, never
+*whether*. Its value is the composition layer's own verdict, rendered once
+(`ActivationReason`'s `Display`) and reported unchanged: `"manifest-dependency: next"` /
+`"file-exists: next.config.*"` for a plugin whose own activation rule fired (the rule itself,
+because "a rule matched" does not answer the question), `"dependency of <id>"` for one another active
+plugin implied through `dependencies`, `"always-on"` for a built-in that declares no
+rules, `"registered"` for one whose presence *is* the opt-in (a `.kndo/plugins/` drop-in, or an
+embedder's explicit set). The engine never derives these: whoever activated a plugin says why,
+which is what keeps this field and `kndo doctor` from disagreeing. New reason spellings are
+additive; consumers must not exhaustively match on the string.
+
+**`run.abstained` (normative).** A category listed here was **not judged** this run: the analysis
+that owns it could not (no ingested coverage report for `crap`, no test roots for `untested`) and
+emitted nothing. Consumers must read a listed category as *unknown*, never as clean — zero
+findings in an abstained category is the absence of a measurement, not a passing verdict. Absent
+categories were judged, so their emptiness does mean clean. Usually `[]`. The same value drives
+the `stale` rule (a pragma naming an abstained category is never reported matched-nothing) and
+the health axes, so the three can never disagree.
+
+**`elided` vs `suppressed` (normative).** Both say a finding is not in `findings`, and they
+are not interchangeable. `suppressed` counts findings *acknowledged* — an inline pragma or a
+configured/flagged skip; a consumer may treat them as known and accepted. `elided` counts
+findings the caller's `--only` lens did not ask for; they are neither acknowledged nor clean,
+merely out of view, and a consumer that read a narrowed run as a clean one would be wrong.
+Absent (never `0`) when nothing was narrowed. `--only` narrows every category alike, `stale`
+included — the lens is one invocation's scope, not a stored policy, and this count is what
+keeps it from hiding anything silently.
+
+Diagnostic levels: `info` · `warn` (the run degraded but ran) · `error` (M6, additive) — the
+run could not do what was asked (a `--diff` base that doesn't resolve): frontends exit 2 when
+any error-level diagnostic is present, so an analysis that never ran can never read as a clean
+pass. Consumers must treat unknown levels as at least `warn`.
+
+### 2. Finding
+
+```jsonc
+{
+  "id": "kndo-a3f81c92e5d4",            // stable content-anchored id, §5
+  "category": "unused",                 // verdict; registry in §6
+  "group": "waste",                     // the verdict's nature: defect | waste | risk | hygiene | convention
+                                         // (fixed mapping, §6) — convention is reserved for plugin-contributed
+                                         // findings (RFC 0018 §2.1); a core analysis never emits it
+  "subject_kind": "function",           // what the verdict landed on: symbol kind | file | directory | dependency | import | suppression
+  "severity": "warning",                // "error" | "warning" | "info"
+  "confidence": "certain",              // "certain" | "probable" | "possible"
+  "message": "calcLegacyTax() is unreachable from any production or test root",
+  "location": { "path": "src/billing/tax.ts", "range": { "start": [41,1], "end": [78,2] },
+                "symbol": "calcLegacyTax", "package": "@org/billing" },   // owning workspace package (RFC 0011)
+  "rolled_up": 50,                      // rollup ladder: how many findings this one subsumes; ABSENT when it subsumes nothing
+  "related": [                           // evidence chain (also what `kndo explain` renders)
+    { "role": "cause", "path": "src/billing/index.ts", "range": { "start": [12,1], "end": [12,42] },
+      "note": "last production reference removed by this change" }
+  ],
+  "sources": ["adapter:js-ts", "plugin:kndo:nextjs"],  // §2.1 — ABSENT when nothing claimed the subject
+  "delta": "new",                        // diff modes: "new"; absent in full mode
+  "delta_origin": "derived",             // diff modes: "introduced" (inside the change set — dead on arrival) | "derived" (flipped by it); RFC 0004 §6
+  "advisory": true                       // RFC 0018 §2.2: never influences exit codes/budgets; only ever present (as true) on plugin: findings without a [plugins.gate] opt-in
+}
+```
+
+**A finding whose subject spans several places** (`duplicate` over identical files,
+`version-skew` over disagreeing manifests) **anchors on the lexicographically-first member and
+carries every member — that one included — in `related`.** Normative: `location` makes the
+finding addressable, `related` makes it complete, and only then may `message` summarize
+("… and 3 more"). A consumer must never have to read the prose to learn which places a finding
+covers. The anchor is presentation, not identity: `id` for those categories stays keyed on the
+content hash or the coordinate, so renaming one member while the group survives is the same
+finding, not a new one.
+
+#### 2.1 `sources` (normative)
+
+The adapters and plugins whose **facts** the finding's subject rests on, sorted, deduplicated,
+spelled `adapter:<adapter-id>` · `plugin:<coordinate>` · `core:surface`. Same values and same
+derivation as a `describe` envelope's `sources` — one index answers both, so the two can never
+disagree about a node.
+
+A subject contributes:
+
+- the adapter that **claimed** its file, whether or not any edge touches it (a claimed file's
+  declarations, spans and metrics are that adapter's facts);
+- every adapter or plugin that contributed an **edge touching** it, in either direction — an
+  incoming reference is as load-bearing as an outgoing one, which is what puts a plugin's name
+  on the symbol it keeps alive;
+- for a **dependency** subject, the adapters that read the manifest declaring it. A dependency
+  declared and never imported has no edge anywhere, and the manifest's readers are the only
+  honest answer;
+- for a **directory** subject (the rollup ladder), every file underneath — a rollup stands in
+  for exactly those findings, so its provenance is exactly theirs;
+- every `related` path as well as the anchor, so a finding that spans places names every
+  component it rests on.
+
+**Absent means no component was involved, and is a real answer.** `duplicate` over two
+identical files no adapter claims rests on nobody's facts: the core hashed the bytes. Consumers
+must read absence as "no adapter or plugin contributed", never as "not recorded".
+
+**What `sources` cannot say.** It names components whose facts are *present*. It can never name
+the plugin that would have kept a symbol alive had it activated — a verdict of absence
+(`unused` is the whole category) rests on the silence of every component that ran, and silence
+has no provenance. `run.plugins` (§1) is the field that says who ran.
+
+**Two fields this object deliberately does NOT have.** `evidence` — a category-specific block —
+was specified before any category had one, and no analysis has since produced a fact that
+`related` cannot carry; a per-category schema invented ahead of its first consumer is a shape
+every consumer would have to tolerate and none could rely on. `remediation` — the advice a
+finding carries travels *inside* `message`, where it is written by the analysis that knows the
+subject (`deep-import` is the worked example); lifting it into its own field means committing to
+computed remediation prose for every category, which is a product decision, not a serialization
+one. Both stay cut rather than emitted null: a field that is always `null` teaches a consumer to
+stop reading it.
+
+### 3. Fixed finding (diff modes)
+
+Same shape as a finding, with `"delta": "fixed"` and the *previous* location. Lets CI/agents
+credit improvements and lets pre-commit output celebrate deletions.
+
+### 4. Health
+
+```jsonc
+{
+  "score": 84.1, "grade": "B",                  // one-decimal score; A≥90 B≥80 C≥65 D≥50 F
+  "previous": { "score": 82.0, "grade": "B" },  // full mode: last snapshot (.kndo/health.json), if any;
+                                                // diff modes: the computed "before" side
+  "categories": [                               // always all computed categories, each with ratio+penalty
+    { "category": "unused-symbols", "ratio": 0.031, "penalty": 6.2, "count": 47 },
+    { "category": "duplication",  "ratio": 0.058, "penalty": 7.1, "tokens_duplicated": 8412 },
+    { "category": "crap",         "ratio": 0.2, "penalty": 4.0, "count": 12, "crapload": 1912.4,
+      "coverage": "coverage-lcov coverage/lcov.info (2d old)" }   // or "none"
+  ],
+  "packages": [                                 // RFC 0011 §6 breakdown; present only when ≥ 2
+    { "package": "@demo/a", "score": 91.0, "grade": "A" }         // packages own claimed files
+  ]
+}
+```
+
+Category names in the breakdown: `unused-symbols`, `unused-dependencies`, `unused-files`,
+`test-only`, `duplication`, `crap`, `cycles`, `internal-only`, `untested` (the last omitted
+when the project has no test roots — RFC 0005 §11's gate). Weights, saturation constants, and
+ratio definitions are normative in RFC 0005 §11.
+
+### 5. Finding id stability
+
+`id = "kndo-" + hash(category, subject_kind, project-relative path, symbol path (not line numbers),
+category-specific discriminator)`, truncated to 12 hex chars. Line/column changes do **not** change the id; renames
+and moves do (a rename is a different code object). Guarantees: an agent that fixes finding X can
+re-run kndo and assert X is absent; a baseline survives reformatting.
+
+### 6. Category registry (1.0)
+
+Categories are pure verdicts (RFC 0005 taxonomy rule):
+`unused`, `test-only`, `untested`, `undeclared`, `unresolved`, `version-skew`, `duplicate`,
+`internal-only`, `private-type-leak`, `cyclic`, `deep-import`, `crap`, `stale`.
+New categories are additive (minor bump); consumers must ignore unknown categories.
+
+**Plugin-contributed findings (RFC 0018, landed).** Categories under the `plugin:` prefix —
+`plugin:<coordinate>/<rule>`, host-assembled from the emitting plugin's registered identity —
+are third-party verdicts, always in group `convention`, and are OUTSIDE the zero-FP statement
+that covers the bare categories above (RFC 0005 §9). They carry `advisory: true` unless a
+`[plugins.gate]` entry in `kndo.toml` opts the coordinate (or `<coordinate>/<rule>`) in, at
+which point severity is capped at the configured level (lower than declared, never higher).
+An `advisory` finding never influences exit codes or budgets, whatever its `severity`. The
+prefix and group remain reserved: no core category or group may claim either.
+
+Each category maps to exactly one `group` — `defect` (unresolved, undeclared, version-skew,
+private-type-leak), `waste` (unused, test-only, duplicate, internal-only), `risk` (crap, cyclic,
+untested, deep-import), `hygiene` (stale) — normative mapping in RFC 0005. The
+field is redundant with `category` by design: it is included so consumers section and sort
+without maintaining the mapping themselves. New groups are additive; consumers must render
+unknown groups after known ones rather than dropping their findings.
+
+What the verdict landed on travels in `subject_kind`: the `SymbolKind` names from
+[Core traits](#core-traits) in kebab-case, plus `file`, `directory`, `package`,
+`dependency`, `import`, `suppression`. Suppression/config targets may append the subject as
+`category:subject` (e.g. `unused:enum-member`, `test-only:dependency`). Subject kinds are
+additive like categories and are not a registry of their own. Human renderers compose the
+two (`unused (dependency)`); JSON consumers filter on either axis independently.
+
+### 7. SARIF mapping
+
+`category` → `rule.id`; `severity` → SARIF `level` (error/warning/note); evidence chain →
+`relatedLocations`; confidence → `properties.confidence`. One run object per kndo run.
+
+### 8. Query envelopes (navigation verbs, RFC 0007)
+
+All navigation verbs share one envelope; `result` is verb-specific. Listings are always capped
+and carry explicit `elided` counts (RFC 0007 §2) — consumers must treat `elided > 0` as "there is
+more", never as "that's all".
+
+```jsonc
+{
+  "schema_version": "1.3.0",
+  "query": { "verb": "used-by", "selectors": ["src/billing/tax.ts#calcLegacyTax"],
+             "flags": { "depth": 1, "split_by_color": true }, "id": "q1" },   // id: query-mode echo, optional
+  "run": { "cache": "warm", "duration_ms": 74 },
+  "status": "ok",                        // "ok" | "not-found" | "error" (per request)
+  "results": [ { /* one verb-specific result per selector, argument order */ } ],
+  "diagnostics": []
+}
+```
+
+Verbs accept multiple selectors; `results` always aligns 1:1 with `query.selectors` (a failed
+selector yields an inline `{ "status": "not-found" | "error", … }` entry without failing its
+siblings). In `kndo query` mode (RFC 0007 §4.7) this same envelope is emitted as one JSON Line
+per request, in input order, `run` appearing only on the first line (shared graph snapshot).
+
+Common building blocks:
+
+```jsonc
+// NodeRef — every node mention, everywhere:
+{ "selector": "src/billing/tax.ts#TaxTable.lookup", "kind": "method",
+  "color": "test-only", "span": { "path": "src/billing/tax.ts", "start": [90,3], "end": [104,4] } }
+
+// EdgeRef — every edge mention:
+{ "edge": "references", "confidence": "certain",
+  "site": { "path": "src/billing/index.ts", "start": [12,10], "end": [12,23] } }
+```
+
+Verb result shapes (fields beyond these are additive/minor):
+
+- **find**: `{ "matches": [NodeRef…], "elided": N }` — ranked.
+- **describe**: `{ "node": NodeRef, "declaration": {…}, "degree": { "in": {...by edge kind}, "out": {…} },
+  "reached_by_roots": [NodeRef…], "metrics": { "cyclomatic": 14, "crap": 36.2, "coverage": 0.12 },
+  "findings": [finding-id…], "uses": [ {NodeRef, via: EdgeRef}… ], "used_by": [ … ],
+  "elided": { "uses": N, "used_by": M } }`.
+- **uses / used-by**: `{ "node": NodeRef, "entries": [ { "node": NodeRef, "via": EdgeRef,
+  "depth": 1 }… ], "by_color": { "production": N, "test-only": M, "tooling": K },
+  "elided": N }`.
+- **trace**: `{ "from": NodeRef, "to": NodeRef, "paths": [ { "hops": [ { "node": NodeRef,
+  "via": EdgeRef }… ], "weakest_confidence": "possible" }… ], "paths_elided": N }` —
+  liveness traces set `"from"` to the root found.
+- **impact**: `{ "node": NodeRef, "affected": [ { "node": NodeRef, "via": EdgeRef,
+  "depth": N }… ], "by_color": {…}, "elided": N,
+  "affected_roots": [ { "kind": "production"|"test"|"tooling", "node": NodeRef }… ],
+  "affected_roots_elided": N, "if_deleted": { "newly_unreachable": [NodeRef…],
+  "newly_unreachable_elided": N, "newly_test_only": [NodeRef…],
+  "newly_test_only_elided": N, "freed_dependencies": [name…] } }` — `if_deleted` present
+  only with the flag. `affected` reuses uses/used-by's depth-annotated entry shape (one
+  grammar, not two); the simulation reports *typed reachability flips* rather than
+  synthesized §2 finding objects — the flips are the graph-level fact, and fabricating
+  finding ids/messages for findings that don't exist yet would put untruths in the envelope.
+
+Query exit codes are defined in RFC 0007 §6 and are part of this contract.
+
+#### 8.1 `explain` (normative)
+
+`kndo explain <finding-id>` answers in the §8 query envelope with `verb: "explain"` and the
+id in `selectors`. Each result is:
+
+```jsonc
+{
+  "finding": { /* §2, verbatim — the same object `check` reported */ },
+  "subject": { /* §8 describe result for what the finding landed on */ },
+  "subject_selector": "src/billing/tax.ts#calcLegacyTax"
+}
+```
+
+Normative points:
+
+- **It is a pair, never a derivation.** The finding's own message, `related` chain, `sources`
+  and `rolled_up` are the explanation the analysis already wrote; the subject block is
+  `describe`'s answer about the node. A consumer comparing `kndo explain <id>` with
+  `kndo describe <subject_selector>` must see the same node facts.
+- **`subject` is absent when the subject is not one graph node** — a directory rollup stands
+  in for many files, and a path the graph never saw has none. `subject_selector` is absent
+  with it in the rollup case, and present-without-`subject` when a selector was formed but
+  did not resolve. The finding is still returned: an explanation with less context beats an
+  invented node.
+- **An id nothing reported is `not-found`, not `error`** — the exit-code tier every other
+  verb's unresolvable selector uses. A finding can be missing because it was fixed,
+  suppressed, or acknowledged in a baseline since the reader saw it, and the message says so
+  rather than implying a typo.
+
+### 9. Agent format (`--format agent`)
+
+A line-oriented plain-text rendering of the same data, optimized for LLM context windows:
+maximum information per token, deterministic grammar, no decoration. Versioned independently of
+the JSON schema (`agent-format 1` in the header); grammar changes bump the version and the old
+version stays available for one release cycle, like JSON majors.
+
+```
+kndo 0.3.1 agent-format 1 | mode staged | cache warm | 312ms
+result: 3 new, 2 fixed, net +1 | health 82.4 -> 84.1 (B) | baseline 412 acknowledged
+budget: fail (2/3) | health-drop<=0 ok -1.7 | net<=0 FAIL 1 over-by 1 | defect<=0 ok 0
+new:
+1. [kndo-a3f81c92e5d4] unused function src/billing/tax.ts:41 calcLegacyTax
+   cause: last production reference removed by src/billing/index.ts:12 (this change)
+   fix: delete calcLegacyTax() and its export in src/billing/index.ts:12
+2. [kndo-9c04d1b2aa7e] test-only function src/util/csv.ts:8 exportCsv (2 test roots: src/util/csv.test.ts)
+   fix: delete exportCsv() together with its tests
+fixed:
+3. [kndo-77b0e4f2c19d] unused dependency package.json date-fns
+more: none
+next: kndo explain <id> | kndo used-by <selector> --format agent
+```
+
+Grammar rules (normative):
+
+- **Header + result lines always first**, fixed field order, `|`-separated. An agent reads two
+  lines and knows the outcome.
+- **`budget:` line** appears only when `[delta]` rules are configured (RFC 0006 §5): overall
+  verdict + one `rule<=limit ok|FAIL measured [over-by N]` segment per rule — a failing agent
+  reads `over-by` and knows exactly how much work remains, without interpretation. Absence is
+  itself information: it says no budget was configured, never that every budget held.
+- **One finding = one numbered line**: `N. [id] <category> <subject_kind> <path:line> <name>`,
+  followed by optional indented `cause:` / `fix:` / `evidence:` lines. Numbers let a model refer
+  to findings cheaply ("fix 1 and 3"); ids are the durable anchors.
+- **Findings appear in group order** (defect, waste, risk, hygiene) within `new:` / `fixed:` /
+  `findings:` blocks — same triage order as every other renderer.
+- **Elision is always explicit**: `more: 47 unused (kndo check --only unused --format agent)`
+  or `more: none`. A model must never have to guess whether it saw everything.
+- **`next:` closes every response** with the drill-down commands relevant to what was shown —
+  affordances travel with the data, so the model needn't memorize the CLI.
+- Confidence below `certain` is appended in parentheses (`(probable)`); severity is implied by
+  group/category and never repeated per line.
+- Navigation verbs (RFC 0007) render in the same grammar: numbered entries of
+  `[selector] kind path:line` plus the verb's specifics (depth, via-edge, cycle path), same
+  `more:`/`next:` discipline. `kndo query` (JSONL) is unaffected — it stays JSON by nature.
+- Encoding: UTF-8, no ANSI, no glyphs, stable across `--threads` and cache states (RFC 0008 §4).
+
+The agent format is a *rendering* of `RunResult`/`QueryResult` — it can never carry information
+absent from the JSON, and anything added to it must land in the JSON schema first. Like JSON and
+SARIF it renders **core-side** (machine formats, contracts §5): every frontend — CLI today,
+`kndo serve`/MCP tomorrow — emits byte-identical agent text.
+
+## WASM ABI
+
+**Status:** Accepted, both v1s shipped · Normative for the WASM tier of ADR 0003 and RFC 0003
+§§2–3. Code must match this document; changing either requires updating both in the same PR.
+
+### 0. What this is
+
+ADR 0003 splits extensions into two tiers: first-party adapters/plugins compiled into the
+`kndo` binary, and third-party ones shipped as WASM components against a versioned ABI —
+`kndo-plugin-api`. **Two independently-versioned WIT packages live under that one crate**, one
+per native trait: `kndo:adapter@0.1.0` bridges `LanguageAdapter` (§§1–4 below),
+`kndo:plugin@0.1.0` bridges `Plugin`'s four graph-mutation hooks (§5 below). Independent
+versioning is deliberate (contracts/core-traits.md §6: "WASM ABI versioned independently") —
+a breaking change to one package's shape never forces a lockstep bump of the other, and the
+small vocabulary overlap between them (`file-class`, `root-kind`, `ref-kind`, `confidence`) is
+duplicated rather than shared for the same reason.
+
+Both packages cover only their v1 scope — real, working, and deliberately smaller than the
+native trait's full surface; §2 and §5.2 each list their own cuts and why. `Plugin`'s
+`ingest_coverage`/`suppress` hooks are not bridged by either package yet.
+
+### 1. The adapter WIT world
+
+`crates/kndo-plugin-api/wit/adapter.wit`, package `kndo:adapter@0.1.0`, world `adapter`:
+
+```
+export descriptor: func() -> adapter-descriptor;
+export claim: func(path: string) -> option<file-claim>;
+export extract: func(path: string, content: string) -> file-facts;
+```
+
+`adapter-descriptor`, `file-claim`, and `file-facts` are v1-scoped mirrors of the native
+`AdapterDescriptor`/`FileClaim`/`FileFacts` (contracts/core-traits.md §2) — see the WIT file's
+own doc comments for the field-by-field mapping and what each omission means. The three
+functions are the whole world: **no host-import callbacks exist in v1** — a component never
+calls back into the host. That is what lets the reference guest
+(`examples/kndo-plugin-demo`) target plain `wasm32-unknown-unknown` with zero WASI: there is
+nothing for it to import, so there is no ambient fs/net surface to sandbox *away* — the
+target itself has none.
+
+### 2. v1 scope cuts, and why
+
+Every cut below is the same shape of decision this project makes elsewhere (CSS's deferred
+selector extraction, JSON's non-source-language non-goals): ship the honestly-smaller thing
+that's fully correct, rather than a bigger thing with a hidden gap.
+
+- **No `claim_manifest`/`extract_manifest`/`resolve`.** The host bridge (`WasmAdapter`)
+  answers all three itself without ever calling the guest: `claim_manifest` is always
+  `false`, `extract_manifest` always returns `ManifestFacts::default()`, `resolve` always
+  returns `Resolution::Unresolved` — the exact posture the JSON and CSS adapters already
+  document for their own non-applicable trait methods (docs/adapters/json.md, css.md). A v1
+  external adapter therefore has no manifest, no dependency graph, and no cross-file import
+  resolution; `unused`/`test-only`/`untested` are real for it (declarations + references +
+  roots is exactly what reachability consumes), but `cyclic`, `deep-import`, and dependency
+  hygiene see nothing.
+- **No `ResolveCtx` host-import callbacks.** `resolve()`'s real job needs `ResolveCtx`'s
+  querying API (`contains`, `workspace_member`, `unit_files_from`, `files_in_dir`,
+  `files_under` — contracts/core-traits.md §2), which only makes sense as **host-import**
+  functions a component calls back into — the opposite data-flow direction from everything
+  else in v1. Adding it is what a v2 needs to make `resolve()` real; deliberately deferred
+  until an external adapter actually wants cross-file resolution (the same "don't build the
+  mechanism before the demand" call RFC 0003 §6 makes for custom analyses).
+
+  When that v2 lands, the unit query it exposes must be `unit_files_from(unit, from)` — the
+  importer-relative one — and **not** the repo-global `unit_files`. A unit key is unique only
+  within a package, so the global form hands a resolver candidates from unrelated modules that
+  merely share a package or target name; picking among them by path order invents cross-module
+  edges that `cyclic` reports as package cycles no source supports. Every compiled-in adapter
+  that resolves by unit hit this (see RFC 0012 §8). Exposing the global form across the ABI
+  would rebuild that footgun at the boundary where it is most expensive to change later.
+- **No visibility ladder, no cycle policy, no `resolves_dependency_usage`.** The host fills
+  in the same safe defaults CSS/JSON already use for a language with no such semantics: an
+  empty visibility ladder (every declaration reports the widest level — the ladder's own
+  conservative-mapping rule, contracts/core-traits.md §2), `Idiomatic` cycle tolerance at
+  both levels, `resolves_dependency_usage: false`. A v1 external adapter is exempt from
+  `internal-only`/`private-type-leak` rather than risk a wrong ladder guess. The mechanism is
+  worth stating precisely, since it is uniformity rather than an explicit skip: the bridge
+  assigns every declaration `VisibilityLevel(0)`, so the "is the referenced type narrower than
+  the declaration?" comparison is always `0 < 0` and never fires. `private-type-leak`'s
+  `surface_transitive` gate reaches the same answer independently — an empty ladder has no rung
+  at any level, and the check treats a missing rung as surface-transitive (degrade toward
+  keep-alive), so the gate passes and the comparison below it stays the deciding step.
+- **UTF-8 text content, not raw bytes.** `extract`'s `content` parameter is a WIT `string`
+  (valid UTF-8 by construction), not `list<u8>` — simpler for v1, at the cost of an adapter
+  for a language with non-UTF-8-safe source files not being expressible yet. Every launch
+  language's grammar already assumes UTF-8 source in practice, so this has cost nothing so
+  far.
+- **`SymbolKind::Other(name)` isn't representable.** An adapter-specific facet (Rust's
+  `"macro"`, Go's `"type"`) has nowhere to go in the v1 enum; a WASM adapter needing one
+  today folds it into the nearest listed kind.
+
+None of these are silent: every one is enforced by the host bridge never calling the guest
+for the corresponding native method (§3), not by a guest-side promise the host has to trust.
+
+### 3. The host bridge (`crates/kndo-plugin-api`)
+
+`WasmAdapter::load(path: &Path) -> Result<WasmAdapter, LoadError>` loads an **already
+componentized** `.wasm` file (component-model binary — see §6 for how one gets produced) and
+returns a value implementing `kndo_core::adapter::LanguageAdapter` directly. From the
+`Engine`'s side this is indistinguishable from a compiled-in adapter (ADR 0003: "the WASM ABI
+is a generated bridge over [the native traits]") — it goes on the very same
+`Vec<Box<dyn LanguageAdapter>>` `default_adapters()` returns.
+
+**Fuel budget (RFC 0003 §3).** Every guest call runs under a fixed fuel allowance
+(`FUEL_PER_CALL` in `host.rs`); a call that exhausts it or traps is caught and converted to a
+conservative empty result — `None` from `claim`, or `FileFacts::default()` plus a `Warn`
+diagnostic from `extract` — never a crashed `kndo check`. One misbehaving external adapter
+degrades to silence for its own files, not a broken run for every other language in the
+project.
+
+**Memory ceiling (`MAX_GUEST_MEMORY_BYTES` in `engine.rs`, 256 MiB).** Fuel bounds *work*, not
+*bytes*: `memory.grow` costs a handful of fuel units and commits megabytes, so fuel alone lets
+a guest exhaust the host long before it exhausts its allowance — and that failure arrives as an
+OOM kill, which no `catch` converts to silence. Every store therefore installs a
+`wasmtime::StoreLimits` capping guest memory; exceeding it fails the `memory.grow` inside the
+guest, which reaches the host as an ordinary trap and takes the same degrade-to-silence path as
+fuel exhaustion. Deliberately memory-only: table and instance counts are bounded by the
+component's own type section, which the host validates at load.
+
+Note for implementors: `StoreLimits::default()` is *unlimited*, and every store's data type in
+this crate derives `Default`. A limiter that is merely a field of that data is decorative — the
+value must be assigned explicitly before `Store::limiter` is installed.
+
+**No wall-clock deadline — and this is a rejection, not a deferral.** `epoch_deadline` bounds
+elapsed time, and kndo guarantees byte-identical output across thread counts and machines
+(`threads_determinism`, `patch_equivalence` in the named gates). A guest cut off by elapsed
+time contributes different facts on a loaded machine than on an idle one, which is precisely
+the property those gates exist to forbid. Fuel is instruction-counted and therefore
+deterministic; it is not a cheaper stand-in for a deadline, it is the correct instrument, and
+the memory ceiling above closes the one hole fuel genuinely had.
+
+**Sandbox.** No WASI is linked into the host's `Linker` at all — v1's world has no imports to
+satisfy, so there is nothing to grant. This is stronger than a policy promise: a component
+that somehow declared a WASI import would fail to *instantiate*, not silently receive
+capabilities nobody meant to give it.
+
+**Execution model: an instance pool, performance parity as a contract.** The component is
+Cranelift-compiled once per load (against a process-wide shared engine whose disk compilation
+cache makes a previously seen component's load skip codegen entirely), and `claim`/`extract`
+run against a **pool of instances**: each concurrent call checks one out — instantiating a
+fresh one from the shared compiled component when all are busy — and returns it afterward.
+Graph assembly's parallel extraction phase therefore parallelizes a WASM adapter's files
+exactly as it does a compiled-in adapter's; nothing serializes on a shared guest. Two
+consequences are normative:
+
+- **`claim`/`extract` must be pure functions of their arguments.** Calls may land on any
+  instance in any order; instance state must not be relied on between calls. This was always
+  the contract in effect — the facts cache (ADR 0004) has served any file's facts from any
+  prior run since M1, so a call-order-dependent guest was already broken — the pool just makes
+  it observable. (Contrast the `kndo:plugin` side, where RFC 0017 §4 *guarantees* one instance
+  across a round's hooks — graph-mutation rounds are sequential by design; per-file extraction
+  is parallel by design. Two execution models, each documented where it binds.)
+- **A trapped instance is discarded, never re-pooled** — no later call inherits a guest that
+  died mid-call.
+
+### 4. Discovery (`kndo::open`, RFC 0003 §3)
+
+The distribution crate (`crates/kndo/src/lib.rs`) auto-discovers `.kndo/plugins/*.wasm`
+relative to the project root on every `kndo::open` call — no `kndo.toml` entry needed, the
+zero-config default RFC 0003 §3 already names. This section covers that project-local
+directory; both `Plugin`s and (since RFC 0016 §4) `LanguageAdapter`s also auto-discover from a
+global, per-machine directory, filtered by activation rules rather than unconditional — §4.1
+for adapters, §5.5 for plugins. **One directory, two loaders, no naming convention**: every
+discovered `.wasm` file is tried against both
+`WasmAdapter::load` and
+`WasmPlugin::load`; each fails to *instantiate* (not merely "doesn't look right") against a
+component built for the other package's world, since wasmtime's own component type-checking
+requires every world-declared export to be present with matching types. A component that
+fails to load either way is skipped, not fatal to the run (§3's/§5.3's "one bad extension
+doesn't take down the rest" posture, applied at load time as well as call time).
+`kndo_plugin_api::WasmAdapter`/`WasmPlugin` never guess which ABI a `.wasm` file targets by its
+name, path, or a magic byte prefix — the type system already answers that, so nothing else
+needs to. Both loaders are feature-gated together (`external-adapters`, on by default) so an
+embedder building a minimal static binary can drop the WASM runtime entirely
+(`--no-default-features --features js,go,...`, ADR 0006).
+
+Demo components shipped **in this repository** live outside the compiled product on purpose
+(`examples/kndo-plugin-demo`, `examples/kndo-plugin-hooks-demo` — both excluded from the
+workspace's own `members`, same convention as `spikes/perf`): "third-party" means never
+statically linked, checked by keeping it structurally incapable of being one.
+
+#### 4.1 Identity, global installation & activation (RFC 0016 §4)
+
+`WasmAdapter::load` rejects any component whose descriptor claims a `kndo:`-prefixed id
+(`host.rs`, mirroring §5.1's identity binding for plugins) — the reserved namespace is not
+claimable by an external component, full stop, independent of what any first-party adapter's
+own id happens to be (none of them use the `kndo:` prefix; renaming them would only churn the
+graph cache key — RFC 0016 §4's own note on why that's not worth doing).
+
+Beyond `.kndo/plugins/`, `crates/kndo/src/lib.rs`'s `compose_adapters` also scans the same
+**global** directory the plugin tier uses (§5.5 — `dirs::data_dir()/kndo/plugins`,
+`KNDO_PLUGIN_DIR`-overridable): each candidate's `descriptor().activation` is evaluated against
+the project root before it joins composition, reusing the exact `activation::activates`/
+`ActivationRule` machinery §5.5 documents for plugins — `file-exists(glob)`/
+`manifest-dependency(name)`, any single match activates, an empty list never self-activates
+globally. Project-local and compiled-in adapters are unconditional either way, same as their
+plugin-tier counterparts. Since RFC 0017 §6, `descriptor().dependencies` participates too:
+an *active* adapter (any tier) activates every global candidate it names, transitively —
+the same co-activation fixpoint the plugin tier runs, shared as one generic implementation
+over kind-neutral candidate identities, and reported the same way (`missing_dependencies`
+on `kndo::adapter_resolution`, reason-aware status — "active (dependency of X)" — on each
+global candidate). `examples/kndo-adapter-wrapper-demo` is the reference wrapper adapter
+proving the chain against real components.
+
+**Claim priority.** With project-local, global, and compiled-in adapters all in play for the
+same file extension, composition orders the final `Vec<Box<dyn LanguageAdapter>>` project-local
+first, then active global candidates, then compiled-in — ties within a tier broken by
+descriptor id — because `graph.rs`'s claim resolution takes the first adapter in that list
+whose `claim()` returns `Some`. Auditing this while implementing it found the *actual*
+pre-existing order was the reverse (compiled-in first, externals appended after): a
+project-local adapter could never have won a contested extension against a built-in one. That
+is corrected, not merely documented, by RFC 0016 §4.
+
+`kndo::adapter_resolution`/`kndo::global_adapter_candidates` mirror `plugin_resolution`/
+`global_plugin_candidates` (§5.5) exactly — `kndo doctor` renders both the composed set with
+each adapter's `activation` rules shown, and a "global adapter candidates" section listing
+every `.wasm` the global directory holds, activated or not.
+
+`kndo plugin install <coordinate>` (RFC 0015 §4, `kndo::plugin_install`) accepts adapter
+components too: `wasm_probe` tries the plugin loader, then the adapter loader, and whichever
+accepts the bytes carries the descriptor identity binding checks against. No installer-side
+distinction between the two kinds beyond that — checksum, identity, dependency closure, and
+`plugins.lock` are all kind-agnostic.
+
+### 5. The Plugin ABI (`kndo:plugin`)
+
+#### 5.1 The WIT world
+
+`crates/kndo-plugin-api/wit/plugin.wit`, package `kndo:plugin@0.1.0`, world `plugin`:
+
+```
+import list-files: func() -> list<wasm-file-info>;
+import symbols-in: func(path: string) -> list<wasm-symbol-info>;
+import read-file: func(path: string) -> option<list<u8>>;
+
+export descriptor: func() -> plugin-descriptor;
+export classify-file: func(path: string, current: file-class) -> option<file-class>;
+export contribute-roots: func() -> list<contributed-root>;
+export contribute-edges: func() -> list<contributed-edge>;
+export annotate-symbols: func() -> list<plugin-target>;
+```
+
+Unlike the adapter world, this one is **bidirectional** — `contribute-roots`/`contribute-
+edges`/`annotate-symbols` need to *read* the graph, not just report facts about one file. Two
+narrow host-import queries (`list-files`, `symbols-in`) mirror `kndo_core::plugin::GraphView`'s
+own two methods exactly, rather than serializing the whole graph into every call: a guest only
+pays for what it actually queries. The three "write" hooks return a `list<...>` of their
+contributions in one call, the WASM analogue of filling `RootSink`/`EdgeSink`/`AnnotationSink`
+via repeated `add()` calls collapsed into a single call-boundary crossing — cheaper, and it
+keeps the imperative sink shape out of the wire format entirely. `classify-file` needs no
+queries of its own (it only ever sees the one file it's asked about, mirroring the native
+hook's own contract) and is called against a lightweight, view-less instance.
+
+Every target is named, never addressed by an internal id — `plugin-target { path, symbol:
+option<string> }`, same as `kndo_core::plugin::PluginTarget`; resolved host-side against the
+same bare/qualified lookup tables `RawRoot`/`RawReference` resolve against, and an unresolvable
+target is dropped silently (the same miss behavior the adapter ABI and the native `Plugin`
+trait both already have).
+
+`plugin-descriptor` also carries `activation: list<activation-rule>` — `variant activation-rule
+{ file-exists(string), manifest-dependency(string) }`, the machine-checkable counterpart to
+`detection`'s human-readable prose. `descriptor()` is the *only* call the host makes before
+deciding whether a globally installed plugin even joins composition (§5.5); a project-local
+`.kndo/plugins/*.wasm` file never has this field consulted at all.
+
+Two RFC 0015 fields ride the same record: `id` is the plugin's *coordinate* (its fetchable
+source, `github.com/<owner>/<repo>`; the `kndo:` namespace is reserved for built-ins, and the
+host **fails the load** of any external component claiming it — same skipped-not-fatal handling
+as an instantiation error), and `dependencies: list<string>` names coordinates of plugins whose
+conventions are part of this one's (install closure + activation implication, RFC 0015 §3 —
+never versions, ordering, or data flow).
+
+**`read-file` (RFC 0016 §5's content channel, landed).** Scoped to `requested-file-access`:
+the host prefetches every discovered path matching the descriptor's declared globs, budget-
+charged and byte-read through the run's `ContentView` (`kndo_core::plugin::ContentView`) exactly
+as a native plugin's own `.read()` calls would be, *before* instantiating each round's guest —
+the guest can't make a host round-trip of its own choosing mid-call, so `read-file` on the guest
+side is a lookup into that owned snapshot, not a live filesystem call. Budget accounting is
+keyed by path, not by call: a component's read scope shouldn't depend on how many hooks look at
+the same file — a path already charged is served again for free within the round. (This keying
+predates RFC 0017 §4's one-instance-per-round lifecycle, §5.3, which removed its original
+triple-charge motivation; it stays because it is the right semantics regardless.) A path outside
+the declared globs, or one the budget has cut off, comes back `none` — the same silent-miss
+shape every other host-mediated lookup in this ABI already has.
+
+#### 5.2 v1 scope cuts, and why
+
+- **No `ingest_coverage`/`suppress`.** `ingest_coverage` isn't wired on the native `Plugin`
+  trait either — nothing to bridge until it's real. `suppress` went further: RFC 0016 §7
+  evaluated it against real shipped components and decided cut, not merely deferred (RFC 0003
+  §2) — it stays undeclared on both the native trait and this WIT package.
+- **The frozen v1 records stay frozen; the read surface grew by imports instead (RFC 0017
+  §5).** `wasm-file-info` (path/role/origin) and `wasm-symbol-info`
+  (name/kind/exported/member-of) never gain fields — growing a record is a breaking change in
+  the component model. Everything else the graph stably holds arrives through the additive
+  imports `packages`/`package-of`, `file-details`/`symbol-details`, `symbol-implements`,
+  `imports-of`/`importers-of`/`references-to`, `call-sites-in`, and `attr-strings-in` (each
+  with its own new record type — `wasm-package-info`, `wasm-file-details`,
+  `wasm-symbol-details`, `wasm-ref-site`, `wasm-call-site`, `wasm-attr-string`, `wasm-span`;
+  `symbol-implements` needs none, it answers `option<string>`). `symbol-implements` is the rule applied to itself: the trait/protocol
+  whose implementation declares a member is a new fact, and it arrived as its own import
+  rather than a field on `wasm-symbol-details`, which is just as frozen in practice as the v1
+  records once a component is built against it. It is what lets a THIRD-PARTY conventions
+  plugin be its curated table, exactly like the built-in `kndo:serde`/`kndo:rkyv`/
+  `kndo:wasmtime`, instead of asking for source access and re-parsing a grammar.
+  `attr-strings-in` is the same rule applied a second time, and the pair it completes says
+  what the rule is *for*: `call-sites-in` carries string literals written in a call,
+  `attr-strings-in` carries them written in an attribute or annotation, and neither says what
+  the string means. `#[serde(skip_serializing_if = "is_zero")]` names a function and
+  `#[serde(rename = "is_zero")]` names a wire label; only a plugin that knows serde can tell
+  them apart, and putting that knowledge in the record — or in an adapter — is the coupling
+  the split exists to prevent. All answer from the same
+  pre-instantiation snapshot as `list-files`/`symbols-in`, sorted and deterministic, and from
+  **adapter-derived data only** (RFC 0017 §2's rule R1): no plugin ever observes another
+  plugin's contributions, which is what keeps runs identical across plugin compositions. The
+  snapshot clone grows accordingly — bounded `O(files + symbols + edges + content bytes)`
+  per round.
+- **`SymbolKind::Other(name)`/`CssRule`/`CssVariable` aren't representable** — same cut as
+  §2's adapter-side one; the host bridge folds them into `variable` rather than fabricate a
+  wire value.
+- **No fuel-budget layer around individual host-import calls** — the *whole* hook call
+  (guest logic plus every `list-files`/`symbols-in` round trip inside it) shares one fuel
+  allowance, refilled per hook. A guest that queries in a tight loop pays for it out of the
+  same budget its own logic does; there is no separate per-query cap.
+
+None of these are silent: every one is enforced by what the host bridge (`plugin_host.rs`)
+does and doesn't call or expose, not by a guest-side promise the host has to trust.
+
+#### 5.3 The host bridge
+
+`WasmPlugin::load(path: &Path) -> Result<WasmPlugin, LoadError>` loads an already-componentized
+`.wasm` file and returns a value implementing `kndo_core::plugin::Plugin` directly — same
+"generated bridge" posture as `WasmAdapter` (ADR 0003), on the same `Vec<Box<dyn Plugin>>`
+`default_plugins()`/`Engine::open_with_plugins` accept.
+
+**Host state and the borrow problem.** `contribute_roots`/`contribute_edges`/`annotate_symbols`
+run with a real `&GraphView<'_>` (and, since RFC 0016 §5, a real `&ContentView<'_>`) borrowed
+for the duration of one `assemble_from_source` call (graph.rs, RFC 0003 §2's "landed" note);
+`wasmtime::Store`'s state type must be `'static`, so a live borrow can't sit inside it directly.
+`WasmPlugin` resolves this by cloning exactly what `list-files`/`symbols-in` can answer, plus
+every content-channel path the descriptor's globs match (`HostViewData`, built once per
+graph-mutation round, not once per query), into the store's state rather than reaching for
+raw-pointer plumbing across the FFI boundary — a bounded `O(files + symbols + content bytes)`
+clone, once per round, and the resulting code has no `unsafe`.
+
+**Guest lifecycle (RFC 0017 §4): one instance per graph-mutation round.** The bridge
+instantiates the component when `contribute-roots` — the round's first hook in the world's
+declaration order — is invoked; `contribute-edges` and `annotate-symbols` run against that
+same instance, and it is dropped when `annotate-symbols` returns. Two consequences a guest
+author may rely on, and one it must never rely on: guest state (statics, lazily built caches)
+*persists across the three hooks of one round* — compute something in `contribute-roots`,
+reuse it in `contribute-edges`; guest state *never survives into the next round or run* — the
+drop is unconditional, success or trap; and a hook invoked out of order by a non-core host
+gets a defensively fresh instance rather than another round's state. Stateless
+request/response guests (what `wit-bindgen` produces by default) behave identically under
+either lifecycle. Proven observable by the compliance suite's `staged_`/`fresh_` scenarios
+against `examples/kndo-plugin-hooks-demo`.
+
+**Fuel budget and sandbox** are the same posture and the same constant class as §3's adapter
+bridge (`FUEL_PER_CALL` in `plugin_host.rs`), re-armed before *every* hook call — the per-call
+budget semantics are unchanged by the shared instance; a heavy `contribute-roots` can't starve
+`annotate-symbols`. An exhausted or trapped hook degrades to "this plugin contributed nothing
+this round," never a crashed `kndo check`; no WASI linked, so a component declaring one fails
+to instantiate rather than silently receiving capabilities.
+
+#### 5.4 Correctness: cache and patch bypass
+
+Same rule as the native `Plugin`'s own graph-mutation hooks (contracts/core-traits.md §3): any
+registered plugin — WASM or built-in — that declares `mutates_graph()` (a `kndo:plugin`
+component always does: the world exports all four hooks, so `WasmPlugin` keeps the trait's
+`true` default) participates in `assemble_from_source`'s cache-key folding (RFC 0016 §6).
+Coverage-only plugins (`LcovPlugin`) declare `false` and were never part of either bypass.
+
+**The snapshot cache is reusable, the incremental patch is not — landed asymmetrically, on
+purpose.** `Plugin::content_hash()` (`WasmPlugin` overrides it to the blake3 hash of its own
+component bytes, computed once at `load()`; a native plugin's default `None` relies on
+`PluginDescriptor.version` as its trust boundary, same discipline `AdapterDescriptor
+.facts_schema_version` already established) folds into the graph cache key alongside every
+discovered file's content hash. A `ContentView` never answers a path outside that same
+discovered set (§5.1), so any input a plugin's hooks — including its content-channel reads —
+could react to was already part of the key. That makes the graph-snapshot fast path safe: a
+snapshot written under one plugin's identity can only ever match a run with the identical
+component (bytes and all, for WASM) over identical inputs. The incremental patch (RFC 0017
+§3) covers the other fast path without needing the key-folding argument at all: every plugin
+contribution is provenance-tagged, so the patch strips them, splices the source change, and
+re-runs the full plugin round against the patched graph — byte-identical to a full rebuild by
+the equivalence gate, guarded by a snapshot-stored plugin-set digest (a changed set
+full-rebuilds once). Nothing a plugin contributes ever rides either fast path unrevised.
+
+#### 5.5 Global installation & activation (RFC 0003 §4)
+
+Beyond project-local `.kndo/plugins/`, `crates/kndo/src/lib.rs`'s `activation` module also scans
+a **global** directory — `dirs::data_dir()/kndo/plugins` (XDG data dir on Linux, Application
+Support on macOS, `%APPDATA%` on Windows), overridable wholesale via the `KNDO_PLUGIN_DIR`
+env var. This directory is not tied to any one project, so presence there can't be the opt-in
+signal `.kndo/plugins/` gets to use — each candidate's `descriptor().activation` is evaluated
+against the project root *before* the plugin joins composition at all:
+
+- `file-exists(glob)` — at least one file under the project root matches (`glob` crate
+  semantics, evaluated once at `kndo::open` time, not per-analysis-run).
+- `manifest-dependency(name)` — any `package.json`/`Cargo.toml` under the project root declares
+  a dependency by this name in any dependency section, not just the root's own
+  (`kndo_core::discovery::find_files_named` — the same gitignore-aware walker `discover` itself
+  uses, so `node_modules` etc. are excluded exactly like everywhere else in the product; Cargo's
+  `-`/`_` interchangeability is honored). Root-only would have made every monorepo package a
+  false negative for a dependency only *it* declares — not an acceptable v1 cut, since kndo's
+  monorepo awareness is a first-class feature everywhere else (RFC 0012 §8/§10).
+
+Any single matching rule activates the plugin; an **empty** `activation` list never
+self-activates from the global directory (silence over a guess, the zero-false-positive
+default) — such a plugin only ever runs if placed in a project's own `.kndo/plugins/` instead.
+`LanguageAdapter` shares this exact mechanism since RFC 0016 §4 — §4.1 covers the adapter-side
+specifics (identity, claim priority) this section doesn't repeat.
+
+`kndo doctor` (`crates/kndo-cli/src/main.rs`'s `doctor_cmd`) reports both sides: `report.plugins`
+(from `Engine::doctor`) for the final composed set, and `kndo::global_plugin_candidates(root)`
+— a separate call, since `Engine` itself never sees a candidate that didn't activate — for
+*every* `.wasm` file the global directory holds, each with `activated: bool` and its
+`activation` rules rendered via `ActivationRule::describe`. A globally installed plugin whose
+rule doesn't match isn't invisible; it shows up as inactive with the rule that didn't fire.
+
+`kndo plugin install <coordinate>` (RFC 0015 §4, `kndo::plugin_install`) populates the global
+directory from GitHub releases — checksum-verified, identity-bound (the fetched component's
+descriptor id must equal the coordinate), dependency-closed, recorded in `plugins.lock` beside
+the `.wasm` files. Hand-copying a file in still works and is still the project-local tier's
+only mechanism; `kndo plugin list` shows such files as hand-installed rather than hiding them.
+
+### 6. Producing a component
+
+(The full author-facing walkthrough — project setup, descriptor fields, testing shape,
+versioning/maintenance — is [docs/src/plugins/authoring.md](../docs/src/plugins/authoring.md); this section
+is only the componentization mechanics.)
+
+A third-party author needs a real component-model `.wasm` binary, not a plain core module.
+Two ways, both documented rather than assumed, for either package:
+
+- `cargo component build` (the `cargo-component` tool) — the ecosystem-standard path.
+- The `wit-component` crate directly, as a library, with **no extra tool install** —
+  `wit_component::ComponentEncoder::default().module(&core_wasm_bytes)?.encode()?`. This is
+  exactly what `kndo-plugin-api`'s own compliance tests do to build both
+  `examples/kndo-plugin-demo` and `examples/kndo-plugin-hooks-demo` fresh on every run — it
+  works with zero WASI imports to satisfy (§2/§3, §5.2/§5.3), which is true of any
+  v1-conformant adapter or plugin by construction.
+
+### 7. Compliance
+
+The suites below build their demo component fresh from source and componentize it in-process
+on every run — testing today's guest source against today's host. The one deliberate
+exception is the compat matrix (last entry), whose whole point is *committed, pinned* binary
+components:
+
+- `crates/kndo-plugin-api/tests/compliance.rs` — drives a `WasmAdapter` directly against a
+  hand-built `Engine`.
+- `crates/kndo-plugin-api/tests/plugin_compliance.rs` — drives a `WasmPlugin` directly against
+  a hand-built `Engine` and its own minimal `LanguageAdapter`, exercising all four hooks
+  (including the `list-files`/`symbols-in` round trip) with a baseline run proving the
+  assertions aren't vacuous; also proves the two ABIs reject each other's components
+  (`each_abi_rejects_a_component_built_for_the_other`) — the mechanism §4's discovery design
+  depends on.
+- `crates/kndo/tests/external_adapter.rs` and `crates/kndo/tests/external_plugin.rs` — go
+  through the full product composition (`kndo::open`, `.kndo/plugins/` discovery included), the
+  same code path `kndo-cli` uses for every command; `external_plugin.rs` drops *both* an
+  adapter and a plugin component into the same `.kndo/plugins/` directory, proving §4's
+  single-directory sort actually works end to end, not just at the loader level.
+- `crates/kndo/tests/global_plugin_activation.rs` — same full-product composition, but through
+  `KNDO_PLUGIN_DIR` (§5.5): one `#[test]` opens two temp projects against the same globally
+  installed plugin — one without, one with the file that satisfies its `file-exists` rule —
+  proving activation is genuinely conditional, not just wired and always-on.
+- `crates/kndo/tests/global_adapter_activation.rs` (RFC 0016 §4) — the adapter-side mirror of
+  the above, plus a claim-priority assertion: with the same component placed both project-local
+  and in the global tier for one project, `kndo::adapter_resolution` must list the project-local
+  copy first — proving §4.1's corrected composition order, not just that both tiers activate.
+- `crates/kndo/tests/plugin_install_probe.rs` (RFC 0015 §4, extended by RFC 0016 §4) — a real
+  component through `kndo::plugin_install::wasm_probe`; one case per kind proves the probe's
+  plugin-then-adapter fallback reaches identity binding for both, not just plugins.
+- `crates/kndo/tests/adapter_dependency_implication.rs` (RFC 0017 §6) — two real components
+  in the global tier; satisfying only the wrapper's activation rule must activate the adapter
+  it depends on (`ImpliedBy`), all the way to that adapter's findings actually firing.
+- `crates/kndo-plugin-api/tests/compat_matrix.rs` (RFC 0017 §7) — the ABI compatibility
+  matrix: the two reference components **pre-built and committed** under `tests/compat/`,
+  loaded and hook-driven against the HEAD host with no wasm toolchain in the loop. This is
+  §8's "a v1 component keeps working indefinitely" promise as a build-breaking CI job (its
+  own named job in `ci.yml`, plus the ordinary workspace test run). Pre-1.0, a WIT change
+  that breaks the pinned binaries is legal (authoring.md §7) — the rebuild of `tests/compat/`
+  in the same commit is the explicit, reviewable record that a break happened.
+
+`kndo plugin verify <component.wasm>` (RFC 0017 §7) packages the public half of this for
+plugin authors: the exact discovery loaders, a descriptor report with lint-grade warnings,
+and a real fixture-project check reporting what the component contributed.
+
+### 8. Versioning
+
+Each WIT package version (`kndo:adapter@0.1.0`, `kndo:plugin@0.1.0`) and the corresponding
+section of this document change together, independently of each other (§0). A breaking v2 of
+either package (the adapter side's `resolve()` host-import callbacks or byte-content; the
+plugin side's `ingest_coverage`, or per-query fuel) is a new package version, not a silent
+reinterpretation of `0.1.0` — a component built against a v1 package must keep working
+against a v1-compatible host indefinitely. (The "richer `GraphView` surface" this paragraph
+once listed as a breaking-v2 example turned out not to need one: RFC 0017 §5 grew it entirely
+through additive imports with new record types — §5.2 above — the same evolution shape as
+`read-file`.)
+
+**Both RFC 0016 §8 phase 0 reservations are now landed**, additively, exactly as reserved:
+
+- **`kndo:plugin`'s `read-file` host import (RFC 0016 §5).** One added import,
+  `read-file(path) → option<list<u8>>` (§5.1/§5.3 above). A component built against the
+  pre-§5 world simply never calls it, and the host still answers every existing import
+  identically.
+- **`kndo:adapter`'s component-descriptor fields (RFC 0016 §4).** The `adapter-descriptor`
+  record gained `activation: list<activation-rule>` (wired and read — §4.1) and
+  `dependencies: list<string>` (initially riding the wire unevaluated; RFC 0017 §6 later
+  gave it RFC 0015 §3's exact co-activation semantics in the global tier, through the same
+  fixpoint plugins use — the wire shape never changed). No `version` field landed — §4.1's
+  own note explains why one was never needed.
+  A component built against the pre-§4 world has neither field; the host reads them as empty,
+  the same value the dormant reservation always implied.
+
+Neither changed a byte of previously shipped behavior — both are the freeze committing to an
+evolution *path* it had already declared, landing on schedule.
+
+**A second world in the same package (RFC 0018).** `kndo:plugin@0.1.0` gained `world
+plugin-findings` — everything `world plugin` has plus two exports (`rules`,
+`contribute-findings`) and two type additions (`rule-descriptor`, `contributed-finding`).
+A world's exports are mandatory, so growing `plugin` itself would have broken every
+already-built v1 component; a sibling world is the additive shape for new *exports*, exactly
+as new imports were the additive shape for new host surface. The host probes
+`plugin-findings` first (a findings-capable component also satisfies `plugin`, so the other
+order would silently strip its findings) and falls back to `plugin` — the pinned compat
+components exercise the fallback on every push. Authors choose their world in `generate!`;
+the scaffold targets `plugin-findings`.
+
+### 9. Threat model
+
+Written down explicitly (RFC 0017 §7) because the tool is published and components come from
+anywhere. What a malicious or buggy component **cannot** do, by construction:
+
+- **Read outside its grant.** No filesystem, no environment, no clocks, no network: the WASM
+  sandbox has no WASI world at all — every byte a component sees arrives through a host
+  import. The content channel (RFC 0016 §5) serves only files matching the component's own
+  declared `requested_file_access` globs, from the already-discovered, gitignore-filtered
+  tree, under a per-round byte budget whose cutoff is surfaced as a diagnostic.
+- **Write anything.** There is no write-shaped import. Hook outputs are *claims about the
+  graph*, applied by the host under the sink vocabulary (§5.1) — no new node/edge kinds, no
+  finding creation, no file mutation.
+- **Hang or exhaust the host.** Every hook call runs under a wasmtime fuel budget, re-armed
+  per call (RFC 0017 §4), *and* every store under a 256 MiB memory ceiling (§3) — fuel alone
+  bounds work, not bytes, and an OOM kill is the one failure no `catch` can degrade. An
+  exhausted, over-committed or trapping call is dropped like any other component error —
+  skipped, never fatal to the run.
+- **Impersonate.** Reserved-namespace ids fail the load (§4.1/§5.5); the installer's identity
+  binding refuses a component whose descriptor id differs from the coordinate it was fetched
+  from, and the lockfile pins the checksum (RFC 0015 §4).
+
+What a malicious component **can** do — the residual risk, stated honestly: **lie about graph
+facts** and, since RFC 0018, **emit noisy findings**. A false root, edge, annotation, or
+`classify_file` override suppresses findings that should have fired (it cannot *create* false
+core findings: plugin evidence is liveness-only, RFC 0005 §1, and file-target edges are
+consumed by reachability alone). A plugin's own findings can be wrong or spammy — but they
+are namespaced (`plugin:<coordinate>/<rule>`), quota-capped per rule with loud truncation,
+excluded from health, and **advisory by default**: without an explicit `[plugins.gate]`
+opt-in they cannot move an exit code, so the blast radius of a lying rule is a mislabeled
+line in a report, not a broken build. The mitigations are visibility, not prevention:
+contributions are provenance-tagged in the graph, declared rules are shown by doctor/verify
+before a component ever runs, and `kndo doctor` reports the per-plugin audit record from the
+last run — id, roots, edges, annotations (`plugin contributions (last recorded run)`), so
+"this plugin exempted 400 symbols" is a line in a report, not an invisible bias. Installing a
+component remains a trust decision at exactly that scope: the worst case is quieter output or
+noisier advisory lines, never exfiltration or code execution.

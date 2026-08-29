@@ -52,12 +52,12 @@ fn committed_schema_matches_the_type_it_was_generated_from() {
 #[test]
 fn schema_version_matches_the_contract_document() {
     let contract =
-        std::fs::read_to_string(workspace_root().join("internal/contracts/output-schema.md"))
+        std::fs::read_to_string(workspace_root().join("internal/CONTRACTS.md"))
             .expect("the normative output-schema contract");
     let needle = format!("\"schema_version\": \"{}\"", kndo::SCHEMA_VERSION);
     assert!(
         contract.contains(&needle),
-        "SCHEMA_VERSION is {} but internal/contracts/output-schema.md does not carry it — \
+        "SCHEMA_VERSION is {} but internal/CONTRACTS.md does not carry it — \
          the contract is normative, so one of the two is wrong. Additive change? bump the \
          minor in BOTH (RFC 0006 §4).",
         kndo::SCHEMA_VERSION,

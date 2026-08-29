@@ -1,8 +1,8 @@
 # Writing a plugin
 
 This is the one guide to writing a kndo extension. It is the *practical* companion to the
-contracts it names; where they disagree, `internal/contracts/wasm-abi.md` (the ABI),
-`internal/contracts/core-traits.md` §3 (the `Plugin` trait), RFC 0003 (the plugin system) and
+contracts it names; where they disagree, `internal/CONTRACTS.md` (the ABI),
+`internal/CONTRACTS.md` §3 (the `Plugin` trait), RFC 0003 (the plugin system) and
 RFC 0015 (identity, dependencies, installation) win.
 
 Everything here is exercised by real code in the kndo repository — the reference guests under

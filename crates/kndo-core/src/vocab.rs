@@ -807,7 +807,7 @@ mod category_registry_tests {
             .parent()
             .and_then(std::path::Path::parent)
             .expect("workspace root");
-        for doc in ["docs/src/rules.md", "internal/contracts/output-schema.md"] {
+        for doc in ["docs/src/rules.md", "internal/CONTRACTS.md"] {
             let text = std::fs::read_to_string(root.join(doc))
                 .unwrap_or_else(|e| panic!("reading {doc}: {e}"));
             for c in Category::all() {

@@ -6,7 +6,7 @@ with that architecture.
 
 ## Contract first
 
-`internal/contracts/core-traits.md` is normative. A PR that changes a contractual signature (a
+`internal/CONTRACTS.md` is normative. A PR that changes a contractual signature (a
 public trait, `Engine`'s public methods, a §-numbered type) without updating the doc in the
 same PR is incomplete — not "follow-up docs." The contract never describes code that doesn't
 exist, and code never implements contract-affecting behavior the contract doesn't mention.
@@ -14,7 +14,7 @@ exist, and code never implements contract-affecting behavior the contract doesn'
 ## Keep internal/ current
 
 Every document `internal/README.md` indexes is normative for the subsystem it covers, the same
-way `internal/contracts/core-traits.md` is normative for the core traits. A PR that changes the
+way `internal/CONTRACTS.md` is normative for the core traits. A PR that changes the
 behavior one of them describes updates that document in the same PR. A document never describes
 behavior the code doesn't have, and code never implements documented behavior the matching
 document doesn't mention. `internal/detection-gaps.md` is a live reference cited by
