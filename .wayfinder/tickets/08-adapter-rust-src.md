@@ -1,8 +1,8 @@
 # Limpiar comentarios: crates/kndo-adapter-rust/src/
 
-- Status: open
+- Status: closed
 - Type: wayfinder:task (AFK)
-- Assignee: unassigned
+- Assignee: claude (sesión claude/wayfinder-cleanup-docs-9c4ic4, resuelto en paralelo vía Workflow)
 - Blocked by: none
 
 ## Question
@@ -16,4 +16,6 @@ prácticamente nulo). Solo edición de comentarios en `src/`.
 
 ## Resolution
 
-(completar al cerrar)
+Comentarios reescritos en `extraction.rs` y `lib.rs`; `tests/` sin tocar. `cargo check
+--workspace` en verde.
+

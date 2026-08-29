@@ -1,8 +1,8 @@
 # Corregir vigencia: RFC 0001, 0002, 0003 (arquitectura, adapters, plugin system)
 
-- Status: open
+- Status: closed
 - Type: wayfinder:task (AFK)
-- Assignee: unassigned
+- Assignee: claude (sesión claude/wayfinder-cleanup-docs-9c4ic4, resuelto en paralelo vía Workflow)
 - Blocked by: none
 
 ## Question
@@ -27,4 +27,10 @@ como vigente)?
 
 ## Resolution
 
-(completar al cerrar)
+RFC 0001 §5 reescrita en presente (el patch incremental de RFC 0013 y el gate de benchmark ya
+existen); §2 ahora incluye HTML. RFC 0002 §3/§7 ahora incluyen HTML, con nota explícita de que
+`internal/adapters/html.md` todavía no existe. RFC 0003 §2 agrega `rules`/`contribute_findings`;
+§3 actualizado a los ~10 plugins reales con sus docs; §6 distingue con precisión lo que RFC 0018
+sí shippeó (findings namespaced) de lo que sigue abierto (una API de análisis genérica). `cargo
+test -p kndo doc_links` en verde.
+

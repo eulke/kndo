@@ -1,8 +1,8 @@
 # Limpiar comentarios: crates/kndo-adapter-css/ + kndo-adapter-html/ + kndo-adapter-json/
 
-- Status: open
+- Status: closed
 - Type: wayfinder:task (AFK)
-- Assignee: unassigned
+- Assignee: claude (sesión claude/wayfinder-cleanup-docs-9c4ic4, resuelto en paralelo vía Workflow)
 - Blocked by: none
 
 ## Question
@@ -14,4 +14,6 @@
 
 ## Resolution
 
-(completar al cerrar)
+Comentarios reescritos en los tres adapters (`lib.rs` de cada uno). `cargo check --workspace`
+en verde.
+

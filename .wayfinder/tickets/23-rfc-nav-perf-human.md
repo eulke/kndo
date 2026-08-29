@@ -1,8 +1,8 @@
 # Corregir vigencia: RFC 0007, 0008, 0009 (navegación, performance, interfaz humana)
 
-- Status: open
+- Status: closed
 - Type: wayfinder:task (AFK)
-- Assignee: unassigned
+- Assignee: claude (sesión claude/wayfinder-cleanup-docs-9c4ic4, resuelto en paralelo vía Workflow)
 - Blocked by: none
 
 ## Question
@@ -26,4 +26,11 @@
 
 ## Resolution
 
-(completar al cerrar)
+RFC 0007 §8 marca resueltas las dos preguntas que ya lo estaban en código, agrega el verbo
+`Explain` y renumera las secciones de batching consistentemente. RFC 0008 corrige tres
+afirmaciones falsas (adaptive execution no implementado, no hay paralelismo intra-análisis, el
+benchmark no es CI-blocking) con cita exacta de dónde vive cada mecanismo real. RFC 0009 agrega
+`Group::Convention` a la tabla de vocabulario y corrige los ejemplos de "clean run" y de error
+para que coincidan con `render.rs`/`EngineError` reales. `cargo test -p kndo doc_links` en
+verde.
+

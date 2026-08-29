@@ -1,8 +1,8 @@
 # Limpiar comentarios: crates/kndo-adapter-toolkit/
 
-- Status: open
+- Status: closed
 - Type: wayfinder:task (AFK)
-- Assignee: unassigned
+- Assignee: claude (sesión claude/wayfinder-cleanup-docs-9c4ic4, resuelto en paralelo vía Workflow)
 - Blocked by: none
 
 ## Question
@@ -14,4 +14,7 @@ describen únicamente el comportamiento/invariante actual? Aplicar la política 
 
 ## Resolution
 
-(completar al cerrar)
+Comentarios reescritos en los 7 archivos que tenían algo que corregir (`classify.rs`,
+`decls.rs`, `jvm_manifest.rs`, `lib.rs`, `metrics.rs`, `parsing.rs`, `refs.rs`). Ningún helper
+expuesto cambió. `cargo check --workspace` en verde.
+

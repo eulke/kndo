@@ -1,8 +1,8 @@
 # Corregir vigencia: adapters/js-ts.md (tsconfig documentado como shippeado, no lo está)
 
-- Status: open
+- Status: closed
 - Type: wayfinder:task (AFK)
-- Assignee: unassigned
+- Assignee: claude (sesión claude/wayfinder-cleanup-docs-9c4ic4, resuelto en paralelo vía Workflow)
 - Blocked by: none
 
 ## Question
@@ -22,4 +22,7 @@ verificó vigente — no tocar.
 
 ## Resolution
 
-(completar al cerrar)
+§3/§5/§6 reescritas para decir explícitamente que el adapter no sigue `tsconfig`
+`baseUrl`/`paths` hoy, sin construir la feature (fuera de alcance, ver Out of scope del mapa).
+`cargo test -p kndo doc_links` en verde.
+

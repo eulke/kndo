@@ -1,8 +1,8 @@
 # Limpiar comentarios: xtask/
 
-- Status: open
+- Status: closed
 - Type: wayfinder:task (AFK)
-- Assignee: unassigned
+- Assignee: claude (sesión claude/wayfinder-cleanup-docs-9c4ic4, resuelto en paralelo vía Workflow)
 - Blocked by: none
 
 ## Question
@@ -14,4 +14,5 @@ describen únicamente el comportamiento/invariante actual? Aplicar la política 
 
 ## Resolution
 
-(completar al cerrar)
+Comentarios reescritos en `main.rs` y `package.rs`. `cargo check --workspace` en verde.
+

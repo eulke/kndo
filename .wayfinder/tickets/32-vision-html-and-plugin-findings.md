@@ -1,8 +1,8 @@
 # Corregir vigencia: product/vision.md (falta HTML; modelo de plugins desactualizado)
 
-- Status: open
+- Status: closed
 - Type: wayfinder:task (AFK)
-- Assignee: unassigned
+- Assignee: claude (sesión claude/wayfinder-cleanup-docs-9c4ic4, resuelto en paralelo vía Workflow)
 - Blocked by: none
 
 ## Question
@@ -19,4 +19,7 @@ ya verificó vigente.
 
 ## Resolution
 
-(completar al cerrar)
+§4 agrega HTML a los lenguajes soportados. Principio #3 actualizado para mencionar que un
+plugin puede emitir findings de primera clase bajo su propio namespace (RFC 0018), no solo
+contribuir a verdictos del core. `cargo test -p kndo doc_links` en verde.
+

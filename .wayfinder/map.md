@@ -96,6 +96,38 @@ en el mismo commit.
   (info-plist/thymeleaf shippeados, vite/rollup/guava-testlib ya en §19-20 de
   `detection-gaps.md`); reescribí la §14 (marcada "GAP" pese a estar resuelta) y traduje todo el
   español mezclado. Plan borrado.
+- **Barrido paralelo de los 28 tickets restantes sin bloqueos** (28 agentes en worktrees
+  aislados vía Workflow, mergeados y verificados a mano — `cargo check --workspace`,
+  `cargo test --workspace`, `cargo test -p kndo doc_links` en verde; heurística de línea
+  confirmó cero cambios no-comentario en los 102 archivos `.rs` tocados):
+  - [03 — graph/](tickets/03-core-graph.md), [04 — analysis/](tickets/04-core-analysis.md),
+    [05 — engine.rs+adapter.rs](tickets/05-core-engine-adapter.md),
+    [06 — plugin/cache/query/config](tickets/06-core-plugin-cache-query.md),
+    [07 — resto de top-level](tickets/07-core-remaining-top-level.md): comentarios de
+    `kndo-core` reescritos. Efecto colateral encontrado y corregido: el rustdoc de
+    `Related`/`Group`/`Location`/`Severity` en `vocab.rs` se embebe en los JSON Schema
+    comprometidos (`schemars`) — regenerados con `cargo xtask gen-schema` para no romper
+    `schema_validation`.
+  - [08 — adapter-rust](tickets/08-adapter-rust-src.md),
+    [09 — adapter-js](tickets/09-adapter-js.md),
+    [10 — adapter-toolkit](tickets/10-adapter-toolkit.md),
+    [11 — adapter-java+kotlin](tickets/11-adapter-java-kotlin.md),
+    [12 — adapter-swift+go](tickets/12-adapter-swift-go.md),
+    [13 — adapter-css+html+json](tickets/13-adapter-css-html-json.md): comentarios de los 9
+    adapters de lenguaje reescritos.
+  - [14 — plugins first-party](tickets/14-plugins-first-party.md),
+    [15 — plugin-api](tickets/15-plugin-api.md): comentarios de los crates de plugin
+    reescritos.
+  - [16 — kndo-cli](tickets/16-cli.md), [17 — kndo façade](tickets/17-kndo-facade.md),
+    [18 — xtask](tickets/18-xtask.md): comentarios reescritos; verificado a mano que los 6
+    gates nombrados en `CLAUDE.md` que ticket 17 toca no cambiaron ninguna aserción.
+  - [19 — examples+spikes](tickets/19-examples-spikes.md): sin cambios, ya estaba limpio.
+  - [21](tickets/21-rfc-arch-adapters-plugins.md)–[24](tickets/24-rfc-ci-workspaces-release.md)
+    (RFC 0001–0011, 0014), [25](tickets/25-adrs-linking-cache.md) (ADR 0003, 0004),
+    [26](tickets/26-adapter-specs-status-headers.md)–[29](tickets/29-adapter-spec-js-ts-tsconfig.md)
+    (specs de adapter), [31](tickets/31-roadmap-html-plugins-and-redundancy.md) (ROADMAP),
+    [32](tickets/32-vision-html-and-plugin-findings.md) (vision): las 22 correcciones de
+    vigencia de la auditoría, aplicadas — ver cada ticket para el detalle punto por punto.
 
 ## Not yet specified
 

@@ -1,8 +1,8 @@
 # Corregir vigencia: adapters/java.md (fixture faltante y capacidad no documentada)
 
-- Status: open
+- Status: closed
 - Type: wayfinder:task (AFK)
-- Assignee: unassigned
+- Assignee: claude (sesión claude/wayfinder-cleanup-docs-9c4ic4, resuelto en paralelo vía Workflow)
 - Blocked by: none
 
 ## Question
@@ -19,4 +19,6 @@ ticket 31 (ROADMAP) puede recortar si hay tiempo.
 
 ## Resolution
 
-(completar al cerrar)
+§6 corregido a "Six fixtures", con `multi-release-variants` agregada y descripta. `cargo test
+-p kndo doc_links` en verde.
+

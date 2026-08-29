@@ -1,8 +1,8 @@
 # Corregir vigencia: RFC 0004, 0005, 0006 (cache, análisis, CLI/output)
 
-- Status: open
+- Status: closed
 - Type: wayfinder:task (AFK)
-- Assignee: unassigned
+- Assignee: claude (sesión claude/wayfinder-cleanup-docs-9c4ic4, resuelto en paralelo vía Workflow)
 - Blocked by: none
 
 ## Question
@@ -25,4 +25,10 @@
 
 ## Resolution
 
-(completar al cerrar)
+RFC 0004 §2/§3 reescritas para reflejar `graphs/<key>.bin` + `graphs/latest` reales, sin
+`findings.bin`, con la ausencia del config hash explicada. RFC 0005 §13 corrige la
+autocontradicción (dos filas se mantienen explícitamente abiertas); §3 refleja el estado real
+de `test_only`'s severidad. RFC 0006 §7 marca `[health.weights]` como no implementado y corrige
+la afirmación (ya errónea) sobre el config hash en la cache key. `cargo test -p kndo doc_links`
+en verde.
+

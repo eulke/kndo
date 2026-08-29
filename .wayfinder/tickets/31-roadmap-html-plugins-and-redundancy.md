@@ -1,8 +1,8 @@
 # Corregir vigencia: ROADMAP.md (falta HTML + 6 plugins; recortar narrativa redundante)
 
-- Status: open
+- Status: closed
 - Type: wayfinder:task (AFK)
-- Assignee: unassigned
+- Assignee: claude (sesión claude/wayfinder-cleanup-docs-9c4ic4, resuelto en paralelo vía Workflow)
 - Blocked by: none
 
 ## Question
@@ -23,4 +23,10 @@ recortar ambas secciones a un resumen de una o dos líneas + link al spec corres
 
 ## Resolution
 
-(completar al cerrar)
+Agregadas dos secciones nuevas (HTML adapter M6, los 6 plugins de ecosistema M6) y notas "Since
+landed" donde el ROADMAP todavía decía "still parked" contradicho por esos 6 plugins reales.
+Recortadas las secciones "M5 progress — CSS adapter" y "M5 progress — Java adapter" a un
+resumen + puntero a los specs correspondientes (156 líneas netas, mayoría recorte). Verificado
+que no queda ninguna mención de "still parked" para React/Next.js. `cargo test -p kndo
+doc_links` en verde.
+

@@ -1,8 +1,8 @@
 # Limpiar comentarios: crates/kndo-cli/
 
-- Status: open
+- Status: closed
 - Type: wayfinder:task (AFK)
-- Assignee: unassigned
+- Assignee: claude (sesión claude/wayfinder-cleanup-docs-9c4ic4, resuelto en paralelo vía Workflow)
 - Blocked by: none
 
 ## Question
@@ -15,4 +15,6 @@ edición de comentarios.
 
 ## Resolution
 
-(completar al cerrar)
+Comentarios reescritos en `main.rs`, `nav.rs`, `render.rs`. Los imports de fachada
+(`kndo::<Name>`) no se tocaron. `cargo check --workspace` en verde.
+

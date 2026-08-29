@@ -1,8 +1,8 @@
 # Corregir vigencia: RFC 0010, 0011, 0014 (CI/Action, workspaces, release)
 
-- Status: open
+- Status: closed
 - Type: wayfinder:task (AFK)
-- Assignee: unassigned
+- Assignee: claude (sesión claude/wayfinder-cleanup-docs-9c4ic4, resuelto en paralelo vía Workflow)
 - Blocked by: none
 
 ## Question
@@ -24,4 +24,8 @@
 
 ## Resolution
 
-(completar al cerrar)
+RFC 0010 §4 reescrita: sin budget checklist, describe lo que `action/render.mjs` realmente
+manda al PR. RFC 0011 §5 marca el override por-paquete como no implementado. RFC 0014 quita la
+nota obsoleta sobre el nombre del repo (ya coincide con el remoto real). `cargo test -p kndo
+doc_links` en verde.
+

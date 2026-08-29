@@ -1,8 +1,8 @@
 # Limpiar comentarios: kndo-core, resto de archivos top-level de src/
 
-- Status: open
+- Status: closed
 - Type: wayfinder:task (AFK)
-- Assignee: unassigned
+- Assignee: claude (sesión claude/wayfinder-cleanup-docs-9c4ic4, resuelto en paralelo vía Workflow)
 - Blocked by: none
 
 ## Question
@@ -16,4 +16,12 @@ edición de comentarios.
 
 ## Resolution
 
-(completar al cerrar)
+Comentarios reescritos en 10 de los 15 archivos del lote (`coverage.rs`, `delta.rs`,
+`gitutil.rs`, `lib.rs`, `sarif.rs` no tenían nada que corregir). `testkit.rs` no cambió de
+comportamiento. Efecto colateral: la reescritura del rustdoc de `Related`/`Group`/`Location`/
+`Severity` en `vocab.rs` dejó desactualizados los JSON Schema comprometidos
+(`schemas/kndo-output.schema.json`, `schemas/kndo-query-output.schema.json`, generados vía
+`schemars` a partir de esos mismos doc comments) — detectado por `schema_validation.rs` fallando
+2 de 6 tests, regenerados con `cargo xtask gen-schema` y commiteado aparte. `cargo test -p kndo
+--test schema_validation` (6/6) y `cargo check --workspace` en verde.
+

@@ -1,8 +1,8 @@
 # Limpiar comentarios: kndo-core plugin.rs, cache.rs, query.rs, query_envelope.rs, config.rs
 
-- Status: open
+- Status: closed
 - Type: wayfinder:task (AFK)
-- Assignee: unassigned
+- Assignee: claude (sesión claude/wayfinder-cleanup-docs-9c4ic4, resuelto en paralelo vía Workflow)
 - Blocked by: none
 
 ## Question
@@ -15,4 +15,7 @@ comentarios.
 
 ## Resolution
 
-(completar al cerrar)
+Comentarios reescritos en `plugin.rs`, `cache.rs`, `query.rs`, `query_envelope.rs`, `config.rs`.
+La lógica de merge de `EffectiveConfig` no se tocó (verificado). `cargo check --workspace` en
+verde.
+

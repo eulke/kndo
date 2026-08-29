@@ -1,8 +1,8 @@
 # Limpiar comentarios: crates/kndo-adapter-swift/ + crates/kndo-adapter-go/
 
-- Status: open
+- Status: closed
 - Type: wayfinder:task (AFK)
-- Assignee: unassigned
+- Assignee: claude (sesión claude/wayfinder-cleanup-docs-9c4ic4, resuelto en paralelo vía Workflow)
 - Blocked by: none
 
 ## Question
@@ -14,4 +14,6 @@ del ticket). Solo edición de comentarios.
 
 ## Resolution
 
-(completar al cerrar)
+Comentarios reescritos en ambos adapters (`extraction.rs`/`lib.rs` de cada uno). `cargo check
+--workspace` en verde.
+

@@ -1,8 +1,8 @@
 # Limpiar comentarios: kndo-core engine.rs + adapter.rs
 
-- Status: open
+- Status: closed
 - Type: wayfinder:task (AFK)
-- Assignee: unassigned
+- Assignee: claude (sesión claude/wayfinder-cleanup-docs-9c4ic4, resuelto en paralelo vía Workflow)
 - Blocked by: none
 
 ## Question
@@ -17,4 +17,7 @@ Solo edición de comentarios.
 
 ## Resolution
 
-(completar al cerrar)
+Comentarios reescritos en `engine.rs` y `adapter.rs`, sin tocar ninguna firma ni lo que el
+contrato de `internal/contracts/core-traits.md` promete — verificado línea por línea (todos los
+cambios son de comentario, ninguno de código). `cargo check --workspace` en verde.
+

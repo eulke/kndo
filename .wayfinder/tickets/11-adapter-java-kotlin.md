@@ -1,8 +1,8 @@
 # Limpiar comentarios: crates/kndo-adapter-java/ + crates/kndo-adapter-kotlin/
 
-- Status: open
+- Status: closed
 - Type: wayfinder:task (AFK)
-- Assignee: unassigned
+- Assignee: claude (sesión claude/wayfinder-cleanup-docs-9c4ic4, resuelto en paralelo vía Workflow)
 - Blocked by: none
 
 ## Question
@@ -14,4 +14,6 @@ comparten código — agrupados acá solo por tamaño del ticket). Solo edición
 
 ## Resolution
 
-(completar al cerrar)
+Solo `kndo-adapter-kotlin/src/extraction.rs` tenía comentarios que corregir; `kndo-adapter-java`
+ya estaba limpio. `cargo check --workspace` en verde.
+

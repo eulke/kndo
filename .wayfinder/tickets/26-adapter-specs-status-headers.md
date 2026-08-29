@@ -1,8 +1,8 @@
 # Corregir vigencia: adapters/css.md + adapters/json.md (headers de estado obsoletos)
 
-- Status: open
+- Status: closed
 - Type: wayfinder:task (AFK)
-- Assignee: unassigned
+- Assignee: claude (sesión claude/wayfinder-cleanup-docs-9c4ic4, resuelto en paralelo vía Workflow)
 - Blocked by: none
 
 ## Question
@@ -21,4 +21,6 @@ acá, se recorta desde el lado del ROADMAP (ticket 31).
 
 ## Resolution
 
-(completar al cerrar)
+Quitado "pre-implementation" de ambos headers (css.md, json.md); ahora dicen solo "Draft",
+igual que los demás specs implementados. `cargo test -p kndo doc_links` en verde.
+

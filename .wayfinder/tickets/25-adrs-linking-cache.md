@@ -1,8 +1,8 @@
 # Corregir vigencia: ADR 0003 (adapter linking) + ADR 0004 (cache format)
 
-- Status: open
+- Status: closed
 - Type: wayfinder:task (AFK)
-- Assignee: unassigned
+- Assignee: claude (sesión claude/wayfinder-cleanup-docs-9c4ic4, resuelto en paralelo vía Workflow)
 - Blocked by: none
 
 ## Question
@@ -21,4 +21,8 @@
 
 ## Resolution
 
-(completar al cerrar)
+ADR 0003 recorta su sección de "Implementation status" a un puntero a `contracts/wasm-abi.md`
+§5 en vez de repetir (y errar) el detalle de qué está implementado. ADR 0004 corrige la misma
+afirmación falsa sobre `findings.bin` que RFC 0004 (coordinado con el ticket 22 para no dejar
+la corrección en un lado y no en el otro). `cargo test -p kndo doc_links` en verde.
+

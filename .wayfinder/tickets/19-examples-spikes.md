@@ -1,8 +1,8 @@
 # Limpiar comentarios: examples/ + spikes/perf/src/main.rs
 
-- Status: open
+- Status: closed
 - Type: wayfinder:task (AFK)
-- Assignee: unassigned
+- Assignee: claude (sesión claude/wayfinder-cleanup-docs-9c4ic4, resuelto en paralelo vía Workflow)
 - Blocked by: none
 
 ## Question
@@ -16,4 +16,7 @@ estructura. Solo edición de comentarios.
 
 ## Resolution
 
-(completar al cerrar)
+Sin cambios: ningún archivo de `examples/*/src/` ni `spikes/perf/src/main.rs` tenía comentarios
+que violaran la política (volumen bajo, ~195 líneas de comentario en total, ya presentes y
+correctos). Nada que commitear.
+

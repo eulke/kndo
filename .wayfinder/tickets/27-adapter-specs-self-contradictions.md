@@ -1,8 +1,8 @@
 # Corregir vigencia: adapters/go.md + adapters/kotlin.md (autocontradicciones)
 
-- Status: open
+- Status: closed
 - Type: wayfinder:task (AFK)
-- Assignee: unassigned
+- Assignee: claude (sesión claude/wayfinder-cleanup-docs-9c4ic4, resuelto en paralelo vía Workflow)
 - Blocked by: none
 
 ## Question
@@ -20,4 +20,8 @@
 
 ## Resolution
 
-(completar al cerrar)
+go.md: §5 y §7 ahora dicen que `RefKind::Extend` está implementado (tachado "~~fixed~~" como
+los demás puntos resueltos de la lista); §7 punto 3 corregido a 3 rungs; agregada mención de
+`private-type-leak`. kotlin.md §6 corregido a "Five fixtures" con la quinta listada. `cargo
+test -p kndo doc_links` en verde.
+

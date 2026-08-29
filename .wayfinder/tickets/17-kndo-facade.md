@@ -1,8 +1,8 @@
 # Limpiar comentarios: crates/kndo/ (fachada)
 
-- Status: open
+- Status: closed
 - Type: wayfinder:task (AFK)
-- Assignee: unassigned
+- Assignee: claude (sesión claude/wayfinder-cleanup-docs-9c4ic4, resuelto en paralelo vía Workflow)
 - Blocked by: none
 
 ## Question
@@ -16,4 +16,11 @@ comentarios en todo el crate.
 
 ## Resolution
 
-(completar al cerrar)
+Comentarios reescritos en `src/` (author.rs, lib.rs) y 13 archivos de `tests/` (fixtures sin
+tocar). Verificado a mano, línea por línea, que `dogfood.rs`, `builtin_plugin_proofs.rs`,
+`doc_links.rs`, `schema_validation.rs`, `plugin_dependency_implication.rs` y
+`adapter_dependency_implication.rs` — los seis gates nombrados en `CLAUDE.md` que este ticket
+toca — no cambiaron ninguna aserción, la lista `ACCEPTED`/`PROVEN`, ni lógica de test, solo
+comentarios. Corrido explícitamente: `cargo test -p kndo --test dogfood` (2/2),
+`--test doc_links` (1/1) — ambos en verde.
+

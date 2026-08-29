@@ -1,8 +1,8 @@
 # Limpiar comentarios: crates/kndo-plugin-api/
 
-- Status: open
+- Status: closed
 - Type: wayfinder:task (AFK)
-- Assignee: unassigned
+- Assignee: claude (sesión claude/wayfinder-cleanup-docs-9c4ic4, resuelto en paralelo vía Workflow)
 - Blocked by: none
 
 ## Question
@@ -16,4 +16,6 @@ redacción de sus comentarios.
 
 ## Resolution
 
-(completar al cerrar)
+Comentarios reescritos en `host.rs` y `plugin_host.rs`. El ABI del plugin (`internal/contracts/
+wasm-abi.md`) no cambió. `cargo check --workspace` en verde.
+
