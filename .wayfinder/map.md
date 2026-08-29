@@ -87,6 +87,10 @@ en el mismo commit.
   `detection-gaps.md` aparte; corregir contenido primero (tickets 21-32), fusionar después
   (tickets 34a-34h); regla nueva en CLAUDE.md (ticket 01) + gate de CI (ticket 35) para que no
   vuelva a desincronizarse.
+- [Reescribir CLAUDE.md: sin narración histórica, con la política de comentarios](tickets/01-claude-md-rewrite.md):
+  9 incidentes narrados reescritos en presente; agregadas "Keep internal/ current" (apunta al
+  índice de `internal/README.md`, no a los 10 nombres todavía inexistentes) y "Comments"
+  (presente, no pasado/futuro; solo comentar lo no obvio).
 
 ## Not yet specified
 

@@ -1,8 +1,8 @@
 # Reescribir CLAUDE.md: sin narración histórica, con la política de comentarios
 
-- Status: open
+- Status: closed
 - Type: wayfinder:task (HITL — mostrar el borrador de CLAUDE.md al usuario antes de commitear)
-- Assignee: unassigned
+- Assignee: claude (sesión claude/wayfinder-cleanup-docs-9c4ic4)
 - Blocked by: none
 
 ## Question
@@ -37,4 +37,29 @@ segundo aplica el ajuste sobre el resultado del primero).
 
 ## Resolution
 
-(completar al cerrar)
+Reescrito `CLAUDE.md` completo. Se quitó la referencia a la branch
+`claude/core-api-ergonomics-architecture-983pom` del header y cada incidente narrado puntual
+(9 casos: `Engine::explain`, las copias CLI-side de group ordering, el merge duplicado de
+config, la race de `temp_dir()`, el detalle de `-gnu`/staged-directory del release, la lista
+"had never executed/installed/built/run", el `useless_conversion` de 1.98 vs 1.94, el
+descriptor que casi esconde `dependencies`, y los dos links rotos de `doc_links`) — en todos
+los casos se conservó la regla y su severidad, solo se reescribió en presente.
+
+Se agregaron dos secciones:
+- **"Keep internal/ current"**, generalizando "Contract first" a los 10 documentos que decidió
+  el ticket 33 — pero redactada como *"every document `internal/README.md` indexes"* en vez de
+  nombrar los 10 archivos directamente, porque esos archivos todavía no existen (34a-34h no
+  corrieron): nombrarlos ahora habría sido exactamente el error que este mapa corrige. La regla
+  es cierta hoy y sigue siendo cierta después de la fusión sin necesitar otro edit.
+- **"Comments"** — la política de comentarios del mapa (presente, nunca pasado/futuro, aplica
+  igual a `///` y `//`) más una segunda parte sobre dónde: solo comentar cuando el código solo
+  no alcanza para un WHY no obvio.
+
+Desviación deliberada de la instrucción original del ticket: no se agregó un nombre de gate de
+CI para el ticket 35 en "Gates that must never regress" — ese gate no existe todavía, y
+agregarlo habría sido la misma contaminación que "Contract first" prohíbe. El ticket 35 agrega
+su propio nombre a esa lista cuando el gate exista de verdad.
+
+La referencia a `internal/contracts/core-traits.md` en "Contract first" se dejó igual (el
+ticket 34a, que fusiona los contratos, todavía no cerró) — 34a la actualiza él mismo al
+fusionar, como preveía este ticket.

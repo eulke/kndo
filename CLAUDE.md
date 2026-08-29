@@ -1,19 +1,25 @@
 # Working in this repo
 
-This file exists because `kndo-core`'s architecture is deliberate — normative contracts,
-an `Engine` facade, an "ignorance rule" for language-agnosticism — and every rule below
-codifies a divergence that actually happened between that architecture and the code, found
-during a full ergonomics audit (see `internal/contracts/core-traits.md` and the git history
-on `claude/core-api-ergonomics-architecture-983pom`). Follow these to keep it from
-happening again.
+`kndo-core`'s architecture is deliberate: normative contracts, an `Engine` facade, an
+"ignorance rule" for language-agnosticism. The rules below keep code and contracts in sync
+with that architecture.
 
 ## Contract first
 
-`internal/contracts/core-traits.md` is normative. If a PR changes a contractual signature
-(a public trait, `Engine`'s public methods, a §-numbered type) without updating the doc in
-the same PR, the PR is incomplete — not "follow-up docs." Never leave the contract
-describing code that doesn't exist (we once had `Engine::explain` documented and never
-implemented) or code describing behavior the contract doesn't mention.
+`internal/contracts/core-traits.md` is normative. A PR that changes a contractual signature (a
+public trait, `Engine`'s public methods, a §-numbered type) without updating the doc in the
+same PR is incomplete — not "follow-up docs." The contract never describes code that doesn't
+exist, and code never implements contract-affecting behavior the contract doesn't mention.
+
+## Keep internal/ current
+
+Every document `internal/README.md` indexes is normative for the subsystem it covers, the same
+way `internal/contracts/core-traits.md` is normative for the core traits. A PR that changes the
+behavior one of them describes updates that document in the same PR. A document never describes
+behavior the code doesn't have, and code never implements documented behavior the matching
+document doesn't mention. `internal/detection-gaps.md` is a live reference cited by
+`kndo.toml` and `kndo:allow` pragmas, not a design document, and isn't covered by this rule the
+same way.
 
 ## Fachada: frontends import only the root re-exports
 
@@ -23,9 +29,8 @@ internal module (`kndo::engine::X`, `kndo::vocab::X`, `kndo_core::...` directly)
 frontend needs a piece of data or logic that isn't exported yet, that's a PR to core: add
 the field to `RunResult`, export the helper, add it to the root re-export list — never a
 local re-derivation or a reach into an internal module. `sort_findings_for_display` is the
-precedent to follow. (We once had CLI-side copies of group ordering and grade-boundary
-tables that silently drifted from core's own logic — that's the failure mode this rule
-exists to prevent.)
+precedent to follow: group ordering and grade-boundary logic live once, in core, and every
+frontend calls it rather than keeping its own copy.
 
 ## Ignorance rule
 
@@ -63,11 +68,25 @@ Use `thiserror` enums with `Display` impls. Do not introduce a new `Result<_, St
 error messages that reach JSON envelopes or CLI output should come from a typed error, not
 ad hoc string formatting.
 
+## Comments
+
+A comment states what is true now — a non-obvious WHY, an invariant, a constraint — never a
+contrast with an earlier state ("this used to be X", "no longer", "added for Y") and never a
+promise about the future. If deleting "used to"/"previously"/"no longer" leaves a comment
+meaningless, rewrite it as a present invariant or delete it. The same rule applies equally to
+`///`/`//!` rustdoc and inline `//` comments: public API documentation states what callers can
+rely on today, not the history of how it got there.
+
+Write a comment only where the code alone would leave a reader stuck on a non-obvious WHY —
+not to restate what a well-named function or type already says. A codebase with fewer, sharper
+comments is easier to trust than one with a comment on every block: readers stop reading
+comments once enough of them are noise.
+
 ## Config
 
 All defaults and all precedence between config sources live in `config::EffectiveConfig`.
-Don't write `unwrap_or(SomeConfig::default().field)` or a second merge site outside it —
-that's exactly how the engine ended up with the same merge logic duplicated in two places.
+Never write `unwrap_or(SomeConfig::default().field)` or a second merge site outside it — merge
+logic duplicated across two places drifts silently out of sync.
 
 ## Finding identity is a stability contract
 
@@ -81,9 +100,9 @@ fixture.
 ## Tests
 
 Mocks and builders come from `kndo-core`'s `testkit` feature (`MockAdapter`, and friends) —
-don't hand-roll a local mock adapter or a duplicate toy DSL. Use `tempfile` for any
-temporary directory a test needs; never a hand-rolled name under `std::env::temp_dir()`
-(name collisions under parallel test execution are a real, previously-hit race).
+never a hand-rolled local mock adapter or a duplicate toy DSL. Use `tempfile` for any
+temporary directory a test needs, never a hand-rolled name under `std::env::temp_dir()` —
+parallel test execution can collide on a fixed name.
 
 ## Adapters and the toolkit
 
@@ -104,51 +123,40 @@ a plugin doesn't actually mutate the graph silently disables incremental patchin
 project that plugin runs on; returning `false` when it does mutate causes correctness bugs.
 Decide it, don't default it.
 
-## The release surface: one producer, and nothing that first runs at tag time
+## The release surface: one producer, and nothing unverified until a tag
 
-Two rules, both codifying things that were wrong at once and could not have been noticed before
-a tag was pushed.
-
-**One producer for the release artifact.** `xtask::package` owns the target table, the artifact's
-name and its layout. `release.yml` calls `cargo xtask package`; it does not build an archive
-itself. The four consumers — `install.sh`, `action/action.yml`, the Homebrew template, the
-install docs — are checked against that definition by `xtask/tests/release_channels.rs`, never
-against each other and never by eye. When they each spelled it independently, three of the four
-were broken simultaneously: the Action asked for `-gnu` triples no release builds *and* dropped
-the tag's `v`, and both the installer and the docs took the binary from the archive root rather
-than the staged directory it actually lives in. If you change what a release produces, change it
+**One producer for the release artifact.** `xtask::package` owns the target table, the
+artifact's name and its layout. `release.yml` calls `cargo xtask package`; it never builds an
+archive itself. `xtask/tests/release_channels.rs` checks the four consumers — `install.sh`,
+`action/action.yml`, the Homebrew template, the install docs — against that single definition,
+never against each other and never by eye. If you change what a release produces, change it
 there; if you add a consumer, add it to that test.
 
-**A mechanism whose first run is the release is not verified.** `git-cliff` renders the release
-body and had never executed; `install.sh` had never installed anything; the musl build had never
-been built outside a tag; macOS and Windows had never run the suite though releases ship both.
-CI now does each of these on every push. Before adding a step that only runs during a release,
-ask what exercises it beforehand — and if the answer is nothing, that is the thing to build.
-Deliberate exceptions get written down with their measurement, not left silent: `cargo xtask
-bench` is not a CI gate because its baseline is machine-specific (CONTRIBUTING "Benchmarks" has
-the numbers), and `epoch_deadline` is not enabled because wall-clock cutoffs would break the
-determinism gates (`kndo-plugin-api`'s `engine.rs`).
+**A mechanism whose first run is the release is not verified.** CI exercises `git-cliff`'s
+release-body rendering, `install.sh`'s install, the musl build, and the full suite on macOS and
+Windows on every push — the same things a release needs, run before any tag exists. Before
+adding a step that only runs during a release, build what exercises it beforehand — a step with
+nothing exercising it first is the thing to fix. Deliberate exceptions are written down with
+their measurement, not left silent: `cargo xtask bench` is not a CI gate because its baseline is
+machine-specific (CONTRIBUTING "Benchmarks" has the numbers), and `epoch_deadline` is not
+enabled because wall-clock cutoffs would break the determinism gates (`kndo-plugin-api`'s
+`engine.rs`).
 
 **Config the engine does not read is not shipped.** `config::LIVE_TABLES` is what `parse`
 actually reads; `kndo init`'s template is checked against it. A commented-out key is still a
-promise — `[project]`'s `roots`/`exclude` were written into every new project and documented key
-by key, wired to nothing. Wire it or leave it out.
+promise. Wire it or leave it out.
 
 ## Verify on the toolchain CI uses, and with the targets CI installs
 
-"clippy is clean locally" is a claim about one toolchain. CI installs `stable`, which moves;
-a container can sit several releases behind. Six jobs went red on a `useless_conversion` that
-1.98 reports and 1.94 does not, in code nobody had touched — the lint was new, the code was old,
-and the local run could not have seen it. If a CI job disagrees with a local run, compare
+"clippy is clean locally" is a claim about one toolchain. CI installs `stable`, which moves; a
+container can sit several releases behind. If a CI job disagrees with a local run, compare
 `rustc --version` **before** looking for anything subtler; `cargo +<version>` reproduces it.
 
 The same holds for targets. The workspace suite builds real WASM components at run time, so a
 job that runs it needs `targets: wasm32-unknown-unknown` on its toolchain step — without it the
-build dies with "can't find crate for `core`". The `gates` job lacked it, which meant
-`plugin_dependency_implication` — a named gate on the list below — had **never once passed in
-CI**, while appearing in the job list as a step that ran. A step that always fails and a step
-that never runs look the same from a distance; both are worse than no step, because the list
-says the invariant is covered.
+build dies with "can't find crate for `core`". A step that always fails and a step that never
+runs look the same from a distance; both are worse than no step, because the job list says the
+invariant is covered.
 
 ## Gates that must never regress
 
@@ -175,9 +183,7 @@ graph/cache/analysis — and `doc_links`, whose subject is Markdown, on every PR
   only path to a plugin whose framework is an *indirect* dependency: a company framework that
   uses Express internally is never `express` in its users' manifests, so `kndo:express` can
   never self-activate there. No plugin we ship uses it, and it must exist anyway — that is what
-  makes it easy to delete by accident. It already nearly went: a descriptor constructor that
-  hid four of `PluginDescriptor`'s six fields made the field invisible in every built-in, and
-  nothing failed.
+  makes it easy to delete by accident.
 - `builtin_plugin_proofs` (`crates/kndo/tests/builtin_plugin_proofs.rs`) — **every built-in
   plugin has a baseline-then-plugin proof**, the standard `docs/src/plugins/authoring.md` already
   demands of anyone writing one: the fixture's findings fire without the plugin, exactly those
@@ -189,11 +195,10 @@ graph/cache/analysis — and `doc_links`, whose subject is Markdown, on every PR
 
 - `doc_links` (`crates/kndo/tests/doc_links.rs`) — **every relative Markdown link in the
   repository resolves.** A link is the author asserting a path exists, and moving a document
-  means updating what points at it in the same commit; two links broke when the plugin specs
-  moved into the book and nothing noticed. Deliberately links only: prose paths measured 63
-  non-resolving candidates on this repo with essentially no defects among them (examples from
-  other repositories, invented illustrations, paths that exist in a *user's* project), so an
-  analysis firing on those would be noise. The scanner blanks code spans first — a path inside
-  backticks is quoted, not claimed.
+  means updating what points at it in the same commit. Deliberately links only: prose paths
+  carry too many false positives on this repository to be worth checking (examples from other
+  repositories, invented illustrations, paths that exist in a *user's* project), so an analysis
+  firing on those would be noise. The scanner blanks code spans first — a path inside backticks
+  is quoted, not claimed.
 
 No PR should weaken or skip one of these to get green.
