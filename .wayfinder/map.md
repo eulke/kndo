@@ -25,9 +25,10 @@ no obvio, una invariante, una restricción — nunca contrasta con un estado pas
 Y", "ya no", "se agregó para") ni promete uno futuro, y no queda ninguna referencia a un incidente,
 branch, PR o sesión puntual. `CLAUDE.md` conserva cada regla y cada gate que ya tiene, reescritos
 en presente, más una sección nueva que fija esta misma política de comentarios. `internal/` y
-`docs/` quedan intactos tal como están — son el registro de decisiones del proyecto, no
-contaminación — salvo `internal/plan-detection-gap-fixes.md`, que se retira. Al cerrar el último
-ticket de este mapa, el propio tracker (`.wayfinder/`) se borra del repo.
+`docs/` no se recortan por volumen — una auditoría de los 39 documentos de `internal/` confirmó
+que ninguno es redundante ni está muerto — pero sí se corrigen donde quedaron desactualizados
+respecto al código (22 de 39 lo estaban), y `internal/plan-detection-gap-fixes.md` se retira.
+Al cerrar el último ticket de este mapa, el propio tracker (`.wayfinder/`) se borra del repo.
 
 ## Notes
 
@@ -50,12 +51,22 @@ hecho presente, no como contraste histórico. No tocar comentarios que ya son pr
 documentan un WHY no obvio (la mayoría de los rustdoc de contratos/invariantes está bien así).
 No genera falta ningún cambio de comportamiento: es edición de comentarios/prose únicamente.
 
-**Alcance de "documentación interna" (decidido):** `internal/` (RFCs, ADRs, contratos,
-ROADMAP, `adapters/*.md`, `product/vision.md`, `internal/spikes/0001-performance.md`) y `docs/`
-(manual de usuario, mdBook) quedan **intactos** — son el mecanismo de gobernanza del proyecto
-(RFCs vivos, ADRs inmutables, contratos normativos que `CLAUDE.md` ya protege), no contaminación.
-Única excepción: `internal/plan-detection-gap-fixes.md` es un plan de sesión atado a una branch
-puntual (`claude/core-api-ergonomics-architecture-983pom`) — se retira (ticket 02).
+**Alcance de "documentación interna" (decidido, refinado tras auditoría):** `internal/` no se
+achica por volumen — es el mecanismo de gobernanza del proyecto (RFCs vivos, ADRs inmutables,
+contratos normativos que `CLAUDE.md` ya protege). Una auditoría de sus 39 documentos (11 agentes
+en paralelo, cada afirmación comparada contra el código actual) confirmó que ninguno es
+redundante ni está muerto: cada RFC/ADR/contrato/spec sigue siendo la única fuente de esa
+decisión. Lo que sí encontró: **22 de 39 quedaron desactualizados** — afirman algo que el código
+ya no hace, o falta algo que el código ya hace — ver tickets 21–32. La corrección es edición
+dirigida de las secciones puntuales que fallaron la verificación, nunca reescritura completa ni
+recorte estructural del documento. Dos redundancias reales, ambas resueltas dentro de la
+corrección misma (no como borrado de un documento entero): la nota de estado de ADR 0003
+duplica lo que `contracts/wasm-abi.md` §5 ya documenta correctamente — se recorta en el ADR, el
+contrato es la fuente; el `## 0` de `adapters/css.md` se superpone con la sección "M5 progress —
+CSS adapter" de `ROADMAP.md` — `css.md` queda como fuente canónica, el ROADMAP se recorta a un
+puntero. `docs/` (manual de usuario, mdBook) no fue auditado — sigue fuera de alcance. Única
+baja real: `internal/plan-detection-gap-fixes.md`, un plan de sesión atado a una branch puntual
+(`claude/core-api-ergonomics-architecture-983pom`) — se retira (ticket 02).
 
 **Reescritura de `CLAUDE.md` (decidido):** cada regla existente y sus gates nombrados se
 mantienen en sustancia, reescritos como instrucción presente ("nunca hagas X", "Y vive en Z"),
@@ -80,6 +91,11 @@ en el mismo commit.
 
 ## Out of scope
 
-- `docs/` (mdBook de usuario) y todo `internal/` salvo `plan-detection-gap-fixes.md`: RFCs,
-  ADRs, contratos, ROADMAP, `adapters/*.md`, `product/vision.md`, `spikes/0001-performance.md`
-  — son el registro de decisiones del proyecto, confirmado explícitamente al fijar el destino.
+- `docs/` (mdBook de usuario): no auditado, no se toca.
+- Construir funcionalidad nueva para que el código alcance lo que un doc desactualizado
+  promete — la corrección va en el sentido contrario: el doc se ajusta a lo que el código hace
+  hoy. Caso concreto: `adapters/js-ts.md` documenta soporte de `tsconfig` `baseUrl`/`paths` que
+  no existe en `kndo-adapter-js` (ticket 29) — se corrige el doc, no se construye la feature.
+- Restructurar el layout de `internal/` (fusionar carpetas, cambiar la convención
+  RFC/ADR/contrato/ROADMAP) — la auditoría no encontró necesidad de eso; toda corrección es
+  puntual, documento por documento.
