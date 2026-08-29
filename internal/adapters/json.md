@@ -1,6 +1,6 @@
 # Adapter Spec — JSON
 
-**Status:** Draft, pre-implementation · **Depends on:** RFC 0002 §3, §7 · docs/rfcs/0012-reference-semantics-and-visibility.md (unit-key §8, visibility ladder §6, generated-origin §7)
+**Status:** Draft · **Depends on:** RFC 0002 §3, §7 · docs/rfcs/0012-reference-semantics-and-visibility.md (unit-key §8, visibility ladder §6, generated-origin §7)
 
 ## 0. What's structurally different from every prior adapter, and why it matters here
 

@@ -1,6 +1,6 @@
 # Adapter Spec — CSS
 
-**Status:** Draft, pre-implementation · **Depends on:** RFC 0002 §3, §7 · docs/rfcs/0012-reference-semantics-and-visibility.md (member_of §3, within §4, RefKind §5, visibility ladder §6, generated-origin §7, unit-key §8) · ADR 0002 (tree-sitter)
+**Status:** Draft · **Depends on:** RFC 0002 §3, §7 · docs/rfcs/0012-reference-semantics-and-visibility.md (member_of §3, within §4, RefKind §5, visibility ladder §6, generated-origin §7, unit-key §8) · ADR 0002 (tree-sitter)
 
 ## 0. What's structurally different from every prior adapter, and why it matters here
 
