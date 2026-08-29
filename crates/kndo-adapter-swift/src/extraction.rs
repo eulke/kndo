@@ -588,9 +588,9 @@ fn handle_property(item: Node, src: &[u8], ctx: &Ctx<'_>, out: &mut FileFacts) {
         walk_type_refs(annotation, src, ctx.owner, out);
     }
     walk_property_bodies(item, src, property_value_within(ctx, name), out);
-    // A computed property is a callable and now says so in its kind — so it must have a shape
-    // too, or `crap` and `duplicate` cannot see a getter however gnarly it is. Observers are
-    // deliberately excluded: `willSet`/`didSet` run around a store, they are not the property.
+    // A computed property is a callable, so its kind must carry a shape too, or `crap` and
+    // `duplicate` cannot see a getter however gnarly it is. Observers are deliberately
+    // excluded: `willSet`/`didSet` run around a store, they are not the property.
     let accessors = computed_accessor_bodies(item);
     if !accessors.is_empty() {
         let (_, qualified) = qualify(ctx.owner, name);
@@ -629,9 +629,8 @@ fn computed_accessor_bodies(item: Node) -> Vec<Node> {
 
 /// A **computed** property is a getter, not a value: `var isValid: Bool { … }` compiles to a
 /// method and has a body a test can exercise, where `static let https = Scheme("https")` has a
-/// value and nothing to exercise. Calling both `Field` made the kind unable to tell a header-name
-/// constant from real logic, which is what let `untested` accuse 185 of vapor's stored constants
-/// of not being tested.
+/// value and nothing to exercise. Giving both kind `Field` would collapse that distinction,
+/// leaving `untested` unable to tell a header-name constant from real logic.
 ///
 /// `willSet`/`didSet` observers do NOT make a property computed — the property still stores its
 /// value, and the observers run around the store rather than instead of it.
@@ -931,10 +930,10 @@ mod tests {
 
     #[test]
     fn a_computed_property_gets_a_shape_and_a_stored_one_does_not() {
-        // Reclassifying computed properties to `Method` without giving them a shape left a
-        // callable `crap` and `duplicate` could not see. One symbol, one numbering: the getter
-        // is ordinal 0 (reading the property runs it) and the setter continues, so the two
-        // cannot collide on a nested shape's identity.
+        // A computed property's kind alone isn't enough — it needs a shape too, or `crap` and
+        // `duplicate` cannot see a callable getter. One symbol, one numbering: the getter is
+        // ordinal 0 (reading the property runs it) and the setter continues, so the two cannot
+        // collide on a nested shape's identity.
         let f = facts(
             "struct S {\n\
              \x20   var stored: Int = 0\n\
@@ -994,9 +993,9 @@ mod tests {
     #[test]
     fn a_computed_property_is_a_callable_and_a_stored_one_is_not() {
         // The kind has to separate `static let https = Scheme("https")` — a value with nothing
-        // to exercise — from `var isValid: Bool { … }`, which is a getter with a body. Both
-        // used to be `Field`, so nothing downstream could tell a header-name constant from
-        // real logic.
+        // to exercise — from `var isValid: Bool { … }`, which is a getter with a body: collapsing
+        // both into `Field` would leave nothing downstream able to tell a header-name constant
+        // from real logic.
         let f = facts(
             "struct Scheme {\n\
              \x20   static let https = Scheme()\n\
@@ -1217,7 +1216,7 @@ mod tests {
         assert_eq!(r.within.as_deref(), Some("shared"));
 
         // `main.swift` is a script: top-level code executes procedurally at load, so this
-        // stays the ordinary "module load" `within: None` (unaffected by the fix above).
+        // stays the ordinary "module load" `within: None`.
         let script = extract("Sources/App/main.swift", b"let shared = makeHelper()\n");
         let r = script
             .references

@@ -503,8 +503,8 @@ fn emit_explicit_witness(spec: Node, src: &[u8], out: &mut FileFacts) {
         // write the assertion (the composite-literal form below is the other). Tree shape is
         // `call_expression(parenthesized_expression(… T …), argument_list(nil))`, and `T` sits
         // there as a plain `identifier` because `*T` in expression position is not a type node.
-        // Without this the idiom contributed nothing at all: the blank name is not extracted
-        // and the assertion it exists to make was invisible.
+        // Without this branch, the idiom contributes nothing: the blank name isn't extracted,
+        // and the assertion it exists to make stays invisible.
         if n.kind() == "call_expression" {
             if let Some(witness) = n
                 .child_by_field_name("function")
@@ -800,9 +800,9 @@ mod tests {
     fn a_blank_var_declares_nothing_but_asserts_an_interface() {
         // `var _ StructValidator = (*defaultValidator)(nil)` is Go's compile-time interface
         // assertion, and it appears several times per repo in gin, hugo and go-redis. The
-        // blank name is unreferenceable by definition, so extracting it as a symbol is a
-        // guaranteed false `unused`; the assertion it exists to make was meanwhile invisible,
-        // because the witness only read the composite-literal form.
+        // blank name is unreferenceable by definition, so extracting it as a symbol would be a
+        // guaranteed false `unused`; the witness must cover both the conversion and
+        // composite-literal forms, or the assertion it exists to make goes unseen.
         let f = extract(
             "a.go",
             b"package p\nvar _ StructValidator = (*defaultValidator)(nil)\n",
