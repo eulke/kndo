@@ -316,9 +316,9 @@ fn every_published_url_names_the_repository_that_exists() {
             // this project's own two spellings are at issue.
             if line.contains("eulke/kndo") && !line.contains("eulke/kondo") {
                 panic!(
-                    "{rel}:{} names eulke/kndo, which does not exist until the ADR 0007 rename \
-                     happens — publish eulke/kondo, which resolves before it and (through \
-                     GitHub's redirect) after it too:\n  {}",
+                    "{rel}:{} names eulke/kndo, which does not exist yet — publish eulke/kondo, \
+                     which resolves today and (through GitHub's redirect) will keep resolving \
+                     after the repository is renamed too:\n  {}",
                     n + 1,
                     line.trim()
                 );

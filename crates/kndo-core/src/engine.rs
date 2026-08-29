@@ -3578,7 +3578,10 @@ mod tests {
         );
         let budget = result.budget.as_ref().expect("the section opts in");
         assert!(budget.failed());
-        assert!(result.gate_fails(None), "the two gate halves compose with OR");
+        assert!(
+            result.gate_fails(None),
+            "the two gate halves compose with OR"
+        );
 
         let net = budget
             .rules

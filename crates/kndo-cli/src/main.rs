@@ -36,7 +36,7 @@ check flags
   --fail-on <sev>  exit 1 at/above: error | warning (diff default) | info | none (full default)
   --only <cats>    report only these categories (comma-separated, repeatable)
   --skip <cats>    report everything except these
-  --strict         promote what RFC 0005 marks promotable (today: undeclared → error)
+  --strict         promote categories marked promotable (today: undeclared → error)
   --format <f>     human (tty default) | json (piped default) | agent | sarif
   --quiet | --verbose | --no-cache | --threads <n> | --color <auto|always|never>
 

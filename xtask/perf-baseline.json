@@ -1,5 +1,5 @@
 {
-  "comment": "RFC 0008 §7 benchmark baseline — end-to-end wall ms, min-of-N, release build. Machine-specific: re-record with `cargo xtask bench --update-baseline` when the measuring machine changes; the gate compares same-machine runs only.",
+  "comment": "Benchmark baseline — end-to-end wall ms, min-of-N, release build. Machine-specific: re-record with `cargo xtask bench --update-baseline` when the measuring machine changes; the gate compares same-machine runs only.",
   "generator_version": 1,
   "scenarios": {
     "1k/cold-full": 137.3,
