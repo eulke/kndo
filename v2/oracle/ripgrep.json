@@ -1,0 +1,4810 @@
+{
+ "schema_version": "1.3.0",
+ "kndo_version": "0.1.0",
+ "run": {
+  "mode": "full",
+  "cache": "disabled",
+  "adapters": [
+   {
+    "id": "js-ts",
+    "files": 0
+   },
+   {
+    "id": "go",
+    "files": 0
+   },
+   {
+    "id": "rust",
+    "files": 110
+   },
+   {
+    "id": "java",
+    "files": 0
+   },
+   {
+    "id": "kotlin",
+    "files": 0
+   },
+   {
+    "id": "swift",
+    "files": 0
+   },
+   {
+    "id": "json",
+    "files": 0
+   },
+   {
+    "id": "css",
+    "files": 0
+   },
+   {
+    "id": "html",
+    "files": 0
+   }
+  ],
+  "plugins": [
+   {
+    "id": "kndo:coverage-lcov",
+    "activated_by": "always-on"
+   },
+   {
+    "id": "kndo:coverage-cobertura",
+    "activated_by": "always-on"
+   },
+   {
+    "id": "kndo:coverage-jacoco",
+    "activated_by": "always-on"
+   },
+   {
+    "id": "kndo:coverage-go",
+    "activated_by": "always-on"
+   },
+   {
+    "id": "kndo:serde",
+    "activated_by": "manifest-dependency: serde"
+   }
+  ],
+  "abstained": [
+   {
+    "category": "crap",
+    "reason": "crap: no coverage ingested — skipped (the score is complexity × untestedness; without a report the coverage factor would be a guess, not a measurement — drop a report at a well-known path (lcov.info, coverage.xml, jacoco.xml, coverage.out, …) or point [plugins.<id>] report at one to enable it)"
+   }
+  ]
+ },
+ "findings": [
+  {
+   "id": "kndo-00e6ee352b8a",
+   "category": "untested",
+   "group": "risk",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "probable",
+   "message": "crates/printer/src/counter.rs#CounterWriter.supports_color is production-reachable but no test reaches this method",
+   "location": {
+    "path": "crates/printer/src/counter.rs",
+    "range": {
+     "start": [
+      69,
+      5
+     ],
+     "end": [
+      71,
+      6
+     ]
+    },
+    "symbol": "CounterWriter.supports_color",
+    "package": "grep-printer"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-01a7813811b0",
+   "category": "untested",
+   "group": "risk",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "probable",
+   "message": "crates/cli/src/process.rs#CommandReader.read is production-reachable but no test reaches this method",
+   "location": {
+    "path": "crates/cli/src/process.rs",
+    "range": {
+     "start": [
+      255,
+      5
+     ],
+     "end": [
+      267,
+      6
+     ]
+    },
+    "symbol": "CommandReader.read",
+    "package": "grep-cli"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-02606c5f47dc",
+   "category": "untested",
+   "group": "risk",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "probable",
+   "message": "crates/cli/src/decompress.rs#DecompressionMatcherBuilder.try_associate is production-reachable but no test reaches this method",
+   "location": {
+    "path": "crates/cli/src/decompress.rs",
+    "range": {
+     "start": [
+      125,
+      5
+     ],
+     "end": [
+      142,
+      6
+     ]
+    },
+    "symbol": "DecompressionMatcherBuilder.try_associate",
+    "package": "grep-cli"
+   },
+   "sources": [
+    "adapter:rust",
+    "core:surface"
+   ]
+  },
+  {
+   "id": "kndo-0335c8cc8b2b",
+   "category": "duplicate",
+   "group": "waste",
+   "subject_kind": "file",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "11 identical files share the same content: LICENSE-MIT, crates/cli/LICENSE-MIT, crates/globset/LICENSE-MIT and 8 more",
+   "location": {
+    "path": "LICENSE-MIT"
+   },
+   "related": [
+    {
+     "role": "clone",
+     "path": "LICENSE-MIT"
+    },
+    {
+     "role": "clone",
+     "path": "crates/cli/LICENSE-MIT"
+    },
+    {
+     "role": "clone",
+     "path": "crates/globset/LICENSE-MIT"
+    },
+    {
+     "role": "clone",
+     "path": "crates/grep/LICENSE-MIT"
+    },
+    {
+     "role": "clone",
+     "path": "crates/ignore/LICENSE-MIT"
+    },
+    {
+     "role": "clone",
+     "path": "crates/index/LICENSE-MIT"
+    },
+    {
+     "role": "clone",
+     "path": "crates/matcher/LICENSE-MIT"
+    },
+    {
+     "role": "clone",
+     "path": "crates/pcre2/LICENSE-MIT"
+    },
+    {
+     "role": "clone",
+     "path": "crates/printer/LICENSE-MIT"
+    },
+    {
+     "role": "clone",
+     "path": "crates/regex/LICENSE-MIT"
+    },
+    {
+     "role": "clone",
+     "path": "crates/searcher/LICENSE-MIT"
+    }
+   ]
+  },
+  {
+   "id": "kndo-034c5fff0a74",
+   "category": "untested",
+   "group": "risk",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "probable",
+   "message": "crates/matcher/src/interpolate.rs#Ref.from is production-reachable but no test reaches this method",
+   "location": {
+    "path": "crates/matcher/src/interpolate.rs",
+    "range": {
+     "start": [
+      80,
+      5
+     ],
+     "end": [
+      82,
+      6
+     ]
+    },
+    "symbol": "Ref.from",
+    "package": "grep-matcher"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-034c5fff0a74",
+   "category": "untested",
+   "group": "risk",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "probable",
+   "message": "crates/matcher/src/interpolate.rs#Ref.from is production-reachable but no test reaches this method",
+   "location": {
+    "path": "crates/matcher/src/interpolate.rs",
+    "range": {
+     "start": [
+      87,
+      5
+     ],
+     "end": [
+      89,
+      6
+     ]
+    },
+    "symbol": "Ref.from",
+    "package": "grep-matcher"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-035dedb19230",
+   "category": "untested",
+   "group": "risk",
+   "subject_kind": "function",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "crates/cli/src/lib.rs#is_tty_stdin is production-reachable but no test reaches this function",
+   "location": {
+    "path": "crates/cli/src/lib.rs",
+    "range": {
+     "start": [
+      260,
+      1
+     ],
+     "end": [
+      263,
+      2
+     ]
+    },
+    "symbol": "is_tty_stdin",
+    "package": "grep-cli"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-05f153c51e47",
+   "category": "untested",
+   "group": "risk",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "probable",
+   "message": "crates/globset/src/serde_impl.rs#Glob.serialize is production-reachable but no test reaches this method",
+   "location": {
+    "path": "crates/globset/src/serde_impl.rs",
+    "range": {
+     "start": [
+      9,
+      5
+     ],
+     "end": [
+      14,
+      6
+     ]
+    },
+    "symbol": "Glob.serialize",
+    "package": "globset"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-061062acc0f6",
+   "category": "internal-only",
+   "group": "waste",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "crates/regex/src/matcher.rs#RegexCaptures.captures_mut is declared pub(crate) but only used within its own file — private would suffice for this method",
+   "location": {
+    "path": "crates/regex/src/matcher.rs",
+    "range": {
+     "start": [
+      548,
+      5
+     ],
+     "end": [
+      550,
+      6
+     ]
+    },
+    "symbol": "RegexCaptures.captures_mut",
+    "package": "grep-regex"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-07415f178fa7",
+   "category": "duplicate",
+   "group": "waste",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "2 structurally identical methods (identifiers/literals aside): crates/index/src/literal.rs#GramQuery.intersect, crates/index/src/literal.rs#GramQuery.union — extract the shared implementation",
+   "location": {
+    "path": "crates/index/src/literal.rs",
+    "range": {
+     "start": [
+      205,
+      5
+     ],
+     "end": [
+      254,
+      6
+     ]
+    },
+    "symbol": "GramQuery.intersect",
+    "package": "grep-index"
+   },
+   "related": [
+    {
+     "role": "clone",
+     "path": "crates/index/src/literal.rs",
+     "range": {
+      "start": [
+       205,
+       5
+      ],
+      "end": [
+       254,
+       6
+      ]
+     },
+     "note": "GramQuery.intersect"
+    },
+    {
+     "role": "clone",
+     "path": "crates/index/src/literal.rs",
+     "range": {
+      "start": [
+       153,
+       5
+      ],
+      "end": [
+       203,
+       6
+      ]
+     },
+     "note": "GramQuery.union"
+    }
+   ],
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-07c047b5a9f4",
+   "category": "untested",
+   "group": "risk",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "probable",
+   "message": "crates/printer/src/counter.rs#CounterWriter.flush is production-reachable but no test reaches this method",
+   "location": {
+    "path": "crates/printer/src/counter.rs",
+    "range": {
+     "start": [
+      62,
+      5
+     ],
+     "end": [
+      64,
+      6
+     ]
+    },
+    "symbol": "CounterWriter.flush",
+    "package": "grep-printer"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-09b2cede48f1",
+   "category": "internal-only",
+   "group": "waste",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "crates/index/src/index.rs#IndexDiscovery.env_name is declared pub but only used within its own file — private would suffice for this method",
+   "location": {
+    "path": "crates/index/src/index.rs",
+    "range": {
+     "start": [
+      153,
+      5
+     ],
+     "end": [
+      159,
+      6
+     ]
+    },
+    "symbol": "IndexDiscovery.env_name",
+    "package": "grep-index"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-09dbe66b7593",
+   "category": "internal-only",
+   "group": "waste",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "possible",
+   "message": "crates/index/src/index.rs#IndexDiscovery.create is declared pub and every confidently resolved use is within its own file, but weaker matches point outside it — private would suffice for this method only if those are not real uses",
+   "location": {
+    "path": "crates/index/src/index.rs",
+    "range": {
+     "start": [
+      169,
+      5
+     ],
+     "end": [
+      172,
+      6
+     ]
+    },
+    "symbol": "IndexDiscovery.create",
+    "package": "grep-index"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-0a9704dc270d",
+   "category": "internal-only",
+   "group": "waste",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "crates/core/flags/hiargs.rs#BinaryDetection.is_none is declared pub(crate) but only used within its own file — private would suffice for this method",
+   "location": {
+    "path": "crates/core/flags/hiargs.rs",
+    "range": {
+     "start": [
+      1215,
+      5
+     ],
+     "end": [
+      1218,
+      6
+     ]
+    },
+    "symbol": "BinaryDetection.is_none",
+    "package": "ripgrep"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-0c80b634c88e",
+   "category": "duplicate",
+   "group": "waste",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "3 structurally identical methods (identifiers/literals aside): crates/printer/src/color.rs#OutType.from_str, crates/printer/src/color.rs#SpecType.from_str, crates/printer/src/color.rs#Style.from_str — extract the shared implementation",
+   "location": {
+    "path": "crates/printer/src/color.rs",
+    "range": {
+     "start": [
+      354,
+      5
+     ],
+     "end": [
+      363,
+      6
+     ]
+    },
+    "symbol": "OutType.from_str",
+    "package": "grep-printer"
+   },
+   "related": [
+    {
+     "role": "clone",
+     "path": "crates/printer/src/color.rs",
+     "range": {
+      "start": [
+       354,
+       5
+      ],
+      "end": [
+       363,
+       6
+      ]
+     },
+     "note": "OutType.from_str"
+    },
+    {
+     "role": "clone",
+     "path": "crates/printer/src/color.rs",
+     "range": {
+      "start": [
+       369,
+       5
+      ],
+      "end": [
+       377,
+       6
+      ]
+     },
+     "note": "SpecType.from_str"
+    },
+    {
+     "role": "clone",
+     "path": "crates/printer/src/color.rs",
+     "range": {
+      "start": [
+       383,
+       5
+      ],
+      "end": [
+       395,
+       6
+      ]
+     },
+     "note": "Style.from_str"
+    }
+   ],
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-105c6f6b83fe",
+   "category": "duplicate",
+   "group": "waste",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "3 structurally identical methods (identifiers/literals aside): crates/searcher/src/searcher/core.rs#Core.sink_after_context, crates/searcher/src/searcher/core.rs#Core.sink_before_context, crates/searcher/src/searcher/core.rs#Core.sink_other_context — extract the shared implementation",
+   "location": {
+    "path": "crates/searcher/src/searcher/core.rs",
+    "range": {
+     "start": [
+      585,
+      5
+     ],
+     "end": [
+      615,
+      6
+     ]
+    },
+    "symbol": "Core.sink_after_context",
+    "package": "grep-searcher"
+   },
+   "related": [
+    {
+     "role": "clone",
+     "path": "crates/searcher/src/searcher/core.rs",
+     "range": {
+      "start": [
+       585,
+       5
+      ],
+      "end": [
+       615,
+       6
+      ]
+     },
+     "note": "Core.sink_after_context"
+    },
+    {
+     "role": "clone",
+     "path": "crates/searcher/src/searcher/core.rs",
+     "range": {
+      "start": [
+       556,
+       5
+      ],
+      "end": [
+       583,
+       6
+      ]
+     },
+     "note": "Core.sink_before_context"
+    },
+    {
+     "role": "clone",
+     "path": "crates/searcher/src/searcher/core.rs",
+     "range": {
+      "start": [
+       617,
+       5
+      ],
+      "end": [
+       644,
+       6
+      ]
+     },
+     "note": "Core.sink_other_context"
+    }
+   ],
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-10d34595bbb1",
+   "category": "untested",
+   "group": "risk",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "probable",
+   "message": "crates/globset/src/fnv.rs#Hasher.write is production-reachable but no test reaches this method",
+   "location": {
+    "path": "crates/globset/src/fnv.rs",
+    "range": {
+     "start": [
+      24,
+      5
+     ],
+     "end": [
+      29,
+      6
+     ]
+    },
+    "symbol": "Hasher.write",
+    "package": "globset"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-128bd9a41608",
+   "category": "untested",
+   "group": "risk",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "probable",
+   "message": "crates/printer/src/color.rs#UserColorSpec.to_color_spec is production-reachable but no test reaches this method",
+   "location": {
+    "path": "crates/printer/src/color.rs",
+    "range": {
+     "start": [
+      162,
+      5
+     ],
+     "end": [
+      166,
+      6
+     ]
+    },
+    "symbol": "UserColorSpec.to_color_spec",
+    "package": "grep-printer"
+   },
+   "sources": [
+    "adapter:rust",
+    "core:surface"
+   ]
+  },
+  {
+   "id": "kndo-12bbedce6ada",
+   "category": "internal-only",
+   "group": "waste",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "crates/index/src/literal.rs#GramQueryBuilder.limit_len is declared pub but only used within its own file — private would suffice for this method",
+   "location": {
+    "path": "crates/index/src/literal.rs",
+    "range": {
+     "start": [
+      657,
+      5
+     ],
+     "end": [
+      660,
+      6
+     ]
+    },
+    "symbol": "GramQueryBuilder.limit_len",
+    "package": "grep-index"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-13dabb16c43d",
+   "category": "internal-only",
+   "group": "waste",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "possible",
+   "message": "crates/index/src/literal.rs#GramQueryBuilder.build is declared pub and every confidently resolved use is within its own file, but weaker matches point outside it — private would suffice for this method only if those are not real uses",
+   "location": {
+    "path": "crates/index/src/literal.rs",
+    "range": {
+     "start": [
+      667,
+      5
+     ],
+     "end": [
+      669,
+      6
+     ]
+    },
+    "symbol": "GramQueryBuilder.build",
+    "package": "grep-index"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-17eda4261cc5",
+   "category": "untested",
+   "group": "risk",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "crates/matcher/src/lib.rs#Captures.as_match is production-reachable but no test reaches this method",
+   "location": {
+    "path": "crates/matcher/src/lib.rs",
+    "range": {
+     "start": [
+      397,
+      5
+     ],
+     "end": [
+      399,
+      6
+     ]
+    },
+    "symbol": "Captures.as_match",
+    "package": "grep-matcher"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-1821a226c429",
+   "category": "internal-only",
+   "group": "waste",
+   "subject_kind": "function",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "crates/matcher/src/interpolate.rs#interpolate is declared pub but only used within its own package — pub(crate) would suffice for this function",
+   "location": {
+    "path": "crates/matcher/src/interpolate.rs",
+    "range": {
+     "start": [
+      14,
+      1
+     ],
+     "end": [
+      56,
+      2
+     ]
+    },
+    "symbol": "interpolate",
+    "package": "grep-matcher"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-188a2954d277",
+   "category": "untested",
+   "group": "risk",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "probable",
+   "message": "crates/printer/src/standard.rs#StandardBuilder.build_no_color is production-reachable but no test reaches this method",
+   "location": {
+    "path": "crates/printer/src/standard.rs",
+    "range": {
+     "start": [
+      140,
+      5
+     ],
+     "end": [
+      145,
+      6
+     ]
+    },
+    "symbol": "StandardBuilder.build_no_color",
+    "package": "grep-printer"
+   },
+   "sources": [
+    "adapter:rust",
+    "core:surface"
+   ]
+  },
+  {
+   "id": "kndo-196138da0822",
+   "category": "duplicate",
+   "group": "waste",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "2 structurally identical methods (identifiers/literals aside): crates/ignore/src/types.rs#TypesBuilder.negate, crates/ignore/src/types.rs#TypesBuilder.select — extract the shared implementation",
+   "location": {
+    "path": "crates/ignore/src/types.rs",
+    "range": {
+     "start": [
+      399,
+      5
+     ],
+     "end": [
+      408,
+      6
+     ]
+    },
+    "symbol": "TypesBuilder.negate",
+    "package": "ignore"
+   },
+   "related": [
+    {
+     "role": "clone",
+     "path": "crates/ignore/src/types.rs",
+     "range": {
+      "start": [
+       399,
+       5
+      ],
+      "end": [
+       408,
+       6
+      ]
+     },
+     "note": "TypesBuilder.negate"
+    },
+    {
+     "role": "clone",
+     "path": "crates/ignore/src/types.rs",
+     "range": {
+      "start": [
+       385,
+       5
+      ],
+      "end": [
+       394,
+       6
+      ]
+     },
+     "note": "TypesBuilder.select"
+    }
+   ],
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-219ee20a3d31",
+   "category": "internal-only",
+   "group": "waste",
+   "subject_kind": "struct",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "crates/ignore/src/dir.rs#IgnoreMatch is declared pub(crate) but only used within its own file — private would suffice for this struct",
+   "location": {
+    "path": "crates/ignore/src/dir.rs",
+    "range": {
+     "start": [
+      38,
+      1
+     ],
+     "end": [
+      38,
+      57
+     ]
+    },
+    "symbol": "IgnoreMatch",
+    "package": "ignore"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-2243b2d2d0b5",
+   "category": "unused",
+   "group": "waste",
+   "subject_kind": "dependency",
+   "severity": "warning",
+   "confidence": "certain",
+   "message": "arbitrary is declared in globset's manifest but never imported",
+   "location": {
+    "path": "crates/globset/Cargo.toml",
+    "symbol": "arbitrary",
+    "package": "globset"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-227d49b58e21",
+   "category": "unused",
+   "group": "waste",
+   "subject_kind": "method",
+   "severity": "warning",
+   "confidence": "certain",
+   "message": "crates/index/src/index.rs#Handle.read_write_mut is unreachable: nothing references this method",
+   "location": {
+    "path": "crates/index/src/index.rs",
+    "range": {
+     "start": [
+      200,
+      5
+     ],
+     "end": [
+      207,
+      6
+     ]
+    },
+    "symbol": "Handle.read_write_mut",
+    "package": "grep-index"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-22ded3dfa0fd",
+   "category": "untested",
+   "group": "risk",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "probable",
+   "message": "crates/printer/src/json.rs#JSON.has_written is production-reachable but no test reaches this method",
+   "location": {
+    "path": "crates/printer/src/json.rs",
+    "range": {
+     "start": [
+      566,
+      5
+     ],
+     "end": [
+      568,
+      6
+     ]
+    },
+    "symbol": "JSON.has_written",
+    "package": "grep-printer"
+   },
+   "sources": [
+    "adapter:rust",
+    "core:surface"
+   ]
+  },
+  {
+   "id": "kndo-26fe2ef11009",
+   "category": "version-skew",
+   "group": "defect",
+   "subject_kind": "dependency",
+   "severity": "warning",
+   "confidence": "certain",
+   "message": "anyhow is declared with diverging version requirements: Cargo.toml (1.0.75), crates/index/Cargo.toml (1.0.103)",
+   "location": {
+    "path": "Cargo.toml",
+    "symbol": "anyhow"
+   },
+   "related": [
+    {
+     "role": "declaration",
+     "path": "Cargo.toml",
+     "note": "1.0.75"
+    },
+    {
+     "role": "declaration",
+     "path": "crates/index/Cargo.toml",
+     "note": "1.0.103"
+    }
+   ],
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-29397f4cda6a",
+   "category": "internal-only",
+   "group": "waste",
+   "subject_kind": "enum",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "crates/index/src/literal.rs#GramQuery is declared pub but only used within its own file — private would suffice for this enum",
+   "location": {
+    "path": "crates/index/src/literal.rs",
+    "range": {
+     "start": [
+      16,
+      1
+     ],
+     "end": [
+      20,
+      2
+     ]
+    },
+    "symbol": "GramQuery",
+    "package": "grep-index"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-32321911d8a2",
+   "category": "internal-only",
+   "group": "waste",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "possible",
+   "message": "crates/index/src/index.rs#IndexBuilder.new is declared pub and every confidently resolved use is within its own file, but weaker matches point outside it — private would suffice for this method only if those are not real uses",
+   "location": {
+    "path": "crates/index/src/index.rs",
+    "range": {
+     "start": [
+      39,
+      5
+     ],
+     "end": [
+      41,
+      6
+     ]
+    },
+    "symbol": "IndexBuilder.new",
+    "package": "grep-index"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-32c72dd45a21",
+   "category": "internal-only",
+   "group": "waste",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "possible",
+   "message": "crates/core/search.rs#SearchResult.stats is declared pub(crate) and every confidently resolved use is within its own file, but weaker matches point outside it — private would suffice for this method only if those are not real uses",
+   "location": {
+    "path": "crates/core/search.rs",
+    "range": {
+     "start": [
+      186,
+      5
+     ],
+     "end": [
+      188,
+      6
+     ]
+    },
+    "symbol": "SearchResult.stats",
+    "package": "ripgrep"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-32ecdbb64458",
+   "category": "internal-only",
+   "group": "waste",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "possible",
+   "message": "crates/printer/src/hyperlink/mod.rs#Interpolator.new is declared pub(crate) and every confidently resolved use is within its own file, but weaker matches point outside it — private would suffice for this method only if those are not real uses",
+   "location": {
+    "path": "crates/printer/src/hyperlink/mod.rs",
+    "range": {
+     "start": [
+      633,
+      5
+     ],
+     "end": [
+      635,
+      6
+     ]
+    },
+    "symbol": "Interpolator.new",
+    "package": "grep-printer"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-37a0bc5dfa93",
+   "category": "version-skew",
+   "group": "defect",
+   "subject_kind": "dependency",
+   "severity": "warning",
+   "confidence": "certain",
+   "message": "walkdir is declared with diverging version requirements: Cargo.toml (2), crates/grep/Cargo.toml (2.2.7), crates/ignore/Cargo.toml (2.4.0)",
+   "location": {
+    "path": "Cargo.toml",
+    "symbol": "walkdir"
+   },
+   "related": [
+    {
+     "role": "declaration",
+     "path": "Cargo.toml",
+     "note": "2"
+    },
+    {
+     "role": "declaration",
+     "path": "crates/grep/Cargo.toml",
+     "note": "2.2.7"
+    },
+    {
+     "role": "declaration",
+     "path": "crates/ignore/Cargo.toml",
+     "note": "2.4.0"
+    }
+   ],
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-385b8fbd76c1",
+   "category": "untested",
+   "group": "risk",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "crates/matcher/src/lib.rs#ByteSet.add_all is production-reachable but no test reaches this method",
+   "location": {
+    "path": "crates/matcher/src/lib.rs",
+    "range": {
+     "start": [
+      331,
+      5
+     ],
+     "end": [
+      335,
+      6
+     ]
+    },
+    "symbol": "ByteSet.add_all",
+    "package": "grep-matcher"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-394900a7c4f1",
+   "category": "internal-only",
+   "group": "waste",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "possible",
+   "message": "crates/core/flags/lowargs.rs#ContextModeLimited.get is declared pub(crate) and every confidently resolved use is within its own file, but weaker matches point outside it — private would suffice for this method only if those are not real uses",
+   "location": {
+    "path": "crates/core/flags/lowargs.rs",
+    "range": {
+     "start": [
+      464,
+      5
+     ],
+     "end": [
+      476,
+      6
+     ]
+    },
+    "symbol": "ContextModeLimited.get",
+    "package": "ripgrep"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-3b0a070b572c",
+   "category": "untested",
+   "group": "risk",
+   "subject_kind": "function",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "crates/cli/src/pattern.rs#patterns_from_stdin is production-reachable but no test reaches this function",
+   "location": {
+    "path": "crates/cli/src/pattern.rs",
+    "range": {
+     "start": [
+      104,
+      1
+     ],
+     "end": [
+      110,
+      2
+     ]
+    },
+    "symbol": "patterns_from_stdin",
+    "package": "grep-cli"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-3bae840f9f40",
+   "category": "untested",
+   "group": "risk",
+   "subject_kind": "function",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "crates/cli/src/lib.rs#is_tty_stderr is production-reachable but no test reaches this function",
+   "location": {
+    "path": "crates/cli/src/lib.rs",
+    "range": {
+     "start": [
+      292,
+      1
+     ],
+     "end": [
+      295,
+      2
+     ]
+    },
+    "symbol": "is_tty_stderr",
+    "package": "grep-cli"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-3d52b10606ad",
+   "category": "untested",
+   "group": "risk",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "crates/ignore/src/types.rs#Glob.file_type_def is production-reachable but no test reaches this method",
+   "location": {
+    "path": "crates/ignore/src/types.rs",
+    "range": {
+     "start": [
+      132,
+      5
+     ],
+     "end": [
+      137,
+      6
+     ]
+    },
+    "symbol": "Glob.file_type_def",
+    "package": "ignore"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-3e9829a1424f",
+   "category": "untested",
+   "group": "risk",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "probable",
+   "message": "crates/pcre2/src/matcher.rs#RegexMatcherBuilder.jit is production-reachable but no test reaches this method",
+   "location": {
+    "path": "crates/pcre2/src/matcher.rs",
+    "range": {
+     "start": [
+      258,
+      5
+     ],
+     "end": [
+      261,
+      6
+     ]
+    },
+    "symbol": "RegexMatcherBuilder.jit",
+    "package": "grep-pcre2"
+   },
+   "sources": [
+    "adapter:rust",
+    "core:surface"
+   ]
+  },
+  {
+   "id": "kndo-40a3c3748f41",
+   "category": "version-skew",
+   "group": "defect",
+   "subject_kind": "dependency",
+   "severity": "warning",
+   "confidence": "certain",
+   "message": "winapi-util is declared with diverging version requirements: crates/cli/Cargo.toml (0.1.6), crates/ignore/Cargo.toml (0.1.2)",
+   "location": {
+    "path": "crates/cli/Cargo.toml",
+    "symbol": "winapi-util"
+   },
+   "related": [
+    {
+     "role": "declaration",
+     "path": "crates/cli/Cargo.toml",
+     "note": "0.1.6"
+    },
+    {
+     "role": "declaration",
+     "path": "crates/ignore/Cargo.toml",
+     "note": "0.1.2"
+    }
+   ],
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-44966fd3b7ea",
+   "category": "internal-only",
+   "group": "waste",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "possible",
+   "message": "crates/core/search.rs#Printer.get_mut is declared pub(crate) and every confidently resolved use is within its own file, but weaker matches point outside it — private would suffice for this method only if those are not real uses",
+   "location": {
+    "path": "crates/core/search.rs",
+    "range": {
+     "start": [
+      215,
+      5
+     ],
+     "end": [
+      221,
+      6
+     ]
+    },
+    "symbol": "Printer.get_mut",
+    "package": "ripgrep"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-477f4363d68c",
+   "category": "internal-only",
+   "group": "waste",
+   "subject_kind": "struct",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "crates/searcher/src/searcher/mod.rs#Config is declared pub but only used within its own module subtree — private would suffice for this struct",
+   "location": {
+    "path": "crates/searcher/src/searcher/mod.rs",
+    "range": {
+     "start": [
+      151,
+      1
+     ],
+     "end": [
+      185,
+      2
+     ]
+    },
+    "symbol": "Config",
+    "package": "grep-searcher"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-4969cc906892",
+   "category": "untested",
+   "group": "risk",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "probable",
+   "message": "crates/searcher/src/sink.rs#Error.error_io is production-reachable but no test reaches this method",
+   "location": {
+    "path": "crates/searcher/src/sink.rs",
+    "range": {
+     "start": [
+      47,
+      5
+     ],
+     "end": [
+      49,
+      6
+     ]
+    },
+    "symbol": "Error.error_io",
+    "package": "grep-searcher"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-4a7f431ef0f9",
+   "category": "untested",
+   "group": "risk",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "probable",
+   "message": "crates/printer/src/counter.rs#CounterWriter.reset is production-reachable but no test reaches this method",
+   "location": {
+    "path": "crates/printer/src/counter.rs",
+    "range": {
+     "start": [
+      89,
+      5
+     ],
+     "end": [
+      91,
+      6
+     ]
+    },
+    "symbol": "CounterWriter.reset",
+    "package": "grep-printer"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-4c09180d1d79",
+   "category": "untested",
+   "group": "risk",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "probable",
+   "message": "crates/regex/src/matcher.rs#RegexMatcher.new_line_matcher is production-reachable but no test reaches this method",
+   "location": {
+    "path": "crates/regex/src/matcher.rs",
+    "range": {
+     "start": [
+      401,
+      5
+     ],
+     "end": [
+      403,
+      6
+     ]
+    },
+    "symbol": "RegexMatcher.new_line_matcher",
+    "package": "grep-regex"
+   },
+   "sources": [
+    "adapter:rust",
+    "core:surface"
+   ]
+  },
+  {
+   "id": "kndo-4d70dd687166",
+   "category": "internal-only",
+   "group": "waste",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "possible",
+   "message": "crates/core/search.rs#SearchWorker.printer is declared pub(crate) and every confidently resolved use is within its own file, but weaker matches point outside it — private would suffice for this method only if those are not real uses",
+   "location": {
+    "path": "crates/core/search.rs",
+    "range": {
+     "start": [
+      270,
+      5
+     ],
+     "end": [
+      272,
+      6
+     ]
+    },
+    "symbol": "SearchWorker.printer",
+    "package": "ripgrep"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-4ffa8c1b6a75",
+   "category": "internal-only",
+   "group": "waste",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "possible",
+   "message": "crates/index/src/index.rs#Index.builder is declared pub and every confidently resolved use is within its own file, but weaker matches point outside it — private would suffice for this method only if those are not real uses",
+   "location": {
+    "path": "crates/index/src/index.rs",
+    "range": {
+     "start": [
+      18,
+      5
+     ],
+     "end": [
+      20,
+      6
+     ]
+    },
+    "symbol": "Index.builder",
+    "package": "grep-index"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-501c8b9589a8",
+   "category": "unused",
+   "group": "waste",
+   "subject_kind": "dependency",
+   "severity": "warning",
+   "confidence": "certain",
+   "message": "serde_json is declared in grep-printer's manifest but never imported",
+   "location": {
+    "path": "crates/printer/Cargo.toml",
+    "symbol": "serde_json",
+    "package": "grep-printer"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-5523e5a41c4d",
+   "category": "internal-only",
+   "group": "waste",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "possible",
+   "message": "crates/core/flags/lowargs.rs#ContextSeparator.into_bytes is declared pub(crate) and every confidently resolved use is within its own file, but weaker matches point outside it — private would suffice for this method only if those are not real uses",
+   "location": {
+    "path": "crates/core/flags/lowargs.rs",
+    "range": {
+     "start": [
+      516,
+      5
+     ],
+     "end": [
+      518,
+      6
+     ]
+    },
+    "symbol": "ContextSeparator.into_bytes",
+    "package": "ripgrep"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-56276dd118aa",
+   "category": "internal-only",
+   "group": "waste",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "possible",
+   "message": "crates/printer/src/hyperlink/mod.rs#Interpolator.begin is declared pub(crate) and every confidently resolved use is within its own file, but weaker matches point outside it — private would suffice for this method only if those are not real uses",
+   "location": {
+    "path": "crates/printer/src/hyperlink/mod.rs",
+    "range": {
+     "start": [
+      646,
+      5
+     ],
+     "end": [
+      665,
+      6
+     ]
+    },
+    "symbol": "Interpolator.begin",
+    "package": "grep-printer"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-5a73e5bdc574",
+   "category": "unused",
+   "group": "waste",
+   "subject_kind": "method",
+   "severity": "warning",
+   "confidence": "certain",
+   "message": "crates/regex/src/literal.rs#TSeq.sort is unreachable: nothing references this method",
+   "location": {
+    "path": "crates/regex/src/literal.rs",
+    "range": {
+     "start": [
+      496,
+      5
+     ],
+     "end": [
+      498,
+      6
+     ]
+    },
+    "symbol": "TSeq.sort",
+    "package": "grep-regex"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-5e1ecaaf6a66",
+   "category": "untested",
+   "group": "risk",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "probable",
+   "message": "crates/ignore/src/incremental.rs#IncrementalMatch.invert is production-reachable but no test reaches this method",
+   "location": {
+    "path": "crates/ignore/src/incremental.rs",
+    "range": {
+     "start": [
+      532,
+      5
+     ],
+     "end": [
+      534,
+      6
+     ]
+    },
+    "symbol": "IncrementalMatch.invert",
+    "package": "ignore"
+   },
+   "sources": [
+    "adapter:rust",
+    "core:surface"
+   ]
+  },
+  {
+   "id": "kndo-603e71363011",
+   "category": "unused",
+   "group": "waste",
+   "subject_kind": "method",
+   "severity": "warning",
+   "confidence": "certain",
+   "message": "crates/index/src/index.rs#Handle.read_write is unreachable: nothing references this method",
+   "location": {
+    "path": "crates/index/src/index.rs",
+    "range": {
+     "start": [
+      191,
+      5
+     ],
+     "end": [
+      198,
+      6
+     ]
+    },
+    "symbol": "Handle.read_write",
+    "package": "grep-index"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-6106244b7f27",
+   "category": "untested",
+   "group": "risk",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "probable",
+   "message": "crates/core/logger.rs#Logger.log is production-reachable but no test reaches this method",
+   "location": {
+    "path": "crates/core/logger.rs",
+    "range": {
+     "start": [
+      37,
+      5
+     ],
+     "end": [
+      67,
+      6
+     ]
+    },
+    "symbol": "Logger.log",
+    "package": "ripgrep"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-61c10e1979ff",
+   "category": "untested",
+   "group": "risk",
+   "subject_kind": "function",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "crates/cli/src/lib.rs#is_tty_stdout is production-reachable but no test reaches this function",
+   "location": {
+    "path": "crates/cli/src/lib.rs",
+    "range": {
+     "start": [
+      279,
+      1
+     ],
+     "end": [
+      282,
+      2
+     ]
+    },
+    "symbol": "is_tty_stdout",
+    "package": "grep-cli"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-626d24d645ea",
+   "category": "internal-only",
+   "group": "waste",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "crates/regex/src/literal.rs#InnerLiterals.none is declared pub(crate) but only used within its own file — private would suffice for this method",
+   "location": {
+    "path": "crates/regex/src/literal.rs",
+    "range": {
+     "start": [
+      96,
+      5
+     ],
+     "end": [
+      98,
+      6
+     ]
+    },
+    "symbol": "InnerLiterals.none",
+    "package": "grep-regex"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-65b907b1c04a",
+   "category": "untested",
+   "group": "risk",
+   "subject_kind": "function",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "crates/cli/src/pattern.rs#patterns_from_reader is production-reachable but no test reaches this function",
+   "location": {
+    "path": "crates/cli/src/pattern.rs",
+    "range": {
+     "start": [
+      141,
+      1
+     ],
+     "end": [
+      158,
+      2
+     ]
+    },
+    "symbol": "patterns_from_reader",
+    "package": "grep-cli"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-6652cac15ecf",
+   "category": "untested",
+   "group": "risk",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "probable",
+   "message": "crates/cli/src/pattern.rs#Error.from is production-reachable but no test reaches this method",
+   "location": {
+    "path": "crates/cli/src/pattern.rs",
+    "range": {
+     "start": [
+      40,
+      5
+     ],
+     "end": [
+      42,
+      6
+     ]
+    },
+    "symbol": "Error.from",
+    "package": "grep-cli"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-6697272a7cec",
+   "category": "internal-only",
+   "group": "waste",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "possible",
+   "message": "crates/index/src/index.rs#Index.path is declared pub and every confidently resolved use is within its own file, but weaker matches point outside it — private would suffice for this method only if those are not real uses",
+   "location": {
+    "path": "crates/index/src/index.rs",
+    "range": {
+     "start": [
+      27,
+      5
+     ],
+     "end": [
+      29,
+      6
+     ]
+    },
+    "symbol": "Index.path",
+    "package": "grep-index"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-66c6b7f68194",
+   "category": "untested",
+   "group": "risk",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "probable",
+   "message": "crates/globset/src/serde_impl.rs#Glob.deserialize is production-reachable but no test reaches this method",
+   "location": {
+    "path": "crates/globset/src/serde_impl.rs",
+    "range": {
+     "start": [
+      38,
+      5
+     ],
+     "end": [
+      42,
+      6
+     ]
+    },
+    "symbol": "Glob.deserialize",
+    "package": "globset"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-687bbfc1fee7",
+   "category": "internal-only",
+   "group": "waste",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "crates/index/src/literal.rs#GramQueryBuilder.ngram_size is declared pub but only used within its own file — private would suffice for this method",
+   "location": {
+    "path": "crates/index/src/literal.rs",
+    "range": {
+     "start": [
+      648,
+      5
+     ],
+     "end": [
+      655,
+      6
+     ]
+    },
+    "symbol": "GramQueryBuilder.ngram_size",
+    "package": "grep-index"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-6ba388eca9bf",
+   "category": "untested",
+   "group": "risk",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "probable",
+   "message": "crates/printer/src/counter.rs#CounterWriter.set_color is production-reachable but no test reaches this method",
+   "location": {
+    "path": "crates/printer/src/counter.rs",
+    "range": {
+     "start": [
+      79,
+      5
+     ],
+     "end": [
+      81,
+      6
+     ]
+    },
+    "symbol": "CounterWriter.set_color",
+    "package": "grep-printer"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-6c503025ade7",
+   "category": "duplicate",
+   "group": "waste",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "2 structurally identical methods (identifiers/literals aside): crates/regex/src/literal.rs#Extractor.extract_class_bytes, crates/regex/src/literal.rs#Extractor.extract_class_unicode — extract the shared implementation",
+   "location": {
+    "path": "crates/regex/src/literal.rs",
+    "range": {
+     "start": [
+      336,
+      5
+     ],
+     "end": [
+      348,
+      6
+     ]
+    },
+    "symbol": "Extractor.extract_class_bytes",
+    "package": "grep-regex"
+   },
+   "related": [
+    {
+     "role": "clone",
+     "path": "crates/regex/src/literal.rs",
+     "range": {
+      "start": [
+       336,
+       5
+      ],
+      "end": [
+       348,
+       6
+      ]
+     },
+     "note": "Extractor.extract_class_bytes"
+    },
+    {
+     "role": "clone",
+     "path": "crates/regex/src/literal.rs",
+     "range": {
+      "start": [
+       320,
+       5
+      ],
+      "end": [
+       332,
+       6
+      ]
+     },
+     "note": "Extractor.extract_class_unicode"
+    }
+   ],
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-6c9443d01654",
+   "category": "duplicate",
+   "group": "waste",
+   "subject_kind": "file",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "11 identical files share the same content: UNLICENSE, crates/cli/UNLICENSE, crates/globset/UNLICENSE and 8 more",
+   "location": {
+    "path": "UNLICENSE"
+   },
+   "related": [
+    {
+     "role": "clone",
+     "path": "UNLICENSE"
+    },
+    {
+     "role": "clone",
+     "path": "crates/cli/UNLICENSE"
+    },
+    {
+     "role": "clone",
+     "path": "crates/globset/UNLICENSE"
+    },
+    {
+     "role": "clone",
+     "path": "crates/grep/UNLICENSE"
+    },
+    {
+     "role": "clone",
+     "path": "crates/ignore/UNLICENSE"
+    },
+    {
+     "role": "clone",
+     "path": "crates/index/UNLICENSE"
+    },
+    {
+     "role": "clone",
+     "path": "crates/matcher/UNLICENSE"
+    },
+    {
+     "role": "clone",
+     "path": "crates/pcre2/UNLICENSE"
+    },
+    {
+     "role": "clone",
+     "path": "crates/printer/UNLICENSE"
+    },
+    {
+     "role": "clone",
+     "path": "crates/regex/UNLICENSE"
+    },
+    {
+     "role": "clone",
+     "path": "crates/searcher/UNLICENSE"
+    }
+   ]
+  },
+  {
+   "id": "kndo-6dc55d8d4f74",
+   "category": "internal-only",
+   "group": "waste",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "crates/ignore/src/dir.rs#Ignore.is_root is declared pub(crate) but only used within its own file — private would suffice for this method",
+   "location": {
+    "path": "crates/ignore/src/dir.rs",
+    "range": {
+     "start": [
+      176,
+      5
+     ],
+     "end": [
+      178,
+      6
+     ]
+    },
+    "symbol": "Ignore.is_root",
+    "package": "ignore"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-6fcf4001b6f5",
+   "category": "internal-only",
+   "group": "waste",
+   "subject_kind": "struct",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "crates/ignore/src/dir.rs#IgnoreRef is declared pub(crate) but only used within its own file — private would suffice for this struct",
+   "location": {
+    "path": "crates/ignore/src/dir.rs",
+    "range": {
+     "start": [
+      716,
+      1
+     ],
+     "end": [
+      718,
+      2
+     ]
+    },
+    "symbol": "IgnoreRef",
+    "package": "ignore"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-70fd402af0d5",
+   "category": "internal-only",
+   "group": "waste",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "possible",
+   "message": "crates/printer/src/hyperlink/mod.rs#Interpolator.finish is declared pub(crate) and every confidently resolved use is within its own file, but weaker matches point outside it — private would suffice for this method only if those are not real uses",
+   "location": {
+    "path": "crates/printer/src/hyperlink/mod.rs",
+    "range": {
+     "start": [
+      675,
+      5
+     ],
+     "end": [
+      684,
+      6
+     ]
+    },
+    "symbol": "Interpolator.finish",
+    "package": "grep-printer"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-7208179be6f2",
+   "category": "untested",
+   "group": "risk",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "probable",
+   "message": "crates/regex/src/matcher.rs#RegexMatcherBuilder.build_literals is production-reachable but no test reaches this method",
+   "location": {
+    "path": "crates/regex/src/matcher.rs",
+    "range": {
+     "start": [
+      92,
+      5
+     ],
+     "end": [
+      97,
+      6
+     ]
+    },
+    "symbol": "RegexMatcherBuilder.build_literals",
+    "package": "grep-regex"
+   },
+   "sources": [
+    "adapter:rust",
+    "core:surface"
+   ]
+  },
+  {
+   "id": "kndo-730166ed82c3",
+   "category": "untested",
+   "group": "risk",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "crates/ignore/src/gitignore.rs#Gitignore.num_whitelists is production-reachable but no test reaches this method",
+   "location": {
+    "path": "crates/ignore/src/gitignore.rs",
+    "range": {
+     "start": [
+      187,
+      5
+     ],
+     "end": [
+      189,
+      6
+     ]
+    },
+    "symbol": "Gitignore.num_whitelists",
+    "package": "ignore"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-74e364dcabd2",
+   "category": "internal-only",
+   "group": "waste",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "crates/core/flags/hiargs.rs#HiArgs.types is declared pub(crate) but only used within its own file — private would suffice for this method",
+   "location": {
+    "path": "crates/core/flags/hiargs.rs",
+    "range": {
+     "start": [
+      872,
+      5
+     ],
+     "end": [
+      874,
+      6
+     ]
+    },
+    "symbol": "HiArgs.types",
+    "package": "ripgrep"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-756a34366472",
+   "category": "unused",
+   "group": "waste",
+   "subject_kind": "dependency",
+   "severity": "warning",
+   "confidence": "certain",
+   "message": "serde is declared in ripgrep's manifest but never imported",
+   "location": {
+    "path": "Cargo.toml",
+    "symbol": "serde",
+    "package": "ripgrep"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-76441f3aeadf",
+   "category": "internal-only",
+   "group": "waste",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "possible",
+   "message": "crates/index/src/index.rs#IndexBuilder.create is declared pub and every confidently resolved use is within its own file, but weaker matches point outside it — private would suffice for this method only if those are not real uses",
+   "location": {
+    "path": "crates/index/src/index.rs",
+    "range": {
+     "start": [
+      93,
+      5
+     ],
+     "end": [
+      96,
+      6
+     ]
+    },
+    "symbol": "IndexBuilder.create",
+    "package": "grep-index"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-7845bc441509",
+   "category": "internal-only",
+   "group": "waste",
+   "subject_kind": "struct",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "crates/globset/src/fnv.rs#Hasher is declared pub(crate) but only used within its own file — private would suffice for this struct",
+   "location": {
+    "path": "crates/globset/src/fnv.rs",
+    "range": {
+     "start": [
+      6,
+      1
+     ],
+     "end": [
+      6,
+      31
+     ]
+    },
+    "symbol": "Hasher",
+    "package": "globset"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-78551719d2ad",
+   "category": "untested",
+   "group": "risk",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "probable",
+   "message": "crates/pcre2/src/matcher.rs#RegexMatcherBuilder.extended is production-reachable but no test reaches this method",
+   "location": {
+    "path": "crates/pcre2/src/matcher.rs",
+    "range": {
+     "start": [
+      135,
+      5
+     ],
+     "end": [
+      138,
+      6
+     ]
+    },
+    "symbol": "RegexMatcherBuilder.extended",
+    "package": "grep-pcre2"
+   },
+   "sources": [
+    "adapter:rust",
+    "core:surface"
+   ]
+  },
+  {
+   "id": "kndo-7b715322e158",
+   "category": "duplicate",
+   "group": "waste",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "2 structurally identical methods (identifiers/literals aside): crates/core/flags/defs.rs#Sort.update, crates/core/flags/defs.rs#Sortr.update — extract the shared implementation",
+   "location": {
+    "path": "crates/core/flags/defs.rs",
+    "range": {
+     "start": [
+      6733,
+      5
+     ],
+     "end": [
+      6747,
+      6
+     ]
+    },
+    "symbol": "Sort.update",
+    "package": "ripgrep"
+   },
+   "related": [
+    {
+     "role": "clone",
+     "path": "crates/core/flags/defs.rs",
+     "range": {
+      "start": [
+       6733,
+       5
+      ],
+      "end": [
+       6747,
+       6
+      ]
+     },
+     "note": "Sort.update"
+    },
+    {
+     "role": "clone",
+     "path": "crates/core/flags/defs.rs",
+     "range": {
+      "start": [
+       6835,
+       5
+      ],
+      "end": [
+       6849,
+       6
+      ]
+     },
+     "note": "Sortr.update"
+    }
+   ],
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-7f0c08b27cee",
+   "category": "internal-only",
+   "group": "waste",
+   "subject_kind": "function",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "crates/ignore/src/dir.rs#create_gitignore is declared pub(crate) but only used within its own file — private would suffice for this function",
+   "location": {
+    "path": "crates/ignore/src/dir.rs",
+    "range": {
+     "start": [
+      1016,
+      1
+     ],
+     "end": [
+      1051,
+      2
+     ]
+    },
+    "symbol": "create_gitignore",
+    "package": "ignore"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-7f3e5a176119",
+   "category": "untested",
+   "group": "risk",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "probable",
+   "message": "crates/core/logger.rs#Logger.enabled is production-reachable but no test reaches this method",
+   "location": {
+    "path": "crates/core/logger.rs",
+    "range": {
+     "start": [
+      31,
+      5
+     ],
+     "end": [
+      35,
+      6
+     ]
+    },
+    "symbol": "Logger.enabled",
+    "package": "ripgrep"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-7fa466f18a51",
+   "category": "untested",
+   "group": "risk",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "probable",
+   "message": "crates/cli/src/decompress.rs#DecompressionReader.read is production-reachable but no test reaches this method",
+   "location": {
+    "path": "crates/cli/src/decompress.rs",
+    "range": {
+     "start": [
+      392,
+      5
+     ],
+     "end": [
+      397,
+      6
+     ]
+    },
+    "symbol": "DecompressionReader.read",
+    "package": "grep-cli"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-80b07ea0897f",
+   "category": "unused",
+   "group": "waste",
+   "subject_kind": "method",
+   "severity": "warning",
+   "confidence": "certain",
+   "message": "crates/index/src/index.rs#Handle.begin_read is unreachable: nothing references this method",
+   "location": {
+    "path": "crates/index/src/index.rs",
+    "range": {
+     "start": [
+      181,
+      5
+     ],
+     "end": [
+      189,
+      6
+     ]
+    },
+    "symbol": "Handle.begin_read",
+    "package": "grep-index"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-837239301a72",
+   "category": "internal-only",
+   "group": "waste",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "possible",
+   "message": "crates/core/flags/lowargs.rs#FieldContextSeparator.new is declared pub(crate) and every confidently resolved use is within its own file, but weaker matches point outside it — private would suffice for this method only if those are not real uses",
+   "location": {
+    "path": "crates/core/flags/lowargs.rs",
+    "range": {
+     "start": [
+      573,
+      5
+     ],
+     "end": [
+      581,
+      6
+     ]
+    },
+    "symbol": "FieldContextSeparator.new",
+    "package": "ripgrep"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-8699a6d89772",
+   "category": "internal-only",
+   "group": "waste",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "possible",
+   "message": "crates/core/search.rs#SearchResult.has_match is declared pub(crate) and every confidently resolved use is within its own file, but weaker matches point outside it — private would suffice for this method only if those are not real uses",
+   "location": {
+    "path": "crates/core/search.rs",
+    "range": {
+     "start": [
+      178,
+      5
+     ],
+     "end": [
+      180,
+      6
+     ]
+    },
+    "symbol": "SearchResult.has_match",
+    "package": "ripgrep"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-893b0ed7f25d",
+   "category": "version-skew",
+   "group": "defect",
+   "subject_kind": "dependency",
+   "severity": "warning",
+   "confidence": "certain",
+   "message": "serde is declared with diverging version requirements: Cargo.toml (1.0.77), crates/globset/Cargo.toml (1.0.188), crates/printer/Cargo.toml (1.0.193)",
+   "location": {
+    "path": "Cargo.toml",
+    "symbol": "serde"
+   },
+   "related": [
+    {
+     "role": "declaration",
+     "path": "Cargo.toml",
+     "note": "1.0.77"
+    },
+    {
+     "role": "declaration",
+     "path": "crates/globset/Cargo.toml",
+     "note": "1.0.188"
+    },
+    {
+     "role": "declaration",
+     "path": "crates/printer/Cargo.toml",
+     "note": "1.0.193"
+    }
+   ],
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-8acb24163cd2",
+   "category": "untested",
+   "group": "risk",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "probable",
+   "message": "crates/printer/src/standard.rs#Standard.has_written is production-reachable but no test reaches this method",
+   "location": {
+    "path": "crates/printer/src/standard.rs",
+    "range": {
+     "start": [
+      600,
+      5
+     ],
+     "end": [
+      602,
+      6
+     ]
+    },
+    "symbol": "Standard.has_written",
+    "package": "grep-printer"
+   },
+   "sources": [
+    "adapter:rust",
+    "core:surface"
+   ]
+  },
+  {
+   "id": "kndo-8d7bb2574c95",
+   "category": "internal-only",
+   "group": "waste",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "crates/index/src/index.rs#IndexDiscovery.dir_name is declared pub but only used within its own file — private would suffice for this method",
+   "location": {
+    "path": "crates/index/src/index.rs",
+    "range": {
+     "start": [
+      161,
+      5
+     ],
+     "end": [
+      167,
+      6
+     ]
+    },
+    "symbol": "IndexDiscovery.dir_name",
+    "package": "grep-index"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-8f23dd4a6030",
+   "category": "untested",
+   "group": "risk",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "probable",
+   "message": "crates/globset/src/serde_impl.rs#GlobSet.deserialize is production-reachable but no test reaches this method",
+   "location": {
+    "path": "crates/globset/src/serde_impl.rs",
+    "range": {
+     "start": [
+      70,
+      5
+     ],
+     "end": [
+      74,
+      6
+     ]
+    },
+    "symbol": "GlobSet.deserialize",
+    "package": "globset"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-9067c7e3b18a",
+   "category": "untested",
+   "group": "risk",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "crates/ignore/src/gitignore.rs#Gitignore.global is production-reachable but no test reaches this method",
+   "location": {
+    "path": "crates/ignore/src/gitignore.rs",
+    "range": {
+     "start": [
+      141,
+      5
+     ],
+     "end": [
+      146,
+      6
+     ]
+    },
+    "symbol": "Gitignore.global",
+    "package": "ignore"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-9199e2019445",
+   "category": "internal-only",
+   "group": "waste",
+   "subject_kind": "struct",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "crates/index/src/literal.rs#GramQueryBuilder is declared pub but only used within its own file — private would suffice for this struct",
+   "location": {
+    "path": "crates/index/src/literal.rs",
+    "range": {
+     "start": [
+      637,
+      1
+     ],
+     "end": [
+      641,
+      2
+     ]
+    },
+    "symbol": "GramQueryBuilder",
+    "package": "grep-index"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-91a5d313bfb0",
+   "category": "unused",
+   "group": "waste",
+   "subject_kind": "dependency",
+   "severity": "warning",
+   "confidence": "certain",
+   "message": "fst is declared in grep-index's manifest but never imported",
+   "location": {
+    "path": "crates/index/Cargo.toml",
+    "symbol": "fst",
+    "package": "grep-index"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-97dcb415c749",
+   "category": "internal-only",
+   "group": "waste",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "possible",
+   "message": "crates/printer/src/hyperlink/mod.rs#Values.column is declared pub(crate) and every confidently resolved use is within its own file, but weaker matches point outside it — private would suffice for this method only if those are not real uses",
+   "location": {
+    "path": "crates/printer/src/hyperlink/mod.rs",
+    "range": {
+     "start": [
+      610,
+      5
+     ],
+     "end": [
+      613,
+      6
+     ]
+    },
+    "symbol": "Values.column",
+    "package": "grep-printer"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-9f01814ab4a7",
+   "category": "private-type-leak",
+   "group": "defect",
+   "subject_kind": "method",
+   "severity": "warning",
+   "confidence": "certain",
+   "message": "crates/ignore/src/walk.rs#WalkParallel.run is exported but its signature references FnVisitor, which is not — consumers can see the method yet cannot name that type (export FnVisitor, or narrow WalkParallel.run)",
+   "location": {
+    "path": "crates/ignore/src/walk.rs",
+    "range": {
+     "start": [
+      1430,
+      23
+     ],
+     "end": [
+      1430,
+      32
+     ]
+    },
+    "symbol": "WalkParallel.run",
+    "package": "ignore"
+   },
+   "sources": [
+    "adapter:rust",
+    "core:surface"
+   ]
+  },
+  {
+   "id": "kndo-a09608e8df78",
+   "category": "untested",
+   "group": "risk",
+   "subject_kind": "function",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "crates/cli/src/escape.rs#unescape_os is production-reachable but no test reaches this function",
+   "location": {
+    "path": "crates/cli/src/escape.rs",
+    "range": {
+     "start": [
+      77,
+      1
+     ],
+     "end": [
+      79,
+      2
+     ]
+    },
+    "symbol": "unescape_os",
+    "package": "grep-cli"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-a5ca4d46a51b",
+   "category": "internal-only",
+   "group": "waste",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "possible",
+   "message": "crates/cli/src/process.rs#CommandError.is_empty is declared pub(crate) and every confidently resolved use is within its own file, but weaker matches point outside it — private would suffice for this method only if those are not real uses",
+   "location": {
+    "path": "crates/cli/src/process.rs",
+    "range": {
+     "start": [
+      33,
+      5
+     ],
+     "end": [
+      38,
+      6
+     ]
+    },
+    "symbol": "CommandError.is_empty",
+    "package": "grep-cli"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-a86481926fe9",
+   "category": "version-skew",
+   "group": "defect",
+   "subject_kind": "dependency",
+   "severity": "warning",
+   "confidence": "certain",
+   "message": "termcolor is declared with diverging version requirements: Cargo.toml (1.4.0), crates/cli/Cargo.toml (1.3.0), crates/grep/Cargo.toml (1.0.4), crates/printer/Cargo.toml (1.3.0)",
+   "location": {
+    "path": "Cargo.toml",
+    "symbol": "termcolor"
+   },
+   "related": [
+    {
+     "role": "declaration",
+     "path": "Cargo.toml",
+     "note": "1.4.0"
+    },
+    {
+     "role": "declaration",
+     "path": "crates/cli/Cargo.toml",
+     "note": "1.3.0"
+    },
+    {
+     "role": "declaration",
+     "path": "crates/grep/Cargo.toml",
+     "note": "1.0.4"
+    },
+    {
+     "role": "declaration",
+     "path": "crates/printer/Cargo.toml",
+     "note": "1.3.0"
+    }
+   ],
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-a8b34991f3dd",
+   "category": "unused",
+   "group": "waste",
+   "subject_kind": "method",
+   "severity": "warning",
+   "confidence": "certain",
+   "message": "crates/regex/src/literal.rs#TSeq.max_literal_len is unreachable: nothing references this method",
+   "location": {
+    "path": "crates/regex/src/literal.rs",
+    "range": {
+     "start": [
+      537,
+      5
+     ],
+     "end": [
+      539,
+      6
+     ]
+    },
+    "symbol": "TSeq.max_literal_len",
+    "package": "grep-regex"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-a94fcd4f2daf",
+   "category": "internal-only",
+   "group": "waste",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "possible",
+   "message": "crates/searcher/src/searcher/core.rs#Core.matcher is declared pub(crate) and every confidently resolved use is within its own file, but weaker matches point outside it — private would suffice for this method only if those are not real uses",
+   "location": {
+    "path": "crates/searcher/src/searcher/core.rs",
+    "range": {
+     "start": [
+      95,
+      5
+     ],
+     "end": [
+      97,
+      6
+     ]
+    },
+    "symbol": "Core.matcher",
+    "package": "grep-searcher"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-ad311069d893",
+   "category": "internal-only",
+   "group": "waste",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "crates/printer/src/hyperlink/mod.rs#HyperlinkConfig.environment is declared pub(crate) but only used within its own file — private would suffice for this method",
+   "location": {
+    "path": "crates/printer/src/hyperlink/mod.rs",
+    "range": {
+     "start": [
+      43,
+      5
+     ],
+     "end": [
+      45,
+      6
+     ]
+    },
+    "symbol": "HyperlinkConfig.environment",
+    "package": "grep-printer"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-b1e9690f3771",
+   "category": "internal-only",
+   "group": "waste",
+   "subject_kind": "function",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "crates/core/flags/config.rs#args is declared pub but only used within its own package — pub(crate) would suffice for this function",
+   "location": {
+    "path": "crates/core/flags/config.rs",
+    "range": {
+     "start": [
+      16,
+      1
+     ],
+     "end": [
+      53,
+      2
+     ]
+    },
+    "symbol": "args",
+    "package": "ripgrep"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-b490379d0205",
+   "category": "internal-only",
+   "group": "waste",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "possible",
+   "message": "crates/printer/src/hyperlink/mod.rs#Values.line is declared pub(crate) and every confidently resolved use is within its own file, but weaker matches point outside it — private would suffice for this method only if those are not real uses",
+   "location": {
+    "path": "crates/printer/src/hyperlink/mod.rs",
+    "range": {
+     "start": [
+      600,
+      5
+     ],
+     "end": [
+      603,
+      6
+     ]
+    },
+    "symbol": "Values.line",
+    "package": "grep-printer"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-b77fc9ed5c81",
+   "category": "internal-only",
+   "group": "waste",
+   "subject_kind": "struct",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "crates/core/search.rs#SearchResult is declared pub(crate) but only used within its own file — private would suffice for this struct",
+   "location": {
+    "path": "crates/core/search.rs",
+    "range": {
+     "start": [
+      171,
+      1
+     ],
+     "end": [
+      174,
+      2
+     ]
+    },
+    "symbol": "SearchResult",
+    "package": "ripgrep"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-bb0af93193eb",
+   "category": "untested",
+   "group": "risk",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "probable",
+   "message": "crates/printer/src/counter.rs#CounterWriter.is_synchronous is production-reachable but no test reaches this method",
+   "location": {
+    "path": "crates/printer/src/counter.rs",
+    "range": {
+     "start": [
+      94,
+      5
+     ],
+     "end": [
+      96,
+      6
+     ]
+    },
+    "symbol": "CounterWriter.is_synchronous",
+    "package": "grep-printer"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-bc0aff3f2bdf",
+   "category": "internal-only",
+   "group": "waste",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "crates/ignore/src/dir.rs#Ignore.matched_ignore is declared pub(crate) but only used within its own file — private would suffice for this method",
+   "location": {
+    "path": "crates/ignore/src/dir.rs",
+    "range": {
+     "start": [
+      548,
+      5
+     ],
+     "end": [
+      685,
+      6
+     ]
+    },
+    "symbol": "Ignore.matched_ignore",
+    "package": "ignore"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-bdad903101cc",
+   "category": "internal-only",
+   "group": "waste",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "crates/pcre2/src/matcher.rs#RegexCaptures.new is declared pub(crate) but only used within its own file — private would suffice for this method",
+   "location": {
+    "path": "crates/pcre2/src/matcher.rs",
+    "range": {
+     "start": [
+      407,
+      5
+     ],
+     "end": [
+      409,
+      6
+     ]
+    },
+    "symbol": "RegexCaptures.new",
+    "package": "grep-pcre2"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-c01d0c3d8ac8",
+   "category": "private-type-leak",
+   "group": "defect",
+   "subject_kind": "method",
+   "severity": "warning",
+   "confidence": "certain",
+   "message": "crates/searcher/src/searcher/core.rs#Core.find is exported but its signature references Range, which is not — consumers can see the method yet cannot name that type (export Range, or narrow Core.find)",
+   "location": {
+    "path": "crates/searcher/src/searcher/core.rs",
+    "range": {
+     "start": [
+      127,
+      24
+     ],
+     "end": [
+      127,
+      29
+     ]
+    },
+    "symbol": "Core.find",
+    "package": "grep-searcher"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-c063c3cccc3f",
+   "category": "internal-only",
+   "group": "waste",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "possible",
+   "message": "crates/core/flags/hiargs.rs#HiArgs.stats is declared pub(crate) and every confidently resolved use is within its own file, but weaker matches point outside it — private would suffice for this method only if those are not real uses",
+   "location": {
+    "path": "crates/core/flags/hiargs.rs",
+    "range": {
+     "start": [
+      833,
+      5
+     ],
+     "end": [
+      835,
+      6
+     ]
+    },
+    "symbol": "HiArgs.stats",
+    "package": "ripgrep"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-c0b94942470d",
+   "category": "internal-only",
+   "group": "waste",
+   "subject_kind": "function",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "crates/regex/src/ban.rs#check is declared pub(crate) but only used within its own file — private would suffice for this function",
+   "location": {
+    "path": "crates/regex/src/ban.rs",
+    "range": {
+     "start": [
+      8,
+      1
+     ],
+     "end": [
+      53,
+      2
+     ]
+    },
+    "symbol": "check",
+    "package": "grep-regex"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-c4b4a4817652",
+   "category": "version-skew",
+   "group": "defect",
+   "subject_kind": "dependency",
+   "severity": "warning",
+   "confidence": "certain",
+   "message": "bstr is declared with diverging version requirements: Cargo.toml (1.7.0), crates/cli/Cargo.toml (1.6.2), crates/globset/Cargo.toml (1.6.2), crates/ignore/Cargo.toml (1.6.2), crates/index/Cargo.toml (1.12.0), crates/printer/Cargo.toml (1.6.2), crates/regex/Cargo.toml (1.6.2), crates/searcher/Cargo.toml (1.6.2)",
+   "location": {
+    "path": "Cargo.toml",
+    "symbol": "bstr"
+   },
+   "related": [
+    {
+     "role": "declaration",
+     "path": "Cargo.toml",
+     "note": "1.7.0"
+    },
+    {
+     "role": "declaration",
+     "path": "crates/cli/Cargo.toml",
+     "note": "1.6.2"
+    },
+    {
+     "role": "declaration",
+     "path": "crates/globset/Cargo.toml",
+     "note": "1.6.2"
+    },
+    {
+     "role": "declaration",
+     "path": "crates/ignore/Cargo.toml",
+     "note": "1.6.2"
+    },
+    {
+     "role": "declaration",
+     "path": "crates/index/Cargo.toml",
+     "note": "1.12.0"
+    },
+    {
+     "role": "declaration",
+     "path": "crates/printer/Cargo.toml",
+     "note": "1.6.2"
+    },
+    {
+     "role": "declaration",
+     "path": "crates/regex/Cargo.toml",
+     "note": "1.6.2"
+    },
+    {
+     "role": "declaration",
+     "path": "crates/searcher/Cargo.toml",
+     "note": "1.6.2"
+    }
+   ],
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-c7edc327cb25",
+   "category": "untested",
+   "group": "risk",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "probable",
+   "message": "crates/cli/src/decompress.rs#DecompressionMatcherBuilder.associate is production-reachable but no test reaches this method",
+   "location": {
+    "path": "crates/cli/src/decompress.rs",
+    "range": {
+     "start": [
+      96,
+      5
+     ],
+     "end": [
+      109,
+      6
+     ]
+    },
+    "symbol": "DecompressionMatcherBuilder.associate",
+    "package": "grep-cli"
+   },
+   "sources": [
+    "adapter:rust",
+    "core:surface"
+   ]
+  },
+  {
+   "id": "kndo-c8224c77cf9f",
+   "category": "duplicate",
+   "group": "waste",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "2 structurally identical methods (identifiers/literals aside): crates/core/search.rs#SearchWorker.search_path, crates/core/search.rs#SearchWorker.search_reader — extract the shared implementation",
+   "location": {
+    "path": "crates/core/search.rs",
+    "range": {
+     "start": [
+      342,
+      5
+     ],
+     "end": [
+      351,
+      6
+     ]
+    },
+    "symbol": "SearchWorker.search_path",
+    "package": "ripgrep"
+   },
+   "related": [
+    {
+     "role": "clone",
+     "path": "crates/core/search.rs",
+     "range": {
+      "start": [
+       342,
+       5
+      ],
+      "end": [
+       351,
+       6
+      ]
+     },
+     "note": "SearchWorker.search_path"
+    },
+    {
+     "role": "clone",
+     "path": "crates/core/search.rs",
+     "range": {
+      "start": [
+       362,
+       5
+      ],
+      "end": [
+       375,
+       6
+      ]
+     },
+     "note": "SearchWorker.search_reader"
+    }
+   ],
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-c917c1ca0f4d",
+   "category": "internal-only",
+   "group": "waste",
+   "subject_kind": "struct",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "crates/index/src/index.rs#IndexBuilder is declared pub but only used within its own file — private would suffice for this struct",
+   "location": {
+    "path": "crates/index/src/index.rs",
+    "range": {
+     "start": [
+      33,
+      1
+     ],
+     "end": [
+      36,
+      2
+     ]
+    },
+    "symbol": "IndexBuilder",
+    "package": "grep-index"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-cadef1b7993d",
+   "category": "untested",
+   "group": "risk",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "crates/ignore/src/overrides.rs#Override.num_ignores is production-reachable but no test reaches this method",
+   "location": {
+    "path": "crates/ignore/src/overrides.rs",
+    "range": {
+     "start": [
+      70,
+      5
+     ],
+     "end": [
+      72,
+      6
+     ]
+    },
+    "symbol": "Override.num_ignores",
+    "package": "ignore"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-cbe23f86517f",
+   "category": "untested",
+   "group": "risk",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "probable",
+   "message": "crates/pcre2/src/matcher.rs#RegexMatcherBuilder.disable_utf_check is production-reachable but no test reaches this method",
+   "location": {
+    "path": "crates/pcre2/src/matcher.rs",
+    "range": {
+     "start": [
+      245,
+      5
+     ],
+     "end": [
+      247,
+      6
+     ]
+    },
+    "symbol": "RegexMatcherBuilder.disable_utf_check",
+    "package": "grep-pcre2"
+   },
+   "sources": [
+    "adapter:rust",
+    "core:surface"
+   ]
+  },
+  {
+   "id": "kndo-cce1fb51039e",
+   "category": "untested",
+   "group": "risk",
+   "subject_kind": "function",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "crates/cli/src/lib.rs#is_readable_stdin is production-reachable but no test reaches this function",
+   "location": {
+    "path": "crates/cli/src/lib.rs",
+    "range": {
+     "start": [
+      170,
+      1
+     ],
+     "end": [
+      250,
+      2
+     ]
+    },
+    "symbol": "is_readable_stdin",
+    "package": "grep-cli"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-cd41a9da3524",
+   "category": "duplicate",
+   "group": "waste",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "2 structurally identical methods (identifiers/literals aside): crates/globset/src/lib.rs#GlobSetMatchStrategy.is_match, crates/globset/src/lib.rs#GlobSetMatchStrategy.matches_all — extract the shared implementation",
+   "location": {
+    "path": "crates/globset/src/lib.rs",
+    "range": {
+     "start": [
+      665,
+      5
+     ],
+     "end": [
+      676,
+      6
+     ]
+    },
+    "symbol": "GlobSetMatchStrategy.is_match",
+    "package": "globset"
+   },
+   "related": [
+    {
+     "role": "clone",
+     "path": "crates/globset/src/lib.rs",
+     "range": {
+      "start": [
+       665,
+       5
+      ],
+      "end": [
+       676,
+       6
+      ]
+     },
+     "note": "GlobSetMatchStrategy.is_match"
+    },
+    {
+     "role": "clone",
+     "path": "crates/globset/src/lib.rs",
+     "range": {
+      "start": [
+       695,
+       5
+      ],
+      "end": [
+       706,
+       6
+      ]
+     },
+     "note": "GlobSetMatchStrategy.matches_all"
+    }
+   ],
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-ce495ff98f79",
+   "category": "internal-only",
+   "group": "waste",
+   "subject_kind": "struct",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "crates/searcher/src/sink.rs#Bytes is declared pub but only used within its own file — pub(crate) would suffice for this struct",
+   "location": {
+    "path": "crates/searcher/src/sink.rs",
+    "range": {
+     "start": [
+      638,
+      5
+     ],
+     "end": [
+      640,
+      57
+     ]
+    },
+    "symbol": "Bytes",
+    "package": "grep-searcher"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-cf227803f6e0",
+   "category": "untested",
+   "group": "risk",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "probable",
+   "message": "crates/globset/src/fnv.rs#Hasher.finish is production-reachable but no test reaches this method",
+   "location": {
+    "path": "crates/globset/src/fnv.rs",
+    "range": {
+     "start": [
+      20,
+      5
+     ],
+     "end": [
+      22,
+      6
+     ]
+    },
+    "symbol": "Hasher.finish",
+    "package": "globset"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-d273ecb18d80",
+   "category": "internal-only",
+   "group": "waste",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "possible",
+   "message": "crates/core/flags/lowargs.rs#ContextSeparator.new is declared pub(crate) and every confidently resolved use is within its own file, but weaker matches point outside it — private would suffice for this method only if those are not real uses",
+   "location": {
+    "path": "crates/core/flags/lowargs.rs",
+    "range": {
+     "start": [
+      495,
+      5
+     ],
+     "end": [
+      503,
+      6
+     ]
+    },
+    "symbol": "ContextSeparator.new",
+    "package": "ripgrep"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-d4f079fe727d",
+   "category": "internal-only",
+   "group": "waste",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "possible",
+   "message": "crates/core/flags/lowargs.rs#FieldMatchSeparator.new is declared pub(crate) and every confidently resolved use is within its own file, but weaker matches point outside it — private would suffice for this method only if those are not real uses",
+   "location": {
+    "path": "crates/core/flags/lowargs.rs",
+    "range": {
+     "start": [
+      607,
+      5
+     ],
+     "end": [
+      615,
+      6
+     ]
+    },
+    "symbol": "FieldMatchSeparator.new",
+    "package": "ripgrep"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-d5c6f7103fec",
+   "category": "duplicate",
+   "group": "waste",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "2 structurally identical methods (identifiers/literals aside): crates/index/src/literal.rs#GramQuery.from_set_and, crates/index/src/literal.rs#GramQuery.from_set_or — extract the shared implementation",
+   "location": {
+    "path": "crates/index/src/literal.rs",
+    "range": {
+     "start": [
+      141,
+      5
+     ],
+     "end": [
+      151,
+      6
+     ]
+    },
+    "symbol": "GramQuery.from_set_and",
+    "package": "grep-index"
+   },
+   "related": [
+    {
+     "role": "clone",
+     "path": "crates/index/src/literal.rs",
+     "range": {
+      "start": [
+       141,
+       5
+      ],
+      "end": [
+       151,
+       6
+      ]
+     },
+     "note": "GramQuery.from_set_and"
+    },
+    {
+     "role": "clone",
+     "path": "crates/index/src/literal.rs",
+     "range": {
+      "start": [
+       129,
+       5
+      ],
+      "end": [
+       139,
+       6
+      ]
+     },
+     "note": "GramQuery.from_set_or"
+    }
+   ],
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-d6a4b115cb3f",
+   "category": "internal-only",
+   "group": "waste",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "possible",
+   "message": "crates/regex/src/matcher.rs#RegexCaptures.new is declared pub(crate) and every confidently resolved use is within its own file, but weaker matches point outside it — private would suffice for this method only if those are not real uses",
+   "location": {
+    "path": "crates/regex/src/matcher.rs",
+    "range": {
+     "start": [
+      543,
+      5
+     ],
+     "end": [
+      545,
+      6
+     ]
+    },
+    "symbol": "RegexCaptures.new",
+    "package": "grep-regex"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-d7fdb25b33e2",
+   "category": "internal-only",
+   "group": "waste",
+   "subject_kind": "struct",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "crates/searcher/src/sink.rs#UTF8 is declared pub but only used within its own file — pub(crate) would suffice for this struct",
+   "location": {
+    "path": "crates/searcher/src/sink.rs",
+    "range": {
+     "start": [
+      540,
+      5
+     ],
+     "end": [
+      542,
+      56
+     ]
+    },
+    "symbol": "UTF8",
+    "package": "grep-searcher"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-dc7024e74b77",
+   "category": "untested",
+   "group": "risk",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "probable",
+   "message": "crates/printer/src/counter.rs#CounterWriter.supports_hyperlinks is production-reachable but no test reaches this method",
+   "location": {
+    "path": "crates/printer/src/counter.rs",
+    "range": {
+     "start": [
+      74,
+      5
+     ],
+     "end": [
+      76,
+      6
+     ]
+    },
+    "symbol": "CounterWriter.supports_hyperlinks",
+    "package": "grep-printer"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-dd1a49d84c82",
+   "category": "internal-only",
+   "group": "waste",
+   "subject_kind": "struct",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "crates/core/flags/lowargs.rs#ContextModeLimited is declared pub(crate) but only used within its own file — private would suffice for this struct",
+   "location": {
+    "path": "crates/core/flags/lowargs.rs",
+    "range": {
+     "start": [
+      452,
+      1
+     ],
+     "end": [
+      456,
+      2
+     ]
+    },
+    "symbol": "ContextModeLimited",
+    "package": "ripgrep"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-e05265c95e89",
+   "category": "version-skew",
+   "group": "defect",
+   "subject_kind": "dependency",
+   "severity": "warning",
+   "confidence": "certain",
+   "message": "log is declared with diverging version requirements: Cargo.toml (0.4.5), crates/cli/Cargo.toml (0.4.20), crates/globset/Cargo.toml (0.4.20), crates/ignore/Cargo.toml (0.4.20), crates/pcre2/Cargo.toml (0.4.20), crates/printer/Cargo.toml (0.4.5), crates/regex/Cargo.toml (0.4.20), crates/searcher/Cargo.toml (0.4.20)",
+   "location": {
+    "path": "Cargo.toml",
+    "symbol": "log"
+   },
+   "related": [
+    {
+     "role": "declaration",
+     "path": "Cargo.toml",
+     "note": "0.4.5"
+    },
+    {
+     "role": "declaration",
+     "path": "crates/cli/Cargo.toml",
+     "note": "0.4.20"
+    },
+    {
+     "role": "declaration",
+     "path": "crates/globset/Cargo.toml",
+     "note": "0.4.20"
+    },
+    {
+     "role": "declaration",
+     "path": "crates/ignore/Cargo.toml",
+     "note": "0.4.20"
+    },
+    {
+     "role": "declaration",
+     "path": "crates/pcre2/Cargo.toml",
+     "note": "0.4.20"
+    },
+    {
+     "role": "declaration",
+     "path": "crates/printer/Cargo.toml",
+     "note": "0.4.5"
+    },
+    {
+     "role": "declaration",
+     "path": "crates/regex/Cargo.toml",
+     "note": "0.4.20"
+    },
+    {
+     "role": "declaration",
+     "path": "crates/searcher/Cargo.toml",
+     "note": "0.4.20"
+    }
+   ],
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-e22719eaf01e",
+   "category": "version-skew",
+   "group": "defect",
+   "subject_kind": "dependency",
+   "severity": "warning",
+   "confidence": "certain",
+   "message": "regex-automata is declared with diverging version requirements: crates/globset/Cargo.toml (0.4.18), crates/ignore/Cargo.toml (0.4.18), crates/regex/Cargo.toml (0.4.0)",
+   "location": {
+    "path": "crates/globset/Cargo.toml",
+    "symbol": "regex-automata"
+   },
+   "related": [
+    {
+     "role": "declaration",
+     "path": "crates/globset/Cargo.toml",
+     "note": "0.4.18"
+    },
+    {
+     "role": "declaration",
+     "path": "crates/ignore/Cargo.toml",
+     "note": "0.4.18"
+    },
+    {
+     "role": "declaration",
+     "path": "crates/regex/Cargo.toml",
+     "note": "0.4.0"
+    }
+   ],
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-e2555b73eb12",
+   "category": "untested",
+   "group": "risk",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "probable",
+   "message": "crates/printer/src/counter.rs#CounterWriter.set_hyperlink is production-reachable but no test reaches this method",
+   "location": {
+    "path": "crates/printer/src/counter.rs",
+    "range": {
+     "start": [
+      84,
+      5
+     ],
+     "end": [
+      86,
+      6
+     ]
+    },
+    "symbol": "CounterWriter.set_hyperlink",
+    "package": "grep-printer"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-e2d780b40517",
+   "category": "duplicate",
+   "group": "waste",
+   "subject_kind": "function",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "2 structurally identical functions (identifiers/literals aside): crates/core/flags/doc/help.rs#generate_long, crates/core/flags/doc/man.rs#generate — extract the shared implementation",
+   "location": {
+    "path": "crates/core/flags/doc/help.rs",
+    "range": {
+     "start": [
+      120,
+      1
+     ],
+     "end": [
+      146,
+      2
+     ]
+    },
+    "symbol": "generate_long",
+    "package": "ripgrep"
+   },
+   "related": [
+    {
+     "role": "clone",
+     "path": "crates/core/flags/doc/help.rs",
+     "range": {
+      "start": [
+       120,
+       1
+      ],
+      "end": [
+       146,
+       2
+      ]
+     },
+     "note": "generate_long"
+    },
+    {
+     "role": "clone",
+     "path": "crates/core/flags/doc/man.rs",
+     "range": {
+      "start": [
+       27,
+       1
+      ],
+      "end": [
+       49,
+       2
+      ]
+     },
+     "note": "generate"
+    }
+   ],
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-e3e7e83b3051",
+   "category": "version-skew",
+   "group": "defect",
+   "subject_kind": "dependency",
+   "severity": "warning",
+   "confidence": "certain",
+   "message": "serde_json is declared with diverging version requirements: Cargo.toml (1.0.23), crates/globset/Cargo.toml (1.0.107), crates/printer/Cargo.toml (1.0.107)",
+   "location": {
+    "path": "Cargo.toml",
+    "symbol": "serde_json"
+   },
+   "related": [
+    {
+     "role": "declaration",
+     "path": "Cargo.toml",
+     "note": "1.0.23"
+    },
+    {
+     "role": "declaration",
+     "path": "crates/globset/Cargo.toml",
+     "note": "1.0.107"
+    },
+    {
+     "role": "declaration",
+     "path": "crates/printer/Cargo.toml",
+     "note": "1.0.107"
+    }
+   ],
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-e86f4dbccfdc",
+   "category": "internal-only",
+   "group": "waste",
+   "subject_kind": "struct",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "crates/searcher/src/sink.rs#Lossy is declared pub but only used within its own file — pub(crate) would suffice for this struct",
+   "location": {
+    "path": "crates/searcher/src/sink.rs",
+    "range": {
+     "start": [
+      588,
+      5
+     ],
+     "end": [
+      590,
+      56
+     ]
+    },
+    "symbol": "Lossy",
+    "package": "grep-searcher"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-e9f9af0a188d",
+   "category": "duplicate",
+   "group": "waste",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "2 structurally identical methods (identifiers/literals aside): crates/index/src/literal.rs#Analysis.finalize, crates/index/src/literal.rs#Analysis.simplify — extract the shared implementation",
+   "location": {
+    "path": "crates/index/src/literal.rs",
+    "range": {
+     "start": [
+      469,
+      5
+     ],
+     "end": [
+      491,
+      6
+     ]
+    },
+    "symbol": "Analysis.finalize",
+    "package": "grep-index"
+   },
+   "related": [
+    {
+     "role": "clone",
+     "path": "crates/index/src/literal.rs",
+     "range": {
+      "start": [
+       469,
+       5
+      ],
+      "end": [
+       491,
+       6
+      ]
+     },
+     "note": "Analysis.finalize"
+    },
+    {
+     "role": "clone",
+     "path": "crates/index/src/literal.rs",
+     "range": {
+      "start": [
+       445,
+       5
+      ],
+      "end": [
+       467,
+       6
+      ]
+     },
+     "note": "Analysis.simplify"
+    }
+   ],
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-e9fef2c30d27",
+   "category": "internal-only",
+   "group": "waste",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "possible",
+   "message": "crates/index/src/literal.rs#GramQueryBuilder.new is declared pub and every confidently resolved use is within its own file, but weaker matches point outside it — private would suffice for this method only if those are not real uses",
+   "location": {
+    "path": "crates/index/src/literal.rs",
+    "range": {
+     "start": [
+      644,
+      5
+     ],
+     "end": [
+      646,
+      6
+     ]
+    },
+    "symbol": "GramQueryBuilder.new",
+    "package": "grep-index"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-ec12d812c757",
+   "category": "untested",
+   "group": "risk",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "probable",
+   "message": "crates/core/logger.rs#Logger.flush is production-reachable but no test reaches this method",
+   "location": {
+    "path": "crates/core/logger.rs",
+    "range": {
+     "start": [
+      69,
+      5
+     ],
+     "end": [
+      71,
+      6
+     ]
+    },
+    "symbol": "Logger.flush",
+    "package": "ripgrep"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-ec46e578b9e5",
+   "category": "untested",
+   "group": "risk",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "probable",
+   "message": "crates/printer/src/standard.rs#Standard.new_no_color is production-reachable but no test reaches this method",
+   "location": {
+    "path": "crates/printer/src/standard.rs",
+    "range": {
+     "start": [
+      505,
+      5
+     ],
+     "end": [
+      507,
+      6
+     ]
+    },
+    "symbol": "Standard.new_no_color",
+    "package": "grep-printer"
+   },
+   "sources": [
+    "adapter:rust",
+    "core:surface"
+   ]
+  },
+  {
+   "id": "kndo-eca1da5bb837",
+   "category": "internal-only",
+   "group": "waste",
+   "subject_kind": "struct",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "crates/index/src/literal.rs#Analysis is declared pub but only used within its own file — private would suffice for this struct",
+   "location": {
+    "path": "crates/index/src/literal.rs",
+    "range": {
+     "start": [
+      320,
+      1
+     ],
+     "end": [
+      326,
+      2
+     ]
+    },
+    "symbol": "Analysis",
+    "package": "grep-index"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-f0eb8641bc9e",
+   "category": "private-type-leak",
+   "group": "defect",
+   "subject_kind": "method",
+   "severity": "warning",
+   "confidence": "certain",
+   "message": "crates/searcher/src/searcher/core.rs#Core.matched is exported but its signature references Range, which is not — consumers can see the method yet cannot name that type (export Range, or narrow Core.matched)",
+   "location": {
+    "path": "crates/searcher/src/searcher/core.rs",
+    "range": {
+     "start": [
+      102,
+      17
+     ],
+     "end": [
+      102,
+      22
+     ]
+    },
+    "symbol": "Core.matched",
+    "package": "grep-searcher"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-f43767ad8f6c",
+   "category": "duplicate",
+   "group": "waste",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "2 structurally identical methods (identifiers/literals aside): crates/printer/src/jsont.rs#Context.serialize, crates/printer/src/jsont.rs#Match.serialize — extract the shared implementation",
+   "location": {
+    "path": "crates/printer/src/jsont.rs",
+    "range": {
+     "start": [
+      120,
+      5
+     ],
+     "end": [
+      133,
+      6
+     ]
+    },
+    "symbol": "Context.serialize",
+    "package": "grep-printer"
+   },
+   "related": [
+    {
+     "role": "clone",
+     "path": "crates/printer/src/jsont.rs",
+     "range": {
+      "start": [
+       120,
+       5
+      ],
+      "end": [
+       133,
+       6
+      ]
+     },
+     "note": "Context.serialize"
+    },
+    {
+     "role": "clone",
+     "path": "crates/printer/src/jsont.rs",
+     "range": {
+      "start": [
+       95,
+       5
+      ],
+      "end": [
+       108,
+       6
+      ]
+     },
+     "note": "Match.serialize"
+    }
+   ],
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-f470587d2aa8",
+   "category": "untested",
+   "group": "risk",
+   "subject_kind": "function",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "crates/cli/src/pattern.rs#patterns_from_path is production-reachable but no test reaches this function",
+   "location": {
+    "path": "crates/cli/src/pattern.rs",
+    "range": {
+     "start": [
+      82,
+      1
+     ],
+     "end": [
+      96,
+      2
+     ]
+    },
+    "symbol": "patterns_from_path",
+    "package": "grep-cli"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-f4dbd10e4743",
+   "category": "internal-only",
+   "group": "waste",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "possible",
+   "message": "crates/searcher/src/line_buffer.rs#LineBuffer.set_binary_detection is declared pub(crate) and every confidently resolved use is within its own file, but weaker matches point outside it — private would suffice for this method only if those are not real uses",
+   "location": {
+    "path": "crates/searcher/src/line_buffer.rs",
+    "range": {
+     "start": [
+      330,
+      5
+     ],
+     "end": [
+      332,
+      6
+     ]
+    },
+    "symbol": "LineBuffer.set_binary_detection",
+    "package": "grep-searcher"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-f5341f777807",
+   "category": "private-type-leak",
+   "group": "defect",
+   "subject_kind": "method",
+   "severity": "warning",
+   "confidence": "certain",
+   "message": "crates/searcher/src/searcher/core.rs#Core.detect_binary is exported but its signature references Range, which is not — consumers can see the method yet cannot name that type (export Range, or narrow Core.detect_binary)",
+   "location": {
+    "path": "crates/searcher/src/searcher/core.rs",
+    "range": {
+     "start": [
+      218,
+      17
+     ],
+     "end": [
+      218,
+      22
+     ]
+    },
+    "symbol": "Core.detect_binary",
+    "package": "grep-searcher"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-f550195cc7da",
+   "category": "version-skew",
+   "group": "defect",
+   "subject_kind": "dependency",
+   "severity": "warning",
+   "confidence": "certain",
+   "message": "regex-syntax is declared with diverging version requirements: crates/globset/Cargo.toml (0.8.0), crates/index/Cargo.toml (0.8.8), crates/regex/Cargo.toml (0.8.0)",
+   "location": {
+    "path": "crates/globset/Cargo.toml",
+    "symbol": "regex-syntax"
+   },
+   "related": [
+    {
+     "role": "declaration",
+     "path": "crates/globset/Cargo.toml",
+     "note": "0.8.0"
+    },
+    {
+     "role": "declaration",
+     "path": "crates/index/Cargo.toml",
+     "note": "0.8.8"
+    },
+    {
+     "role": "declaration",
+     "path": "crates/regex/Cargo.toml",
+     "note": "0.8.0"
+    }
+   ],
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-f6bc44d97339",
+   "category": "internal-only",
+   "group": "waste",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "possible",
+   "message": "crates/index/src/index.rs#IndexBuilder.write is declared pub and every confidently resolved use is within its own file, but weaker matches point outside it — private would suffice for this method only if those are not real uses",
+   "location": {
+    "path": "crates/index/src/index.rs",
+    "range": {
+     "start": [
+      98,
+      5
+     ],
+     "end": [
+      101,
+      6
+     ]
+    },
+    "symbol": "IndexBuilder.write",
+    "package": "grep-index"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-f6e1e012b88f",
+   "category": "duplicate",
+   "group": "waste",
+   "subject_kind": "file",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "4 identical files share the same content: COPYING, crates/globset/COPYING, crates/grep/COPYING and 1 more",
+   "location": {
+    "path": "COPYING"
+   },
+   "related": [
+    {
+     "role": "clone",
+     "path": "COPYING"
+    },
+    {
+     "role": "clone",
+     "path": "crates/globset/COPYING"
+    },
+    {
+     "role": "clone",
+     "path": "crates/grep/COPYING"
+    },
+    {
+     "role": "clone",
+     "path": "crates/ignore/COPYING"
+    }
+   ]
+  },
+  {
+   "id": "kndo-f6f37b56635f",
+   "category": "duplicate",
+   "group": "waste",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "2 structurally identical methods (identifiers/literals aside): crates/index/src/literal.rs#GramQuery.and, crates/index/src/literal.rs#GramQuery.or — extract the shared implementation",
+   "location": {
+    "path": "crates/index/src/literal.rs",
+    "range": {
+     "start": [
+      101,
+      5
+     ],
+     "end": [
+      127,
+      6
+     ]
+    },
+    "symbol": "GramQuery.and",
+    "package": "grep-index"
+   },
+   "related": [
+    {
+     "role": "clone",
+     "path": "crates/index/src/literal.rs",
+     "range": {
+      "start": [
+       101,
+       5
+      ],
+      "end": [
+       127,
+       6
+      ]
+     },
+     "note": "GramQuery.and"
+    },
+    {
+     "role": "clone",
+     "path": "crates/index/src/literal.rs",
+     "range": {
+      "start": [
+       73,
+       5
+      ],
+      "end": [
+       99,
+       6
+      ]
+     },
+     "note": "GramQuery.or"
+    }
+   ],
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-f7903ec1a0e8",
+   "category": "untested",
+   "group": "risk",
+   "subject_kind": "file",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "fuzz/fuzz_targets/fuzz_glob.rs is production-reachable but no test reaches it",
+   "location": {
+    "path": "fuzz/fuzz_targets/fuzz_glob.rs",
+    "package": "fuzz"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-f7a7b202f4b2",
+   "category": "internal-only",
+   "group": "waste",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "possible",
+   "message": "crates/index/src/index.rs#IndexBuilder.build is declared pub and every confidently resolved use is within its own file, but weaker matches point outside it — private would suffice for this method only if those are not real uses",
+   "location": {
+    "path": "crates/index/src/index.rs",
+    "range": {
+     "start": [
+      43,
+      5
+     ],
+     "end": [
+      50,
+      6
+     ]
+    },
+    "symbol": "IndexBuilder.build",
+    "package": "grep-index"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-f81f2124fe0b",
+   "category": "unused",
+   "group": "waste",
+   "subject_kind": "method",
+   "severity": "warning",
+   "confidence": "certain",
+   "message": "crates/core/flags/lowargs.rs#ContextSeparator.disabled is unreachable: nothing references this method",
+   "location": {
+    "path": "crates/core/flags/lowargs.rs",
+    "range": {
+     "start": [
+      507,
+      5
+     ],
+     "end": [
+      509,
+      6
+     ]
+    },
+    "symbol": "ContextSeparator.disabled",
+    "package": "ripgrep"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-fcfbed92ed98",
+   "category": "internal-only",
+   "group": "waste",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "possible",
+   "message": "crates/ignore/src/dir.rs#IgnoreRef.path is declared pub(crate) and every confidently resolved use is within its own file, but weaker matches point outside it — private would suffice for this method only if those are not real uses",
+   "location": {
+    "path": "crates/ignore/src/dir.rs",
+    "range": {
+     "start": [
+      721,
+      5
+     ],
+     "end": [
+      723,
+      6
+     ]
+    },
+    "symbol": "IgnoreRef.path",
+    "package": "ignore"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-ff9f6a1e2122",
+   "category": "unused",
+   "group": "waste",
+   "subject_kind": "method",
+   "severity": "warning",
+   "confidence": "certain",
+   "message": "crates/regex/src/literal.rs#TSeq.is_exact is unreachable: nothing references this method",
+   "location": {
+    "path": "crates/regex/src/literal.rs",
+    "range": {
+     "start": [
+      516,
+      5
+     ],
+     "end": [
+      518,
+      6
+     ]
+    },
+    "symbol": "TSeq.is_exact",
+    "package": "grep-regex"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  },
+  {
+   "id": "kndo-ffc3a383cd2c",
+   "category": "internal-only",
+   "group": "waste",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "possible",
+   "message": "crates/printer/src/hyperlink/mod.rs#Values.new is declared pub(crate) and every confidently resolved use is within its own file, but weaker matches point outside it — private would suffice for this method only if those are not real uses",
+   "location": {
+    "path": "crates/printer/src/hyperlink/mod.rs",
+    "range": {
+     "start": [
+      592,
+      5
+     ],
+     "end": [
+      594,
+      6
+     ]
+    },
+    "symbol": "Values.new",
+    "package": "grep-printer"
+   },
+   "sources": [
+    "adapter:rust"
+   ]
+  }
+ ],
+ "health": {
+  "score": 96.7,
+  "grade": "A",
+  "categories": [
+   {
+    "category": "unused-symbols",
+    "ratio": 0.002,
+    "penalty": 0.2,
+    "count": 7
+   },
+   {
+    "category": "unused-dependencies",
+    "ratio": 0.049,
+    "penalty": 1.5,
+    "count": 4
+   },
+   {
+    "category": "unused-files",
+    "ratio": 0.0,
+    "penalty": 0.0,
+    "count": 0
+   },
+   {
+    "category": "test-only",
+    "ratio": 0.0,
+    "penalty": 0.0,
+    "count": 0
+   },
+   {
+    "category": "duplication",
+    "ratio": 0.012,
+    "penalty": 0.8,
+    "tokens_duplicated": 2004
+   },
+   {
+    "category": "crap",
+    "ratio": 0.0,
+    "penalty": 0.0,
+    "coverage": "none"
+   },
+   {
+    "category": "cycles",
+    "ratio": 0.0,
+    "penalty": 0.0,
+    "count": 0
+   },
+   {
+    "category": "internal-only",
+    "ratio": 0.056,
+    "penalty": 0.6,
+    "count": 59
+   },
+   {
+    "category": "untested",
+    "ratio": 0.018,
+    "penalty": 0.2,
+    "count": 54
+   }
+  ],
+  "packages": [
+   {
+    "package": "fuzz",
+    "score": 100.0,
+    "grade": "A"
+   },
+   {
+    "package": "globset",
+    "score": 95.5,
+    "grade": "A"
+   },
+   {
+    "package": "grep",
+    "score": 100.0,
+    "grade": "A"
+   },
+   {
+    "package": "grep-cli",
+    "score": 98.5,
+    "grade": "A"
+   },
+   {
+    "package": "grep-index",
+    "score": 76.6,
+    "grade": "C"
+   },
+   {
+    "package": "grep-matcher",
+    "score": 99.4,
+    "grade": "A"
+   },
+   {
+    "package": "grep-pcre2",
+    "score": 98.9,
+    "grade": "A"
+   },
+   {
+    "package": "grep-printer",
+    "score": 95.0,
+    "grade": "A"
+   },
+   {
+    "package": "grep-regex",
+    "score": 96.5,
+    "grade": "A"
+   },
+   {
+    "package": "grep-searcher",
+    "score": 98.6,
+    "grade": "A"
+   },
+   {
+    "package": "ignore",
+    "score": 99.4,
+    "grade": "A"
+   },
+   {
+    "package": "ripgrep",
+    "score": 96.5,
+    "grade": "A"
+   }
+  ]
+ },
+ "suppressed": {
+  "inline": 0,
+  "config": 0
+ },
+ "diagnostics": [
+  {
+   "level": "info",
+   "message": "crap: no coverage ingested — skipped (the score is complexity × untestedness; without a report the coverage factor would be a guess, not a measurement — drop a report at a well-known path (lcov.info, coverage.xml, jacoco.xml, coverage.out, …) or point [plugins.<id>] report at one to enable it)"
+  }
+ ]
+}

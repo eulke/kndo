@@ -1,0 +1,683 @@
+{
+ "schema_version": "1.3.0",
+ "kndo_version": "0.1.0",
+ "run": {
+  "mode": "full",
+  "cache": "disabled",
+  "adapters": [
+   {
+    "id": "js-ts",
+    "files": 0
+   },
+   {
+    "id": "go",
+    "files": 99
+   },
+   {
+    "id": "rust",
+    "files": 0
+   },
+   {
+    "id": "java",
+    "files": 0
+   },
+   {
+    "id": "kotlin",
+    "files": 0
+   },
+   {
+    "id": "swift",
+    "files": 0
+   },
+   {
+    "id": "json",
+    "files": 0
+   },
+   {
+    "id": "css",
+    "files": 0
+   },
+   {
+    "id": "html",
+    "files": 0
+   }
+  ],
+  "plugins": [
+   {
+    "id": "kndo:coverage-lcov",
+    "activated_by": "always-on"
+   },
+   {
+    "id": "kndo:coverage-cobertura",
+    "activated_by": "always-on"
+   },
+   {
+    "id": "kndo:coverage-jacoco",
+    "activated_by": "always-on"
+   },
+   {
+    "id": "kndo:coverage-go",
+    "activated_by": "always-on"
+   }
+  ],
+  "abstained": [
+   {
+    "category": "crap",
+    "reason": "crap: no coverage ingested — skipped (the score is complexity × untestedness; without a report the coverage factor would be a guess, not a measurement — drop a report at a well-known path (lcov.info, coverage.xml, jacoco.xml, coverage.out, …) or point [plugins.<id>] report at one to enable it)"
+   }
+  ]
+ },
+ "findings": [
+  {
+   "id": "kndo-0d02411173a5",
+   "category": "untested",
+   "group": "risk",
+   "subject_kind": "function",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "ginS/gins.go#RunUnix is production-reachable but no test reaches this function",
+   "location": {
+    "path": "ginS/gins.go",
+    "range": {
+     "start": [
+      150,
+      1
+     ],
+     "end": [
+      152,
+      2
+     ]
+    },
+    "symbol": "RunUnix",
+    "package": "github.com/gin-gonic/gin"
+   },
+   "sources": [
+    "adapter:go"
+   ]
+  },
+  {
+   "id": "kndo-1149115e0ccf",
+   "category": "duplicate",
+   "group": "waste",
+   "subject_kind": "function",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "2 structurally identical functions (identifiers/literals aside): auth.go#BasicAuthForProxy:104, auth.go#BasicAuthForRealm:54 — extract the shared implementation",
+   "location": {
+    "path": "auth.go",
+    "range": {
+     "start": [
+      104,
+      9
+     ],
+     "end": [
+      115,
+      3
+     ]
+    },
+    "symbol": "BasicAuthForProxy",
+    "package": "github.com/gin-gonic/gin"
+   },
+   "related": [
+    {
+     "role": "clone",
+     "path": "auth.go",
+     "range": {
+      "start": [
+       104,
+       9
+      ],
+      "end": [
+       115,
+       3
+      ]
+     },
+     "note": "BasicAuthForProxy"
+    },
+    {
+     "role": "clone",
+     "path": "auth.go",
+     "range": {
+      "start": [
+       54,
+       9
+      ],
+      "end": [
+       67,
+       3
+      ]
+     },
+     "note": "BasicAuthForRealm"
+    }
+   ],
+   "sources": [
+    "adapter:go"
+   ]
+  },
+  {
+   "id": "kndo-1b65e32eb9bd",
+   "category": "untested",
+   "group": "risk",
+   "subject_kind": "function",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "codec/json/sonic.go#init is production-reachable but no test reaches this function",
+   "location": {
+    "path": "codec/json/sonic.go",
+    "range": {
+     "start": [
+      18,
+      1
+     ],
+     "end": [
+      20,
+      2
+     ]
+    },
+    "symbol": "init",
+    "package": "github.com/gin-gonic/gin"
+   },
+   "sources": [
+    "adapter:go"
+   ]
+  },
+  {
+   "id": "kndo-378953aaad59",
+   "category": "untested",
+   "group": "risk",
+   "subject_kind": "function",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "ginS/gins.go#RunTLS is production-reachable but no test reaches this function",
+   "location": {
+    "path": "ginS/gins.go",
+    "range": {
+     "start": [
+      143,
+      1
+     ],
+     "end": [
+      145,
+      2
+     ]
+    },
+    "symbol": "RunTLS",
+    "package": "github.com/gin-gonic/gin"
+   },
+   "sources": [
+    "adapter:go"
+   ]
+  },
+  {
+   "id": "kndo-68d438c2d0a8",
+   "category": "untested",
+   "group": "risk",
+   "subject_kind": "function",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "ginS/gins.go#Run is production-reachable but no test reaches this function",
+   "location": {
+    "path": "ginS/gins.go",
+    "range": {
+     "start": [
+      136,
+      1
+     ],
+     "end": [
+      138,
+      2
+     ]
+    },
+    "symbol": "Run",
+    "package": "github.com/gin-gonic/gin"
+   },
+   "sources": [
+    "adapter:go"
+   ]
+  },
+  {
+   "id": "kndo-6e20ee88e1b1",
+   "category": "internal-only",
+   "group": "waste",
+   "subject_kind": "method",
+   "severity": "info",
+   "confidence": "possible",
+   "message": "internal/fs/fs.go#FileSystem.Open is declared exported (internal) and every confidently resolved use is within its own file, but weaker matches point outside it — unexported would suffice for this method only if those are not real uses",
+   "location": {
+    "path": "internal/fs/fs.go",
+    "range": {
+     "start": [
+      14,
+      1
+     ],
+     "end": [
+      21,
+      2
+     ]
+    },
+    "symbol": "FileSystem.Open",
+    "package": "github.com/gin-gonic/gin"
+   },
+   "sources": [
+    "adapter:go"
+   ]
+  },
+  {
+   "id": "kndo-7c6c7daade05",
+   "category": "test-only",
+   "group": "waste",
+   "subject_kind": "dependency",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "github.com/stretchr/testify is declared in github.com/gin-gonic/gin's manifest but only imported by test files — belongs in devDependencies",
+   "location": {
+    "path": "go.mod",
+    "symbol": "github.com/stretchr/testify",
+    "package": "github.com/gin-gonic/gin"
+   },
+   "sources": [
+    "adapter:go"
+   ]
+  },
+  {
+   "id": "kndo-83b23a4e20ba",
+   "category": "test-only",
+   "group": "waste",
+   "subject_kind": "function",
+   "severity": "info",
+   "confidence": "probable",
+   "message": "test_helpers.go#waitForServerReady is reachable only from tests: nothing in production calls this function",
+   "location": {
+    "path": "test_helpers.go",
+    "range": {
+     "start": [
+      39,
+      1
+     ],
+     "end": [
+      57,
+      2
+     ]
+    },
+    "symbol": "waitForServerReady",
+    "package": "github.com/gin-gonic/gin"
+   },
+   "sources": [
+    "adapter:go"
+   ]
+  },
+  {
+   "id": "kndo-8b29c16e39b6",
+   "category": "test-only",
+   "group": "waste",
+   "subject_kind": "const",
+   "severity": "info",
+   "confidence": "probable",
+   "message": "utils.go#localhostIP is reachable only from tests: nothing in production calls this const",
+   "location": {
+    "path": "utils.go",
+    "range": {
+     "start": [
+      23,
+      7
+     ],
+     "end": [
+      23,
+      18
+     ]
+    },
+    "symbol": "localhostIP",
+    "package": "github.com/gin-gonic/gin"
+   },
+   "sources": [
+    "adapter:go"
+   ]
+  },
+  {
+   "id": "kndo-8eea2d6f8497",
+   "category": "untested",
+   "group": "risk",
+   "subject_kind": "function",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "codec/json/go_json.go#init is production-reachable but no test reaches this function",
+   "location": {
+    "path": "codec/json/go_json.go",
+    "range": {
+     "start": [
+      18,
+      1
+     ],
+     "end": [
+      20,
+      2
+     ]
+    },
+    "symbol": "init",
+    "package": "github.com/gin-gonic/gin"
+   },
+   "sources": [
+    "adapter:go"
+   ]
+  },
+  {
+   "id": "kndo-95e9158e8f69",
+   "category": "test-only",
+   "group": "waste",
+   "subject_kind": "const",
+   "severity": "info",
+   "confidence": "probable",
+   "message": "utils.go#localhostIPv6 is reachable only from tests: nothing in production calls this const",
+   "location": {
+    "path": "utils.go",
+    "range": {
+     "start": [
+      26,
+      7
+     ],
+     "end": [
+      26,
+      20
+     ]
+    },
+    "symbol": "localhostIPv6",
+    "package": "github.com/gin-gonic/gin"
+   },
+   "sources": [
+    "adapter:go"
+   ]
+  },
+  {
+   "id": "kndo-9de39d034ec7",
+   "category": "untested",
+   "group": "risk",
+   "subject_kind": "function",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "ginS/gins.go#LoadHTMLFiles is production-reachable but no test reaches this function",
+   "location": {
+    "path": "ginS/gins.go",
+    "range": {
+     "start": [
+      25,
+      1
+     ],
+     "end": [
+      27,
+      2
+     ]
+    },
+    "symbol": "LoadHTMLFiles",
+    "package": "github.com/gin-gonic/gin"
+   },
+   "sources": [
+    "adapter:go"
+   ]
+  },
+  {
+   "id": "kndo-b244da4dfc61",
+   "category": "test-only",
+   "group": "waste",
+   "subject_kind": "dependency",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "github.com/modern-go/reflect2 is declared in github.com/gin-gonic/gin's manifest but only imported by test files — belongs in devDependencies",
+   "location": {
+    "path": "go.mod",
+    "symbol": "github.com/modern-go/reflect2",
+    "package": "github.com/gin-gonic/gin"
+   },
+   "sources": [
+    "adapter:go"
+   ]
+  },
+  {
+   "id": "kndo-b9f5e5b4b89f",
+   "category": "untested",
+   "group": "risk",
+   "subject_kind": "function",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "codec/json/jsoniter.go#init is production-reachable but no test reaches this function",
+   "location": {
+    "path": "codec/json/jsoniter.go",
+    "range": {
+     "start": [
+      18,
+      1
+     ],
+     "end": [
+      20,
+      2
+     ]
+    },
+    "symbol": "init",
+    "package": "github.com/gin-gonic/gin"
+   },
+   "sources": [
+    "adapter:go"
+   ]
+  },
+  {
+   "id": "kndo-bbfe58320b84",
+   "category": "untested",
+   "group": "risk",
+   "subject_kind": "file",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "context_appengine.go is production-reachable but no test reaches it",
+   "location": {
+    "path": "context_appengine.go",
+    "package": "github.com/gin-gonic/gin"
+   },
+   "sources": [
+    "adapter:go"
+   ]
+  },
+  {
+   "id": "kndo-d37152cd8e85",
+   "category": "untested",
+   "group": "risk",
+   "subject_kind": "function",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "mode.go#init is production-reachable but no test reaches this function",
+   "location": {
+    "path": "mode.go",
+    "range": {
+     "start": [
+      52,
+      1
+     ],
+     "end": [
+      55,
+      2
+     ]
+    },
+    "symbol": "init",
+    "package": "github.com/gin-gonic/gin"
+   },
+   "sources": [
+    "adapter:go"
+   ]
+  },
+  {
+   "id": "kndo-dc66e5d738fb",
+   "category": "untested",
+   "group": "risk",
+   "subject_kind": "function",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "ginS/gins.go#LoadHTMLGlob is production-reachable but no test reaches this function",
+   "location": {
+    "path": "ginS/gins.go",
+    "range": {
+     "start": [
+      20,
+      1
+     ],
+     "end": [
+      22,
+      2
+     ]
+    },
+    "symbol": "LoadHTMLGlob",
+    "package": "github.com/gin-gonic/gin"
+   },
+   "sources": [
+    "adapter:go"
+   ]
+  },
+  {
+   "id": "kndo-df46463831a9",
+   "category": "untested",
+   "group": "risk",
+   "subject_kind": "function",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "ginS/gins.go#LoadHTMLFS is production-reachable but no test reaches this function",
+   "location": {
+    "path": "ginS/gins.go",
+    "range": {
+     "start": [
+      30,
+      1
+     ],
+     "end": [
+      32,
+      2
+     ]
+    },
+    "symbol": "LoadHTMLFS",
+    "package": "github.com/gin-gonic/gin"
+   },
+   "sources": [
+    "adapter:go"
+   ]
+  },
+  {
+   "id": "kndo-e28503e6cdd7",
+   "category": "untested",
+   "group": "risk",
+   "subject_kind": "function",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "ginS/gins.go#RunFd is production-reachable but no test reaches this function",
+   "location": {
+    "path": "ginS/gins.go",
+    "range": {
+     "start": [
+      157,
+      1
+     ],
+     "end": [
+      159,
+      2
+     ]
+    },
+    "symbol": "RunFd",
+    "package": "github.com/gin-gonic/gin"
+   },
+   "sources": [
+    "adapter:go"
+   ]
+  },
+  {
+   "id": "kndo-f36e1ceb9d43",
+   "category": "untested",
+   "group": "risk",
+   "subject_kind": "function",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "codec/json/json.go#init is production-reachable but no test reaches this function",
+   "location": {
+    "path": "codec/json/json.go",
+    "range": {
+     "start": [
+      17,
+      1
+     ],
+     "end": [
+      19,
+      2
+     ]
+    },
+    "symbol": "init",
+    "package": "github.com/gin-gonic/gin"
+   },
+   "sources": [
+    "adapter:go"
+   ]
+  }
+ ],
+ "health": {
+  "score": 94.8,
+  "grade": "A",
+  "categories": [
+   {
+    "category": "unused-symbols",
+    "ratio": 0.0,
+    "penalty": 0.0,
+    "count": 0
+   },
+   {
+    "category": "unused-dependencies",
+    "ratio": 0.133,
+    "penalty": 4.0,
+    "count": 2
+   },
+   {
+    "category": "unused-files",
+    "ratio": 0.017,
+    "penalty": 0.7,
+    "count": 1
+   },
+   {
+    "category": "test-only",
+    "ratio": 0.004,
+    "penalty": 0.2,
+    "count": 3
+   },
+   {
+    "category": "duplication",
+    "ratio": 0.0,
+    "penalty": 0.0,
+    "tokens_duplicated": 53
+   },
+   {
+    "category": "crap",
+    "ratio": 0.0,
+    "penalty": 0.0,
+    "coverage": "none"
+   },
+   {
+    "category": "cycles",
+    "ratio": 0.0,
+    "penalty": 0.0,
+    "count": 0
+   },
+   {
+    "category": "internal-only",
+    "ratio": 0.002,
+    "penalty": 0.0,
+    "count": 1
+   },
+   {
+    "category": "untested",
+    "ratio": 0.029,
+    "penalty": 0.3,
+    "count": 21
+   }
+  ]
+ },
+ "suppressed": {
+  "inline": 0,
+  "config": 0
+ },
+ "diagnostics": [
+  {
+   "level": "info",
+   "message": "crap: no coverage ingested — skipped (the score is complexity × untestedness; without a report the coverage factor would be a guess, not a measurement — drop a report at a well-known path (lcov.info, coverage.xml, jacoco.xml, coverage.out, …) or point [plugins.<id>] report at one to enable it)"
+  }
+ ]
+}

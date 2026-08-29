@@ -1,0 +1,80 @@
+# The oracle corpus: pinned open-source repositories the v2 is measured against.
+#
+# Selection rule: every repo is one v1's own precision work already measured — its
+# incidents are recorded in v1's history — so oracle diffs are regression-meaningful,
+# not arbitrary. 8 repos, all 6 languages, 4 of them from the 24-repo field audit
+# (commit 73040fd: 345 findings hand-verified, 170 true / 175 false).
+#
+# Pin = the exact commit the oracle ran on. Re-running the oracle on any other commit
+# is a different experiment and must update this file and oracle/ together.
+
+[oracle]
+# Fields stripped from kndo's JSON before versioning (vary per run/machine, carry no
+# analysis signal): run.started_at, run.duration_ms, run.project_root.
+stripped_run_fields = ["started_at", "duration_ms", "project_root"]
+kndo_version_commit = "98fe860"   # eulke/kondo commit the oracle binary was built from
+invocation = "kndo check --format json --no-cache"
+
+[[repo]]
+name = "vite"
+github = "vitejs/vite"
+commit = "e2b597de0ef14598901703f5aa52f8c962007d02"
+license = "MIT"
+languages = ["ts", "js"]
+why = "v1 measured it repeatedly: 11/61 configs declare an entry (killed kndo:vite), HTML adapter net-negative first measurement (+181 before the untested fix)."
+
+[[repo]]
+name = "lodash"
+github = "lodash/lodash"
+commit = "a666ba591064c8011988275790ad7d625279f09c"
+license = "MIT"
+languages = ["js"]
+why = "CJS-era JS — exercises the JS adapter's require/dynamic half, the opposite world from vite's ESM/TS."
+
+[[repo]]
+name = "gin"
+github = "gin-gonic/gin"
+commit = "dcaa4296d111981ffb31ac3eba90bb63e1eb5ab9"
+license = "MIT"
+languages = ["go"]
+why = "Go representative from the audit family; unit/unit_parent (package model) coverage."
+
+[[repo]]
+name = "ripgrep"
+github = "BurntSushi/ripgrep"
+commit = "3fce3b5bb0236da2df6d99672afb8a719642eca7"
+license = "Unlicense OR MIT"
+languages = ["rust"]
+why = "Rust workspace with crates/, benches, build scripts — the adapter v1 patched most (43 extraction commits)."
+
+[[repo]]
+name = "guava"
+github = "google/guava"
+commit = "d5cc108ede2f3fc4a0c512c90920000fcdcbc4a0"
+license = "Apache-2.0"
+languages = ["java"]
+why = "The 88% incident: one parent-pom source-dir miss made v1 read most of the repo as dead (-11,444/+2,435 findings when fixed). The single most regression-sensitive repo in the corpus."
+
+[[repo]]
+name = "Exposed"
+github = "JetBrains/Exposed"
+commit = "4be9aee04c4751ca141c034ff6b41ed5f8339916"
+license = "Apache-2.0"
+languages = ["kotlin"]
+why = "Kotlin + Gradle multi-module; exercises the jvm-manifest path shared with Java."
+
+[[repo]]
+name = "Alamofire"
+github = "Alamofire/Alamofire"
+commit = "0455bfb650893e86ad07ace16e5f2d36dadf46f4"
+license = "MIT"
+languages = ["swift"]
+why = "Named in the audit commit: the metrics-by-name collapse (a method reported as a clone of itself) was confirmed here."
+
+[[repo]]
+name = "vapor"
+github = "vapor/vapor"
+commit = "cf330f6558504b8e2acafb1ac253094d8f7ca75e"
+license = "MIT"
+languages = ["swift"]
+why = "The untested-noise measurement anchor (56% of vapor's untested findings were one bug's noise before the fix)."

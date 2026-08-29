@@ -1,0 +1,29 @@
+#!/bin/sh
+# Guard wrapper for agent shells: refuses the two git forms that destroy uncommitted
+# work when misused as verification (stash; checkout-as-file-restore), passes
+# everything else to the real git. Put this directory first on PATH in agent sessions.
+set -eu
+
+real_git=$(command -v -p git || echo /usr/bin/git)
+
+if [ "${1:-}" = "stash" ]; then
+    echo "git-guard: 'git stash' is disabled in agent sessions — a stash mishap once" >&2
+    echo "deleted ten fixture corpora and the baseline. Commit to a WIP branch, or use" >&2
+    echo "v2/harness/verify-fix.sh to test without touching the working tree." >&2
+    exit 1
+fi
+
+if [ "${1:-}" = "checkout" ] || [ "${1:-}" = "restore" ]; then
+    for arg in "$@"; do
+        if [ "$arg" = "--" ] || [ "$1" = "restore" ]; then
+            echo "git-guard: restoring files over the working tree is disabled as a" >&2
+            echo "verification tool — it has eaten sessions' work. To prove a test fails" >&2
+            echo "without a fix, use v2/harness/verify-fix.sh (reads history, changes" >&2
+            echo "nothing). To actually discard work, run the real git explicitly:" >&2
+            echo "  $real_git $*" >&2
+            exit 1
+        fi
+    done
+fi
+
+exec "$real_git" "$@"

@@ -1,0 +1,772 @@
+{
+ "schema_version": "1.3.0",
+ "kndo_version": "0.1.0",
+ "run": {
+  "mode": "full",
+  "cache": "disabled",
+  "adapters": [
+   {
+    "id": "js-ts",
+    "files": 54
+   },
+   {
+    "id": "go",
+    "files": 0
+   },
+   {
+    "id": "rust",
+    "files": 0
+   },
+   {
+    "id": "java",
+    "files": 0
+   },
+   {
+    "id": "kotlin",
+    "files": 0
+   },
+   {
+    "id": "swift",
+    "files": 0
+   },
+   {
+    "id": "json",
+    "files": 2
+   },
+   {
+    "id": "css",
+    "files": 5
+   },
+   {
+    "id": "html",
+    "files": 6
+   }
+  ],
+  "plugins": [
+   {
+    "id": "kndo:coverage-lcov",
+    "activated_by": "always-on"
+   },
+   {
+    "id": "kndo:coverage-cobertura",
+    "activated_by": "always-on"
+   },
+   {
+    "id": "kndo:coverage-jacoco",
+    "activated_by": "always-on"
+   },
+   {
+    "id": "kndo:coverage-go",
+    "activated_by": "always-on"
+   }
+  ],
+  "abstained": [
+   {
+    "category": "crap",
+    "reason": "crap: no coverage ingested — skipped (the score is complexity × untestedness; without a report the coverage factor would be a guess, not a measurement — drop a report at a well-known path (lcov.info, coverage.xml, jacoco.xml, coverage.out, …) or point [plugins.<id>] report at one to enable it)"
+   }
+  ]
+ },
+ "findings": [
+  {
+   "id": "kndo-00252623b1a4",
+   "category": "undeclared",
+   "group": "defect",
+   "subject_kind": "dependency",
+   "severity": "warning",
+   "confidence": "certain",
+   "message": "marky-markdown is imported but not declared in lodash's manifest (phantom dependency — likely resolving via hoisting/transitivity): imported by lib/main/build-site.js",
+   "location": {
+    "path": "package.json",
+    "symbol": "marky-markdown",
+    "package": "lodash"
+   },
+   "sources": [
+    "adapter:js-ts"
+   ]
+  },
+  {
+   "id": "kndo-0121f77279fe",
+   "category": "duplicate",
+   "group": "waste",
+   "subject_kind": "file",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "2 identical files share the same content: vendor/firebug-lite/skin/xp/blank.gif, vendor/firebug-lite/skin/xp/pixel_transparent.gif",
+   "location": {
+    "path": "vendor/firebug-lite/skin/xp/blank.gif"
+   },
+   "related": [
+    {
+     "role": "clone",
+     "path": "vendor/firebug-lite/skin/xp/blank.gif"
+    },
+    {
+     "role": "clone",
+     "path": "vendor/firebug-lite/skin/xp/pixel_transparent.gif"
+    }
+   ]
+  },
+  {
+   "id": "kndo-05d65e540e8c",
+   "category": "unused",
+   "group": "waste",
+   "subject_kind": "dependency",
+   "severity": "warning",
+   "confidence": "certain",
+   "message": "qunitjs is declared in lodash's manifest but never imported",
+   "location": {
+    "path": "package.json",
+    "symbol": "qunitjs",
+    "package": "lodash"
+   },
+   "sources": [
+    "adapter:js-ts"
+   ]
+  },
+  {
+   "id": "kndo-133ff41be67a",
+   "category": "unused",
+   "group": "waste",
+   "subject_kind": "dependency",
+   "severity": "warning",
+   "confidence": "certain",
+   "message": "codecov.io is declared in lodash's manifest but never imported",
+   "location": {
+    "path": "package.json",
+    "symbol": "codecov.io",
+    "package": "lodash"
+   },
+   "sources": [
+    "adapter:js-ts"
+   ]
+  },
+  {
+   "id": "kndo-13ad4081cc34",
+   "category": "undeclared",
+   "group": "defect",
+   "subject_kind": "dependency",
+   "severity": "warning",
+   "confidence": "certain",
+   "message": "system is imported but not declared in lodash's manifest (phantom dependency — likely resolving via hoisting/transitivity): imported by test/test.js",
+   "location": {
+    "path": "package.json",
+    "symbol": "system",
+    "package": "lodash"
+   },
+   "sources": [
+    "adapter:js-ts"
+   ]
+  },
+  {
+   "id": "kndo-303e3c3751cf",
+   "category": "unused",
+   "group": "waste",
+   "subject_kind": "file",
+   "severity": "warning",
+   "confidence": "certain",
+   "message": "vendor/firebug-lite/skin/xp/firebug.IE6.css is unreachable: no root or import reaches it",
+   "location": {
+    "path": "vendor/firebug-lite/skin/xp/firebug.IE6.css",
+    "package": "lodash"
+   },
+   "sources": [
+    "adapter:css"
+   ]
+  },
+  {
+   "id": "kndo-3313f7338591",
+   "category": "unused",
+   "group": "waste",
+   "subject_kind": "dependency",
+   "severity": "warning",
+   "confidence": "certain",
+   "message": "chalk is declared in lodash's manifest but never imported",
+   "location": {
+    "path": "package.json",
+    "symbol": "chalk",
+    "package": "lodash"
+   },
+   "sources": [
+    "adapter:js-ts"
+   ]
+  },
+  {
+   "id": "kndo-38fa11f7f56f",
+   "category": "unused",
+   "group": "waste",
+   "subject_kind": "file",
+   "severity": "warning",
+   "confidence": "certain",
+   "message": "package-lock.json is unreachable: no root or import reaches it",
+   "location": {
+    "path": "package-lock.json",
+    "package": "lodash"
+   },
+   "sources": [
+    "adapter:json"
+   ]
+  },
+  {
+   "id": "kndo-3fc13d863ffa",
+   "category": "unused",
+   "group": "waste",
+   "subject_kind": "dependency",
+   "severity": "warning",
+   "confidence": "certain",
+   "message": "lodash-doc-globals is declared in lodash's manifest but never imported",
+   "location": {
+    "path": "package.json",
+    "symbol": "lodash-doc-globals",
+    "package": "lodash"
+   },
+   "sources": [
+    "adapter:js-ts"
+   ]
+  },
+  {
+   "id": "kndo-47f757bff7ac",
+   "category": "unused",
+   "group": "waste",
+   "subject_kind": "file",
+   "severity": "warning",
+   "confidence": "certain",
+   "message": "fp/_convertBrowser.js is unreachable: no root or import reaches it",
+   "location": {
+    "path": "fp/_convertBrowser.js",
+    "package": "lodash"
+   },
+   "sources": [
+    "adapter:js-ts"
+   ]
+  },
+  {
+   "id": "kndo-4aaea66afd1d",
+   "category": "unused",
+   "group": "waste",
+   "subject_kind": "dependency",
+   "severity": "warning",
+   "confidence": "certain",
+   "message": "istanbul is declared in lodash's manifest but never imported",
+   "location": {
+    "path": "package.json",
+    "symbol": "istanbul",
+    "package": "lodash"
+   },
+   "sources": [
+    "adapter:js-ts"
+   ]
+  },
+  {
+   "id": "kndo-545c1d5cf7e7",
+   "category": "unused",
+   "group": "waste",
+   "subject_kind": "file",
+   "severity": "warning",
+   "confidence": "certain",
+   "message": "vendor/firebug-lite/skin/xp/firebug-1.3a2.css is unreachable: no root or import reaches it",
+   "location": {
+    "path": "vendor/firebug-lite/skin/xp/firebug-1.3a2.css",
+    "package": "lodash"
+   },
+   "sources": [
+    "adapter:css"
+   ]
+  },
+  {
+   "id": "kndo-5b730310ba11",
+   "category": "untested",
+   "group": "risk",
+   "subject_kind": "file",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "dist/mapping.fp.js is production-reachable but no test reaches it",
+   "location": {
+    "path": "dist/mapping.fp.js",
+    "package": "lodash"
+   },
+   "sources": [
+    "adapter:html",
+    "adapter:js-ts"
+   ]
+  },
+  {
+   "id": "kndo-5ed9a9701967",
+   "category": "unused",
+   "group": "waste",
+   "subject_kind": "file",
+   "severity": "warning",
+   "confidence": "certain",
+   "message": "vendor/firebug-lite/skin/xp/debugger.css is unreachable: no root or import reaches it",
+   "location": {
+    "path": "vendor/firebug-lite/skin/xp/debugger.css",
+    "package": "lodash"
+   },
+   "sources": [
+    "adapter:css"
+   ]
+  },
+  {
+   "id": "kndo-6d64eae2890e",
+   "category": "unused",
+   "group": "waste",
+   "subject_kind": "dependency",
+   "severity": "warning",
+   "confidence": "certain",
+   "message": "benchmark is declared in lodash's manifest but never imported",
+   "location": {
+    "path": "package.json",
+    "symbol": "benchmark",
+    "package": "lodash"
+   },
+   "sources": [
+    "adapter:js-ts"
+   ]
+  },
+  {
+   "id": "kndo-76e355d7ee23",
+   "category": "untested",
+   "group": "risk",
+   "subject_kind": "file",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "perf/asset/perf-ui.js is production-reachable but no test reaches it",
+   "location": {
+    "path": "perf/asset/perf-ui.js",
+    "package": "lodash"
+   },
+   "sources": [
+    "adapter:html",
+    "adapter:js-ts"
+   ]
+  },
+  {
+   "id": "kndo-7935af40cffe",
+   "category": "unused",
+   "group": "waste",
+   "subject_kind": "dependency",
+   "severity": "warning",
+   "confidence": "certain",
+   "message": "ecstatic is declared in lodash's manifest but never imported",
+   "location": {
+    "path": "package.json",
+    "symbol": "ecstatic",
+    "package": "lodash"
+   },
+   "sources": [
+    "adapter:js-ts"
+   ]
+  },
+  {
+   "id": "kndo-7948d4ed0c64",
+   "category": "unused",
+   "group": "waste",
+   "subject_kind": "dependency",
+   "severity": "warning",
+   "confidence": "certain",
+   "message": "platform is declared in lodash's manifest but never imported",
+   "location": {
+    "path": "package.json",
+    "symbol": "platform",
+    "package": "lodash"
+   },
+   "sources": [
+    "adapter:js-ts"
+   ]
+  },
+  {
+   "id": "kndo-7a487d7925f9",
+   "category": "untested",
+   "group": "risk",
+   "subject_kind": "file",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "perf/perf.js is production-reachable but no test reaches it",
+   "location": {
+    "path": "perf/perf.js",
+    "package": "lodash"
+   },
+   "sources": [
+    "adapter:html",
+    "adapter:js-ts"
+   ]
+  },
+  {
+   "id": "kndo-7bb965ad5514",
+   "category": "undeclared",
+   "group": "defect",
+   "subject_kind": "dependency",
+   "severity": "warning",
+   "confidence": "certain",
+   "message": "webpage is imported but not declared in lodash's manifest (phantom dependency — likely resolving via hoisting/transitivity): imported by test/test.js",
+   "location": {
+    "path": "package.json",
+    "symbol": "webpage",
+    "package": "lodash"
+   },
+   "sources": [
+    "adapter:js-ts"
+   ]
+  },
+  {
+   "id": "kndo-85c61874d13d",
+   "category": "unused",
+   "group": "waste",
+   "subject_kind": "dependency",
+   "severity": "warning",
+   "confidence": "certain",
+   "message": "sauce-tunnel is declared in lodash's manifest but never imported",
+   "location": {
+    "path": "package.json",
+    "symbol": "sauce-tunnel",
+    "package": "lodash"
+   },
+   "sources": [
+    "adapter:js-ts"
+   ]
+  },
+  {
+   "id": "kndo-89994b767c94",
+   "category": "undeclared",
+   "group": "defect",
+   "subject_kind": "dependency",
+   "severity": "warning",
+   "confidence": "certain",
+   "message": "@playwright/test is imported but not declared in lodash's manifest (phantom dependency — likely resolving via hoisting/transitivity): imported by playwright.config.js, test/playwright-runner.spec.js",
+   "location": {
+    "path": "package.json",
+    "symbol": "@playwright/test",
+    "package": "lodash"
+   },
+   "sources": [
+    "adapter:js-ts"
+   ]
+  },
+  {
+   "id": "kndo-8fab0ffb1b37",
+   "category": "unused",
+   "group": "waste",
+   "subject_kind": "file",
+   "severity": "warning",
+   "confidence": "certain",
+   "message": "renovate.json is unreachable: no root or import reaches it",
+   "location": {
+    "path": "renovate.json",
+    "package": "lodash"
+   },
+   "sources": [
+    "adapter:json"
+   ]
+  },
+  {
+   "id": "kndo-947fb24faf85",
+   "category": "unused",
+   "group": "waste",
+   "subject_kind": "file",
+   "severity": "warning",
+   "confidence": "certain",
+   "message": "dist/lodash.fp.min.js is unreachable: no root or import reaches it",
+   "location": {
+    "path": "dist/lodash.fp.min.js",
+    "package": "lodash"
+   },
+   "sources": [
+    "adapter:js-ts"
+   ]
+  },
+  {
+   "id": "kndo-948b03015f87",
+   "category": "unused",
+   "group": "waste",
+   "subject_kind": "file",
+   "severity": "warning",
+   "confidence": "certain",
+   "message": "vendor/firebug-lite/skin/xp/html.css is unreachable: no root or import reaches it",
+   "location": {
+    "path": "vendor/firebug-lite/skin/xp/html.css",
+    "package": "lodash"
+   },
+   "sources": [
+    "adapter:css"
+   ]
+  },
+  {
+   "id": "kndo-949359b269f5",
+   "category": "unused",
+   "group": "waste",
+   "subject_kind": "dependency",
+   "severity": "warning",
+   "confidence": "certain",
+   "message": "request is declared in lodash's manifest but never imported",
+   "location": {
+    "path": "package.json",
+    "symbol": "request",
+    "package": "lodash"
+   },
+   "sources": [
+    "adapter:js-ts"
+   ]
+  },
+  {
+   "id": "kndo-a0632638590f",
+   "category": "unused",
+   "group": "waste",
+   "subject_kind": "file",
+   "severity": "warning",
+   "confidence": "certain",
+   "message": "dist/lodash.core.js is unreachable: no root or import reaches it",
+   "location": {
+    "path": "dist/lodash.core.js",
+    "package": "lodash"
+   },
+   "sources": [
+    "adapter:js-ts"
+   ]
+  },
+  {
+   "id": "kndo-b049afd1afb0",
+   "category": "unused",
+   "group": "waste",
+   "subject_kind": "file",
+   "severity": "warning",
+   "confidence": "certain",
+   "message": "dist/lodash.core.min.js is unreachable: no root or import reaches it",
+   "location": {
+    "path": "dist/lodash.core.min.js",
+    "package": "lodash"
+   },
+   "sources": [
+    "adapter:js-ts"
+   ]
+  },
+  {
+   "id": "kndo-ba35d3269660",
+   "category": "unused",
+   "group": "waste",
+   "subject_kind": "file",
+   "severity": "warning",
+   "confidence": "certain",
+   "message": "dist/lodash.js is unreachable: no root or import reaches it",
+   "location": {
+    "path": "dist/lodash.js",
+    "package": "lodash"
+   },
+   "sources": [
+    "adapter:js-ts"
+   ]
+  },
+  {
+   "id": "kndo-bdfaf9858b47",
+   "category": "unused",
+   "group": "waste",
+   "subject_kind": "file",
+   "severity": "warning",
+   "confidence": "certain",
+   "message": "dist/lodash.min.js is unreachable: no root or import reaches it",
+   "location": {
+    "path": "dist/lodash.min.js",
+    "package": "lodash"
+   },
+   "sources": [
+    "adapter:js-ts"
+   ]
+  },
+  {
+   "id": "kndo-be2e1076ab09",
+   "category": "unused",
+   "group": "waste",
+   "subject_kind": "dependency",
+   "severity": "warning",
+   "confidence": "certain",
+   "message": "curl-amd is declared in lodash's manifest but never imported",
+   "location": {
+    "path": "package.json",
+    "symbol": "curl-amd",
+    "package": "lodash"
+   },
+   "sources": [
+    "adapter:js-ts"
+   ]
+  },
+  {
+   "id": "kndo-d1faea44ae23",
+   "category": "duplicate",
+   "group": "waste",
+   "subject_kind": "file",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "2 identical files share the same content: dist/lodash.js, lodash.js",
+   "location": {
+    "path": "dist/lodash.js"
+   },
+   "related": [
+    {
+     "role": "clone",
+     "path": "dist/lodash.js"
+    },
+    {
+     "role": "clone",
+     "path": "lodash.js"
+    }
+   ],
+   "sources": [
+    "adapter:html",
+    "adapter:js-ts"
+   ]
+  },
+  {
+   "id": "kndo-d4a6d54fd22a",
+   "category": "unused",
+   "group": "waste",
+   "subject_kind": "file",
+   "severity": "warning",
+   "confidence": "certain",
+   "message": "vendor/firebug-lite/skin/xp/firebug.css is unreachable: no root or import reaches it",
+   "location": {
+    "path": "vendor/firebug-lite/skin/xp/firebug.css",
+    "package": "lodash"
+   },
+   "sources": [
+    "adapter:css"
+   ]
+  },
+  {
+   "id": "kndo-da4b1240f3d4",
+   "category": "unused",
+   "group": "waste",
+   "subject_kind": "dependency",
+   "severity": "warning",
+   "confidence": "certain",
+   "message": "requirejs is declared in lodash's manifest but never imported",
+   "location": {
+    "path": "package.json",
+    "symbol": "requirejs",
+    "package": "lodash"
+   },
+   "sources": [
+    "adapter:js-ts"
+   ]
+  },
+  {
+   "id": "kndo-e49ba3cecfcd",
+   "category": "unused",
+   "group": "waste",
+   "subject_kind": "dependency",
+   "severity": "warning",
+   "confidence": "certain",
+   "message": "dojo is declared in lodash's manifest but never imported",
+   "location": {
+    "path": "package.json",
+    "symbol": "dojo",
+    "package": "lodash"
+   },
+   "sources": [
+    "adapter:js-ts"
+   ]
+  },
+  {
+   "id": "kndo-e70fab469015",
+   "category": "untested",
+   "group": "risk",
+   "subject_kind": "file",
+   "severity": "info",
+   "confidence": "certain",
+   "message": "dist/lodash.fp.js is production-reachable but no test reaches it",
+   "location": {
+    "path": "dist/lodash.fp.js",
+    "package": "lodash"
+   },
+   "sources": [
+    "adapter:html",
+    "adapter:js-ts"
+   ]
+  },
+  {
+   "id": "kndo-e9571efe82c4",
+   "category": "unused",
+   "group": "waste",
+   "subject_kind": "dependency",
+   "severity": "warning",
+   "confidence": "certain",
+   "message": "coveralls is declared in lodash's manifest but never imported",
+   "location": {
+    "path": "package.json",
+    "symbol": "coveralls",
+    "package": "lodash"
+   },
+   "sources": [
+    "adapter:js-ts"
+   ]
+  }
+ ],
+ "health": {
+  "score": 73.8,
+  "grade": "C",
+  "categories": [
+   {
+    "category": "unused-symbols",
+    "ratio": 0.012,
+    "penalty": 1.2,
+    "count": 1
+   },
+   {
+    "category": "unused-dependencies",
+    "ratio": 0.667,
+    "penalty": 15.0,
+    "count": 18
+   },
+   {
+    "category": "unused-files",
+    "ratio": 0.325,
+    "penalty": 10.0,
+    "count": 13
+   },
+   {
+    "category": "test-only",
+    "ratio": 0.0,
+    "penalty": 0.0,
+    "count": 0
+   },
+   {
+    "category": "duplication",
+    "ratio": 0.0,
+    "penalty": 0.0,
+    "tokens_duplicated": 0
+   },
+   {
+    "category": "crap",
+    "ratio": 0.0,
+    "penalty": 0.0,
+    "coverage": "none"
+   },
+   {
+    "category": "cycles",
+    "ratio": 0.0,
+    "penalty": 0.0,
+    "count": 0
+   },
+   {
+    "category": "internal-only",
+    "ratio": 0.0,
+    "penalty": 0.0,
+    "count": 0
+   },
+   {
+    "category": "untested",
+    "ratio": 0.0,
+    "penalty": 0.0,
+    "count": 0
+   }
+  ]
+ },
+ "suppressed": {
+  "inline": 0,
+  "config": 0
+ },
+ "diagnostics": [
+  {
+   "level": "info",
+   "message": "crap: no coverage ingested — skipped (the score is complexity × untestedness; without a report the coverage factor would be a guess, not a measurement — drop a report at a well-known path (lcov.info, coverage.xml, jacoco.xml, coverage.out, …) or point [plugins.<id>] report at one to enable it)"
+  }
+ ]
+}

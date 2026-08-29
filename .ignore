@@ -10,3 +10,7 @@
 # the same globs to every consumer that needs them and none of the version-control side
 # effect, so the exclusion is stated once and means only what it says.
 **/tests/fixtures/
+
+# v2 greenfield seed: spike code, oracle JSON, harvested corpus — kndo's own
+# analysis skips it (git tracks it; same mechanism as the fixture corpus above).
+v2/

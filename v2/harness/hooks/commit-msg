@@ -1,0 +1,20 @@
+#!/bin/sh
+# Conventional-commit lint. First line must be: type(optional-scope)!?: subject
+# Types mirror cliff.toml's parsers; merge commits pass through.
+set -eu
+msg_file=$1
+first=$(head -n1 "$msg_file")
+
+case "$first" in
+    Merge\ *) exit 0 ;;
+esac
+
+if printf '%s' "$first" | grep -qE '^(feat|fix|docs|refactor|perf|test|build|ci|chore|revert)(\([a-z0-9,/_-]+\))?!?: .+'; then
+    exit 0
+fi
+
+echo "commit-msg: first line is not a conventional commit:" >&2
+echo "  $first" >&2
+echo "expected: type(scope)?: subject   with type in" >&2
+echo "  feat fix docs refactor perf test build ci chore revert" >&2
+exit 1
