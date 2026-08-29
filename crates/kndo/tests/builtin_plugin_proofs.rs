@@ -802,8 +802,8 @@ fn libsass_compilation_is_gated_by_the_pom_declaration() {
 fn serde_attribute_paths_are_gated_by_the_manifest() {
     // kndo's own shape, reduced: a predicate named only by `skip_serializing_if`. Its caller
     // is code serde's derive macro generates, which exists in no source file — so plain
-    // reachability sees a struct field carrying a string and a function nobody calls. kndo
-    // reported exactly this about itself, and the tree was reshaped to dodge it.
+    // reachability sees a struct field carrying a string and a function nobody calls. This is
+    // exactly the shape `kndo:serde` exists to recognize, drawn from kndo's own codebase.
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path();
     write(
@@ -873,7 +873,7 @@ const PROVEN: &[&str] = &[
 /// decide it.
 ///
 /// Closed in both directions. A missing proof is the failure everyone expects; a stale entry
-/// matters just as much, because a `PROVEN` list naming plugins that no longer exist stops
+/// matters just as much, because a `PROVEN` list naming a plugin this build does not ship stops
 /// being a statement about this build. Under a partial feature set the built-in set shrinks
 /// and only the first direction is meaningful, so the second checks against the ids this
 /// build actually contains.

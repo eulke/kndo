@@ -23,8 +23,8 @@ fn workspace_root() -> PathBuf {
 /// Builds one of the `examples/` demo guests and encodes it as a WASM component.
 fn build_component(example_dir: &str, artifact: &str) -> Vec<u8> {
     let demo_dir = workspace_root().join(example_dir);
-    // A `TempDir`: unique by construction and removed on drop, unwind included —
-    // the hand-rolled pid+nonce name it replaced leaked the whole build tree on panic.
+    // A `TempDir`: unique by construction and removed on drop, unwind included — a hand-rolled
+    // fixed name would leak the whole build tree if the process panics before cleanup.
     let target_dir = tempfile::tempdir().expect("wasm target dir");
     let status = Command::new("cargo")
         .args(["build", "--release", "--target", "wasm32-unknown-unknown"])

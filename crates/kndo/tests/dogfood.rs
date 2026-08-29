@@ -4,9 +4,9 @@
 //! itself, which is the only check that cannot be satisfied by a fixture written to pass: the
 //! subject is the whole workspace, and it changes every commit.
 //!
-//! It exists because "we took the findings to zero" is a photograph, not an invariant. Getting
-//! here took a `duplicate` count of 28 down to nothing, and every one of those was code someone
-//! wrote without noticing they were writing it twice — which is exactly what will happen again.
+//! It exists because "we took the findings to zero" is a photograph, not an invariant: a
+//! `duplicate` finding is code someone wrote without noticing they had already written it, and
+//! nothing about the workspace changing stops that from happening again.
 //! A new finding fails this test. Accepting one is a deliberate act: add it to `ACCEPTED` with
 //! a reason, in the same commit, where a reviewer sees it. Never silently.
 
@@ -73,9 +73,9 @@ fn kndo_is_clean_under_kndo() {
         unaccepted.join("\n"),
     );
 
-    // An entry that no longer fires is the mirror failure: `ACCEPTED` decaying into a list of
-    // things that used to be true is how a baseline stops meaning anything. This is the same
-    // rule the `stale` category applies to inline pragmas, applied to this file.
+    // An ACCEPTED entry with no matching finding is the mirror failure: keeping it lets the
+    // baseline decay into a list nothing can verify. This is the same rule the `stale`
+    // category applies to inline pragmas, applied to this file.
     let live: BTreeSet<(&str, &str, &str)> = result
         .findings
         .iter()

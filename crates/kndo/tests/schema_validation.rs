@@ -46,10 +46,9 @@ fn committed_schema_matches_the_type_it_was_generated_from() {
     );
 }
 
-/// The version constant and the normative document are one fact in two files, and until now
-/// nothing compared them: the generated JSON Schema types `schema_version` as a plain string
-/// with no `const`, so a bump — or a missed bump — changed nothing any test could see. They
-/// had already drifted (the contract said 1.1.0 while two doc pages still printed 1.0.0).
+/// The version constant and the normative document are one fact in two files: the generated
+/// JSON Schema types `schema_version` as a plain string with no `const`, so a bump — or a
+/// missed bump — changes nothing any test but this one can see.
 #[test]
 fn schema_version_matches_the_contract_document() {
     let contract =

@@ -8,9 +8,9 @@
 //! `kndo:express` in its `dependencies`, and being active is what activates the built-in
 //! (RFC 0015 §3). Nothing else reaches a plugin whose framework is an indirect dependency.
 //!
-//! The adapter tier has had this proof since `adapter_dependency_implication.rs`; the plugin
-//! tier — the half real users depend on — had none, which is how a refactor of the descriptor
-//! could make the mechanism *look* gone without any test objecting. This is that objection.
+//! The adapter tier's own proof lives in `adapter_dependency_implication.rs`; this file is the
+//! plugin-tier counterpart — the half real users depend on — so a refactor of the descriptor
+//! that quietly breaks implication cannot pass unnoticed on either side.
 //!
 //! Own test binary (not another `#[test]` elsewhere): `KNDO_PLUGIN_DIR` is process-wide state,
 //! and separate binaries are separate processes. Both halves — implied and not implied — live
@@ -29,8 +29,8 @@ fn workspace_root() -> PathBuf {
 
 fn build_component(example_dir: &str, artifact: &str) -> Vec<u8> {
     let demo_dir = workspace_root().join(example_dir);
-    // A `TempDir`: unique by construction and removed on drop, unwind included —
-    // the hand-rolled pid+nonce name it replaced leaked the whole build tree on panic.
+    // A `TempDir`: unique by construction and removed on drop, unwind included — a hand-rolled
+    // fixed name would leak the whole build tree if the process panics before cleanup.
     let target_dir = tempfile::tempdir().expect("wasm target dir");
     let status = Command::new("cargo")
         .args(["build", "--release", "--target", "wasm32-unknown-unknown"])
@@ -65,9 +65,9 @@ const WRAPPER_ID: &str = "github.com/acme/framework";
 /// launched by rather than imported through. The marker decides whether the wrapper — and
 /// therefore express — turns on.
 ///
-/// `main` deliberately points at a different file. The first version of this fixture named
-/// `server.js` as `main`, which the JS adapter roots on its own: the test went green while
-/// proving nothing about express. The negative half below is what caught that.
+/// `main` deliberately points at a different file (`index.js`): pointing it at `app.js` would
+/// let the JS adapter's own manifest-main rooting keep the entry alive regardless of express,
+/// which is exactly the false positive the negative half below rules out.
 fn framework_project(with_marker: bool) -> tempfile::TempDir {
     let dir = tempfile::tempdir().expect("temp project fixture dir");
     std::fs::write(

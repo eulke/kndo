@@ -19,8 +19,8 @@ pub use kndo_core::{
 // The frontend facade, re-exported at this crate's root exactly as `kndo-core` exports it at
 // its own — `kndo::Engine`, not `kndo::engine::Engine`. `graph`/`cache`/`discovery` are
 // deliberately not re-exported here: nothing outside a handful of `kndo-core`-internal tests
-// and this crate's own patch-equivalence test needs them, and that test now depends on
-// `kndo-core` directly instead of routing through this crate's surface.
+// and this crate's own patch-equivalence test needs them, and that test depends on
+// `kndo-core` directly rather than through this crate's surface.
 pub use kndo_core::plugin::ActivationReason;
 pub use kndo_core::{
     sort_findings_for_display, BaselineOp, BaselineResult, Budget, BudgetRule, BudgetVerdict,
@@ -612,8 +612,7 @@ mod activation {
     }
 
     /// Everything an activation rule may consult about a project, with the project's manifests
-    /// read and parsed **at most once** — previously every rule of every candidate re-walked
-    /// the tree and re-parsed every manifest it found.
+    /// read and parsed **at most once**, no matter how many candidates' rules consult them.
     ///
     /// The adapters here are the compiled-in ones, deliberately. Activation decides which
     /// OPTIONAL components run, so letting an optional component's own manifest knowledge
@@ -646,10 +645,10 @@ mod activation {
         }
 
         fn parse_manifests(&self) -> Vec<(usize, ManifestFacts)> {
-            // The file names to look for come from the adapters themselves rather than a list
-            // here — the list here was `["package.json", "Cargo.toml"]`, which silently made
-            // every JVM, Go and Swift `ManifestDependency` rule unmatchable, and nothing
-            // objected because no shipped plugin gated on one.
+            // The file names to look for come from the adapters themselves, never a fixed list
+            // here — a fixed list would silently exclude any ecosystem (JVM, Go, Swift, …)
+            // whose manifest name isn't on it, with no shipped plugin's rule to fail loudly
+            // and reveal the gap.
             let names: Vec<String> = self
                 .adapters
                 .iter()
@@ -908,10 +907,10 @@ mod activation {
 
         #[test]
         fn manifest_dependency_rule_matches_a_maven_artifact_id() {
-            // The hole this replaced: activation read `package.json` and `Cargo.toml` only, so
-            // NO `ManifestDependency` rule could ever fire on a JVM, Go or Swift project. It
-            // was invisible because no shipped plugin gated on one of those — the same
-            // "nothing failed" shape as the descriptor field that nearly went missing.
+            // Guards a fixed manifest-name list from creeping back in: if the names checked
+            // here were `package.json` and `Cargo.toml` alone, no `ManifestDependency` rule
+            // could ever fire on a JVM, Go or Swift project, and no shipped plugin would
+            // surface the gap since none of them gate on one of those ecosystems.
             //
             // The query is the artifact id alone, which is what a plugin author writes;
             // the pom stores `org.springframework.boot:spring-boot-starter-thymeleaf`.

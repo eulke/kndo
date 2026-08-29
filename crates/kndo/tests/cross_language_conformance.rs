@@ -1,13 +1,11 @@
 //! Conformance for what happens BETWEEN adapters — the one thing a per-adapter fixture suite
 //! structurally cannot cover, because each of those registers exactly one adapter.
 //!
-//! This is the suite that would have caught the jquery/Jazzy misattribution: a Jazzy-generated
-//! `.js` file under `docs/` in a Swift repository had its bare `require('jquery')` charged to
-//! the nearest ancestor manifest — `Package.swift` — and every Swift repo in the field audit
-//! reported a phantom undeclared dependency for it. No Swift fixture could reproduce it (there
-//! was no JS adapter to claim the file) and no JS fixture could either (there was no
-//! `Package.swift` to misattribute to). It took both at once, which is exactly what
-//! `kndo::default_adapters()` gives.
+//! A misattribution like a Jazzy-generated `.js` file under `docs/` in a Swift repository having
+//! its bare `require('jquery')` charged to the nearest ancestor manifest — `Package.swift` — as
+//! a phantom undeclared dependency needs a JS adapter (to claim the file) and a Swift adapter
+//! (to own the manifest it gets misattributed to) present at the same time — exactly what
+//! `kndo::default_adapters()` gives and no single-adapter fixture can reproduce.
 //!
 //! Same fixture format as every adapter's own suite — `project/` plus `expected.json`, run
 //! through the shared harness with the real `Engine`.

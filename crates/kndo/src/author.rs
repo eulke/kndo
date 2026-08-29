@@ -15,11 +15,10 @@ use std::process::Command;
 
 /// Everything the author kit can fail at, typed.
 ///
-/// `Result<_, String>` is what this module used to return, and `CLAUDE.md` forbids introducing
-/// another: a message assembled with `format!` at the failure site is a message no caller can
-/// branch on, no test can match without matching prose, and no JSON envelope can carry as
-/// anything but a blob. The `Display` impls below are the *only* place the wording lives, so a
-/// reworded error is one edit rather than a search.
+/// `CLAUDE.md` forbids `Result<_, String>`: a message assembled with `format!` at the failure
+/// site is a message no caller can branch on, no test can match without matching prose, and no
+/// JSON envelope can carry as anything but a blob. The `Display` impls below are the *only*
+/// place the wording lives, so a reworded error is one edit rather than a search.
 #[derive(Debug, thiserror::Error)]
 pub enum AuthorError {
     #[error("{0} already exists and is not empty — scaffold into a fresh directory")]

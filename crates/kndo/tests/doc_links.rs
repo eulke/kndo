@@ -1,13 +1,12 @@
 //! **Every relative link in the repository's Markdown resolves.**
 //!
-//! This is the gate that `kndo-adapter-markdown` was going to be, reduced to what the
-//! evidence actually supports. The plan for that adapter rested on
-//! `internal/detection-gaps.md` §9 — four documents left pointing at a moved
-//! `perf-baseline.json` — and on the idea that a path-shaped token in prose is a `Possible`
-//! reference. Measured on this repository, both halves fail:
+//! This gate is scoped to exactly what the evidence on this repository supports, not to the
+//! broader design `internal/detection-gaps.md` §9 sketches — treating a path-shaped token in
+//! prose as a `Possible` reference too. Measured here, that broader approach fails:
 //!
-//! * §9's four documents were fixed long ago. The only two remaining mentions of the dead
-//!   path are the two documents *describing the gap*, which are not stale pointers.
+//! * The path §9 flags as moved appears in only two documents on this repository, and both
+//!   are the ones explaining the gap itself — not stale pointers a prose-path check would
+//!   need to catch.
 //! * Backticked prose paths: **195 checked, 63 resolve to nothing, and essentially none is a
 //!   defect** — they are examples from other repositories (`crates/searcher/src/sink.rs` is
 //!   ripgrep's), invented illustrations (`com/foo/bar/Widget.java`), paths that exist in a
@@ -20,9 +19,9 @@
 //!   change to make a component viable that has no measured case.
 //!
 //! What *is* real is the narrow half: a Markdown **link** is an author asserting that a path
-//! resolves — the closest thing prose has to an import — and 189 of them exist here. Two were
-//! broken, both introduced by the commit that moved the plugin specs into the book, and
-//! nothing caught them. This test would have.
+//! resolves — the closest thing prose has to an import — and 189 of them exist here. Moving or
+//! renaming a document silently breaks any link still pointing at the old path unless
+//! something checks it — which is what this test is for.
 //!
 //! Prose is deliberately not checked. That is the measurement above, not an omission.
 
@@ -65,10 +64,10 @@ fn markdown_files(root: &Path) -> Vec<PathBuf> {
 /// `text` with every fenced block and inline code span blanked out, so what remains is prose
 /// and real links.
 ///
-/// Not cosmetic: `internal/adapters/go.md` documents Go generics as `` `func F[T any](x T)` ``
-/// and the naive scan read `](x T)` as a link to `x`. Code is quoted, not asserted — a path
-/// inside backticks is an illustration, and the whole point of this gate is to fire only on
-/// what an author actually claims resolves.
+/// Not cosmetic: `internal/adapters/go.md` documents Go generics as `` `func F[T any](x T)` ``,
+/// and a scan that does not blank code spans first reads `](x T)` inside it as a link to `x`.
+/// Code is quoted, not asserted — a path inside backticks is an illustration, and the whole
+/// point of this gate is to fire only on what an author actually claims resolves.
 ///
 /// Replaces with spaces rather than removing, so byte offsets stay put and a span cannot be
 /// joined to the text after it.

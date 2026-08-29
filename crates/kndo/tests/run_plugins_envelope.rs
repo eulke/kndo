@@ -1,10 +1,9 @@
 //! `run.plugins[]` — the envelope's answer to "which plugins ran, and why".
 //!
 //! The reason is *decided* by this crate's composition layer (activation rules, the
-//! `dependencies` fixpoint, the three tiers) and *reported* by the engine. This test exists
-//! because the contract specified the field long before anything emitted it: what it guards is
-//! the join between the two halves, so a future refactor cannot quietly drop the reason on the
-//! floor again — or, worse, have core re-derive one of its own that disagrees with `doctor`.
+//! `dependencies` fixpoint, the three tiers) and *reported* by the engine. This test guards the
+//! join between the two halves, so a refactor cannot quietly drop the reason on the floor — or,
+//! worse, have core re-derive one of its own that disagrees with `doctor`.
 
 use std::path::Path;
 
