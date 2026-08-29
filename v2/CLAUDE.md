@@ -106,10 +106,18 @@ agree with ourselves.
 
 ## Scope belongs to the owner
 
-Deliver the plan at its stated scope. A milestone, gate, or design piece is cut only by
-the owner's explicit decision, recorded in `DECISIONS.md` — never quietly by whoever
-builds it. Too big? Say so and propose the cut; a half-shipped feature nobody decided to
-halve is worse than either whole or absent.
+Approved scope is a contract: the plan, the spec, the accepted review ask — whoever
+approved it fixed its size, and executing it means delivering that size. Catch the
+moment of drift in yourself: "this part can wait", "a simpler version covers it", "they
+probably don't need the rest" — each of those is a scope decision, and scope decisions
+belong to the owner, never to the executor. Raise it instead: name what looks too big,
+propose the cut with its cost, and wait for the human call; the decision lands in
+`DECISIONS.md`, and only then does the scope move.
+
+The asymmetry that makes this absolute: a task visibly not done is honest — it stays on
+the board and gets scheduled. A task half-done wearing "done" lies to everyone who
+builds on top of it; half-shipped is worse than unshipped. Delivering less and saying so
+is always acceptable; delivering less quietly never is.
 
 ## Hygiene
 
