@@ -1100,9 +1100,7 @@ mod tests {
     ///
     /// Parsing cleanly is not the same as doing anything: `kndo.toml`'s parser skips unknown
     /// tables silently, by design, so an unwired section passes the test below while promising
-    /// a capability that does not exist. One did, for a long time — `[project]`, with `roots`
-    /// and `exclude`, written by `kndo init` and documented key by key in the user guide, wired
-    /// to nothing. A commented-out key is still a promise.
+    /// a capability that does not exist. A commented-out key is still a promise.
     ///
     /// `config::LIVE_TABLES` is what `parse` actually reads, exported for exactly this check.
     #[test]
@@ -1293,7 +1291,7 @@ mod tests {
     #[test]
     fn unknown_arguments_and_missing_values_are_rejected() {
         // A typo'd flag silently un-gating CI is worse than any friction. clap's own wording
-        // ("unexpected argument", "a value is required for") replaces the hand-written phrasing;
+        // ("unexpected argument", "a value is required for") names the offending flag directly;
         // what every caller actually depends on is the flag name appearing in the error.
         let args: Vec<String> = vec!["--fail-onn".into(), "warning".into()];
         assert!(parse_flags(&args).unwrap_err().contains("--fail-onn"));

@@ -24,7 +24,7 @@
 //! - Width-based column truncation and the below-60-columns two-line fallback — lines
 //!   are never truncated here.
 //!
-//! Rendered in full, and listed because earlier drafts of this doc claimed otherwise:
+//! Rendered in full:
 //! - The health block — a score/grade line plus per-category penalty bars (non-zero
 //!   categories only in `check` output; `kndo health` renders the full table), with diff
 //!   mode's before ──▶ after line carrying the grade-boundary distance on drops.
@@ -492,7 +492,7 @@ fn glyph(group: Group, rich: bool) -> &'static str {
         (Group::Risk, false) => "^",
         (Group::Hygiene, true) => "·",
         (Group::Hygiene, false) => ".",
-        // Mirrors action/render.mjs's GLYPH table (the copy that was already correct).
+        // Mirrors action/render.mjs's GLYPH table.
         (Group::Convention, true) => "•",
         (Group::Convention, false) => "?",
     }
@@ -780,12 +780,9 @@ mod tests {
 
     /// **Every group has a glyph in both modes, and the rich ones match `action/render.mjs`.**
     ///
-    /// `glyph` is a ten-arm table whose own comment says it mirrors the Action's `GLYPH`, and
-    /// nothing checked that — kndo's `crap` analysis reported the function at 31% coverage on
-    /// this repository, which is the same fact stated numerically: seven arms had never been
-    /// evaluated. Two copies of one table, one of them unexercised, is the drift this repo
-    /// removes everywhere else; here it is asserted instead, because the Action is JavaScript
-    /// and cannot import the Rust one.
+    /// `glyph`'s own comment says it mirrors the Action's `GLYPH` table. Two copies of one
+    /// table is drift waiting to happen, and this test is what keeps them in sync, because the
+    /// Action is JavaScript and cannot import the Rust one.
     #[test]
     fn every_group_has_a_glyph_and_the_rich_table_matches_the_action() {
         let js = std::fs::read_to_string(
@@ -1006,9 +1003,9 @@ mod tests {
 
     #[test]
     fn a_clean_diff_still_prints_a_budget_that_broke() {
-        // The case the old "no findings, no body" shortcut got wrong: a change can move zero
-        // findings and still break `max-health-drop` (a function got longer, coverage fell).
-        // Printing only the header there would leave the exit code with no stated reason.
+        // A change can move zero findings and still break `max-health-drop` (a function got
+        // longer, coverage fell). Printing only the header there would leave the exit code
+        // with no stated reason.
         let result = RunResult {
             mode: "diff".to_string(),
             base_ref: Some("main".to_string()),
@@ -1214,11 +1211,9 @@ mod tests {
 
     /// **Every section the human renderer can emit, emitted.**
     ///
-    /// Its sibling above populates three of the ten optional parts; kndo's own `crap` analysis
-    /// put this renderer at 51% coverage on this repository, which says the same thing in a
-    /// number. This is the CLI half of the pair `agent_format` also owns — the facade rule means
-    /// they read the same `DescribeResult`, so both need the whole shape exercised, not one
-    /// corner each.
+    /// Its sibling above populates three of the ten optional parts. This is the CLI half of
+    /// the pair `agent_format` also owns — the facade rule means they read the same
+    /// `DescribeResult`, so both need the whole shape exercised, not one corner each.
     #[test]
     fn describe_human_output_renders_every_section_it_declares() {
         use kndo::query::{

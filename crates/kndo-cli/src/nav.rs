@@ -34,8 +34,8 @@ struct NavArgs {
     transitive: bool,
     #[arg(long)]
     edges: Option<String>,
-    // `by_color` is always computed; the flag is accepted for parity with older docs/muscle
-    // memory and otherwise does nothing.
+    // `by_color` is always computed regardless of this flag; `--split-by-color` still parses
+    // as a no-op rather than erroring, so a command line that includes it keeps working.
     #[arg(long = "split-by-color")]
     split_by_color: bool,
     #[arg(long = "if-deleted")]
@@ -351,8 +351,8 @@ mod tests {
         assert_eq!(parsed.max_paths, Some(2));
         assert_eq!(parsed.limit, Some(5));
         // clap's own message for a bad numeric value (e.g. "invalid digit found in string")
-        // replaces the hand-written "not a number" text; every caller only depends on the flag
-        // name appearing in the error, which it still does.
+        // is what surfaces here; every caller only depends on the flag name appearing in the
+        // error, which it still does.
         for flag in ["--depth", "--max-paths", "--limit"] {
             let err = parse_nav_args(&args(&[flag, "abc"])).unwrap_err();
             assert!(err.contains(flag), "{err}");
@@ -390,9 +390,9 @@ mod tests {
 
     #[test]
     fn unknown_flag_and_missing_value_are_errors() {
-        // clap's own wording ("unexpected argument", "a value is required for") replaces the
-        // hand-written phrasing; what every caller actually depends on is the flag name
-        // appearing in the error, which both assertions still check.
+        // clap's own wording ("unexpected argument", "a value is required for") names the
+        // offending flag; what every caller actually depends on is the flag name appearing in
+        // the error, which both assertions still check.
         let err = parse_nav_args(&args(&["--nope"])).unwrap_err();
         assert!(err.contains("--nope"), "{err}");
         let err = parse_nav_args(&args(&["--kind"])).unwrap_err();
