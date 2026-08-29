@@ -100,7 +100,7 @@ same two-hooks-one-input shape, copy a structure rather than a duplication.
 
 **A `prepare` hook on the trait** is the answer if a plugin ever appears whose derivation is
 expensive enough to matter. It is a deliberate contract change — the native trait *and* the
-WIT world — and belongs in an RFC, not behind a cell in one plugin.
+WIT world — and belongs in a proposal reviewed on its own, not behind a cell in one plugin.
 
 ## What it does not do
 

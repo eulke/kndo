@@ -9,9 +9,9 @@ bundle `Info.plist` schema
 
 An app bundle's `Info.plist` names classes **as strings**, and the system instantiates them at
 launch. Nothing in source mentions those classes, so no reference edge can exist and the entry
-surface of a whole target reads as unreachable. This is the file-outside-the-code half of
-detection-gaps.md's audit: the fact is real, it is declared, and it lives in a file the language
-graph never opens.
+surface of a whole target reads as unreachable. This is a gap no source-only analysis can close
+by construction: the fact is real, it is declared, and it lives in a file the language graph
+never opens.
 
 The plugin content channel exists exactly for this — read the non-source file, contribute the
 root. The knowledge here is Apple's bundle schema and nothing else: **which keys carry a class
