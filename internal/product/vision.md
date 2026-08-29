@@ -46,7 +46,10 @@ project health*, not on style. One binary, one config (optional), one output sch
    into that vocabulary. Adding a language never touches the core.
 3. **Language-adjacent knowledge lives in plugins.** Framework conventions (React, Spring, ...),
    coverage-report formats, and organization-specific rules are plugins layered on top of
-   adapters — the adapter handles only what the language spec defines.
+   adapters — the adapter handles only what the language spec defines. Plugins aren't limited to
+   contributing roots, edges, and annotations to core-owned verdicts: a plugin can emit its own
+   first-class findings under its `plugin:<coordinate>/<rule>` namespace, sectioned apart from
+   core output and advisory to the exit-code gate unless a team opts a rule in (RFC 0018).
 4. **Honest about uncertainty.** Static analysis of dynamic languages cannot be perfect. Every
    finding carries a confidence level; dynamic constructs lower confidence instead of producing
    false "definitely dead" claims.
@@ -80,8 +83,8 @@ project health*, not on style. One binary, one config (optional), one output sch
 ## 4. Supported languages (initial)
 
 JavaScript/TypeScript (incl. JSX/TSX), Go, Java, Kotlin, Swift, Rust, JSON, CSS (incl. SCSS/LESS
-variants). The adapter contract is the extension point; a new language lands as a new adapter
-crate with zero core changes (see [RFC 0002](../rfcs/0002-language-adapters.md)).
+variants), HTML. The adapter contract is the extension point; a new language lands as a new
+adapter crate with zero core changes (see [RFC 0002](../rfcs/0002-language-adapters.md)).
 
 ## 5. Non-goals
 
