@@ -44,15 +44,11 @@ delta envelope.
 
 **Sticky comment (primary).** One comment per PR, **upserted in place** on every push —
 identified by a hidden HTML marker (`<!-- kndo-report -->`) — never appended: a PR with thirty
-pushes gets one living report, not thirty stale ones. Layout mirrors the terminal report in
-markdown:
+pushes gets one living report, not thirty stale ones. `action/render.mjs` builds the markdown
+directly from the JSON envelope (no CLI text is reused); layout:
 
 ```markdown
-### kndo · 3 new · 2 fixed · health 82.4 → 84.1 (B) ↑ · budget 2/3 ✗
-
-- [x] health-drop ≤ 0.0 — +1.7
-- [x] new defects = 0 — 0
-- [ ] net findings ≤ 0 — +1 (**over by 1**)
+### kndo · 3 new · 2 fixed · health 82.4 → 84.1 (B) ↑
 
 **New**
 | | finding | where | why |
@@ -63,14 +59,29 @@ markdown:
 **Fixed** ✓ `unused` dependency `date-fns`
 
 <details><summary>47 baseline findings unchanged</summary>…</details>
+
+<details><summary>1 diagnostic</summary>
+
+- kndo could not parse `src/legacy/vendor.min.js` — skipped
+</details>
+
+_2 finding(s) suppressed (inline: 1, config: 1)_
+
+<sub>[run](…) · mode `diff` · fail-on `warning` · kndo 0.9.0</sub>
 ```
 
-The budget checklist (one checkbox per configured `[delta]` rule, RFC 0006 §5) makes the sticky
-comment a *living budget marker*: every push updates how much of the tolerance is consumed.
 Group order and glyph vocabulary follow RFC 0009 §3 (rendered as text/emoji-safe equivalents);
-long sections collapse under `<details>`; hard cap per section with a link to the workflow run
-for the full report. Fixed findings always render — the reward loop (RFC 0004 §6) applies to
-reviewers too.
+findings sort by group then id; long sections collapse under `<details>` with a hard cap per
+section and a link to the workflow run for the rest. Fixed findings always render — the reward
+loop (RFC 0004 §6) applies to reviewers too. The diagnostics and suppressed-count lines appear
+only when non-empty.
+
+**No budget checklist.** `[delta]` rules are not evaluated or rendered by the Action at all —
+the JSON envelope carries a `budget` block (RFC 0006 §5), but `action/render.mjs` never reads
+it. The budget's only rendering is CLI-side: `kndo check` prints a plain rule-by-rule `ok`/`FAIL`
+table (`kndo-cli/src/render.rs::budget_block`) to the terminal. A PR's merge gate is still
+`fail-on` against the JSON envelope's findings (§3); the per-rule budget breakdown is visible
+locally, not on any of the three PR-facing surfaces below.
 
 **File annotations.** New findings of severity ≥ warning are emitted as GitHub annotations on
 the diff (`::warning file=,line=`) so they appear inline in Files Changed. Capped (GitHub limit

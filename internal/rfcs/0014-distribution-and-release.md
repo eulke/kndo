@@ -23,9 +23,9 @@ crates.io as-is. Resolved: **Apache-2.0**, confirmed by the author. `Cargo.toml`
 phrasing common to Apache-2.0 projects that don't want to hardcode one individual's legal name;
 swap it for a specific holder if that's preferred). `CODE_OF_CONDUCT.md` (Contributor Covenant
 2.1) and `SECURITY.md` (GitHub's private vulnerability-reporting flow, no maintainer email
-exposed) added — both link to `eulke/kondo` (the repo's *current* name, deliberately, not the
-`eulke/kndo` ADR 0007 name Cargo.toml already uses: GitHub's post-rename redirect makes the old
-name resolve forever once the rename happens, while the new name 404s until it does).
+exposed) added — both link to `eulke/kondo` (the repo's *current* name — the same rule
+`Cargo.toml`'s own `repository` field follows: GitHub's post-rename redirect makes the old name
+resolve forever once the rename happens, while the new name 404s until it does).
 
 **Ownership & context — confirmed.** kndo is a personal project: personal account, personal
 device, on the author's own time, intended to go public once finished for anyone to use. That
@@ -36,13 +36,6 @@ the other: if there's an employment agreement in the picture, its IP/invention-a
 should be checked against a personal OSS project before the first public release (get it in
 writing if the text is ambiguous). This blocks only the *first public release*, not the
 engineering in the rest of this RFC.
-
-**Also noticed while touching this file, unrelated to licensing:** `Cargo.toml`'s `repository`
-field already points at `https://github.com/eulke/kndo` (the ADR 0007-recommended future name),
-but `git remote -v` shows the repo is still hosted at `eulke/kondo` — the rename ADR 0007
-proposed hasn't happened yet. Not touched here (renaming a GitHub repo is an administrative
-action outside this RFC's scope); flagged so it doesn't get missed before the metadata is
-actually published somewhere that link needs to resolve.
 
 ## 1. License & repo governance
 

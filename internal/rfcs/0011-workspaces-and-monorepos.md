@@ -122,7 +122,7 @@ verdict, not silently absorbed.
 
 ## 5. Roots & library mode are per-package decisions
 
-Each Package independently resolves its mode from manifest signals, overridable in config:
+Each Package independently resolves its mode from manifest signals:
 
 - **Published/library** (`private` absent, publish metadata, or a lib target): its public API
   is a production root — external consumers exist by definition. "Public API" is computed
@@ -139,11 +139,10 @@ Each Package independently resolves its mode from manifest signals, overridable 
   code hides, and it is exactly the `internal-only`/`unused` machinery already specified, now
   fed with correct roots.
 
-```toml
-[package."@org/legacy-ui"]        # per-package config override (kndo.toml)
-mode = "library"                   # force, when manifest signals lie
-skip = ["duplicate"]
-```
+**Not implemented.** A per-package config override — forcing a mode when manifest signals lie,
+or skipping a category for one package — is conceivable but does not exist in any form today:
+`config::LIVE_TABLES` carries no `package` table, `kndo init`'s template has no such section,
+and there is no `PackageMode` type. Manifest signals are the only input; there is no override.
 
 ## 6. Verdicts at package granularity
 
