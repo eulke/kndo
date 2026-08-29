@@ -2,19 +2,16 @@
 //!
 //! Four things consume kndo's release artifacts and none of them can call Rust: `install.sh`,
 //! `action/action.yml`, `packaging/homebrew/kndo.rb.tmpl`, and the published install docs. Each
-//! used to spell the artifact name and assume its layout independently, which is how three of
-//! the four came to be broken at once with nothing failing:
+//! spells the artifact name and assumes its layout independently of the others and of
+//! [`xtask::package`], the one producer — nothing but this file enforces that all five agree,
+//! and a channel that drifts (a stripped tag prefix, a triple the release never builds, an
+//! extraction path that skips the archive's staged directory) is invisible until a real tag is
+//! pushed and a real download 404s.
 //!
-//! - the Action downloaded `-unknown-linux-gnu` triples the release has never built, from a
-//!   URL with the tag's leading `v` stripped — two independent 404s on every platform;
-//! - `install.sh` extracted correctly and then copied `kndo` from the extraction root, where
-//!   the archive's staged directory means it is not;
-//! - the docs' copy-pasteable one-liner had both faults.
-//!
-//! None of it was discoverable before a tag was pushed. These tests read the four files as
-//! text and check them against [`xtask::package`], so a channel that drifts fails on the PR
-//! that drifts it. Text matching is the point: these consumers *are* text, and a test that
-//! re-derived their behavior instead of reading it would be a fifth copy.
+//! These tests read the four consumer files as text and check them against
+//! [`xtask::package`], so a channel that drifts fails on the PR that drifts it. Text matching
+//! is the point: these consumers *are* text, and a test that re-derived their behavior instead
+//! of reading it would be a fifth copy.
 
 use xtask::package::{self, Archive};
 
@@ -275,11 +272,11 @@ fn the_install_docs_match_the_artifact() {
 
 /// **Every published link names the repository that exists.**
 ///
-/// ADR 0007 proposes renaming `eulke/kondo` to `eulke/kndo`, and three places had already
-/// adopted the new name: `Cargo.toml`'s `repository` — the one piece of metadata crates.io
-/// publishes as the project's home — and the two links `kndo plugin new` writes into every
-/// scaffolded plugin's docs. All three 404 for anyone who follows them, and would keep doing so
-/// until an administrative action nobody scheduled.
+/// ADR 0007 proposes renaming `eulke/kondo` to `eulke/kndo`; the rename itself is an
+/// administrative action against the GitHub repository, outside this codebase's reach, so
+/// nothing here can make it happen and nothing here should assume it already has. Any shipped
+/// file that names `eulke/kndo` links to a repository that does not exist until that action
+/// runs — a 404 for anyone who follows it.
 ///
 /// The direction of the rename is not in question; the spelling to publish is. RFC 0014 §3
 /// settles it: write the *current* name, because GitHub's post-rename redirect makes it resolve
@@ -433,12 +430,10 @@ fn every_artifact_nests_under_one_directory_named_for_itself() {
 #[test]
 /// **Every released target is a `.tar.gz` holding a binary called `kndo`.**
 ///
-/// This used to assert that `x86_64-pc-windows-msvc` was the one `.zip` with the one `.exe`.
-/// Windows is no longer a release target (RFC 0014 §3.3) — `tree-sitter-scss`'s build script
-/// hands `cl.exe` a flag it refuses, so the binary could never be built — and with it went the
-/// zip writer, which nothing then produced. What is asserted here is what the four consumers
-/// actually resolve today; if a second archive format ever returns, this is the test that has
-/// to change first.
+/// Windows is not a release target (RFC 0014 §3.3): `tree-sitter-scss`'s build script hands
+/// `cl.exe` a flag it refuses, so the binary cannot be built there. What is asserted here is
+/// what the four consumers actually resolve; if a second archive format is ever added, this is
+/// the test that has to change first.
 fn every_released_target_is_a_tar_gz_named_kndo() {
     for target in package::TARGETS {
         assert_eq!(
@@ -468,9 +463,9 @@ fn every_released_target_is_a_tar_gz_named_kndo() {
 /// with a producer that writes something else.
 /// **The packaging command line resolves the way a release depends on.**
 ///
-/// `from_args` used to be `package_inner` in `main.rs`, where no test could reach it — kndo's
-/// own `crap` analysis reported it at 0% coverage on this repository. Argument handling is
-/// where a release command goes wrong quietly, so each rule it applies is asserted here.
+/// `from_args` lives in the library, reachable from a test with no process spawned, precisely
+/// so argument handling — where a release command goes wrong quietly — is asserted directly
+/// rather than left uncovered behind a CLI entry point.
 #[test]
 fn the_package_command_line_resolves_target_tag_and_paths() {
     let dir = tempfile::tempdir().expect("tempdir");

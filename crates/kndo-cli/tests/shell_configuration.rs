@@ -3,15 +3,14 @@
 //! `shell-build` job proves it by actually building it. This test guards the seam between the
 //! two: **the feature names that workflow passes must exist in this crate and forward.**
 //!
-//! It replaces `default_features_mirror_the_library`, which watched a list this crate no longer
-//! keeps: `default` is now `["kndo/default"]`, one entry that cannot drift from what the
-//! library enables, so there is nothing left there to guard. What can still break is the
-//! workflow's command going stale against a renamed feature — and that failure surfaces today
-//! only as a cargo error deep in a several-minute release build, on a job whose whole point is
-//! to be the one that catches shell regressions.
+//! `default` is `["kndo/default"]`, one entry that cannot drift from what the library enables,
+//! so there is nothing to guard there. What can still break is the workflow's command going
+//! stale against a renamed feature — a failure that surfaces only as a cargo error deep in a
+//! several-minute release build, on the one job whose whole point is to catch shell
+//! regressions.
 //!
-//! Reading the workflow rather than hardcoding the names is the point. A copy of the list here
-//! would be exactly the duplication the change this test ships removed.
+//! Reading the workflow rather than hardcoding the names is the point: a copy of the list here
+//! would itself be a second place for the two to drift apart.
 
 use std::path::{Path, PathBuf};
 
@@ -109,7 +108,7 @@ fn default_forwards_the_librarys_own_default_set() {
         default,
         ["kndo/default"],
         "the shipped binary's default set must BE the library's, by reference — spelling the \
-         list out again is what let kndo:uikit be registered in the library and shipped in no \
-         binary at all"
+         list out again risks a plugin registered in the library but silently absent from the \
+         shipped binary"
     );
 }
