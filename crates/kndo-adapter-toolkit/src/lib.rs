@@ -17,8 +17,8 @@ pub mod parsing;
 /// The body-walk driver two grammars genuinely share — the traversal written once, the node
 /// kinds reported per adapter (`BodySyntax`), the same split `metrics::MetricsSyntax` made.
 pub mod refs;
-/// Re-export: the arithmetic moved to `kndo-core` when a plugin needed it too (the
-/// toolkit's audience is adapters). Adapters keep calling `kndo_adapter_toolkit::paths::*`.
+/// Re-export: path arithmetic lives in `kndo-core` because plugins need it too, not only
+/// adapters (the toolkit's own audience). Adapters call `kndo_adapter_toolkit::paths::*`.
 pub use kndo_core::paths;
 pub mod stdlib;
 pub mod suppression;

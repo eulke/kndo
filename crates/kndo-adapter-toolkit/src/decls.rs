@@ -1,14 +1,12 @@
 //! Declaration emission — the base fact, written once.
 //!
-//! Four adapters had this push copied out with the same thirteen fields in the same order,
-//! differing only in whether their grammar carries markers. It is safe to share, and the
-//! reason is worth stating because the opposite call was made for `PluginDescriptor`: the
-//! fields this does not take (`implicitly_invoked`, `nested_scope`, `visibility_inherited`,
-//! `visible_in_unit`, `implements`) are not decisions an adapter makes *here*. Every adapter
-//! that reports one sets it AFTERWARDS, by name, on the declaration it just pushed
-//! (`decl.nested_scope = true`, `mark_implicitly_invoked(…)`) — so nothing becomes invisible
-//! by not being spelled at the push, which is exactly what did happen when a constructor hid
-//! four of `PluginDescriptor`'s six fields.
+//! Every adapter pushes the same thirteen fields in the same order, differing only in
+//! whether their grammar carries markers. The fields this does not take
+//! (`implicitly_invoked`, `nested_scope`, `visibility_inherited`, `visible_in_unit`,
+//! `implements`) are not decisions an adapter makes *here*: every adapter that reports one
+//! sets it AFTERWARDS, by name, on the declaration it just pushed (`decl.nested_scope =
+//! true`, `mark_implicitly_invoked(…)`) — naming a field only inside the constructor call
+//! would let it go unset silently at every call site that forgets it.
 
 use kndo_core::adapter::{Declaration, FileFacts, Span, VisibilityLevel};
 use kndo_core::vocab::SymbolKind;

@@ -28,8 +28,8 @@ const GRAM: usize = 10;
 const WINDOW: usize = 8;
 
 /// Default granularity gate: bodies under 50 normalized tokens don't fingerprint (their
-/// metrics are still emitted, for `crap`) — the same default every adapter used to redeclare
-/// as its own local constant.
+/// metrics are still emitted, for `crap`) — the one definition every adapter shares rather
+/// than redeclaring locally.
 pub const MIN_CLONE_TOKENS: usize = 50;
 
 /// An adapter's metric-relevant node kinds, as data.
@@ -51,13 +51,13 @@ pub struct MetricsSyntax {
     /// clone evidence by itself* (`min_clone_tokens`): its branches and its tokens then leave
     /// the enclosing shape's stream, which keeps a single `FN` placeholder in their place, and
     /// it is measured, fingerprinted and reported in its own right. Below that floor it stays
-    /// an expression and folds into its owner, as it did before this field existed.
+    /// an expression and folds into its owner.
     ///
     /// Empty is a valid answer, and it means no splitting: closures fold into their enclosing
-    /// callable, the way every adapter behaved before this field existed. Declare a kind only
-    /// where it genuinely introduces an authored callable — this is the adapter reporting its
-    /// grammar, never guessing a policy. What is DONE with the split is uniform across
-    /// languages (see [`push_function_metrics`]); which kinds trigger it is per-language.
+    /// callable. Declare a kind only where it genuinely introduces an authored callable — this
+    /// is the adapter reporting its grammar, never guessing a policy. What is DONE with the
+    /// split is uniform across languages (see [`push_function_metrics`]); which kinds trigger
+    /// it is per-language.
     ///
     /// Only *named* nodes are considered, so a grammar whose `function` keyword token shares
     /// a name with a node kind can't accidentally split on the keyword.
@@ -103,9 +103,9 @@ pub struct FunctionShape {
 /// Deliberately all-or-nothing. A function that constructs AND does work is ordinary code: its
 /// structure is authored, and copy-paste of it is exactly what `duplicate` should catch.
 ///
-/// No carve-out is needed for a construction carrying a callback, and that is the previous
-/// commit paying for itself: a promoted closure's tokens are not in this stream at all (only
-/// an `FN` placeholder is), and the closure is its own shape, which this test never sees.
+/// No carve-out is needed for a construction carrying a callback: a promoted closure's
+/// tokens are not in this stream at all (only an `FN` placeholder is), and the closure is
+/// its own shape, which this test never sees.
 fn body_is_construction(body: Node, syntax: &MetricsSyntax) -> bool {
     if syntax.construction_kinds.is_empty() {
         return false;
@@ -129,7 +129,7 @@ fn body_is_construction(body: Node, syntax: &MetricsSyntax) -> bool {
 }
 
 /// Computes [`function_shape`] and appends the resulting [`FunctionMetrics`] to `out` — the
-/// same mapping duplicated identically across four adapters before this moved here.
+/// one mapping every adapter shares instead of reimplementing its own.
 /// `syntax`/`min_clone_tokens` stay parameters (per-language data, not duplication) — most
 /// adapters wrap this in a one-line local `push_function_metrics(out, symbol, decl_span, body)`
 /// that partially applies its own [`MetricsSyntax`] and [`MIN_CLONE_TOKENS`].
@@ -313,11 +313,11 @@ fn collect<'t>(
     // A callable nested inside this one MAY be its own shape — but only if it is big enough to
     // carry clone evidence on its own. Promoting a small one would take its tokens out of the
     // enclosing stream without giving them anywhere to land: both halves end up under the
-    // clone floor and a real clone stops being reported. Measured on the corpus, that cost 83
-    // clone participants — `Receiver.close`, `deleteWhere`, `Interceptor.adapt`: functions
-    // whose whole substance is one small lambda. So the SAME floor that decides whether a body
-    // is worth fingerprinting decides whether a nested callable is worth separating; below it,
-    // the callable is an expression and folds into its owner exactly as before.
+    // clone floor and a real clone stops being reported — small lambdas like `Receiver.close`,
+    // `deleteWhere`, `Interceptor.adapt`, whose whole substance is one small callback, are
+    // exactly the shapes this would break. So the SAME floor that decides whether a body is
+    // worth fingerprinting decides whether a nested callable is worth separating; below it,
+    // the callable is an expression and folds into its owner.
     //
     // Never on the root: adapters hand this walk a callable's body, and one of them (JS's
     // `const f = (x) => …`) hands it something that IS a nested-callable kind. Splitting there
@@ -570,9 +570,9 @@ mod tests {
 
     #[test]
     fn a_callable_too_small_to_carry_clone_evidence_folds_into_its_owner() {
-        // The corpus lesson: `xs.map((x) => x.name)` promoted would leave BOTH halves under
-        // the clone floor, and a real clone of the enclosing function stops being reported.
-        // Below the floor a nested callable is an expression, exactly as before the split.
+        // `xs.map((x) => x.name)` promoted would leave BOTH halves under the clone floor,
+        // and a real clone of the enclosing function stops being reported. Below the floor a
+        // nested callable is an expression and folds into its owner.
         let src =
             "function a(xs) { const t = xs.map((x) => x.name); if (t) { return t; } return null; }";
         let shapes = shapes_of(src);
@@ -595,8 +595,8 @@ mod tests {
 
     #[test]
     fn an_adapter_declaring_no_nested_kinds_emits_exactly_one_shape() {
-        // The pre-split behaviour, pinned: a language whose grammar has no "this is a
-        // callable body" node declares nothing and keeps folding closures into their owner.
+        // A language whose grammar has no "this is a callable body" node declares nothing
+        // and keeps folding closures into their owner — pinned here as the no-split case.
         const NO_SPLIT: MetricsSyntax = MetricsSyntax {
             branch_kinds: SYNTAX.branch_kinds,
             identifier_kinds: SYNTAX.identifier_kinds,
@@ -682,10 +682,10 @@ mod tests {
 
     #[test]
     fn a_construction_carrying_a_callback_is_still_a_construction() {
-        // The narrowing predicate an earlier design needed, made unnecessary: a promoted
-        // closure's tokens are not in this stream at all — only an `FN` placeholder is — and
-        // the closure is its own shape, which this exemption never sees. So the construction
-        // stays exempt AND the duplicated callback stays visible, on the callback.
+        // A promoted closure's tokens are not in this stream at all — only an `FN`
+        // placeholder is — and the closure is its own shape, which this exemption never
+        // sees. So the construction stays exempt AND the duplicated callback stays visible,
+        // on the callback.
         let cb = format!("(x) => {}", big("x"));
         let src = format!("function a() {{ return new Thing({cb}); }}");
         assert!(constructs(&src));
@@ -711,7 +711,8 @@ mod tests {
 
     #[test]
     fn the_declarations_own_shape_span_is_the_declaration_span() {
-        // What keeps every pre-split finding id and location byte-identical.
+        // What keeps a declaration's own finding id and location stable when nothing inside
+        // it gets split out.
         let arrow = format!("(x) => {}", big("x"));
         let tree = parse(&format!("function a(xs) {{ return xs.map({arrow}); }}"));
         let func = tree.root_node().child(0).unwrap();

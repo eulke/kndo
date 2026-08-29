@@ -21,8 +21,8 @@ pub fn span(node: Node) -> Span {
     }
 }
 
-/// A node's source text, grammar-independent (any tree-sitter tree, any node) — was
-/// copy-pasted identically into eight adapters before this moved here.
+/// A node's source text, grammar-independent (any tree-sitter tree, any node) — every
+/// adapter calls this rather than keeping its own copy.
 pub fn text<'a>(node: Node, src: &'a [u8]) -> &'a str {
     std::str::from_utf8(&src[node.byte_range()]).unwrap_or("")
 }

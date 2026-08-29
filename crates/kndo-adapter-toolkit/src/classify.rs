@@ -31,8 +31,7 @@ fn in_dir(path: &str, dir: &str) -> bool {
 /// The whole claim an extension-gated adapter makes: *this file's final extension is one of
 /// mine, so it is mine, and its role/origin follow from this language's path conventions*.
 ///
-/// Six of the eight first-party adapters had this body copied out verbatim — four of them
-/// character for character — which is the promotion rule's exact trigger. An adapter whose
+/// The shared claim body most extension-gated adapters use as-is. An adapter whose
 /// claim needs more than the extension still owns that part at the call site: Swift rejects
 /// `Package.swift` (a manifest that is also real source) before asking, and the two adapters
 /// whose `FileClass` is fixed rather than path-derived (`css`, `json`) keep their own bodies —

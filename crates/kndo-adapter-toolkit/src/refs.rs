@@ -1,10 +1,10 @@
 //! The reference-emission driver: one body walk, many grammars.
 //!
-//! Two adapters (Kotlin, Swift) had this whole walk copied between them — the recursion, the
-//! call/identifier handling, the comment skip — differing only in which node kinds their
-//! grammars spell things with. That is the same split [`crate::metrics::MetricsSyntax`] made
-//! for metrics, and it is made the same way here: the **driver** is written once, the **kind
-//! table** is the adapter's own report about its grammar.
+//! Kotlin and Swift share this walk — the recursion, the call/identifier handling, the
+//! comment skip — differing only in which node kinds their grammars spell things with. That
+//! is the same split [`crate::metrics::MetricsSyntax`] makes for metrics, made the same way
+//! here: the **driver** is written once, the **kind table** is the adapter's own report about
+//! its grammar.
 //!
 //! What deliberately does NOT live here is anything a grammar decides differently rather than
 //! spells differently — a dotted access chain, for instance: Kotlin's grammar exposes its parts

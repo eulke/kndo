@@ -124,15 +124,16 @@ fn extract_maven(
         let dir = crate::paths::dirname(path);
         // A DECLARED source directory wins over the convention. Maven's `<sourceDirectory>` is
         // the module saying where its code is, and a module that says so is not guessing —
-        // guava declares `src` (with tests in a sibling `test`), and against the hardcoded
-        // `src/main/java` its entire publishable surface was promoted from nothing, so every
-        // public class in it read as `unused`. The convention is the fallback, not the rule.
+        // guava declares `src` (with tests in a sibling `test`), which the hardcoded
+        // `src/main/java` convention would never match, leaving the module's entire
+        // publishable surface unpromoted and every public class in it reading as `unused`.
+        // The convention is the fallback, not the rule.
         let declared = maven_declared_source_root(project, &properties)
             // …and a module that declares nothing may still be told where its code is by an
             // ANCESTOR. Maven inheritance is not a corner: guava declares `<sourceDirectory>`
-            // exactly once, in `guava-parent`, and all ten modules inherit it. Reading only
-            // each pom's own text, kndo found *zero* production roots in guava and reported
-            // 88% of the repository as unreachable.
+            // exactly once, in `guava-parent`, and all ten modules inherit it — reading only
+            // each pom's own text finds zero production roots in guava, leaving 88% of the
+            // repository unreachable.
             .or_else(|| maven_inherited_source_root(project, path, ctx));
         match declared {
             Some(declared) => {
@@ -471,8 +472,8 @@ fn maven_dependency(
 /// A declared version with `${…}` / `$…` placeholders substituted from the manifest's own
 /// property pool, or `None` when any placeholder in it is unresolved.
 ///
-/// Taking an unresolved placeholder verbatim is what made `${spring.version}` "diverge" from
-/// `5.3.0`, and `$junit5Version` from `$junit5_version` — two spellings of one
+/// Taking an unresolved placeholder verbatim would read `${spring.version}` as diverging
+/// from `5.3.0`, and `$junit5Version` from `$junit5_version` — two spellings of one
 /// `gradle.properties` key. The value is not a version and must not be compared as one; the
 /// honest answer to "what does this manifest require" is that we could not read it.
 fn resolve_placeholder(
@@ -651,10 +652,10 @@ fn gradle_dependency_line(
 ///
 /// A BOM/platform-managed coordinate has TWO segments and no version at all
 /// (`implementation 'org.springframework.boot:spring-boot-starter-actuator'`, with the version
-/// supplied by an imported BOM). Splitting on the last colon read that as
-/// `name = "org.springframework.boot"`, `version = "spring-boot-starter-actuator"` — which is
-/// why the field audit saw `version-skew` report ARTIFACT IDS as diverging versions of a group
-/// id, on every JVM repository it covered.
+/// supplied by an imported BOM). Splitting on the last colon instead would read that as
+/// `name = "org.springframework.boot"`, `version = "spring-boot-starter-actuator"` —
+/// reporting an artifact id as a diverging version of a group id on every JVM repository
+/// with a BOM-managed dependency.
 fn gradle_coordinate(
     lit: &str,
     properties: &std::collections::HashMap<String, String>,
