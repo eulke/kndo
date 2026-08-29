@@ -9,7 +9,7 @@
 
 // kndo:allow-file untested this guest crate is exercised end-to-end by the WASM-bridge
 // integration tests, which build it as a subprocess and run the component in-process —
-// reachability the host repo's graph cannot see (internal/detection-gaps.md §1).
+// reachability the host repo's graph cannot see.
 // (No crap pragma, unlike the sibling demos: nothing here is complex enough to score.)
 
 // Marks the dependency used explicitly — the macro invocation below is a fully-qualified

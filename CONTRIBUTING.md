@@ -12,9 +12,8 @@ human contributors.
 - Types: `feat`, `fix`, `docs`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`, `revert`.
 - Subject: imperative mood, ≤72 chars, no trailing period.
 - Body: optional, **1–2 lines max**. State what changed and why if it's not obvious from the
-  subject — not a design rationale. Extended discussion belongs in the PR description or the
-  relevant `internal/` design document, not the commit body. (Design documents live in
-  `internal/`; `docs/` is user documentation.)
+  subject — not a design rationale. Extended discussion belongs in the PR description, not the
+  commit body.
 
 ```
 feat(adapter-js): extract export surface from CJS module.exports

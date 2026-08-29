@@ -464,9 +464,9 @@ jobs:
     # time by the release build itself — the suite had never run there, on a tool whose whole
     # job is reading paths out of a filesystem.
     #
-    # It ran once with `windows-latest` in the matrix, and that is how Windows stopped being a
-    # release target (RFC 0014 §3.3): `tree-sitter-scss`'s build script hands `cl.exe` a flag it
-    # refuses, so kndo's own code never compiled there at all. The matrix is kept as a matrix
+    # It ran once with `windows-latest` in the matrix: `tree-sitter-scss`'s build script hands
+    # `cl.exe` a flag it refuses, so kndo's own code never compiled there at all — which is why
+    # Windows is not a release target. The matrix is kept as a matrix
     # rather than flattened to `runs-on: macos-latest` — adding a platform back is a one-line
     # change, and this job existing is what made the Windows problem visible before a tag did.
     #

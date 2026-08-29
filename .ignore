@@ -1,6 +1,6 @@
 # Read by the `ignore` crate (and by ripgrep/fd), NOT by git — which is exactly the point.
 #
-# Conformance fixture corpora (RFC 0002 §8) are deliberately-flawed test data: checked into
+# Conformance fixture corpora are deliberately-flawed test data: checked into
 # git and exercised by the conformance harness's own `cargo test` run, but excluded from
 # kndo's self-check of its own repo (ROADMAP M1 exit: "kndo check on kndo's own JS-free repo
 # returns cleanly"). Analyzing them would report every flaw they were written to contain.

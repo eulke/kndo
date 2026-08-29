@@ -1,5 +1,5 @@
 #!/bin/sh
-# kndo installer (RFC 0014 §3.2). Downloads a precompiled release binary, verifies its checksum,
+# kndo installer. Downloads a precompiled release binary, verifies its checksum,
 # and installs it — no cargo/rustc required. Safe to re-run: it replaces cleanly, never appends.
 #
 # Usage:

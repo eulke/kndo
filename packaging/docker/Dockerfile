@@ -1,6 +1,6 @@
-# kndo container image (RFC 0014 §2 item 6 / §3.1 publish-container). Never builds kndo —
-# copies the already-built release binary in, per-arch, matching every other secondary
-# distribution channel's "the GitHub Release is the source of truth" rule (RFC 0014 §3).
+# kndo container image. Never builds kndo — copies the already-built release binary in,
+# per-arch, matching every other secondary distribution channel's "the GitHub Release is
+# the source of truth" rule.
 #
 # Built by CI as: docker buildx build --platform linux/amd64,linux/arm64
 #                   --build-context bin=<dir with kndo-linux-amd64 / kndo-linux-arm64>

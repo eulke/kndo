@@ -1,4 +1,4 @@
-# Homebrew formula template (RFC 0014 §2 item 4 / §3.1 update-tap). Rendered by CI into a real
+# Homebrew formula template. Rendered by CI into a real
 # `kndo.rb` and committed to the tap repo (e.g. `eulke/homebrew-tap`) — this file itself never
 # ships anywhere, it's the source `update-tap`'s job substitutes into.
 #
@@ -8,7 +8,7 @@
 #   {{SHA256_LINUX_ARM64}}   {{SHA256_LINUX_X86_64}}
 #
 # The formula only ever downloads a precompiled binary — it never compiles anything on the
-# user's machine (RFC 0014 §2 item 4).
+# user's machine.
 class Kndo < Formula
   desc "Multi-language static analyzer for unused code, dependency hygiene, and structural risk"
   homepage "https://github.com/eulke/kondo"

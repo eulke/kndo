@@ -47,12 +47,11 @@ edition = "2021"
 # the number stays true rather than becoming decoration.
 rust-version = "1.89"
 license = "Apache-2.0"
-# The repository's CURRENT name. ADR 0007 proposes renaming `eulke/kondo` -> `eulke/kndo`, and
-# this field used to point at the future name — a URL that 404s for anyone who follows it today,
-# in the one piece of metadata crates.io publishes as the project's home. The rename direction is
-# unchanged, but it is safe to write the old name either way: GitHub's post-rename redirect makes
-# it resolve forever once the rename happens, while the new name resolves only after. RFC 0014 §3
-# states this rule for every published link; `xtask/tests/release_channels.rs` enforces it.
+# The repository's CURRENT name — `eulke/kondo`, pending a rename to `eulke/kndo` — in the one
+# piece of metadata crates.io publishes as the project's home. Writing the current name is safe
+# either way: GitHub's post-rename redirect makes it resolve forever once the rename happens,
+# while the new name resolves only after. `xtask/tests/release_channels.rs` enforces this rule
+# for every published link.
 repository = "https://github.com/eulke/kondo"
 publish = false # pre-1.0: nothing is published; crate names are reserved regardless
 

@@ -96,7 +96,7 @@
       ]
     },
     "Category": {
-      "description": "A finding's category — an open namespace (RFC 0018 §2.1: a plugin's own category is\n`plugin:<coordinate>/<rule>`, never a bare or off-namespace name), so unlike [`Group`] this\nis a validated string newtype rather than a closed enum. The core categories are\nassociated consts; [`Category::plugin`] builds the namespaced form; [`Category::is_plugin`]\ntells the two apart without a string-prefix check at every call site.",
+      "description": "A finding's category — an open namespace (a plugin's own category is\n`plugin:<coordinate>/<rule>`, never a bare or off-namespace name), so unlike [`Group`] this\nis a validated string newtype rather than a closed enum. The core categories are\nassociated consts; [`Category::plugin`] builds the namespaced form; [`Category::is_plugin`]\ntells the two apart without a string-prefix check at every call site.",
       "type": "string"
     },
     "Confidence": {
@@ -271,7 +271,7 @@
           }
         },
         "metrics": {
-          "description": "Per-shape measurements, ordered by `shape_ordinal`. Empty for a node that owns no\ncallable shape — a type, a file, a dependency (RFC 0007 §4.2).",
+          "description": "Per-shape measurements, ordered by `shape_ordinal`. Empty for a node that owns no\ncallable shape — a type, a file, a dependency.",
           "type": "array",
           "items": {
             "$ref": "#/$defs/ShapeMetrics"
@@ -504,7 +504,7 @@
           }
         },
         "rolled_up": {
-          "description": "How many findings this one subsumes, on the rollup ladder (symbol → file → directory →\npackage, RFC 0005 taxonomy rule 3): a directory reported once instead of fifty times\nsays `50` here. `None` on a finding that subsumes nothing, which is most of them —\nabsent rather than `1`, because \"this is a rollup of one\" is not a fact, and a\nconsumer summing the field must not double-count leaves.\n\nWithout it the count survives only inside the message prose (\"4 files, none\nreferenced\"), so a consumer deciding how much a finding is worth has to parse English\n— the same defect `location`/`related` had for multi-place subjects.",
+          "description": "How many findings this one subsumes, on the rollup ladder (symbol → file → directory →\npackage): a directory reported once instead of fifty times says `50` here. `None` on\na finding that subsumes nothing, which is most of them —\nabsent rather than `1`, because \"this is a rollup of one\" is not a fact, and a\nconsumer summing the field must not double-count leaves.\n\nWithout it the count survives only inside the message prose (\"4 files, none\nreferenced\"), so a consumer deciding how much a finding is worth has to parse English\n— the same defect `location`/`related` had for multi-place subjects.",
           "type": [
             "integer",
             "null"
@@ -538,7 +538,7 @@
       ]
     },
     "Group": {
-      "description": "A finding's section — the taxonomy RFC 0018 §\"reserved\" closes: exactly these five, plus\n`Convention` reserved for plugin-contributed findings (`category` stays an open\n`plugin:<coordinate>/<rule>` namespace — RFC 0018 §2.1 — but no finding may claim a group\noutside this set). [`Group::DISPLAY_ORDER`] is the single source of section ordering —\nevery renderer reads it instead of keeping its own copy: a duplicated 4-entry copy of this\nlist, missing `Convention`, would missort every plugin finding under an unnamed fallback\nsection in any renderer that carried it (`agent_format.rs`, the CLI's `render.rs`).",
+      "description": "A finding's section — a closed taxonomy of exactly these five, plus `Convention` reserved\nfor plugin-contributed findings (`category` stays an open `plugin:<coordinate>/<rule>`\nnamespace, but no finding may claim a group outside this set). [`Group::DISPLAY_ORDER`] is\nthe single source of section ordering —\nevery renderer reads it instead of keeping its own copy: a duplicated 4-entry copy of this\nlist, missing `Convention`, would missort every plugin finding under an unnamed fallback\nsection in any renderer that carried it (`agent_format.rs`, the CLI's `render.rs`).",
       "oneOf": [
         {
           "type": "string",
@@ -1023,7 +1023,7 @@
       ]
     },
     "Severity": {
-      "description": "A finding's severity — each category carries one as\na fixed default. `--strict` promotion (RFC 0005) happens where the analysis assigns the\nseverity directly (see `analysis::undeclared`), never through logic on this type.\nDeclaration order doubles as sort/triage order: worst first.",
+      "description": "A finding's severity — each category carries one as\na fixed default. `--strict` promotion happens where the analysis assigns the\nseverity directly (see `analysis::undeclared`), never through logic on this type.\nDeclaration order doubles as sort/triage order: worst first.",
       "type": "string",
       "enum": [
         "error",
@@ -1132,7 +1132,7 @@
       ]
     },
     "SubjectKind": {
-      "description": "A finding's subject facet (`category:subject` targeting, RFC 0005) — open like\n[`Category`]: most values are the fixed `file | directory | dependency | package |\nsuppression` set, but a symbol-subject finding's facet is [`SymbolKind::facet`], which\nitself carries an open [`SymbolKind::Other`] tail for languages the closed variants don't\ncover — so this can never be a closed enum either.",
+      "description": "A finding's subject facet (`category:subject` targeting) — open like\n[`Category`]: most values are the fixed `file | directory | dependency | package |\nsuppression` set, but a symbol-subject finding's facet is [`SymbolKind::facet`], which\nitself carries an open [`SymbolKind::Other`] tail for languages the closed variants don't\ncover — so this can never be a closed enum either.",
       "type": "string"
     },
     "TraceResult": {

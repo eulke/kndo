@@ -28,10 +28,9 @@
 
 // kndo:allow-file untested this guest crate is exercised end-to-end by the WASM-bridge
 // integration tests, which build it as a subprocess and run the component in-process —
-// reachability the host repo's graph cannot see (internal/detection-gaps.md §1).
+// reachability the host repo's graph cannot see.
 // kndo:allow-file crap the crate compiles to wasm32, which the coverage instrumentation
-// cannot link — coverage is structurally unmeasurable here, not merely absent
-// (internal/detection-gaps.md §1).
+// cannot link — coverage is structurally unmeasurable here, not merely absent.
 
 // Marks the dependency used explicitly — the macro invocation below is a fully-qualified
 // path with no `use`, which kndo's own Rust adapter (a static extractor, not a macro

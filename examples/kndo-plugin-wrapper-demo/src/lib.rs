@@ -6,9 +6,8 @@
 //! project that depends on the framework does **not** declare `express` in its own manifest —
 //! and `kndo:express`'s activation rule (`ManifestDependency("express")`) can therefore never
 //! fire for it. The framework ships a plugin for its own conventions, that plugin names
-//! `kndo:express` in its `dependencies`, and being active is what activates the built-in
-//! (RFC 0015 §3). There is no other path to a plugin whose framework is an indirect
-//! dependency.
+//! `kndo:express` in its `dependencies`, and being active is what activates the built-in.
+//! There is no other path to a plugin whose framework is an indirect dependency.
 //!
 //! It also proves the crossing that matters most: an EXTERNAL component naming a BUILT-IN.
 //! The `kndo:` namespace is reserved — a component claiming such an id is refused at load —
@@ -24,7 +23,7 @@
 
 // kndo:allow-file untested this guest crate is exercised end-to-end by the WASM-bridge
 // integration tests, which build it as a subprocess and run the component in-process —
-// reachability the host repo's graph cannot see (internal/detection-gaps.md §1).
+// reachability the host repo's graph cannot see.
 
 // Only ever invoked through the macro path below, never an ordinary `use` — kept as a real
 // import anyway (not a suppression-shaped workaround) so dependency hygiene sees a genuine
