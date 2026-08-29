@@ -76,10 +76,10 @@ pub enum TreeSource<'a> {
 }
 
 /// [`Discovered`] plus content access for the assembly phases that need bytes (extraction on a
-/// facts-cache miss, manifest extraction). Directory sources read from disk on demand exactly
-/// as before; git-tree sources serve the blob bytes already streamed during discovery (they
-/// were needed for content hashing anyway — holding them beats a second subprocess round-trip,
-/// and they live only for the one assembly call).
+/// facts-cache miss, manifest extraction). Directory sources read from disk on demand;
+/// git-tree sources serve the blob bytes already streamed during discovery (they were needed
+/// for content hashing anyway — holding them beats a second subprocess round-trip, and they
+/// live only for the one assembly call).
 pub struct DiscoveredTree {
     pub files: Vec<DiscoveredFile>,
     pub diagnostics: Vec<Diagnostic>,

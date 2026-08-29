@@ -175,7 +175,7 @@ mod tests {
     #[test]
     fn a_nested_type_expression_survives_the_archive() {
         // The shape the whole bridge exists for: `Result<Vec<TreeEntry>, _>`, three levels
-        // deep, with the argument that a flat one-level encoding used to throw away.
+        // deep, with nested arguments a flat one-level encoding would throw away.
         let value = TreeProbe {
             yields: TypeExpr::Named {
                 name: SmolStr::new("Result"),

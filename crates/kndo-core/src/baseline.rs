@@ -47,7 +47,7 @@ impl From<&Finding> for BaselineEntry {
 
 /// Bumped only if this on-disk shape itself changes; unrelated to any cache format version —
 /// this file is committed and hand-editable, so a version mismatch is a diagnostic-worthy
-/// condition for a future migration path, never a silent-rebuild-and-move-on cache miss.
+/// condition, never a silent-rebuild-and-move-on cache miss.
 const BASELINE_FILE_VERSION: u32 = 1;
 
 #[derive(Debug, Default, serde::Serialize, serde::Deserialize)]

@@ -682,9 +682,10 @@ mod tests {
 
     #[test]
     fn a_pragma_for_an_abstained_category_is_not_stale() {
-        // The accusation-direction bug: with no coverage report the `crap` analysis abstains
-        // and emits nothing, and reading that emptiness as "the issue is gone" told the user
-        // to delete a pragma that is doing its job — add the report and the finding returns.
+        // The failure mode this guards against: with no coverage report the `crap` analysis
+        // abstains and emits nothing, and reading that emptiness as "the issue is gone" would
+        // tell the user to delete a pragma that is doing its job — add the report and the
+        // finding returns.
         let graph = graph_with(
             vec![symbol("foo", 3, 3)],
             vec![(

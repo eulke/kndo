@@ -353,8 +353,8 @@ pub enum RootKind {
 /// The role-derived root kind a file's classification implies — "Test roots are test
 /// files, Tooling roots are build/config scripts" — or `None` for `Production`, which stays
 /// manifest/API-driven and is never role-derived. One mapping, read by both the full
-/// assembly's role-derived-roots pass and the incremental patch's equivalent regeneration —
-/// they used to each carry their own copy of the same match.
+/// assembly's role-derived-roots pass and the incremental patch's equivalent regeneration, so
+/// the two can never diverge on this classification.
 pub fn role_root_kind(role: FileRole) -> Option<RootKind> {
     match role {
         FileRole::Test => Some(RootKind::Test),
@@ -607,9 +607,9 @@ pub struct Edge {
 /// `Convention` reserved for plugin-contributed findings (`category` stays an open
 /// `plugin:<coordinate>/<rule>` namespace — RFC 0018 §2.1 — but no finding may claim a group
 /// outside this set). [`Group::DISPLAY_ORDER`] is the single source of section ordering —
-/// every renderer reads it instead of keeping its own copy (a duplicated 4-entry copy of this
-/// list, missing `Convention`, is exactly how `agent_format.rs` and the CLI's `render.rs`
-/// used to missort every plugin finding under an unnamed fallback section).
+/// every renderer reads it instead of keeping its own copy: a duplicated 4-entry copy of this
+/// list, missing `Convention`, would missort every plugin finding under an unnamed fallback
+/// section in any renderer that carried it (`agent_format.rs`, the CLI's `render.rs`).
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
 )]
@@ -694,10 +694,10 @@ impl Category {
 
     /// **The** closed set of core categories — the registry `docs/src/rules.md` publishes and
     /// suppression validates a pragma's category against. One list, so a category cannot exist
-    /// in the vocabulary and be unspellable in a pragma, or the reverse: `unresolved` spent a
-    /// long time in the suppression registry with no `Category` const and no analysis emitting
-    /// it, which made `kndo:allow unresolved` a pragma that was valid, matched nothing by
-    /// construction, and was reported stale forever.
+    /// in the vocabulary and be unspellable in a pragma, or the reverse: a category present in
+    /// the suppression registry with no `Category` const and no analysis emitting it would make
+    /// `kndo:allow` for it a pragma that is valid, matches nothing by construction, and is
+    /// reported stale forever.
     ///
     /// A `static` behind a function, not an associated `const`: [`Category`] wraps a `SmolStr`,
     /// so a borrowed const array is a temporary and nothing could hold a `&'static str` from it.
@@ -798,9 +798,9 @@ mod category_registry_tests {
     use super::Category;
 
     /// `docs/src/rules.md` publishes the closed registry, and `internal/contracts/
-    /// output-schema.md` restates it. They were hand-maintained beside a third copy in
-    /// `suppression.rs` and a fourth in this file's consts, and they had already diverged:
-    /// `unresolved` was in the registry with no `Category` const and nothing emitting it.
+    /// output-schema.md` restates it — both hand-maintained prose, alongside `suppression.rs`'s
+    /// validation and this file's consts, so nothing but this test keeps all four in sync with
+    /// `Category::all()`.
     #[test]
     fn the_published_registry_matches_the_vocabulary() {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))

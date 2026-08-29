@@ -1,6 +1,6 @@
 //! Shared conformance harness: every adapter's
 //! fixture suite runs through this one runner, so "the adapter passes conformance" means the
-//! same thing everywhere — first-party today, third-party later. A fixture is a directory:
+//! same thing for any adapter, first-party or third-party. A fixture is a directory:
 //! `project/` (a miniature real codebase, extracted and resolved by real adapters — not
 //! `MockAdapter`) plus `expected.json` (the findings it must produce).
 //!
@@ -67,9 +67,9 @@ impl fmt::Display for ConformanceMismatch {
 pub struct ConformanceError(pub String);
 
 /// [`run_fixture`]/[`run_fixture_with`]'s success outcome — a fixture that ran and either
-/// matched `expected.json` or didn't. Was a nested `Result<Result<(), ConformanceMismatch>,
-/// ConformanceError>`; the two failure modes (a malformed fixture vs. a fixture that ran and
-/// disagreed) are still distinct, just as one flat enum instead of Result-in-Result.
+/// matched `expected.json` or didn't. The two failure modes (a malformed fixture vs. a fixture
+/// that ran and disagreed) stay distinct as variants of one flat enum, rather than as
+/// `Result<Result<(), ConformanceMismatch>, ConformanceError>`.
 #[derive(Debug)]
 pub enum ConformanceVerdict {
     Pass,

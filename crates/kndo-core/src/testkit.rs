@@ -1,9 +1,9 @@
 //! Shared test infrastructure: an in-memory [`MockAdapter`] driving a tiny text DSL, used by
 //! this crate's own graph/analysis tests. Gated behind the `testkit` feature (in addition to
 //! `cfg(test)`) so a downstream crate's test suite that needs a real end-to-end
-//! `LanguageAdapter` — kndo-plugin-api's WASM compliance tests, previously — can depend on the
+//! `LanguageAdapter` — kndo-plugin-api's WASM compliance tests among them — can depend on the
 //! canonical mock via `kndo-core = { features = ["testkit"] }` instead of reimplementing its
-//! grammar because this module used to be private.
+//! grammar.
 //!
 //! kndo-core must never depend on a real language adapter (that would invert the ignorance
 //! rule) — `MockAdapter` is the one exception, and it lives only here, behind this feature.
@@ -769,15 +769,11 @@ impl LanguageAdapter for MockAdapter {
 
 /// Filesystem fixtures. **Every** temporary directory a test needs comes from `tempfile`, and
 /// nothing anywhere builds a name under `std::env::temp_dir()` — a rule with a guard test
-/// (`crates/kndo-core/tests/no_hand_rolled_temp_dirs.rs`), because the alternative was tried
-/// and the failure was worse than a leak.
-///
-/// The shape it took here was a fixed literal name plus `remove_dir_all` **on entry**: two
-/// tests that happened to pick the same string did not merely collide, the second one to start
-/// deleted the first one's fixture out from under it mid-read (documented at the time in
-/// `kndo-adapter-go/tests/assembly.rs`). `tempfile::tempdir()` is unique by construction, mode
-/// 0700, and deleted on drop — including on unwind, which is why a panicking test cleans up
-/// after itself and a hand-rolled `PathBuf` never did.
+/// (`crates/kndo-core/tests/no_hand_rolled_temp_dirs.rs`). A fixed or hand-rolled name risks two
+/// tests colliding under parallel execution — the second test to start can delete the first
+/// one's fixture out from under it mid-read. `tempfile::tempdir()` is unique by construction,
+/// mode 0700, and deleted on drop — including on unwind, which is why a panicking test cleans up
+/// after itself.
 pub mod fixture {
     /// A throwaway project tree: each `(path, content)` written relative to the returned
     /// directory, parent directories created. Hold the returned `TempDir` for as long as the

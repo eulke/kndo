@@ -666,8 +666,7 @@ mod tests {
         //
         // The health rule measures the DROP, so a run that improved health by 1.7 reports
         // `-1.7` and passes a 0.0 limit. That sign convention is what makes `measured <= limit`
-        // the pass test for every rule alike — the earlier doc example had `1.7` against a
-        // limit of `0.0` marked `pass`, which no consumer could have reproduced.
+        // the pass test for every rule alike.
         let out = render(&RunResult {
             mode: "diff".to_string(),
             base_ref: Some("main".to_string()),
@@ -901,11 +900,10 @@ mod tests {
 
     /// **Every section `describe` can render, rendered.**
     ///
-    /// The test above populates two of the ten optional parts, which is why kndo's own `crap`
-    /// analysis reported this renderer at 51% coverage on this repository: half the contract in
-    /// RFC 0007 §4.2 had no assertion behind it. A node carrying all of them at once is not a
-    /// contrived shape — a public function in a duplicated group, in a package, with metrics and
-    /// findings, is an ordinary answer to `kndo describe`.
+    /// A node carrying all ten optional parts at once is not a contrived shape — a public
+    /// function in a duplicated group, in a package, with metrics and findings, is an ordinary
+    /// answer to `kndo describe`. Exercising all ten here is what keeps the full contract in RFC
+    /// 0007 §4.2 under assertion, rather than only the parts a narrower fixture happens to touch.
     #[test]
     fn describe_renders_every_section_it_declares() {
         use crate::query::QNodeRef;

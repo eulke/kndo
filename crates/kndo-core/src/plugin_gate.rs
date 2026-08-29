@@ -123,8 +123,8 @@ mod tests {
 
     #[test]
     fn malformed_values_are_reported_not_fatal() {
-        // A malformed FILE is config.rs's problem now (single parse); malformed values
-        // within the table stay this module's.
+        // A malformed FILE is config.rs's problem (it owns the single parse); malformed
+        // values within the table are this module's.
         let (gate, problems) = gate_from("[plugins.gate]\n\"a\" = \"loud\"\n\"b\" = 3\n");
         assert_eq!(problems.len(), 2, "{problems:?}");
         assert!(gate.resolve("a", "r").is_none());
