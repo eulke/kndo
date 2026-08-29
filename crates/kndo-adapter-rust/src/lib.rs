@@ -45,20 +45,20 @@ impl LanguageAdapter for RustAdapter {
             grammar_version: SmolStr::new("tree-sitter-rust 0.24"),
             // [File "private", Module "pub(super)", Package "pub(crate)", Public "pub"].
             // `pub(super)` names the parent module's SUBTREE — a region strictly between one
-            // file and one package, which the four-bucket ladder had nowhere to put and so
-            // widened into `pub(crate)`. That approximation is what kept `private-type-leak`
-            // gated (`internal/detection-gaps.md` §7). `pub(in path)` still widens: this
-            // adapter does not resolve its path to a unit key yet, and widening only ever
-            // silences an accusation, never fabricates one.
+            // file and one package, distinct from both `pub(crate)` above it and `private`
+            // below it. Collapsing it into `pub(crate)` would widen every `pub(super)` item to
+            // crate-wide visibility, leaving `private-type-leak` blind to leaks that stop at the
+            // parent module's boundary (`internal/detection-gaps.md` §7). `pub(in path)` still
+            // widens: this adapter does not resolve its path to a unit key yet, and widening
+            // only ever silences an accusation, never fabricates one.
             visibility_ladder: vec![
                 VisibilityRung {
                     // Rust's "private" is NOT the file: it is the declaring module AND its
                     // descendants, which is exactly what a Module rung anchored on the file's
-                    // own unit says. The adapter used to approximate it as `File` because the
-                    // ladder had nowhere else to put it — and that approximation is what made
-                    // `private-type-leak` accuse ripgrep's `flags::parse::lookup` for naming
-                    // `flags::mod`'s private `Flag`, which every module under `flags` can spell
-                    // perfectly well (`internal/detection-gaps.md` §7).
+                    // own unit says. A `File` rung here is too narrow: it would accuse
+                    // ripgrep's `flags::parse::lookup` of leaking `flags::mod`'s private `Flag`,
+                    // which every module under `flags` can spell perfectly well
+                    // (`internal/detection-gaps.md` §7).
                     scope: VisibilityScope::Module,
                     label: SmolStr::new("private"),
                     surface_transitive: false,
@@ -139,10 +139,10 @@ impl LanguageAdapter for RustAdapter {
 /// What Rust's own generics do to their arguments — the facts no file in a project declares
 /// because the declaration lives in the standard library.
 ///
-/// A chain that crosses one of these used to stop dead: `ls_tree(..).map_err(..)?` then
-/// iterated is four hops through `Result` and `Vec` before it reaches the element type, and
-/// without them the type behind it read as consumed only where it was declared
-/// (`internal/detection-gaps.md` §3).
+/// Without these facts, a chain that crosses one of these stops dead:
+/// `ls_tree(..).map_err(..)?` then iterated is four hops through `Result` and `Vec` before it
+/// reaches the element type, and the type behind it reads as consumed only where it was
+/// declared (`internal/detection-gaps.md` §3).
 ///
 /// Two conventions, both this adapter's own choice and invisible to the core: `@element` is
 /// the member an iteration hops through (a container that does not declare one simply does

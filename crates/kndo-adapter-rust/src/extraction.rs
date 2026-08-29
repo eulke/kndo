@@ -1124,11 +1124,11 @@ const HARNESS_CFGS: [&str; 5] = ["test", "loom", "fuzzing", "miri", "kani"];
 /// Whether a `cfg` predicate is satisfiable **only** under a harness — the criterion for
 /// treating the item it gates as test infrastructure rather than production code.
 ///
-/// A substring search for `"test"` was the previous rule, and it was wrong in both directions.
+/// A plain substring search for `"test"` is wrong in both directions.
 /// `any(test, feature = "testkit")` also compiles with the feature on, so the item is
 /// production code a downstream crate can reach; marking its region as tests silences every
 /// finding inside it and makes the dependencies it imports look dev-only. `not(test)` is the
-/// exact opposite of a test region and matched too, as did anything merely spelling the
+/// exact opposite of a test region and matches too, as does anything merely spelling the
 /// substring — `feature = "fastest"`, `target_os = "latest"`.
 ///
 /// Uncertainty resolves toward silence, never toward accusation (RFC 0012 §2): an unrecognized
@@ -1187,7 +1187,7 @@ fn split_predicates(inner: &str) -> Vec<&str> {
 /// The predicate inside a `#[cfg(…)]`/`#![cfg(…)]` attribute's own text, if it is a `cfg` at
 /// all. `cfg_attr` is deliberately not accepted: `#[cfg_attr(test, derive(Debug))]` applies an
 /// attribute conditionally, it does not gate the item — an item carrying it is ordinary
-/// production code and used to be classified as test infrastructure.
+/// production code, not test infrastructure.
 fn cfg_predicate(attr_text: &str) -> Option<&str> {
     let t = attr_text.trim();
     let t = t
@@ -1255,8 +1255,8 @@ fn visibility(node: Node) -> (u8, bool) {
 
 /// One `pub…` modifier mapped to the ladder: bare `pub` is the top rung; `pub(self)` is
 /// private everywhere; `pub(super)` is private only when `super` stays inside the file, and
-/// otherwise names the PARENT MODULE's subtree — the rung this adapter's ladder gained so it
-/// no longer has to widen a real region into `pub(crate)`.
+/// otherwise names the PARENT MODULE's subtree — a real region distinct from `pub(crate)`,
+/// not folded into it.
 fn visibility_of_modifier(modifier: Node, item: Node) -> (u8, bool) {
     if modifier.child_count() <= 1 {
         return (VIS_PUBLIC, true); // bare `pub`
@@ -1282,11 +1282,11 @@ fn restriction_level(restriction: Node, item: Node) -> Option<u8> {
         // `super` of an INLINE mod is a module within this same file, so under file ≈ module
         // the item never leaves the file.
         "super" if inside_inline_mod(item) => Some(VIS_PRIVATE),
-        // A top-level `pub(super)` names the parent module's subtree — a real region, and the
-        // one the four-bucket ladder had nowhere to put.
+        // A top-level `pub(super)` names the parent module's subtree — a real region distinct
+        // from `pub(crate)`.
         "super" => Some(VIS_SUPER),
         // `pub(in path)` names an ancestor this adapter does not resolve to a unit key yet, so
-        // it keeps the old conservative widening: `pub(crate)`. Widening only ever silences an
+        // it widens conservatively to `pub(crate)`. Widening only ever silences an
         // `internal-only`, never accuses (7 occurrences across tokio, for scale).
         _ => None,
     }
@@ -2226,8 +2226,9 @@ fn push_member_type(
 /// An annotation as a TYPE EXPRESSION — the tree, not its base name. Applies the same
 /// dispatch reduction [`base_type_name`] always did (references and `impl`/`dyn` looked
 /// through, `Box`/`Rc`/`Arc` unwrapped to the pointee, `Self` resolved by the caller), and
-/// then keeps going into the arguments instead of stopping at one level. `Result<Vec<T>, E>`
-/// used to reduce to `Result` plus the names `["Vec", "E"]`, which lost the `T` for good.
+/// then keeps going into the arguments instead of stopping at one level — stopping there
+/// would reduce `Result<Vec<T>, E>` to `Result` plus the names `["Vec", "E"]`, losing the `T`
+/// for good.
 ///
 /// A slice or array is anonymous in the grammar, so it is named `@slice` — a name only this
 /// adapter uses, on both the fact side and the reference side, which lets it carry an
@@ -2472,8 +2473,8 @@ fn mark_implicitly_invoked(out: &mut FileFacts, owner: &str, name: &str) {
 /// trait whose `impl` block declares it. A FACT, recorded for every trait impl regardless of
 /// whether this adapter considers the trait machinery — because the consumer that knows a
 /// third-party trait's meaning is a plugin, and it can only know it if the fact survives
-/// extraction. Reducing it to `implicitly_invoked` alone is what once forced `kndo:serde` to
-/// re-parse Rust source the adapter had already parsed.
+/// extraction. Reducing it to `implicitly_invoked` alone would force `kndo:serde` to re-parse
+/// Rust source the adapter has already parsed.
 fn record_implements(out: &mut FileFacts, owner: &str, name: &str, trait_name: &str) {
     if let Some(decl) = last_member_decl(out, owner, name) {
         decl.implements = Some(SmolStr::new(trait_name));
@@ -4202,8 +4203,8 @@ mod tests {
         assert_eq!(by_name("private_fn").visibility.0, VIS_PRIVATE);
         assert!(!by_name("private_fn").exported);
         assert_eq!(by_name("crate_fn").visibility.0, VIS_CRATE);
-        // Top-level `super` leaves the file and lands on its OWN rung, no longer widened into
-        // the crate one — the region `private-type-leak` needs to see (§7).
+        // Top-level `super` leaves the file and lands on its OWN rung, distinct from the crate
+        // one — the region `private-type-leak` needs to see (§7).
         assert_eq!(by_name("super_fn").visibility.0, VIS_SUPER);
         // `pub(in path)` still widens: the path is not resolved to a unit key, and widening
         // only ever silences.
@@ -4727,7 +4728,8 @@ mod tests {
 
     #[test]
     fn only_a_harness_only_cfg_marks_a_test_region() {
-        // `contains("test")` was the old rule. Every case below is one it got wrong.
+        // A plain `contains("test")` check misjudges every case below — each one exercises
+        // exactly where that naive test fails.
         assert!(cfg_is_harness_only("test"));
         assert!(cfg_is_harness_only("all(test, unix)"));
         assert!(cfg_is_harness_only("any(test, all(test, unix))"));
@@ -4757,9 +4759,9 @@ mod tests {
     #[test]
     fn a_feature_gated_helper_module_is_not_test_infrastructure() {
         // kndo found this on its own source: `testkit` is `#[cfg(any(test, feature =
-        // "testkit"))]`, so the old rule swallowed the whole module as tests — which made the
-        // `tempfile` it imports look like a dev-dependency, and would have silenced every
-        // finding inside it.
+        // "testkit"))]` — a substring check on `"test"` would swallow the whole module as
+        // tests, making the `tempfile` it imports look like a dev-dependency and silencing
+        // every finding inside it.
         let f = facts(
             "#[cfg(any(test, feature = \"testkit\"))]\nmod testkit {\n    pub fn helper() {}\n}\n",
         );
@@ -4773,7 +4775,7 @@ mod tests {
     #[test]
     fn cfg_attr_does_not_gate_the_item_it_decorates() {
         // `#[cfg_attr(test, derive(Debug))]` applies an attribute conditionally; the item
-        // itself compiles in every build. It used to be classified as test infrastructure.
+        // itself compiles in every build.
         let f = facts("#[cfg_attr(test, derive(Debug))]\npub struct Config {}\n");
         assert!(f.test_spans.is_empty(), "{:?}", f.test_spans);
     }
@@ -5129,7 +5131,7 @@ mod tests {
         // A macro called as an item (`export!(Guest);`, `wit_bindgen::generate!({ .. });`)
         // parses as `expression_statement > macro_invocation`, not a bare item-position
         // `macro_invocation` — without unwrapping that wrapper, the macro name and every
-        // identifier in its token tree (`Guest` here) were silently invisible.
+        // identifier in its token tree (`Guest` here) would be silently invisible.
         let f = facts("struct Guest;\nexport!(Guest);\n");
         assert!(f
             .references
