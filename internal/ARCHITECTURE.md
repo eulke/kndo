@@ -1,11 +1,306 @@
-# RFC 0016 — Uniform Component Model
+# Architecture
+
+Core system design: the project graph pipeline (RFC 0001), the language-adapter contract
+(RFC 0002), and the uniform component model unifying adapters and plugins (RFC 0016). Each
+section below was originally its own RFC document; they are merged here per the consolidation
+recorded in `.wayfinder/tickets/33-consolidation-decision.md`.
+
+## RFC 0001: Architecture
+
+**Status:** Accepted · **Depends on:** — · **Depended on by:** all other RFCs
+
+### 1. Overview
+
+kndo is organized as a pipeline around one central data structure, the **Project Graph**:
+
+```
+┌────────────┐   ┌───────────────────┐   ┌───────────────┐   ┌────────────┐   ┌──────────┐
+│  Discovery │ → │ Language Adapters │ → │ Project Graph │ → │  Analyses  │ → │ Reporting│
+│ (walk fs,  │   │ (parse, extract   │   │ (files,       │   │ (reachab., │   │ (human,  │
+│  git diff) │   │  facts per file)  │   │  symbols,     │   │  dup, CRAP,│   │  json,   │
+│            │   │                   │   │  edges)       │   │  deps, ...)│   │  sarif)  │
+└────────────┘   └───────────────────┘   └───────┬───────┘   └────────────┘   └──────────┘
+                                                 │  ▲
+                                            ┌────▼──┴────┐
+                                            │   Cache    │  .kndo/ (content-addressed)
+                                            └────────────┘
+```
+
+Everything left of the graph is **per-file and parallel**; everything right of the graph is
+**whole-program**. The cache sits under the graph so that per-file work is skipped for unchanged
+files and whole-program work is re-run only on the affected subgraph (RFC 0004).
+
+### 2. Layering & the ignorance rule
+
+```
+kndo-cli           ── one frontend: terminal UI, exit codes, human rendering (RFC 0009)
+kndo               ── the DISTRIBUTION layer: the composed product (core + all first-party
+                      adapters + built-in plugins), one `open()` for every frontend
+kndo-core          ── the system: graph model, analysis engine, cache, orchestration, plugin host
+kndo-adapter-*     ── one crate per language (js, go, java, kotlin, swift, rust, json, css, html)
+kndo-plugin-api    ── stable API surface for third-party plugins (WASM)
+```
+
+`kndo-core` is a library; the CLI is one frontend among future ones (`kndo serve`/MCP, LSP,
+GUI, CI actions) and holds **zero** analysis logic. All frontends consume the same `Engine`
+facade (contracts §5): the core never prints, frontends never compute. Machine output (JSON,
+SARIF) is serialized core-side so every frontend emits identical data; only *human* rendering
+is frontend-owned.
+
+**Which languages the product ships is distribution knowledge, not frontend knowledge.** The
+`kndo` crate owns the composition — it depends downward on the core *and* on every first-party
+adapter (feature-gated for slim embedder builds, ADR 0006) and hands frontends a single
+`kndo::open()`. Frontends therefore never name a language, can never ship a kndo missing one,
+and adding a language touches exactly one crate. The ignorance rule is preserved: the core
+still depends on no adapter — composition happens *above* both.
+
+**The ignorance rule:** `kndo-core` must not contain the name of any language. It defines a
+language-neutral vocabulary — `SourceFile`, `Symbol`, `Reference`, `Root`, `ManifestDependency` —
+and adapters translate language reality into that vocabulary. If implementing a feature requires
+`if language == X` in the core, the vocabulary is missing a concept and must be extended instead.
+
+Conversely, adapters own only what the **language specification** defines: syntax, module
+resolution rules, visibility/export semantics, canonical entry points, the language's manifest
+format(s). Anything conventional or ecosystem-specific — framework magic (Spring DI, React
+components referenced by JSX, dependency-injection containers), test-framework detection beyond
+the standard library, coverage formats — belongs to **plugins** (RFC 0003), which enrich adapter
+output rather than fork it.
+
+### 3. The Project Graph
+
+The graph is the language-neutral model of the project. Node and edge kinds (normative definition
+in [contracts/core-traits.md](CONTRACTS.md)):
+
+**Nodes**
+- `File` — a source file (path, content hash, language, role: production | test | tooling,
+  origin: authored | generated | vendored — two orthogonal axes)
+- `Symbol` — a named declarable (function, method, type, class, const, css-rule…), owned by a File
+- `Dependency` — an external dependency declared in a manifest (name, version req, scope: prod | dev | build | peer | optional)
+- `Package` — a workspace unit: one manifest + the file tree it governs; every File is owned by exactly one Package (RFC 0011)
+- `Manifest` — the declaring file of Dependencies and Package identity (package.json, go.mod, Cargo.toml…)
+
+**Edges**
+- `File imports File` — module-level dependency (resolved by the adapter; may cross Packages)
+- `File imports Dependency` — external dependency usage
+- `Package depends-on Package` — derived by the core from cross-package edges and manifests
+- `Symbol references Symbol` — call/use/extend/implement/type-reference
+- `File declares Symbol`
+- `Root → Symbol | File` — entry-point marking (bin main, exported public API, framework handler,
+  test root), with a `RootKind ∈ {production, test, tooling}`
+- Every edge carries a `Confidence ∈ {certain, probable, possible}` (dynamic constructs demote
+  confidence, RFC 0002 §5).
+
+Analyses (RFC 0005) are pure functions over this graph plus optional enrichments (coverage data,
+plugin-provided roots). They never read source text — if an analysis needs a fact, the fact
+becomes part of the extraction contract.
+
+### 4. Execution model
+
+1. **Discovery** — enumerate candidate files (respecting `.gitignore` + kndo config), or take the
+   changed set from `--staged` / `--diff <ref>`. Output: file list + content hashes (blake3).
+2. **Extraction** (parallel, rayon) — for each file whose hash is not in cache: adapter parses
+   (tree-sitter, ADR 0002) and emits `FileFacts` (declarations, references, imports, roots,
+   complexity per function, duplication fingerprints). Cached facts are loaded for unchanged files.
+3. **Graph assembly** — resolve imports/references into edges (adapters provide resolvers; the
+   core provides the resolution driver). Plugins may add/annotate nodes and edges here.
+4. **Analysis** — run enabled analyses over the graph. In incremental mode, only the *dirty
+   region* is recomputed: changed nodes plus their forward/reverse closure (RFC 0004 §5).
+5. **Reporting** — findings are diffed against the previous snapshot and the baseline; output is
+   rendered for the selected audience (RFC 0006).
+
+### 5. Concurrency & performance budget
+
+Target: warm incremental p95 **< 500 ms** on a 5k-file repo (pre-commit path).
+Validated empirically by [spike 0001](PERFORMANCE-WORKSPACES-AND-RELEASE.md): measured warm composite
+~75 ms on 4 cores — 6.8× headroom.
+
+| Phase | Budget (warm, small diff) | Notes |
+|-------|--------------------------|-------|
+| Process start + config | 20 ms | single static binary, no runtime deps |
+| Discovery + hashing | 80 ms | hash only stat-changed files; git index for `--staged` |
+| Extraction | 100 ms | only changed files re-parsed; tree-sitter is incremental-friendly |
+| Cache load (graph) | 100 ms | memory-mappable snapshot, ADR 0004 |
+| Graph patch + analyses | 150 ms | dirty-region recomputation only |
+| Reporting | 50 ms | |
+
+Cold full runs are allowed seconds (parallel across cores) — they build the cache that makes every
+subsequent run warm. The 500 ms contract is for the *warm* path. The phase breakdown above is the
+RFC 0004 §4-5 patch/dirty-region path, and it is built and landed: [RFC 0013](GRAPH-CACHE-AND-ANALYSES.md)
+(`crates/kndo-core/src/graph/patch.rs`) makes "Graph patch + analyses" a real dirty-region
+recomputation — changed nodes plus their forward/reverse closure — not a full recompute. A
+benchmark regression gate exists (`cargo xtask bench --gate`, CONTRIBUTING "Benchmarks"),
+comparing warm end-to-end wall time at 1k/5k/50k files against a recorded baseline; it is
+deliberately *not* wired into CI — the baseline is machine-specific, so ephemeral runners of
+varying hardware would fail it for reasons unrelated to any change — and instead runs locally,
+by hand, before and after a change expected to cost time. The full parallelism model —
+per-phase strategy,
+determinism under any thread count, adaptive sequential fallback, and the CI performance gates —
+is specified in [RFC 0008](PERFORMANCE-WORKSPACES-AND-RELEASE.md).
+
+### 6. Error philosophy
+
+- A file that fails to parse degrades to an *opaque file node*: it keeps previous cached facts if
+  any, else contributes no facts — and this is reported as a diagnostic, never a crash.
+- Adapter/plugin panics are caught at the file boundary; one bad file cannot kill the run.
+- kndo's own exit codes distinguish "findings" from "kndo failed" (RFC 0006 §5).
+
+### 7. Alternatives considered
+
+- **Reusing per-language tools and aggregating their output.** Rejected: N configs, N output
+  formats, no shared graph → cannot answer cross-cutting questions (test-only reachability,
+  blast-radius diffs), and cold starts of N processes blow the 500 ms budget.
+- **Compiler-grade semantic analysis per language** (tsc API, gopls, javac…). Rejected for the
+  core path: accuracy gains don't justify multi-second startup and per-language runtimes.
+  Adapters may *optionally* shell out to native tooling in a future "deep mode" (post-1.0).
+
+## RFC 0002: Language adapters
+
+**Status:** Accepted · **Depends on:** RFC 0001 · **Normative contract:** [contracts/core-traits.md](CONTRACTS.md)
+
+### 1. Purpose
+
+A **language adapter** is the only component that understands a language. It translates source
+files into the core's language-neutral vocabulary. The core discovers adapters through a registry
+and treats them uniformly; adding a language is adding one crate that implements one trait.
+
+### 2. Responsibilities (exactly these, no more)
+
+An adapter owns what the **language specification and its standard toolchain** define:
+
+1. **Claiming files** — which extensions/filenames it handles (`.ts`, `go.mod`, `BUILD.gradle.kts`…),
+   including classifying each file on two orthogonal axes — *role* (production / test / tooling:
+   `_test.go`, `*.spec.ts`) and *origin* (authored / generated / vendored: headers like
+   `// Code generated … DO NOT EDIT`).
+2. **Parsing** — producing a syntax tree (tree-sitter grammar, ADR 0002) and surviving broken code.
+3. **Extraction** — emitting `FileFacts`:
+   - declared symbols (name, kind, span, visibility, exported?)
+   - references (identifier uses with enough context for resolution)
+   - imports (raw specifier + kind: relative, package, stdlib)
+   - language-defined roots (`main` functions, `pub` API of a library crate, exported members of
+     an npm package's `main`/`exports`, `@main`/top-level code in Swift…)
+   - per-function cyclomatic complexity (for CRAP, RFC 0005 §10)
+   - normalized token streams per function/block (for duplicate detection, RFC 0005 §6)
+4. **Resolution** — mapping an import specifier or a reference to its target, given the graph
+   assembly context (e.g. Node resolution algorithm incl. `tsconfig` paths; Go module paths; Java
+   package/classpath conventions; Cargo module tree).
+5. **Manifests** — parsing the language's dependency manifests (`package.json`, `go.mod`,
+   `Cargo.toml`, Gradle version catalogs, `Package.swift`) into `ManifestDependency` nodes, and
+   mapping import specifiers → package names (e.g. `lodash/fp` → `lodash`, `golang.org/x/net/html`
+   → module).
+
+**Explicitly out of adapter scope** (goes to plugins, RFC 0003): framework conventions (a React
+component "used" via JSX by a router config; Spring beans; SwiftUI previews), test frameworks
+beyond the standard library/dominant convention, coverage formats, org-specific entry points.
+
+Rationale for the boundary: language specs are stable and versioned; ecosystems are fashion.
+Keeping fashion out of adapters keeps them small, testable, and slow-changing.
+
+### 3. Non-source languages (JSON, CSS, HTML)
+
+The vocabulary must not assume "code". For data/style languages the mapping is:
+
+- **JSON**: files claimed only when *referenced* semantics exist (e.g. imported by JS/TS, listed
+  in a manifest). Symbols are not extracted; JSON participates as import *targets* so file-level
+  `unused` findings cover config/data files. Well-known manifests (`package.json`, `tsconfig.json`) are
+  claimed by the *owning* adapter instead.
+- **CSS/SCSS/LESS**: symbols are selectors/mixins/variables; references are `@import`/`@use`,
+  `composes`, and — via the cross-language edge mechanism (§4) — class-name usage from JS/TS/HTML.
+  This enables "unused CSS rule" as a normal unused-symbol finding.
+- **HTML**: no symbols, no visibility ladder, no metrics — a document declares nothing a caller
+  can name, the same non-source posture as JSON. Unlike JSON, a document is never an import
+  *target*: nothing imports a page, so every claimed `.html`/`.htm` file roots itself (a browser
+  loads it, a server renders it, a bundler is handed it), and the scripts/stylesheets/assets it
+  names via `<script src>`, `<link href>`, `<img src>`, `<source src>`, `<iframe src>` become
+  reachable through that root. A tag scan, not a grammar-backed parse: HTML's error recovery
+  means a "malformed" document is still one a browser renders, so the adapter reads attribute
+  values directly and under-reports (skips) anything it cannot read plainly rather than guessing.
+
+### 4. Cross-language edges
+
+Real projects cross language boundaries (TS imports a CSS module; JS reads a JSON file; Kotlin and
+Java in one Gradle module). Adapters never call each other. Instead, an adapter emits an import
+with a raw specifier; the **core's resolution driver** asks *each* registered adapter's resolver
+whether it can resolve that specifier to a file it claims. First unambiguous claim wins; ambiguity
+demotes the edge to `probable`.
+
+### 5. Confidence & dynamic constructs
+
+Static analysis of dynamic features must degrade honestly, not guess:
+
+- `certain` — spec-level static resolution (a Go import, a Rust `use`, a TS named import).
+- `probable` — resolution relied on convention or a single plausible candidate (string literal in
+  `require(x)` with a resolvable literal value; duck-typed method with one candidate).
+- `possible` — dynamic construct detected but not resolvable (`import(variable)`, reflection,
+  `eval`). The adapter emits a **wildcard edge** from the file to *unknown* instead of guessing
+  a target.
+
+This is per-edge strength; how many edges of differing strength combine into a node's overall
+reachability color and confidence — including how wildcard edges fold in — is the tiered
+algorithm in RFC 0005 §1. Findings inherit the *weakest* confidence on their evidence path and
+report it (RFC 0006).
+
+### 6. Adapter lifecycle & versioning
+
+- Adapters implement the `LanguageAdapter` trait (normative in contracts/core-traits.md) and
+  register capabilities: claimed globs, manifest patterns, grammar version, **facts schema version**.
+- The facts schema version participates in the cache key (RFC 0004 §3): bumping it invalidates
+  only that adapter's cached facts.
+- First-party adapters are compiled into the binary; the same trait is bridged to WASM for
+  third-party adapters (ADR 0003). An adapter must not perform I/O beyond the file content handed
+  to it — all filesystem access goes through the core (determinism, sandboxability, testability).
+- **Version-dependent language data is generated data, never hand-maintained code — through the
+  shared mechanism, not per-adapter improvisation.** Facts that track a language/runtime release
+  cadence — stdlib/builtin module lists (Node builtins, Go packages, Java modules), reserved
+  words, version-gated syntax tables — ship as **`kndo-stdlib v1`** data files (toolkit `stdlib`
+  module: one format, one loader, one validation, provenance headers surfaced by `kndo doctor`),
+  embedded at build time and produced by **one generic generator** — `cargo xtask gen-stdlib
+  <language>` — where each language is a *table entry* (source command, version command,
+  exclusion prefixes), never a per-language script. The generator validates its output with the
+  same loader that consumes it at build time, and queries the authoritative source
+  (`module.builtinModules`, `go list std`, `java --list-modules`). A new runtime version means
+  regenerating a file; a new language means one table row — never new tooling, never editing
+  adapter code. The bare-specifier **precedence is
+  written once in the toolkit**, never re-derived per language: (1) structural stdlib signal
+  (Node's `node:` prefix — unambiguous by the language's own construction, version-proof) >
+  (2) manifest-declared dependency (declared intent beats shipped data — the userland `punycode`
+  package is real) > (3) the stdlib list > (4) external dependency. An adapter supplies only
+  what it alone knows: the structural check and the subpath→package mapping. Never query the
+  *ambient* installed runtime at analysis time: that would make findings depend on the machine,
+  violating determinism (RFC 0008 §4) — generators run at kndo development time, not at the
+  user's analysis time.
+
+### 7. Per-language notes (initial scope)
+
+| Language | Resolution highlights | Roots (language-defined) | Test-role detection |
+|----------|----------------------|--------------------------|----------------------|
+| JS/TS | Node ESM+CJS, `tsconfig` paths/baseUrl, package.json `exports`; JSX/TSX | package entry points (`main`, `exports`, `bin`), scripts referenced files | `*.test.*`, `*.spec.*`, `__tests__/` |
+| Go | Go modules, internal/ visibility | `main.main`, exported identifiers of library modules, `init` | `_test.go` |
+| Java | package + source roots (Maven/Gradle layout) | `public static void main`, public API of published modules | `src/test/` |
+| Kotlin | as Java + top-level functions, multiplatform source sets (post-1.0) | `main`, public API | `src/test/`, `commonTest` |
+| Swift | SPM targets, module imports | `@main`, top-level code in `main.swift`, public API of library targets | `Tests/` targets |
+| Rust | module tree from crate roots, `use`/paths, features (coarse: any-feature = live) | `main`, `lib.rs` `pub` API, `#[no_mangle]`/`export` | `#[cfg(test)]`, `tests/` |
+| JSON | n/a (target-only) | n/a | n/a |
+| CSS | `@import`/`@use` graph, CSS Modules | none (reachability comes from consumers) | n/a |
+| HTML | none — a tag scan (`<script src>`, `<link href>`, `<img src>`, `<source src>`, `<iframe src>`), not module resolution | the whole file (a document is an entry point, not a module) | n/a |
+
+Each adapter gets its own detailed spec section under `internal/ADAPTERS.md` before its
+implementation milestone (ROADMAP), including the tricky cases above — HTML's included, since
+the section covering it now exists alongside the other eight.
+
+### 8. Testing contract
+
+Every adapter ships **conformance fixtures**: a miniature project + the expected `FileFacts` and
+expected findings, executed by a shared test harness in the core. This doubles as the compliance
+suite third-party adapters run against.
+
+## RFC 0016: Uniform component model
 
 **Status:** Accepted (design), phased (§8) · **Depends on:** RFC 0002 (adapter contract),
 RFC 0003 (plugin system), RFC 0004 (cache), RFC 0015 (identity & installation), ADR 0003
 (linking strategy), ADR 0006 (single binary, zero-config) · **Ships:** post-1.0, except the
 freeze reservations in §8 phase 0, which must land in M6
 
-## 1. The question this RFC answers
+### 1. The question this RFC answers
 
 With RFC 0015 fully landed, the extension story has two visible seams:
 
@@ -31,7 +326,7 @@ statically linked or loaded as WASM stays a distribution detail, invisible at ev
 those surfaces. The "kndo as a shell" build becomes a supported, CI-proven *configuration* —
 not the shipped default.
 
-## 2. Why the shell must not be the default
+### 2. Why the shell must not be the default
 
 Each argument is an existing, load-bearing decision; this section only connects them:
 
@@ -53,7 +348,7 @@ no language (RFC 0001's ignorance rule), and the `kndo` crate is pure compositio
 gates. The gap is not architecture — it is that the two extension kinds have unequal contracts
 and that the shell configuration is possible but unproven. §§3–7 close exactly that.
 
-## 3. The component contract
+### 3. The component contract
 
 A **component** is: a descriptor + one of the two capability traits.
 
@@ -79,7 +374,7 @@ installed WASM component must be indistinguishable at the descriptor, activation
 dependency, and (where applicable) installer surfaces. First-party components are simply
 components whose distribution happens to be "compiled into the default binary."
 
-## 4. Adapters become installable components — Landed
+### 4. Adapters become installable components — Landed
 
 The concrete closure of RFC 0003 §4's stated gap.
 
@@ -129,7 +424,7 @@ The concrete closure of RFC 0003 §4's stated gap.
    show the composed order so which adapter would win a contested extension is inspectable, not
    just implied by list position.
 
-## 5. The content channel: `requested_file_access` for graph hooks — Landed
+### 5. The content channel: `requested_file_access` for graph hooks — Landed
 
 The highest-value extension, and the one both shipped plugin specs already pointed at.
 Implemented in full (`kndo_core::plugin::ContentView`, `crates/kndo-plugin-api`'s `read-file`
@@ -176,7 +471,7 @@ made at implementation time and recorded here rather than left as silent drift:
 - **Determinism note:** content-derived contributions are already correct under the
   `mutates_graph` bypass (RFC 0003 §5) — every run re-reads. §6 is what makes them *fast*.
 
-## 6. Cache-key folding — the performance gate for a component-heavy world — Landed
+### 6. Cache-key folding — the performance gate for a component-heavy world — Landed
 
 Before this landed, any graph-mutating component forfeited both the snapshot cache and the
 incremental patch (RFC 0003 §5, wasm-abi §5.4) — correct, and acceptable while such components
@@ -224,7 +519,7 @@ because they don't need to be — the warm-run code path a plugin-bearing projec
 no-op re-run is the identical `cache.get_graph` hit already covered by `50k/warm-noop`, not a
 new one; the mechanism, not the fixture composition, is what determines the cost.
 
-## 7. Smaller alignments — decided
+### 7. Smaller alignments — decided
 
 - **`suppress` is cut, not wired.** Declared since RFC 0003 §2, never called. This phase's
   review found no shipped component — `kndo:nextjs`, `kndo:express`, or the reference examples —
@@ -275,7 +570,7 @@ new one; the mechanism, not the fixture composition, is what determines the cost
   tested on every push, and one flag away for embedders — while the default binary keeps ADR
   0006's promise unchanged.
 
-## 8. Phases
+### 8. Phases
 
 0. **Freeze reservations (M6, before ABI/schema freeze):** none of §§4–6 needs to ship at
    1.0, but the freeze must not wall it off. Concretely: wasm-abi §8's versioning note gains
@@ -329,7 +624,7 @@ Order matters: 1 before 2 because installable external adapters are more attract
 plugin side demonstrates the full component surface; 3 before the shell is advertised because
 a shell that full-rebuilds every run would demo badly and deserve it.
 
-## 9. Explicitly out of scope
+### 9. Explicitly out of scope
 
 - **Analyses as components.** The zero-false-positive bar is enforceable because the core owns
   analysis semantics end to end (RFC 0003 §6's deliberate post-1.0 deferral of custom
