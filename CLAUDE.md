@@ -8,8 +8,7 @@ with that architecture.
 
 `internal/` holds design notes for maintainers. The code never depends on it: every public
 contract is legible from the code and its doc comments alone, with no citation to an external
-document required or expected. `internal_boundary` (see "Gates that must never regress") is what
-keeps this the only section that names the tree at all.
+document required or expected.
 
 Before finishing substantial work, consider whether the tree needs a durable update — a decision
 made, an architectural fact discovered, a gotcha worth remembering, not a narration of what was
@@ -211,10 +210,9 @@ graph/cache/analysis, and `doc_links` (whose subject is Markdown) on every PR th
   has exactly one point of contact with the rest of the codebase: this file, `CLAUDE.md`.**
   Nothing outside that tree may cite it — no path into it, no retired `RFC 00NN`/`ADR 00NN`
   number, no section-sign citation — except the one line above that tells an agent the tree
-  exists. A
-  handful of files are allowlisted in the test for a real, unrelated language convention (Go's
-  own package-visibility boundary, Node's internal-subpath-imports convention, Kotlin's
-  `internal` keyword); a new false positive there is fixed by extending that list, never by
-  weakening the gate.
+  exists. A handful of files are allowlisted in the test for a real, unrelated language
+  convention (Go's own package-visibility boundary, Node's internal-subpath-imports convention,
+  Kotlin's `internal` keyword); a new false positive there is fixed by extending that list,
+  never by weakening the gate.
 
 No PR should weaken or skip one of these to get green.
