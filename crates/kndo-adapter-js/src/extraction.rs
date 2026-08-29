@@ -289,7 +289,7 @@ fn handle_export_statement(node: Node, src: &[u8], out: &mut FileFacts) {
         //
         // Anonymous defaults need no alias: `handle_named` already names them `default`, which
         // is exactly what the consumer looks up. The CJS half of this contract
-        // (`module.exports = local`) has always recorded it; ESM's named default did not.
+        // (`module.exports = local`) records the same alias; this is its ESM counterpart.
         if has_default_token(node) {
             if let Some(name) = decl.child_by_field_name("name") {
                 out.default_export_alias = Some(SmolStr::new(text(name, src)));
@@ -1737,7 +1737,7 @@ mod tests {
         // `import foo from './x.js'` and that binding asks the target for `default`. Without
         // the alias the lookup finds nothing, the reference never binds, and the function
         // reads `unused` however many files call it — axios's `mergeConfig`, called from five,
-        // is the shape, and three more of its findings were downstream of the same miss.
+        // is the shape.
         for (src, expected) in [
             ("export default function bar() {}", Some("bar")),
             ("export default class Baz {}", Some("Baz")),

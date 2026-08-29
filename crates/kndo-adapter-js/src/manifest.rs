@@ -123,10 +123,11 @@ pub(crate) fn extract(path: &str, content: &[u8], ctx: &ResolveCtx<'_>) -> Manif
     // an alternate `main` ("./dist/browser.js"). As an OBJECT it is an ALIAS MAP — axios ships
     // `{"./lib/platform/node/index.js": "./lib/platform/browser/index.js"}` — whose *values*
     // are the files a browser bundler substitutes in. Those values have no import edge
-    // anywhere: nothing in the source names them, the bundler rewrites the specifier. Before
-    // this, axios's entire `lib/platform/browser/` tree read `unused` while shipping in every
-    // browser build. A `false` value ("stub this module out") names no file and is skipped, as
-    // is a key: keys are the node-side files, already reachable through ordinary imports.
+    // anywhere: nothing in the source names them, the bundler rewrites the specifier, so
+    // without this handling axios's entire `lib/platform/browser/` tree would read `unused`
+    // despite shipping in every browser build. A `false` value ("stub this module out") names
+    // no file and is skipped, as is a key: keys are the node-side files, already reachable
+    // through ordinary imports.
     //
     // Probable for the map's values, the same reasoning `exports` leaves get — a conditional
     // build alternate, not unconditionally "the" entry. The string form is one declared entry
@@ -175,8 +176,7 @@ pub(crate) fn extract(path: &str, content: &[u8], ctx: &ResolveCtx<'_>) -> Manif
         // so `"index"` becomes `<dir>/index.{js,ts,…}` — the name Node itself looks for. The
         // ladder also offers `index.d.ts`, which must NOT answer: a declaration file carries no
         // runtime edge and Node never resolves an entry to one. `is_source_entry` does not catch
-        // it (its final extension is `ts`), so the exclusion is explicit — the
-        // `types_field_never_becomes_a_root` test is what caught this.
+        // it (its final extension is `ts`), so the exclusion is explicit.
         if let Some((target, confidence)) = resolve_entry(path, "index", ctx, Confidence::Certain)
             .filter(|(t, _)| !t.0.ends_with(".d.ts"))
         {
