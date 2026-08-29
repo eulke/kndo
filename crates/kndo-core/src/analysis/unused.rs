@@ -147,8 +147,8 @@ pub fn find_unused_files(graph: &ProjectGraph, reach: &ReachabilityMap) -> Vec<F
 /// which of its symbols anyone consumes, because nothing in the project ever names one. Judging
 /// those symbols one by one on that basis reports a stylesheet's every unread custom property
 /// the moment a template links it — 48 of them on spring-petclinic, all `--bs-*` from a
-/// compiled Bootstrap bundle — which is an accusation the evidence cannot support (RFC 0012
-/// §2). The file-level verdict, which the evidence CAN support, is unaffected either way.
+/// compiled Bootstrap bundle — which is an accusation the evidence cannot support. The
+/// file-level verdict, which the evidence CAN support, is unaffected either way.
 ///
 /// `EdgeKind::ReferencesFile` is the only kind carrying this meaning, by contract ("liveness
 /// evidence, never architecture evidence"). Every other inbound edge is symbol-level evidence

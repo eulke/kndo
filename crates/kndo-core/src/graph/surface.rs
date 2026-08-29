@@ -1,5 +1,5 @@
-//! The surface-member closure: promoting transitive members of surface types
-//! (RFC 0011 s5). Idempotent; re-run once per run on every path.
+//! The surface-member closure: promoting transitive members of surface types.
+//! Idempotent; re-run once per run on every path.
 
 use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 

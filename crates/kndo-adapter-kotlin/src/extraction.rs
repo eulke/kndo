@@ -815,8 +815,8 @@ fn walk_extend_refs(node: Node, src: &[u8], owner: &str, out: &mut FileFacts) {
             // are ordinary expression references; dropping them would leave whatever they name
             // reading as dead unless something else happens to use it — as with Exposed's
             // `PostgreSQLTypeProvider`, passed to its superclass on the very next declaration in
-            // the same file. RFC 0012 §4 puts code that runs on instantiation under the type
-            // itself, so `within` stays the owner.
+            // the same file. Code that runs on instantiation belongs under the type itself, so
+            // `within` stays the owner.
             if let Some(args) = find_child(node, "value_arguments") {
                 walk_body(args, src, Some(owner), out);
             }

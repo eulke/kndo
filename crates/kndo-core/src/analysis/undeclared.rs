@@ -19,7 +19,7 @@ use crate::vocab::{
     Category, Confidence, DependencyId, EdgeKind, FileOrigin, Group, PackageId, SubjectKind,
 };
 
-/// `strict` is `--strict` (RFC 0005 §"undeclared": *"Severity: warning; error in `--strict`"*).
+/// `strict` is `--strict`, which promotes this analysis from a warning to an error.
 /// A phantom dependency is a build that works by accident — it resolves today through
 /// hoisting or transitivity and breaks on a clean install elsewhere — so a project that opts
 /// into strictness wants its build to say so rather than to warn about it.
@@ -296,10 +296,10 @@ mod tests {
 
     #[test]
     fn strict_promotes_the_verdict_to_error_and_changes_nothing_else() {
-        // RFC 0005: "Severity: warning; error in `--strict`". A phantom dependency is a build
-        // that works by accident; a project that opts into strictness wants the build to say
-        // so. Everything else about the finding — its id above all — must be identical, or
-        // `--strict` would silently invalidate baselines and suppressions.
+        // `--strict` promotes this analysis's severity from warning to error. A phantom
+        // dependency is a build that works by accident; a project that opts into strictness
+        // wants the build to say so. Everything else about the finding — its id above all —
+        // must be identical, or `--strict` would silently invalidate baselines and suppressions.
         let graph = ProjectGraph::for_test(
             vec![file("docs/js/bundle.js", PackageId(0))],
             vec![],

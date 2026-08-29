@@ -28,7 +28,7 @@ pub enum Verb {
     UsedBy,
     Trace,
     Impact,
-    /// `kndo explain <finding-id>` — RFC 0006 §2. A verb over a *finding* rather than a
+    /// `kndo explain <finding-id>` — a verb over a *finding* rather than a
     /// selector, which is why its "selector" is an id; everything else about it (the envelope,
     /// the `not-found` status, the exit code, batching through `kndo query`) is the same
     /// machinery every other verb uses, and deliberately not a second one.

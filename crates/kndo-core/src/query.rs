@@ -7,13 +7,13 @@
 //! form and the single-argument liveness form), and `impact` (the reverse closure, with
 //! `--if-deleted` simulating the deletion).
 //!
-//! `describe` reports everything RFC 0007 §4.2 asks for. Two of them are worth naming because
-//! this doc claimed for a long time that they could not exist: **metrics** come from
-//! `graph.function_metrics`, one entry per callable *shape* rather than one per symbol, with
-//! coverage and CRAP filled in only when a report was ingested — absent means unmeasured, never
-//! zero; **duplication group membership** is read off the `duplicate` findings the run already
-//! computed, whose `related` list is the group. `findings` (open findings attached to a node)
-//! reruns the same suppression-aware computation `check` uses and filters by node.
+//! `describe` reports metrics and duplication group membership alongside a subject's other
+//! facts: **metrics** come from `graph.function_metrics`, one entry per callable *shape* rather
+//! than one per symbol, with coverage and CRAP filled in only when a report was ingested —
+//! absent means unmeasured, never zero; **duplication group membership** is read off the
+//! `duplicate` findings the run already computed, whose `related` list is the group. `findings`
+//! (open findings attached to a node) reruns the same suppression-aware computation `check`
+//! uses and filters by node.
 //!
 //! `trace --all`'s path-enumeration policy is an open design question —
 //! this implementation takes a direct, bounded reading: BFS for the shortest path,

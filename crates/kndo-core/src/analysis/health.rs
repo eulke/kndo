@@ -135,9 +135,9 @@ pub struct PackageHealth {
     pub grade: String,
 }
 
-/// The grade bands, best first: a grade and the score at or above which it is earned. RFC 0006
-/// fixes these four numbers, and they are written **once** — [`grade`] reads them forward and
-/// [`grade_boundary`] backward, so the two can never drift apart into disagreeing copies.
+/// The grade bands, best first: a grade and the score at or above which it is earned. These
+/// four numbers are written **once** — [`grade`] reads them forward and [`grade_boundary`]
+/// backward, so the two can never drift apart into disagreeing copies.
 const GRADE_BANDS: [(&str, f64); 5] = [
     ("A", 90.0),
     ("B", 80.0),

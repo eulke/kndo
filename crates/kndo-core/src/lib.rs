@@ -6,8 +6,10 @@
 //! may touch ([`engine::Engine`]). The core never prints; frontends never
 //! compute.
 //!
-//! Normative source of truth: `internal/contracts/core-traits.md`. Code must match it; changing
-//! either requires updating both in the same PR.
+//! Every contract a component or frontend relies on is legible from this code and its doc
+//! comments alone: the traits in [`adapter`] and [`plugin`], the vocabulary in [`vocab`], and
+//! the surface [`engine::Engine`] exposes are the complete, load-bearing definition of what
+//! this crate promises.
 
 pub mod adapter;
 /// Plumbing behind `RunResult::to_agent_format`/`QueryResult::to_agent_format` — reached
@@ -44,8 +46,8 @@ pub mod vocab;
 //
 // The surface a frontend (CLI, `kndo serve`/MCP, LSP, GUI) actually needs to drive an
 // `Engine` end to end, re-exported at the crate root so "import from a module path" is never
-// the answer to "I need a new piece of data" (`internal/contracts/core-traits.md` §1: only
-// `Engine` — and what it returns — is contract). A frontend needing something not listed here
+// the answer to "I need a new piece of data" — only `Engine`, and what it returns, is
+// contract. A frontend needing something not listed here
 // is a core PR that adds it to `RunResult`/exports the helper, not a deeper import of
 // `engine`/`vocab`/`query_envelope` internals. Adapter/plugin authoring types
 // (`adapter::LanguageAdapter`, `plugin::Plugin`, `graph::GraphView`, …) are a different

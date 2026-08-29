@@ -3,10 +3,10 @@
 //!
 //! These live in their own plugin crate, not in `kndo-core`, for the same reason
 //! `kndo-plugin-express` does: core knows no language *and no report format* — it owns only
-//! the format-neutral model (`kndo_core::coverage`) and the
-//! `ingest_coverage` hook. Every ingester here is a plain [`Plugin`] ("the same trait serves
-//! built-ins"), statically linked into the product by `kndo::default_plugins()`; formats kndo
-//! doesn't ship come in as external WASM components through the same hook.
+//! the format-neutral model (`kndo_core::coverage`) and the `ingest_coverage` hook. Every
+//! ingester here is a plain [`Plugin`] ("the same trait serves built-ins"), statically linked
+//! into the product by `kndo::default_plugins()`; formats kndo doesn't ship come in as
+//! external WASM components through the same hook.
 //!
 //! Shared charter, per format, is "the subset that matters": the line → hit-count facts
 //! `crap` needs, nothing else. Branch/function/method records are ignored everywhere —

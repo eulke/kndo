@@ -185,8 +185,8 @@ pub fn find_private_type_leaks(graph: &ProjectGraph) -> Vec<Finding> {
         // member closure) — an intra-package item has no consumers outside the package to lie
         // to, so it must not be accused of leaking to them.
         //
-        // `VisibilityScope::Module` (a unit and its subtree, `internal/detection-gaps.md` §7)
-        // gives the containment test below a scope finer than the four-bucket ladder: an item
+        // `VisibilityScope::Module` (a unit and its subtree) gives the containment test below
+        // a scope finer than the four-bucket ladder: an item
         // visible to a *sibling module* that names a type private to its own module is judged
         // against the region it actually names, so that shape is a genuine leak by the letter
         // of the language's rules.
@@ -625,8 +625,7 @@ mod tests {
 
     #[test]
     fn a_module_subtree_tells_the_two_pub_super_shapes_apart() {
-        // The whole point of the rung (`internal/detection-gaps.md` §7) — the two field cases
-        // below:
+        // The whole point of the rung — the two field cases below:
         //
         //   tokio    `task::state::unset_waker` is pub(super) — visible in the `task` subtree —
         //            and returns `UpdateResult`, private to `state.rs`. Its caller in

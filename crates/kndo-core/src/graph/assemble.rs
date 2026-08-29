@@ -178,7 +178,7 @@ pub(crate) struct ImportResolution {
     /// UNCHANGED files' tables without re-fetching their facts.
     pub(crate) module_bindings: Vec<crate::graph::ModuleBinding>,
     /// Relative imports that resolved to no file. Recorded, not judged: assembly states facts
-    /// and the `unresolved` analysis decides what follows (RFC 0005 §5).
+    /// and the `unresolved` analysis decides what follows.
     pub(crate) unresolved_imports: Vec<crate::graph::UnresolvedImport>,
 }
 
@@ -195,7 +195,7 @@ pub(crate) struct QualifierTarget {
     pub(crate) files: Vec<FileId>,
     /// True once any import that registered this qualifier is one the file STATES: a written
     /// import names a closed namespace, so a member miss under it settles rather than falling
-    /// through (RFC 0012 §9-ter).
+    /// through.
     pub(crate) settles: bool,
 }
 
@@ -326,7 +326,7 @@ pub(crate) struct VisibilityRegion<'a> {
 /// also NAME the type in its signature?" A scope alone cannot answer it: a scope is meaningless
 /// without the thing it is relative to, so two `File` scopes in different files, or two module
 /// subtrees anchored at different depths, name disjoint regions that a bare enum comparison
-/// would read as equal. Comparing regions decides it exactly (`internal/detection-gaps.md` §7).
+/// would read as equal. Comparing regions decides it exactly.
 pub(crate) fn region_covers(
     outer: &VisibilityRegion<'_>,
     inner: &VisibilityRegion<'_>,
@@ -463,7 +463,7 @@ pub(crate) fn build_unit_indexes(files: &[FileNode]) -> UnitIndexes {
             .push(f.path.clone());
         file_package.insert(f.path.clone(), f.package.0);
     }
-    // Sorted, so `.first()` is deterministic for every caller (RFC 0008 §4).
+    // Sorted, so `.first()` is deterministic for every caller.
     for fs in by_unit.values_mut() {
         fs.sort();
     }
@@ -732,7 +732,7 @@ pub(crate) fn resolve_imports(
                 // adapter (`local_alias`) or by the target itself (`unit_name`), never
                 // guessed from the specifier's text: splitting a specifier on `::` would need
                 // knowledge of the language's own path separator, which the ignorance rule
-                // forbids core from having. `internal/detection-gaps.md` §8's hop covers the
+                // forbids core from having. `link_module_bindings`'s hop, below, covers the
                 // case where no adapter states a qualifier.
                 //
                 // Whether a MISS under that qualifier settles is the import's own
@@ -805,8 +805,7 @@ pub(crate) fn resolve_imports(
 /// The answer was in the data all along — `internals/mod.rs` has its own `mod check;`, so the
 /// chain is "a binding on the TARGET's own import table" — but no single-pass resolver can
 /// follow it, because the target's table does not exist yet when its consumer is resolved. In
-/// serde this killed `internals::check` and the whole family of `check_*` helpers it reaches
-/// (`internal/detection-gaps.md` §8).
+/// serde this killed `internals::check` and the whole family of `check_*` helpers it reaches.
 ///
 /// One hop, never a fixpoint: chasing further would need a cycle guard for no evidence anyone
 /// writes such chains. Non-settling, like every derived qualifier — a miss falls through to the
@@ -1654,8 +1653,7 @@ pub(crate) fn in_scope_member_targets(
 ///    (`rollup.directory_rollups`, from `use …::rollup;` + `rollup::directory_rollups(..)`).
 ///    Rust code reaches free functions through their module constantly, and without this arm
 ///    the pointer died at its first segment: `let rolled = rollup::directory_rollups(..)`
-///    typed `rolled` as nothing and every field it reads looked file-local
-///    (`internal/detection-gaps.md` §3).
+///    typed `rolled` as nothing and every field it reads looked file-local.
 ///
 /// Language-blind: the qualifier table is whatever the adapters said their imports bind, and
 /// the lookup inside the target is the same bare/unit pair every other tier uses.
@@ -3218,8 +3216,8 @@ pub fn assemble_from_source(
     // single-slot, so it holds only one of them; a name-only lookup would send every reference
     // to that one file and leave the other reading `unused` — in gin, one of the two
     // `validate`s would take all 16 references and its twin none. kndo analyzes the UNION of
-    // build configurations by documented policy (`internal/adapters/go.md`), under which both
-    // are live, so the displaced ones are kept here and every twin gets the edge.
+    // build configurations, under which both are live, so the displaced ones are kept here
+    // and every twin gets the edge.
     let mut symbol_twins_per_unit: HashMap<SmolStr, HashMap<SmolStr, Vec<SymbolId>>> =
         HashMap::default();
     let mut symbol_by_name_per_unit: HashMap<SmolStr, HashMap<SmolStr, SymbolId>> =

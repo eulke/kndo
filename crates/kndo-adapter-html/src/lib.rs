@@ -4,9 +4,9 @@
 //! an HTML file roots itself, and the modules and stylesheets it names become reachable through
 //! it. That one rule is the adapter's whole reason to exist.
 //!
-//! `internal/detection-gaps.md` §20 has the measurement behind it: `<script type="module"
-//! src="./main.js">` inside an `index.html` is how a bundled app names its real entry module,
-//! and nothing else in the project imports that file. Without a root here, reachability has no
+//! `<script type="module" src="./main.js">` inside an `index.html` is how a bundled app names
+//! its real entry module, and nothing else in the project imports that file. Without a root
+//! here, reachability has no
 //! edge into it and the whole subtree behind it would read as dead. `<script src>` is HTML's own
 //! mechanism, no more a bundler's property than `import` is webpack's — which by the layering
 //! rule makes resolving it an adapter's job, not a plugin's.

@@ -1,5 +1,5 @@
 //! Which components a node's facts came from — the `sources` field of both the query
-//! envelopes (`describe`) and every finding (output-schema §2).
+//! envelopes (`describe`) and every finding.
 //!
 //! [`crate::vocab::Provenance`] lives on graph *edges*, not on nodes and not on findings, so
 //! answering "who contributed this?" is a derivation, not a copy. `describe` and every

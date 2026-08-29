@@ -1131,9 +1131,9 @@ const HARNESS_CFGS: [&str; 5] = ["test", "loom", "fuzzing", "miri", "kani"];
 /// exact opposite of a test region and matches too, as does anything merely spelling the
 /// substring — `feature = "fastest"`, `target_os = "latest"`.
 ///
-/// Uncertainty resolves toward silence, never toward accusation (RFC 0012 §2): an unrecognized
-/// predicate is treated as an ordinary build, so its items stay production and kndo keeps
-/// measuring them, but a predicate every branch of which is harness-only stays quiet.
+/// Uncertainty resolves toward silence, never toward accusation: an unrecognized predicate is
+/// treated as an ordinary build, so its items stay production and kndo keeps measuring them,
+/// but a predicate every branch of which is harness-only stays quiet.
 fn cfg_is_harness_only(pred: &str) -> bool {
     let pred = pred.trim();
     if HARNESS_CFGS.contains(&pred) {
@@ -1304,8 +1304,8 @@ fn inside_inline_mod(node: Node) -> bool {
     false
 }
 
-/// This file's MODULE, as a unit key. Rust's resolution unit is the module and — under the
-/// file ≈ module approximation this adapter is built on (§0) — a module is a file, so every
+/// This file's MODULE, as a unit key. Rust's resolution unit is the module, and under the
+/// file ≈ module approximation this adapter is built on, a module is a file, so every
 /// key names exactly one file. That degeneracy is the point twice over: it leaves every
 /// unit-keyed table behaving exactly as it did when the key was absent (a file's own
 /// declarations are already the tier consulted before its unit's), and it gives the module
@@ -1314,9 +1314,9 @@ fn inside_inline_mod(node: Node) -> bool {
 /// The path IS the module path, so the key is the path with the conventional file names
 /// folded into the directory they stand for: `src/graph/mod.rs` and `src/graph/assemble.rs`
 /// are `…/src/graph` and `…/src/graph/assemble`, and `src/lib.rs` is `…/src` — the crate
-/// root, which the next module up. Keys stay project-relative, so two crates with the same
-/// internal layout do not collide (RFC 0012 §8's "unique only within a package" holds a
-/// fortiori).
+/// root, which the next module up. Keys stay project-relative, which is a stronger guarantee
+/// than Rust itself needs (module paths only have to be unique within a package), so two
+/// crates with the same internal layout never collide.
 ///
 /// `#[path = "…"]` breaks the convention, and inline `mod x {}` flattens into its file — both
 /// are the same standing approximation the rest of the adapter makes.
@@ -1993,9 +1993,8 @@ fn handle_function(
     // Member-type fact for a FREE function: what CALLING it yields. The mirror of the
     // impl-method fact `handle_impl` pushes, minus an owner — `let entry = parse_entry(..);
     // entry.path` has no receiver type to read off anything else, and without this the type
-    // `parse_entry` returns looks used only where it is declared
-    // (`internal/detection-gaps.md` §3). Only top-level functions: a nested `fn` is not
-    // callable from where the binding lives.
+    // `parse_entry` returns looks used only where it is declared. Only top-level functions: a
+    // nested `fn` is not callable from where the binding lives.
     if owner.is_none() {
         if let Some(ret) = item.child_by_field_name("return_type") {
             push_member_type(&mut out.member_types, None, name, ret, src);
@@ -2297,8 +2296,8 @@ fn generic_type_expr(
 /// `T`. Nothing is inferred here — the derive says the impl exists and the trait's signature
 /// says what it returns, the same curated-stdlib knowledge `is_machinery_trait` already
 /// carries. Without it a `let sink = Sink::default()` binding points at a member no impl block
-/// declares, and every field read off that local resolves nowhere
-/// (`internal/detection-gaps.md` §3 — the plugin sinks are exactly this shape).
+/// declares, and every field read off that local resolves nowhere — the plugin sinks that
+/// matter most are exactly this shape.
 fn push_derived_default_type(item: Node, src: &[u8], pending: &PendingAttrs, out: &mut FileFacts) {
     let derives_default = pending
         .derives
@@ -4016,7 +4015,7 @@ mod tests {
     #[test]
     fn a_type_annotation_becomes_a_tree_not_a_base_and_a_list() {
         // `Result<Vec<TreeEntry>, GitError>` — the `TreeEntry` is two levels down, and a
-        // one-level parameter list lost it for good (`internal/detection-gaps.md` §3).
+        // one-level parameter list lost it for good.
         let f = facts("pub fn ls_tree(p: &str) -> Result<Vec<TreeEntry>, GitError> { todo!() }\n");
         let fact = f
             .member_types
@@ -4059,9 +4058,9 @@ mod tests {
 
     #[test]
     fn a_chain_crosses_a_call_and_its_unwrap() {
-        // The shape §3's last case is made of: a module-qualified free call, a method on its
-        // result, the try operator, and then iteration. Every link is a declared fact, and
-        // the pointer names them in order.
+        // This chain links a module-qualified free call, a method on its result, the try
+        // operator, and then iteration. Every link is a declared fact, and the pointer names
+        // them in order.
         let f = facts(
             "fn run() {\n\
              \x20   let entries = gitutil::ls_tree(root, tree).map_err(git_error)?;\n\
@@ -4204,7 +4203,7 @@ mod tests {
         assert!(!by_name("private_fn").exported);
         assert_eq!(by_name("crate_fn").visibility.0, VIS_CRATE);
         // Top-level `super` leaves the file and lands on its OWN rung, distinct from the crate
-        // one — the region `private-type-leak` needs to see (§7).
+        // one — exactly the distinction the `private-type-leak` region needs to see.
         assert_eq!(by_name("super_fn").visibility.0, VIS_SUPER);
         // `pub(in path)` still widens: the path is not resolved to a unit key, and widening
         // only ever silences.

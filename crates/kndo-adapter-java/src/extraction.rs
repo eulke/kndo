@@ -464,8 +464,8 @@ fn last_type_name<'a>(node: Node, src: &'a [u8]) -> Option<&'a str> {
 /// file that also does `import retrofit2.http.Query` binds the reference to the **annotation**
 /// — the nested class gets no incoming edge and reads as dead, while an unrelated type gets a
 /// reference it never received. Carried as `scope_context`, the core resolves the member
-/// against the qualifier instead (RFC 0012 §9), and on a miss falls through to the duck-typed
-/// member fallback rather than settling.
+/// against the qualifier instead, and on a miss falls through to the duck-typed member
+/// fallback rather than settling.
 ///
 /// Two discriminators, both required. Structural: tree-sitter nests a multi-segment path, so
 /// `java.util.List`'s qualifier is itself a `scoped_type_identifier` while `Outer.Inner`'s is a

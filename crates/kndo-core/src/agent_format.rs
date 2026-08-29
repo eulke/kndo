@@ -142,7 +142,7 @@ fn more_line(result: &RunResult) -> String {
     }
 }
 
-/// The `budget:` line (output-schema §9): overall verdict with a passed/total count, then one
+/// The `budget:` line: overall verdict with a passed/total count, then one
 /// `rule op limit ok|FAIL measured [over-by N]` segment per rule. Absent entirely when no
 /// `[delta]` section is configured — an agent must be able to tell "every budget held" from
 /// "nobody set one".
@@ -318,7 +318,7 @@ pub fn render_query(result: &QueryResult) -> String {
     out
 }
 
-/// `next:` — "the drill-down commands relevant to what was shown" (output-schema §9), which
+/// `next:` — the drill-down commands relevant to what was shown, which
 /// for most verbs is the same request in JSON. `explain` can do better: it just named a
 /// subject, and the question a reader asks next is almost always who reaches it.
 fn query_next_line(result: &QueryResult) -> String {
@@ -661,7 +661,7 @@ mod tests {
 
     #[test]
     fn the_budget_line_matches_the_schema_documents_own_example() {
-        // output-schema §9 prints this line as its normative example. It is a contract sample,
+        // This is the schema's normative example line. It is a contract sample,
         // not an illustration: an agent parsing kndo's agent format is parsing THIS shape.
         //
         // The health rule measures the DROP, so a run that improved health by 1.7 reports
@@ -902,8 +902,8 @@ mod tests {
     ///
     /// A node carrying all ten optional parts at once is not a contrived shape — a public
     /// function in a duplicated group, in a package, with metrics and findings, is an ordinary
-    /// answer to `kndo describe`. Exercising all ten here is what keeps the full contract in RFC
-    /// 0007 §4.2 under assertion, rather than only the parts a narrower fixture happens to touch.
+    /// answer to `kndo describe`. Exercising all ten here is what keeps the full `describe`
+    /// contract under assertion, rather than only the parts a narrower fixture happens to touch.
     #[test]
     fn describe_renders_every_section_it_declares() {
         use crate::query::QNodeRef;

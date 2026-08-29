@@ -45,8 +45,8 @@ pub struct JvmSourceLayout {
 /// Matching the bare artifact id can in principle match two groups publishing the same
 /// artifact name. That is the keep-alive direction — a conventions plugin turning on for a
 /// project that does not use that exact vendor's artifact contributes roots and edges nobody
-/// asked for, which can only suppress findings, never invent one (RFC 0012 §2) — and it is the
-/// only spelling an author can reasonably be expected to write.
+/// asked for, which can only suppress findings, never invent one — and it is the only spelling
+/// an author can reasonably be expected to write.
 pub fn declares_dependency(facts: &ManifestFacts, query: &str) -> bool {
     facts
         .dependencies

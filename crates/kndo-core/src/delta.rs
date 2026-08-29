@@ -11,7 +11,7 @@
 //! duplicate = 2            # up to 2 new clones tolerated per change
 //! ```
 //!
-//! Three semantics RFC 0006 §5 fixes, each of which is a decision rather than an
+//! Three semantics fixed here, each of which is a decision rather than an
 //! implementation detail:
 //!
 //! - **`fixed` compensates only inside `max-net-findings`.** Per-group and per-category
@@ -27,7 +27,7 @@
 //!   leaves `max-health-drop` at 0.0 — so opting in is one deliberate act and no existing
 //!   project silently changes exit code.
 //!
-//! Advisory findings (plugin findings without a `[plugins.gate]` opt-in, RFC 0018 §2.2) are
+//! Advisory findings (plugin findings without a `[plugins.gate]` opt-in) are
 //! excluded from every count here, the same way [`crate::engine::RunResult::fails_at`]
 //! excludes them: installing a finding-emitting plugin must never move someone's gate.
 
@@ -284,7 +284,7 @@ mod tests {
 
     #[test]
     fn fixed_findings_compensate_the_net_rule_and_nothing_else() {
-        // RFC 0006 §5: `fixed` compensates only inside `max-net-findings`; a per-group budget
+        // `fixed` compensates only inside `max-net-findings`; a per-group budget
         // is absolute. Otherwise a change could trade a fixed typo for a new defect and call
         // it even.
         let mut b = DeltaBudget::default();
@@ -316,7 +316,7 @@ mod tests {
 
     #[test]
     fn advisory_findings_never_move_a_budget() {
-        // RFC 0018 §2.2 — installing a finding-emitting plugin must not move anyone's gate.
+        // Installing a finding-emitting plugin must not move anyone's gate.
         let b = DeltaBudget::default();
         let new = vec![
             finding("plugin:acme/x", Group::Convention, true),

@@ -36,7 +36,7 @@ pub(crate) fn resolve(spec: &ImportSpec, ctx: &ResolveCtx<'_>) -> Resolution {
 /// not affect reachability — the core's same-unit fallback makes every file in the package
 /// individually reachable whichever one an edge lands on — but it does affect the literal edge,
 /// which `cyclic` reads as evidence. Two Gradle modules that both declare `package retrofit2;`
-/// share one unit key (RFC 0012 §8 keys Java units on the declared package name), so without
+/// share one unit key — Java units are keyed on the declared package name — so without
 /// the preference an import could land in an unrelated sibling module and invent a
 /// cross-module cycle that neither module's source supports.
 fn resolve_package(package: &str, from: &ProjectPath, ctx: &ResolveCtx<'_>) -> Resolution {

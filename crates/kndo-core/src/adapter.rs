@@ -86,15 +86,15 @@ pub struct AdapterDescriptor {
     /// report), so it is answered per adapter rather than inherited from a constructor.
     pub declares_units_of_testing: bool,
     /// What gates a *globally installed* adapter for a project — same rules and semantics as
-    /// `PluginDescriptor::activation`, evaluated by the distribution layer's composition pass
-    /// (RFC 0016 §4). Compiled-in and project-local adapters ignore it: the first are
+    /// `PluginDescriptor::activation`, evaluated by the distribution layer's composition pass.
+    /// Compiled-in and project-local adapters ignore it: the first are
     /// unconditional, the second are opted in by their presence in `.kndo/plugins/`, and both
     /// are scoped by their file claims. Empty means "no known structural signal", so a global
     /// candidate with none never self-activates rather than guessing.
     pub activation: Vec<crate::plugin::ActivationRule>,
-    /// Component dependencies by coordinate id, with the co-install/co-activate semantics
-    /// RFC 0017 §6 gave them: an *active* adapter activates every present adapter it names
-    /// here, transitively, as a fixpoint. The wrapper-adapter case is why it exists — a
+    /// Component dependencies by coordinate id, with co-install/co-activate semantics: an
+    /// *active* adapter activates every present adapter it names here, transitively, as a
+    /// fixpoint. The wrapper-adapter case is why it exists — a
     /// `.vue`-style superset language whose extraction degrades without its base language's
     /// adapter present. Pinned by `crates/kndo/tests/adapter_dependency_implication.rs`.
     pub dependencies: Vec<SmolStr>,
@@ -195,7 +195,7 @@ pub enum VisibilityScope {
     /// pick a bucket widened them to `Package` — which cannot tell a real leak (tokio's
     /// `task::state::unset_waker` returning a `state.rs`-private alias its `task::harness`
     /// caller cannot spell) from the far more common harmless inverse, and so kept
-    /// `private-type-leak` gated. `internal/detection-gaps.md` §7.
+    /// `private-type-leak` gated.
     Module,
     /// Same `PackageId` (manifest ownership) — contains `Module`.
     Package,
@@ -381,7 +381,7 @@ pub struct Declaration {
     /// body is inlined into instrumented bytecode; a Koin `@Scoped` annotation is read by an
     /// annotation processor in a different repository. Every one of them reads `unused` or
     /// `test-only` with perfect correctness from the graph alone, and every one is a false
-    /// accusation (see `internal/detection-gaps.md`).
+    /// accusation.
     ///
     /// Markers are FACTS, not verdicts: an adapter emits them for every declaration that
     /// carries them, whether or not any framework is involved, and whether or not the
@@ -501,7 +501,7 @@ pub struct RawImport {
     /// makes and the adapter's reading of a path:
     ///
     ///  * a qualifier registered by a reconstructed import does NOT settle a member miss — a
-    ///    misread path must fall through the ladder, not close a namespace (RFC 0012 §9-ter);
+    ///    misread path must fall through the ladder, not close a namespace;
     ///  * its BINDINGS rank below the file's own declarations. Every language kndo supports
     ///    forbids a real import from shadowing a same-named local declaration (Rust E0255),
     ///    so such a collision can only ever come from a synthetic one — and it must not win.
@@ -797,7 +797,7 @@ pub struct FileFacts {
 /// What a value's type IS, as declared — a tree, because a type is one:
 /// `Result<Vec<TreeEntry>, GitError>` has a `TreeEntry` two levels down, and flattening it to
 /// a list of one-level parameter names threw that away irrecoverably. The chain resolver
-/// (RFC 0012 §3-bis) carries one of these rather than a bare name, so a projection selects a
+/// carries one of these rather than a bare name, so a projection selects a
 /// SUBTREE with its own arguments intact.
 ///
 /// Adapters build it recursively from their own grammar; the archive format is not allowed to
@@ -885,7 +885,7 @@ pub struct RawMemberType {
     /// with the same chain machinery: a `None`-owner fact simply applies where a pointer's
     /// BASE names the function, before any member segment. Without it `let entry =
     /// parse_entry(..); entry.path` types as nothing, and `path`'s owner reads as
-    /// file-local (`internal/detection-gaps.md` §3).
+    /// file-local.
     #[rkyv(with = rkyv::with::Map<crate::rkyv_support::SmolStrAsString>)]
     pub owner: Option<SmolStr>,
     #[rkyv(with = crate::rkyv_support::SmolStrAsString)]
@@ -1133,7 +1133,7 @@ pub struct ResolveCtx<'a> {
     units: Option<&'a rustc_hash::FxHashMap<SmolStr, Vec<ProjectPath>>>,
     /// The same reverse index, partitioned by the owning package (nearest-manifest-ancestor).
     /// A unit key is only unique *within* a package: Java and Kotlin key units on the declared
-    /// package name (RFC 0012 §8 — never directory-derived, deliberately, since a source root
+    /// package name (never directory-derived, deliberately, since a source root
     /// is a build-tool convention a bare dotted name can't reveal), so two Gradle modules that
     /// both declare `package retrofit2;` share one unit key across the whole repo. Swift keys
     /// on the target name, and two packages may each declare a target `Core`. Left unset by
@@ -1380,7 +1380,7 @@ pub enum Resolution {
     ///
     /// Adopting it is per-adapter and optional: an adapter whose resolver cannot tell the
     /// two apart keeps returning `Unresolved` and simply reports nothing, which is the safe
-    /// direction (RFC 0012 §2 — degrade toward keep-alive, never toward accusation).
+    /// direction (degrade toward keep-alive, never toward accusation).
     Missing,
     /// No answer. The specifier's shape is not one this adapter resolves, or the information it
     /// would need lives somewhere the adapter does not read. Says nothing about the code, and

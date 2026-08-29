@@ -5,9 +5,9 @@
 //! WASM components (bridged via `kndo-plugin-api` — `kndo:plugin@0.1.0` for the four
 //! graph-mutation hooks below, `kndo:adapter@0.1.0` for `LanguageAdapter`, `plugin-findings`
 //! for [`Plugin::rules`]/[`Plugin::contribute_findings`], and `coverage-ingester` for
-//! [`Plugin::ingest_coverage`]). There is no `suppress` hook: RFC 0016 §7 evaluated
-//! domain-specific suppression against the components actually shipping and cut it — a real
-//! use case reopens it as a new, additive hook rather than a deferred one.
+//! [`Plugin::ingest_coverage`]). There is no `suppress` hook: domain-specific suppression has
+//! no use case among the components actually shipping — a real one reopens it as a new,
+//! additive hook rather than a deferred one.
 //! `GraphView` is read-only; mutation happens only through typed sinks the core validates and
 //! attributes (`Provenance::Plugin`). `contribute_roots`/`contribute_edges`/`annotate_symbols`
 //! additionally get [`ContentView`], the host-mediated content channel for files

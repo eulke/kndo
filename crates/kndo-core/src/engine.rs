@@ -185,10 +185,10 @@ fn store_health_snapshot(root: &Path, score: f64, grade: &str) {
 }
 
 /// Mirrors the output schema's `schema_version` (contracts/output-schema.md), which is the
-/// normative document — semver, additive = minor, breaking = major (RFC 0006 §4). Pinned
-/// against that file by `schema_version_matches_the_contract_document`: the generated JSON
-/// Schema types this field as a plain string with no `const`, so nothing else would notice
-/// the two drifting apart, and they already had.
+/// normative document — semver, additive = minor, breaking = major. Pinned against that
+/// file by `schema_version_matches_the_contract_document`: the generated JSON Schema types
+/// this field as a plain string with no `const`, so nothing else would notice the two
+/// drifting apart, and they already had.
 pub const SCHEMA_VERSION: &str = "1.3.0";
 
 /// The product version — every crate shares `version.workspace = true`, so kndo-core's own
@@ -220,7 +220,7 @@ pub struct ConfigOverrides {
     /// `--skip <cats>`: the same policy `[analysis] skip` expresses, from the command line.
     /// The two are unioned, never overridden, and counted together.
     pub skip: Vec<crate::config::SkipSpec>,
-    /// `--strict`: promote the severities RFC 0005 marks as promotable. Today that is
+    /// `--strict`: promote whichever severities are marked promotable. Today that is
     /// `undeclared` alone (warning → error) — a phantom dependency is a build that works by
     /// accident, and a project that opts in wants its build to say so.
     pub strict: bool,
@@ -394,7 +394,7 @@ pub struct DoctorReport {
 }
 
 /// A finding's severity — each category carries one as
-/// a fixed default. `--strict` promotion (RFC 0005) happens where the analysis assigns the
+/// a fixed default. `--strict` promotion happens where the analysis assigns the
 /// severity directly (see `analysis::undeclared`), never through logic on this type.
 /// Declaration order doubles as sort/triage order: worst first.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
@@ -537,8 +537,8 @@ pub struct Finding {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub related: Vec<RelatedLocation>,
     /// How many findings this one subsumes, on the rollup ladder (symbol → file → directory →
-    /// package, RFC 0005 taxonomy rule 3): a directory reported once instead of fifty times
-    /// says `50` here. `None` on a finding that subsumes nothing, which is most of them —
+    /// package): a directory reported once instead of fifty times says `50` here. `None` on
+    /// a finding that subsumes nothing, which is most of them —
     /// absent rather than `1`, because "this is a rollup of one" is not a fact, and a
     /// consumer summing the field must not double-count leaves.
     ///
@@ -748,7 +748,7 @@ impl RunResult {
 
     /// The gate check ("should this run fail?") — the **findings** half, judging severity
     /// against `--fail-on`. The other half is [`Self::budget_failed`], judging aggregate
-    /// movement against `[delta]`; RFC 0006 §5 composes them with OR, and a frontend that
+    /// movement against `[delta]`; the two compose with OR, and a frontend that
     /// forgets one silently loosens the gate, so [`Self::gate_fails`] does it once. `None`
     /// (`--fail-on none`, full mode's default) never fails. An advisory finding — a plugin
     /// finding without an explicit `[plugins.gate]` opt-in — never counts toward the gate,
@@ -770,7 +770,7 @@ impl RunResult {
         self.budget.as_ref().is_some_and(|b| b.failed())
     }
 
-    /// The whole gate, as RFC 0006 §5 states it: exit 1 when findings reach `--fail-on`
+    /// The whole gate: exit 1 when findings reach `--fail-on`
     /// **or** a delta budget is exceeded. One reader, so the two halves cannot be composed
     /// differently by two frontends — or one of them forgotten.
     pub fn gate_fails(&self, threshold: Option<Severity>) -> bool {
@@ -935,7 +935,7 @@ struct AnalyzedTree {
     /// Categories no analysis judged this run — see [`crate::analysis::Abstention`].
     abstained: Vec<crate::analysis::Abstention>,
     /// This run's ingested coverage. Kept rather than dropped after `run_all` because
-    /// `describe` reports per-shape coverage and CRAP (RFC 0007 §4.2) and would otherwise
+    /// `describe` reports per-shape coverage and CRAP and would otherwise
     /// re-read the reports — deliberately NOT on the graph, for the freshness reason
     /// [`crate::coverage`]'s own module doc gives.
     coverage: crate::coverage::CoverageMap,
@@ -1937,7 +1937,7 @@ impl Engine {
     /// `check()` returns) and counted in the summary instead. `None` when no baseline file
     /// exists — distinct from `Some` with `acknowledged: 0`, a baseline that exists but matches
     /// nothing right now (everything it acknowledged got fixed).
-    /// Fill every surviving finding's `sources` (output-schema §2) from one shared provenance
+    /// Fill every surviving finding's `sources` from one shared provenance
     /// index, after suppression and config filtering have decided which findings there are.
     ///
     /// One pass, one place — not thirteen analyses each answering the question. A verdict knows
@@ -3440,8 +3440,9 @@ mod tests {
 
     #[test]
     fn strict_promotes_undeclared_and_nothing_else() {
-        // RFC 0005: "Severity: warning; error in `--strict`". Exactly one category promotes
-        // today, and the test says so — a blanket promotion would be a different feature.
+        // `undeclared` alone is severity warning, promoted to error under `--strict`. Exactly
+        // one category promotes today, and the test says so — a blanket promotion would be a
+        // different feature.
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("root.dmock"), "root-file\n").unwrap();
         std::fs::write(dir.path().join("dead.dmock"), "").unwrap();
@@ -3577,7 +3578,7 @@ mod tests {
         );
         let budget = result.budget.as_ref().expect("the section opts in");
         assert!(budget.failed());
-        assert!(result.gate_fails(None), "OR, per RFC 0006 §5");
+        assert!(result.gate_fails(None), "the two gate halves compose with OR");
 
         let net = budget
             .rules

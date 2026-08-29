@@ -842,7 +842,7 @@ mod tests {
 
     #[test]
     fn colliding_labels_name_the_impl_block_they_came_from() {
-        // Gap §5: one type, one method name, two impl blocks — the generated-vs-hand-written
+        // One type, one method name, two impl blocks — the generated-vs-hand-written
         // split. Without a disambiguator, both instances print the same `path#Owner.name`,
         // leaving the reader no way to tell them apart.
         let graph = ProjectGraph::for_test(

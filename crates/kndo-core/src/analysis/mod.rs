@@ -123,7 +123,7 @@ pub struct AnalysisTuning {
     /// below the extraction floor ([`crate::config::DUPLICATE_MIN_TOKENS_FLOOR`]): under it
     /// the facts carry no fingerprints to match.
     pub duplicate_min_tokens: u32,
-    /// `--strict`: the analyses RFC 0005 marks as promotable raise their severity.
+    /// `--strict`: an analysis with a promotable verdict raises its severity under it.
     ///
     /// Deliberately read by the analyses that own a promotable verdict rather than applied as
     /// a blanket post-pass: severity is part of what a verdict *means*, and a central table
@@ -208,11 +208,11 @@ impl AnalysisOutput {
     }
 }
 
-/// One analysis, over a shared [`AnalysisCtx`]. Internal (contract §6: "may change any
-/// release") — the uniform [`AnalysisOutput`] return type is what replaces the six divergent
-/// shapes (`Vec<Finding>`, `(Vec<Finding>, Option<Diagnostic>)`, …) the underlying `find_*`
-/// functions still return; this trait is the seam between them and [`run_all`]'s registry,
-/// not a rewrite of the analyses themselves.
+/// One analysis, over a shared [`AnalysisCtx`]. Private to this crate and free to change shape
+/// release to release — the uniform [`AnalysisOutput`] return type is what replaces the six
+/// divergent shapes (`Vec<Finding>`, `(Vec<Finding>, Option<Diagnostic>)`, …) the underlying
+/// `find_*` functions still return; this trait is the seam between them and [`run_all`]'s
+/// registry, not a rewrite of the analyses themselves.
 trait Analysis: Send + Sync {
     /// Also the `--verbose` timings label. Not a category: one analysis may own several
     /// (`dependencies` emits three).

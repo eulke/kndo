@@ -547,8 +547,8 @@ fn a_brace_member_naming_a_submodule_hops_through_the_module_file() {
     // The import registers ONE qualifier (the target's own name), and `check` stays a mere
     // binding that resolves to no symbol — the module file declares nothing called `check`,
     // it only re-links the file with its own `mod check;`. The answer is in the module
-    // file's OWN import table, one hop away (`internal/detection-gaps.md` §8): without it
-    // the whole family of helpers behind such a submodule reads as dead.
+    // file's OWN import table, one hop away: without it the whole family of helpers behind
+    // such a submodule reads as dead.
     let dir = project(&[
         (
             "src/main.mock",
@@ -807,7 +807,7 @@ fn twins_declared_in_one_file_both_receive_the_reference() {
     // single-slot bare table keeps one and displaces the other, so the displaced one had no
     // incoming edge and read as `unused` — a false "delete this" on code every non-mac build
     // compiles. Twins are tracked per UNIT, so this only works once the language keys one;
-    // a per-file unit is what a file-scoped module tree gives it (RFC 0012 §8).
+    // a per-file unit is what a file-scoped module tree gives it.
     let dir = project(&[
         ("app/a.mock", "import ./b.mock\nroot-file"),
         (
@@ -976,7 +976,7 @@ fn a_free_functions_return_type_carries_its_callers_member_access() {
     // `let entry = parse_entry(..); entry.path` — the receiver's type is the callee's
     // declared return, which lives in the CALLEE's file. Without the fact travelling,
     // `TreeEntry.path` has no cross-file use and `internal-only` advises narrowing a type
-    // its own consumers read every day (`internal/detection-gaps.md` §3).
+    // its own consumers read every day.
     let dir = project(
         &[
             (
@@ -1024,7 +1024,7 @@ fn a_pointer_base_may_be_a_qualifier_rather_than_a_symbol() {
     // `use …::rollup;` + `let rolled = rollup::directory_rollups(..); rolled.dirs` — the
     // function is never bound by name here, only its module is. Without resolving the base
     // through the qualifier table the pointer died at its first segment and every field the
-    // caller reads looked file-local (`internal/detection-gaps.md` §3).
+    // caller reads looked file-local.
     let dir = project(
         &[
             (
@@ -1049,7 +1049,8 @@ fn a_hop_through_a_language_provided_type_reaches_the_element() {
     // table is the only place the chain can continue: without it, a chain crossing `Box<Item>`
     // would stop dead and everything reachable only through it would read as unused. The table
     // says what iterating one yields, in terms of its own argument, and the argument comes
-    // from the receiver: the two halves of `internal/detection-gaps.md` §3's last case.
+    // from the receiver: together, that pair is what lets the pointer keep resolving through
+    // a container no file in the project ever declared.
     let dir = project(&[
         (
             "a.mock",
@@ -3415,8 +3416,8 @@ fn same_name_overloads_each_own_the_references_in_their_body() {
 /// nomsgpack`) are mutually exclusive and both declare `validate` in package `binding`. The
 /// same-unit name table is single-slot, so every reference landed on whichever file was
 /// inserted last and its twin read `unused` — in gin one `validate` took all 16 references and
-/// the other took none. kndo analyzes the UNION of build configurations by documented policy
-/// (`internal/adapters/go.md`), under which both are live.
+/// the other took none. kndo analyzes the UNION of build configurations, under which both are
+/// live.
 #[test]
 fn same_unit_twins_both_receive_the_reference() {
     let dir = project(&[

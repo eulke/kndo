@@ -48,8 +48,8 @@ impl LanguageAdapter for RustAdapter {
             // file and one package, distinct from both `pub(crate)` above it and `private`
             // below it. Collapsing it into `pub(crate)` would widen every `pub(super)` item to
             // crate-wide visibility, leaving `private-type-leak` blind to leaks that stop at the
-            // parent module's boundary (`internal/detection-gaps.md` §7). `pub(in path)` still
-            // widens: this adapter does not resolve its path to a unit key yet, and widening
+            // parent module's boundary. `pub(in path)` still widens: this adapter does not
+            // resolve its path to a unit key yet, and widening
             // only ever silences an accusation, never fabricates one.
             visibility_ladder: vec![
                 VisibilityRung {
@@ -57,8 +57,7 @@ impl LanguageAdapter for RustAdapter {
                     // descendants, which is exactly what a Module rung anchored on the file's
                     // own unit says. A `File` rung here is too narrow: it would accuse
                     // ripgrep's `flags::parse::lookup` of leaking `flags::mod`'s private `Flag`,
-                    // which every module under `flags` can spell perfectly well
-                    // (`internal/detection-gaps.md` §7).
+                    // which every module under `flags` can spell perfectly well.
                     scope: VisibilityScope::Module,
                     label: SmolStr::new("private"),
                     surface_transitive: false,
@@ -142,7 +141,7 @@ impl LanguageAdapter for RustAdapter {
 /// Without these facts, a chain that crosses one of these stops dead:
 /// `ls_tree(..).map_err(..)?` then iterated is four hops through `Result` and `Vec` before it
 /// reaches the element type, and the type behind it reads as consumed only where it was
-/// declared (`internal/detection-gaps.md` §3).
+/// declared.
 ///
 /// Two conventions, both this adapter's own choice and invisible to the core: `@element` is
 /// the member an iteration hops through (a container that does not declare one simply does
@@ -208,7 +207,7 @@ mod tests {
     fn the_builtin_table_declares_iteration_only_where_the_element_is_one_type() {
         // A map iterates to a TUPLE, which this model has no way to name, so `HashMap`
         // deliberately declares no `@element` and its loop variable simply does not type.
-        // Silence beats a confident wrong type — RFC 0012 §2's direction, made concrete.
+        // Silence beats a confident wrong type.
         let d = RustAdapter.descriptor();
         let has = |owner: &str, member: &str| {
             d.builtin_member_types
@@ -226,7 +225,8 @@ mod tests {
 
     #[test]
     fn a_result_operation_keeps_the_success_type_and_admits_it_lost_the_error() {
-        // `map_err` is the hop §3's last case has to cross. The fact says "still a `Result`
+        // `map_err` is a hop a chain like `ls_tree(..).map_err(..)?` has to cross. The fact
+        // says "still a `Result`
         // over the SAME argument 0" — a relationship, not a concrete type — and states
         // outright that it cannot name what the error became.
         let d = RustAdapter.descriptor();
