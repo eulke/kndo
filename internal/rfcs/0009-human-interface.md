@@ -15,8 +15,10 @@ format) are out of scope here — they are serialized core-side and schema-gover
 
 1. **Scannable in two seconds.** The first line answers "am I fine?"; the layout answers "what
    do I fix first?" without reading everything. Triage order = group order (RFC 0005 rule 4).
-2. **Quiet success.** A clean run prints one line (`kndo · clean · health 91 (A) · 214 ms`).
-   No banners, no ASCII art, no emoji noise, no advertising. Silence is the reward.
+2. **Quiet success.** A clean run's header is one line (`kndo · clean · 214 files (198 claimed,
+   1205 symbols, 340 deps, 2618 edges) · 187ms`), followed by the health line when health
+   tracking is on. No banners, no ASCII art, no emoji noise, no advertising. Silence is the
+   reward.
 3. **Semantic color, never decorative.** Color encodes exactly two things: the finding's group
    and delta polarity (new/fixed). If it's colored, it means something; if it means something,
    it's *also* expressed without color (§4) — color-blind users and CI logs lose nothing.
@@ -34,6 +36,7 @@ format) are out of scope here — they are serialized core-side and schema-gover
 | group `waste` | yellow | `◦` / `o` |
 | group `risk` | magenta | `▲` / `^` |
 | group `hygiene` | blue | `·` / `.` |
+| group `convention` | cyan | `•` / `?` |
 | delta `fixed` | green | `✓` / `+` |
 | evidence / secondary | dim | `└` / `\`- ` |
 | health up / down | green / red | `↑` / `↓` (`^`/`v`) |
@@ -42,6 +45,9 @@ format) are out of scope here — they are serialized core-side and schema-gover
   color or glyph (principle 3).
 - One accent color per line maximum; paths and messages stay in default foreground. kndo output
   should look calm next to a compiler's.
+- `convention` is reserved for plugin-contributed findings (`category` is an open
+  `plugin:<coordinate>/<rule>` namespace) — no core analysis emits it, but it carries its own
+  color and glyph so a plugin's findings render with the same discipline as every other group.
 
 ## 4. Capability degradation
 
@@ -97,8 +103,13 @@ One finding = one primary line, optional evidence lines, fixed column order:
   get one start line and one end line instead.
 - `--quiet`: header line + exit code only. `--verbose`: adds `possible`-confidence findings,
   per-phase timings, and cache state. Neither changes *what* was analyzed (RFC 0006 flags do).
-- Errors speak human: every `EngineError` renders as problem + probable cause + next command
-  (`cache locked by pid 4211 — another kndo is running; retry or kndo doctor`). Never a bare
+- Errors speak human within what exists today: `EngineError` has exactly one variant
+  (`ProjectRootNotFound`), and every command renders it the same way, a plain
+  `eprintln!("kndo: {e}")` of `thiserror`'s `Display` message (`kndo: project root does not
+  exist or is not a directory: /path/to/project`) — no separate probable-cause or next-command
+  fields exist yet. A structured problem + probable cause + next command render, the way
+  `cache locked by pid 4211 — another kndo is running; retry or kndo doctor` would read, is
+  design intent for variants `EngineError` doesn't have, not current behavior. Never a bare
   Rust error chain outside `--verbose`.
 
 ## 7. Non-goals (1.0)

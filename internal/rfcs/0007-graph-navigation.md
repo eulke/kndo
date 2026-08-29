@@ -20,7 +20,7 @@ that produces it.
 1. **Read-only, warm, fast.** Navigation verbs never mutate findings or baseline. They revalidate
    the cache exactly like `check` (patching changed files first, RFC 0004 §4), so answers reflect
    the working tree, within the same < 500 ms warm budget. Startup + revalidation dominate that
-   budget, so batching (§4.7) amortizes them: many questions, one process, one graph load.
+   budget, so batching (§4.8) amortizes them: many questions, one process, one graph load.
 2. **Bounded by default.** Every listing is capped (default 50 entries, `--limit`) with an explicit
    `"elided": N` count and deterministic ordering — an agent always knows whether it saw
    everything, and output can never blow up a context window.
@@ -101,7 +101,18 @@ Forward-looking blast radius, built on the same machinery as diff-mode derived e
   orphaned. Simulation only: nothing is written. This lets an agent *plan* a deletion and know
   the full cleanup set before editing a single line.
 
-### 4.7 Batching & `kndo query` — many questions, one process
+### 4.7 `kndo explain <finding-id>`
+Everything the graph knows about one already-reported finding, in one call: the finding itself
+verbatim (message, evidence chain, provenance, rollup count) paired with `describe` (§4.2) of
+its subject (color, roots that reach it, degree, the other findings on the same node).
+Deliberately a pair, not a new derivation — re-deriving either half would be a second answer to
+a question `describe` or the analysis already answered. A finding id absent from the current
+run is `not-found`, never "no such finding": it may have been fixed, suppressed, or acknowledged
+in the baseline since it was last seen. A verb over a *finding* rather than a selector — its
+"selector" is an id — but otherwise the same machinery as every other verb: same envelope
+shape, same batching through `kndo query`.
+
+### 4.8 Batching & `kndo query` — many questions, one process
 
 Per-invocation cost (process start + cache revalidation, ~120 ms warm) dwarfs per-query cost
 (~a few ms on the loaded graph). An agent exploring a subsystem asks dozens of questions;
@@ -135,7 +146,7 @@ EOF
   (diagnostic + truncation status beyond that, guarding against runaway generation).
 - `kndo query` is JSON-only (no human format) and is the intended transport for a future
   `kndo serve`/MCP wrapper (§7): one MCP tool call ⇒ one request line, same envelopes.
-- The individual verbs (§4.1–4.6) are sugar over the same engine: one verb ≡ a single-line
+- The individual verbs (§4.1–4.7) are sugar over the same engine: one verb ≡ a single-line
   query. Future composition features (joins, set operations over results) belong to `kndo
   query`, keeping the verbs simple — tracked as open question 4 (§8).
 
@@ -156,7 +167,7 @@ kndo check --staged                            → verifies: 4 fixed findings, 0
 Four bounded calls replace reading five files into context, and the final `check` is the
 machine-verifiable proof the cleanup is complete — the anti-slop loop closed end to end.
 After `find`, the middle queries are independent — an agent that already knows its questions
-collapses them into one `kndo query` invocation (§4.7), paying startup once.
+collapses them into one `kndo query` invocation (§4.8), paying startup once.
 
 ## 6. Exit codes & failure semantics
 
@@ -183,14 +194,22 @@ status (0 < 1 < 2), so single-question scripting semantics survive batching unch
 
 ## 8. Open questions
 
-1. Flat verbs (`kndo uses`) vs. namespaced (`kndo graph uses`) — flat reads better and the verb
-   set is small and closed; namespacing frees verb names for future features. Current draft: flat.
+1. ~~Flat verbs (`kndo uses`) vs. namespaced (`kndo graph uses`)?~~ **Resolved: flat.**
+   `internal/README.md`'s open-questions resolution log records the decision: flat reads better
+   and the verb set is small and closed; namespacing would free verb names for features nothing
+   currently plans to add.
 2. ~~Should `describe` inline the first level of `uses`/`used-by`?~~ **Resolved: no.** `describe`
    answers "everything about *this* node"; the neighbourhood is a different question and `uses`
    is one round-trip away, with its own `--depth`, `--edges` and `--limit` that an inlined,
    fixed-cap copy could not offer. `reached_by_roots` stays because it is a property of the node
    (what keeps it alive), not a listing of its neighbours.
-3. `trace --all` path explosion policy: cap by `--max-paths` only, or also by path length?
+3. ~~`trace --all` path explosion policy: cap by `--max-paths` only, or also by path length?~~
+   **Resolved: both, plus a total-expansion budget.** The DFS enumeration (`enumerate_paths` in
+   `crates/kndo-core/src/query.rs`) stops at `--max-paths` results, restricts every path to a
+   length ceiling of `shortest_len + 2` (so "alternatives" stays close to the shortest path
+   rather than "every walk in the graph"), and bounds total edge expansions by a fixed
+   `TRACE_EXPANSION_BUDGET` — three independent limits so a pathological graph can't blow the
+   query budget even before `max_paths` is reached.
 4. How much composition does `kndo query` grow before it *is* the deferred query language —
    1.0 draft: independent requests only (no joins/set operations/piping between lines);
    result-set composition is evaluated post-1.0 with real agent usage data.
