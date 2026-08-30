@@ -20,12 +20,12 @@ use kndo_contract::evidence::{
     CoverageRecords, DeclarationId, DiagnosticLevel, EvidenceSink, EvidenceStream, EvidenceStreams,
     ImportBinding, ImportShape, ImportTarget, Reach, RefKind, RootKind, RootTarget, SymbolKind,
 };
-use kndo_contract::extension::{ConductSink, ContentView, Extension, ExtensionSpec, GraphAccess};
+use kndo_contract::extension::{ConductSink, ContentAccess, Extension, ExtensionSpec, GraphAccess};
 use kndo_contract::vocab::{Confidence, ProjectPath, Span};
 use std::collections::BTreeMap;
 use std::path::Path;
 
-type ConductHook = dyn Fn(&dyn GraphAccess, &ContentView<'_>, &mut ConductSink) + Send + Sync;
+type ConductHook = dyn Fn(&dyn GraphAccess, &dyn ContentAccess, &mut ConductSink) + Send + Sync;
 type IngestHook = dyn Fn(&str, &[u8]) -> Option<CoverageRecords> + Send + Sync;
 
 /// The one mock for every cluster. [`MockExtension::new`] speaks the kmock
@@ -72,7 +72,7 @@ impl MockExtension {
 
     pub fn on_contribute(
         mut self,
-        f: impl Fn(&dyn GraphAccess, &ContentView<'_>, &mut ConductSink) + Send + Sync + 'static,
+        f: impl Fn(&dyn GraphAccess, &dyn ContentAccess, &mut ConductSink) + Send + Sync + 'static,
     ) -> Self {
         self.on_contribute = Some(Box::new(f));
         self
@@ -80,7 +80,7 @@ impl MockExtension {
 
     pub fn on_report(
         mut self,
-        f: impl Fn(&dyn GraphAccess, &ContentView<'_>, &mut ConductSink) + Send + Sync + 'static,
+        f: impl Fn(&dyn GraphAccess, &dyn ContentAccess, &mut ConductSink) + Send + Sync + 'static,
     ) -> Self {
         self.on_report = Some(Box::new(f));
         self
@@ -109,7 +109,7 @@ impl Extension for MockExtension {
     fn contribute_roots(
         &self,
         graph: &dyn GraphAccess,
-        content: &ContentView<'_>,
+        content: &dyn ContentAccess,
         out: &mut ConductSink,
     ) {
         if let Some(f) = &self.on_contribute {
@@ -120,7 +120,7 @@ impl Extension for MockExtension {
     fn report_findings(
         &self,
         graph: &dyn GraphAccess,
-        content: &ContentView<'_>,
+        content: &dyn ContentAccess,
         out: &mut ConductSink,
     ) {
         if let Some(f) = &self.on_report {

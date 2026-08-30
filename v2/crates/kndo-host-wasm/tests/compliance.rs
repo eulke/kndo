@@ -6,7 +6,7 @@
 //! that the ABI's whole surface WORKS.
 
 use kndo_core::{Config, RunMode, Session, Snapshot, Threads};
-use kndo_host_wasm::{WasmAdapter, WasmIngester, WasmPlugin};
+use kndo_host_wasm::WasmExtension;
 use kndo_testkit::TempProject;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -55,7 +55,7 @@ fn kmini_session(
     use_cache: bool,
     conduct: Vec<Box<dyn kndo_core::Extension>>,
 ) -> Session {
-    let adapter = WasmAdapter::load(&component("kmini_adapter")).expect("kmini adapter loads");
+    let adapter = WasmExtension::load(&component("kmini_adapter")).expect("kmini adapter loads");
     let mut extensions: Vec<Box<dyn kndo_core::Extension>> = vec![Box::new(adapter)];
     extensions.extend(conduct);
     Session::open(
@@ -183,7 +183,7 @@ fn the_wasm_plugin_world_carries_the_containment_model() {
     p.file("orphan.kmini", "fn floats\n");
     p.file("config.probe", "sixteen bytes!!\n");
 
-    let plugin = WasmPlugin::load(&component("probe_plugin")).expect("probe plugin loads");
+    let plugin = WasmExtension::load(&component("probe_plugin")).expect("probe plugin loads");
     let session = kmini_session(&p, true, vec![Box::new(plugin)]);
     let snap = session.analyze(RunMode::Full).expect("analyze");
 
@@ -252,7 +252,7 @@ fn the_wasm_ingester_world_feeds_untested_like_the_builtin() {
         "SF:lib.kmini\nFN:1,covered\nFN:2,never_ran\nFNDA:3,covered\nFNDA:0,never_ran\nend_of_record\n",
     );
 
-    let ingester = WasmIngester::load(&component("records_ingester")).expect("ingester loads");
+    let ingester = WasmExtension::load(&component("records_ingester")).expect("ingester loads");
     let with = kmini_session(&p, false, vec![Box::new(ingester)])
         .analyze(RunMode::Full)
         .expect("analyze with ingester");
@@ -278,4 +278,85 @@ fn the_wasm_ingester_world_feeds_untested_like_the_builtin() {
         with.findings
     );
     assert_eq!(with.plugins[0].coordinate, "demo:lcov-records");
+}
+
+#[test]
+fn a_two_cluster_extension_speaks_a_language_and_conducts() {
+    // The framework case the old taxonomy could not hold in one component:
+    // extraction for its own format AND conduct with dependency chaining.
+    let p = TempProject::new();
+    p.file(
+        "kmini.pkg",
+        "name kit\nentry app.kmini\ndep acme-framework\n",
+    );
+    p.file("app.kmini", "entry\n");
+    p.file("routes.acme", "handler index\nhandler health\n");
+    p.file("extra.kmini", "fn di_wired\n");
+
+    let acme = WasmExtension::load(&component("acme_framework")).expect("acme loads");
+    let probe = WasmExtension::load(&component("probe_plugin")).expect("probe loads");
+    let snap = kmini_session(&p, false, vec![Box::new(acme), Box::new(probe)])
+        .analyze(RunMode::Full)
+        .expect("analyze");
+
+    // Cluster one, extraction: the .acme file is claimed, its handlers rooted.
+    assert!(
+        snap.graph
+            .files
+            .iter()
+            .any(|f| f.path.as_str() == "routes.acme"),
+        "the two-cluster extension claims its own format"
+    );
+    assert!(
+        finding_on(&snap, "routes.acme").is_empty() && finding_on(&snap, "handler").is_empty(),
+        "extraction-rooted route files accuse nothing: {:#?}",
+        snap.findings
+    );
+    // Cluster two, conduct: activated by the manifest dependency name, its root
+    // keeps extra.kmini, and the CHAIN activates demo:probe although probe's own
+    // FileExists rule was never needed for it.
+    let coordinates: Vec<&str> = snap.plugins.iter().map(|c| c.coordinate.as_str()).collect();
+    assert_eq!(
+        coordinates,
+        ["acme:framework", "demo:probe"],
+        "manifest-activated framework, dependency-chained probe"
+    );
+    assert!(
+        finding_on(&snap, "extra.kmini").is_empty(),
+        "the conduct root keeps the DI-wired file: {:#?}",
+        snap.findings
+    );
+}
+
+#[test]
+fn a_conduct_import_during_extraction_traps_with_a_named_violation() {
+    // The hand-rolled tier: rude-probe bypasses the SDK and calls `graph-paths`
+    // from its extract export. The host's phase scoping must answer with a trap
+    // that surfaces as a described diagnostic — never with data.
+    let p = TempProject::new();
+    p.file("app.rude", "anything\n");
+
+    let rude = WasmExtension::load(&component("rude_probe")).expect("rude probe loads");
+    let session = Session::open(
+        p.root(),
+        Config {
+            threads: Threads::Auto,
+            use_cache: false,
+        },
+        vec![Box::new(rude)],
+    )
+    .expect("open");
+    let snap = session
+        .analyze(RunMode::Full)
+        .expect("the run never crashes");
+    let report = snap.report();
+    assert!(
+        report.diagnostics.iter().any(|d| {
+            d.path.as_str() == "app.rude"
+                && d.message.contains("phase contract violation")
+                && d.message.contains("`graph-paths`")
+        }),
+        "the violation is named on the file it happened to: {:#?}",
+        report.diagnostics
+    );
 }

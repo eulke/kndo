@@ -9,4 +9,5 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
+kndo-contract = { path = "../../../crates/kndo-contract" }
 kndo-sdk = { path = "../../../crates/kndo-sdk" }

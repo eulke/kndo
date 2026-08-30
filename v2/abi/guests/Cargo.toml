@@ -3,7 +3,7 @@
 # wit-component, no special access), which is what their compliance runs prove.
 [workspace]
 resolver = "2"
-members = ["kmini-adapter", "probe-plugin", "records-ingester"]
+members = ["acme-framework", "kmini-adapter", "probe-plugin", "records-ingester", "rude-probe"]
 
 [profile.release]
 opt-level = "s"

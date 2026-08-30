@@ -1,70 +1,56 @@
-//! The guest half of the ABI, once for every world: generated bindings for
-//! `kndo:vocab@1` and the conversions between wire records and `kndo-contract`
-//! types. An external ADAPTER author implements the real
-//! [`kndo_contract::adapter::LanguageAdapter`] — the same trait, the same
-//! `EvidenceSink`, the same `ResolveContext` queries as a native adapter — and
-//! exports it with [`export_adapter!`]; this crate rebuilds the resolve context
-//! from the host's enumeration imports and converts finished evidence to the wire.
-//! Plugin and ingester authors write against the wire records directly (their
-//! native trait lives in `kndo-core`, which cannot cross to `wasm32`) — one small
-//! mirrored surface instead of a dragged-in engine.
+//! The guest half of the ABI — one world, one macro, the REAL trait. An external
+//! author implements [`kndo_contract::extension::Extension`] — the same trait,
+//! the same `EvidenceSink`, `ResolveContext`, `ConductSink` and content scope a
+//! built-in uses — and exports it with [`export_extension!`]. This crate rebuilds
+//! the extraction context from the host's enumeration imports, hands conduct
+//! hooks a graph and content view backed by the conduct imports, and converts
+//! finished values to the wire once, here.
 //!
-//! Compiles natively too (the host's test suites link it for its conversion
-//! helpers), but its purpose is `wasm32-unknown-unknown` guests.
+//! The raw generated bindings are `#[doc(hidden)]`: the documented surface is
+//! phase-correct by construction (an extraction hook is handed nothing that can
+//! reach the graph), and a guest that digs into the hidden module anyway meets
+//! the host's phase scoping — a named trap, not an answer.
+//!
+//! Compiles natively too (test suites can link the conversion helpers), but its
+//! purpose is `wasm32-unknown-unknown` guests.
 
-use kndo_contract::adapter::{
-    AdapterSpec, LanguageAdapter, PackageEntry, ProjectRoot, Resolution, ResolveContext, SourceFile,
-};
+use kndo_contract::adapter::{PackageEntry, ProjectRoot, Resolution, ResolveContext, SourceFile};
 use kndo_contract::evidence::{
-    self as ev, EvidenceSink, EvidenceStream, EvidenceStreams, FileEvidence,
+    self as ev, CoverageRecords, EvidenceSink, EvidenceStream, EvidenceStreams, FileEvidence,
+};
+use kndo_contract::extension::{
+    Activation, ActivationRule, ConductSink, ContentAccess, Extension, ExtensionSpec, GraphAccess,
+    PluginSeverity, PluginTarget,
 };
 use kndo_contract::vocab::{Confidence, ProjectPath, Span};
 use smol_str::SmolStr;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::OnceLock;
 
-/// The adapter world's bindings; `types` is the one vocabulary, re-used by the
-/// other worlds' generations below.
-pub mod adapter {
+#[doc(hidden)]
+pub mod bindings {
     wit_bindgen::generate!({
         path: "../../wit",
-        world: "adapter",
+        world: "extension",
         pub_export_macro: true,
     });
 }
 
-pub mod plugin {
-    wit_bindgen::generate!({
-        path: "../../wit",
-        world: "plugin",
-        pub_export_macro: true,
-        with: { "kndo:vocab/types@1.0.0": crate::adapter::kndo::vocab::types },
-    });
-}
-
-pub mod ingester {
-    wit_bindgen::generate!({
-        path: "../../wit",
-        world: "coverage-ingester",
-        pub_export_macro: true,
-        with: { "kndo:vocab/types@1.0.0": crate::adapter::kndo::vocab::types },
-    });
-}
-
-/// The one vocabulary's generated types — the module the two `with` mappings above
-/// point at, so every world shares a single Rust spelling of each record.
-pub use adapter::kndo::vocab::types as wire;
+/// The vocabulary's generated types — one world, one Rust spelling of each record.
+#[doc(hidden)]
+pub use bindings::kndo::vocab::types as wire;
 
 // ---------------------------------------------------------------- contract → wire
 
-pub fn spec_to_wire(spec: &AdapterSpec) -> wire::AdapterSpec {
+pub fn spec_to_wire(spec: &ExtensionSpec) -> wire::ExtensionSpec {
     // `EvidenceStreams` exposes membership, not iteration; the SDK versions with
     // the contract, so enumerating the known streams here is the pairing rule's
     // wire spelling, not a second source.
     let known = [EvidenceStream::Comments, EvidenceStream::Metrics];
-    wire::AdapterSpec {
-        id: spec.id().to_string(),
-        semantics_version: spec.semantics_version(),
+    wire::ExtensionSpec {
+        coordinate: spec.coordinate().to_string(),
+        version: spec.version(),
+        extensions: spec.extensions().iter().map(|s| s.to_string()).collect(),
         claims: spec.claims().iter().map(|s| s.to_string()).collect(),
         emits: known
             .into_iter()
@@ -72,7 +58,43 @@ pub fn spec_to_wire(spec: &AdapterSpec) -> wire::AdapterSpec {
             .map(stream_to_wire)
             .collect(),
         manifests: spec.manifests().iter().map(|s| s.to_string()).collect(),
-        extensions: spec.extensions().iter().map(|s| s.to_string()).collect(),
+        conducts: spec.declares_conduct(),
+        activation: activation_to_wire(spec.activation()),
+        mutates_graph: spec.mutates_graph(),
+        dependencies: spec.dependencies().iter().map(|s| s.to_string()).collect(),
+        requested_file_access: spec
+            .requested_file_access()
+            .iter()
+            .map(|s| s.to_string())
+            .collect(),
+        rules: spec
+            .rules()
+            .iter()
+            .map(|r| wire::RuleDescriptor {
+                name: r.name.to_string(),
+                description: r.description.to_string(),
+            })
+            .collect(),
+        reads_reports: spec.reads_reports().iter().map(|s| s.to_string()).collect(),
+    }
+}
+
+fn activation_to_wire(activation: &Activation) -> wire::Activation {
+    match activation {
+        Activation::Always => wire::Activation::Always,
+        Activation::AnyRule(rules) => wire::Activation::AnyRule(
+            rules
+                .iter()
+                .map(|r| match r {
+                    ActivationRule::FileExists(g) => {
+                        wire::ActivationRule::FileExists(g.to_string())
+                    }
+                    ActivationRule::ManifestDependency(n) => {
+                        wire::ActivationRule::ManifestDependency(n.to_string())
+                    }
+                })
+                .collect(),
+        ),
     }
 }
 
@@ -161,8 +183,8 @@ fn import_to_wire(import: &ev::Import) -> wire::Import {
     }
 }
 
-/// Finished evidence to the wire — what `export_adapter!`'s extract shim sends
-/// back after the author's real `EvidenceSink` pass.
+/// Finished evidence to the wire — what the extract shim sends back after the
+/// author's real `EvidenceSink` pass.
 pub fn evidence_to_wire(evidence: &FileEvidence) -> wire::FileEvidence {
     wire::FileEvidence {
         declarations: evidence
@@ -285,12 +307,52 @@ fn package_entry_from_wire(entry: wire::PackageEntry) -> PackageEntry {
     }
 }
 
+fn plugin_target_to_wire(target: &PluginTarget) -> wire::PluginTarget {
+    match target {
+        PluginTarget::File(p) => wire::PluginTarget::File(p.as_str().to_string()),
+        PluginTarget::Symbol { path, name } => wire::PluginTarget::Symbol(wire::SymbolRef {
+            path: path.as_str().to_string(),
+            name: name.to_string(),
+        }),
+    }
+}
+
+fn severity_to_wire(severity: PluginSeverity) -> wire::PluginSeverity {
+    match severity {
+        PluginSeverity::Error => wire::PluginSeverity::Error,
+        PluginSeverity::Warning => wire::PluginSeverity::Warning,
+        PluginSeverity::Info => wire::PluginSeverity::Info,
+    }
+}
+
+pub fn records_to_wire(records: &CoverageRecords) -> wire::CoverageRecords {
+    let mut lines = Vec::new();
+    let mut functions = Vec::new();
+    for (path, rec) in &records.files {
+        for (line, hits) in &rec.lines {
+            lines.push(wire::CoverageRecord {
+                path: path.as_str().to_string(),
+                line: *line,
+                hits: *hits,
+            });
+        }
+        for (line, hits) in &rec.functions {
+            functions.push(wire::CoverageRecord {
+                path: path.as_str().to_string(),
+                line: *line,
+                hits: *hits,
+            });
+        }
+    }
+    wire::CoverageRecords { lines, functions }
+}
+
 // ------------------------------------------------- the guest-side resolve context
 
 /// The project as the host enumerated it, fetched once per instance and held for
 /// the program's life (a component instance IS one program run). The context built
 /// over it is the contract's own [`ResolveContext`] — innermost-package matching
-/// and every other rule has exactly one owner, shared with native adapters.
+/// and every other rule has exactly one owner, shared with native extensions.
 struct ProjectSnapshot {
     known: BTreeSet<ProjectPath>,
     packages: BTreeMap<SmolStr, PackageEntry>,
@@ -299,11 +361,11 @@ struct ProjectSnapshot {
 fn project_snapshot() -> &'static ProjectSnapshot {
     static SNAPSHOT: OnceLock<ProjectSnapshot> = OnceLock::new();
     SNAPSHOT.get_or_init(|| ProjectSnapshot {
-        known: adapter::known_files()
+        known: bindings::known_files()
             .into_iter()
             .map(ProjectPath::new)
             .collect(),
-        packages: adapter::package_entries()
+        packages: bindings::package_entries()
             .into_iter()
             .map(package_entry_from_wire)
             .map(|p| (p.name.clone(), p))
@@ -317,27 +379,85 @@ pub fn resolve_context() -> ResolveContext<'static> {
     ResolveContext::with_packages(&snap.known, &snap.packages)
 }
 
-// ------------------------------------------------------------- the adapter export
+// --------------------------------------------------- the guest-side conduct views
 
-/// Implements the generated `Guest` trait for any real [`LanguageAdapter`]. Used
-/// through [`export_adapter!`]; public so the macro's expansion can name it.
-pub struct ExportedAdapter<A>(core::marker::PhantomData<A>);
+/// The assembled graph over the conduct imports — the same [`GraphAccess`] shape
+/// a native extension's hooks receive.
+struct WireGraph {
+    paths: Vec<ProjectPath>,
+}
 
-impl<A: LanguageAdapter + Default> adapter::Guest for ExportedAdapter<A> {
-    fn spec() -> wire::AdapterSpec {
-        spec_to_wire(A::default().spec())
+impl WireGraph {
+    fn fetch() -> Self {
+        WireGraph {
+            paths: bindings::graph_paths()
+                .into_iter()
+                .map(ProjectPath::new)
+                .collect(),
+        }
+    }
+}
+
+impl GraphAccess for WireGraph {
+    fn paths(&self) -> Box<dyn Iterator<Item = &ProjectPath> + '_> {
+        Box::new(self.paths.iter())
+    }
+
+    fn contains(&self, path: &ProjectPath) -> bool {
+        self.paths.binary_search(path).is_ok()
+    }
+}
+
+/// Scoped content over the conduct imports. Fetched whole at hook entry: the
+/// host prefetched this exact set through its own `ContentView` (budget charged
+/// by declaration), so this copy is bounded by the content budget.
+struct WireContent {
+    contents: BTreeMap<ProjectPath, Vec<u8>>,
+}
+
+impl WireContent {
+    fn fetch() -> Self {
+        let mut contents = BTreeMap::new();
+        for path in bindings::readable_paths() {
+            if let Some(bytes) = bindings::read_file(&path) {
+                contents.insert(ProjectPath::new(path), bytes);
+            }
+        }
+        WireContent { contents }
+    }
+}
+
+impl ContentAccess for WireContent {
+    fn readable_paths(&self) -> Box<dyn Iterator<Item = &ProjectPath> + '_> {
+        Box::new(self.contents.keys())
+    }
+
+    fn read(&self, path: &ProjectPath) -> Option<&[u8]> {
+        self.contents.get(path).map(|b| b.as_slice())
+    }
+}
+
+// ------------------------------------------------------------- the one export
+
+/// Implements the generated `Guest` trait for any real [`Extension`]. Used
+/// through [`export_extension!`]; public so the macro's expansion can name it.
+pub struct ExportedExtension<E>(core::marker::PhantomData<E>);
+
+impl<E: Extension + Default> bindings::Guest for ExportedExtension<E> {
+    fn spec() -> wire::ExtensionSpec {
+        spec_to_wire(E::default().spec())
     }
 
     fn extract(path: String, content: Vec<u8>) -> wire::FileEvidence {
-        let adapter = A::default();
+        let extension = E::default();
         let path = ProjectPath::new(path);
         let mut sink = EvidenceSink::new(
             content.len() as u32,
             // The same pairing rule as the engine's own claim wiring: the sink is
             // constructed from the spec's declared streams.
-            streams_of(adapter.spec()),
+            streams_of(extension.spec()),
         );
-        adapter.extract(
+        extension.extract(
             &SourceFile {
                 path: &path,
                 content: &content,
@@ -349,7 +469,7 @@ impl<A: LanguageAdapter + Default> adapter::Guest for ExportedAdapter<A> {
 
     fn resolve(from: String, specifier: String) -> wire::Resolution {
         let from = ProjectPath::new(from);
-        resolution_to_wire(A::default().resolve(&from, &specifier, &resolve_context()))
+        resolution_to_wire(E::default().resolve(&from, &specifier, &resolve_context()))
     }
 
     fn roots(manifest_path: String, content: Vec<u8>) -> Vec<wire::ProjectRoot> {
@@ -358,7 +478,7 @@ impl<A: LanguageAdapter + Default> adapter::Guest for ExportedAdapter<A> {
             path: &path,
             content: &content,
         };
-        A::default()
+        E::default()
             .roots(&manifest, &resolve_context())
             .iter()
             .map(project_root_to_wire)
@@ -371,7 +491,7 @@ impl<A: LanguageAdapter + Default> adapter::Guest for ExportedAdapter<A> {
             path: &path,
             content: &content,
         };
-        A::default()
+        E::default()
             .packages(&manifest, &resolve_context())
             .iter()
             .map(package_entry_to_wire)
@@ -384,7 +504,7 @@ impl<A: LanguageAdapter + Default> adapter::Guest for ExportedAdapter<A> {
             path: &path,
             content: &content,
         };
-        A::default()
+        E::default()
             .manifest_dependencies(&manifest)
             .iter()
             .map(|s| s.to_string())
@@ -393,15 +513,59 @@ impl<A: LanguageAdapter + Default> adapter::Guest for ExportedAdapter<A> {
 
     fn unit_mates(path: String) -> Vec<String> {
         let path = ProjectPath::new(path);
-        A::default()
+        E::default()
             .unit_mates(&path, &resolve_context())
             .iter()
             .map(|p| p.as_str().to_string())
             .collect()
     }
+
+    fn contribute_roots() -> Vec<wire::ContributedRoot> {
+        let extension = E::default();
+        let graph = WireGraph::fetch();
+        let content = WireContent::fetch();
+        let mut sink = ConductSink::default();
+        extension.contribute_roots(&graph, &content, &mut sink);
+        let (roots, _) = sink.into_parts();
+        roots
+            .into_iter()
+            .map(|(target, kind, confidence)| wire::ContributedRoot {
+                target: plugin_target_to_wire(&target),
+                kind: root_kind_to_wire(kind),
+                confidence: confidence_to_wire(confidence),
+            })
+            .collect()
+    }
+
+    fn report_findings() -> Vec<wire::ContributedFinding> {
+        let extension = E::default();
+        let graph = WireGraph::fetch();
+        let content = WireContent::fetch();
+        let mut sink = ConductSink::default();
+        extension.report_findings(&graph, &content, &mut sink);
+        let (_, findings) = sink.into_parts();
+        findings
+            .into_iter()
+            .map(
+                |(rule, severity, target, message)| wire::ContributedFinding {
+                    rule: rule.to_string(),
+                    severity: severity_to_wire(severity),
+                    target: plugin_target_to_wire(&target),
+                    message,
+                },
+            )
+            .collect()
+    }
+
+    fn ingest(path: String, content: Vec<u8>) -> Option<wire::CoverageRecords> {
+        E::default()
+            .ingest(&path, &content)
+            .as_ref()
+            .map(records_to_wire)
+    }
 }
 
-fn streams_of(spec: &AdapterSpec) -> EvidenceStreams {
+fn streams_of(spec: &ExtensionSpec) -> EvidenceStreams {
     let known = [EvidenceStream::Comments, EvidenceStream::Metrics];
     EvidenceStreams::of(
         &known
@@ -411,13 +575,13 @@ fn streams_of(spec: &AdapterSpec) -> EvidenceStreams {
     )
 }
 
-/// Export a [`LanguageAdapter`] as this component's `kndo:vocab/adapter` world.
-/// The author's type needs `Default`; everything else is the same trait a native
-/// adapter implements.
+/// Export a real [`Extension`] as this component's `kndo:vocab/extension` world.
+/// The author's type needs `Default`; everything else is the same trait a
+/// built-in implements — whichever clusters its spec declares.
 #[macro_export]
-macro_rules! export_adapter {
-    ($adapter:ty) => {
-        type __KndoExportedAdapter = $crate::ExportedAdapter<$adapter>;
-        $crate::adapter::export!(__KndoExportedAdapter with_types_in $crate::adapter);
+macro_rules! export_extension {
+    ($extension:ty) => {
+        type __KndoExportedExtension = $crate::ExportedExtension<$extension>;
+        $crate::bindings::export!(__KndoExportedExtension with_types_in $crate::bindings);
     };
 }

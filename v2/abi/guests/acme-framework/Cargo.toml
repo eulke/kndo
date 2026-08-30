@@ -1,0 +1,13 @@
+[package]
+name = "acme-framework"
+description = "Reference TWO-CLUSTER extension for the kndo ABI — extraction for its own file format AND graph conduct with dependency chaining, the framework case the taxonomy could not hold in one component."
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+kndo-contract = { path = "../../../crates/kndo-contract" }
+kndo-sdk = { path = "../../../crates/kndo-sdk" }

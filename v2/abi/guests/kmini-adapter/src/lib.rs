@@ -2,8 +2,8 @@
 //! ("kmini") hand-scanned with no dependency beyond the SDK — a tree-sitter
 //! grammar would mean cross-compiling C to wasm32, a choice for native adapters,
 //! not a requirement of the ABI. The author-facing surface is the point: this
-//! crate implements the same [`LanguageAdapter`] a native adapter does, sink,
-//! resolve context and all, and two lines at the bottom export it as a component.
+//! crate implements the same [`Extension`] a built-in does, sink, resolve
+//! context and all, and two lines at the bottom export it as a component.
 //!
 //! kmini, the whole of it — one statement per line:
 //! ```text
@@ -20,25 +20,23 @@
 //! `dep <name>` lines. Files `x.kmini` and `x_part.kmini` are one compilation
 //! unit — a pure function of path and file set, as the contract demands.
 
-use kndo_contract::adapter::{
-    AdapterSpec, LanguageAdapter, PackageEntry, ProjectRoot, Resolution, ResolveContext,
-    SourceFile,
-};
+use kndo_contract::adapter::{PackageEntry, ProjectRoot, Resolution, ResolveContext, SourceFile};
 use kndo_contract::evidence::{
-    EvidenceSink, EvidenceStream, EvidenceStreams, ImportBinding, ImportShape, ImportTarget,
-    Reach, RefKind, RootKind, RootTarget, SymbolKind,
+    EvidenceSink, EvidenceStream, EvidenceStreams, ImportBinding, ImportShape, ImportTarget, Reach,
+    RefKind, RootKind, RootTarget, SymbolKind,
 };
+use kndo_contract::extension::{Extension, ExtensionSpec};
 use kndo_contract::vocab::{Confidence, ProjectPath, Span};
 use smol_str::SmolStr;
 
 pub struct KminiAdapter {
-    spec: AdapterSpec,
+    spec: ExtensionSpec,
 }
 
 impl Default for KminiAdapter {
     fn default() -> Self {
         KminiAdapter {
-            spec: AdapterSpec::builder("kmini", 1)
+            spec: ExtensionSpec::builder("kmini", 1)
                 .extensions(&["kmini"])
                 .emits(EvidenceStreams::of(&[EvidenceStream::Comments]))
                 .manifests(&["**/kmini.pkg"])
@@ -74,8 +72,8 @@ fn mate_of(path: &ProjectPath) -> Option<ProjectPath> {
     }
 }
 
-impl LanguageAdapter for KminiAdapter {
-    fn spec(&self) -> &AdapterSpec {
+impl Extension for KminiAdapter {
+    fn spec(&self) -> &ExtensionSpec {
         &self.spec
     }
 
@@ -84,7 +82,11 @@ impl LanguageAdapter for KminiAdapter {
             let span = Span::new(start, start + line.len() as u32);
             let trimmed = line.trim();
             if trimmed == "entry" {
-                out.root(RootTarget::WholeFile, RootKind::Production, Confidence::Certain);
+                out.root(
+                    RootTarget::WholeFile,
+                    RootKind::Production,
+                    Confidence::Certain,
+                );
             } else if let Some(name) = trimmed.strip_prefix("pub fn ") {
                 out.declaration(name.trim(), SymbolKind::Function, span, Reach::Exported);
             } else if let Some(name) = trimmed.strip_prefix("fn ") {
@@ -181,8 +183,11 @@ impl LanguageAdapter for KminiAdapter {
     }
 
     fn unit_mates(&self, path: &ProjectPath, cx: &ResolveContext<'_>) -> Vec<ProjectPath> {
-        mate_of(path).filter(|m| cx.contains(m)).into_iter().collect()
+        mate_of(path)
+            .filter(|m| cx.contains(m))
+            .into_iter()
+            .collect()
     }
 }
 
-kndo_sdk::export_adapter!(KminiAdapter);
+kndo_sdk::export_extension!(KminiAdapter);

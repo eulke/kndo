@@ -406,7 +406,7 @@ fn builtin_plugin_proofs() {
 }
 
 #[test]
-fn plugin_dependency_implication() {
+fn extension_dependency_implication() {
     // A plugin named in another plugin's `dependencies` activates even when its own
     // rules never match — the only path for a plugin whose framework is an INDIRECT
     // dependency (a company framework that uses Express internally is never
@@ -584,7 +584,7 @@ fn abi_compat_matrix() {
     // loading is not the promise; contributing is.
     let compat = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../abi/compat");
     let session = |p: &TempProject, conduct: Vec<Box<dyn kndo_core::Extension>>| {
-        let adapter = kndo_host_wasm::WasmAdapter::load(&compat.join("kmini_adapter.wasm"))
+        let adapter = kndo_host_wasm::WasmExtension::load(&compat.join("kmini_adapter.wasm"))
             .expect("the pinned adapter component loads against the HEAD host");
         let mut extensions: Vec<Box<dyn kndo_core::Extension>> = vec![Box::new(adapter)];
         extensions.extend(conduct);
@@ -629,7 +629,7 @@ fn abi_compat_matrix() {
     p.file("app.kmini", "entry\n");
     p.file("wired.kmini", "fn wired_dead\n");
     p.file("config.probe", "sixteen bytes!!\n");
-    let plugin = kndo_host_wasm::WasmPlugin::load(&compat.join("probe_plugin.wasm"))
+    let plugin = kndo_host_wasm::WasmExtension::load(&compat.join("probe_plugin.wasm"))
         .expect("the pinned plugin component loads against the HEAD host");
     let snap = session(&p, vec![Box::new(plugin)]);
     let contribution = &snap.plugins[0];
@@ -661,7 +661,7 @@ fn abi_compat_matrix() {
         "lcov.info",
         "SF:lib.kmini\nFN:1,covered\nFN:2,never_ran\nFNDA:3,covered\nFNDA:0,never_ran\nend_of_record\n",
     );
-    let ingester = kndo_host_wasm::WasmIngester::load(&compat.join("records_ingester.wasm"))
+    let ingester = kndo_host_wasm::WasmExtension::load(&compat.join("records_ingester.wasm"))
         .expect("the pinned ingester component loads against the HEAD host");
     let snap = session(&p, vec![Box::new(ingester)]);
     assert!(
@@ -671,6 +671,36 @@ fn abi_compat_matrix() {
                 && f.confidence == kndo_contract::vocab::Confidence::Certain
                 && format!("{:?}", f.subject).contains("never_ran")),
         "the pinned ingester's records still assemble into the Certain verdict: {:#?}",
+        snap.findings
+    );
+
+    // The two-cluster extension: its own format claimed AND its conduct chain.
+    let p = TempProject::new();
+    p.file(
+        "kmini.pkg",
+        "name kit\nentry app.kmini\ndep acme-framework\n",
+    );
+    p.file("app.kmini", "entry\n");
+    p.file("routes.acme", "handler index\n");
+    p.file("extra.kmini", "fn di_wired\n");
+    let acme = kndo_host_wasm::WasmExtension::load(&compat.join("acme_framework.wasm"))
+        .expect("the pinned two-cluster component loads against the HEAD host");
+    let probe = kndo_host_wasm::WasmExtension::load(&compat.join("probe_plugin.wasm"))
+        .expect("the pinned plugin component loads against the HEAD host");
+    let snap = session(&p, vec![Box::new(acme), Box::new(probe)]);
+    let coordinates: Vec<&str> = snap.plugins.iter().map(|c| c.coordinate.as_str()).collect();
+    assert_eq!(
+        coordinates,
+        ["acme:framework", "demo:probe"],
+        "the pinned framework still activates by manifest and still chains its dependency"
+    );
+    assert!(
+        !snap
+            .findings
+            .iter()
+            .any(|f| format!("{:?}", f.subject).contains("extra.kmini")
+                || format!("{:?}", f.subject).contains("routes.acme")),
+        "both of its clusters still land: {:#?}",
         snap.findings
     );
 }

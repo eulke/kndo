@@ -441,6 +441,19 @@ impl ConductSink {
     }
 }
 
+/// Scoped content reads as conduct hooks see them — the same surface natively
+/// (backed by [`ContentView`]) and across the WASM boundary (backed by the
+/// host's prefetched snapshot), so an extension's conduct code is written once
+/// against one shape. Every miss is `None`; the budget lives behind the
+/// implementation, and its cut is reported on the contribution.
+pub trait ContentAccess {
+    /// The discovered paths the scope admits, in path order — names only,
+    /// nothing charged.
+    fn readable_paths(&self) -> Box<dyn Iterator<Item = &ProjectPath> + '_>;
+
+    fn read(&self, path: &ProjectPath) -> Option<&[u8]>;
+}
+
 pub const CONTENT_MAX_FILES: usize = 200;
 pub const CONTENT_MAX_BYTES: usize = 8 * 1024 * 1024;
 
@@ -518,6 +531,16 @@ impl<'a> ContentView<'a> {
     }
 }
 
+impl ContentAccess for ContentView<'_> {
+    fn readable_paths(&self) -> Box<dyn Iterator<Item = &ProjectPath> + '_> {
+        Box::new(ContentView::readable_paths(self))
+    }
+
+    fn read(&self, path: &ProjectPath) -> Option<&[u8]> {
+        ContentView::read(self, path)
+    }
+}
+
 /// The one door. Every hook has an abstaining default; [`Extension::spec`] is the
 /// only obligation. The engine invokes a hook only when the spec declares its
 /// capability: extraction hooks for claimed files, manifest hooks for declared
@@ -581,7 +604,7 @@ pub trait Extension: Send + Sync {
     fn contribute_roots(
         &self,
         graph: &dyn GraphAccess,
-        content: &ContentView<'_>,
+        content: &dyn ContentAccess,
         out: &mut ConductSink,
     ) {
         let _ = (graph, content, out);
@@ -591,7 +614,7 @@ pub trait Extension: Send + Sync {
     fn report_findings(
         &self,
         graph: &dyn GraphAccess,
-        content: &ContentView<'_>,
+        content: &dyn ContentAccess,
         out: &mut ConductSink,
     ) {
         let _ = (graph, content, out);

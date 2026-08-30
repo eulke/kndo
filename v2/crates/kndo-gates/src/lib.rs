@@ -63,8 +63,8 @@ pub const GATES: &[Gate] = &[
         invariant: "every built-in conducting extension proves its effect baseline-then-plugin, closed over the conduct subset of default_extensions",
     },
     Gate {
-        name: "plugin_dependency_implication",
-        invariant: "a plugin named in another's dependencies activates even when its own rules never match",
+        name: "extension_dependency_implication",
+        invariant: "an extension named in another's dependencies activates even when its own rules never match",
     },
     Gate {
         name: "abi_compat_matrix",

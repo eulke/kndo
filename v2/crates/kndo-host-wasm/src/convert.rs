@@ -1,25 +1,24 @@
-//! Host-side conversions between the wire and the contract — the SOURCE TEXT
-//! exists once per conversion. The generator names separate Rust types per world
-//! for the same WIT records, so the plugin-family conversions are macro bodies
-//! instantiated for the plugin and ingester worlds; the adapter world's are plain
-//! functions (it has one consumer). The load-bearing piece is `replay_evidence`: a
-//! component's evidence is never trusted as a value, it is REPLAYED through a real
-//! [`EvidenceSink`] under the spec's declared streams, so every clamp, drop and
-//! pairing rule applies to a WASM adapter exactly as to a native one — and the
-//! ids the wire spells as indices come back out sink-issued and unforgeable, or
-//! not at all.
+//! Host-side conversions between the wire and the contract — ONE world, so the
+//! source text exists once, with one set of generated types, and the macro
+//! instantiation the three-world generator forced is gone. The load-bearing
+//! piece is `replay_evidence`: a component's evidence is never trusted as a
+//! value, it is REPLAYED through a real [`EvidenceSink`] under the spec's
+//! declared streams, so every clamp, drop and pairing rule applies to a WASM
+//! extension exactly as to a native one — and the ids the wire spells as
+//! indices come back out sink-issued and unforgeable, or not at all.
 
-use crate::bindings::adapter::kndo::vocab::types as awire;
-use kndo_contract::adapter::{PackageEntry, Resolution};
+use crate::bindings::kndo::vocab::types as awire;
+use kndo_contract::adapter::{PackageEntry, ProjectRoot, Resolution};
 use kndo_contract::evidence::{
     self as ev, DiagnosticLevel, EvidenceSink, EvidenceStream, EvidenceStreams, FileEvidence,
     RootKind,
 };
-use kndo_contract::extension::{ExtensionSpec, ExtensionSpecParts};
+use kndo_contract::extension::{
+    Activation, ActivationRule, ExtensionSpec, ExtensionSpecParts, PluginSeverity, PluginTarget,
+    RuleDescriptor,
+};
 use kndo_contract::vocab::{Confidence, ProjectPath, Span};
 use smol_str::SmolStr;
-
-// ------------------------------------------------------------ the adapter world
 
 pub(crate) fn span(s: awire::Span) -> Span {
     // A hostile start > end normalizes to the empty span at the lower offset; the
@@ -43,10 +42,13 @@ pub(crate) fn root_kind(k: awire::RootKind) -> RootKind {
     }
 }
 
-pub(crate) fn adapter_spec(spec: awire::AdapterSpec) -> ExtensionSpec {
+/// The one spec record, assembled as owned parts. `conducts` comes from the
+/// record itself: a hand-rolled guest is forced by the shape to state it.
+pub(crate) fn extension_spec(spec: awire::ExtensionSpec) -> ExtensionSpec {
     ExtensionSpecParts {
-        coordinate: SmolStr::new(spec.id),
-        version: spec.semantics_version,
+        coordinate: SmolStr::new(spec.coordinate),
+        version: spec.version,
+        extensions: spec.extensions.into_iter().map(SmolStr::new).collect(),
         claims: spec.claims.into_iter().map(SmolStr::new).collect(),
         emits: EvidenceStreams::of(
             &spec
@@ -59,10 +61,85 @@ pub(crate) fn adapter_spec(spec: awire::AdapterSpec) -> ExtensionSpec {
                 .collect::<Vec<_>>(),
         ),
         manifests: spec.manifests.into_iter().map(SmolStr::new).collect(),
-        extensions: spec.extensions.into_iter().map(SmolStr::new).collect(),
-        ..Default::default()
+        conducts: spec.conducts,
+        activation: match spec.activation {
+            awire::Activation::Always => Activation::Always,
+            awire::Activation::AnyRule(rules) => Activation::AnyRule(
+                rules
+                    .into_iter()
+                    .map(|r| match r {
+                        awire::ActivationRule::FileExists(g) => {
+                            ActivationRule::FileExists(SmolStr::new(g))
+                        }
+                        awire::ActivationRule::ManifestDependency(n) => {
+                            ActivationRule::ManifestDependency(SmolStr::new(n))
+                        }
+                    })
+                    .collect(),
+            ),
+        },
+        mutates_graph: spec.mutates_graph,
+        dependencies: spec.dependencies.into_iter().map(SmolStr::new).collect(),
+        requested_file_access: spec
+            .requested_file_access
+            .into_iter()
+            .map(SmolStr::new)
+            .collect(),
+        rules: spec
+            .rules
+            .into_iter()
+            .map(|r| RuleDescriptor {
+                name: SmolStr::new(r.name),
+                description: SmolStr::new(r.description),
+            })
+            .collect(),
+        reads_reports: spec.reads_reports.into_iter().map(SmolStr::new).collect(),
     }
     .into()
+}
+
+pub(crate) fn project_root(root: awire::ProjectRoot) -> ProjectRoot {
+    ProjectRoot {
+        file: ProjectPath::new(root.file),
+        kind: root_kind(root.kind),
+        confidence: confidence(root.confidence),
+    }
+}
+
+pub(crate) fn plugin_target(target: awire::PluginTarget) -> PluginTarget {
+    match target {
+        awire::PluginTarget::File(path) => PluginTarget::File(ProjectPath::new(path)),
+        awire::PluginTarget::Symbol(s) => PluginTarget::Symbol {
+            path: ProjectPath::new(s.path),
+            name: SmolStr::new(s.name),
+        },
+    }
+}
+
+pub(crate) fn plugin_severity(s: awire::PluginSeverity) -> PluginSeverity {
+    match s {
+        awire::PluginSeverity::Error => PluginSeverity::Error,
+        awire::PluginSeverity::Warning => PluginSeverity::Warning,
+        awire::PluginSeverity::Info => PluginSeverity::Info,
+    }
+}
+
+/// Wire coverage records, grouped by the report's own paths — ready for
+/// `kndo_coverage::assemble`.
+pub(crate) fn coverage_records(records: awire::CoverageRecords) -> ev::CoverageRecords {
+    let mut out = ev::CoverageRecords::default();
+    for line in records.lines {
+        let file = out.files.entry(ProjectPath::new(line.path)).or_default();
+        *file.lines.entry(line.line).or_insert(0) += line.hits;
+    }
+    for f in records.functions {
+        out.files
+            .entry(ProjectPath::new(f.path))
+            .or_default()
+            .functions
+            .push((f.line, f.hits));
+    }
+    out
 }
 
 pub(crate) fn package_entry(entry: awire::PackageEntry) -> PackageEntry {
@@ -243,125 +320,4 @@ pub(crate) fn replay_evidence(
         );
     }
     sink.finish()
-}
-
-// ------------------------------------------------------- the plugin-family worlds
-
-/// The plugin-vocabulary conversions, written once and instantiated per world
-/// (the plugin and ingester generations each name their own Rust types for the
-/// same WIT records).
-macro_rules! plugin_family_conversions {
-    ($wire:path) => {
-        use kndo_contract::extension::{
-            Activation, ActivationRule, ExtensionSpecParts, RuleDescriptor,
-        };
-        use kndo_contract::vocab::ProjectPath;
-        use smol_str::SmolStr;
-        use $wire as w;
-
-        /// The conduct half of a loaded spec, as owned parts — the caller states
-        /// what its world implies (`mutates_graph` for plugins, report paths for
-        /// ingesters) before assembling.
-        pub(crate) fn plugin_parts(spec: w::PluginSpec) -> ExtensionSpecParts {
-            ExtensionSpecParts {
-                coordinate: SmolStr::new(spec.coordinate),
-                version: spec.version,
-                conducts: true,
-                activation: match spec.activation {
-                    w::Activation::Always => Activation::Always,
-                    w::Activation::AnyRule(rules) => Activation::AnyRule(
-                        rules
-                            .into_iter()
-                            .map(|r| match r {
-                                w::ActivationRule::FileExists(g) => {
-                                    ActivationRule::FileExists(SmolStr::new(g))
-                                }
-                                w::ActivationRule::ManifestDependency(n) => {
-                                    ActivationRule::ManifestDependency(SmolStr::new(n))
-                                }
-                            })
-                            .collect(),
-                    ),
-                },
-                dependencies: spec.dependencies.into_iter().map(SmolStr::new).collect(),
-                requested_file_access: spec
-                    .requested_file_access
-                    .into_iter()
-                    .map(SmolStr::new)
-                    .collect(),
-                rules: spec
-                    .rules
-                    .into_iter()
-                    .map(|r| RuleDescriptor {
-                        name: SmolStr::new(r.name),
-                        description: SmolStr::new(r.description),
-                    })
-                    .collect(),
-                ..Default::default()
-            }
-        }
-    };
-}
-
-pub(crate) mod plugin_wire {
-    plugin_family_conversions!(crate::bindings::plugin::kndo::vocab::types);
-    use kndo_contract::evidence::RootKind;
-    use kndo_contract::vocab::Confidence;
-    use kndo_core::plugin::{PluginSeverity, PluginTarget};
-
-    pub(crate) fn confidence(c: w::Confidence) -> Confidence {
-        match c {
-            w::Confidence::Possible => Confidence::Possible,
-            w::Confidence::Probable => Confidence::Probable,
-            w::Confidence::Certain => Confidence::Certain,
-        }
-    }
-
-    pub(crate) fn root_kind(k: w::RootKind) -> RootKind {
-        match k {
-            w::RootKind::Production => RootKind::Production,
-            w::RootKind::Test => RootKind::Test,
-            w::RootKind::Tooling => RootKind::Tooling,
-        }
-    }
-
-    pub(crate) fn plugin_target(target: w::PluginTarget) -> PluginTarget {
-        match target {
-            w::PluginTarget::File(path) => PluginTarget::File(ProjectPath::new(path)),
-            w::PluginTarget::Symbol(s) => PluginTarget::Symbol {
-                path: ProjectPath::new(s.path),
-                name: SmolStr::new(s.name),
-            },
-        }
-    }
-
-    pub(crate) fn plugin_severity(s: w::PluginSeverity) -> PluginSeverity {
-        match s {
-            w::PluginSeverity::Error => PluginSeverity::Error,
-            w::PluginSeverity::Warning => PluginSeverity::Warning,
-            w::PluginSeverity::Info => PluginSeverity::Info,
-        }
-    }
-}
-
-pub(crate) mod ingester_wire {
-    plugin_family_conversions!(crate::bindings::ingester::kndo::vocab::types);
-
-    /// Wire coverage records, grouped by the report's own paths — ready for
-    /// `kndo_coverage::assemble`.
-    pub(crate) fn coverage_records(records: w::CoverageRecords) -> kndo_coverage::CoverageRecords {
-        let mut out = kndo_coverage::CoverageRecords::default();
-        for line in records.lines {
-            let file = out.files.entry(ProjectPath::new(line.path)).or_default();
-            *file.lines.entry(line.line).or_insert(0) += line.hits;
-        }
-        for f in records.functions {
-            out.files
-                .entry(ProjectPath::new(f.path))
-                .or_default()
-                .functions
-                .push((f.line, f.hits));
-        }
-        out
-    }
 }

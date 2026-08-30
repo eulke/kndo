@@ -87,8 +87,9 @@ fn a_broken_component_degrades_to_a_visible_diagnostic() {
     let out = run_args(["kndo", "check", &root, "--no-cache"]);
     assert_eq!(out.code, 0, "{}{}", out.stdout, out.stderr);
     assert!(
-        out.stdout
-            .contains("diagnostic .kndo/plugins/broken.wasm: not loadable as any kndo:vocab world"),
+        out.stdout.contains(
+            "diagnostic .kndo/plugins/broken.wasm: not a loadable kndo:vocab extension component"
+        ),
         "an opted-in component never vanishes silently: {}",
         out.stdout
     );

@@ -171,15 +171,28 @@ interface types {
         diagnostics: list<diagnostic>,
     }
 
-    /// Mirrors `AdapterSpec`, claims already derived — the guest-side builder does
-    /// the extension-to-glob derivation, the wire carries the finished list.
-    record adapter-spec {
-        id: string,
-        semantics-version: u32,
+    /// Mirrors `ExtensionSpec` — the ONE manifest for every capability, claims
+    /// already derived (the guest-side builder does the extension-to-glob
+    /// derivation; the wire carries the finished list). `coordinate` is identity
+    /// AND provenance; the `kndo:` namespace is reserved for built-ins — the host
+    /// rejects any external component claiming it at load. `conducts` is the
+    /// conduct-stage bit: with it false, the activation/mutates-graph/rules half
+    /// is inert and the component never appears in the round; a hand-rolled guest
+    /// is forced by the record's shape to state every gate either way.
+    record extension-spec {
+        coordinate: string,
+        version: u32,
+        extensions: list<string>,
         claims: list<string>,
         emits: list<evidence-stream>,
         manifests: list<string>,
-        extensions: list<string>,
+        conducts: bool,
+        activation: activation,
+        mutates-graph: bool,
+        dependencies: list<string>,
+        requested-file-access: list<string>,
+        rules: list<rule-descriptor>,
+        reads-reports: list<string>,
     }
 
     /// Mirrors `PackageEntry`.
@@ -219,18 +232,6 @@ interface types {
     record rule-descriptor {
         name: string,
         description: string,
-    }
-
-    /// Mirrors `PluginSpec`. `coordinate` is identity AND provenance; the `kndo:`
-    /// namespace is reserved for built-ins — the host rejects any external
-    /// component claiming it at load.
-    record plugin-spec {
-        coordinate: string,
-        version: u32,
-        activation: activation,
-        dependencies: list<string>,
-        requested-file-access: list<string>,
-        rules: list<rule-descriptor>,
     }
 
     /// Mirrors `PluginSeverity` — a plugin's own vocabulary, mapped host-side into

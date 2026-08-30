@@ -1,0 +1,90 @@
+// The ONE world. A component declares everything it does in its spec and exports
+// the full hook surface (an SDK stubs what an author leaves unimplemented); the
+// host invokes only what the spec declares, so a stub is dead bytes, never dead
+// design. Phase discipline is host-enforced: the imports below belong to phases,
+// and calling one outside its phase traps with a named contract violation —
+// extraction-phase exports (extract, resolve, roots, packages,
+// manifest-dependencies, unit-mates) may use only the project enumerations;
+// conduct-phase exports (contribute-roots, report-findings) only the graph and
+// content imports; ingest imports nothing.
+//
+// Every export must not trap on malformed input: return degraded output plus a
+// diagnostic. A guest that traps anyway is caught by the host's fuel and memory
+// budgets and that call contributes nothing — never a crashed run.
+
+world extension {
+    use types.{
+        extension-spec, file-evidence, resolution, project-root, package-entry,
+        contributed-root, contributed-finding, coverage-records,
+    };
+
+    // ---- extraction-phase imports: the project as ResolveContext sees it ----
+
+    /// Every file the run knows, in path order. The SDK fetches once per instance.
+    import known-files: func() -> list<string>;
+
+    /// Every package the run's manifests declared, in name order.
+    import package-entries: func() -> list<package-entry>;
+
+    // ---- conduct-phase imports: the assembled graph and scoped content ----
+
+    /// Every path in the assembled graph, in path order.
+    import graph-paths: func() -> list<string>;
+
+    /// Membership without the full list.
+    import graph-contains: func(path: string) -> bool;
+
+    /// The discovered paths the spec's `requested-file-access` globs admit, in
+    /// path order — names only, nothing charged.
+    import readable-paths: func() -> list<string>;
+
+    /// One file's bytes, scoped to those globs and the host's per-extension
+    /// budget. `none` covers every miss uniformly: no glob match, unknown path,
+    /// budget cut — the cut itself is reported on the contribution.
+    import read-file: func(path: string) -> option<list<u8>>;
+
+    // ---- exports ----
+
+    /// Called once at load; the host caches and validates the result (a spec is
+    /// folded into evidence cache keys, so it must be stable for the process).
+    export spec: func() -> extension-spec;
+
+    /// Extract one claimed file's evidence. The host replays the result through a
+    /// real `EvidenceSink` under the spec's declared streams — clamps, drops and
+    /// the pairing rule apply identically to native and WASM extensions.
+    export extract: func(path: string, content: list<u8>) -> file-evidence;
+
+    /// Resolve one import specifier written in `from`.
+    export resolve: func(%from: string, specifier: string) -> resolution;
+
+    /// The roots one manifest declares — transcription of a project fact, gated
+    /// by claims, not activation. Called for every discovered file matching the
+    /// spec's manifest globs.
+    export roots: func(manifest-path: string, content: list<u8>) -> list<project-root>;
+
+    /// The packages one manifest declares.
+    export packages: func(manifest-path: string, content: list<u8>) -> list<package-entry>;
+
+    /// The dependency NAMES one manifest declares — what activation's
+    /// `manifest-dependency` rules evaluate against.
+    export manifest-dependencies: func(manifest-path: string, content: list<u8>) -> list<string>;
+
+    /// The files whose names `path` can see without an import — must depend only
+    /// on the path and the file set (the same purity the native contract demands).
+    export unit-mates: func(path: string) -> list<string>;
+
+    /// Liveness the language cannot know. Invoked only when the spec declares
+    /// `mutates-graph` (and any active mutating extension bypasses the persisted
+    /// graph cache, WASM and native alike).
+    export contribute-roots: func() -> list<contributed-root>;
+
+    /// Advisory findings under the spec's declared rules; undeclared rules drop
+    /// with a described line on the contribution.
+    export report-findings: func() -> list<contributed-finding>;
+
+    /// Parse one report the engine located through the spec's `reads-reports`
+    /// paths: what the report STATES, never a line table — the engine maps
+    /// records onto the project uniformly for every ingester. `none` when the
+    /// bytes are not this extension's format.
+    export ingest: func(path: string, content: list<u8>) -> option<coverage-records>;
+}

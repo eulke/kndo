@@ -1,0 +1,85 @@
+//! The deliberately misbehaving guest — HAND-ROLLED against the raw world (no
+//! SDK), because that is the one tier where phase discipline is not structural:
+//! its `extract` export calls the conduct-phase `graph-paths` import, and the
+//! compliance suite asserts the host answers with a named phase-violation trap
+//! that surfaces as a diagnostic, never as data.
+
+mod bindings {
+    wit_bindgen::generate!({
+        path: "../../../wit",
+        world: "extension",
+    });
+}
+
+use bindings::kndo::vocab::types as wire;
+
+struct RudeProbe;
+
+impl bindings::Guest for RudeProbe {
+    fn spec() -> wire::ExtensionSpec {
+        wire::ExtensionSpec {
+            coordinate: "demo:rude".to_string(),
+            version: 1,
+            extensions: vec!["rude".to_string()],
+            claims: vec!["**/*.rude".to_string()],
+            emits: Vec::new(),
+            manifests: Vec::new(),
+            conducts: false,
+            activation: wire::Activation::Always,
+            mutates_graph: false,
+            dependencies: Vec::new(),
+            requested_file_access: Vec::new(),
+            rules: Vec::new(),
+            reads_reports: Vec::new(),
+        }
+    }
+
+    fn extract(_path: String, _content: Vec<u8>) -> wire::FileEvidence {
+        // The misbehavior under test: a conduct import during extraction. The
+        // host must trap here — this call never returns.
+        let _ = bindings::graph_paths();
+        wire::FileEvidence {
+            declarations: Vec::new(),
+            references: Vec::new(),
+            imports: Vec::new(),
+            roots: Vec::new(),
+            comments: Vec::new(),
+            metrics: Vec::new(),
+            diagnostics: Vec::new(),
+        }
+    }
+
+    fn resolve(_from: String, _specifier: String) -> wire::Resolution {
+        wire::Resolution::Unresolved
+    }
+
+    fn roots(_manifest_path: String, _content: Vec<u8>) -> Vec<wire::ProjectRoot> {
+        Vec::new()
+    }
+
+    fn packages(_manifest_path: String, _content: Vec<u8>) -> Vec<wire::PackageEntry> {
+        Vec::new()
+    }
+
+    fn manifest_dependencies(_manifest_path: String, _content: Vec<u8>) -> Vec<String> {
+        Vec::new()
+    }
+
+    fn unit_mates(_path: String) -> Vec<String> {
+        Vec::new()
+    }
+
+    fn contribute_roots() -> Vec<wire::ContributedRoot> {
+        Vec::new()
+    }
+
+    fn report_findings() -> Vec<wire::ContributedFinding> {
+        Vec::new()
+    }
+
+    fn ingest(_path: String, _content: Vec<u8>) -> Option<wire::CoverageRecords> {
+        None
+    }
+}
+
+bindings::export!(RudeProbe with_types_in bindings);

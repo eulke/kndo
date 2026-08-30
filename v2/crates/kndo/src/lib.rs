@@ -56,21 +56,21 @@ pub fn open(root: impl Into<std::path::PathBuf>, config: Config) -> Result<Sessi
 
 #[cfg(feature = "wasm")]
 mod external {
-    //! `.kndo/plugins/*.wasm`: presence is the opt-in; each file joins the
-    //! composition as whichever world it targets. External components are
-    //! SECOND in every ordering on purpose — an external adapter cannot steal a
-    //! built-in language's claims, and the built-in coverage ingester keeps
-    //! first-answer precedence — and their activation is evaluated by the same
-    //! rules as every plugin's (`Always` is the spelling for "just run").
-    //! A component that fails to load degrades to a Warn diagnostic on every
-    //! report the session produces: an opted-in component silently vanishing
-    //! would hide exactly the mistake the channel exists to show.
+    //! `.kndo/plugins/*.wasm`: presence is the opt-in, and there is ONE load
+    //! path — a component states everything it does in its spec, so the loader
+    //! never guesses. External extensions are SECOND in every ordering on
+    //! purpose (an external cannot steal a built-in language's claims; the
+    //! built-in ingester keeps first-answer precedence), their activation is
+    //! evaluated by the same rules as every extension's, and a component that
+    //! fails to load degrades to a Warn diagnostic on every report the session
+    //! produces: an opted-in component silently vanishing would hide exactly
+    //! the mistake the channel exists to show.
 
     use kndo_contract::evidence::DiagnosticLevel;
     use kndo_contract::extension::Extension;
     use kndo_contract::vocab::ProjectPath;
     use kndo_core::ReportDiagnostic;
-    use kndo_host_wasm::{WasmAdapter, WasmIngester, WasmPlugin};
+    use kndo_host_wasm::WasmExtension;
     use std::path::Path;
 
     pub(crate) fn load_into(
@@ -95,61 +95,28 @@ mod external {
                 .map(|n| n.to_string_lossy().into_owned())
                 .unwrap_or_default();
             let report_path = ProjectPath::new(format!(".kndo/plugins/{name}"));
-            // A component targets exactly one world; worlds are tried in a fixed
-            // order and the first that instantiates wins. A definitive rejection
-            // (the reserved `kndo:` namespace) stops the ladder — the component
-            // loaded fine and was refused on identity, not shape.
-            match WasmAdapter::load(&path) {
-                Ok(adapter) => {
-                    extensions.push(Box::new(adapter));
-                    continue;
-                }
+            match WasmExtension::load(&path) {
+                Ok(extension) => extensions.push(Box::new(extension)),
                 Err(kndo_host_wasm::LoadError::ReservedCoordinate { coordinate }) => {
-                    diagnostics.push(reserved(report_path, &coordinate));
-                    continue;
-                }
-                Err(_) => {}
-            }
-            match WasmPlugin::load(&path) {
-                Ok(plugin) => {
-                    extensions.push(Box::new(plugin));
-                    continue;
-                }
-                Err(kndo_host_wasm::LoadError::ReservedCoordinate { coordinate }) => {
-                    diagnostics.push(reserved(report_path, &coordinate));
-                    continue;
-                }
-                Err(_) => {}
-            }
-            match WasmIngester::load(&path) {
-                Ok(ingester) => {
-                    extensions.push(Box::new(ingester));
-                }
-                Err(kndo_host_wasm::LoadError::ReservedCoordinate { coordinate }) => {
-                    diagnostics.push(reserved(report_path, &coordinate));
+                    diagnostics.push(ReportDiagnostic {
+                        path: report_path,
+                        level: DiagnosticLevel::Warn,
+                        message: format!(
+                            "rejected: the component claims the reserved `kndo:` coordinate \
+                             namespace (`{coordinate}`) — built-ins are native; an external \
+                             coordinate names its own provenance"
+                        ),
+                    });
                 }
                 Err(e) => diagnostics.push(ReportDiagnostic {
                     path: report_path,
                     level: DiagnosticLevel::Warn,
                     message: format!(
-                        "not loadable as any kndo:vocab world \
-                         (adapter, plugin, coverage-ingester) — skipped: {e}"
+                        "not a loadable kndo:vocab extension component — skipped: {e}"
                     ),
                 }),
             }
         }
         diagnostics
-    }
-
-    fn reserved(path: ProjectPath, coordinate: &str) -> ReportDiagnostic {
-        ReportDiagnostic {
-            path,
-            level: DiagnosticLevel::Warn,
-            message: format!(
-                "rejected: the component claims the reserved `kndo:` coordinate \
-                 namespace (`{coordinate}`) — built-ins are native; an external \
-                 coordinate names its own provenance"
-            ),
-        }
     }
 }

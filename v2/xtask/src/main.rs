@@ -73,7 +73,12 @@ fn pin_abi() -> Result<()> {
     }
     let out_dir = workspace_root().join("abi/compat");
     fs::create_dir_all(&out_dir).map_err(|e| e.to_string())?;
-    for name in ["kmini_adapter", "probe_plugin", "records_ingester"] {
+    for name in [
+        "acme_framework",
+        "kmini_adapter",
+        "probe_plugin",
+        "records_ingester",
+    ] {
         let module = guests.join(format!("target/wasm32-unknown-unknown/release/{name}.wasm"));
         let bytes = fs::read(&module).map_err(|e| format!("{}: {e}", module.display()))?;
         let component = wit_component::ComponentEncoder::default()

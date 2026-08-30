@@ -1,0 +1,12 @@
+[package]
+name = "rude-probe"
+description = "Deliberately misbehaving hand-rolled guest for the kndo ABI compliance suite — calls a conduct import during extraction to prove the host's phase scoping traps with a named violation."
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "=0.57.1"

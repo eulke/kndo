@@ -1,22 +1,17 @@
 //! The host half of the ABI: wasmtime, isolated. Loads `kndo:vocab@1` components
-//! and adapts each world onto the same native trait its native siblings implement —
-//! [`WasmAdapter`] is a [`kndo_contract::adapter::LanguageAdapter`], [`WasmPlugin`]
-//! and [`WasmIngester`] are [`kndo_core::Plugin`]s — so the engine cannot tell
-//! tiers apart and every containment rule (budgets, drops, the graph-cache bypass,
-//! namespaced findings) applies identically by construction.
+//! through the ONE world and adapts them onto the same [`Extension`] trait the
+//! built-ins implement — so the engine cannot tell tiers apart and every
+//! containment rule (budgets, drops, the graph-cache bypass, namespaced
+//! findings, phase discipline) applies identically by construction.
 //!
 //! This crate is the workspace's one wasmtime dependency: the build shell and
 //! embedders that want no WASM leave it out without touching anything else.
 
-mod adapter;
 mod convert;
 mod engine;
-mod ingester;
-mod plugin;
+mod extension;
 
-pub use adapter::WasmAdapter;
-pub use ingester::WasmIngester;
-pub use plugin::WasmPlugin;
+pub use extension::WasmExtension;
 
 /// A component that could not become a citizen. Everything AFTER a successful load
 /// degrades instead (a trap contributes nothing); refusing to load is the one
@@ -35,31 +30,16 @@ pub enum LoadError {
     ReservedCoordinate { coordinate: String },
 }
 
-mod bindings {
-    //! One `bindgen!` per world. Each generation elides the vocabulary down to
-    //! what its world reaches and names its own Rust types for them, so the
-    //! conversions in [`crate::convert`] are written ONCE as macro bodies and
-    //! instantiated per world — one source text, however many spellings the
-    //! generator insists on.
+#[doc(hidden)]
+pub mod bindings {
+    //! One `bindgen!`, one world, one set of generated types — the conversions
+    //! in [`crate::convert`] are plain functions again. `trappable_imports`
+    //! lets every host import refuse with a real error: the spelling of the
+    //! phase discipline in [`crate::extension`].
 
-    pub mod adapter {
-        wasmtime::component::bindgen!({
-            path: "../../wit",
-            world: "adapter",
-        });
-    }
-
-    pub mod plugin {
-        wasmtime::component::bindgen!({
-            path: "../../wit",
-            world: "plugin",
-        });
-    }
-
-    pub mod ingester {
-        wasmtime::component::bindgen!({
-            path: "../../wit",
-            world: "coverage-ingester",
-        });
-    }
+    wasmtime::component::bindgen!({
+        path: "../../wit",
+        world: "extension",
+        trappable_imports: true,
+    });
 }

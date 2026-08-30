@@ -1,82 +1,90 @@
-//! The reference external plugin. It exercises the whole plugin world from the
-//! guest side: rule-based activation, a contributed root (it declares
-//! `mutates-graph` true), findings under a declared rule — one of them built from
-//! a scoped `read-file` probe — plus two deliberate misbehaviors (an undeclared
-//! rule, a missing target) whose DROPS the host must report on the contribution:
-//! the containment model, observed from outside the process.
+//! The reference external plugin — written against the REAL [`Extension`]
+//! trait, the same one a built-in implements: the spec through the two-stage
+//! builder, roots and findings through the contract's own `ConductSink`, content
+//! through the same scoped view. It exercises rule-based activation, a
+//! contributed root (its spec declares `MutatesGraph::Yes`), findings under a
+//! declared rule — one built from a scoped content probe — plus two deliberate
+//! misbehaviors (an undeclared rule, a missing target) whose DROPS the host must
+//! report on the contribution: the containment model, observed from outside.
 
-use kndo_sdk::plugin::{
-    Guest, export, graph_contains, graph_paths, read_file,
+use kndo_contract::evidence::RootKind;
+use kndo_contract::extension::{
+    Activation, ActivationRule, ConductSink, ContentAccess, Extension, ExtensionSpec, GraphAccess,
+    MutatesGraph, PluginSeverity, PluginTarget,
 };
-use kndo_sdk::wire::{
-    Activation, ActivationRule, Confidence, ContributedFinding, ContributedRoot, PluginSeverity,
-    PluginSpec, PluginTarget, RootKind, RuleDescriptor,
-};
+use kndo_contract::vocab::{Confidence, ProjectPath};
+use std::sync::LazyLock;
 
+static SPEC: LazyLock<ExtensionSpec> = LazyLock::new(|| {
+    ExtensionSpec::builder("demo:probe", 1)
+        .conduct(
+            Activation::AnyRule(vec![ActivationRule::FileExists("*.kmini".into())]),
+            MutatesGraph::Yes,
+        )
+        .requested_file_access(&["config.probe"])
+        .rule("note", "reports what the probe observed")
+        .build()
+});
+
+#[derive(Default)]
 struct ProbePlugin;
 
-impl Guest for ProbePlugin {
-    fn spec() -> PluginSpec {
-        PluginSpec {
-            coordinate: "demo:probe".to_string(),
-            version: 1,
-            activation: Activation::AnyRule(vec![ActivationRule::FileExists(
-                "*.kmini".to_string(),
-            )]),
-            dependencies: Vec::new(),
-            requested_file_access: vec!["config.probe".to_string()],
-            rules: vec![RuleDescriptor {
-                name: "note".to_string(),
-                description: "reports what the probe observed".to_string(),
-            }],
-        }
+impl Extension for ProbePlugin {
+    fn spec(&self) -> &ExtensionSpec {
+        &SPEC
     }
 
-    fn mutates_graph() -> bool {
-        true
-    }
-
-    fn contribute_roots() -> Vec<ContributedRoot> {
-        let mut roots = Vec::new();
+    fn contribute_roots(
+        &self,
+        graph: &dyn GraphAccess,
+        _content: &dyn ContentAccess,
+        out: &mut ConductSink,
+    ) {
         // Anchor liveness the language cannot see, when the target exists.
-        if graph_contains(&"wired.kmini".to_string()) {
-            roots.push(ContributedRoot {
-                target: PluginTarget::File("wired.kmini".to_string()),
-                kind: RootKind::Production,
-                confidence: Confidence::Certain,
-            });
+        if graph.contains(&ProjectPath::new("wired.kmini")) {
+            out.root(
+                PluginTarget::File(ProjectPath::new("wired.kmini")),
+                RootKind::Production,
+                Confidence::Certain,
+            );
         }
         // A root at a file no graph holds — the host must drop it, described.
-        roots.push(ContributedRoot {
-            target: PluginTarget::File("nowhere.kmini".to_string()),
-            kind: RootKind::Production,
-            confidence: Confidence::Certain,
-        });
-        roots
+        out.root(
+            PluginTarget::File(ProjectPath::new("nowhere.kmini")),
+            RootKind::Production,
+            Confidence::Certain,
+        );
     }
 
-    fn report_findings() -> Vec<ContributedFinding> {
-        let first = graph_paths().into_iter().next().unwrap_or_default();
-        let seen = match read_file(&"config.probe".to_string()) {
+    fn report_findings(
+        &self,
+        graph: &dyn GraphAccess,
+        content: &dyn ContentAccess,
+        out: &mut ConductSink,
+    ) {
+        let first = graph
+            .paths()
+            .next()
+            .cloned()
+            .unwrap_or_else(|| ProjectPath::new(""));
+        let seen = match content.read(&ProjectPath::new("config.probe")) {
             Some(bytes) => format!("config.probe is {} bytes", bytes.len()),
             None => "config.probe unreadable".to_string(),
         };
-        vec![
-            ContributedFinding {
-                rule: "note".to_string(),
-                severity: PluginSeverity::Info,
-                target: PluginTarget::File(first),
-                message: seen,
-            },
-            // Under a rule the spec never declared — the host must drop it.
-            ContributedFinding {
-                rule: "ghost".to_string(),
-                severity: PluginSeverity::Info,
-                target: PluginTarget::File("wired.kmini".to_string()),
-                message: "never lands".to_string(),
-            },
-        ]
+        out.finding(
+            "note",
+            PluginSeverity::Info,
+            PluginTarget::File(first),
+            seen,
+        );
+        // Under a rule the spec never declared — the host must drop it.
+        out.finding(
+            "ghost",
+            PluginSeverity::Info,
+            PluginTarget::File(ProjectPath::new("wired.kmini")),
+            "never lands",
+        );
     }
 }
 
-export!(ProbePlugin with_types_in kndo_sdk::plugin);
+kndo_sdk::export_extension!(ProbePlugin);
