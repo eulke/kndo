@@ -14,6 +14,7 @@ use kndo_contract::finding::{Finding, Severity};
 use smol_str::SmolStr;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Threads {
@@ -58,10 +59,31 @@ pub struct Session {
     adapters: Vec<Box<dyn LanguageAdapter>>,
 }
 
+/// Wall-clock per pipeline phase. Lives BESIDE the report, never inside it: the
+/// [`Report`] is compared byte-for-byte by the equivalence gates and diffed by users,
+/// so run-varying metadata stays out of the envelope — frontends render these
+/// (verbose/human output, serve's own metadata channel) and the bench harness measures
+/// around `analyze()` with its per-machine baseline.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct PhaseTimings {
+    pub discover: Duration,
+    pub claim: Duration,
+    pub extract: Duration,
+    pub assemble: Duration,
+    pub analyze: Duration,
+}
+
+impl PhaseTimings {
+    pub fn total(&self) -> Duration {
+        self.discover + self.claim + self.extract + self.assemble + self.analyze
+    }
+}
+
 pub struct Snapshot {
     pub graph: Graph,
     pub findings: Vec<Finding>,
     pub abstained: Vec<Abstention>,
+    pub timings: PhaseTimings,
     files_discovered: u32,
 }
 
@@ -119,20 +141,46 @@ impl Session {
     }
 
     fn pipeline(&self) -> Snapshot {
-        let files = discover::discover(&self.root);
-        let claims = extract::claim(&files, &self.adapters);
+        let mut timings = PhaseTimings::default();
+        let timed = |slot: &mut Duration, f: &mut dyn FnMut()| {
+            let t = Instant::now();
+            f();
+            *slot = t.elapsed();
+        };
+
+        let mut files = Vec::new();
+        timed(&mut timings.discover, &mut || {
+            files = discover::discover(&self.root);
+        });
+
+        let mut claims = Vec::new();
+        timed(&mut timings.claim, &mut || {
+            claims = extract::claim(&files, &self.adapters);
+        });
+
         let cache_dir = self
             .config
             .use_cache
             .then(|| self.root.join(".kndo/cache/evidence"));
         let cache = EvidenceCache::new(cache_dir, kndo_contract::contract_fingerprint());
-        let evidence = extract::extract(&files, &claims, &self.adapters, &cache);
+        let mut evidence = Vec::new();
+        timed(&mut timings.extract, &mut || {
+            evidence = extract::extract(&files, &claims, &self.adapters, &cache);
+        });
+
+        let assemble_start = Instant::now();
         let graph = crate::graph::assemble(&files, &claims, evidence, &self.adapters);
+        timings.assemble = assemble_start.elapsed();
+
+        let analyze_start = Instant::now();
         let (findings, abstained) = run_all(&graph, &[&Unused]);
+        timings.analyze = analyze_start.elapsed();
+
         Snapshot {
             graph,
             findings,
             abstained,
+            timings,
             files_discovered: files.len() as u32,
         }
     }

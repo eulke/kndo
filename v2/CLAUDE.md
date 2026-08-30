@@ -82,7 +82,7 @@ A language needs something new? Take the first floor that fits:
    idioms, builtin member types) → `AdapterSpec` data, with a default that reproduces
    pre-capability behavior, a named core consumer, and a conformance case.
 3. A fact about THE PROJECT around the file — what exists, what manifests declare →
-   a `ResolveCtx` query, engine-provided.
+   a `ResolveContext` query, engine-provided.
 4. A mechanism a second adapter would copy verbatim → the toolkit.
 
 Wrong-floor signals: an analysis branching on an adapter id; an adapter parsing what

@@ -82,13 +82,13 @@ impl AdapterSpecBuilder {
 
 /// The project around a file, as the engine lets an adapter see it during import
 /// resolution. Grows methods only.
-pub struct ResolveCtx<'a> {
+pub struct ResolveContext<'a> {
     known_files: &'a BTreeSet<ProjectPath>,
 }
 
-impl<'a> ResolveCtx<'a> {
+impl<'a> ResolveContext<'a> {
     pub fn new(known_files: &'a BTreeSet<ProjectPath>) -> Self {
-        ResolveCtx { known_files }
+        ResolveContext { known_files }
     }
 
     pub fn contains(&self, path: &ProjectPath) -> bool {
@@ -112,5 +112,5 @@ pub trait LanguageAdapter: Send + Sync {
     fn extract(&self, file: &SourceFile<'_>, out: &mut EvidenceSink);
 
     /// Resolve a relative import specifier written in `from` against the project.
-    fn resolve(&self, from: &ProjectPath, specifier: &str, cx: &ResolveCtx<'_>) -> Resolution;
+    fn resolve(&self, from: &ProjectPath, specifier: &str, cx: &ResolveContext<'_>) -> Resolution;
 }

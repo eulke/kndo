@@ -61,7 +61,7 @@ Complete (CI green pending only the credits reset, like M0):
 
 - `kndo-contract` grew the adapter side: `LanguageAdapter`, the M1 `AdapterSpec`
   (id, `semantics_version`, claim globs, `emits` — the pairing rule's declaration),
-  `ResolveCtx`, `Finding`/`Severity` with the canonical sort.
+  `ResolveContext`, `Finding`/`Severity` with the canonical sort.
 - `kndo-core`: the Session/Snapshot engine — deterministic discovery (gitignore-aware,
   path-sorted), claim by spec globs, parallel extraction through the evidence cache
   (key folds adapter id + semantics_version + CONTRACT_FINGERPRINT + emits + content

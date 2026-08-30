@@ -233,12 +233,27 @@ generalized: v1's `declares_units_of_testing` was this rule invented ad hoc, onc
 (2) **Default compatibility** — a new stream or capability defaults to
 not-declared/empty, which through degrade-toward-keep-alive reproduces pre-capability
 behavior: absence can silence, never accuse. (3) **Additive surface** —
-`EvidenceSink`/`ResolveCtx` only gain methods; growable enums (`SymbolKind`,
+`EvidenceSink`/`ResolveContext` only gain methods; growable enums (`SymbolKind`,
 `RefKind`, `ImportShape`, `ImportTarget`, `RootTarget`) are `#[non_exhaustive]` with
 keep-alive wildcard arms, while `Confidence`, `Reach`, `RootKind`, `DiagnosticLevel`
 are documented closed-by-design (extension is a semantic change, not growth).
-(4) **The growth triage** — evidence stream vs spec data vs `ResolveCtx` query vs
+(4) **The growth triage** — evidence stream vs spec data vs `ResolveContext` query vs
 toolkit — is a CLAUDE.md judgment block. Also applied: `SymbolKind::Other(SmolStr)`
 carries the adapter's word instead of dropping it. The open visibility-ladder question
 (v1's linear rungs could not express Rust's module-and-descendants privacy) goes to
 EXPERIMENTS.md, measured when the v2 Rust adapter lands — not designed dry.
+
+## 2026-08-30 — Timings live beside the report, never inside it
+
+Performance is measured at three layers, none of which touches the byte-compared
+envelope: (1) `PhaseTimings` on `Snapshot` — the engine times each phase
+(discover/claim/extract/assemble/analyze); frontends render it in verbose/human output
+and serve exposes it as its own metadata, both outside the `Report`; (2) the bench
+harness (`xtask bench`, lands with real languages) measures around `analyze()` on
+synthetic fixtures with a per-machine baseline — deliberately not a CI gate, because
+v1 measured the same tree varying 22%/108% across containers; (3) standard profilers
+on the binary. Evidence for keeping the envelope clock-free: v1's gates compare
+envelopes byte-for-byte, and the one run-varying field that slipped in
+(`health.previous`) forced a permanent field-stripping carve-out in
+`threads_determinism`. Also applied this change: `ResolveCtx` → `ResolveContext`
+(the spell-it-out rule, third application).

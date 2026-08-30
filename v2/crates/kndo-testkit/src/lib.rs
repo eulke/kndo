@@ -15,7 +15,9 @@
 //! # text               a comment (the Comments stream, declared)
 //! ```
 
-use kndo_contract::adapter::{AdapterSpec, LanguageAdapter, Resolution, ResolveCtx, SourceFile};
+use kndo_contract::adapter::{
+    AdapterSpec, LanguageAdapter, Resolution, ResolveContext, SourceFile,
+};
 use kndo_contract::evidence::{
     DeclarationId, DiagnosticLevel, EvidenceSink, EvidenceStream, EvidenceStreams, ImportBinding,
     ImportShape, ImportTarget, Reach, RefKind, RootKind, RootTarget, SymbolKind,
@@ -121,7 +123,7 @@ impl LanguageAdapter for MockAdapter {
         }
     }
 
-    fn resolve(&self, from: &ProjectPath, specifier: &str, cx: &ResolveCtx<'_>) -> Resolution {
+    fn resolve(&self, from: &ProjectPath, specifier: &str, cx: &ResolveContext<'_>) -> Resolution {
         let Some(name) = specifier.strip_prefix("./") else {
             return Resolution::Unresolved;
         };

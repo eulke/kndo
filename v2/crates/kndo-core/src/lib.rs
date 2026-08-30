@@ -14,4 +14,6 @@ mod session;
 pub use analysis::{Abstention, AbstentionReason, AbstentionScope, Analysis};
 pub use graph::{Graph, GraphFile};
 pub use report::Report;
-pub use session::{Config, GatePolicy, Refusal, RunMode, RunOutcome, Session, Snapshot, Threads};
+pub use session::{
+    Config, GatePolicy, PhaseTimings, Refusal, RunMode, RunOutcome, Session, Snapshot, Threads,
+};

@@ -6,7 +6,7 @@
 
 use crate::discover::DiscoveredFile;
 use crate::extract::ClaimedFile;
-use kndo_contract::adapter::{LanguageAdapter, Resolution, ResolveCtx};
+use kndo_contract::adapter::{LanguageAdapter, Resolution, ResolveContext};
 use kndo_contract::evidence::{FileEvidence, ImportTarget};
 use kndo_contract::vocab::ProjectPath;
 use serde::Serialize;
@@ -45,7 +45,7 @@ pub fn assemble(
         .iter()
         .map(|c| files[c.file_index].path.clone())
         .collect();
-    let cx = ResolveCtx::new(&known);
+    let cx = ResolveContext::new(&known);
 
     let mut graph_files: Vec<GraphFile> = claims
         .iter()
