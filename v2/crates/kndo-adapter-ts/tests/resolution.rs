@@ -73,6 +73,41 @@ fn root_level_sibling() {
 }
 
 #[test]
+fn workspace_bare_specifiers_link_to_their_package() {
+    use kndo_contract::adapter::PackageEntry;
+    use smol_str::SmolStr;
+    use std::collections::BTreeMap;
+
+    let known = project(&[
+        "packages/core/src/index.ts",
+        "packages/core/src/util.ts",
+        "packages/app/main.ts",
+    ]);
+    let mut packages: BTreeMap<SmolStr, PackageEntry> = BTreeMap::new();
+    packages.insert(
+        SmolStr::new("@demo/core"),
+        PackageEntry {
+            name: SmolStr::new("@demo/core"),
+            entry: ProjectPath::new("packages/core/src/index.ts"),
+            dir: SmolStr::new("packages/core"),
+        },
+    );
+    let cx = ResolveContext::with_packages(&known, &packages);
+    let adapter = TypeScriptAdapter::new();
+    let from = ProjectPath::new("packages/app/main.ts");
+
+    assert_eq!(
+        adapter.resolve(&from, "@demo/core", &cx),
+        file("packages/core/src/index.ts")
+    );
+    assert_eq!(
+        adapter.resolve(&from, "@demo/core/src/util", &cx),
+        file("packages/core/src/util.ts")
+    );
+    assert_eq!(adapter.resolve(&from, "react", &cx), Resolution::Unresolved);
+}
+
+#[test]
 fn unresolvable_stays_unresolved() {
     let files = ["src/a.ts"];
     assert_eq!(

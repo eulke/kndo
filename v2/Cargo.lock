@@ -320,6 +320,7 @@ dependencies = [
  "kndo-adapter-ts",
  "kndo-contract",
  "kndo-core",
+ "kndo-testkit",
 ]
 
 [[package]]
@@ -328,6 +329,7 @@ version = "0.0.0"
 dependencies = [
  "kndo-contract",
  "kndo-toolkit",
+ "serde_json",
  "smol_str",
  "tree-sitter",
  "tree-sitter-typescript",

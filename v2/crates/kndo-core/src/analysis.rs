@@ -133,7 +133,7 @@ impl Analysis for Unused {
     }
 
     fn abstains(&self, graph: &Graph) -> Option<AbstentionReason> {
-        let any_root = graph.files.iter().any(|f| !f.evidence.roots.is_empty());
+        let any_root = graph.files.iter().any(|f| f.is_rooted());
         (!graph.files.is_empty() && !any_root).then_some(AbstentionReason::NoRootsAnywhere)
     }
 
@@ -143,9 +143,7 @@ impl Analysis for Unused {
 
         // Reachability: root-anchored files, then everything they transitively import.
         let mut reachable = vec![false; n];
-        let mut queue: Vec<usize> = (0..n)
-            .filter(|&i| !g.files[i].evidence.roots.is_empty())
-            .collect();
+        let mut queue: Vec<usize> = (0..n).filter(|&i| g.files[i].is_rooted()).collect();
         for &i in &queue {
             reachable[i] = true;
         }
@@ -174,20 +172,17 @@ impl Analysis for Unused {
             for r in &f.evidence.references {
                 member_referenced.insert(r.name.as_str());
             }
-            for import in &f.evidence.imports {
-                for &t in &f.imports {
-                    // M1: bindings apply to every resolved target of the file; real
-                    // per-import targeting arrives with the first real language.
-                    match &import.shape {
-                        ImportShape::Bindings(bs)
-                        | ImportShape::Reexport(bs)
-                        | ImportShape::TypeOnly(bs) => {
-                            for b in bs {
-                                bound.insert((t, b.imported.as_str()));
-                            }
+            for (import, target) in f.evidence.imports.iter().zip(&f.import_targets) {
+                let Some(t) = *target else { continue };
+                match &import.shape {
+                    ImportShape::Bindings(bs)
+                    | ImportShape::Reexport(bs)
+                    | ImportShape::TypeOnly(bs) => {
+                        for b in bs {
+                            bound.insert((t, b.imported.as_str()));
                         }
-                        _ => surface_kept[t as usize] = true,
                     }
+                    _ => surface_kept[t as usize] = true,
                 }
             }
         }
@@ -225,18 +220,28 @@ impl Analysis for Unused {
                     _ => None,
                 })
                 .collect();
-            // A whole-file root anchors the FILE's reachability; its declarations are
-            // still judged individually — a private, uncalled function in an entry
-            // point is dead code.
+            // A whole-file root anchors the FILE's reachability AND hands its exported
+            // surface to whoever rooted it (a package consumer, a test runner, a
+            // tool). Private declarations are still judged individually — a private,
+            // uncalled function in an entry point is dead code.
+            let entry_surface = !f.anchored.is_empty()
+                || f.evidence
+                    .roots
+                    .iter()
+                    .any(|r| matches!(r.target, RootTarget::WholeFile));
             for (d_ix, d) in f.evidence.declarations.iter().enumerate() {
+                let exported = d.reach == kndo_contract::evidence::Reach::Exported;
                 let kept = if let Some(owner) = d.owner {
                     // A member: kept by any reference to its name anywhere reachable
                     // (dispatch is not lexical), by a root, or by its owner's whole
                     // surface being kept from outside.
+                    let owner_exported = f.evidence.declarations[owner.index()].reach
+                        == kndo_contract::evidence::Reach::Exported;
                     member_referenced.contains(d.name.as_str())
                         || rooted.contains(&d_ix)
                         || rooted.contains(&owner.index())
                         || surface_kept[i]
+                        || (entry_surface && owner_exported)
                 } else {
                     // Importers bind the module-system name: the local one, or the
                     // exported alias when the declaration carries one.
@@ -246,8 +251,7 @@ impl Analysis for Unused {
                             .is_some_and(|a| bound.contains(&(i as u32, a.as_str())));
                     referenced.contains(d.name.as_str())
                         || rooted.contains(&d_ix)
-                        || (d.reach == kndo_contract::evidence::Reach::Exported
-                            && (surface_kept[i] || bound_by_name))
+                        || (exported && (surface_kept[i] || bound_by_name || entry_surface))
                 };
                 if !kept {
                     let selector = match d.owner {

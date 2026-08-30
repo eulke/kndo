@@ -7,6 +7,7 @@
 
 use kndo_contract::adapter::AdapterSpec;
 use kndo_contract::evidence::FileEvidence;
+use kndo_contract::vocab::ProjectPath;
 use std::path::PathBuf;
 
 const MAGIC: &[u8; 4] = b"KNE1";
@@ -25,13 +26,22 @@ impl EvidenceCache {
         EvidenceCache { dir, fingerprint }
     }
 
-    fn entry_path(&self, spec: &AdapterSpec, content_hash: &[u8; 32]) -> Option<PathBuf> {
+    fn entry_path(
+        &self,
+        spec: &AdapterSpec,
+        path: &ProjectPath,
+        content_hash: &[u8; 32],
+    ) -> Option<PathBuf> {
         let dir = self.dir.as_ref()?;
         let mut h = blake3::Hasher::new();
         h.update(spec.id().as_bytes());
         h.update(&spec.semantics_version().to_le_bytes());
         h.update(&self.fingerprint);
         h.update(serde_json::to_string(spec.emits()).ok()?.as_bytes());
+        // The path participates: extraction sees it, and adapters emit
+        // path-conditional evidence (a test-glob root), so identical content at two
+        // paths is not interchangeable.
+        h.update(path.as_str().as_bytes());
         h.update(content_hash);
         let hex: String = h
             .finalize()
@@ -42,8 +52,13 @@ impl EvidenceCache {
         Some(dir.join(format!("{hex}.bin")))
     }
 
-    pub fn get(&self, spec: &AdapterSpec, content_hash: &[u8; 32]) -> Option<FileEvidence> {
-        let path = self.entry_path(spec, content_hash)?;
+    pub fn get(
+        &self,
+        spec: &AdapterSpec,
+        path: &ProjectPath,
+        content_hash: &[u8; 32],
+    ) -> Option<FileEvidence> {
+        let path = self.entry_path(spec, path, content_hash)?;
         let bytes = std::fs::read(path).ok()?;
         let (magic, rest) = bytes.split_at_checked(4)?;
         if magic != MAGIC {
@@ -56,8 +71,14 @@ impl EvidenceCache {
         bincode::deserialize(payload).ok()
     }
 
-    pub fn put(&self, spec: &AdapterSpec, content_hash: &[u8; 32], evidence: &FileEvidence) {
-        let Some(path) = self.entry_path(spec, content_hash) else {
+    pub fn put(
+        &self,
+        spec: &AdapterSpec,
+        path: &ProjectPath,
+        content_hash: &[u8; 32],
+        evidence: &FileEvidence,
+    ) {
+        let Some(path) = self.entry_path(spec, path, content_hash) else {
             return;
         };
         let Ok(payload) = bincode::serialize(evidence) else {

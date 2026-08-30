@@ -336,6 +336,10 @@ fn references_and_comments(root: Node<'_>, source: &[u8], out: &mut EvidenceSink
             comment(n, source, out);
             return;
         }
+        if n.kind() == "call_expression" {
+            dynamic_import(n, source, out);
+            return;
+        }
         if !IDENT_KINDS.contains(&n.kind()) {
             return;
         }
@@ -347,6 +351,51 @@ fn references_and_comments(root: Node<'_>, source: &[u8], out: &mut EvidenceSink
         }
         out.reference(tk::text(n, source), classify(n, parent), tk::span(n));
     });
+}
+
+/// `require("...")` and `import("...")` with a literal argument are imports, at any
+/// depth. A `require` bound to a name is a namespace binding of the whole module;
+/// anything else keeps the target's surface without naming a binding. Non-literal
+/// arguments stay unrecorded — absence can under-connect, never accuse.
+fn dynamic_import(call: Node<'_>, source: &[u8], out: &mut EvidenceSink) {
+    let Some(function) = call.child_by_field_name("function") else {
+        return;
+    };
+    let is_require = function.kind() == "identifier" && tk::text(function, source) == "require";
+    let is_import = function.kind() == "import";
+    if !is_require && !is_import {
+        return;
+    }
+    let Some(args) = call.child_by_field_name("arguments") else {
+        return;
+    };
+    let mut c = args.walk();
+    let literals: Vec<Node<'_>> = args.named_children(&mut c).collect();
+    let [arg] = literals[..] else { return };
+    if arg.kind() != "string" {
+        return;
+    }
+    let text = string_text(arg, source);
+    if text.is_empty() {
+        return;
+    }
+    let target = if text.starts_with('.') {
+        ImportTarget::Relative(SmolStr::new(text))
+    } else {
+        ImportTarget::Package(SmolStr::new(text))
+    };
+    let shape = match (is_require, call.parent()) {
+        (true, Some(p)) if p.kind() == "variable_declarator" => {
+            match p.child_by_field_name("name") {
+                Some(name) if name.kind() == "identifier" => ImportShape::Namespace {
+                    local: SmolStr::new(tk::text(name, source)),
+                },
+                _ => ImportShape::SideEffect,
+            }
+        }
+        _ => ImportShape::SideEffect,
+    };
+    out.import(target, shape, tk::span(call), Confidence::Certain);
 }
 
 /// Binding and naming positions are not uses. The bias is deliberate: excluding too

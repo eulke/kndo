@@ -257,3 +257,26 @@ envelopes byte-for-byte, and the one run-varying field that slipped in
 (`health.previous`) forced a permanent field-stripping carve-out in
 `threads_determinism`. Also applied this change: `ResolveCtx` → `ResolveContext`
 (the spell-it-out rule, third application).
+
+## 2026-08-30 — Roots are evidence from three sources, and the corpus decided each one
+
+The manifest capability landed measured: vite went 771 → 739 → 702 and lodash
+50 → 18 across the three recorded corpus runs as each root source was added, with
+`corpus-findings/COMPARISON.md` explaining every remaining difference against the v1
+oracle. The shape: (1) in-file roots stay extraction evidence (a shebang, a
+`/test/`+`/tests/`+`__tests__`+`*.test.*` convention as Test-Probable, `*.config.*`
+and rc-dotfiles as Tooling-Probable) — path-conditional, so the evidence cache key
+now folds the file path; (2) manifest roots (`package.json` `main`/`module`/
+`browser`/`bin`, `exports` AND `imports` string leaves, wildcard entries expanded via
+`ResolveContext::files_with_prefix`, `.d.ts` companions, npm-`scripts` source paths
+as Tooling) anchor engine-side on `GraphFile.anchored`, never in cached evidence,
+because a manifest change must not invalidate the target file's extraction;
+(3) workspace packages (`LanguageAdapter::packages` → `ResolveContext::package`)
+link bare specifiers to sibling entries. A whole-file root hands its exported surface
+to whoever rooted it — the 4-finding gates fixture proved private declarations in an
+entry file stay judged. Per-import targeting replaced the M1 bind-to-every-target
+approximation in the same change (`GraphFile.import_targets`), and `require()`/
+dynamic `import()` with literal arguments count as imports (Namespace when bound,
+SideEffect otherwise). Killed en route: rooting `dist/*` build artifacts (kept
+accused — they are checked-in outputs nothing references; v1 only kept them through
+HTML edges v2 does not claim yet).

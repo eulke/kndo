@@ -205,6 +205,45 @@ export { caller };
 }
 
 #[test]
+fn require_and_dynamic_import_are_imports() {
+    let ev = extract(
+        "src/cjs.cjs",
+        r#"
+const util = require("./util.js");
+require("./side-effect");
+const pkg = require("lodash");
+function later() { return import("./lazy.js"); }
+const dynamic = require(someVariable);
+"#,
+    );
+    let relative = |s: &str| {
+        ev.imports
+            .iter()
+            .find(|i| matches!(&i.target, ImportTarget::Relative(t) if t == s))
+            .unwrap_or_else(|| panic!("no relative import {s}: {:#?}", ev.imports))
+    };
+    assert!(matches!(
+        &relative("./util.js").shape,
+        ImportShape::Namespace { local } if local == "util"
+    ));
+    assert!(matches!(
+        &relative("./side-effect").shape,
+        ImportShape::SideEffect
+    ));
+    assert!(matches!(
+        &relative("./lazy.js").shape,
+        ImportShape::SideEffect
+    ));
+    assert!(
+        ev.imports
+            .iter()
+            .any(|i| matches!(&i.target, ImportTarget::Package(p) if p == "lodash"))
+    );
+    // The non-literal require records nothing.
+    assert_eq!(ev.imports.len(), 4, "{:#?}", ev.imports);
+}
+
+#[test]
 fn comments_carry_stripped_text_spans() {
     let source = "// line note\nconst x = 1; /* block */\n";
     let ev = extract("src/c.ts", source);

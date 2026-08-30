@@ -8,13 +8,16 @@
 //! comparisons line up file-for-file.
 
 mod extract;
+mod manifest;
 mod resolve;
 
 use kndo_contract::adapter::{
-    AdapterSpec, LanguageAdapter, Resolution, ResolveContext, SourceFile,
+    AdapterSpec, LanguageAdapter, PackageEntry, ProjectRoot, Resolution, ResolveContext, SourceFile,
 };
-use kndo_contract::evidence::{DiagnosticLevel, EvidenceSink, EvidenceStream, EvidenceStreams};
-use kndo_contract::vocab::ProjectPath;
+use kndo_contract::evidence::{
+    DiagnosticLevel, EvidenceSink, EvidenceStream, EvidenceStreams, RootKind, RootTarget,
+};
+use kndo_contract::vocab::{Confidence, ProjectPath};
 use tree_sitter::Language;
 
 pub struct TypeScriptAdapter {
@@ -29,6 +32,7 @@ impl TypeScriptAdapter {
                     "**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.mjs", "**/*.cjs",
                 ])
                 .emits(EvidenceStreams::of(&[EvidenceStream::Comments]))
+                .manifests(&["**/package.json"])
                 .build(),
         }
     }
@@ -57,6 +61,10 @@ impl LanguageAdapter for TypeScriptAdapter {
     }
 
     fn extract(&self, file: &SourceFile<'_>, out: &mut EvidenceSink) {
+        // Convention roots come from the path and the first bytes, before any parse:
+        // a test file that fails to parse must still be rooted, or the parse failure
+        // would turn into an unreachable-file accusation.
+        convention_roots(file, out);
         let language = language_for(file.path);
         match kndo_toolkit::parse(&language, file.content) {
             Some(tree) => {
@@ -79,5 +87,44 @@ impl LanguageAdapter for TypeScriptAdapter {
 
     fn resolve(&self, from: &ProjectPath, specifier: &str, cx: &ResolveContext<'_>) -> Resolution {
         resolve::resolve(from, specifier, cx)
+    }
+
+    fn roots(&self, manifest: &SourceFile<'_>, cx: &ResolveContext<'_>) -> Vec<ProjectRoot> {
+        manifest::roots(manifest, cx)
+    }
+
+    fn packages(&self, manifest: &SourceFile<'_>, cx: &ResolveContext<'_>) -> Vec<PackageEntry> {
+        manifest::packages(manifest, cx)
+    }
+}
+
+/// Roots the ecosystem's conventions declare without a manifest: a shebang is an
+/// executable entry, `*.test.*`/`*.spec.*`/`__tests__/` files are run by the test
+/// runner, `*.config.*` and rc-dotfiles are read by their tools. Convention is
+/// `Probable`, never `Certain` — only the shebang is the file's own statement.
+fn convention_roots(file: &SourceFile<'_>, out: &mut EvidenceSink) {
+    if file.content.starts_with(b"#!") {
+        out.root(
+            RootTarget::WholeFile,
+            RootKind::Production,
+            Confidence::Certain,
+        );
+    }
+    let path = file.path.as_str();
+    let name = path.rsplit('/').next().unwrap_or(path);
+    let in_dir = |d: &str| path.contains(&format!("/{d}/")) || path.starts_with(&format!("{d}/"));
+    let is_test = in_dir("__tests__")
+        || in_dir("test")
+        || in_dir("tests")
+        || name.contains(".test.")
+        || name.contains(".spec.");
+    if is_test {
+        out.root(RootTarget::WholeFile, RootKind::Test, Confidence::Probable);
+    } else if name.contains(".config.") || (name.starts_with('.') && name.contains("rc.")) {
+        out.root(
+            RootTarget::WholeFile,
+            RootKind::Tooling,
+            Confidence::Probable,
+        );
     }
 }

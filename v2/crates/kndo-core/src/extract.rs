@@ -57,7 +57,7 @@ pub fn extract(
             let file = &files[c.file_index];
             let adapter = &adapters[c.adapter_index];
             let spec = adapter.spec();
-            if let Some(hit) = cache.get(spec, &file.hash) {
+            if let Some(hit) = cache.get(spec, &file.path, &file.hash) {
                 return hit;
             }
             let mut sink = EvidenceSink::new(file.content.len() as u32, spec.emits().clone());
@@ -69,7 +69,7 @@ pub fn extract(
                 &mut sink,
             );
             let evidence = sink.finish();
-            cache.put(spec, &file.hash, &evidence);
+            cache.put(spec, &file.path, &file.hash, &evidence);
             evidence
         })
         .collect()

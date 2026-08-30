@@ -10,3 +10,6 @@ publish.workspace = true
 kndo-adapter-ts = { path = "../kndo-adapter-ts" }
 kndo-contract = { path = "../kndo-contract" }
 kndo-core = { path = "../kndo-core" }
+
+[dev-dependencies]
+kndo-testkit = { path = "../kndo-testkit" }
