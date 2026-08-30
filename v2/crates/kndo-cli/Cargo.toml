@@ -11,7 +11,8 @@ name = "kndo"
 path = "src/main.rs"
 
 [dependencies]
-kndo = { path = "../kndo" }
+# The build shell: the shipped frontends carry the WASM component loader.
+kndo = { path = "../kndo", features = ["wasm"] }
 # Trimmed the way v1 measured it: `derive` for the Parser structs, the rest because
 # clap's defaults pull suggestion/color machinery the binary doesn't need.
 clap = { version = "4", features = ["derive", "std", "error-context", "help", "usage"], default-features = false }

@@ -693,3 +693,41 @@ to share) — which became v2's first reasoned suppression, a line-scoped
 `kndo:allow duplicate` with the why beside it. Everything else held to the byte:
 all 56 fixtures, all 8 corpus reports, the schema — the ABI added a tier, not a
 behavior.
+
+## 2026-08-30 — M5.d: the build shell — `.kndo/plugins/` and the authoring guide
+
+The `wasm` feature on the facade is the build shell: `open()` also loads external
+components from `<root>/.kndo/plugins/*.wasm`, and both shipped frontends carry
+the feature, so the release binary is the shell by construction — an embedder
+that wants no wasmtime in its tree simply doesn't enable it, and nothing else
+changes. The M5 exit criterion runs as a test in the CLI's own suite: the pinned
+kmini adapter and probe plugin, copied into `.kndo/plugins/` of a temp project,
+drive `kndo check --json` to a report whose adapter table says `kmini`, whose
+findings carry the WASM language's dead code and the plugin's namespaced note,
+and whose contribution shows the root that kept a file alive.
+
+Load policy, decided not defaulted:
+
+- **Presence is the opt-in; the file name is irrelevant, the world it targets is
+  not.** Worlds are tried in a fixed order (adapter, plugin, coverage-ingester);
+  the first that instantiates wins, and a reserved-`kndo:` coordinate stops the
+  ladder — refused on identity, not shape.
+- **External components are SECOND in every ordering**: an external adapter
+  cannot take a built-in language's claims, and the built-in coverage ingester
+  keeps first-answer precedence. Deterministic: the directory is walked sorted.
+- **Activation is uniform** — a deliberate divergence from v1, which ran
+  project-local components unconditionally. One activation semantics for every
+  plugin, external or built-in; `Always` is the spelling for "just run", and a
+  dropped-in component with `any-rule([])` stays dependency-reachable only,
+  exactly as the posture means.
+- **A component that fails to load never vanishes silently.** The session grew a
+  composition-diagnostics channel (`Session::with_composition_diagnostics`);
+  a broken or unrecognizable file becomes a Warn diagnostic on every report of
+  that session, asserted end-to-end through the CLI's text mode.
+
+`abi/README.md` is the authoring guide, written from the worked examples: the
+adapter path (the REAL `LanguageAdapter` plus `export_adapter!` — same code
+natively and here), the wire-record path for plugins and ingesters with the
+containment promises stated as behavior, budgets and their reasons, the build
+loop, and the proof discipline (`builtin_plugin_proofs` as the bar external
+authors should hold themselves to).

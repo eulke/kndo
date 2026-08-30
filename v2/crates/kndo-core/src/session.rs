@@ -60,6 +60,7 @@ pub struct Session {
     config: Config,
     adapters: Vec<Box<dyn LanguageAdapter>>,
     plugins: Vec<Box<dyn Plugin>>,
+    composition_diagnostics: Vec<crate::report::ReportDiagnostic>,
 }
 
 /// Wall-clock per pipeline phase. Lives BESIDE the report, never inside it: the
@@ -99,6 +100,7 @@ pub struct Snapshot {
     pub timings: PhaseTimings,
     baseline: Option<Vec<Finding>>,
     pragma_problems: Vec<crate::suppress::PragmaProblem>,
+    composition_diagnostics: Vec<ReportDiagnostic>,
     files_discovered: u32,
 }
 
@@ -159,6 +161,7 @@ impl Session {
             config,
             adapters,
             plugins: Vec::new(),
+            composition_diagnostics: Vec::new(),
         })
     }
 
@@ -167,6 +170,18 @@ impl Session {
     /// so embedders that want none say nothing.
     pub fn with_plugins(mut self, plugins: Vec<Box<dyn Plugin>>) -> Self {
         self.plugins = plugins;
+        self
+    }
+
+    /// Diagnostics from assembling this session's composition — a component that
+    /// failed to load, a rejected coordinate. They ride every report the session
+    /// produces: an opted-in component that silently vanished would be the one
+    /// failure the honesty channel exists to prevent.
+    pub fn with_composition_diagnostics(
+        mut self,
+        diagnostics: Vec<crate::report::ReportDiagnostic>,
+    ) -> Self {
+        self.composition_diagnostics = diagnostics;
         self
     }
 
@@ -317,6 +332,7 @@ impl Session {
             suppressed: suppressed.summary,
             plugins: round.contributions,
             pragma_problems: suppressed.problems,
+            composition_diagnostics: self.composition_diagnostics.clone(),
             timings,
             baseline: self.read_baseline(),
             files_discovered: files.len() as u32,
@@ -369,6 +385,7 @@ impl Snapshot {
                 level: p.level,
                 message: p.message.clone(),
             }))
+            .chain(self.composition_diagnostics.iter().cloned())
             .collect();
         diagnostics.sort_by(|a, b| (&a.path, &a.message).cmp(&(&b.path, &b.message)));
 

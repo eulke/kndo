@@ -250,8 +250,14 @@ Complete (CI verification pending only the credits reset, like M0–M2):
   thirteen, `abi_compat_matrix` (`cargo xtask pin-abi` re-pins, in the same
   commit as any WIT change). Zero drift anywhere: fixtures, corpus and schema
   held to the byte.
-- Pending: the external components loaded from `.kndo/plugins/` in the build
-  shell + authoring docs (M5.d), close-out (M5.e).
+- **M5.d — the build shell, done**: the facade's `wasm` feature loads external
+  components from `<root>/.kndo/plugins/` (presence is the opt-in; worlds tried
+  in order; externals compose after built-ins; activation uniform; load
+  failures become report diagnostics, never silence), and both shipped
+  frontends carry it. The M5 exit criterion is a CLI test: the pinned kmini
+  adapter and probe plugin run `kndo check` on a project no built-in could
+  read. `abi/README.md` is the authoring guide.
+- Pending: close-out (M5.e).
 - Owner decision (in DECISIONS.md): internal-only — and the visibility ladder
   with it — lands in M6.
 

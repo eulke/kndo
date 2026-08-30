@@ -941,6 +941,7 @@ dependencies = [
  "kndo-contract",
  "kndo-core",
  "kndo-coverage",
+ "kndo-host-wasm",
  "kndo-plugin-coverage",
  "kndo-testkit",
 ]

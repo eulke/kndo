@@ -38,7 +38,7 @@ fn schema_version_const(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
     schemars::json_schema!({ "const": SCHEMA })
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct ReportDiagnostic {
     pub path: ProjectPath,

@@ -20,7 +20,7 @@ pub use plugin::{
     ContentView, GraphView, Plugin, PluginContribution, PluginSeverity, PluginSink, PluginSpec,
     PluginTarget, RuleDescriptor, WellKnown, is_reserved_coordinate,
 };
-pub use report::Report;
+pub use report::{Report, ReportDiagnostic};
 pub use session::{
     Config, GatePolicy, PhaseTimings, Refusal, RunMode, RunOutcome, Session, Snapshot, Threads,
 };
