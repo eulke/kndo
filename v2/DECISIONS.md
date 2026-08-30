@@ -131,7 +131,7 @@ derive. Adapters depend on contract + toolkit only. Evidence: v1 adapters compil
 against the whole 43k-line core, and the third-party-adapter promise was never
 demonstrated with a real language.
 
-## Adapters write through `EvidenceSink`; metrics attach by `DeclId`
+## Adapters write through `EvidenceSink`; metrics attach by `DeclarationId`
 
 The sink validates invariants at the call site and returns ids, killing the
 match-by-span convention (v1's metrics-by-name collapse: a method reported as a clone of

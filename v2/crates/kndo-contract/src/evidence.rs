@@ -4,7 +4,7 @@
 //!
 //! Adapters never build [`FileEvidence`] by hand: extraction writes through
 //! [`EvidenceSink`], which validates at the call site and returns ids — attaching
-//! metrics or membership is by [`DeclId`], so "must byte-match another span" style
+//! metrics or membership is by [`DeclarationId`], so "must byte-match another span" style
 //! conventions have nothing to exist for. The engine reads the finished value.
 
 use crate::fingerprint::ContractFingerprint;
@@ -16,9 +16,9 @@ use smol_str::SmolStr;
 /// file hands these out; there is no public constructor to forge one from an integer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ContractFingerprint)]
 #[serde(transparent)]
-pub struct DeclId(u32);
+pub struct DeclarationId(u32);
 
-impl DeclId {
+impl DeclarationId {
     pub fn index(self) -> usize {
         self.0 as usize
     }
@@ -53,7 +53,7 @@ pub struct Declaration {
     pub span: Span,
     pub reach: Reach,
     /// Set via [`EvidenceSink::member_of`] — by id, never by name lookup.
-    pub owner: Option<DeclId>,
+    pub owner: Option<DeclarationId>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ContractFingerprint)]
@@ -124,7 +124,7 @@ pub enum RootKind {
 #[serde(rename_all = "kebab-case")]
 pub enum RootTarget {
     WholeFile,
-    Declaration(DeclId),
+    Declaration(DeclarationId),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ContractFingerprint)]
@@ -178,7 +178,7 @@ pub struct FileEvidence {
     pub imports: Vec<Import>,
     pub roots: Vec<Root>,
     pub comments: Vec<CommentSpan>,
-    pub metrics: Vec<(DeclId, FunctionMetrics)>,
+    pub metrics: Vec<(DeclarationId, FunctionMetrics)>,
     pub diagnostics: Vec<AdapterDiagnostic>,
 }
 
@@ -228,9 +228,9 @@ impl EvidenceSink {
         kind: SymbolKind,
         span: Span,
         reach: Reach,
-    ) -> DeclId {
+    ) -> DeclarationId {
         let span = self.clamp(span, "declaration");
-        let id = DeclId(self.out.declarations.len() as u32);
+        let id = DeclarationId(self.out.declarations.len() as u32);
         self.out.declarations.push(Declaration {
             name: name.into(),
             kind,
@@ -242,7 +242,7 @@ impl EvidenceSink {
     }
 
     /// Membership by id: no name lookup, no span matching, nothing to mis-resolve.
-    pub fn member_of(&mut self, member: DeclId, owner: DeclId) {
+    pub fn member_of(&mut self, member: DeclarationId, owner: DeclarationId) {
         debug_assert_ne!(member, owner, "a declaration cannot own itself");
         debug_assert!(owner.index() < self.out.declarations.len());
         self.out.declarations[member.index()].owner = Some(owner);
@@ -250,7 +250,7 @@ impl EvidenceSink {
 
     /// Metrics attach to the declaration they describe — by id. (v1 matched by name
     /// against last-wins symbol tables and reported a method as a clone of itself.)
-    pub fn metrics(&mut self, of: DeclId, m: FunctionMetrics) {
+    pub fn metrics(&mut self, of: DeclarationId, m: FunctionMetrics) {
         debug_assert!(of.index() < self.out.declarations.len());
         self.out.metrics.push((of, m));
     }
