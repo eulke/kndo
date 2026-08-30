@@ -264,6 +264,17 @@ Complete (CI verification pending only the credits reset, like M0–M2):
 - Owner decision (in DECISIONS.md): internal-only — and the visibility ladder
   with it — lands in M6.
 
+## M6 — next
+
+- **M6.a (design approved, DECISIONS 2026-08-30): the unified extension
+  mechanism.** One species — extension — replaces the adapter/plugin/ingester
+  taxonomy: one `ExtensionSpec`, one `Extension` trait in the contract, one
+  WIT world. Built-ins become extensions that ship in the box, under
+  namespaced coordinates. Migration in two batches: the mechanism under old
+  names (pure byte-identity acceptance), then the identity toll as one final,
+  enumerated commit — the repository's single deliberate regeneration.
+  Languages and everything else in M6 land AFTER it, on the unified door.
+
 ## Name verification (2026-08-29)
 
 - npm: `kndo` still taken by an unrelated DeFi package (unchanged since the v1 check);

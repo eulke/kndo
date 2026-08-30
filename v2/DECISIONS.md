@@ -731,3 +731,119 @@ natively and here), the wire-record path for plugins and ingesters with the
 containment promises stated as behavior, budgets and their reasons, the build
 loop, and the proof discipline (`builtin_plugin_proofs` as the bar external
 authors should hold themselves to).
+
+## 2026-08-30 — One door: the unified extension mechanism (design approved; M6.a)
+
+The owner's grill approved the redesign of the whole extension surface: ONE
+species — "extension" — replaces the adapter/plugin/ingester taxonomy. One
+`ExtensionSpec` declares everything a component does; one `Extension` trait in
+`kndo-contract` (10 defaulted hooks — fewer than the 12 methods across the two
+traits it replaces) is implemented by built-ins, embedders, and WASM guests
+alike; one WIT world replaces the three. The engine routes by what the spec
+declares — never by instantiate-and-see. The diagnosis that forced it: the
+sniffing ladder, the SDK asymmetry (plugins wrote wire records while adapters
+got the real trait), native counting two species while the wire counted three,
+and the framework use case (language-aware reads + roots) straddling the
+taxonomy. The deciding teleology, owner's words: **built-ins are extensions
+that ship in the box** — the end state has them distributable and replaceable
+like any other, so identity, trait, and packaging must be uniform now, while
+the ABI is pre-freeze and zero external components exist.
+
+Decisions, each with its rejected alternative:
+
+- **D1 — namespaced coordinates for ALL**: built-ins rename to `kndo:js-ts`,
+  `kndo:rust`, `kndo:go` (`kndo:coverage-lcov` already is). Measured before
+  deciding: finding identity is category + subject + discriminator — the
+  adapter id is NOT an input — so no finding changes id; baselines,
+  suppressions and the v1-oracle comparison survive intact. The regeneration
+  is confined to `run.adapters[].id` values in envelopes (~62 files, one
+  string per row) plus the envelope const bump with its regenerated schema.
+  `is_reserved_coordinate` stays the pure `kndo:` prefix. Rejected: keeping
+  bare legacy names — it fossilized the old taxonomy in a public contract and
+  made the future "built-in as installable component" a major version.
+- **R1** — `run.adapters` → `run.extensions` (`AdapterRun` → `ExtensionRun`).
+- **R2** — finding categories `plugin:<coordinate>/<rule>` →
+  `ext:<coordinate>/<rule>`. Categories are finding identity, so this was
+  now-or-never; verified that no harvested fixture or corpus report carries a
+  plugin finding — the cost is test strings only.
+- **D2 — claims gate evidence-gathering; activation gates judgment.**
+  Activation evaluates ONCE, post-extraction (ManifestDependency consumes
+  names manifest extraction produces), and gates conduct
+  (`contribute_roots`, `report_findings`) and ingestion; extraction,
+  resolution and unit mates are gated by claims alone. Two nuances are part
+  of the decision: (1) one file, one extractor — the M1 first-claim-wins rule
+  becomes an explicit law of the model; a framework extension claims its OWN
+  formats and reaches language-owned files through `requested_file_access`
+  at conduct time; (2) two paths into the graph split by the fact/judgment
+  line — manifest roots are transcription (ungated, cacheable, per-file),
+  conduct roots are inference (activation + mutates_graph). Rejected:
+  two-stage activation (FileExists gating extraction at discovery) — two
+  effective semantics; the accepted residual is that a claiming extension
+  extracts (and caches) on projects where it never activates, with a
+  discovery-time knob deferred until a named consumer exists.
+- **D3 — the conduct methods sit behind a typestate key.** The builder has
+  two stages: identity+extraction first; `.rule`, `.dependencies`,
+  `.requested_file_access`, `.reads_reports` EXIST only past
+  `.conduct(activation, MutatesGraph::Yes|No)` (enum, not bool). Forgetting
+  the gates does not panic — it does not compile. `mutates_graph` becomes
+  spec data (where the wire wants it: a mandatory field of the
+  `extension-spec` record, alongside `activation` — hand-rolled guests are
+  forced by shape; `always`/`false` are the documented-inert neutrals for
+  extraction-only components). Today's builder default of `AnyRule([])`
+  dies: the dependency-only posture is written by hand. The
+  "`mutates_graph` has no default" gate retires INTO the type system
+  (precedent: the ReferenceScope retirement) — the bad case is no longer
+  writable; the containment behavior (roots from a `false` component refused
+  with a described drop) stays tested in compliance. Rejected: panic in
+  `build()` with a gate proving it — the original form of this decision,
+  overturned in the grill; two stages is one method boundary, and "make
+  invalid states unrepresentable" demanded the stronger form.
+- **D4 — pure ingestion**: `ingest(report_path, bytes) →
+  Option<Vec<CoverageRecord>>`, the shape the WIT world already proved. The
+  engine walks the new `reads_reports` spec field (splitting
+  `requested_file_access`'s double duty — one field, one meaning) through
+  the well-known channel, pushes bytes, assembles records→coverage uniformly;
+  first answer wins in registration order (built-in lcov first — precedence
+  unchanged). `WellKnown` leaves the trait surface and becomes
+  engine-internal; no hook touches the filesystem.
+- **D5 — coverage records are contract vocabulary**: the record types move to
+  `kndo-contract` (the WIT already keeps them in `kndo:vocab/types`);
+  `kndo-coverage` remains a parser crate depending on the contract. This
+  breaks the cycle that would keep the trait from naming `ingest`'s return.
+- **D6 — conduct views are contract interfaces**: `GraphAccess` (paths +
+  contains — the surface the wire proved sufficient), `ContentView`,
+  `ConductSink`, `PluginTarget`, severity/activation/rule types move to the
+  contract; `Graph`, the round, target resolution and all containment stay in
+  core, which implements the interfaces. Rejected: moving `Graph` itself.
+- **D7 — one WIT world**: all exports (minus `mutates-graph`, now a record
+  field), all imports. The SDK macro stubs unimplemented exports AND keeps
+  the raw bindings private, exposing only phase-correct wrappers
+  (`ResolveContext` in extraction hooks, `GraphAccess` in conduct hooks) —
+  so phase discipline is structural for native code (hook signatures carry
+  only what the phase provides) and for SDK guests, and enforced by
+  host-side phase scoping for hand-rolled guests: an extraction-time call to
+  a conduct import traps with a named violation, proven by a deliberately
+  misbehaving compliance guest. Rejected: inspecting a component's exports
+  to infer capabilities — sniffing with better manners.
+
+§8 as settled in the grill: the phase-discipline price shrank to "the .wit no
+longer communicates phases by shape" once the three enforcement tiers were laid
+out; the regeneration precedent is contained by being THE one, written here;
+the reservation wart died with D1; the wide-trait watch item keeps the
+standing law (a new hook enters with a spec capability + named consumer +
+conformance case). The half-measure — unifying only the wire — stays
+rejected: it keeps the SDK asymmetry and both spec twins, and buys the look
+of the benefit without the benefit.
+
+**Migration in two batches.** Batch 1, the mechanism under the OLD names:
+contract types and trait; engine over `Extension`; built-ins rewritten;
+`MockExtension` folding the three local mocks; one world + SDK + host bridge +
+single-path loader; guests migrated plus a fourth two-cluster reference guest
+(the framework case) and the misbehaving guest; gates adapted
+(`extension_dependency_implication` rename, single-load, phase-scoping).
+Acceptance for every step of batch 1: PURE byte-identity — all 56 fixtures,
+all 8 corpus reports, the schema, untouched. Batch 2, one final commit: the
+identity toll — D1 + R1 + R2 + envelope const bump + regenerated schema —
+whose diff is exactly the enumerated list and nothing else. This entry marks
+that commit as the repository's ONE deliberate regeneration; the
+never-regenerate bar stands for everything after it.
