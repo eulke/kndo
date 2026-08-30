@@ -1,0 +1,50 @@
+{
+  "run": {
+    "schema": "kndo-v2/m1",
+    "files_discovered": 5,
+    "files_claimed": 4,
+    "adapters": [
+      {
+        "id": "js-ts",
+        "files": 4
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "kndo-7ade39fd74d5",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "src/handlers/alpha.ts"
+      },
+      "message": "no root anchors this file and no reachable file imports it"
+    },
+    {
+      "id": "kndo-a2c5bae20559",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "src/handlers/beta.ts"
+      },
+      "message": "no root anchors this file and no reachable file imports it"
+    },
+    {
+      "id": "kndo-8ebdc5c36690",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "src/outside/dead.ts"
+      },
+      "message": "no root anchors this file and no reachable file imports it"
+    }
+  ],
+  "abstained": [],
+  "diagnostics": []
+}

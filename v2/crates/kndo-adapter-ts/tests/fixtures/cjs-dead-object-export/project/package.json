@@ -1,0 +1,5 @@
+{
+  "name": "cjs-dead-object-export",
+  "private": false,
+  "main": "index.js"
+}

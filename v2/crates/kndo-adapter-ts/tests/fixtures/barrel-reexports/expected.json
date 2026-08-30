@@ -1,0 +1,28 @@
+{
+  "run": {
+    "schema": "kndo-v2/m1",
+    "files_discovered": 5,
+    "files_claimed": 4,
+    "adapters": [
+      {
+        "id": "js-ts",
+        "files": 4
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "kndo-bf500c882332",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "src/orphan.ts"
+      },
+      "message": "no root anchors this file and no reachable file imports it"
+    }
+  ],
+  "abstained": [],
+  "diagnostics": []
+}

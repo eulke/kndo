@@ -1,0 +1,35 @@
+{
+  "run": {
+    "schema": "kndo-v2/m1",
+    "files_discovered": 2,
+    "files_claimed": 1,
+    "adapters": [
+      {
+        "id": "js-ts",
+        "files": 1
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "kndo-e6deb88fe2cd",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "src/index.ts",
+        "selector": {
+          "Free": "unusedHelper"
+        },
+        "span": {
+          "start": 350,
+          "end": 468
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    }
+  ],
+  "abstained": [],
+  "diagnostics": []
+}

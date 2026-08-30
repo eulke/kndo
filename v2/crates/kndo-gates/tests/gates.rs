@@ -122,6 +122,59 @@ fn threads_one_and_many_are_byte_identical() {
 }
 
 #[test]
+fn adapter_conformance_fixtures_are_byte_identical() {
+    // The harvested regression floor: v1's js fixture corpus (every false-positive
+    // hunt it encodes) replayed through the v2 engine, each report pinned byte-for-
+    // byte. A diff is either your bug or a deliberate, documented contract change —
+    // regenerate with KNDO_CONFORMANCE=overwrite and justify the diff in the PR;
+    // the pinned reports GROW as analyses land, which is the point of pinning them.
+    let fixtures =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../kndo-adapter-ts/tests/fixtures");
+    let mut names: Vec<_> = std::fs::read_dir(&fixtures)
+        .expect("fixture corpus exists")
+        .filter_map(|e| e.ok())
+        .filter(|e| e.path().is_dir())
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .collect();
+    names.sort();
+    assert!(names.len() >= 22, "the harvested corpus is present");
+
+    let overwrite = std::env::var_os("KNDO_CONFORMANCE").is_some_and(|v| v == "overwrite");
+    let mut failures = Vec::new();
+    for name in &names {
+        let dir = fixtures.join(name);
+        let session = kndo::open(
+            dir.join("project"),
+            Config {
+                threads: Threads::Auto,
+                use_cache: false,
+            },
+        )
+        .expect("open fixture project");
+        let report = session
+            .analyze(RunMode::Full)
+            .expect("analyze fixture")
+            .report()
+            .to_json();
+        let expected_path = dir.join("expected.json");
+        if overwrite {
+            std::fs::write(&expected_path, &report).expect("write expected");
+            continue;
+        }
+        let expected = std::fs::read_to_string(&expected_path)
+            .unwrap_or_else(|_| panic!("{name}/expected.json exists — regenerate deliberately"));
+        if report != expected {
+            failures.push(name.clone());
+        }
+    }
+    assert!(
+        failures.is_empty(),
+        "conformance fixtures diverged: {failures:?} — a bug, or a deliberate \
+         contract change to regenerate (KNDO_CONFORMANCE=overwrite) and document"
+    );
+}
+
+#[test]
 fn incremental_and_full_assembly_are_byte_identical() {
     // Patch ≡ full, in all three shapes of change: content-only (the surgical path
     // patches the persisted graph in place), a new file and a deleted file (the file

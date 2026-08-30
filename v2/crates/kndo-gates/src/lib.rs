@@ -42,6 +42,10 @@ pub const GATES: &[Gate] = &[
         name: "incremental_and_full_assembly_are_byte_identical",
         invariant: "a change replayed over cached evidence equals a from-scratch build",
     },
+    Gate {
+        name: "adapter_conformance_fixtures_are_byte_identical",
+        invariant: "the harvested fixture corpus replays to its pinned reports",
+    },
 ];
 
 /// Repo-relative location of the generated workflow.

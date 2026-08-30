@@ -1,0 +1,16 @@
+{
+  "run": {
+    "schema": "kndo-v2/m1",
+    "files_discovered": 2,
+    "files_claimed": 1,
+    "adapters": [
+      {
+        "id": "js-ts",
+        "files": 1
+      }
+    ]
+  },
+  "findings": [],
+  "abstained": [],
+  "diagnostics": []
+}

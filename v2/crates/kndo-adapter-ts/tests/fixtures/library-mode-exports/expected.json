@@ -1,0 +1,28 @@
+{
+  "run": {
+    "schema": "kndo-v2/m1",
+    "files_discovered": 4,
+    "files_claimed": 3,
+    "adapters": [
+      {
+        "id": "js-ts",
+        "files": 3
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "kndo-032fe6759a79",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "src/internal.ts"
+      },
+      "message": "no root anchors this file and no reachable file imports it"
+    }
+  ],
+  "abstained": [],
+  "diagnostics": []
+}

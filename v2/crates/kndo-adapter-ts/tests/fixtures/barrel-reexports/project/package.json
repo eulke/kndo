@@ -1,0 +1,5 @@
+{
+  "name": "barrel-reexports",
+  "private": false,
+  "main": "src/index.ts"
+}
