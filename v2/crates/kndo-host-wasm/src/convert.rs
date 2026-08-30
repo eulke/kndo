@@ -125,7 +125,7 @@ pub(crate) fn plugin_severity(s: awire::PluginSeverity) -> PluginSeverity {
 }
 
 /// Wire coverage records, grouped by the report's own paths — ready for
-/// `kndo_coverage::assemble`.
+/// the engine's coverage assembly.
 pub(crate) fn coverage_records(records: awire::CoverageRecords) -> ev::CoverageRecords {
     let mut out = ev::CoverageRecords::default();
     for line in records.lines {

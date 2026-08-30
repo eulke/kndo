@@ -1,64 +1,27 @@
-//! Coverage formats, parsed — no I/O by design: the same crate compiles natively
-//! (the built-in ingester plugin) and to WASM (the reference external ingester),
-//! so the two can never drift apart by prose. A format earns its parser here with
-//! a fixture captured from a real producer; lcov is the one that has. Function
-//! records (`FN`/`FNDA`) are the primary evidence — a declaration line executes at
-//! module load, so line hits alone would call every loaded function tested; `DA`
-//! lines are the fallback for producers that emit no function records. Everything
-//! unparseable or unmappable degrades to absence, and absence never accuses.
+//! The lcov coverage extension — ALL the format knowledge in one crate, and only
+//! format knowledge: the parser turns an lcov stream into the contract's records
+//! ("what the report states"), and the built-in ingester is that parser behind
+//! the same [`Extension`] trait everything else implements. No I/O and no
+//! engine dependency by design: the same crate compiles natively (the built-in)
+//! and to WASM (the reference external ingester), so the two can never drift
+//! apart by prose — and mapping records onto the project is the ENGINE's job,
+//! uniformly for every ingester, never done here.
+//!
+//! A format earns its parser here with a fixture captured from a real producer;
+//! lcov is the one that has. Function records (`FN`/`FNDA`) are the primary
+//! evidence — a declaration line executes at module load, so line hits alone
+//! would call every loaded function tested; `DA` lines are the fallback for
+//! producers that emit no function records. Everything unparseable degrades to
+//! absence, and absence never accuses.
 
-use kndo_contract::vocab::{ProjectPath, Span};
+use kndo_contract::extension::{Activation, Extension, ExtensionSpec, MutatesGraph};
+use kndo_contract::vocab::ProjectPath;
 use std::collections::BTreeMap;
-
-pub struct Coverage {
-    pub files: BTreeMap<ProjectPath, FileCoverage>,
-}
-
-pub struct FileCoverage {
-    /// Byte offset where each 1-based line starts, from the discovered content.
-    line_starts: Vec<u32>,
-    /// Instrumented lines (1-based) → hit count.
-    lines: BTreeMap<u32, u64>,
-    /// Function records: (declaration line, hit count), FN joined with FNDA by name.
-    functions: Vec<(u32, u64)>,
-}
-
-/// Whether a function whose declaration spans `span` went unexecuted. `None` means
-/// the coverage cannot tell (no record overlaps) — the caller falls back to weaker
-/// evidence rather than accusing.
-impl FileCoverage {
-    pub fn function_untested(&self, span: Span) -> Option<bool> {
-        let first = self.line_of(span.start);
-        let last = self.line_of(span.end.saturating_sub(1).max(span.start));
-        if let Some((_, count)) = self
-            .functions
-            .iter()
-            .filter(|(line, _)| (first..=last).contains(line))
-            .min_by_key(|(line, _)| *line)
-        {
-            return Some(*count == 0);
-        }
-        // DA fallback: the body's lines, excluding the declaration line itself
-        // (module load executes it).
-        let body: Vec<u64> = self
-            .lines
-            .range(first + 1..=last)
-            .map(|(_, c)| *c)
-            .collect();
-        if body.is_empty() {
-            return None;
-        }
-        Some(body.iter().all(|&c| c == 0))
-    }
-
-    fn line_of(&self, byte: u32) -> u32 {
-        self.line_starts.partition_point(|&s| s <= byte) as u32
-    }
-}
+use std::sync::LazyLock;
 
 /// The record types are contract vocabulary (`kndo-contract`'s evidence module):
-/// what an ingesting extension returns, re-exported here where the parsers that
-/// produce them live.
+/// what an ingesting extension returns, re-exported here where the parser that
+/// produces them lives.
 pub use kndo_contract::evidence::{CoverageRecords, FileRecords};
 
 /// One lcov stream, to records — needs no file contents, which is what lets the
@@ -110,119 +73,57 @@ pub fn parse_lcov_records(text: &str) -> Option<CoverageRecords> {
     (!files.is_empty()).then_some(CoverageRecords { files })
 }
 
-/// Records → judgeable coverage, given the run's file contents (the line table each
-/// span query maps through). Records outside the project — paths matching no
-/// discovered file — are skipped; records with nothing mappable are no coverage at
-/// all. The mapping half of ingestion, host-side always: a guest states records,
-/// never a line table.
-pub fn assemble(
-    records: CoverageRecords,
-    contents: &BTreeMap<ProjectPath, &[u8]>,
-) -> Option<Coverage> {
-    let mut files = BTreeMap::new();
-    for (path, rec) in records.files {
-        let Some(content) = contents.get(&path) else {
-            continue;
-        };
-        let mut functions = rec.functions;
-        functions.sort_unstable();
-        files.insert(
-            path,
-            FileCoverage {
-                line_starts: line_starts(content),
-                lines: rec.lines,
-                functions,
-            },
-        );
-    }
-    (!files.is_empty()).then_some(Coverage { files })
-}
+static SPEC: LazyLock<ExtensionSpec> = LazyLock::new(|| {
+    ExtensionSpec::builder("kndo:coverage-lcov", 1)
+        // MutatesGraph::No is load-bearing: an ingester contributes analysis
+        // input, never graph facts, and Yes here would turn the persisted graph
+        // cache off for every project, because this extension is always on.
+        .conduct(Activation::Always, MutatesGraph::No)
+        // The conventional lcov locations, tried in order; the first report that
+        // parses AND maps onto the project wins.
+        .reads_reports(&["lcov.info", "coverage/lcov.info"])
+        .build()
+});
 
-/// One lcov stream, mapped against the project in one step — parse to records, then
-/// [`assemble`].
-pub fn parse_lcov(text: &str, contents: &BTreeMap<ProjectPath, &[u8]>) -> Option<Coverage> {
-    assemble(parse_lcov_records(text)?, contents)
-}
+/// The built-in lcov ingester. Coverage is run output and usually gitignored, so
+/// the discovery walk deliberately never sees it; the spec's `reads_reports`
+/// paths are the sanctioned way in, and the ENGINE does the reading — this
+/// extension only turns bytes into records.
+pub struct LcovPlugin;
 
-/// Byte offset of each line's first byte — the one line table both coverage and
-/// suppression map spans through.
-pub fn line_starts(content: &[u8]) -> Vec<u32> {
-    let mut starts = vec![0u32];
-    for (i, &b) in content.iter().enumerate() {
-        if b == b'\n' {
-            starts.push(i as u32 + 1);
-        }
+impl Extension for LcovPlugin {
+    fn spec(&self) -> &ExtensionSpec {
+        &SPEC
     }
-    starts
+
+    fn ingest(&self, _report_path: &str, content: &[u8]) -> Option<CoverageRecords> {
+        parse_lcov_records(std::str::from_utf8(content).ok()?)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn contents<'a>(entries: &[(&str, &'a str)]) -> BTreeMap<ProjectPath, &'a [u8]> {
-        entries
-            .iter()
-            .map(|(p, c)| (ProjectPath::new(*p), c.as_bytes()))
-            .collect()
-    }
-
     #[test]
-    fn function_records_win_over_the_loaded_declaration_line() {
-        let src = "function a() {\n  return 1;\n}\nfunction b() {\n  return 2;\n}\n";
-        let map = contents(&[("src/x.js", src)]);
-        let cov = parse_lcov(
-            "SF:src/x.js\nFN:1,a\nFN:4,b\nFNDA:3,a\nFNDA:0,b\nDA:1,1\nDA:2,3\nDA:4,1\nDA:5,0\nend_of_record\n",
-            &map,
+    fn function_and_line_records_parse_as_the_report_states_them() {
+        let records = parse_lcov_records(
+            "SF:src/x.js\nFN:1,a\nFN:4,b\nFNDA:3,a\nFNDA:0,b\nDA:2,3\nDA:5,0\nend_of_record\n\
+             SF:not/in/project.js\nDA:1,1\nend_of_record\n",
         )
         .expect("parses");
-        let fc = &cov.files[&ProjectPath::new("src/x.js")];
-        // a: bytes 0..28 (lines 1-3); b: bytes 29..57 (lines 4-6).
-        assert_eq!(fc.function_untested(Span::new(0, 28)), Some(false));
-        assert_eq!(fc.function_untested(Span::new(29, 57)), Some(true));
+        // The parser keeps the report's own view — mapping against the project
+        // is the engine's half, never done here.
+        assert_eq!(records.files.len(), 2);
+        let x = &records.files[&ProjectPath::new("src/x.js")];
+        assert_eq!(x.functions, [(1, 3), (4, 0)]);
+        assert_eq!(x.lines.get(&2), Some(&3));
+        assert_eq!(x.lines.get(&5), Some(&0));
     }
 
     #[test]
-    fn da_fallback_ignores_the_declaration_line() {
-        let src = "function a() {\n  return 1;\n}\n";
-        let map = contents(&[("src/y.js", src)]);
-        let cov = parse_lcov("SF:src/y.js\nDA:1,1\nDA:2,0\nend_of_record\n", &map).expect("parses");
-        let fc = &cov.files[&ProjectPath::new("src/y.js")];
-        assert_eq!(fc.function_untested(Span::new(0, 28)), Some(true));
-    }
-
-    #[test]
-    fn unmappable_streams_are_no_coverage() {
-        let map = contents(&[("src/z.js", "x\n")]);
-        assert!(parse_lcov("SF:elsewhere/other.js\nDA:1,1\nend_of_record\n", &map).is_none());
-    }
-
-    #[test]
-    fn records_split_then_assemble_equals_the_one_step_parse() {
-        // The wire level a WASM ingester speaks: parse without contents, map later.
-        // The split must change nothing an analysis can observe.
-        let src = "function a() {\n  return 1;\n}\nfunction b() {\n  return 2;\n}\n";
-        let map = contents(&[("src/x.js", src)]);
-        let text = "SF:src/x.js\nFN:1,a\nFN:4,b\nFNDA:3,a\nFNDA:0,b\nDA:2,3\nDA:5,0\nend_of_record\nSF:not/in/project.js\nDA:1,1\nend_of_record\n";
-
-        let records = parse_lcov_records(text).expect("records parse without contents");
-        assert_eq!(records.files.len(), 2, "records keep the report's own view");
-        let split = assemble(records, &map).expect("assembles against the project");
-        let direct = parse_lcov(text, &map).expect("one-step parses");
-        assert_eq!(
-            split.files.keys().collect::<Vec<_>>(),
-            direct.files.keys().collect::<Vec<_>>()
-        );
-        for (path, fc) in &split.files {
-            let d = &direct.files[path];
-            assert_eq!(
-                fc.function_untested(Span::new(0, 28)),
-                d.function_untested(Span::new(0, 28))
-            );
-            assert_eq!(
-                fc.function_untested(Span::new(29, 57)),
-                d.function_untested(Span::new(29, 57))
-            );
-        }
+    fn an_empty_or_foreign_stream_is_absence() {
+        assert!(parse_lcov_records("").is_none());
+        assert!(parse_lcov_records("not lcov at all\n").is_none());
     }
 }

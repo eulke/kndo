@@ -178,7 +178,7 @@ fn rule_matches(
 /// Everything one plugin round produced, ready for the session to fold in.
 pub struct PluginRound {
     pub contributions: Vec<PluginContribution>,
-    pub coverage: Option<kndo_coverage::Coverage>,
+    pub coverage: Option<crate::coverage::Coverage>,
     pub findings: Vec<Finding>,
 }
 
@@ -212,7 +212,7 @@ pub fn run_round(
                 .iter()
                 .filter_map(|path| well_known.read(path).map(|text| (path, text)))
                 .filter_map(|(path, text)| extension.ingest(path, text.as_bytes()))
-                .find_map(|records| kndo_coverage::assemble(records, contents));
+                .find_map(|records| crate::coverage::assemble(records, contents));
         }
 
         let content = ContentView::new(contents, spec.requested_file_access());

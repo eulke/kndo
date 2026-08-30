@@ -942,7 +942,6 @@ dependencies = [
  "kndo-core",
  "kndo-coverage",
  "kndo-host-wasm",
- "kndo-plugin-coverage",
  "kndo-testkit",
 ]
 
@@ -1024,7 +1023,6 @@ dependencies = [
  "globset",
  "ignore",
  "kndo-contract",
- "kndo-coverage",
  "rayon",
  "schemars",
  "serde",
@@ -1061,21 +1059,12 @@ dependencies = [
  "kndo",
  "kndo-contract",
  "kndo-core",
- "kndo-coverage",
  "kndo-testkit",
  "smol_str",
  "tempfile",
  "thiserror 2.0.20",
  "wasmtime",
  "wit-component 0.219.2",
-]
-
-[[package]]
-name = "kndo-plugin-coverage"
-version = "0.0.0"
-dependencies = [
- "kndo-contract",
- "kndo-coverage",
 ]
 
 [[package]]

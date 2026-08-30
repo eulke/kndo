@@ -19,12 +19,11 @@ pub use kndo_core::{
     RuleDescriptor, RunMode, RunOutcome, Session, Snapshot, SuppressedSummary, Threads,
     is_reserved_coordinate,
 };
-pub use kndo_coverage::{Coverage, FileCoverage};
 
 use kndo_adapter_go::GoAdapter;
 use kndo_adapter_rust::RustAdapter;
 use kndo_adapter_ts::TypeScriptAdapter;
-use kndo_plugin_coverage::LcovPlugin;
+use kndo_coverage::LcovPlugin;
 
 /// Everything a stock run is, in deterministic registration order: claim priority
 /// among claiming extensions, and — among conduct-declaring ones — coverage

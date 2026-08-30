@@ -14,7 +14,6 @@ kndo-contract = { path = "../kndo-contract" }
 kndo-core = { path = "../kndo-core" }
 kndo-coverage = { path = "../kndo-coverage" }
 kndo-host-wasm = { path = "../kndo-host-wasm", optional = true }
-kndo-plugin-coverage = { path = "../kndo-plugin-coverage" }
 
 [features]
 # The build-shell feature: sessions opened through `open()` also load external

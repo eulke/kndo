@@ -9,7 +9,6 @@ publish.workspace = true
 [dependencies]
 kndo-contract = { path = "../kndo-contract" }
 kndo-core = { path = "../kndo-core" }
-kndo-coverage = { path = "../kndo-coverage" }
 smol_str = { version = "0.3", features = ["serde"] }
 thiserror = "2"
 wasmtime = { version = "=27.0.0", default-features = false, features = [

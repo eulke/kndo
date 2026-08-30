@@ -5,6 +5,7 @@
 
 pub mod analysis;
 mod cache;
+pub mod coverage;
 mod discover;
 mod extract;
 mod graph;

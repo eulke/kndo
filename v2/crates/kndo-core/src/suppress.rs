@@ -233,7 +233,7 @@ fn comment_text(content: &[u8], text: Span) -> &str {
     std::str::from_utf8(&content[start..end]).unwrap_or("")
 }
 
-use kndo_coverage::line_starts;
+use crate::coverage::line_starts;
 
 /// 1-based.
 fn line_of(starts: &[u32], byte: u32) -> u32 {
