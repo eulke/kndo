@@ -114,6 +114,33 @@ impl Category {
         Category(SmolStr::from(format!("plugin:{coordinate}/{rule}")))
     }
 
+    /// The validating way in from user-written text (a suppression pragma, a config
+    /// value): a first-party name or a well-formed `plugin:<coordinate>/<rule>`.
+    /// The frontier never constructs a raw string category.
+    pub fn parse(s: &str) -> Option<Category> {
+        const FIRST_PARTY: [Category; 13] = [
+            Category::CRAP,
+            Category::CYCLIC,
+            Category::DEEP_IMPORT,
+            Category::DUPLICATE,
+            Category::INTERNAL_ONLY,
+            Category::PRIVATE_TYPE_LEAK,
+            Category::STALE,
+            Category::TEST_ONLY,
+            Category::UNDECLARED,
+            Category::UNRESOLVED,
+            Category::UNTESTED,
+            Category::UNUSED,
+            Category::VERSION_SKEW,
+        ];
+        if let Some(known) = FIRST_PARTY.iter().find(|c| c.as_str() == s) {
+            return Some(known.clone());
+        }
+        let rest = s.strip_prefix("plugin:")?;
+        let (coordinate, rule) = rest.split_once('/')?;
+        (!coordinate.is_empty() && !rule.is_empty()).then(|| Category(SmolStr::from(s)))
+    }
+
     pub fn is_plugin(&self) -> bool {
         self.0.starts_with("plugin:")
     }

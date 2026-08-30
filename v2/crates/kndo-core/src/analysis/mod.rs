@@ -165,11 +165,22 @@ pub struct Abstention {
     pub scope: AbstentionScope,
 }
 
+/// What one run's analyses produced — and which categories actually JUDGED, so
+/// suppression can tell a stale allow from an allow over an un-judged category.
+pub struct AnalysisOutcome {
+    pub findings: Vec<Finding>,
+    pub abstained: Vec<Abstention>,
+    /// Categories whose analysis ran this run (not whole-run-abstained). A category
+    /// absent here — abstained, or no analysis ships for it yet — is un-judged, and
+    /// nothing about it (a suppression included) may be called stale.
+    pub judged: std::collections::BTreeSet<Category>,
+}
+
 pub fn run_all(
     graph: &Graph,
     coverage: Option<crate::coverage::Coverage>,
     analyses: &[&dyn Analysis],
-) -> (Vec<Finding>, Vec<Abstention>) {
+) -> AnalysisOutcome {
     let run = RunContext {
         graph,
         reach: Reachability::compute(graph),
@@ -177,6 +188,7 @@ pub fn run_all(
     };
     let mut findings = Vec::new();
     let mut abstained = Vec::new();
+    let mut judged = std::collections::BTreeSet::new();
 
     for analysis in analyses {
         if let Some(reason) = analysis.abstains(&run) {
@@ -216,8 +228,13 @@ pub fn run_all(
             measured: &measured,
         };
         findings.extend(analysis.run(&cx));
+        judged.insert(analysis.category());
     }
 
     sort_findings(&mut findings);
-    (findings, abstained)
+    AnalysisOutcome {
+        findings,
+        abstained,
+        judged,
+    }
 }

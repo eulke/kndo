@@ -10,7 +10,7 @@ pub use kndo_contract::subject::{FindingId, Subject, SymbolSelector};
 pub use kndo_contract::vocab::{Category, Confidence, ProjectPath, Span, SubjectKind};
 pub use kndo_core::{
     Abstention, AbstentionReason, AbstentionScope, Config, GatePolicy, Graph, PhaseTimings,
-    Refusal, Report, RunMode, RunOutcome, Session, Snapshot, Threads,
+    Refusal, Report, RunMode, RunOutcome, Session, Snapshot, SuppressedSummary, Threads,
 };
 
 use kndo_adapter_ts::TypeScriptAdapter;

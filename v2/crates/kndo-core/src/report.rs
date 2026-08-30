@@ -3,13 +3,14 @@
 //! (timings, timestamps) joins at the frontend edge when a milestone needs it.
 
 use crate::analysis::Abstention;
+use crate::suppress::SuppressedSummary;
 use kndo_contract::evidence::DiagnosticLevel;
 use kndo_contract::finding::Finding;
 use kndo_contract::vocab::ProjectPath;
 use serde::Serialize;
 use smol_str::SmolStr;
 
-pub const SCHEMA: &str = "kndo-v2/m1";
+pub const SCHEMA: &str = "kndo-v2/m3";
 
 #[derive(Serialize)]
 pub struct AdapterRun {
@@ -35,8 +36,14 @@ pub struct ReportDiagnostic {
 #[derive(Serialize)]
 pub struct Report {
     pub run: RunInfo,
+    /// New relative to the baseline; all current findings when none exists.
     pub findings: Vec<Finding>,
+    /// Baseline entries the current run no longer produces.
+    pub fixed: Vec<Finding>,
+    /// Current findings the baseline already carries — counted, not repeated.
+    pub baselined: u32,
     pub abstained: Vec<Abstention>,
+    pub suppressed: SuppressedSummary,
     pub diagnostics: Vec<ReportDiagnostic>,
 }
 

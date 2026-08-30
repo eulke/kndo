@@ -1,6 +1,6 @@
 {
   "run": {
-    "schema": "kndo-v2/m1",
+    "schema": "kndo-v2/m3",
     "files_discovered": 4,
     "files_claimed": 3,
     "adapters": [
@@ -48,6 +48,8 @@
       "message": "no test executes this function"
     }
   ],
+  "fixed": [],
+  "baselined": 0,
   "abstained": [
     {
       "category": "test-only",
@@ -55,5 +57,9 @@
       "scope": "whole-run"
     }
   ],
+  "suppressed": {
+    "total": 0,
+    "by_category": []
+  },
   "diagnostics": []
 }

@@ -45,7 +45,7 @@ pub enum RunMode {
 
 /// The run could not happen at all. Everything less than this degrades into
 /// diagnostics inside a successful run.
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum Refusal {
     #[error("project root not found: {0}")]
     RootNotFound(PathBuf),
@@ -84,10 +84,31 @@ impl PhaseTimings {
 
 pub struct Snapshot {
     pub graph: Graph,
+    /// Current findings, post-suppression. The baseline split (new vs known) is the
+    /// report's and the gate's view; the snapshot keeps the whole truth.
     pub findings: Vec<Finding>,
     pub abstained: Vec<Abstention>,
+    pub suppressed: crate::suppress::SuppressedSummary,
     pub timings: PhaseTimings,
+    baseline: Option<Vec<Finding>>,
+    pragma_problems: Vec<crate::suppress::PragmaProblem>,
     files_discovered: u32,
+}
+
+impl Snapshot {
+    /// Findings the baseline does not already carry — what the gate counts and the
+    /// report lists.
+    pub fn new_findings(&self) -> impl Iterator<Item = &Finding> {
+        let known: std::collections::BTreeSet<&str> = self
+            .baseline
+            .iter()
+            .flatten()
+            .map(|f| f.id.as_str())
+            .collect();
+        self.findings
+            .iter()
+            .filter(move |f| !known.contains(f.id.as_str()))
+    }
 }
 
 pub struct GatePolicy {
@@ -98,7 +119,12 @@ pub struct GatePolicy {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RunOutcome {
     Pass,
-    FailFindings { at_or_above: u32 },
+    FailFindings {
+        at_or_above: u32,
+    },
+    /// The run never happened; `exit_code` covers this path too, so a frontend maps
+    /// `analyze()`'s `Err` through here instead of inventing its own code.
+    Refused(Refusal),
 }
 
 impl RunOutcome {
@@ -106,6 +132,7 @@ impl RunOutcome {
         match self {
             RunOutcome::Pass => 0,
             RunOutcome::FailFindings { .. } => 1,
+            RunOutcome::Refused(_) => 2,
         }
     }
 }
@@ -225,20 +252,53 @@ impl Session {
             .map(|f| (f.path.clone(), f.content.as_slice()))
             .collect();
         let coverage = crate::coverage::ingest(&self.root, &contents);
-        let (findings, abstained) = run_all(
+        let outcome = run_all(
             &graph,
             coverage,
             &[&Unused, &TestOnly, &Untested, &Duplicate],
+        );
+        let (findings, suppressed) = crate::suppress::apply(
+            &graph,
+            &contents,
+            &outcome.abstained,
+            &outcome.judged,
+            outcome.findings,
         );
         timings.analyze = analyze_start.elapsed();
 
         Snapshot {
             graph,
             findings,
-            abstained,
+            abstained: outcome.abstained,
+            suppressed: suppressed.summary,
+            pragma_problems: suppressed.problems,
             timings,
+            baseline: self.read_baseline(),
             files_discovered: files.len() as u32,
         }
+    }
+
+    fn baseline_path(&self) -> PathBuf {
+        self.root.join(".kndo/baseline.json")
+    }
+
+    /// A missing or unparseable baseline degrades to none — the run never fails on
+    /// its own memory.
+    fn read_baseline(&self) -> Option<Vec<Finding>> {
+        let bytes = std::fs::read(self.baseline_path()).ok()?;
+        serde_json::from_slice(&bytes).ok()
+    }
+
+    /// The one baseline effect: accept the snapshot's current findings as known.
+    /// Written sorted, pretty, and whole — a baseline is a reviewed artifact users
+    /// commit, not a cache.
+    pub fn write_baseline(&self, snap: &Snapshot) -> std::io::Result<()> {
+        let path = self.baseline_path();
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let json = serde_json::to_string_pretty(&snap.findings).expect("findings serialize");
+        std::fs::write(path, json)
     }
 }
 
@@ -259,8 +319,25 @@ impl Snapshot {
                     message: d.message.clone(),
                 })
             })
+            .chain(self.pragma_problems.iter().map(|p| ReportDiagnostic {
+                path: p.path.clone(),
+                level: p.level,
+                message: p.message.clone(),
+            }))
             .collect();
         diagnostics.sort_by(|a, b| (&a.path, &a.message).cmp(&(&b.path, &b.message)));
+
+        let current: std::collections::BTreeSet<&str> =
+            self.findings.iter().map(|f| f.id.as_str()).collect();
+        let fixed: Vec<Finding> = self
+            .baseline
+            .iter()
+            .flatten()
+            .filter(|f| !current.contains(f.id.as_str()))
+            .cloned()
+            .collect();
+        let findings: Vec<Finding> = self.new_findings().cloned().collect();
+        let baselined = (self.findings.len() - findings.len()) as u32;
 
         Report {
             run: RunInfo {
@@ -272,19 +349,23 @@ impl Snapshot {
                     .map(|(id, files)| AdapterRun { id, files })
                     .collect(),
             },
-            findings: self.findings.clone(),
+            findings,
+            fixed,
+            baselined,
             abstained: self.abstained.clone(),
+            suppressed: self.suppressed.clone(),
             diagnostics,
         }
     }
 
+    /// Counts NEW findings only: the baseline's whole purpose is that known findings
+    /// hold no gate hostage.
     pub fn gate(&self, policy: &GatePolicy) -> RunOutcome {
         let Some(floor) = policy.fail_on else {
             return RunOutcome::Pass;
         };
         let at_or_above = self
-            .findings
-            .iter()
+            .new_findings()
             .filter(|f| f.severity.at_least(floor))
             .count() as u32;
         if at_or_above == 0 {

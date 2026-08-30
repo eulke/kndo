@@ -1,6 +1,6 @@
 {
   "run": {
-    "schema": "kndo-v2/m1",
+    "schema": "kndo-v2/m3",
     "files_discovered": 2712,
     "files_claimed": 1553,
     "adapters": [
@@ -11801,7 +11801,13 @@
       "message": "no test references this function"
     }
   ],
+  "fixed": [],
+  "baselined": 0,
   "abstained": [],
+  "suppressed": {
+    "total": 0,
+    "by_category": []
+  },
   "diagnostics": [
     {
       "path": "packages/vite/src/node/__tests__/runnerImport.spec.ts",

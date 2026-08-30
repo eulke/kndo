@@ -11,6 +11,7 @@ mod extract;
 mod graph;
 mod report;
 mod session;
+mod suppress;
 
 pub use analysis::{Abstention, AbstentionReason, AbstentionScope, Analysis};
 pub use graph::{Graph, GraphFile};
@@ -18,3 +19,4 @@ pub use report::Report;
 pub use session::{
     Config, GatePolicy, PhaseTimings, Refusal, RunMode, RunOutcome, Session, Snapshot, Threads,
 };
+pub use suppress::SuppressedSummary;

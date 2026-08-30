@@ -1,6 +1,6 @@
 {
   "run": {
-    "schema": "kndo-v2/m1",
+    "schema": "kndo-v2/m3",
     "files_discovered": 555,
     "files_claimed": 10,
     "adapters": [
@@ -67,6 +67,8 @@
       "message": "byte-identical to docs/docsets/Alamofire.docset/Contents/Resources/Documents/js/typeahead.jquery.js"
     }
   ],
+  "fixed": [],
+  "baselined": 0,
   "abstained": [
     {
       "category": "unused",
@@ -84,5 +86,9 @@
       "scope": "whole-run"
     }
   ],
+  "suppressed": {
+    "total": 0,
+    "by_category": []
+  },
   "diagnostics": []
 }
