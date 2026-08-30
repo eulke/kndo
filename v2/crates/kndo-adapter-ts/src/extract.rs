@@ -222,12 +222,11 @@ fn function_metrics(node: Node<'_>, source: &[u8]) -> kndo_contract::evidence::F
             | "do_statement" | "switch_case" | "catch_clause" | "ternary_expression" => {
                 cyclomatic += 1;
             }
-            "binary_expression" => {
+            "binary_expression"
                 if n.child_by_field_name("operator")
-                    .is_some_and(|op| matches!(op.kind(), "&&" | "||" | "??"))
-                {
-                    cyclomatic += 1;
-                }
+                    .is_some_and(|op| matches!(op.kind(), "&&" | "||" | "??")) =>
+            {
+                cyclomatic += 1;
             }
             _ => {}
         }
