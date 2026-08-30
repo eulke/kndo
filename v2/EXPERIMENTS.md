@@ -67,6 +67,13 @@ in different files compared as equal regions). Candidate: rungs gain a scope-sha
 dimension. Measure when the v2 Rust adapter lands, against the harvested fixtures and
 the oracle — not before.
 
+The same design absorbs `Declaration.exported_as` (2026-08-30, M2): the export alias
+belongs inside the exported side of the visibility type — today it rides beside
+`Reach` as a parallel `Option` whose `Private`+`Some` combination is representable but
+inert, a recorded shape debt by the repo's own "Reach for the type" bar. Folding it in
+is a deliberate contract change: fingerprint moves, the pinned conformance reports
+diff, DECISIONS gets the entry.
+
 ### Type-3 clones (divergent copies)
 Winnowing covers Type-1/2 today. Measure recall/precision of a Type-3 extension on the
 corpus before designing anything.
