@@ -173,3 +173,39 @@ exit_code` unreachable because the member rule ignored re-export chains (the rul
 grew `owner_bound`, which `published-lib-surface` also demanded), and pragma prose
 in doc comments parsing as pragmas (a pragma now STARTS its comment). Zero stands,
 measured.
+
+## M4.c — Go arrives, package-shaped
+
+**gin — v2: 108 (duplicate 108); v1: 20 (untested 13 · test-only 5 ·
+internal-only 1 · duplicate 1).** The comparable slice is `unused`, and both
+report ZERO — reached differently. Go bent the contract twice, and both bends are
+now capabilities with fixtures:
+
+**The package is the unit.** A directory of `.go` files shares one namespace with
+no imports between siblings, so `AdapterSpec` grew `ReferenceScope::Directory`
+(default `File` — the default-compatibility rule; `unused` is the named consumer;
+`multi-file-package` the conformance case): analyses pool references per
+directory. Every file also carries a synthetic `"."` edge to its non-test
+siblings — reachability travels, `_test.go` stays out of the production color —
+and imports resolve through the longest go.mod module-path prefix to
+`Resolution::Files`, M4.a's directory-unit variant doing exactly what it was
+grown for.
+
+**What the grammar cannot prove, it never accuses.** Three Go facts, each pinned
+by a fixture: `internal/` is the language's own visibility fence, so a bin-less
+module's non-internal packages are importable published surface (whole-file
+Production roots, `Probable`; `internal-package` reports exactly v1's one
+finding). A `// Code generated … DO NOT EDIT.` file declares nothing accusable
+while its imports and references stay live evidence (`generated-file`, zero
+findings, matching v1). And methods are never declared at all: Go's interfaces
+are structural, so ANY method may satisfy one and run without its name appearing
+— first contact with gin accused `IsEmpty` and `MarshalYAML`, both alive through
+external interface dispatch, and the fix was to stop declaring the class, not to
+allowlist the cases (v1's gin oracle also reports zero unused).
+
+**duplicate 108 vs 1** is the ripgrep story again: gin's per-endpoint test
+scaffolding really is Type-2-identical at the 60-token floor (35 clones in
+`context_test.go` alone). True, Info, and a presentation question already
+recorded. **untested/test-only 0 vs 13/5**: gin's packages all carry `_test.go`
+files, so at file granularity every production file is test-reachable — v1's
+symbol-level precision is the recorded gap shared with Rust's `rally`.

@@ -422,3 +422,43 @@ recorded, floor unchanged), test-only 3, untested 2. The 25 v1 fixtures replay
 byte-pinned through the conformance gate beside the 22 js ones; divergences from
 v1's expected verdicts are each named in COMPARISON.md (`rally`, symbol-level
 test-only, the guest example v2 anchors because its manifest declares it).
+
+## 2026-08-30 — M4.c: the Go adapter, and the package as the unit
+
+Go lands as the fourth language (`go`, v1's id, tree-sitter-go 0.25), and its
+shape — the package, not the file, is the compilation unit — grew the contract
+one capability and exercised M4.a's other half:
+
+- **`AdapterSpec::reference_scope`** (`File` default, `Directory` for Go), the
+  capability rule in full: a default that reproduces pre-capability behavior, a
+  named core consumer (`unused` pools references per directory, so a sibling's
+  use keeps a sibling's declaration, private or not), and a conformance case
+  (`multi-file-package`). The graph copies the scope per file
+  (`GRAPH_SEMANTICS_VERSION` 3) so analyses never reach back into the adapter set.
+- **The synthetic `"."` edge**: every file imports its own package — a mute
+  binding to the non-test siblings, resolved as `Resolution::Files`. Reachability
+  crosses the package the way the compiler does; `_test.go` targets are excluded
+  so the production color never leaks through a test file.
+- **Import resolution is module-path prefix matching**: the longest go.mod-declared
+  prefix wins at `/` boundaries, the remainder maps into the module directory, the
+  resolution is the package's files. go.mod packages are entry-less by
+  construction — the M4.a `PackageEntry.entry: Option` decision, vindicated.
+- **Three never-accuse facts, each a fixture**: `internal/` is the language's own
+  fence and everything non-internal in a bin-less module is importable published
+  surface (library-mode whole-file roots, Probable; `internal-package` matches
+  v1's single finding exactly); `// Code generated … DO NOT EDIT.` files declare
+  nothing accusable while their imports and references stay evidence
+  (`generated-file`, zero, as v1); and methods are NEVER declared — structural
+  interfaces dispatch on any method invisibly, which gin proved on first contact
+  (`IsEmpty`, `MarshalYAML`: alive through encoding/json and yaml, accused by the
+  name heuristic, fixed by dropping the class, not the cases).
+- The dogfood caught the third test-harness clone (the `import` finder copied
+  from the rust tests into the go tests) — promoted to `kndo-testkit` like its
+  siblings. The second-copy rule now has three enforcement stories in one day,
+  all from our own gate.
+
+gin at the pin: 108 findings, all `duplicate` (real per-endpoint test-scaffold
+clones), zero `unused` — matching the oracle's zero. Eight v1 fixtures replay
+byte-pinned; `go-work-phantom-dep`, `internal-only-unit` and `private-type-leak`
+hold at zero pending their v1 categories (undeclared, internal-only,
+private-type-leak), which do not exist in v2 yet.

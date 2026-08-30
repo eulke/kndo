@@ -231,3 +231,18 @@ pub fn resolve_in(
     let cx = ResolveContext::new(&known);
     adapter.resolve(&ProjectPath::new(from), specifier, &cx)
 }
+
+/// The first import whose specifier matches, or a panic that prints every import —
+/// the assertion failure an extraction test wants to read.
+pub fn import_named<'e>(
+    ev: &'e kndo_contract::evidence::FileEvidence,
+    specifier: &str,
+) -> &'e kndo_contract::evidence::Import {
+    ev.imports
+        .iter()
+        .find(|i| match &i.target {
+            ImportTarget::Relative(s) | ImportTarget::Package(s) => s == specifier,
+            _ => false,
+        })
+        .unwrap_or_else(|| panic!("import {specifier} missing: {:#?}", ev.imports))
+}

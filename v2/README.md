@@ -188,11 +188,19 @@ Complete (CI verification pending only the credits reset, like M0–M2):
 - **untested** decides by test reachability at file granularity where coverage is
   silent (v1 parity; manifest-anchored entries are wiring), coverage per-function
   `Certain` unchanged; three js fixtures regenerated under the documented change.
+- **M4.c — the Go adapter, done**: `kndo-adapter-go` (id `go`, tree-sitter-go) —
+  the package as the unit (`AdapterSpec::reference_scope = Directory`, the
+  synthetic `"."` sibling edge, module-path-prefix resolution to
+  `Resolution::Files`), capitalization as reach, library-mode roots with the
+  `internal/` fence, generated-file and structural-interface never-accuse rules.
+  Eight v1 fixtures replay byte-pinned; the conformance gate now walks three
+  corpora (22 js + 25 rust + 8 go).
 - Corpus: ripgrep 143 (unused 3 — all verified true at the source, duplicate 135,
-  test-only 3, untested 2) against oracle 149; vite 1,004 (unused 702, duplicate
-  174, test-only 122, untested 6); lodash 21. Deltas named in COMPARISON.md.
-- Pending in M4: the Go adapter (M4.c), the visibility-ladder measurement (M4.d),
-  and the milestone close-out (M4.e).
+  test-only 3, untested 2) against oracle 149; gin 108 (all duplicate; unused 0,
+  matching the oracle's 0); vite 1,004 (unused 702, duplicate 174, test-only 122,
+  untested 6); lodash 21. Deltas named in COMPARISON.md.
+- Pending in M4: the visibility-ladder measurement (M4.d) and the milestone
+  close-out (M4.e).
 
 ## Name verification (2026-08-29)
 

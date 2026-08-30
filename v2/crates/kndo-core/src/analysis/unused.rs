@@ -3,11 +3,12 @@
 //! always `Certain` — color outranks confidence.
 
 use super::{AbstentionReason, Analysis, AnalysisContext, RunContext};
+use kndo_contract::adapter::ReferenceScope;
 use kndo_contract::evidence::{ImportShape, Reach, RootTarget, SymbolKind};
 use kndo_contract::finding::{Finding, Severity};
 use kndo_contract::subject::{Subject, SymbolSelector};
 use kndo_contract::vocab::{Category, Confidence};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 pub struct Unused;
 
@@ -38,12 +39,22 @@ impl Analysis for Unused {
         let mut bound: BTreeSet<(u32, &str)> = BTreeSet::new();
         let mut surface_kept = vec![false; n];
         let mut member_referenced: BTreeSet<&str> = BTreeSet::new();
+        // Directory-scoped languages (a Go package) share one namespace across a
+        // directory's files: their references pool per dir, so a sibling's use keeps
+        // a sibling's declaration — exported and private alike, no import needed.
+        let mut dir_pool: BTreeMap<&str, BTreeSet<&str>> = BTreeMap::new();
         for (i, f) in g.files.iter().enumerate() {
             if !reachable(i) {
                 continue;
             }
             for r in &f.evidence.references {
                 member_referenced.insert(r.name.as_str());
+            }
+            if f.reference_scope == ReferenceScope::Directory {
+                let pool = dir_pool.entry(parent_dir(f.path.as_str())).or_default();
+                for r in &f.evidence.references {
+                    pool.insert(r.name.as_str());
+                }
             }
             for (import, targets) in f.evidence.imports.iter().zip(&f.import_targets) {
                 for &t in targets {
@@ -79,12 +90,18 @@ impl Analysis for Unused {
                 ));
                 continue;
             }
-            let referenced: BTreeSet<&str> = f
-                .evidence
-                .references
-                .iter()
-                .map(|r| r.name.as_str())
-                .collect();
+            let referenced: BTreeSet<&str> = match f.reference_scope {
+                ReferenceScope::File => f
+                    .evidence
+                    .references
+                    .iter()
+                    .map(|r| r.name.as_str())
+                    .collect(),
+                ReferenceScope::Directory => dir_pool
+                    .get(parent_dir(f.path.as_str()))
+                    .cloned()
+                    .unwrap_or_default(),
+            };
             let rooted: BTreeSet<usize> = f
                 .evidence
                 .roots
@@ -174,5 +191,12 @@ impl Analysis for Unused {
             }
         }
         out
+    }
+}
+
+fn parent_dir(path: &str) -> &str {
+    match path.rfind('/') {
+        Some(i) => &path[..i],
+        None => "",
     }
 }

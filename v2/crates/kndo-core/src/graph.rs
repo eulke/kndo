@@ -21,12 +21,15 @@ use std::collections::{BTreeMap, BTreeSet};
 /// Bump when the SAME evidence assembles into a DIFFERENT graph — resolution
 /// candidate changes, reachability semantics, new assembled fields. Folded into the
 /// graph cache key beside the contract fingerprint and the adapter set.
-pub const GRAPH_SEMANTICS_VERSION: u32 = 2;
+pub const GRAPH_SEMANTICS_VERSION: u32 = 3;
 
 #[derive(Serialize, Deserialize)]
 pub struct GraphFile {
     pub path: ProjectPath,
     pub adapter: SmolStr,
+    /// The claiming adapter's declared reference scope, copied per file so analyses
+    /// can pool references without reaching back into the adapter set.
+    pub reference_scope: kndo_contract::adapter::ReferenceScope,
     pub hash_hex: String,
     pub evidence: FileEvidence,
     /// Whole-file roots anchored from OUTSIDE this file's content (a manifest naming
@@ -84,6 +87,7 @@ pub fn assemble(
             GraphFile {
                 path: f.path.clone(),
                 adapter: SmolStr::new(adapters[c.adapter_index].spec().id()),
+                reference_scope: adapters[c.adapter_index].spec().reference_scope(),
                 hash_hex: f.hash.iter().map(|b| format!("{b:02x}")).collect(),
                 evidence: ev,
                 anchored: Vec::new(),

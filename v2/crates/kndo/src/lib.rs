@@ -13,6 +13,7 @@ pub use kndo_core::{
     Refusal, Report, RunMode, RunOutcome, Session, Snapshot, SuppressedSummary, Threads,
 };
 
+use kndo_adapter_go::GoAdapter;
 use kndo_adapter_rust::RustAdapter;
 use kndo_adapter_ts::TypeScriptAdapter;
 
@@ -21,6 +22,7 @@ pub fn default_adapters() -> Vec<Box<dyn LanguageAdapter>> {
     vec![
         Box::new(TypeScriptAdapter::new()),
         Box::new(RustAdapter::new()),
+        Box::new(GoAdapter::new()),
     ]
 }
 

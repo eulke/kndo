@@ -2,10 +2,1960 @@
   "run": {
     "schema": "kndo-v2/m3",
     "files_discovered": 118,
-    "files_claimed": 0,
-    "adapters": []
+    "files_claimed": 99,
+    "adapters": [
+      {
+        "id": "go",
+        "files": 99
+      }
+    ]
   },
-  "findings": [],
+  "findings": [
+    {
+      "id": "kndo-30e78d502280",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "auth.go",
+        "selector": {
+          "Free": "BasicAuthForProxy"
+        },
+        "span": {
+          "start": 3090,
+          "end": 3837
+        }
+      },
+      "message": "structural clone of auth.go:BasicAuthForRealm"
+    },
+    {
+      "id": "kndo-28fdbc42a839",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "benchmarks_test.go",
+        "selector": {
+          "Free": "Benchmark404Many"
+        },
+        "span": {
+          "start": 2757,
+          "end": 3285
+        }
+      },
+      "message": "structural clone of benchmarks_test.go:Benchmark404"
+    },
+    {
+      "id": "kndo-1ed2ae90025f",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "binding/binding_test.go",
+        "selector": {
+          "Free": "testQueryBindingBoolFail"
+        },
+        "span": {
+          "start": 32944,
+          "end": 33291
+        }
+      },
+      "message": "structural clone of binding/binding_test.go:testQueryBindingFail"
+    },
+    {
+      "id": "kndo-3549a7ea53ac",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "binding/binding_test.go",
+        "selector": {
+          "Free": "TestRequiredFails"
+        },
+        "span": {
+          "start": 21705,
+          "end": 21952
+        }
+      },
+      "message": "structural clone of binding/binding_test.go:TestRequiredSucceeds"
+    },
+    {
+      "id": "kndo-35d9346d632f",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "binding/binding_test.go",
+        "selector": {
+          "Free": "createFormFilesMultipartRequestFail"
+        },
+        "span": {
+          "start": 15495,
+          "end": 16225
+        }
+      },
+      "message": "structural clone of binding/binding_test.go:createFormFilesMultipartRequest"
+    },
+    {
+      "id": "kndo-43e711b986b8",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "binding/binding_test.go",
+        "selector": {
+          "Free": "testFormBindingForTimeFailFormat"
+        },
+        "span": {
+          "start": 27996,
+          "end": 28500
+        }
+      },
+      "message": "structural clone of binding/binding_test.go:testFormBindingForTimeNotUnixFormat"
+    },
+    {
+      "id": "kndo-44da5c3aac9d",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "binding/binding_test.go",
+        "selector": {
+          "Free": "TestBindingProtoBufFail"
+        },
+        "span": {
+          "start": 20512,
+          "end": 20752
+        }
+      },
+      "message": "structural clone of binding/binding_test.go:TestBindingProtoBuf"
+    },
+    {
+      "id": "kndo-62a1720de10a",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "binding/binding_test.go",
+        "selector": {
+          "Free": "createFormPostRequestForMapFail"
+        },
+        "span": {
+          "start": 14516,
+          "end": 14773
+        }
+      },
+      "message": "structural clone of binding/binding_test.go:createFormPostRequest"
+    },
+    {
+      "id": "kndo-8b68d27367bc",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "binding/binding_test.go",
+        "selector": {
+          "Free": "testFormBindingDefaultValue"
+        },
+        "span": {
+          "start": 24360,
+          "end": 24907
+        }
+      },
+      "message": "structural clone of binding/binding_test.go:testFormBinding"
+    },
+    {
+      "id": "kndo-9e5f3e7b82cd",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "binding/binding_test.go",
+        "selector": {
+          "Free": "testFormBindingForTimeNotFormat"
+        },
+        "span": {
+          "start": 27493,
+          "end": 27994
+        }
+      },
+      "message": "structural clone of binding/binding_test.go:testFormBindingForTimeNotUnixFormat"
+    },
+    {
+      "id": "kndo-bc0e51d4bb65",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "binding/binding_test.go",
+        "selector": {
+          "Free": "testFormBindingInvalidName2"
+        },
+        "span": {
+          "start": 29898,
+          "end": 30373
+        }
+      },
+      "message": "structural clone of binding/binding_test.go:testFormBindingForTimeNotUnixFormat"
+    },
+    {
+      "id": "kndo-da06c5589660",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "binding/binding_test.go",
+        "selector": {
+          "Free": "createDefaultFormPostRequest"
+        },
+        "span": {
+          "start": 13996,
+          "end": 14251
+        }
+      },
+      "message": "structural clone of binding/binding_test.go:createFormPostRequest"
+    },
+    {
+      "id": "kndo-e10c369331ed",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "binding/binding_test.go",
+        "selector": {
+          "Free": "TestBindingFormMultipart"
+        },
+        "span": {
+          "start": 19405,
+          "end": 19692
+        }
+      },
+      "message": "structural clone of binding/binding_test.go:TestBindingFormPost"
+    },
+    {
+      "id": "kndo-f0cecea88738",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "binding/binding_test.go",
+        "selector": {
+          "Free": "TestFormPostBindingFail"
+        },
+        "span": {
+          "start": 25496,
+          "end": 25730
+        }
+      },
+      "message": "structural clone of binding/binding_test.go:TestFormBindingFail"
+    },
+    {
+      "id": "kndo-fa6d48719c55",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "binding/binding_test.go",
+        "selector": {
+          "Free": "TestFormMultipartBindingFail"
+        },
+        "span": {
+          "start": 25732,
+          "end": 25980
+        }
+      },
+      "message": "structural clone of binding/binding_test.go:TestFormBindingFail"
+    },
+    {
+      "id": "kndo-faba769cc954",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "binding/binding_test.go",
+        "selector": {
+          "Free": "testFormBindingForTimeFailLocation"
+        },
+        "span": {
+          "start": 28502,
+          "end": 29012
+        }
+      },
+      "message": "structural clone of binding/binding_test.go:testFormBindingForTimeNotUnixFormat"
+    },
+    {
+      "id": "kndo-02583ff4ad80",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "binding/form_mapping_test.go",
+        "selector": {
+          "Free": "TestMappingCustomSliceOfSliceUnmarshalTextUri"
+        },
+        "span": {
+          "start": 25510,
+          "end": 25902
+        }
+      },
+      "message": "structural clone of binding/form_mapping_test.go:TestMappingCustomSliceOfSliceUri"
+    },
+    {
+      "id": "kndo-07f81a0b447e",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "binding/form_mapping_test.go",
+        "selector": {
+          "Free": "TestMappingForm"
+        },
+        "span": {
+          "start": 3808,
+          "end": 3995
+        }
+      },
+      "message": "structural clone of binding/form_mapping_test.go:TestMappingURI"
+    },
+    {
+      "id": "kndo-0beb08afe0a7",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "binding/form_mapping_test.go",
+        "selector": {
+          "Free": "TestMappingCustomArrayOfArrayUnmarshalTextForm"
+        },
+        "span": {
+          "start": 28376,
+          "end": 28895
+        }
+      },
+      "message": "structural clone of binding/form_mapping_test.go:TestMappingCustomArrayOfArrayUri"
+    },
+    {
+      "id": "kndo-0eb31c29e3b1",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "binding/form_mapping_test.go",
+        "selector": {
+          "Free": "TestMappingCustomSliceForm"
+        },
+        "span": {
+          "start": 17883,
+          "end": 18157
+        }
+      },
+      "message": "structural clone of binding/form_mapping_test.go:TestMappingCustomSliceUri"
+    },
+    {
+      "id": "kndo-1e881f03b230",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "binding/form_mapping_test.go",
+        "selector": {
+          "Free": "TestMappingCustomArrayOfArrayForm"
+        },
+        "span": {
+          "start": 20503,
+          "end": 20919
+        }
+      },
+      "message": "structural clone of binding/form_mapping_test.go:TestMappingCustomArrayOfArrayUri"
+    },
+    {
+      "id": "kndo-2188c2da3e5a",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "binding/form_mapping_test.go",
+        "selector": {
+          "Free": "TestMappingCustomUnmarshalTextHexForm"
+        },
+        "span": {
+          "start": 21582,
+          "end": 21863
+        }
+      },
+      "message": "structural clone of binding/form_mapping_test.go:TestMappingCustomUnmarshalParamHexWithFormTag"
+    },
+    {
+      "id": "kndo-302e25bd8ef0",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "binding/form_mapping_test.go",
+        "selector": {
+          "Free": "TestMappingCustomSliceOfSliceUnmarshalTextForm"
+        },
+        "span": {
+          "start": 25904,
+          "end": 26299
+        }
+      },
+      "message": "structural clone of binding/form_mapping_test.go:TestMappingCustomSliceOfSliceUri"
+    },
+    {
+      "id": "kndo-3ad6b83838b6",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "binding/form_mapping_test.go",
+        "selector": {
+          "Free": "TestMappingCustomSliceUnmarshalTextStopsWhenError"
+        },
+        "span": {
+          "start": 25191,
+          "end": 25508
+        }
+      },
+      "message": "structural clone of binding/form_mapping_test.go:TestMappingCustomSliceStopsWhenError"
+    },
+    {
+      "id": "kndo-484f8166ece9",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "binding/form_mapping_test.go",
+        "selector": {
+          "Free": "TestMappingCustomSliceUnmarshalTextUri"
+        },
+        "span": {
+          "start": 24526,
+          "end": 24855
+        }
+      },
+      "message": "structural clone of binding/form_mapping_test.go:TestMappingCustomSliceUri"
+    },
+    {
+      "id": "kndo-4a289a02f903",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "binding/form_mapping_test.go",
+        "selector": {
+          "Free": "TestMappingCustomUnmarshalTextHexDefault"
+        },
+        "span": {
+          "start": 21865,
+          "end": 22158
+        }
+      },
+      "message": "structural clone of binding/form_mapping_test.go:TestMappingCustomUnmarshalParamHexDefault"
+    },
+    {
+      "id": "kndo-4fff91d1e984",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "binding/form_mapping_test.go",
+        "selector": {
+          "Free": "TestMappingCustomPointerStructTypeWithURITag"
+        },
+        "span": {
+          "start": 17016,
+          "end": 17390
+        }
+      },
+      "message": "structural clone of binding/form_mapping_test.go:TestMappingCustomPointerStructTypeWithFormTag"
+    },
+    {
+      "id": "kndo-500ca64aa1d1",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "binding/form_mapping_test.go",
+        "selector": {
+          "Free": "TestMappingCustomPointerStructTypeUnmarshalTextForm"
+        },
+        "span": {
+          "start": 23382,
+          "end": 23796
+        }
+      },
+      "message": "structural clone of binding/form_mapping_test.go:TestMappingCustomPointerStructTypeWithFormTag"
+    },
+    {
+      "id": "kndo-61ff0a55a15a",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "binding/form_mapping_test.go",
+        "selector": {
+          "Free": "TestMappingCustomArrayForm"
+        },
+        "span": {
+          "start": 19797,
+          "end": 20086
+        }
+      },
+      "message": "structural clone of binding/form_mapping_test.go:TestMappingCustomArrayUri"
+    },
+    {
+      "id": "kndo-6cff94f75425",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "binding/form_mapping_test.go",
+        "selector": {
+          "Free": "TestMappingCustomUnmarshalTextHexUri"
+        },
+        "span": {
+          "start": 21302,
+          "end": 21580
+        }
+      },
+      "message": "structural clone of binding/form_mapping_test.go:TestMappingCustomUnmarshalParamHexWithFormTag"
+    },
+    {
+      "id": "kndo-6d4b2ae3a215",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "binding/form_mapping_test.go",
+        "selector": {
+          "Free": "TestMappingCustomStructTypeUnmarshalTextUri"
+        },
+        "span": {
+          "start": 22977,
+          "end": 23380
+        }
+      },
+      "message": "structural clone of binding/form_mapping_test.go:TestMappingCustomStructTypeWithFormTag"
+    },
+    {
+      "id": "kndo-78189bec20fa",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "binding/form_mapping_test.go",
+        "selector": {
+          "Free": "TestMappingUsingBindUnmarshalerAndTextUnmarshalerWhenOnlyTextUnmarshalerDefined"
+        },
+        "span": {
+          "start": 30318,
+          "end": 30943
+        }
+      },
+      "message": "structural clone of binding/form_mapping_test.go:TestMappingUsingBindUnmarshalerAndTextUnmarshalerWhenOnlyBindUnmarshalerDefined"
+    },
+    {
+      "id": "kndo-79a85057283d",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "binding/form_mapping_test.go",
+        "selector": {
+          "Free": "TestMappingCustomSliceOfSliceForm"
+        },
+        "span": {
+          "start": 18743,
+          "end": 19067
+        }
+      },
+      "message": "structural clone of binding/form_mapping_test.go:TestMappingCustomSliceOfSliceUri"
+    },
+    {
+      "id": "kndo-956e854bbe7f",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "binding/form_mapping_test.go",
+        "selector": {
+          "Free": "TestMappingCustomArrayUnmarshalTextForm"
+        },
+        "span": {
+          "start": 27493,
+          "end": 27856
+        }
+      },
+      "message": "structural clone of binding/form_mapping_test.go:TestMappingCustomArrayUri"
+    },
+    {
+      "id": "kndo-99d33a3f9bf5",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "binding/form_mapping_test.go",
+        "selector": {
+          "Free": "TestMappingUnexportedField"
+        },
+        "span": {
+          "start": 2960,
+          "end": 3211
+        }
+      },
+      "message": "structural clone of binding/form_mapping_test.go:TestMappingIgnoreField"
+    },
+    {
+      "id": "kndo-bc419444c70a",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "binding/form_mapping_test.go",
+        "selector": {
+          "Free": "TestMappingCustomPointerStructTypeUnmarshalTextUri"
+        },
+        "span": {
+          "start": 23798,
+          "end": 24209
+        }
+      },
+      "message": "structural clone of binding/form_mapping_test.go:TestMappingCustomPointerStructTypeWithFormTag"
+    },
+    {
+      "id": "kndo-c38862bc6097",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "binding/form_mapping_test.go",
+        "selector": {
+          "Free": "TestMappingCustomSliceUnmarshalTextForm"
+        },
+        "span": {
+          "start": 24857,
+          "end": 25189
+        }
+      },
+      "message": "structural clone of binding/form_mapping_test.go:TestMappingCustomSliceUri"
+    },
+    {
+      "id": "kndo-c95665597da5",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "binding/form_mapping_test.go",
+        "selector": {
+          "Free": "TestMappingCustomUnmarshalParamHexWithURITag"
+        },
+        "span": {
+          "start": 15051,
+          "end": 15299
+        }
+      },
+      "message": "structural clone of binding/form_mapping_test.go:TestMappingCustomUnmarshalParamHexWithFormTag"
+    },
+    {
+      "id": "kndo-d218ab28f341",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "binding/form_mapping_test.go",
+        "selector": {
+          "Free": "TestMappingCustomArrayOfArrayUnmarshalTextUri"
+        },
+        "span": {
+          "start": 27858,
+          "end": 28374
+        }
+      },
+      "message": "structural clone of binding/form_mapping_test.go:TestMappingCustomArrayOfArrayUri"
+    },
+    {
+      "id": "kndo-f0b58f7fe8ca",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "binding/form_mapping_test.go",
+        "selector": {
+          "Free": "TestMappingCustomStructTypeUnmarshalTextForm"
+        },
+        "span": {
+          "start": 22569,
+          "end": 22975
+        }
+      },
+      "message": "structural clone of binding/form_mapping_test.go:TestMappingCustomStructTypeWithFormTag"
+    },
+    {
+      "id": "kndo-f793660758c3",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "binding/form_mapping_test.go",
+        "selector": {
+          "Free": "TestMappingCustomStructTypeWithURITag"
+        },
+        "span": {
+          "start": 16269,
+          "end": 16635
+        }
+      },
+      "message": "structural clone of binding/form_mapping_test.go:TestMappingCustomStructTypeWithFormTag"
+    },
+    {
+      "id": "kndo-fcb2b62631f0",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "binding/form_mapping_test.go",
+        "selector": {
+          "Free": "TestMappingCustomArrayUnmarshalTextUri"
+        },
+        "span": {
+          "start": 27131,
+          "end": 27491
+        }
+      },
+      "message": "structural clone of binding/form_mapping_test.go:TestMappingCustomArrayUri"
+    },
+    {
+      "id": "kndo-15751f2c631d",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "binding/xml_test.go",
+        "selector": {
+          "Free": "TestXMLBindingBindBody"
+        },
+        "span": {
+          "start": 277,
+          "end": 559
+        }
+      },
+      "message": "structural clone of binding/toml_test.go:TestTOMLBindingBindBody"
+    },
+    {
+      "id": "kndo-012ff4d9a5e3",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "context_test.go",
+        "selector": {
+          "Free": "TestContextShouldBindWithTOML"
+        },
+        "span": {
+          "start": 80608,
+          "end": 81109
+        }
+      },
+      "message": "structural clone of context_test.go:TestContextBindWithYAML"
+    },
+    {
+      "id": "kndo-1d03d02dfccc",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "context_test.go",
+        "selector": {
+          "Free": "TestContextShouldBindWithXML"
+        },
+        "span": {
+          "start": 77645,
+          "end": 78213
+        }
+      },
+      "message": "structural clone of context_test.go:TestContextBindWithJSON"
+    },
+    {
+      "id": "kndo-294de1ee2f97",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "context_test.go",
+        "selector": {
+          "Free": "TestContextShouldBindHeader"
+        },
+        "span": {
+          "start": 78897,
+          "end": 79526
+        }
+      },
+      "message": "structural clone of context_test.go:TestContextBindHeader"
+    },
+    {
+      "id": "kndo-2d6241686cf4",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "context_test.go",
+        "selector": {
+          "Free": "TestContextGetUint8Slice"
+        },
+        "span": {
+          "start": 18110,
+          "end": 18319
+        }
+      },
+      "message": "structural clone of context_test.go:TestContextGetIntSlice"
+    },
+    {
+      "id": "kndo-3f75e04a632c",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "context_test.go",
+        "selector": {
+          "Free": "TestContextRenderTOML"
+        },
+        "span": {
+          "start": 51165,
+          "end": 51495
+        }
+      },
+      "message": "structural clone of context_test.go:TestContextRenderYAML"
+    },
+    {
+      "id": "kndo-4647f600a3f0",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "context_test.go",
+        "selector": {
+          "Free": "TestContextGetUint16Slice"
+        },
+        "span": {
+          "start": 18321,
+          "end": 18534
+        }
+      },
+      "message": "structural clone of context_test.go:TestContextGetIntSlice"
+    },
+    {
+      "id": "kndo-477861db08d8",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "context_test.go",
+        "selector": {
+          "Free": "TestContextShouldBindWithJSON"
+        },
+        "span": {
+          "start": 77138,
+          "end": 77643
+        }
+      },
+      "message": "structural clone of context_test.go:TestContextBindWithJSON"
+    },
+    {
+      "id": "kndo-48c003fc40de",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "context_test.go",
+        "selector": {
+          "Free": "TestContextShouldBindPlain"
+        },
+        "span": {
+          "start": 78215,
+          "end": 78895
+        }
+      },
+      "message": "structural clone of context_test.go:TestContextBindPlain"
+    },
+    {
+      "id": "kndo-50f7119a2f87",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "context_test.go",
+        "selector": {
+          "Free": "TestContextGetUint64Slice"
+        },
+        "span": {
+          "start": 18751,
+          "end": 18964
+        }
+      },
+      "message": "structural clone of context_test.go:TestContextGetIntSlice"
+    },
+    {
+      "id": "kndo-516ef0f74507",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "context_test.go",
+        "selector": {
+          "Free": "TestContextShouldBindWithYAML"
+        },
+        "span": {
+          "start": 80109,
+          "end": 80606
+        }
+      },
+      "message": "structural clone of context_test.go:TestContextBindWithYAML"
+    },
+    {
+      "id": "kndo-5b7b1022445f",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "context_test.go",
+        "selector": {
+          "Free": "TestContextShouldBindBodyWithXML"
+        },
+        "span": {
+          "start": 85205,
+          "end": 86674
+        }
+      },
+      "message": "structural clone of context_test.go:TestContextShouldBindBodyWithJSON"
+    },
+    {
+      "id": "kndo-5c1c35478ae4",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "context_test.go",
+        "selector": {
+          "Free": "TestContextNegotiationWithTOML"
+        },
+        "span": {
+          "start": 56055,
+          "end": 56544
+        }
+      },
+      "message": "structural clone of context_test.go:TestContextNegotiationWithYAML"
+    },
+    {
+      "id": "kndo-5d3c54fd77d8",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "context_test.go",
+        "selector": {
+          "Free": "TestContextGetFloat32Slice"
+        },
+        "span": {
+          "start": 18966,
+          "end": 19183
+        }
+      },
+      "message": "structural clone of context_test.go:TestContextGetIntSlice"
+    },
+    {
+      "id": "kndo-62d369c48fbe",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "context_test.go",
+        "selector": {
+          "Free": "TestContextShouldBindBodyWithYAML"
+        },
+        "span": {
+          "start": 86676,
+          "end": 88256
+        }
+      },
+      "message": "structural clone of context_test.go:TestContextShouldBindBodyWithJSON"
+    },
+    {
+      "id": "kndo-72dfc8ac6a13",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "context_test.go",
+        "selector": {
+          "Free": "TestContextShouldBindWithQuery"
+        },
+        "span": {
+          "start": 79528,
+          "end": 80107
+        }
+      },
+      "message": "structural clone of context_test.go:TestContextBindWithQuery"
+    },
+    {
+      "id": "kndo-782cba36a430",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "context_test.go",
+        "selector": {
+          "Free": "TestContextRenderNoContentXML"
+        },
+        "span": {
+          "start": 43793,
+          "end": 44116
+        }
+      },
+      "message": "structural clone of context_test.go:TestContextRenderNoContentJSON"
+    },
+    {
+      "id": "kndo-805099eaabf2",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "context_test.go",
+        "selector": {
+          "Free": "TestContextGetFloat64Slice"
+        },
+        "span": {
+          "start": 19185,
+          "end": 19402
+        }
+      },
+      "message": "structural clone of context_test.go:TestContextGetIntSlice"
+    },
+    {
+      "id": "kndo-8a14ee5d5287",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "context_test.go",
+        "selector": {
+          "Free": "TestContextAbortWithStatusPureJSON"
+        },
+        "span": {
+          "start": 62927,
+          "end": 63700
+        }
+      },
+      "message": "structural clone of context_test.go:TestContextAbortWithStatusJSON"
+    },
+    {
+      "id": "kndo-8c7276e48e91",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "context_test.go",
+        "selector": {
+          "Free": "TestContextRenderXML"
+        },
+        "span": {
+          "start": 43404,
+          "end": 43743
+        }
+      },
+      "message": "structural clone of context_test.go:TestContextRenderNoContentJSON"
+    },
+    {
+      "id": "kndo-95a9bf227dc2",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "context_test.go",
+        "selector": {
+          "Free": "TestContextRenderNoContentAsciiJSON"
+        },
+        "span": {
+          "start": 40391,
+          "end": 40725
+        }
+      },
+      "message": "structural clone of context_test.go:TestContextRenderNoContentSecureJSON"
+    },
+    {
+      "id": "kndo-97d434328511",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "context_test.go",
+        "selector": {
+          "Free": "TestContextBindWithXML"
+        },
+        "span": {
+          "start": 72847,
+          "end": 73406
+        }
+      },
+      "message": "structural clone of context_test.go:TestContextBindWithJSON"
+    },
+    {
+      "id": "kndo-9bbb36ac597c",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "context_test.go",
+        "selector": {
+          "Free": "TestContextGetInt32Slice"
+        },
+        "span": {
+          "start": 17481,
+          "end": 17690
+        }
+      },
+      "message": "structural clone of context_test.go:TestContextGetIntSlice"
+    },
+    {
+      "id": "kndo-a47ecc0f06fb",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "context_test.go",
+        "selector": {
+          "Free": "TestContextBindWithTOML"
+        },
+        "span": {
+          "start": 75603,
+          "end": 76094
+        }
+      },
+      "message": "structural clone of context_test.go:TestContextBindWithYAML"
+    },
+    {
+      "id": "kndo-b27d8ebf40e3",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "context_test.go",
+        "selector": {
+          "Free": "TestContextGetInt64Slice"
+        },
+        "span": {
+          "start": 17692,
+          "end": 17901
+        }
+      },
+      "message": "structural clone of context_test.go:TestContextGetIntSlice"
+    },
+    {
+      "id": "kndo-d1e9a0ad9ddf",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "context_test.go",
+        "selector": {
+          "Free": "TestContextGetUint32Slice"
+        },
+        "span": {
+          "start": 18536,
+          "end": 18749
+        }
+      },
+      "message": "structural clone of context_test.go:TestContextGetIntSlice"
+    },
+    {
+      "id": "kndo-d440fdea5e5f",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "context_test.go",
+        "selector": {
+          "Free": "TestContextRenderNoContentData"
+        },
+        "span": {
+          "start": 47231,
+          "end": 47548
+        }
+      },
+      "message": "structural clone of context_test.go:TestContextRenderData"
+    },
+    {
+      "id": "kndo-d547e3d68766",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "context_test.go",
+        "selector": {
+          "Free": "TestContextAutoShouldBindJSON"
+        },
+        "span": {
+          "start": 76675,
+          "end": 77136
+        }
+      },
+      "message": "structural clone of context_test.go:TestContextAutoBindJSON"
+    },
+    {
+      "id": "kndo-d7e165bf5c65",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "context_test.go",
+        "selector": {
+          "Free": "TestContextGetUintSlice"
+        },
+        "span": {
+          "start": 17903,
+          "end": 18108
+        }
+      },
+      "message": "structural clone of context_test.go:TestContextGetIntSlice"
+    },
+    {
+      "id": "kndo-d8066fe92fc8",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "context_test.go",
+        "selector": {
+          "Free": "TestSaveUploadedCreateFailed"
+        },
+        "span": {
+          "start": 6252,
+          "end": 6815
+        }
+      },
+      "message": "structural clone of context_test.go:TestContextFormFile"
+    },
+    {
+      "id": "kndo-db884fe312ce",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "context_test.go",
+        "selector": {
+          "Free": "TestContextGetInt16Slice"
+        },
+        "span": {
+          "start": 17270,
+          "end": 17479
+        }
+      },
+      "message": "structural clone of context_test.go:TestContextGetIntSlice"
+    },
+    {
+      "id": "kndo-dfff22d4d483",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "context_test.go",
+        "selector": {
+          "Free": "TestContextRenderNoContentHTML"
+        },
+        "span": {
+          "start": 42845,
+          "end": 43287
+        }
+      },
+      "message": "structural clone of context_test.go:TestContextRenderHTML"
+    },
+    {
+      "id": "kndo-e386da3f8f53",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "context_test.go",
+        "selector": {
+          "Free": "TestContextRenderNoContentString"
+        },
+        "span": {
+          "start": 45437,
+          "end": 45771
+        }
+      },
+      "message": "structural clone of context_test.go:TestContextRenderString"
+    },
+    {
+      "id": "kndo-e5751bcc5853",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "context_test.go",
+        "selector": {
+          "Free": "TestContextRenderRedirectWith201"
+        },
+        "span": {
+          "start": 53611,
+          "end": 53978
+        }
+      },
+      "message": "structural clone of context_test.go:TestContextRenderRedirectWithAbsolutePath"
+    },
+    {
+      "id": "kndo-e6e7b83dec67",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "context_test.go",
+        "selector": {
+          "Free": "TestContextGetInt8Slice"
+        },
+        "span": {
+          "start": 17063,
+          "end": 17268
+        }
+      },
+      "message": "structural clone of context_test.go:TestContextGetIntSlice"
+    },
+    {
+      "id": "kndo-f1c1491e0cdd",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "context_test.go",
+        "selector": {
+          "Free": "TestContextRenderNoContentHTMLString"
+        },
+        "span": {
+          "start": 46347,
+          "end": 46746
+        }
+      },
+      "message": "structural clone of context_test.go:TestContextRenderHTMLString"
+    },
+    {
+      "id": "kndo-09734d498648",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "ginS/gins_test.go",
+        "selector": {
+          "Free": "TestPUT"
+        },
+        "span": {
+          "start": 988,
+          "end": 1296
+        }
+      },
+      "message": "structural clone of ginS/gins_test.go:TestGET"
+    },
+    {
+      "id": "kndo-112811ab49b8",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "ginS/gins_test.go",
+        "selector": {
+          "Free": "TestPATCH"
+        },
+        "span": {
+          "start": 1623,
+          "end": 1941
+        }
+      },
+      "message": "structural clone of ginS/gins_test.go:TestGET"
+    },
+    {
+      "id": "kndo-20305b9d1de9",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "ginS/gins_test.go",
+        "selector": {
+          "Free": "TestStatic"
+        },
+        "span": {
+          "start": 5341,
+          "end": 5589
+        }
+      },
+      "message": "structural clone of ginS/gins_test.go:TestStaticFile"
+    },
+    {
+      "id": "kndo-29378deffb1d",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "ginS/gins_test.go",
+        "selector": {
+          "Free": "TestPOST"
+        },
+        "span": {
+          "start": 663,
+          "end": 986
+        }
+      },
+      "message": "structural clone of ginS/gins_test.go:TestGET"
+    },
+    {
+      "id": "kndo-2b37ffb29242",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "ginS/gins_test.go",
+        "selector": {
+          "Free": "TestAny"
+        },
+        "span": {
+          "start": 2540,
+          "end": 2840
+        }
+      },
+      "message": "structural clone of ginS/gins_test.go:TestGET"
+    },
+    {
+      "id": "kndo-5bf0eb0b7501",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "ginS/gins_test.go",
+        "selector": {
+          "Free": "TestOPTIONS"
+        },
+        "span": {
+          "start": 1943,
+          "end": 2271
+        }
+      },
+      "message": "structural clone of ginS/gins_test.go:TestGET"
+    },
+    {
+      "id": "kndo-8d0c09375bd8",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "ginS/gins_test.go",
+        "selector": {
+          "Free": "TestDELETE"
+        },
+        "span": {
+          "start": 1298,
+          "end": 1621
+        }
+      },
+      "message": "structural clone of ginS/gins_test.go:TestGET"
+    },
+    {
+      "id": "kndo-9c304e2f8452",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "gin_integration_test.go",
+        "selector": {
+          "Free": "TestRunQUIC"
+        },
+        "span": {
+          "start": 7884,
+          "end": 8457
+        }
+      },
+      "message": "structural clone of gin_integration_test.go:TestRunTLS"
+    },
+    {
+      "id": "kndo-1cb28df36b33",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "gin_test.go",
+        "selector": {
+          "Free": "TestLoadHTMLGlobTestMode"
+        },
+        "span": {
+          "start": 2447,
+          "end": 2807
+        }
+      },
+      "message": "structural clone of gin_test.go:TestLoadHTMLGlobDebugMode"
+    },
+    {
+      "id": "kndo-23c525fefe09",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "gin_test.go",
+        "selector": {
+          "Free": "TestRebuild404Handlers"
+        },
+        "span": {
+          "start": 12393,
+          "end": 13142
+        }
+      },
+      "message": "structural clone of gin_test.go:TestNoRouteWithGlobalHandlers"
+    },
+    {
+      "id": "kndo-266e33245ad6",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "gin_test.go",
+        "selector": {
+          "Free": "TestEngineHandleContextUseRawPathPercentEncoded"
+        },
+        "span": {
+          "start": 20405,
+          "end": 20822
+        }
+      },
+      "message": "structural clone of gin_test.go:TestEngineHandleContextUseEscapedPathPercentEncoded"
+    },
+    {
+      "id": "kndo-28fce677c0b8",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "gin_test.go",
+        "selector": {
+          "Free": "TestLoadHTMLFSFuncMap"
+        },
+        "span": {
+          "start": 8336,
+          "end": 8695
+        }
+      },
+      "message": "structural clone of gin_test.go:TestLoadHTMLFSTestMode"
+    },
+    {
+      "id": "kndo-2b2ae60214c7",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "gin_test.go",
+        "selector": {
+          "Free": "TestLoadHTMLGlobFromFuncMap"
+        },
+        "span": {
+          "start": 3767,
+          "end": 4126
+        }
+      },
+      "message": "structural clone of gin_test.go:TestLoadHTMLGlobDebugMode"
+    },
+    {
+      "id": "kndo-3479f36fc91b",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "gin_test.go",
+        "selector": {
+          "Free": "TestLoadHTMLFilesFuncMap"
+        },
+        "span": {
+          "start": 6190,
+          "end": 6587
+        }
+      },
+      "message": "structural clone of gin_test.go:TestLoadHTMLFilesTestMode"
+    },
+    {
+      "id": "kndo-426ac78fd6d9",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "gin_test.go",
+        "selector": {
+          "Free": "TestLoadHTMLFSReleaseMode"
+        },
+        "span": {
+          "start": 7369,
+          "end": 7740
+        }
+      },
+      "message": "structural clone of gin_test.go:TestLoadHTMLFSTestMode"
+    },
+    {
+      "id": "kndo-82f410095ece",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "gin_test.go",
+        "selector": {
+          "Free": "TestNoMethodWithGlobalHandlers"
+        },
+        "span": {
+          "start": 13144,
+          "end": 14173
+        }
+      },
+      "message": "structural clone of gin_test.go:TestNoRouteWithGlobalHandlers"
+    },
+    {
+      "id": "kndo-de3c2d03894b",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "gin_test.go",
+        "selector": {
+          "Free": "TestLoadHTMLFSDebugMode"
+        },
+        "span": {
+          "start": 7000,
+          "end": 7367
+        }
+      },
+      "message": "structural clone of gin_test.go:TestLoadHTMLFSTestMode"
+    },
+    {
+      "id": "kndo-e19e0bd60958",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "gin_test.go",
+        "selector": {
+          "Free": "TestNoMethodWithoutGlobalHandlers"
+        },
+        "span": {
+          "start": 11657,
+          "end": 12391
+        }
+      },
+      "message": "structural clone of gin_test.go:TestNoRouteWithoutGlobalHandlers"
+    },
+    {
+      "id": "kndo-eefe79734135",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "gin_test.go",
+        "selector": {
+          "Free": "TestLoadHTMLFilesReleaseMode"
+        },
+        "span": {
+          "start": 5147,
+          "end": 5556
+        }
+      },
+      "message": "structural clone of gin_test.go:TestLoadHTMLFilesTestMode"
+    },
+    {
+      "id": "kndo-ef6a70bdfd00",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "gin_test.go",
+        "selector": {
+          "Free": "TestLoadHTMLFilesDebugMode"
+        },
+        "span": {
+          "start": 4740,
+          "end": 5145
+        }
+      },
+      "message": "structural clone of gin_test.go:TestLoadHTMLFilesTestMode"
+    },
+    {
+      "id": "kndo-fde60420449c",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "gin_test.go",
+        "selector": {
+          "Free": "TestLoadHTMLGlobReleaseMode"
+        },
+        "span": {
+          "start": 2809,
+          "end": 3175
+        }
+      },
+      "message": "structural clone of gin_test.go:TestLoadHTMLGlobDebugMode"
+    },
+    {
+      "id": "kndo-4805b4bf8001",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "githubapi_test.go",
+        "selector": {
+          "Free": "TestBindUri"
+        },
+        "span": {
+          "start": 13328,
+          "end": 13959
+        }
+      },
+      "message": "structural clone of githubapi_test.go:TestShouldBindUri"
+    },
+    {
+      "id": "kndo-fa83f9bd9aa2",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "githubapi_test.go",
+        "selector": {
+          "Free": "BenchmarkParallelGithubDefault"
+        },
+        "span": {
+          "start": 17000,
+          "end": 17382
+        }
+      },
+      "message": "structural clone of githubapi_test.go:BenchmarkParallelGithub"
+    },
+    {
+      "id": "kndo-a49aa88a05e1",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "render/render_test.go",
+        "selector": {
+          "Free": "TestRenderJsonpJSON"
+        },
+        "span": {
+          "start": 2808,
+          "end": 3627
+        }
+      },
+      "message": "structural clone of render/render_test.go:TestRenderSecureJSON"
+    },
+    {
+      "id": "kndo-e85136e44f4c",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "render/render_test.go",
+        "selector": {
+          "Free": "TestRenderHTMLTemplateExecuteError"
+        },
+        "span": {
+          "start": 18642,
+          "end": 18991
+        }
+      },
+      "message": "structural clone of render/render_test.go:TestRenderHTMLTemplateError"
+    },
+    {
+      "id": "kndo-75dfa65c52fe",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "routergroup_test.go",
+        "selector": {
+          "Free": "TestRouterGroupInvalidStaticFile"
+        },
+        "span": {
+          "start": 2762,
+          "end": 2999
+        }
+      },
+      "message": "structural clone of routergroup_test.go:TestRouterGroupInvalidStatic"
+    },
+    {
+      "id": "kndo-e41aad805320",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "routes_test.go",
+        "selector": {
+          "Free": "TestRouteNotOK"
+        },
+        "span": {
+          "start": 2772,
+          "end": 3141
+        }
+      },
+      "message": "structural clone of routes_test.go:TestRouterGroupRouteOK"
+    },
+    {
+      "id": "kndo-fa50ac1083a4",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "routes_test.go",
+        "selector": {
+          "Free": "TestRouteNotOK2"
+        },
+        "span": {
+          "start": 3143,
+          "end": 3522
+        }
+      },
+      "message": "structural clone of routes_test.go:TestRouterGroupRouteOK"
+    },
+    {
+      "id": "kndo-146d071ea204",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "tree_test.go",
+        "selector": {
+          "Free": "TestTreeCatchAllConflict"
+        },
+        "span": {
+          "start": 20756,
+          "end": 20996
+        }
+      },
+      "message": "structural clone of tree_test.go:TestTreeChildConflict"
+    },
+    {
+      "id": "kndo-37d95137db11",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "tree_test.go",
+        "selector": {
+          "Free": "TestTreeFindCaseInsensitivePathWildcardParamAndStaticChild"
+        },
+        "span": {
+          "start": 34451,
+          "end": 35987
+        }
+      },
+      "message": "structural clone of tree_test.go:TestTreeFindCaseInsensitivePathWithMultipleChildrenAndWildcard"
+    }
+  ],
   "fixed": [],
   "baselined": 0,
   "abstained": [],

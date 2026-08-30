@@ -16,13 +16,7 @@ fn decl<'e>(ev: &'e FileEvidence, name: &str) -> &'e kndo_contract::evidence::De
 }
 
 fn import<'e>(ev: &'e FileEvidence, specifier: &str) -> &'e kndo_contract::evidence::Import {
-    ev.imports
-        .iter()
-        .find(|i| match &i.target {
-            ImportTarget::Relative(s) | ImportTarget::Package(s) => s == specifier,
-            _ => false,
-        })
-        .unwrap_or_else(|| panic!("import {specifier} missing: {:#?}", ev.imports))
+    kndo_testkit::import_named(ev, specifier)
 }
 
 #[test]

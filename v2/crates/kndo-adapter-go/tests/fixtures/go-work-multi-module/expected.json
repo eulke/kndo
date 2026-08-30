@@ -1,0 +1,52 @@
+{
+  "run": {
+    "schema": "kndo-v2/m3",
+    "files_discovered": 5,
+    "files_claimed": 2,
+    "adapters": [
+      {
+        "id": "go",
+        "files": 2
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "kndo-e9e1113bff06",
+      "category": "unused",
+      "severity": "warning",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "moda/api.go",
+        "selector": {
+          "Free": "deadHelper"
+        },
+        "span": {
+          "start": 397,
+          "end": 417
+        }
+      },
+      "message": "nothing references, roots, or imports this declaration"
+    }
+  ],
+  "fixed": [],
+  "baselined": 0,
+  "abstained": [
+    {
+      "category": "test-only",
+      "reason": "no-test-roots-anywhere",
+      "scope": "whole-run"
+    },
+    {
+      "category": "untested",
+      "reason": "no-test-roots-anywhere",
+      "scope": "whole-run"
+    }
+  ],
+  "suppressed": {
+    "total": 0,
+    "by_category": []
+  },
+  "diagnostics": []
+}
