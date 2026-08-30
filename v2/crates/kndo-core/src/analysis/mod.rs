@@ -7,10 +7,12 @@
 //! Reachability is computed once, per root color, and shared: every analysis reads
 //! the same [`Reachability`] instead of building its own.
 
+mod duplicate;
 mod test_only;
 mod untested;
 mod unused;
 
+pub use duplicate::Duplicate;
 pub use test_only::TestOnly;
 pub use untested::Untested;
 pub use unused::Unused;

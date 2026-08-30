@@ -10,7 +10,26 @@
       }
     ]
   },
-  "findings": [],
+  "findings": [
+    {
+      "id": "kndo-c498f5028286",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "orders.ts",
+        "selector": {
+          "Free": "sumWithFee"
+        },
+        "span": {
+          "start": 169,
+          "end": 456
+        }
+      },
+      "message": "structural clone of billing.ts:totalWithTax"
+    }
+  ],
   "abstained": [
     {
       "category": "test-only",

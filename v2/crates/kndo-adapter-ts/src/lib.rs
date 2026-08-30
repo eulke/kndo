@@ -27,11 +27,16 @@ pub struct TypeScriptAdapter {
 impl TypeScriptAdapter {
     pub fn new() -> Self {
         TypeScriptAdapter {
-            spec: AdapterSpec::builder("js-ts", 1)
+            // semantics_version 2: the adapter emits Metrics (winnowing fingerprints,
+            // cyclomatic, loc) for every function-shaped declaration.
+            spec: AdapterSpec::builder("js-ts", 2)
                 .claims(&[
                     "**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.mjs", "**/*.cjs",
                 ])
-                .emits(EvidenceStreams::of(&[EvidenceStream::Comments]))
+                .emits(EvidenceStreams::of(&[
+                    EvidenceStream::Comments,
+                    EvidenceStream::Metrics,
+                ]))
                 .manifests(&["**/package.json"])
                 .build(),
         }

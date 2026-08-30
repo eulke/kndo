@@ -298,3 +298,16 @@ committed measurement is enforced, not decorative. M2 exit numbers: vite 702 vs 
 unused 844 (shared-verdict overlap 274 files + 5 public-API symbols; every delta
 bucketed in `corpus-findings/COMPARISON.md`), lodash 18 vs 13 files (dist/vendor/HTML
 edges explained), dogfood zero via honest abstention.
+
+## 2026-08-30 — The duplicate floor is 60 normalized tokens, measured
+
+Winnowing (k=5, w=4) over kind-normalized leaves lives in the toolkit; the js-ts
+adapter emits it per function (semantics_version 2). The floor experiment on the
+corpus: MIN_TOKENS 100 → vite 158 duplicates; 60 → 174 (+16), every sampled addition
+a true clone (create-vite template Apps, byte-identical vite.configs), lodash
+unchanged, and the harvested duplicate-structural fixture's designed clones (76
+tokens) covered. Oracle: vite 179 — the residue is css/json subjects v2 does not
+claim. 60 wins; it becomes a config key when the registry lands. Byte-identical
+files are the same category's file-level judgment (hash_hex equality), and members
+of an exact-duplicate group are excluded from the structural pass so a copied file
+does not also duplicate every function inside itself.

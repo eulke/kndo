@@ -10,7 +10,63 @@
       }
     ]
   },
-  "findings": [],
+  "findings": [
+    {
+      "id": "kndo-006b7252c4e8",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "docs/js/jazzy.js"
+      },
+      "message": "byte-identical to docs/docsets/Alamofire.docset/Contents/Resources/Documents/js/jazzy.js"
+    },
+    {
+      "id": "kndo-ed2bc4786dfa",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "docs/js/jazzy.search.js"
+      },
+      "message": "byte-identical to docs/docsets/Alamofire.docset/Contents/Resources/Documents/js/jazzy.search.js"
+    },
+    {
+      "id": "kndo-7317215f2bb3",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "docs/js/jquery.min.js"
+      },
+      "message": "byte-identical to docs/docsets/Alamofire.docset/Contents/Resources/Documents/js/jquery.min.js"
+    },
+    {
+      "id": "kndo-ccf3dde42a4f",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "docs/js/lunr.min.js"
+      },
+      "message": "byte-identical to docs/docsets/Alamofire.docset/Contents/Resources/Documents/js/lunr.min.js"
+    },
+    {
+      "id": "kndo-fc88c06b1578",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "docs/js/typeahead.jquery.js"
+      },
+      "message": "byte-identical to docs/docsets/Alamofire.docset/Contents/Resources/Documents/js/typeahead.jquery.js"
+    }
+  ],
   "abstained": [
     {
       "category": "unused",

@@ -210,6 +210,17 @@
       "message": "no root anchors this file and no reachable file imports it"
     },
     {
+      "id": "kndo-1bfe61bd7670",
+      "category": "duplicate",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "file",
+        "path": "lodash.js"
+      },
+      "message": "byte-identical to dist/lodash.js"
+    },
+    {
       "id": "kndo-52c77982755b",
       "category": "test-only",
       "severity": "info",

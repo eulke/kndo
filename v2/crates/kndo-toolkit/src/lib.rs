@@ -39,3 +39,48 @@ pub fn walk(node: Node<'_>, f: &mut dyn FnMut(Node<'_>)) {
         walk(child, f);
     }
 }
+
+/// FNV-1a over bytes — the stable, dependency-free token hash the fingerprint
+/// pipeline builds on. Not cryptographic; collisions only ever merge clone groups
+/// toward under-reporting.
+pub fn fnv1a(bytes: &[u8]) -> u64 {
+    let mut h: u64 = 0xcbf29ce484222325;
+    for &b in bytes {
+        h ^= u64::from(b);
+        h = h.wrapping_mul(0x100000001b3);
+    }
+    h
+}
+
+/// Winnowing (Schleimer et al.) over an already-hashed token stream: k-gram hashes,
+/// then the minimum of each sliding window, returned sorted and deduplicated so two
+/// token streams are structural clones exactly when their fingerprint sets are equal.
+/// Grammar-independent by construction — adapters own tokenization and
+/// normalization; this owns the guarantee (any shared run of `window + k - 1` tokens
+/// shares a fingerprint).
+pub fn winnow(token_hashes: &[u64], k: usize, window: usize) -> Vec<u64> {
+    if token_hashes.len() < k {
+        return Vec::new();
+    }
+    let grams: Vec<u64> = token_hashes
+        .windows(k)
+        .map(|gram| {
+            let mut h: u64 = 0xcbf29ce484222325;
+            for &t in gram {
+                h = h.rotate_left(7) ^ t.wrapping_mul(0x100000001b3);
+            }
+            h
+        })
+        .collect();
+    let mut out: Vec<u64> = if grams.len() <= window {
+        grams.iter().copied().min().into_iter().collect()
+    } else {
+        grams
+            .windows(window)
+            .map(|w| *w.iter().min().unwrap())
+            .collect()
+    };
+    out.sort_unstable();
+    out.dedup();
+    out
+}

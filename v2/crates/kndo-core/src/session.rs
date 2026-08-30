@@ -4,7 +4,7 @@
 //! `Result<Snapshot, Refusal>`: the run either happened or was refused, and the
 //! refusal reappears inside [`RunOutcome`] so `exit_code` covers that path too.
 
-use crate::analysis::{Abstention, TestOnly, Untested, Unused, run_all};
+use crate::analysis::{Abstention, Duplicate, TestOnly, Untested, Unused, run_all};
 use crate::cache::EvidenceCache;
 use crate::graph::Graph;
 use crate::report::{AdapterRun, Report, ReportDiagnostic, RunInfo, SCHEMA};
@@ -220,7 +220,7 @@ impl Session {
         let graph = persisted.graph;
 
         let analyze_start = Instant::now();
-        let (findings, abstained) = run_all(&graph, &[&Unused, &TestOnly, &Untested]);
+        let (findings, abstained) = run_all(&graph, &[&Unused, &TestOnly, &Untested, &Duplicate]);
         timings.analyze = analyze_start.elapsed();
 
         Snapshot {

@@ -105,12 +105,13 @@ fn declare(
     match node.kind() {
         "function_declaration" | "generator_function_declaration" => {
             if let Some(n) = node.child_by_field_name("name") {
-                emit(
+                let id = emit(
                     tk::text(n, source),
                     SymbolKind::Function,
                     tk::span(node),
                     out,
                 );
+                out.metrics(id, function_metrics(node, source));
             }
         }
         "class_declaration" | "abstract_class_declaration" => {
@@ -146,7 +147,16 @@ fn declare(
                 // Destructuring patterns bind names this pass does not declare —
                 // an undeclared binding can never be accused.
                 if n.kind() == "identifier" {
-                    emit(tk::text(n, source), kind.clone(), tk::span(d), out);
+                    let id = emit(tk::text(n, source), kind.clone(), tk::span(d), out);
+                    // A function in const clothing is a function to the metrics.
+                    if let Some(value) = d.child_by_field_name("value")
+                        && matches!(
+                            value.kind(),
+                            "arrow_function" | "function_expression" | "generator_function"
+                        )
+                    {
+                        out.metrics(id, function_metrics(value, source));
+                    }
                 }
             }
         }
@@ -194,6 +204,55 @@ fn class_members(class: Node<'_>, source: &[u8], class_id: DeclarationId, out: &
         }
         let id = out.declaration(name, SymbolKind::Method, tk::span(m), Reach::Private);
         out.member_of(id, class_id);
+        out.metrics(id, function_metrics(m, source));
+    }
+}
+
+/// Metrics over one function-shaped node. Leaves are normalized by class —
+/// identifiers, strings and numbers collapse to their kind — so Type-2 clones
+/// (renamed, re-valued) fingerprint identically; everything else keeps its literal
+/// kind. Comments never count.
+fn function_metrics(node: Node<'_>, source: &[u8]) -> kndo_contract::evidence::FunctionMetrics {
+    let _ = source;
+    let mut token_hashes: Vec<u64> = Vec::new();
+    let mut cyclomatic = 1u32;
+    tk::walk(node, &mut |n| {
+        match n.kind() {
+            "if_statement" | "for_statement" | "for_in_statement" | "while_statement"
+            | "do_statement" | "switch_case" | "catch_clause" | "ternary_expression" => {
+                cyclomatic += 1;
+            }
+            "binary_expression" => {
+                if n.child_by_field_name("operator")
+                    .is_some_and(|op| matches!(op.kind(), "&&" | "||" | "??"))
+                {
+                    cyclomatic += 1;
+                }
+            }
+            _ => {}
+        }
+        if n.child_count() == 0 {
+            let class = match n.kind() {
+                "identifier"
+                | "property_identifier"
+                | "private_property_identifier"
+                | "type_identifier"
+                | "shorthand_property_identifier"
+                | "shorthand_property_identifier_pattern" => "id",
+                "string_fragment" => "str",
+                "number" => "num",
+                "comment" => return,
+                other => other,
+            };
+            token_hashes.push(tk::fnv1a(class.as_bytes()));
+        }
+    });
+    let loc = (node.end_position().row - node.start_position().row + 1) as u32;
+    kndo_contract::evidence::FunctionMetrics {
+        cyclomatic,
+        loc,
+        token_count: token_hashes.len() as u32,
+        fingerprints: tk::winnow(&token_hashes, 5, 4),
     }
 }
 

@@ -265,6 +265,52 @@ fn broken_source_degrades_with_diagnostics() {
 }
 
 #[test]
+fn metrics_fingerprint_structural_clones() {
+    let ev = extract(
+        "src/m.ts",
+        r#"
+export function alpha(list: number[]) {
+  let total = 0;
+  for (const item of list) {
+    if (item > 10) { total += item * 2; } else { total += item; }
+  }
+  return total;
+}
+export function beta(values: number[]) {
+  let sum = 0;
+  for (const v of values) {
+    if (v > 99) { sum += v * 7; } else { sum += v; }
+  }
+  return sum;
+}
+export function gamma(values: number[]) {
+  return values.filter((v) => v > 0).map((v) => v * 2);
+}
+"#,
+    );
+    let m = |name: &str| {
+        let ix = ev
+            .declarations
+            .iter()
+            .position(|d| d.name == name)
+            .unwrap_or_else(|| panic!("decl {name}"));
+        ev.metrics
+            .iter()
+            .find(|(id, _)| id.index() == ix)
+            .map(|(_, m)| m)
+            .unwrap_or_else(|| panic!("metrics for {name}: {:#?}", ev.metrics))
+    };
+    let (alpha, beta, gamma) = (m("alpha"), m("beta"), m("gamma"));
+    // Renamed identifiers and different literals: same structure, same fingerprints.
+    assert_eq!(alpha.fingerprints, beta.fingerprints);
+    assert_ne!(alpha.fingerprints, gamma.fingerprints);
+    // for + if + else-arm-free counting: 1 + for + if = 3.
+    assert_eq!(alpha.cyclomatic, 3);
+    assert!(alpha.token_count > 20);
+    assert_eq!(alpha.loc, 7);
+}
+
+#[test]
 fn plain_js_and_jsx_extract_through_the_tsx_grammar() {
     let ev = extract(
         "src/App.jsx",
