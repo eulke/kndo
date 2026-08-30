@@ -5,8 +5,9 @@
 
 use crate::cache::EvidenceCache;
 use crate::discover::DiscoveredFile;
-use kndo_contract::adapter::{LanguageAdapter, SourceFile};
+use kndo_contract::adapter::SourceFile;
 use kndo_contract::evidence::{EvidenceSink, FileEvidence};
+use kndo_contract::extension::Extension;
 use rayon::prelude::*;
 
 pub struct ClaimedFile {
@@ -14,7 +15,7 @@ pub struct ClaimedFile {
     pub adapter_index: usize,
 }
 
-pub fn claim(files: &[DiscoveredFile], adapters: &[Box<dyn LanguageAdapter>]) -> Vec<ClaimedFile> {
+pub fn claim(files: &[DiscoveredFile], adapters: &[Box<dyn Extension>]) -> Vec<ClaimedFile> {
     let sets: Vec<globset::GlobSet> = adapters
         .iter()
         .map(|a| {
@@ -48,7 +49,7 @@ pub fn claim(files: &[DiscoveredFile], adapters: &[Box<dyn LanguageAdapter>]) ->
 pub fn extract(
     files: &[DiscoveredFile],
     claims: &[ClaimedFile],
-    adapters: &[Box<dyn LanguageAdapter>],
+    adapters: &[Box<dyn Extension>],
     cache: &EvidenceCache,
 ) -> Vec<FileEvidence> {
     claims
@@ -65,7 +66,7 @@ pub fn extract(
 
 pub fn extract_one(
     file: &DiscoveredFile,
-    adapter: &dyn LanguageAdapter,
+    adapter: &dyn Extension,
     cache: &EvidenceCache,
 ) -> FileEvidence {
     let spec = adapter.spec();

@@ -3,7 +3,8 @@
 //! standard library and everything external.
 
 use kndo_adapter_go::GoAdapter;
-use kndo_contract::adapter::{LanguageAdapter, PackageEntry, Resolution, ResolveContext};
+use kndo_contract::adapter::{PackageEntry, Resolution, ResolveContext};
+use kndo_contract::extension::Extension;
 use kndo_contract::vocab::ProjectPath;
 use smol_str::SmolStr;
 use std::collections::{BTreeMap, BTreeSet};

@@ -10,13 +10,14 @@ use crate::adapter::{PackageEntry, ProjectRoot, Resolution, ResolveContext, Sour
 use crate::evidence::{CoverageRecords, EvidenceSink, EvidenceStreams, RootKind};
 use crate::finding::Severity;
 use crate::vocab::{Confidence, ProjectPath};
+use serde::Serialize;
 use smol_str::SmolStr;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 
 /// One machine-checkable activation predicate — cheap, evaluated against what the
 /// run already discovered, never by running extension code.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub enum ActivationRule {
     /// At least one discovered file matches this glob (e.g. `next.config.*`).
     FileExists(SmolStr),
@@ -33,7 +34,7 @@ pub enum ActivationRule {
 /// extension that can never self-activate, reachable only through another
 /// extension's `dependencies` (a company framework whose users never depend on
 /// it directly).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub enum Activation {
     Always,
     AnyRule(Vec<ActivationRule>),
@@ -42,7 +43,7 @@ pub enum Activation {
 /// One rule an extension may emit findings under; the suffix of the namespaced
 /// advisory category. A finding under an undeclared rule is dropped and recorded
 /// — declaration is the contract, not decoration.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct RuleDescriptor {
     pub name: SmolStr,
     pub description: SmolStr,
@@ -71,7 +72,7 @@ impl MutatesGraph {
 /// come in three clusters with one gate each: extraction (gated by `claims`),
 /// conduct (gated by `activation` + `mutates_graph`), ingestion (gated by
 /// `activation` + `reads_reports`).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ExtensionSpec {
     coordinate: SmolStr,
     version: u32,
@@ -81,6 +82,12 @@ pub struct ExtensionSpec {
     emits: EvidenceStreams,
     manifests: Vec<SmolStr>,
     // -- conduct --
+    /// Whether this spec went through the conduct stage at all. Data, not
+    /// inference: an empty-but-conducting spec (an always-on ingester before its
+    /// paths are declared) still owes the report a contribution row, and an
+    /// extraction-only spec never appears in the round — a distinction field
+    /// values alone cannot draw.
+    conducts: bool,
     activation: Activation,
     mutates_graph: bool,
     dependencies: Vec<SmolStr>,
@@ -107,6 +114,7 @@ impl ExtensionSpec {
                 // Inert neutrals for an extraction-only extension: activation
                 // gates only conduct and ingestion, and with no conduct declared
                 // there is nothing for these to gate.
+                conducts: false,
                 activation: Activation::Always,
                 mutates_graph: false,
                 dependencies: Vec::new(),
@@ -144,6 +152,13 @@ impl ExtensionSpec {
         &self.manifests
     }
 
+    /// Whether this spec declares conduct or ingestion at all — the engine's
+    /// round runs over exactly the extensions for which this is true, and only
+    /// those appear as contributions in the report.
+    pub fn declares_conduct(&self) -> bool {
+        self.conducts
+    }
+
     pub fn activation(&self) -> &Activation {
         &self.activation
     }
@@ -169,6 +184,62 @@ impl ExtensionSpec {
     /// [`Extension::ingest`], in declaration order.
     pub fn reads_reports(&self) -> &[SmolStr] {
         &self.reads_reports
+    }
+}
+
+/// The owned-parts constructor for the wire boundary: a LOADED component's spec
+/// arrives as data, not statics, so the builder's `&'static str` economy cannot
+/// apply — and a parts struct rather than a parameter list, so no two same-typed
+/// fields can swap silently. `conducts` is the loader's statement of which side
+/// of the door the component's world sits on until the worlds unify.
+#[derive(Debug, Default)]
+pub struct ExtensionSpecParts {
+    pub coordinate: SmolStr,
+    pub version: u32,
+    pub extensions: Vec<SmolStr>,
+    pub claims: Vec<SmolStr>,
+    pub emits: EvidenceStreams,
+    pub manifests: Vec<SmolStr>,
+    pub conducts: bool,
+    pub activation: Activation,
+    pub mutates_graph: bool,
+    pub dependencies: Vec<SmolStr>,
+    pub requested_file_access: Vec<SmolStr>,
+    pub rules: Vec<RuleDescriptor>,
+    pub reads_reports: Vec<SmolStr>,
+}
+
+impl Default for Activation {
+    /// The inert neutral (see [`ExtensionSpec::builder`]); a conducting spec
+    /// assembled from wire parts carries the activation its component declared.
+    fn default() -> Self {
+        Activation::Always
+    }
+}
+
+impl Default for EvidenceStreams {
+    fn default() -> Self {
+        EvidenceStreams::none()
+    }
+}
+
+impl From<ExtensionSpecParts> for ExtensionSpec {
+    fn from(parts: ExtensionSpecParts) -> ExtensionSpec {
+        ExtensionSpec {
+            coordinate: parts.coordinate,
+            version: parts.version,
+            extensions: parts.extensions,
+            claims: parts.claims,
+            emits: parts.emits,
+            manifests: parts.manifests,
+            conducts: parts.conducts,
+            activation: parts.activation,
+            mutates_graph: parts.mutates_graph,
+            dependencies: parts.dependencies,
+            requested_file_access: parts.requested_file_access,
+            rules: parts.rules,
+            reads_reports: parts.reads_reports,
+        }
     }
 }
 
@@ -232,6 +303,7 @@ impl ExtensionSpecBuilder {
         activation: Activation,
         mutates_graph: MutatesGraph,
     ) -> ConductBuilder {
+        self.spec.conducts = true;
         self.spec.activation = activation;
         self.spec.mutates_graph = mutates_graph.as_bool();
         ConductBuilder { spec: self.spec }

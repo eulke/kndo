@@ -1,6 +1,6 @@
-//! A loaded component as a [`kndo_core::Plugin`]. The containment model is not
-//! re-implemented here — it is INHERITED: the bridge writes through the same
-//! `PluginSink` a native plugin does, so undeclared rules, misdirected targets and
+//! A loaded plugin-world component as an [`Extension`]. The containment model is
+//! not re-implemented here — it is INHERITED: the bridge writes through the same
+//! `ConductSink` a native extension does, so undeclared rules, misdirected targets and
 //! smuggled roots drop under the engine's own rules, and the spec's declared globs
 //! and budget govern content through the engine's own `ContentView`.
 
@@ -8,9 +8,8 @@ use crate::LoadError;
 use crate::bindings::plugin::{Plugin as PluginWorld, PluginImports};
 use crate::convert::plugin_wire;
 use crate::engine::{budgeted_store, guest_limits, shared_engine};
-use kndo_core::plugin::{
-    ContentView, GraphView, Plugin, PluginSink, PluginSpec, is_reserved_coordinate,
-};
+use kndo_contract::extension::{ConductSink, ContentView, Extension, ExtensionSpec, GraphAccess};
+use kndo_core::plugin::is_reserved_coordinate;
 use std::collections::BTreeMap;
 use std::path::Path;
 use wasmtime::component::{Component, Linker};
@@ -45,8 +44,7 @@ impl PluginImports for PluginStoreData {
 pub struct WasmPlugin {
     component: Component,
     linker: Linker<PluginStoreData>,
-    spec: PluginSpec,
-    mutates: bool,
+    spec: ExtensionSpec,
 }
 
 impl WasmPlugin {
@@ -76,7 +74,9 @@ impl WasmPlugin {
         let mutates = guest
             .call_mutates_graph(&mut store)
             .map_err(|e| LoadError::Component(e.to_string()))?;
-        let spec = plugin_wire::plugin_spec(spec);
+        let mut parts = plugin_wire::plugin_parts(spec);
+        parts.mutates_graph = mutates;
+        let spec: ExtensionSpec = parts.into();
         if is_reserved_coordinate(spec.coordinate()) {
             return Err(LoadError::ReservedCoordinate {
                 coordinate: spec.coordinate().to_string(),
@@ -86,11 +86,10 @@ impl WasmPlugin {
             component,
             linker,
             spec,
-            mutates,
         })
     }
 
-    fn round_data(&self, graph: &GraphView<'_>, content: &ContentView<'_>) -> PluginStoreData {
+    fn round_data(&self, graph: &dyn GraphAccess, content: &ContentView<'_>) -> PluginStoreData {
         let paths: Vec<String> = graph.paths().map(|p| p.as_str().to_string()).collect();
         let mut snapshot = BTreeMap::new();
         // The view's own enumeration and its own budgeted reads — the glob scope
@@ -121,20 +120,16 @@ impl WasmPlugin {
     }
 }
 
-impl Plugin for WasmPlugin {
-    fn spec(&self) -> &PluginSpec {
+impl Extension for WasmPlugin {
+    fn spec(&self) -> &ExtensionSpec {
         &self.spec
-    }
-
-    fn mutates_graph(&self) -> bool {
-        self.mutates
     }
 
     fn contribute_roots(
         &self,
-        graph: &GraphView<'_>,
+        graph: &dyn GraphAccess,
         content: &ContentView<'_>,
-        out: &mut PluginSink,
+        out: &mut ConductSink,
     ) {
         let Some(roots) = self.call(self.round_data(graph, content), |guest, store| {
             guest.call_contribute_roots(store)
@@ -152,9 +147,9 @@ impl Plugin for WasmPlugin {
 
     fn report_findings(
         &self,
-        graph: &GraphView<'_>,
+        graph: &dyn GraphAccess,
         content: &ContentView<'_>,
-        out: &mut PluginSink,
+        out: &mut ConductSink,
     ) {
         let Some(findings) = self.call(self.round_data(graph, content), |guest, store| {
             guest.call_report_findings(store)

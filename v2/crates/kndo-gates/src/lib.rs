@@ -60,7 +60,7 @@ pub const GATES: &[Gate] = &[
     },
     Gate {
         name: "builtin_plugin_proofs",
-        invariant: "every built-in plugin proves its effect baseline-then-plugin, closed over default_plugins",
+        invariant: "every built-in conducting extension proves its effect baseline-then-plugin, closed over the conduct subset of default_extensions",
     },
     Gate {
         name: "plugin_dependency_implication",

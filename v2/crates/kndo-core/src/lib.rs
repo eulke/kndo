@@ -15,10 +15,14 @@ mod suppress;
 
 pub use analysis::{Abstention, AbstentionReason, AbstentionScope, Analysis};
 pub use graph::{Graph, GraphFile};
+pub use kndo_contract::extension::{
+    ConductBuilder, ExtensionSpec, ExtensionSpecBuilder, ExtensionSpecParts, MutatesGraph,
+};
 pub use plugin::{
     Activation, ActivationReason, ActivationRule, CONTENT_MAX_BYTES, CONTENT_MAX_FILES,
-    ContentView, GraphView, Plugin, PluginContribution, PluginSeverity, PluginSink, PluginSpec,
-    PluginTarget, RuleDescriptor, WellKnown, is_reserved_coordinate,
+    ConductSink, ContentView, Extension, GraphAccess, GraphView, PluginContribution,
+    PluginSeverity, PluginSink, PluginTarget, RuleDescriptor, WellKnown, activate,
+    is_reserved_coordinate, run_round,
 };
 pub use report::{Report, ReportDiagnostic};
 pub use session::{

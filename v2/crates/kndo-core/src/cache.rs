@@ -1,14 +1,14 @@
 //! The two caches, both content-addressed, disposable, and versioned by the contract
 //! fingerprint — a shape change in any evidence type invalidates every entry with no
 //! constant to remember. The evidence cache's key also folds the adapter's id,
-//! `semantics_version` and declared streams, so a behavior or declaration change
+//! `version` and declared streams, so a behavior or declaration change
 //! invalidates exactly that adapter's entries; the graph cache's key folds the whole
 //! adapter set and `GRAPH_SEMANTICS_VERSION`. Every failure path degrades to a miss
 //! or a skipped write; a cache can slow a run down, never change it.
 
 use crate::graph::Graph;
-use kndo_contract::adapter::AdapterSpec;
 use kndo_contract::evidence::FileEvidence;
+use kndo_contract::extension::ExtensionSpec;
 use kndo_contract::vocab::ProjectPath;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -32,14 +32,14 @@ impl EvidenceCache {
 
     fn entry_path(
         &self,
-        spec: &AdapterSpec,
+        spec: &ExtensionSpec,
         path: &ProjectPath,
         content_hash: &[u8; 32],
     ) -> Option<PathBuf> {
         let dir = self.dir.as_ref()?;
         let mut h = blake3::Hasher::new();
-        h.update(spec.id().as_bytes());
-        h.update(&spec.semantics_version().to_le_bytes());
+        h.update(spec.coordinate().as_bytes());
+        h.update(&spec.version().to_le_bytes());
         h.update(&self.fingerprint);
         h.update(serde_json::to_string(spec.emits()).ok()?.as_bytes());
         // The path participates: extraction sees it, and adapters emit
@@ -58,7 +58,7 @@ impl EvidenceCache {
 
     pub fn get(
         &self,
-        spec: &AdapterSpec,
+        spec: &ExtensionSpec,
         path: &ProjectPath,
         content_hash: &[u8; 32],
     ) -> Option<FileEvidence> {
@@ -77,7 +77,7 @@ impl EvidenceCache {
 
     pub fn put(
         &self,
-        spec: &AdapterSpec,
+        spec: &ExtensionSpec,
         path: &ProjectPath,
         content_hash: &[u8; 32],
         evidence: &FileEvidence,

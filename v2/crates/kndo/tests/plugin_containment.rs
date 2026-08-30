@@ -5,76 +5,11 @@
 //! same suppression pass as first-party ones.
 
 use kndo::{
-    Activation, Category, Confidence, Config, ContentView, GraphView, Plugin, PluginSeverity,
-    PluginSink, PluginSpec, PluginTarget, ProjectPath, RootKind, RunMode, Session, Snapshot,
-    Subject, Threads,
+    Activation, Category, Confidence, Config, Extension, ExtensionSpec, MutatesGraph,
+    PluginSeverity, PluginTarget, ProjectPath, RootKind, RunMode, Session, Snapshot, Subject,
+    Threads,
 };
-use kndo_testkit::{MockAdapter, TempProject};
-
-/// A plugin that emits exactly what the test scripts — including things a correct
-/// plugin never would, because the drops are the behavior under test.
-struct ScriptedPlugin {
-    spec: PluginSpec,
-    mutates: bool,
-    /// Emitted from `contribute_roots` (the sanctioned hook).
-    contribute: Vec<(PluginTarget, RootKind, Confidence)>,
-    /// Emitted from `report_findings` — the containment probe: a non-mutating
-    /// plugin trying to smuggle a root through the shared sink.
-    report_roots: Vec<(PluginTarget, RootKind, Confidence)>,
-    findings: Vec<(&'static str, PluginTarget)>,
-    /// Read every graph file through the content view, to drain its budget.
-    read_everything: bool,
-}
-
-impl ScriptedPlugin {
-    fn new(spec: PluginSpec, mutates: bool) -> Self {
-        ScriptedPlugin {
-            spec,
-            mutates,
-            contribute: Vec::new(),
-            report_roots: Vec::new(),
-            findings: Vec::new(),
-            read_everything: false,
-        }
-    }
-}
-
-impl Plugin for ScriptedPlugin {
-    fn spec(&self) -> &PluginSpec {
-        &self.spec
-    }
-    fn mutates_graph(&self) -> bool {
-        self.mutates
-    }
-    fn contribute_roots(
-        &self,
-        _graph: &GraphView<'_>,
-        _content: &ContentView<'_>,
-        out: &mut PluginSink,
-    ) {
-        for (target, kind, confidence) in &self.contribute {
-            out.root(target.clone(), *kind, *confidence);
-        }
-    }
-    fn report_findings(
-        &self,
-        graph: &GraphView<'_>,
-        content: &ContentView<'_>,
-        out: &mut PluginSink,
-    ) {
-        for (target, kind, confidence) in &self.report_roots {
-            out.root(target.clone(), *kind, *confidence);
-        }
-        if self.read_everything {
-            for path in graph.paths() {
-                let _ = content.read(path);
-            }
-        }
-        for (rule, target) in &self.findings {
-            out.finding(rule, PluginSeverity::Info, target.clone(), "scripted");
-        }
-    }
-}
+use kndo_testkit::{MockAdapter, MockExtension, TempProject};
 
 fn fixture() -> TempProject {
     let p = TempProject::new();
@@ -87,17 +22,18 @@ fn fixture() -> TempProject {
     p
 }
 
-fn analyze(p: &TempProject, plugins: Vec<Box<dyn Plugin>>) -> Snapshot {
+fn analyze(p: &TempProject, conduct: Vec<Box<dyn Extension>>) -> Snapshot {
+    let mut extensions: Vec<Box<dyn Extension>> = vec![Box::new(MockAdapter::new())];
+    extensions.extend(conduct);
     Session::open(
         p.root(),
         Config {
             threads: Threads::Auto,
             use_cache: false,
         },
-        vec![Box::new(MockAdapter::new())],
+        extensions,
     )
     .expect("open")
-    .with_plugins(plugins)
     .analyze(RunMode::Full)
     .expect("analyze")
 }
@@ -115,36 +51,50 @@ fn symbol(path: &str, name: &str) -> PluginTarget {
 
 #[test]
 fn misdirected_contributions_drop_with_described_lines() {
-    let mut m = ScriptedPlugin::new(
-        PluginSpec::builder("test:m", 1)
-            .activation(Activation::Always)
+    let m = MockExtension::scripted(
+        ExtensionSpec::builder("test:m", 1)
+            .conduct(Activation::Always, MutatesGraph::Yes)
             .rule("hello", "a declared rule")
             .build(),
-        true,
-    );
-    m.contribute = vec![
-        (
+    )
+    .on_contribute(|_, _, out| {
+        out.root(
             file("missing.kmock"),
             RootKind::Production,
             Confidence::Certain,
-        ),
-        (
+        );
+        out.root(
             symbol("main.kmock", "no_such_fn"),
             RootKind::Production,
             Confidence::Certain,
-        ),
+        );
         // The one that lands: a DECLARATION-targeted anchor keeps `dead_one`.
-        (
+        out.root(
             symbol("main.kmock", "dead_one"),
             RootKind::Production,
             Confidence::Certain,
-        ),
-    ];
-    m.findings = vec![
-        ("ghost", file("main.kmock")),
-        ("hello", file("missing.kmock")),
-        ("hello", symbol("lib.kmock", "helper")),
-    ];
+        );
+    })
+    .on_report(|_, _, out| {
+        out.finding(
+            "ghost",
+            PluginSeverity::Info,
+            file("main.kmock"),
+            "scripted",
+        );
+        out.finding(
+            "hello",
+            PluginSeverity::Info,
+            file("missing.kmock"),
+            "scripted",
+        );
+        out.finding(
+            "hello",
+            PluginSeverity::Info,
+            symbol("lib.kmock", "helper"),
+            "scripted",
+        );
+    });
 
     let snap = analyze(&fixture(), vec![Box::new(m)]);
     let contribution = &snap.plugins[0];
@@ -188,17 +138,18 @@ fn misdirected_contributions_drop_with_described_lines() {
 
 #[test]
 fn a_non_mutating_plugin_cannot_smuggle_roots_through_the_sink() {
-    let mut n = ScriptedPlugin::new(
-        PluginSpec::builder("test:n", 1)
-            .activation(Activation::Always)
+    let n = MockExtension::scripted(
+        ExtensionSpec::builder("test:n", 1)
+            .conduct(Activation::Always, MutatesGraph::No)
             .build(),
-        false,
-    );
-    n.report_roots = vec![(
-        file("orphan.kmock"),
-        RootKind::Production,
-        Confidence::Certain,
-    )];
+    )
+    .on_report(|_, _, out| {
+        out.root(
+            file("orphan.kmock"),
+            RootKind::Production,
+            Confidence::Certain,
+        );
+    });
 
     let snap = analyze(&fixture(), vec![Box::new(n)]);
     assert_eq!(
@@ -222,14 +173,17 @@ fn the_content_budget_cut_is_reported_on_the_contribution() {
     for i in 0..kndo::CONTENT_MAX_FILES {
         p.file(&format!("bulk_{i:03}.kmock"), "fn filler\n");
     }
-    let mut n = ScriptedPlugin::new(
-        PluginSpec::builder("test:n", 1)
-            .activation(Activation::Always)
+    let n = MockExtension::scripted(
+        ExtensionSpec::builder("test:n", 1)
+            .conduct(Activation::Always, MutatesGraph::No)
             .requested_file_access(&["*.kmock"])
             .build(),
-        false,
-    );
-    n.read_everything = true;
+    )
+    .on_report(|graph, content, _| {
+        for path in graph.paths() {
+            let _ = content.read(path);
+        }
+    });
 
     let snap = analyze(&p, vec![Box::new(n)]);
     assert!(
@@ -245,14 +199,20 @@ fn plugin_findings_ride_the_same_suppression_pass() {
         "lib.kmock",
         "# kndo:allow-file plugin:test:m/hello\npub fn helper\n",
     );
-    let mut m = ScriptedPlugin::new(
-        PluginSpec::builder("test:m", 1)
-            .activation(Activation::Always)
+    let m = MockExtension::scripted(
+        ExtensionSpec::builder("test:m", 1)
+            .conduct(Activation::Always, MutatesGraph::No)
             .rule("hello", "a declared rule")
             .build(),
-        false,
-    );
-    m.findings = vec![("hello", symbol("lib.kmock", "helper"))];
+    )
+    .on_report(|_, _, out| {
+        out.finding(
+            "hello",
+            PluginSeverity::Info,
+            symbol("lib.kmock", "helper"),
+            "scripted",
+        );
+    });
 
     let snap = analyze(&p, vec![Box::new(m)]);
     assert!(

@@ -7,10 +7,9 @@ use crate::bindings::adapter::kndo::vocab::types as awire;
 use crate::bindings::adapter::{Adapter, AdapterImports};
 use crate::convert;
 use crate::engine::{budgeted_store, guest_limits, shared_engine};
-use kndo_contract::adapter::{
-    AdapterSpec, LanguageAdapter, PackageEntry, ProjectRoot, Resolution, ResolveContext, SourceFile,
-};
+use kndo_contract::adapter::{PackageEntry, ProjectRoot, Resolution, ResolveContext, SourceFile};
 use kndo_contract::evidence::{DiagnosticLevel, EvidenceSink};
+use kndo_contract::extension::{Extension, ExtensionSpec};
 use kndo_contract::vocab::ProjectPath;
 use smol_str::SmolStr;
 use std::path::Path;
@@ -59,7 +58,7 @@ impl AdapterImports for AdapterStoreData {
 pub struct WasmAdapter {
     component: Component,
     linker: Linker<AdapterStoreData>,
-    spec: AdapterSpec,
+    spec: ExtensionSpec,
 }
 
 impl WasmAdapter {
@@ -102,8 +101,8 @@ impl WasmAdapter {
     }
 }
 
-impl LanguageAdapter for WasmAdapter {
-    fn spec(&self) -> &AdapterSpec {
+impl Extension for WasmAdapter {
+    fn spec(&self) -> &ExtensionSpec {
         &self.spec
     }
 

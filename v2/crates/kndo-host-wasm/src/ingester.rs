@@ -1,19 +1,18 @@
-//! A loaded coverage-ingester component as a [`kndo_core::Plugin`]. The world is
-//! unidirectional — the host locates the report through the spec's
-//! `requested-file-access` entries read as well-known report paths, pushes the
-//! bytes in, and assembles judgeable coverage from the returned records with
-//! `kndo_coverage::assemble`, the same mapping half every ingester shares. The
-//! `mutates_graph() == false` posture is structural: the world has no graph hooks
-//! to answer otherwise.
+//! A loaded coverage-ingester component as an [`Extension`]. The world is
+//! unidirectional: the ENGINE locates each report through the spec's
+//! `reads_reports` paths (the wire spells them as `requested-file-access`; the
+//! bridge restates them on the field that means it), pushes the bytes here, and
+//! this hook only turns them into records. The `mutates_graph == false` posture
+//! is structural: the world has no graph hooks to answer otherwise.
 
 use crate::LoadError;
 use crate::bindings::ingester::CoverageIngester;
 use crate::bindings::ingester::kndo::vocab::types as iwire;
 use crate::convert::ingester_wire;
 use crate::engine::{budgeted_store, guest_limits, shared_engine};
-use kndo_contract::vocab::ProjectPath;
-use kndo_core::plugin::{Plugin, PluginSpec, WellKnown, is_reserved_coordinate};
-use std::collections::BTreeMap;
+use kndo_contract::evidence::CoverageRecords;
+use kndo_contract::extension::{Extension, ExtensionSpec};
+use kndo_core::plugin::is_reserved_coordinate;
 use std::path::Path;
 use wasmtime::component::{Component, Linker};
 
@@ -25,7 +24,7 @@ pub(crate) struct NoImports {
 pub struct WasmIngester {
     component: Component,
     linker: Linker<NoImports>,
-    spec: PluginSpec,
+    spec: ExtensionSpec,
 }
 
 impl WasmIngester {
@@ -43,11 +42,13 @@ impl WasmIngester {
         store.limiter(|d| &mut d.limits);
         let guest = CoverageIngester::instantiate(&mut store, &component, &linker)
             .map_err(|e| LoadError::Component(e.to_string()))?;
-        let spec = ingester_wire::plugin_spec(
+        let mut parts = ingester_wire::plugin_parts(
             guest
                 .call_spec(&mut store)
                 .map_err(|e| LoadError::Component(e.to_string()))?,
         );
+        parts.reads_reports = std::mem::take(&mut parts.requested_file_access);
+        let spec: ExtensionSpec = parts.into();
         if is_reserved_coordinate(spec.coordinate()) {
             return Err(LoadError::ReservedCoordinate {
                 coordinate: spec.coordinate().to_string(),
@@ -71,35 +72,13 @@ impl WasmIngester {
     }
 }
 
-impl Plugin for WasmIngester {
-    fn spec(&self) -> &PluginSpec {
+impl Extension for WasmIngester {
+    fn spec(&self) -> &ExtensionSpec {
         &self.spec
     }
 
-    /// Structurally false: the world has no graph hooks, so an ingester can never
-    /// turn the graph fast paths off.
-    fn mutates_graph(&self) -> bool {
-        false
-    }
-
-    fn ingest_coverage(
-        &self,
-        well_known: &WellKnown<'_>,
-        contents: &BTreeMap<ProjectPath, &[u8]>,
-    ) -> Option<kndo_coverage::Coverage> {
-        for candidate in self.spec.requested_file_access() {
-            let Some(text) = well_known.read(candidate) else {
-                continue;
-            };
-            let Some(records) = self.ingest_one(candidate, text.as_bytes()) else {
-                continue;
-            };
-            if let Some(coverage) =
-                kndo_coverage::assemble(ingester_wire::coverage_records(records), contents)
-            {
-                return Some(coverage);
-            }
-        }
-        None
+    fn ingest(&self, report_path: &str, content: &[u8]) -> Option<CoverageRecords> {
+        self.ingest_one(report_path, content)
+            .map(ingester_wire::coverage_records)
     }
 }

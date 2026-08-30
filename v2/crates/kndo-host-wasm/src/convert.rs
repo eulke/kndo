@@ -10,11 +10,12 @@
 //! not at all.
 
 use crate::bindings::adapter::kndo::vocab::types as awire;
-use kndo_contract::adapter::{AdapterSpec, PackageEntry, Resolution};
+use kndo_contract::adapter::{PackageEntry, Resolution};
 use kndo_contract::evidence::{
     self as ev, DiagnosticLevel, EvidenceSink, EvidenceStream, EvidenceStreams, FileEvidence,
     RootKind,
 };
+use kndo_contract::extension::{ExtensionSpec, ExtensionSpecParts};
 use kndo_contract::vocab::{Confidence, ProjectPath, Span};
 use smol_str::SmolStr;
 
@@ -42,12 +43,12 @@ pub(crate) fn root_kind(k: awire::RootKind) -> RootKind {
     }
 }
 
-pub(crate) fn adapter_spec(spec: awire::AdapterSpec) -> AdapterSpec {
-    AdapterSpec::assemble(
-        spec.id,
-        spec.semantics_version,
-        spec.claims.into_iter().map(SmolStr::new).collect(),
-        EvidenceStreams::of(
+pub(crate) fn adapter_spec(spec: awire::AdapterSpec) -> ExtensionSpec {
+    ExtensionSpecParts {
+        coordinate: SmolStr::new(spec.id),
+        version: spec.semantics_version,
+        claims: spec.claims.into_iter().map(SmolStr::new).collect(),
+        emits: EvidenceStreams::of(
             &spec
                 .emits
                 .into_iter()
@@ -57,9 +58,11 @@ pub(crate) fn adapter_spec(spec: awire::AdapterSpec) -> AdapterSpec {
                 })
                 .collect::<Vec<_>>(),
         ),
-        spec.manifests.into_iter().map(SmolStr::new).collect(),
-        spec.extensions.into_iter().map(SmolStr::new).collect(),
-    )
+        manifests: spec.manifests.into_iter().map(SmolStr::new).collect(),
+        extensions: spec.extensions.into_iter().map(SmolStr::new).collect(),
+        ..Default::default()
+    }
+    .into()
 }
 
 pub(crate) fn package_entry(entry: awire::PackageEntry) -> PackageEntry {
@@ -249,16 +252,22 @@ pub(crate) fn replay_evidence(
 /// same WIT records).
 macro_rules! plugin_family_conversions {
     ($wire:path) => {
+        use kndo_contract::extension::{
+            Activation, ActivationRule, ExtensionSpecParts, RuleDescriptor,
+        };
         use kndo_contract::vocab::ProjectPath;
-        use kndo_core::plugin::{Activation, ActivationRule, PluginSpec, RuleDescriptor};
         use smol_str::SmolStr;
         use $wire as w;
 
-        pub(crate) fn plugin_spec(spec: w::PluginSpec) -> PluginSpec {
-            PluginSpec::assemble(
-                spec.coordinate,
-                spec.version,
-                match spec.activation {
+        /// The conduct half of a loaded spec, as owned parts — the caller states
+        /// what its world implies (`mutates_graph` for plugins, report paths for
+        /// ingesters) before assembling.
+        pub(crate) fn plugin_parts(spec: w::PluginSpec) -> ExtensionSpecParts {
+            ExtensionSpecParts {
+                coordinate: SmolStr::new(spec.coordinate),
+                version: spec.version,
+                conducts: true,
+                activation: match spec.activation {
                     w::Activation::Always => Activation::Always,
                     w::Activation::AnyRule(rules) => Activation::AnyRule(
                         rules
@@ -274,19 +283,22 @@ macro_rules! plugin_family_conversions {
                             .collect(),
                     ),
                 },
-                spec.dependencies.into_iter().map(SmolStr::new).collect(),
-                spec.requested_file_access
+                dependencies: spec.dependencies.into_iter().map(SmolStr::new).collect(),
+                requested_file_access: spec
+                    .requested_file_access
                     .into_iter()
                     .map(SmolStr::new)
                     .collect(),
-                spec.rules
+                rules: spec
+                    .rules
                     .into_iter()
                     .map(|r| RuleDescriptor {
                         name: SmolStr::new(r.name),
                         description: SmolStr::new(r.description),
                     })
                     .collect(),
-            )
+                ..Default::default()
+            }
         }
     };
 }

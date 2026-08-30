@@ -3,8 +3,9 @@
 //! manifests.
 
 use kndo_adapter_rust::RustAdapter;
-use kndo_contract::adapter::{LanguageAdapter, ResolveContext, SourceFile};
+use kndo_contract::adapter::{ResolveContext, SourceFile};
 use kndo_contract::evidence::RootKind;
+use kndo_contract::extension::Extension;
 use kndo_contract::vocab::ProjectPath;
 use std::collections::BTreeSet;
 

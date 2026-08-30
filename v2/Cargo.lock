@@ -1075,7 +1075,6 @@ name = "kndo-plugin-coverage"
 version = "0.0.0"
 dependencies = [
  "kndo-contract",
- "kndo-core",
  "kndo-coverage",
 ]
 

@@ -3,8 +3,9 @@
 //! anchor nothing.
 
 use kndo_adapter_ts::TypeScriptAdapter;
-use kndo_contract::adapter::{LanguageAdapter, ResolveContext, SourceFile};
+use kndo_contract::adapter::{ResolveContext, SourceFile};
 use kndo_contract::evidence::{EvidenceSink, RootKind, RootTarget};
+use kndo_contract::extension::Extension;
 use kndo_contract::vocab::ProjectPath;
 use std::collections::BTreeSet;
 

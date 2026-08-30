@@ -7,10 +7,10 @@
 use crate::analysis::{Abstention, Duplicate, TestOnly, Untested, Unused, run_all};
 use crate::cache::EvidenceCache;
 use crate::graph::Graph;
-use crate::plugin::{Plugin, PluginContribution};
+use crate::plugin::PluginContribution;
 use crate::report::{AdapterRun, Report, ReportDiagnostic, RunInfo, SCHEMA};
 use crate::{discover, extract};
-use kndo_contract::adapter::LanguageAdapter;
+use kndo_contract::extension::Extension;
 use kndo_contract::finding::{Finding, Severity};
 use kndo_contract::vocab::ProjectPath;
 use smol_str::SmolStr;
@@ -58,8 +58,7 @@ pub enum Refusal {
 pub struct Session {
     root: PathBuf,
     config: Config,
-    adapters: Vec<Box<dyn LanguageAdapter>>,
-    plugins: Vec<Box<dyn Plugin>>,
+    extensions: Vec<Box<dyn Extension>>,
     composition_diagnostics: Vec<crate::report::ReportDiagnostic>,
 }
 
@@ -147,10 +146,13 @@ impl RunOutcome {
 }
 
 impl Session {
+    /// One list, one door: registration order is claim priority among claiming
+    /// extensions, and — among conduct-declaring ones — coverage-ingestion
+    /// precedence and contribution order alike.
     pub fn open(
         root: impl Into<PathBuf>,
         config: Config,
-        adapters: Vec<Box<dyn LanguageAdapter>>,
+        extensions: Vec<Box<dyn Extension>>,
     ) -> Result<Session, Refusal> {
         let root = root.into();
         if !root.is_dir() {
@@ -159,18 +161,9 @@ impl Session {
         Ok(Session {
             root,
             config,
-            adapters,
-            plugins: Vec::new(),
+            extensions,
             composition_diagnostics: Vec::new(),
         })
-    }
-
-    /// The plugin set this session runs — registration order is coverage-ingestion
-    /// precedence and contribution order. A builder rather than an `open` parameter
-    /// so embedders that want none say nothing.
-    pub fn with_plugins(mut self, plugins: Vec<Box<dyn Plugin>>) -> Self {
-        self.plugins = plugins;
-        self
     }
 
     /// Diagnostics from assembling this session's composition — a component that
@@ -195,8 +188,8 @@ impl Session {
         let mut h = blake3::Hasher::new();
         h.update(&kndo_contract::contract_fingerprint());
         h.update(&crate::graph::GRAPH_SEMANTICS_VERSION.to_le_bytes());
-        for adapter in &self.adapters {
-            let spec = serde_json::to_string(adapter.spec()).unwrap_or_default();
+        for extension in &self.extensions {
+            let spec = serde_json::to_string(extension.spec()).unwrap_or_default();
             h.update(&(spec.len() as u32).to_le_bytes());
             h.update(spec.as_bytes());
         }
@@ -230,7 +223,7 @@ impl Session {
 
         let mut claims = Vec::new();
         timed(&mut timings.claim, &mut || {
-            claims = extract::claim(&files, &self.adapters);
+            claims = extract::claim(&files, &self.extensions);
         });
 
         // Activation is decided before the graph exists — its inputs are what
@@ -242,14 +235,14 @@ impl Session {
         let discovered_paths: BTreeSet<ProjectPath> =
             files.iter().map(|f| f.path.clone()).collect();
         let mut manifest_dependencies: BTreeSet<SmolStr> = BTreeSet::new();
-        crate::graph::for_each_manifest(&files, &self.adapters, |adapter, manifest| {
-            manifest_dependencies.extend(adapter.manifest_dependencies(&manifest));
+        crate::graph::for_each_manifest(&files, &self.extensions, |extension, manifest| {
+            manifest_dependencies.extend(extension.manifest_dependencies(&manifest));
         });
         let active =
-            crate::plugin::activate(&self.plugins, &discovered_paths, &manifest_dependencies);
+            crate::plugin::activate(&self.extensions, &discovered_paths, &manifest_dependencies);
         let plugins_mutate = active
             .iter()
-            .any(|(ix, _)| self.plugins[*ix].mutates_graph());
+            .any(|(ix, _)| self.extensions[*ix].spec().mutates_graph());
 
         let fingerprint = kndo_contract::contract_fingerprint();
         let cache_root = self.config.use_cache.then(|| self.root.join(".kndo/cache"));
@@ -269,7 +262,7 @@ impl Session {
                 p.manifest_state,
                 &files,
                 &claims,
-                &self.adapters,
+                &self.extensions,
                 &cache,
             )
         });
@@ -281,10 +274,10 @@ impl Session {
             None => {
                 let mut evidence = Vec::new();
                 timed(&mut timings.extract, &mut || {
-                    evidence = extract::extract(&files, &claims, &self.adapters, &cache);
+                    evidence = extract::extract(&files, &claims, &self.extensions, &cache);
                 });
                 let assemble_start = Instant::now();
-                let graph = crate::graph::assemble(&files, &claims, evidence, &self.adapters);
+                let graph = crate::graph::assemble(&files, &claims, evidence, &self.extensions);
                 timings.assemble = assemble_start.elapsed();
                 graph
             }
@@ -293,7 +286,7 @@ impl Session {
         // plugin-free, and when a mutating plugin is active nothing is stored at all.
         if let Some(gc) = &graph_cache {
             let persisted = crate::cache::PersistedGraph {
-                manifest_state: crate::graph::manifest_state(&files, &self.adapters),
+                manifest_state: crate::graph::manifest_state(&files, &self.extensions),
                 graph,
             };
             gc.store(&persisted);
@@ -306,7 +299,7 @@ impl Session {
             .map(|f| (f.path.clone(), f.content.as_slice()))
             .collect();
         let round =
-            crate::plugin::run_round(&self.plugins, &active, &mut graph, &self.root, &contents);
+            crate::plugin::run_round(&self.extensions, &active, &mut graph, &self.root, &contents);
         let mut outcome = run_all(
             &graph,
             round.coverage,

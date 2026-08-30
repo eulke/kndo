@@ -9,10 +9,9 @@
 use crate::cache::EvidenceCache;
 use crate::discover::DiscoveredFile;
 use crate::extract::ClaimedFile;
-use kndo_contract::adapter::{
-    LanguageAdapter, PackageEntry, Resolution, ResolveContext, SourceFile,
-};
+use kndo_contract::adapter::{PackageEntry, Resolution, ResolveContext, SourceFile};
 use kndo_contract::evidence::{FileEvidence, ImportTarget, Root, RootTarget};
+use kndo_contract::extension::Extension;
 use kndo_contract::vocab::ProjectPath;
 use serde::{Deserialize, Serialize};
 use smol_str::SmolStr;
@@ -30,7 +29,7 @@ pub struct GraphFile {
     pub hash_hex: String,
     pub evidence: FileEvidence,
     /// Files whose names this file can see without an import — the rest of its
-    /// compilation unit, per [`kndo_contract::adapter::LanguageAdapter::unit_mates`];
+    /// compilation unit, per [`kndo_contract::extension::Extension::unit_mates`];
     /// indices into `Graph::files`, sorted, deduplicated. Reachability walks these
     /// like import edges, and analyses pool references over the visibility they
     /// declare. A pure function of path and file set, so a content-only patch can
@@ -75,7 +74,7 @@ pub fn assemble(
     files: &[DiscoveredFile],
     claims: &[ClaimedFile],
     evidence: Vec<FileEvidence>,
-    adapters: &[Box<dyn LanguageAdapter>],
+    adapters: &[Box<dyn Extension>],
 ) -> Graph {
     let known: BTreeSet<ProjectPath> = claims
         .iter()
@@ -92,7 +91,7 @@ pub fn assemble(
             let f = &files[c.file_index];
             GraphFile {
                 path: f.path.clone(),
-                adapter: SmolStr::new(adapters[c.adapter_index].spec().id()),
+                adapter: SmolStr::new(adapters[c.adapter_index].spec().coordinate()),
                 hash_hex: f.hash.iter().map(|b| format!("{b:02x}")).collect(),
                 evidence: ev,
                 unit_mates: Vec::new(),
@@ -132,13 +131,10 @@ pub fn assemble(
     Graph { files: graph_files }
 }
 
-fn adapter_by_id<'a>(
-    adapters: &'a [Box<dyn LanguageAdapter>],
-    id: &str,
-) -> &'a dyn LanguageAdapter {
+fn adapter_by_id<'a>(adapters: &'a [Box<dyn Extension>], id: &str) -> &'a dyn Extension {
     adapters
         .iter()
-        .find(|a| a.spec().id() == id)
+        .find(|a| a.spec().coordinate() == id)
         .expect("claiming adapter is registered")
         .as_ref()
 }
@@ -148,7 +144,7 @@ fn adapter_by_id<'a>(
 /// declare a name keeps it.
 fn package_map(
     files: &[DiscoveredFile],
-    adapters: &[Box<dyn LanguageAdapter>],
+    adapters: &[Box<dyn Extension>],
     known: &BTreeSet<ProjectPath>,
 ) -> BTreeMap<SmolStr, PackageEntry> {
     let files_cx = ResolveContext::new(known);
@@ -167,7 +163,7 @@ fn package_map(
 fn unit_mates_of(
     ix: usize,
     path: &ProjectPath,
-    adapter: &dyn LanguageAdapter,
+    adapter: &dyn Extension,
     cx: &ResolveContext<'_>,
     sorted_paths: &[ProjectPath],
 ) -> Vec<u32> {
@@ -193,7 +189,7 @@ struct ResolvedEdges {
 fn resolve_file(
     from: &ProjectPath,
     evidence: &FileEvidence,
-    adapter: &dyn LanguageAdapter,
+    adapter: &dyn Extension,
     cx: &ResolveContext<'_>,
     sorted_paths: &[ProjectPath],
 ) -> ResolvedEdges {
@@ -244,7 +240,7 @@ fn resolve_file(
 /// Hash over every discovered manifest's (path, content), in path order — the
 /// manifest-derived parts of a graph (anchors, the package map) are pure functions
 /// of this state.
-pub fn manifest_state(files: &[DiscoveredFile], adapters: &[Box<dyn LanguageAdapter>]) -> [u8; 32] {
+pub fn manifest_state(files: &[DiscoveredFile], adapters: &[Box<dyn Extension>]) -> [u8; 32] {
     let mut h = blake3::Hasher::new();
     for_each_manifest(files, adapters, |_, manifest| {
         let path = manifest.path.as_str().as_bytes();
@@ -266,7 +262,7 @@ pub fn patch(
     prev_manifest_state: [u8; 32],
     files: &[DiscoveredFile],
     claims: &[ClaimedFile],
-    adapters: &[Box<dyn LanguageAdapter>],
+    adapters: &[Box<dyn Extension>],
     cache: &EvidenceCache,
 ) -> Option<Graph> {
     if manifest_state(files, adapters) != prev_manifest_state {
@@ -281,7 +277,7 @@ pub fn patch(
     for (ix, c) in claims.iter().enumerate() {
         let f = &files[c.file_index];
         let gf = &prev.files[ix];
-        if gf.path != f.path || gf.adapter != adapters[c.adapter_index].spec().id() {
+        if gf.path != f.path || gf.adapter != adapters[c.adapter_index].spec().coordinate() {
             return None;
         }
         let hex: String = f.hash.iter().map(|b| format!("{b:02x}")).collect();
@@ -325,8 +321,8 @@ pub fn patch(
 /// pass for plugin activation).
 pub(crate) fn for_each_manifest(
     files: &[DiscoveredFile],
-    adapters: &[Box<dyn LanguageAdapter>],
-    mut f: impl FnMut(&dyn LanguageAdapter, SourceFile<'_>),
+    adapters: &[Box<dyn Extension>],
+    mut f: impl FnMut(&dyn Extension, SourceFile<'_>),
 ) {
     let manifest_sets: Vec<Option<globset::GlobSet>> = adapters
         .iter()
@@ -367,7 +363,7 @@ pub(crate) fn for_each_manifest(
 /// order and the anchors are sorted, so the result is a pure function of the tree.
 fn anchor_manifest_roots(
     files: &[DiscoveredFile],
-    adapters: &[Box<dyn LanguageAdapter>],
+    adapters: &[Box<dyn Extension>],
     cx: &ResolveContext<'_>,
     graph_files: &mut [GraphFile],
 ) {

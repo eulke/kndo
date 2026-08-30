@@ -109,7 +109,7 @@ jobs:
         run: cargo test -p kndo-gates --test gates -- --exact report_schema_is_generated_and_valid
       - name: gate — frontends_import_only_the_facade (a frontend's production dependencies contain exactly one kndo crate: kndo)
         run: cargo test -p kndo-gates --test gates -- --exact frontends_import_only_the_facade
-      - name: gate — builtin_plugin_proofs (every built-in plugin proves its effect baseline-then-plugin, closed over default_plugins)
+      - name: gate — builtin_plugin_proofs (every built-in conducting extension proves its effect baseline-then-plugin, closed over the conduct subset of default_extensions)
         run: cargo test -p kndo-gates --test gates -- --exact builtin_plugin_proofs
       - name: gate — plugin_dependency_implication (a plugin named in another's dependencies activates even when its own rules never match)
         run: cargo test -p kndo-gates --test gates -- --exact plugin_dependency_implication

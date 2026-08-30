@@ -2,7 +2,8 @@
 //! subpaths resolve against, and there is no file a bare import points at.
 
 use kndo_adapter_go::GoAdapter;
-use kndo_contract::adapter::{LanguageAdapter, ResolveContext, SourceFile};
+use kndo_contract::adapter::{ResolveContext, SourceFile};
+use kndo_contract::extension::Extension;
 use kndo_contract::vocab::ProjectPath;
 use std::collections::BTreeSet;
 

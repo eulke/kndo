@@ -15,44 +15,127 @@
 //! # text               a comment (the Comments stream, declared)
 //! ```
 
-use kndo_contract::adapter::{
-    AdapterSpec, LanguageAdapter, Resolution, ResolveContext, SourceFile,
-};
+use kndo_contract::adapter::{Resolution, ResolveContext, SourceFile};
 use kndo_contract::evidence::{
-    DeclarationId, DiagnosticLevel, EvidenceSink, EvidenceStream, EvidenceStreams, ImportBinding,
-    ImportShape, ImportTarget, Reach, RefKind, RootKind, RootTarget, SymbolKind,
+    CoverageRecords, DeclarationId, DiagnosticLevel, EvidenceSink, EvidenceStream, EvidenceStreams,
+    ImportBinding, ImportShape, ImportTarget, Reach, RefKind, RootKind, RootTarget, SymbolKind,
 };
+use kndo_contract::extension::{ConductSink, ContentView, Extension, ExtensionSpec, GraphAccess};
 use kndo_contract::vocab::{Confidence, ProjectPath, Span};
 use std::collections::BTreeMap;
 use std::path::Path;
 
-pub struct MockAdapter {
-    spec: AdapterSpec,
+type ConductHook = dyn Fn(&dyn GraphAccess, &ContentView<'_>, &mut ConductSink) + Send + Sync;
+type IngestHook = dyn Fn(&str, &[u8]) -> Option<CoverageRecords> + Send + Sync;
+
+/// The one mock for every cluster. [`MockExtension::new`] speaks the kmock
+/// language (extraction + resolution); [`MockExtension::scripted`] carries any
+/// spec and runs the closures a test hangs on its conduct and ingestion hooks —
+/// including behavior a correct extension never has, because drops and refusals
+/// are exactly what containment tests script.
+pub struct MockExtension {
+    spec: ExtensionSpec,
+    speaks_kmock: bool,
+    on_contribute: Option<Box<ConductHook>>,
+    on_report: Option<Box<ConductHook>>,
+    on_ingest: Option<Box<IngestHook>>,
 }
 
-impl MockAdapter {
+/// The kmock-speaking mock under its historical name.
+pub type MockAdapter = MockExtension;
+
+impl MockExtension {
     pub fn new() -> Self {
-        MockAdapter {
-            spec: AdapterSpec::builder("kmock", 1)
+        MockExtension {
+            spec: ExtensionSpec::builder("kmock", 1)
                 .extensions(&["kmock"])
                 .emits(EvidenceStreams::of(&[EvidenceStream::Comments]))
                 .build(),
+            speaks_kmock: true,
+            on_contribute: None,
+            on_report: None,
+            on_ingest: None,
         }
+    }
+
+    /// A conduct/ingestion mock: no language, the given spec, and whatever the
+    /// closures script.
+    pub fn scripted(spec: ExtensionSpec) -> Self {
+        MockExtension {
+            spec,
+            speaks_kmock: false,
+            on_contribute: None,
+            on_report: None,
+            on_ingest: None,
+        }
+    }
+
+    pub fn on_contribute(
+        mut self,
+        f: impl Fn(&dyn GraphAccess, &ContentView<'_>, &mut ConductSink) + Send + Sync + 'static,
+    ) -> Self {
+        self.on_contribute = Some(Box::new(f));
+        self
+    }
+
+    pub fn on_report(
+        mut self,
+        f: impl Fn(&dyn GraphAccess, &ContentView<'_>, &mut ConductSink) + Send + Sync + 'static,
+    ) -> Self {
+        self.on_report = Some(Box::new(f));
+        self
+    }
+
+    pub fn on_ingest(
+        mut self,
+        f: impl Fn(&str, &[u8]) -> Option<CoverageRecords> + Send + Sync + 'static,
+    ) -> Self {
+        self.on_ingest = Some(Box::new(f));
+        self
     }
 }
 
-impl Default for MockAdapter {
+impl Default for MockExtension {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl LanguageAdapter for MockAdapter {
-    fn spec(&self) -> &AdapterSpec {
+impl Extension for MockExtension {
+    fn spec(&self) -> &ExtensionSpec {
         &self.spec
     }
 
+    fn contribute_roots(
+        &self,
+        graph: &dyn GraphAccess,
+        content: &ContentView<'_>,
+        out: &mut ConductSink,
+    ) {
+        if let Some(f) = &self.on_contribute {
+            f(graph, content, out);
+        }
+    }
+
+    fn report_findings(
+        &self,
+        graph: &dyn GraphAccess,
+        content: &ContentView<'_>,
+        out: &mut ConductSink,
+    ) {
+        if let Some(f) = &self.on_report {
+            f(graph, content, out);
+        }
+    }
+
+    fn ingest(&self, report_path: &str, content: &[u8]) -> Option<CoverageRecords> {
+        self.on_ingest.as_ref()?(report_path, content)
+    }
+
     fn extract(&self, file: &SourceFile<'_>, out: &mut EvidenceSink) {
+        if !self.speaks_kmock {
+            return;
+        }
         let text = String::from_utf8_lossy(file.content);
 
         // Pass 1: declarations, so roots can anchor by id regardless of line order.
@@ -124,6 +207,9 @@ impl LanguageAdapter for MockAdapter {
     }
 
     fn resolve(&self, from: &ProjectPath, specifier: &str, cx: &ResolveContext<'_>) -> Resolution {
+        if !self.speaks_kmock {
+            return Resolution::Unresolved;
+        }
         let Some(name) = specifier.strip_prefix("./") else {
             return Resolution::Unresolved;
         };
@@ -190,7 +276,7 @@ impl Default for TempProject {
 /// fresh sink and return the finished evidence. The shared front half of every
 /// adapter's extraction tests.
 pub fn extract_evidence(
-    adapter: &dyn LanguageAdapter,
+    adapter: &dyn Extension,
     path: &str,
     source: &str,
 ) -> kndo_contract::evidence::FileEvidence {
@@ -221,7 +307,7 @@ pub fn declaration_named<'e>(
 /// One resolution against a synthetic file set — the shared front half of every
 /// adapter's resolution tests.
 pub fn resolve_in(
-    adapter: &dyn LanguageAdapter,
+    adapter: &dyn Extension,
     files: &[&str],
     from: &str,
     specifier: &str,

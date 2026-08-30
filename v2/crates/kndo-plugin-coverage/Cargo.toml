@@ -8,5 +8,4 @@ publish.workspace = true
 
 [dependencies]
 kndo-contract = { path = "../kndo-contract" }
-kndo-core = { path = "../kndo-core" }
 kndo-coverage = { path = "../kndo-coverage" }

@@ -2,44 +2,34 @@
 //! parsed by `kndo-coverage` — the same parser the reference WASM ingester
 //! compiles, so native and external coverage can never drift apart by prose.
 //! Coverage is run output and usually gitignored, so the discovery walk
-//! deliberately never sees it; the well-known channel is the sanctioned way in.
+//! deliberately never sees it; the spec's `reads_reports` paths are the
+//! sanctioned way in, and the ENGINE does the reading — this extension only
+//! turns bytes into records.
 
-use kndo_contract::vocab::ProjectPath;
-use kndo_core::plugin::{Activation, Plugin, PluginSpec, WellKnown};
-use std::collections::BTreeMap;
+use kndo_contract::evidence::CoverageRecords;
+use kndo_contract::extension::{Activation, Extension, ExtensionSpec, MutatesGraph};
 use std::sync::LazyLock;
 
-/// The conventional lcov locations, tried in order; the first parseable one wins.
-const WELL_KNOWN_LCOV: [&str; 2] = ["lcov.info", "coverage/lcov.info"];
-
-static SPEC: LazyLock<PluginSpec> = LazyLock::new(|| {
-    PluginSpec::builder("kndo:coverage-lcov", 1)
-        .activation(Activation::Always)
+static SPEC: LazyLock<ExtensionSpec> = LazyLock::new(|| {
+    ExtensionSpec::builder("kndo:coverage-lcov", 1)
+        // MutatesGraph::No is load-bearing: an ingester contributes analysis
+        // input, never graph facts, and Yes here would turn the persisted graph
+        // cache off for every project, because this extension is always on.
+        .conduct(Activation::Always, MutatesGraph::No)
+        // The conventional lcov locations, tried in order; the first report that
+        // parses AND maps onto the project wins.
+        .reads_reports(&["lcov.info", "coverage/lcov.info"])
         .build()
 });
 
 pub struct LcovPlugin;
 
-impl Plugin for LcovPlugin {
-    fn spec(&self) -> &PluginSpec {
+impl Extension for LcovPlugin {
+    fn spec(&self) -> &ExtensionSpec {
         &SPEC
     }
 
-    /// An ingester contributes analysis input, never graph facts — and `false` is
-    /// load-bearing: `true` here would turn the persisted graph cache off for
-    /// every project, because this plugin is always on.
-    fn mutates_graph(&self) -> bool {
-        false
-    }
-
-    fn ingest_coverage(
-        &self,
-        well_known: &WellKnown<'_>,
-        contents: &BTreeMap<ProjectPath, &[u8]>,
-    ) -> Option<kndo_coverage::Coverage> {
-        WELL_KNOWN_LCOV
-            .iter()
-            .filter_map(|candidate| well_known.read(candidate))
-            .find_map(|text| kndo_coverage::parse_lcov(&text, contents))
+    fn ingest(&self, _report_path: &str, content: &[u8]) -> Option<CoverageRecords> {
+        kndo_coverage::parse_lcov_records(std::str::from_utf8(content).ok()?)
     }
 }

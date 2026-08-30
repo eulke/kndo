@@ -2,7 +2,8 @@
 //! the-compiled-file swap, index files, and the escapes that must stay `Unresolved`.
 
 use kndo_adapter_ts::TypeScriptAdapter;
-use kndo_contract::adapter::{LanguageAdapter, Resolution, ResolveContext};
+use kndo_contract::adapter::{Resolution, ResolveContext};
+use kndo_contract::extension::Extension;
 use kndo_contract::vocab::ProjectPath;
 use std::collections::BTreeSet;
 

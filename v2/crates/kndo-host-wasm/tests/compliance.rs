@@ -50,15 +50,21 @@ fn component(name: &str) -> PathBuf {
     out
 }
 
-fn kmini_session(p: &TempProject, use_cache: bool) -> Session {
+fn kmini_session(
+    p: &TempProject,
+    use_cache: bool,
+    conduct: Vec<Box<dyn kndo_core::Extension>>,
+) -> Session {
     let adapter = WasmAdapter::load(&component("kmini_adapter")).expect("kmini adapter loads");
+    let mut extensions: Vec<Box<dyn kndo_core::Extension>> = vec![Box::new(adapter)];
+    extensions.extend(conduct);
     Session::open(
         p.root(),
         Config {
             threads: Threads::Auto,
             use_cache,
         },
-        vec![Box::new(adapter)],
+        extensions,
     )
     .expect("open")
 }
@@ -89,7 +95,7 @@ fn the_wasm_adapter_world_is_a_first_class_language() {
     p.file("app_part.kmini", "fn from_part\n");
     p.file("orphan.kmini", "fn floats\n");
 
-    let snap = kmini_session(&p, false)
+    let snap = kmini_session(&p, false, Vec::new())
         .analyze(RunMode::Full)
         .expect("analyze");
     assert_eq!(snap.graph.files.len(), 4, "every .kmini file claimed");
@@ -128,25 +134,17 @@ fn the_wasm_adapter_world_is_a_first_class_language() {
 
     // The manifest's dependency names feed activation — through the same wasm
     // manifest pipeline.
-    struct DependencyWitness;
-    impl kndo_core::Plugin for DependencyWitness {
-        fn spec(&self) -> &kndo_core::PluginSpec {
-            static SPEC: std::sync::LazyLock<kndo_core::PluginSpec> =
-                std::sync::LazyLock::new(|| {
-                    kndo_core::PluginSpec::builder("test:witness", 1)
-                        .activation(kndo_core::Activation::AnyRule(vec![
-                            kndo_core::ActivationRule::ManifestDependency("probe-framework".into()),
-                        ]))
-                        .build()
-                });
-            &SPEC
-        }
-        fn mutates_graph(&self) -> bool {
-            false
-        }
-    }
-    let snap = kmini_session(&p, false)
-        .with_plugins(vec![Box::new(DependencyWitness)])
+    let witness = kndo_testkit::MockExtension::scripted(
+        kndo_core::ExtensionSpec::builder("test:witness", 1)
+            .conduct(
+                kndo_core::Activation::AnyRule(vec![
+                    kndo_core::ActivationRule::ManifestDependency("probe-framework".into()),
+                ]),
+                kndo_core::MutatesGraph::No,
+            )
+            .build(),
+    );
+    let snap = kmini_session(&p, false, vec![Box::new(witness)])
         .analyze(RunMode::Full)
         .expect("analyze with witness");
     assert_eq!(
@@ -165,7 +163,7 @@ fn wasm_extraction_is_deterministic_and_cache_transparent() {
     p.file("app.kmini", "entry\nuse ./lib shared\ncall shared\n");
 
     let report = |use_cache: bool| {
-        let snap = kmini_session(&p, use_cache)
+        let snap = kmini_session(&p, use_cache, Vec::new())
             .analyze(RunMode::Full)
             .expect("analyze");
         (snap.graph.to_json(), snap.report().to_json())
@@ -186,7 +184,7 @@ fn the_wasm_plugin_world_carries_the_containment_model() {
     p.file("config.probe", "sixteen bytes!!\n");
 
     let plugin = WasmPlugin::load(&component("probe_plugin")).expect("probe plugin loads");
-    let session = kmini_session(&p, true).with_plugins(vec![Box::new(plugin)]);
+    let session = kmini_session(&p, true, vec![Box::new(plugin)]);
     let snap = session.analyze(RunMode::Full).expect("analyze");
 
     let contribution = &snap.plugins[0];
@@ -255,11 +253,10 @@ fn the_wasm_ingester_world_feeds_untested_like_the_builtin() {
     );
 
     let ingester = WasmIngester::load(&component("records_ingester")).expect("ingester loads");
-    let with = kmini_session(&p, false)
-        .with_plugins(vec![Box::new(ingester)])
+    let with = kmini_session(&p, false, vec![Box::new(ingester)])
         .analyze(RunMode::Full)
         .expect("analyze with ingester");
-    let without = kmini_session(&p, false)
+    let without = kmini_session(&p, false, Vec::new())
         .analyze(RunMode::Full)
         .expect("analyze without");
 

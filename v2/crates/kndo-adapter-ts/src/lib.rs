@@ -11,12 +11,11 @@ mod extract;
 mod manifest;
 mod resolve;
 
-use kndo_contract::adapter::{
-    AdapterSpec, LanguageAdapter, PackageEntry, ProjectRoot, Resolution, ResolveContext, SourceFile,
-};
+use kndo_contract::adapter::{PackageEntry, ProjectRoot, Resolution, ResolveContext, SourceFile};
 use kndo_contract::evidence::{
     DiagnosticLevel, EvidenceSink, EvidenceStream, EvidenceStreams, RootKind, RootTarget,
 };
+use kndo_contract::extension::{Extension, ExtensionSpec};
 use kndo_contract::vocab::{Confidence, ProjectPath};
 use smol_str::SmolStr;
 use tree_sitter::Language;
@@ -27,7 +26,7 @@ use tree_sitter::Language;
 pub(crate) const TYPE_DECLARATION_EXT: &str = "d.ts";
 
 pub struct TypeScriptAdapter {
-    spec: AdapterSpec,
+    spec: ExtensionSpec,
     /// Dotted resolution candidates in TS priority order, derived once from the
     /// spec's declared extensions (with `.d.ts` after the TS pair) — resolution and
     /// manifest logic read this, never a second extension list.
@@ -38,7 +37,7 @@ impl TypeScriptAdapter {
     pub fn new() -> Self {
         // semantics_version 2: the adapter emits Metrics (winnowing fingerprints,
         // cyclomatic, loc) for every function-shaped declaration.
-        let spec = AdapterSpec::builder("js-ts", 2)
+        let spec = ExtensionSpec::builder("js-ts", 2)
             .extensions(&["ts", "tsx", "js", "jsx", "mjs", "cjs"])
             .emits(EvidenceStreams::of(&[
                 EvidenceStream::Comments,
@@ -77,8 +76,8 @@ fn language_for(path: &ProjectPath) -> Language {
     }
 }
 
-impl LanguageAdapter for TypeScriptAdapter {
-    fn spec(&self) -> &AdapterSpec {
+impl Extension for TypeScriptAdapter {
+    fn spec(&self) -> &ExtensionSpec {
         &self.spec
     }
 

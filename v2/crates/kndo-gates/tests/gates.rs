@@ -319,21 +319,23 @@ fn incremental_and_full_assembly_are_byte_identical() {
 
 #[test]
 fn builtin_plugin_proofs() {
-    // Every built-in plugin ships with the baseline-then-plugin proof the authoring
-    // docs demand of anyone else: the run WITHOUT it establishes what fires, the run
-    // WITH it changes exactly what the plugin claims to change, and the contribution
-    // is reported in full. Closed over `default_plugins()`: a coordinate shipped
-    // without its proof here fails, the same posture as `mutates_graph` having no
-    // default — a plugin nothing asserts is a plugin nothing notices breaking, and
-    // the cost of one is measured in findings that silently return.
+    // Every built-in conducting extension ships with the baseline-then-plugin
+    // proof the authoring docs demand of anyone else: the run WITHOUT it
+    // establishes what fires, the run WITH it changes exactly what it claims to
+    // change, and the contribution is reported in full. Closed over the conduct
+    // subset of `default_extensions()`: a coordinate shipped without its proof
+    // here fails, the same posture that makes the conduct gates arguments of
+    // `.conduct()` — an extension nothing asserts is one nothing notices
+    // breaking, and the cost is measured in findings that silently return.
     const PROVEN: &[&str] = &["kndo:coverage-lcov"];
-    let shipped: Vec<String> = kndo::default_plugins()
+    let shipped: Vec<String> = kndo::default_extensions()
         .iter()
-        .map(|p| p.spec().coordinate().to_string())
+        .filter(|e| e.spec().declares_conduct())
+        .map(|e| e.spec().coordinate().to_string())
         .collect();
     assert_eq!(
         shipped, PROVEN,
-        "\nthe default plugin set moved. Every built-in coordinate needs its \
+        "\nthe default conducting set moved. Every built-in coordinate needs its \
          baseline-then-plugin proof added to this gate in the same commit.\n"
     );
 
@@ -346,7 +348,13 @@ fn builtin_plugin_proofs() {
         use_cache: false,
     };
 
-    let without = Session::open(&fixture, config(), kndo::default_adapters())
+    let extraction_only = || {
+        kndo::default_extensions()
+            .into_iter()
+            .filter(|e| !e.spec().declares_conduct())
+            .collect()
+    };
+    let without = Session::open(&fixture, config(), extraction_only())
         .expect("open baseline session")
         .analyze(RunMode::Full)
         .expect("analyze baseline");
@@ -397,57 +405,6 @@ fn builtin_plugin_proofs() {
     assert!(contribution.dropped.is_empty() && !contribution.content_budget_cut);
 }
 
-/// A configurable plugin for gate fixtures: contributes the given roots when
-/// mutating, and probes the content view with one read, reporting what it saw.
-struct TestPlugin {
-    spec: kndo_core::PluginSpec,
-    mutates: bool,
-    roots: Vec<(
-        kndo_core::PluginTarget,
-        kndo_contract::evidence::RootKind,
-        kndo_contract::vocab::Confidence,
-    )>,
-    reads: Option<kndo_contract::vocab::ProjectPath>,
-}
-
-impl kndo_core::Plugin for TestPlugin {
-    fn spec(&self) -> &kndo_core::PluginSpec {
-        &self.spec
-    }
-    fn mutates_graph(&self) -> bool {
-        self.mutates
-    }
-    fn contribute_roots(
-        &self,
-        _graph: &kndo_core::GraphView<'_>,
-        _content: &kndo_core::ContentView<'_>,
-        out: &mut kndo_core::PluginSink,
-    ) {
-        for (target, kind, confidence) in &self.roots {
-            out.root(target.clone(), *kind, *confidence);
-        }
-    }
-    fn report_findings(
-        &self,
-        _graph: &kndo_core::GraphView<'_>,
-        content: &kndo_core::ContentView<'_>,
-        out: &mut kndo_core::PluginSink,
-    ) {
-        if let Some(path) = &self.reads {
-            let message = match content.read(path) {
-                Some(bytes) => format!("read {} bytes", bytes.len()),
-                None => "read denied".to_string(),
-            };
-            out.finding(
-                "probe",
-                kndo_core::PluginSeverity::Info,
-                kndo_core::PluginTarget::File(path.clone()),
-                message,
-            );
-        }
-    }
-}
-
 #[test]
 fn plugin_dependency_implication() {
     // A plugin named in another plugin's `dependencies` activates even when its own
@@ -460,54 +417,78 @@ fn plugin_dependency_implication() {
     // C transitively. D's unmatched rule proves activation is not "everything runs".
     use kndo_contract::evidence::RootKind;
     use kndo_contract::vocab::{Confidence, ProjectPath};
-    use kndo_core::{Activation, ActivationRule, Plugin, PluginSpec, PluginTarget};
+    use kndo_core::{
+        Activation, ActivationRule, Extension, ExtensionSpec, MutatesGraph, PluginSeverity,
+        PluginTarget,
+    };
+    use kndo_testkit::MockExtension;
+
+    // The probe every conducting mock runs: one scoped read, reported as a
+    // finding — what the content view let it see IS the assertion.
+    let probing = |spec: ExtensionSpec, reads: &'static str| {
+        MockExtension::scripted(spec).on_report(move |_, content, out| {
+            let path = ProjectPath::new(reads);
+            let message = match content.read(&path) {
+                Some(bytes) => format!("read {} bytes", bytes.len()),
+                None => "read denied".to_string(),
+            };
+            out.finding(
+                "probe",
+                PluginSeverity::Info,
+                PluginTarget::File(path),
+                message,
+            );
+        })
+    };
 
     let p = fixture();
-    let plugins: Vec<Box<dyn Plugin>> = vec![
-        Box::new(TestPlugin {
-            spec: PluginSpec::builder("test:framework-a", 1)
-                .activation(Activation::AnyRule(vec![ActivationRule::FileExists(
-                    "*.kmock".into(),
-                )]))
+    let extensions: Vec<Box<dyn Extension>> = vec![
+        Box::new(MockAdapter::new()),
+        Box::new(probing(
+            ExtensionSpec::builder("test:framework-a", 1)
+                .conduct(
+                    Activation::AnyRule(vec![ActivationRule::FileExists("*.kmock".into())]),
+                    MutatesGraph::No,
+                )
                 .dependencies(&["test:middleware-b"])
                 .requested_file_access(&["main.kmock"])
                 .rule("probe", "reports what the content view let it see")
                 .build(),
-            mutates: false,
-            roots: Vec::new(),
-            reads: Some(ProjectPath::new("main.kmock")),
-        }),
-        Box::new(TestPlugin {
-            // No declared file access: its probe read must come back denied — the
-            // content view is deny-by-default, budgeted, never ambient.
-            spec: PluginSpec::builder("test:middleware-b", 1)
+            "main.kmock",
+        )),
+        // No declared file access: its probe read must come back denied — the
+        // content view is deny-by-default, budgeted, never ambient. And the
+        // hand-written empty rule list IS the dependency-only posture.
+        Box::new(probing(
+            ExtensionSpec::builder("test:middleware-b", 1)
+                .conduct(Activation::AnyRule(vec![]), MutatesGraph::No)
                 .dependencies(&["test:leaf-c"])
                 .rule("probe", "reports what the content view let it see")
                 .build(),
-            mutates: false,
-            roots: Vec::new(),
-            reads: Some(ProjectPath::new("lib.kmock")),
-        }),
-        Box::new(TestPlugin {
-            spec: PluginSpec::builder("test:leaf-c", 1).build(),
-            mutates: true,
-            roots: vec![(
-                PluginTarget::File(ProjectPath::new("orphan.kmock")),
-                RootKind::Production,
-                Confidence::Certain,
-            )],
-            reads: None,
-        }),
-        Box::new(TestPlugin {
-            spec: PluginSpec::builder("test:dormant-d", 1)
-                .activation(Activation::AnyRule(vec![ActivationRule::FileExists(
-                    "never-*.xyz".into(),
-                )]))
+            "lib.kmock",
+        )),
+        Box::new(
+            MockExtension::scripted(
+                ExtensionSpec::builder("test:leaf-c", 1)
+                    .conduct(Activation::AnyRule(vec![]), MutatesGraph::Yes)
+                    .build(),
+            )
+            .on_contribute(|_, _, out| {
+                out.root(
+                    PluginTarget::File(ProjectPath::new("orphan.kmock")),
+                    RootKind::Production,
+                    Confidence::Certain,
+                );
+            }),
+        ),
+        Box::new(MockExtension::scripted(
+            ExtensionSpec::builder("test:dormant-d", 1)
+                .conduct(
+                    Activation::AnyRule(vec![ActivationRule::FileExists("never-*.xyz".into())]),
+                    MutatesGraph::No,
+                )
                 .build(),
-            mutates: false,
-            roots: Vec::new(),
-            reads: None,
-        }),
+        )),
     ];
 
     let session = Session::open(
@@ -516,10 +497,9 @@ fn plugin_dependency_implication() {
             threads: Threads::Auto,
             use_cache: false,
         },
-        vec![Box::new(MockAdapter::new())],
+        extensions,
     )
-    .expect("open session")
-    .with_plugins(plugins);
+    .expect("open session");
     let snap = session.analyze(RunMode::Full).expect("analyze");
     let report = snap.report();
 
@@ -603,19 +583,20 @@ fn abi_compat_matrix() {
     // the break. Each world is driven through a real session to a real verdict —
     // loading is not the promise; contributing is.
     let compat = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../abi/compat");
-    let session = |p: &TempProject, plugins: Vec<Box<dyn kndo_core::Plugin>>| {
+    let session = |p: &TempProject, conduct: Vec<Box<dyn kndo_core::Extension>>| {
         let adapter = kndo_host_wasm::WasmAdapter::load(&compat.join("kmini_adapter.wasm"))
             .expect("the pinned adapter component loads against the HEAD host");
+        let mut extensions: Vec<Box<dyn kndo_core::Extension>> = vec![Box::new(adapter)];
+        extensions.extend(conduct);
         Session::open(
             p.root(),
             Config {
                 threads: Threads::Auto,
                 use_cache: false,
             },
-            vec![Box::new(adapter)],
+            extensions,
         )
         .expect("open")
-        .with_plugins(plugins)
         .analyze(RunMode::Full)
         .expect("analyze")
     };

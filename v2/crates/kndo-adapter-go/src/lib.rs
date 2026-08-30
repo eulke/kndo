@@ -2,7 +2,7 @@
 //! directory of files sharing one namespace with no imports between siblings — so
 //! this adapter leans on the contract's unit features: imports resolve to
 //! [`Resolution::Files`] (every non-test `.go` in the package dir), and
-//! [`LanguageAdapter::unit_mates`] declares what each file sees without an import
+//! [`Extension::unit_mates`] declares what each file sees without an import
 //! (a production file sees its non-test siblings; a test file sees the whole
 //! package), which the engine turns into reachability edges and pooled
 //! references. Capitalization IS the visibility: an upper-case initial is
@@ -15,22 +15,21 @@ mod extract;
 mod manifest;
 mod resolve;
 
-use kndo_contract::adapter::{
-    AdapterSpec, LanguageAdapter, PackageEntry, Resolution, ResolveContext, SourceFile,
-};
+use kndo_contract::adapter::{PackageEntry, Resolution, ResolveContext, SourceFile};
 use kndo_contract::evidence::{DiagnosticLevel, EvidenceSink, EvidenceStream, EvidenceStreams};
+use kndo_contract::extension::{Extension, ExtensionSpec};
 use kndo_contract::vocab::ProjectPath;
 use smol_str::SmolStr;
 
 pub struct GoAdapter {
-    spec: AdapterSpec,
+    spec: ExtensionSpec,
 }
 
 impl GoAdapter {
     pub fn new() -> Self {
         // semantics_version 2: evidence carries no synthetic package edge — the
         // unit fact moved to `unit_mates`, out of content-keyed cache entries.
-        let spec = AdapterSpec::builder("go", 2)
+        let spec = ExtensionSpec::builder("go", 2)
             .extensions(&["go"])
             .emits(EvidenceStreams::of(&[
                 EvidenceStream::Comments,
@@ -48,8 +47,8 @@ impl Default for GoAdapter {
     }
 }
 
-impl LanguageAdapter for GoAdapter {
-    fn spec(&self) -> &AdapterSpec {
+impl Extension for GoAdapter {
+    fn spec(&self) -> &ExtensionSpec {
         &self.spec
     }
 

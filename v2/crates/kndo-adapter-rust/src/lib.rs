@@ -17,20 +17,19 @@ mod extract;
 mod manifest;
 mod resolve;
 
-use kndo_contract::adapter::{
-    AdapterSpec, LanguageAdapter, PackageEntry, ProjectRoot, Resolution, ResolveContext, SourceFile,
-};
+use kndo_contract::adapter::{PackageEntry, ProjectRoot, Resolution, ResolveContext, SourceFile};
 use kndo_contract::evidence::{DiagnosticLevel, EvidenceSink, EvidenceStream, EvidenceStreams};
+use kndo_contract::extension::{Extension, ExtensionSpec};
 use kndo_contract::vocab::ProjectPath;
 use smol_str::SmolStr;
 
 pub struct RustAdapter {
-    spec: AdapterSpec,
+    spec: ExtensionSpec,
 }
 
 impl RustAdapter {
     pub fn new() -> Self {
-        let spec = AdapterSpec::builder("rust", 1)
+        let spec = ExtensionSpec::builder("rust", 1)
             .extensions(&["rs"])
             .emits(EvidenceStreams::of(&[
                 EvidenceStream::Comments,
@@ -48,8 +47,8 @@ impl Default for RustAdapter {
     }
 }
 
-impl LanguageAdapter for RustAdapter {
-    fn spec(&self) -> &AdapterSpec {
+impl Extension for RustAdapter {
+    fn spec(&self) -> &ExtensionSpec {
         &self.spec
     }
 
