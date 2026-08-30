@@ -188,19 +188,33 @@ fn parse_pragma(
     if !rest.starts_with([' ', '\t']) {
         return;
     }
-    let list = rest.split("--").next().unwrap_or("");
+    // The categories are the LEADING words that parse; the first word that is not a
+    // category ends the list, and everything after it is the reason — free text, the
+    // way real pragmas write it (`kndo:allow-file unused invoked by action.yml…`),
+    // with an explicit `--` working the same way. Only a pragma that names NO valid
+    // category is a problem worth a diagnostic.
     let mut categories = Vec::new();
-    for word in list.split([' ', '\t', ',']).filter(|w| !w.is_empty()) {
+    let mut first_reject = None;
+    for word in rest.split([' ', '\t', ',']).filter(|w| !w.is_empty()) {
         match Category::parse(word) {
             Some(c) => categories.push(c),
-            None => problems.push(PragmaProblem {
-                path: path.clone(),
-                level: DiagnosticLevel::Warn,
-                message: format!("kndo:allow names an unknown category `{word}`"),
-            }),
+            None => {
+                first_reject = Some(word);
+                break;
+            }
         }
     }
     if categories.is_empty() {
+        problems.push(PragmaProblem {
+            path: path.clone(),
+            level: DiagnosticLevel::Warn,
+            message: match first_reject {
+                Some(word) => {
+                    format!("kndo:allow names no valid category (first word: `{word}`)")
+                }
+                None => "kndo:allow names no category".to_string(),
+            },
+        });
         return;
     }
     pragmas.push(Pragma {

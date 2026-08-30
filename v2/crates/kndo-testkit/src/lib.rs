@@ -34,7 +34,7 @@ impl MockAdapter {
     pub fn new() -> Self {
         MockAdapter {
             spec: AdapterSpec::builder("kmock", 1)
-                .claims(&["**/*.kmock"])
+                .extensions(&["kmock"])
                 .emits(EvidenceStreams::of(&[EvidenceStream::Comments]))
                 .build(),
         }
@@ -131,7 +131,8 @@ impl LanguageAdapter for MockAdapter {
             Some((dir, _)) => format!("{dir}/"),
             None => String::new(),
         };
-        let candidate = ProjectPath::new(format!("{dir}{name}.kmock"));
+        let ext = &self.spec.extensions()[0];
+        let candidate = ProjectPath::new(format!("{dir}{name}.{ext}"));
         if cx.contains(&candidate) {
             Resolution::File(candidate)
         } else {

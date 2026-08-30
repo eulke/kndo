@@ -20,25 +20,41 @@ use kndo_contract::evidence::{
 use kndo_contract::vocab::{Confidence, ProjectPath};
 use tree_sitter::Language;
 
+/// The `.d.ts` fact, spelled once: the type-declaration companion extension that
+/// resolution tries after the TS pair, wildcard exports anchor, and JS entries
+/// publish beside themselves.
+pub(crate) const TYPE_DECLARATION_EXT: &str = "d.ts";
+
 pub struct TypeScriptAdapter {
     spec: AdapterSpec,
+    /// Dotted resolution candidates in TS priority order, derived once from the
+    /// spec's declared extensions (with `.d.ts` after the TS pair) — resolution and
+    /// manifest logic read this, never a second extension list.
+    resolution_exts: Vec<String>,
 }
 
 impl TypeScriptAdapter {
     pub fn new() -> Self {
+        // semantics_version 2: the adapter emits Metrics (winnowing fingerprints,
+        // cyclomatic, loc) for every function-shaped declaration.
+        let spec = AdapterSpec::builder("js-ts", 2)
+            .extensions(&["ts", "tsx", "js", "jsx", "mjs", "cjs"])
+            .emits(EvidenceStreams::of(&[
+                EvidenceStream::Comments,
+                EvidenceStream::Metrics,
+            ]))
+            .manifests(&["**/package.json"])
+            .build();
+        let mut resolution_exts = Vec::new();
+        for ext in spec.extensions() {
+            resolution_exts.push(format!(".{ext}"));
+            if ext == "tsx" {
+                resolution_exts.push(format!(".{TYPE_DECLARATION_EXT}"));
+            }
+        }
         TypeScriptAdapter {
-            // semantics_version 2: the adapter emits Metrics (winnowing fingerprints,
-            // cyclomatic, loc) for every function-shaped declaration.
-            spec: AdapterSpec::builder("js-ts", 2)
-                .claims(&[
-                    "**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.mjs", "**/*.cjs",
-                ])
-                .emits(EvidenceStreams::of(&[
-                    EvidenceStream::Comments,
-                    EvidenceStream::Metrics,
-                ]))
-                .manifests(&["**/package.json"])
-                .build(),
+            spec,
+            resolution_exts,
         }
     }
 }
@@ -91,15 +107,15 @@ impl LanguageAdapter for TypeScriptAdapter {
     }
 
     fn resolve(&self, from: &ProjectPath, specifier: &str, cx: &ResolveContext<'_>) -> Resolution {
-        resolve::resolve(from, specifier, cx)
+        resolve::resolve(from, specifier, cx, &self.resolution_exts)
     }
 
     fn roots(&self, manifest: &SourceFile<'_>, cx: &ResolveContext<'_>) -> Vec<ProjectRoot> {
-        manifest::roots(manifest, cx)
+        manifest::roots(manifest, cx, &self.resolution_exts)
     }
 
     fn packages(&self, manifest: &SourceFile<'_>, cx: &ResolveContext<'_>) -> Vec<PackageEntry> {
-        manifest::packages(manifest, cx)
+        manifest::packages(manifest, cx, &self.resolution_exts)
     }
 }
 

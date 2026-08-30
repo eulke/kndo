@@ -7,14 +7,21 @@
 use kndo_contract::adapter::{Resolution, ResolveContext};
 use kndo_contract::vocab::ProjectPath;
 
-const EXTS: [&str; 7] = [".ts", ".tsx", ".d.ts", ".js", ".jsx", ".mjs", ".cjs"];
+/// A compiled-output extension in a specifier names the SOURCE beside it — the
+/// grammar-specific swap table, spelled once.
+const COMPILED_TO_SOURCE: [(&str, &[&str]); 2] = [(".js", &[".ts", ".tsx"]), (".jsx", &[".tsx"])];
 
-pub fn resolve(from: &ProjectPath, specifier: &str, cx: &ResolveContext<'_>) -> Resolution {
+pub fn resolve(
+    from: &ProjectPath,
+    specifier: &str,
+    cx: &ResolveContext<'_>,
+    exts: &[String],
+) -> Resolution {
     if !specifier.starts_with('.') {
-        return resolve_bare(specifier, cx);
+        return resolve_bare(specifier, cx, exts);
     }
     let dir = parent_dir(from);
-    match resolve_in_dir(dir, specifier, cx) {
+    match resolve_in_dir(dir, specifier, cx, exts) {
         Some(path) => Resolution::File(path),
         None => Resolution::Unresolved,
     }
@@ -24,14 +31,14 @@ pub fn resolve(from: &ProjectPath, specifier: &str, cx: &ResolveContext<'_>) -> 
 /// declares the package (a workspace sibling): the exact name resolves to the
 /// declared entry; a subpath resolves against the package directory when the layout
 /// matches. Everything else is an external package — `Unresolved`, keep-alive.
-fn resolve_bare(specifier: &str, cx: &ResolveContext<'_>) -> Resolution {
+fn resolve_bare(specifier: &str, cx: &ResolveContext<'_>, exts: &[String]) -> Resolution {
     let (name, subpath) = split_bare(specifier);
     let Some(pkg) = cx.package(name) else {
         return Resolution::Unresolved;
     };
     match subpath {
         None => Resolution::File(pkg.entry.clone()),
-        Some(sub) => match resolve_in_dir(&pkg.dir, sub, cx) {
+        Some(sub) => match resolve_in_dir(&pkg.dir, sub, cx, exts) {
             Some(path) => Resolution::File(path),
             None => Resolution::Unresolved,
         },
@@ -72,9 +79,10 @@ pub(crate) fn resolve_in_dir(
     dir: &str,
     specifier: &str,
     cx: &ResolveContext<'_>,
+    exts: &[String],
 ) -> Option<ProjectPath> {
     let joined = normalize(dir, specifier)?;
-    candidates(&joined)
+    candidates(&joined, exts)
         .into_iter()
         .map(ProjectPath::new)
         .find(|p| cx.contains(p))
@@ -100,20 +108,18 @@ fn normalize(dir: &str, spec: &str) -> Option<String> {
     Some(parts.join("/"))
 }
 
-fn candidates(joined: &str) -> Vec<String> {
+fn candidates(joined: &str, exts: &[String]) -> Vec<String> {
     let mut out = Vec::new();
     if !joined.is_empty() {
         out.push(joined.to_string());
-        for e in EXTS {
+        for e in exts {
             out.push(format!("{joined}{e}"));
         }
-        // In a TS project, `./x.js` names the COMPILED file; the source beside it is
-        // the `.ts`/`.tsx`.
-        if let Some(stem) = joined.strip_suffix(".js") {
-            out.push(format!("{stem}.ts"));
-            out.push(format!("{stem}.tsx"));
-        } else if let Some(stem) = joined.strip_suffix(".jsx") {
-            out.push(format!("{stem}.tsx"));
+        for (compiled, sources) in COMPILED_TO_SOURCE {
+            if let Some(stem) = joined.strip_suffix(compiled) {
+                out.extend(sources.iter().map(|s| format!("{stem}{s}")));
+                break;
+            }
         }
     }
     let prefix = if joined.is_empty() {
@@ -121,7 +127,7 @@ fn candidates(joined: &str) -> Vec<String> {
     } else {
         format!("{joined}/")
     };
-    for e in EXTS {
+    for e in exts {
         out.push(format!("{prefix}index{e}"));
     }
     out

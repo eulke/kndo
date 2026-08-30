@@ -22,13 +22,22 @@ pub struct AdapterRun {
 #[derive(Serialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct RunInfo {
+    /// Stamped as a CONST in the generated schema, from the same `SCHEMA` the report
+    /// writes — a report from any other envelope version fails validation instead of
+    /// drifting through.
+    #[cfg_attr(feature = "schema", schemars(schema_with = "schema_version_const"))]
     pub schema: &'static str,
     pub files_discovered: u32,
     pub files_claimed: u32,
     pub adapters: Vec<AdapterRun>,
 }
 
-#[derive(Serialize)]
+#[cfg(feature = "schema")]
+fn schema_version_const(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+    schemars::json_schema!({ "const": SCHEMA })
+}
+
+#[derive(Debug, Serialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct ReportDiagnostic {
     pub path: ProjectPath,

@@ -112,6 +112,11 @@ pub fn assemble(
         gf.imports = imports;
         gf.import_targets = per_import;
         gf.unresolved_imports = unresolved;
+        debug_assert_eq!(
+            gf.import_targets.len(),
+            gf.evidence.imports.len(),
+            "import_targets is index-parallel to evidence.imports"
+        );
     }
 
     anchor_manifest_roots(files, adapters, &cx, &mut graph_files);
@@ -263,6 +268,11 @@ pub fn patch(
         gf.imports = imports;
         gf.import_targets = per_import;
         gf.unresolved_imports = unresolved;
+        debug_assert_eq!(
+            gf.import_targets.len(),
+            gf.evidence.imports.len(),
+            "import_targets is index-parallel to evidence.imports"
+        );
     }
     Some(prev)
 }

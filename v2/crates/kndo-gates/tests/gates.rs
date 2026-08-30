@@ -161,6 +161,15 @@ fn dogfood_zero_means_measured() {
          written reason in the same commit; if not, an analysis started abstaining \
          (or judging) on this repository without you meaning it to.\n"
     );
+
+    // The same lock for the diagnostics channel: the repo run emits none, so any
+    // that appear (a parse failure, a pragma problem, a clamped span) are a
+    // regression to explain, never background noise.
+    let diagnostics = snap.report().diagnostics;
+    assert!(
+        diagnostics.is_empty(),
+        "the dogfood run emits no diagnostics; got {diagnostics:#?}"
+    );
 }
 
 #[test]

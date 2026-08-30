@@ -131,3 +131,16 @@ fn contract_fingerprint_is_stable_within_a_build() {
         kndo_contract::contract_fingerprint_hex()
     );
 }
+
+#[test]
+fn declaring_extensions_is_claiming_them() {
+    use kndo_contract::adapter::AdapterSpec;
+    let spec = AdapterSpec::builder("demo", 1)
+        .extensions(&["ts", "tsx"])
+        .claims(&["**/special.conf"])
+        .build();
+    // One declaration: the extension list is queryable AND the claim globs derive
+    // from it, in order, with non-extension claims preserved alongside.
+    assert_eq!(spec.extensions(), ["ts", "tsx"]);
+    assert_eq!(spec.claims(), ["**/*.ts", "**/*.tsx", "**/special.conf"]);
+}

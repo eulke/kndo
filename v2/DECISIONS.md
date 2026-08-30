@@ -330,3 +330,22 @@ gate. M3 exit vs oracle: duplicate 174/179 (residue = unclaimed css/json subject
 test-only 122 vs 27 and untested 25 vs 222 share one named cause — production color
 starved by dist indirection — recorded in COMPARISON.md with its M4 experiment
 (mapping built entries to sources), not patched around.
+
+## 2026-08-30 — Extensions are declared once; the audit's four warts closed
+
+Owner call: adapter-specific facts spelled in several places must have one
+declaration. `AdapterSpec` gains `extensions` (no dot, resolution-priority order) and
+declaring them IS claiming them — the builder derives the `**/*.<ext>` globs, so the
+engine's matching and the adapter's own consumers read one list. js-ts now derives
+its resolution candidates (with the one spelled `.d.ts` insertion), npm-script
+detection and wildcard filters from the spec; MockAdapter's resolve reads its spec
+instead of respelling `.kmock`. Corpus held byte-identical through the refactor —
+the point was shape, not behavior. Closed in the same change, from the standing
+audit: the generated schema now stamps `run.schema` as a CONST of the same `SCHEMA`
+the report writes (the §7.2 detail v1's drift incident motivated — any other
+envelope version fails validation); the pragma grammar takes v1-style free-text
+reasons (leading words that parse are the categories, the first non-category ends
+the list — the ~20 false Warn diagnostics the repo's own pragmas produced are gone,
+and the dogfood gate now asserts a diagnostics-clean run so the class cannot
+return); and `import_targets` carries debug asserts for its index-parallel
+invariant at both write sites.

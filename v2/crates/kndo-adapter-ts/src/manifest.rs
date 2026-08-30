@@ -12,7 +12,11 @@ use kndo_contract::vocab::{Confidence, ProjectPath};
 use smol_str::SmolStr;
 use std::collections::BTreeSet;
 
-pub fn roots(manifest: &SourceFile<'_>, cx: &ResolveContext<'_>) -> Vec<ProjectRoot> {
+pub fn roots(
+    manifest: &SourceFile<'_>,
+    cx: &ResolveContext<'_>,
+    exts: &[String],
+) -> Vec<ProjectRoot> {
     let Ok(json) = serde_json::from_slice::<serde_json::Value>(manifest.content) else {
         return Vec::new();
     };
@@ -36,18 +40,18 @@ pub fn roots(manifest: &SourceFile<'_>, cx: &ResolveContext<'_>) -> Vec<ProjectR
                     cx.files_with_prefix(&prefix)
                         .filter(|p| {
                             p.as_str().ends_with(after)
-                                || SOURCE_EXTS.iter().any(|e| p.as_str().ends_with(e))
-                                || p.as_str().ends_with(".d.ts")
+                                || exts.iter().any(|e| p.as_str().ends_with(e.as_str()))
                         })
                         .cloned(),
                 );
             }
             None => {
-                if let Some(path) = resolve_in_dir(dir, entry, cx) {
-                    // A JS entry's `.d.ts` companion is published beside it.
+                if let Some(path) = resolve_in_dir(dir, entry, cx, exts) {
+                    // A JS entry's type-declaration companion is published beside it.
                     for ext in [".js", ".mjs", ".cjs"] {
                         if let Some(stem) = path.as_str().strip_suffix(ext) {
-                            let dts = ProjectPath::new(format!("{stem}.d.ts"));
+                            let dts =
+                                ProjectPath::new(format!("{stem}.{}", crate::TYPE_DECLARATION_EXT));
                             if cx.contains(&dts) {
                                 anchored.insert(dts);
                             }
@@ -76,8 +80,8 @@ pub fn roots(manifest: &SourceFile<'_>, cx: &ResolveContext<'_>) -> Vec<ProjectR
             };
             for token in command.split(|c: char| c.is_whitespace() || c == ';' || c == '&') {
                 let token = token.trim_matches(|c| c == '"' || c == '\'');
-                if SOURCE_EXTS.iter().any(|e| token.ends_with(e))
-                    && let Some(path) = resolve_in_dir(dir, token, cx)
+                if exts.iter().any(|e| token.ends_with(e.as_str()))
+                    && let Some(path) = resolve_in_dir(dir, token, cx, exts)
                 {
                     script_files.insert(path);
                 }
@@ -97,8 +101,6 @@ pub fn roots(manifest: &SourceFile<'_>, cx: &ResolveContext<'_>) -> Vec<ProjectR
     out.extend(script_roots);
     out
 }
-
-const SOURCE_EXTS: [&str; 6] = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"];
 
 /// Every entry-declaring string in the manifest: `main`/`module`/`browser`, `bin`
 /// values, and the string leaves of `exports` and `imports` (the internal `#alias`
@@ -127,7 +129,11 @@ fn entry_fields(json: &serde_json::Value) -> Vec<String> {
 
 /// The package this manifest declares, when it has a name and an entry that
 /// resolves — what links a workspace-internal bare import to its source.
-pub fn packages(manifest: &SourceFile<'_>, cx: &ResolveContext<'_>) -> Vec<PackageEntry> {
+pub fn packages(
+    manifest: &SourceFile<'_>,
+    cx: &ResolveContext<'_>,
+    exts: &[String],
+) -> Vec<PackageEntry> {
     let Ok(json) = serde_json::from_slice::<serde_json::Value>(manifest.content) else {
         return Vec::new();
     };
@@ -137,7 +143,7 @@ pub fn packages(manifest: &SourceFile<'_>, cx: &ResolveContext<'_>) -> Vec<Packa
     let dir = parent_dir(manifest.path);
     let entry = entry_fields(&json)
         .iter()
-        .find_map(|e| resolve_in_dir(dir, e, cx));
+        .find_map(|e| resolve_in_dir(dir, e, cx, exts));
     match entry {
         Some(entry) => vec![PackageEntry {
             name: SmolStr::new(name),

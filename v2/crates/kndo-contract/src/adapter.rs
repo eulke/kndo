@@ -28,6 +28,8 @@ pub struct AdapterSpec {
     emits: EvidenceStreams,
     #[serde(default)]
     manifests: Vec<SmolStr>,
+    #[serde(default)]
+    extensions: Vec<SmolStr>,
 }
 
 impl AdapterSpec {
@@ -39,6 +41,7 @@ impl AdapterSpec {
                 claims: Vec::new(),
                 emits: EvidenceStreams::none(),
                 manifests: Vec::new(),
+                extensions: Vec::new(),
             },
         }
     }
@@ -67,6 +70,15 @@ impl AdapterSpec {
     pub fn manifests(&self) -> &[SmolStr] {
         &self.manifests
     }
+
+    /// The file extensions this adapter speaks (no leading dot), in
+    /// resolution-candidate priority order — THE one declaration: the claim globs
+    /// derive from it at build time, and the adapter's own resolution, script
+    /// detection, and any other extension-conditional logic read this same list
+    /// instead of keeping copies.
+    pub fn extensions(&self) -> &[SmolStr] {
+        &self.extensions
+    }
 }
 
 pub struct AdapterSpecBuilder {
@@ -74,8 +86,22 @@ pub struct AdapterSpecBuilder {
 }
 
 impl AdapterSpecBuilder {
+    /// Declare the extensions this adapter speaks (no leading dot), in
+    /// resolution-candidate priority order. Each derives a `**/*.<ext>` claim glob —
+    /// declaring extensions IS claiming them; `claims` stays for patterns that are
+    /// not extension-shaped.
+    pub fn extensions(mut self, extensions: &[&'static str]) -> Self {
+        for ext in extensions {
+            self.spec.extensions.push(SmolStr::new_static(ext));
+            self.spec.claims.push(SmolStr::from(format!("**/*.{ext}")));
+        }
+        self
+    }
+
     pub fn claims(mut self, globs: &[&'static str]) -> Self {
-        self.spec.claims = globs.iter().map(|g| SmolStr::new_static(g)).collect();
+        self.spec
+            .claims
+            .extend(globs.iter().map(|g| SmolStr::new_static(g)));
         self
     }
 
