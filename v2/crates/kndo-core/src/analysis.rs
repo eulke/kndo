@@ -26,6 +26,12 @@ pub trait Analysis: Sync {
     fn requires(&self) -> &'static [EvidenceStream] {
         &[]
     }
+    /// A precondition on the graph as a whole. `Some` means this run cannot be judged
+    /// at all — the engine records the abstention and never calls [`Analysis::run`].
+    /// Degrade-toward-keep-alive at analysis scale: silence over accusation.
+    fn abstains(&self, _graph: &Graph) -> Option<AbstentionReason> {
+        None
+    }
     fn run(&self, cx: &AnalysisContext<'_>) -> Vec<Finding>;
 }
 
@@ -39,7 +45,13 @@ pub enum AbstentionScope {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum AbstentionReason {
-    StreamsNotDeclared { missing: Vec<EvidenceStream> },
+    StreamsNotDeclared {
+        missing: Vec<EvidenceStream>,
+    },
+    /// No root anchors anything in the whole graph. Reachability judged from zero
+    /// roots would accuse every file at once; that is a missing-evidence condition,
+    /// not a verdict.
+    NoRootsAnywhere,
 }
 
 impl fmt::Display for AbstentionReason {
@@ -47,6 +59,9 @@ impl fmt::Display for AbstentionReason {
         match self {
             AbstentionReason::StreamsNotDeclared { missing } => {
                 write!(f, "required evidence streams not declared: {missing:?}")
+            }
+            AbstentionReason::NoRootsAnywhere => {
+                write!(f, "no root anchors any file in this graph")
             }
         }
     }
@@ -64,6 +79,14 @@ pub fn run_all(graph: &Graph, analyses: &[&dyn Analysis]) -> (Vec<Finding>, Vec<
     let mut abstained = Vec::new();
 
     for analysis in analyses {
+        if let Some(reason) = analysis.abstains(graph) {
+            abstained.push(Abstention {
+                category: analysis.category(),
+                reason,
+                scope: AbstentionScope::WholeRun,
+            });
+            continue;
+        }
         let requires = analysis.requires();
         let measured: Vec<bool> = graph
             .files
@@ -109,6 +132,11 @@ impl Analysis for Unused {
         Category::UNUSED
     }
 
+    fn abstains(&self, graph: &Graph) -> Option<AbstentionReason> {
+        let any_root = graph.files.iter().any(|f| !f.evidence.roots.is_empty());
+        (!graph.files.is_empty() && !any_root).then_some(AbstentionReason::NoRootsAnywhere)
+    }
+
     fn run(&self, cx: &AnalysisContext<'_>) -> Vec<Finding> {
         let g = cx.graph;
         let n = g.files.len();
@@ -134,11 +162,17 @@ impl Analysis for Unused {
         // Names each file's imports bind from each target, and whether an importer
         // keeps a target's whole exported surface alive (namespace/side-effect: the
         // engine cannot see through them, so it degrades toward keep-alive).
+        // Member references dispatch through values, not lexical scope, so their
+        // evidence pool is every reachable file's references at once.
         let mut bound: BTreeSet<(u32, &str)> = BTreeSet::new();
         let mut surface_kept = vec![false; n];
+        let mut member_referenced: BTreeSet<&str> = BTreeSet::new();
         for (i, f) in g.files.iter().enumerate() {
             if !reachable[i] {
                 continue;
+            }
+            for r in &f.evidence.references {
+                member_referenced.insert(r.name.as_str());
             }
             for import in &f.evidence.imports {
                 for &t in &f.imports {
@@ -195,18 +229,41 @@ impl Analysis for Unused {
             // still judged individually — a private, uncalled function in an entry
             // point is dead code.
             for (d_ix, d) in f.evidence.declarations.iter().enumerate() {
-                let kept = referenced.contains(d.name.as_str())
-                    || rooted.contains(&d_ix)
-                    || (d.reach == kndo_contract::evidence::Reach::Exported
-                        && (surface_kept[i] || bound.contains(&(i as u32, d.name.as_str()))));
+                let kept = if let Some(owner) = d.owner {
+                    // A member: kept by any reference to its name anywhere reachable
+                    // (dispatch is not lexical), by a root, or by its owner's whole
+                    // surface being kept from outside.
+                    member_referenced.contains(d.name.as_str())
+                        || rooted.contains(&d_ix)
+                        || rooted.contains(&owner.index())
+                        || surface_kept[i]
+                } else {
+                    // Importers bind the module-system name: the local one, or the
+                    // exported alias when the declaration carries one.
+                    let bound_by_name = bound.contains(&(i as u32, d.name.as_str()))
+                        || d.exported_as
+                            .as_ref()
+                            .is_some_and(|a| bound.contains(&(i as u32, a.as_str())));
+                    referenced.contains(d.name.as_str())
+                        || rooted.contains(&d_ix)
+                        || (d.reach == kndo_contract::evidence::Reach::Exported
+                            && (surface_kept[i] || bound_by_name))
+                };
                 if !kept {
+                    let selector = match d.owner {
+                        Some(owner) => SymbolSelector::Member {
+                            owner: f.evidence.declarations[owner.index()].name.clone(),
+                            name: d.name.clone(),
+                        },
+                        None => SymbolSelector::Free(d.name.clone()),
+                    };
                     out.push(Finding::new(
                         Category::UNUSED,
                         Severity::Warning,
                         Confidence::Certain,
                         Subject::Symbol {
                             path: f.path.clone(),
-                            selector: SymbolSelector::Free(d.name.clone()),
+                            selector,
                             span: d.span,
                         },
                         "",
