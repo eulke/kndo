@@ -48,6 +48,9 @@ root swap; `cargo` commands run from here, on the pinned toolchain
 - CI (`v2.yml`): lint (fmt, clippy, conventional-commit), test matrix on linux/macos
   (Windows deferred by owner decision — tree-sitter-scss upstream; see DECISIONS.md),
   named gates, and package+verify-install on both platforms.
+- CI verification pending an external blocker: the account's Actions credits are
+  exhausted until 2026-09-01 (every job dies in seconds, v1's CI on main included);
+  a scheduled re-fire via workflow_dispatch closes M0 when credits reset.
 - Exit-criterion adaptation, recorded in `DECISIONS.md`: the ceremonial `v0.0.0-rc` tag
   is deferred — v1's release.yml fires on any `v*` tag — and the package+install matrix
   proves the same loop on every push instead.
