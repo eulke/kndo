@@ -206,3 +206,18 @@ invariant list (v1 kept three hand-synced spellings, including a named gate that
 never once run). The M0 exit criterion is proven by the package+verify-install matrix
 on every push; the ceremonial `v0.0.0-rc` tag is deferred because v1's release.yml
 triggers on any `v*` tag, and lands when that pipeline is retired.
+
+## 2026-08-30 — Windows out of the CI matrix for now (owner decision)
+
+tree-sitter-scss's build script hands MSVC a flag it refuses — the same upstream defect
+that killed the v1 Windows release target after shipping unbuilt — and carrying hacks
+for it now buys nothing. The matrix is linux + macOS; Windows re-enters when the CSS
+grammar question is resolved (upstream fix, grammar swap, or an experiment that says
+the SCSS adapter isn't worth the platform). Owner-decided scope change, recorded per
+the scope rule.
+
+## 2026-08-30 — Toolchain pinned to 1.98.0
+
+Latest stable, and the exact version v1's CI already ran. `rust-toolchain.toml` +
+`toolchain:` in the generated workflow move together (the generator is the single
+source); a bump is its own PR with the full suite.

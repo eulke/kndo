@@ -35,7 +35,7 @@ plan M-1→M6) lives as a published page; the decisions extracted from it start 
 
 The v2 workspace lives at `v2/` (this directory) beside the v1 it replaces, until the
 root swap; `cargo` commands run from here, on the pinned toolchain
-(`rust-toolchain.toml`, 1.94.1 — local and CI identical by construction).
+(`rust-toolchain.toml`, 1.98.0 — local and CI identical by construction).
 
 - `crates/kndo-cli` — the `kndo` binary at hello-world size: enough artifact for the
   release loop to be real before any analysis code can hide its failures.
@@ -45,8 +45,9 @@ root swap; `cargo` commands run from here, on the pinned toolchain
 - `xtask` — `gen-ci`, `package` (build + tar.gz + sha256), `verify-artifact`
   (checksum-verify, extract, run — in Rust, so linux/macos/windows run the identical
   install check).
-- CI (`v2.yml`): lint (fmt, clippy, conventional-commit), test matrix on
-  linux/macos/windows, named gates, and package+verify-install on all three platforms.
+- CI (`v2.yml`): lint (fmt, clippy, conventional-commit), test matrix on linux/macos
+  (Windows deferred by owner decision — tree-sitter-scss upstream; see DECISIONS.md),
+  named gates, and package+verify-install on both platforms.
 - Exit-criterion adaptation, recorded in `DECISIONS.md`: the ceremonial `v0.0.0-rc` tag
   is deferred — v1's release.yml fires on any `v*` tag — and the package+install matrix
   proves the same loop on every push instead.

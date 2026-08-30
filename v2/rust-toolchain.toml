@@ -1,5 +1,5 @@
 # Local and CI run the same compiler by construction; a toolchain bump is its own PR
 # with the full suite. (v1 paid the local-vs-CI drift twice, three pushes each.)
 [toolchain]
-channel = "1.94.1"
+channel = "1.98.0"
 components = ["rustfmt", "clippy"]

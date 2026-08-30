@@ -43,6 +43,7 @@ on:
     paths: ["v2/**", ".github/workflows/v2.yml"]
   pull_request:
     paths: ["v2/**", ".github/workflows/v2.yml"]
+  workflow_dispatch:
 
 concurrency:
   group: v2-${{ github.ref }}
@@ -64,7 +65,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.94.1
+          toolchain: 1.98.0
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
         with:
@@ -87,12 +88,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        # Windows deferred by owner decision (tree-sitter-scss upstream) — v2/DECISIONS.md.
+        os: [ubuntu-latest, macos-latest]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.94.1
+          toolchain: 1.98.0
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: v2
@@ -106,7 +108,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.94.1
+          toolchain: 1.98.0
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: v2
@@ -126,12 +128,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        # Windows deferred by owner decision (tree-sitter-scss upstream) — v2/DECISIONS.md.
+        os: [ubuntu-latest, macos-latest]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.94.1
+          toolchain: 1.98.0
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: v2
