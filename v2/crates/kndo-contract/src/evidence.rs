@@ -466,3 +466,21 @@ impl EvidenceSink {
         self.out
     }
 }
+
+/// What one file's coverage report states, before any project mapping: hit counts
+/// keyed by 1-based line. Test-execution evidence at the WIRE level — what an
+/// ingesting extension returns from [`crate::extension::Extension::ingest`] and
+/// what the engine maps onto the project once it supplies the sources.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct FileRecords {
+    /// Instrumented lines → hit count.
+    pub lines: std::collections::BTreeMap<u32, u64>,
+    /// Function records: (declaration line, hit count).
+    pub functions: Vec<(u32, u64)>,
+}
+
+/// Every file a report mentions, by the report's own (separator-normalized) path.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct CoverageRecords {
+    pub files: std::collections::BTreeMap<crate::vocab::ProjectPath, FileRecords>,
+}

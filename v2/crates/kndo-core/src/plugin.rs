@@ -9,52 +9,29 @@
 //! embedders use.
 
 use crate::graph::{Graph, GraphFile};
-use kndo_contract::evidence::{Root, RootKind, RootTarget};
-use kndo_contract::finding::{Finding, Severity};
+use kndo_contract::evidence::{Root, RootTarget};
+use kndo_contract::finding::Finding;
 use kndo_contract::subject::{Subject, SymbolSelector};
 use kndo_contract::vocab::{Category, Confidence, ProjectPath};
 use serde::Serialize;
 use smol_str::SmolStr;
-use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
+
+/// The conduct vocabulary is contract vocabulary (`kndo-contract`'s extension
+/// module — the one door); re-exported here where the engine that enforces it
+/// lives. `PluginSink` is the same type as `ConductSink`, under the name the
+/// native trait's hooks spell.
+pub use kndo_contract::extension::{
+    Activation, ActivationRule, CONTENT_MAX_BYTES, CONTENT_MAX_FILES, ConductSink,
+    ConductSink as PluginSink, ContentView, GraphAccess, PluginSeverity, PluginTarget,
+    RuleDescriptor,
+};
 
 /// `kndo:` is the built-in namespace: an external component carrying it is
 /// rejected at load, which is what makes `dependencies: ["kndo:express"]`
 /// unambiguous from any source.
 pub fn is_reserved_coordinate(coordinate: &str) -> bool {
     coordinate.starts_with("kndo:")
-}
-
-/// One machine-checkable activation predicate — cheap, evaluated against what the
-/// run already discovered, never by running plugin code.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ActivationRule {
-    /// At least one discovered file matches this glob (e.g. `next.config.*`).
-    FileExists(SmolStr),
-    /// Some discovered manifest declares a dependency with this name, in any
-    /// section — as reported by the claiming adapters through
-    /// `LanguageAdapter::manifest_dependencies`, the one manifest pipeline.
-    ManifestDependency(SmolStr),
-}
-
-/// When a plugin runs. `Always` is speakable on purpose: "always on and cheap"
-/// (a coverage ingester) is a real posture, not an exemption with a paragraph of
-/// justification. An empty rule list is the OTHER deliberate extreme — a plugin
-/// that can never self-activate, reachable only through another plugin's
-/// `dependencies` (a company framework whose users never depend on it directly).
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Activation {
-    Always,
-    AnyRule(Vec<ActivationRule>),
-}
-
-/// One rule a plugin may emit findings under; the suffix of the namespaced
-/// category `plugin:<coordinate>/<rule>`. A finding under an undeclared rule is
-/// dropped and recorded — declaration is the contract, not decoration.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RuleDescriptor {
-    pub name: SmolStr,
-    pub description: SmolStr,
 }
 
 /// What a plugin IS, as data — the same posture as `AdapterSpec`.
@@ -172,36 +149,8 @@ impl PluginSpecBuilder {
     }
 }
 
-/// A plugin's own severity vocabulary — deliberately not `Severity`: the engine
-/// maps it into the advisory channel, so a plugin can never construct a
-/// gate-eligible finding directly.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PluginSeverity {
-    Error,
-    Warning,
-    Info,
-}
-
-impl PluginSeverity {
-    fn advisory(self) -> Severity {
-        match self {
-            PluginSeverity::Error => Severity::Error,
-            PluginSeverity::Warning => Severity::Warning,
-            PluginSeverity::Info => Severity::Info,
-        }
-    }
-}
-
-/// What a contribution points at. A target that resolves to nothing is a silent
-/// no-op in the graph and a described line in the contribution — the author
-/// debugging "contributed 0 roots" needs the why; the run never crashes on it.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum PluginTarget {
-    File(ProjectPath),
-    Symbol { path: ProjectPath, name: SmolStr },
-}
-
-/// The graph as a plugin may see it: paths and membership, no internals.
+/// The graph as a plugin may see it: paths and membership, no internals. The
+/// engine-side implementation of the contract's [`GraphAccess`].
 pub struct GraphView<'a> {
     files: &'a [GraphFile],
 }
@@ -216,79 +165,13 @@ impl<'a> GraphView<'a> {
     }
 }
 
-/// Budgeted, glob-scoped reads over the run's already-read file contents — no
-/// second disk walk. Every miss (no glob match, unknown path, budget cut) is the
-/// same `None`; the cut itself is reported on the contribution, never silent.
-pub struct ContentView<'a> {
-    contents: &'a BTreeMap<ProjectPath, &'a [u8]>,
-    globs: Vec<globset::GlobMatcher>,
-    budget: RefCell<ContentBudget>,
-}
-
-pub const CONTENT_MAX_FILES: usize = 200;
-pub const CONTENT_MAX_BYTES: usize = 8 * 1024 * 1024;
-
-#[derive(Default)]
-struct ContentBudget {
-    files: usize,
-    bytes: usize,
-    seen: BTreeSet<ProjectPath>,
-    cut_off: bool,
-}
-
-impl<'a> ContentView<'a> {
-    fn new(contents: &'a BTreeMap<ProjectPath, &'a [u8]>, spec: &PluginSpec) -> Self {
-        // A malformed glob is simply never satisfied — declared input degrades,
-        // the run never aborts on it.
-        let globs = spec
-            .requested_file_access
-            .iter()
-            .filter_map(|g| globset::Glob::new(g).ok())
-            .map(|g| g.compile_matcher())
-            .collect();
-        ContentView {
-            contents,
-            globs,
-            budget: RefCell::new(ContentBudget::default()),
-        }
+impl GraphAccess for GraphView<'_> {
+    fn paths(&self) -> Box<dyn Iterator<Item = &ProjectPath> + '_> {
+        Box::new(GraphView::paths(self))
     }
 
-    /// The discovered paths this view's globs admit, in path order — names only,
-    /// nothing charged. What a prefetching consumer (the WASM bridge's
-    /// before-instantiation snapshot) walks so it never re-implements the glob
-    /// scope; reading each is still [`ContentView::read`], budget and all.
-    pub fn readable_paths(&self) -> impl Iterator<Item = &'a ProjectPath> + '_ {
-        self.contents
-            .keys()
-            .filter(|p| self.globs.iter().any(|g| g.is_match(p.as_str())))
-    }
-
-    pub fn read(&self, path: &ProjectPath) -> Option<&'a [u8]> {
-        if !self.globs.iter().any(|g| g.is_match(path.as_str())) {
-            return None;
-        }
-        let bytes = *self.contents.get(path)?;
-        let mut budget = self.budget.borrow_mut();
-        if budget.seen.contains(path) {
-            // A charged path re-reads for free, cutoff or not: the budget is
-            // about new reads, not about punishing a second look.
-            return Some(bytes);
-        }
-        if budget.cut_off {
-            return None;
-        }
-        budget.files += 1;
-        budget.bytes += bytes.len();
-        budget.seen.insert(path.clone());
-        if budget.files > CONTENT_MAX_FILES || budget.bytes > CONTENT_MAX_BYTES {
-            budget.cut_off = true;
-            return None;
-        }
-        Some(bytes)
-    }
-
-    fn was_cut(&self) -> bool {
-        self.budget.borrow().cut_off
+    fn contains(&self, path: &ProjectPath) -> bool {
+        GraphView::contains(self, path)
     }
 }
 
@@ -309,36 +192,6 @@ impl WellKnown<'_> {
             return None;
         }
         std::fs::read_to_string(path).ok()
-    }
-}
-
-/// The write side of one plugin's run.
-#[derive(Default)]
-pub struct PluginSink {
-    roots: Vec<(PluginTarget, RootKind, Confidence)>,
-    findings: Vec<(SmolStr, PluginSeverity, PluginTarget, String)>,
-}
-
-impl PluginSink {
-    /// Anchor liveness the language cannot see: a route file, a DI-registered
-    /// symbol. Applied to the graph only from plugins that declare
-    /// `mutates_graph() == true` — the declaration is self-enforcing, because the
-    /// hook that fills this is only invoked on those.
-    pub fn root(&mut self, target: PluginTarget, kind: RootKind, confidence: Confidence) {
-        self.roots.push((target, kind, confidence));
-    }
-
-    /// An advisory finding under one of the spec's declared rules; undeclared
-    /// rules drop with a described line on the contribution.
-    pub fn finding(
-        &mut self,
-        rule: &str,
-        severity: PluginSeverity,
-        target: PluginTarget,
-        message: impl Into<String>,
-    ) {
-        self.findings
-            .push((SmolStr::new(rule), severity, target, message.into()));
     }
 }
 
@@ -513,7 +366,7 @@ pub fn run_round(
             coverage = plugin.ingest_coverage(&well_known, contents);
         }
 
-        let content = ContentView::new(contents, spec);
+        let content = ContentView::new(contents, spec.requested_file_access());
         {
             let view = GraphView {
                 files: &graph.files,
@@ -524,8 +377,9 @@ pub fn run_round(
             plugin.report_findings(&view, &content, &mut sink);
         }
 
+        let (sunk_roots, sunk_findings) = sink.into_parts();
         let mut applied_roots = 0u32;
-        for (target, kind, confidence) in sink.roots {
+        for (target, kind, confidence) in sunk_roots {
             // The sink is shared between hooks, so a plugin that declared
             // `mutates_graph() == false` can still CALL `root()` from
             // `report_findings` — those drop with a described line instead of
@@ -554,7 +408,7 @@ pub fn run_round(
         }
 
         let mut applied_findings = 0u32;
-        for (rule, severity, target, message) in sink.findings {
+        for (rule, severity, target, message) in sunk_findings {
             if !spec.rules().iter().any(|r| r.name == rule) {
                 dropped.push(format!("finding under undeclared rule `{rule}`"));
                 continue;
@@ -582,7 +436,7 @@ pub fn run_round(
             roots: applied_roots,
             findings: applied_findings,
             dropped,
-            content_budget_cut: content.was_cut(),
+            content_budget_cut: content.budget_cut(),
         });
     }
 

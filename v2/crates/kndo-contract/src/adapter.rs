@@ -111,14 +111,15 @@ pub struct AdapterSpecBuilder {
 
 impl AdapterSpecBuilder {
     /// Declare the extensions this adapter speaks (no leading dot), in
-    /// resolution-candidate priority order. Each derives a `**/*.<ext>` claim glob —
-    /// declaring extensions IS claiming them; `claims` stays for patterns that are
-    /// not extension-shaped.
+    /// resolution-candidate priority order — the shared derivation rule
+    /// (`crate::extension::declare_extensions`): declaring extensions IS claiming
+    /// them; `claims` stays for patterns that are not extension-shaped.
     pub fn extensions(mut self, extensions: &[&'static str]) -> Self {
-        for ext in extensions {
-            self.spec.extensions.push(SmolStr::new_static(ext));
-            self.spec.claims.push(SmolStr::from(format!("**/*.{ext}")));
-        }
+        crate::extension::declare_extensions(
+            &mut self.spec.extensions,
+            &mut self.spec.claims,
+            extensions,
+        );
         self
     }
 

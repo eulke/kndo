@@ -56,22 +56,10 @@ impl FileCoverage {
     }
 }
 
-/// What one file's coverage report states, before any project mapping: hit counts
-/// keyed by 1-based line. This is the WIRE level — what a WASM ingester returns and
-/// what [`assemble`] turns into [`Coverage`] once the host supplies the sources.
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
-pub struct FileRecords {
-    /// Instrumented lines → hit count.
-    pub lines: BTreeMap<u32, u64>,
-    /// Function records: (declaration line, hit count).
-    pub functions: Vec<(u32, u64)>,
-}
-
-/// Every file a report mentions, by the report's own (separator-normalized) path.
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
-pub struct CoverageRecords {
-    pub files: BTreeMap<ProjectPath, FileRecords>,
-}
+/// The record types are contract vocabulary (`kndo-contract`'s evidence module):
+/// what an ingesting extension returns, re-exported here where the parsers that
+/// produce them live.
+pub use kndo_contract::evidence::{CoverageRecords, FileRecords};
 
 /// One lcov stream, to records — needs no file contents, which is what lets the
 /// same parse run inside a WASM guest. A stream with no records at all is `None`.

@@ -999,6 +999,7 @@ name = "kndo-contract"
 version = "0.0.0"
 dependencies = [
  "blake3",
+ "globset",
  "kndo-contract-fingerprint",
  "schemars",
  "serde",
