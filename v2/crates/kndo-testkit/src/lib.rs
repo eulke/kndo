@@ -1,0 +1,184 @@
+//! Test machinery: the mock language (`.kmock`) every engine gate runs against, and a
+//! temp-project builder. Contract-only by design — the same crate a third-party
+//! adapter author can use, with no path to the engine's internals.
+//!
+//! The kmock DSL, one construct per line:
+//!
+//! ```text
+//! fn name              private function declaration
+//! pub fn name          exported function declaration
+//! call name            a Call reference to `name`
+//! import ./x           side-effect import of x.kmock in the same directory
+//! import ./x { a, b }  binding import
+//! root name            production root anchored on the declaration `name`
+//! root-file            whole-file production root
+//! # text               a comment (the Comments stream, declared)
+//! ```
+
+use kndo_contract::adapter::{AdapterSpec, LanguageAdapter, Resolution, ResolveCtx, SourceFile};
+use kndo_contract::evidence::{
+    DeclarationId, DiagnosticLevel, EvidenceSink, EvidenceStream, EvidenceStreams, ImportBinding,
+    ImportShape, ImportTarget, Reach, RefKind, RootKind, RootTarget, SymbolKind,
+};
+use kndo_contract::vocab::{Confidence, ProjectPath, Span};
+use std::collections::BTreeMap;
+use std::path::Path;
+
+pub struct MockAdapter {
+    spec: AdapterSpec,
+}
+
+impl MockAdapter {
+    pub fn new() -> Self {
+        MockAdapter {
+            spec: AdapterSpec::builder("kmock", 1)
+                .claims(&["**/*.kmock"])
+                .emits(EvidenceStreams::of(&[EvidenceStream::Comments]))
+                .build(),
+        }
+    }
+}
+
+impl Default for MockAdapter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl LanguageAdapter for MockAdapter {
+    fn spec(&self) -> &AdapterSpec {
+        &self.spec
+    }
+
+    fn extract(&self, file: &SourceFile<'_>, out: &mut EvidenceSink) {
+        let text = String::from_utf8_lossy(file.content);
+
+        // Pass 1: declarations, so roots can anchor by id regardless of line order.
+        let mut decls: BTreeMap<&str, DeclarationId> = BTreeMap::new();
+        for (line, span) in lines_with_spans(&text) {
+            let (reach, rest) = match line.strip_prefix("pub fn ") {
+                Some(rest) => (Reach::Exported, rest),
+                None => match line.strip_prefix("fn ") {
+                    Some(rest) => (Reach::Private, rest),
+                    None => continue,
+                },
+            };
+            let name = rest.trim();
+            let id = out.declaration(name, SymbolKind::Function, span, reach);
+            decls.insert(name, id);
+        }
+
+        // Pass 2: everything that may point at a declaration.
+        for (line, span) in lines_with_spans(&text) {
+            if let Some(name) = line.strip_prefix("call ") {
+                out.reference(name.trim(), RefKind::Call, span);
+            } else if line == "root-file" {
+                out.root(
+                    RootTarget::WholeFile,
+                    RootKind::Production,
+                    Confidence::Certain,
+                );
+            } else if let Some(name) = line.strip_prefix("root ") {
+                match decls.get(name.trim()) {
+                    Some(id) => out.root(
+                        RootTarget::Declaration(*id),
+                        RootKind::Production,
+                        Confidence::Certain,
+                    ),
+                    None => out.diagnostic(
+                        DiagnosticLevel::Warn,
+                        format!("root names undeclared `{}`", name.trim()),
+                        Some(span),
+                    ),
+                }
+            } else if let Some(rest) = line.strip_prefix("import ") {
+                let (specifier, shape) = match rest.split_once('{') {
+                    Some((spec, names)) => {
+                        let bindings = names
+                            .trim_end_matches('}')
+                            .split(',')
+                            .map(str::trim)
+                            .filter(|n| !n.is_empty())
+                            .map(|n| ImportBinding {
+                                imported: n.into(),
+                                local: n.into(),
+                            })
+                            .collect();
+                        (spec.trim(), ImportShape::Bindings(bindings))
+                    }
+                    None => (rest.trim(), ImportShape::SideEffect),
+                };
+                out.import(
+                    ImportTarget::Relative(specifier.into()),
+                    shape,
+                    span,
+                    Confidence::Certain,
+                );
+            } else if let Some(t) = line.strip_prefix("# ") {
+                let text_start = span.start + (line.len() - t.len()) as u32;
+                out.comment(span, Span::new(text_start, span.end));
+            }
+        }
+    }
+
+    fn resolve(&self, from: &ProjectPath, specifier: &str, cx: &ResolveCtx<'_>) -> Resolution {
+        let Some(name) = specifier.strip_prefix("./") else {
+            return Resolution::Unresolved;
+        };
+        let dir = match from.as_str().rsplit_once('/') {
+            Some((dir, _)) => format!("{dir}/"),
+            None => String::new(),
+        };
+        let candidate = ProjectPath::new(format!("{dir}{name}.kmock"));
+        if cx.contains(&candidate) {
+            Resolution::File(candidate)
+        } else {
+            Resolution::Unresolved
+        }
+    }
+}
+
+fn lines_with_spans(text: &str) -> Vec<(&str, Span)> {
+    let mut out = Vec::new();
+    let mut offset = 0u32;
+    for raw in text.split_inclusive('\n') {
+        let line = raw.trim_end_matches(['\n', '\r']);
+        if !line.is_empty() {
+            out.push((line, Span::new(offset, offset + line.len() as u32)));
+        }
+        offset += raw.len() as u32;
+    }
+    out
+}
+
+/// A throwaway project on disk (tempfile-backed — never a hand-rolled temp path).
+pub struct TempProject {
+    dir: tempfile::TempDir,
+}
+
+impl TempProject {
+    pub fn new() -> Self {
+        TempProject {
+            dir: tempfile::tempdir().expect("create temp project"),
+        }
+    }
+
+    pub fn file(&self, rel: &str, content: &str) -> &Self {
+        let path = self.dir.path().join(rel);
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).expect("create parent dirs");
+        }
+        std::fs::write(path, content).expect("write project file");
+        self
+    }
+
+    pub fn root(&self) -> &Path {
+        self.dir.path()
+    }
+}
+
+impl Default for TempProject {
+    fn default() -> Self {
+        Self::new()
+    }
+}

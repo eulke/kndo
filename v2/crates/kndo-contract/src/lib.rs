@@ -10,7 +10,9 @@
 // crate too (the serde pattern).
 extern crate self as kndo_contract;
 
+pub mod adapter;
 pub mod evidence;
+pub mod finding;
 pub mod fingerprint;
 pub mod subject;
 pub mod vocab;

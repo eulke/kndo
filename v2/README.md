@@ -55,6 +55,25 @@ root swap; `cargo` commands run from here, on the pinned toolchain
   is deferred — v1's release.yml fires on any `v*` tag — and the package+install matrix
   proves the same loop on every push instead.
 
+## M1 — status
+
+Complete (CI green pending only the credits reset, like M0):
+
+- `kndo-contract` grew the adapter side: `LanguageAdapter`, the M1 `AdapterSpec`
+  (id, `semantics_version`, claim globs, `emits` — the pairing rule's declaration),
+  `ResolveCtx`, `Finding`/`Severity` with the canonical sort.
+- `kndo-core`: the Session/Snapshot engine — deterministic discovery (gitignore-aware,
+  path-sorted), claim by spec globs, parallel extraction through the evidence cache
+  (key folds adapter id + semantics_version + CONTRACT_FINGERPRINT + emits + content
+  hash), two-phase assembly, `Analysis::requires()` + `AbstentionScope` partition, and
+  the `unused` analysis. Reports carry no wall-clock fields by design.
+- `kndo-testkit`: `MockAdapter` (the `.kmock` DSL) + `TempProject` — contract-only.
+- Four new named gates, workflow regenerated: `dogfood_kndo_reports_nothing_on_itself`
+  (trivially zero until a real adapter lands — active from day 1),
+  `warm_and_cold_runs_are_byte_identical`, `threads_one_and_many_are_byte_identical`,
+  `incremental_and_full_assembly_are_byte_identical` (M1 form: change replayed over
+  cached evidence ≡ from-scratch; the surgical graph patch tightens it in M2).
+
 ## Name verification (2026-08-29)
 
 - npm: `kndo` still taken by an unrelated DeFi package (unchanged since the v1 check);

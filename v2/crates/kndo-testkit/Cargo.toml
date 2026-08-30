@@ -1,5 +1,5 @@
 [package]
-name = "kndo-gates"
+name = "kndo-testkit"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -8,7 +8,5 @@ publish.workspace = true
 
 [dependencies]
 kndo-contract = { path = "../kndo-contract" }
-
-[dev-dependencies]
-kndo-core = { path = "../kndo-core" }
-kndo-testkit = { path = "../kndo-testkit" }
+smol_str = { version = "0.3", features = ["serde"] }
+tempfile = "3"

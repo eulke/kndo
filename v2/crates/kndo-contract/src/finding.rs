@@ -1,0 +1,63 @@
+//! The output side of the contract: a verdict on one subject. Identity, kind and
+//! location all derive from [`Subject`]; there is no parallel field to keep agreeing.
+
+use crate::subject::{FindingId, Subject};
+use crate::vocab::{Category, Confidence};
+use serde::{Deserialize, Serialize};
+
+/// Declared worst-first so `Ord` is display order; gates compare via
+/// [`Severity::at_least`], the one place the inversion lives.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Severity {
+    Error,
+    Warning,
+    Info,
+}
+
+impl Severity {
+    pub fn at_least(self, floor: Severity) -> bool {
+        self <= floor
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Finding {
+    pub id: FindingId,
+    pub category: Category,
+    pub severity: Severity,
+    pub confidence: Confidence,
+    pub subject: Subject,
+    pub message: String,
+}
+
+impl Finding {
+    pub fn new(
+        category: Category,
+        severity: Severity,
+        confidence: Confidence,
+        subject: Subject,
+        discriminator: &str,
+        message: impl Into<String>,
+    ) -> Self {
+        Finding {
+            id: FindingId::derive(&category, &subject, discriminator),
+            category,
+            severity,
+            confidence,
+            subject,
+            message: message.into(),
+        }
+    }
+}
+
+/// The canonical display/serialization order — one source, used by every frontend and
+/// by the byte-identity gates: severity, then category, then path, then rendered
+/// selector, then id as the total tie-break.
+pub fn sort_findings(findings: &mut [Finding]) {
+    findings.sort_by(|a, b| {
+        (a.severity, a.category.as_str(), a.subject.path().as_str())
+            .cmp(&(b.severity, b.category.as_str(), b.subject.path().as_str()))
+            .then_with(|| a.id.as_str().cmp(b.id.as_str()))
+    });
+}

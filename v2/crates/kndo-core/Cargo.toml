@@ -1,0 +1,19 @@
+[package]
+name = "kndo-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+kndo-contract = { path = "../kndo-contract" }
+bincode = "1"
+blake3 = "1"
+globset = "0.4"
+ignore = "0.4"
+rayon = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+smol_str = { version = "0.3", features = ["serde"] }
+thiserror = "2"

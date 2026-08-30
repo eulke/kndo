@@ -6,7 +6,9 @@ members = [
     "crates/kndo-cli",
     "crates/kndo-contract",
     "crates/kndo-contract-fingerprint",
+    "crates/kndo-core",
     "crates/kndo-gates",
+    "crates/kndo-testkit",
     "xtask",
 ]
 

@@ -26,6 +26,22 @@ pub const GATES: &[Gate] = &[
         name: "contract_fingerprint_is_intentional",
         invariant: "a contract shape change updates fingerprint.txt in the same commit",
     },
+    Gate {
+        name: "dogfood_kndo_reports_nothing_on_itself",
+        invariant: "kndo over this repository reports zero findings",
+    },
+    Gate {
+        name: "warm_and_cold_runs_are_byte_identical",
+        invariant: "cached, re-cached and uncached runs serialize identically",
+    },
+    Gate {
+        name: "threads_one_and_many_are_byte_identical",
+        invariant: "thread count never changes a byte of output",
+    },
+    Gate {
+        name: "incremental_and_full_assembly_are_byte_identical",
+        invariant: "a change replayed over cached evidence equals a from-scratch build",
+    },
 ];
 
 /// Repo-relative location of the generated workflow.
