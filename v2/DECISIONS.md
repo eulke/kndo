@@ -497,3 +497,33 @@ always wins untouched. The alternative recorded at M4.a — emitting entry-less
 `PackageEntry`s for dangling entries — is superseded for js by this mapping
 (the mapped entry is strictly more informative than no entry) and stays in
 EXPERIMENTS only if a subpath-linking gap ever shows up in a measurement.
+
+## 2026-08-30 — The multi-file unit is one concept: `unit_mates`
+
+Owner call, from the M4 audit: the package-as-unit fact was spelled three ways —
+`Resolution::Files` for imports, `ReferenceScope::Directory` for pooling, and a
+synthetic `"."` import every Go file carried for reachability — and the third was
+evidence lying about the source (a record with an empty span no code wrote). The
+fix is the deeper concept: `LanguageAdapter::unit_mates(path, cx)` — the files a
+file's names see WITHOUT an import — asked at assembly beside `resolve`, a pure
+function of path and file set (which is what lets a content-only patch trust the
+persisted values). The engine turns it into reachability edges and `unused` pools
+references over the reverse visibility, so a mate's use keeps a declaration no
+import ever names, private or not.
+
+Retired by it, one commit after arriving: `ReferenceScope` (the narrower spelling
+of the same fact) and the synthetic edge (Go's evidence is faithful to the source
+again; its `semantics_version` bumps to 2 for the changed emission, and
+`GRAPH_SEMANTICS_VERSION` to 4 for the new assembled field). Go's answer also
+fixes a small infidelity the synthetic edge had: test files now see their test
+siblings, as internal test packages really do — while the asymmetry stands (the
+package never consumes its tests, so production color cannot leak through them).
+Core still never says "module" or "package": what a unit IS stays the adapter's
+knowledge; core only walks the visibility it declares.
+
+Equivalence, proven not assumed: the full suite passed with ZERO fixture
+regenerations — all 55 conformance reports byte-identical — and the corpus
+findings held byte-for-byte on every repo. The one diff anywhere is gin's graph
+stats in SUMMARY.md (edges 1711 → 230, unresolved 4 → 0): the synthetic edges
+inflating an edge count and four phantom "." specifiers polluting the unresolved
+counter, both gone — the change deleted noise and nothing else.

@@ -17,26 +17,34 @@ fn files(paths: &[&str]) -> Resolution {
 }
 
 #[test]
-fn the_package_edge_is_the_non_test_siblings() {
+fn unit_mates_are_the_package_with_test_asymmetry() {
     let known = project(&[
         "pkg/a.go",
         "pkg/b.go",
         "pkg/b_test.go",
+        "pkg/c_test.go",
         "pkg/sub/c.go",
         "other/d.go",
     ]);
     let cx = ResolveContext::new(&known);
     let adapter = GoAdapter::new();
-    // Sibling files, the test file and the subdirectory excluded, self excluded.
+    let mates = |p: &str| -> Vec<String> {
+        adapter
+            .unit_mates(&ProjectPath::new(p), &cx)
+            .iter()
+            .map(|m| m.as_str().to_string())
+            .collect()
+    };
+    // A production file sees its non-test siblings — never itself, the
+    // subdirectory, or the tests: the package never consumes its tests.
+    assert_eq!(mates("pkg/a.go"), ["pkg/b.go"]);
+    // A test file sees the whole package, test siblings included.
     assert_eq!(
-        adapter.resolve(&ProjectPath::new("pkg/a.go"), ".", &cx),
-        files(&["pkg/b.go"])
+        mates("pkg/b_test.go"),
+        ["pkg/a.go", "pkg/b.go", "pkg/c_test.go"]
     );
-    // From the test file, the whole package is the target.
-    assert_eq!(
-        adapter.resolve(&ProjectPath::new("pkg/b_test.go"), ".", &cx),
-        files(&["pkg/a.go", "pkg/b.go"])
-    );
+    // A lone file has no mates.
+    assert_eq!(mates("other/d.go"), Vec::<String>::new());
 }
 
 #[test]

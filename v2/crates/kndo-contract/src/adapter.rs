@@ -17,18 +17,6 @@ pub struct SourceFile<'a> {
     pub content: &'a [u8],
 }
 
-/// How far a reference reaches within this adapter's language: some languages scope
-/// names to the file, some to the directory (a Go package is every file in its dir,
-/// sharing one namespace with no imports between siblings). Analyses that match
-/// references to declarations pool them accordingly. The default reproduces
-/// pre-capability behavior.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-pub enum ReferenceScope {
-    #[default]
-    File,
-    Directory,
-}
-
 /// What an adapter IS, as data. Built once, returned by reference, and folded into
 /// every evidence cache key (`id`, `semantics_version`, `emits`) so a behavior change
 /// invalidates exactly what it changes.
@@ -42,8 +30,6 @@ pub struct AdapterSpec {
     manifests: Vec<SmolStr>,
     #[serde(default)]
     extensions: Vec<SmolStr>,
-    #[serde(default)]
-    reference_scope: ReferenceScope,
 }
 
 impl AdapterSpec {
@@ -56,7 +42,6 @@ impl AdapterSpec {
                 emits: EvidenceStreams::none(),
                 manifests: Vec::new(),
                 extensions: Vec::new(),
-                reference_scope: ReferenceScope::default(),
             },
         }
     }
@@ -94,10 +79,6 @@ impl AdapterSpec {
     pub fn extensions(&self) -> &[SmolStr] {
         &self.extensions
     }
-
-    pub fn reference_scope(&self) -> ReferenceScope {
-        self.reference_scope
-    }
 }
 
 pub struct AdapterSpecBuilder {
@@ -134,12 +115,6 @@ impl AdapterSpecBuilder {
     /// the default-compatibility rule.
     pub fn manifests(mut self, globs: &[&'static str]) -> Self {
         self.spec.manifests = globs.iter().map(|g| SmolStr::new_static(g)).collect();
-        self
-    }
-
-    /// Omitted ⇒ [`ReferenceScope::File`] — the default-compatibility rule.
-    pub fn reference_scope(mut self, scope: ReferenceScope) -> Self {
-        self.spec.reference_scope = scope;
         self
     }
 
@@ -268,6 +243,20 @@ pub trait LanguageAdapter: Send + Sync {
     /// through [`ResolveContext::package`]. Same default and degradations as `roots`.
     fn packages(&self, manifest: &SourceFile<'_>, cx: &ResolveContext<'_>) -> Vec<PackageEntry> {
         let _ = (manifest, cx);
+        Vec::new()
+    }
+
+    /// The files whose names `path` can see WITHOUT an import — the rest of its
+    /// compilation unit, in the languages whose unit is bigger than the file (every
+    /// non-test sibling of a Go file's package; a test file sees the whole package).
+    /// The engine draws one reachability edge per mate and pools references over
+    /// the visibility this declares, so a mate's use keeps a declaration no import
+    /// ever names. Depends only on `path` and the file SET, never on content —
+    /// which is what lets a persisted graph trust it while only contents change.
+    /// The default — no mates, names scoped to the file — reproduces pre-capability
+    /// behavior.
+    fn unit_mates(&self, path: &ProjectPath, cx: &ResolveContext<'_>) -> Vec<ProjectPath> {
+        let _ = (path, cx);
         Vec::new()
     }
 }

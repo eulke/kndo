@@ -1,7 +1,6 @@
 //! Extraction against inline sources: capitalization reach, entry and test roots,
-//! the never-declared method class, every import spelling, the synthetic package
-//! edge, library-mode and generated-file rules, reference exclusions, and comment
-//! spans.
+//! the never-declared method class, every import spelling, library-mode and
+//! generated-file rules, reference exclusions, and comment spans.
 
 use kndo_adapter_go::GoAdapter;
 use kndo_contract::evidence::{
@@ -91,7 +90,7 @@ fn methods_are_not_declared() {
 }
 
 #[test]
-fn imports_in_every_spelling_plus_the_package_edge() {
+fn imports_in_every_spelling() {
     let ev = extract(
         "pkg/a.go",
         r#"
@@ -105,11 +104,9 @@ import (
 )
 "#,
     );
-    // The synthetic package edge ties siblings together.
-    assert!(matches!(
-        &import(&ev, ".").shape,
-        ImportShape::Bindings(b) if b.is_empty()
-    ));
+    // Evidence is faithful to the source: exactly the written imports, nothing
+    // synthetic — the package-as-unit fact lives in `unit_mates`.
+    assert_eq!(ev.imports.len(), 4);
     assert!(matches!(
         &import(&ev, "fmt").shape,
         ImportShape::Namespace { local } if local == "fmt"

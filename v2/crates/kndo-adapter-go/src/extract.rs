@@ -1,12 +1,13 @@
 //! Extraction: one pass over top-level declarations, the import block, and a pruned
 //! full-tree walk for references and comments. Go-specific facts spelled here:
-//! capitalization is reach, `package main` + `func main` is the binary entry,
-//! `_test.go` is the test runner's file, and every file carries a synthetic `"."`
-//! edge to its package siblings — the package, not the file, is the compilation
-//! unit. Deliberately undeclared: struct fields, interface methods, and ALL
-//! methods — Go's interfaces are structural, so any method may satisfy one and be
-//! dispatched without its name ever appearing (`MarshalYAML`, `IsEmpty`); the
-//! grammar cannot prove a method dead, and never accuses what it cannot prove.
+//! capitalization is reach, `package main` + `func main` is the binary entry, and
+//! `_test.go` is the test runner's file. The package-as-unit fact lives in
+//! [`crate::resolve::unit_mates`], not in evidence — what a file sees without an
+//! import depends on the file set, never on this file's bytes. Deliberately
+//! undeclared: struct fields, interface methods, and ALL methods — Go's interfaces
+//! are structural, so any method may satisfy one and be dispatched without its
+//! name ever appearing (`MarshalYAML`, `IsEmpty`); the grammar cannot prove a
+//! method dead, and never accuses what it cannot prove.
 
 use kndo_contract::evidence::{
     EvidenceSink, ImportShape, ImportTarget, Reach, RefKind, RootKind, RootTarget, SymbolKind,
@@ -27,15 +28,6 @@ pub fn extract(
     if is_test_file {
         out.root(RootTarget::WholeFile, RootKind::Test, Confidence::Certain);
     }
-    // The package is the compilation unit: every file implicitly "imports" its
-    // siblings. The mute edge carries reachability; the Directory reference scope
-    // carries the keeps.
-    out.import(
-        ImportTarget::Relative(SmolStr::new_static(".")),
-        ImportShape::Bindings(Vec::new()),
-        Span::new(0, 0),
-        Confidence::Certain,
-    );
 
     let root = tree.root_node();
     let package_main = package_name(root, source) == Some("main".to_string());

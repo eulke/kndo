@@ -21,17 +21,21 @@ use std::collections::{BTreeMap, BTreeSet};
 /// Bump when the SAME evidence assembles into a DIFFERENT graph — resolution
 /// candidate changes, reachability semantics, new assembled fields. Folded into the
 /// graph cache key beside the contract fingerprint and the adapter set.
-pub const GRAPH_SEMANTICS_VERSION: u32 = 3;
+pub const GRAPH_SEMANTICS_VERSION: u32 = 4;
 
 #[derive(Serialize, Deserialize)]
 pub struct GraphFile {
     pub path: ProjectPath,
     pub adapter: SmolStr,
-    /// The claiming adapter's declared reference scope, copied per file so analyses
-    /// can pool references without reaching back into the adapter set.
-    pub reference_scope: kndo_contract::adapter::ReferenceScope,
     pub hash_hex: String,
     pub evidence: FileEvidence,
+    /// Files whose names this file can see without an import — the rest of its
+    /// compilation unit, per [`kndo_contract::adapter::LanguageAdapter::unit_mates`];
+    /// indices into `Graph::files`, sorted, deduplicated. Reachability walks these
+    /// like import edges, and analyses pool references over the visibility they
+    /// declare. A pure function of path and file set, so a content-only patch can
+    /// trust the persisted values.
+    pub unit_mates: Vec<u32>,
     /// Whole-file roots anchored from OUTSIDE this file's content (a manifest naming
     /// it as an entry point). Kept apart from `evidence.roots` because evidence is
     /// cached by this file's content hash — a manifest change must not invalidate it.
@@ -87,9 +91,9 @@ pub fn assemble(
             GraphFile {
                 path: f.path.clone(),
                 adapter: SmolStr::new(adapters[c.adapter_index].spec().id()),
-                reference_scope: adapters[c.adapter_index].spec().reference_scope(),
                 hash_hex: f.hash.iter().map(|b| format!("{b:02x}")).collect(),
                 evidence: ev,
+                unit_mates: Vec::new(),
                 anchored: Vec::new(),
                 imports: Vec::new(),
                 import_targets: Vec::new(),
@@ -99,23 +103,21 @@ pub fn assemble(
         .collect();
     graph_files.sort_by(|a, b| a.path.cmp(&b.path));
 
-    // Resolution as a second phase over fixed ids.
+    // Resolution as a second phase over fixed ids; unit mates ride the same phase —
+    // both are functions of the file set the first phase froze.
     let sorted_paths: Vec<ProjectPath> = graph_files.iter().map(|g| g.path.clone()).collect();
-    let mut resolved: Vec<(Vec<u32>, Vec<Vec<u32>>, u32)> = Vec::with_capacity(graph_files.len());
-    for gf in &graph_files {
+    let mut resolved: Vec<ResolvedEdges> = Vec::with_capacity(graph_files.len());
+    for (ix, gf) in graph_files.iter().enumerate() {
         let adapter = adapter_by_id(adapters, &gf.adapter);
-        resolved.push(resolve_file(
-            &gf.path,
-            &gf.evidence,
-            adapter,
-            &cx,
-            &sorted_paths,
-        ));
+        let mut edges = resolve_file(&gf.path, &gf.evidence, adapter, &cx, &sorted_paths);
+        edges.unit_mates = unit_mates_of(ix, &gf.path, adapter, &cx, &sorted_paths);
+        resolved.push(edges);
     }
-    for (gf, (imports, per_import, unresolved)) in graph_files.iter_mut().zip(resolved) {
-        gf.imports = imports;
-        gf.import_targets = per_import;
-        gf.unresolved_imports = unresolved;
+    for (gf, edges) in graph_files.iter_mut().zip(resolved) {
+        gf.imports = edges.imports;
+        gf.import_targets = edges.import_targets;
+        gf.unresolved_imports = edges.unresolved_imports;
+        gf.unit_mates = edges.unit_mates;
         debug_assert_eq!(
             gf.import_targets.len(),
             gf.evidence.imports.len(),
@@ -157,13 +159,42 @@ fn package_map(
     packages
 }
 
+/// The adapter's unit mates for one file, as graph ids: sorted, deduplicated,
+/// never the file itself, and only files actually in the graph — a mate the claim
+/// set does not contain is silently absent, keep-alive.
+fn unit_mates_of(
+    ix: usize,
+    path: &ProjectPath,
+    adapter: &dyn LanguageAdapter,
+    cx: &ResolveContext<'_>,
+    sorted_paths: &[ProjectPath],
+) -> Vec<u32> {
+    let mut mates: Vec<u32> = adapter
+        .unit_mates(path, cx)
+        .iter()
+        .filter_map(|p| sorted_paths.binary_search(p).ok().map(|i| i as u32))
+        .filter(|&t| t as usize != ix)
+        .collect();
+    mates.sort_unstable();
+    mates.dedup();
+    mates
+}
+
+/// One file's assembled edges, mirroring the `GraphFile` fields they land in.
+struct ResolvedEdges {
+    imports: Vec<u32>,
+    import_targets: Vec<Vec<u32>>,
+    unresolved_imports: u32,
+    unit_mates: Vec<u32>,
+}
+
 fn resolve_file(
     from: &ProjectPath,
     evidence: &FileEvidence,
     adapter: &dyn LanguageAdapter,
     cx: &ResolveContext<'_>,
     sorted_paths: &[ProjectPath],
-) -> (Vec<u32>, Vec<Vec<u32>>, u32) {
+) -> ResolvedEdges {
     let index_of = |p: &ProjectPath| sorted_paths.binary_search(p).ok().map(|i| i as u32);
     let mut targets = BTreeSet::new();
     let mut per_import: Vec<Vec<u32>> = Vec::with_capacity(evidence.imports.len());
@@ -200,7 +231,12 @@ fn resolve_file(
         }
         per_import.push(resolved);
     }
-    (targets.into_iter().collect(), per_import, unresolved)
+    ResolvedEdges {
+        imports: targets.into_iter().collect(),
+        import_targets: per_import,
+        unresolved_imports: unresolved,
+        unit_mates: Vec::new(),
+    }
 }
 
 /// Hash over every discovered manifest's (path, content), in path order — the
@@ -265,13 +301,14 @@ pub fn patch(
         let file = &files[file_index];
         let adapter = adapter_by_id(adapters, &prev.files[ix].adapter);
         let evidence = crate::extract::extract_one(file, adapter, cache);
-        let (imports, per_import, unresolved) =
-            resolve_file(&file.path, &evidence, adapter, &cx, &sorted_paths);
+        let edges = resolve_file(&file.path, &evidence, adapter, &cx, &sorted_paths);
         let gf = &mut prev.files[ix];
         gf.evidence = evidence;
-        gf.imports = imports;
-        gf.import_targets = per_import;
-        gf.unresolved_imports = unresolved;
+        gf.imports = edges.imports;
+        gf.import_targets = edges.import_targets;
+        gf.unresolved_imports = edges.unresolved_imports;
+        // `unit_mates` is untouched on purpose: it is a pure function of path and
+        // file set, and this path only runs when both are unchanged.
         debug_assert_eq!(
             gf.import_targets.len(),
             gf.evidence.imports.len(),

@@ -189,12 +189,12 @@ Complete (CI verification pending only the credits reset, like M0–M2):
   silent (v1 parity; manifest-anchored entries are wiring), coverage per-function
   `Certain` unchanged; three js fixtures regenerated under the documented change.
 - **M4.c — the Go adapter, done**: `kndo-adapter-go` (id `go`, tree-sitter-go) —
-  the package as the unit (`AdapterSpec::reference_scope = Directory`, the
-  synthetic `"."` sibling edge, module-path-prefix resolution to
-  `Resolution::Files`), capitalization as reach, library-mode roots with the
-  `internal/` fence, generated-file and structural-interface never-accuse rules.
-  Eight v1 fixtures replay byte-pinned; the conformance gate now walks three
-  corpora (22 js + 25 rust + 8 go).
+  the package as the unit (`LanguageAdapter::unit_mates` declares what a file
+  sees without an import — the engine draws the edges and pools references;
+  module-path-prefix resolution to `Resolution::Files`), capitalization as
+  reach, library-mode roots with the `internal/` fence, generated-file and
+  structural-interface never-accuse rules. Eight v1 fixtures replay byte-pinned;
+  the conformance gate now walks three corpora (22 js + 25 rust + 8 go).
 - **M4.d — the ladder, measured and deferred**: 8,026 oracle findings depend on
   visibility-ladder knowledge (internal-only 7,983, private-type-leak 43) — the
   largest unbuilt category — but its consumer (the internal-only analysis) does

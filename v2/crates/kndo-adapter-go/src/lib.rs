@@ -1,10 +1,11 @@
 //! Go, through the tree-sitter-go grammar. The unit Go imports is the package — a
 //! directory of files sharing one namespace with no imports between siblings — so
-//! this adapter leans on the contract's directory features: imports resolve to
-//! [`Resolution::Files`] (every non-test `.go` in the package dir), a synthetic
-//! `"."` edge ties siblings together for reachability, and the spec declares
-//! [`ReferenceScope::Directory`] so analyses pool references the way the language
-//! scopes them. Capitalization IS the visibility: an upper-case initial is
+//! this adapter leans on the contract's unit features: imports resolve to
+//! [`Resolution::Files`] (every non-test `.go` in the package dir), and
+//! [`LanguageAdapter::unit_mates`] declares what each file sees without an import
+//! (a production file sees its non-test siblings; a test file sees the whole
+//! package), which the engine turns into reachability edges and pooled
+//! references. Capitalization IS the visibility: an upper-case initial is
 //! exported, anything else package-private.
 //!
 //! The adapter id is `go`, the same id v1 used for this territory, so oracle
@@ -15,8 +16,7 @@ mod manifest;
 mod resolve;
 
 use kndo_contract::adapter::{
-    AdapterSpec, LanguageAdapter, PackageEntry, ReferenceScope, Resolution, ResolveContext,
-    SourceFile,
+    AdapterSpec, LanguageAdapter, PackageEntry, Resolution, ResolveContext, SourceFile,
 };
 use kndo_contract::evidence::{DiagnosticLevel, EvidenceSink, EvidenceStream, EvidenceStreams};
 use kndo_contract::vocab::ProjectPath;
@@ -27,14 +27,15 @@ pub struct GoAdapter {
 
 impl GoAdapter {
     pub fn new() -> Self {
-        let spec = AdapterSpec::builder("go", 1)
+        // semantics_version 2: evidence carries no synthetic package edge — the
+        // unit fact moved to `unit_mates`, out of content-keyed cache entries.
+        let spec = AdapterSpec::builder("go", 2)
             .extensions(&["go"])
             .emits(EvidenceStreams::of(&[
                 EvidenceStream::Comments,
                 EvidenceStream::Metrics,
             ]))
             .manifests(&["**/go.mod"])
-            .reference_scope(ReferenceScope::Directory)
             .build();
         GoAdapter { spec }
     }
@@ -78,5 +79,9 @@ impl LanguageAdapter for GoAdapter {
 
     fn packages(&self, manifest: &SourceFile<'_>, cx: &ResolveContext<'_>) -> Vec<PackageEntry> {
         manifest::packages(manifest, cx)
+    }
+
+    fn unit_mates(&self, path: &ProjectPath, cx: &ResolveContext<'_>) -> Vec<ProjectPath> {
+        resolve::unit_mates(path, cx)
     }
 }
