@@ -1,0 +1,35 @@
+{
+  "run": {
+    "schema": "kndo-v2/m1",
+    "files_discovered": 3,
+    "files_claimed": 2,
+    "adapters": [
+      {
+        "id": "js-ts",
+        "files": 2
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "kndo-f5eea7905f5d",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "src/calc.js",
+        "selector": {
+          "Free": "neverRan"
+        },
+        "span": {
+          "start": 199,
+          "end": 273
+        }
+      },
+      "message": "no test executes this function"
+    }
+  ],
+  "abstained": [],
+  "diagnostics": []
+}

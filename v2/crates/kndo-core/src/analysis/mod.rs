@@ -85,11 +85,11 @@ fn flood(graph: &Graph, kind: RootKind) -> Vec<bool> {
     reached
 }
 
-/// Everything one run shares across analyses. Grows fields as evidence sources land
-/// (coverage joins here); each analysis reads what it needs.
+/// Everything one run shares across analyses; each analysis reads what it needs.
 pub struct RunContext<'a> {
     pub graph: &'a Graph,
     pub reach: Reachability,
+    pub coverage: Option<crate::coverage::Coverage>,
 }
 
 pub struct AnalysisContext<'a> {
@@ -165,10 +165,15 @@ pub struct Abstention {
     pub scope: AbstentionScope,
 }
 
-pub fn run_all(graph: &Graph, analyses: &[&dyn Analysis]) -> (Vec<Finding>, Vec<Abstention>) {
+pub fn run_all(
+    graph: &Graph,
+    coverage: Option<crate::coverage::Coverage>,
+    analyses: &[&dyn Analysis],
+) -> (Vec<Finding>, Vec<Abstention>) {
     let run = RunContext {
         graph,
         reach: Reachability::compute(graph),
+        coverage,
     };
     let mut findings = Vec::new();
     let mut abstained = Vec::new();

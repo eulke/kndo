@@ -1,0 +1,1 @@
+{ "name": "coverage-demo", "main": "src/calc.js", "type": "module" }

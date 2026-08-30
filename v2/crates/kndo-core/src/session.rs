@@ -220,7 +220,16 @@ impl Session {
         let graph = persisted.graph;
 
         let analyze_start = Instant::now();
-        let (findings, abstained) = run_all(&graph, &[&Unused, &TestOnly, &Untested, &Duplicate]);
+        let contents: BTreeMap<_, _> = files
+            .iter()
+            .map(|f| (f.path.clone(), f.content.as_slice()))
+            .collect();
+        let coverage = crate::coverage::ingest(&self.root, &contents);
+        let (findings, abstained) = run_all(
+            &graph,
+            coverage,
+            &[&Unused, &TestOnly, &Untested, &Duplicate],
+        );
         timings.analyze = analyze_start.elapsed();
 
         Snapshot {

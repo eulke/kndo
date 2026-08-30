@@ -10,15 +10,47 @@
       }
     ]
   },
-  "findings": [],
+  "findings": [
+    {
+      "id": "kndo-65b5e29dccb4",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "probable",
+      "subject": {
+        "kind": "symbol",
+        "path": "main.ts",
+        "selector": {
+          "Free": "run"
+        },
+        "span": {
+          "start": 86,
+          "end": 165
+        }
+      },
+      "message": "no test references this function"
+    },
+    {
+      "id": "kndo-6013c8db5f4d",
+      "category": "untested",
+      "severity": "info",
+      "confidence": "certain",
+      "subject": {
+        "kind": "symbol",
+        "path": "risky.ts",
+        "selector": {
+          "Free": "classifyInput"
+        },
+        "span": {
+          "start": 7,
+          "end": 368
+        }
+      },
+      "message": "no test executes this function"
+    }
+  ],
   "abstained": [
     {
       "category": "test-only",
-      "reason": "no-test-roots-anywhere",
-      "scope": "whole-run"
-    },
-    {
-      "category": "untested",
       "reason": "no-test-roots-anywhere",
       "scope": "whole-run"
     }

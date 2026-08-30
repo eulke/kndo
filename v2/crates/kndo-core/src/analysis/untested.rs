@@ -1,8 +1,8 @@
-//! Production-reachable functions no test exercises. The graph form of the evidence:
-//! a reference from a file that carries a Test root is what "a test exercises this"
-//! looks like in the graph — name-level, so a same-named reference keeps a function
-//! (under-accusing, never over). Coverage, when ingested, replaces this heuristic
-//! with measured execution.
+//! Production-reachable functions no test exercises. Two strengths of evidence:
+//! ingested coverage measures execution (uncovered ⇒ `Certain`), and where coverage
+//! is absent or silent about a declaration, the graph heuristic applies — a
+//! reference from a file that carries a Test root, name-level, so a same-named
+//! reference keeps a function (`Probable`, under-accusing, never over).
 
 use super::{AbstentionReason, Analysis, AnalysisContext, RunContext, has_root_of};
 use kndo_contract::evidence::{RootKind, SymbolKind};
@@ -25,7 +25,8 @@ impl Analysis for Untested {
     fn abstains(&self, run: &RunContext<'_>) -> Option<AbstentionReason> {
         let any_test_root =
             (0..run.graph.files.len()).any(|i| has_root_of(run.graph, i, RootKind::Test));
-        (!run.graph.files.is_empty() && !any_test_root)
+        // Ingested coverage is test evidence in its own right.
+        (!run.graph.files.is_empty() && !any_test_root && run.coverage.is_none())
             .then_some(AbstentionReason::NoTestRootsAnywhere)
     }
 
@@ -56,11 +57,27 @@ impl Analysis for Untested {
             if !reach.by(RootKind::Production)[i] || has_root_of(g, i, RootKind::Test) {
                 continue;
             }
+            let file_coverage = cx.run.coverage.as_ref().and_then(|c| c.files.get(&f.path));
             for d in &f.evidence.declarations {
                 if !matches!(d.kind, SymbolKind::Function | SymbolKind::Method) {
                     continue;
                 }
-                if tested.contains(d.name.as_str()) {
+                // Coverage speaks first; where it is silent about this declaration,
+                // the graph heuristic decides.
+                let (untested, confidence, message) =
+                    match file_coverage.and_then(|fc| fc.function_untested(d.span)) {
+                        Some(untested) => (
+                            untested,
+                            Confidence::Certain,
+                            "no test executes this function",
+                        ),
+                        None => (
+                            !tested.contains(d.name.as_str()),
+                            Confidence::Probable,
+                            "no test references this function",
+                        ),
+                    };
+                if !untested {
                     continue;
                 }
                 let selector = match d.owner {
@@ -73,14 +90,14 @@ impl Analysis for Untested {
                 out.push(Finding::new(
                     Category::UNTESTED,
                     Severity::Info,
-                    Confidence::Probable,
+                    confidence,
                     Subject::Symbol {
                         path: f.path.clone(),
                         selector,
                         span: d.span,
                     },
                     "",
-                    "no test references this function",
+                    message,
                 ));
             }
         }
