@@ -128,6 +128,10 @@ pub struct Declaration {
     pub reach: Reach,
     /// Set via [`EvidenceSink::member_of`] — by id, never by name lookup.
     pub owner: Option<DeclarationId>,
+    /// The module-system name this declaration is exported under when it differs
+    /// from its local name (`export default`, `export { local as alias }`) — what
+    /// importers actually bind. Set via [`EvidenceSink::exported_as`].
+    pub exported_as: Option<SmolStr>,
 }
 
 /// Grows as languages need it; an unknown kind in a consumer's wildcard arm counts as
@@ -178,9 +182,14 @@ pub struct ImportBinding {
 #[serde(rename_all = "kebab-case")]
 pub enum ImportShape {
     Bindings(Vec<ImportBinding>),
-    Namespace { local: SmolStr },
+    Namespace {
+        local: SmolStr,
+    },
     SideEffect,
     Reexport(Vec<ImportBinding>),
+    /// The target's whole exported surface re-exported (`export * from`): consumers
+    /// cannot see through it, so it keeps that surface alive.
+    ReexportAll,
     TypeOnly(Vec<ImportBinding>),
 }
 
@@ -331,6 +340,7 @@ impl EvidenceSink {
             span,
             reach,
             owner: None,
+            exported_as: None,
         });
         id
     }
@@ -340,6 +350,13 @@ impl EvidenceSink {
         debug_assert_ne!(member, owner, "a declaration cannot own itself");
         debug_assert!(owner.index() < self.out.declarations.len());
         self.out.declarations[member.index()].owner = Some(owner);
+    }
+
+    /// The exported alias, when it differs from the local name — by id, so the alias
+    /// can never attach to the wrong declaration.
+    pub fn exported_as(&mut self, of: DeclarationId, name: impl Into<SmolStr>) {
+        debug_assert!(of.index() < self.out.declarations.len());
+        self.out.declarations[of.index()].exported_as = Some(name.into());
     }
 
     /// True when the write may proceed; otherwise drops it with a diagnostic so the
