@@ -76,7 +76,35 @@ Complete (CI green pending only the credits reset, like M0):
 
 ## M2 — status
 
-Landed (first slice):
+Complete (CI verification pending only the credits reset, like M0/M1). The second
+slice landed the four remaining pieces:
+
+- **Manifest/root capabilities**: `AdapterSpec` declares manifest globs;
+  `LanguageAdapter::roots` anchors `package.json` entries (`main`/`module`/`browser`/
+  `bin`, `exports` AND `imports` leaves, wildcard entries via
+  `ResolveContext::files_with_prefix`, `.d.ts` companions, npm-`scripts` sources) on
+  `GraphFile.anchored` — engine-side, never inside cached evidence.
+  `LanguageAdapter::packages` links workspace bare imports to sibling entries.
+  Convention roots (shebang, test dirs/names, config files) are path-conditional
+  extraction evidence, so the evidence cache key folds the path. Per-import targeting
+  replaced the M1 bind-to-every-target approximation; `require()`/dynamic `import()`
+  count as imports. Corpus effect: vite 771→702, lodash 50→18, with
+  `corpus-findings/COMPARISON.md` explaining every remaining difference vs the
+  oracle.
+- **Persisted graph cache with surgical patching** (`.kndo/cache/graph.bin`, keyed by
+  fingerprint + `GRAPH_SEMANTICS_VERSION` + the adapter set): content-only changes
+  patch in place; a moved file set or manifest falls back to full assembly from
+  cached evidence. The incremental gate proves patched ≡ full across content-change,
+  add, and delete.
+- **Harvested-fixture conformance**: the 22 v1 js fixture projects replay through the
+  v2 engine under the new `adapter_conformance_fixtures_are_byte_identical` gate,
+  each report pinned byte-for-byte and regenerated only deliberately.
+- **The corpus CI job**: `corpus/clone.sh` fetches the pins shallowly (cached by
+  `corpus.toml` hash), `cargo xtask corpus` measures, and `git diff --exit-code`
+  holds `corpus-findings/` equal to the committed measurement — the same three
+  commands exercised locally before the job landed.
+
+Earlier in M2 (first slice):
 
 - `crates/kndo-toolkit` — the adapters' paved road: tree-sitter parse/span/text/walk
   helpers whose behavior is grammar-independent (v1 carried five verbatim copies of
@@ -100,12 +128,7 @@ Landed (first slice):
   no-roots abstention on record).
 - `cargo xtask corpus` + `corpus-findings/` — the first v2 measurement over the pinned
   corpus, versioned: vite 1,553 files claimed, 3,491 declarations, 87,573 references,
-  1,565 resolved import edges, byte-identical across runs. All-TS repos abstain on
-  roots by design at this slice; see `corpus-findings/SUMMARY.md`.
-
-Remaining for M2 (stated scope, not started): the persisted graph cache with surgical
-patching, manifest/root capabilities (turns the corpus findings on), harvested-fixture
-conformance replay, and the CI corpus job.
+  1,565 resolved import edges, byte-identical across runs.
 
 ## Name verification (2026-08-29)
 

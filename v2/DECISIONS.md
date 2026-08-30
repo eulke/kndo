@@ -280,3 +280,21 @@ dynamic `import()` with literal arguments count as imports (Namespace when bound
 SideEffect otherwise). Killed en route: rooting `dist/*` build artifacts (kept
 accused — they are checked-in outputs nothing references; v1 only kept them through
 HTML edges v2 does not claim yet).
+
+## 2026-08-30 — M2 closes: patch ≡ full in three shapes, and the corpus is a CI gate
+
+The persisted graph (`.kndo/cache/graph.bin`, keyed by contract fingerprint +
+`GRAPH_SEMANTICS_VERSION` + the adapter set as data) patches surgically only when the
+file set, every claim, and every manifest are unchanged — measured by `manifest_state`,
+a hash over the discovered manifests. Anything else falls back to full assembly from
+cached evidence, and the incremental gate holds patched ≡ full across content-change,
+added file, and deleted file. The harvested v1 js fixture corpus (22 projects) replays
+under `adapter_conformance_fixtures_are_byte_identical`: precision fixtures pin zero
+accusations, future-capability fixtures (generated files, variable dynamic imports,
+CJS object exports) pin today's honest behavior so their diff announces the capability
+that changes it. The corpus job runs the same three commands exercised locally before
+it landed (clone at pins → measure → `git diff --exit-code corpus-findings/`), so the
+committed measurement is enforced, not decorative. M2 exit numbers: vite 702 vs oracle
+unused 844 (shared-verdict overlap 274 files + 5 public-API symbols; every delta
+bucketed in `corpus-findings/COMPARISON.md`), lodash 18 vs 13 files (dist/vendor/HTML
+edges explained), dogfood zero via honest abstention.

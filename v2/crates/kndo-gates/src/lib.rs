@@ -148,6 +148,28 @@ jobs:
           done
           [ -z "$missing" ] || { echo "named gates missing from the harness:$missing"; exit 1; }
 @GATE_STEPS@
+  corpus:
+    name: corpus is measured and its findings are committed
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.98.0
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: v2
+      - uses: actions/cache@v4
+        with:
+          path: /tmp/kndo-corpus
+          key: corpus-${{ hashFiles('v2/corpus/corpus.toml') }}
+      - name: clone the pinned corpus
+        run: bash corpus/clone.sh /tmp/kndo-corpus
+      - name: measure
+        run: cargo run --release -p xtask -- corpus --corpus-dir /tmp/kndo-corpus
+      - name: the committed measurement matches this code
+        run: git diff --exit-code -- corpus-findings/
+
   package-install:
     name: package + install (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
