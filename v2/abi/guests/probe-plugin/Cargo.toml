@@ -1,0 +1,12 @@
+[package]
+name = "probe-plugin"
+description = "Reference external plugin for the kndo ABI — activates on kmini projects, contributes a graph root, and probes the scoped content channel from findings."
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+kndo-sdk = { path = "../../../crates/kndo-sdk" }

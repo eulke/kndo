@@ -66,6 +66,10 @@ pub const GATES: &[Gate] = &[
         name: "plugin_dependency_implication",
         invariant: "a plugin named in another's dependencies activates even when its own rules never match",
     },
+    Gate {
+        name: "abi_compat_matrix",
+        invariant: "the pinned reference components still run against the HEAD host",
+    },
 ];
 
 /// Repo-relative location of the generated workflow.
@@ -141,6 +145,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.98.0
+          # The ABI compliance suite builds the reference guests at run time; a
+          # toolchain without this target dies with "can't find crate for `core`".
+          targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: v2

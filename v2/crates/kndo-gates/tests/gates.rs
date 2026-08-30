@@ -594,6 +594,107 @@ fn plugin_dependency_implication() {
 }
 
 #[test]
+fn abi_compat_matrix() {
+    // Yesterday's binaries against today's host: the reference components are
+    // PINNED under abi/compat/ and deliberately never rebuilt here — rebuilding
+    // would test today's source against today's host, and the compat question is
+    // the committed bytes. When the WIT evolves pre-freeze, `cargo xtask pin-abi`
+    // rebuilds the pins in the SAME commit: the diff is the reviewable record of
+    // the break. Each world is driven through a real session to a real verdict —
+    // loading is not the promise; contributing is.
+    let compat = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../abi/compat");
+    let session = |p: &TempProject, plugins: Vec<Box<dyn kndo_core::Plugin>>| {
+        let adapter = kndo_host_wasm::WasmAdapter::load(&compat.join("kmini_adapter.wasm"))
+            .expect("the pinned adapter component loads against the HEAD host");
+        Session::open(
+            p.root(),
+            Config {
+                threads: Threads::Auto,
+                use_cache: false,
+            },
+            vec![Box::new(adapter)],
+        )
+        .expect("open")
+        .with_plugins(plugins)
+        .analyze(RunMode::Full)
+        .expect("analyze")
+    };
+
+    // The adapter world: extraction, manifest roots, guest-side resolution.
+    let p = TempProject::new();
+    p.file("kmini.pkg", "name kit\nentry lib.kmini\n");
+    p.file("lib.kmini", "pub fn shared\nfn helper\ncall helper\n");
+    p.file(
+        "app.kmini",
+        "entry\nuse ./lib shared\ncall shared\nfn local_dead\n",
+    );
+    p.file("orphan.kmini", "fn floats\n");
+    let snap = session(&p, Vec::new());
+    let accused: Vec<String> = snap
+        .findings
+        .iter()
+        .map(|f| format!("{:?}", f.subject))
+        .collect();
+    assert!(
+        accused.iter().any(|s| s.contains("local_dead"))
+            && accused.iter().any(|s| s.contains("orphan.kmini"))
+            && !accused.iter().any(|s| s.contains("shared"))
+            && !accused.iter().any(|s| s.contains("helper")),
+        "the pinned adapter still drives real reachability: {accused:#?}"
+    );
+
+    // The plugin world: a contributed root, a scoped read, described drops.
+    let p = TempProject::new();
+    p.file("app.kmini", "entry\n");
+    p.file("wired.kmini", "fn wired_dead\n");
+    p.file("config.probe", "sixteen bytes!!\n");
+    let plugin = kndo_host_wasm::WasmPlugin::load(&compat.join("probe_plugin.wasm"))
+        .expect("the pinned plugin component loads against the HEAD host");
+    let snap = session(&p, vec![Box::new(plugin)]);
+    let contribution = &snap.plugins[0];
+    assert_eq!(
+        (
+            contribution.coordinate.as_str(),
+            contribution.roots,
+            contribution.findings
+        ),
+        ("demo:probe", 1, 1),
+        "{contribution:#?}"
+    );
+    assert_eq!(contribution.dropped.len(), 2, "{contribution:#?}");
+    assert!(
+        snap.findings
+            .iter()
+            .any(|f| f.category.as_str() == "plugin:demo:probe/note"
+                && f.message == "config.probe is 16 bytes"),
+        "the pinned plugin still probes scoped content: {:#?}",
+        snap.findings
+    );
+
+    // The ingester world: records from the pinned guest still become a verdict.
+    let p = TempProject::new();
+    p.file("kmini.pkg", "name kit\nentry lib.kmini\n");
+    p.file("lib.kmini", "pub fn covered\npub fn never_ran\n");
+    p.file("app.kmini", "entry\nuse ./lib covered\ncall covered\n");
+    p.file(
+        "lcov.info",
+        "SF:lib.kmini\nFN:1,covered\nFN:2,never_ran\nFNDA:3,covered\nFNDA:0,never_ran\nend_of_record\n",
+    );
+    let ingester = kndo_host_wasm::WasmIngester::load(&compat.join("records_ingester.wasm"))
+        .expect("the pinned ingester component loads against the HEAD host");
+    let snap = session(&p, vec![Box::new(ingester)]);
+    assert!(
+        snap.findings
+            .iter()
+            .any(|f| f.category.as_str() == "untested"
+                && f.confidence == kndo_contract::vocab::Confidence::Certain
+                && format!("{:?}", f.subject).contains("never_ran")),
+        "the pinned ingester's records still assemble into the Certain verdict: {:#?}",
+        snap.findings
+    );
+}
+
+#[test]
 fn frontends_import_only_the_facade() {
     // The facade rule as executable law: a frontend's production dependency graph
     // contains exactly one kndo crate — `kndo` itself. Reaching into core, the

@@ -237,8 +237,21 @@ Complete (CI verification pending only the credits reset, like M0–M2):
   grew `plugins` (SCHEMA `kndo-v2/m5`); gates eleven and twelve:
   `builtin_plugin_proofs` (closed over `default_plugins()`) and
   `plugin_dependency_implication`.
-- Pending: the WASM ABI with its compat matrix (M5.c), the external reference
-  adapter from `.kndo/plugins/` (M5.d), close-out (M5.e).
+- **M5.c — the WASM ABI, done**: `kndo:vocab@1.0.0` under `wit/` — one types
+  interface, three worlds (`adapter` born COMPLETE: extraction, resolve,
+  manifests, unit mates; `plugin` with mandatory `mutates-graph` and inherited
+  containment; `coverage-ingester`, unidirectional records). `kndo-sdk` is the
+  guest half (an external adapter implements the real `LanguageAdapter` and
+  exports it with `export_adapter!`); `kndo-host-wasm` isolates wasmtime (fuel
+  not epochs, memory ceiling, per-call instances) and replays all wire evidence
+  through a real `EvidenceSink`. Three reference guests live out-of-workspace
+  under `abi/guests/` and are driven fresh-built through real sessions by the
+  compliance suite; their PINNED components under `abi/compat/` are gate
+  thirteen, `abi_compat_matrix` (`cargo xtask pin-abi` re-pins, in the same
+  commit as any WIT change). Zero drift anywhere: fixtures, corpus and schema
+  held to the byte.
+- Pending: the external components loaded from `.kndo/plugins/` in the build
+  shell + authoring docs (M5.d), close-out (M5.e).
 - Owner decision (in DECISIONS.md): internal-only — and the visibility ladder
   with it — lands in M6.
 

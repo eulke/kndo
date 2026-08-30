@@ -33,6 +33,30 @@ pub struct AdapterSpec {
 }
 
 impl AdapterSpec {
+    /// The bridge-side constructor: a LOADED component's spec arrives as data, not
+    /// statics, so the builder's `&'static str` economy cannot apply. Everything is
+    /// taken verbatim — in particular `claims` is NOT derived from `extensions`
+    /// here, because the guest-side builder already derived it and the wire carries
+    /// the finished list. Native adapters use [`AdapterSpec::builder`].
+    #[allow(clippy::too_many_arguments)]
+    pub fn assemble(
+        id: impl Into<SmolStr>,
+        semantics_version: u32,
+        claims: Vec<SmolStr>,
+        emits: EvidenceStreams,
+        manifests: Vec<SmolStr>,
+        extensions: Vec<SmolStr>,
+    ) -> AdapterSpec {
+        AdapterSpec {
+            id: id.into(),
+            semantics_version,
+            claims,
+            emits,
+            manifests,
+            extensions,
+        }
+    }
+
     pub fn builder(id: &'static str, semantics_version: u32) -> AdapterSpecBuilder {
         AdapterSpecBuilder {
             spec: AdapterSpec {
@@ -195,6 +219,18 @@ impl<'a> ResolveContext<'a> {
         self.known_files
             .range(ProjectPath::new(prefix)..)
             .take_while(move |p| p.as_str().starts_with(prefix))
+    }
+
+    /// Every known file, in path order — the enumeration a WASM bridge snapshots
+    /// across the boundary so a guest-side context can answer the same queries from
+    /// the same data. Deterministic by construction.
+    pub fn known_files(&self) -> impl Iterator<Item = &'a ProjectPath> + '_ {
+        self.known_files.iter()
+    }
+
+    /// Every declared package, in name order — the other half of the same snapshot.
+    pub fn packages(&self) -> impl Iterator<Item = &'a PackageEntry> + '_ {
+        self.packages.into_iter().flat_map(|m| m.values())
     }
 }
 

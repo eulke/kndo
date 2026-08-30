@@ -71,6 +71,32 @@ pub struct PluginSpec {
 }
 
 impl PluginSpec {
+    /// The bridge-side constructor: a LOADED component's spec arrives as data, not
+    /// statics, so the builder's `&'static str` economy cannot apply. Native
+    /// plugins use [`PluginSpec::builder`].
+    // `AdapterSpec::assemble` is this function's twin by construction: each spec
+    // type owes the wire boundary an owned-parts constructor, the bodies are
+    // field transcriptions, and the types live in different crates — there is no
+    // source to share, only a shape both must have.
+    // kndo:allow duplicate -- wire-boundary constructor, twin by construction
+    pub fn assemble(
+        coordinate: impl Into<SmolStr>,
+        version: u32,
+        activation: Activation,
+        dependencies: Vec<SmolStr>,
+        requested_file_access: Vec<SmolStr>,
+        rules: Vec<RuleDescriptor>,
+    ) -> PluginSpec {
+        PluginSpec {
+            coordinate: coordinate.into(),
+            version,
+            activation,
+            dependencies,
+            requested_file_access,
+            rules,
+        }
+    }
+
     pub fn builder(coordinate: &'static str, version: u32) -> PluginSpecBuilder {
         PluginSpecBuilder {
             spec: PluginSpec {
@@ -225,6 +251,16 @@ impl<'a> ContentView<'a> {
             globs,
             budget: RefCell::new(ContentBudget::default()),
         }
+    }
+
+    /// The discovered paths this view's globs admit, in path order — names only,
+    /// nothing charged. What a prefetching consumer (the WASM bridge's
+    /// before-instantiation snapshot) walks so it never re-implements the glob
+    /// scope; reading each is still [`ContentView::read`], budget and all.
+    pub fn readable_paths(&self) -> impl Iterator<Item = &'a ProjectPath> + '_ {
+        self.contents
+            .keys()
+            .filter(|p| self.globs.iter().any(|g| g.is_match(p.as_str())))
     }
 
     pub fn read(&self, path: &ProjectPath) -> Option<&'a [u8]> {

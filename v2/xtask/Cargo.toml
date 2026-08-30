@@ -14,3 +14,4 @@ kndo-gates = { path = "../crates/kndo-gates" }
 flate2 = "1"
 tar = "0.4"
 sha2 = "0.10"
+wit-component = "0.219"

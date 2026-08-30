@@ -1,0 +1,14 @@
+[package]
+name = "kmini-adapter"
+description = "Reference external adapter for the kndo ABI — a toy language, hand-scanned, exercising the FULL adapter world: extraction, manifests, resolution, unit mates."
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+kndo-contract = { path = "../../../crates/kndo-contract" }
+kndo-sdk = { path = "../../../crates/kndo-sdk" }
+smol_str = "0.3"

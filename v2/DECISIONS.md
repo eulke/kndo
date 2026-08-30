@@ -618,3 +618,78 @@ conformance fixtures and all eight corpus reports regenerated with the identical
 mechanical diff — the schema line plus the `kndo:coverage-lcov` contribution —
 and every finding held byte-for-byte, coverage-lcov's Certain verdict included:
 re-homing the ingester changed nothing it measures.
+
+## 2026-08-30 — M5.c: the WASM ABI — one vocabulary, three worlds, born complete
+
+`kndo:vocab@1.0.0` is ONE WIT package: a single `types` interface mirroring the
+contract field-for-field (byte spans included), and the three worlds — `adapter`,
+`plugin`, `coverage-ingester` — beside it in the same package. v1 deliberately
+duplicated the vocabulary between its adapter and plugin packages so each could
+version alone, and paid with per-world conversion modules synchronized by prose;
+here one version stream is the POINT, and evolution is additive interfaces and
+sibling worlds, never a grown record. Where the contract's ids are unforgeable,
+the wire spells indices — and the host REPLAYS all wire evidence through a real
+`EvidenceSink` under the loaded spec's declared streams, so clamps, drops and the
+pairing rule hit a WASM adapter exactly as a native one.
+
+- **The adapter world is born complete** — extraction, `resolve`, manifest roots,
+  packages, dependency names, unit mates — closing v1's second-class-citizen cut.
+  Resolution's "host callbacks" became two ENUMERATION imports (`known-files`,
+  `package-entries`); the guest SDK rebuilds a real `ResolveContext` from them
+  once per instance, so an external adapter implements the same
+  `LanguageAdapter`, sink and context queries as a native one and exports it with
+  one macro (`export_adapter!`). Rules like innermost-package matching keep one
+  owner. The contract grew the enumerations (`ResolveContext::known_files`/
+  `packages`) and owned-parts constructors (`AdapterSpec::assemble`,
+  `PluginSpec::assemble`) for the bridge side.
+- **The plugin world inherits containment instead of re-implementing it**: the
+  bridge writes through the engine's own `PluginSink`, and content crosses as a
+  snapshot prefetched THROUGH the engine's `ContentView`
+  (`readable_paths()` + budgeted `read`) — so a WASM plugin's budget is charged
+  by declaration rather than demand, and the cut still lands on the
+  contribution. `mutates-graph` is a MANDATORY export: the WIT spelling of the
+  native method having no default, and the compliance suite watches the cache
+  bypass happen from outside (`graph.bin` absent, evidence cache present). A
+  trapped guest contributes nothing — silently, today: a host-attributed dropped
+  line is a ledgered gap, not yet a channel.
+- **The ingester world is unidirectional** — the host locates the report by the
+  spec's well-known paths, pushes bytes, gets RECORDS back, and maps them with
+  `kndo_coverage::assemble`; `parse_lcov_records`/`assemble` split out of
+  `parse_lcov` with unit-proven equivalence. The reference ingester IS
+  `kndo-coverage` compiled to wasm32 — the "same crate compiles twice" promise as
+  a binary, and the native/WASM prose-sync pair structurally impossible.
+- **The host is one crate** (`kndo-host-wasm`, wasmtime `=27.0.0` isolated):
+  fuel 50M per call and a 256 MiB memory ceiling carry from v1 with their
+  reasons; epoch interruption stays off (wall-clock cutoffs would break the
+  byte-identity gates). One deliberate deviation from v1's proven design: ONE
+  INSTANCE PER CALL, not per round — no guest state between calls, no
+  shared-instance locks under parallel extraction, instantiation amortized by
+  the engine's JIT cache. Cost: resolution re-fetches the enumerations per call;
+  measured acceptable at reference scale, revisit with a corpus number if a real
+  WASM language lands.
+- **Conversion lives once per side**: guest in `kndo-sdk`, host in
+  `kndo-host-wasm` — where the generator insists on per-world Rust types, the
+  conversions are one macro body instantiated per world, one source text. The
+  SDK's asymmetry is stated, not hidden: adapters get the REAL native trait
+  (`kndo-contract` compiles to wasm32); plugin and ingester authors write wire
+  records, because their native trait lives in `kndo-core`, which cannot cross —
+  dragging the engine into guests would be the wrong trade.
+- **The compat matrix runs from the ABI's first day** — gate thirteen,
+  `abi_compat_matrix`: the three reference components PINNED under `abi/compat/`
+  (never rebuilt by the gate; `cargo xtask pin-abi` re-pins in the same commit
+  as any pre-freeze WIT change, making every break a reviewable diff) are driven
+  through real sessions to real verdicts against the HEAD host. The compliance
+  suite builds the same guests FRESH (cargo + `wit-component`, the third-party
+  path) and proves the whole surface: a WASM language whose unit mates and
+  manifest dependency names behave natively, byte-determinism through the
+  evidence cache, containment across the boundary, records into a Certain
+  `untested` verdict. CI's test job gains `targets: wasm32-unknown-unknown` —
+  the exact "can't find crate for `core`" lesson, applied before it fired.
+
+The dogfood earned its keep once more: it flagged `PluginSpec::assemble` as a
+structural clone of `AdapterSpec::assemble` — true, and irreducible (two spec
+types each owe the wire an owned-parts constructor; different crates, no source
+to share) — which became v2's first reasoned suppression, a line-scoped
+`kndo:allow duplicate` with the why beside it. Everything else held to the byte:
+all 56 fixtures, all 8 corpus reports, the schema — the ABI added a tier, not a
+behavior.

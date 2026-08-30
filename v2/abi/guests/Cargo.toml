@@ -1,0 +1,10 @@
+# The reference guests' own workspace — deliberately OUTSIDE the kndo workspace:
+# each is built and componentized the way a third party's would be (cargo +
+# wit-component, no special access), which is what their compliance runs prove.
+[workspace]
+resolver = "2"
+members = ["kmini-adapter", "probe-plugin", "records-ingester"]
+
+[profile.release]
+opt-level = "s"
+lto = true

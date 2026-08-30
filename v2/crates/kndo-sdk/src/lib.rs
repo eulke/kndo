@@ -1,0 +1,423 @@
+//! The guest half of the ABI, once for every world: generated bindings for
+//! `kndo:vocab@1` and the conversions between wire records and `kndo-contract`
+//! types. An external ADAPTER author implements the real
+//! [`kndo_contract::adapter::LanguageAdapter`] — the same trait, the same
+//! `EvidenceSink`, the same `ResolveContext` queries as a native adapter — and
+//! exports it with [`export_adapter!`]; this crate rebuilds the resolve context
+//! from the host's enumeration imports and converts finished evidence to the wire.
+//! Plugin and ingester authors write against the wire records directly (their
+//! native trait lives in `kndo-core`, which cannot cross to `wasm32`) — one small
+//! mirrored surface instead of a dragged-in engine.
+//!
+//! Compiles natively too (the host's test suites link it for its conversion
+//! helpers), but its purpose is `wasm32-unknown-unknown` guests.
+
+use kndo_contract::adapter::{
+    AdapterSpec, LanguageAdapter, PackageEntry, ProjectRoot, Resolution, ResolveContext, SourceFile,
+};
+use kndo_contract::evidence::{
+    self as ev, EvidenceSink, EvidenceStream, EvidenceStreams, FileEvidence,
+};
+use kndo_contract::vocab::{Confidence, ProjectPath, Span};
+use smol_str::SmolStr;
+use std::collections::{BTreeMap, BTreeSet};
+use std::sync::OnceLock;
+
+/// The adapter world's bindings; `types` is the one vocabulary, re-used by the
+/// other worlds' generations below.
+pub mod adapter {
+    wit_bindgen::generate!({
+        path: "../../wit",
+        world: "adapter",
+        pub_export_macro: true,
+    });
+}
+
+pub mod plugin {
+    wit_bindgen::generate!({
+        path: "../../wit",
+        world: "plugin",
+        pub_export_macro: true,
+        with: { "kndo:vocab/types@1.0.0": crate::adapter::kndo::vocab::types },
+    });
+}
+
+pub mod ingester {
+    wit_bindgen::generate!({
+        path: "../../wit",
+        world: "coverage-ingester",
+        pub_export_macro: true,
+        with: { "kndo:vocab/types@1.0.0": crate::adapter::kndo::vocab::types },
+    });
+}
+
+/// The one vocabulary's generated types — the module the two `with` mappings above
+/// point at, so every world shares a single Rust spelling of each record.
+pub use adapter::kndo::vocab::types as wire;
+
+// ---------------------------------------------------------------- contract → wire
+
+pub fn spec_to_wire(spec: &AdapterSpec) -> wire::AdapterSpec {
+    // `EvidenceStreams` exposes membership, not iteration; the SDK versions with
+    // the contract, so enumerating the known streams here is the pairing rule's
+    // wire spelling, not a second source.
+    let known = [EvidenceStream::Comments, EvidenceStream::Metrics];
+    wire::AdapterSpec {
+        id: spec.id().to_string(),
+        semantics_version: spec.semantics_version(),
+        claims: spec.claims().iter().map(|s| s.to_string()).collect(),
+        emits: known
+            .into_iter()
+            .filter(|s| spec.emits().contains(*s))
+            .map(stream_to_wire)
+            .collect(),
+        manifests: spec.manifests().iter().map(|s| s.to_string()).collect(),
+        extensions: spec.extensions().iter().map(|s| s.to_string()).collect(),
+    }
+}
+
+fn stream_to_wire(stream: EvidenceStream) -> wire::EvidenceStream {
+    match stream {
+        EvidenceStream::Comments => wire::EvidenceStream::Comments,
+        EvidenceStream::Metrics => wire::EvidenceStream::Metrics,
+        _ => unreachable!("the SDK enumerates only streams it knows"),
+    }
+}
+
+fn span_to_wire(span: Span) -> wire::Span {
+    wire::Span {
+        start: span.start,
+        end: span.end,
+    }
+}
+
+fn confidence_to_wire(c: Confidence) -> wire::Confidence {
+    match c {
+        Confidence::Possible => wire::Confidence::Possible,
+        Confidence::Probable => wire::Confidence::Probable,
+        Confidence::Certain => wire::Confidence::Certain,
+    }
+}
+
+fn symbol_kind_to_wire(kind: &ev::SymbolKind) -> wire::SymbolKind {
+    match kind {
+        ev::SymbolKind::Function => wire::SymbolKind::Function,
+        ev::SymbolKind::Method => wire::SymbolKind::Method,
+        ev::SymbolKind::Type => wire::SymbolKind::Type,
+        ev::SymbolKind::Constant => wire::SymbolKind::Constant,
+        ev::SymbolKind::Variable => wire::SymbolKind::Variable,
+        ev::SymbolKind::Module => wire::SymbolKind::Module,
+        ev::SymbolKind::Other(name) => wire::SymbolKind::Other(name.to_string()),
+        other => wire::SymbolKind::Other(format!("{other:?}")),
+    }
+}
+
+fn ref_kind_to_wire(kind: ev::RefKind) -> wire::RefKind {
+    match kind {
+        ev::RefKind::Call => wire::RefKind::Call,
+        ev::RefKind::Read => wire::RefKind::Read,
+        ev::RefKind::Write => wire::RefKind::Write,
+        ev::RefKind::Extend => wire::RefKind::Extend,
+        ev::RefKind::Implement => wire::RefKind::Implement,
+        ev::RefKind::TypeUse => wire::RefKind::TypeUse,
+        // An unknown kind counts as a use, never an accusation — Read is the
+        // weakest keep-alive spelling the wire has.
+        _ => wire::RefKind::Read,
+    }
+}
+
+fn bindings_to_wire(bindings: &[ev::ImportBinding]) -> Vec<wire::ImportBinding> {
+    bindings
+        .iter()
+        .map(|b| wire::ImportBinding {
+            imported: b.imported.to_string(),
+            local: b.local.to_string(),
+        })
+        .collect()
+}
+
+fn import_to_wire(import: &ev::Import) -> wire::Import {
+    wire::Import {
+        target: match &import.target {
+            ev::ImportTarget::Relative(s) => wire::ImportTarget::Relative(s.to_string()),
+            ev::ImportTarget::Package(s) => wire::ImportTarget::Package(s.to_string()),
+            // An unknown target keeps its import alive unresolved; Package of the
+            // empty string resolves nowhere and accuses nothing.
+            _ => wire::ImportTarget::Package(String::new()),
+        },
+        shape: match &import.shape {
+            ev::ImportShape::Bindings(b) => wire::ImportShape::Bindings(bindings_to_wire(b)),
+            ev::ImportShape::Namespace { local } => wire::ImportShape::Namespace(local.to_string()),
+            ev::ImportShape::SideEffect => wire::ImportShape::SideEffect,
+            ev::ImportShape::Reexport(b) => wire::ImportShape::Reexport(bindings_to_wire(b)),
+            ev::ImportShape::ReexportAll => wire::ImportShape::ReexportAll,
+            ev::ImportShape::TypeOnly(b) => wire::ImportShape::TypeOnly(bindings_to_wire(b)),
+            ev::ImportShape::Glob => wire::ImportShape::Glob,
+            // An unknown shape keeps everything alive — SideEffect is that posture.
+            _ => wire::ImportShape::SideEffect,
+        },
+        span: span_to_wire(import.span),
+        confidence: confidence_to_wire(import.confidence),
+    }
+}
+
+/// Finished evidence to the wire — what `export_adapter!`'s extract shim sends
+/// back after the author's real `EvidenceSink` pass.
+pub fn evidence_to_wire(evidence: &FileEvidence) -> wire::FileEvidence {
+    wire::FileEvidence {
+        declarations: evidence
+            .declarations
+            .iter()
+            .map(|d| wire::Declaration {
+                name: d.name.to_string(),
+                kind: symbol_kind_to_wire(&d.kind),
+                span: span_to_wire(d.span),
+                reach: match d.reach {
+                    ev::Reach::Private => wire::Reach::Private,
+                    ev::Reach::Exported => wire::Reach::Exported,
+                },
+                owner: d.owner.map(|id| id.index() as u32),
+                exported_as: d.exported_as.as_ref().map(|s| s.to_string()),
+            })
+            .collect(),
+        references: evidence
+            .references
+            .iter()
+            .map(|r| wire::Reference {
+                name: r.name.to_string(),
+                kind: ref_kind_to_wire(r.kind),
+                span: span_to_wire(r.span),
+            })
+            .collect(),
+        imports: evidence.imports.iter().map(import_to_wire).collect(),
+        roots: evidence
+            .roots
+            .iter()
+            .map(|r| wire::Root {
+                target: match &r.target {
+                    ev::RootTarget::WholeFile => wire::RootTarget::WholeFile,
+                    ev::RootTarget::Declaration(id) => {
+                        wire::RootTarget::Declaration(id.index() as u32)
+                    }
+                    // An unknown target keeps the whole file alive.
+                    _ => wire::RootTarget::WholeFile,
+                },
+                kind: root_kind_to_wire(r.kind),
+                confidence: confidence_to_wire(r.confidence),
+            })
+            .collect(),
+        comments: evidence
+            .comments
+            .iter()
+            .map(|c| wire::CommentSpan {
+                span: span_to_wire(c.span),
+                text: span_to_wire(c.text),
+            })
+            .collect(),
+        metrics: evidence
+            .metrics
+            .iter()
+            .map(|(id, m)| wire::MetricEntry {
+                declaration: id.index() as u32,
+                metrics: wire::FunctionMetrics {
+                    cyclomatic: m.cyclomatic,
+                    loc: m.loc,
+                    token_count: m.token_count,
+                    fingerprints: m.fingerprints.clone(),
+                },
+            })
+            .collect(),
+        diagnostics: evidence
+            .diagnostics
+            .iter()
+            .map(|d| wire::Diagnostic {
+                level: match d.level {
+                    ev::DiagnosticLevel::Info => wire::DiagnosticLevel::Info,
+                    ev::DiagnosticLevel::Warn => wire::DiagnosticLevel::Warn,
+                    ev::DiagnosticLevel::Error => wire::DiagnosticLevel::Error,
+                },
+                message: d.message.clone(),
+                span: d.span.map(span_to_wire),
+            })
+            .collect(),
+    }
+}
+
+fn root_kind_to_wire(kind: ev::RootKind) -> wire::RootKind {
+    match kind {
+        ev::RootKind::Production => wire::RootKind::Production,
+        ev::RootKind::Test => wire::RootKind::Test,
+        ev::RootKind::Tooling => wire::RootKind::Tooling,
+    }
+}
+
+pub fn resolution_to_wire(resolution: Resolution) -> wire::Resolution {
+    match resolution {
+        Resolution::File(p) => wire::Resolution::File(p.as_str().to_string()),
+        Resolution::Files(ps) => {
+            wire::Resolution::Files(ps.iter().map(|p| p.as_str().to_string()).collect())
+        }
+        _ => wire::Resolution::Unresolved,
+    }
+}
+
+pub fn project_root_to_wire(root: &ProjectRoot) -> wire::ProjectRoot {
+    wire::ProjectRoot {
+        file: root.file.as_str().to_string(),
+        kind: root_kind_to_wire(root.kind),
+        confidence: confidence_to_wire(root.confidence),
+    }
+}
+
+pub fn package_entry_to_wire(entry: &PackageEntry) -> wire::PackageEntry {
+    wire::PackageEntry {
+        name: entry.name.to_string(),
+        entry: entry.entry.as_ref().map(|p| p.as_str().to_string()),
+        dir: entry.dir.to_string(),
+    }
+}
+
+fn package_entry_from_wire(entry: wire::PackageEntry) -> PackageEntry {
+    PackageEntry {
+        name: SmolStr::new(entry.name),
+        entry: entry.entry.map(ProjectPath::new),
+        dir: SmolStr::new(entry.dir),
+    }
+}
+
+// ------------------------------------------------- the guest-side resolve context
+
+/// The project as the host enumerated it, fetched once per instance and held for
+/// the program's life (a component instance IS one program run). The context built
+/// over it is the contract's own [`ResolveContext`] — innermost-package matching
+/// and every other rule has exactly one owner, shared with native adapters.
+struct ProjectSnapshot {
+    known: BTreeSet<ProjectPath>,
+    packages: BTreeMap<SmolStr, PackageEntry>,
+}
+
+fn project_snapshot() -> &'static ProjectSnapshot {
+    static SNAPSHOT: OnceLock<ProjectSnapshot> = OnceLock::new();
+    SNAPSHOT.get_or_init(|| ProjectSnapshot {
+        known: adapter::known_files()
+            .into_iter()
+            .map(ProjectPath::new)
+            .collect(),
+        packages: adapter::package_entries()
+            .into_iter()
+            .map(package_entry_from_wire)
+            .map(|p| (p.name.clone(), p))
+            .collect(),
+    })
+}
+
+/// The real `ResolveContext`, rebuilt from the host's enumerations.
+pub fn resolve_context() -> ResolveContext<'static> {
+    let snap = project_snapshot();
+    ResolveContext::with_packages(&snap.known, &snap.packages)
+}
+
+// ------------------------------------------------------------- the adapter export
+
+/// Implements the generated `Guest` trait for any real [`LanguageAdapter`]. Used
+/// through [`export_adapter!`]; public so the macro's expansion can name it.
+pub struct ExportedAdapter<A>(core::marker::PhantomData<A>);
+
+impl<A: LanguageAdapter + Default> adapter::Guest for ExportedAdapter<A> {
+    fn spec() -> wire::AdapterSpec {
+        spec_to_wire(A::default().spec())
+    }
+
+    fn extract(path: String, content: Vec<u8>) -> wire::FileEvidence {
+        let adapter = A::default();
+        let path = ProjectPath::new(path);
+        let mut sink = EvidenceSink::new(
+            content.len() as u32,
+            // The same pairing rule as the engine's own claim wiring: the sink is
+            // constructed from the spec's declared streams.
+            streams_of(adapter.spec()),
+        );
+        adapter.extract(
+            &SourceFile {
+                path: &path,
+                content: &content,
+            },
+            &mut sink,
+        );
+        evidence_to_wire(&sink.finish())
+    }
+
+    fn resolve(from: String, specifier: String) -> wire::Resolution {
+        let from = ProjectPath::new(from);
+        resolution_to_wire(A::default().resolve(&from, &specifier, &resolve_context()))
+    }
+
+    fn roots(manifest_path: String, content: Vec<u8>) -> Vec<wire::ProjectRoot> {
+        let path = ProjectPath::new(manifest_path);
+        let manifest = SourceFile {
+            path: &path,
+            content: &content,
+        };
+        A::default()
+            .roots(&manifest, &resolve_context())
+            .iter()
+            .map(project_root_to_wire)
+            .collect()
+    }
+
+    fn packages(manifest_path: String, content: Vec<u8>) -> Vec<wire::PackageEntry> {
+        let path = ProjectPath::new(manifest_path);
+        let manifest = SourceFile {
+            path: &path,
+            content: &content,
+        };
+        A::default()
+            .packages(&manifest, &resolve_context())
+            .iter()
+            .map(package_entry_to_wire)
+            .collect()
+    }
+
+    fn manifest_dependencies(manifest_path: String, content: Vec<u8>) -> Vec<String> {
+        let path = ProjectPath::new(manifest_path);
+        let manifest = SourceFile {
+            path: &path,
+            content: &content,
+        };
+        A::default()
+            .manifest_dependencies(&manifest)
+            .iter()
+            .map(|s| s.to_string())
+            .collect()
+    }
+
+    fn unit_mates(path: String) -> Vec<String> {
+        let path = ProjectPath::new(path);
+        A::default()
+            .unit_mates(&path, &resolve_context())
+            .iter()
+            .map(|p| p.as_str().to_string())
+            .collect()
+    }
+}
+
+fn streams_of(spec: &AdapterSpec) -> EvidenceStreams {
+    let known = [EvidenceStream::Comments, EvidenceStream::Metrics];
+    EvidenceStreams::of(
+        &known
+            .into_iter()
+            .filter(|s| spec.emits().contains(*s))
+            .collect::<Vec<_>>(),
+    )
+}
+
+/// Export a [`LanguageAdapter`] as this component's `kndo:vocab/adapter` world.
+/// The author's type needs `Default`; everything else is the same trait a native
+/// adapter implements.
+#[macro_export]
+macro_rules! export_adapter {
+    ($adapter:ty) => {
+        type __KndoExportedAdapter = $crate::ExportedAdapter<$adapter>;
+        $crate::adapter::export!(__KndoExportedAdapter with_types_in $crate::adapter);
+    };
+}

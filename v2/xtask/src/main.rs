@@ -22,9 +22,10 @@ fn main() {
         Some("package") => package(&args[1..]),
         Some("verify-artifact") => verify_artifact(&args[1..]),
         Some("corpus") => corpus(&args[1..]),
+        Some("pin-abi") => pin_abi(),
         _ => {
             eprintln!(
-                "usage: cargo xtask <gen-ci | gen-fingerprint | gen-schema | package --tag T --out-dir D | verify-artifact --dir D | corpus --corpus-dir D [--out-dir D]>"
+                "usage: cargo xtask <gen-ci | gen-fingerprint | gen-schema | package --tag T --out-dir D | verify-artifact --dir D | corpus --corpus-dir D [--out-dir D] | pin-abi>"
             );
             exit(2);
         }
@@ -51,6 +52,39 @@ fn gen_ci() -> Result<()> {
     fs::create_dir_all(path.parent().unwrap()).map_err(|e| e.to_string())?;
     fs::write(&path, kndo_gates::render_ci()).map_err(|e| e.to_string())?;
     println!("wrote {}", kndo_gates::WORKFLOW_REPO_PATH);
+    Ok(())
+}
+
+/// Rebuilds the reference guests and rewrites the PINNED components under
+/// `abi/compat/` — the deliberate act the `abi_compat_matrix` gate demands after
+/// a WIT change: the rebuilt binaries landing in the same commit are the explicit,
+/// reviewable record of a compatibility break, which a silent breakage never is.
+fn pin_abi() -> Result<()> {
+    let guests = workspace_root().join("abi/guests");
+    let status = Command::new("cargo")
+        .args(["build", "--release", "--target", "wasm32-unknown-unknown"])
+        .env_remove("RUSTFLAGS")
+        .env_remove("CARGO_ENCODED_RUSTFLAGS")
+        .current_dir(&guests)
+        .status()
+        .map_err(|e| format!("invoking cargo for the guest build: {e}"))?;
+    if !status.success() {
+        return Err("reference guest build failed".into());
+    }
+    let out_dir = workspace_root().join("abi/compat");
+    fs::create_dir_all(&out_dir).map_err(|e| e.to_string())?;
+    for name in ["kmini_adapter", "probe_plugin", "records_ingester"] {
+        let module = guests.join(format!("target/wasm32-unknown-unknown/release/{name}.wasm"));
+        let bytes = fs::read(&module).map_err(|e| format!("{}: {e}", module.display()))?;
+        let component = wit_component::ComponentEncoder::default()
+            .module(&bytes)
+            .map_err(|e| format!("attaching {name}: {e}"))?
+            .encode()
+            .map_err(|e| format!("componentizing {name}: {e}"))?;
+        let out = out_dir.join(format!("{name}.wasm"));
+        fs::write(&out, component).map_err(|e| e.to_string())?;
+        println!("pinned abi/compat/{name}.wasm");
+    }
     Ok(())
 }
 

@@ -56,25 +56,35 @@ impl FileCoverage {
     }
 }
 
-/// One lcov stream. Records outside the project (paths that match no discovered
-/// file) are skipped; a stream with no mappable records is no coverage at all.
-pub fn parse_lcov(text: &str, contents: &BTreeMap<ProjectPath, &[u8]>) -> Option<Coverage> {
-    let mut files = BTreeMap::new();
-    let mut current: Option<(ProjectPath, FileCoverage)> = None;
+/// What one file's coverage report states, before any project mapping: hit counts
+/// keyed by 1-based line. This is the WIRE level — what a WASM ingester returns and
+/// what [`assemble`] turns into [`Coverage`] once the host supplies the sources.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct FileRecords {
+    /// Instrumented lines → hit count.
+    pub lines: BTreeMap<u32, u64>,
+    /// Function records: (declaration line, hit count).
+    pub functions: Vec<(u32, u64)>,
+}
+
+/// Every file a report mentions, by the report's own (separator-normalized) path.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct CoverageRecords {
+    pub files: BTreeMap<ProjectPath, FileRecords>,
+}
+
+/// One lcov stream, to records — needs no file contents, which is what lets the
+/// same parse run inside a WASM guest. A stream with no records at all is `None`.
+pub fn parse_lcov_records(text: &str) -> Option<CoverageRecords> {
+    let mut files: BTreeMap<ProjectPath, FileRecords> = BTreeMap::new();
+    let mut current: Option<(ProjectPath, FileRecords)> = None;
     let mut fn_lines: BTreeMap<String, u32> = BTreeMap::new();
 
     for line in text.lines() {
         let line = line.trim();
         if let Some(path) = line.strip_prefix("SF:") {
             let path = ProjectPath::new(path.replace('\\', "/"));
-            current = contents.get(&path).map(|content| {
-                let fc = FileCoverage {
-                    line_starts: line_starts(content),
-                    lines: BTreeMap::new(),
-                    functions: Vec::new(),
-                };
-                (path, fc)
-            });
+            current = Some((path, FileRecords::default()));
             fn_lines.clear();
         } else if let Some((_, fc)) = &mut current {
             if let Some(rest) = line.strip_prefix("DA:") {
@@ -100,18 +110,50 @@ pub fn parse_lcov(text: &str, contents: &BTreeMap<ProjectPath, &[u8]>) -> Option
                     fc.functions.push((l, count));
                 }
             } else if line == "end_of_record" {
-                let (path, mut fc) = current.take().unwrap();
-                fc.functions.sort_unstable();
+                let (path, fc) = current.take().unwrap();
                 files.insert(path, fc);
                 fn_lines.clear();
             }
         }
     }
-    if let Some((path, mut fc)) = current.take() {
-        fc.functions.sort_unstable();
+    if let Some((path, fc)) = current.take() {
         files.insert(path, fc);
     }
+    (!files.is_empty()).then_some(CoverageRecords { files })
+}
+
+/// Records → judgeable coverage, given the run's file contents (the line table each
+/// span query maps through). Records outside the project — paths matching no
+/// discovered file — are skipped; records with nothing mappable are no coverage at
+/// all. The mapping half of ingestion, host-side always: a guest states records,
+/// never a line table.
+pub fn assemble(
+    records: CoverageRecords,
+    contents: &BTreeMap<ProjectPath, &[u8]>,
+) -> Option<Coverage> {
+    let mut files = BTreeMap::new();
+    for (path, rec) in records.files {
+        let Some(content) = contents.get(&path) else {
+            continue;
+        };
+        let mut functions = rec.functions;
+        functions.sort_unstable();
+        files.insert(
+            path,
+            FileCoverage {
+                line_starts: line_starts(content),
+                lines: rec.lines,
+                functions,
+            },
+        );
+    }
     (!files.is_empty()).then_some(Coverage { files })
+}
+
+/// One lcov stream, mapped against the project in one step — parse to records, then
+/// [`assemble`].
+pub fn parse_lcov(text: &str, contents: &BTreeMap<ProjectPath, &[u8]>) -> Option<Coverage> {
+    assemble(parse_lcov_records(text)?, contents)
 }
 
 /// Byte offset of each line's first byte — the one line table both coverage and
@@ -165,5 +207,34 @@ mod tests {
     fn unmappable_streams_are_no_coverage() {
         let map = contents(&[("src/z.js", "x\n")]);
         assert!(parse_lcov("SF:elsewhere/other.js\nDA:1,1\nend_of_record\n", &map).is_none());
+    }
+
+    #[test]
+    fn records_split_then_assemble_equals_the_one_step_parse() {
+        // The wire level a WASM ingester speaks: parse without contents, map later.
+        // The split must change nothing an analysis can observe.
+        let src = "function a() {\n  return 1;\n}\nfunction b() {\n  return 2;\n}\n";
+        let map = contents(&[("src/x.js", src)]);
+        let text = "SF:src/x.js\nFN:1,a\nFN:4,b\nFNDA:3,a\nFNDA:0,b\nDA:2,3\nDA:5,0\nend_of_record\nSF:not/in/project.js\nDA:1,1\nend_of_record\n";
+
+        let records = parse_lcov_records(text).expect("records parse without contents");
+        assert_eq!(records.files.len(), 2, "records keep the report's own view");
+        let split = assemble(records, &map).expect("assembles against the project");
+        let direct = parse_lcov(text, &map).expect("one-step parses");
+        assert_eq!(
+            split.files.keys().collect::<Vec<_>>(),
+            direct.files.keys().collect::<Vec<_>>()
+        );
+        for (path, fc) in &split.files {
+            let d = &direct.files[path];
+            assert_eq!(
+                fc.function_untested(Span::new(0, 28)),
+                d.function_untested(Span::new(0, 28))
+            );
+            assert_eq!(
+                fc.function_untested(Span::new(29, 57)),
+                d.function_untested(Span::new(29, 57))
+            );
+        }
     }
 }

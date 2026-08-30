@@ -1,0 +1,54 @@
+// The external-adapter world — the FULL `LanguageAdapter` surface from the ABI's
+// first version: extraction, manifests (roots, packages, dependency names), import
+// resolution, and unit mates. v1 shipped extraction only and made external adapters
+// second-class exactly where the product competes (no imports, no manifests, no
+// resolution); this world is that lesson closed.
+//
+// Resolution needs the project around the file. Rather than host callbacks per query
+// (which would smuggle borrowed engine state across the boundary), the guest imports
+// the same ENUMERATIONS the engine's `ResolveContext` is built from — the guest-side
+// SDK reconstructs a real `ResolveContext` from them once per instance, so adapter
+// code runs the same contract logic natively and in WASM, with one owner for rules
+// like innermost-package matching. Both imports answer from data the host already
+// holds, sorted and deterministic; no filesystem, no ambient state.
+//
+// Every export must not trap on malformed input: return degraded output plus a
+// diagnostic. A guest that traps anyway is caught by the host's fuel and memory
+// budgets and that call contributes nothing — never a crashed run.
+
+world adapter {
+    use types.{adapter-spec, file-evidence, resolution, project-root, package-entry};
+
+    /// Every file the run knows, in path order. The SDK fetches once per instance.
+    import known-files: func() -> list<string>;
+
+    /// Every package the run's manifests declared, in name order.
+    import package-entries: func() -> list<package-entry>;
+
+    /// Called once at load; the host caches and validates the result (a spec is
+    /// folded into evidence cache keys, so it must be stable for the process).
+    export spec: func() -> adapter-spec;
+
+    /// Extract one file's evidence. The host replays the result through a real
+    /// `EvidenceSink` under the spec's declared streams — clamps, drops and the
+    /// pairing rule apply identically to native and WASM adapters.
+    export extract: func(path: string, content: list<u8>) -> file-evidence;
+
+    /// Resolve one import specifier written in `from`.
+    export resolve: func(%from: string, specifier: string) -> resolution;
+
+    /// The roots one manifest declares. Called for every discovered file matching
+    /// the spec's manifest globs, same as the native trait.
+    export roots: func(manifest-path: string, content: list<u8>) -> list<project-root>;
+
+    /// The packages one manifest declares.
+    export packages: func(manifest-path: string, content: list<u8>) -> list<package-entry>;
+
+    /// The dependency NAMES one manifest declares — what plugin activation's
+    /// `manifest-dependency` rules evaluate against.
+    export manifest-dependencies: func(manifest-path: string, content: list<u8>) -> list<string>;
+
+    /// The files whose names `path` can see without an import — must depend only on
+    /// the path and the file set (the same purity the native contract demands).
+    export unit-mates: func(path: string) -> list<string>;
+}

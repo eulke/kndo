@@ -1,0 +1,13 @@
+[package]
+name = "records-ingester"
+description = "Reference external coverage ingester for the kndo ABI — kndo-coverage's own lcov parser compiled to WASM, the 'same crate compiles twice' promise made a binary."
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+kndo-coverage = { path = "../../../crates/kndo-coverage" }
+kndo-sdk = { path = "../../../crates/kndo-sdk" }

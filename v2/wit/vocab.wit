@@ -1,0 +1,282 @@
+// The kndo ABI's ONE vocabulary. Every world in this package uses these types; the
+// Rust conversion to and from `kndo-contract` lives once per side (guest: kndo-sdk,
+// host: kndo-host-wasm). v1 duplicated the vocabulary between its adapter and plugin
+// packages so their versions could move independently, and paid for it with a
+// per-world conversion module drifting "in sync by prose" — this package is that
+// lesson inverted: the vocabulary IS the contract, and worlds evolve by ADDITIVE
+// interfaces and sibling worlds within it, never by growing a frozen record (growing
+// a record is a breaking change in the component model).
+//
+// Mirroring rule: these records mirror `kndo-contract` types field-for-field, byte
+// spans included (kndo spans are byte offsets, not line/column). Where the contract
+// uses an unforgeable id (`DeclarationId`), the wire carries an index into the same
+// evidence's declaration list, and the HOST validates on conversion — a bad index
+// degrades to a dropped write plus a diagnostic, never a trusted forgery.
+package kndo:vocab@1.0.0;
+
+interface types {
+    /// Byte-offset span into one file's content, `start..end`.
+    record span {
+        start: u32,
+        end: u32,
+    }
+
+    enum confidence {
+        possible,
+        probable,
+        certain,
+    }
+
+    /// Mirrors `EvidenceStream` — the optional streams an adapter declares.
+    enum evidence-stream {
+        comments,
+        metrics,
+    }
+
+    /// Mirrors `SymbolKind`; `other` carries the adapter's own word verbatim.
+    variant symbol-kind {
+        function,
+        method,
+        %type,
+        constant,
+        variable,
+        module,
+        other(string),
+    }
+
+    /// Mirrors `Reach` — the binary half every language shares.
+    enum reach {
+        private,
+        exported,
+    }
+
+    /// Mirrors `Declaration`. `owner` is an index into the SAME file-evidence's
+    /// `declarations` list (the wire spelling of `DeclarationId`); host-validated.
+    record declaration {
+        name: string,
+        kind: symbol-kind,
+        span: span,
+        reach: reach,
+        owner: option<u32>,
+        exported-as: option<string>,
+    }
+
+    /// Mirrors `RefKind`.
+    enum ref-kind {
+        call,
+        read,
+        write,
+        extend,
+        implement,
+        type-use,
+    }
+
+    record reference {
+        name: string,
+        kind: ref-kind,
+        span: span,
+    }
+
+    /// Mirrors `ImportTarget` — the specifier as written, tagged by form.
+    variant import-target {
+        relative(string),
+        %package(string),
+    }
+
+    record import-binding {
+        imported: string,
+        local: string,
+    }
+
+    /// Mirrors `ImportShape`.
+    variant import-shape {
+        bindings(list<import-binding>),
+        namespace(string),
+        side-effect,
+        reexport(list<import-binding>),
+        reexport-all,
+        type-only(list<import-binding>),
+        glob,
+    }
+
+    record %import {
+        target: import-target,
+        shape: import-shape,
+        span: span,
+        confidence: confidence,
+    }
+
+    enum root-kind {
+        production,
+        test,
+        tooling,
+    }
+
+    /// Mirrors `RootTarget`; `declaration` is the same index spelling as `owner`.
+    variant root-target {
+        whole-file,
+        declaration(u32),
+    }
+
+    record root {
+        target: root-target,
+        kind: root-kind,
+        confidence: confidence,
+    }
+
+    /// Mirrors `CommentSpan`: where a comment is, and where its text is. The engine
+    /// owns what a `kndo:` pragma inside one means — suppression is free and
+    /// identical for a WASM adapter.
+    record comment-span {
+        span: span,
+        text: span,
+    }
+
+    record function-metrics {
+        cyclomatic: u32,
+        loc: u32,
+        token-count: u32,
+        fingerprints: list<u64>,
+    }
+
+    /// Metrics attach by declaration index — the wire spelling of the sink's by-id
+    /// attachment.
+    record metric-entry {
+        declaration: u32,
+        metrics: function-metrics,
+    }
+
+    enum diagnostic-level {
+        info,
+        warn,
+        error,
+    }
+
+    record diagnostic {
+        level: diagnostic-level,
+        message: string,
+        span: option<span>,
+    }
+
+    /// Mirrors `FileEvidence`, minus `declared` — the declared streams come from the
+    /// spec, and the host replays every wire write through a real `EvidenceSink`, so
+    /// the pairing rule and every clamp apply to a WASM adapter identically.
+    record file-evidence {
+        declarations: list<declaration>,
+        references: list<reference>,
+        imports: list<%import>,
+        roots: list<root>,
+        comments: list<comment-span>,
+        metrics: list<metric-entry>,
+        diagnostics: list<diagnostic>,
+    }
+
+    /// Mirrors `AdapterSpec`, claims already derived — the guest-side builder does
+    /// the extension-to-glob derivation, the wire carries the finished list.
+    record adapter-spec {
+        id: string,
+        semantics-version: u32,
+        claims: list<string>,
+        emits: list<evidence-stream>,
+        manifests: list<string>,
+        extensions: list<string>,
+    }
+
+    /// Mirrors `PackageEntry`.
+    record package-entry {
+        name: string,
+        entry: option<string>,
+        dir: string,
+    }
+
+    /// Mirrors `Resolution`.
+    variant resolution {
+        file(string),
+        files(list<string>),
+        unresolved,
+    }
+
+    /// Mirrors `ProjectRoot` — a manifest-declared entry point, already resolved.
+    record project-root {
+        file: string,
+        kind: root-kind,
+        confidence: confidence,
+    }
+
+    /// Mirrors `ActivationRule`.
+    variant activation-rule {
+        file-exists(string),
+        manifest-dependency(string),
+    }
+
+    /// Mirrors `Activation`. `any-rule([])` is the deliberate dependency-only
+    /// posture: a component that can never self-activate.
+    variant activation {
+        always,
+        any-rule(list<activation-rule>),
+    }
+
+    record rule-descriptor {
+        name: string,
+        description: string,
+    }
+
+    /// Mirrors `PluginSpec`. `coordinate` is identity AND provenance; the `kndo:`
+    /// namespace is reserved for built-ins — the host rejects any external
+    /// component claiming it at load.
+    record plugin-spec {
+        coordinate: string,
+        version: u32,
+        activation: activation,
+        dependencies: list<string>,
+        requested-file-access: list<string>,
+        rules: list<rule-descriptor>,
+    }
+
+    /// Mirrors `PluginSeverity` — a plugin's own vocabulary, mapped host-side into
+    /// the advisory channel; a guest can never construct a gate-eligible finding.
+    enum plugin-severity {
+        error,
+        warning,
+        info,
+    }
+
+    /// Mirrors `PluginTarget`.
+    record symbol-ref {
+        path: string,
+        name: string,
+    }
+
+    variant plugin-target {
+        file(string),
+        symbol(symbol-ref),
+    }
+
+    record contributed-root {
+        target: plugin-target,
+        kind: root-kind,
+        confidence: confidence,
+    }
+
+    record contributed-finding {
+        rule: string,
+        severity: plugin-severity,
+        target: plugin-target,
+        message: string,
+    }
+
+    /// One line or function record as the coverage report states it — the wire
+    /// level of `kndo-coverage`'s `CoverageRecords`. Paths are the report's own,
+    /// separator-normalized; the host maps them against the project and builds the
+    /// line tables (a guest never sees source contents).
+    record coverage-record {
+        path: string,
+        line: u32,
+        hits: u64,
+    }
+
+    record coverage-records {
+        lines: list<coverage-record>,
+        functions: list<coverage-record>,
+    }
+}
