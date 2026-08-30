@@ -1,0 +1,22 @@
+{
+  "run": {
+    "schema": "kndo-v2/m1",
+    "files_discovered": 146,
+    "files_claimed": 54,
+    "adapters": [
+      {
+        "id": "js-ts",
+        "files": 54
+      }
+    ]
+  },
+  "findings": [],
+  "abstained": [
+    {
+      "category": "unused",
+      "reason": "no-roots-anywhere",
+      "scope": "whole-run"
+    }
+  ],
+  "diagnostics": []
+}

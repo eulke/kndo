@@ -65,16 +65,21 @@ fn fixture() -> TempProject {
 
 #[test]
 fn dogfood_kndo_reports_nothing_on_itself() {
-    // Trivially zero while no real adapter claims this repository's languages — active
-    // from day 1 so the first real finding appears the day its adapter lands, not as
-    // debt at the end (v1 started its self-check at 366 findings).
+    // The REAL default adapter set over this repository — the same composition a user
+    // runs. The repo's JS surface today has no roots, so `unused` abstains rather than
+    // accusing (an abstention is honest; a finding here would be a bug in ours to fix).
     let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-    let session = Session::open(repo_root, Config::default(), Vec::new()).expect("open repo");
+    let session = kndo::open(repo_root, Config::default()).expect("open repo");
     let snap = session.analyze(RunMode::Full).expect("analyze repo");
     assert!(
         snap.findings.is_empty(),
         "kndo-on-kndo must report nothing; got {:#?}",
         snap.findings
+    );
+    assert!(
+        !snap.graph.files.is_empty(),
+        "the default adapters claim this repository's own JS surface — an empty claim \
+         set would make this gate vacuous"
     );
 }
 

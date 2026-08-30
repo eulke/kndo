@@ -20,9 +20,10 @@ fn main() {
         Some("gen-fingerprint") => gen_fingerprint(),
         Some("package") => package(&args[1..]),
         Some("verify-artifact") => verify_artifact(&args[1..]),
+        Some("corpus") => corpus(&args[1..]),
         _ => {
             eprintln!(
-                "usage: cargo xtask <gen-ci | gen-fingerprint | package --tag T --out-dir D | verify-artifact --dir D>"
+                "usage: cargo xtask <gen-ci | gen-fingerprint | package --tag T --out-dir D | verify-artifact --dir D | corpus --corpus-dir D [--out-dir D]>"
             );
             exit(2);
         }
@@ -59,6 +60,92 @@ fn gen_fingerprint() -> Result<()> {
     let hex = kndo_contract::contract_fingerprint_hex();
     fs::write(&path, format!("{hex}\n")).map_err(|e| e.to_string())?;
     println!("wrote crates/kndo-contract/fingerprint.txt = {hex}");
+    Ok(())
+}
+
+/// The measurement loop: run the default engine over every clone in `--corpus-dir`
+/// and version the per-repo reports plus one summary table into `--out-dir` (default
+/// `corpus-findings/`). Everything written is deterministic — timings go to stdout
+/// only, never into the versioned files.
+fn corpus(args: &[String]) -> Result<()> {
+    let corpus_dir = PathBuf::from(flag(args, "--corpus-dir").ok_or("--corpus-dir is required")?);
+    let out_dir =
+        workspace_root().join(flag(args, "--out-dir").unwrap_or_else(|| "corpus-findings".into()));
+    fs::create_dir_all(&out_dir).map_err(|e| e.to_string())?;
+
+    let mut repos: Vec<PathBuf> = fs::read_dir(&corpus_dir)
+        .map_err(|e| format!("{}: {e}", corpus_dir.display()))?
+        .filter_map(|e| e.ok())
+        .map(|e| e.path())
+        .filter(|p| p.is_dir())
+        .collect();
+    repos.sort();
+    if repos.is_empty() {
+        return Err(format!("no repositories under {}", corpus_dir.display()));
+    }
+
+    let mut summary = String::from(
+        "# v2 corpus measurement\n\n\
+         The default adapter set over the corpus pinned in `corpus/corpus.toml`.\n\
+         Regenerate with `cargo xtask corpus --corpus-dir <clones>`; the oracle to\n\
+         compare against is `oracle/`. A repo with zero claimed files speaks a\n\
+         language no default adapter claims yet; an `unused` abstention means the\n\
+         graph has no roots (root evidence arrives with manifest capabilities), so\n\
+         the analysis declines to judge rather than accuse everything.\n\n\
+         | repo | discovered | claimed | decls | refs | import edges | unresolved | findings | abstentions | diagnostics |\n\
+         |---|---|---|---|---|---|---|---|---|---|\n",
+    );
+
+    for repo in &repos {
+        let name = repo
+            .file_name()
+            .and_then(|n| n.to_str())
+            .ok_or("unnameable repo dir")?;
+        let session = kndo::open(
+            repo,
+            kndo::Config {
+                threads: kndo::Threads::Auto,
+                use_cache: false,
+            },
+        )
+        .map_err(|e| format!("{name}: {e}"))?;
+        let snap = session
+            .analyze(kndo::RunMode::Full)
+            .map_err(|e| format!("{name}: {e}"))?;
+        let report = snap.report();
+
+        let (mut decls, mut refs, mut edges, mut unresolved) = (0u64, 0u64, 0u64, 0u64);
+        for f in &snap.graph.files {
+            decls += f.evidence.declarations.len() as u64;
+            refs += f.evidence.references.len() as u64;
+            edges += f.imports.len() as u64;
+            unresolved += u64::from(f.unresolved_imports);
+        }
+        summary.push_str(&format!(
+            "| {name} | {} | {} | {decls} | {refs} | {edges} | {unresolved} | {} | {} | {} |\n",
+            report.run.files_discovered,
+            report.run.files_claimed,
+            report.findings.len(),
+            report.abstained.len(),
+            report.diagnostics.len(),
+        ));
+
+        fs::write(
+            out_dir.join(format!("{name}.report.json")),
+            report.to_json(),
+        )
+        .map_err(|e| e.to_string())?;
+        println!(
+            "{name}: {} claimed, {} findings, {} abstentions ({:.2?} total)",
+            report.run.files_claimed,
+            report.findings.len(),
+            report.abstained.len(),
+            snap.timings.total(),
+        );
+    }
+
+    fs::write(out_dir.join("SUMMARY.md"), summary).map_err(|e| e.to_string())?;
+    println!("wrote {}", out_dir.display());
     Ok(())
 }
 

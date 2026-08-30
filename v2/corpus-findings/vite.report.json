@@ -1,0 +1,53 @@
+{
+  "run": {
+    "schema": "kndo-v2/m1",
+    "files_discovered": 2712,
+    "files_claimed": 1553,
+    "adapters": [
+      {
+        "id": "js-ts",
+        "files": 1553
+      }
+    ]
+  },
+  "findings": [],
+  "abstained": [
+    {
+      "category": "unused",
+      "reason": "no-roots-anywhere",
+      "scope": "whole-run"
+    }
+  ],
+  "diagnostics": [
+    {
+      "path": "packages/vite/src/node/__tests__/runnerImport.spec.ts",
+      "level": "info",
+      "message": "syntax errors in file — evidence may be partial"
+    },
+    {
+      "path": "packages/vite/src/node/index.ts",
+      "level": "info",
+      "message": "syntax errors in file — evidence may be partial"
+    },
+    {
+      "path": "packages/vite/src/node/ssr/__tests__/fixtures/errors/syntax-error.js",
+      "level": "info",
+      "message": "syntax errors in file — evidence may be partial"
+    },
+    {
+      "path": "packages/vite/src/node/ssr/__tests__/fixtures/errors/syntax-error.ts",
+      "level": "info",
+      "message": "syntax errors in file — evidence may be partial"
+    },
+    {
+      "path": "packages/vite/types/importGlob.d.ts",
+      "level": "info",
+      "message": "syntax errors in file — evidence may be partial"
+    },
+    {
+      "path": "packages/vite/types/internal/terserOptions.d.ts",
+      "level": "info",
+      "message": "syntax errors in file — evidence may be partial"
+    }
+  ]
+}

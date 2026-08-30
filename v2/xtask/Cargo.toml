@@ -7,6 +7,7 @@ rust-version.workspace = true
 publish.workspace = true
 
 [dependencies]
+kndo = { path = "../crates/kndo" }
 kndo-contract = { path = "../crates/kndo-contract" }
 kndo-gates = { path = "../crates/kndo-gates" }
 flate2 = "1"

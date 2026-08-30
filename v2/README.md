@@ -74,6 +74,39 @@ Complete (CI green pending only the credits reset, like M0):
   `incremental_and_full_assembly_are_byte_identical` (M1 form: change replayed over
   cached evidence ≡ from-scratch; the surgical graph patch tightens it in M2).
 
+## M2 — status
+
+Landed (first slice):
+
+- `crates/kndo-toolkit` — the adapters' paved road: tree-sitter parse/span/text/walk
+  helpers whose behavior is grammar-independent (v1 carried five verbatim copies of
+  `parse`).
+- `crates/kndo-adapter-ts` — the first real language, id `js-ts` (v1's id, so oracle
+  comparisons line up): TS/TSX/JS/JSX/MJS/CJS through the tree-sitter-typescript
+  grammars. Top-level declarations with reach and export aliases (`exported_as` carries
+  what importers actually bind — `export default`, `export { a as b }`), class members
+  owned by id, every ESM import shape (including `ReexportAll`, the shape `export *
+  from` taught the contract), keep-alive-biased references, comment spans, and relative
+  resolution in Node/TS candidate order. Extraction degrades through diagnostics —
+  never fails.
+- `crates/kndo` — the facade and composition root: frontends import `kndo::<Name>`
+  only; `default_adapters()` is the one list of what a stock run speaks.
+- The engine grew `Analysis::abstains(graph)`: `unused` abstains whole-run on a graph
+  with zero roots (`NoRootsAnywhere`) instead of accusing every file — root evidence
+  arrives with the manifest capabilities. Member declarations are judged against the
+  whole reachable graph's references (dispatch is not lexical).
+- The dogfood gate now runs the REAL default adapter set over this repository (the
+  repo's own JS surface is claimed; zero findings via honest evidence, with the
+  no-roots abstention on record).
+- `cargo xtask corpus` + `corpus-findings/` — the first v2 measurement over the pinned
+  corpus, versioned: vite 1,553 files claimed, 3,491 declarations, 87,573 references,
+  1,565 resolved import edges, byte-identical across runs. All-TS repos abstain on
+  roots by design at this slice; see `corpus-findings/SUMMARY.md`.
+
+Remaining for M2 (stated scope, not started): the persisted graph cache with surgical
+patching, manifest/root capabilities (turns the corpus findings on), harvested-fixture
+conformance replay, and the CI corpus job.
+
 ## Name verification (2026-08-29)
 
 - npm: `kndo` still taken by an unrelated DeFi package (unchanged since the v1 check);

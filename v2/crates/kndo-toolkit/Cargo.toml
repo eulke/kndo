@@ -1,5 +1,5 @@
 [package]
-name = "kndo-gates"
+name = "kndo-toolkit"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -8,8 +8,4 @@ publish.workspace = true
 
 [dependencies]
 kndo-contract = { path = "../kndo-contract" }
-
-[dev-dependencies]
-kndo = { path = "../kndo" }
-kndo-core = { path = "../kndo-core" }
-kndo-testkit = { path = "../kndo-testkit" }
+tree-sitter = "0.25"

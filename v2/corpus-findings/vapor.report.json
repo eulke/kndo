@@ -1,0 +1,11 @@
+{
+  "run": {
+    "schema": "kndo-v2/m1",
+    "files_discovered": 273,
+    "files_claimed": 0,
+    "adapters": []
+  },
+  "findings": [],
+  "abstained": [],
+  "diagnostics": []
+}

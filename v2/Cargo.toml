@@ -3,12 +3,15 @@
 [workspace]
 resolver = "2"
 members = [
+    "crates/kndo",
+    "crates/kndo-adapter-ts",
     "crates/kndo-cli",
     "crates/kndo-contract",
     "crates/kndo-contract-fingerprint",
     "crates/kndo-core",
     "crates/kndo-gates",
     "crates/kndo-testkit",
+    "crates/kndo-toolkit",
     "xtask",
 ]
 
