@@ -29,7 +29,7 @@ impl GoAdapter {
     pub fn new() -> Self {
         // semantics_version 2: evidence carries no synthetic package edge — the
         // unit fact moved to `unit_mates`, out of content-keyed cache entries.
-        let spec = ExtensionSpec::builder("go", 2)
+        let spec = ExtensionSpec::builder("kndo:go", 2)
             .extensions(&["go"])
             .emits(EvidenceStreams::of(&[
                 EvidenceStream::Comments,

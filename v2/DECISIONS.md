@@ -847,3 +847,44 @@ identity toll — D1 + R1 + R2 + envelope const bump + regenerated schema —
 whose diff is exactly the enumerated list and nothing else. This entry marks
 that commit as the repository's ONE deliberate regeneration; the
 never-regenerate bar stands for everything after it.
+
+## 2026-08-30 — M6.a executed: one door, and the single deliberate regeneration
+
+The approved One-door design is implemented. Batch 1 (four commits) rebuilt the
+whole extension surface under the OLD names with PURE byte-identity held at
+every step — all 56 conformance fixtures, all 8 corpus reports and the schema
+unchanged while the taxonomy left the engine, the WIT collapsed to one world,
+the SDK began handing every author the real trait, and the loader lost its
+sniffing ladder. Batch 2 is THE identity toll commit, and this entry marks it
+as the repository's ONE deliberate regeneration; the never-regenerate bar
+stands for everything after it. The toll's diff, audited line-by-line with a
+uniq count over every regenerated file, is exactly the enumerated list:
+
+- `"schema": "kndo-v2/m5"` → `"kndo-v2/m6"` (64 envelopes: 56 fixtures + 8
+  corpus reports), with the schema regenerated from the types.
+- `"adapters"` → `"extensions"` in the run info (R1; `AdapterRun` →
+  `ExtensionRun` in code).
+- Built-in ids `js-ts`/`rust`/`go` → `kndo:js-ts`/`kndo:rust`/`kndo:go` (D1);
+  `kndo:coverage-lcov` already namespaced. `is_reserved_coordinate` stays the
+  pure `kndo:` prefix — the reservation list died unborn.
+- Finding categories `plugin:<coordinate>/<rule>` → `ext:<coordinate>/<rule>`
+  (R2; `Category::plugin` → `Category::extension`); no harvested fixture or
+  corpus report carried one, so the change touched test literals only.
+- NOT in the diff, as the design promised: not one finding changed id —
+  identity is category + subject + discriminator, and the extension id was
+  never an input. vite still reports 895, ripgrep 143, gin 108, lodash 21.
+
+Two facts discovered during execution, recorded where they belong:
+
+- The SDK's raw bindings are `#[doc(hidden)] pub`, not private: the component
+  model's `export!` macro must expand in the guest crate, so full privacy is
+  unavailable — the documented surface is phase-correct by construction, and
+  the host's phase scoping covers whoever digs past it (proven by the
+  `rude-probe` compliance guest, whose extraction-time `graph-paths` call
+  traps with a named violation that surfaces as a diagnostic).
+- The rust adapter emits no references from `use` paths, so a private module
+  used only through imports reads as unused to the dogfood. The host's
+  bindings module is `pub` + `doc(hidden)` (matching the SDK) rather than
+  suppressed; teaching the adapter use-tree references is an adapter
+  semantics change with its own fixtures and its own corpus measurement —
+  deferred with that named shape, not silently.

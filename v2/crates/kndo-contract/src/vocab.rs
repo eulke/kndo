@@ -91,7 +91,7 @@ pub enum Confidence {
 }
 
 /// A finding category: a validated string newtype, not an enum, because the
-/// `plugin:<coordinate>/<rule>` namespace is open. First-party categories are the
+/// `ext:<coordinate>/<rule>` namespace is open. First-party categories are the
 /// associated constants.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -114,12 +114,12 @@ impl Category {
     pub const VERSION_SKEW: Category = Category(SmolStr::new_static("version-skew"));
 
     /// The namespaced category of a plugin rule.
-    pub fn plugin(coordinate: &str, rule: &str) -> Self {
-        Category(SmolStr::from(format!("plugin:{coordinate}/{rule}")))
+    pub fn extension(coordinate: &str, rule: &str) -> Self {
+        Category(SmolStr::from(format!("ext:{coordinate}/{rule}")))
     }
 
     /// The validating way in from user-written text (a suppression pragma, a config
-    /// value): a first-party name or a well-formed `plugin:<coordinate>/<rule>`.
+    /// value): a first-party name or a well-formed `ext:<coordinate>/<rule>`.
     /// The frontier never constructs a raw string category.
     pub fn parse(s: &str) -> Option<Category> {
         const FIRST_PARTY: [Category; 13] = [
@@ -140,13 +140,13 @@ impl Category {
         if let Some(known) = FIRST_PARTY.iter().find(|c| c.as_str() == s) {
             return Some(known.clone());
         }
-        let rest = s.strip_prefix("plugin:")?;
+        let rest = s.strip_prefix("ext:")?;
         let (coordinate, rule) = rest.split_once('/')?;
         (!coordinate.is_empty() && !rule.is_empty()).then(|| Category(SmolStr::from(s)))
     }
 
     pub fn is_plugin(&self) -> bool {
-        self.0.starts_with("plugin:")
+        self.0.starts_with("ext:")
     }
 
     pub fn as_str(&self) -> &str {

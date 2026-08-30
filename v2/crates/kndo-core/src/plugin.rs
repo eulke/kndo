@@ -270,7 +270,7 @@ pub fn run_round(
                 continue;
             };
             findings.push(Finding::new(
-                Category::plugin(spec.coordinate(), &rule),
+                Category::extension(spec.coordinate(), &rule),
                 severity.advisory(),
                 Confidence::Probable,
                 subject,

@@ -1,11 +1,11 @@
 {
   "run": {
-    "schema": "kndo-v2/m5",
+    "schema": "kndo-v2/m6",
     "files_discovered": 146,
     "files_claimed": 54,
-    "adapters": [
+    "extensions": [
       {
-        "id": "js-ts",
+        "id": "kndo:js-ts",
         "files": 54
       }
     ]

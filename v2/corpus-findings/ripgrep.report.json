@@ -1,11 +1,11 @@
 {
   "run": {
-    "schema": "kndo-v2/m5",
+    "schema": "kndo-v2/m6",
     "files_discovered": 231,
     "files_claimed": 110,
-    "adapters": [
+    "extensions": [
       {
-        "id": "rust",
+        "id": "kndo:rust",
         "files": 110
       }
     ]

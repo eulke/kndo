@@ -130,7 +130,7 @@ fn misdirected_contributions_drop_with_described_lines() {
     let hello = snap
         .findings
         .iter()
-        .find(|f| f.category.as_str() == "plugin:test:m/hello")
+        .find(|f| f.category.as_str() == "ext:test:m/hello")
         .expect("the declared-rule finding lands");
     assert_eq!(hello.confidence, Confidence::Probable);
     assert!(matches!(&hello.subject, Subject::Symbol { path, .. } if path.as_str() == "lib.kmock"));
@@ -197,7 +197,7 @@ fn plugin_findings_ride_the_same_suppression_pass() {
     let p = fixture();
     p.file(
         "lib.kmock",
-        "# kndo:allow-file plugin:test:m/hello\npub fn helper\n",
+        "# kndo:allow-file ext:test:m/hello\npub fn helper\n",
     );
     let m = MockExtension::scripted(
         ExtensionSpec::builder("test:m", 1)
@@ -219,10 +219,10 @@ fn plugin_findings_ride_the_same_suppression_pass() {
         !snap
             .findings
             .iter()
-            .any(|f| f.category.as_str() == "plugin:test:m/hello"),
+            .any(|f| f.category.as_str() == "ext:test:m/hello"),
         "the pragma suppressed the plugin finding"
     );
-    let category = Category::parse("plugin:test:m/hello").expect("namespaced category parses");
+    let category = Category::parse("ext:test:m/hello").expect("namespaced category parses");
     assert!(
         snap.suppressed
             .by_category

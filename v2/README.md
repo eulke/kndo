@@ -266,14 +266,18 @@ Complete (CI verification pending only the credits reset, like M0–M2):
 
 ## M6 — next
 
-- **M6.a (design approved, DECISIONS 2026-08-30): the unified extension
-  mechanism.** One species — extension — replaces the adapter/plugin/ingester
-  taxonomy: one `ExtensionSpec`, one `Extension` trait in the contract, one
-  WIT world. Built-ins become extensions that ship in the box, under
-  namespaced coordinates. Migration in two batches: the mechanism under old
-  names (pure byte-identity acceptance), then the identity toll as one final,
-  enumerated commit — the repository's single deliberate regeneration.
-  Languages and everything else in M6 land AFTER it, on the unified door.
+- **M6.a — done: the unified extension mechanism.** One species — extension —
+  replaced the adapter/plugin/ingester taxonomy: one `ExtensionSpec` with the
+  two-stage builder (`.conduct(activation, MutatesGraph)` is the compile-time
+  key to the conduct cluster), one `Extension` trait in the contract that
+  built-ins, embedders and WASM guests all implement, one WIT world with
+  host-enforced phase discipline, one load path. Batch 1 landed the mechanism
+  under the old names with PURE byte-identity held across all four commits;
+  batch 2 paid the identity toll in one enumerated commit — built-ins under
+  `kndo:*` coordinates, `run.extensions`, the `ext:` category prefix, the
+  `kndo-v2/m6` envelope — the repository's single deliberate regeneration
+  (finding ids untouched: identity never included the extension id).
+  Everything else in M6 lands on the unified door.
 
 ## Name verification (2026-08-29)
 

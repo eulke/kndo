@@ -29,7 +29,7 @@ pub struct RustAdapter {
 
 impl RustAdapter {
     pub fn new() -> Self {
-        let spec = ExtensionSpec::builder("rust", 1)
+        let spec = ExtensionSpec::builder("kndo:rust", 1)
             .extensions(&["rs"])
             .emits(EvidenceStreams::of(&[
                 EvidenceStream::Comments,

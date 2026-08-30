@@ -11,11 +11,11 @@ use kndo_contract::vocab::ProjectPath;
 use serde::Serialize;
 use smol_str::SmolStr;
 
-pub const SCHEMA: &str = "kndo-v2/m5";
+pub const SCHEMA: &str = "kndo-v2/m6";
 
 #[derive(Serialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
-pub struct AdapterRun {
+pub struct ExtensionRun {
     pub id: SmolStr,
     pub files: u32,
 }
@@ -30,7 +30,7 @@ pub struct RunInfo {
     pub schema: &'static str,
     pub files_discovered: u32,
     pub files_claimed: u32,
-    pub adapters: Vec<AdapterRun>,
+    pub extensions: Vec<ExtensionRun>,
 }
 
 #[cfg(feature = "schema")]

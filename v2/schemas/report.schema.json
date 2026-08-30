@@ -148,25 +148,8 @@
         }
       ]
     },
-    "AdapterRun": {
-      "type": "object",
-      "properties": {
-        "files": {
-          "type": "integer",
-          "format": "uint32",
-          "minimum": 0
-        },
-        "id": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "id",
-        "files"
-      ]
-    },
     "Category": {
-      "description": "A finding category: a validated string newtype, not an enum, because the\n`plugin:<coordinate>/<rule>` namespace is open. First-party categories are the\nassociated constants.",
+      "description": "A finding category: a validated string newtype, not an enum, because the\n`ext:<coordinate>/<rule>` namespace is open. First-party categories are the\nassociated constants.",
       "type": "string"
     },
     "Confidence": {
@@ -193,6 +176,23 @@
       "enum": [
         "comments",
         "metrics"
+      ]
+    },
+    "ExtensionRun": {
+      "type": "object",
+      "properties": {
+        "files": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "files"
       ]
     },
     "Finding": {
@@ -292,10 +292,10 @@
     "RunInfo": {
       "type": "object",
       "properties": {
-        "adapters": {
+        "extensions": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/AdapterRun"
+            "$ref": "#/$defs/ExtensionRun"
           }
         },
         "files_claimed": {
@@ -310,14 +310,14 @@
         },
         "schema": {
           "description": "Stamped as a CONST in the generated schema, from the same `SCHEMA` the report\nwrites — a report from any other envelope version fails validation instead of\ndrifting through.",
-          "const": "kndo-v2/m5"
+          "const": "kndo-v2/m6"
         }
       },
       "required": [
         "schema",
         "files_discovered",
         "files_claimed",
-        "adapters"
+        "extensions"
       ]
     },
     "Severity": {

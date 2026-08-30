@@ -8,7 +8,7 @@ use crate::analysis::{Abstention, Duplicate, TestOnly, Untested, Unused, run_all
 use crate::cache::EvidenceCache;
 use crate::graph::Graph;
 use crate::plugin::PluginContribution;
-use crate::report::{AdapterRun, Report, ReportDiagnostic, RunInfo, SCHEMA};
+use crate::report::{ExtensionRun, Report, ReportDiagnostic, RunInfo, SCHEMA};
 use crate::{discover, extract};
 use kndo_contract::extension::Extension;
 use kndo_contract::finding::{Finding, Severity};
@@ -306,7 +306,7 @@ impl Session {
             &[&Unused, &TestOnly, &Untested, &Duplicate],
         );
         // Plugin findings ride the same suppression pass — a `kndo:allow
-        // plugin:<coordinate>/<rule>` pragma reaches them like any category — and
+        // ext:<coordinate>/<rule>` pragma reaches them like any category — and
         // `apply` owns the canonical final sort.
         outcome.findings.extend(round.findings);
         let (findings, suppressed) = crate::suppress::apply(
@@ -358,9 +358,9 @@ impl Session {
 
 impl Snapshot {
     pub fn report(&self) -> Report {
-        let mut per_adapter: BTreeMap<SmolStr, u32> = BTreeMap::new();
+        let mut per_extension: BTreeMap<SmolStr, u32> = BTreeMap::new();
         for f in &self.graph.files {
-            *per_adapter.entry(f.adapter.clone()).or_insert(0) += 1;
+            *per_extension.entry(f.adapter.clone()).or_insert(0) += 1;
         }
         let mut diagnostics: Vec<ReportDiagnostic> = self
             .graph
@@ -399,9 +399,9 @@ impl Snapshot {
                 schema: SCHEMA,
                 files_discovered: self.files_discovered,
                 files_claimed: self.graph.files.len() as u32,
-                adapters: per_adapter
+                extensions: per_extension
                     .into_iter()
-                    .map(|(id, files)| AdapterRun { id, files })
+                    .map(|(id, files)| ExtensionRun { id, files })
                     .collect(),
             },
             findings,

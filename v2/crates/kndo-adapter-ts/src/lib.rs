@@ -37,7 +37,7 @@ impl TypeScriptAdapter {
     pub fn new() -> Self {
         // semantics_version 2: the adapter emits Metrics (winnowing fingerprints,
         // cyclomatic, loc) for every function-shaped declaration.
-        let spec = ExtensionSpec::builder("js-ts", 2)
+        let spec = ExtensionSpec::builder("kndo:js-ts", 2)
             .extensions(&["ts", "tsx", "js", "jsx", "mjs", "cjs"])
             .emits(EvidenceStreams::of(&[
                 EvidenceStream::Comments,

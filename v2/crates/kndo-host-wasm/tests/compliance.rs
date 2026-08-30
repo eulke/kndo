@@ -225,7 +225,7 @@ fn the_wasm_plugin_world_carries_the_containment_model() {
     let note = snap
         .findings
         .iter()
-        .find(|f| f.category.as_str() == "plugin:demo:probe/note")
+        .find(|f| f.category.as_str() == "ext:demo:probe/note")
         .expect("the declared-rule finding lands");
     assert_eq!(note.message, "config.probe is 16 bytes");
 

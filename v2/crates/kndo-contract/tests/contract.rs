@@ -118,9 +118,9 @@ fn subject_derives_kind_and_identity_ignores_spans() {
 
 #[test]
 fn plugin_categories_are_namespaced() {
-    let c = Category::plugin("github.com/acme/kndo-x", "no-foo");
+    let c = Category::extension("github.com/acme/kndo-x", "no-foo");
     assert!(c.is_plugin());
-    assert_eq!(c.as_str(), "plugin:github.com/acme/kndo-x/no-foo");
+    assert_eq!(c.as_str(), "ext:github.com/acme/kndo-x/no-foo");
     assert!(!Category::UNUSED.is_plugin());
 }
 

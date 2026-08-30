@@ -70,7 +70,18 @@ fn dogfood_kndo_reports_nothing_on_itself() {
     // analysis judges it, and a finding here is a bug in ours to fix or dead code of
     // ours to delete — never an entry to allowlist.
     let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-    let session = kndo::open(repo_root, Config::default()).expect("open repo");
+    let session = kndo::open(
+        repo_root,
+        // Cache off: this gate's subject is findings, not caching (the
+        // byte-identity gates own that), and two cache-on dogfood runs over
+        // the same repo root race each other's .kndo/cache in the parallel
+        // test harness.
+        Config {
+            use_cache: false,
+            ..Config::default()
+        },
+    )
+    .expect("open repo");
     let snap = session.analyze(RunMode::Full).expect("analyze repo");
     assert!(
         snap.findings.is_empty(),
@@ -141,7 +152,18 @@ fn dogfood_zero_means_measured() {
     const ACCEPTED: &[(&str, &str)] = &[];
 
     let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-    let session = kndo::open(repo_root, Config::default()).expect("open repo");
+    let session = kndo::open(
+        repo_root,
+        // Cache off: this gate's subject is findings, not caching (the
+        // byte-identity gates own that), and two cache-on dogfood runs over
+        // the same repo root race each other's .kndo/cache in the parallel
+        // test harness.
+        Config {
+            use_cache: false,
+            ..Config::default()
+        },
+    )
+    .expect("open repo");
     let snap = session.analyze(RunMode::Full).expect("analyze repo");
     let actual: Vec<(String, String)> = snap
         .abstained
@@ -531,11 +553,11 @@ fn extension_dependency_implication() {
             .clone()
     };
     assert!(
-        probe("plugin:test:framework-a/probe").starts_with("read "),
+        probe("ext:test:framework-a/probe").starts_with("read "),
         "declared access reads the run's own contents"
     );
     assert_eq!(
-        probe("plugin:test:middleware-b/probe"),
+        probe("ext:test:middleware-b/probe"),
         "read denied",
         "undeclared access is denied, not ambient"
     );
@@ -646,7 +668,7 @@ fn abi_compat_matrix() {
     assert!(
         snap.findings
             .iter()
-            .any(|f| f.category.as_str() == "plugin:demo:probe/note"
+            .any(|f| f.category.as_str() == "ext:demo:probe/note"
                 && f.message == "config.probe is 16 bytes"),
         "the pinned plugin still probes scoped content: {:#?}",
         snap.findings

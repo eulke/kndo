@@ -1,9 +1,9 @@
 {
   "run": {
-    "schema": "kndo-v2/m5",
+    "schema": "kndo-v2/m6",
     "files_discovered": 1,
     "files_claimed": 0,
-    "adapters": []
+    "extensions": []
   },
   "findings": [],
   "fixed": [],
