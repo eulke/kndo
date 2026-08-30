@@ -46,7 +46,7 @@ pub fn roots(
                 );
             }
             None => {
-                if let Some(path) = resolve_in_dir(dir, entry, cx, exts) {
+                if let Some(path) = resolve_entry(dir, entry, cx, exts) {
                     // A JS entry's type-declaration companion is published beside it.
                     for ext in [".js", ".mjs", ".cjs"] {
                         if let Some(stem) = path.as_str().strip_suffix(ext) {
@@ -102,6 +102,25 @@ pub fn roots(
     out
 }
 
+/// An entry that names a BUILT file names its source when the built tree is
+/// absent: the same path with its first segment under `src/`, through the same
+/// candidate machinery (the compiled-extension swap included). Only when the
+/// literal entry resolves nowhere — an existing `dist/` wins untouched, and a
+/// mapping that lands on nothing stays absent.
+fn resolve_entry(
+    dir: &str,
+    entry: &str,
+    cx: &ResolveContext<'_>,
+    exts: &[String],
+) -> Option<ProjectPath> {
+    if let Some(found) = resolve_in_dir(dir, entry, cx, exts) {
+        return Some(found);
+    }
+    let trimmed = entry.trim_start_matches("./");
+    let (_built, rest) = trimmed.split_once('/')?;
+    resolve_in_dir(dir, &format!("src/{rest}"), cx, exts)
+}
+
 /// Every entry-declaring string in the manifest: `main`/`module`/`browser`, `bin`
 /// values, and the string leaves of `exports` and `imports` (the internal `#alias`
 /// map — its targets are entries of this package all the same).
@@ -143,7 +162,7 @@ pub fn packages(
     let dir = parent_dir(manifest.path);
     let entry = entry_fields(&json)
         .iter()
-        .find_map(|e| resolve_in_dir(dir, e, cx, exts));
+        .find_map(|e| resolve_entry(dir, e, cx, exts));
     match entry {
         Some(entry) => vec![PackageEntry {
             name: SmolStr::new(name),

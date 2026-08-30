@@ -183,3 +183,28 @@ fn convention_roots_from_path_and_shebang() {
         vec![]
     );
 }
+
+#[test]
+fn built_entries_map_to_their_source() {
+    // The manifest points at build output that is not in the tree; the same path
+    // under src/ (with the compiled-extension swap) is the entry's source.
+    let roots = manifest_roots(
+        "pkg/package.json",
+        r#"{ "name": "demo", "main": "dist/node/index.js" }"#,
+        &["pkg/src/node/index.ts"],
+    );
+    assert_eq!(
+        roots,
+        [("pkg/src/node/index.ts".to_string(), RootKind::Production)]
+    );
+    // An existing built entry wins untouched — no mapping fires.
+    let literal = manifest_roots(
+        "pkg/package.json",
+        r#"{ "name": "demo", "main": "lib/index.js" }"#,
+        &["pkg/lib/index.js", "pkg/src/index.js"],
+    );
+    assert_eq!(
+        literal,
+        [("pkg/lib/index.js".to_string(), RootKind::Production)]
+    );
+}

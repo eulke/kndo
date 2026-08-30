@@ -209,3 +209,23 @@ scaffolding really is Type-2-identical at the 60-token floor (35 clones in
 recorded. **untested/test-only 0 vs 13/5**: gin's packages all carry `_test.go`
 files, so at file granularity every production file is test-reachable — v1's
 symbol-level precision is the recorded gap shared with Rust's `rally`.
+
+## M4.e — the dist experiment pays
+
+The M3 sections above name one cause three times: production color starved by dist
+indirection (every vite package entry points at built output absent from the
+tree). The recorded experiment ran: when a manifest entry resolves to nothing, the
+same path with its first segment under `src/` — through the same candidate
+machinery, compiled-extension swap included — is the entry's source, taken only
+when it exists. Measured on the corpus:
+
+**vite test-only: 122 → 16** (oracle: 27). The 106 that left were the
+`packages/*/src` bodies the test color alone could reach; with entries mapped to
+their sources, production reaches them first, and the residual 16 are the real
+test-only helpers. **vite unused: 702 → 699**, three formerly-orphaned files now
+production-linked. Everything else held: vite duplicate 174 and untested 6,
+lodash byte-identical (its `lib/` entries exist literally — the guard means an
+existing built tree always wins untouched), every fixture corpus unchanged. One
+deliberate, existence-gated mapping closed the milestone's biggest recorded
+distortion; the shared cli.ts/client.ts verdicts confirmed against v1 in M2
+remain, as they should — v1 sees the same graph truth.

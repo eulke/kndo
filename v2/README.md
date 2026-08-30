@@ -195,12 +195,24 @@ Complete (CI verification pending only the credits reset, like M0–M2):
   `internal/` fence, generated-file and structural-interface never-accuse rules.
   Eight v1 fixtures replay byte-pinned; the conformance gate now walks three
   corpora (22 js + 25 rust + 8 go).
-- Corpus: ripgrep 143 (unused 3 — all verified true at the source, duplicate 135,
-  test-only 3, untested 2) against oracle 149; gin 108 (all duplicate; unused 0,
-  matching the oracle's 0); vite 1,004 (unused 702, duplicate 174, test-only 122,
-  untested 6); lodash 21. Deltas named in COMPARISON.md.
-- Pending in M4: the visibility-ladder measurement (M4.d) and the milestone
-  close-out (M4.e).
+- **M4.d — the ladder, measured and deferred**: 8,026 oracle findings depend on
+  visibility-ladder knowledge (internal-only 7,983, private-type-leak 43) — the
+  largest unbuilt category — but its consumer (the internal-only analysis) does
+  not exist, and M4's own evidence says the missing dimension is scope SHAPE
+  (Go's Directory reference scope, Rust's module-tree bindings — both landed as
+  their own constructs). The ladder arrives with internal-only, rung+shape from
+  the start; EXPERIMENTS and DECISIONS carry the measurement.
+- **M4.e — the dist experiment pays**: a manifest entry naming absent built
+  output maps to its `src/` source, existence-gated. vite test-only 122 → 16
+  (oracle 27) — the milestone's biggest recorded distortion closed by one
+  deliberate mapping; lodash and all 56 conformance fixtures byte-identical.
+- Corpus at M4 exit: ripgrep 143 (unused 3 — all verified true at the source,
+  duplicate 135, test-only 3, untested 2) against oracle 149; gin 108 (all
+  duplicate; unused 0, matching the oracle's 0); vite 895 (unused 699, duplicate
+  174, test-only 16, untested 6); lodash 21. Deltas named in COMPARISON.md.
+  Three languages pass conformance (22 js + 25 rust + 8 go fixtures); the
+  multi-language corpus is stable at the pins — the two-weeks criterion is
+  wall-clock and owner-tracked from here.
 
 ## Name verification (2026-08-29)
 

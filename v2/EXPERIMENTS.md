@@ -64,8 +64,20 @@ run — likely advisory-only), and a corpus measurement of signal quality.
 v1's linear rung ladder could not express Rust's module-and-descendants privacy — a
 recorded incident (the adapter "had to stop lying about private"; equal rungs anchored
 in different files compared as equal regions). Candidate: rungs gain a scope-shape
-dimension. Measure when the v2 Rust adapter lands, against the harvested fixtures and
-the oracle — not before.
+dimension.
+
+Measured at M4.d, when the Rust and Go adapters landed (the deferred-until moment).
+Demand: 8,026 oracle findings across the corpus depend on ladder knowledge —
+internal-only 7,983 (guava 7,014, vapor 383, Alamofire 216, Exposed 163, vite 147,
+ripgrep 59, gin 1) plus private-type-leak 43 — the largest unbuilt category, bigger
+than everything v2 reports today combined. Supply: three languages shipped on binary
+`Reach` alone, and NONE of M4's false-positive fixes wanted a rung between private and
+exported — every one wanted scope SHAPE: Go's package scope landed as
+`ReferenceScope::Directory` (a capability, not a rung), and Rust's module-tree privacy
+landed as bindings-keep-whatever-the-reach. That is the hypothesis confirmed early and
+partially absorbed: the linear part of the ladder is what remains, its consumer is the
+internal-only analysis, and it does not exist yet — so the ladder waits for it
+(consumer rule; DECISIONS 2026-08-30 M4.d has the verdict).
 
 The same design absorbs `Declaration.exported_as` (2026-08-30, M2): the export alias
 belongs inside the exported side of the visibility type — today it rides beside

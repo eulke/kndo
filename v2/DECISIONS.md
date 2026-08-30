@@ -462,3 +462,38 @@ clones), zero `unused` — matching the oracle's zero. Eight v1 fixtures replay
 byte-pinned; `go-work-phantom-dep`, `internal-only-unit` and `private-type-leak`
 hold at zero pending their v1 categories (undeclared, internal-only,
 private-type-leak), which do not exist in v2 yet.
+
+## 2026-08-30 — M4.d: the visibility ladder waits for its consumer, measured
+
+The EXPERIMENTS entry came due when the Rust adapter landed, and the measurement
+decides: DEFER. Demand is real and large — 8,026 oracle findings depend on ladder
+knowledge (internal-only 7,983 across every language, private-type-leak 43), the
+biggest category v2 does not report — but its consumer is the internal-only
+analysis, which does not exist, and a capability without a named core consumer
+does not merge. Building the rungs now would be exactly the speculative vocabulary
+the contract's growth rules exist to prevent.
+
+What M4 measured about the SHAPE strengthens the recorded hypothesis: three
+languages shipped on binary `Reach` alone, and none of the milestone's
+false-positive hunts needed an intermediate rung — they needed scope shape, twice,
+and both landed as their own constructs: Go's package scope as
+`ReferenceScope::Directory`, Rust's module-tree privacy as
+bindings-keep-whatever-the-reach. When internal-only arrives, the ladder arrives
+with it, designed rung+scope-shape from the start, and `Declaration.exported_as`
+folds into the same type in the same deliberate contract change (the shape debt
+stays recorded in EXPERIMENTS until then). ripgrep alone would convert 59 oracle
+findings, gin 1 — the corpus numbers to beat are already pinned.
+
+## 2026-08-30 — M4.e: built entries map to their source, existence-gated
+
+The experiment COMPARISON.md carried since M3 ran and won: a `package.json` entry
+naming built output that is not in the tree resolves to the same path with its
+first segment under `src/`, through the ordinary candidate machinery (the
+`.js`-names-the-source swap included), only when the literal entry resolves
+nowhere and the mapped file exists. vite's test-only fell 122 → 16 (oracle 27)
+and unused 699 as production color finally reached `packages/*/src`; lodash and
+all 56 conformance fixtures held byte-identical, because an existing built tree
+always wins untouched. The alternative recorded at M4.a — emitting entry-less
+`PackageEntry`s for dangling entries — is superseded for js by this mapping
+(the mapped entry is strictly more informative than no entry) and stays in
+EXPERIMENTS only if a subpath-linking gap ever shows up in a measurement.
