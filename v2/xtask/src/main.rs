@@ -17,11 +17,12 @@ fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let result = match args.first().map(String::as_str) {
         Some("gen-ci") => gen_ci(),
+        Some("gen-fingerprint") => gen_fingerprint(),
         Some("package") => package(&args[1..]),
         Some("verify-artifact") => verify_artifact(&args[1..]),
         _ => {
             eprintln!(
-                "usage: cargo xtask <gen-ci | package --tag T --out-dir D | verify-artifact --dir D>"
+                "usage: cargo xtask <gen-ci | gen-fingerprint | package --tag T --out-dir D | verify-artifact --dir D>"
             );
             exit(2);
         }
@@ -48,6 +49,16 @@ fn gen_ci() -> Result<()> {
     fs::create_dir_all(path.parent().unwrap()).map_err(|e| e.to_string())?;
     fs::write(&path, kndo_gates::render_ci()).map_err(|e| e.to_string())?;
     println!("wrote {}", kndo_gates::WORKFLOW_REPO_PATH);
+    Ok(())
+}
+
+/// Rewrites the committed contract fingerprint — the deliberate act the
+/// `contract_fingerprint_is_intentional` gate demands after a shape change.
+fn gen_fingerprint() -> Result<()> {
+    let path = workspace_root().join("crates/kndo-contract/fingerprint.txt");
+    let hex = kndo_contract::contract_fingerprint_hex();
+    fs::write(&path, format!("{hex}\n")).map_err(|e| e.to_string())?;
+    println!("wrote crates/kndo-contract/fingerprint.txt = {hex}");
     Ok(())
 }
 

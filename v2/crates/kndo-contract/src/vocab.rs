@@ -1,0 +1,148 @@
+//! The language-neutral vocabulary: paths, spans, confidence, and the open string
+//! taxonomies (validated newtypes, because the `plugin:` namespace keeps them open).
+
+use crate::fingerprint::ContractFingerprint;
+use serde::{Deserialize, Serialize};
+use smol_str::SmolStr;
+
+/// A `/`-separated, project-relative path. The one path spelling that crosses crate
+/// boundaries; OS paths stay at the discovery edge.
+#[derive(
+    Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, ContractFingerprint,
+)]
+#[serde(transparent)]
+pub struct ProjectPath(SmolStr);
+
+impl ProjectPath {
+    pub fn new(path: impl Into<SmolStr>) -> Self {
+        let s: SmolStr = path.into();
+        debug_assert!(
+            !s.contains('\\'),
+            "ProjectPath is /-separated; normalize at the discovery edge"
+        );
+        ProjectPath(s)
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+/// A byte range within one file: `start..end`, end-exclusive. Bytes, not line/column —
+/// tree-sitter yields them for free, overlap and containment are arithmetic, and a
+/// central line index renders line/column only at the output edge.
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    Serialize,
+    Deserialize,
+    ContractFingerprint,
+)]
+pub struct Span {
+    pub start: u32,
+    pub end: u32,
+}
+
+impl Span {
+    pub fn new(start: u32, end: u32) -> Self {
+        debug_assert!(start <= end, "span start must not exceed end");
+        Span { start, end }
+    }
+
+    pub fn contains(&self, other: &Span) -> bool {
+        self.start <= other.start && other.end <= self.end
+    }
+
+    pub fn overlaps(&self, other: &Span) -> bool {
+        self.start < other.end && other.start < self.end
+    }
+}
+
+/// Ordered by strength, so `max()` and threshold comparisons read naturally.
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    Serialize,
+    Deserialize,
+    ContractFingerprint,
+)]
+#[serde(rename_all = "lowercase")]
+pub enum Confidence {
+    Possible,
+    Probable,
+    Certain,
+}
+
+/// A finding category: a validated string newtype, not an enum, because the
+/// `plugin:<coordinate>/<rule>` namespace is open. First-party categories are the
+/// associated constants.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct Category(SmolStr);
+
+impl Category {
+    pub const CRAP: Category = Category(SmolStr::new_static("crap"));
+    pub const CYCLIC: Category = Category(SmolStr::new_static("cyclic"));
+    pub const DEEP_IMPORT: Category = Category(SmolStr::new_static("deep-import"));
+    pub const DUPLICATE: Category = Category(SmolStr::new_static("duplicate"));
+    pub const INTERNAL_ONLY: Category = Category(SmolStr::new_static("internal-only"));
+    pub const PRIVATE_TYPE_LEAK: Category = Category(SmolStr::new_static("private-type-leak"));
+    pub const STALE: Category = Category(SmolStr::new_static("stale"));
+    pub const TEST_ONLY: Category = Category(SmolStr::new_static("test-only"));
+    pub const UNDECLARED: Category = Category(SmolStr::new_static("undeclared"));
+    pub const UNRESOLVED: Category = Category(SmolStr::new_static("unresolved"));
+    pub const UNTESTED: Category = Category(SmolStr::new_static("untested"));
+    pub const UNUSED: Category = Category(SmolStr::new_static("unused"));
+    pub const VERSION_SKEW: Category = Category(SmolStr::new_static("version-skew"));
+
+    /// The namespaced category of a plugin rule.
+    pub fn plugin(coordinate: &str, rule: &str) -> Self {
+        Category(SmolStr::from(format!("plugin:{coordinate}/{rule}")))
+    }
+
+    pub fn is_plugin(&self) -> bool {
+        self.0.starts_with("plugin:")
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+/// The facet of a finding's subject; derived from [`crate::subject::Subject`], never
+/// stored beside it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SubjectKind {
+    File,
+    Symbol,
+    Package,
+    Dependency,
+    Directory,
+    Suppression,
+}
+
+impl SubjectKind {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            SubjectKind::File => "file",
+            SubjectKind::Symbol => "symbol",
+            SubjectKind::Package => "package",
+            SubjectKind::Dependency => "dependency",
+            SubjectKind::Directory => "directory",
+            SubjectKind::Suppression => "suppression",
+        }
+    }
+}

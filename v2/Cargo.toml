@@ -2,7 +2,13 @@
 # nothing in it is a member of the v1 workspace and nothing in v1 depends on it.
 [workspace]
 resolver = "2"
-members = ["crates/kndo-cli", "crates/kndo-gates", "xtask"]
+members = [
+    "crates/kndo-cli",
+    "crates/kndo-contract",
+    "crates/kndo-contract-fingerprint",
+    "crates/kndo-gates",
+    "xtask",
+]
 
 [workspace.package]
 version = "0.0.0"

@@ -17,10 +17,16 @@ pub struct Gate {
     pub invariant: &'static str,
 }
 
-pub const GATES: &[Gate] = &[Gate {
-    name: "generated_ci_is_current",
-    invariant: "the committed v2.yml byte-matches the generator",
-}];
+pub const GATES: &[Gate] = &[
+    Gate {
+        name: "generated_ci_is_current",
+        invariant: "the committed v2.yml byte-matches the generator",
+    },
+    Gate {
+        name: "contract_fingerprint_is_intentional",
+        invariant: "a contract shape change updates fingerprint.txt in the same commit",
+    },
+];
 
 /// Repo-relative location of the generated workflow.
 pub const WORKFLOW_REPO_PATH: &str = ".github/workflows/v2.yml";
