@@ -790,6 +790,13 @@ fn attribute_string_references(attr: Node<'_>, source: &[u8], out: &mut Evidence
 /// reach an item. One deduplicated edge per distinct path, binding every segment
 /// after the leading keywords — the module chain and the item alike, all declared in
 /// the file the path lands in.
+///
+/// Unlike `use` and `mod` items, these paths are NOT rebased against the
+/// inline-`mod` stack (this walk is flat): `super::f()` inside `mod tests { .. }`
+/// resolves as if written at the top of the file, usually to a miss. That is
+/// deliberate — the path's own identifiers land as same-file references, which is
+/// the keep that matters there, and a missed edge degrades to `Unresolved`,
+/// keep-alive, never an accusation.
 fn path_import(node: Node<'_>, source: &[u8], seen: &mut BTreeSet<String>, out: &mut EvidenceSink) {
     // Only the outermost scoped node carries the whole path.
     if node

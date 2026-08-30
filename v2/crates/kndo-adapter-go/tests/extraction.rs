@@ -1,6 +1,7 @@
 //! Extraction against inline sources: capitalization reach, entry and test roots,
-//! receiver-owned methods, every import spelling, the synthetic package edge,
-//! reference exclusions, and comment spans.
+//! the never-declared method class, every import spelling, the synthetic package
+//! edge, library-mode and generated-file rules, reference exclusions, and comment
+//! spans.
 
 use kndo_adapter_go::GoAdapter;
 use kndo_contract::evidence::{

@@ -86,6 +86,24 @@ inert, a recorded shape debt by the repo's own "Reach for the type" bar. Folding
 is a deliberate contract change: fingerprint moves, the pinned conformance reports
 diff, DECISIONS gets the entry.
 
+### Import-shape debt: the `use`-leaf pair (recorded 2026-08-30, M4)
+A plain Rust `use` leaf emits TWO import records over the same target: a
+`Bindings` (per-item precision — what keeps a private a child module legally
+imports) and a `Namespace` (the whole-surface keep that survives alias hops the
+resolver cannot follow). Two records to express one statement is the "two fields
+that must agree" smell by this repo's own bar — the honest shape is one variant
+carrying both meanings (a named binding that also keeps the surface). Folding it
+is a deliberate contract change (fingerprint moves, adapters and the pinned
+conformance reports diff), so it rides the next planned import-shape change
+rather than moving the contract twice in one milestone. Two smaller ledger notes
+from the same audit, each already stated at its code site: Go declares no methods
+(structural interfaces), so `duplicate` cannot see Go method-body clones — an
+under-report to measure if a corpus ever suggests it matters; and the Rust
+adapter's unimportable-crate-root and single-file-crate checks are path-segment
+conventions (`src/bin`, `tests/`, `examples/`), the only knowledge available at
+their layer — a module literally named `tests` inside `src/` would be misread,
+in the fewer-keeps direction.
+
 ### Type-3 clones (divergent copies)
 Winnowing covers Type-1/2 today. Measure recall/precision of a Type-3 extension on the
 corpus before designing anything.
