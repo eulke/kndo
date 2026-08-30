@@ -246,6 +246,16 @@ pub trait LanguageAdapter: Send + Sync {
         Vec::new()
     }
 
+    /// The dependency NAMES one manifest declares, every section alike — what
+    /// plugin activation (`ManifestDependency`) evaluates against, through the same
+    /// discovered-manifest pipeline `roots` and `packages` already ride; no second
+    /// manifest walk exists. The default — no names — keeps such rules unmatched,
+    /// so a plugin stays off rather than guessing on. Same degradations as `roots`.
+    fn manifest_dependencies(&self, manifest: &SourceFile<'_>) -> Vec<SmolStr> {
+        let _ = manifest;
+        Vec::new()
+    }
+
     /// The files whose names `path` can see WITHOUT an import — the rest of its
     /// compilation unit, in the languages whose unit is bigger than the file (every
     /// non-test sibling of a Go file's package; a test file sees the whole package).

@@ -32,3 +32,40 @@ pub fn packages(manifest: &SourceFile<'_>, _cx: &ResolveContext<'_>) -> Vec<Pack
         dir: SmolStr::new(dir),
     }]
 }
+
+/// The module paths this `go.mod` requires — single-line and block form alike,
+/// `// indirect` included (an indirect dependency is still in the build).
+/// Activation evidence for plugin `ManifestDependency` rules.
+pub fn dependencies(manifest: &SourceFile<'_>) -> Vec<SmolStr> {
+    let Ok(text) = std::str::from_utf8(manifest.content) else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    let mut in_block = false;
+    for line in text.lines() {
+        let line = line.trim();
+        if in_block {
+            if line.starts_with(')') {
+                in_block = false;
+            } else if let Some(module) = line.split_whitespace().next()
+                && !module.starts_with("//")
+            {
+                out.push(SmolStr::new(module.trim_matches('"')));
+            }
+            continue;
+        }
+        let Some(rest) = line.strip_prefix("require") else {
+            continue;
+        };
+        if !rest.starts_with([' ', '\t', '(']) {
+            continue;
+        }
+        let rest = rest.trim_start();
+        if rest.starts_with('(') {
+            in_block = true;
+        } else if let Some(module) = rest.split_whitespace().next() {
+            out.push(SmolStr::new(module.trim_matches('"')));
+        }
+    }
+    out
+}

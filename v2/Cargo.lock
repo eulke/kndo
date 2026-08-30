@@ -664,6 +664,8 @@ dependencies = [
  "kndo-adapter-ts",
  "kndo-contract",
  "kndo-core",
+ "kndo-coverage",
+ "kndo-plugin-coverage",
  "kndo-testkit",
 ]
 
@@ -744,12 +746,20 @@ dependencies = [
  "globset",
  "ignore",
  "kndo-contract",
+ "kndo-coverage",
  "rayon",
  "schemars",
  "serde",
  "serde_json",
  "smol_str",
  "thiserror",
+]
+
+[[package]]
+name = "kndo-coverage"
+version = "0.0.0"
+dependencies = [
+ "kndo-contract",
 ]
 
 [[package]]
@@ -763,6 +773,15 @@ dependencies = [
  "kndo-testkit",
  "serde_json",
  "toml",
+]
+
+[[package]]
+name = "kndo-plugin-coverage"
+version = "0.0.0"
+dependencies = [
+ "kndo-contract",
+ "kndo-core",
+ "kndo-coverage",
 ]
 
 [[package]]

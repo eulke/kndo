@@ -224,8 +224,21 @@ Complete (CI verification pending only the credits reset, like M0–M2):
   `frontends_import_only_the_facade` — a frontend's production dependencies
   contain exactly one kndo crate. The release install-check runs `kndo
   --version`; the whole package/verify loop re-exercised locally.
-- Pending: native plugins (M5.b), the WASM ABI with its compat matrix (M5.c),
-  the external reference adapter from `.kndo/plugins/` (M5.d), close-out (M5.e).
+- **M5.b — native plugins, done**: the `Plugin` trait lives in core, composition
+  in the facade (`default_plugins()`); v1's containment model carries whole —
+  namespaced advisory findings the gate never counts, contributions always in
+  the report (drops described, budget cuts visible), `mutates_graph()` with no
+  default (an active mutating plugin bypasses the graph cache; a smuggled root
+  from a non-mutating one drops). Activation = `FileExists` globs +
+  `ManifestDependency` over the new `LanguageAdapter::manifest_dependencies`
+  capability (js, rust, go), plus the dependency closure to fixpoint. Coverage
+  re-homed: `kndo-coverage` is a no-I/O parser crate and `kndo:coverage-lcov`
+  the first built-in ingester — byte-identical findings everywhere. Envelope
+  grew `plugins` (SCHEMA `kndo-v2/m5`); gates eleven and twelve:
+  `builtin_plugin_proofs` (closed over `default_plugins()`) and
+  `plugin_dependency_implication`.
+- Pending: the WASM ABI with its compat matrix (M5.c), the external reference
+  adapter from `.kndo/plugins/` (M5.d), close-out (M5.e).
 - Owner decision (in DECISIONS.md): internal-only — and the visibility ladder
   with it — lands in M6.
 

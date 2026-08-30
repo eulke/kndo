@@ -82,7 +82,7 @@ jobs:
           set -eu
           cargo test -p kndo-gates --test gates -- --list > /tmp/gate-list.txt
           missing=""
-          for name in generated_ci_is_current contract_fingerprint_is_intentional dogfood_kndo_reports_nothing_on_itself warm_and_cold_runs_are_byte_identical threads_one_and_many_are_byte_identical incremental_and_full_assembly_are_byte_identical adapter_conformance_fixtures_are_byte_identical dogfood_zero_means_measured report_schema_is_generated_and_valid; do
+          for name in generated_ci_is_current contract_fingerprint_is_intentional dogfood_kndo_reports_nothing_on_itself warm_and_cold_runs_are_byte_identical threads_one_and_many_are_byte_identical incremental_and_full_assembly_are_byte_identical adapter_conformance_fixtures_are_byte_identical dogfood_zero_means_measured report_schema_is_generated_and_valid frontends_import_only_the_facade builtin_plugin_proofs plugin_dependency_implication; do
             grep -q "$name" /tmp/gate-list.txt || missing="$missing $name"
           done
           [ -z "$missing" ] || { echo "named gates missing from the harness:$missing"; exit 1; }
@@ -104,6 +104,12 @@ jobs:
         run: cargo test -p kndo-gates --test gates -- --exact dogfood_zero_means_measured
       - name: gate — report_schema_is_generated_and_valid (the committed schema is derived from the types and validates real reports)
         run: cargo test -p kndo-gates --test gates -- --exact report_schema_is_generated_and_valid
+      - name: gate — frontends_import_only_the_facade (a frontend's production dependencies contain exactly one kndo crate: kndo)
+        run: cargo test -p kndo-gates --test gates -- --exact frontends_import_only_the_facade
+      - name: gate — builtin_plugin_proofs (every built-in plugin proves its effect baseline-then-plugin, closed over default_plugins)
+        run: cargo test -p kndo-gates --test gates -- --exact builtin_plugin_proofs
+      - name: gate — plugin_dependency_implication (a plugin named in another's dependencies activates even when its own rules never match)
+        run: cargo test -p kndo-gates --test gates -- --exact plugin_dependency_implication
 
   corpus:
     name: corpus is measured and its findings are committed

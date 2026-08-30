@@ -567,3 +567,54 @@ both frontends at once, and with the rule they prove made executable:
 Both frontends pass the dogfood from birth (zero findings over their own code)
 and the corpus held byte-identical — frontends are presentation, and the
 measurement agrees.
+
+## 2026-08-30 — M5.b: native plugins, v1's containment model carried whole
+
+The plugin trait lands in core (`kndo_core::plugin`), the composition in the
+facade (`default_plugins()`, mirror of `default_adapters()`), and v1's containment
+model carries without dilution: plugin findings are namespaced
+(`plugin:<coordinate>/<rule>`) and advisory — the gate never counts them —
+contributions are ALWAYS in the report (roots applied, findings, every dropped
+assertion described, budget cuts), and a plugin can only lie about graph facts,
+never forge engine state. Measured consequences of the shape:
+
+- **`mutates_graph()` has no default**, and it is load-bearing twice over: any
+  ACTIVE graph-mutating plugin bypasses the persisted graph cache entirely (the
+  surgical patch never re-invokes plugin hooks, so it could never safely reuse a
+  graph one influenced), and a root smuggled through the shared sink by a
+  non-mutating plugin drops with a described line instead of applying. Both are
+  tested end to end (`plugin_containment.rs`), not documented and hoped.
+- **Activation is decided before the graph exists** — `FileExists` globs over
+  discovery, `ManifestDependency` over names the claiming adapters report through
+  the new `LanguageAdapter::manifest_dependencies` capability (default: none; js,
+  rust and go implement it over the ONE manifest pipeline `roots`/`packages`
+  already ride) — because the cache decision hangs on the active set. The
+  dependency closure runs to fixpoint, so `dependencies: ["kndo:express"]`
+  reaches a plugin whose own rules can never match; `AnyRule([])` is that
+  posture's deliberate spelling.
+- **Coverage moved out of the engine into the plugin system** with zero behavior
+  change: `kndo-coverage` is a no-I/O parsing crate (the same code will compile
+  to WASM as the reference external ingester in M5.d), and `kndo:coverage-lcov`
+  is the first built-in — `Activation::Always`, `mutates_graph() == false`
+  (v1's lesson in one line: an always-on ingester answering `true` would turn
+  the graph cache off product-wide), reading its conventional paths through the
+  well-known channel that exists precisely because run output is gitignored.
+  First-Some-wins in registration order decides between competing ingesters.
+- **Anchors now reach declarations**: plugin symbol roots land in
+  `GraphFile.anchored` as `RootTarget::Declaration`, obtained through the
+  contract's new read-side `FileEvidence::declarations_with_ids()` — ids stay
+  unforgeable (only real declarations of the same evidence yield one). `unused`
+  reads evidence roots and anchors through one chain; the whole-file/declaration
+  distinction stayed byte-equivalent for every existing graph (anchors were all
+  whole-file until now).
+- **Two new named gates** (twelve total): `builtin_plugin_proofs` — every
+  built-in proves its effect baseline-then-plugin and the proof list is closed
+  over `default_plugins()`, so a coordinate shipped without one fails the suite —
+  and `plugin_dependency_implication` — the dependency-activation path no shipped
+  plugin uses is exactly the one a gate must hold in place.
+
+The envelope grew `plugins` (SCHEMA `kndo-v2/m3` → `kndo-v2/m5`); all 56
+conformance fixtures and all eight corpus reports regenerated with the identical
+mechanical diff — the schema line plus the `kndo:coverage-lcov` contribution —
+and every finding held byte-for-byte, coverage-lcov's Certain verdict included:
+re-homing the ingester changed nothing it measures.

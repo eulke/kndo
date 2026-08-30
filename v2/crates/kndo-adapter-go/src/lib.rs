@@ -20,6 +20,7 @@ use kndo_contract::adapter::{
 };
 use kndo_contract::evidence::{DiagnosticLevel, EvidenceSink, EvidenceStream, EvidenceStreams};
 use kndo_contract::vocab::ProjectPath;
+use smol_str::SmolStr;
 
 pub struct GoAdapter {
     spec: AdapterSpec,
@@ -79,6 +80,10 @@ impl LanguageAdapter for GoAdapter {
 
     fn packages(&self, manifest: &SourceFile<'_>, cx: &ResolveContext<'_>) -> Vec<PackageEntry> {
         manifest::packages(manifest, cx)
+    }
+
+    fn manifest_dependencies(&self, manifest: &SourceFile<'_>) -> Vec<SmolStr> {
+        manifest::dependencies(manifest)
     }
 
     fn unit_mates(&self, path: &ProjectPath, cx: &ResolveContext<'_>) -> Vec<ProjectPath> {

@@ -173,6 +173,26 @@ pub fn packages(
     }
 }
 
+/// The dependency names this manifest declares, every section npm installs from —
+/// activation evidence for plugin `ManifestDependency` rules, never resolution.
+pub fn dependencies(manifest: &SourceFile<'_>) -> Vec<SmolStr> {
+    let Ok(json) = serde_json::from_slice::<serde_json::Value>(manifest.content) else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for section in [
+        "dependencies",
+        "devDependencies",
+        "peerDependencies",
+        "optionalDependencies",
+    ] {
+        if let Some(serde_json::Value::Object(map)) = json.get(section) {
+            out.extend(map.keys().map(SmolStr::new));
+        }
+    }
+    out
+}
+
 /// Every string leaf of the `exports` value — plain, per-subpath, or per-condition
 /// nesting alike. Non-path leaves simply fail to resolve later.
 fn export_leaves(value: &serde_json::Value, out: &mut Vec<String>) {

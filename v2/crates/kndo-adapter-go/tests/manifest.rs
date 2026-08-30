@@ -54,3 +54,35 @@ fn broken_manifests_declare_nothing() {
     assert!(packages_of("go.mod", "go 1.22\n").is_empty());
     assert!(packages_of("go.mod", "modulename\n").is_empty());
 }
+
+#[test]
+fn require_lines_report_dependency_names_both_forms() {
+    let path = ProjectPath::new("go.mod");
+    let content = concat!(
+        "module example.com/app\n",
+        "go 1.22\n",
+        "require example.com/single v1.0.0\n",
+        "require (\n",
+        "\tgithub.com/gin-gonic/gin v1.10.0\n",
+        "\tgolang.org/x/sys v0.1.0 // indirect\n",
+        "\t// a comment line names nothing\n",
+        ")\n",
+        "requirement_not_a_keyword v0\n",
+    );
+    let deps: Vec<String> = GoAdapter::new()
+        .manifest_dependencies(&SourceFile {
+            path: &path,
+            content: content.as_bytes(),
+        })
+        .into_iter()
+        .map(|d| d.to_string())
+        .collect();
+    assert_eq!(
+        deps,
+        [
+            "example.com/single",
+            "github.com/gin-gonic/gin",
+            "golang.org/x/sys"
+        ]
+    );
+}

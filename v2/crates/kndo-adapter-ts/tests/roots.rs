@@ -208,3 +208,34 @@ fn built_entries_map_to_their_source() {
         [("pkg/lib/index.js".to_string(), RootKind::Production)]
     );
 }
+
+#[test]
+fn manifest_dependencies_report_every_section() {
+    let path = ProjectPath::new("package.json");
+    let json = r#"{
+        "name": "demo",
+        "dependencies": { "express": "^4", "lodash": "*" },
+        "devDependencies": { "vitest": "^1" },
+        "peerDependencies": { "react": ">=18" },
+        "optionalDependencies": { "fsevents": "^2" },
+        "scripts": { "not-a-dep": "echo" }
+    }"#;
+    let mut deps: Vec<String> = TypeScriptAdapter::new()
+        .manifest_dependencies(&SourceFile {
+            path: &path,
+            content: json.as_bytes(),
+        })
+        .into_iter()
+        .map(|d| d.to_string())
+        .collect();
+    deps.sort();
+    assert_eq!(deps, ["express", "fsevents", "lodash", "react", "vitest"]);
+    assert!(
+        TypeScriptAdapter::new()
+            .manifest_dependencies(&SourceFile {
+                path: &path,
+                content: b"not json",
+            })
+            .is_empty()
+    );
+}

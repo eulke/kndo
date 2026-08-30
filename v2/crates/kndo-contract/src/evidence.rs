@@ -285,6 +285,20 @@ pub struct FileEvidence {
     pub diagnostics: Vec<AdapterDiagnostic>,
 }
 
+impl FileEvidence {
+    /// Each declaration beside its id — the read-side counterpart of the sink
+    /// handing ids out at write time, for a consumer that must NAME a declaration
+    /// it found by inspection (the engine anchoring an outside root on one). Ids
+    /// stay honest: this is the only way to obtain one after extraction, and every
+    /// id it yields names a declaration this evidence actually holds.
+    pub fn declarations_with_ids(&self) -> impl Iterator<Item = (DeclarationId, &Declaration)> {
+        self.declarations
+            .iter()
+            .enumerate()
+            .map(|(i, d)| (DeclarationId(i as u32), d))
+    }
+}
+
 /// The write side of extraction. Validates as evidence arrives — a span outside the
 /// file is clamped and reported as a diagnostic (extraction degrades, never fails) —
 /// and hands back the ids that make attachment misuse unrepresentable.

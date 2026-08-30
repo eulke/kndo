@@ -36,9 +36,11 @@ pub struct GraphFile {
     /// declare. A pure function of path and file set, so a content-only patch can
     /// trust the persisted values.
     pub unit_mates: Vec<u32>,
-    /// Whole-file roots anchored from OUTSIDE this file's content (a manifest naming
-    /// it as an entry point). Kept apart from `evidence.roots` because evidence is
-    /// cached by this file's content hash — a manifest change must not invalidate it.
+    /// Roots anchored from OUTSIDE this file's content — a manifest naming it as an
+    /// entry point (whole-file), a plugin naming it or one of its declarations. Kept
+    /// apart from `evidence.roots` because evidence is cached by this file's content
+    /// hash — a manifest change must not invalidate it. Plugin anchors never reach
+    /// the persisted graph: an active graph-mutating plugin bypasses that cache.
     pub anchored: Vec<Root>,
     /// Resolved import targets, as indices into `Graph::files`; sorted, deduplicated.
     pub imports: Vec<u32>,
@@ -319,8 +321,9 @@ pub fn patch(
 }
 
 /// Every (adapter, discovered manifest) pair, in file-path order — the one iteration
-/// both manifest passes share.
-fn for_each_manifest(
+/// every manifest pass shares (packages, roots, and the session's dependency-name
+/// pass for plugin activation).
+pub(crate) fn for_each_manifest(
     files: &[DiscoveredFile],
     adapters: &[Box<dyn LanguageAdapter>],
     mut f: impl FnMut(&dyn LanguageAdapter, SourceFile<'_>),

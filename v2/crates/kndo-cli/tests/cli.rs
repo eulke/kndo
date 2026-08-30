@@ -54,7 +54,7 @@ fn json_mode_emits_the_report_envelope() {
     let p = project_with_findings();
     let out = check(&p, &["--json", "--no-cache"]);
     let report: serde_json::Value = serde_json::from_str(&out.stdout).expect("stdout is JSON");
-    assert_eq!(report["run"]["schema"], "kndo-v2/m3");
+    assert_eq!(report["run"]["schema"], "kndo-v2/m5");
     assert!(report["findings"].as_array().is_some_and(|f| !f.is_empty()));
 }
 

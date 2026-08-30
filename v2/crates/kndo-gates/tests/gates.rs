@@ -318,6 +318,282 @@ fn incremental_and_full_assembly_are_byte_identical() {
 }
 
 #[test]
+fn builtin_plugin_proofs() {
+    // Every built-in plugin ships with the baseline-then-plugin proof the authoring
+    // docs demand of anyone else: the run WITHOUT it establishes what fires, the run
+    // WITH it changes exactly what the plugin claims to change, and the contribution
+    // is reported in full. Closed over `default_plugins()`: a coordinate shipped
+    // without its proof here fails, the same posture as `mutates_graph` having no
+    // default — a plugin nothing asserts is a plugin nothing notices breaking, and
+    // the cost of one is measured in findings that silently return.
+    const PROVEN: &[&str] = &["kndo:coverage-lcov"];
+    let shipped: Vec<String> = kndo::default_plugins()
+        .iter()
+        .map(|p| p.spec().coordinate().to_string())
+        .collect();
+    assert_eq!(
+        shipped, PROVEN,
+        "\nthe default plugin set moved. Every built-in coordinate needs its \
+         baseline-then-plugin proof added to this gate in the same commit.\n"
+    );
+
+    // kndo:coverage-lcov — the lcov fixture's `neverRan` finding exists only
+    // because coverage was ingested: uncovered ⇒ Certain, on the function.
+    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../kndo-adapter-ts/tests/fixtures/coverage-lcov/project");
+    let config = || Config {
+        threads: Threads::Auto,
+        use_cache: false,
+    };
+
+    let without = Session::open(&fixture, config(), kndo::default_adapters())
+        .expect("open baseline session")
+        .analyze(RunMode::Full)
+        .expect("analyze baseline");
+    let with = kndo::open(&fixture, config())
+        .expect("open stock session")
+        .analyze(RunMode::Full)
+        .expect("analyze with plugins");
+
+    assert!(!with.graph.files.is_empty(), "the fixture is measured");
+    let never_ran = |snap: &Snapshot| {
+        snap.findings
+            .iter()
+            .filter(|f| {
+                f.category.as_str() == "untested"
+                    && f.confidence == kndo_contract::vocab::Confidence::Certain
+                    && format!("{:?}", f.subject).contains("neverRan")
+            })
+            .count()
+    };
+    assert_eq!(
+        without.plugins.len(),
+        0,
+        "the baseline run carries no plugin"
+    );
+    assert_eq!(
+        never_ran(&without),
+        0,
+        "without the ingester, no coverage verdict"
+    );
+    assert_eq!(
+        never_ran(&with),
+        1,
+        "with it, the uncovered function is Certain"
+    );
+    assert_eq!(
+        without.findings.len(),
+        with.findings.len() - 1,
+        "the plugin's whole effect is that one finding — nothing else moved"
+    );
+
+    let contribution = &with.plugins[0];
+    assert_eq!(contribution.coordinate, "kndo:coverage-lcov");
+    assert_eq!(
+        (contribution.roots, contribution.findings),
+        (0, 0),
+        "an ingester asserts no graph facts and no findings of its own"
+    );
+    assert!(contribution.dropped.is_empty() && !contribution.content_budget_cut);
+}
+
+/// A configurable plugin for gate fixtures: contributes the given roots when
+/// mutating, and probes the content view with one read, reporting what it saw.
+struct TestPlugin {
+    spec: kndo_core::PluginSpec,
+    mutates: bool,
+    roots: Vec<(
+        kndo_core::PluginTarget,
+        kndo_contract::evidence::RootKind,
+        kndo_contract::vocab::Confidence,
+    )>,
+    reads: Option<kndo_contract::vocab::ProjectPath>,
+}
+
+impl kndo_core::Plugin for TestPlugin {
+    fn spec(&self) -> &kndo_core::PluginSpec {
+        &self.spec
+    }
+    fn mutates_graph(&self) -> bool {
+        self.mutates
+    }
+    fn contribute_roots(
+        &self,
+        _graph: &kndo_core::GraphView<'_>,
+        _content: &kndo_core::ContentView<'_>,
+        out: &mut kndo_core::PluginSink,
+    ) {
+        for (target, kind, confidence) in &self.roots {
+            out.root(target.clone(), *kind, *confidence);
+        }
+    }
+    fn report_findings(
+        &self,
+        _graph: &kndo_core::GraphView<'_>,
+        content: &kndo_core::ContentView<'_>,
+        out: &mut kndo_core::PluginSink,
+    ) {
+        if let Some(path) = &self.reads {
+            let message = match content.read(path) {
+                Some(bytes) => format!("read {} bytes", bytes.len()),
+                None => "read denied".to_string(),
+            };
+            out.finding(
+                "probe",
+                kndo_core::PluginSeverity::Info,
+                kndo_core::PluginTarget::File(path.clone()),
+                message,
+            );
+        }
+    }
+}
+
+#[test]
+fn plugin_dependency_implication() {
+    // A plugin named in another plugin's `dependencies` activates even when its own
+    // rules never match — the only path for a plugin whose framework is an INDIRECT
+    // dependency (a company framework that uses Express internally is never
+    // `express` in its users' manifests). No plugin we ship uses it, and it must
+    // exist anyway; that is exactly what makes it easy to delete by accident, so
+    // this gate holds it in place. B and C carry `AnyRule([])` — they can NEVER
+    // self-activate; their contributions in the report ARE the implication working,
+    // C transitively. D's unmatched rule proves activation is not "everything runs".
+    use kndo_contract::evidence::RootKind;
+    use kndo_contract::vocab::{Confidence, ProjectPath};
+    use kndo_core::{Activation, ActivationRule, Plugin, PluginSpec, PluginTarget};
+
+    let p = fixture();
+    let plugins: Vec<Box<dyn Plugin>> = vec![
+        Box::new(TestPlugin {
+            spec: PluginSpec::builder("test:framework-a", 1)
+                .activation(Activation::AnyRule(vec![ActivationRule::FileExists(
+                    "*.kmock".into(),
+                )]))
+                .dependencies(&["test:middleware-b"])
+                .requested_file_access(&["main.kmock"])
+                .rule("probe", "reports what the content view let it see")
+                .build(),
+            mutates: false,
+            roots: Vec::new(),
+            reads: Some(ProjectPath::new("main.kmock")),
+        }),
+        Box::new(TestPlugin {
+            // No declared file access: its probe read must come back denied — the
+            // content view is deny-by-default, budgeted, never ambient.
+            spec: PluginSpec::builder("test:middleware-b", 1)
+                .dependencies(&["test:leaf-c"])
+                .rule("probe", "reports what the content view let it see")
+                .build(),
+            mutates: false,
+            roots: Vec::new(),
+            reads: Some(ProjectPath::new("lib.kmock")),
+        }),
+        Box::new(TestPlugin {
+            spec: PluginSpec::builder("test:leaf-c", 1).build(),
+            mutates: true,
+            roots: vec![(
+                PluginTarget::File(ProjectPath::new("orphan.kmock")),
+                RootKind::Production,
+                Confidence::Certain,
+            )],
+            reads: None,
+        }),
+        Box::new(TestPlugin {
+            spec: PluginSpec::builder("test:dormant-d", 1)
+                .activation(Activation::AnyRule(vec![ActivationRule::FileExists(
+                    "never-*.xyz".into(),
+                )]))
+                .build(),
+            mutates: false,
+            roots: Vec::new(),
+            reads: None,
+        }),
+    ];
+
+    let session = Session::open(
+        p.root(),
+        Config {
+            threads: Threads::Auto,
+            use_cache: false,
+        },
+        vec![Box::new(MockAdapter::new())],
+    )
+    .expect("open session")
+    .with_plugins(plugins);
+    let snap = session.analyze(RunMode::Full).expect("analyze");
+    let report = snap.report();
+
+    let coordinates: Vec<&str> = report
+        .plugins
+        .iter()
+        .map(|c| c.coordinate.as_str())
+        .collect();
+    assert_eq!(
+        coordinates,
+        ["test:framework-a", "test:middleware-b", "test:leaf-c"],
+        "rule-matched, dependency-implied, transitively implied — and never dormant-d"
+    );
+    assert!(
+        report
+            .plugins
+            .iter()
+            .all(|c| c.dropped.is_empty() && !c.content_budget_cut),
+        "every contribution applied cleanly: {:#?}",
+        report.plugins
+    );
+
+    let probe = |category: &str| {
+        snap.findings
+            .iter()
+            .find(|f| f.category.as_str() == category)
+            .unwrap_or_else(|| panic!("{category} reported"))
+            .message
+            .clone()
+    };
+    assert!(
+        probe("plugin:test:framework-a/probe").starts_with("read "),
+        "declared access reads the run's own contents"
+    );
+    assert_eq!(
+        probe("plugin:test:middleware-b/probe"),
+        "read denied",
+        "undeclared access is denied, not ambient"
+    );
+
+    // C's root keeps orphan.kmock alive as a FILE, so the whole-file accusation is
+    // gone — while its private dead symbol is still judged: a plugin root grants
+    // reachability, never amnesty.
+    use kndo_contract::subject::Subject;
+    let orphan_subjects: Vec<&Subject> = snap
+        .findings
+        .iter()
+        .filter(|f| f.subject.path().as_str() == "orphan.kmock")
+        .map(|f| &f.subject)
+        .collect();
+    assert!(
+        !orphan_subjects
+            .iter()
+            .any(|s| matches!(s, Subject::File { .. })),
+        "the contributed root reached the graph"
+    );
+    assert!(
+        orphan_subjects
+            .iter()
+            .any(|s| matches!(s, Subject::Symbol { .. })),
+        "unrelated dead code stays reported"
+    );
+
+    // Plugin findings are advisory by containment: the gate still counts exactly
+    // the four first-party findings, never the two probes.
+    assert_eq!(
+        snap.gate(&GatePolicy {
+            fail_on: Some(kndo_contract::finding::Severity::Info)
+        }),
+        RunOutcome::FailFindings { at_or_above: 4 },
+    );
+}
+
+#[test]
 fn frontends_import_only_the_facade() {
     // The facade rule as executable law: a frontend's production dependency graph
     // contains exactly one kndo crate — `kndo` itself. Reaching into core, the

@@ -102,10 +102,13 @@ impl Analysis for Unused {
                         .map(|r| r.name.as_str()),
                 );
             }
+            // Extraction evidence and outside anchors (manifest entries, plugin
+            // roots) keep declarations the same way.
             let rooted: BTreeSet<usize> = f
                 .evidence
                 .roots
                 .iter()
+                .chain(&f.anchored)
                 .filter_map(|r| match &r.target {
                     RootTarget::Declaration(id) => Some(id.index()),
                     _ => None,
@@ -115,11 +118,12 @@ impl Analysis for Unused {
             // surface to whoever rooted it (a package consumer, a test runner, a
             // tool). Private declarations are still judged individually — a private,
             // uncalled function in an entry point is dead code.
-            let entry_surface = !f.anchored.is_empty()
-                || f.evidence
-                    .roots
-                    .iter()
-                    .any(|r| matches!(r.target, RootTarget::WholeFile));
+            let entry_surface = f
+                .evidence
+                .roots
+                .iter()
+                .chain(&f.anchored)
+                .any(|r| matches!(r.target, RootTarget::WholeFile));
             for (d_ix, d) in f.evidence.declarations.iter().enumerate() {
                 let exported = d.reach == Reach::Exported;
                 // Method-kind declarations are members even without an owner in this

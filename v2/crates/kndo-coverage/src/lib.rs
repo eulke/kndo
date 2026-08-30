@@ -1,14 +1,14 @@
-//! Coverage ingestion: lcov, read from the conventional paths (`lcov.info`,
-//! `coverage/lcov.info`) directly on disk — coverage is run output and usually
-//! gitignored, so the discovery walk deliberately does not see it. Function records
-//! (`FN`/`FNDA`) are the primary evidence — a declaration line executes at module
-//! load, so line hits alone would call every loaded function tested; `DA` lines are
-//! the fallback for producers that emit no function records. Everything unparseable
-//! or unmappable degrades to absence, and absence never accuses.
+//! Coverage formats, parsed — no I/O by design: the same crate compiles natively
+//! (the built-in ingester plugin) and to WASM (the reference external ingester),
+//! so the two can never drift apart by prose. A format earns its parser here with
+//! a fixture captured from a real producer; lcov is the one that has. Function
+//! records (`FN`/`FNDA`) are the primary evidence — a declaration line executes at
+//! module load, so line hits alone would call every loaded function tested; `DA`
+//! lines are the fallback for producers that emit no function records. Everything
+//! unparseable or unmappable degrades to absence, and absence never accuses.
 
 use kndo_contract::vocab::{ProjectPath, Span};
 use std::collections::BTreeMap;
-use std::path::Path;
 
 pub struct Coverage {
     pub files: BTreeMap<ProjectPath, FileCoverage>,
@@ -56,21 +56,9 @@ impl FileCoverage {
     }
 }
 
-/// The conventional lcov locations, tried in order; first parseable one wins.
-pub fn ingest(root: &Path, contents: &BTreeMap<ProjectPath, &[u8]>) -> Option<Coverage> {
-    for candidate in ["lcov.info", "coverage/lcov.info"] {
-        if let Ok(text) = std::fs::read_to_string(root.join(candidate))
-            && let Some(cov) = parse_lcov(&text, contents)
-        {
-            return Some(cov);
-        }
-    }
-    None
-}
-
 /// One lcov stream. Records outside the project (paths that match no discovered
 /// file) are skipped; a stream with no mappable records is no coverage at all.
-fn parse_lcov(text: &str, contents: &BTreeMap<ProjectPath, &[u8]>) -> Option<Coverage> {
+pub fn parse_lcov(text: &str, contents: &BTreeMap<ProjectPath, &[u8]>) -> Option<Coverage> {
     let mut files = BTreeMap::new();
     let mut current: Option<(ProjectPath, FileCoverage)> = None;
     let mut fn_lines: BTreeMap<String, u32> = BTreeMap::new();
@@ -128,7 +116,7 @@ fn parse_lcov(text: &str, contents: &BTreeMap<ProjectPath, &[u8]>) -> Option<Cov
 
 /// Byte offset of each line's first byte — the one line table both coverage and
 /// suppression map spans through.
-pub(crate) fn line_starts(content: &[u8]) -> Vec<u32> {
+pub fn line_starts(content: &[u8]) -> Vec<u32> {
     let mut starts = vec![0u32];
     for (i, &b) in content.iter().enumerate() {
         if b == b'\n' {

@@ -45,7 +45,7 @@ fn handshake_discovery_and_the_check_tool() {
     assert_eq!(call["isError"], false);
     let text = call["content"][0]["text"].as_str().expect("text content");
     let report: Value = serde_json::from_str(text).expect("the tool returns the Report envelope");
-    assert_eq!(report["run"]["schema"], "kndo-v2/m3");
+    assert_eq!(report["run"]["schema"], "kndo-v2/m5");
     assert!(
         report["findings"]
             .as_array()

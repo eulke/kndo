@@ -1,0 +1,12 @@
+[package]
+name = "kndo-plugin-coverage"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+kndo-contract = { path = "../kndo-contract" }
+kndo-core = { path = "../kndo-core" }
+kndo-coverage = { path = "../kndo-coverage" }

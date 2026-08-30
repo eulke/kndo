@@ -119,6 +119,35 @@ pub fn packages(manifest: &SourceFile<'_>, cx: &ResolveContext<'_>) -> Vec<Packa
     }]
 }
 
+/// The dependency names this manifest declares — every dependency table Cargo
+/// reads: the three top-level sections, `[workspace.dependencies]`, and the same
+/// sections under each `[target.…]`. Names are the table keys (what the project's
+/// code refers to). Activation evidence for plugin `ManifestDependency` rules.
+pub fn dependencies(manifest: &SourceFile<'_>) -> Vec<SmolStr> {
+    const SECTIONS: [&str; 3] = ["dependencies", "dev-dependencies", "build-dependencies"];
+    let Some(toml) = parse(manifest.content) else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    let mut collect = |table: Option<&toml::Value>| {
+        if let Some(toml::Value::Table(map)) = table {
+            out.extend(map.keys().map(SmolStr::new));
+        }
+    };
+    for section in SECTIONS {
+        collect(toml.get(section));
+    }
+    collect(toml.get("workspace").and_then(|w| w.get("dependencies")));
+    if let Some(toml::Value::Table(targets)) = toml.get("target") {
+        for target in targets.values() {
+            for section in SECTIONS {
+                collect(target.get(section));
+            }
+        }
+    }
+    out
+}
+
 fn lib_entry(toml: &toml::Value, dir: &str) -> Option<ProjectPath> {
     let declared = toml
         .get("lib")

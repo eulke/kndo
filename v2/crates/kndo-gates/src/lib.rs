@@ -58,6 +58,14 @@ pub const GATES: &[Gate] = &[
         name: "frontends_import_only_the_facade",
         invariant: "a frontend's production dependencies contain exactly one kndo crate: kndo",
     },
+    Gate {
+        name: "builtin_plugin_proofs",
+        invariant: "every built-in plugin proves its effect baseline-then-plugin, closed over default_plugins",
+    },
+    Gate {
+        name: "plugin_dependency_implication",
+        invariant: "a plugin named in another's dependencies activates even when its own rules never match",
+    },
 ];
 
 /// Repo-relative location of the generated workflow.

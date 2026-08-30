@@ -7,12 +7,14 @@
 use crate::analysis::{Abstention, Duplicate, TestOnly, Untested, Unused, run_all};
 use crate::cache::EvidenceCache;
 use crate::graph::Graph;
+use crate::plugin::{Plugin, PluginContribution};
 use crate::report::{AdapterRun, Report, ReportDiagnostic, RunInfo, SCHEMA};
 use crate::{discover, extract};
 use kndo_contract::adapter::LanguageAdapter;
 use kndo_contract::finding::{Finding, Severity};
+use kndo_contract::vocab::ProjectPath;
 use smol_str::SmolStr;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
@@ -57,6 +59,7 @@ pub struct Session {
     root: PathBuf,
     config: Config,
     adapters: Vec<Box<dyn LanguageAdapter>>,
+    plugins: Vec<Box<dyn Plugin>>,
 }
 
 /// Wall-clock per pipeline phase. Lives BESIDE the report, never inside it: the
@@ -84,11 +87,15 @@ impl PhaseTimings {
 
 pub struct Snapshot {
     pub graph: Graph,
-    /// Current findings, post-suppression. The baseline split (new vs known) is the
-    /// report's and the gate's view; the snapshot keeps the whole truth.
+    /// Current findings, post-suppression — plugin findings included, under their
+    /// namespaced categories. The baseline split (new vs known) is the report's and
+    /// the gate's view; the snapshot keeps the whole truth.
     pub findings: Vec<Finding>,
     pub abstained: Vec<Abstention>,
     pub suppressed: crate::suppress::SuppressedSummary,
+    /// What each active plugin asserted, in registration order — always reported,
+    /// even when everything applied cleanly.
+    pub plugins: Vec<PluginContribution>,
     pub timings: PhaseTimings,
     baseline: Option<Vec<Finding>>,
     pragma_problems: Vec<crate::suppress::PragmaProblem>,
@@ -151,7 +158,16 @@ impl Session {
             root,
             config,
             adapters,
+            plugins: Vec::new(),
         })
+    }
+
+    /// The plugin set this session runs — registration order is coverage-ingestion
+    /// precedence and contribution order. A builder rather than an `open` parameter
+    /// so embedders that want none say nothing.
+    pub fn with_plugins(mut self, plugins: Vec<Box<dyn Plugin>>) -> Self {
+        self.plugins = plugins;
+        self
     }
 
     pub fn root(&self) -> &Path {
@@ -202,18 +218,37 @@ impl Session {
             claims = extract::claim(&files, &self.adapters);
         });
 
+        // Activation is decided before the graph exists — its inputs are what
+        // discovery and the manifest pass already know — because the cache decision
+        // hangs on it: any ACTIVE graph-mutating plugin bypasses the persisted graph
+        // entirely (the surgical patch never re-invokes plugin hooks, so it could
+        // never safely reuse a graph one influenced). The evidence cache stays on:
+        // per-file evidence is plugin-independent.
+        let discovered_paths: BTreeSet<ProjectPath> =
+            files.iter().map(|f| f.path.clone()).collect();
+        let mut manifest_dependencies: BTreeSet<SmolStr> = BTreeSet::new();
+        crate::graph::for_each_manifest(&files, &self.adapters, |adapter, manifest| {
+            manifest_dependencies.extend(adapter.manifest_dependencies(&manifest));
+        });
+        let active =
+            crate::plugin::activate(&self.plugins, &discovered_paths, &manifest_dependencies);
+        let plugins_mutate = active
+            .iter()
+            .any(|(ix, _)| self.plugins[*ix].mutates_graph());
+
         let fingerprint = kndo_contract::contract_fingerprint();
         let cache_root = self.config.use_cache.then(|| self.root.join(".kndo/cache"));
         let cache =
             EvidenceCache::new(cache_root.as_ref().map(|r| r.join("evidence")), fingerprint);
-        let graph_cache = crate::cache::GraphCache::new(cache_root, self.graph_cache_key());
+        let graph_cache = (!plugins_mutate)
+            .then(|| crate::cache::GraphCache::new(cache_root, self.graph_cache_key()));
 
         // The surgical path first: a persisted graph patched in place when only file
         // contents moved. Re-extraction of the changed files happens inside `patch`,
         // so on a patched run the extract phase reads as zero and its work is folded
         // into `assemble`.
         let assemble_start = Instant::now();
-        let patched = graph_cache.load().and_then(|p| {
+        let patched = graph_cache.as_ref().and_then(|gc| gc.load()).and_then(|p| {
             crate::graph::patch(
                 p.graph,
                 p.manifest_state,
@@ -223,7 +258,7 @@ impl Session {
                 &cache,
             )
         });
-        let graph = match patched {
+        let mut graph = match patched {
             Some(graph) => {
                 timings.assemble = assemble_start.elapsed();
                 graph
@@ -239,24 +274,33 @@ impl Session {
                 graph
             }
         };
-        let persisted = crate::cache::PersistedGraph {
-            manifest_state: crate::graph::manifest_state(&files, &self.adapters),
-            graph,
-        };
-        graph_cache.store(&persisted);
-        let graph = persisted.graph;
+        // Stored before the plugin round on purpose: the persisted graph is always
+        // plugin-free, and when a mutating plugin is active nothing is stored at all.
+        if let Some(gc) = &graph_cache {
+            let persisted = crate::cache::PersistedGraph {
+                manifest_state: crate::graph::manifest_state(&files, &self.adapters),
+                graph,
+            };
+            gc.store(&persisted);
+            graph = persisted.graph;
+        }
 
         let analyze_start = Instant::now();
         let contents: BTreeMap<_, _> = files
             .iter()
             .map(|f| (f.path.clone(), f.content.as_slice()))
             .collect();
-        let coverage = crate::coverage::ingest(&self.root, &contents);
-        let outcome = run_all(
+        let round =
+            crate::plugin::run_round(&self.plugins, &active, &mut graph, &self.root, &contents);
+        let mut outcome = run_all(
             &graph,
-            coverage,
+            round.coverage,
             &[&Unused, &TestOnly, &Untested, &Duplicate],
         );
+        // Plugin findings ride the same suppression pass — a `kndo:allow
+        // plugin:<coordinate>/<rule>` pragma reaches them like any category — and
+        // `apply` owns the canonical final sort.
+        outcome.findings.extend(round.findings);
         let (findings, suppressed) = crate::suppress::apply(
             &graph,
             &contents,
@@ -271,6 +315,7 @@ impl Session {
             findings,
             abstained: outcome.abstained,
             suppressed: suppressed.summary,
+            plugins: round.contributions,
             pragma_problems: suppressed.problems,
             timings,
             baseline: self.read_baseline(),
@@ -354,19 +399,22 @@ impl Snapshot {
             baselined,
             abstained: self.abstained.clone(),
             suppressed: self.suppressed.clone(),
+            plugins: self.plugins.clone(),
             diagnostics,
         }
     }
 
-    /// Counts NEW findings only: the baseline's whole purpose is that known findings
-    /// hold no gate hostage.
+    /// Counts NEW findings only — the baseline's whole purpose is that known findings
+    /// hold no gate hostage — and never a plugin finding: those are advisory by
+    /// containment (a plugin cannot construct a gate-eligible finding), visible in
+    /// the report, powerless over the exit code.
     pub fn gate(&self, policy: &GatePolicy) -> RunOutcome {
         let Some(floor) = policy.fail_on else {
             return RunOutcome::Pass;
         };
         let at_or_above = self
             .new_findings()
-            .filter(|f| f.severity.at_least(floor))
+            .filter(|f| !f.category.is_plugin() && f.severity.at_least(floor))
             .count() as u32;
         if at_or_above == 0 {
             RunOutcome::Pass

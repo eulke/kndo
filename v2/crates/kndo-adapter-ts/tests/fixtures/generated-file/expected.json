@@ -1,6 +1,6 @@
 {
   "run": {
-    "schema": "kndo-v2/m3",
+    "schema": "kndo-v2/m5",
     "files_discovered": 3,
     "files_claimed": 2,
     "adapters": [
@@ -41,5 +41,14 @@
     "total": 0,
     "by_category": []
   },
+  "plugins": [
+    {
+      "coordinate": "kndo:coverage-lcov",
+      "roots": 0,
+      "findings": 0,
+      "dropped": [],
+      "content_budget_cut": false
+    }
+  ],
   "diagnostics": []
 }

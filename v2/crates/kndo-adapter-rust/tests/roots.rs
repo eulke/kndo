@@ -163,3 +163,41 @@ fn lib_name_overrides_the_import_name() {
     );
     assert_eq!(pkgs[0].name, "demo");
 }
+
+#[test]
+fn manifest_dependencies_report_every_cargo_table() {
+    let path = ProjectPath::new("Cargo.toml");
+    let manifest = r#"
+[package]
+name = "demo"
+
+[dependencies]
+serde = "1"
+tokio = { version = "1", features = ["full"] }
+
+[dev-dependencies]
+tempfile = "3"
+
+[build-dependencies]
+cc = "1"
+
+[workspace.dependencies]
+thiserror = "2"
+
+[target.'cfg(windows)'.dependencies]
+winapi = "0.3"
+"#;
+    let mut deps: Vec<String> = RustAdapter::new()
+        .manifest_dependencies(&SourceFile {
+            path: &path,
+            content: manifest.as_bytes(),
+        })
+        .into_iter()
+        .map(|d| d.to_string())
+        .collect();
+    deps.sort();
+    assert_eq!(
+        deps,
+        ["cc", "serde", "tempfile", "thiserror", "tokio", "winapi"]
+    );
+}

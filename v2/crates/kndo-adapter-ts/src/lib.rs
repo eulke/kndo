@@ -18,6 +18,7 @@ use kndo_contract::evidence::{
     DiagnosticLevel, EvidenceSink, EvidenceStream, EvidenceStreams, RootKind, RootTarget,
 };
 use kndo_contract::vocab::{Confidence, ProjectPath};
+use smol_str::SmolStr;
 use tree_sitter::Language;
 
 /// The `.d.ts` fact, spelled once: the type-declaration companion extension that
@@ -116,6 +117,10 @@ impl LanguageAdapter for TypeScriptAdapter {
 
     fn packages(&self, manifest: &SourceFile<'_>, cx: &ResolveContext<'_>) -> Vec<PackageEntry> {
         manifest::packages(manifest, cx, &self.resolution_exts)
+    }
+
+    fn manifest_dependencies(&self, manifest: &SourceFile<'_>) -> Vec<SmolStr> {
+        manifest::dependencies(manifest)
     }
 }
 

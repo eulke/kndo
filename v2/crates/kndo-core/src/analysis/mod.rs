@@ -92,7 +92,7 @@ fn flood(graph: &Graph, kind: RootKind) -> Vec<bool> {
 pub struct RunContext<'a> {
     pub graph: &'a Graph,
     pub reach: Reachability,
-    pub coverage: Option<crate::coverage::Coverage>,
+    pub coverage: Option<kndo_coverage::Coverage>,
 }
 
 pub struct AnalysisContext<'a> {
@@ -184,7 +184,7 @@ pub struct AnalysisOutcome {
 
 pub fn run_all(
     graph: &Graph,
-    coverage: Option<crate::coverage::Coverage>,
+    coverage: Option<kndo_coverage::Coverage>,
     analyses: &[&dyn Analysis],
 ) -> AnalysisOutcome {
     let run = RunContext {

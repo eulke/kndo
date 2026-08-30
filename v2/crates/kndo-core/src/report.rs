@@ -3,6 +3,7 @@
 //! (timings, timestamps) joins at the frontend edge when a milestone needs it.
 
 use crate::analysis::Abstention;
+use crate::plugin::PluginContribution;
 use crate::suppress::SuppressedSummary;
 use kndo_contract::evidence::DiagnosticLevel;
 use kndo_contract::finding::Finding;
@@ -10,7 +11,7 @@ use kndo_contract::vocab::ProjectPath;
 use serde::Serialize;
 use smol_str::SmolStr;
 
-pub const SCHEMA: &str = "kndo-v2/m3";
+pub const SCHEMA: &str = "kndo-v2/m5";
 
 #[derive(Serialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
@@ -57,6 +58,10 @@ pub struct Report {
     pub baselined: u32,
     pub abstained: Vec<Abstention>,
     pub suppressed: SuppressedSummary,
+    /// One entry per ACTIVE plugin, in registration order — what it asserted, what
+    /// missed, whether its content budget cut. Always present, so a plugin that
+    /// contributed nothing is visibly distinct from a plugin that never ran.
+    pub plugins: Vec<PluginContribution>,
     pub diagnostics: Vec<ReportDiagnostic>,
 }
 

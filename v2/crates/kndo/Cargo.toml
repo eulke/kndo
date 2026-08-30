@@ -12,6 +12,8 @@ kndo-adapter-rust = { path = "../kndo-adapter-rust" }
 kndo-adapter-ts = { path = "../kndo-adapter-ts" }
 kndo-contract = { path = "../kndo-contract" }
 kndo-core = { path = "../kndo-core" }
+kndo-coverage = { path = "../kndo-coverage" }
+kndo-plugin-coverage = { path = "../kndo-plugin-coverage" }
 
 [dev-dependencies]
 kndo-testkit = { path = "../kndo-testkit" }

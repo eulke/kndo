@@ -5,16 +5,21 @@
 
 pub mod analysis;
 mod cache;
-mod coverage;
 mod discover;
 mod extract;
 mod graph;
+pub mod plugin;
 mod report;
 mod session;
 mod suppress;
 
 pub use analysis::{Abstention, AbstentionReason, AbstentionScope, Analysis};
 pub use graph::{Graph, GraphFile};
+pub use plugin::{
+    Activation, ActivationReason, ActivationRule, CONTENT_MAX_BYTES, CONTENT_MAX_FILES,
+    ContentView, GraphView, Plugin, PluginContribution, PluginSeverity, PluginSink, PluginSpec,
+    PluginTarget, RuleDescriptor, WellKnown, is_reserved_coordinate,
+};
 pub use report::Report;
 pub use session::{
     Config, GatePolicy, PhaseTimings, Refusal, RunMode, RunOutcome, Session, Snapshot, Threads,

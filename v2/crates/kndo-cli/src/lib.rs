@@ -233,6 +233,19 @@ fn render_text(report: &Report) -> String {
             report.suppressed.total
         ));
     }
+    // Contribution anomalies only: a clean contribution is JSON detail, but a
+    // dropped assertion or a cut budget is the run being partial, said out loud.
+    for contribution in &report.plugins {
+        for line in &contribution.dropped {
+            out.push_str(&format!("plugin {}: {line}\n", contribution.coordinate));
+        }
+        if contribution.content_budget_cut {
+            out.push_str(&format!(
+                "plugin {}: content budget cut — its findings may be partial\n",
+                contribution.coordinate
+            ));
+        }
+    }
     for diagnostic in &report.diagnostics {
         out.push_str(&format!(
             "diagnostic {}: {}\n",
