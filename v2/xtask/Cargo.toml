@@ -9,6 +9,7 @@ publish.workspace = true
 [dependencies]
 kndo = { path = "../crates/kndo" }
 kndo-contract = { path = "../crates/kndo-contract" }
+kndo-core = { path = "../crates/kndo-core", features = ["schema"] }
 kndo-gates = { path = "../crates/kndo-gates" }
 flate2 = "1"
 tar = "0.4"

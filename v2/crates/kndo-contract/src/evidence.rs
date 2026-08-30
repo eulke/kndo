@@ -63,6 +63,7 @@ impl DeclarationId {
     ContractFingerprint,
 )]
 #[serde(rename_all = "lowercase")]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub enum EvidenceStream {
     Comments,
     Metrics,
@@ -249,6 +250,7 @@ pub struct FunctionMetrics {
 /// Closed by design: three levels are the reporting contract.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ContractFingerprint)]
 #[serde(rename_all = "lowercase")]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub enum DiagnosticLevel {
     Info,
     Warn,

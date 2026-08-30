@@ -85,3 +85,33 @@ findings are Swift/Kotlin/Java territory: M3+ adapters.
 
 Zero claimed files (Go/Rust/Swift only) — nothing to compare until their adapters
 exist. v1's findings there stand as the oracle for those milestones.
+
+## M3 — the analysis categories arrive
+
+v2 grew test-only, untested, and duplicate (plus suppression/stale and the baseline,
+which the corpus repos do not exercise — no `kndo:` pragmas, no baselines). The
+comparable slices on the run recorded here:
+
+**duplicate — v2: vite 174 · lodash 1 · Alamofire 5; v1: vite 179 · lodash 2.**
+The closest match of any category. v2's winnowing (structural, kind-normalized
+leaves, corpus-measured 60-token floor — DECISIONS has the experiment) finds the
+create-vite template clones and byte-identical files; the residue against v1's 179
+is css/json subjects v2 does not claim. Alamofire's 5 are its vendored docs-theme
+JS — v1 found them under `duplicate` too, inside its larger Swift-dominated count.
+
+**test-only — v2: vite 122 · lodash 2; v1: vite 27.** 121 of vite's 122 sit in
+`packages/*`: the production color is starved by the dist indirection (every
+package entry points at built output, so `src/` is production-dark and the test
+color is often the only one that reaches it). The accusations are mechanically
+true of the graph v2 can see and Info/Probable by design, but the VOLUME is the
+dist blindness again — the same root cause behind the shared cli.ts/client.ts
+verdicts. The fix is a measurable capability (mapping built entries back to their
+sources), an M4 experiment, not a tweak.
+
+**untested — v2: vite 25; v1: 222.** The inverse shape: v2 only judges
+production-REACHABLE files, and the same dist starvation shrinks that set, so v2
+under-accuses where v1 (whose reachability differed) judged more. All 25 are
+playground app files with no tests — true positives. Keep-alive direction;
+the count grows as production reachability does. On the abstainers
+(guava/Exposed/Alamofire JS slices) untested and test-only abstain for want of
+test evidence, and duplicate now judges everywhere Metrics are declared.

@@ -311,3 +311,22 @@ claim. 60 wins; it becomes a config key when the registry lands. Byte-identical
 files are the same category's file-level judgment (hash_hex equality), and members
 of an exact-duplicate group are excluded from the structural pass so a copied file
 does not also duplicate every function inside itself.
+
+## 2026-08-30 — M3 closes: judged categories, measured evidence strengths, one schema
+
+Reachability went per-color and shared (one flood per root kind, every analysis reads
+the same answer; unused held byte-stable at 702 on vite through the refactor).
+Evidence strength is explicit in confidence now: coverage-measured untested is
+Certain (lcov FN/FNDA first — a declaration line executes at module load, so DA
+alone would call every loaded function tested; the conformance fixture is REAL
+output from Node 22's built-in lcov reporter), graph-heuristic untested is Probable,
+duplicate is Certain on fingerprint-set equality. The stale rule sharpened on first
+contact with reality: this repo's own v1 pragma `kndo:allow-file crap` proved that
+"not judged" must cover not-yet-built categories, not only abstained ones — the
+dogfood gate caught it before the commit went green, which is that gate doing its
+job. The envelope grew fixed/baselined/suppressed (SCHEMA kndo-v2/m3) and its JSON
+schema is generated from the types and validated against real reports in the same
+gate. M3 exit vs oracle: duplicate 174/179 (residue = unclaimed css/json subjects);
+test-only 122 vs 27 and untested 25 vs 222 share one named cause — production color
+starved by dist indirection — recorded in COMPARISON.md with its M4 experiment
+(mapping built entries to sources), not patched around.

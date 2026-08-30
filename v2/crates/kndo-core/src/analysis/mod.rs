@@ -122,6 +122,7 @@ pub trait Analysis: Sync {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "kebab-case")]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub enum AbstentionScope {
     WholeRun,
     Files { unmeasured: u32 },
@@ -129,6 +130,7 @@ pub enum AbstentionScope {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "kebab-case")]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub enum AbstentionReason {
     StreamsNotDeclared {
         missing: Vec<EvidenceStream>,
@@ -159,6 +161,7 @@ impl fmt::Display for AbstentionReason {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Abstention {
     pub category: Category,
     pub reason: AbstentionReason,

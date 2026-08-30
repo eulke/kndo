@@ -130,6 +130,42 @@ Earlier in M2 (first slice):
   corpus, versioned: vite 1,553 files claimed, 3,491 declarations, 87,573 references,
   1,565 resolved import edges, byte-identical across runs.
 
+## M3 — status
+
+Complete (CI verification pending only the credits reset, like M0–M2):
+
+- **Reachability by colors**, computed once per run and shared through `RunContext`:
+  production/test/tooling flood from each file's own roots over resolved edges.
+- **test-only** (Info/Probable): files only the test color reaches, with a file that
+  carries its own Test root exempt. **untested** (Info): coverage speaks first —
+  ingested lcov (`lcov.info`, `coverage/lcov.info`; FN/FNDA before DA, because a
+  declaration line executes at module load) makes uncovered functions `Certain`;
+  where coverage is silent, the graph heuristic (no test-rooted file references it)
+  judges at `Probable`. Both abstain without test evidence. **duplicate** (Info):
+  byte-identical files by content hash, structural Type-1/2 function clones by
+  winnowed fingerprint-set equality (toolkit-owned winnowing, kind-normalized
+  leaves, corpus-measured 60-token floor).
+- **Central suppression** (§6.6 realized): adapters report comment spans; the engine
+  owns the `kndo:allow` / `kndo:allow-file` grammar, categories validate through
+  `Category::parse`, and a stale allow is a Warning — except over categories the run
+  did not JUDGE (abstained or not yet built), the flicker rule that this repository's
+  own v1 pragmas exercised the day it landed.
+- **Baseline**: `.kndo/baseline.json`, written whole by `Session::write_baseline`;
+  reports split findings into new/`fixed`/`baselined` and the gate counts new only.
+  `RunOutcome::Refused` completes the exit-code story (0 pass / 1 findings / 2
+  refused).
+- **Schema, generated and validated**: `cargo xtask gen-schema` derives
+  `schemas/report.schema.json` from the types (schemars behind the `schema`
+  feature); the `report_schema_is_generated_and_valid` gate holds it current AND
+  validates a live fixture report plus the versioned vite corpus report against it.
+  `SCHEMA` moved to `kndo-v2/m3`.
+- Two new named gates (nine total): `dogfood_zero_means_measured` — every dogfood
+  abstention is accepted in writing, so zero findings can never quietly mean
+  un-judged — and the schema gate above.
+- Corpus (M3 exit numbers, all deltas explained in `corpus-findings/COMPARISON.md`):
+  vite 1,023 (unused 702, duplicate 174 vs oracle 179, test-only 122, untested 25),
+  lodash 21, Alamofire 5 duplicates; dogfood still zero through honest evidence.
+
 ## Name verification (2026-08-29)
 
 - npm: `kndo` still taken by an unrelated DeFi package (unchanged since the v1 check);

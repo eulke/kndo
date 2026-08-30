@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 /// [`Severity::at_least`], the one place the inversion lives.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub enum Severity {
     Error,
     Warning,
@@ -22,6 +23,7 @@ impl Severity {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Finding {
     pub id: FindingId,
     pub category: Category,

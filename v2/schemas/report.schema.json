@@ -1,0 +1,502 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Report",
+  "type": "object",
+  "properties": {
+    "abstained": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Abstention"
+      }
+    },
+    "baselined": {
+      "description": "Current findings the baseline already carries — counted, not repeated.",
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "diagnostics": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ReportDiagnostic"
+      }
+    },
+    "findings": {
+      "description": "New relative to the baseline; all current findings when none exists.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Finding"
+      }
+    },
+    "fixed": {
+      "description": "Baseline entries the current run no longer produces.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Finding"
+      }
+    },
+    "run": {
+      "$ref": "#/$defs/RunInfo"
+    },
+    "suppressed": {
+      "$ref": "#/$defs/SuppressedSummary"
+    }
+  },
+  "required": [
+    "run",
+    "findings",
+    "fixed",
+    "baselined",
+    "abstained",
+    "suppressed",
+    "diagnostics"
+  ],
+  "$defs": {
+    "Abstention": {
+      "type": "object",
+      "properties": {
+        "category": {
+          "$ref": "#/$defs/Category"
+        },
+        "reason": {
+          "$ref": "#/$defs/AbstentionReason"
+        },
+        "scope": {
+          "$ref": "#/$defs/AbstentionScope"
+        }
+      },
+      "required": [
+        "category",
+        "reason",
+        "scope"
+      ]
+    },
+    "AbstentionReason": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "streams-not-declared": {
+              "type": "object",
+              "properties": {
+                "missing": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/EvidenceStream"
+                  }
+                }
+              },
+              "required": [
+                "missing"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "streams-not-declared"
+          ]
+        },
+        {
+          "description": "No root anchors anything in the whole graph. Reachability judged from zero\nroots would accuse every file at once; that is a missing-evidence condition,\nnot a verdict.",
+          "type": "string",
+          "const": "no-roots-anywhere"
+        },
+        {
+          "description": "No test root anchors anything: with zero test evidence, \"tests never reach\nthis\" describes every declaration equally and accuses none.",
+          "type": "string",
+          "const": "no-test-roots-anywhere"
+        }
+      ]
+    },
+    "AbstentionScope": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "whole-run"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "files": {
+              "type": "object",
+              "properties": {
+                "unmeasured": {
+                  "type": "integer",
+                  "format": "uint32",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "unmeasured"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "files"
+          ]
+        }
+      ]
+    },
+    "AdapterRun": {
+      "type": "object",
+      "properties": {
+        "files": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "files"
+      ]
+    },
+    "Category": {
+      "description": "A finding category: a validated string newtype, not an enum, because the\n`plugin:<coordinate>/<rule>` namespace is open. First-party categories are the\nassociated constants.",
+      "type": "string"
+    },
+    "Confidence": {
+      "description": "Ordered by strength, so `max()` and threshold comparisons read naturally.\nClosed by design: a fourth tier would change what every existing threshold means —\nthat is a semantic contract change, not growth.",
+      "type": "string",
+      "enum": [
+        "possible",
+        "probable",
+        "certain"
+      ]
+    },
+    "DiagnosticLevel": {
+      "description": "Closed by design: three levels are the reporting contract.",
+      "type": "string",
+      "enum": [
+        "info",
+        "warn",
+        "error"
+      ]
+    },
+    "EvidenceStream": {
+      "description": "An optional evidence stream — one whose absence would be ambiguous without a\ndeclaration. Grows a variant whenever a language teaches us a new stream\n(test spans, units, …); the default for every adapter is not-declared.",
+      "type": "string",
+      "enum": [
+        "comments",
+        "metrics"
+      ]
+    },
+    "Finding": {
+      "type": "object",
+      "properties": {
+        "category": {
+          "$ref": "#/$defs/Category"
+        },
+        "confidence": {
+          "$ref": "#/$defs/Confidence"
+        },
+        "id": {
+          "$ref": "#/$defs/FindingId"
+        },
+        "message": {
+          "type": "string"
+        },
+        "severity": {
+          "$ref": "#/$defs/Severity"
+        },
+        "subject": {
+          "$ref": "#/$defs/Subject"
+        }
+      },
+      "required": [
+        "id",
+        "category",
+        "severity",
+        "confidence",
+        "subject",
+        "message"
+      ]
+    },
+    "FindingId": {
+      "description": "A finding's stable identity. Baselines and suppressions depend on it, so it is a\ntype, derived from typed parts — never five adjacent strings.",
+      "type": "string"
+    },
+    "ProjectPath": {
+      "description": "A `/`-separated, project-relative path. The one path spelling that crosses crate\nboundaries; OS paths stay at the discovery edge.",
+      "type": "string"
+    },
+    "ReportDiagnostic": {
+      "type": "object",
+      "properties": {
+        "level": {
+          "$ref": "#/$defs/DiagnosticLevel"
+        },
+        "message": {
+          "type": "string"
+        },
+        "path": {
+          "$ref": "#/$defs/ProjectPath"
+        }
+      },
+      "required": [
+        "path",
+        "level",
+        "message"
+      ]
+    },
+    "RunInfo": {
+      "type": "object",
+      "properties": {
+        "adapters": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/AdapterRun"
+          }
+        },
+        "files_claimed": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "files_discovered": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "schema": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema",
+        "files_discovered",
+        "files_claimed",
+        "adapters"
+      ]
+    },
+    "Severity": {
+      "description": "Declared worst-first so `Ord` is display order; gates compare via\n[`Severity::at_least`], the one place the inversion lives.",
+      "type": "string",
+      "enum": [
+        "error",
+        "warning",
+        "info"
+      ]
+    },
+    "Span": {
+      "description": "A byte range within one file: `start..end`, end-exclusive. Bytes, not line/column —\ntree-sitter yields them for free, overlap and containment are arithmetic, and a\ncentral line index renders line/column only at the output edge.",
+      "type": "object",
+      "properties": {
+        "end": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "start": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "start",
+        "end"
+      ]
+    },
+    "Subject": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "file"
+            },
+            "path": {
+              "$ref": "#/$defs/ProjectPath"
+            }
+          },
+          "required": [
+            "kind",
+            "path"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "symbol"
+            },
+            "path": {
+              "$ref": "#/$defs/ProjectPath"
+            },
+            "selector": {
+              "$ref": "#/$defs/SymbolSelector"
+            },
+            "span": {
+              "$ref": "#/$defs/Span"
+            }
+          },
+          "required": [
+            "kind",
+            "path",
+            "selector",
+            "span"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "package"
+            },
+            "manifest": {
+              "$ref": "#/$defs/ProjectPath"
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "manifest",
+            "name"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "dependency"
+            },
+            "name": {
+              "type": "string"
+            },
+            "owner_manifest": {
+              "$ref": "#/$defs/ProjectPath"
+            }
+          },
+          "required": [
+            "kind",
+            "owner_manifest",
+            "name"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "directory"
+            },
+            "path": {
+              "$ref": "#/$defs/ProjectPath"
+            }
+          },
+          "required": [
+            "kind",
+            "path"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "suppression"
+            },
+            "path": {
+              "$ref": "#/$defs/ProjectPath"
+            },
+            "span": {
+              "$ref": "#/$defs/Span"
+            }
+          },
+          "required": [
+            "kind",
+            "path",
+            "span"
+          ]
+        }
+      ]
+    },
+    "SuppressedSummary": {
+      "description": "What suppression did to a run, for the report: totals only — the suppressed\nfindings themselves are the pragmas' business, not the envelope's.",
+      "type": "object",
+      "properties": {
+        "by_category": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "$ref": "#/$defs/Category"
+              },
+              {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              }
+            ]
+          }
+        },
+        "total": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "total",
+        "by_category"
+      ]
+    },
+    "SymbolSelector": {
+      "description": "Names a symbol within a file. The one place the member-of relation is spelled;\nrendering (`Owner.name`) is the output edge's job, never a parsing convention.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "Free": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Free"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "Member": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "owner": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "owner",
+                "name"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Member"
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -9,6 +9,7 @@ use smol_str::SmolStr;
 /// Names a symbol within a file. The one place the member-of relation is spelled;
 /// rendering (`Owner.name`) is the output edge's job, never a parsing convention.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub enum SymbolSelector {
     Free(SmolStr),
     Member { owner: SmolStr, name: SmolStr },
@@ -26,6 +27,7 @@ impl SymbolSelector {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "lowercase")]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub enum Subject {
     File {
         path: ProjectPath,
@@ -81,6 +83,7 @@ impl Subject {
 /// type, derived from typed parts — never five adjacent strings.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(transparent)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct FindingId(SmolStr);
 
 impl FindingId {

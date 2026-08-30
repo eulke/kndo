@@ -50,6 +50,10 @@ pub const GATES: &[Gate] = &[
         name: "dogfood_zero_means_measured",
         invariant: "every dogfood abstention is accepted in writing — zero cannot cheapen",
     },
+    Gate {
+        name: "report_schema_is_generated_and_valid",
+        invariant: "the committed schema is derived from the types and validates real reports",
+    },
 ];
 
 /// Repo-relative location of the generated workflow.

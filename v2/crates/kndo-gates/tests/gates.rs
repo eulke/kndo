@@ -84,6 +84,48 @@ fn dogfood_kndo_reports_nothing_on_itself() {
 }
 
 #[test]
+fn report_schema_is_generated_and_valid() {
+    // The committed schema is derived, never hand-written; and it VALIDATES real
+    // output — the fixture's own report and a versioned corpus report — so the
+    // schema being "current" also means being true of what the engine emits.
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let committed = std::fs::read_to_string(root.join("schemas/report.schema.json"))
+        .expect("schemas/report.schema.json exists — run `cargo xtask gen-schema`");
+    assert_eq!(
+        committed,
+        kndo_core::report_schema(),
+        "\nthe envelope's shape changed. If deliberate, run `cargo xtask gen-schema` \
+         and commit the result in the same commit; if not, you changed the Report \
+         without meaning to.\n"
+    );
+
+    let schema: serde_json::Value = serde_json::from_str(&committed).expect("schema is JSON");
+    let validator = jsonschema::validator_for(&schema).expect("schema compiles");
+
+    let p = fixture();
+    let live: serde_json::Value =
+        serde_json::from_str(&run(p.root(), false, Threads::Auto).report().to_json())
+            .expect("report is JSON");
+    let errors: Vec<String> = validator
+        .iter_errors(&live)
+        .map(|e| e.to_string())
+        .collect();
+    assert!(errors.is_empty(), "a live report validates: {errors:#?}");
+
+    let vite = std::fs::read_to_string(root.join("corpus-findings/vite.report.json"))
+        .expect("versioned corpus report exists");
+    let vite: serde_json::Value = serde_json::from_str(&vite).expect("corpus report is JSON");
+    let errors: Vec<String> = validator
+        .iter_errors(&vite)
+        .map(|e| e.to_string())
+        .collect();
+    assert!(
+        errors.is_empty(),
+        "the corpus report validates: {errors:#?}"
+    );
+}
+
+#[test]
 fn dogfood_zero_means_measured() {
     // The dogfood's second lock: zero findings must mean MEASURED, not un-judged.
     // Every abstention on the repo run is listed here with its written reason; the

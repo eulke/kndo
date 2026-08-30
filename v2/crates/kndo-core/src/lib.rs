@@ -20,3 +20,6 @@ pub use session::{
     Config, GatePolicy, PhaseTimings, Refusal, RunMode, RunOutcome, Session, Snapshot, Threads,
 };
 pub use suppress::SuppressedSummary;
+
+#[cfg(feature = "schema")]
+pub use report::report_schema;

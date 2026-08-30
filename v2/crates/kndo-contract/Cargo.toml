@@ -11,3 +11,7 @@ kndo-contract-fingerprint = { path = "../kndo-contract-fingerprint" }
 smol_str = { version = "0.3", features = ["serde"] }
 serde = { version = "1", features = ["derive"] }
 blake3 = "1"
+schemars = { version = "1", features = ["smol_str03"], optional = true }
+
+[features]
+schema = ["dep:schemars"]

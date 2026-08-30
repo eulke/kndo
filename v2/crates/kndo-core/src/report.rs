@@ -13,12 +13,14 @@ use smol_str::SmolStr;
 pub const SCHEMA: &str = "kndo-v2/m3";
 
 #[derive(Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct AdapterRun {
     pub id: SmolStr,
     pub files: u32,
 }
 
 #[derive(Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct RunInfo {
     pub schema: &'static str,
     pub files_discovered: u32,
@@ -27,6 +29,7 @@ pub struct RunInfo {
 }
 
 #[derive(Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct ReportDiagnostic {
     pub path: ProjectPath,
     pub level: DiagnosticLevel,
@@ -34,6 +37,7 @@ pub struct ReportDiagnostic {
 }
 
 #[derive(Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Report {
     pub run: RunInfo,
     /// New relative to the baseline; all current findings when none exists.
@@ -51,4 +55,14 @@ impl Report {
     pub fn to_json(&self) -> String {
         serde_json::to_string_pretty(self).expect("report serializes")
     }
+}
+
+/// The JSON schema of the envelope, derived from the types — the committed
+/// `schemas/report.schema.json` is generated from this, never written by hand.
+#[cfg(feature = "schema")]
+pub fn report_schema() -> String {
+    let schema = schemars::schema_for!(Report);
+    let mut json = serde_json::to_string_pretty(&schema).expect("schema serializes");
+    json.push('\n');
+    json
 }

@@ -39,6 +39,7 @@ struct Pragma {
 /// What suppression did to a run, for the report: totals only — the suppressed
 /// findings themselves are the pragmas' business, not the envelope's.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Default)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct SuppressedSummary {
     pub total: u32,
     pub by_category: Vec<(Category, u32)>,

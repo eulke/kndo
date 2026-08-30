@@ -11,6 +11,7 @@ use smol_str::SmolStr;
     Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, ContractFingerprint,
 )]
 #[serde(transparent)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct ProjectPath(SmolStr);
 
 impl ProjectPath {
@@ -44,6 +45,7 @@ impl ProjectPath {
     Deserialize,
     ContractFingerprint,
 )]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Span {
     pub start: u32,
     pub end: u32,
@@ -81,6 +83,7 @@ impl Span {
     ContractFingerprint,
 )]
 #[serde(rename_all = "lowercase")]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub enum Confidence {
     Possible,
     Probable,
@@ -92,6 +95,7 @@ pub enum Confidence {
 /// associated constants.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(transparent)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Category(SmolStr);
 
 impl Category {
@@ -154,6 +158,7 @@ impl Category {
 /// stored beside it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub enum SubjectKind {
     File,
     Symbol,

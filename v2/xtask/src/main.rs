@@ -18,12 +18,13 @@ fn main() {
     let result = match args.first().map(String::as_str) {
         Some("gen-ci") => gen_ci(),
         Some("gen-fingerprint") => gen_fingerprint(),
+        Some("gen-schema") => gen_schema(),
         Some("package") => package(&args[1..]),
         Some("verify-artifact") => verify_artifact(&args[1..]),
         Some("corpus") => corpus(&args[1..]),
         _ => {
             eprintln!(
-                "usage: cargo xtask <gen-ci | gen-fingerprint | package --tag T --out-dir D | verify-artifact --dir D | corpus --corpus-dir D [--out-dir D]>"
+                "usage: cargo xtask <gen-ci | gen-fingerprint | gen-schema | package --tag T --out-dir D | verify-artifact --dir D | corpus --corpus-dir D [--out-dir D]>"
             );
             exit(2);
         }
@@ -146,6 +147,17 @@ fn corpus(args: &[String]) -> Result<()> {
 
     fs::write(out_dir.join("SUMMARY.md"), summary).map_err(|e| e.to_string())?;
     println!("wrote {}", out_dir.display());
+    Ok(())
+}
+
+/// Rewrites the committed report schema from the types — the deliberate act the
+/// `report_schema_is_current` gate demands after an envelope change.
+fn gen_schema() -> Result<()> {
+    let dir = workspace_root().join("schemas");
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    fs::write(dir.join("report.schema.json"), kndo_core::report_schema())
+        .map_err(|e| e.to_string())?;
+    println!("wrote schemas/report.schema.json");
     Ok(())
 }
 
