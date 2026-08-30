@@ -214,7 +214,7 @@ Complete (CI verification pending only the credits reset, like M0–M2):
   multi-language corpus is stable at the pins — the two-weeks criterion is
   wall-clock and owner-tracked from here.
 
-## M5 — status (in progress)
+## M5 — done
 
 - **M5.a — the two facade frontends, done**: the `kndo` CLI is real (`check` and
   `baseline`, `--json`, `--fail-on`, exit codes 0/1/2; library-with-thin-main so
@@ -257,7 +257,10 @@ Complete (CI verification pending only the credits reset, like M0–M2):
   frontends carry it. The M5 exit criterion is a CLI test: the pinned kmini
   adapter and probe plugin run `kndo check` on a project no built-in could
   read. `abi/README.md` is the authoring guide.
-- Pending: close-out (M5.e).
+- Close-out held across all four deliveries: thirteen named gates green, the
+  56 conformance fixtures and 8 corpus reports byte-identical throughout, and
+  the package → checksum → install → run loop re-exercised with the shell
+  binary (wasmtime inside) before any tag exists.
 - Owner decision (in DECISIONS.md): internal-only — and the visibility ladder
   with it — lands in M6.
 
