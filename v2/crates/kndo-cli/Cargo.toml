@@ -9,3 +9,13 @@ publish.workspace = true
 [[bin]]
 name = "kndo"
 path = "src/main.rs"
+
+[dependencies]
+kndo = { path = "../kndo" }
+# Trimmed the way v1 measured it: `derive` for the Parser structs, the rest because
+# clap's defaults pull suggestion/color machinery the binary doesn't need.
+clap = { version = "4", features = ["derive", "std", "error-context", "help", "usage"], default-features = false }
+
+[dev-dependencies]
+kndo-testkit = { path = "../kndo-testkit" }
+serde_json = "1"

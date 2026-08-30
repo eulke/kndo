@@ -1,0 +1,18 @@
+[package]
+name = "kndo-serve"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "kndo-serve"
+path = "src/main.rs"
+
+[dependencies]
+kndo = { path = "../kndo" }
+serde_json = "1"
+
+[dev-dependencies]
+kndo-testkit = { path = "../kndo-testkit" }

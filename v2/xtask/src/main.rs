@@ -238,7 +238,10 @@ fn verify_artifact(args: &[String]) -> Result<()> {
     ar.unpack(&dest).map_err(|e| e.to_string())?;
 
     let bin = dest.join(BIN);
+    // The install check is a version handshake — bare `kndo` is a real analysis of
+    // the current directory, which is the product, not the smoke test.
     let out = Command::new(&bin)
+        .arg("--version")
         .output()
         .map_err(|e| format!("running {}: {e}", bin.display()))?;
     let stdout = String::from_utf8_lossy(&out.stdout);

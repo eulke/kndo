@@ -214,6 +214,21 @@ Complete (CI verification pending only the credits reset, like M0–M2):
   multi-language corpus is stable at the pins — the two-weeks criterion is
   wall-clock and owner-tracked from here.
 
+## M5 — status (in progress)
+
+- **M5.a — the two facade frontends, done**: the `kndo` CLI is real (`check` and
+  `baseline`, `--json`, `--fail-on`, exit codes 0/1/2; library-with-thin-main so
+  tests and the dogfood reach it through imports) and `kndo-serve` exists at
+  skeleton size (MCP over stdio, one `check` tool returning the same Report
+  envelope). The facade rule they prove is now the tenth named gate:
+  `frontends_import_only_the_facade` — a frontend's production dependencies
+  contain exactly one kndo crate. The release install-check runs `kndo
+  --version`; the whole package/verify loop re-exercised locally.
+- Pending: native plugins (M5.b), the WASM ABI with its compat matrix (M5.c),
+  the external reference adapter from `.kndo/plugins/` (M5.d), close-out (M5.e).
+- Owner decision (in DECISIONS.md): internal-only — and the visibility ladder
+  with it — lands in M6.
+
 ## Name verification (2026-08-29)
 
 - npm: `kndo` still taken by an unrelated DeFi package (unchanged since the v1 check);

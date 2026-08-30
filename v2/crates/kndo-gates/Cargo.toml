@@ -15,3 +15,4 @@ kndo-core = { path = "../kndo-core", features = ["schema"] }
 jsonschema = { version = "0.26", default-features = false }
 serde_json = "1"
 kndo-testkit = { path = "../kndo-testkit" }
+toml = "0.8"

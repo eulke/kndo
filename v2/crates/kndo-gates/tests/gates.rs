@@ -316,3 +316,32 @@ fn incremental_and_full_assembly_are_byte_identical() {
         "the deleted file left the graph"
     );
 }
+
+#[test]
+fn frontends_import_only_the_facade() {
+    // The facade rule as executable law: a frontend's production dependency graph
+    // contains exactly one kndo crate — `kndo` itself. Reaching into core, the
+    // contract, or an adapter from a frontend is the drift that cost v1 three CLI
+    // rewrites. Dev-dependencies may use the testkit: test machinery is not the
+    // product graph. A new frontend joins this list, never escapes it.
+    let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    for frontend in ["kndo-cli", "kndo-serve"] {
+        let path = manifest_dir.join(format!("../{frontend}/Cargo.toml"));
+        let text = std::fs::read_to_string(&path).expect("frontend manifest exists");
+        let value: toml::Value = text.parse().expect("frontend manifest parses");
+        let deps = value
+            .get("dependencies")
+            .and_then(|d| d.as_table())
+            .expect("frontend declares dependencies");
+        assert!(
+            deps.contains_key("kndo"),
+            "{frontend} consumes the facade crate"
+        );
+        for name in deps.keys() {
+            assert!(
+                name == "kndo" || !name.starts_with("kndo"),
+                "{frontend} depends on `{name}` — frontends import only the facade"
+            );
+        }
+    }
+}

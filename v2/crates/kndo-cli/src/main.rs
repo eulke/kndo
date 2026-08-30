@@ -1,9 +1,15 @@
-//! The v2 binary at its M0 size: enough surface for the release pipeline to have a
-//! real artifact to build, package, checksum, install and run on every platform CI
-//! promises — before any analysis code exists to hide that plumbing's failures.
+//! One call deep: the binary is the library plus process plumbing, so everything it
+//! does is reachable from tests through imports.
 
-const VERSION: &str = concat!("kndo ", env!("CARGO_PKG_VERSION"), "-dev (v2 skeleton)");
+use std::io::Write;
 
 fn main() {
-    println!("{VERSION}");
+    let out = kndo_cli::run_args(std::env::args_os());
+    if !out.stdout.is_empty() {
+        let _ = std::io::stdout().write_all(out.stdout.as_bytes());
+    }
+    if !out.stderr.is_empty() {
+        let _ = std::io::stderr().write_all(out.stderr.as_bytes());
+    }
+    std::process::exit(out.code);
 }

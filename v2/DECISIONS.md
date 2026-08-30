@@ -527,3 +527,43 @@ findings held byte-for-byte on every repo. The one diff anywhere is gin's graph
 stats in SUMMARY.md (edges 1711 → 230, unresolved 4 → 0): the synthetic edges
 inflating an edge count and four phantom "." specifiers polluting the unresolved
 counter, both gone — the change deleted noise and nothing else.
+
+## 2026-08-30 — internal-only (and the ladder with it) lands in M6
+
+Owner call at the M5 kickoff: the internal-only analysis — the largest oracle
+category (7,983 findings) and the named consumer the visibility ladder waits for —
+belongs to M6, beside the remaining languages and parity polish, not to M5's
+plugin/ABI/frontend territory. M5 proceeds as planned: native plugins, the WASM
+ABI with its compat matrix, and the two facade frontends.
+
+## 2026-08-30 — M5.a: two frontends, and the facade rule becomes a gate
+
+The plan's own note drove the order (`kndo-serve` early is the living test that
+the facade suffices — v1's lone consumer drifted three times), so M5 opens with
+both frontends at once, and with the rule they prove made executable:
+
+- **The `kndo` CLI is real**: `check` (default) and `baseline`, `--json`,
+  `--no-cache`, `--threads`, `--fail-on error|warning|info|never`, exit codes
+  0 pass / 1 findings / 2 refused (clap's usage-error 2 folds into the refusal
+  class, documented). All logic lives in the crate's library with a one-call
+  `main` — a structure our own gates force: a bin-only crate is unreachable to
+  tests through imports, and the dogfood's untested heuristic would say so.
+  clap arrives with v1's measured feature trim. `RunOutcome::exit_code` meets
+  its consumer at last.
+- **`kndo-serve` exists at skeleton size**: MCP over stdio (newline-delimited
+  JSON-RPC, hand-rolled on serde_json — the surface this skeleton speaks fits in
+  one match), one tool (`check`) returning the same Report envelope the CLI
+  prints. Refusals are tool-level errors (`isError`), never protocol failures —
+  the conversation stays alive.
+- **`frontends_import_only_the_facade`** is the tenth named gate: each frontend's
+  `[dependencies]` contains exactly one kndo crate — `kndo`. Dev-dependencies may
+  use the testkit; the product graph may not reach deeper. A new frontend joins
+  the gate's list, never escapes it.
+- The release loop's install check now runs `kndo --version` — bare `kndo`
+  became a real analysis of the current directory, which is the product, not the
+  smoke test. The full package → checksum → extract → run loop was exercised
+  locally before landing, as the release surface demands.
+
+Both frontends pass the dogfood from birth (zero findings over their own code)
+and the corpus held byte-identical — frontends are presentation, and the
+measurement agrees.

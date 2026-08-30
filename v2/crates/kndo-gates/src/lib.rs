@@ -54,6 +54,10 @@ pub const GATES: &[Gate] = &[
         name: "report_schema_is_generated_and_valid",
         invariant: "the committed schema is derived from the types and validates real reports",
     },
+    Gate {
+        name: "frontends_import_only_the_facade",
+        invariant: "a frontend's production dependencies contain exactly one kndo crate: kndo",
+    },
 ];
 
 /// Repo-relative location of the generated workflow.

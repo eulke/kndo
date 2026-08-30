@@ -12,6 +12,7 @@ members = [
     "crates/kndo-contract-fingerprint",
     "crates/kndo-core",
     "crates/kndo-gates",
+    "crates/kndo-serve",
     "crates/kndo-testkit",
     "crates/kndo-toolkit",
     "xtask",
