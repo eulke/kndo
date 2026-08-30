@@ -60,6 +60,13 @@ how many test-only findings on the corpus are actionable?
 Roadmap idea. Needs: determinism story for history-derived data (history changes run to
 run — likely advisory-only), and a corpus measurement of signal quality.
 
+### Visibility-ladder shape (module-and-descendants scope)
+v1's linear rung ladder could not express Rust's module-and-descendants privacy — a
+recorded incident (the adapter "had to stop lying about private"; equal rungs anchored
+in different files compared as equal regions). Candidate: rungs gain a scope-shape
+dimension. Measure when the v2 Rust adapter lands, against the harvested fixtures and
+the oracle — not before.
+
 ### Type-3 clones (divergent copies)
 Winnowing covers Type-1/2 today. Measure recall/precision of a Type-3 extension on the
 corpus before designing anything.

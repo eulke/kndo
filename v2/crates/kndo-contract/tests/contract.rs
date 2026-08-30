@@ -1,13 +1,13 @@
 use kndo_contract::evidence::{
-    DiagnosticLevel, EvidenceSink, FunctionMetrics, Reach, RefKind, RootKind, RootTarget,
-    SymbolKind,
+    DiagnosticLevel, EvidenceSink, EvidenceStream, EvidenceStreams, FunctionMetrics, Reach,
+    RefKind, RootKind, RootTarget, SymbolKind,
 };
 use kndo_contract::subject::{FindingId, Subject, SymbolSelector};
 use kndo_contract::vocab::{Category, ProjectPath, Span, SubjectKind};
 
 #[test]
 fn sink_attaches_metrics_and_membership_by_id() {
-    let mut sink = EvidenceSink::new(100);
+    let mut sink = EvidenceSink::new(100, EvidenceStreams::of(&[EvidenceStream::Metrics]));
     let owner = sink.declaration(
         "Widget",
         SymbolKind::Type,
@@ -46,7 +46,7 @@ fn sink_attaches_metrics_and_membership_by_id() {
 
 #[test]
 fn sink_degrades_on_a_bad_span_instead_of_failing() {
-    let mut sink = EvidenceSink::new(10);
+    let mut sink = EvidenceSink::new(10, EvidenceStreams::none());
     let d = sink.declaration("x", SymbolKind::Function, Span::new(4, 99), Reach::Private);
     sink.diagnostic(DiagnosticLevel::Info, "note", None);
     let ev = sink.finish();
@@ -61,6 +61,34 @@ fn sink_degrades_on_a_bad_span_instead_of_failing() {
             .any(|d| d.level == DiagnosticLevel::Warn && d.message.contains("clamped")),
         "the clamp is reported, not silent"
     );
+}
+
+#[test]
+fn undeclared_stream_writes_are_dropped_and_reported() {
+    // The pairing rule at the sink: this adapter never declared Comments, so the
+    // write is dropped with a Warn — the declaration stays truthful and analyses can
+    // trust `declared` to abstain instead of guessing.
+    let mut sink = EvidenceSink::new(50, EvidenceStreams::none());
+    sink.comment(Span::new(0, 10), Span::new(2, 8));
+    let ev = sink.finish();
+    assert!(ev.comments.is_empty(), "undeclared write dropped");
+    assert!(
+        ev.diagnostics
+            .iter()
+            .any(|d| d.level == DiagnosticLevel::Warn && d.message.contains("undeclared stream")),
+        "and reported"
+    );
+    assert!(!ev.declared.contains(EvidenceStream::Comments));
+}
+
+#[test]
+fn declared_stream_writes_flow_through() {
+    let mut sink = EvidenceSink::new(50, EvidenceStreams::of(&[EvidenceStream::Comments]));
+    sink.comment(Span::new(0, 10), Span::new(2, 8));
+    let ev = sink.finish();
+    assert_eq!(ev.comments.len(), 1);
+    assert!(ev.diagnostics.is_empty());
+    assert!(ev.declared.contains(EvidenceStream::Comments));
 }
 
 #[test]

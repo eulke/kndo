@@ -6,6 +6,27 @@
 //! [`EvidenceSink`], which validates at the call site and returns ids — attaching
 //! metrics or membership is by [`DeclarationId`], so "must byte-match another span" style
 //! conventions have nothing to exist for. The engine reads the finished value.
+//!
+//! ## The growth contract
+//!
+//! This module grows for as long as languages keep teaching us things, under four
+//! rules that keep the growth safe:
+//!
+//! 1. **Pairing**: every OPTIONAL evidence stream is declared in [`EvidenceStreams`],
+//!    so an empty stream is typed — "none exist" (declared) vs "this adapter doesn't
+//!    know" (undeclared). Analyses abstain over undeclared streams instead of
+//!    guessing. The mandatory spine (declarations, references, imports, roots) is not
+//!    optional and not listed.
+//! 2. **Default compatibility**: a new stream or capability defaults to
+//!    not-declared/empty, which through degrade-toward-keep-alive reproduces the
+//!    pre-capability behavior: absence can silence an analysis, never accuse.
+//! 3. **Additive surface**: the sink only gains methods; growable enums are
+//!    `#[non_exhaustive]` and every consumer's wildcard arm degrades toward
+//!    keep-alive (an unknown `RefKind` counts as a use; an unknown `ImportShape`
+//!    keeps its import alive). Enums documented "closed by design" are contracts
+//!    whose extension is a semantic change, not growth.
+//! 4. Every shape change moves the contract fingerprint — visible, versioned,
+//!    deliberate.
 
 use crate::fingerprint::ContractFingerprint;
 use crate::vocab::{Confidence, Span};
@@ -24,7 +45,59 @@ impl DeclarationId {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ContractFingerprint)]
+/// An optional evidence stream — one whose absence would be ambiguous without a
+/// declaration. Grows a variant whenever a language teaches us a new stream
+/// (test spans, units, …); the default for every adapter is not-declared.
+#[non_exhaustive]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    Serialize,
+    Deserialize,
+    ContractFingerprint,
+)]
+#[serde(rename_all = "lowercase")]
+pub enum EvidenceStream {
+    Comments,
+    Metrics,
+}
+
+/// The set of optional streams an adapter DECLARES it produces — the pairing rule.
+/// Carried on every [`FileEvidence`] so analyses can tell "empty because none exist"
+/// from "unjudgeable because unreported", per file, per claiming adapter.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ContractFingerprint)]
+#[serde(transparent)]
+pub struct EvidenceStreams {
+    set: Vec<EvidenceStream>,
+}
+
+impl EvidenceStreams {
+    pub fn none() -> Self {
+        EvidenceStreams { set: Vec::new() }
+    }
+
+    pub fn of(streams: &[EvidenceStream]) -> Self {
+        let mut set: Vec<EvidenceStream> = streams.to_vec();
+        set.sort();
+        set.dedup();
+        EvidenceStreams { set }
+    }
+
+    pub fn contains(&self, stream: EvidenceStream) -> bool {
+        self.set.contains(&stream)
+    }
+}
+
+/// Grows as languages need it; a consumer's wildcard arm treats an unknown kind as a
+/// plain symbol and never triggers kind-specific accusations.
+#[non_exhaustive]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, ContractFingerprint)]
 #[serde(rename_all = "kebab-case")]
 pub enum SymbolKind {
     Function,
@@ -33,12 +106,13 @@ pub enum SymbolKind {
     Constant,
     Variable,
     Module,
-    Other,
+    /// The adapter's own word for a kind the taxonomy lacks — carried, never dropped.
+    Other(SmolStr),
 }
 
 /// Whether a declaration is nameable beyond its file. The visibility *ladder* (the
 /// per-language rungs between private and public) arrives with the AdapterSpec work;
-/// this is the half every language shares.
+/// this is the half every language shares. Closed by design: it is binary by meaning.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ContractFingerprint)]
 #[serde(rename_all = "lowercase")]
 pub enum Reach {
@@ -56,6 +130,9 @@ pub struct Declaration {
     pub owner: Option<DeclarationId>,
 }
 
+/// Grows as languages need it; an unknown kind in a consumer's wildcard arm counts as
+/// a use (keep-alive), never as evidence for an accusation.
+#[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ContractFingerprint)]
 #[serde(rename_all = "lowercase")]
 pub enum RefKind {
@@ -76,6 +153,8 @@ pub struct Reference {
 
 /// Where an import points. The specifier string as written lives inside the variant
 /// that needs it; resolution happens engine-side through the adapter's resolver.
+/// Grows as languages need it; an unknown target resolves to Unresolved-keep-alive.
+#[non_exhaustive]
 #[derive(Debug, Clone, Serialize, Deserialize, ContractFingerprint)]
 #[serde(rename_all = "lowercase")]
 pub enum ImportTarget {
@@ -92,7 +171,9 @@ pub struct ImportBinding {
 }
 
 /// The FORM of an import is one closed choice — not a bag of independent booleans
-/// whose illegal combinations need documenting.
+/// whose illegal combinations need documenting. Grows as languages need it; an
+/// unknown shape keeps its import (and whatever it binds) alive.
+#[non_exhaustive]
 #[derive(Debug, Clone, Serialize, Deserialize, ContractFingerprint)]
 #[serde(rename_all = "kebab-case")]
 pub enum ImportShape {
@@ -111,6 +192,8 @@ pub struct Import {
     pub confidence: Confidence,
 }
 
+/// Closed by design: the role taxonomy (production/test/tooling) is a reporting
+/// contract — extending it changes what every color-based verdict means.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ContractFingerprint)]
 #[serde(rename_all = "lowercase")]
 pub enum RootKind {
@@ -119,7 +202,9 @@ pub enum RootKind {
     Tooling,
 }
 
-/// What a root anchors: the whole file, or one declaration — by id.
+/// What a root anchors: the whole file, or one declaration — by id. Grows if roots
+/// ever anchor something else; an unknown target keeps the whole file alive.
+#[non_exhaustive]
 #[derive(Debug, Clone, Serialize, Deserialize, ContractFingerprint)]
 #[serde(rename_all = "kebab-case")]
 pub enum RootTarget {
@@ -152,6 +237,7 @@ pub struct FunctionMetrics {
     pub fingerprints: Vec<u64>,
 }
 
+/// Closed by design: three levels are the reporting contract.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ContractFingerprint)]
 #[serde(rename_all = "lowercase")]
 pub enum DiagnosticLevel {
@@ -173,6 +259,9 @@ pub struct AdapterDiagnostic {
 /// everywhere.
 #[derive(Debug, Clone, Serialize, Deserialize, ContractFingerprint)]
 pub struct FileEvidence {
+    /// The pairing rule's carrier: which optional streams the claiming adapter
+    /// declared. Analyses read it to abstain over what was never reported.
+    pub declared: EvidenceStreams,
     pub declarations: Vec<Declaration>,
     pub references: Vec<Reference>,
     pub imports: Vec<Import>,
@@ -191,10 +280,15 @@ pub struct EvidenceSink {
 }
 
 impl EvidenceSink {
-    pub fn new(file_len: u32) -> Self {
+    /// `declares` comes from the claiming adapter's spec — the sink keeps the
+    /// declaration truthful: writes to an undeclared optional stream are dropped and
+    /// reported (the fix is one declaration in the spec, and conformance shows the
+    /// warning immediately).
+    pub fn new(file_len: u32, declares: EvidenceStreams) -> Self {
         EvidenceSink {
             file_len,
             out: FileEvidence {
+                declared: declares,
                 declarations: Vec::new(),
                 references: Vec::new(),
                 imports: Vec::new(),
@@ -248,11 +342,30 @@ impl EvidenceSink {
         self.out.declarations[member.index()].owner = Some(owner);
     }
 
+    /// True when the write may proceed; otherwise drops it with a diagnostic so the
+    /// declaration stays truthful and the adapter author sees the defect at once.
+    fn declared(&mut self, stream: EvidenceStream) -> bool {
+        if self.out.declared.contains(stream) {
+            return true;
+        }
+        self.out.diagnostics.push(AdapterDiagnostic {
+            level: DiagnosticLevel::Warn,
+            message: format!(
+                "write to undeclared stream {stream:?} dropped — declare it in the \
+                 adapter's spec (adapter defect)"
+            ),
+            span: None,
+        });
+        false
+    }
+
     /// Metrics attach to the declaration they describe — by id. (v1 matched by name
     /// against last-wins symbol tables and reported a method as a clone of itself.)
     pub fn metrics(&mut self, of: DeclarationId, m: FunctionMetrics) {
         debug_assert!(of.index() < self.out.declarations.len());
-        self.out.metrics.push((of, m));
+        if self.declared(EvidenceStream::Metrics) {
+            self.out.metrics.push((of, m));
+        }
     }
 
     pub fn reference(&mut self, name: impl Into<SmolStr>, kind: RefKind, span: Span) {
@@ -292,6 +405,9 @@ impl EvidenceSink {
     }
 
     pub fn comment(&mut self, span: Span, text: Span) {
+        if !self.declared(EvidenceStream::Comments) {
+            return;
+        }
         let span = self.clamp(span, "comment");
         let text = self.clamp(text, "comment text");
         self.out.comments.push(CommentSpan { span, text });

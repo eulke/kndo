@@ -221,3 +221,24 @@ the scope rule.
 Latest stable, and the exact version v1's CI already ran. `rust-toolchain.toml` +
 `toolchain:` in the generated workflow move together (the generator is the single
 source); a bump is its own PR with the full suite.
+
+## 2026-08-30 — The adapter growth contract
+
+Adapters must absorb new language knowledge for years without re-creating v1's
+descriptor grab-bag. Four rules, now structural in `kndo-contract`: (1) **pairing** —
+every optional evidence stream is declared in `EvidenceStreams`, carried on each
+`FileEvidence`; the sink drops-and-reports writes to undeclared streams, and analyses
+abstain over undeclared streams instead of guessing (the HTML/untested flood
+generalized: v1's `declares_units_of_testing` was this rule invented ad hoc, once).
+(2) **Default compatibility** — a new stream or capability defaults to
+not-declared/empty, which through degrade-toward-keep-alive reproduces pre-capability
+behavior: absence can silence, never accuse. (3) **Additive surface** —
+`EvidenceSink`/`ResolveCtx` only gain methods; growable enums (`SymbolKind`,
+`RefKind`, `ImportShape`, `ImportTarget`, `RootTarget`) are `#[non_exhaustive]` with
+keep-alive wildcard arms, while `Confidence`, `Reach`, `RootKind`, `DiagnosticLevel`
+are documented closed-by-design (extension is a semantic change, not growth).
+(4) **The growth triage** — evidence stream vs spec data vs `ResolveCtx` query vs
+toolkit — is a CLAUDE.md judgment block. Also applied: `SymbolKind::Other(SmolStr)`
+carries the adapter's word instead of dropping it. The open visibility-ladder question
+(v1's linear rungs could not express Rust's module-and-descendants privacy) goes to
+EXPERIMENTS.md, measured when the v2 Rust adapter lands — not designed dry.

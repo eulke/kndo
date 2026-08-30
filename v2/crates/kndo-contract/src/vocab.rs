@@ -65,6 +65,8 @@ impl Span {
 }
 
 /// Ordered by strength, so `max()` and threshold comparisons read naturally.
+/// Closed by design: a fourth tier would change what every existing threshold means —
+/// that is a semantic contract change, not growth.
 #[derive(
     Debug,
     Clone,
